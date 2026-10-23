@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import type { BulkLlmConfig } from './bulkLlmConfig';
 import type { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
+/** The ledger refused a reservation: a spend limit, not a provider or answer failure (B556). */
+export const BULK_BUDGET_EXCEEDED = 'Bulk budget exceeded';
+
 export interface BulkLlmInput {
   runId: string;
   task: string;
@@ -136,7 +139,7 @@ export class BulkLlmClient {
       { ...input, model: this.config.model, provider: this.config.provider },
       this.config,
     );
-    if (!id) throw new Error('Bulk budget exceeded');
+    if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     try {
       const response = await this.request('/chat/completions', body);
       if (!response.ok) {
@@ -183,7 +186,7 @@ export class BulkLlmClient {
       this.config,
       inputs.length * this.config.perRequestUsd,
     );
-    if (!id) throw new Error('Bulk budget exceeded');
+    if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     try {
       const response = await this.request('/batches', {
         model: this.config.model,

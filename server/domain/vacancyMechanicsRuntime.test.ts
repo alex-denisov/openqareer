@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BulkLlmClient, BulkLlmInput } from '../providers/bulkLlmClient';
+import { BULK_BUDGET_EXCEEDED, type BulkLlmClient, type BulkLlmInput } from '../providers/bulkLlmClient';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { evaluateVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { extractVacancyRequirements } from './vacancyRequirements';
@@ -258,6 +258,31 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(beforeMidnight).toBeGreaterThanOrEqual(2);
     expect(new Set(runIds.slice(0, beforeMidnight))).toEqual(new Set(['vacancy-mechanics:2026-10-21']));
     expect(new Set(runIds.slice(beforeMidnight))).toEqual(new Set(['vacancy-mechanics:2026-10-22']));
+  });
+
+  it('pauses extraction until the next UTC day when the spend budget refuses, without burning attempts (B556)', async () => {
+    const runtime = setup(); const source = { ...input(), description: 'Requirements\n- TypeScript required\n- SQL queries' };
+    vi.useFakeTimers({ toFake: ['Date'] });
+    cleanup.push(() => vi.useRealTimers());
+    vi.setSystemTime(Date.parse('2026-10-22T21:00:00.000Z'));
+    let budgetLeft = false;
+    const complete = vi.fn(async (request: BulkLlmInput) => {
+      if (!budgetLeft) throw new Error(BULK_BUDGET_EXCEEDED);
+      return fitClient(() => Promise.reject(new Error('provider_offline'))).complete(request);
+    });
+    const client = { complete } as unknown as BulkLlmClient;
+    runtime.enqueue(source);
+    await runtime.runNext(client);
+    await runtime.runNext(client);
+    await runtime.runNext(client);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(runtime.takeStats()).toMatchObject({ requirementsUnavailable: 0, requirementsInvalid: 0, budgetPaused: 1 });
+    const job = runtime.database.prepare('SELECT status,attempts,last_error FROM vacancy_requirements_jobs').get();
+    expect(job).toMatchObject({ status: 'queued', attempts: 0, last_error: 'requirements_budget_paused' });
+    vi.setSystemTime(Date.parse('2026-10-23T00:00:01.000Z'));
+    budgetLeft = true;
+    await runtime.runNext(client);
+    expect(runtime.requirements.getLatest(source.vacancyId)?.method).toBe('model');
   });
 
   it('requeues model failures once at worker start and not on the next start (B522)', async () => {

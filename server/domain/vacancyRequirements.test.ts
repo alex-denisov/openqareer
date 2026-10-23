@@ -158,6 +158,44 @@ describe('vacancy requirement extraction', () => {
       expect(result.requirements[0].sourceQuote).toBe('事業責任者、\n\nオペレーション責任者などのマネジメント経験');
     });
 
+    describe('quote mismatches seen on prod 23.10 (B556)', () => {
+      const extractOne = (source: string, quote: string) => extractVacancyRequirementsWithFallback({ vacancyId: 'v', description: source },
+        { extract: async () => JSON.stringify({ requirements: [entry(quote, quote, 'Degree')] }) });
+
+      it('decodes HTML entities the source sends, so the model and the check see the same text', async () => {
+        let seen = '';
+        const source = 'Requirements\n- Bachelor&rsquo;s degree &ndash; CS or &#8220;related&#8221; &lt;field&gt;';
+        const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description: source }, { extract: async ({ description: text }) => {
+          seen = text;
+          return JSON.stringify({ requirements: [entry('Bachelor’s degree – CS', 'Bachelor’s degree – CS', 'Degree')] });
+        } });
+        expect(seen).toContain('Bachelor’s degree – CS or “related” <field>');
+        expect(result.fallbackStatus).toBeUndefined();
+        expect(result.method).toBe('model');
+        expect(result.requirements[0]).toMatchObject({ sourceQuote: 'Bachelor’s degree – CS' });
+      });
+
+      it('matches a quote whose non-breaking hyphens the model typed as plain ones and keeps the source span', async () => {
+        const result = await extractOne('Requirements\n- Expert‑level system‑level knowledge.', 'Expert-level system-level knowledge.');
+        expect(result.fallbackStatus).toBeUndefined();
+        expect(result.method).toBe('model');
+        expect(result.requirements[0].sourceQuote).toBe('Expert‑level system‑level knowledge.');
+      });
+
+      it('does not ask the model about a posting that is only its title: there is nothing to quote', async () => {
+        const extract = vi.fn(async () => '{"requirements":[]}');
+        const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description: 'Director of Software Engineering (d/f/m) — Kleinmachnow' }, { extract });
+        expect(extract).not.toHaveBeenCalled();
+        expect(result).toMatchObject({ status: 'no_requirements', method: 'rules' });
+        expect(result.fallbackStatus).toBeUndefined();
+      });
+
+      it('still rejects a quote the model spliced with an ellipsis', async () => {
+        const result = await extractOne('Requirements\n- Previous experience as: Chief Analytics Officer\n- VP Data', 'Previous experience as: Chief Analytics Officer ... VP Data');
+        expect(result.fallbackStatus).toBe('invalid');
+      });
+    });
+
     it('salvages the complete entries of JSON cut at the output limit', async () => {
       const full = JSON.stringify({ requirements: [entry('5+ years with Kafka.', '5+ years with Kafka.', 'Kafka'), entry('A Bachelor’s degree in CS.', 'A Bachelor’s degree in CS.', 'CS degree')] });
       const issues: string[] = [];

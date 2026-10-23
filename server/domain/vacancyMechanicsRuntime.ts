@@ -5,11 +5,11 @@ import type { VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { SqliteVacancyFitStore } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
-import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
+import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor } from './vacancyFitAssessor';
-import type { BulkLlmClient } from '../providers/bulkLlmClient';
+import { BULK_BUDGET_EXCEEDED, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacancyMechanicsStats';
 
@@ -24,6 +24,8 @@ export class VacancyMechanicsRuntime {
   readonly requirements: SqliteVacancyRequirementsStore;
   readonly fit: SqliteVacancyFitStore;
   private stats: VacancyMechanicsStats = emptyVacancyMechanicsStats();
+  /** Until the next UTC day after a budget refusal: no job is claimed for a call that would be refused (B556). */
+  private budgetPausedUntil = 0;
   constructor(databasePath: string, encryptionKey: Buffer, private readonly validateCurrentProfile?: (input: VacancyFitInput) => boolean) {
     this.database = new DatabaseSync(databasePath);
     applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
@@ -118,12 +120,19 @@ export class VacancyMechanicsRuntime {
 
   /** One queued requirements job (highest priority first); the counters feed the batch journal line. */
   private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string): Promise<boolean> {
+    if (client && Date.now() < this.budgetPausedUntil) return false;
     const extracted = await this.requirements.runNext(workerId, async (input) => {
       const result = await extractVacancyRequirementsWithFallback(input,
         client ? { extract: async ({ description, instructions }) => (await client.complete({
           runId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
           // 35 entries took ~2 000 tokens on prod (22.10): 50 need headroom, or the JSON is cut.
           input: minimizeModelText(description), maxTokens: 4096,
+        }).catch((error: unknown) => {
+          if (!(error instanceof Error) || error.message !== BULK_BUDGET_EXCEEDED) throw error;
+          const now = new Date();
+          this.budgetPausedUntil = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+          this.stats.budgetPaused += 1;
+          throw new VacancyRequirementsPausedError(this.budgetPausedUntil);
         })).content } : undefined, (issue) => {
           this.stats.modelIssues = { ...this.stats.modelIssues, [issue]: (this.stats.modelIssues[issue] ?? 0) + 1 };
         });
