@@ -407,15 +407,15 @@ function SourceCatalogContent({
             view.resetVisibleCount();
           }}
         />
+        <SourceCategoryFilters
+          options={view.options}
+          group={view.group}
+          onSelect={(group) => {
+            view.setGroup(group);
+            view.resetVisibleCount();
+          }}
+        />
       </div>
-      <SourceCategoryFilters
-        options={view.options}
-        group={view.group}
-        onSelect={(group) => {
-          view.setGroup(group);
-          view.resetVisibleCount();
-        }}
-      />
       <SourceOptionList catalog={catalog} view={view} />
       <SourceFooter
         view={view}
