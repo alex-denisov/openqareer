@@ -119,7 +119,12 @@ function structuredImportShortcut(
   const replay = candidateStore.findNativeSourceConnectionByDigest(candidateId, 'linkedin', importDigest);
   if (replay && !(mode === 'replace_profile' && replay.receipt.factCount === 0)) {
     const data = { resume: resumeStudioView(candidateStore, candidateId), factCount: replay.receipt.factCount };
-    return { data, meta: { idempotentReplay: true } };
+    // A repeated connect-only answer keeps saying so, or the client reads «0 facts imported».
+    const connectOnly = mode === 'connect_only' && replay.receipt.factCount === 0;
+    return {
+      data: connectOnly ? { ...data, connectOnly: true as const, connection: nativeSourceConnectionView(replay) } : data,
+      meta: { idempotentReplay: true },
+    };
   }
   if (mode !== 'connect_only') return undefined;
   const receipt = { ...body.sourceReceipt, importDigest };
