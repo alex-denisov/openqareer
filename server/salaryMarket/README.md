@@ -51,11 +51,20 @@ reads only salary JSON from the existing catalog-to-cluster join; no migration o
 historical backfill assigns periods to legacy data. Until normal source sync has
 observed enough comparable records, the salary result remains unavailable.
 
-Quarterly trend and candidate outcomes remain unavailable: no historical or
-candidate-outcome evidence has been added. A standalone point helper rejects
-mixed period/currency/tax basis or
-duplicate cluster IDs. Salary snapshot tests cover actual provider-to-persisted-
-catalog roundtrips and verify canonical profession IDs and posted-grade denominators.
+Quarterly skill comparisons use only real, persisted observations of the same
+methodology. The first observation per role and UTC week is immutable; history
+and current snapshots publish atomically. Retention is bounded to the current
+100 canonical roles, 16 weeks and five independent grade samples. A baseline
+must be 90–97 days old and both denominators at least five. Changes are observed
+skill frequencies in percentage points, not market-wide demand or candidate
+outcomes. A skill absent from the baseline Top15 is unknown, not zero. No old
+observations are seeded: a new production installation honestly starts with
+insufficient history. Candidate outcomes remain unavailable.
+
+A standalone salary point helper rejects mixed period/currency/tax basis or
+duplicate cluster IDs. Tests cover provider-to-persisted-catalog roundtrips,
+canonical profession IDs, posted-grade denominators, history immutability,
+transaction rollback and the complete public document delivery budget.
 
 ## Provider evidence and remaining work
 
@@ -82,8 +91,15 @@ catalog roundtrips and verify canonical profession IDs and posted-grade denomina
    Legacy rows remain unknown until re-observed. Production observation counts
    must be checked after a normal sync; fixture counts are not provider evidence.
 
-No live crawling, provider account action, HTTP route or UI is part of this
-foundation. Full US-14.6 acceptance additionally requires production observation evidence,
-public SSR/UI and owner acceptance, as well as any historical/trend claims and
-other story criteria that remain unsupported. Implementing this pipeline alone
-does not prove those external outcomes.
+The public directory `/salaries` and profession pages `/salaries/:role` render
+prepared snapshots with native GET filters for grade, salary cohort and skill
+pagination. HTTP performs bounded primary-key reads, never source scans or
+provider requests. Only evidenced canonical professions with sufficient samples
+enter the sitemap. Missing salary/history evidence remains explicit; unavailable
+roles and failures are noindex. The template preserves the existing public
+chrome and contains no fake sample data.
+
+No live crawling or provider account action was used to create this change.
+Full US-14.6 acceptance still requires production observation evidence, elapsed
+real history for a quarterly comparison and owner visual acceptance. Local
+fixtures and checks do not prove those external outcomes.
