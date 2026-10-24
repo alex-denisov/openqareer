@@ -563,3 +563,70 @@
   align-items: center;
   gap: var(--career-space-3);
 }
+
+/* My data (`view=data`): .note, one .card per step, .section-head with is-sm «Изменить», .rl-docs rows. */
+.career-relocation .career-relocation-profile {
+  display: grid;
+  gap: var(--career-space-5);
+}
+
+.career-relocation .career-relocation-profile-sections {
+  gap: var(--career-space-5);
+}
+
+.career-relocation .career-relocation-profile-section.career-relocation-card {
+  gap: var(--career-space-4);
+}
+
+.career-relocation .career-relocation-profile-section > header {
+  justify-content: flex-start;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+}
+
+.career-relocation .career-relocation-profile-section > header h3 {
+  line-height: 1.25;
+}
+
+.career-relocation .career-relocation-profile-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-relocation .career-relocation-profile-list .career-relocation-profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  padding: var(--career-space-3) var(--career-space-4);
+}
+
+.career-relocation .career-relocation-profile-list .career-relocation-profile-row strong {
+  display: block;
+  color: var(--career-text);
+  line-height: 1.5;
+  font-size: var(--career-text-sm);
+}
+
+.career-relocation .career-relocation-profile-list .career-relocation-profile-row p {
+  margin-block-start: var(--career-space-1);
+  color: var(--career-text-soft);
+  line-height: 1.5;
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation .career-relocation-profile-list .career-relocation-row-actions {
+  display: flex;
+  gap: var(--career-space-3);
+}
+
+.career-relocation .career-relocation-profile-line {
+  font-size: var(--career-text-sm);
+}
+
+.career-relocation .career-relocation-profile-actions {
+  justify-content: flex-start;
+}
