@@ -2,9 +2,6 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 
-/** Yesterday: the responses board shows the last 30 days, so a fixed date rots (24.10.2026). */
-const APPLIED_AT = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
 /**
  * C47 (B251 F5) — the chain a candidate actually walks: vacancy card →
  * «Откликнуться» → «Отклики» with the card at `applied` → stage moved to
@@ -202,10 +199,10 @@ function applicationView(record: ApplicationRecord) {
     vacancy: record.vacancy,
     notes: null,
     followUpDueAt: null,
-    stageChangedAt: APPLIED_AT,
+    stageChangedAt: '2026-09-24T10:00:00.000Z',
     version: record.version,
-    createdAt: APPLIED_AT,
-    updatedAt: APPLIED_AT,
+    createdAt: '2026-09-24T10:00:00.000Z',
+    updatedAt: '2026-09-24T10:00:00.000Z',
     followUp: null,
     whoseTurn: 'company',
     materials: { coverLetter: false, resume: false },
