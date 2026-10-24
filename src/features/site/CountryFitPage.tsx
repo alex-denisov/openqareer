@@ -13,7 +13,7 @@ import { calculateCountryFitScenario, saveCountryFitScenario } from './countryFi
 
 export const COUNTRY_FIT_TITLE = 'Калькулятор налогов и чистой зарплаты 2026 | openqareer';
 export const COUNTRY_FIT_DESCRIPTION =
-  'Зарплата после налогов в шести странах: расчёт за 2026 год, свои расходы и источники. Без регистрации.';
+  'Налоги и чистая зарплата за 2026 год в шести странах. Расчёт со своими расходами.';
 export const COUNTRY_FIT_FAQ = [
   [
     'Нужна ли регистрация для расчёта?',
