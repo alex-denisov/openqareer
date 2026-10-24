@@ -732,7 +732,7 @@
     > .career-vacancy-action[data-vacancy-action='save'] {
     border-color: transparent;
     background: transparent;
-    color: var(--career-text-soft);
+    color: var(--career-text-dim);
   }
 
   .vacancies-screen-row-actions
@@ -1031,7 +1031,12 @@
   font-weight: 600;
 }
 @media (max-width: 760px) {
+  .vacancies-screen-cell--role {
+    justify-items: stretch;
+    min-inline-size: 0;
+  }
   .vacancies-screen-cell--role .vac-title {
+    display: block;
     overflow: hidden;
     font-size: var(--career-text-md);
     text-overflow: ellipsis;
