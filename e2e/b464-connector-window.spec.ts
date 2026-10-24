@@ -14,7 +14,9 @@ const TEST_CONNECTION = {
 test.describe('B464 browser connector window', () => {
   // Owner rule 24.10: the browser cannot read the provider page after sign-in, so it offers
   // no sign-in window at all — only the state of each platform (the window lives in the .app).
-  test('the browser shows platform state without a sign-in path it cannot finish', async ({ page }) => {
+  test('the browser shows platform state without a sign-in path it cannot finish', async ({
+    page,
+  }) => {
     const unmatched = await mockSignedInCabinet(page);
     await page.route('**/api/v1/candidate/connections', (route) =>
       route.fulfill({
