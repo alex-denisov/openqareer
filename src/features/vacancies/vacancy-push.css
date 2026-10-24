@@ -454,3 +454,27 @@ div.vacancy-push-row {
   background: color-mix(in oklch, var(--career-bg-elevated) 70%, transparent);
   backdrop-filter: blur(16px);
 }
+
+/* B510: навыки на 390 как .pm-chips макета 4 — капсула 16 px на surface, текст цвета тела,
+   цветной только значок 14 px (зелёный — подтверждено, жёлтый — нет). */
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-confirmed,
+.vacancy-push-requirements .vacancies-screen-skill-chip button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 16px;
+  color: var(--career-text);
+  background: var(--career-surface);
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-unconfirmed {
+  color: var(--career-text);
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-confirmed svg {
+  color: var(--career-success);
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-unconfirmed svg {
+  color: var(--career-warning);
+}
