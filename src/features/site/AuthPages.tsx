@@ -24,16 +24,19 @@ export interface AuthPageProps {
   nextPath?: string;
   /** Почему кандидат видит вход: например, сессия истекла (PRB-038). */
   notice?: string;
+  /** Build-only first paint: disabled and inert until the client mounts. */
+  bootstrapPending?: boolean;
 }
 
 function useLoginForm({
   onNavigate,
   onSessionChange,
   nextPath,
+  bootstrapPending = false,
 }: AuthPageProps & { nextPath: string }) {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(bootstrapPending);
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -68,16 +71,8 @@ function useLoginForm({
     }
   };
 
-  return {
-    identifier,
-    setIdentifier,
-    password,
-    setPassword,
-    busy,
-    error,
-    fieldErrors,
-    handleSubmit,
-  };
+  const fields = { bootstrapPending, identifier, setIdentifier, password, setPassword };
+  return { ...fields, busy, error, fieldErrors, handleSubmit };
 }
 
 function LoginFormFields({
@@ -93,7 +88,7 @@ function LoginFormFields({
         id="login-identifier"
         name="username"
         label="Email или логин"
-        autoComplete="username"
+        autoComplete={form.bootstrapPending ? 'off' : 'username'}
         placeholder="candidate@example.com"
         value={form.identifier}
         onChange={form.setIdentifier}
@@ -106,7 +101,7 @@ function LoginFormFields({
         name="password"
         label="Пароль"
         type="password"
-        autoComplete="current-password"
+        autoComplete={form.bootstrapPending ? 'off' : 'current-password'}
         placeholder="••••••••"
         value={form.password}
         onChange={form.setPassword}
@@ -123,8 +118,9 @@ function LoginForm({
   onNavigate,
   onSessionChange,
   nextPath,
+  bootstrapPending = false,
 }: AuthPageProps & { nextPath: string }) {
-  const form = useLoginForm({ onNavigate, onSessionChange, nextPath });
+  const form = useLoginForm({ onNavigate, onSessionChange, nextPath, bootstrapPending });
   const forgotBtn = (
     <button
       type="button"
@@ -163,11 +159,17 @@ export function LoginPage({
   onSessionChange,
   nextPath = '/app',
   notice,
+  bootstrapPending = false,
 }: AuthPageProps) {
   const isDesktop = isTauriEnvironment();
   return (
     <main className="auth-page-container">
-      <div className="auth-card">
+      {bootstrapPending ? (
+        <p className="auth-notice" role="status">
+          Загружаем форму…
+        </p>
+      ) : null}
+      <div className="auth-card" {...(bootstrapPending ? { inert: '' } : {})}>
         <AuthCardHeader
           title="Вход в кабинет"
           subtitle="Введите ваш email или логин для доступа к профилю"
@@ -178,7 +180,12 @@ export function LoginPage({
             {notice}
           </p>
         ) : null}
-        <LoginForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
+        <LoginForm
+          onNavigate={onNavigate}
+          onSessionChange={onSessionChange}
+          nextPath={nextPath}
+          bootstrapPending={bootstrapPending}
+        />
         <div className="auth-links">
           <span>
             Ещё нет аккаунта?{' '}
@@ -217,12 +224,13 @@ function useSignupForm({
   onNavigate,
   onSessionChange,
   nextPath,
+  bootstrapPending = false,
 }: AuthPageProps & { nextPath: string }) {
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [legalAccepted, setLegalAccepted] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(bootstrapPending);
   const [error, setError] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -257,7 +265,7 @@ function useSignupForm({
 
   const fields = { email, setEmail, displayName, setDisplayName, password, setPassword };
   const consent = { legalAccepted, setLegalAccepted };
-  return { ...fields, ...consent, busy, error, fieldErrors, handleSubmit };
+  return { ...fields, ...consent, bootstrapPending, busy, error, fieldErrors, handleSubmit };
 }
 
 function SignupPasswordSection({ form }: { form: ReturnType<typeof useSignupForm> }) {
@@ -267,7 +275,7 @@ function SignupPasswordSection({ form }: { form: ReturnType<typeof useSignupForm
       name="password"
       label="Пароль (от 8 символов)"
       type="password"
-      autoComplete="new-password"
+      autoComplete={form.bootstrapPending ? 'off' : 'new-password'}
       placeholder="Минимум 8 символов"
       value={form.password}
       onChange={form.setPassword}
@@ -286,7 +294,7 @@ function SignupFields({ form }: { form: ReturnType<typeof useSignupForm> }) {
         name="email"
         label="Email"
         type="email"
-        autoComplete="email"
+        autoComplete={form.bootstrapPending ? 'off' : 'email'}
         placeholder="candidate@example.com"
         value={form.email}
         onChange={form.setEmail}
@@ -298,7 +306,7 @@ function SignupFields({ form }: { form: ReturnType<typeof useSignupForm> }) {
         id="signup-name"
         name="name"
         label="Как к вам обращаться"
-        autoComplete="name"
+        autoComplete={form.bootstrapPending ? 'off' : 'name'}
         placeholder="Например, Мария"
         value={form.displayName}
         onChange={form.setDisplayName}
@@ -313,8 +321,9 @@ function SignupForm({
   onNavigate,
   onSessionChange,
   nextPath,
+  bootstrapPending = false,
 }: AuthPageProps & { nextPath: string }) {
-  const form = useSignupForm({ onNavigate, onSessionChange, nextPath });
+  const form = useSignupForm({ onNavigate, onSessionChange, nextPath, bootstrapPending });
 
   return (
     <>
@@ -389,17 +398,32 @@ function LegalConsentField({
   );
 }
 
-export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: AuthPageProps) {
+export function SignupPage({
+  onNavigate,
+  onSessionChange,
+  nextPath = '/app',
+  bootstrapPending = false,
+}: AuthPageProps) {
   const isDesktop = isTauriEnvironment();
   return (
     <main className="auth-page-container">
-      <div className="auth-card">
+      {bootstrapPending ? (
+        <p className="auth-notice" role="status">
+          Загружаем форму…
+        </p>
+      ) : null}
+      <div className="auth-card" {...(bootstrapPending ? { inert: '' } : {})}>
         <AuthCardHeader
           title="Создать аккаунт"
           subtitle="Загрузите резюме: соберём профиль, проверим на ATS и покажем вакансии с процентом совпадения. Старт бесплатно."
           onNavigate={onNavigate}
         />
-        <SignupForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
+        <SignupForm
+          onNavigate={onNavigate}
+          onSessionChange={onSessionChange}
+          nextPath={nextPath}
+          bootstrapPending={bootstrapPending}
+        />
         <div className="auth-links">
           <span>
             Уже есть аккаунт?{' '}

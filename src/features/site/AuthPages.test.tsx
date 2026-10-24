@@ -60,6 +60,22 @@ describe('AuthPages', () => {
     expect(signup).not.toContain('autoComplete="email username"');
   });
 
+  it('renders an explicitly loading, inert first paint with no editable or autofillable inputs', () => {
+    for (const Page of [LoginPage, SignupPage]) {
+      const html = renderToStaticMarkup(<Page onNavigate={vi.fn()} bootstrapPending />);
+      expect(html).toContain('role="status">Загружаем форму…');
+      expect(html).toContain('class="auth-card" inert=""');
+      expect(html.indexOf('role="status"')).toBeLessThan(html.indexOf('inert=""'));
+      const inputs = html.match(/<input\b[^>]*>/gu) ?? [];
+      expect(inputs.length).toBeGreaterThan(1);
+      for (const input of inputs) {
+        expect(input).toContain('disabled=""');
+        if (!input.includes('type="checkbox"')) expect(input).toContain('autoComplete="off"');
+      }
+      expect(html).toMatch(/<button type="submit"[^>]*disabled=""/u);
+    }
+  });
+
   /**
    * The owner's own first name stood in the signup form as the example of a
    * name to type. A placeholder is example data, and example data must not be

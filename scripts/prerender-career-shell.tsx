@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -8,6 +9,7 @@ import {
   COUNTRY_FIT_TITLE,
   COUNTRY_FIT_DESCRIPTION,
 } from '../src/features/site/CountryFitPage';
+import { LoginPage, SignupPage } from '../src/features/site/AuthPages';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { PublicHeader, PublicFooter } from '../src/features/site/PublicSiteChrome';
 import {
@@ -245,19 +247,47 @@ export const AUTH_PAGES = [
   },
 ] as const;
 
+async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string> {
+  // Auth is a lazy route. Reuse its exact styles without putting the legacy
+  // landing styles into every public document's initial CSS bundle.
+  const css = (await Promise.all(['landing.css', 'auth.css'].map((file) =>
+    readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
+  ))).join('\n');
+  const path = `/assets/auth-first-paint-${createHash('sha256').update(css).digest('hex').slice(0, 12)}.css`;
+  await mkdir(`${distDirectory}/assets`, { recursive: true });
+  await writeFile(`${distDirectory}${path}`, css);
+  return path;
+}
+
 /**
- * The root stays empty: the auth form mounts from the bundle, and the landing
- * prerender here only flashed the wrong page before the form appeared.
+ * Show the exact auth page before JavaScript, with disabled inputs and an inert
+ * card. createRoot replaces this shell, so credentials cannot be entered early.
  */
 async function writeAuthPages(html: string, distDirectory: string): Promise<void> {
+  const stylesheet = await writeAuthFirstPaintStyles(distDirectory);
   for (const page of AUTH_PAGES) {
-    await writeFile(
-      `${distDirectory}/${page.file}`,
-      pageHead(html, page).replace(
-        /<link rel="canonical"[^>]*>/u,
-        `<link rel="canonical" href="${SITE_ORIGIN}${page.path}"><meta name="robots" content="noindex, follow">`,
-      ),
-    );
+    const document = pageHead(html, page)
+        .replace('</head>', `<link rel="stylesheet" href="${stylesheet}"></head>`)
+        .replace(
+          /<link rel="canonical"[^>]*>/u,
+          `<link rel="canonical" href="${SITE_ORIGIN}${page.path}"><meta name="robots" content="noindex, follow">`,
+        )
+        .replace(
+          EMPTY_ROOT,
+          bootstrapRoot(
+            renderToStaticMarkup(
+              page.path === '/login' ? (
+                <LoginPage onNavigate={() => {}} bootstrapPending />
+              ) : (
+                <SignupPage onNavigate={() => {}} bootstrapPending />
+              ),
+            ),
+          ),
+        );
+    if (Buffer.byteLength(document) > 20_000) {
+      throw new Error(`Auth document ${page.path} exceeds the 20000-byte route budget`);
+    }
+    await writeFile(`${distDirectory}/${page.file}`, document);
   }
 }
 
