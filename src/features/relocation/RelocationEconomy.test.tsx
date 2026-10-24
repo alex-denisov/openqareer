@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as scenarioApi from './relocationScenarioApi';
 import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import { RelocationEconomy } from './RelocationEconomy';
 
@@ -47,7 +48,42 @@ describe('RelocationEconomy', () => {
     expect(host?.querySelector('[role="alert"]')?.textContent).toContain('Укажите годовую зарплату числом');
   });
 
+  it('shows the mockup breakdown: taxes from the scale, no invented rent, insurance or remainder', () => {
+    render(120_000);
+
+    const legend = host?.querySelector('.career-relocation-economy-legend')?.textContent ?? '';
+    expect(legend).toMatch(/Налоги и взносы\s*\d+ %/u);
+    expect(legend).toContain('Аренда');
+    expect(legend).toContain('нет данных');
+    expect(host?.textContent).toContain('Откуда цифры');
+    expect(host?.querySelector('input[type="range"]')).not.toBeNull();
+  });
+
+  it('opens the scenario editor with «Сбросить · Сохранить · Рассчитать» and returns to the calculation', async () => {
+    render(120_000);
+    await click('Уточнить расходы');
+
+    const actions = [...(host?.querySelectorAll('.career-relocation-scenario-actions button') ?? [])].map(
+      (button) => button.textContent?.trim(),
+    );
+    expect(actions).toEqual(['Сбросить', 'Сохранить', 'Рассчитать']);
+    expect(host?.querySelector('select option[value="Берлин"]')).not.toBeNull();
+    expect(host?.textContent).toContain('Сколько детей переезжает');
+
+    await click('К расчёту');
+    expect(host?.textContent).toContain('Откуда цифры');
+  });
+
+  async function click(label: string) {
+    const button = [...(host?.querySelectorAll('button') ?? [])].find((item) => item.textContent?.includes(label));
+    expect(button).toBeDefined();
+    await act(async () => {
+      button?.click();
+    });
+  }
+
   function render(income: number) {
+    vi.spyOn(scenarioApi, 'listRelocationScenarios').mockResolvedValue({ items: [], nextOffset: null });
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);

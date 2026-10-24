@@ -28,8 +28,15 @@ async function openEconomy(page: Page, mobile: boolean) {
     .click();
   if (await openButton.isVisible()) await openButton.click();
   await page.getByRole('tab', { name: 'Экономика' }).click();
-  await page.getByRole('combobox', { name: 'Страна', exact: true }).selectOption('AE');
-  await page.getByLabel('Годовая зарплата до налогов').fill('120000');
+  await page.getByRole('combobox', { name: 'Страна и город' }).selectOption('AE');
+  // The salary is a range (mockup 15 `.rl-slide`); Playwright cannot type into it.
+  await page.getByLabel('Годовая зарплата до налогов').evaluate((input: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+      input,
+      '120000',
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 async function fillCost(page: Page, label: string, value: string, once = false) {
   const section = page
@@ -40,7 +47,7 @@ async function fillCost(page: Page, label: string, value: string, once = false) 
   if (!once && label === 'Жильё') await section.getByLabel('Период: Жильё').selectOption('annual');
   await section.locator('summary').click();
 }
-test('B468 complete household budget saves, retries, reloads, compares and invalidates old output', async ({
+test('B468 scenario editor: «Сохранить» keeps editing, «Рассчитать» shows the calculation, reload, compare, delete', async ({
   page,
 }, info) => {
   test.skip(
@@ -91,9 +98,8 @@ test('B468 complete household budget saves, retries, reloads, compares and inval
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   const mobile = info.project.name === 'mobile-390';
   await openEconomy(page, mobile);
-  await page.getByLabel('Город расчёта').fill('Дубай');
-  await page.getByRole('button', { name: 'Рассчитать сценарий' }).click();
-  await expect(page.getByText(/Не заполнены расходы:/)).toBeVisible();
+  await page.getByRole('button', { name: 'Уточнить расходы' }).click();
+  await page.getByLabel('Город расчёта').selectOption('Дубай');
   await fillCost(page, 'Жильё', '24000');
   await fillCost(page, 'Коммунальные услуги', '200');
   await fillCost(page, 'Питание', '500');
@@ -112,22 +118,22 @@ test('B468 complete household budget saves, retries, reloads, compares and inval
     ['Средства для подтверждения визы', '0'],
   ])
     await fillCost(page, label, value, true);
-  await page.getByRole('button', { name: 'Рассчитать сценарий' }).click();
-  const result = page.locator('.career-relocation-scenario-result');
-  await expect(result).toContainText(/7\s?000 AED/);
-  await fillCost(page, 'Питание', '600');
-  await expect(
-    page.getByText('Исходные данные изменены. Рассчитайте сценарий заново.'),
-  ).toBeVisible();
-  await expect(result).toHaveCount(0);
-  await fillCost(page, 'Питание', '500');
-  await page.getByRole('button', { name: 'Сохранить расчёт в профиль' }).click();
+  // «Сохранить»: the first response is lost, the retry reuses the key and keeps editing.
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
   await expect(page.getByRole('alert')).toBeVisible();
-  await page.getByRole('button', { name: 'Сохранить расчёт в профиль' }).click();
-  await expect(page.getByText('Расчёт сохранён в профиле.')).toBeVisible();
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(page.getByText('Сценарий сохранён в «Сохранённые расчёты».')).toBeVisible();
+  await expect(page.getByLabel('Город расчёта')).toHaveValue('Дубай');
+  expect(saved).toHaveLength(1);
+  // «Рассчитать» saves the same body (no duplicate) and shows the mockup calculation.
+  await page.getByRole('button', { name: 'Рассчитать', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Откуда цифры' })).toBeVisible();
+  await expect(page.locator('.career-relocation-economy-legend')).toContainText('Аренда');
+  await expect(page.getByText(/Свободный остаток 7\s?000/u)).toBeVisible();
   expect(saved).toHaveLength(1);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openEconomy(page, mobile);
+  await page.getByRole('button', { name: 'Уточнить расходы' }).click();
   await page.getByRole('button', { name: 'Открыть: Мой сценарий' }).click();
   await expect(page.getByLabel('Город расчёта')).toHaveValue('Дубай');
   await page.getByRole('checkbox', { name: 'В сравнение: Мой сценарий' }).check();
@@ -141,15 +147,10 @@ test('B468 complete household budget saves, retries, reloads, compares and inval
   );
   expect(axe.violations).toEqual([]);
   await page
-    .getByRole('heading', { name: 'Полный сценарий переезда', exact: true })
+    .getByRole('heading', { name: 'Свой сценарий расходов', exact: true })
     .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: `output/B468/browser/economy-${info.project.name}.png`,
-    fullPage: false,
-  });
-  await result.getByRole('heading', { name: 'Итог сценария' }).scrollIntoViewIfNeeded();
-  await page.screenshot({
-    path: `output/B468/browser/result-${info.project.name}.png`,
     fullPage: false,
   });
   const styles = await page.evaluate(() =>
@@ -171,9 +172,12 @@ test('B468 complete household budget saves, retries, reloads, compares and inval
     html.replace('</head>', `<style>${styles}</style></head>`),
   );
   await page.getByRole('button', { name: 'Удалить: Мой сценарий' }).click();
-  await page.getByRole('button', { name: 'Удалить расчёт', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Удалить «Мой сценарий»?' })
+    .getByRole('button', { name: 'Удалить', exact: true })
+    .click();
   await expect(page.getByText('Расчётов пока нет.')).toBeVisible();
-  await expect(page.getByText('Расчёт удалён. Можно сохранить новую версию.')).toBeVisible();
+  await expect(page.getByText('Расчёт удалён.')).toBeVisible();
   await page.setViewportSize({ width: 280, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
