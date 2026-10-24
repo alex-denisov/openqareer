@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
+  CaretLeft,
   CaretRight,
   CircleNotch,
+  Funnel,
   MagnifyingGlass,
   SlidersHorizontal,
+  SortAscending,
   Target,
   UsersThree,
   X,
@@ -49,6 +52,7 @@ function CompanySearchField({
   const placeholder = `Поиск среди ${total}`;
   return (
     <label className="companies-people-search">
+      <span className="career-sr-only">Поиск</span>
       <MagnifyingGlass aria-hidden="true" />
       <input
         value={search}
@@ -71,10 +75,9 @@ function CompanySortSelect({
 }) {
   return (
     <label className="companies-people-select-wrap">
-      <span className="career-sr-only">Сортировка компаний</span>
+      <span className="career-sr-only">Сортировка</span>
       <select
         className="companies-people-select"
-        aria-label="Сортировка компаний"
         value={sort}
         onChange={(event) => onSort(event.target.value as CandidateCompanySort)}
       >
@@ -342,60 +345,120 @@ interface CompanyFilterSheetProps {
   readonly onApply: (filter: CandidateCompanyFilter, sort: CandidateCompanySort) => void;
 }
 
+const SORT_OPTIONS: readonly { value: CandidateCompanySort; label: string; short: string }[] = [
+  { value: 'default', label: '«Хочу», затем по вакансиям', short: '«Хочу», затем вакансии' },
+  { value: 'contacts', label: 'По контактам в сети', short: 'По контактам в сети' },
+  { value: 'alphabetical', label: 'По алфавиту', short: 'По алфавиту' },
+];
+
+type SheetView = 'overview' | 'filter' | 'sort';
+
+function filterCount(
+  counts: CandidateCompanyPage['filterCounts'],
+  filter: CandidateCompanyFilter,
+): number | null {
+  return counts[filter];
+}
+
 function CompanyFilterSheetHeader({
-  close,
+  view,
+  onBack,
   onReset,
 }: {
-  readonly close: () => void;
+  readonly view: SheetView;
+  readonly onBack: () => void;
   readonly onReset: () => void;
 }) {
+  const title = view === 'filter' ? 'Показывать' : view === 'sort' ? 'Сортировка' : 'Фильтры';
   return (
-    <div className="companies-people-detail-heading">
-      <h2 id="companies-filter-title">Фильтры</h2>
-      <div className="companies-people-actions">
-        <button type="button" className="companies-people-filter-chip" onClick={onReset}>
+    <div className="companies-people-sheet-head">
+      {view === 'overview' ? null : (
+        <button
+          type="button"
+          className="companies-people-sheet-back"
+          aria-label="Назад к фильтрам"
+          onClick={onBack}
+        >
+          <CaretLeft aria-hidden="true" />
+        </button>
+      )}
+      <h2>{title}</h2>
+      {view === 'overview' ? (
+        <button type="button" className="companies-people-sheet-reset" onClick={onReset}>
           Сбросить
         </button>
-        <button type="button" className="companies-people-filter-chip" onClick={close}>
-          Закрыть
-        </button>
-      </div>
+      ) : null}
     </div>
   );
 }
 
-function CompanyFilterApply({
-  filter,
-  sort,
-  counts,
-  onApply,
-  close,
+function SheetRow({
+  icon,
+  label,
+  value,
+  onClick,
 }: {
-  readonly filter: CandidateCompanyFilter;
-  readonly sort: CandidateCompanySort;
-  readonly counts: CandidateCompanyPage['filterCounts'];
-  readonly onApply: (filter: CandidateCompanyFilter, sort: CandidateCompanySort) => void;
-  readonly close: () => void;
+  readonly icon: ReactNode;
+  readonly label: string;
+  readonly value: string;
+  readonly onClick: () => void;
 }) {
-  const countKey =
-    filter === 'all'
-      ? 'all'
-      : filter === 'want'
-        ? 'want'
-        : filter === 'recruiter'
-          ? 'recruiter'
-          : 'contacts';
   return (
     <button
       type="button"
-      className="companies-people-action is-primary"
-      onClick={() => {
-        onApply(filter, sort);
-        close();
-      }}
+      className="companies-people-sheet-row"
+      aria-label={`${label}: ${value}`}
+      onClick={onClick}
     >
-      Показать {counts[countKey] ?? 'неизвестно'}
+      <span className="companies-people-sheet-ico" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="companies-people-sheet-main">{label}</span>
+      <span className="companies-people-sheet-val">{value}</span>
+      <CaretRight className="companies-people-sheet-chev" aria-hidden="true" />
     </button>
+  );
+}
+
+function SheetBody({
+  view,
+  filter,
+  sort,
+  counts,
+  onView,
+  onFilter,
+  onSort,
+}: {
+  readonly view: SheetView;
+  readonly filter: CandidateCompanyFilter;
+  readonly sort: CandidateCompanySort;
+  readonly counts: CandidateCompanyPage['filterCounts'];
+  readonly onView: (view: SheetView) => void;
+  readonly onFilter: (value: CandidateCompanyFilter) => void;
+  readonly onSort: (value: CandidateCompanySort) => void;
+}) {
+  if (view === 'filter')
+    return <FilterOptions value={filter} counts={counts} onChange={onFilter} />;
+  if (view === 'sort') {
+    return (
+      <SortOptions value={sort} disabledContacts={counts.contacts === null} onChange={onSort} />
+    );
+  }
+  return (
+    <div className="companies-people-sheet-list">
+      <SheetRow
+        icon={<Funnel />}
+        label="Показывать"
+        value={FILTERS.find((item) => item.value === filter)?.label ?? 'Все'}
+        onClick={() => onView('filter')}
+      />
+      <SheetRow
+        icon={<SortAscending />}
+        label="Сортировка"
+        value={SORT_OPTIONS.find((item) => item.value === sort)?.short ?? ''}
+        onClick={() => onView('sort')}
+      />
+    </div>
   );
 }
 
@@ -408,34 +471,37 @@ function CompanyFilterSheetForm({
 }: Omit<CompanyFilterSheetProps, 'open' | 'onClose'> & { close: () => void }) {
   const [draftFilter, setDraftFilter] = useState(filter);
   const [draftSort, setDraftSort] = useState(sort);
+  const [view, setView] = useState<SheetView>('overview');
   return (
     <form method="dialog">
+      <span className="companies-people-sheet-grab" aria-hidden="true" />
       <CompanyFilterSheetHeader
-        close={close}
+        view={view}
+        onBack={() => setView('overview')}
         onReset={() => {
           setDraftFilter('all');
           setDraftSort('default');
         }}
       />
-      <FilterOptions
-        name="company-filter"
-        legend="Показывать"
-        value={draftFilter}
-        disabledContacts={counts.contacts === null}
-        onChange={setDraftFilter}
-      />
-      <SortOptions
-        value={draftSort}
-        disabledContacts={counts.contacts === null}
-        onChange={setDraftSort}
-      />
-      <CompanyFilterApply
+      <SheetBody
+        view={view}
         filter={draftFilter}
         sort={draftSort}
         counts={counts}
-        onApply={onApply}
-        close={close}
+        onView={setView}
+        onFilter={setDraftFilter}
+        onSort={setDraftSort}
       />
+      <button
+        type="button"
+        className="companies-people-sheet-cta"
+        onClick={() => {
+          onApply(draftFilter, draftSort);
+          close();
+        }}
+      >
+        Показать {filterCount(counts, draftFilter) ?? 'неизвестно'}
+      </button>
     </form>
   );
 }
@@ -454,45 +520,49 @@ export function CompanyFilterSheet(props: CompanyFilterSheetProps) {
     <dialog
       ref={dialogRef}
       className="companies-people-filter-sheet"
-      aria-labelledby="companies-filter-title"
+      aria-label="Фильтры"
       onClose={props.onClose}
     >
-      <CompanyFilterSheetForm {...props} close={() => dialogRef.current?.close()} />
+      {props.open ? (
+        <CompanyFilterSheetForm {...props} close={() => dialogRef.current?.close()} />
+      ) : null}
     </dialog>
   );
 }
 
 function FilterOptions({
-  name,
-  legend,
   value,
-  disabledContacts,
+  counts,
   onChange,
 }: {
-  readonly name: string;
-  readonly legend: string;
   readonly value: CandidateCompanyFilter;
-  readonly disabledContacts: boolean;
+  readonly counts: CandidateCompanyPage['filterCounts'];
   readonly onChange: (value: CandidateCompanyFilter) => void;
 }) {
   return (
-    <fieldset>
-      <legend>{legend}</legend>
-      {FILTERS.map((item) => (
-        <label className="companies-people-filter-option" key={item.value}>
-          <input
-            type="radio"
-            name={name}
-            value={item.value}
-            checked={value === item.value}
-            disabled={item.value === 'contacts' && disabledContacts}
-            onChange={() => onChange(item.value)}
-          />
-          {item.value === 'contacts' && disabledContacts
-            ? `${item.label} · неизвестно`
-            : item.label}
-        </label>
-      ))}
+    <fieldset className="companies-people-sheet-list">
+      <legend className="career-sr-only">Показывать</legend>
+      {FILTERS.map((item) => {
+        const unknown = item.value === 'contacts' && counts.contacts === null;
+        return (
+          <label className="companies-people-filter-option" key={item.value}>
+            <input
+              type="radio"
+              name="company-filter"
+              value={item.value}
+              checked={value === item.value}
+              disabled={unknown}
+              onChange={() => onChange(item.value)}
+            />
+            <span className="companies-people-sheet-main">
+              {unknown ? `${item.label} · неизвестно` : item.label}
+            </span>
+            {unknown ? null : (
+              <span className="companies-people-sheet-val">{counts[item.value]}</span>
+            )}
+          </label>
+        );
+      })}
     </fieldset>
   );
 }
@@ -507,23 +577,19 @@ function SortOptions({
   readonly onChange: (value: CandidateCompanySort) => void;
 }) {
   return (
-    <fieldset>
-      <legend>Сортировка</legend>
-      {[
-        ['default', '«Хочу», затем по вакансиям'],
-        ['contacts', 'По контактам в сети'],
-        ['alphabetical', 'По алфавиту'],
-      ].map(([option, label]) => (
-        <label className="companies-people-filter-option" key={option}>
+    <fieldset className="companies-people-sheet-list">
+      <legend className="career-sr-only">Сортировка</legend>
+      {SORT_OPTIONS.map((option) => (
+        <label className="companies-people-filter-option" key={option.value}>
           <input
             type="radio"
             name="company-sort"
-            value={option}
-            checked={value === option}
-            disabled={option === 'contacts' && disabledContacts}
-            onChange={() => onChange(option as CandidateCompanySort)}
+            value={option.value}
+            checked={value === option.value}
+            disabled={option.value === 'contacts' && disabledContacts}
+            onChange={() => onChange(option.value)}
           />
-          {label}
+          <span className="companies-people-sheet-main">{option.label}</span>
         </label>
       ))}
     </fieldset>

@@ -673,53 +673,179 @@
   display: none;
 }
 
+/* Mockup 13 on 390 (sheet=cof): grab, «Фильтры» + «Сбросить», rows with a sub-view, «Показать N». */
 .companies-people-filter-sheet {
   inline-size: 100%;
   max-inline-size: none;
   max-block-size: 80dvh;
   margin: auto 0 0;
-  padding: var(--career-space-4);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+  padding: var(--career-space-2) var(--career-space-4)
+    calc(env(safe-area-inset-bottom) + var(--career-space-5));
+  border: 0;
+  border-radius: 28px 28px 0 0;
   color: var(--career-text);
   background: var(--career-bg-elevated);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, white 14%, transparent);
 }
 
 .companies-people-filter-sheet::backdrop {
-  background: color-mix(in oklab, var(--career-bg) 76%, transparent);
+  background: color-mix(in oklch, black 50%, transparent);
 }
 
 .companies-people-filter-sheet form {
   display: grid;
-  gap: var(--career-space-4);
+  gap: var(--career-space-3);
 }
 
-.companies-people-filter-sheet fieldset {
-  display: grid;
-  gap: var(--career-space-2);
-  margin: 0;
-  padding: 0;
-  border: 0;
+.companies-people-sheet-grab {
+  justify-self: center;
+  inline-size: 36px;
+  block-size: 5px;
+  margin: 4px auto;
+  border-radius: 3px;
+  background: color-mix(in oklch, white 24%, transparent);
 }
 
-.companies-people-filter-sheet legend {
-  margin-block-end: var(--career-space-2);
-  color: var(--career-text);
-  font-size: var(--career-text-md);
-  font-weight: 650;
-}
-
-.companies-people-filter-option {
+.companies-people-sheet-head {
   display: flex;
   gap: var(--career-space-2);
   align-items: center;
-  min-block-size: var(--career-target-min);
+  justify-content: space-between;
+}
+
+.companies-people-sheet-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--career-text-lg);
+  font-weight: 700;
+}
+
+.companies-people-sheet-reset {
+  min-block-size: 40px;
+  padding: 0 var(--career-space-4);
+  border: 0;
+  color: var(--career-text-soft);
+  background: none;
+  font: inherit;
+  font-size: var(--career-text-md);
+  cursor: pointer;
+}
+
+/* 40 px as in the mockup, 44 px to touch. */
+.companies-people-sheet-reset {
+  position: relative;
+}
+
+.companies-people-sheet-reset::after {
+  content: '';
+  position: absolute;
+  inset: -2px 0;
+}
+
+.companies-people-sheet-back {
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border: 0;
+  border-radius: 50%;
+  color: var(--career-text);
+  background: var(--career-surface);
+  cursor: pointer;
+}
+
+.companies-people-sheet-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 20px;
+  background: var(--career-surface);
+}
+
+.companies-people-sheet-row,
+.companies-people-filter-option {
+  position: relative;
+  display: flex;
+  gap: var(--career-space-3);
+  align-items: center;
+  min-block-size: 56px;
+  padding: var(--career-space-2) var(--career-space-4);
+  border: 0;
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.companies-people-sheet-row + .companies-people-sheet-row::before,
+.companies-people-filter-option + .companies-people-filter-option::before {
+  content: '';
+  position: absolute;
+  inset-inline: 56px 0;
+  inset-block-start: 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.companies-people-sheet-ico {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 9px;
+  color: var(--career-text-soft);
+  background: color-mix(in oklch, white 7%, transparent);
+}
+
+.companies-people-sheet-ico svg {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
+.companies-people-sheet-main {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--career-text-md);
+  font-weight: 500;
+}
+
+.companies-people-sheet-val {
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
+  white-space: nowrap;
+}
+
+.companies-people-sheet-chev {
+  color: var(--career-text-dim);
 }
 
 .companies-people-filter-option input {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  min-height: 0;
+  margin: 6px;
   accent-color: var(--career-accent);
+}
+
+.companies-people-sheet-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: 50px;
+  padding: 0 var(--career-space-5);
+  border: 0;
+  border-radius: 25px;
+  color: var(--career-bg);
+  background: var(--career-accent);
+  font: inherit;
+  font-size: var(--career-text-md);
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .companies-people-message {

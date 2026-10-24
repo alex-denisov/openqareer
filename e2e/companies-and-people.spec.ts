@@ -198,10 +198,13 @@ test('sorts companies and filters the list by a typed name', async ({ page }, te
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const sheet = page.getByRole('dialog', { name: 'Фильтры' });
+    await sheet.getByRole('button', { name: /^Сортировка:/u }).click();
     await sheet.getByRole('radio', { name: 'По алфавиту', exact: true }).check();
     await sheet.getByRole('button', { name: 'Показать 400', exact: true }).click();
   } else {
-    await page.getByRole('combobox', { name: 'Сортировка компаний' }).selectOption('alphabetical');
+    await page
+      .getByRole('combobox', { name: 'Сортировка', exact: true })
+      .selectOption('alphabetical');
   }
   await expect(
     page.getByRole('button', { name: 'Открыть компанию Арка Холдинг' }).first(),
@@ -219,12 +222,13 @@ test('the mobile filter sheet marks network-contact counts as unknown', async ({
   await page.getByRole('button', { name: 'Фильтры' }).click();
   const dialog = page.getByRole('dialog', { name: 'Фильтры' });
   await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: /^Показывать:/u }).click();
   await expect(
     dialog.getByRole('radio', { name: 'Есть контакты в сети · неизвестно' }),
   ).toBeDisabled();
   await expectCompanyScreenAccessible(page);
   await captureCompanyState(page, testInfo, 'company-filter-sheet');
-  await dialog.getByRole('radio', { name: 'Хочу', exact: true }).check();
+  await dialog.getByRole('radio', { name: /^Хочу \d+$/u }).check();
   await dialog.getByRole('button', { name: /Показать/u }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText('3 компании в подборке')).toBeVisible();
@@ -331,7 +335,8 @@ test('empty Wants state adds every selection company after confirmation (B422)',
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const sheet = page.getByRole('dialog', { name: 'Фильтры' });
-    await sheet.getByRole('radio', { name: 'Хочу', exact: true }).check();
+    await sheet.getByRole('button', { name: /^Показывать:/u }).click();
+    await sheet.getByRole('radio', { name: /^Хочу \d+$/u }).check();
     await sheet.getByRole('button', { name: 'Показать 0', exact: true }).click();
   } else {
     await page.getByRole('button', { name: 'Хочу 0', exact: true }).click();
@@ -357,10 +362,11 @@ test('a stale contact import keeps network counts unknown', async ({ page }, tes
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const filters = page.getByRole('dialog', { name: 'Фильтры' });
+    await filters.getByRole('button', { name: /^Показывать:/u }).click();
     await expect(
       filters.getByRole('radio', { name: 'Есть контакты в сети · неизвестно' }),
     ).toBeDisabled();
-    await filters.getByRole('button', { name: 'Закрыть' }).click();
+    await page.keyboard.press('Escape');
   } else {
     await expect(
       page.getByRole('button', { name: 'Есть контакты в сети · неизвестно' }),
