@@ -394,4 +394,55 @@
     opacity: 0.48;
     cursor: not-allowed;
   }
+
+  /* Country push (`mv=c4`): hero, .vm-f status, «Почему так», .pm-list of next steps */
+  .career-relocation-push .vacancy-push-hero h2 {
+    margin-inline: var(--career-space-1);
+    font-weight: 600;
+    line-height: 32px;
+  }
+
+  .career-relocation-push .vacancy-push-hero p {
+    margin: 2px var(--career-space-1) 0;
+    font-size: var(--career-text-sm);
+    line-height: 1.5;
+  }
+
+  .career-relocation-push .career-relocation-push-status {
+    margin-inline: var(--career-space-1);
+    font-size: var(--career-text-xs);
+    line-height: 20px;
+  }
+
+  .career-relocation-push .career-relocation-push-status svg {
+    inline-size: 14px;
+    block-size: 14px;
+  }
+
+  .career-relocation-push .career-relocation-push-why,
+  .career-relocation-push .vacancy-push-list {
+    border-radius: 20px;
+  }
+
+  .career-relocation-push .career-relocation-push-why {
+    line-height: 1.5;
+  }
+
+  .career-relocation-push .vacancy-push-row {
+    min-block-size: 56px;
+    padding-block: var(--career-space-2);
+  }
+
+  .career-relocation-push .vacancy-push-row b {
+    line-height: 1.5;
+  }
+
+  .career-relocation-push .vacancy-push-row small {
+    line-height: 1.5;
+  }
+
+  .career-relocation-push .vacancy-push-ico {
+    border-radius: 9px;
+    background: color-mix(in oklch, white 7%, transparent);
+  }
 }
