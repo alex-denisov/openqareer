@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
-import { CaretDown } from '@phosphor-icons/react';
+import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
 import type {
   RelocationQuestionnaire,
 } from '../../../shared/relocationQuestionnaire';
@@ -75,7 +75,10 @@ export function CountrySelect({
       </button>
       {open ? (
         <div className="career-relocation-picker-panel">
-          <input type="search" aria-label="Поиск: Страна" placeholder="Поиск: Страна" value={query} ref={searchRef} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }} />
+          <span className="career-relocation-picker-search">
+            <MagnifyingGlass aria-hidden="true" size={20} />
+            <input type="search" aria-label="Поиск: Страна" placeholder="Поиск: Страна" value={query} ref={searchRef} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }} />
+          </span>
           <ul role="listbox" aria-label="Страны">
             {countries.map(({ countryCode, name }) => (
               <li key={countryCode} role="option" aria-selected={countryCode === value}>

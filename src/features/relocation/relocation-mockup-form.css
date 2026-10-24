@@ -333,4 +333,35 @@
   .career-relocation-questionnaire .career-relocation-language-add {
     align-items: start;
   }
+
+  /* .cb-pop: 8 px padding, 10 px radius; .cb-search row with a 20 px icon; 40 px .cb-list rows */
+  .career-relocation-questionnaire .career-relocation-picker-panel {
+    gap: var(--career-space-2);
+    border-radius: var(--career-radius-sm);
+    padding: var(--career-space-2);
+  }
+
+  .career-relocation-questionnaire .career-relocation-picker-search {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: center;
+    gap: var(--career-space-2);
+    padding-inline-start: var(--career-space-3);
+    color: var(--career-text-dim);
+  }
+
+  .career-relocation-questionnaire .career-relocation-field .career-relocation-picker-search input {
+    min-block-size: var(--career-target-min);
+    border: 0;
+    padding-inline: var(--career-space-3);
+    color: var(--career-text);
+    background: transparent;
+    font-size: var(--career-text-sm);
+  }
+
+  .career-relocation-questionnaire .career-relocation-picker-panel li button {
+    min-block-size: 40px;
+    border-radius: var(--career-radius-sm);
+    padding-inline: var(--career-space-3);
+  }
 }
