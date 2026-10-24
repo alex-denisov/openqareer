@@ -167,6 +167,15 @@ export interface ApplicationTrackerMethods
     operation: () => T,
     createdAt?: string,
   ): ApplicationOperationReplay<T>;
+  /** Как runApplicationOperation, но без транзакции хранилища: операция пишет через другое соединение с тем же файлом. */
+  runExternalApplicationOperation<T extends Record<string, unknown>>(
+    candidateId: string,
+    operationId: string,
+    requestHash: string,
+    operationType: string,
+    operation: () => T,
+    createdAt?: string,
+  ): ApplicationOperationReplay<T>;
   bulkChangeApplicationStages(
     candidateId: string,
     targets: readonly { id: string; stage: ApplicationStage; version: number }[],
@@ -476,6 +485,7 @@ function createApplicationOperationsMethods(
   | 'listApplicationRetryRequests'
   | 'bulkQueueApplicationRetries'
   | 'runApplicationOperation'
+  | 'runExternalApplicationOperation'
   | 'bulkChangeApplicationStages'
 > {
   return {
@@ -635,38 +645,58 @@ function createApplicationRetryMethods(
 function createApplicationReplayMethods(
   requireCandidate: RequireCandidate,
   database: DatabaseSync,
-): Pick<ApplicationTrackerMethods, 'runApplicationOperation'> {
+): Pick<ApplicationTrackerMethods, 'runApplicationOperation' | 'runExternalApplicationOperation'> {
   return {
-    runApplicationOperation<T extends Record<string, unknown>>(
-      candidateId: string,
-      operationId: string,
-      requestHash: string,
-      operationType: string,
-      operation: () => T,
-      createdAt?: string,
-    ): ApplicationOperationReplay<T> {
+    runApplicationOperation(candidateId, operationId, requestHash, operationType, operation, createdAt) {
       requireCandidate(candidateId);
-      return inTransaction(database, () => {
-        const existing = database.prepare(`
-          SELECT operation_type, request_hash, result_json FROM candidate_application_operations
-          WHERE candidate_id = ? AND operation_id = ?
-        `).get(candidateId, operationId) as ApplicationOperationRow | undefined;
-        if (existing) {
-          if (existing.operation_type !== operationType || existing.request_hash !== requestHash) {
-            throw new ApplicationOperationConflictError();
-          }
-          return { result: JSON.parse(existing.result_json) as T, replayed: true };
-        }
-        const result = operation();
-        database.prepare(`
-          INSERT INTO candidate_application_operations
-            (candidate_id, operation_id, operation_type, request_hash, result_json, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(candidateId, operationId, operationType, requestHash, JSON.stringify(result), createdAt ?? new Date().toISOString());
-        return { result, replayed: false };
-      });
+      return inTransaction(database, () =>
+        replayOrRun(database, { candidateId, operationId, requestHash, operationType, createdAt }, operation),
+      );
+    },
+    runExternalApplicationOperation(candidateId, operationId, requestHash, operationType, operation, createdAt) {
+      requireCandidate(candidateId);
+      return replayOrRun(database, { candidateId, operationId, requestHash, operationType, createdAt }, operation);
     },
   };
+}
+
+interface ApplicationOperationKey {
+  candidateId: string;
+  operationId: string;
+  requestHash: string;
+  operationType: string;
+  createdAt?: string;
+}
+
+function replayOrRun<T extends Record<string, unknown>>(
+  database: DatabaseSync,
+  key: ApplicationOperationKey,
+  operation: () => T,
+): ApplicationOperationReplay<T> {
+  const existing = database.prepare(`
+    SELECT operation_type, request_hash, result_json FROM candidate_application_operations
+    WHERE candidate_id = ? AND operation_id = ?
+  `).get(key.candidateId, key.operationId) as ApplicationOperationRow | undefined;
+  if (existing) {
+    if (existing.operation_type !== key.operationType || existing.request_hash !== key.requestHash) {
+      throw new ApplicationOperationConflictError();
+    }
+    return { result: JSON.parse(existing.result_json) as T, replayed: true };
+  }
+  const result = operation();
+  database.prepare(`
+    INSERT INTO candidate_application_operations
+      (candidate_id, operation_id, operation_type, request_hash, result_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    key.candidateId,
+    key.operationId,
+    key.operationType,
+    key.requestHash,
+    JSON.stringify(result),
+    key.createdAt ?? new Date().toISOString(),
+  );
+  return { result, replayed: false };
 }
 
 function createApplicationStageBatchMethods(
