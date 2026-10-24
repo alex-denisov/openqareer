@@ -151,7 +151,9 @@ function assessmentDescription(current: RoleSkillAssessmentCurrent | null | unde
     case 'too_few_vacancies':
       return `В выборке ${current.sampleSize} вакансий; для проверки требуется ${current.threshold}.`;
     case 'insufficient_requirements':
-      return 'В выборке недостаточно проверенных требований роли.';
+      return current.collecting
+        ? 'Требования роли собираются из текстов вакансий.'
+        : 'В выборке недостаточно проверенных требований роли.';
     default:
       return 'Нет проверенных данных о текущей проверке.';
   }
