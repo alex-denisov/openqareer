@@ -172,11 +172,22 @@
   color: var(--career-success);
 }
 
-.vacancy-push-kv + .vacancy-push-kv,
-.vacancy-push-row + .vacancy-push-row,
-.vacancy-push-quote + .vacancy-push-row,
-.vacancy-push-chain + .vacancy-push-chain {
+/* B510: разделители как .pm-row + .pm-row::before макета 4 — линия от 56 px, не рамка. */
+.vacancy-push-kv + .vacancy-push-kv::before,
+.vacancy-push-row + .vacancy-push-row::before,
+.vacancy-push-quote + .vacancy-push-row::before,
+.vacancy-push-chain + .vacancy-push-chain::before {
+  content: '';
+  position: absolute;
+  inset-inline: 56px 0;
+  inset-block-start: 0;
   border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+/* Строки «ключ — значение» и цепочки без значка: линия от поля 16 px (.vm-chain макета). */
+.vacancy-push-kv + .vacancy-push-kv::before,
+.vacancy-push-chain + .vacancy-push-chain::before {
+  inset-inline-start: var(--career-space-4);
 }
 
 .vacancy-push-row {
@@ -276,6 +287,7 @@ div.vacancy-push-row {
 }
 
 .vacancy-push-chain {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
