@@ -41,8 +41,9 @@ async function verifySourceActions(page, viewport, baseUrl) {
       ? page.locator('.career-account-mobile-row').filter({ hasText: 'LinkedIn' })
       : page.locator('.career-account-row').filter({ hasText: 'LinkedIn' });
   await connection.getByText('Не подключено', { exact: true }).waitFor();
-  if (viewport.width > 760) {
-    await connection.getByRole('button', { name: /Открыть окно входа LinkedIn/u }).waitFor();
+  // B464 (24.10): the browser cannot finish a platform sign-in, so it shows no sign-in button.
+  if ((await connection.getByRole('button', { name: /Открыть окно входа/u }).count()) > 0) {
+    throw new Error(`${viewport.name}: the browser offers a sign-in window it cannot finish`);
   }
   await page.screenshot({ path: `${OUT}/first-run-source-${viewport.name}-connections.png` });
 }

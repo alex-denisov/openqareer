@@ -54,4 +54,25 @@ describe('connection manage dialogs for a connect-only platform (24.10)', () => 
     expect(html).toContain('Повторить импорт');
     expect(html).not.toContain('Подключено без импорта');
   });
+
+  it('in the browser offers only what works there: no sign-in window, no replace (B464, 24.10)', () => {
+    for (const html of [
+      renderToStaticMarkup(
+        <AccountHhModal busy={false} onClose={vi.fn()} onDisconnect={vi.fn()} connection={connection} connectOnly />,
+      ),
+      renderToStaticMarkup(
+        <AccountLinkedInModal
+          busy={false}
+          onClose={vi.fn()}
+          onDisconnect={vi.fn()}
+          connection={{ ...connection, platform: 'linkedin', factCount: 59 }}
+        />,
+      ),
+    ]) {
+      expect(html).toContain('Отключить');
+      expect(html).not.toContain('Подключить заново');
+      expect(html).not.toContain('Импортировать заново');
+      expect(html).not.toContain('Заменить профиль');
+    }
+  });
 });

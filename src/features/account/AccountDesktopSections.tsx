@@ -351,8 +351,9 @@ interface ConnectionsSectionProps {
   readonly isDesktopApp: boolean;
   readonly onManageLinkedIn: () => void;
   readonly onManageHh: () => void;
-  readonly onConnectLinkedIn: () => void;
-  readonly onConnectHh: () => void;
+  /** Absent in the browser: connecting needs the desktop app's sign-in window (B464). */
+  readonly onConnectLinkedIn?: () => void;
+  readonly onConnectHh?: () => void;
   readonly onOpenNotifications: () => void;
   readonly onConnectTelegram: () => void;
 }
@@ -376,6 +377,7 @@ function AccountConnectionRow({
   readonly disabled?: boolean;
   readonly onAction?: () => void;
 }) {
+  // No handler means the action cannot work here (B464): no button rather than a dead one.
   return (
     <div className="career-account-row">
       <div className="career-account-row-left">
@@ -389,10 +391,12 @@ function AccountConnectionRow({
       </div>
       <div className="career-account-row-right">
         <span className={`career-account-tag is-${tag}`}>{tagLabel}</span>
-        <button type="button" className="career-btn is-sm" disabled={disabled} onClick={onAction}>
-          {actionLabel === 'Управлять' ? <SlidersHorizontal size={16} aria-hidden="true" /> : null}
-          {actionLabel}
-        </button>
+        {onAction ? (
+          <button type="button" className="career-btn is-sm" disabled={disabled} onClick={onAction}>
+            {actionLabel === 'Управлять' ? <SlidersHorizontal size={16} aria-hidden="true" /> : null}
+            {actionLabel}
+          </button>
+        ) : null}
       </div>
     </div>
   );
