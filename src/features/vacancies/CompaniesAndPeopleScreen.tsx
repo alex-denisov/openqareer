@@ -30,6 +30,13 @@ import {
 } from './CompaniesAndPeopleControls';
 import { isContactImportStale, readableError } from './companiesAndPeopleUtils';
 
+/** Mockup 13 on 390 words the default order shorter than on 1440. */
+const COMPANY_ORDER_NOTE_COMPACT: Record<CandidateCompanySort, string> = {
+  default: 'Порядок: «Хочу», затем по числу вакансий, контактов в сети и алфавиту.',
+  contacts: 'Порядок: по числу контактов в сети, затем по алфавиту.',
+  alphabetical: 'Порядок: по алфавиту.',
+};
+
 const COMPANY_ORDER_NOTE: Record<CandidateCompanySort, string> = {
   default:
     'Порядок: сначала «Хочу», затем по числу подходящих вакансий, при равенстве по числу контактов в сети, затем по алфавиту.',
@@ -467,24 +474,13 @@ function CompanyListColumn({
   readonly onOpenCareer?: () => void;
 }) {
   const { page, selectedKey, filters } = model;
+  const total = page.page?.total ?? 0;
+  const more = page.items.length < total;
   const footer = page.page ? (
-    <>
-      {page.items.length < page.page.total ? (
-        <button
-          type="button"
-          className="companies-people-load-more"
-          disabled={page.loadingMore}
-          onClick={() => void page.loadMore()}
-        >
-          {page.loadingMore ? 'Загружаем…' : 'Показать ещё 20'}
-        </button>
-      ) : null}
-      <p className="companies-people-list-footer">
-        Показаны {page.items.length} из {page.page.total}
-        {page.items.length < page.page.total ? ', список прокручивается' : ''}.{' '}
-        {COMPANY_ORDER_NOTE[filters.sort]}
-      </p>
-    </>
+    <p className="companies-people-list-footer is-wide">
+      Показаны {page.items.length} из {total}
+      {more ? ', список прокручивается' : ''}. {COMPANY_ORDER_NOTE[filters.sort]}
+    </p>
   ) : null;
   return (
     <div>
@@ -499,6 +495,21 @@ function CompanyListColumn({
         onWantsChanged={page.reload}
         footer={footer}
       />
+      {page.page && page.items.length > 0 ? (
+        <p className="companies-people-list-footer is-compact">
+          Показано {page.items.length} из {total}. {COMPANY_ORDER_NOTE_COMPACT[filters.sort]}
+        </p>
+      ) : null}
+      {more ? (
+        <button
+          type="button"
+          className="companies-people-load-more"
+          disabled={page.loadingMore}
+          onClick={() => void page.loadMore()}
+        >
+          {page.loadingMore ? 'Загружаем…' : 'Показать ещё 20'}
+        </button>
+      ) : null}
     </div>
   );
 }

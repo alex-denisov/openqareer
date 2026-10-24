@@ -269,12 +269,17 @@
   align-items: center;
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
-  font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
 }
 
-.companies-people-contacts[data-zero] {
-  color: var(--career-text-dim);
+@media (min-width: 761px) {
+  .companies-people-company-metrics {
+    font-family: var(--font-mono, ui-monospace, monospace);
+  }
+
+  .companies-people-contacts[data-zero] {
+    color: var(--career-text-dim);
+  }
 }
 
 .companies-people-contacts {
@@ -719,6 +724,10 @@
   font-size: var(--career-text-xs);
 }
 
+.companies-people-list-footer.is-compact {
+  display: none;
+}
+
 /* B439-r1: company push screen on 390 (mockup 13, mv=main|none|found|noli) */
 .company-push {
   /* Rows take their content height: the action follows the content as in the
@@ -824,6 +833,9 @@
   }
 
   .companies-people-list {
+    display: block;
+    block-size: auto;
+    min-block-size: 0;
     padding: 0;
     border: var(--career-border-width) solid var(--career-line);
     border-radius: var(--career-radius-md);
@@ -914,13 +926,18 @@
     border: 0;
     background: none;
     color: var(--career-text-soft);
+    font-weight: 400;
   }
 
   .companies-people-company-row .companies-people-want-chip.is-compact svg {
     color: var(--career-accent);
   }
 
-  .companies-people-list-footer {
+  .companies-people-list-footer.is-wide {
+    display: none;
+  }
+
+  .companies-people-list-footer.is-compact {
     display: block;
     margin: var(--career-space-3) 0 0;
     color: var(--career-text-soft);
@@ -930,6 +947,24 @@
 
   .companies-people-load-more {
     inline-size: 100%;
+    min-block-size: 50px;
+    margin-block-start: var(--career-space-4);
+    border: 0;
+    border-radius: 25px;
+    background: oklch(100% 0 0 / 0.1);
+    font-size: var(--career-text-md);
+  }
+
+  /* Mockup 13 on 390: «Фильтры» is a soft 32 px pill in a 44 px hit area. */
+  .companies-people-toolbar .companies-people-filter-button {
+    block-size: 32px;
+    min-block-size: 32px;
+    margin-block: 6px;
+    border: 0;
+    border-radius: 16px;
+    background: color-mix(in oklch, var(--career-bg-elevated) 55%, transparent);
+    font-size: var(--career-text-xs);
+    font-weight: 500;
   }
 }
 
