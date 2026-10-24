@@ -144,7 +144,7 @@ function CompanyFilterChip({
       onClick={() => onFilter(filter === item.value ? 'all' : item.value)}
     >
       <span className="companies-people-filter-label">{item.label}</span>{' '}
-      <span className="companies-people-filter-count">{disabled ? 'неизвестно' : count}</span>
+      <span className="companies-people-filter-count">{disabled ? '· неизвестно' : count}</span>
     </button>
   );
 }
