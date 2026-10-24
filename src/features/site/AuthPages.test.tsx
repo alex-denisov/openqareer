@@ -23,7 +23,7 @@ describe('AuthPages', () => {
     expect(html).toContain('Забыли пароль?');
     expect(html).toContain('name="username"');
     expect(html).toContain('name="password"');
-    expect(html).toContain('autoComplete="username email"');
+    expect(html).toContain('autoComplete="username"');
     expect(html).toContain('autoComplete="current-password"');
   });
 
@@ -40,6 +40,24 @@ describe('AuthPages', () => {
     expect(html).toContain('name="password"');
     expect(html).toContain('autoComplete="new-password"');
     expect(html).toContain('Войти');
+  });
+
+  it('gives each full auth page one main landmark containing its form', () => {
+    for (const Page of [LoginPage, SignupPage]) {
+      const html = renderToStaticMarkup(<Page onNavigate={vi.fn()} />);
+      expect(html.match(/<main\b/gu)).toHaveLength(1);
+      expect(html).toMatch(/^<main class="auth-page-container">.*<form\b.*<\/form>.*<\/main>$/u);
+    }
+  });
+
+  it('uses one valid autocomplete purpose per identity field', () => {
+    const login = renderToStaticMarkup(<LoginPage onNavigate={vi.fn()} />);
+    const signup = renderToStaticMarkup(<SignupPage onNavigate={vi.fn()} />);
+    expect(login).toMatch(/<input[^>]*id="login-identifier"[^>]*autoComplete="username"/u);
+    expect(signup).toMatch(/<input[^>]*id="signup-email"[^>]*autoComplete="email"/u);
+    expect(signup).toMatch(/<input[^>]*id="signup-name"[^>]*autoComplete="name"/u);
+    expect(login).not.toContain('autoComplete="username email"');
+    expect(signup).not.toContain('autoComplete="email username"');
   });
 
   /**

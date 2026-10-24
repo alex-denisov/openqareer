@@ -93,7 +93,7 @@ function LoginFormFields({
         id="login-identifier"
         name="username"
         label="Email или логин"
-        autoComplete="username email"
+        autoComplete="username"
         placeholder="candidate@example.com"
         value={form.identifier}
         onChange={form.setIdentifier}
@@ -166,7 +166,7 @@ export function LoginPage({
 }: AuthPageProps) {
   const isDesktop = isTauriEnvironment();
   return (
-    <div className="auth-page-container">
+    <main className="auth-page-container">
       <div className="auth-card">
         <AuthCardHeader
           title="Вход в кабинет"
@@ -193,7 +193,7 @@ export function LoginPage({
           ) : null}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -286,7 +286,7 @@ function SignupFields({ form }: { form: ReturnType<typeof useSignupForm> }) {
         name="email"
         label="Email"
         type="email"
-        autoComplete="email username"
+        autoComplete="email"
         placeholder="candidate@example.com"
         value={form.email}
         onChange={form.setEmail}
@@ -392,7 +392,7 @@ function LegalConsentField({
 export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: AuthPageProps) {
   const isDesktop = isTauriEnvironment();
   return (
-    <div className="auth-page-container">
+    <main className="auth-page-container">
       <div className="auth-card">
         <AuthCardHeader
           title="Создать аккаунт"
@@ -414,6 +414,6 @@ export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: A
           ) : null}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
