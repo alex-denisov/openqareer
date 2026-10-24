@@ -43,6 +43,8 @@ const SPECIAL_LETTERS: Readonly<Record<string, string>> = {
   AElig: 'Æ',
   oslash: 'ø',
   Oslash: 'Ø',
+  oelig: 'œ',
+  OElig: 'Œ',
 };
 
 function accentedLetter(body: string): string | null {
