@@ -365,6 +365,8 @@ describe('VacanciesScreen (B250)', () => {
 
     expect(html).toContain('Сохранённые 1');
     expect(html).toContain('Компании и люди 61');
+    expect(html).toMatch(/Сохранённые<span class="tab-count">1<\/span>/);
+    expect(html).toMatch(/Компании и люди<span class="tab-count">61<\/span>/);
   });
 
   it('keeps the mobile map control available without optional facet metadata', () => {

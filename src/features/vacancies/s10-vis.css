@@ -795,3 +795,38 @@
     font-size: var(--career-text-sm);
   }
 }
+
+/* B510: переключатель «Список / Карта» как .seg макета 4: рамка line-strong без внутреннего
+   поля, кнопки 14 px/600 с полем 16 px, выбранная — accent-soft и цвет акцента. */
+.vacancies-screen .view-switch {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--career-line-strong);
+}
+.vacancies-screen .view-switch button {
+  gap: var(--career-space-2);
+  padding: 0 var(--career-space-4);
+  border-radius: 0;
+  font-size: var(--career-text-sm);
+}
+.vacancies-screen .view-switch button.is-active {
+  background: var(--career-accent-soft);
+  color: var(--career-accent);
+}
+
+/* B510: вкладки «Подборка / Сохранённые / Компании и люди» как .tabs макета 4:
+   поле 16 px по ширине содержимого; счётчик — моно, 400, dim. */
+@media (min-width: 761px) {
+  .vacancies-tabs-row .companies-people-tab {
+    flex: 0 0 auto;
+    padding-inline: var(--career-space-4);
+  }
+}
+.vacancies-tabs-row .companies-people-tab .tab-count {
+  margin-inline-start: var(--career-space-2);
+  color: var(--career-text-dim);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
