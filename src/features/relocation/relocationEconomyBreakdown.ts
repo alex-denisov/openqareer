@@ -1,5 +1,8 @@
 import type { PayrollResult } from '../../../shared/taxCalculators';
-import { RELOCATION_EXPENSES, type RelocationScenarioInput } from '../../../shared/relocationScenario';
+import {
+  RELOCATION_EXPENSES,
+  type RelocationScenarioInput,
+} from '../../../shared/relocationScenario';
 
 export type EconomyItemKey = 'tax' | 'rent' | 'insurance' | 'other' | 'free';
 
@@ -43,9 +46,7 @@ export function relocationEconomyBreakdown(
   const otherKnown = others.filter((value): value is number => value !== null);
   const other = otherKnown.length ? otherKnown.reduce((sum, value) => sum + value, 0) : null;
   const complete = rent !== null && insurance !== null && otherKnown.length === others.length;
-  const freeMonthly = complete
-    ? payroll.netMonthlyIncome - rent - insurance - (other ?? 0)
-    : null;
+  const freeMonthly = complete ? payroll.netMonthlyIncome - rent - insurance - (other ?? 0) : null;
   return {
     items: [
       { key: 'tax', label: 'Налоги и взносы', share: share(gross - payroll.netMonthlyIncome) },

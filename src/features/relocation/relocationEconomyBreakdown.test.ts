@@ -43,7 +43,9 @@ describe('relocationEconomyBreakdown (mockup 15 `view=net`)', () => {
     expect(share('rent')).toBeCloseTo((1_500 * 12) / 120_000, 4);
     expect(share('insurance')).toBeCloseTo((200 * 12) / 120_000, 4);
     expect(share('other')).toBeCloseTo((1_010 * 12) / 120_000, 4);
-    expect(share('tax') + share('rent') + share('insurance') + share('other') + share('free')).toBeCloseTo(1, 4);
+    expect(
+      share('tax') + share('rent') + share('insurance') + share('other') + share('free'),
+    ).toBeCloseTo(1, 4);
     expect(view.freeMonthly).toBeCloseTo(payroll.netMonthlyIncome - 2_710, 2);
   });
 

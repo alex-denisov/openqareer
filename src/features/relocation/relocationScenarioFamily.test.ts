@@ -34,7 +34,11 @@ describe('scenario family: partner and children drive the budget', () => {
       germanyChildless: false,
     });
     expect(
-      scenarioPayrollOptions('GE', { hasPartner: false, children: 0 }, { georgiaPensionParticipant: true }),
+      scenarioPayrollOptions(
+        'GE',
+        { hasPartner: false, children: 0 },
+        { georgiaPensionParticipant: true },
+      ),
     ).toEqual({ georgiaPensionParticipant: true });
   });
 

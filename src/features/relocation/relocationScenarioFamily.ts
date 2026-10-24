@@ -20,7 +20,16 @@ export const RELOCATION_CITIES: Readonly<Record<ScenarioCountry, readonly string
 };
 
 /** ISO 4217 codes the editor accepts for comparison rates and visa funds. */
-export const RELOCATION_CURRENCIES = ['EUR', 'USD', 'RUB', 'RSD', 'AED', 'GEL', 'GBP', 'KZT'] as const;
+export const RELOCATION_CURRENCIES = [
+  'EUR',
+  'USD',
+  'RUB',
+  'RSD',
+  'AED',
+  'GEL',
+  'GBP',
+  'KZT',
+] as const;
 
 /** Partner and children from the questionnaire; unknown answers start as «one person, no children». */
 export function scenarioFamilyFromProfile(profile: RelocationQuestionnaire | null): ScenarioFamily {

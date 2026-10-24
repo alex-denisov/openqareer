@@ -45,7 +45,9 @@ describe('RelocationEconomy', () => {
   it('shows calculation errors instead of hiding invalid numeric input', () => {
     render(-1);
 
-    expect(host?.querySelector('[role="alert"]')?.textContent).toContain('Укажите годовую зарплату числом');
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain(
+      'Укажите годовую зарплату числом',
+    );
   });
 
   it('shows the mockup breakdown: taxes from the scale, no invented rent, insurance or remainder', () => {
@@ -63,9 +65,9 @@ describe('RelocationEconomy', () => {
     render(120_000);
     await click('Уточнить расходы');
 
-    const actions = [...(host?.querySelectorAll('.career-relocation-scenario-actions button') ?? [])].map(
-      (button) => button.textContent?.trim(),
-    );
+    const actions = [
+      ...(host?.querySelectorAll('.career-relocation-scenario-actions button') ?? []),
+    ].map((button) => button.textContent?.trim());
     expect(actions).toEqual(['Сбросить', 'Сохранить', 'Рассчитать']);
     expect(host?.querySelector('select option[value="Берлин"]')).not.toBeNull();
     expect(host?.textContent).toContain('Сколько детей переезжает');
@@ -75,7 +77,9 @@ describe('RelocationEconomy', () => {
   });
 
   async function click(label: string) {
-    const button = [...(host?.querySelectorAll('button') ?? [])].find((item) => item.textContent?.includes(label));
+    const button = [...(host?.querySelectorAll('button') ?? [])].find((item) =>
+      item.textContent?.includes(label),
+    );
     expect(button).toBeDefined();
     await act(async () => {
       button?.click();
@@ -83,20 +87,25 @@ describe('RelocationEconomy', () => {
   }
 
   function render(income: number) {
-    vi.spyOn(scenarioApi, 'listRelocationScenarios').mockResolvedValue({ items: [], nextOffset: null });
+    vi.spyOn(scenarioApi, 'listRelocationScenarios').mockResolvedValue({
+      items: [],
+      nextOffset: null,
+    });
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
-    act(() => root?.render(
-      <RelocationEconomy
-        profile={emptyRelocationQuestionnaire()}
-        selectedCountryCodes={['DE']}
-        selectedCountryCode="DE"
-        grossAnnualIncome={income}
-        onCountryCodeChange={vi.fn()}
-        onGrossAnnualIncomeChange={vi.fn()}
-        onShowComparison={vi.fn()}
-      />,
-    ));
+    act(() =>
+      root?.render(
+        <RelocationEconomy
+          profile={emptyRelocationQuestionnaire()}
+          selectedCountryCodes={['DE']}
+          selectedCountryCode="DE"
+          grossAnnualIncome={income}
+          onCountryCodeChange={vi.fn()}
+          onGrossAnnualIncomeChange={vi.fn()}
+          onShowComparison={vi.fn()}
+        />,
+      ),
+    );
   }
 });
