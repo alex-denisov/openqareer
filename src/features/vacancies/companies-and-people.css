@@ -909,6 +909,8 @@
   flex: none;
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .company-push-remove {
@@ -1481,5 +1483,13 @@ select.companies-people-select {
     > .companies-people-action:not(.is-primary) {
     border-color: var(--career-field-edge);
     background: transparent;
+  }
+
+  /* Mockup .ico is 1.25em: 16 px in 13 px small buttons, 18 px in 14 px buttons. */
+  .companies-people-detail .companies-people-action svg,
+  .companies-people-detail .companies-people-want-button svg {
+    flex: none;
+    inline-size: 1.25em;
+    block-size: 1.25em;
   }
 }

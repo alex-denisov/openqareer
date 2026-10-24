@@ -198,7 +198,7 @@ test('sorts companies and filters the list by a typed name', async ({ page }, te
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const sheet = page.getByRole('dialog', { name: 'Фильтры' });
-    await sheet.getByRole('button', { name: /^Сортировка:/u }).click();
+    await sheet.getByRole('button', { name: /^Сортировка /u }).click();
     await sheet.getByRole('radio', { name: 'По алфавиту', exact: true }).check();
     await sheet.getByRole('button', { name: 'Показать 400', exact: true }).click();
   } else {
@@ -222,7 +222,7 @@ test('the mobile filter sheet marks network-contact counts as unknown', async ({
   await page.getByRole('button', { name: 'Фильтры' }).click();
   const dialog = page.getByRole('dialog', { name: 'Фильтры' });
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: /^Показывать:/u }).click();
+  await dialog.getByRole('button', { name: /^Показывать /u }).click();
   await expect(
     dialog.getByRole('radio', { name: 'Есть контакты в сети · неизвестно' }),
   ).toBeDisabled();
@@ -335,7 +335,7 @@ test('empty Wants state adds every selection company after confirmation (B422)',
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const sheet = page.getByRole('dialog', { name: 'Фильтры' });
-    await sheet.getByRole('button', { name: /^Показывать:/u }).click();
+    await sheet.getByRole('button', { name: /^Показывать /u }).click();
     await sheet.getByRole('radio', { name: /^Хочу \d+$/u }).check();
     await sheet.getByRole('button', { name: 'Показать 0', exact: true }).click();
   } else {
@@ -362,7 +362,7 @@ test('a stale contact import keeps network counts unknown', async ({ page }, tes
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const filters = page.getByRole('dialog', { name: 'Фильтры' });
-    await filters.getByRole('button', { name: /^Показывать:/u }).click();
+    await filters.getByRole('button', { name: /^Показывать /u }).click();
     await expect(
       filters.getByRole('radio', { name: 'Есть контакты в сети · неизвестно' }),
     ).toBeDisabled();

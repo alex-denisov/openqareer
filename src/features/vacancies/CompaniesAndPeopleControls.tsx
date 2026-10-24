@@ -410,12 +410,7 @@ function SheetRow({
   readonly onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      className="companies-people-sheet-row"
-      aria-label={`${label}: ${value}`}
-      onClick={onClick}
-    >
+    <button type="button" className="companies-people-sheet-row" onClick={onClick}>
       <span className="companies-people-sheet-ico" aria-hidden="true">
         {icon}
       </span>
