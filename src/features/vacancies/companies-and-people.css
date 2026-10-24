@@ -736,6 +736,7 @@
 }
 
 .companies-people-sheet-reset {
+  position: relative;
   min-block-size: 40px;
   padding: 0 var(--career-space-4);
   border: 0;
@@ -747,10 +748,6 @@
 }
 
 /* 40 px as in the mockup, 44 px to touch. */
-.companies-people-sheet-reset {
-  position: relative;
-}
-
 .companies-people-sheet-reset::after {
   content: '';
   position: absolute;
