@@ -1114,3 +1114,9 @@
   inline-size: 1.25em;
   block-size: 1.25em;
 }
+
+/* B510: иконочная малая кнопка (.career-btn.is-sm.is-icon) — цель 44 без поля. */
+.vacancies-screen .vac-sm.vac-sm.is-icon {
+  inline-size: var(--career-target-min);
+  padding: 0;
+}

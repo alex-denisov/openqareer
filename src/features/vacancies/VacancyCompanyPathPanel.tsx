@@ -1,12 +1,4 @@
-import {
-  ChatCircleText,
-  EnvelopeSimple,
-  FileText,
-  Info,
-  Path,
-  UserFocus,
-  UsersThree,
-} from '@phosphor-icons/react';
+import { EnvelopeSimple, Info, UserFocus, UsersThree } from '@phosphor-icons/react';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
@@ -56,12 +48,6 @@ const ICONS: Record<ConnectionCircleNumber, typeof UserFocus> = {
   3: EnvelopeSimple,
 };
 
-const ACTION_ICONS: Record<ConnectionCircleNumber, typeof UserFocus> = {
-  1: ChatCircleText,
-  2: Path,
-  3: FileText,
-};
-
 export function circleAction(
   card: PathCircleCard,
   actions: CompanyPathActions,
@@ -80,7 +66,6 @@ function CircleCard({
   readonly actions: CompanyPathActions;
 }) {
   const Icon = ICONS[card.circle];
-  const ActionIcon = ACTION_ICONS[card.circle];
   const onClick = circleAction(card, actions);
   return (
     <li className="vacancy-path-circle">
@@ -91,8 +76,7 @@ function CircleCard({
       <b>{card.title}</b>
       <p>{card.summary}</p>
       {onClick ? (
-        <button type="button" className="btn btn-secondary action-btn" onClick={onClick}>
-          <ActionIcon size={15} aria-hidden="true" />
+        <button type="button" className="vac-sm" onClick={onClick}>
           {card.actionLabel}
         </button>
       ) : null}
@@ -124,8 +108,7 @@ function PathPanelStatus({
       ) : null}
       {state.status !== 'ready' && onPrepareLetter ? (
         // B446-g4: холодное письмо (круг 3) не зависит от контактов — доступно и без кругов.
-        <button type="button" className="btn btn-secondary action-btn" onClick={onPrepareLetter}>
-          <FileText size={15} aria-hidden="true" />
+        <button type="button" className="vac-sm" onClick={onPrepareLetter}>
           Подготовить письмо
         </button>
       ) : null}
@@ -150,7 +133,11 @@ export function VacancyCompanyPathPanel({
         <h3 id={headingId}>Как откликнуться: три круга связей</h3>
         {state.status === 'ready' ? (
           <CareerTooltip content={`${pathSourceNote(state.data)} Шанс ответа не показываем.`}>
-            <button type="button" className="vacancy-path-info" aria-label="Пояснение">
+            <button
+              type="button"
+              className="vacancy-path-info vac-sm is-ghost is-icon"
+              aria-label="Пояснение"
+            >
               <Info size={16} aria-hidden="true" />
             </button>
           </CareerTooltip>
