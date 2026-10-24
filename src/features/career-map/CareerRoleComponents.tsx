@@ -10,7 +10,6 @@ import {
   ListChecks,
   Question,
   Warning,
-  X,
 } from '@phosphor-icons/react';
 import type { CareerRoleModel, RoleStatus } from './careerScreenTypes';
 import { formatVacancyCount } from './careerWageFork';
@@ -198,10 +197,9 @@ function RoleRejectAction({
   return (
     <button
       type="button"
-      className="career-btn career-btn-text"
+      className="career-btn is-sm is-ghost"
       onClick={() => setConfirming(true)}
     >
-      <X size={16} aria-hidden />
       Отклонить роль
     </button>
   );
