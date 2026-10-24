@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowClockwise, Briefcase, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, Bell, Briefcase, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
@@ -465,7 +465,10 @@ function ColumnHeader({
         <h2>{label}</h2>
         <span className="career-responses-column-count">{count.toLocaleString('ru-RU')}</span>
       </div>
-      <p>Нужно действие: {needsActionCount.toLocaleString('ru-RU')}</p>
+      <p>
+        <Bell size={14} aria-hidden="true" />
+        Нужно действие: {needsActionCount.toLocaleString('ru-RU')}
+      </p>
     </header>
   );
 }

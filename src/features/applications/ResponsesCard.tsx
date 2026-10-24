@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowClockwise,
+  ArrowRight,
   CaretDown,
   DotsThreeVertical,
   FileText,
@@ -113,8 +114,8 @@ function CardHeaderContent({
 }) {
   return (
     <>
-      <div className="career-responses-card-role">{title}</div>
       <div className="career-responses-card-company">{company}</div>
+      <div className="career-responses-card-role">{title}</div>
       <MaterialsBadge hasMaterials={hasMaterials} />
     </>
   );
@@ -320,6 +321,7 @@ function CardFooter({
   return (
     <div className="career-responses-card-footer">
       <span className={`career-responses-waiting ${labelOn ? `is-on-${labelOn}` : 'is-closed'}`}>
+        <ArrowRight size={14} aria-hidden="true" />
         {labelText}
       </span>
       <CardMenuWrap

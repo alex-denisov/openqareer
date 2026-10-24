@@ -178,6 +178,7 @@ function FunnelControls({
   return (
     <>
       <ResponsesFunnelSummary
+        active={{ stage: summaryStage(workspace.query.stage), actionOnly: workspace.actionOnly }}
         counts={workspace.stageCounts}
         needsActionCount={workspace.needsActionCount}
         actionCountLoading={workspace.poolStatus !== 'ready'}
@@ -394,4 +395,11 @@ function filteredPageMeta(
   total: number,
 ): ApplicationListPageMeta | undefined {
   return pageMeta ? { ...pageMeta, total, offset: 0, limit: Math.min(20, total) } : undefined;
+}
+
+/** The default open-stage query is the «все» chip of the strip. */
+function summaryStage(stage: readonly ApplicationStage[] | undefined): readonly ApplicationStage[] {
+  if (!stage) return [];
+  const open = new Set(OPEN_APPLICATION_STAGES);
+  return stage.length === open.size && stage.every((value) => open.has(value)) ? [] : stage;
 }

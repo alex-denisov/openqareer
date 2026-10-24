@@ -98,6 +98,7 @@
   }
 
   .career-cabinet-view-responses .career-responses-filterbar > select,
+  .career-cabinet-view-responses .career-responses-filterbar > .career-responses-filter-select,
   .career-cabinet-view-responses .career-responses-view-switch {
     display: none;
   }
@@ -126,9 +127,9 @@
     display: none;
   }
 
-  .career-cabinet-view-responses .career-responses-search-mobile {
+  .career-cabinet-view-responses .career-responses-filterbar .career-responses-search-mobile {
     display: block;
-    padding-inline-start: var(--career-space-8);
+    padding-inline-start: calc(var(--career-space-3) * 2 + var(--career-space-4));
   }
 
   .career-cabinet-view-responses .career-responses-filters-trigger {

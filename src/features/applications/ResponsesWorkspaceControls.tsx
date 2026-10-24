@@ -5,9 +5,10 @@ import {
   type Dispatch,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   type SetStateAction,
 } from 'react';
-import { MagnifyingGlass, SlidersHorizontal } from '@phosphor-icons/react';
+import { CaretDown, Kanban, MagnifyingGlass, Rows, SlidersHorizontal } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
 import { getCandidateCompanyPage } from '../vacancies/candidateCompaniesApi';
@@ -153,6 +154,7 @@ interface SummaryItem {
 }
 
 export function ResponsesFunnelSummary({
+  active,
   counts,
   needsActionCount,
   actionCountLoading,
@@ -162,6 +164,8 @@ export function ResponsesFunnelSummary({
   readonly needsActionCount: number;
   readonly actionCountLoading: boolean;
   readonly onFilter: (filter: ResponsesSummaryFilter) => void;
+  /** The filter on screen: its chip is drawn pressed (mockup 5 `.stat[aria-pressed]`). */
+  readonly active?: ResponsesSummaryFilter;
 }) {
   const items = buildSummaryItems(counts, needsActionCount, actionCountLoading);
   return (
@@ -170,6 +174,7 @@ export function ResponsesFunnelSummary({
         <SummaryButton
           key={item.label}
           item={item}
+          pressed={sameSummaryFilter(item.filter, active)}
           busy={item.label === 'нужно действие' && actionCountLoading}
           onFilter={onFilter}
         />
@@ -216,19 +221,29 @@ function buildSummaryItems(
   ];
 }
 
+function sameSummaryFilter(item: ResponsesSummaryFilter, active?: ResponsesSummaryFilter): boolean {
+  if (!active) return false;
+  if (Boolean(item.actionOnly) !== Boolean(active.actionOnly)) return false;
+  return [...item.stage].sort().join() === [...active.stage].sort().join();
+}
+
 function SummaryButton({
   item,
   busy,
+  pressed,
   onFilter,
 }: {
   readonly item: SummaryItem;
   readonly busy: boolean;
+  readonly pressed: boolean;
   readonly onFilter: (filter: ResponsesSummaryFilter) => void;
 }) {
   return (
     <button
       type="button"
+      className={item.filter.actionOnly ? 'is-hot' : undefined}
       aria-label={`${item.count} ${item.label}`}
+      aria-pressed={pressed}
       aria-busy={busy || undefined}
       onClick={() => onFilter(item.filter)}
     >
@@ -248,9 +263,11 @@ export function ResponsesViewSwitch({
   return (
     <div className="career-responses-view-switch" role="group" aria-label="Вид откликов">
       <button type="button" aria-pressed={view === 'columns'} onClick={() => onChange('columns')}>
+        <Kanban size={16} aria-hidden="true" />
         Колонки
       </button>
       <button type="button" aria-pressed={view === 'table'} onClick={() => onChange('table')}>
+        <Rows size={16} aria-hidden="true" />
         Таблица
       </button>
     </div>
@@ -277,13 +294,29 @@ export function ResponsesFilterControls(props: ResponsesFilterControlsProps) {
     <div className="career-responses-toolbar">
       <div className="career-responses-filterbar" aria-label="Фильтры откликов">
         <SearchFilter value={props.search} onChange={props.onSearchChange} />
-        <ChannelFilter query={props.query} channels={channels} onChange={props.onQueryChange} />
-        <PeriodFilter value={props.period} onChange={props.onPeriodChange} />
-        <SortFilter value={props.sortMode} onChange={props.onSortChange} />
+        <SelectWrap>
+          <ChannelFilter query={props.query} channels={channels} onChange={props.onQueryChange} />
+        </SelectWrap>
+        <SelectWrap>
+          <PeriodFilter value={props.period} onChange={props.onPeriodChange} />
+        </SelectWrap>
+        <SelectWrap>
+          <SortFilter value={props.sortMode} onChange={props.onSortChange} />
+        </SelectWrap>
         <MobileFilterDialog props={props} channels={channels} />
       </div>
       <ResponsesViewSwitch view={props.view} onChange={props.onViewChange} />
     </div>
+  );
+}
+
+/** Mockup 5 `.career-select-wrap`: one select look with a Phosphor caret. */
+function SelectWrap({ children }: { readonly children: ReactNode }) {
+  return (
+    <span className="career-responses-filter-select">
+      {children}
+      <CaretDown size={16} aria-hidden="true" />
+    </span>
   );
 }
 

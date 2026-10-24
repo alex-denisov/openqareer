@@ -270,7 +270,7 @@ function MobileResponseRow({
         <div className="career-responses-mobile-row-heading">
           <strong>{company}</strong>
           <time className="career-numeric" dateTime={application.createdAt}>
-            {formatDate(application.createdAt)}
+            {formatShortDate(application.createdAt)}
           </time>
         </div>
         <p className="career-responses-mobile-row-role">
@@ -766,6 +766,14 @@ function deliveryStateLabel(state: ReturnType<typeof deliveryState>): string {
   if (state === 'failed') return 'Не доставлено';
   if (state === 'prepared') return 'Черновик';
   return 'Пробовали отправить';
+}
+
+/** Mockup 5 at 390: the row date is «08.10», without the year. */
+function formatShortDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 }
 
 function formatDate(value: string): string {
