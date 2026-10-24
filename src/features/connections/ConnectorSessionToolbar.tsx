@@ -7,6 +7,8 @@ interface ConnectorSessionToolbarProps {
   readonly platform: ConnectionPlatform;
   readonly onShow: () => Promise<boolean>;
   readonly onCancel: () => void;
+  /** Signed in already (e.g. the resume choice is on screen): nothing to wait for. */
+  readonly signedIn?: boolean;
 }
 
 /**
@@ -18,6 +20,7 @@ export function ConnectorSessionToolbar({
   platform,
   onShow,
   onCancel,
+  signedIn = false,
 }: ConnectorSessionToolbarProps) {
   const [showFailed, setShowFailed] = useState(false);
 
@@ -33,14 +36,18 @@ export function ConnectorSessionToolbar({
       aria-label="Окно входа"
       data-platform={platform}
     >
-      <p className="career-connector-hint">
-        Войдите в открывшемся окне. Пароль вводится на странице площадки, мы его не видим.
-      </p>
+      {signedIn ? null : (
+        <p className="career-connector-hint">
+          Войдите в открывшемся окне. Пароль вводится на странице площадки, мы его не видим.
+        </p>
+      )}
       <div className="career-connector-toolbar-actions">
-        <span className="career-connector-waiting-label" role="status">
-          <SpinnerGap size={16} className="spin" aria-hidden="true" />
-          Ждём вход
-        </span>
+        {signedIn ? null : (
+          <span className="career-connector-waiting-label" role="status">
+            <SpinnerGap size={16} className="spin" aria-hidden="true" />
+            Ждём вход
+          </span>
+        )}
         <button type="button" className="career-quiet-button" onClick={() => void showWindow()}>
           <ArrowSquareOut size={18} aria-hidden="true" />
           <span>Показать окно</span>

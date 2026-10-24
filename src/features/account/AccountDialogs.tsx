@@ -153,6 +153,63 @@ interface ConnectionModalProps {
   readonly onClose: () => void;
   readonly onDisconnect: () => void;
   readonly onReimport: () => void;
+  /** Connected only: another platform builds the profile (one import source, 23.10.2026). */
+  readonly connectOnly?: boolean;
+  /** Sign in again and replace the profile with this platform's data. */
+  readonly onReplaceProfile?: () => void;
+}
+
+const connectOnlyText = (platform: string) =>
+  `Профиль собран из другой площадки, данные ${platform} в него не добавлялись. Площадка подключена для откликов и сведений о вакансиях.`;
+
+/** A platform connected without importing anything: the honest state and actions (24.10). */
+function ConnectOnlyModal({
+  platform,
+  titleId,
+  busy,
+  onClose,
+  onDisconnect,
+  onReimport,
+  onReplaceProfile,
+}: Omit<ConnectionModalProps, 'connection' | 'connectOnly'> & {
+  readonly platform: 'hh.ru' | 'LinkedIn';
+  readonly titleId: string;
+}) {
+  return (
+    <DialogScrim onClose={onClose}>
+      <div className="career-account-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <div className="career-account-card-header">
+          <h3 id={titleId} className="career-account-card-title">{platform}</h3>
+          <button type="button" className="career-btn is-ghost is-icon" onClick={onClose} aria-label="Закрыть">
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="career-account-rows">
+          <div className="career-account-card-title-wrap">
+            <span className="career-account-tag is-ok">
+              <CheckCircle size={14} weight="fill" aria-hidden="true" />
+              Подключено без импорта
+            </span>
+          </div>
+          <p className="career-account-row-desc">{connectOnlyText(platform)}</p>
+        </div>
+        <div className="career-account-dialog-actions">
+          <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
+            Отключить
+          </button>
+          {onReplaceProfile ? (
+            <button type="button" className="career-btn" disabled={busy} onClick={onReplaceProfile}>
+              Заменить профиль данными с {platform}
+            </button>
+          ) : null}
+          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
+            <ArrowsClockwise size={16} aria-hidden="true" />
+            Подключить заново
+          </button>
+        </div>
+      </div>
+    </DialogScrim>
+  );
 }
 
 function connectionDate(value: string): string {
@@ -200,7 +257,13 @@ export function AccountLinkedInModal({
   onClose,
   onDisconnect,
   onReimport,
+  connectOnly = false,
+  onReplaceProfile,
 }: ConnectionModalProps) {
+  if (connectOnly) {
+    const handlers = { busy, onClose, onDisconnect, onReimport, onReplaceProfile };
+    return <ConnectOnlyModal platform="LinkedIn" titleId="li-modal-title" {...handlers} />;
+  }
   return (
     <DialogScrim onClose={onClose}>
       <div
@@ -274,7 +337,13 @@ export function AccountHhModal({
   onClose,
   onDisconnect,
   onReimport,
+  connectOnly = false,
+  onReplaceProfile,
 }: ConnectionModalProps) {
+  if (connectOnly) {
+    const handlers = { busy, onClose, onDisconnect, onReimport, onReplaceProfile };
+    return <ConnectOnlyModal platform="hh.ru" titleId="hh-modal-title" {...handlers} />;
+  }
   return (
     <DialogScrim onClose={onClose}>
       <div

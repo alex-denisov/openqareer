@@ -442,6 +442,7 @@ export function HhConnectModal({
         {sessionActive ? (
           <ConnectorSessionToolbar
             platform="hh"
+            signedIn={Boolean(choice?.length)}
             onShow={() => showConnectorSession('hh')}
             onCancel={closeModal}
           />

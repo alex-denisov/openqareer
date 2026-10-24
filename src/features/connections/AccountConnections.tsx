@@ -82,6 +82,8 @@ export function AccountConnectionsManager({
   const [importPlatform, setImportPlatform] = useState<ConnectionPlatform>();
   const [managePlatform, setManagePlatform] = useState<ConnectionPlatform>();
   const [replaceOffer, setReplaceOffer] = useState<ReplaceOffer>();
+  // «Заменить профиль данными с …» from the manage dialog: the next sign-in replaces.
+  const [replaceIntent, setReplaceIntent] = useState<'hh' | 'linkedin'>();
   const publishConnections = useCallback((next: CandidateConnection[]) => {
     setConnections(next);
     setConnectionsReady(true);
@@ -136,10 +138,13 @@ export function AccountConnectionsManager({
     setReplaceOffer(undefined);
     try {
       const input = { parsed, sourceUrl, capturedAt: new Date().toISOString() };
-      const persisted = await persistHhSessionImport(input);
-      settleImport('hh', persisted, () =>
-        persistHhSessionImport({ ...input, importMode: 'replace_profile' }),
-      );
+      const replace = () => persistHhSessionImport({ ...input, importMode: 'replace_profile' });
+      if (replaceIntent === 'hh') {
+        setReplaceIntent(undefined);
+        await handleReplaceProfile({ platform: 'hh', replace });
+        return;
+      }
+      settleImport('hh', await persistHhSessionImport(input), replace);
     } catch (error) {
       setNotice(hhSessionImportError(error));
       throw error;
@@ -177,7 +182,13 @@ export function AccountConnectionsManager({
               capturedAt,
               ...(importMode ? { importMode } : {}),
             });
-      settleImport('linkedin', await persist(), () => persist('replace_profile'));
+      const replace = () => persist('replace_profile');
+      if (replaceIntent === 'linkedin') {
+        setReplaceIntent(undefined);
+        await handleReplaceProfile({ platform: 'linkedin', replace });
+        return;
+      }
+      settleImport('linkedin', await persist(), replace);
     } catch (error) {
       setNotice(nativeSessionImportError('linkedin', error));
       throw error;
@@ -202,6 +213,17 @@ export function AccountConnectionsManager({
       `Из ${PLATFORM_LABELS[platform]} сохранено ${factNoun(persisted.connection.factCount)}.`,
     );
     onDataChanged?.();
+  }
+
+  function replaceFromManage(platform: 'hh' | 'linkedin') {
+    setManagePlatform(undefined);
+    setReplaceIntent(platform);
+    setImportPlatform(platform);
+  }
+
+  function closeImport() {
+    setImportPlatform(undefined);
+    setReplaceIntent(undefined);
   }
 
   async function handleReplaceProfile(offer: ReplaceOffer) {
@@ -307,6 +329,8 @@ export function AccountConnectionsManager({
         <AccountLinkedInModal
           connection={managedConnection}
           busy={busyPlatform === 'linkedin'}
+          connectOnly={connectedOnly(managedConnection, connections)}
+          onReplaceProfile={() => replaceFromManage('linkedin')}
           onClose={() => setManagePlatform(undefined)}
           onDisconnect={() => {
             setManagePlatform(undefined);
@@ -322,6 +346,8 @@ export function AccountConnectionsManager({
         <AccountHhModal
           connection={managedConnection}
           busy={busyPlatform === 'hh'}
+          connectOnly={connectedOnly(managedConnection, connections)}
+          onReplaceProfile={() => replaceFromManage('hh')}
           onClose={() => setManagePlatform(undefined)}
           onDisconnect={() => {
             setManagePlatform(undefined);
@@ -336,8 +362,8 @@ export function AccountConnectionsManager({
       <HhConnectModal
         isOpen={importPlatform === 'hh'}
         isReconnect={Boolean(connections.some((connection) => connection.platform === 'hh' && connection.status === 'connected'))}
-        connectOnly={profileBuiltFrom(connections, 'linkedin')}
-        onClose={() => setImportPlatform(undefined)}
+        connectOnly={replaceIntent !== 'hh' && profileBuiltFrom(connections, 'linkedin')}
+        onClose={closeImport}
         onConnectSuccess={handleHhSessionImport}
         onAuthenticatedEmpty={() => {
           setNotice(
@@ -348,7 +374,7 @@ export function AccountConnectionsManager({
       <LinkedInConnectModal
         isOpen={importPlatform === 'linkedin'}
         isReconnect={Boolean(connections.some((connection) => connection.platform === 'linkedin' && connection.status === 'connected'))}
-        onClose={() => setImportPlatform(undefined)}
+        onClose={closeImport}
         onImportSuccess={handleLinkedInSessionImport}
         onConnectionFailure={setNotice}
       />
@@ -441,7 +467,11 @@ async function confirmNativeConnection(
       candidate.accessMode === 'native_session_snapshot',
   );
   if (!connection) throw new Error('native_connection_not_persisted');
-  return { connection, connections, connectOnly: imported.connectOnly === true };
+  // A replay without the flag still connected only if another platform builds the profile.
+  const profileElsewhere = profileBuiltFrom(connections, platform === 'hh' ? 'linkedin' : 'hh');
+  const connectOnly =
+    imported.connectOnly === true || (connection.factCount === 0 && profileElsewhere);
+  return { connection, connections, connectOnly };
 }
 
 interface PersistStructuredLinkedInInput {
@@ -480,6 +510,15 @@ export async function persistStructuredLinkedInImport(
     ...(input.importMode ? { importMode: input.importMode } : {}),
   });
   return confirmNativeConnection('linkedin', imported, dependencies.loadConnections);
+}
+
+/** Connected without importing: no facts here, the profile comes from the other platform. */
+function connectedOnly(
+  connection: Extract<CandidateConnection, { status: 'connected' }>,
+  connections: readonly CandidateConnection[],
+): boolean {
+  const other = connection.platform === 'hh' ? 'linkedin' : 'hh';
+  return connection.factCount === 0 && profileBuiltFrom(connections, other);
 }
 
 function profileBuiltFrom(

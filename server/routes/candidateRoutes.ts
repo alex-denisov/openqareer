@@ -421,7 +421,12 @@ function nativeImportShortcut(
 ) {
   const replay = nativeResumeImportReplay(candidateStore, candidateId, body);
   if (replay && !(mode === 'replace_profile' && replay.factCount === 0)) {
-    return { data: replay, meta: { idempotentReplay: true } };
+    // A repeated connect-only answer keeps saying so, or the client reads «0 facts imported».
+    const connectOnly = mode === 'connect_only' && replay.factCount === 0;
+    return {
+      data: connectOnly ? { ...replay, connectOnly: true as const } : replay,
+      meta: { idempotentReplay: true },
+    };
   }
   if (mode !== 'connect_only' || !body.sourceReceipt) return undefined;
   const receipt = {

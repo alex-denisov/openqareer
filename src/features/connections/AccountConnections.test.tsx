@@ -112,6 +112,35 @@ describe('account connector import persistence', () => {
     expect(importResume.mock.calls[1]?.[0]).toMatchObject({ importMode: 'replace_profile' });
   });
 
+  it('treats a 0-fact answer next to a profile from another platform as connect only (24.10)', async () => {
+    const hh = {
+      platform: 'hh' as const,
+      available: true,
+      status: 'connected' as const,
+      accessMode: 'native_session_snapshot' as const,
+      capabilities: ['resume_read'] as ['resume_read'],
+      importsCareerHistory: true,
+      connectedAt: '2026-10-23T08:00:00.000Z',
+      lastImportedAt: '2026-10-23T08:00:00.000Z',
+      factCount: 0,
+    };
+    const linkedin = { ...hh, platform: 'linkedin' as const, factCount: 59 };
+    // An idempotent replay from an older server: no connectOnly flag, 0 facts.
+    const importResume = vi.fn().mockResolvedValue({ connection: hh, factCount: 0 });
+    const loadConnections = vi.fn().mockResolvedValue([linkedin, hh]);
+
+    const connected = await persistHhSessionImport(
+      {
+        parsed: { rawText: 'Product Director' } as ParsedResume,
+        sourceUrl: 'https://hh.ru/resume/resume-selected',
+        capturedAt: '2026-10-24T02:00:00.000Z',
+      },
+      { importResume, loadConnections },
+    );
+
+    expect(connected.connectOnly).toBe(true);
+  });
+
   it('fails closed when the connection catalog does not confirm the imported receipt', async () => {
     await expect(
       persistHhSessionImport(

@@ -192,8 +192,26 @@ describe('one import source per profile (owner decision 23.10.2026)', () => {
     expect(after.memory.map((memory) => memory.id).sort()).toEqual(
       before.memory.map((memory) => memory.id).sort(),
     );
-    const linkedin = (await connectionsOf(app, authorization)).find((c) => c.platform === 'linkedin');
+    const linkedin = (await connectionsOf(app, authorization)).find(
+      (c) => c.platform === 'linkedin',
+    );
     expect(linkedin?.factCount).toBeGreaterThan(0);
+  });
+
+  it('answers a repeated connect-only import as connect only, not a 0-fact import (24.10)', async () => {
+    const { app, authorization } = await createApp();
+    await postImport(app, authorization, nativeLinkedInImportBody());
+    await postImport(app, authorization, nativeHhImportBody(HH_MARKDOWN));
+
+    const again = await postImport(app, authorization, nativeHhImportBody(HH_MARKDOWN));
+
+    expect(again.statusCode).toBe(200);
+    expect(again.json().meta.idempotentReplay).toBe(true);
+    expect(again.json().data).toMatchObject({
+      connectOnly: true,
+      factCount: 0,
+      connection: { platform: 'hh', factCount: 0 },
+    });
   });
 
   it('connects without importing when the candidate asks for connect only', async () => {
@@ -260,7 +278,10 @@ describe('one import source per profile (owner decision 23.10.2026)', () => {
 
     const again = await postImport(app, authorization, {
       ...nativeLinkedInImportBody(`${LINKEDIN_MARKDOWN}\n- Mentors two engineering managers.\n`),
-      sourceReceipt: { ...nativeLinkedInImportBody().sourceReceipt, capturedAt: '2026-09-02T12:00:00.000Z' },
+      sourceReceipt: {
+        ...nativeLinkedInImportBody().sourceReceipt,
+        capturedAt: '2026-09-02T12:00:00.000Z',
+      },
       importMode: 'connect_only',
     });
 
@@ -271,7 +292,11 @@ describe('one import source per profile (owner decision 23.10.2026)', () => {
 
   it('leaves only the new platform in the profile, file imports included, when replacing', async () => {
     const { app, store, candidateId, authorization } = await createApp();
-    await postImport(app, authorization, { text: LINKEDIN_MARKDOWN, source: 'pdf', fileName: 'cv.pdf' });
+    await postImport(app, authorization, {
+      text: LINKEDIN_MARKDOWN,
+      source: 'pdf',
+      fileName: 'cv.pdf',
+    });
     const fileFacts = store.getSnapshot(candidateId).memory.map((memory) => memory.id);
     expect(fileFacts.length).toBeGreaterThan(0);
 

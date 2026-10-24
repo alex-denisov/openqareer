@@ -24,4 +24,13 @@ describe('ConnectorSessionToolbar (mockup 12)', () => {
     );
     expect(html).toContain('Пароль вводится на странице площадки, мы его не видим.');
   });
+
+  it('stops waiting once the candidate has signed in (24.10)', () => {
+    const html = renderToStaticMarkup(
+      <ConnectorSessionToolbar platform="hh" signedIn onShow={vi.fn()} onCancel={vi.fn()} />,
+    );
+    expect(html).not.toContain('Ждём вход');
+    expect(html).not.toContain('Войдите в открывшемся окне');
+    expect(html).toContain('Показать окно');
+  });
 });
