@@ -134,6 +134,8 @@ const CONFIRMED_EVIDENCE_ITEMS = [
 ];
 
 async function seedWorkspace(page: Page): Promise<void> {
+  // Fixtures are dated late September; pin «today» so the 30-day responses filter keeps them.
+  await page.clock.setFixedTime(new Date('2026-10-01T09:00:00.000Z'));
   await page.addInitScript(
     ({ storageKey, ownerKey, candidateId, workspace }) => {
       window.localStorage.setItem(storageKey, JSON.stringify(workspace));
