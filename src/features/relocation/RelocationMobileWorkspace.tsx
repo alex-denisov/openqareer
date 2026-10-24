@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight } from '@phosphor-icons/react';
+import { ArrowRight, ChatCircle } from '@phosphor-icons/react';
 import { MobilePush } from './RelocationMobilePush';
 import { CountryComparisonPanel } from './CountryComparisonPanel';
 import { RelocationAddCountry } from './RelocationAddCountry';
@@ -176,15 +176,18 @@ function MobileComparison({ workspace, onOpenExpert }: MobileProps) {
       />
       {props.onOpenExpert ? (
         <button
-          className="career-btn career-btn-secondary"
+          className="career-relocation-mobile-single-row"
           type="button"
           onClick={props.onOpenExpert}
         >
-          Обсудить с консультантом
+          <span className="career-relocation-mobile-action-icon">
+            <ChatCircle aria-hidden="true" size={18} />
+          </span>
+          <b>Обсудить с консультантом</b>
         </button>
       ) : null}
       <button
-        className="career-btn career-btn-primary"
+        className="career-relocation-mobile-cta"
         type="button"
         onClick={() => workspace.showTab('economy')}
       >

@@ -445,4 +445,127 @@
     border-radius: 9px;
     background: color-mix(in oklch, white 7%, transparent);
   }
+
+  /* Comparison (`vt=cmp`): a 13 px line of countries, .pm-group per criterion, meanings, row + CTA */
+  .career-relocation-mobile .career-country-comparison {
+    display: grid;
+    gap: var(--career-space-4);
+  }
+
+  .career-relocation-mobile .career-country-comparison-head {
+    margin-inline: var(--career-space-1);
+  }
+
+  .career-relocation-mobile .career-country-comparison .career-country-comparison-title {
+    margin: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 400;
+    line-height: 20px;
+  }
+
+  .career-relocation-mobile .career-country-comparison-mobile {
+    display: grid;
+    gap: var(--career-space-4);
+  }
+
+  .career-relocation-mobile
+    .career-country-comparison
+    .career-country-comparison-mobile-criterion
+    h3,
+  .career-relocation-mobile .career-country-comparison .career-country-comparison-meanings h3 {
+    margin: 0 0 var(--career-space-2);
+    padding-inline: var(--career-space-3);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    line-height: 16px;
+  }
+
+  .career-relocation-mobile .career-country-comparison-mobile-criterion dl,
+  .career-relocation-mobile .career-country-comparison-meanings ul {
+    margin: 0;
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .career-relocation-mobile .career-country-comparison-mobile-entry {
+    min-block-size: 0;
+    padding: 13px var(--career-space-4) 14px;
+    line-height: 1.5;
+  }
+
+  .career-relocation-mobile .career-country-comparison-mobile-entry dt {
+    font-size: var(--career-text-sm);
+  }
+
+  .career-relocation-mobile .career-country-comparison-mobile-entry dd {
+    margin: 0;
+    font-weight: 500;
+  }
+
+  .career-relocation-mobile .career-country-comparison-mobile-foot {
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-dim);
+  }
+
+  .career-relocation-mobile .career-country-comparison-meanings {
+    gap: 0;
+    margin: 0;
+  }
+
+  .career-relocation-mobile .career-country-comparison-meanings li {
+    display: block;
+    position: relative;
+    padding: var(--career-space-3) var(--career-space-4) var(--career-space-3) 48px;
+    font-size: var(--career-text-sm);
+    line-height: 1.43;
+  }
+
+  .career-relocation-mobile .career-country-comparison-meaning-icon {
+    position: absolute;
+    inset-block-start: var(--career-space-3);
+    inset-inline-start: var(--career-space-4);
+    inline-size: 20px;
+    block-size: 20px;
+  }
+
+  .career-relocation-mobile .career-country-comparison-meanings li strong {
+    font-size: var(--career-text-sm);
+    font-weight: 700;
+  }
+
+  .career-relocation-mobile .career-country-comparison-meanings li strong::after {
+    content: '. ';
+  }
+
+  .career-relocation-mobile .career-country-comparison-meanings li p {
+    display: inline;
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+    line-height: 1.43;
+  }
+
+  /* .pm-list with one .pm-row */
+  .career-relocation-mobile .career-relocation-mobile-single-row {
+    display: flex;
+    inline-size: 100%;
+    min-block-size: 56px;
+    align-items: center;
+    gap: var(--career-space-3);
+    border: 0;
+    border-radius: 20px;
+    padding: var(--career-space-2) var(--career-space-4);
+    color: var(--career-text);
+    background: var(--career-surface);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .career-relocation-mobile .career-relocation-mobile-single-row b {
+    font-size: var(--career-text-md);
+    font-weight: 500;
+    line-height: 1.5;
+  }
 }
