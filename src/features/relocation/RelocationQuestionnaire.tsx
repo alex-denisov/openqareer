@@ -143,7 +143,7 @@ function QuestionnaireHeader({
         </button>
         <h2 id="career-relocation-questionnaire-title">Условия для переезда</h2>
         <span className="career-relocation-status"><LockKey aria-hidden="true" size={14} />Видите только вы</span>
-        <span className="career-relocation-save-note"><CheckCircle aria-hidden="true" size={14} />Прогресс сохраняется</span>
+        <span className="career-relocation-save-note"><CheckCircle aria-hidden="true" size={16} />Прогресс сохраняется</span>
       </div>
       <p>{step === 'summary' ? 'Анкета заполнена. Ничего не отправлено, всё сохранено в вашем профиле.' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${DESKTOP_STEP_DESCRIPTIONS[step]}`}</p>
       {children}
@@ -191,13 +191,13 @@ function QuestionnaireStepper({
         return (
           <li key={item} data-state={state} aria-current={state === 'current' ? 'step' : undefined}>
             <button type="button" disabled={busy || (dirty && step !== item)} aria-current={state === 'current' ? 'step' : undefined} onClick={() => onSelect(item)}>
-              <StepMark state={state} />{STEP_TITLES[item]}{state === 'skipped' ? <span className="career-sr-only"> (пропущен)</span> : null}
+              <StepMark state={state} /><span>{STEP_TITLES[item]}</span>{state === 'skipped' ? <span className="career-sr-only"> (пропущен)</span> : null}
             </button>
           </li>
         );
       })}
       <li data-state={summaryState} aria-current={summaryState === 'current' ? 'step' : undefined}>
-        <span className="career-relocation-stepper-current"><StepMark state={summaryState} />Итог</span>
+        <span className="career-relocation-stepper-current"><StepMark state={summaryState} /><span>Итог</span></span>
       </li>
     </ol>
   );
@@ -256,10 +256,10 @@ function QuestionnaireStepActions({
 }) {
   return (
     <div className="career-relocation-list-footer">
-      <button className="career-btn career-btn-primary" type="button" disabled={busy} onClick={() => onNext(false)}>
+      <button className="career-relocation-btn is-primary" type="button" disabled={busy} onClick={() => onNext(false)}>
         <ArrowRight aria-hidden="true" size={17} />{busy ? 'Сохраняем…' : step === 'languages' ? 'Показать итог' : 'Дальше'}
       </button>
-      <button className="career-relocation-text-action" type="button" disabled={busy} onClick={() => onNext(true)}>Пропустить шаг</button>
+      <button className="career-relocation-btn is-ghost" type="button" disabled={busy} onClick={() => onNext(true)}>Пропустить шаг</button>
     </div>
   );
 }
@@ -488,7 +488,9 @@ const DESKTOP_STEP_DESCRIPTIONS: Readonly<Record<RelocationStepId, string>> = {
 function QuestionnaireAside({ text }: { readonly text: string }) {
   return (
     <aside className="career-relocation-questionnaire-reason" aria-labelledby="relocation-reason-title">
-      <h2 id="relocation-reason-title">Зачем это нужно</h2>
+      <div className="career-relocation-reason-head">
+        <h2 id="relocation-reason-title">Зачем это нужно</h2>
+      </div>
       <p>{text}</p>
       <p className="career-relocation-privacy-note">
         <ShieldCheck aria-hidden="true" size={16} />
@@ -536,8 +538,8 @@ function RelocationSummary({
           ))}
         </ul>
         <div className="career-relocation-country-actions">
-          <button className="career-btn career-btn-primary" type="button" onClick={onShowCountries}><ArrowRight aria-hidden="true" size={17} />Показать страны</button>
-          <button className="career-btn career-btn-secondary" type="button" onClick={onEdit}><PencilSimple aria-hidden="true" size={17} />Дополнить данные</button>
+          <button className="career-relocation-btn is-primary" type="button" onClick={onShowCountries}><ArrowRight aria-hidden="true" size={17} />Показать страны</button>
+          <button className="career-relocation-btn" type="button" onClick={onEdit}><PencilSimple aria-hidden="true" size={17} />Дополнить данные</button>
         </div>
       </section>
       <QuestionnaireAside text="Подборка теперь учитывает отмеченные страны. Данные можно править на вкладке «Мои данные» и в блоке «Условия и география»." />
@@ -592,8 +594,8 @@ export function InlineConfirmation({
       <h3 id="relocation-confirm-title">{title}</h3>
       <p>{description}</p>
       <div>
-        <button className="career-btn career-btn-secondary" type="button" disabled={busy} onClick={onCancel}>{cancel}</button>
-        <button className="career-btn career-btn-destructive" type="button" disabled={busy} onClick={onConfirm}>{confirm}</button>
+        <button className="career-relocation-btn" type="button" disabled={busy} onClick={onCancel}>{cancel}</button>
+        <button className="career-relocation-btn is-danger" type="button" disabled={busy} onClick={onConfirm}>{confirm}</button>
       </div>
     </section>
   );

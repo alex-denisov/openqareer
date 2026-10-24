@@ -630,3 +630,9 @@
 .career-relocation .career-relocation-profile-actions {
   justify-content: flex-start;
 }
+
+/* .career-btn.is-danger */
+.career-relocation .career-relocation-btn.is-danger {
+  border-color: var(--career-danger);
+  color: var(--career-danger);
+}

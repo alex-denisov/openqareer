@@ -93,7 +93,7 @@ function EducationRow({
         <RelocationFormField id={`${prefix}-started`} label="Дата начала"><RelocationDateInput id={`${prefix}-started`} value={entry.startedAt ?? ''} onChange={(event) => update({ startedAt: event.target.value || undefined })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><RelocationDateInput id={`${prefix}-completed`} value={entry.completedAt ?? ''} onChange={(event) => update({ completedAt: event.target.value || undefined })} /></RelocationFormField>
       </div>
-      <button className="career-btn career-btn-destructive" type="button" onClick={remove}>
+      <button className="career-relocation-btn is-danger" type="button" onClick={remove}>
         <Trash aria-hidden="true" size={16} />Удалить образование
       </button>
     </fieldset>
@@ -146,7 +146,7 @@ function EducationDraft({
         <RelocationFormField id={`${prefix}-started`} label="Дата начала"><RelocationDateInput id={`${prefix}-started`} value={draft.startedAt} onChange={(event) => onChange({ ...draft, startedAt: event.target.value })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><RelocationDateInput id={`${prefix}-completed`} value={draft.completedAt} onChange={(event) => onChange({ ...draft, completedAt: event.target.value })} /></RelocationFormField>
       </div>
-      <button className="career-btn career-btn-secondary" type="button" disabled={!draft.title.trim() || !draft.countryCode} onClick={onAdd}>
+      <button className="career-relocation-btn" type="button" disabled={!draft.title.trim() || !draft.countryCode} onClick={onAdd}>
         <Plus aria-hidden="true" size={16} />Добавить образование
       </button>
     </section>
@@ -205,7 +205,7 @@ function CertificateRow({
     <fieldset className="career-relocation-record">
       <legend>{entry.title}</legend>
       <CertificateFields prefix={prefix} entry={entry} onChange={update} />
-      <button className="career-btn career-btn-destructive" type="button" onClick={remove}>
+      <button className="career-relocation-btn is-danger" type="button" onClick={remove}>
         <Trash aria-hidden="true" size={16} />Удалить сертификат
       </button>
     </fieldset>
@@ -273,7 +273,7 @@ function CertificateDraft({
         entry={draft}
         onChange={(change) => onChange({ ...draft, ...change })}
       />
-      <button className="career-btn career-btn-secondary" type="button" disabled={!draft.title.trim() || !draft.countryCode} onClick={onAdd}>
+      <button className="career-relocation-btn" type="button" disabled={!draft.title.trim() || !draft.countryCode} onClick={onAdd}>
         <Plus aria-hidden="true" size={16} />Добавить сертификат
       </button>
     </div>
