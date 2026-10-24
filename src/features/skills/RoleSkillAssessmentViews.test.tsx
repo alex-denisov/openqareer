@@ -75,12 +75,26 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
         onOpenOpportunities={() => undefined}
       />,
     );
+    const collecting = renderToStaticMarkup(
+      <InsufficientRequirementsState
+        current={{
+          state: 'insufficient_requirements',
+          roleTitle: 'CTO',
+          sampleSize: 129,
+          requirementCount: 0,
+          collecting: true,
+        }}
+        onOpenOpportunities={() => undefined}
+      />,
+    );
     const sourceErr = renderToStaticMarkup(<SourceErrorState onRetry={() => undefined} />);
 
     expect(loading).toContain('Загружаем требования');
     expect(noRole).toContain('Сначала выберите роль');
     expect(tooFew).toContain('Пока мало вакансий для проверки');
     expect(insufficient).toContain('Требований пока недостаточно');
+    expect(collecting).toContain('Требования собираются');
+    expect(collecting).not.toContain('недостаточно');
     expect(sourceErr).toContain('Не удалось сверить вакансии');
   });
 
@@ -118,11 +132,7 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
     };
 
     const html = renderToStaticMarkup(
-      <ModelErrorState
-        busy={false}
-        onRetry={() => undefined}
-        run={mockRun}
-      />,
+      <ModelErrorState busy={false} onRetry={() => undefined} run={mockRun} />,
     );
 
     expect(html).toContain('Модель не завершила проверку');

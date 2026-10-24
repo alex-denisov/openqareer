@@ -50,7 +50,9 @@ export function skillCheckAvailability(current: RoleSkillAssessmentCurrent): Ava
     case 'insufficient_requirements':
       return {
         kind: 'unavailable',
-        reason: `В вакансиях роли «${current.roleTitle}» мало требований, проверку навыков пока не собрать.`,
+        reason: current.collecting
+          ? `Требования роли «${current.roleTitle}» собираются из текстов вакансий, проверка появится позже.`
+          : `В вакансиях роли «${current.roleTitle}» мало требований, проверку навыков пока не собрать.`,
       };
     default:
       return { kind: 'available' };

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MIN_ROLE_SAMPLE } from '../../shared/poolRoleHypotheses';
 import {
   buildRoleSkillCases,
+  buildRoleSkillRequirementSummaries,
   countFreshActiveRoleVacancies,
   evaluateRoleReadiness,
   isRoleSkillAssessmentStale,
@@ -257,5 +258,54 @@ describe('role skill assessment domain', () => {
       missingKeySkillIds: ['product-discovery'],
     });
     expect(evaluateRoleReadiness(belowThree)).toMatchObject({ ready: false, confirmedCount: 2 });
+  });
+});
+
+describe('repeated requirements in a sparse text-extracted sample (B509)', () => {
+  function withSkills(index: number, skillIds: readonly string[]): RoleAssessmentVacancy {
+    const id = `vacancy-${index}`;
+    return vacancy(index, {
+      requirements: skillIds.map((skillId) => ({
+        id: `requirement-${index}-${skillId}`,
+        skillId,
+        statement: skillId,
+        sourceRefs: [
+          {
+            id: `source-${index}-${skillId}`,
+            vacancyId: id,
+            observedAt: '2026-10-09T12:00:00.000Z',
+          },
+        ],
+      })),
+    });
+  }
+
+  it('counts repetition among vacancies with extracted requirements, not among all of them', () => {
+    // 300 vacancies, only 10 have extracted requirements: each skill in 2 of those 10.
+    const skills = ['a', 'b', 'c', 'd', 'e'];
+    const extracted = Array.from({ length: 10 }, (_, index) =>
+      withSkills(index, [skills[index % 5]!, skills[(index + 1) % 5]!]),
+    );
+    const empty = Array.from({ length: 290 }, (_, index) => withSkills(100 + index, []));
+    const sample = [...extracted, ...empty];
+    expect(
+      buildRoleSkillRequirementSummaries(sample, ROLE_ID).map((item) => item.skillId),
+    ).toHaveLength(5);
+    expect(buildRoleSkillCases(sample, ROLE_ID)).toHaveLength(3);
+  });
+
+  it('still drops a skill seen in one vacancy and one below the 20 % share', () => {
+    const extracted = [
+      ...Array.from({ length: 4 }, (_, index) => withSkills(index, ['common'])),
+      withSkills(10, ['rare', 'common']),
+      ...Array.from({ length: 15 }, (_, index) => withSkills(20 + index, ['filler'])),
+      withSkills(40, ['twice']),
+      withSkills(41, ['twice']),
+    ];
+    const ids = buildRoleSkillRequirementSummaries(extracted, ROLE_ID).map((item) => item.skillId);
+    expect(ids).toContain('common');
+    expect(ids).toContain('filler');
+    expect(ids).not.toContain('rare');
+    expect(ids).not.toContain('twice');
   });
 });

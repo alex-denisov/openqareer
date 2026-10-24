@@ -68,7 +68,11 @@ afterEach(async () => {
   for (const app of apps.splice(0).reverse()) await app.close();
 });
 
-function matchedVacancies(count: number, title = ROLE_TITLE): MatchedVacancyItem[] {
+function matchedVacancies(
+  count: number,
+  title = ROLE_TITLE,
+  withClusterSkills = true,
+): MatchedVacancyItem[] {
   return Array.from({ length: count }, (_, index) => {
     const clusterId = `fixture-vacancy-${index}`;
     const cluster: MatchedVacancyItem['cluster'] = {
@@ -78,13 +82,15 @@ function matchedVacancies(count: number, title = ROLE_TITLE): MatchedVacancyItem
       canonicalLocation: 'Москва',
       isRemote: true,
       descriptionSummary: 'Требования к продуктовой стратегии, аналитике и результатам команды.',
-      skills: [
-        'Product discovery',
-        'Unit economics',
-        'SQL analytics',
-        'A/B testing',
-        'Stakeholder management',
-      ],
+      skills: withClusterSkills
+        ? [
+            'Product discovery',
+            'Unit economics',
+            'SQL analytics',
+            'A/B testing',
+            'Stakeholder management',
+          ]
+        : [],
       primaryUrl: `https://jobs.example.test/${clusterId}`,
       sources: [
         {
@@ -196,13 +202,27 @@ function createFakeProvider(options: { failFirstCall?: boolean } = {}) {
   return { createTurn };
 }
 
-async function createRig(initialVacancyCount = 8, failFirstProviderCall = false) {
+interface RigOptions {
+  readonly withClusterSkills?: boolean;
+  readonly extraDeps?: Partial<RouteDeps>;
+  readonly engine?: Record<string, unknown>;
+}
+
+async function createRig(
+  initialVacancyCount = 8,
+  failFirstProviderCall = false,
+  options: RigOptions = {},
+) {
   const store = createStore();
   const candidate = createCandidate(store);
   const otherCandidate = createCandidate(store);
   store.saveCareerStrategy(candidate.id, TEST_STRATEGY);
   const getMatchedVacanciesAsync = vi.fn(async (query: { targetRoles?: readonly string[] }) =>
-    matchedVacancies(initialVacancyCount, query?.targetRoles?.[0] ?? ROLE_TITLE),
+    matchedVacancies(
+      initialVacancyCount,
+      query?.targetRoles?.[0] ?? ROLE_TITLE,
+      options.withClusterSkills ?? true,
+    ),
   );
   const provider = createFakeProvider({ failFirstCall: failFirstProviderCall });
   const cookieToken = `test-cookie-session-${candidate.id}`;
@@ -223,7 +243,8 @@ async function createRig(initialVacancyCount = 8, failFirstProviderCall = false)
     authService,
     candidateStore: store,
     coachProvider: { createTurn: provider.createTurn },
-    multiSourceEngine: { getMatchedVacanciesAsync },
+    multiSourceEngine: { getMatchedVacanciesAsync, ...options.engine },
+    ...options.extraDeps,
   } as unknown as RouteDeps;
   const app = Fastify({ logger: false });
   await app.register(cookie);
@@ -694,5 +715,96 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
       headers: headersFor(rig.candidate),
     });
     expect(responseData(after)).toEqual([{ roleTitle: OTHER_ROLE, completedAt: OBSERVED_AT }]);
+  });
+});
+
+describe('B509 skills from vacancy text when clusters carry none', () => {
+  const SKILLS = [
+    'Product discovery',
+    'Unit economics',
+    'SQL analytics',
+    'A/B testing',
+    'Roadmapping',
+  ];
+  const DESCRIPTION = `Requirements:\n${SKILLS.map((skill) => `- ${skill}`).join('\n')}`;
+
+  function mechanics(cached: boolean) {
+    const enqueue = vi.fn(() => ({ state: 'queued' as const }));
+    const runtime = {
+      requirements: {
+        getLatestOrLegacy: vi.fn(() =>
+          cached ? { extractorVersion: 'old', status: 'no_requirements', requirements: [] } : null,
+        ),
+        enqueue,
+      },
+    };
+    return { runtime, enqueue };
+  }
+
+  function engine(description: string) {
+    return {
+      getActiveCluster: (id: string) => ({
+        id,
+        canonicalTitle: ROLE_TITLE,
+        descriptionSummary: description,
+      }),
+      getVacancy: () => undefined,
+    };
+  }
+
+  it('builds the check from requirement labels and queues the role vacancies for the model', async () => {
+    const { runtime, enqueue } = mechanics(false);
+    const rig = await createRig(8, false, {
+      withClusterSkills: false,
+      engine: engine(DESCRIPTION),
+      extraDeps: { vacancyMechanics: runtime } as unknown as Partial<RouteDeps>,
+    });
+    const current = await rig.app.inject({
+      method: 'GET',
+      url: CURRENT_PATH,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(current)).toMatchObject({ state: 'ready', roleTitle: ROLE_TITLE });
+    expect(enqueue).toHaveBeenCalledTimes(8);
+    expect(enqueue).toHaveBeenCalledWith(
+      { vacancyId: 'fixture-vacancy-0', description: DESCRIPTION },
+      { titleStrategyPriority: expect.any(Number) },
+    );
+  });
+
+  it('says requirements are being collected while extraction is queued', async () => {
+    const { runtime } = mechanics(false);
+    const rig = await createRig(8, false, {
+      withClusterSkills: false,
+      engine: engine('Работа в продуктовой команде.'),
+      extraDeps: { vacancyMechanics: runtime } as unknown as Partial<RouteDeps>,
+    });
+    const current = await rig.app.inject({
+      method: 'GET',
+      url: CURRENT_PATH,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(current)).toMatchObject({
+      state: 'insufficient_requirements',
+      collecting: true,
+    });
+  });
+
+  it('says insufficient, not collecting, once every vacancy has been extracted', async () => {
+    const { runtime } = mechanics(true);
+    const rig = await createRig(8, false, {
+      withClusterSkills: false,
+      engine: engine('Работа в продуктовой команде.'),
+      extraDeps: { vacancyMechanics: runtime } as unknown as Partial<RouteDeps>,
+    });
+    const current = await rig.app.inject({
+      method: 'GET',
+      url: CURRENT_PATH,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(current)).toMatchObject({
+      state: 'insufficient_requirements',
+      collecting: false,
+    });
   });
 });

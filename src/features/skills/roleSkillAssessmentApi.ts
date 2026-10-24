@@ -15,6 +15,8 @@ export type RoleSkillAssessmentCurrent =
       roleTitle: string;
       sampleSize: number;
       requirementCount: number;
+      /** B509: requirements of the role's vacancies are still being extracted. */
+      collecting?: boolean;
     }
   | {
       state: 'ready';
