@@ -135,7 +135,7 @@ function orderByFit(
 ): MatchedVacancyItem[] {
   const decorated = items.map((item) => {
     const fitView = views.get(item.cluster.id);
-    return fitView ? { ...item, explanation: { ...item.explanation, fitView } } : item;
+    return fitView ? { ...item, explanation: explanationWithFitView(item.explanation, fitView) } : item;
   });
   return decorated.sort((left, right) => compareFitOrder(left, right, sort));
 }
@@ -156,8 +156,29 @@ export function withShownPageFitViews(
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
     const fitView = compactFitView(runtime.view(context(target, [])));
-    return { ...item, explanation: { ...item.explanation, fitView } };
+    return { ...item, explanation: explanationWithFitView(item.explanation, fitView) };
   });
+}
+
+type Explanation = MatchedVacancyItem['explanation'];
+const COVERAGE_SENTENCE = /^Совпало \d+ из \d+ требований вакансии\./u;
+
+/**
+ * Строка и раскрытая карточка считают требования одним разбором: счёт правил по
+ * тегам («2 из 3») уступает разбору требований из текста, когда тот готов (B525).
+ */
+export function explanationWithFitView(explanation: Explanation, fitView: VacancyFitView): Explanation {
+  const coverage = fitView.result?.coverage;
+  if (!coverage || coverage.total === 0) return { ...explanation, fitView };
+  const sentence = `Совпало ${coverage.matched} из ${coverage.total} требований вакансии.`;
+  return {
+    ...explanation,
+    fitView,
+    requirements: { matched: coverage.matched, total: coverage.total },
+    summary: COVERAGE_SENTENCE.test(explanation.summary)
+      ? explanation.summary.replace(COVERAGE_SENTENCE, sentence)
+      : `${sentence} ${explanation.summary}`,
+  };
 }
 
 const FIT_PAGE_LIMIT = 20;

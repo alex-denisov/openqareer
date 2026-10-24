@@ -155,10 +155,12 @@ export default function VacancyMapCanvas({
     <>
       <div ref={container} className="career-map-gl" />
       <MapMarkers placed={drawn} activeCity={compact ? cardCity : selectedCity} onChoose={choose} />
-      <MapZoomControls
-        onZoomIn={() => map?.zoomIn({ animate })}
-        onZoomOut={() => map?.zoomOut({ animate })}
-      />
+      {compact ? null : (
+        <MapZoomControls
+          onZoomIn={() => map?.zoomIn({ animate })}
+          onZoomOut={() => map?.zoomOut({ animate })}
+        />
+      )}
       {compact && cardNode ? (
         <MapCityCard node={cardNode} onShowList={() => onShowCities(nodeCityNames(cardNode))} />
       ) : null}

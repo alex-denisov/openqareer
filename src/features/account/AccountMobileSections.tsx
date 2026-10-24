@@ -412,13 +412,6 @@ function ConnectedPlatformsGroup({
           <CaretRight size={18} aria-hidden="true" />
         </div>
       </button>
-      <div className="career-account-mobile-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Другие площадки</span>
-          <span className="career-account-row-desc">Подключение других площадок.</span>
-        </div>
-        <span className="career-account-tag is-dim">Не подключено</span>
-      </div>
     </div>
   );
 }
@@ -445,7 +438,9 @@ function mobileConnectionTag(connection: CandidateConnection | undefined, loadin
 function mobileConnectionDetails(connection: CandidateConnection | undefined, loading: boolean): string {
   if (!connection) return loading ? 'Проверяем состояние подключения.' : 'Состояние не удалось загрузить.';
   if (connection.status === 'connected') {
-    return `Импортировано ${connection.factCount} фактов · ${mobileConnectionDate(connection.lastImportedAt)}`;
+    return connection.factCount === 0
+      ? `Подключено без импорта · ${mobileConnectionDate(connection.lastImportedAt)}`
+      : `Импортировано ${connection.factCount} фактов · ${mobileConnectionDate(connection.lastImportedAt)}`;
   }
   if (connection.status === 'imported') {
     return `Профиль импортирован ${mobileConnectionDate(connection.importedAt)}. Активная сессия не сохранена.`;
@@ -469,7 +464,6 @@ function ChannelsGroup({
         emailAvailable={emailAvailable}
         onOpen={onOpenNotifications}
       />
-      <CalendarChannelRow />
       <TelegramChannelRow
         connected={telegramConnected}
         onOpen={onOpenNotifications}
@@ -494,15 +488,6 @@ function EmailChannelRow({
       <ChannelRowContent title="Почта" description={description} />
       <ChannelRowAction status={status} connected={Boolean(emailVerified && emailAvailable)} />
     </button>
-  );
-}
-
-function CalendarChannelRow() {
-  return (
-    <div className="career-account-mobile-row">
-      <ChannelRowContent title="Календарь" description="Календарь не подключён." />
-      <span className="career-account-tag is-dim">Не подключено</span>
-    </div>
   );
 }
 

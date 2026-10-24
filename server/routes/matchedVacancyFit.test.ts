@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactFitView, compareFitOrder, vacanciesAwaitingFit } from './matchedVacancyFit';
+import { compactFitView, compareFitOrder, explanationWithFitView, vacanciesAwaitingFit } from './matchedVacancyFit';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitResult } from '../../shared/vacancyFit';
@@ -101,5 +101,34 @@ describe('B525 list carries a fit summary, not the full evidence', () => {
     expect(compact.result?.assessments).toEqual([]);
     expect(compact.result?.coveragePercent).toBe(14);
     expect(JSON.stringify(compact).length).toBeLessThan(400);
+  });
+});
+
+describe('строка и разбор считают требования одинаково (B525)', () => {
+  it('сводка и счёт строки берутся из того же разбора, что и раскрытая карточка', () => {
+    const base = item('v1', null);
+    const fitView = {
+      state: 'ready',
+      requirements: [],
+      result: { status: 'unknown', coverage: { matched: 0, total: 10, unknown: 10 } },
+    } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>;
+    const stale = {
+      ...base.explanation,
+      requirements: { matched: 2, total: 3 },
+      summary: 'Совпало 2 из 3 требований вакансии. Название совпадает с целевой ролью.',
+    };
+    const explanation = explanationWithFitView(stale, fitView);
+    expect(explanation.requirements).toEqual({ matched: 0, total: 10 });
+    expect(explanation.summary).toBe('Совпало 0 из 10 требований вакансии. Название совпадает с целевой ролью.');
+    expect(explanation.fitView).toBe(fitView);
+  });
+
+  it('без разбора оставляет счёт правил', () => {
+    const base = item('v2', null);
+    const fitView = { state: 'queued', requirements: [] } as unknown as NonNullable<
+      MatchedVacancyItem['explanation']['fitView']
+    >;
+    const explanation = explanationWithFitView({ ...base.explanation, requirements: { matched: 1, total: 2 } }, fitView);
+    expect(explanation.requirements).toEqual({ matched: 1, total: 2 });
   });
 });
