@@ -17,5 +17,6 @@ describe('decodeVacancyText', () => {
     expect(decodeVacancyText('tr&egrave;s &Eacute;quipe gar&ccedil;on M&uuml;nchen &szlig; na&iuml;ve &ntilde;')).toBe(
       'très Équipe garçon München ß naïve ñ',
     );
+    expect(decodeVacancyText('au c&oelig;ur, &OElig;uvre')).toBe('au cœur, Œuvre');
   });
 });
