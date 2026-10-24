@@ -283,7 +283,8 @@ div.vacancy-push-row {
   gap: var(--career-space-1);
   color: var(--career-accent);
   font-size: var(--career-text-sm);
-  font-weight: 600;
+  /* B510: как .vm-go макета 4 — 14 px, обычный вес. */
+  font-weight: 400;
 }
 
 .vacancy-push-chain {

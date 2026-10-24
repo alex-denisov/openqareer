@@ -32,6 +32,7 @@
   .vacancies-screen .vacancy-location-search .career-input {
     min-block-size: var(--career-target-min);
     block-size: var(--career-target-min);
+    border-color: var(--career-field-edge);
     border-radius: var(--career-radius-sm);
     font-size: var(--career-text-sm);
   }
