@@ -1,3 +1,4 @@
+import { emptySeoPreparedSnapshot, seoProviderViews } from '../../shared/seoSourceSnapshot';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SeoGoalSummary } from '../../shared/seoSummary';
 
@@ -44,6 +45,6 @@ export function readSeoGoalSummary(database: DatabaseSync, days = 28, now = new 
     methodology: { onboarding: 'explicit_wizard_completion_since_instrumentation', trials: 'committed_trial_rows',
       applications: 'candidate_provided_positive_receipt_since_instrumentation', deletedCandidates: 'excluded',
       syntheticCandidates: 'excluded', organicConversion: 'unavailable_no_attribution' },
-    searchProviders: { google: { status: 'unavailable' }, yandex: { status: 'unavailable' } },
+    searchProviders: seoProviderViews(emptySeoPreparedSnapshot(to), now.getTime()),
   };
 }

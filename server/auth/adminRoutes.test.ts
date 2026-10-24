@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { emptySeoPreparedSnapshot } from '../../shared/seoSourceSnapshot';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app';
 import type { ServerConfig } from '../config';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
@@ -27,6 +28,7 @@ const resources: Array<{
 }> = [];
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   for (const resource of resources.splice(0)) {
     await resource.app.close();
     resource.auth.close();
@@ -47,7 +49,7 @@ const CANDIDATE = {
   password: 'candidate-password-for-tests',
 };
 
-async function createApp() {
+async function createApp(seoSummarySnapshotFile?: string) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-admin-routes-'));
   const databasePath = join(directory, 'app.db');
   const candidates = new SqliteCandidateStore({
@@ -63,6 +65,7 @@ async function createApp() {
     candidates,
   );
   const config: ServerConfig = {
+    seoSummarySnapshotFile,
     host: '127.0.0.1',
     port: 3210,
     openAIKey: 'not-used-by-test',
@@ -691,5 +694,31 @@ describe('GET /api/v1/admin/seo-summary', () => {
       db.prepare("UPDATE users SET role_override = 'CareerPartner', admin_permissions_json = ? WHERE username = ?").run(JSON.stringify({ can_view_audit: true }), ADMIN.username);
       expect((await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie } })).statusCode).toBe(403);
     } finally { db.close(); }
+  });
+});
+
+
+describe('prepared SEO source HTTP boundary', () => {
+  it('reads only configured prepared aggregates without provider network or credential access', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'oq-seo-route-source-'));
+    try {
+      const snapshot = emptySeoPreparedSnapshot();
+      const observedAt = new Date().toISOString();
+      snapshot.providers.google = { latestAttempt: { observedAt, mode: 'official_api', status: 'available', reason: 'none' },
+        lastSuccess: { observedAt, mode: 'official_api', window: null,
+          metrics: { clicks: 0, impressions: 4, ctr: 0, position: null, indexedPages: null, sqi: null },
+          queries: [], sections: { aggregate: 'available', queries: 'available' } } };
+      const path = join(directory, 'prepared.json'); writeFileSync(path, JSON.stringify(snapshot));
+      const network = vi.fn(() => { throw new Error('provider network forbidden'); });
+      vi.stubGlobal('fetch', network);
+      const app = await createApp(path);
+      const cookie = await signIn(app, ADMIN);
+      const response = await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie } });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.searchProviders.google).toMatchObject({ status: 'available', stale: false,
+        lastSuccess: { metrics: { clicks: 0, impressions: 4, position: null } } });
+      expect(network).not.toHaveBeenCalled();
+      expect(response.body).not.toContain(path);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });

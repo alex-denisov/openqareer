@@ -10,7 +10,7 @@ const summary: SeoGoalSummary = {
   methodology: { onboarding: 'explicit_wizard_completion_since_instrumentation', trials: 'committed_trial_rows',
     applications: 'candidate_provided_positive_receipt_since_instrumentation', deletedCandidates: 'excluded',
     syntheticCandidates: 'excluded', organicConversion: 'unavailable_no_attribution' },
-  searchProviders: { google: { status: 'unavailable' }, yandex: { status: 'unavailable' } },
+  searchProviders: { google: { status: 'unavailable', stale: false, latestAttempt: null, lastSuccess: null }, yandex: { status: 'unavailable', stale: false, latestAttempt: null, lastSuccess: null } },
 };
 
 describe('SEO goal summary copy', () => {

@@ -1,3 +1,4 @@
+import { AdminSeoSources } from './AdminSeoSources';
 import { useEffect, useState } from 'react';
 import type { SeoGoalSummary } from '../../../shared/seoSummary';
 import { getAdminSeoSummary } from './adminApi';
@@ -22,13 +23,7 @@ export function AdminSeoSummaryData({ summary }: { summary: SeoGoalSummary }) {
       <p className="admin-note">Квитанцию предоставляет кандидат: ссылка на подтверждение, автоматический ответ или снимок экрана.
         Это не независимая проверка работодателем. Повторная квитанция одного отклика не увеличивает число.</p>
     </section>
-    <section className="admin-card" aria-labelledby="seo-search-title">
-      <h2 id="seo-search-title">Поисковые источники</h2>
-      <p><strong>Google Search Console:</strong> данные API недоступны.</p>
-      <p><strong>Яндекс Вебмастер:</strong> данные API недоступны.</p>
-      <p className="admin-note">Недоступные показы, клики и позиции не заменены нулями.
-        Сводка не обращается к внешним API при открытии страницы.</p>
-    </section>
+    <AdminSeoSources sources={summary.searchProviders} />
     <section className="admin-card" aria-labelledby="seo-method-title">
       <h2 id="seo-method-title">Как читать числа</h2>
       <p className="admin-note">Источник — внутренние серверные записи за выбранный период. Мастер и квитанции учитываются

@@ -1,3 +1,4 @@
+import { readPreparedSeoSources } from '../seo/preparedSeoSources';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
@@ -435,7 +436,8 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
       return sendError(reply, request, 503, 'unavailable', 'Сводка временно недоступна.', true);
     }
     reply.header('Cache-Control', 'no-store');
-    return { data: deps.candidateStore.getSeoGoalSummary(days), meta: { requestId: request.id } };
+    return { data: { ...deps.candidateStore.getSeoGoalSummary(days),
+      searchProviders: readPreparedSeoSources(deps.config.seoSummarySnapshotFile) }, meta: { requestId: request.id } };
   });
   registerAdminPermissionRoutes(app, deps);
   registerAdminPartnerRoutes(app, deps);

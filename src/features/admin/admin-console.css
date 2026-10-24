@@ -2441,3 +2441,6 @@
     margin-inline-start: 0;
   }
 }
+
+/* Provider query text is untrusted and can contain long unbroken strings. */
+.admin-seo-sources { overflow-wrap: anywhere; }
