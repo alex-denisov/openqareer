@@ -421,6 +421,10 @@
       background: var(--career-accent);
     }
 
+    .career-relocation label > input[type='radio']::after {
+      display: none;
+    }
+
     .career-relocation label > input[type='checkbox']:checked::after {
       position: absolute;
       inset-block-start: 4px;

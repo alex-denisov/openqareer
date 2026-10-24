@@ -12,8 +12,9 @@ import { apiErrorMessage } from '../coach/apiClient';
 import { grantRelocationConsent, type RelocationQuestionnaireResponse } from './relocationApi';
 import { RelocationHeaderCard } from './RelocationHeaderCard';
 import { MobilePush } from './RelocationMobilePush';
+import { MobileConsentBody } from './mobile/MobileConsentBody';
 
-type Consent = RelocationQuestionnaireResponse['consent'];
+export type Consent = RelocationQuestionnaireResponse['consent'];
 
 const PROMISES: readonly { readonly title: string; readonly text: string }[] = [
   {
@@ -74,10 +75,7 @@ export function RelocationConsentGate(props: RelocationConsentGateProps) {
         backLabel="Назад к ролям"
         onBack={props.onNavigateBack}
       >
-        <p className="career-relocation-muted">
-          Не включено. Сейчас подборка идёт только по России.
-        </p>
-        <ConsentBody {...props} />
+        <MobileConsentBody {...props} />
       </MobilePush>
     );
   }
@@ -172,20 +170,7 @@ function ConsentGrantControl({
   readonly onGranted: (consent: Consent) => void;
   readonly onLater: () => void;
 }) {
-  const [accepted, setAccepted] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const submit = async () => {
-    setBusy(true);
-    setError(undefined);
-    try {
-      onGranted((await grantRelocationConsent()).consent);
-    } catch (reason) {
-      setError(apiErrorMessage(reason, 'Не удалось сохранить согласие. Повторите.'));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { accepted, setAccepted, busy, error, submit } = useConsentGrant(onGranted);
   return (
     <fieldset className="career-relocation-consent-control" disabled={busy}>
       <label>
@@ -213,6 +198,25 @@ function ConsentGrantControl({
       {error ? <p role="alert">{error}</p> : null}
     </fieldset>
   );
+}
+
+/** Accept the mobility consent: one request, a readable error, no double submit. */
+export function useConsentGrant(onGranted: (consent: Consent) => void) {
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const submit = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      onGranted((await grantRelocationConsent()).consent);
+    } catch (reason) {
+      setError(apiErrorMessage(reason, 'Не удалось сохранить согласие. Повторите.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { accepted, setAccepted, busy, error, submit };
 }
 
 function ConsentPendingControl({ onLater }: { readonly onLater: () => void }) {
