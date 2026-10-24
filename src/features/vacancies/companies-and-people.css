@@ -282,6 +282,15 @@
     font-family: var(--font-mono, ui-monospace, monospace);
   }
 
+  .companies-people-contacts.is-known {
+    font-size: 0;
+  }
+
+  .companies-people-contacts.is-known > svg,
+  .companies-people-contacts.is-known > .companies-people-contacts-count {
+    font-size: var(--career-text-xs);
+  }
+
   .companies-people-contacts[data-zero] {
     color: var(--career-text-dim);
   }

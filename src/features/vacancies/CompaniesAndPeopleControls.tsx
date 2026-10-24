@@ -273,7 +273,7 @@ function CompanyRowMetrics({ company }: { readonly company: CandidateCompanyOppo
   return (
     <span className="companies-people-company-metrics">
       <span
-        className="companies-people-contacts"
+        className={`companies-people-contacts${contacts === null ? '' : ' is-known'}`}
         data-zero={contacts === 0 ? '' : undefined}
         title={contacts === null ? 'Контакты в сети неизвестны' : 'Контакты в вашей сети'}
       >
@@ -287,8 +287,8 @@ function CompanyRowMetrics({ company }: { readonly company: CandidateCompanyOppo
           </>
         ) : (
           <>
-            {contacts}
-            <span className="companies-people-mobile-only"> в сети</span>
+            {/* Mockup 13 on 390: one line «2 в сети» after the icon; 1440 keeps the number only. */}
+            <span className="companies-people-contacts-count">{contacts}</span> в сети
           </>
         )}
       </span>
