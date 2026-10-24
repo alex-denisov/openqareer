@@ -77,9 +77,10 @@
     cursor: pointer;
   }
 
+  /* B510: «Сбросить» как .pm-text макета 4 — 40 px, поле 16 px; подпись как .pm-foot. */
   .vacancies-mobile-sheet-reset {
-    min-block-size: var(--career-target-min);
-    padding: 0;
+    min-block-size: 40px;
+    padding: 0 var(--career-space-4);
     border: 0;
     background: transparent;
     color: var(--career-text-soft);
@@ -90,8 +91,9 @@
 
   .vacancies-mobile-sheet-subtitle {
     margin: 0;
-    color: var(--career-text-soft);
-    font-size: var(--career-text-sm);
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
     font-variant-numeric: tabular-nums;
   }
 
