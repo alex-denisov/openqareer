@@ -1147,3 +1147,37 @@
 }
 
 /* B446-g4: длинные роли кампании не раздвигают ряд фильтров. */
+
+/* B510: окно полного описания как модалка макета 4 — крестик .career-btn.is-ghost.is-icon
+   (44 px, радиус sm), кнопки подвала .career-btn: 14/600, рамка field-edge, радиус sm;
+   на 390 подвал столбцом во всю ширину, капсулы 36 px. */
+.career-modal-card:has(.vacancies-info-body) .career-modal-close {
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+.vacancies-info-footer .vacancies-info-btn {
+  min-block-size: var(--career-target-min);
+  padding: 0 var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background-color: transparent;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+}
+@media (max-width: 600px) {
+  .vacancies-info-footer {
+    flex-direction: column-reverse;
+    padding: var(--career-space-4);
+  }
+  .vacancies-info-footer .vacancies-info-btn {
+    inline-size: 100%;
+    min-block-size: 36px;
+    border-radius: 18px;
+  }
+}
