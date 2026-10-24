@@ -803,4 +803,22 @@
     font-size: var(--career-text-md);
     font-weight: 500;
   }
+
+  /* .pm-row + .pm-row::before: separators start after the 56 px icon column, not full width */
+  .career-relocation-push
+    :is(.vacancy-push-kv, .vacancy-push-row)
+    + :is(.vacancy-push-kv, .vacancy-push-row) {
+    position: relative;
+    border-block-start: 0;
+  }
+
+  .career-relocation-push
+    :is(.vacancy-push-kv, .vacancy-push-row)
+    + :is(.vacancy-push-kv, .vacancy-push-row)::before {
+    position: absolute;
+    inset: 0 0 auto 56px;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+    content: '';
+  }
+
 }
