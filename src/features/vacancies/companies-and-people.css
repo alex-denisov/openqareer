@@ -1234,7 +1234,7 @@ select.companies-people-select {
   .companies-people-detail .companies-people-search-box .companies-people-action.is-primary,
   .companies-people-detail
     > .companies-people-section
-    .companies-people-actions
+    > .companies-people-actions
     > .companies-people-action {
     display: inline-flex;
     flex: none;
@@ -1272,7 +1272,7 @@ select.companies-people-select {
 
   .companies-people-detail
     > .companies-people-section
-    .companies-people-actions
+    > .companies-people-actions
     > .companies-people-action:not(.is-primary) {
     border-color: var(--career-field-edge);
     background: transparent;
