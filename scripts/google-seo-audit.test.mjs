@@ -24,3 +24,10 @@ describe('bounded evidence-only Google audit', () => {
     expect(publicGoogleError(new Error('Search Console SearchAnalytics API HTTP 403'))).toContain('403');
   });
 });
+
+ it('reads inert visible JobPosting microdata without borrowing unrelated properties', () => {
+   const html='<main itemscope itemtype="https://schema.org/JobPosting"><h1 itemprop="title">Engineer</h1><time itemprop="datePosted" datetime="2026-10-24">Today</time><div itemprop="description"><p>Full visible description.</p></div><span itemprop="hiringOrganization" itemscope itemtype="https://schema.org/Organization"><span itemprop="name">Example</span></span><meta itemprop="jobLocationType" content="TELECOMMUTE"><span itemprop="applicantLocationRequirements" itemscope itemtype="https://schema.org/Country"><span itemprop="name">US</span></span></main>';
+   expect(jobPostingEvidence(html)).toEqual({jobPosting:true,missing:[]});
+   expect(jobPostingEvidence(html.replace('itemprop="description"','data-description="outside"')).missing).toContain('description');
+   expect(jobPostingEvidence('<div itemprop="title">Unrelated</div><main itemscope itemtype="https://schema.org/JobPosting"><div itemprop="hiringOrganization" itemscope><span itemprop="title">Wrong scope</span></div></main>').missing).toContain('title');
+ });
