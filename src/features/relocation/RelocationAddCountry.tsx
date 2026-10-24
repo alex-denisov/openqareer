@@ -48,13 +48,7 @@ export function RelocationAddCountry({
           />
         ))}
       </ul>
-      <p className="career-relocation-note">
-        <Info aria-hidden="true" size={17} />
-        <span>
-          Добавленная страна появится в списке. Если правил по ней нет, статус не присваиваем и
-          честно говорим, что он не определён.
-        </span>
-      </p>
+      <AddCountryNote />
       <div className="career-relocation-footer-actions">
         <button className="career-relocation-btn is-primary" type="button" onClick={onDone}>
           <Check aria-hidden="true" size={17} />
@@ -62,6 +56,18 @@ export function RelocationAddCountry({
         </button>
       </div>
     </section>
+  );
+}
+
+function AddCountryNote() {
+  return (
+    <p className="career-relocation-note">
+      <Info aria-hidden="true" size={17} />
+      <span>
+        Добавленная страна появится в списке. Если правил по ней нет, статус не присваиваем и честно
+        говорим, что он не определён.
+      </span>
+    </p>
   );
 }
 
