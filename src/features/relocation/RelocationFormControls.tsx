@@ -30,6 +30,14 @@ export const LANGUAGE_LEVEL_OPTIONS: readonly (readonly [LanguageLevel, string])
   ['unknown', 'Не указан'], ['A1', 'A1'], ['A2', 'A2'], ['B1', 'B1'], ['B2', 'B2'], ['C1', 'C1'], ['C2', 'C2'],
 ];
 
+/** Languages offered from a list (mockup 15 `i4`); «other» opens a name field. */
+export const LANGUAGE_NAME_OPTIONS: readonly string[] = [
+  'Английский', 'Немецкий', 'Французский', 'Испанский', 'Итальянский', 'Португальский',
+  'Сербский', 'Греческий', 'Турецкий', 'Арабский', 'Грузинский', 'Армянский', 'Казахский',
+  'Китайский', 'Японский', 'Нидерландский', 'Польский', 'Иврит',
+];
+export const OTHER_LANGUAGE = 'other';
+
 export function RelocationFormField({
   id,
   label,
