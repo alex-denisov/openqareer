@@ -1,10 +1,13 @@
 import {
   isSalaryMarketGrade,
+  isSalaryMarketLocation,
+  selectSalaryLocation,
   selectSalaryGrade,
   salaryRoleLabel,
   type SalaryMarketSkillSummary,
 } from '../../shared/salaryMarketPublic';
 import { existsSync, readFileSync } from 'node:fs';
+import { ontology } from '../../shared/roleOntology';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import React from 'react';
@@ -12,6 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type {
   SalaryMarketGrade,
+  SalaryMarketLocation,
   SalaryMarketIndexEntry,
   SalaryMarketSnapshot,
 } from '../../shared/salaryMarketSnapshot';
@@ -62,10 +66,12 @@ export function renderSalaryMarketDocument(
   directory?: readonly SalaryMarketIndexEntry[],
   grade?: SalaryMarketGrade,
   skillsPage = 1,
+  related: readonly SalaryMarketIndexEntry[] = [],
+  location: SalaryMarketLocation = 'all',
 ): string {
   const path = directory ? '/salaries' : (salaryRolePath(role) ?? '/salaries');
   const canonical = `${SITE_ORIGIN}${path}`;
-  const visible = selectSalaryGrade(snapshot, grade);
+  const visible = selectSalaryGrade(selectSalaryLocation(snapshot, location), grade);
   const title = escapeHtml(salaryPageTitle(visible ?? snapshot));
   const robots = (
     directory ? directory.some((entry) => entry.indexable) : salarySnapshotIndexable(visible)
@@ -76,11 +82,18 @@ export function renderSalaryMarketDocument(
   const content = renderToStaticMarkup(
     directory
       ? React.createElement(SalaryMarketDirectory, { roles: directory, page: selectedGroup || 1 })
-      : React.createElement(SalaryMarketPage, { snapshot, selectedGroup, grade, skillsPage }),
+      : React.createElement(SalaryMarketPage, {
+          snapshot,
+          selectedGroup,
+          grade,
+          skillsPage,
+          related,
+          location,
+        }),
   );
   return salaryDocumentHead(template, { title, canonical, robots, structured })
     .replace('%%SALARY_CONTENT%%', () => content)
-    .replace('</body>', '<script type="module" src="/assets/oq-salary-gap-1.js"></script></body>');
+    .replace('</body>', '<script type="module" src="/assets/oq-salary-gap-2.js"></script></body>');
 }
 
 function salaryStructuredData(snapshot: SalaryMarketSnapshot | null, canonical: string): string {
@@ -165,7 +178,7 @@ export function registerSalaryMarketRoutes(
   registerSalarySkillSummary(app, read);
   app.get<{
     Params: { role: string };
-    Querystring: { group?: string; grade?: string; skills?: string };
+    Querystring: { group?: string; grade?: string; skills?: string; location?: string };
   }>('/salaries/:role', (request, reply) => {
     const role = request.params.role;
     if (!salaryRolePath(role))
@@ -178,7 +191,18 @@ export function registerSalaryMarketRoutes(
     } catch {
       return reply.code(503).header('X-Robots-Tag', 'noindex').send('Данные временно недоступны');
     }
-    return sendSalaryView(reply, template, snapshot, role, request.query);
+    let related: readonly SalaryMarketIndexEntry[] = [];
+    if (snapshot?.profession?.kind === 'b267') {
+      try {
+        const index = options.readIndex
+          ? options.readIndex()
+          : loadPublicSalaryIndex(options.databasePath);
+        related = relatedSalaryMarkets(snapshot, index);
+      } catch {
+        /* Optional prepared navigation must not hide the available role snapshot. */
+      }
+    }
+    return sendSalaryView(reply, template, snapshot, role, request.query, related);
   });
 }
 
@@ -210,13 +234,24 @@ function sendSalaryView(
   template: string,
   snapshot: SalaryMarketSnapshot | null,
   role: string,
-  query: { grade?: string; group?: string; skills?: string },
+  query: { grade?: string; group?: string; skills?: string; location?: string },
+  related: readonly SalaryMarketIndexEntry[] = [],
 ) {
+  const location =
+    query.location && isSalaryMarketLocation(query.location) ? query.location : 'all';
+  if (query.location && !isSalaryMarketLocation(query.location))
+    return reply.code(400).header('X-Robots-Tag', 'noindex').send('Неизвестная география');
+  const regional = selectSalaryLocation(snapshot, location);
+  if (snapshot && !regional)
+    return reply
+      .code(404)
+      .header('X-Robots-Tag', 'noindex')
+      .send('Географический срез не подготовлен');
   const rawGrade = query.grade;
   const grade = rawGrade && isSalaryMarketGrade(rawGrade) ? rawGrade : undefined;
   if (rawGrade && !grade)
     return reply.code(400).header('X-Robots-Tag', 'noindex').send('Неизвестный грейд');
-  if (grade && !selectSalaryGrade(snapshot, grade))
+  if (grade && !selectSalaryGrade(regional, grade))
     return reply
       .code(404)
       .header('X-Robots-Tag', 'noindex')
@@ -228,7 +263,17 @@ function sendSalaryView(
     .header('Cache-Control', 'no-cache')
     .code(snapshot ? 200 : 404)
     .send(
-      renderSalaryMarketDocument(template, snapshot, role, group, undefined, grade, skillsPage),
+      renderSalaryMarketDocument(
+        template,
+        snapshot,
+        role,
+        group,
+        undefined,
+        grade,
+        skillsPage,
+        related,
+        location,
+      ),
     );
 }
 
@@ -237,19 +282,28 @@ function registerSalarySkillSummary(
   app: FastifyInstance,
   read: (role: string) => SalaryMarketSnapshot | null,
 ): void {
-  app.get<{ Params: { role: string }; Querystring: { grade?: string } }>(
+  app.get<{ Params: { role: string }; Querystring: { grade?: string; location?: string } }>(
     '/api/v1/public/salary-markets/:role/skills',
     (request, reply) => {
       reply.header('Cache-Control', 'no-store');
       const { role } = request.params;
       if (!salaryRolePath(role)) return reply.code(404).send({ error: { code: 'not_found' } });
+      const location =
+        request.query.location && isSalaryMarketLocation(request.query.location)
+          ? request.query.location
+          : 'all';
+      if (request.query.location && !isSalaryMarketLocation(request.query.location))
+        return reply.code(400).send({ error: { code: 'invalid_location' } });
       const raw = request.query.grade;
       const grade = raw && isSalaryMarketGrade(raw) ? raw : null;
       if (raw && !grade) return reply.code(400).send({ error: { code: 'invalid_grade' } });
       try {
-        const visible = selectSalaryGrade(read(role), grade ?? undefined);
+        const visible = selectSalaryGrade(
+          selectSalaryLocation(read(role), location),
+          grade ?? undefined,
+        );
         if (!visible) return reply.code(404).send({ error: { code: 'not_found' } });
-        const data = visible.role === role ? publicSkillSummary(visible, grade) : null;
+        const data = visible.role === role ? publicSkillSummary(visible, grade, location) : null;
         if (!data) return reply.code(503).send({ error: { code: 'aggregate_unavailable' } });
         return { data };
       } catch {
@@ -261,6 +315,7 @@ function registerSalarySkillSummary(
 function publicSkillSummary(
   visible: SalaryMarketSnapshot,
   grade: SalaryMarketGrade | null,
+  location: SalaryMarketLocation,
 ): SalaryMarketSkillSummary | null {
   if (
     !Number.isSafeInteger(visible.sampleSize) ||
@@ -286,6 +341,7 @@ function publicSkillSummary(
   return {
     role: visible.role,
     grade,
+    ...(location !== 'all' ? { location } : {}),
     updatedAt: visible.updatedAt,
     sampleSize: visible.sampleSize,
     source: visible.source,
@@ -295,4 +351,25 @@ function publicSkillSummary(
       frequency: Math.round((count / visible.sampleSize) * 10000) / 100,
     })),
   };
+}
+
+/** Only explicit ontology adjacency joined to actual prepared published paths. */
+export function relatedSalaryMarkets(
+  snapshot: SalaryMarketSnapshot,
+  index: readonly SalaryMarketIndexEntry[],
+): readonly SalaryMarketIndexEntry[] {
+  if (snapshot.profession?.kind !== 'b267') return [];
+  const adjacent = ontology.rolesById.get(snapshot.profession.roleId)?.adjacent ?? [];
+  const allowed = new Set(adjacent.map((row) => row.roleId));
+  return index
+    .slice(0, 100)
+    .filter(
+      (row) =>
+        row.role !== snapshot.role &&
+        row.indexable &&
+        row.profession?.kind === 'b267' &&
+        allowed.has(row.profession.roleId) &&
+        salaryRolePath(row.role),
+    )
+    .slice(0, 3);
 }

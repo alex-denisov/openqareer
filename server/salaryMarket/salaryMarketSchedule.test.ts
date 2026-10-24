@@ -12,7 +12,7 @@ describe('salary snapshot maintenance schedule', () => {
     const db = new DatabaseSync(':memory:');
     db.exec('CREATE TABLE vacancy_clusters (id TEXT PRIMARY KEY, cluster_json TEXT)');
     db.exec(
-      `CREATE TABLE catalog_entries (cluster_id TEXT PRIMARY KEY, role_slug TEXT, role_label TEXT, skills_json TEXT, published_ms INTEGER, status TEXT, title TEXT)`,
+      `CREATE TABLE catalog_entries (cluster_id TEXT PRIMARY KEY, role_slug TEXT, role_label TEXT, skills_json TEXT, published_ms INTEGER, status TEXT, title TEXT, location TEXT, is_remote INTEGER NOT NULL DEFAULT 0)`,
     );
     db.prepare(
       'INSERT INTO catalog_entries (cluster_id, role_slug, role_label, skills_json, published_ms, status) VALUES (?, ?, ?, ?, ?, ?)',

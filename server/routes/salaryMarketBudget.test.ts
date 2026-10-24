@@ -130,6 +130,51 @@ describe('B351: data-dependent raw HTML budget', () => {
     expect(html).toContain('Предыдущие группы');
     expect(html).toContain('…');
   });
+  it('bounds location/grade history with four scopes and three published neighbors', () => {
+    const regional: SalaryMarketSnapshot = {
+      ...snapshot,
+      geography: {
+        method: 'explicit_source_country_v1',
+        regionPolicy: 'openqareer_candidate_regions_v1',
+        explicitCountryCount: 200,
+        unknownCountryCount: 90,
+        ambiguousCountryCount: 10,
+        remoteCount: 200,
+      },
+      locationSlices: (['remote', 'europe', 'uae', 'cis'] as const).map((location) => ({
+        location,
+        evidenceMethod: 'explicit_source_country_v1',
+        sampleSize: 300,
+        skills,
+        salary,
+        gradeSlices: snapshot.gradeSlices,
+        skillQuarterlyTrend: actualHistory(300),
+        quarterlyTrend: 'available',
+      })),
+    };
+    const related = Array.from({ length: 3 }, (_, i) => ({
+      role: `long-published-role-${'a'.repeat(60)}-${i}`,
+      roleLabel: 'Длинное название профессии'.repeat(5),
+      profession: { kind: 'b267' as const, roleId: 'eng.backend.ic' },
+      sampleSize: 100,
+      updatedAt: snapshot.updatedAt,
+      indexable: true,
+    }));
+    const html = renderSalaryMarketDocument(
+      wholeTemplate(),
+      regional,
+      regional.role,
+      4,
+      undefined,
+      'senior',
+      1,
+      related,
+      'europe',
+    );
+    expect(Buffer.byteLength(html)).toBeLessThan(20_000);
+    expect(html).toContain('data-location="europe"');
+    expect(html).toContain('Смежные профессии');
+  });
   it('bounds directory rows and unclassified title in visible text, head and JSON-LD', () => {
     const entries = Array.from({ length: 20 }, (_, i) => ({
       role: `unclassified-${'a'.repeat(45)}-${String(i).padStart(16, '0')}`,

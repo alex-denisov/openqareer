@@ -28,6 +28,8 @@ export interface SalaryMarketSnapshot {
   readonly profession?: SalaryMarketProfession;
   readonly gradeSlices?: readonly SalaryMarketGradeSlice[];
   readonly source: 'deduplicated_public_catalog';
+  readonly geography?: SalaryMarketGeographyEvidence;
+  readonly locationSlices?: readonly SalaryMarketLocationSlice[];
 }
 
 /** Explicit comparable salary evidence only. No currency conversion or inferred periods.
@@ -170,4 +172,26 @@ export function salarySkillTrendHasChanges(trend: SalarySkillQuarterlyTrend | un
   return (
     trend?.status === 'available' && trend.skills.some((skill) => skill.status === 'available')
   );
+}
+
+export type SalaryMarketLocation = 'all' | 'remote' | 'europe' | 'uae' | 'cis';
+export interface SalaryMarketGeographyEvidence {
+  readonly method: 'explicit_source_country_v1';
+  readonly regionPolicy: 'openqareer_candidate_regions_v1';
+  readonly explicitCountryCount: number;
+  readonly unknownCountryCount: number;
+  readonly ambiguousCountryCount: number;
+  /** Overlaps country groups; remote does not establish permission to work worldwide. */
+  readonly remoteCount: number;
+}
+/** At most four prepared scopes; each has an independent denominator and posted-grade slices. */
+export interface SalaryMarketLocationSlice {
+  readonly location: Exclude<SalaryMarketLocation, 'all'>;
+  readonly evidenceMethod: 'stored_remote_flag_v1' | 'explicit_source_country_v1';
+  readonly sampleSize: number;
+  readonly skills: SalaryMarketSnapshot['skills'];
+  readonly salary: SalaryMarketDistribution;
+  readonly gradeSlices?: readonly SalaryMarketGradeSlice[];
+  readonly skillQuarterlyTrend?: SalarySkillQuarterlyTrend;
+  readonly quarterlyTrend: 'unavailable' | 'available';
 }

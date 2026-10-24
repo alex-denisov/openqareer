@@ -136,3 +136,70 @@ it('rejects corrupt denominators/dates rather than returning a successful invali
     }
   }
 });
+
+it('keeps location and grade counts independent and rejects unknown or absent slices', async () => {
+  const regional: SalaryMarketSnapshot = {
+    ...sample,
+    geography: {
+      method: 'explicit_source_country_v1',
+      regionPolicy: 'openqareer_candidate_regions_v1',
+      explicitCountryCount: 12,
+      unknownCountryCount: 8,
+      ambiguousCountryCount: 0,
+      remoteCount: 10,
+    },
+    locationSlices: [
+      {
+        location: 'europe',
+        evidenceMethod: 'explicit_source_country_v1',
+        sampleSize: 10,
+        skills: [{ name: 'Local SQL', count: 6, frequency: 60 }],
+        salary,
+        quarterlyTrend: 'unavailable',
+        gradeSlices: [
+          {
+            ...sample.gradeSlices![0]!,
+            skills: [{ name: 'Regional Senior', count: 2, frequency: 40 }],
+          },
+        ],
+      },
+    ],
+  };
+  const app = appFor(() => regional);
+  try {
+    const all = (
+      await app.inject('/api/v1/public/salary-markets/analyst/skills?location=europe')
+    ).json().data;
+    expect(all).toMatchObject({
+      location: 'europe',
+      sampleSize: 10,
+      skills: [{ name: 'Local SQL', count: 6, frequency: 60 }],
+    });
+    const senior = (
+      await app.inject('/api/v1/public/salary-markets/analyst/skills?location=europe&grade=senior')
+    ).json().data;
+    expect(senior).toMatchObject({
+      location: 'europe',
+      grade: 'senior',
+      sampleSize: 5,
+      skills: [{ name: 'Regional Senior', count: 2, frequency: 40 }],
+    });
+    expect(
+      (await app.inject('/api/v1/public/salary-markets/analyst/skills?location=guess')).statusCode,
+    ).toBe(400);
+    expect(
+      (await app.inject('/api/v1/public/salary-markets/analyst/skills?location=uae')).statusCode,
+    ).toBe(404);
+  } finally {
+    await app.close();
+  }
+  const legacy = appFor(() => sample);
+  try {
+    expect(
+      (await legacy.inject('/api/v1/public/salary-markets/analyst/skills?location=europe'))
+        .statusCode,
+    ).toBe(404);
+  } finally {
+    await legacy.close();
+  }
+});
