@@ -8,6 +8,8 @@
   max-inline-size: 940px;
   padding-block-end: var(--career-space-8);
   font-family: var(--career-font-sans);
+  /* Макет 3 (shared.css body): строка 1.5 для всего текста экрана. */
+  line-height: 1.5;
   color: var(--career-text);
 }
 
@@ -123,9 +125,16 @@
   outline-offset: calc(2px - var(--sm-gutter));
 }
 
-/* Макет 3: вторичная кнопка роли — основной цвет текста (.career-btn). */
+/* Макет 3: вторичная кнопка роли — основной цвет текста и контур field-edge (.career-btn). */
 .career-screen .career-role-actions .career-btn-secondary {
+  border-color: var(--career-field-edge);
   color: var(--career-text);
+}
+
+/* Макет 3 (.career-btn): поля space-4 и зазор space-2 у кнопок роли. */
+.career-screen .career-role-actions .career-btn:not(.is-sm) {
+  padding-inline: var(--career-space-4);
+  gap: var(--career-space-2);
 }
 
 .career-plate {
@@ -361,8 +370,9 @@
   align-items: center;
   gap: var(--career-space-1);
   padding: 2px var(--career-space-2);
-  border: var(--career-border-width) solid currentcolor;
-  border-radius: 6px;
+  /* Макет 3 (.tag): контур цветом статуса на 45 %, без заливки, радиус space-1. */
+  border: var(--career-border-width) solid color-mix(in oklch, currentcolor 45%, transparent);
+  border-radius: var(--career-space-1);
   font-size: var(--career-text-xs);
   font-weight: 600;
   white-space: nowrap;
@@ -370,12 +380,10 @@
 
 .career-badge-ok {
   color: var(--career-success);
-  background: var(--career-success-soft);
 }
 
 .career-badge-hyp {
   color: var(--career-accent);
-  background: var(--career-accent-soft);
 }
 
 .career-badge-muted {
@@ -548,6 +556,7 @@
 }
 
 .career-m-group-title {
+  line-height: 1.25;
   margin: 0;
   padding-inline: var(--career-space-1);
   font-size: var(--career-text-xs);
@@ -599,6 +608,27 @@
 .career-m-row-title {
   font-size: var(--career-text-md);
   font-weight: 600;
+}
+
+/* Макет 3 на 390 (.vm-row): стрелка в строке названия, статус и действие на всю ширину. */
+.career-m-role-main {
+  gap: 2px;
+}
+.career-m-role-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+.career-m-role-head .career-m-row-title {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.career-m-role-main .career-m-row-foot {
+  margin-block-start: 2px;
 }
 
 .career-m-row-main + .career-m-value,

@@ -55,8 +55,11 @@ function MobileRoleRow({
   return (
     <li>
       <button type="button" className="career-m-row" onClick={onOpen}>
-        <span className="career-m-row-main">
-          <span className="career-m-row-title">{role.title}</span>
+        <span className="career-m-row-main career-m-role-main">
+          <span className="career-m-role-head">
+            <span className="career-m-row-title">{role.title}</span>
+            <CaretRight size={16} aria-hidden />
+          </span>
           <span className="career-role-meta">
             {role.wageDisplay} · {formatVacancyCount(role.vacancyCount)}
           </span>
@@ -71,7 +74,6 @@ function MobileRoleRow({
             </span>
           </span>
         </span>
-        <CaretRight size={16} aria-hidden />
       </button>
     </li>
   );
