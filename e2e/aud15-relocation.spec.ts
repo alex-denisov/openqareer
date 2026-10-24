@@ -211,7 +211,7 @@ test('390: country push screen, scenario sheet and document screen', async ({ pa
   await openRelocation(page, info);
 
   await page.getByRole('button', { name: 'Сценарий' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Сценарий переезда' });
+  const sheet = page.getByRole('dialog', { name: 'Сценарий' });
   await expect(sheet).toBeVisible();
   await capture(page, info, 'relocation-scenario-sheet');
   await sheet.getByRole('button', { name: 'Закрыть' }).click();
