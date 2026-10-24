@@ -216,8 +216,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: var(--career-control-min);
-  block-size: var(--career-control-min);
+  /* B510: значок вплотную к тексту, как .m макета 4. */
+  inline-size: auto;
+  block-size: auto;
   flex: none;
 }
 
@@ -361,6 +362,9 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   color: var(--career-text-soft);
+  /* B510: .desc макета 4 — 14 px, интерлиньяж 1.5. */
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
 }
 
 .vacancies-screen-full-description {
@@ -851,10 +855,6 @@
 .vacancies-screen-description h3 {
   color: var(--career-text-soft);
 }
-.vacancies-screen-description-copy {
-  font-size: var(--career-text-sm);
-  line-height: 1.5;
-}
 
 /* B510: строка как .vrow макета 4 — колонки 2.2/1/1.2/1.6 и три кнопки по 44 через 16 px,
    ячейки по верху; значок «совпадает» 13 px вплотную к тексту через space-1. */
@@ -886,10 +886,6 @@
   .vacancies-table-header-actions {
     inline-size: calc(var(--career-target-min) * 3 + var(--career-space-4) * 2);
   }
-}
-.vacancies-screen-fit-status .fit-dot {
-  inline-size: auto;
-  block-size: auto;
 }
 
 /* B510: закладка строки 390 как .vm-save макета 4 — круг 36 px, значок 22 px, цвет dim,
