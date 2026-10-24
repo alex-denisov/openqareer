@@ -35,51 +35,19 @@ if (!token) {
   process.exit(1);
 }
 
-async function ask(path, { allowMissing = false } = {}) {
-  const response = await fetch(`https://api.webmaster.yandex.net/v4${path}`, {
-    headers: { Authorization: `OAuth ${token}` },
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    if (allowMissing) return { error: body?.error_code ?? `HTTP ${response.status}` };
-    throw new Error(`${path} → HTTP ${response.status}`);
-  }
-  return body;
-}
-
-const { user_id: userId } = await ask('/user');
-const { hosts } = await ask(`/user/${userId}/hosts`);
-const host = hosts.find((item) => (item.ascii_host_url ?? '').includes(DOMAIN));
-if (!host) {
-  process.stdout.write(`${DOMAIN} не найден в аккаунте — сначала добавьте сайт в Вебмастере\n`);
-  process.exit(2);
-}
-if (!host.verified) {
-  process.stdout.write(`${DOMAIN}: права не подтверждены — замер невозможен\n`);
-  process.exit(2);
-}
-
-const summary = await ask(`/user/${userId}/hosts/${host.host_id}/summary`, { allowMissing: true });
+const { collectYandexWebmaster } = await import('./yandex-webmaster-client.mjs');
+const { mkdirSync, writeFileSync, chmodSync } = await import('node:fs');
+const snapshot = await collectYandexWebmaster(token);
 const today = new Date().toISOString().slice(0, 10);
-
-// Свежеподтверждённый сайт Яндекс ещё не обошёл, и показателей у него нет.
-// Это состояние, а не ошибка: писать в журнал нечего, и придумывать нечего.
-if (summary.error === 'HOST_NOT_LOADED') {
-  process.stdout.write(
-    `Замер ${today}: Яндекс ещё не обошёл ${DOMAIN} (host_data_status NOT_LOADED).\n` +
-      'Показателей нет — в журнал писать нечего. Обход начинается в первые дни\n' +
-      'после подтверждения прав; повторить замер через несколько дней.\n',
-  );
-  process.exit(3);
-}
-
+const directory = process.env.YANDEX_SEO_SNAPSHOT_DIR ?? join(process.cwd(), 'docs/v1-release/seo/yandex-snapshots');
+mkdirSync(directory, { recursive: true, mode: 0o700 });
+const path = join(directory, `${today}.json`);
+writeFileSync(path, JSON.stringify({ ...snapshot, mode: 'official_api', observedAt: new Date().toISOString() }, null, 2) + '\n', { mode: 0o600 });
+chmodSync(path, 0o600);
+const summary = snapshot.summary;
 process.stdout.write(`Замер ${today}, Яндекс.Вебмастер, ${DOMAIN}\n`);
-process.stdout.write(`  ИКС: ${summary.sqi ?? 'нет данных'}\n`);
-process.stdout.write(`  страниц в поиске: ${summary.searchable_pages_count ?? 'нет данных'}\n`);
-process.stdout.write(`  исключено: ${summary.excluded_pages_count ?? 'нет данных'}\n`);
-process.stdout.write(`  проблем сайта: ${JSON.stringify(summary.site_problems ?? {})}\n`);
-
-process.stdout.write('\nСтрока для журнала:\n');
-process.stdout.write(
-  `| ${today} | страниц в поиске | ${summary.searchable_pages_count ?? '—'} | Яндекс.Вебмастер | |\n`,
-);
+if (summary?.status === 'available') {
+  process.stdout.write(`  ИКС: ${summary.sqi ?? 'нет данных'}\n`);
+  process.stdout.write(`  страниц в поиске: ${summary.indexedPages ?? 'нет данных'}\n`);
+} else process.stdout.write(`  показатели недоступны: ${summary?.reason ?? snapshot.reason ?? 'unknown'}\n`);
+process.stdout.write(`  snapshot: ${path}\n`);

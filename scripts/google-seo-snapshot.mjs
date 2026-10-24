@@ -13,6 +13,8 @@
  *   node scripts/google-seo-snapshot.mjs --mock
  */
 import crypto from 'node:crypto';
+import { inspectionLimit, selectRootSitemap, jobPostingEvidence, publicGoogleError } from './google-seo-audit.mjs';
+import { querySearchAnalytics, searchAnalyticsTotals, exchangeSearchConsoleToken, SEARCH_CONSOLE_TOKEN_URL, readSearchConsoleJson } from './search-console-client.mjs';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +22,6 @@ import { fetchSitemapUrls } from './seo-sitemap-urls.mjs';
 
 const ENV_FILE = process.env.OPENQAREER_ENV_FILE ?? join(homedir(), '.openqareer/openqareer.env');
 const SITE_URL = 'https://openqareer.com/';
-const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly';
 const SNAPSHOT_DIR =
   process.env.GOOGLE_SEO_SNAPSHOT_DIR ?? join(process.cwd(), 'docs/v1-release/seo/google-snapshots');
@@ -71,7 +72,7 @@ function createServiceAccountJwt(clientEmail, privateKey) {
     JSON.stringify({
       iss: clientEmail,
       scope: SCOPE,
-      aud: OAUTH_TOKEN_URL,
+      aud: SEARCH_CONSOLE_TOKEN_URL,
       exp: now + 3600,
       iat: now,
     }),
@@ -87,49 +88,7 @@ function createServiceAccountJwt(clientEmail, privateKey) {
 }
 
 async function fetchAccessToken(clientEmail, privateKey) {
-  const assertion = createServiceAccountJwt(clientEmail, privateKey);
-  const response = await fetch(OAUTH_TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-      assertion,
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`Google OAuth2 error HTTP ${response.status}: ${text}`);
-  }
-
-  const data = await response.json();
-  return data.access_token;
-}
-
-async function querySearchAnalytics(accessToken, siteUrl) {
-  const encoded = encodeURIComponent(siteUrl);
-  const end = new Date();
-  const start = new Date(Date.now() - 28 * 24 * 60 * 60 * 1000);
-  const response = await fetch(
-    `https://www.googleapis.com/webmasters/v3/sites/${encoded}/searchAnalytics/query`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        startDate: start.toISOString().slice(0, 10),
-        endDate: end.toISOString().slice(0, 10),
-        rowLimit: 1,
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    throw new Error(`Search Console SearchAnalytics API error HTTP ${response.status}`);
-  }
-  return response.json();
+  return exchangeSearchConsoleToken(createServiceAccountJwt(clientEmail, privateKey));
 }
 
 async function querySitemaps(accessToken, siteUrl) {
@@ -138,13 +97,14 @@ async function querySitemaps(accessToken, siteUrl) {
     `https://www.googleapis.com/webmasters/v3/sites/${encoded}/sitemaps`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(15_000), redirect: 'error',
     },
   );
 
   if (!response.ok) {
     throw new Error(`Search Console Sitemaps API error HTTP ${response.status}`);
   }
-  return response.json();
+  return readSearchConsoleJson(response);
 }
 
 function sampleEvenly(values, limit) {
@@ -156,11 +116,12 @@ function sampleEvenly(values, limit) {
 async function inspectUrl(accessToken, siteUrl, inspectedUrl) {
   const response = await fetch('https://searchconsole.googleapis.com/v1/urlInspection/index:inspect', {
     method: 'POST',
+    signal: AbortSignal.timeout(15_000), redirect: 'error',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ inspectionUrl: inspectedUrl, siteUrl }),
   });
   if (!response.ok) return { url: inspectedUrl, status: `http_${response.status}` };
-  const result = (await response.json()).inspectionResult?.indexStatusResult ?? {};
+  const result = (await readSearchConsoleJson(response)).inspectionResult?.indexStatusResult ?? {};
   return {
     url: inspectedUrl,
     status: result.verdict ?? 'unknown',
@@ -172,26 +133,15 @@ async function inspectUrl(accessToken, siteUrl, inspectedUrl) {
 }
 
 async function auditJobPosting(urls) {
-  const required = ['datePosted', 'validThrough', 'hiringOrganization', 'jobLocation', 'title', 'description'];
+  const required = ['datePosted', 'hiringOrganization', 'title', 'description'];
   const rows = [];
   for (const url of urls) {
     try {
-      const response = await fetch(url, { headers: { 'User-Agent': 'openqareer-seo-audit/1.0' } });
+      const response = await fetch(url, { headers: { 'User-Agent': 'openqareer-seo-audit/1.0' }, signal: AbortSignal.timeout(15_000), redirect: 'error' });
       const html = await response.text();
-      const jsonLd = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/giu)]
-        .flatMap((match) => {
-          try {
-            const parsed = JSON.parse(match[1]);
-            return Array.isArray(parsed) ? parsed : [parsed];
-          } catch {
-            return [];
-          }
-        })
-        .find((item) => item && (item['@type'] === 'JobPosting' || item['@type']?.includes?.('JobPosting')));
-      const missing = jsonLd ? required.filter((field) => jsonLd[field] === undefined || jsonLd[field] === null || jsonLd[field] === '') : required;
-      rows.push({ url, httpStatus: response.status, jobPosting: Boolean(jsonLd), missing });
-    } catch (error) {
-      rows.push({ url, httpStatus: null, jobPosting: false, missing: required, error: error.message });
+      rows.push({ url, httpStatus: response.status, ...jobPostingEvidence(html) });
+    } catch {
+      rows.push({ url, httpStatus: null, jobPosting: false, missing: required, error: 'request_or_response_failed' });
     }
   }
   return {
@@ -204,13 +154,15 @@ async function auditJobPosting(urls) {
 
 function persistSnapshot(snapshot) {
   mkdirSync(SNAPSHOT_DIR, { recursive: true });
-  const path = join(SNAPSHOT_DIR, `${snapshot.today}.json`);
+  const suffix = snapshot.mode === 'official_api' ? '' : snapshot.mode === 'synthetic_fixture' ? '.fixture' : '.unavailable';
+  const path = join(SNAPSHOT_DIR, `${snapshot.today}${suffix}.json`);
   writeFileSync(path, JSON.stringify(snapshot, null, 2) + '\n', { mode: 0o600 });
   return path;
 }
 
 function formatCtr(ctr) {
-  if (ctr === undefined || ctr === null || Number(ctr) === 0) return '0%';
+  if (ctr === undefined || ctr === null) return 'нет данных';
+  if (Number(ctr) === 0) return '0%';
   const num = Number(ctr);
   const percent = num <= 1 ? num * 100 : num;
   return `${percent.toFixed(1)}%`;
@@ -227,15 +179,15 @@ function printSnapshot({ today, clicks, impressions, ctr, position, sitemapStatu
 
   process.stdout.write(`Замер ${today}, Google Search Console, ${SITE_URL}\n`);
   process.stdout.write(`  режим: ${mode}\n`);
-  process.stdout.write(`  клики: ${clicks}\n`);
-  process.stdout.write(`  показы: ${impressions}\n`);
+  process.stdout.write(`  клики: ${clicks ?? 'нет данных'}\n`);
+  process.stdout.write(`  показы: ${impressions ?? 'нет данных'}\n`);
   process.stdout.write(`  CTR: ${ctrStr}\n`);
   process.stdout.write(`  средняя позиция: ${posStr}\n`);
   process.stdout.write(`  карта сайта: ${sitemapStatus}\n`);
 
   process.stdout.write('\nСтрока для журнала:\n');
   process.stdout.write(
-    `| ${today} | клики / показы (Google) | ${clicks} / ${impressions} (CTR: ${ctrStr}) | ${mode === 'official_api' ? 'Google Search Console API' : 'synthetic fixture — не замер Google'} | |\n`,
+    `| ${today} | клики / показы (Google) | ${clicks ?? 'нет данных'} / ${impressions ?? 'нет данных'} (CTR: ${ctrStr}) | ${mode === 'official_api' ? 'Google Search Console API' : 'synthetic fixture — не замер Google'} | |\n`,
   );
 }
 
@@ -271,6 +223,7 @@ async function main() {
 
   const credentials = loadCredentials(ENV_FILE);
   if (!credentials) {
+    persistSnapshot({today:new Date().toISOString().slice(0,10),observedAt:new Date().toISOString(),mode:'operational_check',status:'unavailable',reason:'credentials_missing'});
     process.stdout.write(
       `в ${ENV_FILE} нет учетных данных Google Search Console — замер невозможен\n`,
     );
@@ -282,38 +235,44 @@ async function main() {
       ? credentials.token
       : await fetchAccessToken(credentials.clientEmail, credentials.privateKey);
 
-  const analytics = await querySearchAnalytics(accessToken, SITE_URL);
+  const observationTime = new Date();
+  const analytics = await querySearchAnalytics(accessToken, SITE_URL, { now: observationTime });
+  const queryReport = await querySearchAnalytics(accessToken, SITE_URL, { byQuery: true, now: observationTime })
+    .then(data => ({ status: 'available', ...data }))
+    .catch(() => ({ status: 'unavailable' }));
   const sitemaps = await querySitemaps(accessToken, SITE_URL);
 
-  const topRow = analytics.rows?.[0] ?? {};
+  const topRow = searchAnalyticsTotals(analytics);
   const sitemapList = sitemaps.sitemap ?? [];
-  const mainSitemap = sitemapList.find((s) => s.path?.includes('sitemap.xml'));
+  const mainSitemap = selectRootSitemap(sitemapList);
   const sitemapStatus = mainSitemap
     ? `${mainSitemap.path} (последнее сканирование: ${mainSitemap.lastDownloaded ?? 'не сканировалась'}, ошибок: ${mainSitemap.errors ?? 0})`
     : 'sitemap.xml не найдена в аккаунте';
 
   const today = new Date().toISOString().slice(0, 10);
-  const inspectionLimit = Number(process.env.GOOGLE_SEO_INSPECTION_LIMIT ?? 20);
+  const inspectionBudget = inspectionLimit(process.env.GOOGLE_SEO_INSPECTION_LIMIT);
   const sitemapUrls = mainSitemap?.path ? await fetchSitemapUrls(mainSitemap.path) : [];
-  const sampledUrls = sampleEvenly(sitemapUrls, inspectionLimit);
+  const sampledUrls = sampleEvenly(sitemapUrls, inspectionBudget);
   const inspections = [];
   for (const url of sampledUrls) inspections.push(await inspectUrl(accessToken, SITE_URL, url));
-  const jobPostingAudit = await auditJobPosting(sampledUrls);
+  const jobPostingAudit = await auditJobPosting(sampledUrls.filter(url => new URL(url).pathname.startsWith('/vacancies/job/')));
   const snapshot = {
     today,
     mode: 'official_api',
     siteUrl: SITE_URL,
+    requestedWindow: analytics.requestedWindow,
+    topQueries: queryReport,
     searchAnalytics: {
-      clicks: topRow.clicks ?? 0,
-      impressions: topRow.impressions ?? 0,
-      ctr: topRow.ctr ?? 0,
-      position: topRow.position ?? 0,
+      clicks: topRow.clicks,
+      impressions: topRow.impressions,
+      ctr: topRow.ctr,
+      position: topRow.position,
     },
     sitemap: { submitted: mainSitemap?.path ?? null, urls: sitemapUrls.length, sampled: sampledUrls.length },
     indexInspection: {
       sampled: inspections.length,
       indexed: inspections.filter((item) => item.status === 'PASS').length,
-      excluded: inspections.filter((item) => item.status !== 'PASS').length,
+      notConfirmed: inspections.filter((item) => item.status !== 'PASS').length,
       rows: inspections,
     },
     jobPostingAudit,
@@ -321,10 +280,10 @@ async function main() {
   const snapshotPath = persistSnapshot(snapshot);
   printSnapshot({
     today,
-    clicks: topRow.clicks ?? 0,
-    impressions: topRow.impressions ?? 0,
-    ctr: topRow.ctr ?? 0,
-    position: topRow.position ?? 0,
+    clicks: topRow.clicks,
+    impressions: topRow.impressions,
+    ctr: topRow.ctr,
+    position: topRow.position,
     sitemapStatus,
     mode: 'official_api',
   });
@@ -334,6 +293,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`Ошибка Google Search Console: ${err.message}\n`);
+  process.stderr.write(`Ошибка Google Search Console: ${publicGoogleError(err)}\n`);
   process.exit(1);
 });
