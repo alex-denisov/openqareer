@@ -21,13 +21,19 @@ import {
 import {
   MobileAddRow,
   MobileGroup,
-  MobileInputRow,
   MobileNavRow,
-  MobilePickerRow,
+  MobileCheckRows,
   MobileRadioRows,
   MobileToggleRow,
 } from './MobileRows';
 import { relocationDay } from '../relocationDates';
+import {
+  HOUSEHOLD_OPTIONS,
+  PRIORITY_OPTIONS,
+  TIMEFRAME_OPTIONS as FAMILY_TIMEFRAME_OPTIONS,
+  household,
+  householdChange,
+} from '../steps/FamilyForm';
 
 type Profile = RelocationQuestionnaire;
 
@@ -46,29 +52,6 @@ export interface MobileStepProps {
   readonly onImportLinkedIn: () => void;
   readonly importBusy: boolean;
 }
-
-const PARTNER_OPTIONS: readonly (readonly [FamilyStep['partnerStatus'], string])[] = [
-  ['no_partner', 'Один'],
-  ['has_partner', 'С партнёром'],
-  ['undecided', 'Не решил'],
-  ['unknown', 'Не указано'],
-];
-
-const TIMEFRAME_OPTIONS: readonly (readonly [FamilyStep['relocationTimeframe'], string])[] = [
-  ['under_two_weeks', 'Не больше 2 недель'],
-  ['under_three_months', 'Не больше трёх месяцев'],
-  ['three_to_six_months', 'От трёх до шести месяцев'],
-  ['six_to_twelve_months', 'От шести до двенадцати месяцев'],
-  ['over_twelve_months', 'Дольше, если надёжно'],
-  ['unknown', 'Не указано'],
-];
-
-const FAMILY_PLAN_OPTIONS: readonly (readonly [FamilyStep['familyMovePlan'], string])[] = [
-  ['together', 'Вместе'],
-  ['later', 'Позже'],
-  ['not_applicable', 'Не относится'],
-  ['undecided', 'Не решил'],
-];
 
 const SOURCE_LABELS: Readonly<Record<Profile['languages']['languages'][number]['source'], string>> =
   {
@@ -252,49 +235,42 @@ function EducationStep({ profile, onOpen }: MobileStepProps) {
   );
 }
 
-/** Mockup 15 `mv=i3`: radio groups for who moves and how long to wait. */
+/** Mockup 15 `mv=i3`: who moves, how long to wait, what matters later — the 1440 option sets. */
 function FamilyStepBody({ profile, onProfileChange }: MobileStepProps) {
   const family = profile.family;
   const update = (change: Partial<FamilyStep>) =>
     onProfileChange({ ...profile, family: { ...family, ...change } });
+  const priorities = family.priorities ?? [];
   return (
     <>
       <MobileGroup caption="С кем планируете переезд">
         <MobileRadioRows
-          name="relocation-partner"
-          value={family.partnerStatus}
-          options={PARTNER_OPTIONS}
-          onChange={(partnerStatus) => update({ partnerStatus })}
+          name="relocation-household"
+          value={household(family)}
+          options={HOUSEHOLD_OPTIONS}
+          onChange={(option) => update(householdChange(option, family))}
         />
       </MobileGroup>
       <MobileGroup caption="Сколько готовы ждать оформление">
         <MobileRadioRows
           name="relocation-timeframe"
           value={family.relocationTimeframe}
-          options={TIMEFRAME_OPTIONS}
+          options={FAMILY_TIMEFRAME_OPTIONS}
           onChange={(relocationTimeframe) => update({ relocationTimeframe })}
         />
       </MobileGroup>
       <MobileGroup
-        caption="Семья"
+        caption="Что важно в перспективе"
         note="Семья меняет сценарии: у одних виз партнёр может работать сразу, у других нет."
       >
-        <MobilePickerRow
-          id="relocation-family-plan"
-          label="План переезда семьи"
-          value={family.familyMovePlan}
-          options={FAMILY_PLAN_OPTIONS}
-          onChange={(familyMovePlan) => update({ familyMovePlan })}
-        />
-        <MobileInputRow
-          id="relocation-children-count"
-          label="Сколько детей переезжает"
-          type="number"
-          value={family.childrenCount === undefined ? '' : String(family.childrenCount)}
-          onChange={(value) =>
+        <MobileCheckRows
+          values={priorities}
+          options={PRIORITY_OPTIONS}
+          onToggle={(option, checked) =>
             update({
-              childrenCount:
-                value === '' ? undefined : Math.min(10, Math.max(0, Math.trunc(Number(value)))),
+              priorities: checked
+                ? [...priorities, option]
+                : priorities.filter((value) => value !== option),
             })
           }
         />

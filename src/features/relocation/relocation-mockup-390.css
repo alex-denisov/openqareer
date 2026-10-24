@@ -635,4 +635,88 @@
     color: var(--career-success);
     cursor: default;
   }
+
+  /* Questionnaire and editors at 390: .pm-cta, .pm-text, iOS switch rows */
+  .career-relocation-push .career-relocation-mobile-actions {
+    gap: var(--career-space-5);
+  }
+
+  .career-relocation-push .career-relocation-mobile-primary {
+    min-block-size: 50px;
+    border: 0;
+    border-radius: 25px;
+    color: var(--career-bg);
+    background: var(--career-accent);
+    font-size: var(--career-text-md);
+    font-weight: 600;
+  }
+
+  .career-relocation-push .career-relocation-skip {
+    min-block-size: 44px;
+    padding-inline: var(--career-space-4);
+    font-size: var(--career-text-md);
+    font-weight: 400;
+  }
+
+  .career-relocation-push .career-relocation-toggle-row {
+    min-block-size: 56px;
+  }
+
+  .career-relocation-push .career-relocation-toggle-row span {
+    font-size: var(--career-text-md);
+    font-weight: 400;
+  }
+
+  .career-shell .career-relocation-push .career-relocation-toggle-row input[type='checkbox'] {
+    inline-size: 51px;
+    block-size: 31px;
+    border-radius: 16px;
+    background: color-mix(in oklch, white 16%, transparent);
+  }
+
+  .career-shell
+    .career-relocation-push
+    .career-relocation-toggle-row
+    input[type='checkbox']::after {
+    inset-block-start: 2px;
+    inset-inline-start: 2px;
+    inline-size: 27px;
+    block-size: 27px;
+    background: white;
+    box-shadow: 0 2px 4px rgb(0 0 0 / 0.3);
+    transform: none;
+  }
+
+  .career-shell
+    .career-relocation-push
+    .career-relocation-toggle-row
+    input[type='checkbox']:checked {
+    background: var(--career-accent);
+  }
+
+  .career-shell
+    .career-relocation-push
+    .career-relocation-toggle-row
+    input[type='checkbox']:checked::after {
+    transform: translateX(20px);
+  }
+
+  /* «Что важно в перспективе»: rows with a check mark on the right */
+  .career-relocation-push .career-relocation-check-row {
+    display: flex;
+    min-block-size: 50px;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--career-space-3);
+    font-size: var(--career-text-md);
+    cursor: pointer;
+  }
+
+  .career-relocation-push .career-relocation-check-row svg {
+    color: var(--career-accent);
+  }
+
+  .career-relocation-push .career-relocation-check-row:focus-within {
+    box-shadow: inset 0 0 0 2px var(--career-accent);
+  }
 }
