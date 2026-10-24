@@ -120,7 +120,7 @@
   gap: var(--career-space-3);
   align-items: center;
   grid-column: 1 / -1;
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
@@ -140,7 +140,7 @@
     );
   gap: var(--career-space-4);
   padding-inline: calc(var(--career-space-4) + var(--career-border-width));
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   font-weight: 600;
 }
@@ -180,13 +180,13 @@
 
 .saved-row-role p,
 .saved-row-closed {
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
 .saved-row.is-closed .saved-row-role,
 .saved-row.is-closed .saved-row-money strong {
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .saved-row-cell {
@@ -199,7 +199,7 @@
   display: inline-flex;
   gap: var(--career-space-1);
   align-items: center;
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
 }
 
 .saved-row-money {
@@ -263,7 +263,7 @@
   gap: var(--career-space-3);
   align-items: center;
   justify-content: space-between;
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 

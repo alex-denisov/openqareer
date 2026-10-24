@@ -406,7 +406,7 @@ div.vacancy-push-row {
 }
 
 .vacancy-push-sheet-item.is-cancel {
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
 }
 
 .vacancy-push-sheet-item:focus-visible {
