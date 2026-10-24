@@ -521,52 +521,6 @@
   accent-color: var(--career-accent);
 }
 
-.career-relocation-economy-bar {
-  display: block;
-  inline-size: 100%;
-  block-size: var(--career-space-2);
-  overflow: hidden;
-  border-radius: var(--career-radius-pill);
-}
-
-.career-relocation-economy-bar rect {
-  fill: var(--career-text-dim);
-}
-
-.career-relocation-economy-dot {
-  display: inline-block;
-  background: var(--career-text-dim);
-  inline-size: var(--career-space-3);
-  block-size: var(--career-space-3);
-  margin-inline-end: var(--career-space-2);
-  border-radius: 3px;
-  vertical-align: -1px;
-}
-
-.career-relocation-economy-bar rect.is-tax {
-  fill: var(--career-danger);
-}
-
-.career-relocation-economy-dot.is-tax {
-  background: var(--career-danger);
-}
-
-.career-relocation-economy-bar rect.is-contribution {
-  fill: var(--career-warning);
-}
-
-.career-relocation-economy-dot.is-contribution {
-  background: var(--career-warning);
-}
-
-.career-relocation-economy-bar rect.is-net {
-  fill: var(--career-success);
-}
-
-.career-relocation-economy-dot.is-net {
-  background: var(--career-success);
-}
-
 .career-relocation-mobile-section .vacancy-push-cap {
   font-size: var(--career-text-xs);
 }

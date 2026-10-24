@@ -290,16 +290,19 @@
 }
 
 @media (max-width: 600px) {
+  /* Still one row: «Сбросить» · «Сохранить» · «Рассчитать», three equal 44 px buttons. */
   .career-relocation-scenario-actions {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--career-space-2);
   }
 
   .career-relocation-scenario-actions > * {
     justify-self: stretch;
+    padding-inline: var(--career-space-2);
   }
 
-  .career-relocation-scenario-actions > :last-child {
-    order: -1;
+  .career-relocation-scenario-actions svg {
+    display: none;
   }
 
   .career-relocation-scenario-money {
@@ -353,4 +356,20 @@
 
 .career-relocation-scenarios .career-relocation-scenario-cost {
   border-color: var(--career-line);
+}
+
+/* 390 «Раскладка»: swatch and label on one line, «нет данных» dim */
+.career-relocation-mobile-economy .vacancy-push-kv > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-relocation-mobile-economy .vacancy-push-kv > b.is-missing {
+  color: var(--career-text-dim);
+  font-weight: 400;
+}
+
+.career-relocation-mobile-economy .career-relocation-economy-stack {
+  margin-block: var(--career-space-1);
 }
