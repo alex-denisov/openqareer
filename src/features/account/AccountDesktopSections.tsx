@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import {
   ArrowsClockwise,
   Briefcase,
-  CalendarBlank,
   CheckCircle,
   Desktop,
   DownloadSimple,
@@ -419,7 +418,10 @@ function connectionState(connection?: CandidateConnection, loading = false) {
     return {
       tag: 'ok' as const,
       label: 'Подключено',
-      details: `Импортировано ${connection.factCount} фактов · ${connectionDate(connection.lastImportedAt)}`,
+      details:
+        connection.factCount === 0
+          ? `Подключено без импорта · ${connectionDate(connection.lastImportedAt)}`
+          : `Импортировано ${connection.factCount} фактов · ${connectionDate(connection.lastImportedAt)}`,
       connected: true,
       disabled: false,
     };
@@ -475,49 +477,34 @@ function PrimaryConnectionsRows(props: ConnectionsSectionProps) {
   );
 }
 
+/** Только строки с работающим действием: заглушек для того, что не работает, нет (владелец, 24.10). */
 function SecondaryConnectionsRows(props: ConnectionsSectionProps) {
   return (
     <>
-      <AccountConnectionRow
-        icon={<Globe size={20} />}
-        title="Другие площадки"
-        details="Подключение других площадок."
-        tag="dim"
-        tagLabel="Не подключено"
-        actionLabel="Подключить"
-        disabled
-      />
-      <AccountConnectionRow
-        icon={<EnvelopeSimple size={20} />}
-        title="Почта"
-        details={props.emailVerified ? 'Почта для входа подтверждена.' : 'Нужна подтверждённая почта для ответов работодателей.'}
-        tag={props.emailVerified ? 'ok' : 'dim'}
-        tagLabel={props.emailVerified ? 'Подключено' : 'Не подтверждена'}
-        actionLabel="Уведомления"
-        disabled={!props.emailAvailable}
-        onAction={props.onOpenNotifications}
-      />
-      <AccountConnectionRow
-        icon={<CalendarBlank size={20} />}
-        title="Календарь"
-        details="Календарь пока не подключён."
-        tag="dim"
-        tagLabel="Не подключено"
-        actionLabel="Подключить"
-        disabled
-      />
-      <AccountConnectionRow
-        icon={<PaperPlaneTilt size={20} />}
-        title="Telegram"
-        details={props.telegramConnected
-          ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
-          : 'Подключите бота, чтобы получать выбранные уведомления.'}
-        tag={props.telegramConnected ? 'ok' : 'dim'}
-        tagLabel={props.telegramConnected ? 'Подключено' : 'Не подключено'}
-        actionLabel={props.telegramConnected ? 'Уведомления' : 'Подключить'}
-        disabled={!props.telegramConnected && !props.telegramAvailable}
-        onAction={props.telegramConnected ? props.onOpenNotifications : props.onConnectTelegram}
-      />
+      {props.emailAvailable ? (
+        <AccountConnectionRow
+          icon={<EnvelopeSimple size={20} />}
+          title="Почта"
+          details={props.emailVerified ? 'Почта для входа подтверждена.' : 'Нужна подтверждённая почта для ответов работодателей.'}
+          tag={props.emailVerified ? 'ok' : 'dim'}
+          tagLabel={props.emailVerified ? 'Подключено' : 'Не подтверждена'}
+          actionLabel="Уведомления"
+          onAction={props.onOpenNotifications}
+        />
+      ) : null}
+      {props.telegramConnected || props.telegramAvailable ? (
+        <AccountConnectionRow
+          icon={<PaperPlaneTilt size={20} />}
+          title="Telegram"
+          details={props.telegramConnected
+            ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
+            : 'Подключите бота, чтобы получать выбранные уведомления.'}
+          tag={props.telegramConnected ? 'ok' : 'dim'}
+          tagLabel={props.telegramConnected ? 'Подключено' : 'Не подключено'}
+          actionLabel={props.telegramConnected ? 'Уведомления' : 'Подключить'}
+          onAction={props.telegramConnected ? props.onOpenNotifications : props.onConnectTelegram}
+        />
+      ) : null}
     </>
   );
 }

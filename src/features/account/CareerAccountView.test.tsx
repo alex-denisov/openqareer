@@ -151,12 +151,8 @@ describe('CareerAccountView uses account state and the application shell surface
       renderAccount({ isMobile: true, initialMobileView: 'prof' }),
     ];
     for (const html of pages) expect(html).not.toMatch(/Скоро|Недоступно|пока недоступн/u);
-    expect(pages[0]).toContain('Другие площадки');
-    expect(pages[0]).toContain('Календарь');
-    expect(pages[0]).toContain('Telegram');
     expect(pages[1]).toContain('Двухфакторная защита');
     expect(pages[1]).toContain('Ключи доступа (passkeys)');
-    expect(pages[2]).toContain('Календарь');
     expect(pages[3]).toContain('Двухфакторная защита');
   });
 
@@ -167,5 +163,30 @@ describe('CareerAccountView uses account state and the application shell surface
     expect(html).toContain('Импортировано 12 фактов');
     expect(html).not.toContain('data-go="app"');
     expect(html).not.toContain('Приложение openqareer');
+  });
+
+  it('shows only connection rows whose action works (owner rule 24.10)', () => {
+    const desktop = renderAccount({ initialSection: 'conn', isDesktopApp: true });
+    const mobile = renderAccount({ isMobile: true, initialMobileView: 'conn' });
+    for (const html of [desktop, mobile]) {
+      expect(html).not.toContain('Другие площадки');
+      expect(html).not.toContain('Календарь');
+    }
+    expect(desktop).not.toMatch(/<button[^>]*disabled[^>]*>[^<]*Подключить/u);
+    expect(desktop).not.toMatch(/<button[^>]*disabled[^>]*>[^<]*Уведомления/u);
+  });
+
+  it('labels a connect-only platform «Подключено без импорта», not «Импортировано 0 фактов»', () => {
+    const connectOnly: CandidateConnection[] = [
+      connections[0],
+      { ...(connections[0] as Extract<CandidateConnection, { status: 'connected' }>), platform: 'hh', factCount: 0, lastImportedAt: '2026-10-23T08:00:00.000Z' },
+    ];
+    for (const html of [
+      renderAccount({ initialSection: 'conn', connections: connectOnly }),
+      renderAccount({ isMobile: true, initialMobileView: 'conn', connections: connectOnly }),
+    ]) {
+      expect(html).toContain('Подключено без импорта · 23.10');
+      expect(html).not.toContain('Импортировано 0 фактов');
+    }
   });
 });
