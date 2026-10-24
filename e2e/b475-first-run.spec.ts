@@ -152,14 +152,9 @@ test.describe('B475 FirstRun in the live career shell', () => {
 
     await page.getByTestId('source-opt-file').click();
     await page.getByTestId('source-next-btn').click();
-    await page.getByTestId('pick-photo-btn').click();
-    await expect(page.locator('.first-run-source-menu-notice')).toContainText(
-      'Загрузка фотографий пока недоступна',
-    );
-    await page.getByTestId('scan-doc-btn').click();
-    await expect(page.locator('.first-run-source-menu-notice')).toContainText(
-      'Сканирование пока недоступно',
-    );
+    await expect(page.getByTestId('pick-photo-btn')).toBeVisible();
+    await expect(page.getByTestId('scan-doc-btn')).toBeVisible();
+    await expect(page.getByText(/пока недоступн/u)).toHaveCount(0);
     await page.getByRole('button', { name: 'Отмена' }).click();
 
     await page.getByTestId('source-opt-talk').click();

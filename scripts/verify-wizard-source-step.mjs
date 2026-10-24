@@ -67,16 +67,15 @@ async function verifyUploadMenu(page, viewport, baseUrl) {
   }
   await page.getByTestId('source-opt-file').click();
   await page.getByTestId('source-next-btn').click();
-  await page.getByTestId('pick-photo-btn').click();
-  await page
-    .locator('.first-run-source-menu-notice')
-    .getByText('Загрузка фотографий пока недоступна')
-    .waitFor();
-  await page.getByTestId('scan-doc-btn').click();
-  await page
-    .locator('.first-run-source-menu-notice')
-    .getByText('Сканирование пока недоступно')
-    .waitFor();
+  // Photo and scan open the same file picker; no «unavailable» notice (owner rule 24.10).
+  for (const testId of ['pick-photo-btn', 'scan-doc-btn']) {
+    const chooser = page.waitForEvent('filechooser', { timeout: 5_000 });
+    await page.getByTestId(testId).click();
+    await chooser;
+  }
+  if ((await page.getByText(/пока недоступн/u).count()) > 0) {
+    throw new Error('first-run upload menu still shows an «unavailable» notice');
+  }
   await page.screenshot({ path: `${OUT}/first-run-source-${viewport.name}-file-menu.png` });
 }
 

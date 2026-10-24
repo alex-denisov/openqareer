@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from 'react';
+import { useRef, type ChangeEvent, type ReactElement } from 'react';
 import { FolderOpen, Image, Scan } from '@phosphor-icons/react';
 
 export interface FirstRunSourceMenuProps {
@@ -51,12 +51,6 @@ function SourceMenuActions({
   );
 }
 
-function unavailableActionCopy(action: UnavailableAction): string {
-  return action === 'photo'
-    ? 'Загрузка фотографий пока недоступна. Выберите PDF-резюме.'
-    : 'Сканирование пока недоступно. Выберите PDF-резюме.';
-}
-
 function handleSelectedFile(
   event: ChangeEvent<HTMLInputElement>,
   onPickFile: (file: File) => void,
@@ -74,10 +68,6 @@ export function FirstRunSourceMenu({
   onPickFile,
 }: FirstRunSourceMenuProps): ReactElement | null {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [unavailableAction, setUnavailableAction] = useState<UnavailableAction | null>(null);
-  useEffect(() => {
-    if (isOpen) setUnavailableAction(null);
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -102,17 +92,9 @@ export function FirstRunSourceMenu({
           <b>Загрузить резюме</b>
           <p>PDF или DOCX, до 10 МБ</p>
         </div>
-        {unavailableAction ? (
-          <p className="first-run-source-menu-notice" role="status">
-            {unavailableActionCopy(unavailableAction)}
-          </p>
-        ) : null}
         <SourceMenuActions
-          onPick={() => {
-            setUnavailableAction(null);
-            fileInputRef.current?.click();
-          }}
-          onUnavailable={setUnavailableAction}
+          onPick={() => fileInputRef.current?.click()}
+          onUnavailable={() => fileInputRef.current?.click()}
           onClose={onClose}
         />
       </div>

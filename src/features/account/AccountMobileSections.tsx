@@ -216,14 +216,12 @@ function ProfileSecurityGroup({
             <span className="career-account-row-label">Двухфакторная защита</span>
             <span className="career-account-row-desc">код из приложения при входе</span>
           </div>
-          <span className="career-account-tag is-dim">Скоро</span>
         </div>
         <div className="career-account-mobile-row">
           <div className="career-account-row-content">
             <span className="career-account-row-label">Ключи доступа</span>
             <span className="career-account-row-desc">вход по отпечатку или Face ID</span>
           </div>
-          <span className="career-account-tag is-dim">Скоро</span>
         </div>
       </div>
       <div className="career-account-mobile-group">
@@ -417,9 +415,9 @@ function ConnectedPlatformsGroup({
       <div className="career-account-mobile-row">
         <div className="career-account-row-content">
           <span className="career-account-row-label">Другие площадки</span>
-          <span className="career-account-row-desc">Подключение пока недоступно.</span>
+          <span className="career-account-row-desc">Подключение других площадок.</span>
         </div>
-        <span className="career-account-tag is-dim">Недоступно</span>
+        <span className="career-account-tag is-dim">Не подключено</span>
       </div>
     </div>
   );
@@ -435,7 +433,7 @@ function mobileConnectionStatus(connection: CandidateConnection | undefined, loa
   if (!connection) return loading ? 'Проверяем' : 'Нет данных';
   if (connection.status === 'connected') return 'Подключено';
   if (connection.status === 'imported') return 'Профиль импортирован';
-  return connection.available ? 'Не подключено' : 'Недоступно';
+  return 'Не подключено';
 }
 
 function mobileConnectionTag(connection: CandidateConnection | undefined, loading: boolean): 'ok' | 'warn' | 'dim' {
@@ -452,18 +450,17 @@ function mobileConnectionDetails(connection: CandidateConnection | undefined, lo
   if (connection.status === 'imported') {
     return `Профиль импортирован ${mobileConnectionDate(connection.importedAt)}. Активная сессия не сохранена.`;
   }
-  return connection.available ? 'Подключите площадку из приложения.' : 'Подключение пока недоступно.';
+  return 'Подключите площадку из приложения.';
 }
 
 function ChannelsGroup({
   emailVerified,
   emailAvailable,
-  telegramAvailable,
   telegramConnected,
   onOpenNotifications,
 }: Pick<
   MobileConnectionsProps,
-  'emailVerified' | 'emailAvailable' | 'telegramAvailable' | 'telegramConnected' | 'onOpenNotifications'
+  'emailVerified' | 'emailAvailable' | 'telegramConnected' | 'onOpenNotifications'
 >) {
   return (
     <div className="career-account-mobile-group">
@@ -474,7 +471,6 @@ function ChannelsGroup({
       />
       <CalendarChannelRow />
       <TelegramChannelRow
-        available={telegramAvailable}
         connected={telegramConnected}
         onOpen={onOpenNotifications}
       />
@@ -487,7 +483,7 @@ function EmailChannelRow({
   emailAvailable,
   onOpen,
 }: Pick<MobileConnectionsProps, 'emailVerified' | 'emailAvailable'> & { readonly onOpen: () => void }) {
-  const status = emailVerified ? (emailAvailable ? 'Подключено' : 'Недоступно') : 'Не подтверждена';
+  const status = emailVerified ? (emailAvailable ? 'Подключено' : 'Подтверждена') : 'Не подтверждена';
   const description = emailVerified
     ? emailAvailable
       ? 'Почта для входа подтверждена. Канал уведомлений доступен.'
@@ -504,26 +500,22 @@ function EmailChannelRow({
 function CalendarChannelRow() {
   return (
     <div className="career-account-mobile-row">
-      <ChannelRowContent title="Календарь" description="Подключение календаря пока недоступно." />
-      <span className="career-account-tag is-dim">Скоро</span>
+      <ChannelRowContent title="Календарь" description="Календарь не подключён." />
+      <span className="career-account-tag is-dim">Не подключено</span>
     </div>
   );
 }
 
 function TelegramChannelRow({
-  available,
   connected,
   onOpen,
 }: {
-  readonly available: boolean;
   readonly connected: boolean;
   readonly onOpen: () => void;
 }) {
   const description = connected
     ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
-    : available
-      ? 'Настройте связь и уведомления в разделе «Уведомления». '
-      : 'Подключение Telegram пока недоступно.';
+    : 'Настройте связь и уведомления в разделе «Уведомления».';
   return (
     <button type="button" className="career-account-mobile-row" onClick={onOpen}>
       <ChannelRowContent title="Telegram" description={description} />
@@ -556,7 +548,6 @@ export function MobileAccountConnections({
   notice,
   emailVerified,
   emailAvailable,
-  telegramAvailable,
   telegramConnected,
   onBack,
   onGoLinkedIn,
@@ -585,7 +576,6 @@ export function MobileAccountConnections({
       <ChannelsGroup
         emailVerified={emailVerified}
         emailAvailable={emailAvailable}
-        telegramAvailable={telegramAvailable}
         telegramConnected={telegramConnected}
         onOpenNotifications={onOpenNotifications}
       />
@@ -687,7 +677,7 @@ function MobileConsentRow({
         disabled={disabled || unknown || (granted ? !item.revokeable : !item.grantable)}
         onClick={onToggle}
       >
-        {unknown ? 'Недоступно' : granted ? 'Отозвать' : 'Дать согласие'}
+        {granted ? 'Отозвать' : 'Дать согласие'}
       </button>
     </div>
   );

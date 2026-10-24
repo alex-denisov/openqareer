@@ -106,7 +106,7 @@ export function InlineError({ message, onRetry }: { message: string; onRetry: ()
 export function ErrorState({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
     <section className="career-role-assessment-state">
-      <h2>Проверка пока недоступна</h2>
+      <h2>Не удалось загрузить проверку</h2>
       <p>{message ?? 'Сервис не ответил. Сохранённые данные не изменены.'}</p>
       <button className="career-primary-button" type="button" onClick={onRetry}>
         Обновить

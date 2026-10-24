@@ -82,7 +82,7 @@ describe('CandidateFootprintAuditSurface', () => {
     expect(html).toContain('role="region" aria-label="Цифровой след"');
     expect(html).toContain('aria-label="Шаги цифрового следа"');
     expect(html).not.toContain('<h2>Как вас видят</h2>');
-    expect(html).toContain('Скоро: ждёт утверждения текста согласия');
+    expect(html).toContain('Текст согласия ждёт утверждения');
     expect(html).toContain('<strong>2 Сканирование</strong><span>Не запускалась</span>');
     expect(html).toContain('disabled=""');
     expect(html).not.toContain('Запустить выбранные проверки');

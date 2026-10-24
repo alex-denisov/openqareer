@@ -4,7 +4,6 @@ import {
   Briefcase,
   CalendarBlank,
   CheckCircle,
-  Clock,
   Desktop,
   DownloadSimple,
   EnvelopeSimple,
@@ -145,10 +144,6 @@ function SecurityPasswordAnd2faRows({
           <span className="career-account-row-desc">Код из приложения при входе</span>
         </div>
         <div className="career-account-row-right">
-          <span className="career-account-tag is-dim">
-            <Clock size={14} aria-hidden="true" />
-            Скоро
-          </span>
           <button type="button" className="career-btn is-sm" disabled>
             <ShieldCheck size={16} aria-hidden="true" />
             Включить
@@ -172,10 +167,6 @@ function SecurityPasskeyAndTimezoneRows({
           <span className="career-account-row-desc">Вход по отпечатку или Face ID</span>
         </div>
         <div className="career-account-row-right">
-          <span className="career-account-tag is-dim">
-            <Clock size={14} aria-hidden="true" />
-            Скоро
-          </span>
           <button type="button" className="career-btn is-sm" disabled>
             <Fingerprint size={16} aria-hidden="true" />
             Добавить
@@ -490,10 +481,10 @@ function SecondaryConnectionsRows(props: ConnectionsSectionProps) {
       <AccountConnectionRow
         icon={<Globe size={20} />}
         title="Другие площадки"
-        details="Подключение других площадок пока недоступно."
+        details="Подключение других площадок."
         tag="dim"
-        tagLabel="Недоступно"
-        actionLabel="Скоро"
+        tagLabel="Не подключено"
+        actionLabel="Подключить"
         disabled
       />
       <AccountConnectionRow
@@ -502,7 +493,7 @@ function SecondaryConnectionsRows(props: ConnectionsSectionProps) {
         details={props.emailVerified ? 'Почта для входа подтверждена.' : 'Нужна подтверждённая почта для ответов работодателей.'}
         tag={props.emailVerified ? 'ok' : 'dim'}
         tagLabel={props.emailVerified ? 'Подключено' : 'Не подтверждена'}
-        actionLabel={props.emailAvailable ? 'Уведомления' : 'Недоступно'}
+        actionLabel="Уведомления"
         disabled={!props.emailAvailable}
         onAction={props.onOpenNotifications}
       />
@@ -512,7 +503,7 @@ function SecondaryConnectionsRows(props: ConnectionsSectionProps) {
         details="Календарь пока не подключён."
         tag="dim"
         tagLabel="Не подключено"
-        actionLabel="Скоро"
+        actionLabel="Подключить"
         disabled
       />
       <AccountConnectionRow
@@ -520,12 +511,10 @@ function SecondaryConnectionsRows(props: ConnectionsSectionProps) {
         title="Telegram"
         details={props.telegramConnected
           ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
-          : props.telegramAvailable
-            ? 'Подключите бота, чтобы получать выбранные уведомления.'
-            : 'Подключение Telegram пока недоступно.'}
+          : 'Подключите бота, чтобы получать выбранные уведомления.'}
         tag={props.telegramConnected ? 'ok' : 'dim'}
         tagLabel={props.telegramConnected ? 'Подключено' : 'Не подключено'}
-        actionLabel={props.telegramConnected ? 'Уведомления' : props.telegramAvailable ? 'Подключить' : 'Недоступно'}
+        actionLabel={props.telegramConnected ? 'Уведомления' : 'Подключить'}
         disabled={!props.telegramConnected && !props.telegramAvailable}
         onAction={props.telegramConnected ? props.onOpenNotifications : props.onConnectTelegram}
       />
@@ -621,7 +610,7 @@ function ConsentRow({
           disabled={disabled || unavailable || (revoke ? !item.revokeable : !item.grantable)}
           onClick={onToggle}
         >
-          {unavailable ? 'Недоступно' : revoke ? 'Отозвать' : 'Дать согласие'}
+          {revoke ? 'Отозвать' : 'Дать согласие'}
         </button>
       </div>
     </div>
@@ -759,7 +748,7 @@ function AppToggleRow({
       <div className="career-account-row-content">
         <span className="career-account-row-label">{label}</span>
         <span className="career-account-row-desc">
-          {available ? enabledDescription : 'Настройка пока недоступна'}
+          {enabledDescription}
         </span>
       </div>
       <input
@@ -792,16 +781,11 @@ export function AccountAppSettingsSection({ settings }: { readonly settings: Acc
             type="button"
             className="career-btn is-sm"
             disabled
-            title="Проверка обновлений в этой версии недоступна."
-            aria-describedby="account-update-state"
           >
             <ArrowsClockwise size={16} aria-hidden="true" />
             Проверить обновления
           </button>
         </div>
-        <p id="account-update-state" className="career-account-row-desc">
-          Проверка обновлений пока недоступна.
-        </p>
         {settings.freshnessLine ? <p className="career-account-row-desc">{settings.freshnessLine}</p> : null}
         <AppTogglesList settings={settings} />
       </div>

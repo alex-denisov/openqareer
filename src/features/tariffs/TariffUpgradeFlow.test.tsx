@@ -83,8 +83,8 @@ describe('TariffUpgradeFlow', () => {
 
     expect(
       host.querySelector('[data-testid="tariff-plan-change-unavailable"]')?.textContent,
-    ).toContain('следующего периода');
-    expect(host.textContent).toContain('Текущий тариф не изменён');
+    ).toContain('Текущий тариф не изменён');
+    expect(host.textContent).not.toContain('пока недоступн');
     expect(checkout).not.toHaveBeenCalled();
   });
 
@@ -116,8 +116,8 @@ describe('TariffUpgradeFlow', () => {
 
     await clickButton(host, 'Включить автопродление');
 
-    expect(host.textContent).toContain('Автопродление пока недоступно');
     expect(host.textContent).toContain('Оплатите следующий период вручную');
+    expect(host.textContent).not.toContain('пока недоступн');
   });
 
   async function mount(context: TariffUpgradeContext, summary = freeSummary) {

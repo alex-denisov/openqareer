@@ -219,7 +219,7 @@ function TariffsDesktopHeader({ onToggleCompare }: { readonly onToggleCompare: (
       </div>
       <p className="career-tariffs-lead">
         Платный тариф подключается после подтверждения оплаты. Возврат на Free отключает
-        автопродление; понижение между платными тарифами пока недоступно.
+        автопродление.
       </p>
     </div>
   );

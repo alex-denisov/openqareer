@@ -119,7 +119,7 @@ function useFlowScaffold(context: TariffUpgradeContext): FlowScaffold {
   const [requestKey, setRequestKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(() =>
     context.kind === 'plan-change-unavailable'
-      ? 'Понижение между платными тарифами со следующего периода пока недоступно. Текущий тариф не изменён.'
+      ? 'Текущий тариф не изменён.'
       : null,
   );
   return {

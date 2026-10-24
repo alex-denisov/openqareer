@@ -227,7 +227,7 @@ function PreparedRenewalAction() {
   const [unavailable, setUnavailable] = useState(false);
   return unavailable ? (
     <p className="career-billing-error" role="status">
-      Автопродление пока недоступно. Оплатите следующий период вручную.
+      Оплатите следующий период вручную.
     </p>
   ) : (
     <button

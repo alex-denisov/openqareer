@@ -91,7 +91,7 @@ function CareerDiarySummaryError({
 }) {
   return (
     <section className="career-diary-summary" aria-label="Сводка карьерного дневника">
-      <p className="career-diary-error" role="alert">{error ?? 'Сводка пока недоступна.'}</p>
+      <p className="career-diary-error" role="alert">{error ?? 'Не удалось загрузить сводку.'}</p>
       <button className="career-btn is-ghost" type="button" onClick={onRetry}>
         <ArrowClockwise size={18} aria-hidden="true" />Повторить
       </button>

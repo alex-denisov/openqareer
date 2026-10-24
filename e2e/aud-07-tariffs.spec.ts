@@ -81,8 +81,8 @@ test('AUD-07: paid downgrade stops at the provider boundary without changing the
   if (isMobile) await page.getByRole('button', { name: /^Basic\b/u }).click();
   await page.getByRole('button', { name: 'Понизить до Basic', exact: true }).click();
   const unavailable = page.getByTestId('tariff-plan-change-unavailable');
-  await expect(unavailable).toContainText('следующего периода');
   await expect(unavailable).toContainText('Текущий тариф не изменён');
+  await expect(unavailable).not.toContainText('пока недоступн');
   expect(checkoutRequests).toBe(0);
   await capture(page, 'paid-downgrade-unavailable', viewport);
   await page.setViewportSize({ width: 280, height: 844 });
@@ -108,9 +108,7 @@ test('AUD-07: disabled renewal reports the manual-payment boundary and stays dis
   await expect(enableRenewal).toBeVisible();
   await capture(page, 'renewal-unavailable', viewport);
   await enableRenewal.click();
-  await expect(page.locator('.career-billing-error[role="status"]:visible')).toContainText(
-    'Автопродление пока недоступно',
-  );
+  await expect(page.getByText(/пока недоступн/u)).toHaveCount(0);
   await expect(page.locator('.career-billing-error[role="status"]:visible')).toContainText(
     'Оплатите следующий период вручную',
   );

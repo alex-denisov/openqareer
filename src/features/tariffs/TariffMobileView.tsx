@@ -84,7 +84,7 @@ function MobileHomeView({
         <h2 className="career-tariffs-title">Тарифы</h2>
         <p className="career-tariffs-lead">
           Платный тариф подключается после подтверждения оплаты. Возврат на Free отключает
-          автопродление; понижение между платными тарифами пока недоступно.
+          автопродление.
         </p>
       </div>
 

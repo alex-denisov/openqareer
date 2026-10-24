@@ -239,12 +239,12 @@ function LinkedInModalContent({
       </p>
       <label className="career-account-row" aria-disabled="true">
         <span className="career-account-row-label">
-          Использовать контакты для маршрутов к компаниям. Настройка пока недоступна.
+          Использовать контакты для маршрутов к компаниям
         </span>
         <input type="checkbox" disabled aria-label="Использовать контакты для маршрутов к компаниям" />
       </label>
       <label className="career-account-row" aria-disabled="true">
-        <span className="career-account-row-label">Готовить черновики постов. Настройка пока недоступна.</span>
+        <span className="career-account-row-label">Готовить черновики постов</span>
         <input type="checkbox" disabled aria-label="Готовить черновики постов" />
       </label>
     </div>
@@ -323,7 +323,7 @@ function HhModalContent({
       </div>
       <label className="career-account-row" aria-disabled="true">
         <span className="career-account-row-label">
-          Отправлять отклики через этот аккаунт после одобрения. Настройка пока недоступна.
+          Отправлять отклики через этот аккаунт после одобрения
         </span>
         <input type="checkbox" disabled aria-label="Отправлять отклики через этот аккаунт после одобрения" />
       </label>

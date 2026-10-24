@@ -748,7 +748,7 @@ export function titleForUpgradeFlow(state: UpgradeDialogState): string {
   if (state.context.kind === 'payment-method') return 'Обновить способ оплаты';
   if (state.view === 'checkout' || state.view === 'creating')
     return 'Оплата тарифа ' + (findPlan(state.summary, state.selectedPlan)?.name ?? '');
-  if (state.context.kind === 'plan-change-unavailable') return 'Понижение тарифа недоступно';
+  if (state.context.kind === 'plan-change-unavailable') return 'Понижение тарифа';
   if (state.view === 'error') return 'Оплата недоступна';
   if (state.context.kind === 'feature')
     return state.context.detail ?? featureCopy(state.context.feature);
