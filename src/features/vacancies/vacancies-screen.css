@@ -21,15 +21,17 @@
   margin: 0;
   padding: var(--career-space-3) var(--career-space-4);
   border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  background: var(--career-surface-soft);
-  color: var(--career-text-muted);
+  /* B510: как .note макета 4 — радиус sm, surface, текст soft, значок dim. */
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
   font-size: var(--career-text-sm);
 }
 
 .saved-intro svg {
   flex: none;
-  margin-block-start: var(--career-space-1);
+  margin-block-start: 2px;
+  color: var(--career-text-dim);
 }
 
 .saved-controls {
