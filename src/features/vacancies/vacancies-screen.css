@@ -1189,7 +1189,12 @@
   .vacancies-info-footer .vacancies-info-btn:last-child {
     min-block-size: 36px;
   }
+  .career-modal-card:has(.vacancies-info-body) {
+    border-inline: 0;
+  }
   .career-modal-card:has(.vacancies-info-body) .career-modal-close {
+    flex: none;
+    min-inline-size: var(--career-target-min);
     block-size: 36px;
     border: var(--career-border-width) solid transparent;
     border-radius: 18px;
