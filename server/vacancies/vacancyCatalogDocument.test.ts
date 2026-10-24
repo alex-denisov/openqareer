@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseTestDocument } from '../testHtmlDocument';
 import {
   CATALOG_STYLE,
   CATALOG_STYLESHEET_PATH,
@@ -79,14 +80,14 @@ describe('документ публичного каталога (B209)', () => 
     const html = renderVacancyDocument(
       buildVacancyDetail(paid, undefined, undefined, new Date('2026-09-06T12:00:00.000Z'))!,
     );
-    expect(html).toContain('"@type":"JobPosting"');
+    expect(html).toContain('itemtype="https://schema.org/JobPosting"');
     expect(html).not.toContain('noindex');
   });
 
   it('закрывает от индекса карточку вне индексируемого набора, но оставляет ссылки', () => {
     const html = renderVacancyDocument(buildVacancyDetail(cluster())!);
     expect(html).toContain('<meta name="robots" content="noindex, follow">');
-    expect(html).not.toContain('"@type":"JobPosting"');
+    expect(html).not.toContain('itemtype="https://schema.org/JobPosting"');
   });
 
   it('закрывает от индекса глубокие страницы каталога, но не первые десять', () => {
@@ -364,5 +365,100 @@ describe('описание карточки для поисковиков', () =
     const description = /<meta name="description" content="([^"]*)">/u.exec(html)?.[1] ?? '';
     expect(description).not.toContain('Статус');
     expect(description).toContain('платформу данных');
+  });
+});
+
+
+function readMicrodata(element: Element): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    '@type': element.getAttribute('itemtype')?.split('/').at(-1),
+  };
+  for (const property of element.querySelectorAll('[itemprop]')) {
+    if (property.parentElement?.closest('[itemscope]') !== element) continue;
+    const name = property.getAttribute('itemprop')!;
+    result[name] = property.hasAttribute('itemscope')
+      ? readMicrodata(property)
+      : name === 'description'
+        ? property.textContent?.trim()
+        : name === 'directApply'
+        ? property.getAttribute('content') === 'true'
+        : property.getAttribute('content') ?? property.textContent;
+  }
+  return result;
+}
+
+describe('JobPosting single-copy public document', () => {
+  it('preserves every evidenced field while the entire description appears once', () => {
+    const full = 'Unique opening requirement. ' + 'Full requirements and responsibilities. '.repeat(250) + ' Unique final requirement.';
+    const detail = buildVacancyDetail(
+      cluster({ salary: { from: 200000, to: 300000, currency: 'USD' } }),
+      full,
+      undefined,
+      new Date('2026-09-06T12:00:00.000Z'),
+    )!;
+    const html = renderVacancyDocument(detail);
+    const document = parseTestDocument(html);
+    const article = document.querySelector('[itemtype="https://schema.org/JobPosting"]')!;
+    const expected = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+    const actual = readMicrodata(article);
+    const expectedText = parseTestDocument(String(expected.description)).body.textContent;
+    expect(actual).toEqual({ ...expected, description: expectedText });
+    expect(document.querySelector('[itemprop="description"]')?.textContent?.trim()).toBe(full);
+    expect(html.split('Unique final requirement.')).toHaveLength(2);
+    expect(html).not.toContain('"@type":"JobPosting"');
+    expect(html).toContain('"@type":"BreadcrumbList"');
+    expect(html).not.toContain('baseSalary');
+    expect(Buffer.byteLength(html)).toBeLessThanOrEqual(20_000);
+  });
+
+  it('keeps text boundaries between headings, paragraphs and list requirements', () => {
+    const detail = buildVacancyDetail(
+      cluster({ salary: { from: 100000, to: 150000, currency: 'USD' } }),
+      '## Responsibilities\n\nFirst paragraph.\n\nSecond paragraph.\n\n- Python\n- SQL',
+      undefined,
+      new Date('2026-09-06T12:00:00.000Z'),
+    )!;
+    const document = parseTestDocument(renderVacancyDocument(detail));
+    const description = document.querySelector('[itemprop="description"]')!;
+    expect(description.textContent?.replace(/\s+/gu, ' ').trim()).toBe(
+      'Responsibilities First paragraph. Second paragraph. Python SQL',
+    );
+    expect(description.querySelectorAll('li')).toHaveLength(2);
+  });
+
+  it('preserves allowed applicant country for remote work without inventing a city', () => {
+    const detail = buildVacancyDetail(
+      cluster({ isRemote: true, canonicalLocation: 'United States', salary: { from: 100000, to: 150000, currency: 'USD' } }),
+      undefined,
+      undefined,
+      new Date('2026-09-06T12:00:00.000Z'),
+    )!;
+    const document = parseTestDocument(renderVacancyDocument(detail));
+    const article = document.querySelector('[itemtype="https://schema.org/JobPosting"]')!;
+    const actual = readMicrodata(article);
+    const expected = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+    expect(actual).toEqual({
+      ...expected,
+      description: parseTestDocument(String(expected.description)).body.textContent,
+    });
+    expect(actual.jobLocationType).toBe('TELECOMMUTE');
+    expect(actual.applicantLocationRequirements).toBeDefined();
+    expect(document.querySelector('[itemprop="addressLocality"]')).toBeNull();
+  });
+
+  it('escapes nested attributes and retains the noindex boundary', () => {
+    const detail = buildVacancyDetail(
+      cluster({ canonicalCompany: 'Acme" onload="alert(1)', salary: { from: 100000, to: 150000, currency: 'USD' } }),
+      'Description <script>alert(2)</script> with evidence.',
+      undefined,
+      new Date('2026-09-06T12:00:00.000Z'),
+    )!;
+    const document = parseTestDocument(renderVacancyDocument(detail));
+    expect(document.querySelector('[onload]')).toBeNull();
+    expect(document.querySelector('[itemprop="hiringOrganization"] [itemprop="name"]')?.getAttribute('content')).toBe('Acme" onload="alert(1)');
+    expect(document.querySelectorAll('script:not([type="application/ld+json"]):not([src])')).toHaveLength(0);
+    const unindexed = renderVacancyDocument({ ...detail, indexable: false });
+    expect(unindexed).toContain('noindex, follow');
+    expect(unindexed).not.toContain('itemtype="https://schema.org/JobPosting"');
   });
 });

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { parseTestDocument } from './testHtmlDocument';
 import { createApp, config, noSessions, successProvider } from './appTestHarness';
 import { buildApp } from './app';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
@@ -257,8 +258,12 @@ describe('B209: публичный каталог вакансий', () => {
     // Сводка кластера — 300 знаков; полный текст длиннее, и он должен быть и на
     // странице, и в разметке одним значением.
     expect(detail.body).toContain('описание вакансии номер 1');
-    const description = /"description":"([^"]+)"/u.exec(detail.body)?.[1] ?? '';
-    expect(description.length).toBeGreaterThan(300);
+    const document = parseTestDocument(detail.body);
+    const description = document.querySelector(
+      '[itemtype="https://schema.org/JobPosting"] [itemprop="description"]',
+    );
+    expect(description?.textContent?.length).toBeGreaterThan(300);
+    expect(description?.textContent).toContain('описание вакансии номер 1');
   });
 });
 
@@ -351,14 +356,14 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
     expect(detail.statusCode).toBe(200);
     expect(detail.body).toContain('<meta name="robots" content="noindex, follow">');
-    expect(detail.body).not.toContain('"@type":"JobPosting"');
+    expect(detail.body).not.toContain('itemtype="https://schema.org/JobPosting"');
   });
 
   it('indexes a valuable card with JobPosting and validThrough', async () => {
     const app = await appWithPool([vacancy(1, { salary: SALARY })]);
     const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
     expect(detail.body).not.toContain('noindex');
-    expect(detail.body).toContain('"@type":"JobPosting"');
-    expect(detail.body).toMatch(/"validThrough":"\d{4}-\d{2}-\d{2}T/u);
+    expect(detail.body).toContain('itemtype="https://schema.org/JobPosting"');
+    expect(detail.body).toMatch(/itemprop="validThrough" content="\d{4}-\d{2}-\d{2}T/u);
   });
 });
