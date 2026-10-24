@@ -328,4 +328,9 @@
   .career-relocation-questionnaire .career-relocation-summary-row-head {
     gap: var(--career-space-3);
   }
+
+  /* `view=i4`: .rl-add of language, level and «Добавить», tops aligned */
+  .career-relocation-questionnaire .career-relocation-language-add {
+    align-items: start;
+  }
 }
