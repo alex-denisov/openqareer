@@ -84,6 +84,10 @@ interface CareerExpertPanelProps {
   onStageChange?: (stage: CoachTurnStage) => void;
   onClose: () => void;
 }
+/** Request ids grow per page load (CareerWorkspaceShellHelpers); kept outside the
+ *  component so a remount (screen switch, account, breakpoint) never resends (B563). */
+let lastHandledSendRequest = 0;
+
 export function CareerExpertPanel({
   collapsed = false,
   intakeMode = false,
@@ -289,11 +293,10 @@ export function CareerExpertPanel({
       active = false;
     };
   }, [user, stage]);
-  const handledSendRequest = useRef<number>();
   useEffect(() => {
-    if (!sendRequest || handledSendRequest.current === sendRequest) return;
+    if (!sendRequest || sendRequest <= lastHandledSendRequest) return;
     if (!user || loadingSnapshot || !initialPrompt) return;
-    handledSendRequest.current = sendRequest;
+    lastHandledSendRequest = sendRequest;
     // The question goes to the feed, not the input; a failed send gives it back to retry.
     setContent('');
     void sendContent(initialPrompt).then((delivered) => {
