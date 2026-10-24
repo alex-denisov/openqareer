@@ -786,4 +786,21 @@
     border-radius: 20px;
     background: var(--career-surface);
   }
+
+  /* .topbar-back of the iOS layer: 44 px glass circle with a 1 px light edge */
+  .career-relocation-push .vacancy-push-back {
+    border-color: color-mix(in oklch, var(--career-text) 14%, transparent);
+    background: color-mix(in oklch, var(--career-bg-elevated) 62%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.7);
+    backdrop-filter: blur(20px) saturate(1.7);
+    font-size: var(--career-text-sm);
+  }
+
+  /* .pm-row label text: 16 px, 500 (radio and check-mark rows of the questionnaire) */
+  .career-relocation-push .career-relocation-radio-row > span,
+  .career-relocation-push .career-relocation-check-row > span,
+  .career-relocation-sheet .career-relocation-sheet-option > span {
+    font-size: var(--career-text-md);
+    font-weight: 500;
+  }
 }
