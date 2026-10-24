@@ -68,9 +68,16 @@ async function expectCompanyTouchTargets(page: import('@playwright/test').Page) 
     .evaluateAll((elements) =>
       elements.flatMap((element) => {
         const rect = element.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0 || rect.height >= 44) return [];
+        // Mockup 13 pills draw 32 px and take the rest of the 44 px target through ::after.
+        const after = window.getComputedStyle(element, '::after');
+        const extra =
+          after.content !== 'none' && after.position === 'absolute'
+            ? -(parseFloat(after.top) || 0) - (parseFloat(after.bottom) || 0)
+            : 0;
+        const height = rect.height + extra;
+        if (rect.width === 0 || rect.height === 0 || height >= 44) return [];
         return [
-          `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}: ${rect.height}`,
+          `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}: ${height}`,
         ];
       }),
     );

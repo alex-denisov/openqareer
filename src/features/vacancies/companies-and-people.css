@@ -971,15 +971,23 @@
 
   /* Mockup 13 on 390: «Фильтры» is a soft 32 px pill in a 44 px hit area. */
   .companies-people-toolbar .companies-people-filter-button {
-    block-size: var(--career-target-min);
-    min-block-size: var(--career-target-min);
-    margin-inline: -6px;
-    border: 6px solid transparent;
-    border-radius: 22px;
+    position: relative;
+    block-size: 32px;
+    min-block-size: 32px;
+    border: 0;
+    border-radius: 16px;
     background: color-mix(in oklch, var(--career-bg-elevated) 55%, transparent);
-    background-clip: padding-box;
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 14%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 18%, transparent);
     font-size: var(--career-text-xs);
     font-weight: 500;
+  }
+
+  .companies-people-toolbar .companies-people-filter-button::after {
+    content: '';
+    position: absolute;
+    inset: -6px -3px;
   }
 }
 
