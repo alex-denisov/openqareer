@@ -123,7 +123,7 @@ test('pages 400 companies and opens a source-backed company detail', async ({ pa
   await page.getByRole('button', { name: 'Открыть компанию Вектор Банк' }).click();
   await expect(page.getByRole('heading', { name: 'Вектор Банк' })).toBeVisible();
   await expect(page.getByText('Москва · Финансы · данные с hh.ru, 08.10.2026')).toBeVisible();
-  await expect(page.getByText(/Рекрутёр Мария Орлова взят из объявления/u)).toBeVisible();
+  await expect(page.getByText(/Рекрутер Мария Орлова взят из объявления/u)).toBeVisible();
   const mobile = testInfo.project.name === 'mobile-390';
   await expect(
     page.locator(mobile ? '[data-company-vacancy]' : '.companies-people-vacancy'),
@@ -239,7 +239,7 @@ test('recruiter lookup asks for consent and shows an honest queued state', async
   await page.getByRole('button', { name: 'Разрешить и найти' }).click();
   const queueStatus = page
     .getByRole('status')
-    .filter({ hasText: 'Ищем рекрутёра по вакансиям компании' });
+    .filter({ hasText: 'Ищем рекрутера по вакансиям компании' });
   await expect(queueStatus).toBeVisible();
   // The refetch after consent remounts the status node; scroll the fresh one.
   await expect(async () => queueStatus.scrollIntoViewIfNeeded({ timeout: 2_000 })).toPass();
@@ -402,7 +402,7 @@ test('a completed recruiter search can report no result without claiming the rec
   });
   await page.getByRole('textbox', { name: 'Поиск среди 400' }).fill('Гринкод');
   await openCompany(page, 'Гринкод');
-  const notFound = page.getByText(/рекрутёра не нашли\. Поиск можно повторить/u);
+  const notFound = page.getByText(/рекрутера не нашли\. Поиск можно повторить/u);
   await expect(notFound).toBeVisible();
   await expect(page.getByRole('button', { name: 'Повторить поиск' })).toBeEnabled();
   await notFound.scrollIntoViewIfNeeded();
