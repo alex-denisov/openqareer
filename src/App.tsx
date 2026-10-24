@@ -27,7 +27,7 @@ import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
 import { loadCareerWorkspaceShell } from './features/shell/careerWorkspaceLoader';
 import { CareerShellBootstrap } from './features/shell/CareerShellBootstrap';
 import { legalSlugFromPath } from '../shared/legalRegistry';
-import { loadAuthPages } from './features/site/authPagesLoader';
+import { getLoadedAuthPages, loadAuthPages } from './features/site/authPagesLoader';
 import {
   desktopSessionFailureRequiresSignOut,
   resolvedDesktopSessionPath,
@@ -126,6 +126,8 @@ interface AppState {
 
 export default function App() {
   const [isDesktop] = useState(() => isTauriEnvironment());
+  // Keep the component identity stable if a later navigation warms the loader.
+  const [startupAuthPages] = useState(getLoadedAuthPages);
   const [isResolvingSession, setIsResolvingSession] = useState(true);
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -513,9 +515,13 @@ export default function App() {
   }
 
   const renderAuthContent = () => {
+    // Initial auth bootstrap has already awaited these modules and styles.
+    // Render them directly so React.lazy cannot commit a fallback for one frame.
+    const ReadyLoginPage = startupAuthPages?.LoginPage ?? LoginPage;
+    const ReadySignupPage = startupAuthPages?.SignupPage ?? SignupPage;
     if (currentPath === '/login') {
       return (
-        <LoginPage
+        <ReadyLoginPage
           embedded={isDesktop}
           onNavigate={navigate}
           onSessionChange={handleSessionChange}
@@ -526,7 +532,7 @@ export default function App() {
     }
     if (currentPath === '/signup') {
       return (
-        <SignupPage embedded={isDesktop} onNavigate={navigate} onSessionChange={handleSessionChange} nextPath="/app" />
+        <ReadySignupPage embedded={isDesktop} onNavigate={navigate} onSessionChange={handleSessionChange} nextPath="/app" />
       );
     }
     if (currentPath === '/verify-email') {
