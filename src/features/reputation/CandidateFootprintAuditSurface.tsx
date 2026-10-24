@@ -364,7 +364,7 @@ function PendingConsent(): JSX.Element {
   return (
     <div className="career-footprint-consent is-pending" role="status" aria-live="polite">
       <WarningCircle aria-hidden="true" />
-      <p>Скоро: ждёт утверждения текста согласия.</p>
+      <p>Текст согласия ждёт утверждения.</p>
     </div>
   );
 }
@@ -675,7 +675,7 @@ function FootprintLaunchActions(props: CandidateFootprintAuditSurfaceProps) {
   const launchLabel = running
     ? 'Проверка выполняется'
     : !props.consent.approved
-      ? 'Скоро: ждёт утверждения текста согласия'
+      ? 'Ждёт утверждения текста согласия'
       : !props.consent.granted
         ? 'Сначала выдайте согласие'
         : !props.ownershipConfirmed

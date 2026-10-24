@@ -55,7 +55,7 @@ describe('TariffUpgradeFlow', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows an unavailable state for paid downgrades instead of opening checkout', async () => {
+  it('offers no downgrade between paid tiers', async () => {
     const summary: CandidateBillingSummary = {
       ...basicSummary,
       currentPlan: 'pro',
@@ -79,16 +79,13 @@ describe('TariffUpgradeFlow', () => {
       await Promise.resolve();
     });
 
-    await clickButton(host, 'Понизить до Basic');
-
-    expect(
-      host.querySelector('[data-testid="tariff-plan-change-unavailable"]')?.textContent,
-    ).toContain('следующего периода');
-    expect(host.textContent).toContain('Текущий тариф не изменён');
+    expect(host.textContent).not.toContain('Понизить до');
+    expect(host.textContent).not.toContain('пока недоступн');
+    expect(host.textContent).toContain('Вернуться на Free');
     expect(checkout).not.toHaveBeenCalled();
   });
 
-  it('explains that re-enabling renewal is still an external dependency', async () => {
+  it('shows no renewal button while auto-renewal is not built', async () => {
     const summary: CandidateBillingSummary = {
       ...basicSummary,
       subscription: { ...basicSummary.subscription!, nextChargeAt: null, autoRenew: false },
@@ -114,10 +111,8 @@ describe('TariffUpgradeFlow', () => {
       await Promise.resolve();
     });
 
-    await clickButton(host, 'Включить автопродление');
-
-    expect(host.textContent).toContain('Автопродление пока недоступно');
-    expect(host.textContent).toContain('Оплатите следующий период вручную');
+    expect(host.textContent).not.toContain('Включить автопродление');
+    expect(host.textContent).not.toContain('пока недоступн');
   });
 
   async function mount(context: TariffUpgradeContext, summary = freeSummary) {

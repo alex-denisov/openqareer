@@ -190,7 +190,7 @@ test.describe('B443: Account screen in the signed-in shell', () => {
 
     for (const tabName of [
       'Профиль и вход',
-      /Подключения 3 из 6/u,
+      /Подключения 3 из 3/u,
       'Уведомления',
       'Согласия и данные',
       'Подписка и платежи',
@@ -207,16 +207,13 @@ test.describe('B443: Account screen in the signed-in shell', () => {
     await captureAtContentHeight(page, 'account-desktop-1440-profile.png');
     await captureAuditHtml(page, 'account-desktop-1440-profile.html');
 
-    await account.getByRole('tab', { name: /Подключения 3 из 6/u }).click();
+    await account.getByRole('tab', { name: /Подключения 3 из 3/u }).click();
     await expect(account.getByText('Импортировано 12 фактов')).toBeVisible();
     await account.getByRole('button', { name: 'Управлять' }).first().click();
     const linkedinDialog = page.getByRole('dialog', { name: 'LinkedIn' });
     await expect(linkedinDialog.getByText('Импортировано 12 фактов')).toBeVisible();
-    await expect(
-      linkedinDialog.getByRole('checkbox', {
-        name: 'Использовать контакты для маршрутов к компаниям',
-      }),
-    ).toBeDisabled();
+    await expect(linkedinDialog.getByRole('checkbox')).toHaveCount(0);
+    await expect(linkedinDialog.getByText(/пока недоступн/u)).toHaveCount(0);
     await captureAtContentHeight(page, 'account-desktop-1440-manage-linkedin.png');
     await linkedinDialog.getByRole('button', { name: 'Закрыть' }).click();
     await account.getByRole('button', { name: 'Управлять' }).nth(1).click();

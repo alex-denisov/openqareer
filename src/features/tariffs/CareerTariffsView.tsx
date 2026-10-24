@@ -86,12 +86,6 @@ function useTariffUpgradeCallbacks(
       onSelectTier?.(id);
       return;
     }
-    const targetRank = TARIFF_LEVELS.findIndex((level) => level.id === id);
-    const activeRank = TARIFF_LEVELS.findIndex((level) => level.id === activeTier);
-    if (targetRank < activeRank && next.kind === 'plan') {
-      setContext({ kind: 'plan-change-unavailable', planId: next.planId });
-      return;
-    }
     setContext(next);
   };
   const requestTier = (id: TariffTierId) => {
@@ -219,7 +213,7 @@ function TariffsDesktopHeader({ onToggleCompare }: { readonly onToggleCompare: (
       </div>
       <p className="career-tariffs-lead">
         Платный тариф подключается после подтверждения оплаты. Возврат на Free отключает
-        автопродление; понижение между платными тарифами пока недоступно.
+        автопродление.
       </p>
     </div>
   );

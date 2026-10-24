@@ -23,7 +23,6 @@ if (typeof document !== 'undefined') {
 export type TariffUpgradeContext =
   | { readonly kind: 'gate' }
   | { readonly kind: 'plan'; readonly planId: PaidTariffPlanId }
-  | { readonly kind: 'plan-change-unavailable'; readonly planId: PaidTariffPlanId }
   | { readonly kind: 'payment-method'; readonly planId: PaidTariffPlanId }
   | {
       readonly kind: 'feature';
@@ -117,11 +116,7 @@ function useFlowScaffold(context: TariffUpgradeContext): FlowScaffold {
   const [autoRenew, setAutoRenew] = useState(context.kind === 'payment-method');
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null);
   const [requestKey, setRequestKey] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(() =>
-    context.kind === 'plan-change-unavailable'
-      ? 'Понижение между платными тарифами со следующего периода пока недоступно. Текущий тариф не изменён.'
-      : null,
-  );
+  const [message, setMessage] = useState<string | null>(null);
   return {
     view,
     selectedPlan,
@@ -186,7 +181,7 @@ function composeDialogState(
     onStartCheckout: actions.startCheckout,
     onCheckStatus: actions.checkPaymentStatus,
     onRetryCheckout: actions.retryCheckout,
-    onCloseError: () => closeFlowError(props.context, flow, props.onClose),
+    onCloseError: () => closeFlowError(props.context, flow),
     onSetTask: flow.setTask,
     onSetTimeline: flow.setTimeline,
     onSetConsent: flow.setProfileConsent,
@@ -198,12 +193,7 @@ function composeDialogState(
 function closeFlowError(
   context: TariffUpgradeContext,
   flow: FlowScaffold,
-  onClose: () => void,
 ): void {
-  if (context.kind === 'plan-change-unavailable') {
-    onClose();
-    return;
-  }
   flow.setMessage(null);
   flow.setView(context.kind === 'executive' ? 'executive-form' : 'offer');
 }
@@ -425,7 +415,6 @@ function useAccountEmail(view: FlowView): AccountEmailState {
 
 function initialView(context: TariffUpgradeContext): FlowView {
   if (context.kind === 'executive') return 'executive-form';
-  if (context.kind === 'plan-change-unavailable') return 'error';
   return context.kind === 'payment-method' ? 'checkout' : 'offer';
 }
 

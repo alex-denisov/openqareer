@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from 'react';
-import { FolderOpen, Image, Scan } from '@phosphor-icons/react';
+import { useRef, type ChangeEvent, type ReactElement } from 'react';
+import { FolderOpen } from '@phosphor-icons/react';
 
 export interface FirstRunSourceMenuProps {
   readonly isOpen: boolean;
@@ -7,39 +7,26 @@ export interface FirstRunSourceMenuProps {
   readonly onPickFile: (file: File) => void;
 }
 
-const MENU_OPTIONS = [
-  { kind: 'file', testId: 'pick-files-btn', Icon: FolderOpen, label: 'Выбрать в «Файлах»' },
-  { kind: 'photo', testId: 'pick-photo-btn', Icon: Image, label: 'Фото из библиотеки' },
-  { kind: 'scan', testId: 'scan-doc-btn', Icon: Scan, label: 'Сканировать документ' },
-] as const;
-
-type UnavailableAction = 'photo' | 'scan';
-
 function SourceMenuActions({
   onPick,
-  onUnavailable,
   onClose,
 }: {
   readonly onPick: () => void;
-  readonly onUnavailable: (action: UnavailableAction) => void;
   readonly onClose: () => void;
 }): ReactElement {
   return (
     <>
-      {MENU_OPTIONS.map(({ kind, testId, Icon, label }) => (
-        <button
-          key={testId}
-          type="button"
-          className="first-run-pick-btn"
-          data-testid={testId}
-          onClick={() => (kind === 'file' ? onPick() : onUnavailable(kind))}
-        >
-          <span className="first-run-source-menu-action-label">
-            <Icon size={18} />
-            {label}
-          </span>
-        </button>
-      ))}
+      <button
+        type="button"
+        className="first-run-pick-btn"
+        data-testid="pick-files-btn"
+        onClick={onPick}
+      >
+        <span className="first-run-source-menu-action-label">
+          <FolderOpen size={18} />
+          Выбрать в «Файлах»
+        </span>
+      </button>
       <button
         type="button"
         className="first-run-btn-ghost first-run-source-menu-cancel"
@@ -49,12 +36,6 @@ function SourceMenuActions({
       </button>
     </>
   );
-}
-
-function unavailableActionCopy(action: UnavailableAction): string {
-  return action === 'photo'
-    ? 'Загрузка фотографий пока недоступна. Выберите PDF-резюме.'
-    : 'Сканирование пока недоступно. Выберите PDF-резюме.';
 }
 
 function handleSelectedFile(
@@ -74,10 +55,6 @@ export function FirstRunSourceMenu({
   onPickFile,
 }: FirstRunSourceMenuProps): ReactElement | null {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [unavailableAction, setUnavailableAction] = useState<UnavailableAction | null>(null);
-  useEffect(() => {
-    if (isOpen) setUnavailableAction(null);
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -102,19 +79,7 @@ export function FirstRunSourceMenu({
           <b>Загрузить резюме</b>
           <p>PDF или DOCX, до 10 МБ</p>
         </div>
-        {unavailableAction ? (
-          <p className="first-run-source-menu-notice" role="status">
-            {unavailableActionCopy(unavailableAction)}
-          </p>
-        ) : null}
-        <SourceMenuActions
-          onPick={() => {
-            setUnavailableAction(null);
-            fileInputRef.current?.click();
-          }}
-          onUnavailable={setUnavailableAction}
-          onClose={onClose}
-        />
+        <SourceMenuActions onPick={() => fileInputRef.current?.click()} onClose={onClose} />
       </div>
     </div>
   );

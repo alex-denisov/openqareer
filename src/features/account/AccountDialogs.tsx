@@ -180,16 +180,6 @@ function LinkedInModalContent({
       <p className="career-account-row-desc">
         Импортировано {connection.factCount} фактов · {connectionDate(connection.lastImportedAt)}.
       </p>
-      <label className="career-account-row" aria-disabled="true">
-        <span className="career-account-row-label">
-          Использовать контакты для маршрутов к компаниям. Настройка пока недоступна.
-        </span>
-        <input type="checkbox" disabled aria-label="Использовать контакты для маршрутов к компаниям" />
-      </label>
-      <label className="career-account-row" aria-disabled="true">
-        <span className="career-account-row-label">Готовить черновики постов. Настройка пока недоступна.</span>
-        <input type="checkbox" disabled aria-label="Готовить черновики постов" />
-      </label>
     </div>
   );
 }
@@ -258,12 +248,6 @@ function HhModalContent({
           Импортировано {connection.factCount} фактов · последний импорт {connectionDate(connection.lastImportedAt)}.
         </span>
       </div>
-      <label className="career-account-row" aria-disabled="true">
-        <span className="career-account-row-label">
-          Отправлять отклики через этот аккаунт после одобрения. Настройка пока недоступна.
-        </span>
-        <input type="checkbox" disabled aria-label="Отправлять отклики через этот аккаунт после одобрения" />
-      </label>
     </div>
   );
 }

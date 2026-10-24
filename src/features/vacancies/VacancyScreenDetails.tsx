@@ -461,7 +461,7 @@ export function VacancyScreenDescription({
         </p>
       ) : (
         <p className="vacancies-screen-description-empty">
-          Краткое описание пока недоступно. Полный текст можно проверить на площадке.
+          Краткого описания нет. Полный текст можно проверить на площадке.
         </p>
       )}
       <VacancyScreenFullDescriptionButton onOpen={onOpenFull} />

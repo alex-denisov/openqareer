@@ -201,7 +201,7 @@ test('B367 keeps launch disabled until the consent text is approved', async ({ p
 
   // Until the consent text is approved the flow stays on step 1 and the scan step cannot open,
   // so no launch control is reachable.
-  await expect(page.getByText('Скоро: ждёт утверждения текста согласия.')).toBeVisible();
+  await expect(page.getByText('Текст согласия ждёт утверждения.')).toBeVisible();
   await expect(footprintStep(page, 1, 'Согласие')).toContainText('Ожидает утверждения');
   await expect(footprintStep(page, 2, 'Сканирование')).toBeDisabled();
   await expect(page.getByRole('button', { name: /Запустить выбранные проверки/u })).toHaveCount(0);

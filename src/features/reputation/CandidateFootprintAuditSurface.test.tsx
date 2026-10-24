@@ -140,7 +140,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
     expect(button('2 Сканирование')?.disabled).toBe(true);
     expect(button('3 Находки')?.disabled).toBe(true);
     expect(button('4 Чек-лист')?.disabled).toBe(true);
-    expect(container.textContent).toContain('Скоро: ждёт утверждения текста согласия');
+    expect(container.textContent).toContain('Текст согласия ждёт утверждения');
     expect(container.textContent).toContain('Ссылка на фото из профиля не передаётся поисковику');
     expect(button('Запустить выбранные проверки')).toBeUndefined();
     expect(props.onStart).not.toHaveBeenCalled();

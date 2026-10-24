@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { ArrowClockwise, SpinnerGap } from '@phosphor-icons/react';
 import type {
   CandidateBillingReceipt,
@@ -203,11 +203,7 @@ function BillingCancellationActions({
   if (!subscription) return null;
   return (
     <div className="career-billing-action">
-      {subscription.autoRenew ? (
-        <CancelRenewalButton state={state} onCancel={onCancel} />
-      ) : (
-        <PreparedRenewalAction />
-      )}
+      {subscription.autoRenew ? <CancelRenewalButton state={state} onCancel={onCancel} /> : null}
       {state === 'error' ? (
         <p className="career-billing-error" role="alert">
           Не удалось отключить автопродление. Проверьте соединение и повторите.
@@ -220,23 +216,6 @@ function BillingCancellationActions({
         </p>
       ) : null}
     </div>
-  );
-}
-
-function PreparedRenewalAction() {
-  const [unavailable, setUnavailable] = useState(false);
-  return unavailable ? (
-    <p className="career-billing-error" role="status">
-      Автопродление пока недоступно. Оплатите следующий период вручную.
-    </p>
-  ) : (
-    <button
-      className="career-btn career-btn-secondary"
-      type="button"
-      onClick={() => setUnavailable(true)}
-    >
-      Включить автопродление
-    </button>
   );
 }
 

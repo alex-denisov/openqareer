@@ -207,7 +207,7 @@ function JobPage({
         <div className="vacancy-push-list">
           <p className="vacancy-push-quote">
             {summary.text ??
-              (summary.loading ? 'Загружаем описание…' : 'Краткое описание пока недоступно.')}
+              (summary.loading ? 'Загружаем описание…' : 'Краткого описания нет.')}
           </p>
           <PushRow
             icon={<FileText aria-hidden="true" />}

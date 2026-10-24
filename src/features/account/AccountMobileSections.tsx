@@ -211,22 +211,6 @@ function ProfileSecurityGroup({
   return (
     <>
       <div className="career-account-mobile-group">
-        <div className="career-account-mobile-row">
-          <div className="career-account-row-content">
-            <span className="career-account-row-label">Двухфакторная защита</span>
-            <span className="career-account-row-desc">код из приложения при входе</span>
-          </div>
-          <span className="career-account-tag is-dim">Скоро</span>
-        </div>
-        <div className="career-account-mobile-row">
-          <div className="career-account-row-content">
-            <span className="career-account-row-label">Ключи доступа</span>
-            <span className="career-account-row-desc">вход по отпечатку или Face ID</span>
-          </div>
-          <span className="career-account-tag is-dim">Скоро</span>
-        </div>
-      </div>
-      <div className="career-account-mobile-group">
         <button type="button" className="career-account-mobile-row" onClick={onEditTimezone}>
           <div className="career-account-row-content">
             <span className="career-account-row-label">Часовой пояс</span>
@@ -414,13 +398,6 @@ function ConnectedPlatformsGroup({
           <CaretRight size={18} aria-hidden="true" />
         </div>
       </button>
-      <div className="career-account-mobile-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Другие площадки</span>
-          <span className="career-account-row-desc">Подключение пока недоступно.</span>
-        </div>
-        <span className="career-account-tag is-dim">Недоступно</span>
-      </div>
     </div>
   );
 }
@@ -435,7 +412,7 @@ function mobileConnectionStatus(connection: CandidateConnection | undefined, loa
   if (!connection) return loading ? 'Проверяем' : 'Нет данных';
   if (connection.status === 'connected') return 'Подключено';
   if (connection.status === 'imported') return 'Профиль импортирован';
-  return connection.available ? 'Не подключено' : 'Недоступно';
+  return 'Не подключено';
 }
 
 function mobileConnectionTag(connection: CandidateConnection | undefined, loading: boolean): 'ok' | 'warn' | 'dim' {
@@ -452,7 +429,7 @@ function mobileConnectionDetails(connection: CandidateConnection | undefined, lo
   if (connection.status === 'imported') {
     return `Профиль импортирован ${mobileConnectionDate(connection.importedAt)}. Активная сессия не сохранена.`;
   }
-  return connection.available ? 'Подключите площадку из приложения.' : 'Подключение пока недоступно.';
+  return 'Подключите площадку из приложения.';
 }
 
 function ChannelsGroup({
@@ -472,12 +449,9 @@ function ChannelsGroup({
         emailAvailable={emailAvailable}
         onOpen={onOpenNotifications}
       />
-      <CalendarChannelRow />
-      <TelegramChannelRow
-        available={telegramAvailable}
-        connected={telegramConnected}
-        onOpen={onOpenNotifications}
-      />
+      {telegramAvailable || telegramConnected ? (
+        <TelegramChannelRow connected={telegramConnected} onOpen={onOpenNotifications} />
+      ) : null}
     </div>
   );
 }
@@ -487,11 +461,11 @@ function EmailChannelRow({
   emailAvailable,
   onOpen,
 }: Pick<MobileConnectionsProps, 'emailVerified' | 'emailAvailable'> & { readonly onOpen: () => void }) {
-  const status = emailVerified ? (emailAvailable ? 'Подключено' : 'Недоступно') : 'Не подтверждена';
+  const status = emailVerified ? 'Подтверждена' : 'Не подтверждена';
   const description = emailVerified
     ? emailAvailable
       ? 'Почта для входа подтверждена. Канал уведомлений доступен.'
-      : 'Почта подтверждена, но канал уведомлений недоступен.'
+      : 'Почта для входа подтверждена.'
     : 'Для ответов работодателей нужна подтверждённая почта.';
   return (
     <button type="button" className="career-account-mobile-row" onClick={onOpen}>
@@ -501,29 +475,16 @@ function EmailChannelRow({
   );
 }
 
-function CalendarChannelRow() {
-  return (
-    <div className="career-account-mobile-row">
-      <ChannelRowContent title="Календарь" description="Подключение календаря пока недоступно." />
-      <span className="career-account-tag is-dim">Скоро</span>
-    </div>
-  );
-}
-
 function TelegramChannelRow({
-  available,
   connected,
   onOpen,
 }: {
-  readonly available: boolean;
   readonly connected: boolean;
   readonly onOpen: () => void;
 }) {
   const description = connected
     ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
-    : available
-      ? 'Настройте связь и уведомления в разделе «Уведомления». '
-      : 'Подключение Telegram пока недоступно.';
+    : 'Настройте связь и уведомления в разделе «Уведомления».';
   return (
     <button type="button" className="career-account-mobile-row" onClick={onOpen}>
       <ChannelRowContent title="Telegram" description={description} />
@@ -681,14 +642,16 @@ function MobileConsentRow({
         <span className="career-account-row-label">{item.title}</span>
         <span className="career-account-row-desc">{status}</span>
       </div>
-      <button
-        type="button"
-        className="career-btn is-sm"
-        disabled={disabled || unknown || (granted ? !item.revokeable : !item.grantable)}
-        onClick={onToggle}
-      >
-        {unknown ? 'Недоступно' : granted ? 'Отозвать' : 'Дать согласие'}
-      </button>
+      {unknown ? null : (
+        <button
+          type="button"
+          className="career-btn is-sm"
+          disabled={disabled || (granted ? !item.revokeable : !item.grantable)}
+          onClick={onToggle}
+        >
+          {granted ? 'Отозвать' : 'Дать согласие'}
+        </button>
+      )}
     </div>
   );
 }

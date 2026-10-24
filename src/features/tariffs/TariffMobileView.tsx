@@ -84,7 +84,7 @@ function MobileHomeView({
         <h2 className="career-tariffs-title">Тарифы</h2>
         <p className="career-tariffs-lead">
           Платный тариф подключается после подтверждения оплаты. Возврат на Free отключает
-          автопродление; понижение между платными тарифами пока недоступно.
+          автопродление.
         </p>
       </div>
 
@@ -304,6 +304,7 @@ function MobileUpgradeAction({
   const currentIdx = TIER_ORDER.indexOf(activeTierId);
   const targetIdx = TIER_ORDER.indexOf(level.id);
   const isDown = targetIdx < currentIdx;
+  if (isDown && !level.request && level.id !== 'free') return null;
 
   return (
     <div>
@@ -318,7 +319,7 @@ function MobileUpgradeAction({
         ) : (
           <>
             <TrendUp size={18} aria-hidden="true" />
-            {isDown ? `Понизить до ${level.name}` : `Перейти на ${level.name}`}
+            Перейти на {level.name}
           </>
         )}
       </button>
