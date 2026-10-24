@@ -4,6 +4,8 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacanciesScreen, filterByScreenState } from './VacanciesScreen';
+import { VacancyScreenRowCells } from './VacancyScreenRowCells';
+import { readyVacancyFit } from '../../../e2e/fixtures/vacancyFit';
 
 function matchedItem(
   id: string,
@@ -419,5 +421,22 @@ describe('VacanciesScreen mockup small buttons (B510)', () => {
   it('renders «Сбросить всё» as the mockup ghost small button', () => {
     const html = render();
     expect(html).toMatch(/class="vacancies-summary-reset vac-sm is-ghost"[^>]*>Сбросить всё/);
+  });
+});
+
+describe('VacanciesScreen fit percent in the 390 status (B510)', () => {
+  it('puts the short percent right after the status label', () => {
+    const html = renderToStaticMarkup(
+      <VacancyScreenRowCells
+        item={matchedItem('v-fit', 'Head of Engineering', {
+          fitView: readyVacancyFit(),
+        } as never)}
+        applicationArchived={false}
+        alreadyApplied={false}
+      />,
+    );
+    expect(html).toMatch(
+      /vacancies-screen-cell--status[^>]*>[^]*?Подходит<span class="vacancy-fit-inline is-number is-short"/,
+    );
   });
 });
