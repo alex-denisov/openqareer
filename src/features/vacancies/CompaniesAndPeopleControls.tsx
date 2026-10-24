@@ -6,7 +6,7 @@ import {
   Funnel,
   MagnifyingGlass,
   SlidersHorizontal,
-  SortAscending,
+  Clock,
   Target,
   UsersThree,
   X,
@@ -454,7 +454,7 @@ function SheetBody({
         onClick={() => onView('filter')}
       />
       <SheetRow
-        icon={<SortAscending />}
+        icon={<Clock />}
         label="Сортировка"
         value={SORT_OPTIONS.find((item) => item.value === sort)?.short ?? ''}
         onClick={() => onView('sort')}
