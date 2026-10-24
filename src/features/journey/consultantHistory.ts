@@ -20,5 +20,26 @@ export function isImportAnnouncement(message: ConsultantHistoryMessage): boolean
 export function consultantTurns<T extends ConsultantHistoryMessage>(
   messages: readonly T[] | undefined,
 ): T[] {
-  return (messages ?? []).filter((message) => !isImportAnnouncement(message));
+  return withoutRepeatedQuestions(
+    (messages ?? []).filter((message) => !isImportAnnouncement(message)),
+  );
+}
+
+/**
+ * A question resent in a row (B563: one vacancy question stored 10+ times) shows
+ * once: a repeat of the previous user question is hidden with its answers.
+ */
+function withoutRepeatedQuestions<T extends ConsultantHistoryMessage>(messages: readonly T[]): T[] {
+  const visible: T[] = [];
+  let lastQuestion: string | undefined;
+  let hidingRepeat = false;
+  for (const message of messages) {
+    if (message.role === 'user') {
+      const question = message.content.trim();
+      hidingRepeat = question === lastQuestion;
+      lastQuestion = question;
+    }
+    if (!hidingRepeat) visible.push(message);
+  }
+  return visible;
 }

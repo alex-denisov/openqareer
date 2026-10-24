@@ -16,3 +16,21 @@ describe('consultant history (B266 S3)', () => {
     expect(turns.map((turn) => turn.id)).toEqual(['u1', 'a1']);
   });
 });
+
+describe('consultantTurns: repeated question in a row (B563)', () => {
+  const q = 'Почему «NewStore» подходит? Разбери вакансию «CTO».';
+  it('keeps the first question and answer, hides the repeats that follow', () => {
+    const messages = [
+      { id: '1', role: 'user', content: q },
+      { id: '2', role: 'assistant', content: 'Ответ 1' },
+      { id: '3', role: 'user', content: q },
+      { id: '4', role: 'assistant', content: 'Ответ 2' },
+      { id: '5', role: 'user', content: ` ${q} ` },
+      { id: '6', role: 'assistant', content: 'Ответ 3' },
+      { id: '7', role: 'user', content: 'Другой вопрос' },
+      { id: '8', role: 'assistant', content: 'Ответ 4' },
+      { id: '9', role: 'user', content: q },
+    ];
+    expect(consultantTurns(messages).map((m) => m.id)).toEqual(['1', '2', '7', '8', '9']);
+  });
+});
