@@ -198,7 +198,7 @@ function ConsentGrantControl({
       </label>
       <div className="career-relocation-footer-actions">
         <button
-          className="career-btn career-btn-primary"
+          className="career-relocation-btn is-primary"
           type="button"
           disabled={!accepted || busy}
           onClick={() => void submit()}
@@ -206,7 +206,7 @@ function ConsentGrantControl({
           <ArrowRight aria-hidden="true" size={17} />
           Заполнить анкету
         </button>
-        <button className="career-btn career-btn-secondary" type="button" onClick={onLater}>
+        <button className="career-relocation-btn" type="button" onClick={onLater}>
           Позже
         </button>
       </div>
@@ -223,11 +223,11 @@ function ConsentPendingControl({ onLater }: { readonly onLater: () => void }) {
         <span>Текст согласия ожидает проверки и пока не может быть принят.</span>
       </label>
       <div className="career-relocation-footer-actions">
-        <button className="career-btn career-btn-primary" type="button" disabled>
+        <button className="career-relocation-btn is-primary" type="button" disabled>
           <ArrowRight aria-hidden="true" size={17} />
           Заполнить анкету
         </button>
-        <button className="career-btn career-btn-secondary" type="button" onClick={onLater}>
+        <button className="career-relocation-btn" type="button" onClick={onLater}>
           Позже
         </button>
       </div>
