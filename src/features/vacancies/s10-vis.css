@@ -959,3 +959,107 @@
       inset 0 1px 0 color-mix(in oklch, white 22%, transparent);
   }
 }
+
+/* B510: строка фильтров и сводка 390 как .vm-bar/.vm-sum макета 4 — «Фильтры» стеклянная
+   капсула 32 px 13/500, чипы 32 px 13/400 на surface, зона нажатия 44 через ::after;
+   число жирным цветом текста, подпись 14 px soft, «Карта» 16 px/400 акцентом. */
+@media (max-width: 760px) {
+  .vacancies-mobile-filter-toggle,
+  .vacancies-mobile-filter-chip {
+    position: relative;
+    min-block-size: 32px;
+    block-size: 32px;
+    border: 0;
+    border-radius: 16px;
+    font-size: var(--career-text-xs);
+  }
+  .vacancies-mobile-filter-toggle::after,
+  .vacancies-mobile-filter-chip::after {
+    content: '';
+    position: absolute;
+    inset: -6px -3px;
+  }
+  .vacancies-mobile-filter-toggle {
+    background: color-mix(in oklch, var(--career-bg-elevated) 55%, transparent);
+    backdrop-filter: blur(20px) saturate(1.7);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 14%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 18%, transparent);
+    font-weight: 500;
+  }
+  .vacancies-mobile-filter-toggle svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+  .vacancies-mobile-filter-chip {
+    background: var(--career-surface);
+    color: var(--career-text-soft);
+    font-weight: 400;
+  }
+  .vacancies-mobile-filter-badge {
+    min-inline-size: 18px;
+    block-size: 18px;
+    border-radius: 9px;
+    color: var(--career-bg);
+  }
+  .vacancies-mobile-results-summary {
+    padding-inline: var(--career-space-1);
+  }
+  .vacancies-mobile-results-summary .list-hint {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+  .vacancies-mobile-results-summary .vacancy-facet-count {
+    color: var(--career-text);
+    font-weight: 700;
+  }
+  .vacancies-mobile-map-action {
+    min-block-size: 40px;
+    font-size: var(--career-text-md);
+    font-weight: 400;
+  }
+  .vacancies-mobile-map-action svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+}
+
+/* B510: название роли как .vrow .cell b макета 4 — 600, не 700; на 390 (.vm-r1 b) 16 px
+   в одну строку с многоточием; деньги (.vm-money b) 14/700, «оценка» прямым 13 px dim;
+   список — одна карточка surface с радиусом 20 без рамки. */
+.vacancies-screen-cell--role .vac-title {
+  font-weight: 600;
+}
+@media (max-width: 760px) {
+  .vacancies-screen-cell--role .vac-title {
+    overflow: hidden;
+    font-size: var(--career-text-md);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vacancies-screen-cell--salary .vacancy-screen-money-value {
+    font-size: var(--career-text-sm);
+    font-weight: 700;
+  }
+  .vacancy-screen-money-short {
+    font-style: normal;
+  }
+  .vacancies-list-container .vac-list {
+    border: 0;
+    border-radius: 20px;
+    background: var(--career-surface);
+  }
+  .vacancies-list-container .vacancies-screen-row-shell.vac-row {
+    padding: var(--career-space-3) var(--career-space-4);
+  }
+  .vacancies-list-container .vac-list-item + .vac-list-item .vacancies-screen-card {
+    position: relative;
+    border-block-start: 0;
+  }
+  .vacancies-list-container .vac-list-item + .vac-list-item .vacancies-screen-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto var(--career-space-4);
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+}
