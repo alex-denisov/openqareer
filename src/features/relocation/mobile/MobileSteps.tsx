@@ -3,6 +3,7 @@ import {
   Certificate,
   Fingerprint,
   GraduationCap,
+  Info,
   LinkedinLogo,
   Translate,
 } from '@phosphor-icons/react';
@@ -211,14 +212,7 @@ function EducationStep({ profile, onOpen }: MobileStepProps) {
   );
   return (
     <>
-      <MobileGroup
-        caption="Образование"
-        note={
-          unknownRecognition
-            ? 'Признание диплома за рубежом не указано. От него зависит порог зарплаты для виз под оффер.'
-            : undefined
-        }
-      >
+      <MobileGroup caption="Образование">
         {education.map((entry) => (
           <MobileNavRow
             key={entry.id}
@@ -230,6 +224,15 @@ function EducationStep({ profile, onOpen }: MobileStepProps) {
         ))}
         <MobileAddRow title="Добавить образование" onClick={() => onOpen({ kind: 'education' })} />
       </MobileGroup>
+      {unknownRecognition ? (
+        <p className="career-relocation-mobile-note">
+          <Info aria-hidden="true" size={16} />
+          <span>
+            Признание диплома за рубежом не указано. От него зависит порог зарплаты для виз под
+            оффер.
+          </span>
+        </p>
+      ) : null}
       <CertificatesGroup certificates={certificates} onOpen={onOpen} />
     </>
   );

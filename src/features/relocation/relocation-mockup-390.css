@@ -747,8 +747,10 @@
 
   .career-relocation-sheet-close {
     position: relative;
+    min-block-size: 40px;
     border: 0;
-    padding: 0;
+    margin-inline-end: calc(var(--career-space-4) * -1);
+    padding: 0 var(--career-space-4);
     color: var(--career-text-soft);
     background: transparent;
     font: inherit;
@@ -820,5 +822,4 @@
     border-block-start: var(--career-border-width) solid var(--career-line);
     content: '';
   }
-
 }

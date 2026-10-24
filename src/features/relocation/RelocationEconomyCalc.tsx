@@ -1,12 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import {
-  ArrowRight,
-  Buildings,
-  Info,
-  PencilSimple,
-  Scales,
-  ShieldCheck,
-} from '@phosphor-icons/react';
+import { Buildings, Info, PencilSimple, Scales, ShieldCheck } from '@phosphor-icons/react';
 import type { PayrollResult } from '../../../shared/taxCalculators';
 import type { RelocationScenarioInput } from '../../../shared/relocationScenario';
 import type { getCountryTaxData } from '../../../shared/taxData';
@@ -302,7 +295,7 @@ export function EconomyActions({
         Уточнить расходы
       </button>
       <button className="career-relocation-btn" type="button" onClick={onShowComparison}>
-        <ArrowRight aria-hidden="true" size={17} />К сравнению
+        К сравнению
       </button>
     </div>
   );
