@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRight, ChatCircle } from '@phosphor-icons/react';
 import { MobilePush } from './RelocationMobilePush';
 import { CountryComparisonPanel } from './CountryComparisonPanel';
-import { RelocationAddCountry } from './RelocationAddCountry';
+import { MobileAddCountry } from './mobile/MobileAddCountry';
 import { RelocationMobileCountryList } from './RelocationMobileCountryList';
 import { RelocationMobileCountry } from './RelocationMobileCountry';
 import { RelocationMobileEconomy } from './RelocationMobileEconomy';
@@ -120,7 +120,7 @@ function MobileModeScreen(props: MobileProps) {
   }
   return (
     <MobilePush title="Добавить страну" onBack={workspace.closeMode}>
-      <RelocationAddCountry
+      <MobileAddCountry
         profile={profile}
         pinnedCountryCodes={workspace.pinnedCountryCodes}
         onAdd={workspace.pinCountry}
