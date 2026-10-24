@@ -1,3 +1,9 @@
+let loadedAuthPages: typeof import('./AuthPages') | undefined;
+
+export function getLoadedAuthPages() {
+  return loadedAuthPages;
+}
+
 export function loadAuthPages() {
   const styles = typeof document === 'undefined'
     ? Promise.resolve()
@@ -6,6 +12,7 @@ export function loadAuthPages() {
     if (typeof document !== 'undefined') {
       document.getElementById('root')?.removeAttribute('aria-busy');
     }
+    loadedAuthPages = pages;
     return pages;
   });
 }
