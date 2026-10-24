@@ -89,6 +89,7 @@ type ApplicationOperationStore = Pick<
   | 'assignApplicationLabel'
   | 'removeApplicationLabel'
   | 'runApplicationOperation'
+  | 'runExternalApplicationOperation'
   | 'bulkQueueApplicationRetries'
   | 'bulkChangeApplicationStages'
 >;
@@ -396,7 +397,7 @@ async function handleCompanyWantBulk(deps: RouteDeps, request: FastifyRequest, r
   if (!repository) return undefined;
   const store = applicationStore(deps.candidateStore);
   try {
-    const operation = store.runApplicationOperation(
+    const operation = store.runExternalApplicationOperation(
       candidate.id,
       body.operationId,
       digestRequest({ action: body.action, companies: body.companies, confirmCount: body.confirmCount }),

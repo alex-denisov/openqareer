@@ -1,3 +1,6 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from './app';
 import { filterApplicationRows, listApplicationsQuerySchema } from './routes/applicationOperationsRoutes';
@@ -682,4 +685,36 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     expect(execution.json().data.changedCount).toBe(1_000);
     expect(executionMs, `preview ${previewMs.toFixed(0)} ms; execution`).toBeLessThan(1_000);
   });
+
+  it('writes company wants when the store and the wants repository share one database file', async () => {
+    // На проде оба хранилища открывают один файл SQLite: запись желаний внутри
+    // BEGIN IMMEDIATE хранилища откликов ждала саму себя и отдавала 503 storage_busy.
+    const databasePath = join(mkdtempSync(join(tmpdir(), 'b451-wants-')), 'candidate.db');
+    const candidateStore = new SqliteCandidateStore({ databasePath, encryptionKey: config.dataEncryptionKey });
+    const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const app = await buildApp({
+      config: { ...config, databasePath },
+      coachProvider: successProvider,
+      candidateStore,
+      authService: noSessions,
+      serveStatic: false,
+    });
+    apps.push(app);
+    stores.push(candidateStore);
+    const authorization = `Bearer ${candidate.accessToken}`;
+    const url = '/api/v1/candidate/applications/company-wants';
+    const add = {
+      operationId: 'b451-shared-file-add',
+      action: 'add',
+      confirmCount: 1,
+      companies: [{ companyName: 'Альфа' }],
+    };
+    const created = await app.inject({ method: 'POST', url: url + '/bulk', headers: { authorization, ...ORIGIN }, payload: add });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().data).toMatchObject({ changedCount: 1, replayed: false });
+    const replay = await app.inject({ method: 'POST', url: url + '/bulk', headers: { authorization, ...ORIGIN }, payload: add });
+    expect(replay.json().data.replayed).toBe(true);
+    const list = await app.inject({ url, headers: { authorization } });
+    expect(list.json().data).toHaveLength(1);
+  }, 20_000);
 });
