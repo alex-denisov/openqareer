@@ -31,53 +31,94 @@
 }
 
 .companies-people-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--career-space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px auto;
+  gap: var(--career-space-4);
   align-items: center;
   min-inline-size: 0;
 }
 
-.companies-people-toolbar .companies-people-search {
-  flex: 0 1 220px;
-}
-
+/* Mockup 13: the field itself carries the frame (.career-input), the icon sits inside it. */
 .companies-people-search {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-2);
+  position: relative;
+  display: block;
   min-inline-size: 0;
-  min-block-size: var(--career-target-min);
-  padding-inline: var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
+  color: var(--career-text-dim);
+}
+
+.companies-people-search svg {
+  position: absolute;
+  inset-inline-start: var(--career-space-3);
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  inline-size: 16px;
+  block-size: 16px;
+  pointer-events: none;
+}
+
+/* Mockup 13: hidden .career-field-label (13 px, 600) as a 1 px .sr-only. */
+.companies-people-field-label {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   color: var(--career-text-soft);
-  background: var(--career-surface);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* .career-shell input sets 46 px for every field; mockup 13 search is 44. */
+.companies-people-toolbar .companies-people-search input {
+  min-height: 0;
 }
 
 .companies-people-search input {
+  box-sizing: border-box;
   min-inline-size: 0;
   inline-size: 100%;
-  border: 0;
-  outline: 0;
+  block-size: var(--career-target-min);
+  padding: 0 var(--career-space-3) 0 calc(var(--career-space-3) * 2 + 16px);
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
   color: var(--career-text);
-  background: transparent;
+  background: var(--career-bg-elevated);
+  font: inherit;
   font-size: var(--career-text-sm);
+}
+
+.companies-people-search input::placeholder {
+  color: var(--career-text-dim);
+}
+
+.companies-people-search input:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: -2px;
+}
+
+.companies-people-select-wrap {
+  display: block;
+  min-inline-size: 0;
 }
 
 .companies-people-select,
 .companies-people-filter-button {
-  min-block-size: var(--career-target-min);
+  box-sizing: border-box;
+  inline-size: 100%;
+  block-size: var(--career-target-min);
   padding-inline: var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line-strong);
+  border: var(--career-border-width) solid var(--career-field-edge);
   border-radius: var(--career-radius-sm);
   color: var(--career-text);
-  background: var(--career-surface);
-  font-size: var(--career-text-xs);
+  background-color: var(--career-bg-elevated);
+  font: inherit;
+  font-size: var(--career-text-sm);
 }
 
 .companies-people-filter-button {
   display: none;
+  inline-size: auto;
   align-items: center;
   justify-content: center;
   gap: var(--career-space-2);
@@ -87,23 +128,41 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--career-space-2);
-  margin-inline-start: auto;
 }
 
 .companies-people-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
   min-block-size: var(--career-target-min);
-  padding-inline: var(--career-space-3);
+  padding: 0 var(--career-space-3);
   border: var(--career-border-width) solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
-  color: var(--career-text-soft);
+  border-radius: 16px;
+  color: var(--career-text);
   background: transparent;
+  font: inherit;
   font-size: var(--career-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.companies-people-filter-label {
+  color: var(--career-text-soft);
+  font-weight: 400;
+}
+
+.companies-people-filter-count {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .companies-people-filter-chip[aria-pressed='true'] {
   border-color: var(--career-accent);
-  color: var(--career-text);
   background: var(--career-accent-soft);
+}
+
+.companies-people-filter-chip[aria-pressed='true'] .companies-people-filter-label {
+  color: var(--career-text);
 }
 
 .companies-people-filter-chip:disabled {
@@ -125,7 +184,7 @@
 
 .companies-people-layout {
   display: grid;
-  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: var(--career-space-5);
   align-items: start;
   min-inline-size: 0;
@@ -140,7 +199,13 @@
 }
 
 .companies-people-list {
-  max-block-size: 72dvh;
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-1);
+  block-size: calc(100dvh - 250px);
+  min-block-size: 420px;
+  border-color: var(--career-line-strong);
+  background: var(--career-bg-elevated);
   padding: var(--career-space-2);
   overflow: auto;
   overscroll-behavior: contain;
@@ -148,7 +213,7 @@
 
 .companies-people-company-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   gap: var(--career-space-3);
   align-items: center;
   inline-size: 100%;
@@ -162,7 +227,7 @@
 }
 
 .companies-people-company-row:hover {
-  background: var(--career-bg-elevated);
+  background: var(--career-surface);
 }
 
 .companies-people-company-row.is-selected {
@@ -178,9 +243,9 @@
   block-size: 36px;
   border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
-  color: var(--career-text);
-  background: var(--career-bg-elevated);
-  font-size: var(--career-text-sm);
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+  font-size: var(--career-text-md);
   font-weight: 600;
 }
 
@@ -198,15 +263,17 @@
 
 .companies-people-company-text {
   display: grid;
-  gap: 2px;
   min-inline-size: 0;
 }
 
 .companies-people-company-text strong {
   overflow-wrap: anywhere;
   color: var(--career-text);
+  overflow: hidden;
   font-size: var(--career-text-sm);
-  font-weight: 650;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .companies-people-company-text span {
@@ -221,6 +288,25 @@
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 761px) {
+  .companies-people-company-metrics {
+    font-family: var(--font-mono, ui-monospace, monospace);
+  }
+
+  .companies-people-contacts.is-known {
+    font-size: 0;
+  }
+
+  .companies-people-contacts.is-known > svg,
+  .companies-people-contacts.is-known > .companies-people-contacts-count {
+    font-size: var(--career-text-xs);
+  }
+
+  .companies-people-contacts[data-zero] {
+    color: var(--career-text-dim);
+  }
 }
 
 .companies-people-contacts {
@@ -247,9 +333,18 @@
   white-space: nowrap;
 }
 
+/* Mockup 13 list row: «Хочу» is a hypothesis tag, not a button. */
 .companies-people-want-chip.is-compact {
-  min-block-size: 24px;
-  padding-inline: var(--career-space-2);
+  min-block-size: 0;
+  padding: 2px var(--career-space-2);
+  border-color: color-mix(in oklch, var(--career-accent) 45%, transparent);
+  border-radius: var(--career-space-1);
+  font-family: inherit;
+}
+
+.companies-people-want-chip.is-compact svg {
+  inline-size: 14px;
+  block-size: 14px;
 }
 
 .companies-people-want-state {
@@ -591,53 +686,189 @@
   display: none;
 }
 
+/* Mockup 13 on 390 (sheet=cof): grab, «Фильтры» + «Сбросить», rows with a sub-view, «Показать N». */
 .companies-people-filter-sheet {
+  box-sizing: border-box;
   inline-size: 100%;
   max-inline-size: none;
   max-block-size: 80dvh;
   margin: auto 0 0;
-  padding: var(--career-space-4);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+  padding: var(--career-space-2) var(--career-space-4)
+    calc(env(safe-area-inset-bottom) + var(--career-space-5));
+  border: 0;
+  border-radius: 28px 28px 0 0;
   color: var(--career-text);
   background: var(--career-bg-elevated);
+  box-shadow: inset 0 1px 0 color-mix(in oklch, white 14%, transparent);
 }
 
 .companies-people-filter-sheet::backdrop {
-  background: color-mix(in oklab, var(--career-bg) 76%, transparent);
+  background: color-mix(in oklch, black 50%, transparent);
 }
 
 .companies-people-filter-sheet form {
   display: grid;
-  gap: var(--career-space-4);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--career-space-3);
 }
 
-.companies-people-filter-sheet fieldset {
-  display: grid;
-  gap: var(--career-space-2);
-  margin: 0;
-  padding: 0;
-  border: 0;
+.companies-people-sheet-grab {
+  justify-self: center;
+  inline-size: 36px;
+  block-size: 5px;
+  margin: 4px auto;
+  border-radius: 3px;
+  background: color-mix(in oklch, white 24%, transparent);
 }
 
-.companies-people-filter-sheet legend {
-  margin-block-end: var(--career-space-2);
-  color: var(--career-text);
-  font-size: var(--career-text-md);
-  font-weight: 650;
-}
-
-.companies-people-filter-option {
+.companies-people-sheet-head {
   display: flex;
   gap: var(--career-space-2);
   align-items: center;
-  min-block-size: var(--career-target-min);
+  justify-content: space-between;
+}
+
+.companies-people-sheet-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--career-text-lg);
+  font-weight: 700;
+}
+
+.companies-people-sheet-reset {
+  position: relative;
+  min-block-size: 40px;
+  padding: 0 var(--career-space-4);
+  border: 0;
+  color: var(--career-text-soft);
+  background: none;
+  font: inherit;
+  font-size: var(--career-text-md);
+  cursor: pointer;
+}
+
+/* 40 px as in the mockup, 44 px to touch. */
+.companies-people-sheet-reset::after {
+  content: '';
+  position: absolute;
+  inset: -2px 0;
+}
+
+.companies-people-sheet-back {
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border: 0;
+  border-radius: 50%;
+  color: var(--career-text);
+  background: var(--career-surface);
+  cursor: pointer;
+}
+
+.companies-people-sheet-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 20px;
+  background: var(--career-surface);
+}
+
+.companies-people-sheet-row,
+.companies-people-filter-option {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  inline-size: 100%;
+  gap: var(--career-space-3);
+  align-items: center;
+  min-block-size: 56px;
+  padding: var(--career-space-2) var(--career-space-4);
+  border: 0;
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+.companies-people-sheet-row + .companies-people-sheet-row::before,
+.companies-people-filter-option + .companies-people-filter-option::before {
+  content: '';
+  position: absolute;
+  inset-inline: 56px 0;
+  inset-block-start: 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.companies-people-sheet-ico {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 9px;
+  color: var(--career-text-soft);
+  background: color-mix(in oklch, white 7%, transparent);
+}
+
+.companies-people-sheet-ico svg {
+  inline-size: 18px;
+  block-size: 18px;
+}
+
+.companies-people-sheet-main {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--career-text-md);
+  font-weight: 500;
+}
+
+.companies-people-sheet-val {
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
+  line-height: 1.5;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.companies-people-sheet-chev {
+  flex: none;
+  inline-size: 14px;
+  block-size: 14px;
+  color: var(--career-text-dim);
 }
 
 .companies-people-filter-option input {
+  flex: none;
+  inline-size: 20px;
+  block-size: 20px;
+  min-height: 0;
+  margin: 6px;
   accent-color: var(--career-accent);
+}
+
+.companies-people-sheet-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: 50px;
+  padding: 0 var(--career-space-5);
+  border: 0;
+  border-radius: 25px;
+  color: var(--career-bg);
+  background: var(--career-accent);
+  font: inherit;
+  font-size: var(--career-text-md);
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .companies-people-message {
@@ -645,8 +876,18 @@
 }
 
 /* B439-r1: list footer and row chevron (shown on 390 only) */
-.companies-people-list-footer,
 .companies-people-row-chev {
+  display: none;
+}
+
+.companies-people-list-footer {
+  margin: 0;
+  padding: var(--career-space-3);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-list-footer.is-compact {
   display: none;
 }
 
@@ -666,6 +907,8 @@
   flex: none;
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .company-push-remove {
@@ -750,11 +993,50 @@
     clip-path: none;
   }
 
+  /* Mockup 13 on 390 (.om-search): a 32 px pill around a bare input, 44 px to touch. */
   .companies-people-toolbar .companies-people-search {
-    flex: 1 1 auto;
+    display: flex;
+    gap: var(--career-space-2);
+    align-items: center;
+    block-size: 32px;
+    padding: 0 var(--career-space-3);
+    border-radius: 16px;
+    color: var(--career-text-soft);
+    background: var(--career-surface);
+  }
+
+  .companies-people-toolbar .companies-people-search::after {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+
+  .companies-people-toolbar .companies-people-search svg {
+    position: static;
+    flex: none;
+    translate: none;
+  }
+
+  .companies-people-toolbar .companies-people-search input {
+    position: relative;
+    z-index: 1;
+    block-size: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    color: var(--career-text);
+    background: transparent;
+    font-size: var(--career-text-md);
+  }
+
+  .companies-people-toolbar .companies-people-search input:focus-visible {
+    outline-offset: 2px;
   }
 
   .companies-people-list {
+    display: block;
+    block-size: auto;
+    min-block-size: 0;
     padding: 0;
     border: var(--career-border-width) solid var(--career-line);
     border-radius: var(--career-radius-md);
@@ -829,7 +1111,11 @@
 
   .companies-people-company-row {
     position: relative;
-    padding-inline-end: calc(var(--career-space-4) + var(--career-space-5));
+  }
+
+  /* Mockup 13 on 390: the chevron sits on the name line, the metrics line runs full width. */
+  .companies-people-company-text {
+    padding-inline-end: var(--career-space-5);
   }
 
   .companies-people-row-chev {
@@ -845,13 +1131,18 @@
     border: 0;
     background: none;
     color: var(--career-text-soft);
+    font-weight: 400;
   }
 
   .companies-people-company-row .companies-people-want-chip.is-compact svg {
     color: var(--career-accent);
   }
 
-  .companies-people-list-footer {
+  .companies-people-list-footer.is-wide {
+    display: none;
+  }
+
+  .companies-people-list-footer.is-compact {
     display: block;
     margin: var(--career-space-3) 0 0;
     color: var(--career-text-soft);
@@ -861,6 +1152,39 @@
 
   .companies-people-load-more {
     inline-size: 100%;
+    min-block-size: 50px;
+    margin-block-start: var(--career-space-4);
+    border: 0;
+    border-radius: 25px;
+    background: oklch(100% 0 0 / 0.1);
+    font-size: var(--career-text-md);
+  }
+
+  /* Mockup 13 on 390: «Фильтры» is a soft 32 px pill in a 44 px hit area. */
+  .companies-people-toolbar .companies-people-filter-button {
+    position: relative;
+    block-size: 32px;
+    min-block-size: 32px;
+    border: 0;
+    border-radius: 16px;
+    background: color-mix(in oklch, var(--career-bg-elevated) 55%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 14%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 18%, transparent);
+    font-size: var(--career-text-xs);
+    font-weight: 500;
+  }
+
+  .companies-people-toolbar .companies-people-filter-button svg {
+    flex: none;
+    inline-size: 18px;
+    block-size: 18px;
+  }
+
+  .companies-people-toolbar .companies-people-filter-button::after {
+    content: '';
+    position: absolute;
+    inset: -6px -3px;
   }
 }
 
@@ -878,4 +1202,292 @@ select.companies-people-select {
   background-position: right var(--career-space-3) center;
   background-repeat: no-repeat;
   background-size: var(--career-space-4) var(--career-space-4);
+}
+
+/* Mockup 13 (1440): company card, vacancies and people as in screens/13-kompanii-i-lyudi.html. */
+@media (min-width: 761px) {
+  .companies-people-detail {
+    gap: var(--career-space-4);
+    padding: var(--career-space-6);
+    border-color: var(--career-line-strong);
+    border-radius: var(--career-radius-md);
+    background: var(--career-bg-elevated);
+  }
+
+  .companies-people-detail-heading {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .companies-people-detail-heading > .companies-people-avatar {
+    border-radius: var(--career-radius-sm);
+  }
+
+  .companies-people-detail h2 {
+    font-size: var(--career-text-lg);
+  }
+
+  .companies-people-detail-heading p {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  /* career-btn.is-sm: 32 px visible, 44 px hit area through a transparent 6 px edge. */
+  .companies-people-detail .companies-people-want-button,
+  .companies-people-detail .companies-people-text-button,
+  .companies-people-detail .companies-people-icon-button,
+  .companies-people-detail .companies-people-person .companies-people-action {
+    --sm-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--career-space-2);
+    min-block-size: var(--career-target-min);
+    margin-inline: calc(var(--sm-gutter) * -1);
+    padding: 0 var(--career-space-3);
+    border: var(--sm-gutter) solid transparent;
+    border-radius: calc(var(--career-radius-sm) + var(--sm-gutter));
+    background-color: transparent;
+    background-clip: padding-box;
+    box-shadow: inset 0 0 0 var(--career-border-width) var(--career-field-edge);
+    color: var(--career-text);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .companies-people-detail .companies-people-text-button,
+  .companies-people-detail .companies-people-icon-button {
+    box-shadow: none;
+    color: var(--career-text-soft);
+  }
+
+  .companies-people-detail .companies-people-icon-button {
+    inline-size: var(--career-target-min);
+    padding: 0;
+  }
+
+  .companies-people-detail .companies-people-want-button:hover:not(:disabled),
+  .companies-people-detail .companies-people-person .companies-people-action:hover:not(:disabled) {
+    box-shadow: inset 0 0 0 var(--career-border-width) var(--career-accent);
+    background-color: var(--career-surface);
+  }
+
+  .companies-people-detail .companies-people-want-state {
+    gap: var(--career-space-3);
+  }
+
+  .companies-people-detail .companies-people-want-chip {
+    min-block-size: 0;
+    padding: 2px var(--career-space-2);
+    border-color: color-mix(in oklch, var(--career-accent) 45%, transparent);
+    border-radius: var(--career-space-1);
+  }
+
+  .companies-people-detail .companies-people-next-step {
+    display: flex;
+    gap: var(--career-space-3);
+    align-items: flex-start;
+    padding: var(--career-space-3) var(--career-space-4);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    color: var(--career-text-soft);
+    background: var(--career-surface);
+    font-size: var(--career-text-sm);
+  }
+
+  .companies-people-detail .companies-people-next-step svg {
+    flex: none;
+    margin-block-start: 2px;
+    color: var(--career-text-dim);
+  }
+
+  .companies-people-detail .companies-people-section {
+    gap: var(--career-space-3);
+    padding-block-start: var(--career-space-4);
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .companies-people-detail .companies-people-section-heading {
+    gap: var(--career-space-3);
+    min-block-size: var(--career-target-min);
+  }
+
+  .companies-people-detail .companies-people-section h3 {
+    font-size: var(--career-text-sm);
+  }
+
+  .companies-people-detail .companies-people-count-badge,
+  .companies-people-detail .companies-people-circle-badge {
+    min-inline-size: 0;
+    min-block-size: 0;
+    padding: 2px var(--career-space-2);
+    border-radius: var(--career-space-1);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  .companies-people-detail .companies-people-count-badge {
+    color: var(--career-text-soft);
+    font-family: var(--font-mono, ui-monospace, monospace);
+  }
+
+  .companies-people-detail .companies-people-vacancy-list {
+    gap: var(--career-space-1);
+  }
+
+  .companies-people-detail .companies-people-vacancy {
+    gap: 0;
+    padding: var(--career-space-2) var(--career-space-3);
+    border: 0;
+    border-radius: var(--career-radius-sm);
+    background: transparent;
+  }
+
+  .companies-people-detail .companies-people-vacancy:hover {
+    background: var(--career-surface);
+  }
+
+  .companies-people-detail .companies-people-link {
+    min-block-size: 0;
+    color: var(--career-accent);
+    font-size: var(--career-text-sm);
+    font-weight: 400;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .companies-people-detail .companies-people-person {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: var(--career-space-3);
+    align-items: start;
+    padding: var(--career-space-3);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-surface);
+  }
+
+  .companies-people-detail .companies-people-person .companies-people-avatar {
+    color: var(--career-text-soft);
+    background: var(--career-surface);
+    font-size: var(--career-text-md);
+  }
+
+  .companies-people-detail .companies-people-person-body {
+    gap: 2px;
+  }
+
+  .companies-people-detail .companies-people-person-body strong {
+    font-size: var(--career-text-sm);
+    font-weight: 700;
+  }
+
+  .companies-people-detail .companies-people-person-body .companies-people-person-role {
+    color: var(--career-text);
+    font-size: var(--career-text-xs);
+  }
+
+  .companies-people-detail .companies-people-person-body span,
+  .companies-people-detail .companies-people-person-body small {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  .companies-people-detail .companies-people-person-body .companies-people-circle-badge {
+    color: var(--career-text-dim);
+    font-weight: 600;
+  }
+
+  .companies-people-detail .companies-people-person-body small {
+    display: inline-flex;
+    gap: var(--career-space-1);
+    align-items: center;
+    color: var(--career-text-dim);
+  }
+
+  .companies-people-detail .companies-people-person-body .companies-people-actions {
+    gap: var(--career-space-3);
+    margin-block-start: var(--career-space-1);
+  }
+
+  .companies-people-detail .companies-people-footer {
+    display: inline-flex;
+    gap: var(--career-space-1);
+    align-items: center;
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+  }
+
+  .companies-people-detail .companies-people-search-box {
+    justify-content: space-between;
+  }
+
+  .companies-people-detail .companies-people-search-box > div {
+    gap: var(--career-space-1);
+  }
+
+  .companies-people-detail .companies-people-search-box p {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  .companies-people-detail .companies-people-search-box .companies-people-action.is-primary,
+  .companies-people-detail
+    > .companies-people-section
+    > .companies-people-actions
+    > .companies-people-action {
+    display: inline-flex;
+    flex: none;
+    gap: var(--career-space-2);
+    align-items: center;
+    padding: 0 var(--career-space-4);
+    border-radius: var(--career-radius-sm);
+    font-size: var(--career-text-sm);
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .companies-people-detail .companies-people-data-note {
+    display: flex;
+    gap: var(--career-space-3);
+    align-items: flex-start;
+    padding: var(--career-space-3) var(--career-space-4);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    color: var(--career-text-soft);
+    background: var(--career-surface);
+    font-size: var(--career-text-sm);
+  }
+
+  .companies-people-detail .companies-people-data-note svg {
+    flex: none;
+    margin-block-start: 2px;
+    color: var(--career-text-dim);
+  }
+
+  .companies-people-detail .companies-people-plain-note {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  .companies-people-detail
+    > .companies-people-section
+    > .companies-people-actions
+    > .companies-people-action:not(.is-primary) {
+    border-color: var(--career-field-edge);
+    background: transparent;
+  }
+
+  /* Mockup .ico is 1.25em: 16 px in 13 px small buttons, 18 px in 14 px buttons. */
+  .companies-people-detail .companies-people-action svg,
+  .companies-people-detail .companies-people-want-button svg {
+    flex: none;
+    inline-size: 1.25em;
+    block-size: 1.25em;
+  }
 }

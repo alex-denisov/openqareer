@@ -174,10 +174,10 @@ describe('CompanyMobilePush (mockup 13, 390 mv=main|none|found|noli)', () => {
     expect(other.onToggleWant).toHaveBeenCalled();
   });
 
-  it('no contacts: honest import note and «Найти рекрутёра»', () => {
+  it('no contacts: honest import note and «Найти рекрутера»', () => {
     const props = render({ people: { ...people, people: [] } });
     expect(document.body.textContent).toContain('из 412 импортированных');
-    act(() => button('Найти рекрутёра').click());
+    act(() => button('Найти рекрутера').click());
     expect(props.onSearch).toHaveBeenCalled();
   });
 
@@ -186,7 +186,7 @@ describe('CompanyMobilePush (mockup 13, 390 mv=main|none|found|noli)', () => {
       people: { ...people, people: [] },
       company: { ...company, recruiters: [recruiter], hasRecruiter: true },
     });
-    expect(document.body.textContent).toContain('Вероятные рекрутёры');
+    expect(document.body.textContent).toContain('Вероятные рекрутеры');
     expect(button('Елена Миронова').textContent).toContain('Круг 3');
     act(() => button('Холодный отклик Елене Мироновой').click());
     expect(props.onOpenLetter).toHaveBeenCalledWith(expect.objectContaining({ id: 'v1' }), 3);

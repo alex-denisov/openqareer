@@ -16,6 +16,7 @@ import type { VacancyLetterTarget } from './VacancyLetterScreen';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import {
   companyNextStepText,
+  companyLocationLabel,
   companySourceSummary,
   formatObservedDate,
 } from './companiesAndPeopleUtils';
@@ -51,7 +52,11 @@ export function CompanyAvatar({ name }: { readonly name: string }) {
 }
 
 function companyMeta(company: CandidateCompanyOpportunity): string {
-  return [company.location, company.industry, companySourceSummary(company.sources)]
+  return [
+    company.location && companyLocationLabel(company.location),
+    company.industry,
+    companySourceSummary(company.sources),
+  ]
     .filter(Boolean)
     .join(' · ');
 }

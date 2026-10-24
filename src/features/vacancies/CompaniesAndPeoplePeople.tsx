@@ -4,6 +4,7 @@ import {
   CircleNotch,
   EnvelopeSimple,
   Info,
+  LinkSimple,
   MagnifyingGlass,
   SignIn,
   UsersThree,
@@ -14,6 +15,7 @@ import type {
   CandidateCompanyPage,
   CandidateCompanyRecruiter,
 } from '../../../shared/candidateCompany';
+import { pluralRu } from '../../../shared/pluralRu';
 import { SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
 import {
   CompanyPeopleCards,
@@ -86,9 +88,16 @@ function RecruiterCard({
       </span>
       <div className="companies-people-person-body">
         <strong>{person.fullName}</strong>
-        <span className="companies-people-person-role">{person.roleTitle}</span>
+        {person.source === 'public-profile' ? (
+          <span>
+            Должность в профиле: {person.roleTitle}, {company.name}
+          </span>
+        ) : (
+          <span className="companies-people-person-role">{person.roleTitle}</span>
+        )}
         <small>
-          {person.sourceLabel}, {formatObservedDate(person.sourceDate)}
+          <LinkSimple aria-hidden="true" /> {person.sourceLabel},{' '}
+          {formatObservedDate(person.sourceDate)}
         </small>
         <div className="companies-people-actions">
           <span className="companies-people-circle-badge">Круг 3</span>
@@ -107,6 +116,15 @@ function RecruiterCard({
   );
 }
 
+function recruiterOrigin(recruiters: readonly CandidateCompanyRecruiter[]): string {
+  if (recruiters.some((person) => person.source !== 'public-profile')) {
+    return 'в объявлениях и публичных профилях';
+  }
+  return recruiters.every((person) => /LinkedIn/u.test(person.sourceLabel))
+    ? 'по публичным профилям LinkedIn'
+    : 'по публичным профилям';
+}
+
 function RecruiterCards({
   company,
   onOpenLetter,
@@ -114,15 +132,21 @@ function RecruiterCards({
   readonly company: CandidateCompanyOpportunity;
   readonly onOpenLetter?: OpenLetter;
 }) {
-  const hypotheses = company.recruiters.filter((person) => person.isHypothesis).length;
+  const hypotheses = company.recruiters.filter((person) => person.isHypothesis);
   return (
     <>
-      {hypotheses > 0 ? (
+      {hypotheses.length > 0 ? (
         <p className="companies-people-data-note" role="note">
           <CheckCircle aria-hidden="true" />
           <span>
-            Найдено вероятных рекрутёров: {hypotheses}. Это предположение по должности и компании,
-            не подтверждение: проверьте профиль перед письмом.
+            Найдено{' '}
+            {pluralRu(hypotheses.length, [
+              'вероятный рекрутер',
+              'вероятных рекрутера',
+              'вероятных рекрутеров',
+            ])}{' '}
+            {recruiterOrigin(hypotheses)}. Это предположение по должности и компании, не
+            подтверждение: проверьте профиль перед письмом.
           </span>
         </p>
       ) : null}
@@ -147,7 +171,7 @@ function RecruiterSearch(props: CompanyPeopleSectionProps) {
   if (props.busySearch || ['queued', 'running'].includes(company.recruiterSearchStatus)) {
     return (
       <p className="companies-people-status" role="status" aria-busy="true">
-        <CircleNotch className="career-spin" aria-hidden="true" /> Ищем рекрутёра по вакансиям
+        <CircleNotch className="career-spin" aria-hidden="true" /> Ищем рекрутера по вакансиям
         компании и публичным профилям.
       </p>
     );
@@ -155,7 +179,7 @@ function RecruiterSearch(props: CompanyPeopleSectionProps) {
   if (company.vacancyCount === 0) {
     return (
       <p className="companies-people-empty">
-        Нет вакансий компании в текущей подборке, поэтому искать рекрутёра пока не по чему.
+        Нет вакансий компании в текущей подборке, поэтому искать рекрутера пока не по чему.
       </p>
     );
   }
@@ -164,14 +188,14 @@ function RecruiterSearch(props: CompanyPeopleSectionProps) {
   return (
     <div className="companies-people-search-box">
       <div>
-        <strong>Рекрутёр компании не найден</strong>
+        <strong>Рекрутер компании не найден</strong>
         <p>
           {props.searchError ??
             (needsConsent
               ? SEARCH_CONSENT_TEXT
               : retry
-                ? 'В объявлениях и публичных профилях рекрутёра не нашли. Поиск можно повторить.'
-                : 'В объявлениях имени нет. Это не значит, что рекрутёра нет: поищем среди сотрудников с ролью HR и Talent.')}
+                ? 'В объявлениях и публичных профилях рекрутера не нашли. Поиск можно повторить.'
+                : 'В объявлениях имени нет. Это не значит, что рекрутера нет: поищем среди сотрудников с ролью HR и Talent.')}
         </p>
       </div>
       <button
@@ -181,7 +205,7 @@ function RecruiterSearch(props: CompanyPeopleSectionProps) {
         onClick={needsConsent ? props.onAllowAndSearch : props.onSearch}
       >
         <MagnifyingGlass aria-hidden="true" />{' '}
-        {needsConsent ? 'Разрешить и найти' : retry ? 'Повторить поиск' : 'Найти рекрутёра'}
+        {needsConsent ? 'Разрешить и найти' : retry ? 'Повторить поиск' : 'Найти рекрутера'}
       </button>
     </div>
   );
@@ -196,7 +220,7 @@ function NoLinkedInPeople(props: CompanyPeopleSectionProps) {
         <Info aria-hidden="true" />
         <span>
           Контакты в вашей сети неизвестны: LinkedIn не подключён.
-          {recruiter && fromVacancy ? ` Рекрутёр ${recruiter.fullName} взят из объявления.` : ''}
+          {recruiter && fromVacancy ? ` Рекрутер ${recruiter.fullName} взят из объявления.` : ''}
         </span>
       </p>
       <div className="companies-people-actions">

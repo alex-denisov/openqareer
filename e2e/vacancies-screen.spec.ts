@@ -1221,7 +1221,7 @@ test.describe('B250 vacancies screen', () => {
     await page.getByRole('tab', { name: /Компании и люди/u }).click();
     await page.getByRole('button', { name: 'Открыть компанию Вектор Банк' }).click();
 
-    await expect(page.getByText(/Рекрутёр Мария Орлова взят из объявления/u)).toBeVisible();
+    await expect(page.getByText(/Рекрутер Мария Орлова взят из объявления/u)).toBeVisible();
     await page.getByRole('button', { name: 'Написать рекрутеру' }).click();
 
     const message = page.getByRole('region', { name: 'Сообщение нанимающему' });

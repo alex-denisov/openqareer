@@ -30,6 +30,7 @@ import type { VacancyLetterTarget } from './VacancyLetterScreen';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import {
   companyNextStepText,
+  companyLocationLabel,
   companySourceSummary,
   formatObservedDate,
 } from './companiesAndPeopleUtils';
@@ -104,7 +105,11 @@ function Row({
 }
 
 function companyMeta(company: CandidateCompanyOpportunity): string {
-  return [company.location, company.industry, companySourceSummary(company.sources)]
+  return [
+    company.location && companyLocationLabel(company.location),
+    company.industry,
+    companySourceSummary(company.sources),
+  ]
     .filter(Boolean)
     .join(' · ');
 }
@@ -213,8 +218,8 @@ function searching(props: CompanyMobilePushProps): boolean {
 function searchText(props: CompanyMobilePushProps): string {
   if (!props.searchConsentGranted) return SEARCH_CONSENT_TEXT;
   if (['ready', 'failed'].includes(props.company.recruiterSearchStatus))
-    return 'В объявлениях и публичных профилях рекрутёра не нашли. Поиск можно повторить.';
-  return 'Рекрутёр не найден. В объявлениях и публичных профилях имени нет, но это не значит, что его нет: поищем среди сотрудников с ролью HR и Talent.';
+    return 'В объявлениях и публичных профилях рекрутера не нашли. Поиск можно повторить.';
+  return 'Рекрутер не найден. В объявлениях и публичных профилях имени нет, но это не значит, что его нет: поищем среди сотрудников с ролью HR и Talent.';
 }
 
 function recruiterSearchCta(props: CompanyMobilePushProps): Cta | null {
@@ -223,7 +228,7 @@ function recruiterSearchCta(props: CompanyMobilePushProps): Cta | null {
   if (searching(props)) {
     return {
       icon: <MagnifyingGlass aria-hidden="true" />,
-      label: 'Ищем рекрутёра…',
+      label: 'Ищем рекрутера…',
       onClick: () => undefined,
       disabled: true,
     };
@@ -238,7 +243,7 @@ function recruiterSearchCta(props: CompanyMobilePushProps): Cta | null {
   const retry = ['ready', 'failed'].includes(company.recruiterSearchStatus);
   return {
     icon: <MagnifyingGlass aria-hidden="true" />,
-    label: retry ? 'Повторить поиск' : 'Найти рекрутёра',
+    label: retry ? 'Повторить поиск' : 'Найти рекрутера',
     onClick: props.onSearch,
   };
 }
@@ -302,13 +307,13 @@ function foundRecruiters(props: CompanyMobilePushProps): PeopleView {
         ) : null}
         {hypotheses > 0 ? (
           <Note icon={<CheckCircle aria-hidden="true" />}>
-            Найдено вероятных рекрутёров: {hypotheses}. Это предположение по должности и компании:
+            Найдено вероятных рекрутеров: {hypotheses}. Это предположение по должности и компании:
             проверьте профиль перед письмом.
           </Note>
         ) : null}
         <section className="vacancy-push-group">
           <h3 className="vacancy-push-cap">
-            {hypotheses > 0 ? 'Вероятные рекрутёры' : 'Рекрутёры'}
+            {hypotheses > 0 ? 'Вероятные рекрутеры' : 'Рекрутеры'}
           </h3>
           <div className="vacancy-push-list">
             {list.map((person) => (
@@ -357,7 +362,7 @@ function withoutLinkedIn(
       <>
         <Note icon={<Info aria-hidden="true" />}>
           Контакты в вашей сети неизвестны: LinkedIn не подключён.
-          {recruiter && fromVacancy ? ` Рекрутёр ${recruiter.fullName} взят из объявления.` : ''}
+          {recruiter && fromVacancy ? ` Рекрутер ${recruiter.fullName} взят из объявления.` : ''}
         </Note>
         {recruiter ? (
           <div className="vacancy-push-list">
@@ -392,10 +397,10 @@ function RecruiterSearchSection({ props }: { readonly props: CompanyMobilePushPr
   if (props.company.vacancyCount === 0) return null;
   return (
     <section className="vacancy-push-group">
-      <h3 className="vacancy-push-cap">Рекрутёр</h3>
+      <h3 className="vacancy-push-cap">Рекрутер</h3>
       {searching(props) ? (
         <p className="vacancy-push-foot" role="status" aria-busy="true">
-          Ищем рекрутёра по вакансиям компании и публичным профилям.
+          Ищем рекрутера по вакансиям компании и публичным профилям.
         </p>
       ) : (
         <Note icon={<Question aria-hidden="true" />}>{searchText(props)}</Note>
