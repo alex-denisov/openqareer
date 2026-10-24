@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
+import { isImportedMemoryId } from './resumeImport';
 import type { VacancyRequirement } from './vacancyRequirements';
 
 export interface VacancyFitFact extends ResumeEvidenceCandidate { readonly candidateId: string }
@@ -45,18 +46,29 @@ export function isSkillRequirement(requirement: VacancyRequirement): boolean {
 function normalizedSource(value: string): string {
   return value.replace(/<[^>]*>/gu, ' ').replace(/&nbsp;/gu, ' ').replace(/&amp;/gu, '&').replace(/&#39;/gu, "'").replace(/&quot;/gu, '"').replace(/\s+/gu, ' ').trim();
 }
+/**
+ * A fact from the candidate's own imported resume or profile is evidence while still `proposed`
+ * (same rule as the pitch, B266): on prod 24.10 a LinkedIn import left all 64 of the owner's facts
+ * proposed, and 787 vacancies read «no_eligible_facts». Facts said only in chat still need a confirm.
+ */
+function isImportedEvidence(fact: VacancyFitFact): boolean {
+  return fact.status === 'proposed' && isImportedMemoryId(fact.id) && isResumeEvidenceEligible({ ...fact, status: 'confirmed' });
+}
 function eligibleFacts(input: VacancyFitInput): readonly VacancyFitFact[] {
   const counts = new Map<string, number>();
   for (const fact of input.facts) counts.set(fact.id, (counts.get(fact.id) ?? 0) + 1);
-  return input.facts.filter((fact) => fact.candidateId === input.candidateId && counts.get(fact.id) === 1 && isResumeEvidenceEligible(fact) && fact.sourceMessageIds.every((id) => id.trim().length > 0));
+  return input.facts.filter((fact) => fact.candidateId === input.candidateId && counts.get(fact.id) === 1 && (isResumeEvidenceEligible(fact) || isImportedEvidence(fact)) && fact.sourceMessageIds.every((id) => id.trim().length > 0));
 }
 
 /** SHA hashes are transient; persistent tenant indexes are keyed HMACs in the store. */
 export function vacancyFitFingerprint(input: VacancyFitInput): { vacancyHash: string; profileHash: string; algorithmVersion: string } {
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const importedIds = input.facts.filter(isImportedEvidence).map((fact) => fact.id);
   return {
     vacancyHash: hash([input.vacancyId, input.description, input.requirements]),
-    profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash]),
+    // B562: a profile whose evidence includes imported facts gets a new key, so its result cached
+    // without them (and the completed queue row) is not reused; confirmed-only profiles keep theirs.
+    profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : [])]),
     algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
   };
 }
