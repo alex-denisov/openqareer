@@ -676,6 +676,7 @@ export default function App() {
           <div className="desktop-auth-overlay">
             <Suspense fallback={<AuthLoadingFallback />}>
               <LoginPage
+                embedded
                 onNavigate={navigate}
                 onSessionChange={handleSessionChange}
                 nextPath="/app"

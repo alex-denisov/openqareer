@@ -50,6 +50,14 @@ describe('AuthPages', () => {
     }
   });
 
+  it('does not add a main landmark inside cabinet or desktop auth containers', () => {
+    for (const Page of [LoginPage, SignupPage]) {
+      const html = renderToStaticMarkup(<main><Page embedded onNavigate={vi.fn()} /></main>);
+      expect(html.match(/<main\b/gu)).toHaveLength(1);
+      expect(html).toContain('<div class="auth-page-container">');
+    }
+  });
+
   it('uses one valid autocomplete purpose per identity field', () => {
     const login = renderToStaticMarkup(<LoginPage onNavigate={vi.fn()} />);
     const signup = renderToStaticMarkup(<SignupPage onNavigate={vi.fn()} />);

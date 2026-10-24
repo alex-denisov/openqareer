@@ -1,5 +1,3 @@
-import '../site/landing.css';
-import './auth.css';
 import React, { useState } from 'react';
 import { preloadCareerWorkspaceShell } from '../shell/careerWorkspaceLoader';
 import { login, register, CoachApiError, type AuthUser } from '../coach/coachApi';
@@ -26,6 +24,8 @@ export interface AuthPageProps {
   notice?: string;
   /** Build-only first paint: disabled and inert until the client mounts. */
   bootstrapPending?: boolean;
+  /** Cabinet and desktop overlays already have their own main landmark. */
+  embedded?: boolean;
 }
 
 function useLoginForm({
@@ -160,10 +160,11 @@ export function LoginPage({
   nextPath = '/app',
   notice,
   bootstrapPending = false,
+  embedded = false,
 }: AuthPageProps) {
-  const isDesktop = isTauriEnvironment();
+  const Container = embedded ? 'div' : 'main';
   return (
-    <main className="auth-page-container">
+    <Container className="auth-page-container">
       {bootstrapPending ? (
         <p className="auth-notice" role="status">
           Загружаем форму…
@@ -193,14 +194,14 @@ export function LoginPage({
               Зарегистрироваться
             </button>
           </span>
-          {!isDesktop ? (
+          {!isTauriEnvironment() ? (
             <button type="button" onClick={() => onNavigate('/')}>
               ← Вернуться на главную
             </button>
           ) : null}
         </div>
       </div>
-    </main>
+    </Container>
   );
 }
 
@@ -403,10 +404,12 @@ export function SignupPage({
   onSessionChange,
   nextPath = '/app',
   bootstrapPending = false,
+  embedded = false,
 }: AuthPageProps) {
   const isDesktop = isTauriEnvironment();
+  const Container = embedded ? 'div' : 'main';
   return (
-    <main className="auth-page-container">
+    <Container className="auth-page-container">
       {bootstrapPending ? (
         <p className="auth-notice" role="status">
           Загружаем форму…
@@ -438,6 +441,6 @@ export function SignupPage({
           ) : null}
         </div>
       </div>
-    </main>
+    </Container>
   );
 }

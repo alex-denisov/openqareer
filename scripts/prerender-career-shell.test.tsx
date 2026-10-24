@@ -69,7 +69,9 @@ describe('production career shell prerender', () => {
       expect(html).toContain('src="/assets/app.js"');
       const stylesheet = html.match(/href="(\/assets\/auth-first-paint-[a-f0-9]+\.css)"/u)?.[1];
       expect(stylesheet).toBeDefined();
-      expect(readFileSync(join(directory, stylesheet!), 'utf8')).toContain('.auth-page-container');
+      const styles = readFileSync(join(directory, stylesheet!), 'utf8');
+      expect(styles).toContain('.auth-page-container');
+      expect(Buffer.byteLength(styles)).toBeLessThanOrEqual(20_000);
       for (const input of html.match(/<input\b[^>]*>/gu) ?? []) expect(input).toContain('disabled=""');
       expect(Buffer.byteLength(html)).toBeLessThanOrEqual(20_000);
     }

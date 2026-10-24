@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { transform } from 'esbuild';
 import { pathToFileURL } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -250,9 +251,11 @@ export const AUTH_PAGES = [
 async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string> {
   // Auth is a lazy route. Reuse its exact styles without putting the legacy
   // landing styles into every public document's initial CSS bundle.
-  const css = (await Promise.all(['landing.css', 'auth.css'].map((file) =>
+  const source = (await Promise.all(['landing.css', 'auth.css'].map((file) =>
     readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
   ))).join('\n');
+  const { code: css } = await transform(source, { loader: 'css', minify: true });
+  if (Buffer.byteLength(css) > 20_000) throw new Error('Auth first-paint CSS exceeds the 20000-byte route budget');
   const path = `/assets/auth-first-paint-${createHash('sha256').update(css).digest('hex').slice(0, 12)}.css`;
   await mkdir(`${distDirectory}/assets`, { recursive: true });
   await writeFile(`${distDirectory}${path}`, css);
