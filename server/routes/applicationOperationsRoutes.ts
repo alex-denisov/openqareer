@@ -85,6 +85,7 @@ type ApplicationOperationStore = Pick<
   ApplicationTrackerMethods,
   | 'listApplicationLabels'
   | 'createApplicationLabel'
+  | 'deleteApplicationLabel'
   | 'listApplicationLabelAssignments'
   | 'assignApplicationLabel'
   | 'removeApplicationLabel'
@@ -347,6 +348,15 @@ async function handleCreateApplicationLabel(deps: RouteDeps, request: FastifyReq
   return { data: label, meta: { requestId: request.id } };
 }
 
+async function handleDeleteApplicationLabel(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const candidate = safeCandidate(deps, request, reply, true);
+  if (!candidate) return undefined;
+  const { labelId } = request.params as { labelId: string };
+  const deleted = applicationStore(deps.candidateStore).deleteApplicationLabel(candidate.id, labelId);
+  if (!deleted) return sendError(reply, request, 404, 'application_label_not_found', 'Метка не найдена.', false);
+  return { data: { deleted: true }, meta: { requestId: request.id } };
+}
+
 async function handleAssignApplicationLabel(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const candidate = safeCandidate(deps, request, reply, true);
   if (!candidate) return undefined;
@@ -462,6 +472,7 @@ export function registerApplicationOperationsRoutes(app: FastifyInstance, deps: 
   app.get('/api/v1/candidate/applications', withDeps(deps, handleListApplications));
   app.post('/api/v1/candidate/application-labels', withDeps(deps, handleCreateApplicationLabel));
   app.get('/api/v1/candidate/application-labels', withDeps(deps, handleListApplicationLabels));
+  app.delete('/api/v1/candidate/application-labels/:labelId', withDeps(deps, handleDeleteApplicationLabel));
   app.put('/api/v1/candidate/applications/:id/labels/:labelId', withDeps(deps, handleAssignApplicationLabel));
   app.delete('/api/v1/candidate/applications/:id/labels/:labelId', withDeps(deps, handleRemoveApplicationLabel));
   app.post('/api/v1/candidate/applications/bulk/preview', withDeps(deps, handleBulkPreview));

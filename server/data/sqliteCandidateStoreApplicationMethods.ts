@@ -140,6 +140,8 @@ export interface ApplicationTrackerMethods
   countCompanyEventsSince(candidateId: string, since: string): number;
   listApplicationLabels(candidateId: string): ApplicationLabel[];
   createApplicationLabel(candidateId: string, name: string, now?: string): ApplicationLabel;
+  /** Удаляет метку кандидата вместе с её назначениями; false — такой метки нет. */
+  deleteApplicationLabel(candidateId: string, labelId: string): boolean;
   listApplicationLabelAssignments(candidateId: string): ApplicationLabelAssignment[];
   assignApplicationLabel(
     candidateId: string,
@@ -479,6 +481,7 @@ function createApplicationOperationsMethods(
   ApplicationTrackerMethods,
   | 'listApplicationLabels'
   | 'createApplicationLabel'
+  | 'deleteApplicationLabel'
   | 'listApplicationLabelAssignments'
   | 'assignApplicationLabel'
   | 'removeApplicationLabel'
@@ -500,8 +503,16 @@ function createApplicationOperationsMethods(
 function createApplicationLabelMethods(
   requireCandidate: RequireCandidate,
   database: DatabaseSync,
-): Pick<ApplicationTrackerMethods, 'listApplicationLabels' | 'createApplicationLabel'> {
+): Pick<ApplicationTrackerMethods, 'listApplicationLabels' | 'createApplicationLabel' | 'deleteApplicationLabel'> {
   return {
+    deleteApplicationLabel(candidateId, labelId) {
+      requireCandidate(candidateId);
+      return inTransaction(database, () => {
+        database.prepare('DELETE FROM application_label_assignments WHERE candidate_id = ? AND label_id = ?').run(candidateId, labelId);
+        const result = database.prepare('DELETE FROM candidate_application_labels WHERE candidate_id = ? AND id = ?').run(candidateId, labelId);
+        return Number(result.changes) > 0;
+      });
+    },
     listApplicationLabels(candidateId) {
       requireCandidate(candidateId);
       const rows = database.prepare(`
