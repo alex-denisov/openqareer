@@ -137,7 +137,7 @@
   border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-sm);
   background: var(--career-surface);
-  font-size: var(--career-text-xs);
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
