@@ -304,7 +304,6 @@ function MobileUpgradeAction({
   const currentIdx = TIER_ORDER.indexOf(activeTierId);
   const targetIdx = TIER_ORDER.indexOf(level.id);
   const isDown = targetIdx < currentIdx;
-  if (isDown && !level.request && level.id !== 'free') return null;
 
   return (
     <div>
@@ -319,7 +318,7 @@ function MobileUpgradeAction({
         ) : (
           <>
             <TrendUp size={18} aria-hidden="true" />
-            Перейти на {level.name}
+            {isDown ? `Понизить до ${level.name}` : `Перейти на ${level.name}`}
           </>
         )}
       </button>

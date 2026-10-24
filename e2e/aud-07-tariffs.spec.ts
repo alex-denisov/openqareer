@@ -58,7 +58,7 @@ test('AUD-07: return to Free disables renewal and persists after reload', async 
   expect(unmatched).toEqual([]);
 });
 
-test('AUD-07: lower paid tiers offer no downgrade button', async ({
+test('AUD-07: paid downgrade stops at the provider boundary without changing the plan', async ({
   page,
 }, testInfo) => {
   const viewport = testInfo.project.name === 'mobile-390' ? '390' : '1440';
@@ -79,16 +79,18 @@ test('AUD-07: lower paid tiers offer no downgrade button', async ({
   await openTariffs(page);
 
   if (isMobile) await page.getByRole('button', { name: /^Basic\b/u }).click();
-  await expect(page.getByRole('button', { name: /^Понизить до/u })).toHaveCount(0);
-  await expect(page.getByText(/пока недоступн/u)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Понизить до Basic', exact: true }).click();
+  const unavailable = page.getByTestId('tariff-plan-change-unavailable');
+  await expect(unavailable).toContainText('Текущий тариф не изменён');
+  await expect(unavailable).not.toContainText('пока недоступн');
   expect(checkoutRequests).toBe(0);
-  await capture(page, 'paid-downgrade-absent', viewport);
+  await capture(page, 'paid-downgrade-unavailable', viewport);
   await page.setViewportSize({ width: 280, height: 844 });
   await expectNoHorizontalOverflow(page);
   expect(unmatched).toEqual([]);
 });
 
-test('AUD-07: disabled renewal shows no placeholder button and stays disabled', async ({
+test('AUD-07: disabled renewal reports the manual-payment boundary and stays disabled', async ({
   page,
 }, testInfo) => {
   const viewport = testInfo.project.name === 'mobile-390' ? '390' : '1440';
@@ -102,9 +104,15 @@ test('AUD-07: disabled renewal shows no placeholder button and stays disabled', 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await openTariffs(page);
 
-  await expect(page.getByRole('button', { name: 'Включить автопродление', exact: true })).toHaveCount(0);
+  const enableRenewal = page.getByRole('button', { name: 'Включить автопродление', exact: true });
+  await expect(enableRenewal).toBeVisible();
+  await capture(page, 'renewal-unavailable', viewport);
+  await enableRenewal.click();
   await expect(page.getByText(/пока недоступн/u)).toHaveCount(0);
-  await capture(page, 'renewal-without-placeholder', viewport);
+  await expect(page.locator('.career-billing-error[role="status"]:visible')).toContainText(
+    'Оплатите следующий период вручную',
+  );
+  await capture(page, 'renewal-prepared', viewport);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openTariffs(page);

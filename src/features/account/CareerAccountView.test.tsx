@@ -137,26 +137,27 @@ describe('CareerAccountView uses account state and the application shell surface
     const browserHtml = renderAccount({ initialSection: 'app', isDesktopApp: false });
     expect(appHtml).toContain('Приложение');
     expect(appHtml).toMatch(/openqareer \d+\.\d+\.\d+/u);
-    expect(appHtml).not.toContain('Настройка пока недоступна');
-    expect(appHtml).not.toContain('Проверить обновления');
+    expect(appHtml).toContain('Проверить обновления');
     expect(appHtml).not.toContain('пока недоступн');
     expect(appHtml).not.toContain('сборка не помечена');
     expect(browserHtml).not.toContain('>Приложение</button>');
   });
 
-  it('shows no placeholders for unbuilt connections or sign-in methods (owner rule 24.10)', () => {
+  it('keeps the laid-out functions but drops «unavailable» captions (owner rule 24.10)', () => {
     const pages = [
       renderAccount({ initialSection: 'conn', isDesktopApp: true }),
       renderAccount({ initialSection: 'prof', isDesktopApp: true }),
       renderAccount({ isMobile: true, initialMobileView: 'conn' }),
       renderAccount({ isMobile: true, initialMobileView: 'prof' }),
     ];
-    for (const html of pages) {
-      expect(html).not.toMatch(/Скоро|Недоступно|пока недоступн|Другие площадки|Календарь|Двухфакторная|Ключи доступа/u);
-    }
-    expect(pages[0]).toContain('hh.ru');
-    expect(pages[0]).toContain('Почта');
-    expect(pages[1]).toContain('Сменить пароль');
+    for (const html of pages) expect(html).not.toMatch(/Скоро|Недоступно|пока недоступн/u);
+    expect(pages[0]).toContain('Другие площадки');
+    expect(pages[0]).toContain('Календарь');
+    expect(pages[0]).toContain('Telegram');
+    expect(pages[1]).toContain('Двухфакторная защита');
+    expect(pages[1]).toContain('Ключи доступа (passkeys)');
+    expect(pages[2]).toContain('Календарь');
+    expect(pages[3]).toContain('Двухфакторная защита');
   });
 
   it('uses the approved mobile connections layout and keeps app settings out of it', () => {

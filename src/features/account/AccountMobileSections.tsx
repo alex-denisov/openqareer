@@ -211,6 +211,20 @@ function ProfileSecurityGroup({
   return (
     <>
       <div className="career-account-mobile-group">
+        <div className="career-account-mobile-row">
+          <div className="career-account-row-content">
+            <span className="career-account-row-label">Двухфакторная защита</span>
+            <span className="career-account-row-desc">код из приложения при входе</span>
+          </div>
+        </div>
+        <div className="career-account-mobile-row">
+          <div className="career-account-row-content">
+            <span className="career-account-row-label">Ключи доступа</span>
+            <span className="career-account-row-desc">вход по отпечатку или Face ID</span>
+          </div>
+        </div>
+      </div>
+      <div className="career-account-mobile-group">
         <button type="button" className="career-account-mobile-row" onClick={onEditTimezone}>
           <div className="career-account-row-content">
             <span className="career-account-row-label">Часовой пояс</span>
@@ -398,6 +412,13 @@ function ConnectedPlatformsGroup({
           <CaretRight size={18} aria-hidden="true" />
         </div>
       </button>
+      <div className="career-account-mobile-row">
+        <div className="career-account-row-content">
+          <span className="career-account-row-label">Другие площадки</span>
+          <span className="career-account-row-desc">Подключение других площадок.</span>
+        </div>
+        <span className="career-account-tag is-dim">Не подключено</span>
+      </div>
     </div>
   );
 }
@@ -435,12 +456,11 @@ function mobileConnectionDetails(connection: CandidateConnection | undefined, lo
 function ChannelsGroup({
   emailVerified,
   emailAvailable,
-  telegramAvailable,
   telegramConnected,
   onOpenNotifications,
 }: Pick<
   MobileConnectionsProps,
-  'emailVerified' | 'emailAvailable' | 'telegramAvailable' | 'telegramConnected' | 'onOpenNotifications'
+  'emailVerified' | 'emailAvailable' | 'telegramConnected' | 'onOpenNotifications'
 >) {
   return (
     <div className="career-account-mobile-group">
@@ -449,9 +469,11 @@ function ChannelsGroup({
         emailAvailable={emailAvailable}
         onOpen={onOpenNotifications}
       />
-      {telegramAvailable || telegramConnected ? (
-        <TelegramChannelRow connected={telegramConnected} onOpen={onOpenNotifications} />
-      ) : null}
+      <CalendarChannelRow />
+      <TelegramChannelRow
+        connected={telegramConnected}
+        onOpen={onOpenNotifications}
+      />
     </div>
   );
 }
@@ -461,17 +483,26 @@ function EmailChannelRow({
   emailAvailable,
   onOpen,
 }: Pick<MobileConnectionsProps, 'emailVerified' | 'emailAvailable'> & { readonly onOpen: () => void }) {
-  const status = emailVerified ? 'Подтверждена' : 'Не подтверждена';
+  const status = emailVerified ? (emailAvailable ? 'Подключено' : 'Подтверждена') : 'Не подтверждена';
   const description = emailVerified
     ? emailAvailable
       ? 'Почта для входа подтверждена. Канал уведомлений доступен.'
-      : 'Почта для входа подтверждена.'
+      : 'Почта подтверждена, но канал уведомлений недоступен.'
     : 'Для ответов работодателей нужна подтверждённая почта.';
   return (
     <button type="button" className="career-account-mobile-row" onClick={onOpen}>
       <ChannelRowContent title="Почта" description={description} />
       <ChannelRowAction status={status} connected={Boolean(emailVerified && emailAvailable)} />
     </button>
+  );
+}
+
+function CalendarChannelRow() {
+  return (
+    <div className="career-account-mobile-row">
+      <ChannelRowContent title="Календарь" description="Календарь не подключён." />
+      <span className="career-account-tag is-dim">Не подключено</span>
+    </div>
   );
 }
 
@@ -517,7 +548,6 @@ export function MobileAccountConnections({
   notice,
   emailVerified,
   emailAvailable,
-  telegramAvailable,
   telegramConnected,
   onBack,
   onGoLinkedIn,
@@ -546,7 +576,6 @@ export function MobileAccountConnections({
       <ChannelsGroup
         emailVerified={emailVerified}
         emailAvailable={emailAvailable}
-        telegramAvailable={telegramAvailable}
         telegramConnected={telegramConnected}
         onOpenNotifications={onOpenNotifications}
       />
@@ -642,16 +671,14 @@ function MobileConsentRow({
         <span className="career-account-row-label">{item.title}</span>
         <span className="career-account-row-desc">{status}</span>
       </div>
-      {unknown ? null : (
-        <button
-          type="button"
-          className="career-btn is-sm"
-          disabled={disabled || (granted ? !item.revokeable : !item.grantable)}
-          onClick={onToggle}
-        >
-          {granted ? 'Отозвать' : 'Дать согласие'}
-        </button>
-      )}
+      <button
+        type="button"
+        className="career-btn is-sm"
+        disabled={disabled || unknown || (granted ? !item.revokeable : !item.grantable)}
+        onClick={onToggle}
+      >
+        {granted ? 'Отозвать' : 'Дать согласие'}
+      </button>
     </div>
   );
 }

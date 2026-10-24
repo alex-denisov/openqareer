@@ -86,6 +86,12 @@ function useTariffUpgradeCallbacks(
       onSelectTier?.(id);
       return;
     }
+    const targetRank = TARIFF_LEVELS.findIndex((level) => level.id === id);
+    const activeRank = TARIFF_LEVELS.findIndex((level) => level.id === activeTier);
+    if (targetRank < activeRank && next.kind === 'plan') {
+      setContext({ kind: 'plan-change-unavailable', planId: next.planId });
+      return;
+    }
     setContext(next);
   };
   const requestTier = (id: TariffTierId) => {

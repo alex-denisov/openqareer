@@ -1,15 +1,19 @@
 import type { ReactNode } from 'react';
 import {
+  ArrowsClockwise,
   Briefcase,
+  CalendarBlank,
   CheckCircle,
   Desktop,
   DownloadSimple,
   EnvelopeSimple,
+  Fingerprint,
   Globe,
   LinkedinLogo,
   LockKey,
   PaperPlaneTilt,
   PencilSimple,
+  ShieldCheck,
   SignIn,
   SlidersHorizontal,
   Trash,
@@ -134,6 +138,18 @@ function SecurityPasswordAnd2faRows({
           Сменить пароль
         </button>
       </div>
+      <div className="career-account-row">
+        <div className="career-account-row-content">
+          <span className="career-account-row-label">Двухфакторная защита</span>
+          <span className="career-account-row-desc">Код из приложения при входе</span>
+        </div>
+        <div className="career-account-row-right">
+          <button type="button" className="career-btn is-sm" disabled>
+            <ShieldCheck size={16} aria-hidden="true" />
+            Включить
+          </button>
+        </div>
+      </div>
     </>
   );
 }
@@ -145,6 +161,18 @@ function SecurityPasskeyAndTimezoneRows({
 }: Pick<ProfileSectionProps, 'timezone' | 'busy' | 'onEditTimezone'>) {
   return (
     <>
+      <div className="career-account-row">
+        <div className="career-account-row-content">
+          <span className="career-account-row-label">Ключи доступа (passkeys)</span>
+          <span className="career-account-row-desc">Вход по отпечатку или Face ID</span>
+        </div>
+        <div className="career-account-row-right">
+          <button type="button" className="career-btn is-sm" disabled>
+            <Fingerprint size={16} aria-hidden="true" />
+            Добавить
+          </button>
+        </div>
+      </div>
       <div className="career-account-row">
         <div className="career-account-row-content">
           <span className="career-account-row-label">Часовой пояс</span>
@@ -345,7 +373,7 @@ function AccountConnectionRow({
   readonly details: string;
   readonly tag: 'ok' | 'warn' | 'dim';
   readonly tagLabel: string;
-  readonly actionLabel?: string;
+  readonly actionLabel: string;
   readonly disabled?: boolean;
   readonly onAction?: () => void;
 }) {
@@ -362,12 +390,10 @@ function AccountConnectionRow({
       </div>
       <div className="career-account-row-right">
         <span className={`career-account-tag is-${tag}`}>{tagLabel}</span>
-        {actionLabel ? (
-          <button type="button" className="career-btn is-sm" disabled={disabled} onClick={onAction}>
-            {actionLabel === 'Управлять' ? <SlidersHorizontal size={16} aria-hidden="true" /> : null}
-            {actionLabel}
-          </button>
-        ) : null}
+        <button type="button" className="career-btn is-sm" disabled={disabled} onClick={onAction}>
+          {actionLabel === 'Управлять' ? <SlidersHorizontal size={16} aria-hidden="true" /> : null}
+          {actionLabel}
+        </button>
       </div>
     </div>
   );
@@ -453,27 +479,45 @@ function SecondaryConnectionsRows(props: ConnectionsSectionProps) {
   return (
     <>
       <AccountConnectionRow
+        icon={<Globe size={20} />}
+        title="Другие площадки"
+        details="Подключение других площадок."
+        tag="dim"
+        tagLabel="Не подключено"
+        actionLabel="Подключить"
+        disabled
+      />
+      <AccountConnectionRow
         icon={<EnvelopeSimple size={20} />}
         title="Почта"
         details={props.emailVerified ? 'Почта для входа подтверждена.' : 'Нужна подтверждённая почта для ответов работодателей.'}
         tag={props.emailVerified ? 'ok' : 'dim'}
         tagLabel={props.emailVerified ? 'Подключено' : 'Не подтверждена'}
-        actionLabel={props.emailAvailable ? 'Уведомления' : undefined}
+        actionLabel="Уведомления"
+        disabled={!props.emailAvailable}
         onAction={props.onOpenNotifications}
       />
-      {props.telegramConnected || props.telegramAvailable ? (
-        <AccountConnectionRow
-          icon={<PaperPlaneTilt size={20} />}
-          title="Telegram"
-          details={props.telegramConnected
-            ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
-            : 'Подключите бота, чтобы получать выбранные уведомления.'}
-          tag={props.telegramConnected ? 'ok' : 'dim'}
-          tagLabel={props.telegramConnected ? 'Подключено' : 'Не подключено'}
-          actionLabel={props.telegramConnected ? 'Уведомления' : 'Подключить'}
-          onAction={props.telegramConnected ? props.onOpenNotifications : props.onConnectTelegram}
-        />
-      ) : null}
+      <AccountConnectionRow
+        icon={<CalendarBlank size={20} />}
+        title="Календарь"
+        details="Календарь пока не подключён."
+        tag="dim"
+        tagLabel="Не подключено"
+        actionLabel="Подключить"
+        disabled
+      />
+      <AccountConnectionRow
+        icon={<PaperPlaneTilt size={20} />}
+        title="Telegram"
+        details={props.telegramConnected
+          ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
+          : 'Подключите бота, чтобы получать выбранные уведомления.'}
+        tag={props.telegramConnected ? 'ok' : 'dim'}
+        tagLabel={props.telegramConnected ? 'Подключено' : 'Не подключено'}
+        actionLabel={props.telegramConnected ? 'Уведомления' : 'Подключить'}
+        disabled={!props.telegramConnected && !props.telegramAvailable}
+        onAction={props.telegramConnected ? props.onOpenNotifications : props.onConnectTelegram}
+      />
     </>
   );
 }
@@ -560,16 +604,14 @@ function ConsentRow({
       </div>
       <div className="career-account-row-right">
         <ConsentStatus item={item} />
-        {unavailable ? null : (
-          <button
-            type="button"
-            className="career-btn is-sm"
-            disabled={disabled || (revoke ? !item.revokeable : !item.grantable)}
-            onClick={onToggle}
-          >
-            {revoke ? 'Отозвать' : 'Дать согласие'}
-          </button>
-        )}
+        <button
+          type="button"
+          className="career-btn is-sm"
+          disabled={disabled || unavailable || (revoke ? !item.revokeable : !item.grantable)}
+          onClick={onToggle}
+        >
+          {revoke ? 'Отозвать' : 'Дать согласие'}
+        </button>
       </div>
     </div>
   );
@@ -676,7 +718,7 @@ const APP_TOGGLES = [
 function AppTogglesList({ settings }: { readonly settings: AccountAppSettings }) {
   return (
     <>
-      {APP_TOGGLES.filter((toggle) => settings[toggle.key] !== null).map((toggle) => (
+      {APP_TOGGLES.map((toggle) => (
         <AppToggleRow
           key={toggle.key}
           id={toggle.id}
@@ -700,6 +742,7 @@ function AppToggleRow({
   readonly checked: boolean | null;
   readonly enabledDescription: string;
 }) {
+  const available = checked !== null;
   return (
     <label htmlFor={id} className="career-account-row">
       <div className="career-account-row-content">
@@ -712,6 +755,7 @@ function AppToggleRow({
         id={id}
         type="checkbox"
         checked={checked ?? false}
+        disabled={!available}
         aria-label={label}
         readOnly
       />
@@ -733,6 +777,14 @@ export function AccountAppSettingsSection({ settings }: { readonly settings: Acc
             <span className="career-account-row-label">Версия</span>
             <span className="career-account-row-desc">{settings.version}</span>
           </div>
+          <button
+            type="button"
+            className="career-btn is-sm"
+            disabled
+          >
+            <ArrowsClockwise size={16} aria-hidden="true" />
+            Проверить обновления
+          </button>
         </div>
         {settings.freshnessLine ? <p className="career-account-row-desc">{settings.freshnessLine}</p> : null}
         <AppTogglesList settings={settings} />

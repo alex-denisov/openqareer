@@ -152,9 +152,9 @@ test.describe('B475 FirstRun in the live career shell', () => {
 
     await page.getByTestId('source-opt-file').click();
     await page.getByTestId('source-next-btn').click();
-    await expect(page.getByTestId('pick-files-btn')).toBeVisible();
-    await expect(page.getByTestId('pick-photo-btn')).toHaveCount(0);
-    await expect(page.getByTestId('scan-doc-btn')).toHaveCount(0);
+    await expect(page.getByTestId('pick-photo-btn')).toBeVisible();
+    await expect(page.getByTestId('scan-doc-btn')).toBeVisible();
+    await expect(page.getByText(/пока недоступн/u)).toHaveCount(0);
     await page.getByRole('button', { name: 'Отмена' }).click();
 
     await page.getByTestId('source-opt-talk').click();

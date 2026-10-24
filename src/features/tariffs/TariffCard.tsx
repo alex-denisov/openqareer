@@ -137,11 +137,14 @@ function TariffActionButton({
       </button>
     );
   }
-  if (isDown) return null;
   return (
     <button className="career-btn is-sm" type="button" onClick={onAction}>
-      <TrendUp size={16} aria-hidden="true" />
-      Перейти на {level.name}
+      {isDown ? (
+        <CaretDown size={16} aria-hidden="true" />
+      ) : (
+        <TrendUp size={16} aria-hidden="true" />
+      )}
+      {isDown ? `Понизить до ${level.name}` : `Перейти на ${level.name}`}
     </button>
   );
 }

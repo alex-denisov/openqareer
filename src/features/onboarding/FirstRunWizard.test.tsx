@@ -72,14 +72,13 @@ describe('FirstRunWizard component tests', () => {
     expect(html).toContain('Рассказать консультанту');
   });
 
-  it('renders only the working file choice and a PDF file input', () => {
+  it('renders the three upload choices and a PDF file input', () => {
     const html = renderToStaticMarkup(
       <FirstRunSourceMenu isOpen onClose={() => undefined} onPickFile={() => undefined} />,
     );
     expect(html).toContain('Выбрать в «Файлах»');
-    expect(html).not.toContain('Фото из библиотеки');
-    expect(html).not.toContain('Сканировать документ');
-    expect(html).not.toContain('пока недоступн');
+    expect(html).toContain('Фото из библиотеки');
+    expect(html).toContain('Сканировать документ');
     expect(html).toContain(
       'application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx',
     );

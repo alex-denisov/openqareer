@@ -30,7 +30,7 @@ export function useCareerAccountViewModel(props: CareerAccountViewProps): Accoun
   const devices = useMemo(() => mapAccountDevices(props.account), [props.account]);
   const displayName = props.account?.displayName ?? props.user.displayName;
   const email = props.account?.email ?? props.user.email;
-  const connectionCount = connectionCountLabel(props.connections, props.user.emailVerified, notifications, notifications.settingsReady);
+  const connectionCount = connectionCountLabel(props.connections, props.user.emailVerified, notifications.telegramConnected, notifications.settingsReady);
   const content = useAccountViewContent(props, sections, notifications);
   const { onOpenDialog, onCloseDialog } = dialogs;
   const { confirmConsent } = capabilityConsents;
@@ -191,13 +191,10 @@ function mobileViewForSection(section: AccountSectionId): MobileAccountViewId {
 function connectionCountLabel(
   connections: readonly CandidateConnection[] | undefined,
   emailVerified: boolean | undefined,
-  telegram: { readonly telegramConnected: boolean; readonly telegramAvailable: boolean },
+  telegramConnected: boolean,
   settingsReady: boolean,
 ): string | null {
   if (!connections || !settingsReady || emailVerified === undefined) return null;
   const count = connections.filter((connection) => connection.status === 'connected').length;
-  // Rows shown on the tab: LinkedIn, hh.ru, email and Telegram when it can be connected.
-  const shownTelegram = telegram.telegramConnected || telegram.telegramAvailable;
-  const total = 3 + Number(shownTelegram);
-  return `${count + Number(emailVerified) + Number(telegram.telegramConnected)} из ${total}`;
+  return `${count + Number(emailVerified) + Number(telegramConnected)} из 6`;
 }
