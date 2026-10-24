@@ -1,3 +1,4 @@
+import { AdminSeoSummaryView } from './AdminSeoSummaryView';
 import { AdminBulkLlmSpend } from './AdminBulkLlmSpend';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
@@ -93,22 +94,18 @@ function AdminNav({
   activeTab,
   onSelectTab,
 }: {
-  activeTab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin';
-  onSelectTab: (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin') => void;
+  activeTab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo';
+  onSelectTab: (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo') => void;
 }) {
   return (
     <nav className="admin-nav" aria-label="Разделы администратора">
       <p className="admin-nav-label">Разделы</p>
-      <button
-        type="button"
-        className={`admin-nav-item ${activeTab === 'users' ? 'is-active' : ''}`}
+      <button type="button" className={`admin-nav-item ${activeTab === 'users' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('users')}
       >
         <UsersThree size={16} aria-hidden="true" /> Учётные записи
       </button>
-      <button
-        type="button"
-        className={`admin-nav-item ${activeTab === 'vacancies' ? 'is-active' : ''}`}
+      <button type="button" className={`admin-nav-item ${activeTab === 'vacancies' ? 'is-active' : ''}`}
         onClick={() => onSelectTab('vacancies')}
       >
         <Briefcase size={16} aria-hidden="true" /> База вакансий
@@ -133,6 +130,10 @@ function AdminNav({
         onClick={() => onSelectTab('linkedin')}
       >
         <LinkedinLogo size={16} aria-hidden="true" /> Аккаунты LinkedIn
+      </button>
+      <button type="button" className={`admin-nav-item ${activeTab === 'seo' ? 'is-active' : ''}`}
+        onClick={() => onSelectTab('seo')}>
+        <Broadcast size={16} aria-hidden="true" /> SEO-сводка
       </button>
     </nav>
   );
@@ -179,11 +180,11 @@ function AdminVacancySourcesTab() {
   );
 }
 
-function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' {
+function getInitialAdminTab(): 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo' {
   if (typeof window === 'undefined') return 'users';
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
-  if (tab === 'vacancies' || tab === 'sources' || tab === 'audit' || tab === 'linkedin') return tab;
+  if (tab === 'vacancies' || tab === 'sources' || tab === 'audit' || tab === 'linkedin' || tab === 'seo') return tab;
   if (params.get('vacancyId')) return 'vacancies';
   return 'users';
 }
@@ -198,7 +199,7 @@ export function AdminConsole({
   const isCareerPartner = session?.role === 'CareerPartner';
   const isAuthorized = isAdmin || isCareerPartner;
   const [activeTab, setActiveTab] = useState<
-    'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin'
+    'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo'
   >(getInitialAdminTab);
 
   useEffect(() => {
@@ -209,7 +210,7 @@ export function AdminConsole({
     if (!sessionPending && !isAuthorized) onUnauthorized?.();
   }, [isAuthorized, onUnauthorized, sessionPending]);
 
-  const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin') => {
+  const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin' | 'seo') => {
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -264,6 +265,7 @@ export function AdminConsole({
             </>
           )}
           {activeTab === 'linkedin' && <AdminLinkedinPoolView />}
+          {activeTab === 'seo' && <AdminSeoSummaryView />}
         </div>
       </div>
     </AdminFrame>

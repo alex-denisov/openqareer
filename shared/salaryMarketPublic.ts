@@ -8,6 +8,7 @@ export function salaryRolePath(role: string): string | undefined {
 import { salarySkillTrendHasChanges } from './salaryMarketSnapshot';
 import type {
   SalaryMarketGrade,
+  SalaryMarketLocation,
   SalaryMarketProfession,
   SalaryMarketSnapshot,
 } from './salaryMarketSnapshot';
@@ -43,6 +44,38 @@ export function selectSalaryGrade(
     : null;
 }
 
+export const SALARY_LOCATION_LABELS: Readonly<Record<SalaryMarketLocation, string>> = {
+  all: 'Все страны',
+  remote: 'Удалённо',
+  europe: 'Европа',
+  uae: 'ОАЭ',
+  cis: 'СНГ',
+};
+export function isSalaryMarketLocation(value: string): value is SalaryMarketLocation {
+  return Object.hasOwn(SALARY_LOCATION_LABELS, value);
+}
+/** Region first, then grade: neither view borrows the other cohort's denominator. */
+export function selectSalaryLocation(
+  snapshot: SalaryMarketSnapshot | null,
+  location: SalaryMarketLocation = 'all',
+): SalaryMarketSnapshot | null {
+  if (!snapshot || location === 'all') return snapshot;
+  const slice = snapshot.locationSlices?.find(
+    (row) => row.location === location && row.sampleSize > 0,
+  );
+  return slice
+    ? {
+        ...snapshot,
+        sampleSize: slice.sampleSize,
+        skills: slice.skills,
+        salary: slice.salary,
+        gradeSlices: slice.gradeSlices,
+        skillQuarterlyTrend: slice.skillQuarterlyTrend,
+        quarterlyTrend: slice.quarterlyTrend,
+      }
+    : null;
+}
+
 /** Explicit display abbreviation; the complete source stays in the prepared snapshot/catalog. */
 export function salaryDisplayLabel(value: string, limit = 40): string {
   const prefix: string[] = [];
@@ -59,4 +92,15 @@ export function salaryRoleLabel(value: {
   readonly profession?: SalaryMarketProfession;
 }): string {
   return salaryDisplayLabel(value.roleLabel, value.profession?.kind === 'b267' ? 64 : 40);
+}
+
+/** Prepared public projection; never carries candidate input or profile facts. */
+export interface SalaryMarketSkillSummary {
+  readonly role: string;
+  readonly grade: SalaryMarketGrade | null;
+  readonly location?: SalaryMarketLocation;
+  readonly updatedAt: string;
+  readonly sampleSize: number;
+  readonly source: SalaryMarketSnapshot['source'];
+  readonly skills: SalaryMarketSnapshot['skills'];
 }

@@ -25,13 +25,16 @@ async function saveRenderedHtml(page: Page, name: string): Promise<void> {
 async function openNewCandidate(page: Page) {
   await mockSignedInCabinet(page, { candidateId: 'candidate-s11-wiz' });
   let savedPayload: Record<string, unknown> | null = null;
-  await page.route('**/api/v1/candidate/workspace', async (route) => {
+  await page.route(/\/api\/v1\/candidate\/workspace(?:\/complete)?$/u, async (route) => {
     const request = route.request();
     if (request.method() === 'GET') {
       await route.fulfill({ json: { data: savedPayload } });
       return;
     }
-    if (request.method() === 'PUT') {
+    if (
+      request.method() === 'PUT' ||
+      (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/complete'))
+    ) {
       const payload = request.postDataJSON() as { workspace: Record<string, unknown> };
       savedPayload = payload.workspace;
       await route.fulfill({ json: { data: savedPayload } });

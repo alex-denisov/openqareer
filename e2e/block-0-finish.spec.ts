@@ -120,9 +120,16 @@ test('first run reads a real DOCX document and retains its text for completion',
 }) => {
   await mockSignedInCabinet(page);
   let savedWorkspace: Record<string, unknown> | null = null;
+  let completionRequests = 0;
   await page.route('**/api/v1/candidate/workspace', (route) => {
     if (route.request().method() === 'PUT')
       savedWorkspace = route.request().postDataJSON().workspace;
+    return route.fulfill({ json: { data: savedWorkspace } });
+  });
+  await page.route('**/api/v1/candidate/workspace/complete', (route) => {
+    expect(route.request().method()).toBe('POST');
+    completionRequests += 1;
+    savedWorkspace = route.request().postDataJSON().workspace;
     return route.fulfill({ json: { data: savedWorkspace } });
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -146,8 +153,10 @@ test('first run reads a real DOCX document and retains its text for completion',
   if (page.viewportSize()!.width === 390) await page.getByTestId('source-next-btn').click();
   else await page.getByTestId('source-opt-file').click();
   await expect(page.getByTestId('context-submit-btn')).toBeVisible();
+  expect(completionRequests).toBe(0);
   await page.getByTestId('context-submit-btn').click();
   await expect.poll(() => savedWorkspace?.resumeText).toBe(text);
+  expect(completionRequests).toBe(1);
   expect(savedWorkspace?.resumeFileName).toBe('resume.docx');
   expect(savedWorkspace?.resumePageCount).toBeUndefined();
   await expect(page.getByTestId('first-run-wizard')).toHaveCount(0);

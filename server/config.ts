@@ -1,5 +1,5 @@
 import { readVertexConfig, type VertexConfig } from './providers/vertexAi';
-import { dirname } from 'node:path';
+import { dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS } from '../shared/applicationArchive';
@@ -106,6 +106,7 @@ const configSchema = z.object({
       .default(DEFAULT_MX_CHECK_BYPASS_DOMAINS.join(','))
       .transform(parseEmailMxBypassDomains),
   ),
+  OPENQAREER_SEO_SUMMARY_SNAPSHOT_FILE: blankAsUnset(z.string().max(4096).refine(isAbsolute)),
   OPENQAREER_PUBLIC_URL: blankAsUnset(z.string().url().max(2_048)),
   OPENQAREER_ROBOKASSA_MERCHANT_LOGIN: blankAsUnset(z.string().trim().min(1).max(200)),
   OPENQAREER_ROBOKASSA_PASSWORD_1: blankAsUnset(z.string().min(1).max(2_048)),
@@ -257,6 +258,7 @@ export interface ServerConfig {
   telegramOwnerChatId?: string;
   telegramWebhookSecret?: string;
   publicBaseUrl?: string;
+  seoSummarySnapshotFile?: string;
   previewToken: string;
   dataEncryptionKey: Buffer;
   databasePath: string;
@@ -424,6 +426,7 @@ export function readServerConfig(
     ...(parsed.OPENQAREER_TELEGRAM_WEBHOOK_SECRET
       ? { telegramWebhookSecret: parsed.OPENQAREER_TELEGRAM_WEBHOOK_SECRET }
       : {}),
+    ...(parsed.OPENQAREER_SEO_SUMMARY_SNAPSHOT_FILE ? { seoSummarySnapshotFile: parsed.OPENQAREER_SEO_SUMMARY_SNAPSHOT_FILE } : {}),
     ...(parsed.OPENQAREER_PUBLIC_URL ? { publicBaseUrl: parsed.OPENQAREER_PUBLIC_URL } : {}),
     previewToken: parsed.OPENQAREER_PREVIEW_API_TOKEN,
     dataEncryptionKey: parsed.OPENQAREER_DATA_ENCRYPTION_KEY,

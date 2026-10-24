@@ -791,6 +791,9 @@ export interface CandidateStore {
   /** Недавние посетители с явной кампанией; id остаётся только в памяти HTTP-процесса. */
   listRecentCampaignCandidateIds?(since: string): string[];
 
+  completeCandidateWorkspace?(candidateId: string, workspace: CandidateWorkspaceState): CandidateWorkspaceState;
+  getSeoGoalSummary?(days?: number): import('../../shared/seoSummary').SeoGoalSummary;
+
   saveCandidateWorkspace(
     candidateId: string,
     workspace: CandidateWorkspaceState,

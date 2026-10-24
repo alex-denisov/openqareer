@@ -100,6 +100,22 @@ describe('createIntakeCompletion', () => {
     await vi.waitFor(() => expect(setImporting).toHaveBeenLastCalledWith(false));
   });
 
+  it('keeps the wizard open when explicit server completion fails, then closes on a successful retry', async () => {
+    const closeIntake = vi.fn();
+    const refreshCabinet = vi.fn();
+    const setImporting = vi.fn();
+    const save = vi.fn().mockRejectedValueOnce(new Error('server_unavailable')).mockResolvedValue(undefined);
+    const complete = createIntakeCompletion({ save, closeIntake, refreshCabinet, setImporting, closeAfterSave: true });
+    complete(input);
+    expect(closeIntake).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(setImporting).toHaveBeenLastCalledWith(false));
+    expect(closeIntake).not.toHaveBeenCalled();
+    expect(refreshCabinet).not.toHaveBeenCalled();
+    complete(input);
+    await vi.waitFor(() => expect(closeIntake).toHaveBeenCalledOnce());
+    expect(refreshCabinet).toHaveBeenCalledOnce();
+  });
+
   it('never leaves the import marked as running when the save is synchronous', () => {
     const setImporting = vi.fn();
 

@@ -1,3 +1,4 @@
+import { recordCandidateGoal, readSeoGoalSummary } from './seoGoalRepository';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
@@ -687,6 +688,17 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.workspaceRepository.save(candidateId, workspace);
   }
+
+  completeCandidateWorkspace(candidateId: string, workspace: CandidateWorkspaceState): CandidateWorkspaceState {
+    this.requireCandidate(candidateId);
+    return this.transaction(() => {
+      const saved = this.workspaceRepository.save(candidateId, workspace);
+      recordCandidateGoal(this.database, candidateId, 'onboarding_completed', 'wizard', 'wizard_completion', new Date().toISOString());
+      return saved;
+    });
+  }
+
+  getSeoGoalSummary = (days = 28) => readSeoGoalSummary(this.database, days);
 
   saveImportWalk: CandidateStore['saveImportWalk'] = (candidateId, walk) =>
     this.conversations.importSources.saveWalk(this.requireCandidate(candidateId).id, walk);

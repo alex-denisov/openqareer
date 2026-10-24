@@ -11,6 +11,8 @@ interface SourceRow {
   readonly role_slug: string | null;
   readonly skills_json: string;
   readonly salary_json: string | null;
+  readonly location: string | null;
+  readonly is_remote: number;
 }
 export interface ClassifiedSalaryRow {
   readonly cluster_id: string;
@@ -23,6 +25,8 @@ export interface ClassifiedSalaryRow {
   readonly marker: string | null;
   readonly skills_json: string;
   readonly salary_json: string | null;
+  readonly location: string | null;
+  readonly is_remote: number;
 }
 
 /** Maintenance-only classification: 500 public source rows in JS, the complete projection in SQLite. */
@@ -30,16 +34,17 @@ export function prepareClassifiedSalaryCatalog(database: DatabaseSync, now: Date
   database.exec(`CREATE TEMP TABLE salary_market_classified (
     cluster_id TEXT PRIMARY KEY, role TEXT NOT NULL, role_label TEXT NOT NULL,
     profession_kind TEXT NOT NULL, profession_id TEXT, matched_alias TEXT,
-    grade TEXT NOT NULL, marker TEXT, skills_json TEXT NOT NULL, salary_json TEXT
+    grade TEXT NOT NULL, marker TEXT, skills_json TEXT NOT NULL, salary_json TEXT, location TEXT, is_remote INTEGER NOT NULL
   ) WITHOUT ROWID;
   CREATE INDEX temp.salary_market_classified_role ON salary_market_classified(role, cluster_id)`);
-  const read = database.prepare(`SELECT e.cluster_id, e.title, e.role_slug, e.skills_json,
+  const read =
+    database.prepare(`SELECT e.cluster_id, e.title, e.role_slug, e.skills_json, e.location, e.is_remote,
     json_extract(c.cluster_json, '$.salary') AS salary_json FROM catalog_entries e
     LEFT JOIN vacancy_clusters c ON c.id = e.cluster_id
     WHERE e.cluster_id > ? AND e.status = 'active' AND e.published_ms >= ? AND e.published_ms <= ?
     ORDER BY e.cluster_id LIMIT 500`);
   const insert = database.prepare(
-    'INSERT INTO salary_market_classified VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO salary_market_classified VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   );
   let cursor = '';
   while (true) {
@@ -63,6 +68,8 @@ export function prepareClassifiedSalaryCatalog(database: DatabaseSync, now: Date
         value.grade.marker,
         row.skills_json,
         row.salary_json,
+        row.location,
+        row.is_remote,
       );
     }
     cursor = rows[rows.length - 1]!.cluster_id;

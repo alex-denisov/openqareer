@@ -1,3 +1,4 @@
+import type { SeoGoalSummary } from '../../../shared/seoSummary';
 import { apiFetch, readData } from '../coach/apiClient';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
@@ -640,4 +641,8 @@ export async function saveHhCrawlFilter(input: {
 /** Просит глубокий обход: следующий проход соберёт выдачу целиком. */
 export async function requestHhDeepSweep(): Promise<void> {
   await apiFetch('/api/v1/admin/hh-crawl-filter/deep-sweep', { method: 'POST' });
+}
+
+export async function getAdminSeoSummary(days = 28, signal?: AbortSignal): Promise<SeoGoalSummary> {
+  return readData<SeoGoalSummary>(await apiFetch(`/api/v1/admin/seo-summary?days=${days}`, { signal }));
 }

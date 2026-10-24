@@ -1,3 +1,5 @@
+import { readPreparedSeoSources } from '../seo/preparedSeoSources';
+import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
 import {
@@ -427,6 +429,16 @@ function registerRuntimeMemory(app: FastifyInstance, deps: RouteDeps): void {
 }
 
 export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  app.get('/api/v1/admin/seo-summary', async (request, reply) => {
+    if (!requireAdmin(deps, request, reply)) return;
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(90).default(28) }).strict().parse(request.query);
+    if (!deps.candidateStore.getSeoGoalSummary) {
+      return sendError(reply, request, 503, 'unavailable', 'Сводка временно недоступна.', true);
+    }
+    reply.header('Cache-Control', 'no-store');
+    return { data: { ...deps.candidateStore.getSeoGoalSummary(days),
+      searchProviders: readPreparedSeoSources(deps.config.seoSummarySnapshotFile) }, meta: { requestId: request.id } };
+  });
   registerAdminPermissionRoutes(app, deps);
   registerAdminPartnerRoutes(app, deps);
   registerCrawlFilter(app, deps);

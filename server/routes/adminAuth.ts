@@ -78,6 +78,7 @@ function isPartnerRoute(path: string): boolean {
 }
 
 function adminRoutePermissions(path: string, method: string): AdminPermission[] | null {
+  if (path === '/api/v1/admin/seo-summary') return ['can_view_audit'];
   if (path.startsWith('/api/v1/admin/users')) {
     if (path.endsWith('/permissions')) return [];
     return ['can_view_candidates'];

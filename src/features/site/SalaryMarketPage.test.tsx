@@ -54,7 +54,10 @@ describe('public salary evidence page', () => {
     expect(html).toContain('10 из 20');
     expect(html).toContain('href="/salaries/software-engineer?group=1"');
     expect(html).toContain('href="/signup"');
-    expect(html).toContain('Сравнить моё резюме с рынком');
+    expect(html).toContain('Сравните навыки');
+    expect(html).toContain('ym-hide-content');
+    expect(html).toContain('ym-disable-keys');
+    expect(html).not.toContain('name="skills"');
     expect(html).toContain('Individual contributor не означает junior');
   });
   it('selects only a supported bucket and names its own sample', () => {
@@ -127,14 +130,14 @@ describe('prepared profession and grade views', () => {
     expect(html).toContain('2 из 8');
     expect(html).not.toContain('10 из 20');
     expect(html).toContain('grade=senior&amp;group=0');
-    expect(html).toContain('Маркеры в опубликованных названиях: Senior');
-    expect(html).toContain('Названия объединены в профессию');
+    expect(html).toContain('Примеры маркеров: Senior');
+    expect(html).toContain('Профессия — по классификатору');
   });
   it('never labels the unknown slice Junior or fills its missing salary from all grades', () => {
     const html = renderToStaticMarkup(<SalaryMarketPage snapshot={graded} grade="unknown" />);
     expect(html).toContain('Грейд не подтверждён (2)');
     expect(html).not.toContain('<dt>P50</dt>');
-    expect(html).not.toContain('Маркеры в опубликованных названиях:');
+    expect(html).not.toContain('Примеры маркеров:');
   });
   it('keeps unclassified raw titles outside the indexed profession barometer', () => {
     expect(
@@ -197,7 +200,7 @@ describe('actual saved skill frequency history', () => {
     expect(html).toContain('24.07.2026');
     expect(html).toContain('25 вакансий');
     expect(html).toContain('20 вакансий');
-    expect(html).toContain('а не оценка всего рынка');
+    expect(html).toContain('а не весь рынок');
   });
   it('does not turn a skill missing from the saved top-15 into zero', () => {
     const absent = {
@@ -262,4 +265,51 @@ describe('actual saved skill frequency history', () => {
     expect(html).not.toContain('24.07.2026');
     expect(html).not.toContain('+30 п.п.');
   });
+});
+
+it('uses the selected region before its grade and preserves the region in navigation', () => {
+  const snapshot: SalaryMarketSnapshot = {
+    ...TEST_SALARY_SNAPSHOT,
+    geography: {
+      method: 'explicit_source_country_v1',
+      regionPolicy: 'openqareer_candidate_regions_v1',
+      explicitCountryCount: 12,
+      unknownCountryCount: 8,
+      ambiguousCountryCount: 0,
+      remoteCount: 10,
+    },
+    locationSlices: [
+      {
+        location: 'europe',
+        evidenceMethod: 'explicit_source_country_v1',
+        sampleSize: 10,
+        salary: TEST_SALARY_SNAPSHOT.salary,
+        skills: [{ name: 'Regional SQL', count: 7, frequency: 70 }],
+        quarterlyTrend: 'unavailable',
+        gradeSlices: [
+          {
+            grade: 'senior',
+            sampleSize: 5,
+            skills: [{ name: 'Regional Senior', count: 2, frequency: 40 }],
+            salary: TEST_SALARY_SNAPSHOT.salary,
+            evidence: { field: 'title', markers: ['Senior'] },
+          },
+        ],
+      },
+    ],
+  };
+  const html = renderToStaticMarkup(
+    <SalaryMarketPage snapshot={snapshot} location="europe" grade="senior" />,
+  );
+  expect(html).toContain('5 вакансий ·');
+  expect(html).toContain('2 из 5');
+  expect(html).toContain('Regional Senior');
+  expect(html).not.toContain('Regional SQL');
+  expect(html).toContain('data-location="europe"');
+  expect(html).toContain('name="grade" value="senior"');
+  expect(html).toContain('grade=senior&amp;location=europe&amp;group=1');
+  expect(html).toContain('не означает разрешение работать из любой страны');
+  const legacy = renderToStaticMarkup(<SalaryMarketPage snapshot={TEST_SALARY_SNAPSHOT} />);
+  expect(legacy).toContain('Географические срезы ещё не подготовлены');
+  expect(legacy).not.toContain('id="salary-location"');
 });

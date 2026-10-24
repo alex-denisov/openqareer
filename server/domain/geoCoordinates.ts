@@ -231,6 +231,7 @@ const LOCAL_COUNTRY_ALIASES: Readonly<Record<string, readonly string[]>> = {
 };
 
 const GEO_NAMES_COUNTRY_INDEX = buildCountryIndex(GEO_NAMES_DATA.countries);
+const GEO_NAMES_COUNTRY_NAMES = new Map(GEO_NAMES_DATA.countries.map(([code, , name]) => [code, name]));
 
 const LEGACY_CITY_COORDINATES_BY_KEY = new Map(
   Object.entries(CITY_COORDINATES).map(([name, point]) => [normalizeGeoKey(name), point] as const),
@@ -371,6 +372,16 @@ export function lookupLocationCoordinates(city?: string, country?: string): GeoP
   }
 
   return undefined;
+}
+
+/** Country dictionary only: unlike countryCodeOf, never infers a country from a city. */
+export function countryCodeFromNameOrCode(name: string): string | undefined {
+  return GEO_NAMES_COUNTRY_INDEX.get(normalizeGeoKey(name));
+}
+
+/** Canonical country label from that same snapshot, for existing region-policy lookups. */
+export function countryNameFromCode(code: string): string | undefined {
+  return GEO_NAMES_COUNTRY_NAMES.get(code);
 }
 
 /**
