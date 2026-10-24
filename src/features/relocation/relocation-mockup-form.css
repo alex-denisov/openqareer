@@ -253,4 +253,79 @@
     font-weight: 600;
     line-height: 1.5;
   }
+
+  /* `view=i5`: .card.as-main with .section-head, .note and .as-res rows */
+  .career-relocation-questionnaire .career-relocation-summary {
+    gap: var(--career-space-4);
+    border-color: var(--career-line-strong);
+    border-radius: var(--career-radius-md);
+    padding: var(--career-space-6);
+    background: var(--career-bg-elevated);
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-head {
+    gap: var(--career-space-3);
+    min-block-size: var(--career-target-min);
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-head > h2 {
+    font-size: var(--career-text-md);
+    line-height: 1.25;
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-head .career-relocation-status {
+    border-radius: var(--career-space-1);
+    padding: 2px var(--career-space-2);
+    line-height: 1.5;
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-note {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--career-space-3);
+    margin: 0;
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    padding: var(--career-space-3) var(--career-space-4);
+    color: var(--career-text-soft);
+    background: var(--career-surface);
+    font-size: var(--career-text-sm);
+    line-height: 1.5;
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-list {
+    display: grid;
+    gap: var(--career-space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-list > li {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: var(--career-space-3);
+    border-block-end: var(--career-border-width) solid var(--career-line);
+    padding-block-end: var(--career-space-4);
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-list > li:last-child {
+    border-block-end: 0;
+    padding-block-end: 0;
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-list strong {
+    font-size: var(--career-text-sm);
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-list p {
+    margin-block: var(--career-space-1) var(--career-space-2);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    line-height: 1.5;
+  }
+
+  .career-relocation-questionnaire .career-relocation-summary-row-head {
+    gap: var(--career-space-3);
+  }
 }

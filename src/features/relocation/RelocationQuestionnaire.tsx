@@ -530,7 +530,7 @@ function RelocationSummary({
               <div>
                 <div className="career-relocation-summary-row-head">
                   <strong>{summary.name}</strong>
-                  <span className="career-relocation-summary-badge">{summary.statusLabel}</span>
+                  <span className={`career-relocation-summary-badge career-relocation-country-status is-${summary.status}`}>{summary.statusLabel}</span>
                 </div>
                 <p>{summary.reason}</p>
               </div>
