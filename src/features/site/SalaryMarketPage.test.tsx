@@ -261,7 +261,7 @@ describe('actual saved skill frequency history', () => {
     };
     const html = renderToStaticMarkup(<SalaryMarketPage snapshot={source} grade="senior" />);
     expect(html).toContain('Первое фактическое наблюдение: 23.10.2026');
-    expect(html).toContain('Отсутствие истории не означает нулевое изменение');
+    expect(html).toContain('Без истории изменение неизвестно');
     expect(html).not.toContain('24.07.2026');
     expect(html).not.toContain('+30 п.п.');
   });
@@ -308,8 +308,51 @@ it('uses the selected region before its grade and preserves the region in naviga
   expect(html).toContain('data-location="europe"');
   expect(html).toContain('name="grade" value="senior"');
   expect(html).toContain('grade=senior&amp;location=europe&amp;group=1');
-  expect(html).toContain('не означает разрешение работать из любой страны');
+  expect(html).toContain('не даёт права работать из любой страны');
   const legacy = renderToStaticMarkup(<SalaryMarketPage snapshot={TEST_SALARY_SNAPSHOT} />);
   expect(legacy).toContain('Географические срезы ещё не подготовлены');
   expect(legacy).not.toContain('id="salary-location"');
+});
+
+it('annotates label categories without changing rank, frequency or denominator', () => {
+  const skills = [
+    { name: 'SQL', count: 10, frequency: 50 },
+    { name: 'People Management', count: 8, frequency: 40 },
+    { name: 'C++', count: 6, frequency: 30 },
+    { name: 'Communication', count: 2, frequency: 10 },
+  ];
+  const html = renderToStaticMarkup(
+    <SalaryMarketPage snapshot={{ ...TEST_SALARY_SNAPSHOT, skills }} />,
+  );
+  const document = new DOMParser().parseFromString(html, 'text/html');
+  const rows = [...document.querySelectorAll('.sm-skill-list li')];
+  expect(rows.map((row) => row.querySelector('span')?.firstChild?.textContent)).toEqual(
+    skills.map((row) => row.name),
+  );
+  expect(rows.map((row) => row.querySelector('span:first-child small')?.textContent)).toEqual([
+    'Технический',
+    'Профильный',
+    'Не определена',
+    'Не определена',
+  ]);
+  expect(rows.map((row) => row.querySelector('meter')?.getAttribute('value'))).toEqual([
+    '50',
+    '40',
+    '30',
+    '10',
+  ]);
+  expect(rows.map((row) => row.querySelector('span:nth-child(2) small')?.textContent)).toEqual([
+    '10 из 20',
+    '8 из 20',
+    '6 из 20',
+    '2 из 20',
+  ]);
+  expect(html).toContain('data-skill-classification="b265_skill_categories_v1"');
+  expect(html).toContain('Не оцениваем важность и владение');
+  expect(skills).toEqual([
+    { name: 'SQL', count: 10, frequency: 50 },
+    { name: 'People Management', count: 8, frequency: 40 },
+    { name: 'C++', count: 6, frequency: 30 },
+    { name: 'Communication', count: 2, frequency: 10 },
+  ]);
 });

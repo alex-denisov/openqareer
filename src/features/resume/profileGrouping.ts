@@ -1,3 +1,8 @@
+import {
+  SKILL_CATEGORIES,
+  OTHER_SKILL_CATEGORY,
+  skillCategoryForLabel,
+} from '../../../shared/skillLabelClassification';
 import type { ResumeExperienceInput, ResumeSkillInput } from './resumeTypes';
 
 export interface ExperienceEmployerGroup {
@@ -44,92 +49,13 @@ export interface SkillCategoryGroup {
   readonly skills: readonly ResumeSkillInput[];
 }
 
-const OTHER_CATEGORY = 'Другое';
-
-/**
- * A fixed, deterministic dictionary (B265 §4: "детерминированный словарь
- * категорий, неизвестные → «Другое»") — never an LLM call, so the same skill
- * always lands in the same group and an unrecognised one is visible instead
- * of silently dropped.
- */
-const SKILL_CATEGORIES: readonly { label: string; match: readonly string[] }[] = [
-  {
-    label: 'Управление и стратегия',
-    match: [
-      'engineering leadership',
-      'roadmapping',
-      'stakeholder management',
-      'hiring & team scaling',
-      'hiring',
-      'budget ownership',
-      'okrs',
-      'team scaling',
-      'people management',
-    ],
-  },
-  {
-    label: 'Платформа и инфраструктура',
-    match: [
-      'kubernetes',
-      'aws',
-      'terraform',
-      'distributed systems',
-      'observability',
-      'ci/cd',
-      'docker',
-      'gcp',
-      'azure',
-    ],
-  },
-  {
-    label: 'Языки и фреймворки',
-    match: [
-      'go',
-      'typescript',
-      'python',
-      'postgresql',
-      'grpc',
-      'react',
-      'java',
-      'javascript',
-      'sql',
-    ],
-  },
-  {
-    label: 'Продукт и комплаенс',
-    match: [
-      'fintech compliance',
-      'pci dss',
-      'payments',
-      'risk management',
-      'product strategy',
-      'bafin audits',
-      'gdpr',
-    ],
-  },
-];
-
-function normalized(name: string): string {
-  return name.trim().toLowerCase();
-}
-
-/**
- * Deterministic membership lookup: same skill name always resolves to the
- * same category label, so a skill never silently jumps groups between runs.
- */
-function categoryLabelFor(skillName: string): string {
-  const key = normalized(skillName);
-  const found = SKILL_CATEGORIES.find((category) => category.match.includes(key));
-  return found?.label ?? OTHER_CATEGORY;
-}
-
 export function categorizeSkills(
   skills: readonly ResumeSkillInput[],
 ): readonly SkillCategoryGroup[] {
-  const order = [...SKILL_CATEGORIES.map((c) => c.label), OTHER_CATEGORY];
+  const order = [...SKILL_CATEGORIES.map((c) => c.label), OTHER_SKILL_CATEGORY];
   const byLabel = new Map<string, ResumeSkillInput[]>();
   skills.forEach((skill) => {
-    const label = categoryLabelFor(skill.name);
+    const label = skillCategoryForLabel(skill.name)?.label ?? OTHER_SKILL_CATEGORY;
     const bucket = byLabel.get(label) ?? [];
     byLabel.set(label, [...bucket, skill]);
   });

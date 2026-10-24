@@ -80,3 +80,34 @@ describe('categorizeSkills', () => {
     expect(categorizeSkills([])).toEqual([]);
   });
 });
+
+it('retains approved category order, exact matching, unknown bucket and original skill references', () => {
+  const inputs = [
+    skill('C++'),
+    skill('SQL'),
+    skill('GDPR'),
+    skill('AWS'),
+    skill('Roadmapping'),
+    skill('C#'),
+    skill('C'),
+  ];
+  const groups = categorizeSkills(inputs);
+  expect(groups.map((row) => row.label)).toEqual([
+    'Управление и стратегия',
+    'Платформа и инфраструктура',
+    'Языки и фреймворки',
+    'Продукт и комплаенс',
+    'Другое',
+  ]);
+  expect(groups.at(-1)?.skills).toEqual([inputs[0], inputs[5], inputs[6]]);
+  expect(groups[2].skills[0]).toBe(inputs[1]);
+  expect(inputs.map((row) => row.name)).toEqual([
+    'C++',
+    'SQL',
+    'GDPR',
+    'AWS',
+    'Roadmapping',
+    'C#',
+    'C',
+  ]);
+});
