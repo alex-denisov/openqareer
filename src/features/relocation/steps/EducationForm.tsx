@@ -1,13 +1,15 @@
 import { RelocationDateInput } from '../RelocationFormControls';
 import { useState } from 'react';
-import { Info, Plus, Trash } from '@phosphor-icons/react';
+import { Check, Info, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import type { RelocationQuestionnaire } from '../../../../shared/relocationQuestionnaire';
 import type { RelocationQuestionnaireStepFormProps } from '../RelocationQuestionnaireSteps';
 import {
   CountrySelect,
+  EDUCATION_LEVEL_OPTIONS,
   EducationLevelSelect,
   RecognitionSelect,
   RelocationFormField,
+  relocationCountryName,
   relocationRowId,
 } from '../RelocationFormControls';
 
@@ -47,27 +49,66 @@ export function EducationForm(props: RelocationQuestionnaireStepFormProps) {
 }
 
 function EducationEntries({ profile, onProfileChange }: RelocationDraftProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
   const entries = profile.education.education;
   if (!entries.length) return null;
+  const remove = (id: string) => onProfileChange({
+    ...profile,
+    education: { ...profile.education, education: profile.education.education.filter((item) => item.id !== id) },
+  });
   return (
     <section className="career-relocation-step-card" aria-label="Образование">
-      <div className="career-relocation-edit-list">
+      <ul className="career-relocation-doc-list">
         {entries.map((entry) => (
-          <EducationRow key={entry.id} entry={entry} profile={profile} onProfileChange={onProfileChange} />
+          <li key={entry.id}>
+            {editingId === entry.id ? (
+              <EducationRow entry={entry} profile={profile} onProfileChange={onProfileChange} onDone={() => setEditingId(null)} />
+            ) : (
+              <>
+                <div>
+                  <strong>{entry.title}</strong>
+                  <p>{educationDetail(entry)}</p>
+                </div>
+                <span className="career-relocation-doc-actions">
+                  <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Изменить: ${entry.title}`} onClick={() => setEditingId(entry.id)}>
+                    <PencilSimple aria-hidden="true" size={18} />
+                  </button>
+                  <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Удалить: ${entry.title}`} onClick={() => remove(entry.id)}>
+                    <Trash aria-hidden="true" size={18} />
+                  </button>
+                </span>
+              </>
+            )}
+          </li>
         ))}
-      </div>
+      </ul>
+      {entries.some(({ recognitionStatus }) => recognitionStatus === 'unknown') ? (
+        <p className="career-relocation-note">
+          <Info aria-hidden="true" size={17} />
+          <span>Признание диплома за рубежом не указано. От него зависит порог зарплаты для Blue Card и Skilled Worker.</span>
+        </p>
+      ) : null}
     </section>
   );
+}
+
+/** «Информатика, Магистратура, 2008 — 2013, Россия»: only the facts the candidate gave. */
+function educationDetail(entry: RelocationEducation): string {
+  const level = EDUCATION_LEVEL_OPTIONS.find(([value]) => value === entry.level)?.[1];
+  const years = [entry.startedAt, entry.completedAt].map((date) => date?.slice(0, 4)).filter(Boolean).join(' — ');
+  return [entry.fieldOfStudy, level, years, relocationCountryName(entry.countryCode)].filter(Boolean).join(', ');
 }
 
 function EducationRow({
   entry,
   profile,
   onProfileChange,
+  onDone,
 }: {
   readonly entry: RelocationEducation;
   readonly profile: RelocationQuestionnaireStepFormProps['profile'];
   readonly onProfileChange: RelocationQuestionnaireStepFormProps['onProfileChange'];
+  readonly onDone: () => void;
 }) {
   const prefix = `relocation-education-${entry.id}`;
   const update = (change: Partial<RelocationEducation>) => onProfileChange({
@@ -76,10 +117,6 @@ function EducationRow({
       ...profile.education,
       education: profile.education.education.map((item) => item.id === entry.id ? { ...item, ...change } : item),
     },
-  });
-  const remove = () => onProfileChange({
-    ...profile,
-    education: { ...profile.education, education: profile.education.education.filter(({ id }) => id !== entry.id) },
   });
   return (
     <fieldset className="career-relocation-record">
@@ -93,8 +130,8 @@ function EducationRow({
         <RelocationFormField id={`${prefix}-started`} label="Дата начала"><RelocationDateInput id={`${prefix}-started`} value={entry.startedAt ?? ''} onChange={(event) => update({ startedAt: event.target.value || undefined })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><RelocationDateInput id={`${prefix}-completed`} value={entry.completedAt ?? ''} onChange={(event) => update({ completedAt: event.target.value || undefined })} /></RelocationFormField>
       </div>
-      <button className="career-relocation-btn is-danger" type="button" onClick={remove}>
-        <Trash aria-hidden="true" size={16} />Удалить образование
+      <button className="career-relocation-btn" type="button" onClick={onDone}>
+        <Check aria-hidden="true" size={16} />Готово
       </button>
     </fieldset>
   );

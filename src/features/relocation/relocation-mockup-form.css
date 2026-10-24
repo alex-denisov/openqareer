@@ -185,8 +185,25 @@
   }
 
   .career-relocation-questionnaire-form .career-relocation-add-form .career-relocation-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--career-space-3) var(--career-space-3);
+  }
+
+  .career-relocation-questionnaire-form
+    .career-relocation-add-form:has(#relocation-new-document-kind)
+    .career-relocation-form-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--career-space-3);
+  }
+
+  .career-relocation-questionnaire-form .career-relocation-add-form > h3 {
+    margin: 0;
+    font-size: var(--career-text-sm);
+    font-weight: 700;
+    line-height: 1.5;
+  }
+
+  .career-relocation-questionnaire-form .career-relocation-step-card > .career-relocation-note {
+    margin: 0;
   }
 
   /* .row.is-wrap of «Дальше» and «Пропустить шаг» */
