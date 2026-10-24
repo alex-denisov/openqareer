@@ -1,3 +1,4 @@
+import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
 import { SqliteMarketSalaryEstimateStore } from './vacancies/marketSalary/sqliteMarketSalaryEstimateStore';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -251,6 +252,7 @@ async function createFastifyBase(
     maxParamLength: 2_048,
   });
 
+  registerReportedSeoBotObservability(app);
   await app.register(cookie);
   await registerRateLimits(app, isSignedIn);
   registerBillingFormParser(app);
