@@ -1087,7 +1087,7 @@
   flex-wrap: wrap;
   margin-block: var(--career-space-2);
   overflow: hidden;
-  border: var(--career-border-width) solid var(--career-line);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
 }
 
@@ -1111,8 +1111,13 @@
   color: var(--career-accent);
 }
 
-.vacancy-source-category[aria-pressed='true'] .vacancy-location-count {
+/* B510: число категории как .pop .seg .num макета 4 — шрифт и цвет кнопки, отступ space-1. */
+.vacancy-source-category .vacancy-location-count {
+  margin-inline-start: var(--career-space-1);
+  padding: 0;
   color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .vacancy-source-group {
