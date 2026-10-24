@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ArrowRight, Check, Info, Plus } from '@phosphor-icons/react';
+import { useId, useMemo, useState } from 'react';
+import { Check, Info, MagnifyingGlass, Plus } from '@phosphor-icons/react';
 import type { RelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import { listRelocationCountries, type RelocationCountry } from './relocationCountryData';
 import { summarizeRelocationCountry } from './relocationCountrySummary';
@@ -32,9 +32,9 @@ export function RelocationAddCountry({
       <AddCountryHeading />
       <CountrySearch query={query} onChange={setQuery} />
       {needle ? (
-        <h4 className="career-relocation-muted">
+        <p className="career-relocation-add-found">
           Найдено {found.length} из {countries.length}
-        </h4>
+        </p>
       ) : null}
       {needle && !found.length ? <p role="status">Такой страны нет в каталоге правил.</p> : null}
       <ul className="career-relocation-add-list">
@@ -48,9 +48,16 @@ export function RelocationAddCountry({
           />
         ))}
       </ul>
+      <p className="career-relocation-note">
+        <Info aria-hidden="true" size={17} />
+        <span>
+          Добавленная страна появится в списке. Если правил по ней нет, статус не присваиваем и
+          честно говорим, что он не определён.
+        </span>
+      </p>
       <div className="career-relocation-footer-actions">
-        <button className="career-btn career-btn-primary" type="button" onClick={onDone}>
-          <ArrowRight aria-hidden="true" size={17} />
+        <button className="career-relocation-btn is-primary" type="button" onClick={onDone}>
+          <Check aria-hidden="true" size={17} />
           Готово
         </button>
       </div>
@@ -65,7 +72,7 @@ function AddCountryHeading() {
       <div className="career-relocation-section-title">
         <h3 id="career-relocation-add-title">Добавить страну</h3>
         <button
-          className="career-relocation-icon-button"
+          className="career-relocation-btn is-sm is-icon is-ghost"
           type="button"
           aria-label="Пояснение"
           aria-expanded={explained}
@@ -103,20 +110,33 @@ function AddCountryRow({
         <strong>{country.name}</strong>
         <span>
           {verified
-            ? `правила проверены: ${summary.statusLabel.toLocaleLowerCase('ru')}`
-            : 'правил нет: статус не присваиваем'}
+            ? `Правила проверены: ${summary.statusLabel.toLocaleLowerCase('ru')}`
+            : 'Правил нет: статус не присваиваем'}
         </span>
       </span>
-      <button
-        className="career-btn career-btn-secondary"
-        type="button"
-        disabled={added}
-        onClick={() => onAdd(country.countryCode)}
-      >
-        {added ? <Check aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}
-        {added ? 'Добавлена' : 'Добавить'}
-      </button>
+      <span className="career-relocation-add-row-actions">
+        <span
+          className={`career-relocation-country-status ${verified ? 'is-available' : 'is-unknown'}`}
+        >
+          {verified ? 'Можно добавить' : 'Нет данных'}
+        </span>
+        <AddButton added={added} onAdd={() => onAdd(country.countryCode)} />
+      </span>
     </li>
+  );
+}
+
+function AddButton({ added, onAdd }: { readonly added: boolean; readonly onAdd: () => void }) {
+  return (
+    <button
+      className="career-relocation-btn is-sm is-ghost"
+      type="button"
+      disabled={added}
+      onClick={onAdd}
+    >
+      {added ? <Check aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}
+      {added ? 'Добавлена' : 'Добавить'}
+    </button>
   );
 }
 
@@ -127,15 +147,20 @@ function CountrySearch({
   readonly query: string;
   readonly onChange: (value: string) => void;
 }) {
+  const id = useId();
   return (
-    <label className="career-relocation-search">
-      <span>Поиск страны</span>
-      <input
-        type="search"
-        value={query}
-        placeholder="Начните вводить название"
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
+    <div className="career-relocation-search">
+      <label htmlFor={id}>Поиск страны</label>
+      <span className="career-relocation-search-box">
+        <MagnifyingGlass aria-hidden="true" size={20} />
+        <input
+          id={id}
+          type="search"
+          value={query}
+          placeholder="Начните вводить название"
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </span>
+    </div>
   );
 }

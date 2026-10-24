@@ -2,6 +2,7 @@ import type { KeyboardEvent } from 'react';
 import { ArrowRight, ChatCircle, PencilSimple } from '@phosphor-icons/react';
 import { CountryComparisonPanel } from './CountryComparisonPanel';
 import { RelocationAddCountry } from './RelocationAddCountry';
+import { listRelocationCountries } from './relocationCountryData';
 import { RelocationCountryWorkspace } from './RelocationCountryWorkspace';
 import { RelocationEconomy } from './RelocationEconomy';
 import { RelocationHeaderCard } from './RelocationHeaderCard';
@@ -35,7 +36,11 @@ export function RelocationDesktopWorkspace(props: DesktopProps) {
       <RelocationHeaderCard
         title="Страны и релокация"
         status="on"
-        description={RELOCATION_TAB_DESCRIPTIONS[workspace.tab]}
+        description={
+          workspace.mode.kind === 'add'
+            ? RELOCATION_ADD_DESCRIPTION
+            : RELOCATION_TAB_DESCRIPTIONS[workspace.tab]
+        }
         backLabel="Назад к ролям"
         onBack={props.onNavigateBack}
         selectionSave={workspace.selectionSave}
@@ -162,6 +167,9 @@ function DesktopComparison({
   );
 }
 
+/** Mockup 15 `view=add`: the head line while the catalog search is open. */
+const RELOCATION_ADD_DESCRIPTION = `Добавьте страну, которой нет в списке. Искать можно среди ${listRelocationCountries().length} стран, по которым у нас есть правила.`;
+
 const TABS: readonly { readonly id: RelocationTab; readonly label: string }[] = [
   { id: 'countries', label: 'Страны' },
   { id: 'comparison', label: 'Сравнение' },
@@ -179,7 +187,7 @@ export function relocationTabCount(
 }
 
 function RelocationTabs({ workspace }: { readonly workspace: RelocationWorkspaceState }) {
-  const active = workspace.mode.kind === 'tabs' ? workspace.tab : undefined;
+  const active = workspace.mode.kind === 'questionnaire' ? undefined : workspace.tab;
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     const currentIndex = TABS.findIndex(({ id }) => id === workspace.tab);
     const nextIndex = nextTabIndex(event.key, currentIndex);

@@ -500,3 +500,66 @@
   border-color: var(--career-line-strong);
   color: var(--career-text-dim);
 }
+
+/* Add country (`view=add`): .career-field label, .cb-search.rl-search box, .rl-docs rows. */
+.career-relocation .career-relocation-search {
+  gap: var(--career-space-2);
+}
+
+.career-relocation .career-relocation-search > label {
+  line-height: 1.5;
+}
+
+.career-relocation .career-relocation-search-box {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: 44px;
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
+  padding-inline-start: var(--career-space-3);
+  color: var(--career-text-dim);
+  background: var(--career-surface);
+}
+
+.career-relocation .career-relocation-search .career-relocation-search-box input {
+  border: 0;
+  color: var(--career-text);
+  background: transparent;
+  font-weight: 400;
+}
+
+.career-relocation .career-relocation-add-found {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 400;
+}
+
+.career-relocation .career-relocation-add-list {
+  gap: var(--career-space-3);
+}
+
+.career-relocation .career-relocation-add-list li {
+  gap: var(--career-space-4);
+  border-color: var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+}
+
+.career-relocation .career-relocation-add-list li > span:first-child {
+  display: block;
+  font-size: var(--career-text-sm);
+}
+
+.career-relocation .career-relocation-add-list li > span:first-child > span {
+  display: block;
+  margin-block-start: var(--career-space-1);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation .career-relocation-add-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+}
