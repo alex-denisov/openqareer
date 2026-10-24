@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { RelocationScenarioInput } from '../../../shared/relocationScenario';
 import { CountrySelect, relocationCountryName } from './RelocationFormControls';
+import { MoneyWithCurrency } from './RelocationScenarioFields';
 type Visa = RelocationScenarioInput['visa'];
 type Props = { readonly visa: Visa; readonly setVisa: (visa: Visa) => void; readonly country: string; readonly currency: string };
 
@@ -20,10 +21,10 @@ export function RelocationVisaExtras({ visa, setVisa, country, currency }: Props
     <label>Есть местное право на работу<select value={visa.hasLocalWorkAuthorizationCountryCodes?.includes(country) ? 'true' : ''} onChange={(e) => setVisa({ ...visa, hasLocalWorkAuthorizationCountryCodes: e.target.value === 'true' ? [...new Set([...(visa.hasLocalWorkAuthorizationCountryCodes ?? []), country])] : visa.hasLocalWorkAuthorizationCountryCodes?.filter((code) => code !== country) })}><option value="">Не подтверждено</option><option value="true">Да</option></select></label>
     {([['meetsLanguageRequirementsByCountry', 'Языковые требования маршрута выполнены'], ['jobSeekerCategoryEligibleByCountry', 'Категория визы поиска работы подтверждена'], ['shortTermWorkExceptionByCountry', 'Подтверждено исключение для краткосрочной работы']] as const).map(([key, label]) => <label key={key}>{label}<select value={visa[key]?.[country] === undefined ? '' : String(visa[key]?.[country])} onChange={(e) => mapping(key, e.target.value)}><option value="">Неизвестно</option><option value="true">Да</option><option value="false">Нет</option></select></label>)}
     <label>Подтверждённая финансовая гарантия<select value={visa.financialGuaranteeSatisfiedByCountry?.includes(country) ? 'true' : ''} onChange={(e) => setVisa({ ...visa, financialGuaranteeSatisfiedByCountry: e.target.value === 'true' ? [...new Set([...(visa.financialGuaranteeSatisfiedByCountry ?? []), country])] : visa.financialGuaranteeSatisfiedByCountry?.filter((code) => code !== country) })}><option value="">Не подтверждена</option><option value="true">Есть документ</option></select></label>
-    <label>Срок пребывания, дней<input type="number" min="1" max="3650" value={visa.stayDurationDays ?? ''} onChange={(e) => setVisa({ ...visa, stayDurationDays: e.target.value ? Number(e.target.value) : undefined })} /></label>
-    <label>Средства в месяц для визы<input type="number" min="0" value={visa.minimumMonthlyFunds?.amount ?? ''} onChange={(e) => setVisa({ ...visa, minimumMonthlyFunds: e.target.value ? { amount: Number(e.target.value), currency: visa.minimumMonthlyFunds?.currency ?? currency } : undefined })} /></label><label>Валюта средств для визы<input disabled={!visa.minimumMonthlyFunds} maxLength={3} value={visa.minimumMonthlyFunds?.currency ?? currency} onChange={(e) => setVisa({ ...visa, minimumMonthlyFunds: { amount: visa.minimumMonthlyFunds?.amount ?? 0, currency: e.target.value.toUpperCase() } })} /></label>
-    <label>Опыт за последние 7 лет<input type="number" min="0" max="7" value={visa.relevantExperienceYearsByWindow?.['7'] ?? ''} onChange={(e) => setVisa({ ...visa, relevantExperienceYearsByWindow: e.target.value ? { '7': Number(e.target.value) } : undefined })} /></label>
-    <label>Сколько лет назад окончен подходящий вуз<input type="number" min="0" max="50" value={visa.recentTopUniversityGraduateWithinYearsByCountry?.[country] ?? ''} onChange={(e) => setVisa({ ...visa, recentTopUniversityGraduateWithinYearsByCountry: e.target.value ? { ...visa.recentTopUniversityGraduateWithinYearsByCountry, [country]: Number(e.target.value) } : undefined })} /></label>
+    <label>Срок пребывания, дней<input type="number" min="1" max="3650" value={visa.stayDurationDays ?? ''} onChange={(e) => setVisa({ ...visa, stayDurationDays: e.target.value ? bounded(e.target.value, 1, 3650) : undefined })} /></label>
+    <MoneyWithCurrency label="Средства в месяц для визы" value={visa.minimumMonthlyFunds} fallbackCurrency={currency} onChange={(minimumMonthlyFunds) => setVisa({ ...visa, minimumMonthlyFunds })} />
+    <label>Опыт за последние 7 лет<input type="number" min="0" max="7" value={visa.relevantExperienceYearsByWindow?.['7'] ?? ''} onChange={(e) => setVisa({ ...visa, relevantExperienceYearsByWindow: e.target.value ? { '7': bounded(e.target.value, 0, 7) } : undefined })} /></label>
+    <label>Сколько лет назад окончен подходящий вуз<input type="number" min="0" max="50" value={visa.recentTopUniversityGraduateWithinYearsByCountry?.[country] ?? ''} onChange={(e) => setVisa({ ...visa, recentTopUniversityGraduateWithinYearsByCountry: e.target.value ? { ...visa.recentTopUniversityGraduateWithinYearsByCountry, [country]: bounded(e.target.value, 0, 50) } : undefined })} /></label>
     {country === 'DE' && <GermanOpportunityFields visa={visa} setVisa={setVisa} />}
   </details>;
 }
@@ -32,8 +33,14 @@ function GermanOpportunityFields({ visa, setVisa }: Pick<Props, 'visa' | 'setVis
   const card = visa.germanyOpportunityCard ?? EMPTY_CARD;
   const change = (patch: Partial<typeof card>) => setVisa({ ...visa, germanyOpportunityCard: { ...card, ...patch } });
   return <details><summary>Германия: карта возможностей</summary><label>Признание квалификации<select value={card.qualificationRecognition} onChange={(e) => change({ qualificationRecognition: e.target.value as typeof card.qualificationRecognition })}><option value="unknown">Неизвестно</option><option value="fully">Полное</option><option value="partially">Частичное</option><option value="not-recognized">Не признана</option></select></label>
-    {([['age', 'Возраст', 100], ['experienceYearsLastFive', 'Опыт за последние пять лет', 5], ['experienceYearsLastSeven', 'Опыт за последние семь лет', 7], ['germanyStayMonthsLastFive', 'Месяцев в Германии за последние пять лет', 60]] as const).map(([key, label, max]) => <label key={key}>{label}<input type="number" min="0" max={max} value={card[key] ?? ''} onChange={(e) => change({ [key]: e.target.value ? Number(e.target.value) : null })} /></label>)}
+    {([['age', 'Возраст', 100], ['experienceYearsLastFive', 'Опыт за последние пять лет', 5], ['experienceYearsLastSeven', 'Опыт за последние семь лет', 7], ['germanyStayMonthsLastFive', 'Месяцев в Германии за последние пять лет', 60]] as const).map(([key, label, max]) => <label key={key}>{label}<input type="number" min="0" max={max} value={card[key] ?? ''} onChange={(e) => change({ [key]: e.target.value ? bounded(e.target.value, 0, max) : null })} /></label>)}
     {([['germanLevel', 'Немецкий'], ['englishLevel', 'Английский']] as const).map(([key, label]) => <label key={key}>{label}<select value={card[key] ?? ''} onChange={(e) => change({ [key]: e.target.value || null })}>{['', 'none', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'native'].map((value) => <option value={value} key={value}>{value === '' ? 'Неизвестно' : value === 'none' ? 'Не владею' : value === 'native' ? 'Родной' : value}</option>)}</select></label>)}
     {([['shortageOccupation', 'Дефицитная профессия подтверждена'], ['partnerQualifiedAndApplying', 'Партнёр квалифицирован и подаёт заявление вместе со мной']] as const).map(([key, label]) => <label key={key}>{label}<select value={card[key] === null ? '' : String(card[key])} onChange={(e) => change({ [key]: e.target.value === '' ? null : e.target.value === 'true' })}><option value="">Неизвестно</option><option value="true">Да</option><option value="false">Нет</option></select></label>)}
   </details>;
+}
+
+/** A whole number inside the field's own range; the schema rejects anything outside it. */
+function bounded(raw: string, min: number, max: number): number {
+  const value = Math.trunc(Number(raw));
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min;
 }

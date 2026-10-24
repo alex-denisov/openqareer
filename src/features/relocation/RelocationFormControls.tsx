@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
-import { CaretDown } from '@phosphor-icons/react';
+import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
 import type {
   RelocationQuestionnaire,
 } from '../../../shared/relocationQuestionnaire';
@@ -29,6 +29,14 @@ export const RECOGNITION_OPTIONS: readonly (readonly [RelocationEducation['recog
 export const LANGUAGE_LEVEL_OPTIONS: readonly (readonly [LanguageLevel, string])[] = [
   ['unknown', 'Не указан'], ['A1', 'A1'], ['A2', 'A2'], ['B1', 'B1'], ['B2', 'B2'], ['C1', 'C1'], ['C2', 'C2'],
 ];
+
+/** Languages offered from a list (mockup 15 `i4`); «other» opens a name field. */
+export const LANGUAGE_NAME_OPTIONS: readonly string[] = [
+  'Английский', 'Немецкий', 'Французский', 'Испанский', 'Итальянский', 'Португальский',
+  'Сербский', 'Греческий', 'Турецкий', 'Арабский', 'Грузинский', 'Армянский', 'Казахский',
+  'Китайский', 'Японский', 'Нидерландский', 'Польский', 'Иврит',
+];
+export const OTHER_LANGUAGE = 'other';
 
 export function RelocationFormField({
   id,
@@ -75,7 +83,10 @@ export function CountrySelect({
       </button>
       {open ? (
         <div className="career-relocation-picker-panel">
-          <input type="search" aria-label="Поиск: Страна" placeholder="Поиск: Страна" value={query} ref={searchRef} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }} />
+          <span className="career-relocation-picker-search">
+            <MagnifyingGlass aria-hidden="true" size={20} />
+            <input type="search" aria-label="Поиск: Страна" placeholder="Поиск: Страна" value={query} ref={searchRef} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }} />
+          </span>
           <ul role="listbox" aria-label="Страны">
             {countries.map(({ countryCode, name }) => (
               <li key={countryCode} role="option" aria-selected={countryCode === value}>

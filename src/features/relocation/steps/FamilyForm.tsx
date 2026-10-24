@@ -5,31 +5,31 @@ import { RelocationFormField } from '../RelocationFormControls';
 type Household = 'alone' | 'partner' | 'partner_children';
 type Priority = NonNullable<FamilyStep['priorities']>[number];
 
-const HOUSEHOLD_OPTIONS: readonly [Household, string][] = [
+export const HOUSEHOLD_OPTIONS: readonly [Household, string][] = [
   ['alone', 'Один'],
   ['partner', 'С партнёром'],
   ['partner_children', 'С партнёром и детьми'],
 ];
 
-const TIMEFRAME_OPTIONS: readonly [FamilyStep['relocationTimeframe'], string][] = [
+export const TIMEFRAME_OPTIONS: readonly [FamilyStep['relocationTimeframe'], string][] = [
   ['under_two_weeks', 'Не больше 2 недель'],
   ['under_three_months', 'До 3 месяцев'],
   ['over_twelve_months', 'Дольше, если надёжно'],
 ];
 
-const PRIORITY_OPTIONS: readonly [Priority, string][] = [
+export const PRIORITY_OPTIONS: readonly [Priority, string][] = [
   ['permanent_residence', 'Путь к ПМЖ'],
   ['citizenship', 'Гражданство'],
   ['partner_work', 'Возможность работать партнёру'],
 ];
 
-function household(family: FamilyStep): Household | null {
+export function household(family: FamilyStep): Household | null {
   if (family.partnerStatus === 'no_partner') return 'alone';
   if (family.partnerStatus !== 'has_partner') return null;
   return (family.childrenCount ?? 0) > 0 ? 'partner_children' : 'partner';
 }
 
-function householdChange(value: Household, family: FamilyStep): Partial<FamilyStep> {
+export function householdChange(value: Household, family: FamilyStep): Partial<FamilyStep> {
   if (value === 'alone') return { partnerStatus: 'no_partner', childrenCount: 0 };
   if (value === 'partner') return { partnerStatus: 'has_partner', childrenCount: 0 };
   return { partnerStatus: 'has_partner', childrenCount: Math.max(family.childrenCount ?? 0, 1) };

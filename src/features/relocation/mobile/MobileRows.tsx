@@ -170,7 +170,7 @@ export function MobileRadioRows<T extends string>({
   onChange,
 }: {
   readonly name: string;
-  readonly value: T;
+  readonly value: T | null | undefined;
   readonly options: readonly (readonly [T, string])[];
   readonly onChange: (value: T) => void;
 }) {
@@ -276,5 +276,33 @@ export function MobileCountrySearch({
         <CountryOptions countries={countries} value={value} onPick={onPick} />
       </MobileGroup>
     </MobilePush>
+  );
+}
+
+/** Several choices as rows with a check mark on the right (mockup 15 `mv=i3`, «Что важно»). */
+export function MobileCheckRows<T extends string>({
+  values,
+  options,
+  onToggle,
+}: {
+  readonly values: readonly T[];
+  readonly options: readonly (readonly [T, string])[];
+  readonly onToggle: (value: T, checked: boolean) => void;
+}) {
+  return (
+    <>
+      {options.map(([option, label]) => (
+        <label key={option} className="vacancy-push-row career-relocation-check-row">
+          <span>{label}</span>
+          <input
+            className="career-sr-only"
+            type="checkbox"
+            checked={values.includes(option)}
+            onChange={(event) => onToggle(option, event.target.checked)}
+          />
+          {values.includes(option) ? <Check aria-hidden="true" size={20} /> : null}
+        </label>
+      ))}
+    </>
   );
 }

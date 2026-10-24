@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { X } from '@phosphor-icons/react';
 import type { MobilityScenarioId } from '../../../shared/countryFit/types';
 import { RELOCATION_SCENARIO_LABELS } from './relocationCountrySummary';
 
@@ -13,7 +12,7 @@ const OPTIONS: readonly RelocationScenarioFilter[] = [
   'simple_mobility',
 ];
 
-/** Mockup 15 `sheet=rls`: the scenario filter as a modal bottom sheet (Escape closes it). */
+/** Mockup 15 `sheet=rls`: the scenario filter as radio rows in a modal bottom sheet (Escape closes it). */
 export function RelocationScenarioSheet({
   value,
   onChange,
@@ -32,31 +31,31 @@ export function RelocationScenarioSheet({
       onClose={onClose}
       onCancel={onClose}
     >
+      <span className="career-relocation-sheet-grab" aria-hidden="true" />
       <header>
-        <h3 id="career-relocation-sheet-title">Сценарий переезда</h3>
-        <button
-          className="career-relocation-icon-button"
-          type="button"
-          aria-label="Закрыть"
-          onClick={onClose}
-        >
-          <X aria-hidden="true" size={18} />
+        <h3 id="career-relocation-sheet-title">Сценарий</h3>
+        <button className="career-relocation-sheet-close" type="button" onClick={onClose}>
+          Закрыть
         </button>
       </header>
-      <div className="career-relocation-chips" role="group" aria-label="Сценарий переезда">
+      <div
+        className="career-relocation-mobile-rows"
+        role="radiogroup"
+        aria-label="Сценарий переезда"
+      >
         {OPTIONS.map((option) => (
-          <button
-            key={option}
-            className="career-relocation-filter-chip"
-            type="button"
-            aria-pressed={value === option}
-            onClick={() => {
-              onChange(option);
-              onClose();
-            }}
-          >
-            {option === 'all' ? 'Все' : (RELOCATION_SCENARIO_LABELS[option] ?? option)}
-          </button>
+          <label key={option} className="career-relocation-sheet-option">
+            <input
+              type="radio"
+              name="relocation-scenario-filter"
+              checked={value === option}
+              onChange={() => {
+                onChange(option);
+                onClose();
+              }}
+            />
+            <span>{option === 'all' ? 'Все' : (RELOCATION_SCENARIO_LABELS[option] ?? option)}</span>
+          </label>
         ))}
       </div>
     </dialog>

@@ -12,8 +12,9 @@ import { apiErrorMessage } from '../coach/apiClient';
 import { grantRelocationConsent, type RelocationQuestionnaireResponse } from './relocationApi';
 import { RelocationHeaderCard } from './RelocationHeaderCard';
 import { MobilePush } from './RelocationMobilePush';
+import { MobileConsentBody } from './mobile/MobileConsentBody';
 
-type Consent = RelocationQuestionnaireResponse['consent'];
+export type Consent = RelocationQuestionnaireResponse['consent'];
 
 const PROMISES: readonly { readonly title: string; readonly text: string }[] = [
   {
@@ -74,10 +75,7 @@ export function RelocationConsentGate(props: RelocationConsentGateProps) {
         backLabel="Назад к ролям"
         onBack={props.onNavigateBack}
       >
-        <p className="career-relocation-muted">
-          Не включено. Сейчас подборка идёт только по России.
-        </p>
-        <ConsentBody {...props} />
+        <MobileConsentBody {...props} />
       </MobilePush>
     );
   }
@@ -172,6 +170,38 @@ function ConsentGrantControl({
   readonly onGranted: (consent: Consent) => void;
   readonly onLater: () => void;
 }) {
+  const { accepted, setAccepted, busy, error, submit } = useConsentGrant(onGranted);
+  return (
+    <fieldset className="career-relocation-consent-control" disabled={busy}>
+      <label>
+        <input
+          type="checkbox"
+          checked={accepted}
+          onChange={(event) => setAccepted(event.target.checked)}
+        />
+        <span>Даю согласие на обработку данных о мобильности для раздела «Страны и релокация»</span>
+      </label>
+      <div className="career-relocation-footer-actions">
+        <button
+          className="career-relocation-btn is-primary"
+          type="button"
+          disabled={!accepted || busy}
+          onClick={() => void submit()}
+        >
+          <ArrowRight aria-hidden="true" size={17} />
+          Заполнить анкету
+        </button>
+        <button className="career-relocation-btn" type="button" onClick={onLater}>
+          Позже
+        </button>
+      </div>
+      {error ? <p role="alert">{error}</p> : null}
+    </fieldset>
+  );
+}
+
+/** Accept the mobility consent: one request, a readable error, no double submit. */
+export function useConsentGrant(onGranted: (consent: Consent) => void) {
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -186,33 +216,7 @@ function ConsentGrantControl({
       setBusy(false);
     }
   };
-  return (
-    <fieldset className="career-relocation-consent-control" disabled={busy}>
-      <label>
-        <input
-          type="checkbox"
-          checked={accepted}
-          onChange={(event) => setAccepted(event.target.checked)}
-        />
-        <span>Даю согласие на обработку данных о мобильности для раздела «Страны и релокация»</span>
-      </label>
-      <div className="career-relocation-footer-actions">
-        <button
-          className="career-btn career-btn-primary"
-          type="button"
-          disabled={!accepted || busy}
-          onClick={() => void submit()}
-        >
-          <ArrowRight aria-hidden="true" size={17} />
-          Заполнить анкету
-        </button>
-        <button className="career-btn career-btn-secondary" type="button" onClick={onLater}>
-          Позже
-        </button>
-      </div>
-      {error ? <p role="alert">{error}</p> : null}
-    </fieldset>
-  );
+  return { accepted, setAccepted, busy, error, submit };
 }
 
 function ConsentPendingControl({ onLater }: { readonly onLater: () => void }) {
@@ -223,11 +227,11 @@ function ConsentPendingControl({ onLater }: { readonly onLater: () => void }) {
         <span>Текст согласия ожидает проверки и пока не может быть принят.</span>
       </label>
       <div className="career-relocation-footer-actions">
-        <button className="career-btn career-btn-primary" type="button" disabled>
+        <button className="career-relocation-btn is-primary" type="button" disabled>
           <ArrowRight aria-hidden="true" size={17} />
           Заполнить анкету
         </button>
-        <button className="career-btn career-btn-secondary" type="button" onClick={onLater}>
+        <button className="career-relocation-btn" type="button" onClick={onLater}>
           Позже
         </button>
       </div>
