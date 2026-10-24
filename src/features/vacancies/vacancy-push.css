@@ -422,3 +422,23 @@ div.vacancy-push-row {
   min-block-size: 50px;
   border-radius: 25px;
 }
+
+/* B510: значок строки как .pm-ico макета 4 — квадрат 32 с радиусом 9 на белом 7 %, значок 18;
+   заголовок экрана (.pm-hero h2) 600; круглая «Править» — стекло bg-elevated 70 %, цвет dim, без рамки. */
+.vacancy-push-row .vacancy-push-ico {
+  border-radius: 9px;
+  background: color-mix(in oklch, white 7%, transparent);
+}
+.vacancy-push-row .vacancy-push-ico svg {
+  inline-size: 18px;
+  block-size: 18px;
+}
+.vacancy-push-body .vacancy-push-hero h2 {
+  font-weight: 600;
+}
+.vacancy-push-cta .vacancy-push-round {
+  border: 0;
+  color: var(--career-text-dim);
+  background: color-mix(in oklch, var(--career-bg-elevated) 70%, transparent);
+  backdrop-filter: blur(16px);
+}
