@@ -794,6 +794,7 @@
   color: var(--career-text);
   background: transparent;
   font: inherit;
+  font-size: var(--career-text-sm);
   text-align: start;
   cursor: pointer;
 }
