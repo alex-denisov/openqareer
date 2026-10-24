@@ -235,7 +235,7 @@
 }
 .cf-donut figcaption {
   flex: 1;
-  min-inline-size: 0;
+  min-inline-size: min(100%, calc(var(--ps-space-8) * 8));
 }
 .cf-donut dl {
   margin: var(--ps-space-3) 0 0;
@@ -243,6 +243,7 @@
 .cf-donut dd {
   margin: 0 0 var(--ps-space-2);
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 .cf-mode-options {
   display: flex;
@@ -260,6 +261,7 @@
   cursor: not-allowed;
 }
 .cf-sticky {
+  flex-wrap: wrap;
   position: fixed;
   inset-block-end: 0;
   inset-inline: 0;
@@ -287,20 +289,11 @@
   white-space: normal;
 }
 
-.cf-donut dd {
-  overflow-wrap: anywhere;
-}
-.cf-sticky {
-  flex-wrap: wrap;
-}
 .cf-sticky > p {
   flex-basis: 100%;
   text-align: center;
 }
 
-.cf-donut figcaption {
-  min-inline-size: min(100%, calc(var(--ps-space-8) * 8));
-}
 .cf-key {
   display: inline-block;
   inline-size: var(--ps-space-3);
