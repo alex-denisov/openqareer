@@ -1184,7 +1184,14 @@
   }
   .vacancies-info-footer .vacancies-info-btn {
     inline-size: 100%;
+    border-radius: 18px;
+  }
+  .vacancies-info-footer .vacancies-info-btn:last-child {
     min-block-size: 36px;
+  }
+  .career-modal-card:has(.vacancies-info-body) .career-modal-close {
+    block-size: 36px;
+    border: var(--career-border-width) solid transparent;
     border-radius: 18px;
   }
 }
