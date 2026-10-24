@@ -144,7 +144,7 @@ function DesktopComparison({
       />
       <div className="career-relocation-footer-actions">
         <button
-          className="career-btn career-btn-primary"
+          className="career-relocation-btn is-primary"
           type="button"
           onClick={() => workspace.showTab('economy')}
         >
@@ -152,7 +152,7 @@ function DesktopComparison({
           Посчитать экономику
         </button>
         {onOpenExpert ? (
-          <button className="career-relocation-text-action" type="button" onClick={onOpenExpert}>
+          <button className="career-relocation-btn" type="button" onClick={onOpenExpert}>
             <ChatCircle aria-hidden="true" size={17} />
             Обсудить с консультантом
           </button>
@@ -232,7 +232,7 @@ function comparisonTitle(countries: RelocationWorkspaceState['comparisonCountrie
 
 function EditCountriesAction({ onClick }: { readonly onClick: () => void }) {
   return (
-    <button className="career-relocation-text-action" type="button" onClick={onClick}>
+    <button className="career-relocation-btn is-sm is-ghost" type="button" onClick={onClick}>
       <PencilSimple aria-hidden="true" size={16} />
       Изменить страны
     </button>
