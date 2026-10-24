@@ -264,3 +264,17 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+.sm-groups select {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding: var(--ps-space-2) var(--ps-space-3);
+  color: var(--ps-ink);
+  background: var(--ps-bg);
+  border: var(--ps-border-width) solid var(--ps-line);
+  border-radius: var(--ps-radius-sm);
+  font: inherit;
+}
+.sm-groups select:focus-visible {
+  outline: calc(var(--ps-border-width) * 2) solid var(--ps-blue);
+  outline-offset: var(--ps-space-1);
+}
