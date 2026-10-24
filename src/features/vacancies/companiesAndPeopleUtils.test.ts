@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  companyLocationLabel,
   companySourceSummary,
   groupCompanyPeople,
   isContactImportStale,
@@ -154,5 +155,20 @@ describe('groupCompanyPeople', () => {
 
   it('returns nobody and no cold vacancy for empty responses', () => {
     expect(groupCompanyPeople([])).toEqual({ people: [], coldVacancyId: null });
+  });
+});
+
+describe('companyLocationLabel', () => {
+  it('keeps one place as is', () => {
+    expect(companyLocationLabel('Bengaluru, IND')).toBe('Bengaluru, IND');
+  });
+
+  it('folds a long list of places into the first one and a count', () => {
+    expect(companyLocationLabel('Argentina; Austria; Belgium; Brazil')).toBe('Argentina и ещё 3');
+  });
+
+  it('names an unknown place', () => {
+    expect(companyLocationLabel(null)).toBe('Место неизвестно');
+    expect(companyLocationLabel('  ')).toBe('Место неизвестно');
   });
 });

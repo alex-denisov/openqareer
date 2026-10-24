@@ -15,7 +15,11 @@ import type {
   CandidateCompanyPage,
   CandidateCompanySort,
 } from '../../../shared/candidateCompany';
-import { companyVacancySummary, isContactImportStale } from './companiesAndPeopleUtils';
+import {
+  companyLocationLabel,
+  companyVacancySummary,
+  isContactImportStale,
+} from './companiesAndPeopleUtils';
 import { CompanyAvatar } from './CompanyDetailPanel';
 
 const FILTERS: readonly { value: CandidateCompanyFilter; label: string }[] = [
@@ -315,7 +319,7 @@ function CompanyListRow({
         <span className="companies-people-company-text">
           <strong>{company.name}</strong>
           <span>
-            {company.location ?? 'Место неизвестно'} · {companyVacancySummary(company)}
+            {companyLocationLabel(company.location)} · {companyVacancySummary(company)}
           </span>
         </span>
         <CompanyRowMetrics company={company} />
