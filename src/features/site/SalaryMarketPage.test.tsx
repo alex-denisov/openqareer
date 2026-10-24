@@ -54,7 +54,10 @@ describe('public salary evidence page', () => {
     expect(html).toContain('10 из 20');
     expect(html).toContain('href="/salaries/software-engineer?group=1"');
     expect(html).toContain('href="/signup"');
-    expect(html).toContain('Сравнить моё резюме с рынком');
+    expect(html).toContain('Сравните навыки');
+    expect(html).toContain('ym-hide-content');
+    expect(html).toContain('ym-disable-keys');
+    expect(html).not.toContain('name="skills"');
     expect(html).toContain('Individual contributor не означает junior');
   });
   it('selects only a supported bucket and names its own sample', () => {

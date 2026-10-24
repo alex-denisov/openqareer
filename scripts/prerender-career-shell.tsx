@@ -214,7 +214,7 @@ async function writeHelpPages(html: string, distDirectory: string): Promise<void
 
 async function writeSalaryTemplate(html: string, distDirectory: string): Promise<void> {
   // Runtime salary SSR uses the built head/assets; it never embeds sample market data.
-  await writeFile(`${distDirectory}/salary-market.html`, html.replace(EMPTY_ROOT,
+  await writeFile(`${distDirectory}/salary-market.html`, html.replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js').replace(EMPTY_ROOT,
     renderToStaticMarkup(<div className="ps sm-public"><a className="ps-skip" href="#main">К содержимому</a><PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />{'%%SALARY_CONTENT%%'}<PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} /></div>))
     .replace(/<script type="module"[^>]*><\/script>/gu, ''));
 }
