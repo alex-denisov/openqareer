@@ -1,4 +1,5 @@
 import { requiresAnalyticsDocumentNavigation } from './features/site/analyticsNavigation';
+import { completeCandidateWorkspace } from './features/workspace/workspaceCompletionApi';
 import {
   clearCountryFitScenario,
   saveWithCountryFitTransfer,
@@ -348,7 +349,7 @@ export default function App() {
     return () => window.removeEventListener('storage', handleStorage);
   }, [state.session]);
 
-  function persist(workspace: CandidateWorkspace) {
+  function persist(workspace: CandidateWorkspace, writeServer = true) {
     try {
       if (state.session?.candidateId) {
         saveWithCountryFitTransfer(
@@ -356,7 +357,7 @@ export default function App() {
           workspaceInputOf(workspace).constraints,
         );
         // Write through, so the answers survive this browser.
-        void putCandidateWorkspace(workspaceInputOf(workspace)).catch(() => {
+        if (writeServer) void putCandidateWorkspace(workspaceInputOf(workspace)).catch(() => {
           setStorageError(
             'Ответы сохранены в этом браузере, но не на сервере. Они могут не открыться на другом устройстве.',
           );
@@ -383,10 +384,18 @@ export default function App() {
    * it the cabinet's single reading raced the import and always lost
    * (INC-024).
    */
-  async function handleSave(input: WorkspaceInput): Promise<void> {
+  async function handleSave(input: WorkspaceInput, complete = false): Promise<void> {
     const { prepareCareerWorkspace } = await import('./features/journey/careerJourneyEngine');
     const workspace = prepareCareerWorkspace(input, undefined, state.workspace);
-    persist(workspace);
+    if (complete && state.session?.candidateId) {
+      try {
+        await completeCandidateWorkspace(workspaceInputOf(workspace));
+      } catch {
+        setStorageError('Не удалось завершить настройку на сервере. Повторите сохранение.');
+        throw new Error('workspace_completion_failed');
+      }
+    }
+    persist(workspace, !complete);
     // The wizard imports as soon as it reads a document; this is the retry for
     // the case where the candidate registered only after uploading. A failure
     // is shown, never swallowed — a silent 422 is what left Resume Studio empty
@@ -551,6 +560,7 @@ export default function App() {
         invalidStorage={state.invalidStorage}
         storageError={storageError}
         onSaveWorkspace={handleSave}
+        onCompleteWorkspace={(input) => handleSave(input, true)}
         onUpdateWorkspace={persist}
         onClearWorkspace={handleClear}
         session={state.session}

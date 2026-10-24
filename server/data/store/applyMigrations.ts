@@ -1,3 +1,4 @@
+import { SEO_GOAL_MIGRATION } from '../seoGoalSchema';
 import { MIGRATION_ADAPTATION_APPLICATIONS } from '../adaptationApplications';
 import { MIGRATION_DIARY_COACH_STAGE } from '../diaryCoachMigration';
 import type { DatabaseSync } from 'node:sqlite';
@@ -100,6 +101,7 @@ export const MIGRATIONS = [
   MIGRATION_PRO_TRIAL,
   MIGRATION_DIARY_COACH_STAGE,
   MIGRATION_ADAPTATION_APPLICATIONS,
+  SEO_GOAL_MIGRATION,
 ] as const;
 
 export function applyMigrations(

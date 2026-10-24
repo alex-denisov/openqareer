@@ -1,3 +1,4 @@
+import { recordCandidateGoal } from './seoGoalRepository';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SealedText } from './sealedText';
@@ -703,6 +704,9 @@ export class SqliteApplicationRepository {
         ? this.sealedText.seal(JSON.stringify({ deliveryReceipt }), eventAssociatedData(candidateId, applicationId))
         : null,
     );
+    if (toStage !== 'saved' && deliveryReceipt && deliveryReceipt.kind !== 'failure_note') {
+      recordCandidateGoal(this.database, candidateId, 'application_receipt', applicationId, deliveryReceipt.kind, recordedAt);
+    }
   }
 
   private transaction<T>(operation: () => T): T {

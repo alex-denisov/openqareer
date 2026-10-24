@@ -1693,6 +1693,9 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    if (path.endsWith('/candidate/workspace/complete') && route.request().method() === 'POST') {
+      return route.fulfill({ json: { data: route.request().postDataJSON().workspace } });
+    }
     if (path.endsWith('/candidate/workspace')) {
       return route.fulfill({ json: { data: workspace } });
     }

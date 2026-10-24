@@ -76,6 +76,7 @@ interface CareerWorkspaceShellProps {
   invalidStorage?: boolean;
   storageError?: string;
   onSaveWorkspace?: (input: WorkspaceInput) => void | Promise<void>;
+  onCompleteWorkspace?: (input: WorkspaceInput) => void | Promise<void>;
   onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
   onClearWorkspace?: () => void;
   session?: AuthUser | null;
@@ -93,6 +94,7 @@ export function CareerWorkspaceShell({
   invalidStorage = false,
   storageError,
   onSaveWorkspace = () => undefined,
+  onCompleteWorkspace,
   onUpdateWorkspace = () => undefined,
   onClearWorkspace = () => undefined,
   session,
@@ -439,7 +441,8 @@ export function CareerWorkspaceShell({
   const completeIntake = useMemo(
     () =>
       createIntakeCompletion({
-        save: onSaveWorkspace,
+        save: onCompleteWorkspace ?? onSaveWorkspace,
+        closeAfterSave: true,
         closeIntake: () => {
           setIntakeStarted(false);
           setIntakeSeed((seed) => seed + 1);
@@ -447,7 +450,7 @@ export function CareerWorkspaceShell({
         refreshCabinet: () => setCabinetRevision((revision) => revision + 1),
         setImporting,
       }),
-    [onSaveWorkspace],
+    [onCompleteWorkspace, onSaveWorkspace],
   );
 
   const completeFirstRun = useCallback(
