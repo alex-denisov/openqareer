@@ -111,3 +111,17 @@ describe('VacancyLocationTreeFilter', () => {
     act(() => root.unmount());
   });
 });
+
+describe('VacancyLocationTreeFilter footer (B510, mockup 4 .pop-foot)', () => {
+  it('uses ghost small buttons for secondary actions and a small button for apply', () => {
+    const { container, root } = render();
+    const byText = (text: string) =>
+      Array.from(container.querySelectorAll('.vacancy-location-foot button')).find(
+        (node) => node.textContent?.trim() === text,
+      )!;
+    expect(byText('Снять все').className).toBe('vac-sm is-ghost');
+    expect(byText('Отмена').className).toBe('vac-sm is-ghost');
+    expect(byText('Применить').className).toBe('vac-sm vacancies-filter-apply');
+    act(() => root.unmount());
+  });
+});

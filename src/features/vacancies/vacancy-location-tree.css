@@ -254,3 +254,19 @@
     min-block-size: 0;
   }
 }
+
+/* B510: строка дерева как .career-check макета 4 — подпись 14 px/400, зазор до текста 12 px,
+   квадрат 24 px с рамкой field-edge на bg-elevated, радиус 4 px. */
+.vacancies-screen .vacancy-location-check {
+  gap: var(--career-space-3);
+  font-weight: 400;
+}
+.vacancies-screen .vacancy-location-check input[type='checkbox'] {
+  inline-size: var(--career-control-min);
+  block-size: var(--career-control-min);
+  border-radius: var(--career-space-1);
+}
+.vacancies-screen .vacancy-location-check input[type='checkbox']:not(:checked):not(:indeterminate) {
+  border-color: var(--career-field-edge);
+  background-color: var(--career-bg-elevated);
+}
