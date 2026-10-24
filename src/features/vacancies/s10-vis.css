@@ -1068,3 +1068,42 @@
     border-block-start: var(--career-border-width) solid var(--career-line);
   }
 }
+
+/* B510: шапка 390 как .topbar макета 4 — колокольчик слева, «Вакансии» по центру 16/600,
+   консультант справа, без линии; «Подключений» в макете нет. «Показать ещё 20» —
+   .pm-cta.is-quiet: 50 px, 16 px, белый 10 %. */
+@media (max-width: 760px) {
+  .career-shell--vacancies .vacancies-mobile-topbar {
+    grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
+    border-block-end: 0;
+  }
+  .vacancies-mobile-topbar h1 {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: var(--career-text-md);
+    text-align: center;
+  }
+  .vacancies-mobile-topbar .vacancies-mobile-header-actions {
+    display: contents;
+  }
+  .vacancies-mobile-topbar button[aria-label='Подключения'] {
+    display: none;
+  }
+  .vacancies-mobile-topbar button[aria-label='Уведомления'] {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .vacancies-mobile-topbar button[aria-label='Спросить консультанта'] {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .vacancies-screen-footer .companies-people-load-more.vac-sm.vac-sm {
+    min-block-size: 50px;
+    border: 0;
+    border-radius: 25px;
+    box-shadow: none;
+    color: var(--career-text);
+    background: color-mix(in oklch, white 10%, transparent);
+    font-size: var(--career-text-md);
+  }
+}
