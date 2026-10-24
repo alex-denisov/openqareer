@@ -29,6 +29,7 @@ import { CATALOG_STYLE } from './catalogStyle';
 import { CATALOG_CHROME_FOOTER, catalogChromeHeader } from './catalogChrome';
 import { meaningfulText, plainSummary, renderDescriptionHtml } from './catalogMarkdown';
 import { countLabel, formatRuDate, pageFacts } from './catalogCopy';
+import { jobPostingMetadata } from './jobPostingMicrodata';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -140,10 +141,13 @@ const CTA_BOX =
 
 const formatDate = formatRuDate;
 
-function descriptionBlock(markdown: string, summary: string): string {
+function descriptionBlock(markdown: string, summary: string, structured = false): string {
   const html = renderDescriptionHtml(markdown) || renderDescriptionHtml(summary);
+  const property = structured ? ' itemprop="description"' : '';
+  // Microdata text values must keep word boundaries between paragraphs/list items.
+  const content = structured ? html.replace(/<\/(p|h2|li)>/gu, '</$1>\n') : html;
   return html
-    ? `<div class="cat-body">${html}</div>`
+    ? `<div class="cat-body"${property}>${content}</div>`
     : '<div class="cat-body"><p>Источник не передал полный текст. Условия и требования — на сайте работодателя, кнопка «Открыть у работодателя».</p></div>';
 }
 
@@ -372,6 +376,13 @@ function aboutBox(entry: CatalogEntry, employer: string): string {
 
 export function renderVacancyDocument(detail: VacancyDetail): string {
   const { entry } = detail;
+  const posting = detail.indexable
+    ? detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')
+    : undefined;
+  const jsonLd: StructuredGraph = {
+    ...detail.jsonLd,
+    '@graph': detail.jsonLd['@graph'].filter((node) => node['@type'] !== 'JobPosting'),
+  };
   const employer = employerLabel(entry.company);
   const title = `${entry.title} — ${employer} · openqareer`;
   const description = plainSummary(
@@ -385,8 +396,9 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     siteHeader() +
     '<main id="main" class="ps-wrap ps-page">' +
     crumbs([{ label: 'Вакансии', path: CATALOG_ROOT }]) +
-    '<div class="cat-detail"><article>' +
-    `<h1>${escapeHtml(entry.title)}</h1>` +
+    `<div class="cat-detail"><article${posting ? ' itemscope itemtype="https://schema.org/JobPosting"' : ''}>` +
+    (posting ? jobPostingMetadata(posting) : '') +
+    `<h1${posting ? ' itemprop="title"' : ''}>${escapeHtml(entry.title)}</h1>` +
     metaLine(entry) +
     (entry.skills.length > 0
       ? `<ul class="cat-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
@@ -394,6 +406,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     descriptionBlock(
       meaningfulText(detail.description, entry.title),
       meaningfulText(entry.summary, entry.title),
+      Boolean(posting),
     ) +
     '<p class="cat-note">openqareer не кадровое агентство: вакансия собрана с открытого источника, ' +
     'отклик подаётся на сайте работодателя.</p>' +
@@ -408,7 +421,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
       title,
       description,
       canonicalPath: entry.path,
-      jsonLd: detail.jsonLd,
+      jsonLd,
       ogType: 'article',
       // Outside the indexable set: reachable and followed, not indexed.
       ...(detail.indexable ? {} : { noindex: true }),

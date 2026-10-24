@@ -1,3 +1,5 @@
+import { JSDOM } from 'jsdom';
+
 export function inspectionLimit(value) {
   const limit = value == null || value === '' ? 20 : Number(value);
   if (!Number.isInteger(limit) || limit < 0 || limit > 50)
@@ -12,12 +14,32 @@ function graphNodes(value) {
   if (!value || typeof value !== 'object') return [];
   return [value, ...graphNodes(value['@graph'])];
 }
+function microdataPosting(html) {
+  // Parse inert markup only; scripts and external resources are never executed.
+  const dom = new JSDOM(html);
+  try {
+    for (const root of dom.window.document.querySelectorAll('[itemscope][itemtype]')) {
+      if (!root.getAttribute('itemtype').split(/\s+/u).some(type => /^https?:\/\/schema\.org\/JobPosting$/u.test(type))) continue;
+      const properties = [...root.querySelectorAll('[itemprop]')]
+        .filter(element => element.parentElement?.closest('[itemscope]') === root);
+      const value = name => {
+        const element = properties.find(item => item.getAttribute('itemprop').split(/\s+/u).includes(name));
+        if (!element) return undefined;
+        if (element.hasAttribute('itemscope')) return element.textContent.trim() ||
+          [...element.querySelectorAll('[content]')].some(child => child.getAttribute('content')?.trim()) ? {} : undefined;
+        return element.getAttribute('content') ?? element.getAttribute('datetime') ?? element.getAttribute('href') ?? element.textContent.trim();
+      };
+      return Object.fromEntries(['datePosted','hiringOrganization','title','description','jobLocation','jobLocationType','applicantLocationRequirements'].map(name => [name,value(name)]));
+    }
+  } finally { dom.window.close(); }
+  return undefined;
+}
 export function jobPostingEvidence(html) {
   const required = ['datePosted','hiringOrganization','title','description'];
   const nodes = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/giu)]
     .flatMap(match => { try { return graphNodes(JSON.parse(match[1])); } catch { return []; } });
   const posting = nodes.find(item => item['@type'] === 'JobPosting' ||
-    (Array.isArray(item['@type']) && item['@type'].includes('JobPosting')));
+    (Array.isArray(item['@type']) && item['@type'].includes('JobPosting'))) ?? microdataPosting(html);
   const missing = posting ? required.filter(name => posting[name] == null || posting[name] === '') : [...required];
   if (posting && !posting.jobLocation &&
     !(posting.jobLocationType === 'TELECOMMUTE' && posting.applicantLocationRequirements)) missing.push('jobLocation');
