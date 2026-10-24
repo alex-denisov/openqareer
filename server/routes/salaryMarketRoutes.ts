@@ -2,6 +2,7 @@ import {
   isSalaryMarketGrade,
   selectSalaryGrade,
   salaryRoleLabel,
+  type SalaryMarketSkillSummary,
 } from '../../shared/salaryMarketPublic';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,6 +29,7 @@ import {
   readSalaryMarketSnapshot,
   readSalaryMarketIndex,
 } from '../salaryMarket/salaryMarketSnapshot';
+import { MIN_SALARY_MARKET_SAMPLE } from '../../shared/salaryMarketSnapshot';
 import { escapeHtml } from '../vacancies/catalogHtml';
 
 /** Role lookup only: no catalog, aggregate or list query belongs on this HTTP path. */
@@ -76,10 +78,9 @@ export function renderSalaryMarketDocument(
       ? React.createElement(SalaryMarketDirectory, { roles: directory, page: selectedGroup || 1 })
       : React.createElement(SalaryMarketPage, { snapshot, selectedGroup, grade, skillsPage }),
   );
-  return salaryDocumentHead(template, { title, canonical, robots, structured }).replace(
-    '%%SALARY_CONTENT%%',
-    () => content,
-  );
+  return salaryDocumentHead(template, { title, canonical, robots, structured })
+    .replace('%%SALARY_CONTENT%%', () => content)
+    .replace('</body>', '<script type="module" src="/assets/oq-salary-gap-1.js"></script></body>');
 }
 
 function salaryStructuredData(snapshot: SalaryMarketSnapshot | null, canonical: string): string {
@@ -161,6 +162,7 @@ export function registerSalaryMarketRoutes(
   registerSalaryDirectoryRoute(app, options, template);
   const read =
     options.read ?? ((role: string) => loadPublicSalarySnapshot(options.databasePath, role));
+  registerSalarySkillSummary(app, read);
   app.get<{
     Params: { role: string };
     Querystring: { group?: string; grade?: string; skills?: string };
@@ -228,4 +230,69 @@ function sendSalaryView(
     .send(
       renderSalaryMarketDocument(template, snapshot, role, group, undefined, grade, skillsPage),
     );
+}
+
+/** Public aggregate projection only. No candidate input, source scan or account data. */
+function registerSalarySkillSummary(
+  app: FastifyInstance,
+  read: (role: string) => SalaryMarketSnapshot | null,
+): void {
+  app.get<{ Params: { role: string }; Querystring: { grade?: string } }>(
+    '/api/v1/public/salary-markets/:role/skills',
+    (request, reply) => {
+      reply.header('Cache-Control', 'no-store');
+      const { role } = request.params;
+      if (!salaryRolePath(role)) return reply.code(404).send({ error: { code: 'not_found' } });
+      const raw = request.query.grade;
+      const grade = raw && isSalaryMarketGrade(raw) ? raw : null;
+      if (raw && !grade) return reply.code(400).send({ error: { code: 'invalid_grade' } });
+      try {
+        const visible = selectSalaryGrade(read(role), grade ?? undefined);
+        if (!visible) return reply.code(404).send({ error: { code: 'not_found' } });
+        const data = visible.role === role ? publicSkillSummary(visible, grade) : null;
+        if (!data) return reply.code(503).send({ error: { code: 'aggregate_unavailable' } });
+        return { data };
+      } catch {
+        return reply.code(503).send({ error: { code: 'temporarily_unavailable' } });
+      }
+    },
+  );
+}
+function publicSkillSummary(
+  visible: SalaryMarketSnapshot,
+  grade: SalaryMarketGrade | null,
+): SalaryMarketSkillSummary | null {
+  if (
+    !Number.isSafeInteger(visible.sampleSize) ||
+    visible.sampleSize < MIN_SALARY_MARKET_SAMPLE ||
+    !Number.isFinite(Date.parse(visible.updatedAt)) ||
+    visible.source !== 'deduplicated_public_catalog' ||
+    !visible.skills.length
+  )
+    return null;
+  const rows = visible.skills.slice(0, 15);
+  if (
+    rows.some(
+      (row) =>
+        typeof row.name !== 'string' ||
+        row.name.length > 128 ||
+        !row.name.trim().length ||
+        !Number.isSafeInteger(row.count) ||
+        row.count < 0 ||
+        row.count > visible.sampleSize,
+    )
+  )
+    return null;
+  return {
+    role: visible.role,
+    grade,
+    updatedAt: visible.updatedAt,
+    sampleSize: visible.sampleSize,
+    source: visible.source,
+    skills: rows.map(({ name, count }) => ({
+      name,
+      count,
+      frequency: Math.round((count / visible.sampleSize) * 10000) / 100,
+    })),
+  };
 }

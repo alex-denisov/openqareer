@@ -273,8 +273,8 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
           <p>
             Разные валюты, периоды и налоговые условия показаны отдельно. P50 означает середину
             упорядоченного ряда границ вилок. Неполные диапазоны и суммы без периода исключены.
-            Перцентили рассчитаны методом ближайшего ранга. Показываем до {MAX_SALARY_MARKET_GROUPS}{' '}
-            самых крупных сопоставимых групп.
+            Перцентили — методом ближайшего ранга. До {MAX_SALARY_MARKET_GROUPS} самых крупных
+            сопоставимых групп.
           </p>
         </div>
         <div>
@@ -284,9 +284,8 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
               : 'Грейды пока не подтверждены'}
           </h3>
           <p>
-            Грейд показывается только при явном маркере в опубликованном названии вакансии. Это не
-            проверка уровня специалиста. Individual contributor не означает junior. Историю роста
-            зарплат пока нет, персональную оценку мы здесь не рассчитываем.
+            Грейд — из явного маркера названия вакансии. Он не оценивает специалиста. Individual
+            contributor не означает junior.
           </p>
         </div>
       </div>
@@ -319,15 +318,45 @@ function MarketExclusions({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>)
     </>
   );
 }
-function CompareResumeCta() {
+function CompareResumeCta({ snapshot, grade }: Pick<SalaryMarketPageProps, 'snapshot' | 'grade'>) {
+  const ready =
+    snapshot && snapshot.sampleSize >= MIN_SALARY_MARKET_SAMPLE && snapshot.skills.length > 0;
   return (
-    <section className="ps-cta-box">
-      <div>
-        <h2>Какие требования подтверждает ваше резюме?</h2>
-        <p>Загрузите резюме, проверьте факты профиля и посмотрите подходящие вакансии.</p>
-      </div>
-      <a className="ps-btn is-primary" href="/signup">
-        Сравнить моё резюме с рынком
+    <section
+      className="ps-cta-box sm-gap ym-hide-content"
+      data-sm-gap={ready ? '' : undefined}
+      data-role={snapshot?.role}
+      data-grade={grade ?? ''}
+    >
+      <h2>Сравните навыки</h2>
+      {ready ? (
+        <>
+          <p>Через запятую или строку. Сравним с Top-15 в браузере.</p>
+          <form data-gap-form>
+            <label htmlFor="gap-skills">Навыки</label>
+            <textarea
+              id="gap-skills"
+              className="ym-disable-keys"
+              rows={3}
+              maxLength={4000}
+              required
+              aria-describedby="gap-status"
+            />
+            <button className="ps-btn is-primary" type="submit" disabled>
+              Сравнить навыки
+            </button>
+          </form>
+          <p id="gap-status" role="status" aria-live="polite" />
+          <div data-gap-results hidden />
+          <noscript>Включите JavaScript для сравнения.</noscript>
+        </>
+      ) : (
+        <p>
+          Для сравнения нужна подготовленная выборка хотя бы из 5 вакансий с извлечёнными навыками.
+        </p>
+      )}
+      <a className="ps-btn" href="/signup">
+        Сформировать доказательную базу
       </a>
     </section>
   );
@@ -459,7 +488,7 @@ export function SalaryMarketPage(props: SalaryMarketPageProps) {
         <MarketSalaries {...props} snapshot={visible} />
         <MarketSkills {...props} snapshot={visible} />
         <MarketMethodology snapshot={visible} />
-        <CompareResumeCta />
+        <CompareResumeCta snapshot={visible} grade={props.grade} />
       </main>
     </>
   );
@@ -577,7 +606,7 @@ export function SalaryMarketDirectory({
             </div>
           )}
         </section>
-        <CompareResumeCta />
+        <CompareResumeCta snapshot={null} />
       </main>
     </>
   );

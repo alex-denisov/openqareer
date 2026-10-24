@@ -60,3 +60,13 @@ export function salaryRoleLabel(value: {
 }): string {
   return salaryDisplayLabel(value.roleLabel, value.profession?.kind === 'b267' ? 64 : 40);
 }
+
+/** Prepared public projection; never carries candidate input or profile facts. */
+export interface SalaryMarketSkillSummary {
+  readonly role: string;
+  readonly grade: SalaryMarketGrade | null;
+  readonly updatedAt: string;
+  readonly sampleSize: number;
+  readonly source: SalaryMarketSnapshot['source'];
+  readonly skills: SalaryMarketSnapshot['skills'];
+}
