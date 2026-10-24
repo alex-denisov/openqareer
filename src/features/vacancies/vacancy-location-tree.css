@@ -27,6 +27,16 @@
   padding-inline-start: calc(var(--career-space-3) * 2 + 16px);
 }
 
+/* B510: поле поиска поповера как .career-input макета 4 на десктопе — 14 px, 44 px, радиус sm. */
+@media (min-width: 761px) {
+  .vacancies-screen .vacancy-location-search .career-input {
+    min-block-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    border-radius: var(--career-radius-sm);
+    font-size: var(--career-text-sm);
+  }
+}
+
 .vacancy-location-body {
   display: grid;
   gap: var(--career-space-2);

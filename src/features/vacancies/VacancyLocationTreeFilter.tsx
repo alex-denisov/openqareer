@@ -200,7 +200,7 @@ function ForeignNote({
     <li className="vacancy-location-note">
       <Globe size={16} aria-hidden="true" />
       <span>Другие страны: подборка учтёт их после включения релокации.</span>
-      <button type="button" className="filters-reset" disabled={busy} onClick={onEnable}>
+      <button type="button" className="vac-sm is-ghost" disabled={busy} onClick={onEnable}>
         Включить
       </button>
     </li>
