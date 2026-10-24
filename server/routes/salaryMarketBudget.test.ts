@@ -47,7 +47,27 @@ const salary = {
   excluded,
 };
 const grades: readonly SalaryMarketGrade[] = ['junior', 'middle', 'senior', 'lead', 'unknown'];
+function actualHistory(sampleSize: number) {
+  return {
+    status: 'available' as const,
+    method: 'observed_catalog_skill_frequency_pp' as const,
+    methodVersion: 'test-v1',
+    earliestActualObservation: '2026-07-24T00:00:00Z',
+    current: { observedAt: '2026-10-23T00:00:00Z', sampleSize },
+    baseline: { observedAt: '2026-07-24T00:00:00Z', sampleSize },
+    skills: skills.map((skill) => ({
+      name: skill.name,
+      currentCount: sampleSize * 0.75,
+      currentFrequency: 75,
+      baselineCount: sampleSize * 0.5,
+      baselineFrequency: 50,
+      changePP: 25,
+      status: 'available' as const,
+    })),
+  };
+}
 const snapshot: SalaryMarketSnapshot = {
+  skillQuarterlyTrend: actualHistory(300),
   role: 'frontend-engineer',
   roleLabel: 'Frontend-разработчик',
   profession: { kind: 'b267', roleId: 'eng.frontend.ic' },
@@ -61,6 +81,7 @@ const snapshot: SalaryMarketSnapshot = {
   salary,
   gradeSlices: grades.map((grade) => ({
     grade,
+    skillQuarterlyTrend: actualHistory(60),
     sampleSize: 60,
     skills: skills.map((skill) => ({ ...skill, count: 45 })),
     salary: { ...salary, groups: groups.map((group) => ({ ...group, sampleSize: 5 })) },
@@ -140,6 +161,7 @@ describe('B351: data-dependent raw HTML budget', () => {
       ...snapshot,
       roleLabel: escaped,
       profession: { kind: 'unclassified_title' },
+      skillQuarterlyTrend: undefined,
       skills: skills.map((skill, i) => ({ ...skill, name: `${escaped}${i}` })),
     };
     const html = renderSalaryMarketDocument(wholeTemplate(), hostile, snapshot.role, 4);

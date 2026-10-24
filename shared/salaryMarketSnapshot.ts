@@ -22,7 +22,8 @@ export interface SalaryMarketSnapshot {
     readonly frequency: number;
   }[];
   readonly salary: SalaryMarketDistribution;
-  readonly quarterlyTrend: 'unavailable';
+  readonly quarterlyTrend: 'unavailable' | 'available';
+  readonly skillQuarterlyTrend?: SalarySkillQuarterlyTrend;
   readonly grades: 'unavailable' | 'published_title_evidence';
   readonly profession?: SalaryMarketProfession;
   readonly gradeSlices?: readonly SalaryMarketGradeSlice[];
@@ -108,5 +109,65 @@ export interface SalaryMarketGradeSlice {
   readonly sampleSize: number;
   readonly skills: SalaryMarketSnapshot['skills'];
   readonly salary: SalaryMarketDistribution;
+  readonly skillQuarterlyTrend?: SalarySkillQuarterlyTrend;
   readonly evidence: { readonly field: 'title'; readonly markers: readonly string[] };
+}
+
+export interface SalarySkillObservation {
+  readonly observedAt: string;
+  readonly sampleSize: number;
+}
+export type SalarySkillFrequencyChange = {
+  readonly name: string;
+  readonly currentCount: number;
+  readonly currentFrequency: number;
+} & (
+  | {
+      readonly status: 'available';
+      readonly baselineCount: number;
+      readonly baselineFrequency: number;
+      readonly changePP: number;
+    }
+  | {
+      readonly status: 'baseline_skill_unavailable';
+      readonly baselineCount: null;
+      readonly baselineFrequency: null;
+      readonly changePP: null;
+    }
+);
+interface SalarySkillTrendProvenance {
+  readonly method: 'observed_catalog_skill_frequency_pp';
+  readonly methodVersion: string;
+  readonly earliestActualObservation: string | null;
+  readonly current: SalarySkillObservation;
+}
+/** Observed frequency differences in percentage points, not global market demand.
+ * The current point is the fresh persisted snapshot. Baseline must be an actual
+ * saved observation of the same method, 90 to 97 days earlier. Missing old top15
+ * skills stay unknown; absence from the published subset never means zero.
+ */
+export type SalarySkillQuarterlyTrend = SalarySkillTrendProvenance &
+  (
+    | {
+        readonly status: 'insufficient_history';
+        readonly baseline?: never;
+        readonly skills?: never;
+      }
+    | {
+        readonly status: 'insufficient_sample';
+        readonly baseline: SalarySkillObservation;
+        readonly skills?: never;
+      }
+    | {
+        readonly status: 'available';
+        readonly baseline: SalarySkillObservation;
+        readonly skills: readonly SalarySkillFrequencyChange[];
+      }
+  );
+
+/** At least one real same-method skill comparison exists; missing skills are never zero changes. */
+export function salarySkillTrendHasChanges(trend: SalarySkillQuarterlyTrend | undefined): boolean {
+  return (
+    trend?.status === 'available' && trend.skills.some((skill) => skill.status === 'available')
+  );
 }

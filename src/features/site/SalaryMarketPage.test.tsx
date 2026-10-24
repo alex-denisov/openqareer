@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
+import { selectSalaryGrade } from '../../../shared/salaryMarketPublic';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { SalaryMarketPage, salarySnapshotIndexable, salaryRolePath } from './SalaryMarketPage';
@@ -164,5 +165,101 @@ describe('prepared profession and grade views', () => {
     expect(second).toContain('start="6"');
     expect(second).toContain('Technology 5');
     expect(second).not.toContain('Technology 0<');
+  });
+});
+
+describe('actual saved skill frequency history', () => {
+  const history = {
+    status: 'available' as const,
+    method: 'observed_catalog_skill_frequency_pp' as const,
+    methodVersion: 'test-v1',
+    earliestActualObservation: '2026-07-24T00:00:00Z',
+    current: { observedAt: TEST_SALARY_SNAPSHOT.updatedAt, sampleSize: 20 },
+    baseline: { observedAt: '2026-07-24T00:00:00Z', sampleSize: 25 },
+    skills: [
+      {
+        name: 'TypeScript',
+        currentCount: 10,
+        currentFrequency: 50,
+        baselineCount: 5,
+        baselineFrequency: 20,
+        changePP: 30,
+        status: 'available' as const,
+      },
+    ],
+  };
+  it('renders observed percentage-point changes with both dated denominators', () => {
+    const html = renderToStaticMarkup(
+      <SalaryMarketPage snapshot={{ ...TEST_SALARY_SNAPSHOT, skillQuarterlyTrend: history }} />,
+    );
+    expect(html).toContain('+30 п.п.');
+    expect(html).toContain('было 20%');
+    expect(html).toContain('24.07.2026');
+    expect(html).toContain('25 вакансий');
+    expect(html).toContain('20 вакансий');
+    expect(html).toContain('а не оценка всего рынка');
+  });
+  it('does not turn a skill missing from the saved top-15 into zero', () => {
+    const absent = {
+      ...history,
+      skills: [
+        {
+          name: 'TypeScript',
+          currentCount: 10,
+          currentFrequency: 50,
+          baselineCount: null,
+          baselineFrequency: null,
+          changePP: null,
+          status: 'baseline_skill_unavailable' as const,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <SalaryMarketPage snapshot={{ ...TEST_SALARY_SNAPSHOT, skillQuarterlyTrend: absent }} />,
+    );
+    expect(html).toContain('нет сравнения');
+    expect(html).not.toContain('было 0%');
+    const graded: SalaryMarketSnapshot = {
+      ...TEST_SALARY_SNAPSHOT,
+      gradeSlices: [
+        {
+          grade: 'senior',
+          sampleSize: 20,
+          skills: TEST_SALARY_SNAPSHOT.skills,
+          salary: TEST_SALARY_SNAPSHOT.salary,
+          evidence: { field: 'title', markers: ['Senior'] },
+          skillQuarterlyTrend: absent,
+        },
+      ],
+    };
+    expect(selectSalaryGrade(graded, 'senior')?.quarterlyTrend).toBe('unavailable');
+  });
+  it('uses only the selected grade history and explains the real first observation', () => {
+    const first = {
+      status: 'insufficient_history' as const,
+      method: history.method,
+      methodVersion: history.methodVersion,
+      earliestActualObservation: TEST_SALARY_SNAPSHOT.updatedAt,
+      current: { observedAt: TEST_SALARY_SNAPSHOT.updatedAt, sampleSize: 8 },
+    };
+    const source: SalaryMarketSnapshot = {
+      ...TEST_SALARY_SNAPSHOT,
+      skillQuarterlyTrend: history,
+      gradeSlices: [
+        {
+          grade: 'senior',
+          sampleSize: 8,
+          skills: TEST_SALARY_SNAPSHOT.skills,
+          salary: TEST_SALARY_SNAPSHOT.salary,
+          evidence: { field: 'title', markers: ['Senior'] },
+          skillQuarterlyTrend: first,
+        },
+      ],
+    };
+    const html = renderToStaticMarkup(<SalaryMarketPage snapshot={source} grade="senior" />);
+    expect(html).toContain('Первое фактическое наблюдение: 23.10.2026');
+    expect(html).toContain('Отсутствие истории не означает нулевое изменение');
+    expect(html).not.toContain('24.07.2026');
+    expect(html).not.toContain('+30 п.п.');
   });
 });

@@ -5,6 +5,7 @@ export function salaryRolePath(role: string): string | undefined {
     : undefined;
 }
 
+import { salarySkillTrendHasChanges } from './salaryMarketSnapshot';
 import type {
   SalaryMarketGrade,
   SalaryMarketProfession,
@@ -29,7 +30,16 @@ export function selectSalaryGrade(
   if (!snapshot || !grade) return snapshot;
   const slice = snapshot.gradeSlices?.find((row) => row.grade === grade && row.sampleSize > 0);
   return slice
-    ? { ...snapshot, sampleSize: slice.sampleSize, skills: slice.skills, salary: slice.salary }
+    ? {
+        ...snapshot,
+        sampleSize: slice.sampleSize,
+        skills: slice.skills,
+        salary: slice.salary,
+        skillQuarterlyTrend: slice.skillQuarterlyTrend,
+        quarterlyTrend: salarySkillTrendHasChanges(slice.skillQuarterlyTrend)
+          ? 'available'
+          : 'unavailable',
+      }
     : null;
 }
 

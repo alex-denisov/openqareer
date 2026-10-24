@@ -14,6 +14,7 @@ import {
   SALARY_MARKET_INDEX_LIMIT,
 } from '../../../shared/salaryMarketSnapshot';
 import type {
+  SalarySkillQuarterlyTrend,
   SalaryMarketGrade,
   SalaryMarketIndexEntry,
   SalaryMarketSnapshot,
@@ -137,10 +138,12 @@ function MarketSkills({
         Длинные названия сокращены с многоточием. Исходные формулировки — в{' '}
         <a href="/vacancies">каталоге вакансий</a>.
       </p>
+      <SkillHistoryContext trend={snapshot?.skillQuarterlyTrend} />
       {snapshot && snapshot.sampleSize >= MIN_SALARY_MARKET_SAMPLE && snapshot.skills.length > 0 ? (
         <>
           <SkillsRows
             rows={rows}
+            trend={snapshot.skillQuarterlyTrend}
             denominator={snapshot.sampleSize}
             start={(currentPage - 1) * 5 + 1}
           />
@@ -164,13 +167,18 @@ function SkillsRows({
   rows,
   denominator,
   start,
+  trend,
 }: {
+  trend?: SalarySkillQuarterlyTrend;
   rows: SalaryMarketSnapshot['skills'];
   denominator: number;
   start: number;
 }) {
   return (
-    <ol className="sm-skill-list" start={start}>
+    <ol
+      className={`sm-skill-list${trend?.status === 'available' ? ' has-history' : ''}`}
+      start={start}
+    >
       {rows.map((skill) => (
         <li key={skill.name}>
           <span>{salaryDisplayLabel(skill.name, 24)}</span>
@@ -180,6 +188,7 @@ function SkillsRows({
               {skill.count.toLocaleString('ru-RU')} из {denominator.toLocaleString('ru-RU')}
             </small>
           </span>
+          <SkillHistoryChange name={skill.name} trend={trend} />
           <meter
             min="0"
             max="100"
@@ -193,6 +202,56 @@ function SkillsRows({
     </ol>
   );
 }
+function SkillHistoryContext({ trend }: { trend?: SalarySkillQuarterlyTrend }) {
+  if (!trend) return null;
+  const date = (value: string) => new Date(value).toLocaleDateString('ru-RU', { timeZone: 'UTC' });
+  return (
+    <div className="sm-history-note">
+      <p>
+        <b>Изменение доли навыков.</b> Текущий срез {date(trend.current.observedAt)}:{' '}
+        {trend.current.sampleSize.toLocaleString('ru-RU')} вакансий.
+      </p>
+      {trend.status === 'insufficient_history' ? (
+        <p>
+          Нет сопоставимого сохранённого среза за 90–97 дней до текущего.{' '}
+          {trend.earliestActualObservation ? (
+            <>Первое фактическое наблюдение: {date(trend.earliestActualObservation)}.</>
+          ) : (
+            'Сохранённых наблюдений пока нет.'
+          )}{' '}
+          Отсутствие истории не означает нулевое изменение.
+        </p>
+      ) : (
+        <>
+          <p>
+            Базовый срез {date(trend.baseline.observedAt)}:{' '}
+            {trend.baseline.sampleSize.toLocaleString('ru-RU')} вакансий.{' '}
+            {trend.status === 'insufficient_sample'
+              ? 'В одной из выборок меньше 5 вакансий, сравнение недоступно.'
+              : 'Разница сопоставимых долей указана в процентных пунктах. Это изменение двух каталожных выборок, а не оценка всего рынка.'}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+function SkillHistoryChange({ name, trend }: { name: string; trend?: SalarySkillQuarterlyTrend }) {
+  if (trend?.status !== 'available') return null;
+  const change = trend.skills.find((row) => row.name === name);
+  if (!change || change.status !== 'available' || !Number.isFinite(change.changePP))
+    return <span className="sm-change">нет сравнения</span>;
+  const delta = change.changePP.toLocaleString('ru-RU', {
+    maximumFractionDigits: 2,
+    signDisplay: 'exceptZero',
+  });
+  return (
+    <span className="sm-change">
+      <b>{delta} п.п.</b>
+      <small>было {change.baselineFrequency.toLocaleString('ru-RU')}%</small>
+    </span>
+  );
+}
+
 function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
   return (
     <section id="methodology" className="sm-methodology">

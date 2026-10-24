@@ -1,4 +1,8 @@
 import {
+  accrueSalarySkillHistory,
+  SALARY_SKILL_HISTORY_TABLE_SQL,
+} from './salaryMarketSkillHistory';
+import {
   prepareClassifiedSalaryCatalog,
   selectClassifiedSalaryRoles,
   classifiedSalaryPage,
@@ -174,14 +178,17 @@ export function computeSalaryMarketSnapshots(
 export function writeSalaryMarketSnapshots(
   database: DatabaseSync,
   snapshots: readonly SalaryMarketSnapshot[],
+  observedAt = new Date(),
 ): void {
   database.exec(SALARY_MARKET_TABLE_SQL);
+  database.exec(SALARY_SKILL_HISTORY_TABLE_SQL);
   database.exec('BEGIN IMMEDIATE');
   try {
+    const prepared = accrueSalarySkillHistory(database, snapshots, observedAt);
     database.exec('DELETE FROM salary_market_snapshots');
     const insert = database.prepare('INSERT INTO salary_market_snapshots VALUES (?, ?)');
-    for (const snapshot of snapshots) insert.run(snapshot.role, JSON.stringify(snapshot));
-    const index = snapshots
+    for (const snapshot of prepared) insert.run(snapshot.role, JSON.stringify(snapshot));
+    const index = prepared
       .map((snapshot) => ({
         role: snapshot.role,
         roleLabel: snapshot.roleLabel,

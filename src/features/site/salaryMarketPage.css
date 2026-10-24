@@ -204,3 +204,27 @@
   min-inline-size: 0;
   overflow-wrap: anywhere;
 }
+
+.sm-history-note {
+  display: grid;
+  gap: var(--ps-space-2);
+  font-size: var(--ps-text-sm);
+  color: var(--ps-soft);
+}
+.sm-skill-list .sm-change {
+  grid-column: 1 / -1;
+  color: var(--ps-ink);
+  font-variant-numeric: tabular-nums;
+}
+.sm-skill-list .sm-change small {
+  display: block;
+}
+@media (min-width: 48rem) {
+  .sm-skill-list.has-history li {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .sm-skill-list.has-history .sm-change {
+    grid-column: auto;
+    text-align: end;
+  }
+}
