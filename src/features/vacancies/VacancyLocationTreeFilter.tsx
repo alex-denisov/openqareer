@@ -360,7 +360,7 @@ function LocationSearch({
     <div className="vacancy-location-head">
       <label className="vacancy-location-search">
         <Funnel size={16} aria-hidden="true" />
-        <span className="career-sr-only">Поиск локации</span>
+        <span className="career-sr-only">Поиск</span>
         <input
           type="search"
           className="career-input"

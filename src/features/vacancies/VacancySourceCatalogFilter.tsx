@@ -440,6 +440,7 @@ function SourceCatalogSearch({
   return (
     <label className="vacancy-location-search vacancy-source-search">
       <Funnel size={16} aria-hidden="true" />
+      <span className="career-sr-only">Поиск</span>
       <input
         type="search"
         className="career-input"
