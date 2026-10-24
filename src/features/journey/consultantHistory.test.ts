@@ -33,4 +33,16 @@ describe('consultantTurns: repeated question in a row (B563)', () => {
     ];
     expect(consultantTurns(messages).map((m) => m.id)).toEqual(['1', '2', '7', '8', '9']);
   });
+
+  it('a burst of repeats sent before any answer keeps the first answer that came', () => {
+    const messages = [
+      { id: '1', role: 'user', content: q },
+      { id: '2', role: 'user', content: q },
+      { id: '3', role: 'user', content: q },
+      { id: '4', role: 'assistant', content: 'Ответ 1' },
+      { id: '5', role: 'user', content: q },
+      { id: '6', role: 'assistant', content: 'Ответ 2' },
+    ];
+    expect(consultantTurns(messages).map((m) => m.id)).toEqual(['1', '4']);
+  });
 });

@@ -27,19 +27,27 @@ export function consultantTurns<T extends ConsultantHistoryMessage>(
 
 /**
  * A question resent in a row (B563: one vacancy question stored 10+ times) shows
- * once: a repeat of the previous user question is hidden with its answers.
+ * once with one answer: repeats are hidden, and so are their answers once the
+ * shown question already has one.
  */
 function withoutRepeatedQuestions<T extends ConsultantHistoryMessage>(messages: readonly T[]): T[] {
   const visible: T[] = [];
   let lastQuestion: string | undefined;
-  let hidingRepeat = false;
+  let repeating = false;
+  let answered = false;
   for (const message of messages) {
     if (message.role === 'user') {
       const question = message.content.trim();
-      hidingRepeat = question === lastQuestion;
+      repeating = question === lastQuestion;
+      if (repeating) continue;
       lastQuestion = question;
+      answered = false;
+      visible.push(message);
+      continue;
     }
-    if (!hidingRepeat) visible.push(message);
+    if (repeating && answered) continue;
+    visible.push(message);
+    if (message.role === 'assistant') answered = true;
   }
   return visible;
 }
