@@ -13,7 +13,7 @@ import { calculateCountryFitScenario, saveCountryFitScenario } from './countryFi
 
 export const COUNTRY_FIT_TITLE = 'Калькулятор налогов и чистой зарплаты 2026 | openqareer';
 export const COUNTRY_FIT_DESCRIPTION =
-  'Рассчитайте зарплату после налогов в шести странах без регистрации. Укажите свои расходы на аренду и страховку, изучите источники и сохраните сценарий.';
+  'Зарплата после налогов в шести странах: расчёт за 2026 год, свои расходы и источники. Без регистрации.';
 export const COUNTRY_FIT_FAQ = [
   [
     'Нужна ли регистрация для расчёта?',
@@ -261,34 +261,28 @@ function ScenarioSources({ model }: { model: CountryFitModel }) {
 
 function ScenarioFaq() {
   return (
-    <section className="cf-section" aria-labelledby="cf-faq">
+    <section
+      className="cf-section"
+      aria-labelledby="cf-faq"
+      itemScope
+      itemType="https://schema.org/FAQPage"
+    >
       <h2 id="cf-faq">Вопросы о расчёте</h2>
       {COUNTRY_FIT_FAQ.map(([question, answer]) => (
-        <details className="cf-faq" key={question}>
-          <summary>{question}</summary>
-          <p>{answer}</p>
+        <details
+          className="cf-faq"
+          key={question}
+          itemScope
+          itemProp="mainEntity"
+          itemType="https://schema.org/Question"
+        >
+          <summary itemProp="name">{question}</summary>
+          <div itemScope itemProp="acceptedAnswer" itemType="https://schema.org/Answer">
+            <p itemProp="text">{answer}</p>
+          </div>
         </details>
       ))}
     </section>
-  );
-}
-
-function ScenarioSchema() {
-  return (
-    <script
-      type="application/ld+json"
-      dangerouslySetInnerHTML={{
-        __html: JSON.stringify({
-          '@context': 'https://schema.org',
-          '@type': 'FAQPage',
-          mainEntity: COUNTRY_FIT_FAQ.map(([name, text]) => ({
-            '@type': 'Question',
-            name,
-            acceptedAnswer: { '@type': 'Answer', text },
-          })),
-        }).replace(/</gu, '\\u003c'),
-      }}
-    />
   );
 }
 
@@ -332,7 +326,6 @@ export function CountryFitPage({
       <a className="ps-skip" href="#main">
         К содержимому
       </a>
-      <ScenarioSchema />
       <CountryFitHeader onNavigate={onNavigate} signedIn={signedIn} isAdmin={isAdmin} />
       <main id="main" className="ps-wrap ps-page cf-page ym-hide-content">
         <CountryFitCrumbs />
