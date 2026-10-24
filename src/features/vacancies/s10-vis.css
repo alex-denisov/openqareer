@@ -1103,3 +1103,11 @@
     font-size: var(--career-text-md);
   }
 }
+
+/* B510: значок в кнопке как .ico макета 4 — 1.25em от кегля кнопки. */
+.vacancies-screen-detail-actions .action-btn svg,
+.vacancies-screen .vac-sm svg {
+  flex: none;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+}
