@@ -16,7 +16,10 @@ const summary: SeoGoalSummary = {
     syntheticCandidates: 'excluded',
     organicConversion: 'unavailable_no_attribution',
   },
-  searchProviders: { google: { status: 'unavailable' }, yandex: { status: 'unavailable' } },
+  searchProviders: {
+    google: { status: 'unavailable', stale: false, latestAttempt: null, lastSuccess: null },
+    yandex: { status: 'unavailable', stale: false, latestAttempt: null, lastSuccess: null },
+  },
 };
 
 // Fictional aggregate fixture; these checks prove built UI behavior, not production analytics.
@@ -108,4 +111,90 @@ test('administrator can read server goals, select a real period, retry failures 
   );
   await expect(page.getByText('12 — завершили мастер настройки')).toBeVisible();
   expect(requests.at(-1)).toBe(90);
+});
+
+test('prepared official source displays real zero, missing position and preserved stale data after failed refresh', async ({
+  page,
+}, testInfo) => {
+  const source = {
+    status: 'available',
+    stale: true,
+    latestAttempt: {
+      observedAt: '2026-10-24T03:00:00.000Z',
+      mode: 'official_api',
+      status: 'unavailable',
+      reason: 'network_error',
+    },
+    lastSuccess: {
+      observedAt: '2026-10-01T03:00:00.000Z',
+      mode: 'official_api',
+      window: { from: '2026-09-01', to: '2026-09-28', timezone: 'America/Los_Angeles' },
+      metrics: { clicks: 0, impressions: 4, ctr: 0, position: null, indexedPages: null, sqi: null },
+      queries: Array.from({ length: 50 }, (_, index) => ({
+        query: index === 0 ? 'q'.repeat(160) : `Синтетический запрос${index}`,
+        clicks: 0,
+        impressions: 4,
+        ctr: 0,
+        position: null,
+      })),
+      sections: { aggregate: 'available', queries: 'available' },
+    },
+  };
+  await page.route('**/api/v1/auth/me', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          username: 'admin.test',
+          email: null,
+          displayName: 'Администратор',
+          role: 'admin',
+          isTest: true,
+          candidateId: null,
+        },
+      },
+    }),
+  );
+  await page.route('**/api/v1/admin/seo-summary?*', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          ...summary,
+          searchProviders: { ...summary.searchProviders, google: source },
+        },
+      },
+    }),
+  );
+  await page.goto('/admin?tab=seo', { waitUntil: 'domcontentloaded' });
+  const region = page.getByRole('region', { name: 'Google Search Console', exact: true });
+  await expect(region).toContainText('Клики: 0. Показы: 4. CTR: 0%. Средняя позиция: нет данных.');
+  await expect(region).toContainText('Срез устарел');
+  await expect(region).toContainText('Показано предыдущее успешное наблюдение');
+  await page.screenshot({
+    path: `output/b352-goals/seo-prepared-${testInfo.project.name}.png`,
+    fullPage: true,
+  });
+  await region.getByText('Популярные запросы (50)', { exact: true }).click();
+  await expect(region.getByRole('listitem')).toHaveCount(50);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const axe = await new AxeBuilder({ page }).include('.admin-workspace').analyze();
+  expect(axe.violations).toEqual([]);
+  writeFileSync(
+    `output/b352-goals/axe-prepared-${testInfo.project.name}.json`,
+    JSON.stringify({ violations: axe.violations, passes: axe.passes.length }, null, 2),
+  );
+  await region.getByRole('listitem').first().scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: `output/b352-goals/seo-prepared-queries-${testInfo.project.name}.png`,
+  });
+  const artifactHtml = await page.evaluate(() => {
+    const css = Array.from(document.styleSheets)
+      .map((sheet) =>
+        Array.from(sheet.cssRules)
+          .map((rule) => rule.cssText)
+          .join('\n'),
+      )
+      .join('\n');
+    return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${css}</style></head><body>${document.querySelector('.admin-console')?.outerHTML}</body></html>`;
+  });
+  writeFileSync(`output/b352-goals/seo-prepared-${testInfo.project.name}.html`, artifactHtml);
 });

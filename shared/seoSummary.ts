@@ -16,5 +16,5 @@ export interface SeoGoalSummary {
     syntheticCandidates: 'excluded';
     organicConversion: 'unavailable_no_attribution';
   };
-  searchProviders: { google: { status: 'unavailable' }; yandex: { status: 'unavailable' } };
+  searchProviders: import('./seoSourceSnapshot').SeoSearchProviders;
 }
