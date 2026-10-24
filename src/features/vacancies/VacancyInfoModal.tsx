@@ -29,6 +29,7 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
       title={cluster.canonicalTitle}
       icon={<Info size={18} aria-hidden="true" />}
       detail
+      className="career-token-scope"
     >
       <div className="career-modal-body vacancies-info-body vacancies-info-scroll">
         <p className="vacancies-info-subtitle">{infoSubtitle(cluster)}</p>
@@ -60,7 +61,11 @@ function VacancyInfoFooter({
           Открыть на площадке
         </button>
       ) : null}
-      <button type="button" className="career-btn career-btn-secondary vacancies-info-btn" onClick={onClose}>
+      <button
+        type="button"
+        className="career-btn career-btn-secondary vacancies-info-btn"
+        onClick={onClose}
+      >
         Закрыть
       </button>
     </div>
