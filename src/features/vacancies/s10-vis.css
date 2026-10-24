@@ -830,3 +830,16 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
+
+/* B510: раскрытая строка как .vcols макета 4 — подпись под навыками xs/dim,
+   блок «Описание» (.desc) 14 px/soft, заголовок наследует soft. */
+.vacancies-screen-requirements-note {
+  color: var(--career-text-dim);
+}
+.vacancies-screen-description h3 {
+  color: var(--career-text-soft);
+}
+.vacancies-screen-description-copy {
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
