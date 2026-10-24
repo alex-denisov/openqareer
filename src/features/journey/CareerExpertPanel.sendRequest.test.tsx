@@ -65,6 +65,16 @@ describe('CareerExpertPanel sendRequest (G5 A2)', () => {
     expect(coach.sendCoachTurn).toHaveBeenCalledTimes(2);
   });
 
+  it('a remounted panel does not resend a request it already sent (B563)', async () => {
+    await act(async () => render(100));
+    expect(coach.sendCoachTurn).toHaveBeenCalledTimes(1);
+    // Switching screens, opening the account or crossing a breakpoint remounts the panel.
+    act(() => root.unmount());
+    root = createRoot(container);
+    await act(async () => render(100));
+    expect(coach.sendCoachTurn).toHaveBeenCalledTimes(1);
+  });
+
   it('only fills the input without a request', async () => {
     await act(async () => render(undefined));
     expect(coach.sendCoachTurn).not.toHaveBeenCalled();
