@@ -78,7 +78,8 @@ test('switched-off state: «Позже» goes back to roles and writes nothing',
   await expect(page.getByRole('button', { name: 'Заполнить анкету' })).toBeDisabled();
   await capture(page, info, 'relocation-off');
 
-  await page.getByRole('button', { name: 'Позже' }).click();
+  // Mockup 15 at 390 has no «Позже»: the push bar's back returns to the roles.
+  await page.getByRole('button', { name: isMobile(info) ? 'Назад к ролям' : 'Позже' }).click();
   await expect(
     page.getByTestId('career-screen').getByRole('heading', { level: 1, name: 'Карьера' }),
   ).toBeVisible();
@@ -91,7 +92,8 @@ test('consent, questionnaire to the summary, countries, comparison and economy',
   await mockSignedInCabinet(page, { relocation: { consentTextApproved: true } });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await openRelocation(page, info);
-  await page.getByRole('checkbox').check();
+  // 390 draws the consent as an iOS switch (mockup 15 `view=off`), 1440 as a checkbox.
+  await page.getByRole(isMobile(info) ? 'switch' : 'checkbox').check();
   await page.getByRole('button', { name: 'Заполнить анкету' }).click();
   await expectStep(page, info, 1);
 
