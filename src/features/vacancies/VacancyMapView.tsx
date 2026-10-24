@@ -130,25 +130,13 @@ function VacancyMapPush(props: VacancyMapViewProps) {
   );
 }
 
-/** 390: одна строка под картой (макет 4), разбивка причин — по кнопке «i». */
+/** 390: одна строка под картой, как в макете 4; кнопки «i» в макете нет. */
 function MapPushNote({ counts }: { counts: VacancyMapNoteCounts }) {
-  const [open, setOpen] = React.useState(false);
   return (
     <div className="career-map-push-note">
       <p className="vacancy-map-note" aria-live="polite">
         {vacancyMapShortNote(counts)}
-        <button
-          type="button"
-          className="career-map-push-note-info"
-          aria-label="Почему не все вакансии на карте"
-          aria-expanded={open}
-          aria-controls="vacancy-map-push-note-details"
-          onClick={() => setOpen((value) => !value)}
-        >
-          <Info size={16} aria-hidden="true" />
-        </button>
       </p>
-      {open ? <p id="vacancy-map-push-note-details">{vacancyMapNote(counts)}</p> : null}
     </div>
   );
 }
