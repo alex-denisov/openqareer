@@ -445,6 +445,21 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     });
     expect((await remove()).json().data.changed).toBe(true);
     expect((await remove()).json().data.changed).toBe(false);
+
+    await assign();
+    const deleteLabel = () => app.inject({
+      method: 'DELETE',
+      url: '/api/v1/candidate/application-labels/' + label.id,
+      headers: { authorization, ...ORIGIN },
+    });
+    const deleted = await deleteLabel();
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().data.deleted).toBe(true);
+    expect((await deleteLabel()).statusCode).toBe(404);
+    const labels = await app.inject({ url: '/api/v1/candidate/application-labels', headers: { authorization } });
+    expect(labels.json().data).toEqual([]);
+    const after = await app.inject({ url: APPLICATIONS_URL, headers: { authorization } });
+    expect(after.json().data[0].labels).toEqual([]);
   });
 
   it('keeps labels and assignments within the authenticated candidate', async () => {
@@ -717,4 +732,25 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     const list = await app.inject({ url, headers: { authorization } });
     expect(list.json().data).toHaveLength(1);
   }, 20_000);
+
+  it('lists and filters 1,000 SQLite applications under one second', async () => {
+    const { app, authorization, candidateStore, candidateId } = await createApp();
+    for (let index = 0; index < 1_000; index += 1) {
+      candidateStore.createApplication(candidateId, {
+        clusterId: 'b451-list-' + index,
+        stage: index % 2 === 0 ? 'saved' : 'applied',
+        manualVacancy: { ...vacancy, company: 'Компания ' + index, source: index % 3 === 0 ? 'hh.ru' : 'linkedin' },
+      });
+    }
+    const started = performance.now();
+    const response = await app.inject({
+      url: APPLICATIONS_URL + '?stage=saved&channel=hh.ru&sort=company&direction=asc&limit=100',
+      headers: { authorization },
+    });
+    const elapsedMs = performance.now() - started;
+    expect(response.statusCode).toBe(200);
+    expect(response.json().meta.total).toBe(167);
+    expect(response.json().meta.stageCounts.applied).toBe(167);
+    expect(elapsedMs).toBeLessThan(1_000);
+  }, 30_000);
 });
