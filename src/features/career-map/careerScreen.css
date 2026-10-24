@@ -49,6 +49,7 @@
   margin: 0;
   font-size: var(--career-text-md);
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .career-count-box {
@@ -502,7 +503,7 @@
 .career-source-stamp {
   margin: 0;
   font-size: var(--career-text-xs);
-  color: var(--career-text-dim);
+  color: var(--career-text-soft);
 }
 
 /* Скелет и пустые состояния */
