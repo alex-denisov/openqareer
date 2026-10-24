@@ -430,7 +430,7 @@ export function VacancyScreenFullDescriptionButton({ onOpen }: { readonly onOpen
   return (
     <button
       type="button"
-      className="btn btn-secondary action-btn vacancies-screen-full-description"
+      className="vac-sm vacancies-screen-full-description"
       onClick={onOpen}
     >
       <FileText size={15} aria-hidden="true" />

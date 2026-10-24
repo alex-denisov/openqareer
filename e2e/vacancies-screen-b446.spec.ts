@@ -51,7 +51,16 @@ async function measureResponsiveWidths(page: Page, testInfo: TestInfo) {
           requested,
           actual,
           overflow,
-          actionHeights: bounds.map((rect) => rect.height),
+          // Mockup 4 (.vm-save): 36 px circle whose ::after (inset -4 px) makes the 44 px target.
+          actionHeights: actions.map((button, index) => {
+            const after = getComputedStyle(button, '::after');
+            const extend =
+              after.content !== 'none' && after.position === 'absolute'
+                ? Math.max(0, -parseFloat(after.top) || 0) +
+                  Math.max(0, -parseFloat(after.bottom) || 0)
+                : 0;
+            return bounds[index].height + extend;
+          }),
           actionOutsideX: bounds.some((rect) => rect.left < 0 || rect.right > actual + 1),
         };
       }, width),
@@ -243,7 +252,16 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     .evaluateAll((buttons) =>
       buttons
         .filter((button) => button.getClientRects().length > 0)
-        .map((button) => button.getBoundingClientRect().height),
+        .map((button) => {
+          // Mockup 4 (.vm-save): the ::after inset extends a 36 px circle to the 44 px target.
+          const after = getComputedStyle(button, '::after');
+          const extend =
+            after.content !== 'none' && after.position === 'absolute'
+              ? Math.max(0, -parseFloat(after.top) || 0) +
+                Math.max(0, -parseFloat(after.bottom) || 0)
+              : 0;
+          return button.getBoundingClientRect().height + extend;
+        }),
     );
   expect(actionHeights.every((height) => height >= 44)).toBe(true);
   const rowTrigger = vacancy.locator('.vacancies-screen-row-trigger');

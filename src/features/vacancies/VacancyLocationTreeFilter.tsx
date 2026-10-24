@@ -113,7 +113,7 @@ function NodeList({
         <li className="vacancy-location-more">
           <button
             type="button"
-            className="filters-reset"
+            className="vac-sm is-ghost"
             onClick={() => setLimit((value) => value + PAGE_STEP)}
           >
             {moreLabel(rest, kind, country)}
@@ -200,7 +200,7 @@ function ForeignNote({
     <li className="vacancy-location-note">
       <Globe size={16} aria-hidden="true" />
       <span>Другие страны: подборка учтёт их после включения релокации.</span>
-      <button type="button" className="filters-reset" disabled={busy} onClick={onEnable}>
+      <button type="button" className="vac-sm is-ghost" disabled={busy} onClick={onEnable}>
         Включить
       </button>
     </li>
@@ -325,7 +325,7 @@ function LocationFooter({
       <span className="vacancy-location-chosen">Выбрано {numberFormat.format(chosen)}</span>
       <button
         type="button"
-        className="filters-reset"
+        className="vac-sm is-ghost"
         disabled={!hasSelection}
         onClick={() =>
           props.onChange((prev) => ({
@@ -338,14 +338,10 @@ function LocationFooter({
       >
         Снять все
       </button>
-      <button type="button" className="filters-reset" onClick={props.onCancel}>
+      <button type="button" className="vac-sm is-ghost" onClick={props.onCancel}>
         Отмена
       </button>
-      <button
-        type="button"
-        className="btn btn-secondary vacancies-filter-apply"
-        onClick={props.onApply}
-      >
+      <button type="button" className="vac-sm vacancies-filter-apply" onClick={props.onApply}>
         <Check size={16} weight="bold" aria-hidden="true" />
         Применить
       </button>

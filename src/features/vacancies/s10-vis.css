@@ -15,7 +15,12 @@
   block-size: 14px;
 }
 
+/* B510: как .vm-f макета 4 — у «Подходит» зелёный только значок, текст soft. */
 .vacancies-screen-cell--status.is-ok {
+  color: var(--career-text-soft);
+}
+
+.vacancies-screen-cell--status.is-ok svg {
   color: var(--career-success);
 }
 
@@ -25,6 +30,10 @@
 
 .vacancies-screen-cell--status.is-unknown {
   color: var(--career-text-soft);
+}
+
+.vacancies-screen-cell--status.is-unknown svg {
+  color: var(--career-text-dim);
 }
 
 .vacancies-screen-card.is-expanded {
@@ -207,8 +216,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: var(--career-control-min);
-  block-size: var(--career-control-min);
+  /* B510: значок вплотную к тексту, как .m макета 4. */
+  inline-size: auto;
+  block-size: auto;
   flex: none;
 }
 
@@ -352,6 +362,9 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   color: var(--career-text-soft);
+  /* B510: .desc макета 4 — 14 px, интерлиньяж 1.5. */
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
 }
 
 .vacancies-screen-full-description {
@@ -723,7 +736,7 @@
     > .career-vacancy-action[data-vacancy-action='save'] {
     border-color: transparent;
     background: transparent;
-    color: var(--career-text-soft);
+    color: var(--career-text-dim);
   }
 
   .vacancies-screen-row-actions
@@ -745,4 +758,356 @@
     color: var(--career-text);
     background: var(--career-surface);
   }
+}
+
+/* B510: малая кнопка макета 4 (shared.css .career-btn.is-sm): видимые 32 px внутри цели 44,
+   прозрачная рамка 6 px, контур inset-тенью, 13 px/600; у пальца и на 390 видимые 44 и 14 px. */
+.vacancies-screen .vac-sm.vac-sm {
+  --sm-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
+  --edge: var(--career-field-edge);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  min-inline-size: 0;
+  margin-block: 0;
+  margin-inline: calc(var(--sm-gutter) * -1);
+  padding: 0 var(--career-space-3);
+  border: var(--sm-gutter) solid transparent;
+  border-radius: calc(var(--career-radius-sm) + var(--sm-gutter));
+  background: transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--edge);
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+.vacancies-screen .vac-sm.vac-sm:hover:not(:disabled) {
+  --edge: var(--career-accent);
+}
+.vacancies-screen .vac-sm.vac-sm.is-ghost {
+  --edge: transparent;
+  color: var(--career-text-soft);
+}
+.vacancies-screen .vac-sm.vac-sm:disabled {
+  color: var(--career-text-dim);
+  cursor: default;
+}
+.vacancies-screen .vac-sm.vac-sm:focus-visible {
+  outline-offset: calc(2px - var(--sm-gutter));
+}
+@media (pointer: coarse), (max-width: 600px) {
+  .vacancies-screen .vac-sm.vac-sm {
+    --sm-gutter: 0px;
+    margin-inline: 0;
+    padding: 0 var(--career-space-4);
+    font-size: var(--career-text-sm);
+  }
+}
+
+/* B510: переключатель «Список / Карта» как .seg макета 4: рамка line-strong без внутреннего
+   поля, кнопки 14 px/600 с полем 16 px, выбранная — accent-soft и цвет акцента. */
+.vacancies-screen .view-switch {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--career-line-strong);
+}
+.vacancies-screen .view-switch button {
+  gap: var(--career-space-2);
+  padding: 0 var(--career-space-4);
+  border-radius: 0;
+  font-size: var(--career-text-sm);
+}
+.vacancies-screen .view-switch button.is-active {
+  background: var(--career-accent-soft);
+  color: var(--career-accent);
+}
+
+/* B510: вкладки «Подборка / Сохранённые / Компании и люди» как .tabs макета 4:
+   поле 16 px по ширине содержимого; счётчик — моно, 400, dim. */
+@media (min-width: 761px) {
+  .vacancies-tabs-row .companies-people-tabs {
+    gap: var(--career-space-1);
+  }
+  .vacancies-tabs-row .companies-people-tab {
+    flex: 0 0 auto;
+    padding-inline: var(--career-space-4);
+  }
+}
+.vacancies-tabs-row .companies-people-tab .tab-count {
+  margin-inline-start: var(--career-space-2);
+  color: var(--career-text-dim);
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* B510: раскрытая строка как .vcols макета 4 — подпись под навыками xs/dim,
+   блок «Описание» (.desc) 14 px/soft, заголовок наследует soft. */
+.vacancies-screen-requirements-note {
+  color: var(--career-text-dim);
+}
+.vacancies-screen-description h3 {
+  color: var(--career-text-soft);
+}
+
+/* B510: строка как .vrow макета 4 — колонки 2.2/1/1.2/1.6 и три кнопки по 44 через 16 px,
+   ячейки по верху; значок «совпадает» 13 px вплотную к тексту через space-1. */
+@media (min-width: 761px) {
+  .vacancies-screen-row-shell.vac-row,
+  .vacancies-table-header {
+    gap: var(--career-space-4);
+  }
+  .vacancies-screen-row-trigger,
+  .vacancies-table-header-cells {
+    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.6fr);
+  }
+  .vacancies-screen-row-trigger {
+    align-items: start;
+    padding-inline-end: 0;
+  }
+  .vacancies-screen-row-trigger .vacancies-screen-cell {
+    align-content: start;
+    gap: 2px;
+  }
+  .vacancies-screen-row-actions,
+  .vacancies-screen-row-actions .career-vacancy-actions {
+    gap: var(--career-space-4);
+  }
+  .vacancies-screen-row-actions {
+    align-items: flex-start;
+    padding-block: var(--career-space-4);
+  }
+  .vacancies-table-header-actions {
+    inline-size: calc(var(--career-target-min) * 3 + var(--career-space-4) * 2);
+  }
+}
+
+/* B510: закладка строки 390 как .vm-save макета 4 — круг 36 px, значок 22 px, цвет dim,
+   без фона; выбранная — цвет акцента. */
+@media (max-width: 760px) {
+  .vacancies-screen-row-actions {
+    inset-block-start: var(--career-space-1);
+    inset-inline-end: var(--career-space-2);
+  }
+  .vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action {
+    inline-size: 36px;
+    min-block-size: 36px;
+    block-size: 36px;
+    border-radius: 50%;
+    color: var(--career-text-dim);
+    background: none;
+    font-size: var(--career-text-sm);
+    font-weight: 400;
+    position: relative;
+  }
+  .vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
+  .vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action svg {
+    inline-size: 22px;
+    block-size: 22px;
+  }
+  .vacancies-screen-row-actions
+    .vacancy-collection-actions
+    > .career-vacancy-action[aria-pressed='true'] {
+    color: var(--career-accent);
+    background: none;
+  }
+}
+
+/* B510: вкладки 390 как .pm-seg макета 4 — стеклянная капсула, три равные кнопки 32 px,
+   13 px/500; выбранная — белый 14 % с внутренним бликом. */
+@media (max-width: 760px) {
+  .vacancies-tabs-row .companies-people-tabs {
+    gap: 2px;
+    padding: 3px;
+    border: 0;
+    border-radius: 19px;
+    background: color-mix(in oklch, var(--career-bg-elevated) 48%, transparent);
+    backdrop-filter: blur(22px) saturate(1.8);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 12%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 18%, transparent),
+      0 6px 20px color-mix(in oklch, black 30%, transparent);
+  }
+  .vacancies-tabs-row .companies-people-tab {
+    min-block-size: 32px;
+    block-size: 32px;
+    border: 0;
+    border-radius: 16px;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 500;
+  }
+  .vacancies-tabs-row .companies-people-tab[aria-selected='true'] {
+    color: var(--career-text);
+    background: color-mix(in oklch, white 14%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 16%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 22%, transparent);
+  }
+}
+
+/* B510: строка фильтров и сводка 390 как .vm-bar/.vm-sum макета 4 — «Фильтры» стеклянная
+   капсула 32 px 13/500, чипы 32 px 13/400 на surface, зона нажатия 44 через ::after;
+   число жирным цветом текста, подпись 14 px soft, «Карта» 16 px/400 акцентом. */
+@media (max-width: 760px) {
+  .vacancies-mobile-filter-toggle,
+  .vacancies-mobile-filter-chip {
+    position: relative;
+    min-block-size: 32px;
+    block-size: 32px;
+    border: 0;
+    border-radius: 16px;
+    font-size: var(--career-text-xs);
+  }
+  .vacancies-mobile-filter-toggle::after,
+  .vacancies-mobile-filter-chip::after {
+    content: '';
+    position: absolute;
+    inset: -6px -3px;
+  }
+  .vacancies-mobile-filter-toggle {
+    background: color-mix(in oklch, var(--career-bg-elevated) 55%, transparent);
+    backdrop-filter: blur(20px) saturate(1.7);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 14%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 18%, transparent);
+    font-weight: 500;
+  }
+  .vacancies-mobile-filter-toggle svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+  .vacancies-mobile-filter-chip {
+    background: var(--career-surface);
+    color: var(--career-text-soft);
+    font-weight: 400;
+  }
+  .vacancies-mobile-filter-badge {
+    min-inline-size: 18px;
+    block-size: 18px;
+    border-radius: 9px;
+    color: var(--career-bg);
+  }
+  .vacancies-mobile-results-summary {
+    padding-inline: var(--career-space-1);
+  }
+  .vacancies-mobile-results-summary .list-hint {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+  .vacancies-mobile-results-summary .vacancy-facet-count {
+    color: var(--career-text);
+    font-weight: 700;
+  }
+  .vacancies-mobile-map-action {
+    min-block-size: 40px;
+    font-size: var(--career-text-md);
+    font-weight: 400;
+  }
+  .vacancies-mobile-map-action svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+}
+
+/* B510: название роли как .vrow .cell b макета 4 — 600, не 700; на 390 (.vm-r1 b) 16 px
+   в одну строку с многоточием; деньги (.vm-money b) 14/700, «оценка» прямым 13 px dim;
+   список — одна карточка surface с радиусом 20 без рамки. */
+.vacancies-screen-cell--role .vac-title {
+  font-weight: 600;
+}
+@media (max-width: 760px) {
+  .vacancies-screen-cell--role {
+    justify-items: stretch;
+    min-inline-size: 0;
+  }
+  .vacancies-screen-cell--role .vac-title {
+    display: block;
+    overflow: hidden;
+    font-size: var(--career-text-md);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vacancies-screen-cell--salary .vacancy-screen-money-value {
+    font-size: var(--career-text-sm);
+    font-weight: 700;
+  }
+  .vacancy-screen-money-short {
+    font-style: normal;
+  }
+  .vacancies-list-container .vac-list {
+    border: 0;
+    border-radius: 20px;
+    background: var(--career-surface);
+  }
+  .vacancies-list-container .vacancies-screen-row-shell.vac-row {
+    padding: var(--career-space-3) var(--career-space-4);
+  }
+  .vacancies-list-container .vac-list-item + .vac-list-item .vacancies-screen-card {
+    position: relative;
+    border-block-start: 0;
+  }
+  .vacancies-list-container .vac-list-item + .vac-list-item .vacancies-screen-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto var(--career-space-4);
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+}
+
+/* B510: шапка 390 как .topbar макета 4 — колокольчик слева, «Вакансии» по центру 16/600,
+   консультант справа, без линии; «Подключений» в макете нет. «Показать ещё 20» —
+   .pm-cta.is-quiet: 50 px, 16 px, белый 10 %. */
+@media (max-width: 760px) {
+  .career-shell--vacancies .vacancies-mobile-topbar {
+    grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
+    border-block-end: 0;
+  }
+  .vacancies-mobile-topbar h1 {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: var(--career-text-md);
+    text-align: center;
+  }
+  .vacancies-mobile-topbar .vacancies-mobile-header-actions {
+    display: contents;
+  }
+  .vacancies-mobile-topbar button[aria-label='Подключения'] {
+    display: none;
+  }
+  .vacancies-mobile-topbar button[aria-label='Уведомления'] {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .vacancies-mobile-topbar button[aria-label='Спросить консультанта'] {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .vacancies-screen-footer .companies-people-load-more.vac-sm.vac-sm {
+    min-block-size: 50px;
+    border: 0;
+    border-radius: 25px;
+    box-shadow: none;
+    color: var(--career-text);
+    background: color-mix(in oklch, white 10%, transparent);
+    font-size: var(--career-text-md);
+  }
+}
+
+/* B510: значок в кнопке как .ico макета 4 — 1.25em от кегля кнопки. */
+.vacancies-screen-detail-actions .action-btn svg,
+.vacancies-screen .vac-sm svg {
+  flex: none;
+  inline-size: 1.25em;
+  block-size: 1.25em;
 }

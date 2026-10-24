@@ -259,7 +259,7 @@ function SourceOptionList({
       {view.visible.length < view.filtered.length ? (
         <button
           type="button"
-          className="filters-reset vacancy-location-more"
+          className="vac-sm is-ghost vacancy-location-more"
           onClick={view.showMore}
         >
           Показать ещё 20
@@ -286,12 +286,12 @@ function SourceFooter({
       <span className="vacancy-location-chosen" aria-live="polite">
         Выбрано {numberFormat.format(view.selected.length)} из {total}
       </span>
-      <button type="button" className="filters-reset" onClick={view.selectAll}>
+      <button type="button" className="vac-sm is-ghost" onClick={view.selectAll}>
         Все {total}
       </button>
       <button
         type="button"
-        className="filters-reset"
+        className="vac-sm is-ghost"
         disabled={!view.selected.length}
         onClick={view.clearSources}
       >
@@ -299,14 +299,10 @@ function SourceFooter({
       </button>
       {compact ? null : (
         <>
-          <button type="button" className="filters-reset" onClick={onCancel}>
+          <button type="button" className="vac-sm is-ghost" onClick={onCancel}>
             Отмена
           </button>
-          <button
-            type="button"
-            className="btn btn-secondary vacancies-filter-apply"
-            onClick={onApply}
-          >
+          <button type="button" className="vac-sm vacancies-filter-apply" onClick={onApply}>
             <Check size={16} weight="bold" aria-hidden="true" />
             Применить
           </button>
@@ -411,15 +407,15 @@ function SourceCatalogContent({
             view.resetVisibleCount();
           }}
         />
+        <SourceCategoryFilters
+          options={view.options}
+          group={view.group}
+          onSelect={(group) => {
+            view.setGroup(group);
+            view.resetVisibleCount();
+          }}
+        />
       </div>
-      <SourceCategoryFilters
-        options={view.options}
-        group={view.group}
-        onSelect={(group) => {
-          view.setGroup(group);
-          view.resetVisibleCount();
-        }}
-      />
       <SourceOptionList catalog={catalog} view={view} />
       <SourceFooter
         view={view}
