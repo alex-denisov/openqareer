@@ -1,3 +1,7 @@
+import {
+  skillFamilyForLabel,
+  SKILL_LABEL_CLASSIFICATION_VERSION,
+} from '../../../shared/skillLabelClassification';
 import React from 'react';
 import {
   SALARY_GRADE_LABELS,
@@ -25,7 +29,7 @@ import type {
 
 export const SALARY_MARKET_TITLE = 'Зарплаты и навыки по профессиям | openqareer';
 export const SALARY_MARKET_DESCRIPTION =
-  'Зарплатные вилки и навыки из каталога вакансий: валюта, период оплаты, размер и дата выборки.';
+  'Вилки и навыки из каталога вакансий: валюта, период, размер и дата выборки.';
 export const SALARY_MARKET_TEMPLATE = 'salary-market.html';
 
 type SalaryGroup = Extract<
@@ -55,8 +59,7 @@ function SalaryDistribution({ group }: { readonly group: SalaryGroup }) {
       <div>
         <h3 id="salary-distribution-title">{salaryGroupLabel(group)}</h3>
         <p className="ps-soft">
-          {group.sampleSize.toLocaleString('ru-RU')} вакансий с полной вилкой и указанным периодом
-          оплаты.
+          {group.sampleSize.toLocaleString('ru-RU')} вакансий с полной вилкой и периодом оплаты.
         </p>
       </div>
       <dl className="sm-percentiles">
@@ -106,7 +109,7 @@ function MarketHeading({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
         )}
       </h1>
       <p className="ps-intro">
-        Опубликованные вилки и навыки из вакансий. Без пересчёта валют и догадок о грейде.
+        Опубликованные вилки и навыки. Без пересчёта валют и догадок о грейде.
       </p>
       {snapshot ? (
         <p className="sm-provenance">
@@ -166,6 +169,11 @@ function MarketSkills({
     </section>
   );
 }
+const SKILL_FAMILY_LABELS = {
+  technical: 'Технический',
+  profile: 'Профильный',
+  unconfirmed: 'Не определена',
+} as const;
 function SkillsRows({
   rows,
   denominator,
@@ -184,7 +192,10 @@ function SkillsRows({
     >
       {rows.map((skill) => (
         <li key={skill.name}>
-          <span>{salaryDisplayLabel(skill.name, 24)}</span>
+          <span>
+            {salaryDisplayLabel(skill.name, 24)}
+            <small>{SKILL_FAMILY_LABELS[skillFamilyForLabel(skill.name)]}</small>
+          </span>
           <span>
             <b>{skill.frequency.toLocaleString('ru-RU')}%</b>{' '}
             <small>
@@ -222,7 +233,7 @@ function SkillHistoryContext({ trend }: { trend?: SalarySkillQuarterlyTrend }) {
           ) : (
             'Сохранённых наблюдений пока нет.'
           )}{' '}
-          Отсутствие истории не означает нулевое изменение.
+          Без истории изменение неизвестно.
         </p>
       ) : (
         <>
@@ -258,12 +269,13 @@ function SkillHistoryChange({ name, trend }: { name: string; trend?: SalarySkill
 function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
   return (
     <section id="methodology" className="sm-methodology">
-      <h2>Методика и ограничения</h2>
+      <h2>Методика</h2>
       <div className="sm-methodology-grid">
         <div>
           <h3>Каталожная выборка за 90 дней</h3>
           <p>
-            Карточка — одно наблюдение. Частота — от всех карточек среза, включая карточки без извлечённых навыков.{' '}
+            Карточка — наблюдение. Частота — от всех карточек, включая карточки без извлечённых
+            навыков.{' '}
             {snapshot?.profession?.kind === 'b267'
               ? 'Профессия — по классификатору openqareer.'
               : 'Профессия пока не определена; выборка по названию.'}{' '}
@@ -273,18 +285,21 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
         <div>
           <h3>Сравниваем только сопоставимое</h3>
           <p>
-            Валюты, периоды и налоги отдельно. Ближайший ранг; P50 — медиана. Неполные вилки и
-            суммы без периода исключены. До {MAX_SALARY_MARKET_GROUPS} самых крупных сопоставимых
-            групп.
+            Валюты, периоды и налоги отдельно. Ближайший ранг; P50 — медиана. Неполные вилки и суммы
+            без периода исключены. До {MAX_SALARY_MARKET_GROUPS} крупных групп.
           </p>
         </div>
         <div>
           <h3>
             {snapshot?.grades === 'published_title_evidence'
-              ? 'Грейд из названия'
-              : 'Грейды пока не подтверждены'}
+              ? 'Грейды и категории'
+              : 'Категории и ограничения'}
           </h3>
-          <p>Грейд не оценивает специалиста. Individual contributor не означает junior.</p>
+          <p>
+            Individual contributor не означает junior. Словарь openqareer по названию: технические —
+            инструменты и инфраструктура; профильные — управление, продукт, комплаенс. Неизвестные
+            не классифицируем. Не оцениваем важность и владение.
+          </p>
         </div>
       </div>
       <MarketExclusions snapshot={snapshot} />
@@ -475,8 +490,7 @@ function MarketGrades({
         ))}
       </nav>
       <p className="ps-soft">
-        Грейд — только из названия; без маркера неизвестен. Навыки, зарплаты и история относятся к
-        выбранному срезу.
+        Грейд — из названия, без маркера неизвестен. Показатели — для выбранного среза.
       </p>
       {selected && selected.evidence.markers.length > 0 ? (
         <p className="ps-note">
@@ -518,10 +532,10 @@ function MarketLocations({ snapshot, grade, location = 'all' }: SalaryMarketPage
         </button>
       </form>
       <p className="ps-note">
-        Страна явная: {snapshot.geography.explicitCountryCount}, неизвестна:{' '}
+        Явная страна: {snapshot.geography.explicitCountryCount}, неизвестна:{' '}
         {snapshot.geography.unknownCountryCount}, неоднозначна:{' '}
         {snapshot.geography.ambiguousCountryCount}. Удалённый формат пересекается со странами и не
-        означает разрешение работать из любой страны.
+        даёт права работать из любой страны.
       </p>
     </section>
   );
@@ -532,7 +546,12 @@ export function SalaryMarketPage(props: SalaryMarketPageProps) {
   const visible = selectSalaryGrade(regional, props.grade);
   return (
     <>
-      <main id="main" tabIndex={-1} className="ps-wrap ps-page sm-page">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="ps-wrap ps-page sm-page"
+        data-skill-classification={SKILL_LABEL_CLASSIFICATION_VERSION}
+      >
         <MarketHeading snapshot={visible} />
         <MarketLocations {...props} />
         <MarketGrades snapshot={regional} grade={props.grade} location={props.location} />
@@ -643,7 +662,12 @@ export function SalaryMarketDirectory({
   const visible = roles.slice((currentPage - 1) * 10, currentPage * 10);
   return (
     <>
-      <main id="main" tabIndex={-1} className="ps-wrap ps-page sm-page">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="ps-wrap ps-page sm-page"
+        data-skill-classification={SKILL_LABEL_CLASSIFICATION_VERSION}
+      >
         <DirectoryHeading />
         <section className="sm-skills">
           <h2>Профессии и названия вакансий в текущем срезе</h2>
