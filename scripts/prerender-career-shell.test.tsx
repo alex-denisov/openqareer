@@ -8,6 +8,7 @@ import { publicPathViolation } from '../shared/seoSlugPolicy';
 import {
   assertSitemapUrlPolicy,
   buildSitemap,
+  compactCountryFitDocument,
   prerenderShells,
   sitemapUrls,
 } from './prerender-career-shell';
@@ -151,6 +152,21 @@ describe('production career shell prerender', () => {
     }
     expect(() => assertSitemapUrlPolicy(['https://openqareer.com/vakansii/moskva'])).toThrow(
       /vakansii/u,
+    );
+  });
+});
+
+
+describe('Country Fit route document budget', () => {
+  it('reuses the exact brand asset without dropping copy or whitespace inside text', () => {
+    const html = '<!-- build note --><header><svg class="brand-lockup-sign" width="26"><path d="M0 0"/></svg></header>\n <p>Две страны и два сценария</p>';
+    const compact = compactCountryFitDocument(html);
+    expect(compact).toContain('src="/favicon.svg" width="26" height="26" alt=""');
+    expect(compact).toContain('<p>Две страны и два сценария</p>');
+    expect(compact).not.toContain('build note');
+    expect(compact).not.toContain('<svg');
+    expect(compactCountryFitDocument('<span>два</span> <span>сценария</span>')).toBe(
+      '<span>два</span> <span>сценария</span>',
     );
   });
 });

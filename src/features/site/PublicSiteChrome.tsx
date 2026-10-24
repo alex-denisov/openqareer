@@ -152,7 +152,7 @@ export function PublicFooter({ onNavigate, onLanding }: PublicChromeProps) {
         <div className="ps-footer-legal">
           <span>© {new Date().getFullYear()} openqareer</span>
           <span>ИП, ИНН {OPERATOR_TAX_ID}</span>
-          {/* Opens the cookie notice from public/assets/oq-analytics-2.js. */}
+          {/* Opens the cookie notice from public/assets/oq-analytics-3.js. */}
           <button type="button" className="ps-footer-cookie" data-oq-consent-open="">
             Настройки cookie
           </button>

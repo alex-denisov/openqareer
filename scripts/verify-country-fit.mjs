@@ -43,11 +43,33 @@ try {
     });
     await page.goto(`${base}/tools/country-fit`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Зарплата после налогов');
-    const firstNet = await page.locator('.cf-net').boundingBox();
+    const firstNet = await page.locator('.cf-net').first().boundingBox();
     expect(firstNet.y + firstNet.height).toBeLessThanOrEqual(width === 390 ? 844 : 900);
     await page.locator('#cf-income').fill('120000');
-    await page.getByRole('radio', { name: 'ОАЭ', exact: true }).check();
-    await expect(page.locator('.cf-net')).toContainText('10');
+    await page
+      .getByRole('group', { name: 'Целевая страна работы', exact: true })
+      .getByRole('radio', { name: 'ОАЭ', exact: true })
+      .check();
+    await expect(page.locator('.cf-net').first()).toContainText('10');
+    await page
+      .getByRole('group', { name: 'Текущая страна (сценарий)', exact: true })
+      .getByRole('radio', { name: 'Кипр', exact: true })
+      .check();
+    await page.locator('#cf-current-income').fill('-1');
+    await expect(page.locator('#cf-current-error')).toContainText('Введите годовой доход');
+    await expect(page.locator('#cf-current-income')).toHaveAttribute(
+      'aria-describedby',
+      'cf-current-error',
+    );
+    await page.locator('#cf-current-income').fill('45000');
+    await expect(page.locator('.cf-current output')).toContainText('€');
+    await expect(page.locator('#cf-income')).toHaveValue('120000');
+    await expect(page.locator('.cf-donut')).toContainText('Взносы работника');
+    await expect(
+      page.getByRole('button', { name: 'ИП / самозанятый · нет расчёта' }),
+    ).toBeDisabled();
+    const sticky = await page.locator('.cf-sticky').boundingBox();
+    expect(sticky.y + sticky.height).toBeLessThanOrEqual(width === 390 ? 844 : 900);
     for (const [index, value] of ['3000', '500', '1500'].entries())
       await page.locator(`#cf-cost-${index}`).fill(value);
     await expect(page.locator('.cf-remainder')).toContainText('5');
@@ -69,8 +91,15 @@ try {
       accessibility.violations.filter((item) => ['critical', 'serious'].includes(item.impact)),
     ).toEqual([]);
     await page.evaluate(() => window.scrollTo(0, 0));
+    await expect(page.locator('.cf-sticky')).toBeHidden();
+    await page.screenshot({ path: `${out}/country-fit-first-fold-${width}.png` });
     await page.screenshot({ path: `${out}/country-fit-${width}.png`, fullPage: true });
-    await page.getByRole('button', { name: 'Продолжить с этим сценарием' }).click();
+    await page.locator('.cf-next').scrollIntoViewIfNeeded();
+    await expect(page.locator('.cf-sticky')).toBeVisible();
+    await page
+      .locator('.cf-sticky')
+      .getByRole('button', { name: 'Продолжить', exact: true })
+      .click();
     await expect(page).toHaveURL(/\/signup$/u);
     expect(
       await page.evaluate(() =>
@@ -104,6 +133,7 @@ try {
       'Сценарий Country Fit: ОАЭ, годовая зарплата до налогов 120000 AED',
     );
     expect(savedWorkspace.constraints).not.toContain('Готов к релокации');
+    expect(savedWorkspace.constraints).not.toContain('45000');
     await page.goto(`${base}/tools/country-fit`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('button', { name: 'Открыть кабинет', exact: true })).toBeVisible();
     await page.evaluate(() => sessionStorage.removeItem('openqareer:country-fit-scenario:v1'));

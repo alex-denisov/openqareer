@@ -198,3 +198,120 @@
 .cf-page .ps-crumbs {
   margin-block-end: 0;
 }
+.cf-public {
+  padding-block-end: calc(var(--ps-space-8) + var(--ps-space-8) + var(--ps-space-4));
+}
+.cf-current {
+  padding: var(--ps-space-6);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-md);
+}
+.cf-donut {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ps-space-6);
+}
+.cf-donut svg {
+  inline-size: calc(var(--ps-space-8) * 5);
+  block-size: calc(var(--ps-space-8) * 5);
+  flex-shrink: 0;
+}
+.cf-donut circle {
+  fill: none;
+  stroke-width: var(--ps-space-3);
+}
+.cf-donut-base {
+  stroke: var(--ps-line-2);
+}
+.cf-donut-tax {
+  stroke: var(--ps-soft);
+}
+.cf-donut-contributions {
+  stroke: var(--ps-ink);
+}
+.cf-donut-net {
+  stroke: var(--ps-blue);
+}
+.cf-donut figcaption {
+  flex: 1;
+  min-inline-size: min(100%, calc(var(--ps-space-8) * 8));
+}
+.cf-donut dl {
+  margin: var(--ps-space-3) 0 0;
+}
+.cf-donut dd {
+  margin: 0 0 var(--ps-space-2);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.cf-mode-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ps-space-3);
+  align-items: center;
+}
+.cf-mode-options button {
+  font: inherit;
+  color: var(--ps-soft);
+  background: var(--ps-bg-2);
+  padding: var(--ps-space-3);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-sm);
+  cursor: not-allowed;
+}
+.cf-sticky {
+  flex-wrap: wrap;
+  position: fixed;
+  inset-block-end: 0;
+  inset-inline: 0;
+  z-index: 10;
+  display: flex;
+  gap: var(--ps-space-3);
+  justify-content: center;
+  align-items: center;
+  padding: var(--ps-space-2);
+  background: var(--ps-surface);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+}
+.cf-sticky > div {
+  display: grid;
+  min-inline-size: 0;
+}
+.cf-sticky small {
+  font-size: var(--ps-text-sm);
+}
+.cf-sticky strong {
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.cf-sticky button {
+  white-space: normal;
+}
+
+.cf-sticky > p {
+  flex-basis: 100%;
+  text-align: center;
+}
+
+.cf-key {
+  display: inline-block;
+  inline-size: var(--ps-space-3);
+  block-size: var(--ps-space-3);
+  margin-inline-end: var(--ps-space-2);
+  border: var(--ps-border-width) solid var(--ps-ink);
+}
+.cf-key-tax {
+  background: var(--ps-soft);
+  border-radius: 50%;
+}
+.cf-key-contributions {
+  background: var(--ps-ink);
+}
+.cf-key-net {
+  background: var(--ps-blue);
+}
+
+.cf-sticky[hidden] {
+  display: none;
+}

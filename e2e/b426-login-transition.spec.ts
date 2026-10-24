@@ -245,7 +245,26 @@ test('preloads the login page chunk when a landing login link receives focus', a
 test('clears the candidate-scoped profile cache after sign-out', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'sign-out cache uses one desktop runner');
   await mockSignedInCabinet(page);
-  await page.addInitScript(
+
+  let signedIn = false;
+  await page.route('**/api/v1/auth/me', async (route) =>
+    route.fulfill({ json: { data: signedIn ? candidate : null } }),
+  );
+  await page.route('**/api/v1/auth/login', async (route) => {
+    signedIn = true;
+    return route.fulfill({
+      json: { data: { ...candidate, sessionToken: 'synthetic-b426-session' } },
+    });
+  });
+  await page.route('**/api/v1/auth/logout', (route) => {
+    signedIn = false;
+    return route.fulfill({ status: 204, body: '' });
+  });
+
+  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByLabel('Email или логин')).toBeVisible();
+  // Seed once before login; a document navigation must never recreate deleted data.
+  await page.evaluate(
     ({ candidateId, value }) => {
       sessionStorage.setItem(
         `openqareer:cabinet:v1:${encodeURIComponent(candidateId)}`,
@@ -262,25 +281,18 @@ test('clears the candidate-scoped profile cache after sign-out', async ({ page }
       },
     },
   );
-
-  let signedIn = false;
-  await page.route('**/api/v1/auth/me', async (route) =>
-    route.fulfill({ json: { data: signedIn ? candidate : null } }),
-  );
-  await page.route('**/api/v1/auth/login', async (route) => {
-    signedIn = true;
-    return route.fulfill({
-      json: { data: { ...candidate, sessionToken: 'synthetic-b426-session' } },
-    });
-  });
-  await page.route('**/api/v1/auth/logout', (route) => route.fulfill({ json: { data: null } }));
-
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
   await page.getByLabel('Email или логин').fill(candidate.username);
   await page.getByLabel('Пароль', { exact: true }).fill('synthetic-password-for-e2e');
   await page.getByRole('button', { name: 'Войти в кабинет' }).click();
   await page.waitForURL('**/app');
   await expect(page.locator('.career-cabinet')).toBeVisible();
+  expect(
+    await page.evaluate(
+      (candidateId) =>
+        sessionStorage.getItem(`openqareer:cabinet:v1:${encodeURIComponent(candidateId)}`),
+      candidate.candidateId,
+    ),
+  ).not.toBeNull();
   await page.locator('.career-account-button').click();
   const accountScreen = page.locator('.career-account-container');
   await expect(accountScreen.getByRole('heading', { name: 'Аккаунт' })).toBeVisible();
@@ -294,7 +306,23 @@ test('clears the candidate-scoped profile cache after sign-out', async ({ page }
       sessionStorage.getItem(`openqareer:cabinet:v1:${encodeURIComponent(candidateId)}`),
     candidate.candidateId,
   );
+  expect(signedIn).toBe(false);
   expect(cachedValue).toBeNull();
+
+  const reloadedSession = page.waitForResponse((response) =>
+    response.url().endsWith('/api/v1/auth/me'),
+  );
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  expect((await (await reloadedSession).json()).data).toBeNull();
+  await expect(page.locator('.ps-top')).toBeVisible();
+  await expect(page.locator('.career-cabinet')).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      (candidateId) =>
+        sessionStorage.getItem(`openqareer:cabinet:v1:${encodeURIComponent(candidateId)}`),
+      candidate.candidateId,
+    ),
+  ).toBeNull();
 });
 
 test('keeps the login page usable at desktop and phone widths', async ({ page }, testInfo) => {

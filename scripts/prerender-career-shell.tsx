@@ -164,9 +164,19 @@ function bootstrapRoot(markup: string, options: { inert?: boolean } = {}): strin
   );
 }
 
+/** The existing favicon is the same measured brand geometry as BrandMark. */
+export function compactCountryFitDocument(document: string): string {
+  return document
+    .replace(/<!--[^]*?-->/gu, '')
+    .replace(
+      /<svg class="brand-lockup-sign"[^]*?<\/svg>/gu,
+      '<img class="brand-lockup-sign" src="/favicon.svg" width="26" height="26" alt="" aria-hidden="true"/>',
+    )
+    .replace(/\n[ \t]*/gu, '');
+}
+
 async function writeCountryFitPage(html: string, distDirectory: string): Promise<void> {
-  await writeFile(
-    `${distDirectory}/country-fit.html`,
+  const document = compactCountryFitDocument(
     deferEntryScript(
       pageHead(html, {
         path: '/tools/country-fit',
@@ -178,6 +188,10 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
       bootstrapRoot(renderToStaticMarkup(<CountryFitPage onNavigate={() => {}} />)),
     ),
   );
+  if (Buffer.byteLength(document) > 20_000) {
+    throw new Error(`Country Fit document ${Buffer.byteLength(document)} exceeds the 20000-byte route budget`);
+  }
+  await writeFile(`${distDirectory}/country-fit.html`, document);
 }
 
 /** B535: /faq and /support are indexed documents with their own first paint. */

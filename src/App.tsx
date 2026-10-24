@@ -1,3 +1,4 @@
+import { requiresAnalyticsDocumentNavigation } from './features/site/analyticsNavigation';
 import {
   clearCountryFitScenario,
   saveWithCountryFitTransfer,
@@ -154,11 +155,15 @@ export default function App() {
       // anonymous visitor to `/`) must not throw the reader back to the top.
       const here = `${window.location.pathname}${window.location.search}`;
       if (path === here) return;
+      if (requiresAnalyticsDocumentNavigation(here, path, isDesktop)) {
+        window.location.assign(path);
+        return;
+      }
       window.history.pushState(null, '', path);
       setCurrentPath(path);
       window.scrollTo(0, 0);
     }
-  }, []);
+  }, [isDesktop]);
 
   const resolveSession = useCallback(async () => {
     const revision = ++sessionRevision.current;

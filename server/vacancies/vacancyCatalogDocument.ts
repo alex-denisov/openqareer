@@ -113,7 +113,7 @@ function head(options: {
     `<meta property="og:url" content="${SITE_ORIGIN}${escapeHtml(options.canonicalPath)}">`,
     `<link rel="stylesheet" href="${CATALOG_STYLESHEET_PATH}">`,
     jsonLdScript(options.jsonLd),
-    '<script src="/assets/oq-analytics-2.js" defer></script>',
+    '<script src="/assets/oq-analytics-3.js" defer></script>',
   ]
     .filter(Boolean)
     .join('');
