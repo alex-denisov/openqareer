@@ -31,7 +31,8 @@ import {
 import { isContactImportStale, readableError } from './companiesAndPeopleUtils';
 
 const COMPANY_ORDER_NOTE: Record<CandidateCompanySort, string> = {
-  default: 'Порядок: «Хочу», затем по числу вакансий, контактов в сети и алфавиту.',
+  default:
+    'Порядок: сначала «Хочу», затем по числу подходящих вакансий, при равенстве по числу контактов в сети, затем по алфавиту.',
   contacts: 'Порядок: по числу контактов в сети, затем по алфавиту.',
   alphabetical: 'Порядок: по алфавиту.',
 };
@@ -267,7 +268,7 @@ async function queueCompanyRecruiterSearch(
     if (reason instanceof CoachApiError && reason.code === 'search_consent_required') {
       onConsentRequired();
     } else {
-      onError(readableError(reason, 'Не удалось запустить поиск рекрутёра.'));
+      onError(readableError(reason, 'Не удалось запустить поиск рекрутера.'));
     }
     return false;
   }
@@ -466,6 +467,25 @@ function CompanyListColumn({
   readonly onOpenCareer?: () => void;
 }) {
   const { page, selectedKey, filters } = model;
+  const footer = page.page ? (
+    <>
+      {page.items.length < page.page.total ? (
+        <button
+          type="button"
+          className="companies-people-load-more"
+          disabled={page.loadingMore}
+          onClick={() => void page.loadMore()}
+        >
+          {page.loadingMore ? 'Загружаем…' : 'Показать ещё 20'}
+        </button>
+      ) : null}
+      <p className="companies-people-list-footer">
+        Показаны {page.items.length} из {page.page.total}
+        {page.items.length < page.page.total ? ', список прокручивается' : ''}.{' '}
+        {COMPANY_ORDER_NOTE[filters.sort]}
+      </p>
+    </>
+  ) : null;
   return (
     <div>
       <CompanyList
@@ -477,22 +497,8 @@ function CompanyListColumn({
         onSelect={model.setSelectedKey}
         onOpenCareer={onOpenCareer}
         onWantsChanged={page.reload}
+        footer={footer}
       />
-      {page.page && page.items.length > 0 ? (
-        <p className="companies-people-list-footer">
-          Показано {page.items.length} из {page.page.total}. {COMPANY_ORDER_NOTE[filters.sort]}
-        </p>
-      ) : null}
-      {page.items.length < (page.page?.total ?? 0) ? (
-        <button
-          type="button"
-          className="companies-people-load-more"
-          disabled={page.loadingMore}
-          onClick={() => void page.loadMore()}
-        >
-          {page.loadingMore ? 'Загружаем…' : 'Показать ещё 20'}
-        </button>
-      ) : null}
     </div>
   );
 }

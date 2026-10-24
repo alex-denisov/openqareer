@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   CaretRight,
   CircleNotch,
@@ -143,9 +143,8 @@ function CompanyFilterChip({
       title={disabled ? 'Список импортированных контактов неизвестен.' : undefined}
       onClick={() => onFilter(filter === item.value ? 'all' : item.value)}
     >
-      {item.value === 'contacts' && disabled
-        ? `${item.label} · неизвестно`
-        : `${item.label}${count === null ? '' : ` ${count}`}`}
+      <span className="companies-people-filter-label">{item.label}</span>{' '}
+      <span className="companies-people-filter-count">{disabled ? 'неизвестно' : count}</span>
     </button>
   );
 }
@@ -184,6 +183,7 @@ export function CompanyList({
   onSelect,
   onOpenCareer,
   onWantsChanged,
+  footer,
 }: {
   readonly companies: readonly CandidateCompanyOpportunity[];
   readonly selectedKey: string | null;
@@ -193,6 +193,8 @@ export function CompanyList({
   readonly onSelect: (key: string) => void;
   readonly onOpenCareer?: () => void;
   readonly onWantsChanged?: () => void;
+  /** Mockup 13: the count and order note close the scrolling list. */
+  readonly footer?: ReactNode;
 }) {
   if (companies.length === 0) {
     return (
@@ -215,6 +217,7 @@ export function CompanyList({
           onSelect={onSelect}
         />
       ))}
+      {footer}
     </div>
   );
 }
@@ -271,6 +274,7 @@ function CompanyRowMetrics({ company }: { readonly company: CandidateCompanyOppo
     <span className="companies-people-company-metrics">
       <span
         className="companies-people-contacts"
+        data-zero={contacts === 0 ? '' : undefined}
         title={contacts === null ? 'Контакты в сети неизвестны' : 'Контакты в вашей сети'}
       >
         <UsersThree aria-hidden="true" />
