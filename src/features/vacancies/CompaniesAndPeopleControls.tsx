@@ -51,16 +51,19 @@ function CompanySearchField({
 }: Pick<CompanyToolbarProps, 'search' | 'total' | 'onSearch'>) {
   const placeholder = `Поиск среди ${total}`;
   return (
-    <label className="companies-people-search">
-      <span className="career-sr-only">Поиск</span>
+    <span className="companies-people-search">
+      <label className="companies-people-field-label" htmlFor="companies-people-q">
+        Поиск
+      </label>
       <MagnifyingGlass aria-hidden="true" />
       <input
+        id="companies-people-q"
         value={search}
         onChange={(event) => onSearch(event.target.value)}
         placeholder={placeholder}
         aria-label={placeholder}
       />
-    </label>
+    </span>
   );
 }
 
@@ -74,9 +77,12 @@ function CompanySortSelect({
   readonly onSort: (value: CandidateCompanySort) => void;
 }) {
   return (
-    <label className="companies-people-select-wrap">
-      <span className="career-sr-only">Сортировка</span>
+    <span className="companies-people-select-wrap">
+      <label className="companies-people-field-label" htmlFor="companies-people-sort">
+        Сортировка
+      </label>
       <select
+        id="companies-people-sort"
         className="companies-people-select"
         value={sort}
         onChange={(event) => onSort(event.target.value as CandidateCompanySort)}
@@ -87,7 +93,7 @@ function CompanySortSelect({
         </option>
         <option value="alphabetical">По алфавиту</option>
       </select>
-    </label>
+    </span>
   );
 }
 
