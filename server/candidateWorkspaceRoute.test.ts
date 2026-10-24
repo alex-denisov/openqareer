@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candidateAuthorization, createApp } from './appTestHarness';
+import { candidateAuthorization, createApp, stores } from './appTestHarness';
 
 const workspace = {
   careerGoal: 'find-job' as const,
@@ -36,6 +36,28 @@ describe('candidate workspace persistence', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toBeNull();
+  });
+
+  it('records only authenticated explicit completion and keeps retries idempotent', async () => {
+    const app = await createApp();
+    const auth = candidateAuthorization(app);
+    const unauthenticated = await app.inject({ method: 'POST', url: '/api/v1/candidate/workspace/complete',
+      headers: { origin: 'http://localhost:3000' }, payload: { workspace } });
+    expect(unauthenticated.statusCode).toBe(401);
+    const unsafe = await app.inject({ method: 'POST', url: '/api/v1/candidate/workspace/complete',
+      headers: { origin: 'https://attacker.test' }, payload: { workspace } });
+    expect(unsafe.statusCode).toBe(403);
+    for (let i = 0; i < 2; i++) {
+      const complete = await app.inject({ method: 'POST', url: '/api/v1/candidate/workspace/complete',
+        headers: { authorization: auth, origin: 'http://localhost:3000' }, payload: { workspace } });
+      expect(complete.statusCode).toBe(200);
+      expect(complete.json().data).toMatchObject({ targetDirection: workspace.targetDirection });
+    }
+    // The app harness deliberately creates a synthetic candidate, excluded from operational totals.
+    expect(stores.at(-1)!.getSeoGoalSummary().goals.onboardingCompleted).toBe(0);
+    const malformed = await app.inject({ method: 'POST', url: '/api/v1/candidate/workspace/complete',
+      headers: { authorization: auth, origin: 'http://localhost:3000' }, payload: { workspace: { resumeText: '' } } });
+    expect(malformed.statusCode).toBe(422);
   });
 
   it('stores the wizard answers and returns them on the next reading', async () => {

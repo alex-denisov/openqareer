@@ -4,7 +4,7 @@ import {
   type CandidateWorkspaceState,
 } from '../domain/candidateWorkspace';
 import type { Handler } from './candidateRoutes';
-import { authenticateCandidate, csrfError, hasSafeMutationOrigin } from './helpers';
+import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
 
 export const handleGetWorkspace: Handler = async (
   { authService, candidateStore, config },
@@ -24,21 +24,29 @@ export const handleGetWorkspace: Handler = async (
  * them. Keeping them only in browser storage meant signing out erased the
  * candidate's career context (INC-024).
  */
-export const handlePutWorkspace: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config } = deps;
-  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
-  const body = z.object({ workspace: candidateWorkspaceSchema }).strict().parse(request.body);
-  const stored = candidateStore.getCandidateWorkspace(candidate.id);
-  return {
-    data: candidateStore.saveCandidateWorkspace(candidate.id, {
-      ...body.workspace,
-      ...serverOwnedWorkspaceFields(stored),
-    }),
-    meta: { requestId: request.id },
+export const handlePutWorkspace = workspaceMutation(false);
+export const handleCompleteWorkspace = workspaceMutation(true);
+
+function workspaceMutation(complete: boolean): Handler {
+  return async (deps, request, reply) => {
+    const { authService, candidateStore, config } = deps;
+    if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+    const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+    if (!candidate) return undefined;
+    const body = z.object({ workspace: candidateWorkspaceSchema }).strict().parse(request.body);
+    const stored = candidateStore.getCandidateWorkspace(candidate.id);
+    const workspace = { ...body.workspace, ...serverOwnedWorkspaceFields(stored) };
+    if (complete && !candidateStore.completeCandidateWorkspace) {
+      return sendError(reply, request, 503, 'unavailable', 'Завершение настройки временно недоступно.', true);
+    }
+    return {
+      data: complete
+        ? candidateStore.completeCandidateWorkspace!(candidate.id, workspace)
+        : candidateStore.saveCandidateWorkspace(candidate.id, workspace),
+      meta: { requestId: request.id },
+    };
   };
-};
+}
 
 /**
  * Кампанию и отметки визита пишет только сервер (`/campaign`, пересборка ролей,

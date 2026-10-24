@@ -9,7 +9,7 @@ import {
   buildSnapshotHead,
   buildTurnPage,
 } from '../data/candidateSnapshotPage';
-import { handleGetWorkspace, handlePutWorkspace } from './workspaceHandlers';
+import { handleCompleteWorkspace, handleGetWorkspace, handlePutWorkspace } from './workspaceHandlers';
 import { evaluateProductCase, productCaseSubmissionSchema } from '../domain/assessment';
 import { coachTurnStageSchema } from '../domain/coach';
 import { evaluateGermanyMarket, germanyMarketSubmissionSchema } from '../domain/germanyMarket';
@@ -640,6 +640,10 @@ async function registerCandidateLifecycle(app: FastifyInstance, deps: RouteDeps)
     },
     withDeps(deps, handlePutWorkspace),
   );
+  app.post('/api/v1/candidate/workspace/complete', {
+    bodyLimit: 4 * 1_024 * 1_024,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, withDeps(deps, handleCompleteWorkspace));
   app.patch('/api/v1/candidate/memory/:memoryId', withDeps(deps, handleChangeMemory));
   app.post(
     '/api/v1/candidate/memory/review',

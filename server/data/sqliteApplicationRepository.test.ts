@@ -1,3 +1,4 @@
+import { SEO_GOAL_MIGRATION } from './seoGoalSchema';
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
@@ -35,6 +36,7 @@ function createRepo(): { repo: SqliteApplicationRepository; database: DatabaseSy
   database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
   database.exec(MIGRATION_33);
   database.exec(MIGRATION_38);
+  database.exec(SEO_GOAL_MIGRATION);
   database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
   const repo = new SqliteApplicationRepository(database, new SealedText(randomBytes(32)));
   return { repo, database };
@@ -211,6 +213,7 @@ describe('SqliteApplicationRepository', () => {
     database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
     database.exec(MIGRATION_33);
     database.exec(MIGRATION_38);
+    database.exec(SEO_GOAL_MIGRATION);
     database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
     const key = randomBytes(32);
     const coordinatedSealedText = new ConcurrentPatchSealedText(key);

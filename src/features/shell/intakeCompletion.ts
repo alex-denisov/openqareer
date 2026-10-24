@@ -7,6 +7,8 @@ export interface IntakeCompletionParts {
    */
   readonly save: (input: WorkspaceInput) => void | Promise<void>;
   readonly closeIntake: () => void;
+  /** A failed explicit server completion keeps the wizard open for retry. */
+  readonly closeAfterSave?: boolean;
   readonly refreshCabinet: () => void;
   /**
    * Marks the window in which the server does not yet hold what the import is
@@ -35,19 +37,29 @@ export interface IntakeCompletionParts {
 export function createIntakeCompletion({
   save,
   closeIntake,
+  closeAfterSave = false,
   refreshCabinet,
   setImporting = () => undefined,
 }: IntakeCompletionParts): (input: WorkspaceInput) => void {
   return (input) => {
-    closeIntake();
+    if (!closeAfterSave) closeIntake();
     const saved = save(input);
-    if (!isPromise(saved)) return;
+    if (!isPromise(saved)) {
+      if (closeAfterSave) closeIntake();
+      return;
+    }
     setImporting(true);
     const settled = () => {
       setImporting(false);
       refreshCabinet();
     };
-    void saved.then(settled, settled);
+    void saved.then(() => {
+      if (closeAfterSave) closeIntake();
+      settled();
+    }, () => {
+      setImporting(false);
+      if (!closeAfterSave) refreshCabinet();
+    });
   };
 }
 
