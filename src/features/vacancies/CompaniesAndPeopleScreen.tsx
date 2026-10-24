@@ -9,6 +9,7 @@ import type {
 } from '../../../shared/candidateCompany';
 import { pluralRu } from '../../../shared/pluralRu';
 import { CoachApiError } from '../coach/apiClient';
+import { usePageTitleOverride } from '../shell/pageTitleOverride';
 import { grantSearchConsent } from './recruiterContactsApi';
 import {
   getCandidateCompanyDetails,
@@ -632,6 +633,7 @@ export function CompaniesAndPeopleScreen({
   onOpenCompanyVacancies,
   initialSearch,
 }: CompaniesAndPeopleScreenProps) {
+  usePageTitleOverride('Компании и люди');
   const model = useCompaniesAndPeopleModel(initialSearch, onOpenCompanyVacancies);
   return (
     <CompaniesAndPeopleView
