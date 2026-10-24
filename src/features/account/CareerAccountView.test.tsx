@@ -189,4 +189,11 @@ describe('CareerAccountView uses account state and the application shell surface
       expect(html).not.toContain('Импортировано 0 фактов');
     }
   });
+
+  it('in the browser a disconnected platform has no sign-in action (B464, 24.10)', () => {
+    const desktopWeb = renderAccount({ initialSection: 'conn', isDesktopApp: false });
+    const mobileWeb = renderAccount({ isMobile: true, initialMobileView: 'conn', isDesktopApp: false });
+    expect(desktopWeb).not.toContain('Открыть окно входа hh.ru');
+    expect(mobileWeb).not.toMatch(/<button[^>]*career-account-mobile-row[^>]*>(?:(?!<\/button>).)*hh\.ru/su);
+  });
 });

@@ -371,8 +371,8 @@ interface MobileConnectionsProps {
   readonly telegramAvailable: boolean;
   readonly telegramConnected: boolean;
   readonly onBack: () => void;
-  readonly onGoLinkedIn: () => void;
-  readonly onGoHh: () => void;
+  readonly onGoLinkedIn?: () => void;
+  readonly onGoHh?: () => void;
   readonly onOpenNotifications: () => void;
 }
 
@@ -386,33 +386,44 @@ function ConnectedPlatformsGroup({
   const hh = connections.find((connection) => connection.platform === 'hh');
   return (
     <div className="career-account-mobile-group">
-      <button type="button" className="career-account-mobile-row" disabled={isLoading} onClick={onGoLinkedIn}>
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">LinkedIn</span>
-          <span className="career-account-row-desc">
-            {mobileConnectionDetails(linkedin, isLoading)}
-          </span>
-        </div>
-        <div className="career-account-row-right">
-          <span className={`career-account-tag is-${mobileConnectionTag(linkedin, isLoading)}`}>
-            {mobileConnectionStatus(linkedin, isLoading)}
-          </span>
-          <CaretRight size={18} aria-hidden="true" />
-        </div>
-      </button>
-      <button type="button" className="career-account-mobile-row" disabled={isLoading} onClick={onGoHh}>
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">hh.ru</span>
-          <span className="career-account-row-desc">{mobileConnectionDetails(hh, isLoading)}</span>
-        </div>
-        <div className="career-account-row-right">
-          <span className={`career-account-tag is-${mobileConnectionTag(hh, isLoading)}`}>
-            {mobileConnectionStatus(hh, isLoading)}
-          </span>
-          <CaretRight size={18} aria-hidden="true" />
-        </div>
-      </button>
+      <PlatformRow label="LinkedIn" connection={linkedin} isLoading={isLoading} onGo={onGoLinkedIn} />
+      <PlatformRow label="hh.ru" connection={hh} isLoading={isLoading} onGo={onGoHh} />
     </div>
+  );
+}
+
+/** Without a handler the row only reports the state: no chevron to a path that cannot finish (B464). */
+function PlatformRow({
+  label,
+  connection,
+  isLoading,
+  onGo,
+}: {
+  readonly label: string;
+  readonly connection: CandidateConnection | undefined;
+  readonly isLoading: boolean;
+  readonly onGo?: () => void;
+}) {
+  const content = (
+    <>
+      <div className="career-account-row-content">
+        <span className="career-account-row-label">{label}</span>
+        <span className="career-account-row-desc">{mobileConnectionDetails(connection, isLoading)}</span>
+      </div>
+      <div className="career-account-row-right">
+        <span className={`career-account-tag is-${mobileConnectionTag(connection, isLoading)}`}>
+          {mobileConnectionStatus(connection, isLoading)}
+        </span>
+        {onGo ? <CaretRight size={18} aria-hidden="true" /> : null}
+      </div>
+    </>
+  );
+  return onGo ? (
+    <button type="button" className="career-account-mobile-row" disabled={isLoading} onClick={onGo}>
+      {content}
+    </button>
+  ) : (
+    <div className="career-account-mobile-row">{content}</div>
   );
 }
 

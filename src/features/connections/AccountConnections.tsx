@@ -273,6 +273,10 @@ export function AccountConnectionsManager({
 
   const managedConnection = connections.find((connection) => connection.platform === managePlatform);
 
+  // B464: the sign-in window exists only in the desktop app; the browser offers no path that cannot finish.
+  const canSignIn = isTauriEnvironment();
+  const isConnected = (platform: ConnectionPlatform) =>
+    connections.some((connection) => connection.platform === platform && connection.status === 'connected');
   const connectionContent = isMobile ? (
     <MobileAccountConnections
       connections={connections}
@@ -283,16 +287,10 @@ export function AccountConnectionsManager({
       telegramAvailable={telegramAvailable}
       telegramConnected={telegramConnected}
       onBack={onBackMobile}
-      onGoLinkedIn={() =>
-        connections.some((connection) => connection.platform === 'linkedin' && connection.status === 'connected')
-          ? setManagePlatform('linkedin')
-          : setImportPlatform('linkedin')
+      onGoLinkedIn={
+        isConnected('linkedin') ? () => setManagePlatform('linkedin') : canSignIn ? () => setImportPlatform('linkedin') : undefined
       }
-      onGoHh={() =>
-        connections.some((connection) => connection.platform === 'hh' && connection.status === 'connected')
-          ? setManagePlatform('hh')
-          : setImportPlatform('hh')
-      }
+      onGoHh={isConnected('hh') ? () => setManagePlatform('hh') : canSignIn ? () => setImportPlatform('hh') : undefined}
       onOpenNotifications={onOpenNotifications}
     />
   ) : (
@@ -308,8 +306,8 @@ export function AccountConnectionsManager({
       isDesktopApp={isTauriEnvironment()}
       onManageLinkedIn={() => setManagePlatform('linkedin')}
       onManageHh={() => setManagePlatform('hh')}
-      onConnectLinkedIn={() => setImportPlatform('linkedin')}
-      onConnectHh={() => setImportPlatform('hh')}
+      onConnectLinkedIn={canSignIn ? () => setImportPlatform('linkedin') : undefined}
+      onConnectHh={canSignIn ? () => setImportPlatform('hh') : undefined}
       onOpenNotifications={onOpenNotifications}
       onConnectTelegram={onOpenNotifications}
     />
@@ -330,16 +328,20 @@ export function AccountConnectionsManager({
           connection={managedConnection}
           busy={busyPlatform === 'linkedin'}
           connectOnly={connectedOnly(managedConnection, connections)}
-          onReplaceProfile={() => replaceFromManage('linkedin')}
+          onReplaceProfile={canSignIn ? () => replaceFromManage('linkedin') : undefined}
           onClose={() => setManagePlatform(undefined)}
           onDisconnect={() => {
             setManagePlatform(undefined);
             void handleDisconnect('linkedin');
           }}
-          onReimport={() => {
-            setManagePlatform(undefined);
-            setImportPlatform('linkedin');
-          }}
+          onReimport={
+            canSignIn
+              ? () => {
+                  setManagePlatform(undefined);
+                  setImportPlatform('linkedin');
+                }
+              : undefined
+          }
         />
       ) : null}
       {managedConnection?.platform === 'hh' && managedConnection.status === 'connected' ? (
@@ -347,16 +349,20 @@ export function AccountConnectionsManager({
           connection={managedConnection}
           busy={busyPlatform === 'hh'}
           connectOnly={connectedOnly(managedConnection, connections)}
-          onReplaceProfile={() => replaceFromManage('hh')}
+          onReplaceProfile={canSignIn ? () => replaceFromManage('hh') : undefined}
           onClose={() => setManagePlatform(undefined)}
           onDisconnect={() => {
             setManagePlatform(undefined);
             void handleDisconnect('hh');
           }}
-          onReimport={() => {
-            setManagePlatform(undefined);
-            setImportPlatform('hh');
-          }}
+          onReimport={
+            canSignIn
+              ? () => {
+                  setManagePlatform(undefined);
+                  setImportPlatform('hh');
+                }
+              : undefined
+          }
         />
       ) : null}
       <HhConnectModal

@@ -152,7 +152,8 @@ interface ConnectionModalProps {
   readonly busy: boolean;
   readonly onClose: () => void;
   readonly onDisconnect: () => void;
-  readonly onReimport: () => void;
+  /** Absent in the browser: the sign-in window only works in the desktop app (B464). */
+  readonly onReimport?: () => void;
   /** Connected only: another platform builds the profile (one import source, 23.10.2026). */
   readonly connectOnly?: boolean;
   /** Sign in again and replace the profile with this platform's data. */
@@ -202,10 +203,12 @@ function ConnectOnlyModal({
               Заменить профиль данными с {platform}
             </button>
           ) : null}
-          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
-            <ArrowsClockwise size={16} aria-hidden="true" />
-            Подключить заново
-          </button>
+          {onReimport ? (
+            <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
+              <ArrowsClockwise size={16} aria-hidden="true" />
+              Подключить заново
+            </button>
+          ) : null}
         </div>
       </div>
     </DialogScrim>
@@ -290,10 +293,12 @@ export function AccountLinkedInModal({
           <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
             Отключить
           </button>
-          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
-            <ArrowsClockwise size={16} aria-hidden="true" />
-            Импортировать заново
-          </button>
+          {onReimport ? (
+            <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
+              <ArrowsClockwise size={16} aria-hidden="true" />
+              Импортировать заново
+            </button>
+          ) : null}
         </div>
       </div>
     </DialogScrim>
@@ -370,10 +375,12 @@ export function AccountHhModal({
           <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
             Отключить
           </button>
-          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
-            <ArrowsClockwise size={16} aria-hidden="true" />
-            Повторить импорт
-          </button>
+          {onReimport ? (
+            <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
+              <ArrowsClockwise size={16} aria-hidden="true" />
+              Повторить импорт
+            </button>
+          ) : null}
         </div>
       </div>
     </DialogScrim>
