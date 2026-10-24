@@ -234,3 +234,122 @@ describe('actual weekly skill observations', () => {
     db.close();
   });
 });
+
+function geographicSample(count = 4, location: 'europe' | 'uae' | 'cis' | 'remote' = 'europe') {
+  const value = sample();
+  return {
+    ...value,
+    locationSlices: [
+      {
+        location,
+        evidenceMethod:
+          location === 'remote'
+            ? ('stored_remote_flag_v1' as const)
+            : ('explicit_source_country_v1' as const),
+        sampleSize: 10,
+        skills: [{ name: 'SQL', count, frequency: count * 10 }],
+        salary: value.salary,
+        quarterlyTrend: 'unavailable' as const,
+        gradeSlices: value.gradeSlices?.map((grade) => ({
+          ...grade,
+          sampleSize: 10,
+          skills: [{ name: 'SQL', count, frequency: count * 10 }],
+        })),
+      },
+    ],
+  };
+}
+
+describe('regional actual observation isolation and bounds', () => {
+  it('never backfills a regional baseline from existing global history', () => {
+    const db = new DatabaseSync(':memory:');
+    write(db, '2026-01-05T12:00:00Z');
+    const regional = write(db, '2026-04-06T12:00:00Z', geographicSample());
+    expect(regional.skillQuarterlyTrend?.status).toBe('available');
+    expect(regional.locationSlices![0]!.skillQuarterlyTrend).toMatchObject({
+      status: 'insufficient_history',
+      earliestActualObservation: '2026-04-06T12:00:00.000Z',
+    });
+    expect(regional.locationSlices![0]!.gradeSlices![0]!.skillQuarterlyTrend?.status).toBe(
+      'insufficient_history',
+    );
+    db.close();
+  });
+  it('preserves regional first-week immutability through successive global publication and retention', () => {
+    const db = new DatabaseSync(':memory:');
+    write(db, '2026-01-05T12:00:00Z', geographicSample(4));
+    write(db, '2026-01-06T12:00:00Z', geographicSample(9));
+    const key = 'frontend-engineer|geography-explicit-country-v1:europe';
+    expect(readSalarySkillHistory(db, key, new Date('2026-01-07'))[0]!.skills[0]!.count).toBe(4);
+    write(db, '2026-01-12T12:00:00Z', geographicSample(5));
+    const april = write(db, '2026-04-06T12:00:00Z', geographicSample(7));
+    expect(april.locationSlices![0]!.skillQuarterlyTrend).toMatchObject({
+      status: 'available',
+      earliestActualObservation: '2026-01-05T12:00:00.000Z',
+      skills: [{ name: 'SQL', baselineCount: 4, currentCount: 7, changePP: 30 }],
+    });
+    const retained = write(db, '2026-05-11T12:00:00Z', geographicSample(8));
+    const points = readSalarySkillHistory(db, key, new Date('2026-05-12'));
+    expect(points.every((point) => point.weekStart >= '2026-01-26')).toBe(true);
+    expect(points.length).toBe(2);
+    expect(retained.locationSlices![0]!.skillQuarterlyTrend?.earliestActualObservation).toBe(
+      '2026-01-05T12:00:00.000Z',
+    );
+    db.close();
+  });
+  it('rolls regional observations and latest data back atomically on publication failure', () => {
+    const db = new DatabaseSync(':memory:');
+    const before = write(db, '2026-01-05T12:00:00Z', geographicSample());
+    const count = db.prepare('SELECT count(*) AS n FROM salary_market_skill_history').get();
+    db.exec(
+      "CREATE TRIGGER reject_region BEFORE INSERT ON salary_market_snapshots BEGIN SELECT RAISE(ABORT, 'fixture failure'); END",
+    );
+    expect(() => write(db, '2026-01-12T12:00:00Z', geographicSample(8))).toThrow('fixture failure');
+    expect(readSalaryMarketSnapshot(db, before.role)).toEqual(before);
+    expect(db.prepare('SELECT count(*) AS n FROM salary_market_skill_history').get()).toEqual(
+      count,
+    );
+    db.close();
+  });
+  it('starts regional history at the first nonempty observation, not the empty publication', () => {
+    const db = new DatabaseSync(':memory:');
+    const base = geographicSample();
+    const empty = {
+      ...base,
+      locationSlices: base.locationSlices.map((slice) => ({
+        ...slice,
+        sampleSize: 0,
+        skills: [],
+        gradeSlices: [],
+      })),
+    };
+    write(db, '2026-01-05T12:00:00Z', empty);
+    const key = 'frontend-engineer|geography-explicit-country-v1:europe';
+    expect(readSalarySkillHistory(db, key, new Date('2026-01-07'))).toEqual([]);
+    const result = write(db, '2026-01-12T12:00:00Z', base);
+    expect(result.locationSlices![0]!.skillQuarterlyTrend).toMatchObject({
+      status: 'insufficient_history',
+      earliestActualObservation: '2026-01-12T12:00:00.000Z',
+    });
+    db.close();
+  });
+  it('keeps no more than 500 cohort identities for the canonical100 history cap', () => {
+    const db = new DatabaseSync(':memory:');
+    const snapshots = Array.from({ length: 101 }, (_, index) => ({
+      ...sample(),
+      role: `role-${index}`,
+      locationSlices: (['remote', 'europe', 'uae', 'cis'] as const).map(
+        (location) => geographicSample(4, location).locationSlices[0]!,
+      ),
+    }));
+    writeSalaryMarketSnapshots(db, snapshots, new Date('2026-01-05T12:00:00Z'));
+    expect(
+      db.prepare('SELECT count(DISTINCT role) AS n FROM salary_market_skill_history').get(),
+    ).toEqual({ n: 500 });
+    writeSalaryMarketSnapshots(db, [], new Date('2026-01-13T12:00:00Z'));
+    expect(db.prepare('SELECT count(*) AS n FROM salary_market_skill_history_first').get()).toEqual(
+      { n: 0 },
+    );
+    db.close();
+  });
+});

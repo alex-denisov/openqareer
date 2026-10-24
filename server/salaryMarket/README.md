@@ -103,3 +103,37 @@ No live crawling or provider account action was used to create this change.
 Full US-14.6 acceptance still requires production observation evidence, elapsed
 real history for a quarterly comparison and owner visual acceptance. Local
 fixtures and checks do not prove those external outcomes.
+
+## Explicit source geography cohorts
+
+The global published role selection remains capped at 100 before geographic
+aggregation. Each prepared role can carry four location slices: `remote`,
+`europe`, `uae`, and `cis`. Each slice has its own denominator, Top15 skills,
+comparable salary groups and up to five posted-grade slices. One cluster can
+appear in remote and a country scope, but never twice inside one scope.
+
+Country membership requires one unambiguous country name/code token in the
+stored catalog location. The country-only GeoNames lookup never guesses from
+a city. Raw postal/country collisions such as DE, CA, IL and Georgia remain
+ambiguous unless an explicit full country resolves the ambiguity. Multi-country,
+missing, city-only, oversized and unrecognized locations remain in the global
+sample without acquiring an invented country. Company-office fallbacks,
+currency, language and source platform are never country evidence.
+
+Europe and CIS reuse OpenQareer's existing candidate-market policy, not legal
+membership in a political organization. Russia remains its separate market;
+UAE means the exact country AE, not all MENA. Remote uses the stored remote flag
+independently; it never promises permission to work from any country. Aggregate
+geography evidence reports explicit, unknown and ambiguous country counts;
+remote count overlaps those counts. Unknown geography is not a claim of zero
+vacancies in a market.
+
+Weekly regional observations use distinct internal cohort keys containing
+`geography-explicit-country-v1`. Global history and its existing methodology
+version are unchanged. At most 100 canonical roles expand to 500 identities,
+each retaining at most sixteen weekly observations. First actual observation
+metadata survives weekly retention. No global observation becomes a regional
+baseline, and an empty regional scope cannot seed a historical point. Regional
+history capture, latest snapshots and directory publication share one rollback
+boundary. The existing HTTP path still reads one prepared role key; location
+and then grade selection belongs to the public renderer integration.

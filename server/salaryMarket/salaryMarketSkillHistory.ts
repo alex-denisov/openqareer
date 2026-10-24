@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { SALARY_REGIONAL_LOCATIONS, salaryLocationCohortKey } from './salaryMarketGeography';
 import {
   MIN_SALARY_MARKET_SAMPLE,
   salarySkillTrendHasChanges,
@@ -302,6 +303,28 @@ function enrichSnapshot(
   };
 }
 /** Called only inside the latest snapshot publication transaction. No fabricated historical points. */
+function regionalHistorySnapshots(
+  canonical: readonly SalaryMarketSnapshot[],
+): SalaryMarketSnapshot[] {
+  return canonical.flatMap((snapshot) => {
+    const locations = new Map(
+      (snapshot.locationSlices ?? [])
+        .filter((slice) => SALARY_REGIONAL_LOCATIONS.includes(slice.location))
+        .slice(0, 4)
+        .map((slice) => [slice.location, slice]),
+    );
+    return [
+      snapshot,
+      ...[...locations.values()].map((slice) => ({
+        ...snapshot,
+        ...slice,
+        role: salaryLocationCohortKey(snapshot.role, slice.location),
+        locationSlices: undefined,
+      })),
+    ];
+  });
+}
+
 export function accrueSalarySkillHistory(
   database: DatabaseSync,
   snapshots: readonly SalaryMarketSnapshot[],
@@ -310,14 +333,40 @@ export function accrueSalarySkillHistory(
   const canonical = snapshots
     .filter((snapshot) => snapshot.profession?.kind === 'b267')
     .slice(0, SALARY_MARKET_ROLE_LIMIT);
+  // Select canonical100 first, then at most four regional scopes per role.
+  // Distinct, versioned keys prevent global observations becoming regional history.
+  const scoped = regionalHistorySnapshots(canonical);
   cleanHistory(
     database,
-    canonical.map((snapshot) => snapshot.role),
+    scoped.map((snapshot) => snapshot.role),
     observedAt,
   );
-  for (const snapshot of canonical) capturePoint(database, snapshot, observedAt);
-  const roles = new Set(canonical.map((snapshot) => snapshot.role));
-  return snapshots.map((snapshot) =>
-    roles.has(snapshot.role) ? enrichSnapshot(database, snapshot, observedAt) : snapshot,
+  for (const snapshot of scoped) capturePoint(database, snapshot, observedAt);
+  const globalKeys = new Set(canonical.map((snapshot) => snapshot.role));
+  const enriched = new Map(
+    scoped.map((snapshot) => [
+      snapshot.role,
+      snapshot.sampleSize > 0 || globalKeys.has(snapshot.role)
+        ? enrichSnapshot(database, snapshot, observedAt)
+        : snapshot,
+    ]),
   );
+  return snapshots.map((snapshot) => {
+    const all = enriched.get(snapshot.role);
+    if (!all) return snapshot;
+    return {
+      ...all,
+      locationSlices: snapshot.locationSlices?.slice(0, 4).map((slice) => {
+        const regional = enriched.get(salaryLocationCohortKey(snapshot.role, slice.location));
+        return regional
+          ? {
+              ...slice,
+              skillQuarterlyTrend: regional.skillQuarterlyTrend,
+              quarterlyTrend: regional.quarterlyTrend,
+              gradeSlices: regional.gradeSlices,
+            }
+          : slice;
+      }),
+    };
+  });
 }

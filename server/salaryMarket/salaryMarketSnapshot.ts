@@ -8,6 +8,12 @@ import {
   classifiedSalaryPage,
   type ClassifiedSalaryRow,
 } from './salaryMarketClassifiedCatalog';
+import {
+  salaryGeography,
+  salaryLocationCohortKey,
+  SALARY_REGIONAL_LOCATIONS,
+  type SalaryRegionalLocation,
+} from './salaryMarketGeography';
 import { prepareSalarySkillCounts, salarySkillsOf } from './salaryMarketSkillCounts';
 import {
   SALARY_MARKET_INDEX_LIMIT,
@@ -15,6 +21,7 @@ import {
   type SalaryMarketIndexEntry,
   type SalaryMarketGrade,
   type SalaryMarketProfession,
+  type SalaryMarketGeographyEvidence,
 } from '../../shared/salaryMarketSnapshot';
 import {
   emptySalaryExclusions,
@@ -65,10 +72,16 @@ interface SliceState {
   excluded: MutableExclusions;
   markers: Set<string>;
 }
-interface RoleState extends SliceState {
+interface CohortState extends SliceState {
+  readonly gradeStates: Map<SalaryMarketGrade, SliceState>;
+}
+interface RoleState extends CohortState {
   readonly label: string;
   readonly profession: SalaryMarketProfession;
-  readonly gradeStates: Map<SalaryMarketGrade, SliceState>;
+  readonly locationStates: Map<SalaryRegionalLocation, CohortState>;
+  readonly geography: {
+    -readonly [K in keyof SalaryMarketGeographyEvidence]: SalaryMarketGeographyEvidence[K];
+  };
 }
 function sliceState(): SliceState {
   return { count: 0, excluded: emptySalaryExclusions(), markers: new Set() };
@@ -77,7 +90,23 @@ function roleState(row: ClassifiedSalaryRow): RoleState {
   const profession: SalaryMarketProfession = row.profession_id
     ? { kind: 'b267', roleId: row.profession_id, matchedAlias: row.matched_alias ?? undefined }
     : { kind: 'unclassified_title' };
-  return { ...sliceState(), label: row.role_label, profession, gradeStates: new Map() };
+  return {
+    ...cohortState(),
+    label: row.role_label,
+    profession,
+    locationStates: new Map(),
+    geography: {
+      method: 'explicit_source_country_v1',
+      regionPolicy: 'openqareer_candidate_regions_v1',
+      explicitCountryCount: 0,
+      unknownCountryCount: 0,
+      ambiguousCountryCount: 0,
+      remoteCount: 0,
+    },
+  };
+}
+function cohortState(): CohortState {
+  return { ...sliceState(), gradeStates: new Map() };
 }
 type SkillCounter = ReturnType<typeof prepareSalarySkillCounts>;
 function recordObservation(
@@ -86,11 +115,25 @@ function recordObservation(
   key: string,
   row: ClassifiedSalaryRow,
   state: SliceState,
+  names: readonly string[],
 ): void {
   state.count += 1;
   recordSalaryRange(database, key, row.cluster_id, row.salary_json, state.excluded);
-  skills.add(key, salarySkillsOf(row.skills_json));
+  skills.add(key, names);
   if (row.marker && state.markers.size < 8) state.markers.add(row.marker);
+}
+function recordCohort(
+  database: DatabaseSync,
+  skills: SkillCounter,
+  key: string,
+  row: ClassifiedSalaryRow,
+  state: CohortState,
+  names: readonly string[],
+): void {
+  recordObservation(database, skills, key, row, state, names);
+  const grade = state.gradeStates.get(row.grade) ?? sliceState();
+  recordObservation(database, skills, `${key}|${row.grade}`, row, grade, names);
+  state.gradeStates.set(row.grade, grade);
 }
 function accumulateClassifiedRoles(
   database: DatabaseSync,
@@ -104,16 +147,67 @@ function accumulateClassifiedRoles(
     if (rows.length === 0) break;
     for (const row of rows) {
       const group = groups.get(row.role) ?? roleState(row);
-      recordObservation(database, skills, row.role, row, group);
-      const grade = group.gradeStates.get(row.grade) ?? sliceState();
-      recordObservation(database, skills, `${row.role}|${row.grade}`, row, grade);
-      group.gradeStates.set(row.grade, grade);
+      const names = salarySkillsOf(row.skills_json);
+      recordCohort(database, skills, row.role, row, group, names);
+      const geography = salaryGeography(row.location, row.is_remote === 1);
+      if (geography.status === 'explicit_country') group.geography.explicitCountryCount += 1;
+      else if (geography.status === 'ambiguous_country') group.geography.ambiguousCountryCount += 1;
+      else group.geography.unknownCountryCount += 1;
+      if (row.is_remote === 1) group.geography.remoteCount += 1;
+      for (const location of geography.locations) {
+        const state = group.locationStates.get(location) ?? cohortState();
+        recordCohort(
+          database,
+          skills,
+          salaryLocationCohortKey(row.role, location),
+          row,
+          state,
+          names,
+        );
+        group.locationStates.set(location, state);
+      }
       groups.set(row.role, group);
     }
     cursor = rows[rows.length - 1]!.cluster_id;
   }
   return groups;
 }
+function assembleCohort(
+  database: DatabaseSync,
+  skills: SkillCounter,
+  key: string,
+  state: CohortState,
+) {
+  if (state.count === 0)
+    return {
+      sampleSize: 0,
+      skills: [],
+      gradeSlices: [],
+      quarterlyTrend: 'unavailable' as const,
+      salary: {
+        status: 'unavailable' as const,
+        reason: 'no_comparable_ranges' as const,
+        excluded: state.excluded,
+      },
+    };
+  const gradeSlices = [...state.gradeStates.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([grade, slice]) => ({
+      grade,
+      sampleSize: slice.count,
+      skills: skills.read(`${key}|${grade}`, slice.count),
+      salary: salaryRangeDistribution(database, `${key}|${grade}`, slice.excluded),
+      evidence: { field: 'title' as const, markers: [...slice.markers] },
+    }));
+  return {
+    sampleSize: state.count,
+    skills: skills.read(key, state.count),
+    salary: salaryRangeDistribution(database, key, state.excluded),
+    gradeSlices,
+    quarterlyTrend: 'unavailable' as const,
+  };
+}
+
 function assembleRoleSnapshot(
   database: DatabaseSync,
   skills: SkillCounter,
@@ -121,30 +215,30 @@ function assembleRoleSnapshot(
   group: RoleState,
   now: Date,
 ): SalaryMarketSnapshot {
-  const gradeSlices = [...group.gradeStates.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([grade, state]) => ({
-      grade,
-      sampleSize: state.count,
-      skills: skills.read(`${role}|${grade}`, state.count),
-      salary: salaryRangeDistribution(database, `${role}|${grade}`, state.excluded),
-      evidence: { field: 'title' as const, markers: [...state.markers] },
-    }));
+  const all = assembleCohort(database, skills, role, group);
   return {
     role,
     roleLabel: group.label,
     profession: group.profession,
     updatedAt: now.toISOString(),
     windowDays: 90,
-    sampleSize: group.count,
-    skills: skills.read(role, group.count),
-    salary: salaryRangeDistribution(database, role, group.excluded),
-    gradeSlices,
-    quarterlyTrend: 'unavailable',
-    grades: gradeSlices.some((slice) => slice.grade !== 'unknown')
+    ...all,
+    grades: all.gradeSlices.some((slice) => slice.grade !== 'unknown')
       ? 'published_title_evidence'
       : 'unavailable',
     source: 'deduplicated_public_catalog',
+    geography: group.geography,
+    locationSlices: SALARY_REGIONAL_LOCATIONS.map((location) => ({
+      location,
+      evidenceMethod:
+        location === 'remote' ? 'stored_remote_flag_v1' : 'explicit_source_country_v1',
+      ...assembleCohort(
+        database,
+        skills,
+        salaryLocationCohortKey(role, location),
+        group.locationStates.get(location) ?? cohortState(),
+      ),
+    })),
   };
 }
 
