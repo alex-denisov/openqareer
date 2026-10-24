@@ -412,3 +412,10 @@ describe('VacanciesScreen (B250)', () => {
     expect(filtered.map((item) => item.cluster.id)).toEqual(['eligible']);
   });
 });
+
+describe('VacanciesScreen mockup small buttons (B510)', () => {
+  it('renders «Сбросить всё» as the mockup ghost small button', () => {
+    const html = render();
+    expect(html).toMatch(/class="vacancies-summary-reset vac-sm is-ghost"[^>]*>Сбросить всё/);
+  });
+});

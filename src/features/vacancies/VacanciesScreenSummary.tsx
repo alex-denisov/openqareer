@@ -76,7 +76,7 @@ export function VacanciesScreenSummary({
       </p>
       <button
         type="button"
-        className="vacancies-summary-reset"
+        className="vacancies-summary-reset vac-sm is-ghost"
         disabled={activeFilters === 0}
         onClick={onReset}
       >
