@@ -7,6 +7,7 @@ import { legalSlugFromPath } from '../../shared/legalRegistry';
 import { applyLandingStats, deferEntryScript } from '../../shared/landingStats';
 import { getLandingStats } from '../landing/landingStatsCache';
 import { registerAeoRoutes } from '../seo/aeoRoutes';
+import { registerSalaryMarketRoutes } from './salaryMarketRoutes';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
@@ -414,6 +415,7 @@ export async function registerStaticDelivery(
 ): Promise<void> {
   if (serveStatic) {
     registerAeoRoutes(app);
+    registerSalaryMarketRoutes(app, config);
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,
@@ -421,7 +423,7 @@ export async function registerStaticDelivery(
       // and child directory so files left in `dist` cannot shadow live routes.
       globIgnore: [
         'server.mjs', 'health', 'sitemap.xml', 'sitemaps/**',
-        'llms.txt', 'llms-full.txt', ENTRY_DOCUMENT,
+        'llms.txt', 'llms-full.txt', 'salary-market.html', ENTRY_DOCUMENT,
       ],
       etag: false,
       lastModified: false,

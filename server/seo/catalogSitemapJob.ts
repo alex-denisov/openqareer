@@ -7,6 +7,7 @@
  * serves files from memory, like `landing_stats` (B535).
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { salaryMarketSitemapUrls } from './salaryMarketSitemap';
 import { listingPath } from '../../shared/vacancyCatalogRoutes';
 import {
   INDEXED_CARD_SUMMARY_MIN,
@@ -81,7 +82,10 @@ function listings(database: DatabaseSync): SitemapUrl[] {
 }
 
 export function computeCatalogSitemaps(database: DatabaseSync, now: Date): SitemapFile[] {
-  return buildSitemapFiles({ listings: listings(database), jobs: indexableJobs(database, now) });
+  return buildSitemapFiles({
+    listings: [...listings(database), ...salaryMarketSitemapUrls(database)],
+    jobs: indexableJobs(database, now),
+  });
 }
 
 /** Replaces the whole set at once, so a shrunk job list leaves no stale file. */

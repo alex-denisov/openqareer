@@ -146,6 +146,7 @@ export function PublicFooter({ onNavigate, onLanding }: PublicChromeProps) {
           <b>Инструменты</b>
           <a href="/vacancies">Каталог вакансий</a>
           <a href="/vacancies/remote">Удалённые вакансии</a>
+          <a href="/salaries">Зарплаты и навыки</a>
         </div>
         <FooterHelpAndDocs onNavigate={onNavigate} />
         <div className="ps-footer-legal">
