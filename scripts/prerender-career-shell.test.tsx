@@ -53,6 +53,30 @@ describe('production career shell prerender', () => {
     expect(html).toContain('application/ld+json');
   });
 
+  it('publishes the exact loading auth pages before JavaScript while retaining noindex and the entry bundle', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'openqareer-auth-prerender-'));
+    temporaryDirectories.push(directory);
+    const entry = join(directory, 'index.html');
+    writeFileSync(entry, '<!doctype html><html><head><link rel="canonical" href="https://openqareer.com/"><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>');
+    await prerenderShells(entry, join(directory, 'admin.html'));
+    for (const [file, title] of [['login.html', 'Вход в кабинет'], ['signup.html', 'Создать аккаунт']]) {
+      const html = readFileSync(join(directory, file), 'utf8');
+      expect(html).toContain(`<h1>${title}</h1>`);
+      expect(html).toContain('<main class="auth-page-container">');
+      expect(html).toContain('class="auth-card" inert=""');
+      expect(html).toContain('role="status">Загружаем форму…');
+      expect(html).toContain('content="noindex, follow"');
+      expect(html).toContain('src="/assets/app.js"');
+      const stylesheet = html.match(/href="(\/assets\/auth-first-paint-[a-f0-9]+\.css)"/u)?.[1];
+      expect(stylesheet).toBeDefined();
+      const styles = readFileSync(join(directory, stylesheet!), 'utf8');
+      expect(styles).toContain('.auth-page-container');
+      expect(Buffer.byteLength(styles)).toBeLessThanOrEqual(20_000);
+      for (const input of html.match(/<input\b[^>]*>/gu) ?? []) expect(input).toContain('disabled=""');
+      expect(Buffer.byteLength(html)).toBeLessThanOrEqual(20_000);
+    }
+  });
+
   it('fails closed when the root mount point is missing or already populated', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'openqareer-prerender-'));
     temporaryDirectories.push(directory);

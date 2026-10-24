@@ -1,3 +1,5 @@
+import '../site/landing.css';
+import '../site/auth.css';
 import { useEffect, useState } from 'react';
 import { ArrowLeft } from '@phosphor-icons/react';
 import { LoginPage, SignupPage, type AuthPageProps } from '../site/AuthPages';
@@ -50,7 +52,7 @@ export function CareerAccountAccess({
         </button>
       </div>
       {view === 'signup' ? (
-        <SignupPage onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath="/app" />
+        <SignupPage embedded onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath="/app" />
       ) : view === 'reset' ? (
         <ResetPasswordPage onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath="/app" />
       ) : view === 'verify' ? (
@@ -61,7 +63,7 @@ export function CareerAccountAccess({
           nextPath="/app"
         />
       ) : (
-        <LoginPage onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath="/app" />
+        <LoginPage embedded onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath="/app" />
       )}
     </section>
   );

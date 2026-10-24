@@ -23,7 +23,7 @@ describe('AuthPages', () => {
     expect(html).toContain('Забыли пароль?');
     expect(html).toContain('name="username"');
     expect(html).toContain('name="password"');
-    expect(html).toContain('autoComplete="username email"');
+    expect(html).toContain('autoComplete="username"');
     expect(html).toContain('autoComplete="current-password"');
   });
 
@@ -40,6 +40,48 @@ describe('AuthPages', () => {
     expect(html).toContain('name="password"');
     expect(html).toContain('autoComplete="new-password"');
     expect(html).toContain('Войти');
+  });
+
+  it('gives each full auth page one main landmark containing its form', () => {
+    for (const Page of [LoginPage, SignupPage]) {
+      const html = renderToStaticMarkup(<Page onNavigate={vi.fn()} />);
+      expect(html.match(/<main\b/gu)).toHaveLength(1);
+      expect(html).toMatch(/^<main class="auth-page-container">.*<form\b.*<\/form>.*<\/main>$/u);
+    }
+  });
+
+  it('does not add a main landmark inside cabinet or desktop auth containers', () => {
+    for (const Page of [LoginPage, SignupPage]) {
+      const html = renderToStaticMarkup(<main><Page embedded onNavigate={vi.fn()} /></main>);
+      expect(html.match(/<main\b/gu)).toHaveLength(1);
+      expect(html).toContain('<div class="auth-page-container">');
+    }
+  });
+
+  it('uses one valid autocomplete purpose per identity field', () => {
+    const login = renderToStaticMarkup(<LoginPage onNavigate={vi.fn()} />);
+    const signup = renderToStaticMarkup(<SignupPage onNavigate={vi.fn()} />);
+    expect(login).toMatch(/<input[^>]*id="login-identifier"[^>]*autoComplete="username"/u);
+    expect(signup).toMatch(/<input[^>]*id="signup-email"[^>]*autoComplete="email"/u);
+    expect(signup).toMatch(/<input[^>]*id="signup-name"[^>]*autoComplete="name"/u);
+    expect(login).not.toContain('autoComplete="username email"');
+    expect(signup).not.toContain('autoComplete="email username"');
+  });
+
+  it('renders an explicitly loading, inert first paint with no editable or autofillable inputs', () => {
+    for (const Page of [LoginPage, SignupPage]) {
+      const html = renderToStaticMarkup(<Page onNavigate={vi.fn()} bootstrapPending />);
+      expect(html).toContain('role="status">Загружаем форму…');
+      expect(html).toContain('class="auth-card" inert=""');
+      expect(html.indexOf('role="status"')).toBeLessThan(html.indexOf('inert=""'));
+      const inputs = html.match(/<input\b[^>]*>/gu) ?? [];
+      expect(inputs.length).toBeGreaterThan(1);
+      for (const input of inputs) {
+        expect(input).toContain('disabled=""');
+        if (!input.includes('type="checkbox"')) expect(input).toContain('autoComplete="off"');
+      }
+      expect(html).toMatch(/<button type="submit"[^>]*disabled=""/u);
+    }
   });
 
   /**

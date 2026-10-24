@@ -516,6 +516,7 @@ export default function App() {
     if (currentPath === '/login') {
       return (
         <LoginPage
+          embedded={isDesktop}
           onNavigate={navigate}
           onSessionChange={handleSessionChange}
           nextPath="/app"
@@ -525,7 +526,7 @@ export default function App() {
     }
     if (currentPath === '/signup') {
       return (
-        <SignupPage onNavigate={navigate} onSessionChange={handleSessionChange} nextPath="/app" />
+        <SignupPage embedded={isDesktop} onNavigate={navigate} onSessionChange={handleSessionChange} nextPath="/app" />
       );
     }
     if (currentPath === '/verify-email') {
@@ -676,6 +677,7 @@ export default function App() {
           <div className="desktop-auth-overlay">
             <Suspense fallback={<AuthLoadingFallback />}>
               <LoginPage
+                embedded
                 onNavigate={navigate}
                 onSessionChange={handleSessionChange}
                 nextPath="/app"
