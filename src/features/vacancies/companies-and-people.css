@@ -56,6 +56,11 @@
   pointer-events: none;
 }
 
+/* .career-shell input sets 46 px for every field; mockup 13 search is 44. */
+.companies-people-toolbar .companies-people-search input {
+  min-height: 0;
+}
+
 .companies-people-search input {
   box-sizing: border-box;
   min-inline-size: 0;
