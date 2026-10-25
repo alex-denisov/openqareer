@@ -464,7 +464,12 @@ function AssessmentRunContent({
 }: AssessmentContentProps & { run: NonNullable<AssessmentContentProps['run']> }) {
   if (run.status === 'model_error')
     return (
-      <ModelErrorState run={run} busy={state.busy} onRetry={() => void actions.retryModel()} />
+      <ModelErrorState
+        run={run}
+        busy={state.busy}
+        onRetry={() => void actions.retryModel()}
+        onSkipSuggestions={() => void actions.skipSuggestions()}
+      />
     );
   if (run.status === 'dialogue')
     return (

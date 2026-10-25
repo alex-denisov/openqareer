@@ -3,6 +3,7 @@ import type { CoachTurnInput } from '../domain/coach';
 import type {
   CoachProvider,
   CoachProviderResult,
+  CoachTurnOptions,
   ProviderUsage,
 } from '../providers/coachProvider';
 import { CAREER_ROLE_PROMPT_REVISIONS } from '../prompts/careerRolePrompts';
@@ -22,6 +23,7 @@ interface CareerRoleRunInput {
     unknowns: string[];
   }>;
   idempotencyKey: string;
+  options?: CoachTurnOptions;
 }
 
 export interface CareerRoleAgent {
@@ -56,6 +58,7 @@ export class CareerOrchestrator implements CoachProvider {
   async createTurn(
     input: CoachTurnInput,
     idempotencyKey: string,
+    options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
     const roles = rolesFor(input);
     if (roles.length > this.maxModelCalls) {
@@ -66,6 +69,7 @@ export class CareerOrchestrator implements CoachProvider {
       roles,
       input,
       idempotencyKey,
+      options,
     );
     return finalizeCareerTurn(input, roles, runs);
   }
@@ -78,6 +82,7 @@ async function runRoles(
   roles: CareerRole[],
   input: CoachTurnInput,
   idempotencyKey: string,
+  options?: CoachTurnOptions,
 ): Promise<RoleRun[]> {
   const runs: RoleRun[] = [];
   for (const role of roles) {
@@ -88,6 +93,8 @@ async function runRoles(
         contribution(priorRole, priorOutput),
       ),
       idempotencyKey: roleIdempotencyKey(idempotencyKey, role),
+      // Only the last role writes the answer the caller checks.
+      ...(role === roles.at(-1) && options ? { options } : {}),
     });
     runs.push({ role, output });
   }
@@ -220,6 +227,11 @@ function marketEvidenceFrom(
 function rolesFor(input: CoachTurnInput): CareerRole[] {
   if (input.internalPurpose === 'consultant-summary') {
     return ['career_consultant'];
+  }
+  // A server step reads JSON from the one role it asked (B461 suggestions and grading). Three
+  // roles in turn left the consultant's prose as message and tripled the wait (B564).
+  if (input.internalPurpose === 'structured-stage') {
+    return [input.activeRole ?? 'career_expert'];
   }
   if (input.phase === 'discovery' || input.phase === 'evidence') {
     return ['career_consultant'];

@@ -199,6 +199,7 @@ export function SuggestionsState(props: {
     (suggestion) => props.drafts[suggestion.id]?.accepted,
   ).length;
   const totalCount = props.run.suggestions.length;
+  if (totalCount === 0) return <EmptySuggestions busy={props.busy} onContinue={props.onSave} />;
   return (
     <section className="career-role-assessment-card career-role-assessment-suggestions">
       <SuggestionsHeader />
@@ -220,6 +221,29 @@ export function SuggestionsState(props: {
         ))}
       </div>
       <SuggestionActions {...props} selectedCount={selectedCount} />
+    </section>
+  );
+}
+
+/** B564: no answer fact survived the quote check — say so and open the cases, not a dead end. */
+function EmptySuggestions({ busy, onContinue }: { busy: boolean; onContinue: () => void }) {
+  return (
+    <section className="career-role-assessment-card career-role-assessment-suggestions">
+      <SuggestionsHeader />
+      <p className="career-role-assessment-lead">
+        Не нашли в ответах фактов, которые можно добавить в профиль с цитатой. Профиль останется без
+        изменений — навыки проверим на кейсах.
+      </p>
+      <div className="career-role-assessment-actions career-role-assessment-suggestion-actions">
+        <button
+          className="career-primary-button"
+          type="button"
+          disabled={busy}
+          onClick={onContinue}
+        >
+          {busy ? 'Сохраняем…' : 'Перейти к кейсам'}
+        </button>
+      </div>
     </section>
   );
 }

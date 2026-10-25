@@ -221,7 +221,7 @@ export type ModelAnswerIssue = 'parse' | 'shape' | 'no_valid_entries' | 'truncat
  * Models wrap JSON in a markdown fence despite instructions (4 of 12 sampled prod answers), and an
  * answer cut at the output limit keeps its complete entries: the array is closed after the last one.
  */
-function parseModelJson(response: string): { readonly value: unknown; readonly truncated: boolean } {
+export function parseModelJson(response: string): { readonly value: unknown; readonly truncated: boolean } {
   const trimmed = response.trim();
   const body = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu)?.[1] ?? trimmed.replace(/^```(?:json)?\s*/iu, '');
   try { return { value: JSON.parse(body), truncated: false }; } catch (error) {
@@ -249,7 +249,7 @@ const MAX_ELLIPSIS_GAP = 300;
  * shortens with an ellipsis (B562-r), and joins CJK lines the source broke mid-sentence; the stored
  * quote is then the original span, so it stays verbatim. Words are never matched by meaning.
  */
-function verbatimQuote(quote: string, description: string): string | null {
+export function verbatimQuote(quote: string, description: string): string | null {
   if (description.includes(quote)) return quote;
   const parts = quote.split(ELLIPSIS).filter((part) => part.trim());
   if (!parts.length) return null;

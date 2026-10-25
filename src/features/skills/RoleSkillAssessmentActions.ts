@@ -180,6 +180,17 @@ export class RoleSkillAssessmentActions {
     );
   };
 
+  /** B564: after a failed suggestion step the candidate goes on to the cases with nothing added. */
+  skipSuggestions = async (): Promise<boolean> => {
+    const run = this.run;
+    if (run?.modelError?.action !== 'suggestions' || run.suggestions.length > 0) return false;
+    const payload = { expectedRevision: run.revision, suggestions: [] };
+    const requestId = this.requestId('suggestions', payload);
+    return this.performMutation(() =>
+      decideRoleAssessmentSuggestions({ runId: run.id, ...payload, requestId }),
+    );
+  };
+
   rollbackSuggestions = async (): Promise<boolean> => {
     const run = this.run;
     if (!run?.profileChange?.memoryIds.length || run.profileChange.revertedAt) return false;

@@ -31,10 +31,19 @@ export interface CoachProviderResult {
   };
 }
 
+export interface CoachTurnOptions {
+  /**
+   * A server step that reads structured output rejects an answer it cannot use; the provider
+   * queue then asks the next route instead of returning it (B564).
+   */
+  readonly accept?: (result: CoachProviderResult['result']) => boolean;
+}
+
 export interface CoachProvider {
   createTurn(
     input: CoachTurnInput,
     idempotencyKey: string,
+    options?: CoachTurnOptions,
   ): Promise<CoachProviderResult>;
 }
 

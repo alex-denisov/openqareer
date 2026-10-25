@@ -1,6 +1,6 @@
 import { sanitizeHiddenMarkersDeep } from '../../shared/textHygiene';
 import type { CoachTurnInput } from '../domain/coach';
-import type { CoachProvider, CoachProviderResult } from './coachProvider';
+import type { CoachProvider, CoachProviderResult, CoachTurnOptions } from './coachProvider';
 
 /**
  * Последний слой перед кандидатом: ответ модели доходит до него без невидимых
@@ -24,8 +24,9 @@ export class HygienicCoachProvider implements CoachProvider {
   async createTurn(
     input: CoachTurnInput,
     idempotencyKey: string,
+    options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
-    const answer = await this.inner.createTurn(input, idempotencyKey);
+    const answer = await this.inner.createTurn(input, idempotencyKey, options);
     const result = sanitizeHiddenMarkersDeep(answer.result);
     return result === answer.result ? answer : { ...answer, result };
   }
