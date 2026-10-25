@@ -186,6 +186,9 @@ describe('bounded salary SSR', () => {
     expect(renderSalaryMarketDocument(template, full, 'analyst')).toContain(
       'content="index, follow"',
     );
+    const indexed = renderSalaryMarketDocument(template, full, 'analyst');
+    expect(indexed).toContain('"@type":"Occupation"');
+    expect(indexed).not.toContain('"estimatedSalary"');
     const selected = renderSalaryMarketDocument(template, full, 'analyst', 0, undefined, 'unknown');
     expect(selected).toContain('content="noindex, follow"');
     expect(selected).not.toContain('"@type":"Occupation"');
