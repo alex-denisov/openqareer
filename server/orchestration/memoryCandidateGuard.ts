@@ -3,6 +3,8 @@ import type { CoachProviderResult } from '../providers/coachProvider';
 
 type MemoryCandidate = CoachProviderResult['result']['memoryCandidates'][number];
 
+const MEMORY_CANDIDATE_LIMIT = 20;
+
 /** Grouped digits («600 000», «1 650») read as one number; a comma decimal reads as a dot. */
 function numbersIn(text: string): string[] {
   const joined = text.replace(/(\d)[\s\u00a0\u202f](?=\d{3}(?!\d))/gu, '$1');
@@ -41,7 +43,7 @@ export function faithfulMemoryCandidates(
 ): MemoryCandidate[] {
   const sources = citableSources(input);
   const seen = new Set<string>();
-  return candidates.filter((candidate) => {
+  const kept = candidates.filter((candidate) => {
     const refs = candidate.sourceMessageIds;
     if (refs.length === 0 || !refs.every((ref) => sources.has(ref))) return false;
     const cited = new Set(refs.flatMap((ref) => numbersIn(sources.get(ref) ?? '')));
@@ -51,4 +53,6 @@ export function faithfulMemoryCandidates(
     seen.add(key);
     return true;
   });
+  // The turn schema holds 20; the fact step comes first, so its facts are the ones kept.
+  return kept.slice(0, MEMORY_CANDIDATE_LIMIT);
 }

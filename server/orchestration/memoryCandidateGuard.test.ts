@@ -90,4 +90,13 @@ describe('faithfulMemoryCandidates (coach facts with a source, no distortion)', 
     };
     expect(faithfulMemoryCandidates(input, [hypothesis])).toHaveLength(1);
   });
+
+  it('keeps at most 20, the first ones, so the stored turn stays valid (26.10)', () => {
+    const many = Array.from({ length: 30 }, (_, index) =>
+      fact(`Факт номер ${'а'.repeat(index + 1)}`),
+    );
+    const kept = faithfulMemoryCandidates(INPUT, many);
+    expect(kept).toHaveLength(20);
+    expect(kept[0].statement).toBe('Факт номер а');
+  });
 });
