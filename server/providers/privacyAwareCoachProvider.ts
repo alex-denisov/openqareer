@@ -2,6 +2,7 @@ import type { CoachTurnInput } from '../domain/coach';
 import type {
   CoachProvider,
   CoachProviderResult,
+  CoachTurnOptions,
 } from './coachProvider';
 
 interface PrivacyAwareCoachProviderOptions {
@@ -20,10 +21,11 @@ export class PrivacyAwareCoachProvider implements CoachProvider {
   createTurn(
     input: CoachTurnInput,
     idempotencyKey: string,
+    options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
     if (input.dataClass === 'synthetic') {
-      return this.syntheticDataProvider.createTurn(input, idempotencyKey);
+      return this.syntheticDataProvider.createTurn(input, idempotencyKey, options);
     }
-    return this.personalDataProvider.createTurn(input, idempotencyKey);
+    return this.personalDataProvider.createTurn(input, idempotencyKey, options);
   }
 }

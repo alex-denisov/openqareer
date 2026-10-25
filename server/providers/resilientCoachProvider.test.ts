@@ -12,6 +12,52 @@ const input: CoachTurnInput = {
 };
 
 describe('ResilientCoachProvider', () => {
+  it('moves on when the caller rejects an answer, without cooling that route (B564)', async () => {
+    let primaryCalls = 0;
+    const primary: CoachProvider = {
+      async createTurn() {
+        primaryCalls += 1;
+        return result('openrouter');
+      },
+    };
+    const fallback: CoachProvider = {
+      async createTurn() {
+        return result('openai');
+      },
+    };
+    const provider = new ResilientCoachProvider({
+      routes: [
+        { id: 'openrouter', provider: primary },
+        { id: 'openai', provider: fallback },
+      ],
+      now: () => 1_000,
+    });
+
+    const strict = await provider.createTurn(input, '77777777-7777-4777-8777-777777777777', {
+      accept: (answer) => answer.message.includes('openai'),
+    });
+    const plain = await provider.createTurn(input, '88888888-8888-4888-8888-888888888888');
+
+    expect(strict.routing?.attempts).toMatchObject([
+      { provider: 'openrouter', status: 'failed', code: 'provider_output_invalid' },
+      { provider: 'openai', status: 'succeeded' },
+    ]);
+    expect(plain.routing?.attempts).toMatchObject([
+      { provider: 'openrouter', status: 'succeeded' },
+    ]);
+    expect(primaryCalls).toBe(2);
+  });
+
+  it('fails as invalid output when no route gives an accepted answer', async () => {
+    const provider = new ResilientCoachProvider({
+      routes: [{ id: 'openrouter', provider: { createTurn: async () => result('openrouter') } }],
+    });
+
+    await expect(
+      provider.createTurn(input, '99999999-9999-4999-8999-999999999999', { accept: () => false }),
+    ).rejects.toMatchObject({ code: 'provider_output_invalid' });
+  });
+
   it('cools a rate-limited provider and returns visible fallback provenance', async () => {
     let primaryCalls = 0;
     const primary: CoachProvider = {
@@ -34,14 +80,8 @@ describe('ResilientCoachProvider', () => {
       now: () => 1_000,
     });
 
-    const first = await provider.createTurn(
-      input,
-      '55555555-5555-4555-8555-555555555555',
-    );
-    const second = await provider.createTurn(
-      input,
-      '66666666-6666-4666-8666-666666666666',
-    );
+    const first = await provider.createTurn(input, '55555555-5555-4555-8555-555555555555');
+    const second = await provider.createTurn(input, '66666666-6666-4666-8666-666666666666');
 
     expect(primaryCalls).toBe(1);
     expect(first.routing).toMatchObject({
@@ -59,14 +99,14 @@ describe('ResilientCoachProvider', () => {
   });
 });
 
-function result(provider: 'nvidia') {
+function result(provider: 'nvidia' | 'openrouter' | 'openai') {
   return {
     provider,
     model: 'nvidia/nemotron-3-super-120b-a12b',
     responseId: 'response-fallback',
     usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
     result: {
-      message: 'Fallback response',
+      message: `Fallback response from ${provider}`,
       phase: 'discovery' as const,
       memoryCandidates: [],
       nextQuestion: 'Что уточнить?',
