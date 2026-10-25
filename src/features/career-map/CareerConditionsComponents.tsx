@@ -380,7 +380,8 @@ export function RelocationRow({
   isRelocationEnabled,
   onOpenRelocation,
 }: {
-  isRelocationEnabled: boolean;
+  /** null — согласие ещё не прочитано: статус не показываем. */
+  isRelocationEnabled: boolean | null;
   onOpenRelocation: () => void;
 }): ReactElement {
   return (
@@ -390,23 +391,27 @@ export function RelocationRow({
           <Globe size={18} aria-hidden />
           <span className="career-relocation-title">Страны и релокация</span>
         </span>
-        <span
-          className={`career-badge ${isRelocationEnabled ? 'career-badge-ok' : 'career-badge-muted'}`}
-        >
-          {isRelocationEnabled ? (
-            <CheckCircle size={12} aria-hidden />
-          ) : (
-            <Circle size={12} aria-hidden />
-          )}
-          {isRelocationEnabled ? 'Включено' : 'Не включено'}
-        </span>
+        {isRelocationEnabled === null ? null : (
+          <span
+            className={`career-badge ${isRelocationEnabled ? 'career-badge-ok' : 'career-badge-muted'}`}
+          >
+            {isRelocationEnabled ? (
+              <CheckCircle size={12} aria-hidden />
+            ) : (
+              <Circle size={12} aria-hidden />
+            )}
+            {isRelocationEnabled ? 'Включено' : 'Не включено'}
+          </span>
+        )}
         <CaretDown size={18} className="career-role-caret" aria-hidden />
       </summary>
       <div className="career-relocation-body">
         <p className="career-role-meta">
-          {isRelocationEnabled
-            ? 'Подборка учитывает страны из раздела «Страны и релокация».'
-            : 'Сейчас подборка идёт только по России. Включение — через анкету и согласие на экране «Страны и релокация».'}
+          {isRelocationEnabled === null
+            ? 'Проверяем, включён ли раздел «Страны и релокация».'
+            : isRelocationEnabled
+              ? 'Подборка учитывает страны из раздела «Страны и релокация».'
+              : 'Сейчас подборка идёт только по России. Включение — через анкету и согласие на экране «Страны и релокация».'}
         </p>
         <button
           type="button"
@@ -432,8 +437,8 @@ export function CareerConditionsCard({
   summary: RolesMarketSummary;
   onEditField: (field: EditableConditionField) => void;
   onOpenRelocation: () => void;
-  /** Согласие анкеты релокации — то же состояние, что в самом разделе (B445-r1). */
-  relocationEnabled?: boolean;
+  /** Согласие анкеты релокации — то же состояние, что в самом разделе (B445-r1); null — ещё не прочитано. */
+  relocationEnabled?: boolean | null;
   editor?: ReactElement | null;
 }): ReactElement {
   return (

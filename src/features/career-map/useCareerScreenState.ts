@@ -224,7 +224,10 @@ export function useCareerScreenState(props: CareerScreenProps) {
     setPushView,
     handleRejectRole,
     focusRoleTitle: props.focusRoleTitle,
-    relocationEnabled: relocationConsent ?? condState.conditions.geography.isRelocationEnabled,
+    // Пока согласие не прочитано, статус неизвестен (null), а не «Не включено» (B509, .app).
+    relocationEnabled: props.initialRoles
+      ? condState.conditions.geography.isRelocationEnabled
+      : relocationConsent,
     refreshRelocation: () => setRelocationRevision((revision) => revision + 1),
     isMobile: props.isMobile ?? false,
   };

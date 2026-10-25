@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { CareerScreen } from './CareerScreen';
+import { RelocationRow } from './CareerConditionsComponents';
 import { DEFAULT_MOCK_ROLES, DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
 import { EMPTY_SEARCH_CONDITIONS } from './careerConditionsStorage';
 
@@ -47,6 +48,15 @@ describe('CareerScreen (B445)', () => {
     expect(html).toContain('Страны и релокация');
     expect(html).toContain('Не включено');
     expect(html).not.toContain('Включить релокацию');
+  });
+
+  it('релокация — пока согласие не прочитано, статус не показан (не «Не включено»)', () => {
+    const html = renderToStaticMarkup(
+      <RelocationRow isRelocationEnabled={null} onOpenRelocation={() => {}} />,
+    );
+    expect(html).toContain('Страны и релокация');
+    expect(html).not.toContain('Включено');
+    expect(html).toContain('Проверяем, включён ли раздел');
   });
 
   it('без данных не выводит ни одного числа макета', () => {
