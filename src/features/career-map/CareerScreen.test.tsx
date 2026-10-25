@@ -43,6 +43,20 @@ describe('CareerScreen (B445)', () => {
     expect(html).toContain('Отклонить роль');
   });
 
+  it('B565: плашка не говорит «пока его нет», когда роль с проверенными навыками уже есть', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} />);
+    expect(html).toContain('Поиск по ролям открывается после проверки навыков');
+    expect(html).not.toContain('Пока его нет');
+    const hypothesesOnly = DEFAULT_MOCK_ROLES.map((role) => ({
+      ...role,
+      status: 'hypothesis' as const,
+    }));
+    const early = renderToStaticMarkup(
+      <CareerScreen initialRoles={hypothesesOnly} initialConditions={DEFAULT_SEARCH_CONDITIONS} />,
+    );
+    expect(early).toContain('Пока его нет, доступен свободный просмотр всех вакансий');
+  });
+
   it('релокация — строка-раскрытие без включения одним нажатием', () => {
     const html = renderToStaticMarkup(<CareerScreen {...full} />);
     expect(html).toContain('Страны и релокация');

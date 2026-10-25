@@ -388,7 +388,46 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
       url: `${BASE_PATH}/checked-roles`,
       headers: headersFor(rig.candidate),
     });
-    expect(responseData(after)).toEqual([{ roleTitle: OTHER_ROLE, completedAt: OBSERVED_AT }]);
+    expect(responseData(after)).toEqual([
+      {
+        roleTitle: OTHER_ROLE,
+        completedAt: OBSERVED_AT,
+        confirmedSkills: run.skills
+          .filter((skill: { grade: string }) => skill.grade === 'confirmed')
+          .map((skill: { name: string }) => skill.name),
+      },
+    ]);
+  });
+
+  it('B565: checked role lists the skills its check confirmed', async () => {
+    const rig = await createRig(8);
+    const started = await rig.app.inject({
+      method: 'POST',
+      url: START_PATH,
+      headers: mutationHeaders(rig),
+      payload: { consent: true, role: OTHER_ROLE },
+    });
+    const run = runFrom(started);
+    const [first, second, ...rest] = run.skills;
+    rig.store.roleSkillAssessments.create(rig.candidate.id, {
+      ...run,
+      id: randomUUID(),
+      status: 'complete',
+      completedAt: OBSERVED_AT,
+      skills: [
+        { ...first, grade: 'confirmed' },
+        { ...second, grade: 'partial' },
+        ...rest.map((skill: typeof first) => ({ ...skill, grade: 'not_confirmed' as const })),
+      ],
+    });
+    const after = await rig.app.inject({
+      method: 'GET',
+      url: `${BASE_PATH}/checked-roles`,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(after)).toEqual([
+      { roleTitle: OTHER_ROLE, completedAt: OBSERVED_AT, confirmedSkills: [first.name] },
+    ]);
   });
 });
 

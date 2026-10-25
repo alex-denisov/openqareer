@@ -170,8 +170,16 @@ function useCareerRolesState(props: CareerScreenProps) {
         acceptedTitle: store.acceptedTitle,
         offersDismissed: store.offersDismissed,
         checkedTitles: store.checkedTitles,
+        checkedSkills: store.checkedSkills,
       }).filter((role) => !store.rejected.includes(role.id)),
-    [store.roles, store.acceptedTitle, store.offersDismissed, store.checkedTitles, store.rejected],
+    [
+      store.roles,
+      store.acceptedTitle,
+      store.offersDismissed,
+      store.checkedTitles,
+      store.checkedSkills,
+      store.rejected,
+    ],
   );
   const [localRejected, setLocalRejected] = useState<readonly string[]>([]);
   const roles: readonly CareerRoleModel[] = provided

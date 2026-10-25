@@ -223,7 +223,13 @@ async function handleCheckedRoles(deps: RouteDeps, request: FastifyRequest, repl
       seen.add(key);
       return true;
     })
-    .map((run) => ({ roleTitle: run.roleTitle, completedAt: run.completedAt }));
+    .map((run) => ({
+      roleTitle: run.roleTitle,
+      completedAt: run.completedAt,
+      confirmedSkills: run.skills
+        .filter((skill) => skill.grade === 'confirmed')
+        .map((skill) => skill.name),
+    }));
   return reply.send({ data: checked });
 }
 

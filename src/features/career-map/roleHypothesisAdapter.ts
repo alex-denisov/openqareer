@@ -1,6 +1,7 @@
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type {
   CareerRoleModel,
+  ConfirmedRoleItem,
   MissingRoleRequirement,
   RoleNextAction,
   RoleStatus,
@@ -16,6 +17,8 @@ export interface RoleDecisions {
   readonly offersDismissed: readonly string[];
   /** Роли с завершённой проверкой навыков (B445). */
   readonly checkedTitles?: readonly string[];
+  /** B565: навыки, подтверждённые проверкой, по названию роли. */
+  readonly checkedSkills?: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Коды, которых нет в общей подписи источников: подвал не должен показывать сырой код. */
@@ -68,7 +71,7 @@ interface RoleEvidence {
   readonly vacancyCount: number;
   readonly observedAt: string | null;
   readonly sources: readonly string[];
-  readonly confirmedItems: readonly string[];
+  readonly confirmedItems: readonly ConfirmedRoleItem[];
   readonly missingItems: readonly MissingRoleRequirement[];
   readonly requirementsNote: string;
 }
@@ -82,7 +85,9 @@ function readEvidence(proposed: ProposedRole): RoleEvidence {
       vacancyCount: conf.sampleSize,
       observedAt: conf.observedTo || null,
       sources: [...new Set(conf.sources.map((entry) => sourceLabel(entry.source)))],
-      confirmedItems: conf.repeatedRequirements.filter((req) => matched.has(req)),
+      confirmedItems: conf.repeatedRequirements
+        .filter((req) => matched.has(req))
+        .map((text) => ({ text, source: 'profile' as const })),
       missingItems: conf.repeatedRequirements
         .filter((req) => !matched.has(req))
         .map((req) => ({ text: req, isWarning: true, linkSection: SKILLS_SECTION })),
@@ -100,6 +105,28 @@ function readEvidence(proposed: ProposedRole): RoleEvidence {
       count > 0
         ? `Требования не сверены: найдено только ${formatVacancyCount(count)}, нужно от ${MIN_WAGE_SAMPLE}.`
         : 'Требования не сверены: вакансий роли пока не найдено.',
+  };
+}
+
+function skillsConfirmedByCheck(title: string, decisions: RoleDecisions): readonly string[] {
+  const entry = Object.entries(decisions.checkedSkills ?? {}).find(([checked]) =>
+    sameTitle(checked, title),
+  );
+  return entry?.[1] ?? [];
+}
+
+/** Итог проверки навыков дополняет сверку с профилем: подтверждённое не числится недостающим. */
+function withCheckedSkills(evidence: RoleEvidence, checked: readonly string[]): RoleEvidence {
+  if (checked.length === 0) return evidence;
+  const key = (text: string) => text.trim().toLocaleLowerCase('ru');
+  const fromCheck = new Set(checked.map(key));
+  return {
+    ...evidence,
+    confirmedItems: [
+      ...checked.map((text) => ({ text, source: 'check' as const })),
+      ...evidence.confirmedItems.filter((item) => !fromCheck.has(key(item.text))),
+    ],
+    missingItems: evidence.missingItems.filter((item) => !fromCheck.has(key(item.text))),
   };
 }
 
@@ -123,7 +150,10 @@ export function mapProposedRoleToCareerRole(
   decisions: RoleDecisions,
 ): CareerRoleModel {
   const status = determineRoleStatus(proposed, decisions);
-  const evidence = readEvidence(proposed);
+  const evidence = withCheckedSkills(
+    readEvidence(proposed),
+    skillsConfirmedByCheck(proposed.title, decisions),
+  );
   const { fork, note } = wageOf(proposed, evidence.vacancyCount);
 
   return {

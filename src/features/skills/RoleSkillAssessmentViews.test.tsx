@@ -11,7 +11,7 @@ import {
   StartState,
   TooFewVacanciesState,
 } from './RoleSkillAssessmentStartViews';
-import { ModelErrorState } from './RoleSkillAssessmentCaseViews';
+import { EvaluationDetails, ModelErrorState } from './RoleSkillAssessmentCaseViews';
 import { SuggestionsState } from './RoleSkillAssessmentConversationViews';
 
 function caseFor(skillId: string, status: 'pending' | 'answered' | 'skipped', graded: boolean) {
@@ -206,6 +206,52 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
     expect(html).toContain('Перейти к кейсам');
     expect(html).not.toContain('Выбрать всё');
     expect(html).not.toContain('из 12');
+  });
+
+  it('B565: suggestions and grading criteria carry Russian labels, not service codes', () => {
+    const suggestion = {
+      id: '00000000-0000-4000-8000-000000000010',
+      domain: 'skill',
+      statement: 'Вёл бюджет направления',
+      sourceExcerpt: 'Вёл бюджет',
+      sourceMessageId: '00000000-0000-4000-8000-000000000011',
+      selected: true,
+      accepted: false,
+    } as const;
+    const suggestionsHtml = renderToStaticMarkup(
+      <SuggestionsState
+        run={
+          {
+            ...BASE_RUN,
+            status: 'suggestions',
+            suggestions: [suggestion],
+          } as RoleSkillAssessmentRun
+        }
+        drafts={{}}
+        busy={false}
+        onDrafts={() => undefined}
+        onSetAll={() => undefined}
+        onAcceptAll={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+    expect(suggestionsHtml).toContain('<strong>Навык</strong>');
+    expect(suggestionsHtml).not.toContain('<strong>skill</strong>');
+
+    const criteria = ['context', 'actions', 'verification'].map((criterionId) => ({
+      criterionId,
+      grade: 'confirmed' as const,
+      explanation: 'Объяснение',
+      candidateExcerpt: 'Цитата',
+      sourceRefIds: [],
+    }));
+    const evaluationHtml = renderToStaticMarkup(
+      <EvaluationDetails evaluation={{ candidateAnswer: 'Ответ', grade: 'confirmed', criteria }} />,
+    );
+    expect(evaluationHtml).toContain('Исходные данные и риск · Подтверждено');
+    expect(evaluationHtml).toContain('Порядок действий · Подтверждено');
+    expect(evaluationHtml).toContain('Проверка результата · Подтверждено');
+    expect(evaluationHtml).not.toMatch(/>(context|actions|verification) ·/u);
   });
 });
 

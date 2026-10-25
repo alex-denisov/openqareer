@@ -77,6 +77,8 @@ export async function startRoleSkillAssessment(
 export interface CheckedRole {
   readonly roleTitle: string;
   readonly completedAt: string;
+  /** B565: навыки, которые проверка подтвердила. */
+  readonly confirmedSkills?: readonly string[];
 }
 
 /** Роли с завершённой проверкой навыков (B445). */

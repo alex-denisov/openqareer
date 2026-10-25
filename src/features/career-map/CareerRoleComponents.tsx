@@ -12,7 +12,7 @@ import {
   Warning,
   X,
 } from '@phosphor-icons/react';
-import type { CareerRoleModel, RoleStatus } from './careerScreenTypes';
+import type { CareerRoleModel, ConfirmedRoleItem, RoleStatus } from './careerScreenTypes';
 import { formatVacancyCount } from './careerWageFork';
 
 export interface RoleHandlers {
@@ -101,7 +101,12 @@ export function RoleStageStepper({ status }: { status: RoleStatus }): ReactEleme
   );
 }
 
-function RoleConfirmedSection({ items }: { items: readonly string[] }): ReactElement {
+const CONFIRMED_BY: Readonly<Record<ConfirmedRoleItem['source'], string>> = {
+  profile: 'есть в навыках профиля',
+  check: 'подтверждено проверкой навыков',
+};
+
+function RoleConfirmedSection({ items }: { items: readonly ConfirmedRoleItem[] }): ReactElement {
   return (
     <div className="career-role-section">
       <h4 className="career-section-subhead">Подтверждено</h4>
@@ -112,9 +117,11 @@ function RoleConfirmedSection({ items }: { items: readonly string[] }): ReactEle
       ) : (
         <ul className="career-check-list">
           {items.map((item) => (
-            <li key={item} className="career-check-item career-check-ok">
+            <li key={item.text} className="career-check-item career-check-ok">
               <CheckCircle size={16} aria-hidden />
-              <span>{item}: есть в навыках профиля</span>
+              <span>
+                {item.text}: {CONFIRMED_BY[item.source]}
+              </span>
             </li>
           ))}
         </ul>
@@ -196,11 +203,7 @@ function RoleRejectAction({
     );
   }
   return (
-    <button
-      type="button"
-      className="career-btn is-sm is-ghost"
-      onClick={() => setConfirming(true)}
-    >
+    <button type="button" className="career-btn is-sm is-ghost" onClick={() => setConfirming(true)}>
       <X size={16} aria-hidden />
       Отклонить роль
     </button>

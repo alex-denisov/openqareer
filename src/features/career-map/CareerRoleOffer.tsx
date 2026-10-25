@@ -21,6 +21,7 @@ function useOfferedRole() {
         acceptedTitle: store.acceptedTitle,
         offersDismissed: store.offersDismissed,
         checkedTitles: store.checkedTitles,
+        checkedSkills: store.checkedSkills,
       }).find(
         (item) =>
           item.status === 'skills_checked' &&
@@ -28,7 +29,14 @@ function useOfferedRole() {
           !store.rejected.includes(item.id) &&
           item.vacancyCount > 0,
       ),
-    [store.roles, store.acceptedTitle, store.offersDismissed, store.checkedTitles, store.rejected],
+    [
+      store.roles,
+      store.acceptedTitle,
+      store.offersDismissed,
+      store.checkedTitles,
+      store.checkedSkills,
+      store.rejected,
+    ],
   );
   return { store, role };
 }

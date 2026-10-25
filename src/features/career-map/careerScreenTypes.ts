@@ -1,3 +1,9 @@
+/** Что подтверждено у роли: совпадение с навыками профиля или итог проверки навыков (B565). */
+export interface ConfirmedRoleItem {
+  readonly text: string;
+  readonly source: 'profile' | 'check';
+}
+
 export type RoleStatus = 'hypothesis' | 'skills_checked' | 'open_for_search';
 
 export interface MissingRoleRequirement {
@@ -31,7 +37,7 @@ export interface CareerRoleModel {
   readonly observedAt: string | null;
   /** Площадки, на которых найдены вакансии роли: «hh.ru», «LinkedIn». */
   readonly sources: readonly string[];
-  readonly confirmedItems: readonly string[];
+  readonly confirmedItems: readonly ConfirmedRoleItem[];
   readonly missingItems: readonly MissingRoleRequirement[];
   /** «Сверка с требованиями 88 вакансий, 05.10» или честное «не сверено». */
   readonly requirementsNote: string;
