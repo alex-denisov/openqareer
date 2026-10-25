@@ -11,7 +11,7 @@ export function registerAeoRoutes(app: FastifyInstance): void {
     app.get(path, async (_request, reply) =>
       reply
         .header('Cache-Control', 'public, max-age=300')
-        .type('text/plain; charset=utf-8')
+        .type('text/markdown; charset=utf-8')
         .send(build(getLandingStats())),
     );
   }
