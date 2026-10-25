@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SEO_GOAL_MIGRATION } from './seoGoalSchema';
 import { readSeoGoalSummary, recordCandidateGoal } from './seoGoalRepository';
 import { createStore, directories } from './sqliteTestHarness';
@@ -25,19 +25,53 @@ function database() {
 
 describe('internal candidate goals', () => {
   it('records explicit completion once; ordinary PUT/storage does not count', () => {
-    const store = createStore();
-    const c = store.createCandidate({ dataClass: 'personal', locale: 'ru-RU' });
-    store.saveCandidateWorkspace(c.id, workspace);
-    expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(0);
-    store.completeCandidateWorkspace(c.id, workspace);
-    store.completeCandidateWorkspace(c.id, { ...workspace, constraints: 'updated' });
-    expect(store.getCandidateWorkspace(c.id)?.constraints).toBe('updated');
-    expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(1);
-    const test = store.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
-    store.completeCandidateWorkspace(test.id, workspace);
-    expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(1);
-    store.deleteCandidate(c.id);
-    expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(0);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+    try {
+      const store = createStore();
+      const c = store.createCandidate({ dataClass: 'personal', locale: 'ru-RU' });
+      store.saveCandidateWorkspace(c.id, workspace);
+      expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(0);
+      store.completeCandidateWorkspace(c.id, workspace);
+      store.completeCandidateWorkspace(c.id, { ...workspace, constraints: 'updated' });
+      expect(store.getCandidateWorkspace(c.id)?.constraints).toBe('updated');
+      // The observation window is [from, to): a marker at exactly to is excluded.
+      expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(0);
+      vi.setSystemTime(new Date(now.getTime() + 1));
+      expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(1);
+      const test = store.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+      store.completeCandidateWorkspace(test.id, workspace);
+      // Put the synthetic marker inside the window, so only data class excludes it.
+      vi.setSystemTime(new Date(now.getTime() + 2));
+      expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(1);
+      store.deleteCandidate(c.id);
+      expect(store.getSeoGoalSummary().goals.onboardingCompleted).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('includes the lower observation boundary and excludes the upper boundary', () => {
+    const db = database();
+    const from = new Date(now.getTime() - 28 * 86_400_000);
+    try {
+      const record = (key: string, timestamp: Date) => recordCandidateGoal(
+        db, 'personal', 'application_receipt', key, 'screenshot', timestamp.toISOString(),
+      );
+      record('before-from', new Date(from.getTime() - 1));
+      expect(readSeoGoalSummary(db, 28, now).goals.applicationsWithCandidateReceipt).toBe(0);
+      record('at-from', from);
+      expect(readSeoGoalSummary(db, 28, now).goals.applicationsWithCandidateReceipt).toBe(1);
+      record('at-to', now);
+      expect(readSeoGoalSummary(db, 28, now).goals.applicationsWithCandidateReceipt).toBe(1);
+      // One millisecond later the old lower-bound marker leaves and at-to enters.
+      const later = readSeoGoalSummary(db, 28, new Date(now.getTime() + 1));
+      expect(later.goals.applicationsWithCandidateReceipt).toBe(1);
+      db.prepare("DELETE FROM candidate_goal_markers WHERE entity_key = 'at-to'").run();
+      expect(readSeoGoalSummary(db, 28, new Date(now.getTime() + 1)).goals.applicationsWithCandidateReceipt).toBe(0);
+    } finally {
+      db.close();
+    }
   });
 
   it('rolls back workspace changes when completion marker insertion fails', () => {
