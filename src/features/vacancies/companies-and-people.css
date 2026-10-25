@@ -1246,9 +1246,9 @@ select.companies-people-select {
     align-items: center;
   }
 
-  /* Narrow card (.app 900–1176): avatar, name and source keep the full width, «Хочу» / «Убрать»
+  /* Narrow card (content under 480 px: .app 900–1024; 1440 is 488 and stays as mockup 13): avatar, name and source keep the full width, «Хочу» / «Убрать»
      take their own line under them (same rule as the company header in block B, 15e7a864). */
-  @container (max-width: 520px) {
+  @container (max-width: 480px) {
     .companies-people-detail-heading {
       grid-template-columns: 48px minmax(0, 1fr);
     }
