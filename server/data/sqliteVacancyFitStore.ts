@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { VacancyFitResult } from '../../shared/vacancyFit';
+import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
 import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitInput } from '../domain/vacancyFit';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
@@ -19,6 +19,8 @@ export type VacancyFitDeferOutcome = 'deferred' | 'failed' | 'lost';
 /** A job waiting for requirements gives up after this many pauses (~30 min at the default pause). */
 export const VACANCY_FIT_MAX_DEFERS = 30;
 const DEFER_MS = 60_000;
+/** One claim moves at most this many rows of another release before it returns empty-handed. */
+const MAX_REKEYS_PER_CLAIM = 50;
 const RETRY_BASE_MS = 30_000;
 const LATE_COLUMNS = [
   ['requested_at', 'TEXT'],
@@ -52,17 +54,22 @@ export class SqliteVacancyFitStore {
   private candidateKey(candidateId: string): string {
     return this.sealedText.indexToken('vacancy-fit-candidate', candidateId);
   }
-  cacheKey(input: VacancyFitInput): string {
-    const fingerprint = vacancyFitFingerprint(input);
+  cacheKey(input: VacancyFitInput, algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION): string {
+    const fingerprint = vacancyFitFingerprint(input, algorithmVersion);
     return this.sealedText.indexToken(`vacancy-fit:${input.candidateId}`, JSON.stringify(fingerprint));
   }
 
   /** `retrying` is a pending job whose last model call failed: the row says so instead of «в очереди». */
   getJobState(input: VacancyFitInput): VacancyFitJobState | undefined {
+    return this.getJobStatus(input)?.state;
+  }
+
+  /** The state with the error class of the last attempt: a `failed` row says why (B562-r). */
+  getJobStatus(input: VacancyFitInput): { readonly state: VacancyFitJobState; readonly lastError: string | null } | undefined {
     const row = this.database.prepare('SELECT status,last_error FROM vacancy_fit_queue WHERE cache_key=? AND candidate_key=?')
       .get(this.cacheKey(input), this.candidateKey(input.candidateId)) as { status: VacancyFitJobState; last_error: string | null } | undefined;
     if (!row) return undefined;
-    return row.status === 'pending' && row.last_error ? 'retrying' : row.status;
+    return { state: row.status === 'pending' && row.last_error ? 'retrying' : row.status, lastError: row.last_error };
   }
 
   getCache(input: VacancyFitInput): VacancyFitResult | undefined {
@@ -95,9 +102,25 @@ export class SqliteVacancyFitStore {
     return ids;
   }
 
-  putCache(input: VacancyFitInput, result: VacancyFitResult, now = new Date().toISOString()): void {
-    this.validateResult(input, result);
-    const key = this.cacheKey(input);
+  /**
+   * The newest result of an earlier algorithm version, its numbers derived again from its verified
+   * evidence: shown as «пересчитывается» while the current version is queued (B562-r).
+   */
+  getPreviousCache(input: VacancyFitInput): VacancyFitResult | undefined {
+    for (const version of LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS) {
+      const key = this.cacheKey(input, version);
+      const row = this.database.prepare('SELECT result_cipher FROM vacancy_fit_cache WHERE cache_key = ? AND candidate_key = ?').get(key, this.candidateKey(input.candidateId)) as { result_cipher: string } | undefined;
+      if (!row) continue;
+      try {
+        return this.validateResult(input, JSON.parse(this.sealedText.open(row.result_cipher, key)) as VacancyFitResult, ['gates'], version);
+      } catch { /* an unreadable older row gives no percent */ }
+    }
+    return undefined;
+  }
+
+  putCache(input: VacancyFitInput, result: VacancyFitResult, now = new Date().toISOString(), algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION): void {
+    this.validateResult(input, result, VERIFIED_FIELDS, algorithmVersion);
+    const key = this.cacheKey(input, algorithmVersion);
     this.database.prepare(`INSERT INTO vacancy_fit_cache(cache_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)
       ON CONFLICT(cache_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), key), now);
   }
@@ -133,19 +156,36 @@ export class SqliteVacancyFitStore {
     const leaseMs = options.leaseMs ?? 60_000;
     if (!Number.isFinite(Date.parse(now)) || !Number.isFinite(leaseMs) || leaseMs <= 0) throw new Error('invalid vacancy fit lease');
     const leaseUntil = new Date(Date.parse(now) + leaseMs).toISOString();
-    const token = randomUUID();
-    const row = this.database.prepare(`UPDATE vacancy_fit_queue SET status='leased',lease_token=?,lease_until=?,attempts=attempts+1,updated_at=?
-      WHERE cache_key=(SELECT cache_key FROM vacancy_fit_queue WHERE (status='pending' AND (lease_until IS NULL OR lease_until<=?)) OR (status='leased' AND lease_until<=?) ORDER BY (defers>0 OR attempts>0),COALESCE(requested_at,created_at) DESC,cache_key LIMIT 1)
-      RETURNING cache_key,input_cipher,lease_token,lease_until,attempts`).get(token, leaseUntil, now, now, now) as JobRow | undefined;
-    if (!row) return undefined;
-    try {
-      const input = JSON.parse(this.sealedText.open(row.input_cipher, row.cache_key)) as VacancyFitInput;
-      if (this.cacheKey(input) !== row.cache_key) throw new Error('invalid vacancy fit job');
-      return { key: row.cache_key, leaseToken: row.lease_token, leaseUntil: row.lease_until, attempts: row.attempts, input };
-    } catch {
-      this.database.prepare("UPDATE vacancy_fit_queue SET status='failed',input_cipher='',lease_token=NULL,lease_until=NULL WHERE cache_key=? AND lease_token=?").run(row.cache_key, token);
-      return undefined;
+    for (let rekeyed = 0; rekeyed <= MAX_REKEYS_PER_CLAIM; rekeyed += 1) {
+      const token = randomUUID();
+      const row = this.database.prepare(`UPDATE vacancy_fit_queue SET status='leased',lease_token=?,lease_until=?,attempts=attempts+1,updated_at=?
+        WHERE cache_key=(SELECT cache_key FROM vacancy_fit_queue WHERE (status='pending' AND (lease_until IS NULL OR lease_until<=?)) OR (status='leased' AND lease_until<=?) ORDER BY (defers>0 OR attempts>0),COALESCE(requested_at,created_at) DESC,cache_key LIMIT 1)
+        RETURNING cache_key,input_cipher,lease_token,lease_until,attempts`).get(token, leaseUntil, now, now, now) as JobRow | undefined;
+      if (!row) return undefined;
+      let input: VacancyFitInput;
+      try {
+        input = JSON.parse(this.sealedText.open(row.input_cipher, row.cache_key)) as VacancyFitInput;
+      } catch {
+        this.database.prepare("UPDATE vacancy_fit_queue SET status='failed',input_cipher='',lease_token=NULL,lease_until=NULL WHERE cache_key=? AND lease_token=?").run(row.cache_key, token);
+        return undefined;
+      }
+      if (this.cacheKey(input) === row.cache_key) return { key: row.cache_key, leaseToken: row.lease_token, leaseUntil: row.lease_until, attempts: row.attempts, input };
+      this.rekey(row.cache_key, token, input, now);
     }
+    return undefined;
+  }
+
+  /**
+   * A row keyed by another release (fingerprint or algorithm version) is moved to this release's key.
+   * Failing it lost every job the new HTTP process queued while the old worker still ran (25.10, B562-r).
+   */
+  private rekey(key: string, token: string, input: VacancyFitInput, now: string): void {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      this.database.prepare('DELETE FROM vacancy_fit_queue WHERE cache_key=? AND lease_token=?').run(key, token);
+      this.enqueue(input, now);
+      this.database.exec('COMMIT');
+    } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }
 
   /** A stale worker cannot publish a result after another worker has reclaimed the lease. */
@@ -208,8 +248,8 @@ export class SqliteVacancyFitStore {
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }
 
-  private validateResult(input: VacancyFitInput, result: VacancyFitResult, fields: readonly (keyof VacancyFitResult)[] = VERIFIED_FIELDS): VacancyFitResult {
-    if (result.candidateId !== input.candidateId || result.vacancyId !== input.vacancyId || result.algorithmVersion !== vacancyFitFingerprint(input).algorithmVersion) throw new Error('vacancy fit result scope mismatch');
+  private validateResult(input: VacancyFitInput, result: VacancyFitResult, fields: readonly (keyof VacancyFitResult)[] = VERIFIED_FIELDS, algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION): VacancyFitResult {
+    if (result.candidateId !== input.candidateId || result.vacancyId !== input.vacancyId || result.algorithmVersion !== algorithmVersion) throw new Error('vacancy fit result scope mismatch');
     if (!Number.isFinite(Date.parse(result.calculatedAt))) throw new Error('invalid vacancy fit result date');
     const checked = evaluateVacancyFit({ ...input, assessments: result.assessments }, result.calculatedAt);
     for (const field of fields) {

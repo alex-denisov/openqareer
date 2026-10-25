@@ -6,8 +6,17 @@ const STATE_LABELS = {
   retrying: 'Не удалось рассчитать — повторим автоматически.',
   no_description: 'Нет описания вакансии для расчёта',
   no_requirements: 'В описании пока не найдены требования',
-  failed: 'Расчёт не завершился: сервис сравнения не ответил',
+  failed: 'Расчёт не завершился',
+  refreshing: 'Пересчитывается',
   ready: 'Недостаточно подтверждённых данных для расчёта',
+};
+/** B562-r: «не ответил» only when the model was unreachable; the card button is the action. */
+const FAILURE_LABELS: Record<NonNullable<VacancyFitView['failure']>, string> = {
+  model_unavailable: 'Расчёт не завершился: сервис сравнения не ответил',
+  model_invalid: 'Расчёт не завершился: ответ сервиса сравнения не прошёл проверку',
+  requirements: 'Расчёт не завершился: требования вакансии не разобраны',
+  profile_changed: 'Профиль изменился во время расчёта',
+  other: STATE_LABELS.failed,
 };
 const REASONS = {
   blocked_gate: 'Есть обязательное условие, которое не совпадает с профилем',
@@ -22,7 +31,7 @@ const REASONS = {
 const MIN_SKILL_REQUIREMENTS = 3;
 export function fitHasNumber(view?: VacancyFitView) {
   return (
-    view?.state === 'ready' &&
+    (view?.state === 'ready' || view?.state === 'refreshing') &&
     view.result?.status === 'assessed' &&
     view.result.dataState !== 'unknown' &&
     typeof view.result.coveragePercent === 'number' &&
@@ -56,7 +65,9 @@ export function VacancyFitSummary({
   const reason =
     (view?.state === 'ready' && result
       ? REASONS[result.reason === 'assessed' && !numeric ? 'too_few_skills' : result.reason]
-      : STATE_LABELS[view?.state ?? 'not_requested']) ?? STATE_LABELS.ready;
+      : view?.state === 'failed' && view.failure
+        ? FAILURE_LABELS[view.failure]
+        : STATE_LABELS[view?.state ?? 'not_requested']) ?? STATE_LABELS.ready;
   return (
     <span
       className={`vacancy-fit-summary${compact ? ' is-compact' : ''}`}
@@ -79,6 +90,7 @@ export function VacancyFitSummary({
             aria-hidden="true"
           />
           {result.dataState === 'partial' ? <span>{partialNote(result)}</span> : null}
+          {view?.state === 'refreshing' ? <span>{STATE_LABELS.refreshing}</span> : null}
         </>
       ) : (
         <span>{compact ? `Соответствие: ${lowerFirst(reason)}` : reason}</span>

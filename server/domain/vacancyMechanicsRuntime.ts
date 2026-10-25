@@ -1,14 +1,14 @@
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sqliteBusyTimeout';
 import { DatabaseSync } from 'node:sqlite';
-import type { VacancyFitView } from '../../shared/vacancyFit';
+import type { VacancyFitFailure, VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { SqliteVacancyFitStore } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
-import { createVacancyFitAssessor } from './vacancyFitAssessor';
+import { createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacancyMechanicsStats';
@@ -17,6 +17,30 @@ import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacanc
 const FIT_DEPENDENCY_PRIORITY = 2;
 /** A vacancy a candidate is looking at gets model labels before the background tail (B510). */
 export const SHOWN_PAGE_PRIORITY = 1.5;
+
+/** Error classes of a failed fit job as the row names them; anything else is a plain «не завершился». */
+const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
+  assessment_model_unavailable: 'model_unavailable',
+  assessment_model_invalid: 'model_invalid',
+  requirements_failed: 'requirements',
+  requirements_wait_timeout: 'requirements',
+  profile_changed: 'profile_changed',
+};
+interface AssessmentOutcome {
+  staleProfile: boolean;
+  returned: boolean;
+  invalid: boolean;
+}
+function assessmentFailure(outcome: AssessmentOutcome): string {
+  return outcome.staleProfile
+    ? 'profile_changed'
+    : outcome.invalid
+      ? 'assessment_model_invalid'
+      : 'assessment_model_unavailable';
+}
+function fitFailure(lastError: string | null | undefined): VacancyFitFailure {
+  return (lastError && FIT_FAILURES[lastError]) || 'other';
+}
 
 /** The HTTP process enqueues/reads only. runNext is called by a separate worker. */
 export class VacancyMechanicsRuntime {
@@ -41,13 +65,34 @@ export class VacancyMechanicsRuntime {
     // Until the worker answers, the rules give the chips; the state below stays honest.
     const shown = extracted ?? extractVacancyRequirements({ vacancyId: input.vacancyId, description: input.description });
     const resolved = { ...input, requirements: extracted?.requirements ?? [] };
-    const result = this.fit.getCache(resolved);
-    const queued = this.fit.getJobState(input) ?? this.fit.getJobState(resolved);
-    const state = !input.description.trim() ? 'no_description'
-      : extracted?.status === 'no_requirements' ? 'no_requirements' : result ? 'ready'
-        : queued === 'failed' ? 'failed' : queued === 'retrying' ? 'retrying'
-          : queued === 'pending' || queued === 'leased' ? 'processing' : 'not_requested';
-    return { state, requirements: shown.requirements.map(labelVacancyRequirement), ...(result ? { result } : {}) };
+    const current = this.fit.getCache(resolved);
+    const job = this.fit.getJobStatus(input) ?? this.fit.getJobStatus(resolved);
+    const queued = job?.state;
+    // B562-r: a version bump keeps the known percent on screen until the new result is ready.
+    const previous =
+      current || queued === 'failed' ? undefined : this.fit.getPreviousCache(resolved);
+    const result = current ?? previous;
+    const state = !input.description.trim()
+      ? 'no_description'
+      : extracted?.status === 'no_requirements'
+        ? 'no_requirements'
+        : current
+          ? 'ready'
+          : previous
+            ? 'refreshing'
+            : queued === 'failed'
+              ? 'failed'
+              : queued === 'retrying'
+                ? 'retrying'
+                : queued === 'pending' || queued === 'leased'
+                  ? 'processing'
+                  : 'not_requested';
+    return {
+      state,
+      requirements: shown.requirements.map(labelVacancyRequirement),
+      ...(result ? { result } : {}),
+      ...(state === 'failed' ? { failure: fitFailure(job?.lastError) } : {}),
+    };
   }
   cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
   enqueue(input: VacancyFitInput) {
@@ -99,23 +144,51 @@ export class VacancyMechanicsRuntime {
         return Boolean(extracted);
       }
       const resolved = { ...job.input, requirements: requirements.requirements };
-      let staleProfile = false;
-      let assessmentReturned = false;
-      const base = client ? createVacancyFitAssessor(client, runId) : undefined;
-      const assessor = base ? { assess: async (input: Parameters<typeof base.assess>[0]) => {
-        if (!this.validateCurrentProfile?.(resolved)) { staleProfile = true; throw new Error('profile_changed'); }
-        const assessments = await base.assess(input);
-        assessmentReturned = true;
-        return assessments;
-      } } : undefined;
+      const { assessor, outcome } = this.trackedAssessor(client, runId, resolved);
       const result = await assessVacancyFit(resolved, assessor);
-      if (client && result.reason === 'assessment_unavailable' && !assessmentReturned) {
-        this.settleFailure(job, staleProfile ? 'profile_changed' : 'assessment_model_unavailable', !staleProfile && job.attempts < 3);
+      if (client && result.reason === 'assessment_unavailable' && !outcome.returned) {
+        this.settleFailure(
+          job,
+          assessmentFailure(outcome),
+          !outcome.staleProfile && job.attempts < 3,
+        );
       } else if (this.fit.complete(job, result, undefined, resolved)) this.stats.completed += 1;
     } catch (error) {
       this.settleFailure(job, error instanceof Error && /^[a-z0-9_:-]{1,80}$/iu.test(error.message) ? error.message : 'assessment_failed', job.attempts < 3);
     }
     return true;
+  }
+
+  /** The fit assessor with what happened to its call: the failure class names the row (B562-r). */
+  private trackedAssessor(
+    client: VacancyFitBulkClient | null,
+    runId: string,
+    resolved: VacancyFitInput,
+  ) {
+    const outcome: AssessmentOutcome = { staleProfile: false, returned: false, invalid: false };
+    const base = client ? createVacancyFitAssessor(client, runId) : undefined;
+    const assessor = base
+      ? {
+          assess: async (input: Parameters<typeof base.assess>[0]) => {
+            if (!this.validateCurrentProfile?.(resolved)) {
+              outcome.staleProfile = true;
+              throw new Error('profile_changed');
+            }
+            try {
+              const assessments = await base.assess(input);
+              outcome.returned = true;
+              return assessments;
+            } catch (error) {
+              // The model answered, but not with the assessment shape: not an outage.
+              outcome.invalid =
+                error instanceof SyntaxError ||
+                (error instanceof Error && error.message.startsWith('invalid vacancy fit'));
+              throw error;
+            }
+          },
+        }
+      : undefined;
+    return { assessor, outcome };
   }
 
   /** One queued requirements job (highest priority first); the counters feed the batch journal line. */

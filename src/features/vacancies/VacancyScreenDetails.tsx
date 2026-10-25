@@ -205,7 +205,8 @@ function DiscussAction({
  */
 /** True while the ready fit's requirements are still being read. */
 function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]): boolean {
-  const needsDetail = view?.state === 'ready' && view.requirements.length === 0;
+  const needsDetail =
+    (view?.state === 'ready' || view?.state === 'refreshing') && view.requirements.length === 0;
   useEffect(() => {
     if (!needsDetail) return;
     const controller = new AbortController();

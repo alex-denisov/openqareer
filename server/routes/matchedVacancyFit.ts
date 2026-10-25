@@ -106,7 +106,10 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
         if (!target) continue;
         const input = context(target, []);
         const view = runtime.view(input);
-        if (view.state === 'not_requested' && requeued < STALE_REFIT_LIMIT) {
+        if (
+          (view.state === 'not_requested' || view.state === 'refreshing') &&
+          requeued < STALE_REFIT_LIMIT
+        ) {
           runtime.enqueue(input);
           requeued += 1;
         }
@@ -215,7 +218,10 @@ export function vacanciesAwaitingFit(items: readonly MatchedVacancyItem[]): stri
   return (
     items
       // Упавший расчёт (провайдер недоступен) повторяется при следующем показе, а не ждёт нажатия.
-      .filter((item) => ['not_requested', 'failed'].includes(item.explanation.fitView?.state ?? ''))
+      // `refreshing` shows the previous version's percent: the current one still has to be queued (B562-r).
+      .filter((item) =>
+        ['not_requested', 'failed', 'refreshing'].includes(item.explanation.fitView?.state ?? ''),
+      )
       .slice(0, FIT_PAGE_LIMIT)
       .map((item) => item.cluster.id)
   );

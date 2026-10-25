@@ -161,10 +161,30 @@ it('B510: the short inline fit for the 390 status shows only the number', () => 
   expect(html).toContain('aria-label="соответствие 50 %"');
 });
 
-it('failed states the reason, not «try again»: the card button is the action (B562-r)', () => {
+it.each([
+  ['model_unavailable', 'Соответствие: расчёт не завершился: сервис сравнения не ответил'],
+  [
+    'model_invalid',
+    'Соответствие: расчёт не завершился: ответ сервиса сравнения не прошёл проверку',
+  ],
+  ['requirements', 'Соответствие: расчёт не завершился: требования вакансии не разобраны'],
+  ['profile_changed', 'Соответствие: профиль изменился во время расчёта'],
+  [undefined, 'Соответствие: расчёт не завершился'],
+] as const)('failed names its real cause, never «try again» (B562-r): %s', (failure, text) => {
   const html = renderToStaticMarkup(
-    <VacancyFitSummary compact view={{ state: 'failed', requirements: [] }} />,
+    <VacancyFitSummary
+      compact
+      view={{ state: 'failed', requirements: [], ...(failure ? { failure } : {}) }}
+    />,
   );
-  expect(html).toContain('Соответствие: расчёт не завершился: сервис сравнения не ответил');
+  expect(html).toContain(`${text}<`);
   expect(html).not.toMatch(/Попробуйте|недоступен/u);
+});
+
+it('keeps the previous percent while the new version is calculated (B562-r)', () => {
+  const view = { ...readyVacancyFit(), state: 'refreshing' as const };
+  expect(renderToStaticMarkup(<VacancyFitSummary view={view} />)).toMatch(/50%.*Пересчитывается/su);
+  expect(renderToStaticMarkup(<VacancyFitInline view={view} />)).toContain(
+    'соответствие 50\u00a0%',
+  );
 });

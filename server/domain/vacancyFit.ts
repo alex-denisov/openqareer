@@ -62,7 +62,10 @@ function eligibleFacts(input: VacancyFitInput): readonly VacancyFitFact[] {
 }
 
 /** SHA hashes are transient; persistent tenant indexes are keyed HMACs in the store. */
-export function vacancyFitFingerprint(input: VacancyFitInput): { vacancyHash: string; profileHash: string; algorithmVersion: string } {
+export function vacancyFitFingerprint(
+  input: VacancyFitInput,
+  algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION,
+): { vacancyHash: string; profileHash: string; algorithmVersion: string } {
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   const importedIds = input.facts.filter(isImportedEvidence).map((fact) => fact.id);
   return {
@@ -70,7 +73,7 @@ export function vacancyFitFingerprint(input: VacancyFitInput): { vacancyHash: st
     // B562: a profile whose evidence includes imported facts gets a new key, so its result cached
     // without them (and the completed queue row) is not reused; confirmed-only profiles keep theirs.
     profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : [])]),
-    algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
+    algorithmVersion,
   };
 }
 

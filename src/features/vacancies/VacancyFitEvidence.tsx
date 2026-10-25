@@ -160,7 +160,8 @@ function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
     }
   }
   // Список приносит только сводку; полный разбор подгружается при раскрытии.
-  const needsDetail = view.state === 'ready' && view.requirements.length === 0;
+  const needsDetail =
+    (view.state === 'ready' || view.state === 'refreshing') && view.requirements.length === 0;
   useEffect(() => {
     if (needsDetail) void load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opened vacancy
@@ -177,7 +178,8 @@ function FitRequestControls({
   readonly compact: boolean;
 }) {
   const { view, busy, error, load } = state;
-  const queued = view.state === 'processing';
+  // `refreshing` (B562-r) is queued too: the previous percent stays until the new one is read.
+  const queued = view.state === 'processing' || view.state === 'refreshing';
   const requestable = compact ? ['not_requested', 'failed'] : ['not_requested', 'failed', 'ready'];
   const canRequest = requestable.includes(view.state);
   const canRefresh = queued || Boolean(error) || (!compact && view.state === 'ready');

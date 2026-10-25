@@ -127,3 +127,29 @@ describe('encrypted persistent vacancy fit cache and queue', () => {
     database.close();
   });
 });
+
+describe('jobs queued by another release (B562-r)', () => {
+  it('re-keys a job whose fingerprint changed instead of failing it silently', () => {
+    const { database, store } = setup();
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const job = input();
+    // The HTTP process of 4c9dac14 queued this row under its key while the 043b1004 worker was still running (25.10, 15:03–15:06).
+    const otherKey = sealed.indexToken('vacancy-fit:candidate-a', 'fingerprint of another release');
+    database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,requested_at,created_at,updated_at) VALUES(?,?,?,'pending',?,?,?)`)
+      .run(otherKey, sealed.indexToken('vacancy-fit-candidate', 'candidate-a'), sealed.seal(JSON.stringify(job), otherKey), now, now, now);
+    const claimed = store.claim({ now });
+    expect(claimed?.key).toBe(store.cacheKey(job));
+    expect(claimed?.input.vacancyId).toBe('vacancy');
+    expect(database.prepare("SELECT COUNT(*) AS n FROM vacancy_fit_queue WHERE status='failed'").get()).toEqual({ n: 0 });
+    expect(database.prepare('SELECT COUNT(*) AS n FROM vacancy_fit_queue WHERE cache_key=?').get(otherKey)).toEqual({ n: 0 });
+    database.close();
+  });
+
+  it('still fails a row it cannot decrypt', () => {
+    const { database, store } = setup();
+    database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,requested_at,created_at,updated_at) VALUES('k','c','broken','pending',?,?,?)`).run(now, now, now);
+    expect(store.claim({ now })).toBeUndefined();
+    expect(database.prepare("SELECT status FROM vacancy_fit_queue WHERE cache_key='k'").get()).toEqual({ status: 'failed' });
+    database.close();
+  });
+});
