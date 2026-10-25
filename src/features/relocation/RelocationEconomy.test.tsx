@@ -61,6 +61,17 @@ describe('RelocationEconomy', () => {
     expect(host?.querySelector('input[type="range"]')).not.toBeNull();
   });
 
+  it('shows Germany at 140 000 € by the BMF wage tax and names its assumptions in «Откуда цифры»', () => {
+    render(140_000);
+
+    const legend = host?.querySelector('.career-relocation-economy-legend')?.textContent ?? '';
+    expect(legend).toMatch(/Налоги и взносы\s*43 %/u);
+    const sources = host?.querySelector('.career-relocation-economy-sources')?.textContent ?? '';
+    expect(sources).toContain(
+      'I налоговый класс, без церковного налога, государственная медстраховка со средней надбавкой 2,9%, без детей',
+    );
+  });
+
   it('opens the scenario editor with «Сбросить · Сохранить · Рассчитать» and returns to the calculation', async () => {
     render(120_000);
     await click('Уточнить расходы');

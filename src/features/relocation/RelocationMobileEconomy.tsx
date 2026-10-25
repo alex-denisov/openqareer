@@ -10,7 +10,12 @@ import {
 import { getCountryTaxData, supportedCountryCodes } from '../../../shared/taxData';
 import type { RelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import type { RelocationScenarioInput } from '../../../shared/relocationScenario';
-import { calculateRelocationEconomy, listRelocationCountries } from './relocationCountryData';
+import {
+  calculateRelocationEconomy,
+  listRelocationCountries,
+  relocationAssumptionSummary,
+  scenarioPayrollNow,
+} from './relocationCountryData';
 import { relocationEconomyBreakdown, type EconomyBreakdown } from './relocationEconomyBreakdown';
 import { relocationDay } from './relocationDates';
 import { formatMoney } from './RelocationEconomyCalc';
@@ -107,7 +112,16 @@ function MobileCalculation(
         income={props.grossAnnualIncome}
         calculated={calculated}
       />
-      <MobileSources data={data} expenses={calculated?.input.expenses} onEdit={props.onEdit} />
+      <MobileSources
+        data={data}
+        assumption={relocationAssumptionSummary(
+          countryCode,
+          props.grossAnnualIncome,
+          calculated ? scenarioPayrollNow(calculated.input) : undefined,
+        )}
+        expenses={calculated?.input.expenses}
+        onEdit={props.onEdit}
+      />
       {supported ? (
         <button className="career-relocation-mobile-cta" type="button" onClick={props.onEdit}>
           <PencilSimple aria-hidden="true" size={18} />
@@ -228,7 +242,7 @@ function MobileResult({
         {result.reason}
       </p>
     );
-  const payroll = calculated?.result.payroll ?? result.payroll;
+  const payroll = (calculated && scenarioPayrollNow(calculated.input)) ?? result.payroll;
   const breakdown = relocationEconomyBreakdown(payroll, calculated?.input.expenses);
   return (
     <MobileBreakdown
@@ -313,10 +327,12 @@ function MobileStack({ breakdown }: { readonly breakdown: EconomyBreakdown }) {
 
 function MobileSources({
   data,
+  assumption,
   expenses,
   onEdit,
 }: {
   readonly data: ReturnType<typeof getCountryTaxData> | null;
+  readonly assumption: string | null;
   readonly expenses: RelocationScenarioInput['expenses'] | undefined;
   readonly onEdit: () => void;
 }) {
@@ -328,7 +344,7 @@ function MobileSources({
   return (
     <MobileGroup
       caption="Откуда цифры"
-      note="Без льгот и вычетов. Не заменяет консультацию налогового специалиста. Если зарплата ниже порога визы, покажем это отдельной строкой."
+      note="Без индивидуальных льгот и вычетов. Не заменяет консультацию налогового специалиста. Если зарплата ниже порога визы, покажем это отдельной строкой."
     >
       <div className="vacancy-push-row">
         <span className="vacancy-push-ico">
@@ -340,6 +356,7 @@ function MobileSources({
             шкала страны, {data.taxYear}, обновлено{' '}
             {relocationDay(data.incomeTax.source.retrievedAt)}
           </small>
+          {assumption ? <small>{assumption}</small> : null}
         </span>
       </div>
       {(['rent', 'insurance'] as const).map((key) => (

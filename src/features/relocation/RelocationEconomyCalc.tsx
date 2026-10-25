@@ -173,10 +173,13 @@ const SOURCE_ICONS: Readonly<Record<Exclude<EconomyItemKey, 'other' | 'free'>, R
 /** «Откуда цифры»: the tax scale with its dates; rent and insurance are the candidate's or missing. */
 export function EconomySources({
   data,
+  assumption,
   expenses,
   onEdit,
 }: {
   readonly data: TaxData | null;
+  /** Tax class, church tax, health insurance and children the tax line assumes. */
+  readonly assumption: string | null;
   readonly expenses: RelocationScenarioInput['expenses'] | undefined;
   readonly onEdit: () => void;
 }) {
@@ -193,16 +196,7 @@ export function EconomySources({
         <h3 id="career-relocation-sources-title">Откуда цифры</h3>
       </div>
       <ul>
-        <SourceRow
-          icon={SOURCE_ICONS.tax}
-          title="Налоги"
-          ok={Boolean(data)}
-          detail={
-            data
-              ? `Шкала страны, ${data.taxYear}, обновлено ${relocationDay(data.incomeTax.source.retrievedAt)}`
-              : 'Нет проверенной шкалы для этой страны'
-          }
-        />
+        <TaxSourceRow data={data} assumption={assumption} />
         {(['rent', 'insurance'] as const).map((key) => (
           <SourceRow
             key={key}
@@ -222,16 +216,40 @@ export function EconomySources({
   );
 }
 
+function TaxSourceRow({
+  data,
+  assumption,
+}: {
+  readonly data: TaxData | null;
+  readonly assumption: string | null;
+}) {
+  return (
+    <SourceRow
+      icon={SOURCE_ICONS.tax}
+      title="Налоги"
+      ok={Boolean(data)}
+      detail={
+        data
+          ? `Шкала страны, ${data.taxYear}, обновлено ${relocationDay(data.incomeTax.source.retrievedAt)}`
+          : 'Нет проверенной шкалы для этой страны'
+      }
+      note={data ? (assumption ?? undefined) : undefined}
+    />
+  );
+}
+
 function SourceRow({
   icon,
   title,
   detail,
   ok,
   action,
+  note,
 }: {
   readonly icon: ReactNode;
   readonly title: string;
   readonly detail: string;
+  readonly note?: string;
   readonly ok: boolean;
   readonly action?: { readonly label: string; readonly onClick: () => void };
 }) {
@@ -241,6 +259,7 @@ function SourceRow({
       <span>
         <b>{title}</b>
         <small>{detail}</small>
+        {note ? <small>{note}</small> : null}
       </span>
       {action ? (
         <button
@@ -273,8 +292,9 @@ export function EconomyHeading() {
       </div>
       {open ? (
         <p className="career-relocation-muted">
-          Налоги по проверенной шкале страны без льгот и вычетов. Аренда, страховка и прочие расходы
-          — только ваши суммы. Расчёт не заменяет консультацию налогового специалиста.
+          Налоги по проверенной шкале страны без индивидуальных льгот и вычетов. Аренда, страховка и
+          прочие расходы — только ваши суммы. Расчёт не заменяет консультацию налогового
+          специалиста.
         </p>
       ) : null}
     </>

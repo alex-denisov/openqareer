@@ -7,6 +7,8 @@ import {
   calculateRelocationEconomy,
   countryFitForQuestionnaire,
   listRelocationCountries,
+  relocationAssumptionSummary,
+  scenarioPayrollNow,
 } from './relocationCountryData';
 import { relocationDay } from './relocationDates';
 import type { PayrollResult } from '../../../shared/taxCalculators';
@@ -77,20 +79,32 @@ export function RelocationEconomy(props: RelocationEconomyProps) {
   );
 }
 
-function EconomyCalculation(
-  props: RelocationEconomyProps & {
-    readonly countryCode: string;
-    readonly supported: boolean;
-    readonly scenario: RelocationScenarioState;
-    readonly onEdit: () => void;
-  },
-) {
-  const { countryCode, supported, scenario } = props;
+type EconomyCalculationProps = RelocationEconomyProps & {
+  readonly countryCode: string;
+  readonly supported: boolean;
+  readonly scenario: RelocationScenarioState;
+  readonly onEdit: () => void;
+};
+
+/** The scenario counts only for this country and salary; its payroll is recomputed by today's rules. */
+function useEconomyCalculation({
+  countryCode,
+  supported,
+  scenario,
+  grossAnnualIncome,
+}: EconomyCalculationProps) {
   const countries = useMemo(() => listRelocationCountries(), []);
   const data = supported && countryCode ? getCountryTaxData(countryCode) : null;
-  const income = props.grossAnnualIncome;
-  const expenses = scenarioExpenses(scenario, countryCode, income);
+  const expenses = scenarioExpenses(scenario, countryCode, grossAnnualIncome);
   const calculated = expenses ? scenario.calculated : undefined;
+  const scenarioPayroll = calculated ? scenarioPayrollNow(calculated.input) : undefined;
+  return { countries, data, income: grossAnnualIncome, expenses, calculated, scenarioPayroll };
+}
+
+function EconomyCalculation(props: EconomyCalculationProps) {
+  const { countryCode, supported } = props;
+  const { countries, data, income, expenses, calculated, scenarioPayroll } =
+    useEconomyCalculation(props);
   return (
     <div className="career-relocation-economy-layout">
       <section
@@ -111,7 +125,7 @@ function EconomyCalculation(
           supported={supported}
           income={income}
           expenses={expenses}
-          scenarioPayroll={calculated?.result.payroll ?? undefined}
+          scenarioPayroll={scenarioPayroll}
           householdSize={calculated?.input.householdSize ?? 1}
         />
         <SalaryThresholdWarnings
@@ -122,7 +136,12 @@ function EconomyCalculation(
         />
         <EconomyActions onEdit={props.onEdit} onShowComparison={props.onShowComparison} />
       </section>
-      <EconomySources data={data} expenses={expenses} onEdit={props.onEdit} />
+      <EconomySources
+        data={data}
+        assumption={relocationAssumptionSummary(countryCode, income, scenarioPayroll)}
+        expenses={expenses}
+        onEdit={props.onEdit}
+      />
     </div>
   );
 }

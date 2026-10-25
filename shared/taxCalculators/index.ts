@@ -1,4 +1,9 @@
 import { getCountryTaxData } from '../taxData';
+import {
+  calculateGermanIncomeTax,
+  germanSolidaritySurcharge,
+  germanWageTaxBase,
+} from './germanyPayroll';
 import type { CountryCode, SourcedMonthlyCost, TaxBand, TaxDataSource } from '../taxData/types';
 
 export interface IncomeTaxResult {
@@ -24,17 +29,29 @@ export interface PayrollResult {
   readonly grossAnnualIncome: number;
   readonly taxableAnnualIncome: number;
   readonly incomeTax: IncomeTaxResult;
+  /** Germany's Solidaritätszuschlag on the income tax; 0 elsewhere. */
+  readonly solidaritySurcharge: number;
   readonly employeeContributions: {
-    readonly items: readonly { readonly name: string; readonly amount: number; readonly source: TaxDataSource }[];
+    readonly items: readonly {
+      readonly name: string;
+      readonly amount: number;
+      readonly source: TaxDataSource;
+    }[];
     readonly total: number;
   };
   readonly netAnnualIncome: number;
   readonly netMonthlyIncome: number;
   readonly assumptions: readonly string[];
+  /** The calculation's assumptions in one line for «Откуда цифры». */
+  readonly assumptionSummary: string;
 }
 
 export type DisposableIncomeResult =
-  | { readonly status: 'unavailable'; readonly amount: null; readonly missing: readonly ('rent' | 'insurance')[] }
+  | {
+      readonly status: 'unavailable';
+      readonly amount: null;
+      readonly missing: readonly ('rent' | 'insurance')[];
+    }
   | {
       readonly status: 'available';
       readonly amount: number;
@@ -57,7 +74,8 @@ function calculateBracketTax(income: number, bands: readonly TaxBand[]): number 
   let tax = 0;
 
   for (const band of bands) {
-    const taxableWidth = band.upTo === null ? remaining : Math.min(remaining, band.upTo - previousLimit);
+    const taxableWidth =
+      band.upTo === null ? remaining : Math.min(remaining, band.upTo - previousLimit);
     if (taxableWidth > 0) tax += taxableWidth * band.rate;
     remaining -= taxableWidth;
     if (remaining <= 0 || band.upTo === null) break;
@@ -65,21 +83,6 @@ function calculateBracketTax(income: number, bands: readonly TaxBand[]): number 
   }
 
   return roundToCents(tax);
-}
-
-function calculateGermanIncomeTax(taxableIncome: number): number {
-  const income = Math.floor(taxableIncome);
-  if (income <= 12_348) return 0;
-  if (income <= 17_799) {
-    const y = (income - 12_348) / 10_000;
-    return Math.floor((914.51 * y + 1_400) * y);
-  }
-  if (income <= 69_878) {
-    const z = (income - 17_799) / 10_000;
-    return Math.floor((173.1 * z + 2_397) * z + 1_034.87);
-  }
-  if (income <= 277_825) return Math.floor(0.42 * income - 11_135.63);
-  return Math.floor(0.45 * income - 19_470.38);
 }
 
 function calculateTaxAmount(countryCode: CountryCode, taxableIncome: number): number {
@@ -98,7 +101,10 @@ function calculateTaxAmount(countryCode: CountryCode, taxableIncome: number): nu
   }
 }
 
-export function calculateAnnualIncomeTax(countryCode: string, taxableIncome: number): IncomeTaxResult {
+export function calculateAnnualIncomeTax(
+  countryCode: string,
+  taxableIncome: number,
+): IncomeTaxResult {
   validateAmount(taxableIncome);
   const data = getCountryTaxData(countryCode);
   return {
@@ -113,7 +119,11 @@ export function calculateAnnualIncomeTax(countryCode: string, taxableIncome: num
 
 function contributionBase(
   grossAnnualIncome: number,
-  rule: { readonly annualCap?: number; readonly monthlyCap?: number; readonly monthlyFloor?: number },
+  rule: {
+    readonly annualCap?: number;
+    readonly monthlyCap?: number;
+    readonly monthlyFloor?: number;
+  },
 ): number {
   if (rule.monthlyCap !== undefined || rule.monthlyFloor !== undefined) {
     const monthlyIncome = grossAnnualIncome / 12;
@@ -123,11 +133,36 @@ function contributionBase(
   return Math.min(grossAnnualIncome, rule.annualCap ?? Number.POSITIVE_INFINITY);
 }
 
+/** Without a family in the scenario Germany is calculated for an employee without children. */
+const germanyChildless = (options: PayrollOptions): boolean => options.germanyChildless !== false;
+
+/** Cyprus deducts social insurance (not GeSY) from the taxable base, at most a fifth of income. */
+function cyprusTaxBase(
+  grossAnnualIncome: number,
+  contributions: ReturnType<typeof collectEmployeeContributions>,
+): number {
+  const socialInsurance = contributions.items
+    .filter(({ name }) => name === 'Социальное страхование')
+    .reduce((total, item) => total + item.amount, 0);
+  return roundToCents(grossAnnualIncome - Math.min(socialInsurance, grossAnnualIncome / 5));
+}
+
+function defaultTaxableIncome(
+  countryCode: CountryCode,
+  grossAnnualIncome: number,
+  options: PayrollOptions,
+  contributions: ReturnType<typeof collectEmployeeContributions>,
+): number {
+  if (countryCode === 'DE') return germanWageTaxBase(grossAnnualIncome, germanyChildless(options));
+  if (countryCode === 'CY') return cyprusTaxBase(grossAnnualIncome, contributions);
+  return grossAnnualIncome;
+}
+
 function isContributionApplicable(
   eligibility: 'germany-childless' | 'georgia-pension-member' | undefined,
   options: PayrollOptions,
 ): boolean {
-  if (eligibility === 'germany-childless') return options.germanyChildless === true;
+  if (eligibility === 'germany-childless') return germanyChildless(options);
   if (eligibility === 'georgia-pension-member') return options.georgiaPensionParticipant === true;
   return true;
 }
@@ -149,24 +184,32 @@ function collectEmployeeContributions(
 }
 
 function assumptionsFor(countryCode: CountryCode, options: PayrollOptions): string[] {
-  const common = ['Расчёт относится к налоговому году 2026 и использует годовую зарплату, равномерно выплачиваемую 12 месяцев.'];
+  const common = [
+    'Расчёт относится к налоговому году 2026 и использует годовую зарплату, равномерно выплачиваемую 12 месяцев.',
+  ];
   switch (countryCode) {
     case 'DE':
       return [
         ...common,
-        'Для тарифной формулы Германии нужна налогооблагаемая база; если она не передана отдельно, для оценки используется валовая зарплата без вычетов.',
-        'Используется государственная медицинская страховка вне Саксонии и средняя добавочная ставка; индивидуальная ставка кассы может отличаться.',
-        options.germanyChildless
+        'Налог на зарплату считается как у работодателя по программе BMF 2026: I налоговый класс, база за вычетом паушальных расходов и обязательных взносов, плюс солидарный сбор.',
+        'Используется государственная медицинская страховка вне Саксонии и средняя добавочная ставка 2,9%; индивидуальная ставка кассы может отличаться.',
+        'Церковный налог не начисляется.',
+        germanyChildless(options)
           ? 'Включена надбавка по страхованию ухода для бездетных работников.'
-          : 'Надбавка для бездетных не включена, так как семейный статус не передан.',
+          : 'Надбавка для бездетных не включена: в сценарии есть дети.',
       ];
     case 'CY':
       return [
         ...common,
-        'Используется переданная налоговая база; семейные, жилищные и другие индивидуальные вычеты не рассчитываются.',
+        'Взносы в социальное страхование вычитаются из налоговой базы (не больше пятой части дохода); взнос GeSY не вычитается.',
+        'Семейные, жилищные и другие индивидуальные вычеты не рассчитываются.',
       ];
     case 'RS':
-      return [...common, 'Используется сценарий штатного работника; месячные минимальная и максимальная базы применяются к каждому из 12 месяцев.'];
+      return [
+        ...common,
+        'Используется сценарий штатного работника; месячные минимальная и максимальная базы применяются к каждому из 12 месяцев.',
+        'Годовой налог на высокий доход по итогам года не рассчитывается.',
+      ];
     case 'GE':
       return [
         ...common,
@@ -175,9 +218,34 @@ function assumptionsFor(countryCode: CountryCode, options: PayrollOptions): stri
           : 'Накопительный пенсионный взнос не включён, так как участие зависит от статуса работника.',
       ];
     case 'AE':
-      return [...common, 'Используется сценарий иностранного работника; расчёт пенсионных взносов граждан ОАЭ не входит в модуль.'];
+      return [
+        ...common,
+        'Используется сценарий иностранного работника; расчёт пенсионных взносов граждан ОАЭ не входит в модуль.',
+      ];
     case 'RU':
-      return [...common, 'Используется налоговый резидент РФ и основная налоговая база; вычеты и особые категории дохода не учитываются.'];
+      return [
+        ...common,
+        'Используется налоговый резидент РФ и основная налоговая база; вычеты и особые категории дохода не учитываются.',
+      ];
+  }
+}
+
+function assumptionSummaryFor(countryCode: CountryCode, options: PayrollOptions): string {
+  switch (countryCode) {
+    case 'DE':
+      return `I налоговый класс, без церковного налога, государственная медстраховка со средней надбавкой 2,9%, ${germanyChildless(options) ? 'без детей' : 'есть дети'}`;
+    case 'CY':
+      return 'Соцстрахование вычтено из базы, GeSY не вычитается, без индивидуальных вычетов';
+    case 'RS':
+      return 'Штатный работник, без годового налога на высокий доход';
+    case 'GE':
+      return options.georgiaPensionParticipant
+        ? 'С накопительной пенсией 2%'
+        : 'Без накопительной пенсии';
+    case 'AE':
+      return 'Иностранный работник: налога на доход и взносов нет';
+    case 'RU':
+      return 'Налоговый резидент РФ, без вычетов';
   }
 }
 
@@ -193,11 +261,17 @@ export function calculateAnnualPayroll(
     throw new Error('Расчёт пенсионных взносов граждан ОАЭ не поддерживается');
   }
 
-  const taxableAnnualIncome = options.taxableIncome ?? grossAnnualIncome;
-  const incomeTax = calculateAnnualIncomeTax(data.code, taxableAnnualIncome);
   const employeeContributions = collectEmployeeContributions(data.code, grossAnnualIncome, options);
+  const taxableAnnualIncome =
+    options.taxableIncome ??
+    defaultTaxableIncome(data.code, grossAnnualIncome, options, employeeContributions);
+  const incomeTax = calculateAnnualIncomeTax(data.code, taxableAnnualIncome);
+  const solidaritySurcharge = data.code === 'DE' ? germanSolidaritySurcharge(incomeTax.amount) : 0;
   const netAnnualIncome = roundToCents(
-    Math.max(0, grossAnnualIncome - incomeTax.amount - employeeContributions.total),
+    Math.max(
+      0,
+      grossAnnualIncome - incomeTax.amount - solidaritySurcharge - employeeContributions.total,
+    ),
   );
 
   return {
@@ -207,17 +281,23 @@ export function calculateAnnualPayroll(
     grossAnnualIncome,
     taxableAnnualIncome,
     incomeTax,
+    solidaritySurcharge,
     employeeContributions,
     netAnnualIncome,
     netMonthlyIncome: roundToCents(netAnnualIncome / 12),
     assumptions: assumptionsFor(data.code, options),
+    assumptionSummary: assumptionSummaryFor(data.code, options),
   };
 }
 
 function validateMonthlyCost(cost: SourcedMonthlyCost, currency: string): void {
   validateAmount(cost.amount, 'Расход');
-  if (cost.currency !== currency) throw new Error('Валюта расходов должна совпадать с валютой страны');
-  if (!Number.isInteger(cost.source.dataYear) || !/^\d{4}-\d{2}-\d{2}$/.test(cost.source.retrievedAt)) {
+  if (cost.currency !== currency)
+    throw new Error('Валюта расходов должна совпадать с валютой страны');
+  if (
+    !Number.isInteger(cost.source.dataYear) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(cost.source.retrievedAt)
+  ) {
     throw new Error('Для расхода нужны год данных и дата получения');
   }
   const url = new URL(cost.source.url);
