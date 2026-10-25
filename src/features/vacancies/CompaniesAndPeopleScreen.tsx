@@ -7,8 +7,9 @@ import type {
   CandidateCompanyPage,
   CandidateCompanySort,
 } from '../../../shared/candidateCompany';
-import { pluralRu } from '../../../shared/pluralRu';
+import { pluralWordRu } from '../../../shared/pluralRu';
 import { CoachApiError } from '../coach/apiClient';
+import { usePageTitleOverride } from '../shell/pageTitleOverride';
 import { grantSearchConsent } from './recruiterContactsApi';
 import {
   getCandidateCompanyDetails,
@@ -29,8 +30,16 @@ import {
 } from './CompaniesAndPeopleControls';
 import { isContactImportStale, readableError } from './companiesAndPeopleUtils';
 
-const COMPANY_ORDER_NOTE: Record<CandidateCompanySort, string> = {
+/** Mockup 13 on 390 words the default order shorter than on 1440. */
+const COMPANY_ORDER_NOTE_COMPACT: Record<CandidateCompanySort, string> = {
   default: 'Порядок: «Хочу», затем по числу вакансий, контактов в сети и алфавиту.',
+  contacts: 'Порядок: по числу контактов в сети, затем по алфавиту.',
+  alphabetical: 'Порядок: по алфавиту.',
+};
+
+const COMPANY_ORDER_NOTE: Record<CandidateCompanySort, string> = {
+  default:
+    'Порядок: сначала «Хочу», затем по числу подходящих вакансий, при равенстве по числу контактов в сети, затем по алфавиту.',
   contacts: 'Порядок: по числу контактов в сети, затем по алфавиту.',
   alphabetical: 'Порядок: по алфавиту.',
 };
@@ -266,7 +275,7 @@ async function queueCompanyRecruiterSearch(
     if (reason instanceof CoachApiError && reason.code === 'search_consent_required') {
       onConsentRequired();
     } else {
-      onError(readableError(reason, 'Не удалось запустить поиск рекрутёра.'));
+      onError(readableError(reason, 'Не удалось запустить поиск рекрутера.'));
     }
     return false;
   }
@@ -465,6 +474,14 @@ function CompanyListColumn({
   readonly onOpenCareer?: () => void;
 }) {
   const { page, selectedKey, filters } = model;
+  const total = page.page?.total ?? 0;
+  const more = page.items.length < total;
+  const footer = page.page ? (
+    <p className="companies-people-list-footer is-wide">
+      Показаны {page.items.length} из <span className="companies-people-num">{total}</span>
+      {more ? ', список прокручивается' : ''}. {COMPANY_ORDER_NOTE[filters.sort]}
+    </p>
+  ) : null;
   return (
     <div>
       <CompanyList
@@ -476,13 +493,14 @@ function CompanyListColumn({
         onSelect={model.setSelectedKey}
         onOpenCareer={onOpenCareer}
         onWantsChanged={page.reload}
+        footer={footer}
       />
       {page.page && page.items.length > 0 ? (
-        <p className="companies-people-list-footer">
-          Показано {page.items.length} из {page.page.total}. {COMPANY_ORDER_NOTE[filters.sort]}
+        <p className="companies-people-list-footer is-compact">
+          Показано {page.items.length} из {total}. {COMPANY_ORDER_NOTE_COMPACT[filters.sort]}
         </p>
       ) : null}
-      {page.items.length < (page.page?.total ?? 0) ? (
+      {more ? (
         <button
           type="button"
           className="companies-people-load-more"
@@ -564,9 +582,14 @@ function CompanyToolbarView({
 function CompanyDirectorySummary({ page }: { readonly page: CompanyListState }) {
   return (
     <p className="companies-people-count" aria-live="polite">
-      {page.page
-        ? `${pluralRu(page.page.total, ['компания', 'компании', 'компаний'])} в подборке`
-        : 'Загружаем компании…'}
+      {page.page ? (
+        <>
+          <b className="companies-people-num">{page.page.total}</b>{' '}
+          {pluralWordRu(page.page.total, ['компания', 'компании', 'компаний'])} в подборке
+        </>
+      ) : (
+        'Загружаем компании…'
+      )}
     </p>
   );
 }
@@ -632,6 +655,7 @@ export function CompaniesAndPeopleScreen({
   onOpenCompanyVacancies,
   initialSearch,
 }: CompaniesAndPeopleScreenProps) {
+  usePageTitleOverride('Компании и люди');
   const model = useCompaniesAndPeopleModel(initialSearch, onOpenCompanyVacancies);
   return (
     <CompaniesAndPeopleView
