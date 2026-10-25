@@ -19,13 +19,14 @@ describe('B545: live AEO evidence routes', () => {
     for (const url of ['/llms.txt', '/llms-full.txt']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode).toBe(200);
-      expect(response.headers['content-type']).toContain('text/plain');
+      expect(response.headers['content-type']).toBe('text/markdown; charset=utf-8');
       expect(response.headers['cache-control']).toBe('public, max-age=300');
       expect(response.body).toContain('123');
       expect(response.body).toContain('2026-10-23');
       expect(response.body).not.toContain('PRIVATE VACANCY PAYLOAD');
       const head = await app.inject({ method: 'HEAD', url });
       expect(head.statusCode).toBe(200);
+      expect(head.headers['content-type']).toBe('text/markdown; charset=utf-8');
       expect(head.body).toBe('');
     }
     setLandingStats({ activeCount: 456, remoteCount: 45, sourceCount: 6, updatedAt: '2026-10-24',

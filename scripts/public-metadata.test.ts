@@ -1,14 +1,31 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LANDING_TITLE } from '../src/features/site/siteTitles';
+import { COUNTRY_FIT_TITLE, COUNTRY_FIT_DESCRIPTION } from '../src/features/site/CountryFitPage';
+import { legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
+import { LEGAL_DOCS } from '../shared/legalRegistry';
 import { buildLlmsTxt } from '../shared/aeoSurface';
 
 describe('public discovery metadata', () => {
+  it('keeps public tool and legal discovery copy within the approved length budgets', () => {
+    for (const title of [
+      COUNTRY_FIT_TITLE,
+      ...LEGAL_DOCS.map((doc) => legalDocumentTitle(doc.slug)),
+    ]) {
+      expect(title.length, title).toBeGreaterThanOrEqual(45);
+      expect(title.length, title).toBeLessThanOrEqual(65);
+    }
+    for (const description of [
+      COUNTRY_FIT_DESCRIPTION,
+      ...LEGAL_DOCS.map((doc) => doc.description),
+    ]) {
+      expect(description.length, description).toBeGreaterThanOrEqual(120);
+      expect(description.length, description).toBeLessThanOrEqual(160);
+    }
+  });
   it('describes the candidate product truthfully in the entry document', () => {
     const html = readFileSync('index.html', 'utf8');
-    expect(html).toMatch(
-      /<meta name="description" content="[^"]{80,180}">/u,
-    );
+    expect(html).toMatch(/<meta name="description" content="[^"]{80,180}">/u);
   });
 
   it('links brand icons and a share image that actually exist (B138)', () => {

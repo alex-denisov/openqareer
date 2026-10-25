@@ -14,7 +14,13 @@ import {
 } from '../../../shared/legalRegistry';
 
 export function legalDocumentTitle(slug: LegalDocSlug): string {
-  return `${legalDocMeta(slug).title} · openqareer`;
+  const title =
+    slug === 'terms'
+      ? 'Пользовательское соглашение: правила сервиса'
+      : slug === 'disclaimer'
+        ? 'Дисклеймер: возможности и ограничения сервиса'
+        : legalDocMeta(slug).title;
+  return `${title} · openqareer`;
 }
 
 /** A published legal document: indexable, canonical and dated (B173). */

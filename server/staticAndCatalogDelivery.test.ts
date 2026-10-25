@@ -63,6 +63,7 @@ describe('B209: сервер поднимается с раздачей стат
     for (const url of ['/llms.txt', '/llms-full.txt']) {
       const response = await app.inject(url);
       expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toBe('text/markdown; charset=utf-8');
       expect(response.body).toContain('## Срез пула');
       expect(response.body).not.toContain('STALE');
       expect(response.headers['cache-control']).toBe('public, max-age=300');

@@ -70,12 +70,13 @@ function helpHead(html: string, page: (typeof HELP_PAGES)[number]): string {
 }
 
 /** Title, description, canonical and the og/twitter copies of them. */
-function pageHead(
+export function pageHead(
   html: string,
-  page: { readonly path: string; readonly title: string; readonly description: string },
+  page: { readonly path: string; readonly title: string; readonly description: string; readonly shareDescription?: string },
 ): string {
   const title = escapeHtml(page.title);
   const description = escapeHtml(page.description);
+  const shareDescription = escapeHtml(page.shareDescription ?? page.description);
   const url = `${SITE_ORIGIN}${page.path}`;
   return html
     .replace(/<title>[^<]*<\/title>/u, `<title>${title}</title>`)
@@ -94,7 +95,7 @@ function pageHead(
     )
     .replace(
       /(<meta (?:property|name)="(?:og|twitter):description" content=")[^"]*/gu,
-      `$1${description}`,
+      `$1${shareDescription}`,
     );
 }
 
@@ -185,6 +186,7 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
         path: '/tools/country-fit',
         title: COUNTRY_FIT_TITLE,
         description: COUNTRY_FIT_DESCRIPTION,
+        shareDescription: 'Налоги и чистая зарплата за 2026 год в шести странах. Расчёт со своими расходами.',
       }),
     ).replace(
       EMPTY_ROOT,
