@@ -31,11 +31,26 @@
 }
 
 .companies-people-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--career-space-4);
   align-items: center;
   min-inline-size: 0;
+}
+
+/* 1440: search 1fr · sort 260 · chips (mockup 13). Narrower .app windows keep the whole
+   «Поиск среди N» hint and move the chips to the next line instead of crushing the field. */
+.companies-people-toolbar > .companies-people-search {
+  flex: 1 1 200px;
+  min-inline-size: 200px;
+}
+
+.companies-people-toolbar > .companies-people-select-wrap {
+  flex: 0 0 260px;
+}
+
+.companies-people-toolbar > .companies-people-filter-chips {
+  flex: 0 0 auto;
 }
 
 /* Mockup 13: the field itself carries the frame (.career-input), the icon sits inside it. */
@@ -955,7 +970,12 @@
 
 @media (max-width: 760px) {
   .companies-people-toolbar {
-    grid-template-columns: minmax(0, 1fr) auto;
+    flex-wrap: nowrap;
+  }
+
+  .companies-people-toolbar > .companies-people-search {
+    flex: 1 1 0;
+    min-inline-size: 0;
   }
 
   .companies-people-select,
@@ -1216,10 +1236,27 @@ select.companies-people-select {
     background: var(--career-bg-elevated);
   }
 
+  .companies-people-detail {
+    container-type: inline-size;
+  }
+
   .companies-people-detail-heading {
     display: grid;
     grid-template-columns: 48px minmax(0, 1fr) auto;
     align-items: center;
+  }
+
+  /* Narrow card (content under 480 px: .app 900–1024; 1440 is 488 and stays as mockup 13): avatar, name and source keep the full width, «Хочу» / «Убрать»
+     take their own line under them (same rule as the company header in block B, 15e7a864). */
+  @container (max-width: 480px) {
+    .companies-people-detail-heading {
+      grid-template-columns: 48px minmax(0, 1fr);
+    }
+
+    .companies-people-detail-heading > :last-child {
+      grid-column: 1 / -1;
+      justify-self: start;
+    }
   }
 
   .companies-people-detail-heading > .companies-people-avatar {
