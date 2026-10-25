@@ -198,7 +198,7 @@ function RoleRejectAction({
   return (
     <button
       type="button"
-      className="career-btn career-btn-text"
+      className="career-btn is-sm is-ghost"
       onClick={() => setConfirming(true)}
     >
       <X size={16} aria-hidden />

@@ -8,6 +8,8 @@
   max-inline-size: 940px;
   padding-block-end: var(--career-space-8);
   font-family: var(--career-font-sans);
+  /* Макет 3 (shared.css body): строка 1.5 для всего текста экрана. */
+  line-height: 1.5;
   color: var(--career-text);
 }
 
@@ -49,6 +51,7 @@
   margin: 0;
   font-size: var(--career-text-md);
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .career-count-box {
@@ -87,6 +90,53 @@
   color: var(--career-text-soft);
 }
 
+/* Макет 3 (shared.css .career-btn.is-sm): видимые 32 px внутри цели 44, контур
+   inset-тенью; is-ghost без контура, мягкий цвет. */
+.career-screen .career-btn.is-sm {
+  --sm-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
+  --edge: var(--career-field-edge);
+  min-block-size: var(--career-target-min);
+  margin-inline: calc(var(--sm-gutter) * -1);
+  padding: 0 var(--career-space-3);
+  border: var(--sm-gutter) solid transparent;
+  border-radius: calc(var(--career-radius-sm) + var(--sm-gutter));
+  background: transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--edge);
+  font-size: var(--career-text-xs);
+}
+.career-screen .career-btn.is-sm:hover:not(:disabled) {
+  --edge: var(--career-accent);
+}
+.career-screen .career-btn.is-sm.is-ghost {
+  --edge: transparent;
+  color: var(--career-text-soft);
+}
+.career-screen .career-btn.is-sm.is-ghost:hover:not(:disabled) {
+  color: var(--career-text);
+  background: var(--career-surface);
+  background-clip: padding-box;
+}
+.career-screen .career-btn.is-sm.is-icon {
+  inline-size: var(--career-target-min);
+  padding: 0;
+}
+.career-screen .career-btn.is-sm:focus-visible {
+  outline-offset: calc(2px - var(--sm-gutter));
+}
+
+/* Макет 3: вторичная кнопка роли — основной цвет текста и контур field-edge (.career-btn). */
+.career-screen .career-role-actions .career-btn-secondary {
+  border-color: var(--career-field-edge);
+  color: var(--career-text);
+}
+
+/* Макет 3 (.career-btn): поля space-4 и зазор space-2 у кнопок роли. */
+.career-screen .career-role-actions .career-btn:not(.is-sm) {
+  padding-inline: var(--career-space-4);
+  gap: var(--career-space-2);
+}
+
 .career-plate {
   display: flex;
   align-items: flex-start;
@@ -96,7 +146,7 @@
   border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-sm);
   background: var(--career-surface);
-  font-size: var(--career-text-xs);
+  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
 }
 
@@ -120,11 +170,12 @@
   min-block-size: 44px;
   padding-inline: var(--career-space-3);
   border: var(--career-border-width) solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
+  border-radius: 16px;
   background: transparent;
-  color: var(--career-text-soft);
+  color: var(--career-text);
   font: inherit;
   font-size: var(--career-text-xs);
+  font-weight: 600;
   cursor: pointer;
   transition: border-color 180ms ease;
 }
@@ -139,6 +190,11 @@
 .career-relocation-head:focus-visible {
   outline: 2px solid var(--career-accent);
   outline-offset: 2px;
+}
+
+.career-cond-label {
+  color: var(--career-text-soft);
+  font-weight: 400;
 }
 
 .career-cond-val {
@@ -314,8 +370,9 @@
   align-items: center;
   gap: var(--career-space-1);
   padding: 2px var(--career-space-2);
-  border: var(--career-border-width) solid currentcolor;
-  border-radius: 6px;
+  /* Макет 3 (.tag): контур цветом статуса на 45 %, без заливки, радиус space-1. */
+  border: var(--career-border-width) solid color-mix(in oklch, currentcolor 45%, transparent);
+  border-radius: var(--career-space-1);
   font-size: var(--career-text-xs);
   font-weight: 600;
   white-space: nowrap;
@@ -323,12 +380,10 @@
 
 .career-badge-ok {
   color: var(--career-success);
-  background: var(--career-success-soft);
 }
 
 .career-badge-hyp {
   color: var(--career-accent);
-  background: var(--career-accent-soft);
 }
 
 .career-badge-muted {
@@ -379,7 +434,8 @@
 .career-section-subhead {
   margin: 0;
   font-size: var(--career-text-sm);
-  font-weight: 600;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .career-check-list {
@@ -455,7 +511,7 @@
 .career-source-stamp {
   margin: 0;
   font-size: var(--career-text-xs);
-  color: var(--career-text-dim);
+  color: var(--career-text-soft);
 }
 
 /* Скелет и пустые состояния */
@@ -500,6 +556,7 @@
 }
 
 .career-m-group-title {
+  line-height: 1.25;
   margin: 0;
   padding-inline: var(--career-space-1);
   font-size: var(--career-text-xs);
@@ -553,6 +610,27 @@
   font-weight: 600;
 }
 
+/* Макет 3 на 390 (.vm-row): стрелка в строке названия, статус и действие на всю ширину. */
+.career-m-role-main {
+  gap: 2px;
+}
+.career-m-role-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+.career-m-role-head .career-m-row-title {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.career-m-role-main .career-m-row-foot {
+  margin-block-start: 2px;
+}
+
 .career-m-row-main + .career-m-value,
 .career-m-row-title + .career-m-value {
   margin-inline-start: auto;
@@ -569,6 +647,7 @@
   border: 0;
   padding: 0;
   background: transparent;
+  color: var(--career-text-soft);
   font-weight: 400;
 }
 

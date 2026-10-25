@@ -292,7 +292,7 @@ export function SectionInfoToggle({ id, text }: { id: string; text: string }): R
     <>
       <button
         type="button"
-        className="career-btn career-btn-icon career-btn-ghost"
+        className="career-btn is-sm is-icon is-ghost"
         aria-label="Пояснение"
         aria-expanded={open}
         aria-controls={id}
