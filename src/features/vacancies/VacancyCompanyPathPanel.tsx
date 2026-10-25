@@ -1,4 +1,12 @@
-import { EnvelopeSimple, Info, UserFocus, UsersThree } from '@phosphor-icons/react';
+import {
+  ChatCircleText,
+  EnvelopeSimple,
+  FileText,
+  Info,
+  Path,
+  UserFocus,
+  UsersThree,
+} from '@phosphor-icons/react';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
@@ -48,6 +56,13 @@ const ICONS: Record<ConnectionCircleNumber, typeof UserFocus> = {
   3: EnvelopeSimple,
 };
 
+/** Action icons of mockup 4: a message to a contact, the paths, the letter. */
+const ACTION_ICONS: Record<ConnectionCircleNumber, typeof UserFocus> = {
+  1: ChatCircleText,
+  2: Path,
+  3: FileText,
+};
+
 export function circleAction(
   card: PathCircleCard,
   actions: CompanyPathActions,
@@ -66,6 +81,7 @@ function CircleCard({
   readonly actions: CompanyPathActions;
 }) {
   const Icon = ICONS[card.circle];
+  const ActionIcon = card.known ? ACTION_ICONS[card.circle] : Path;
   const onClick = circleAction(card, actions);
   return (
     <li className="vacancy-path-circle">
@@ -77,6 +93,7 @@ function CircleCard({
       <p>{card.summary}</p>
       {onClick ? (
         <button type="button" className="vac-sm" onClick={onClick}>
+          <ActionIcon size={15} aria-hidden="true" />
           {card.actionLabel}
         </button>
       ) : null}

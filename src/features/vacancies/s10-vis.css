@@ -699,7 +699,8 @@
   color: var(--career-text-dim);
 }
 
-.vacancy-path-circle .action-btn {
+/* B510: кнопка круга — .career-btn.is-sm макета 4 по содержимому, не во всю карточку. */
+.vacancy-path-circle .vac-sm {
   justify-self: start;
   max-inline-size: 100%;
 }

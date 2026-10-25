@@ -57,6 +57,16 @@ describe('VacancyCompanyPathPanel (B549)', () => {
     expect(onPrepareLetter).toHaveBeenCalledTimes(1);
   });
 
+  it('B510: every circle action carries a leading icon, as .career-btn.is-sm in mockup 4', async () => {
+    vi.spyOn(api, 'getVacancyConnectionCircles').mockResolvedValue(circles);
+    const host = await mount({ onShowPaths: vi.fn(), onPrepareLetter: vi.fn() });
+    const buttons = Array.from(host.querySelectorAll('li button'));
+    expect(buttons).toHaveLength(3);
+    for (const button of buttons) {
+      expect(button.firstElementChild?.tagName.toLowerCase()).toBe('svg');
+    }
+  });
+
   it('treats a malformed response as an error instead of crashing', async () => {
     vi.spyOn(api, 'getVacancyConnectionCircles').mockResolvedValue({} as never);
     const host = await mount();
