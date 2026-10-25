@@ -62,7 +62,7 @@ describe('production career shell prerender', () => {
     for (const [file, title] of [['login.html', 'Вход в кабинет'], ['signup.html', 'Создать аккаунт']]) {
       const html = readFileSync(join(directory, file), 'utf8');
       expect(html).toContain(`<h1>${title}</h1>`);
-      expect(html).toContain('<main class="auth-page-container">');
+      expect(html).toContain('<div class="ps ps-auth"><main class="auth-page-container">');
       expect(html).toContain('class="auth-card" inert=""');
       expect(html).toContain('role="status">Загружаем форму…');
       expect(html).toContain('content="noindex, follow"');

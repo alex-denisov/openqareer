@@ -254,6 +254,11 @@ async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string>
   const source = (await Promise.all(['landing.css', 'auth.css'].map((file) =>
     readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
   ))).join('\n');
+  // transform() does not bundle/rebase dependencies. Quoted @import paths
+  // need this guard too; checking only url() would miss them.
+  if (/@import\b|url\s*\(/iu.test(source)) {
+    throw new Error('Auth first-paint styles must be self-contained before relocation');
+  }
   const { code: css } = await transform(source, { loader: 'css', minify: true });
   if (Buffer.byteLength(css) > 20_000) throw new Error('Auth first-paint CSS exceeds the 20000-byte route budget');
   const path = `/assets/auth-first-paint-${createHash('sha256').update(css).digest('hex').slice(0, 12)}.css`;
@@ -279,11 +284,13 @@ async function writeAuthPages(html: string, distDirectory: string): Promise<void
           EMPTY_ROOT,
           bootstrapRoot(
             renderToStaticMarkup(
-              page.path === '/login' ? (
-                <LoginPage onNavigate={() => {}} bootstrapPending />
-              ) : (
-                <SignupPage onNavigate={() => {}} bootstrapPending />
-              ),
+              <div className="ps ps-auth">
+                {page.path === '/login' ? (
+                  <LoginPage onNavigate={() => {}} bootstrapPending />
+                ) : (
+                  <SignupPage onNavigate={() => {}} bootstrapPending />
+                )}
+              </div>,
             ),
           ),
         );
