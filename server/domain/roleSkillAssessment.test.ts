@@ -231,6 +231,38 @@ describe('role skill assessment domain', () => {
     expect(result.criteria[0]!.candidateExcerpt).toBe('Сначала сравнила стоимость операций,');
   });
 
+  it('keeps a quote stitched from verbatim fragments of the answer (live gpt grading, 25.10)', () => {
+    const answer =
+      'После слияния складов сроки выросли на 40 %. Я собрал руководителей. Риск ухода людей снизил разговорами.';
+    const evaluate = (candidateExcerpt: string) =>
+      validateRoleSkillEvaluation({
+        candidateAnswer: answer,
+        criteria: [{ id: 'decision-evidence', description: 'Названо основание решения.' }],
+        allowedSourceRefs: [
+          { id: 'source-0', vacancyId: 'vacancy-0', observedAt: '2026-10-09T12:00:00.000Z' },
+        ],
+        modelEvaluation: validModelEvaluation({
+          criteria: [
+            {
+              criterionId: 'decision-evidence',
+              grade: 'confirmed',
+              explanation: 'Названы ситуация и риск.',
+              candidateExcerpt,
+              sourceRefIds: ['source-0'],
+            },
+          ],
+        }),
+      });
+
+    expect(
+      evaluate('сроки выросли на 40 %. Риск ухода людей снизил разговорами').criteria[0]!
+        .candidateExcerpt,
+    ).toBe('сроки выросли на 40 %. … Риск ухода людей снизил разговорами');
+    expect(() => evaluate('сроки выросли на 40 %. Уволил половину команды')).toThrow(
+      /evaluation_quote_not_in_answer/u,
+    );
+  });
+
   it('rejects a summary grade that does not follow the individual criteria', () => {
     const input = {
       candidateAnswer: CANDIDATE_ANSWER,
