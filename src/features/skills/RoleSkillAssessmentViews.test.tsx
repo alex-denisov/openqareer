@@ -7,10 +7,25 @@ import {
   NoRoleState,
   ProgressTrack,
   SourceErrorState,
+  RunSkillOverview,
   StartState,
   TooFewVacanciesState,
 } from './RoleSkillAssessmentStartViews';
 import { ModelErrorState } from './RoleSkillAssessmentCaseViews';
+import { SuggestionsState } from './RoleSkillAssessmentConversationViews';
+
+function caseFor(skillId: string, status: 'pending' | 'answered' | 'skipped', graded: boolean) {
+  return {
+    assessmentCase: { id: `case-${skillId}`, skillId },
+    status,
+    answer: status === 'answered' ? 'Ответ' : null,
+    evaluation: graded ? { candidateAnswer: 'Ответ', grade: 'not_confirmed', criteria: [] } : null,
+    evaluationHistory: [],
+    appealReason: null,
+    pendingDiscussionQuestion: null,
+    discussion: [],
+  } as unknown as RoleSkillAssessmentRun['cases'][number];
+}
 
 describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
   it('renders start state with intro, steps and criteria note', () => {
@@ -138,6 +153,90 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
     expect(html).toContain('Модель не завершила проверку');
     expect(html).toContain('Ответ не оценён: модель не ответила');
     expect(html).toContain('Повторить');
-    expect(html).toContain('evaluation');
+    expect(html).not.toContain('Действие');
+    expect(html).not.toContain('evaluation');
+    expect(html).not.toContain('Перейти к кейсам');
+
+    const suggestionsHtml = renderToStaticMarkup(
+      <ModelErrorState
+        busy={false}
+        onRetry={() => undefined}
+        onSkipSuggestions={() => undefined}
+        run={{
+          ...mockRun,
+          modelError: { action: 'suggestions', code: 'provider_output_invalid', caseId: null },
+        }}
+      />,
+    );
+    expect(suggestionsHtml).toContain('Ответы сохранены');
+    expect(suggestionsHtml).toContain('Перейти к кейсам без предложений');
+    expect(suggestionsHtml).not.toContain('suggestions');
+  });
+
+  it('marks a skill «Не проверено» until its case answer is graded (B564)', () => {
+    const run = {
+      ...BASE_RUN,
+      cases: [
+        caseFor('skill-0', 'pending', false),
+        caseFor('skill-1', 'answered', true),
+        caseFor('skill-2', 'skipped', false),
+      ],
+    } as RoleSkillAssessmentRun;
+
+    const html = renderToStaticMarkup(<RunSkillOverview run={run} />);
+
+    expect(html.match(/Не проверено/gu)).toHaveLength(2);
+    expect(html.match(/Не подтверждено/gu)).toHaveLength(1);
+  });
+
+  it('opens the cases from an empty suggestion list with an honest note (B564)', () => {
+    const html = renderToStaticMarkup(
+      <SuggestionsState
+        run={{ ...BASE_RUN, status: 'suggestions' } as RoleSkillAssessmentRun}
+        drafts={{}}
+        busy={false}
+        onDrafts={() => undefined}
+        onSetAll={() => undefined}
+        onAcceptAll={() => undefined}
+        onSave={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Не нашли в ответах фактов');
+    expect(html).toContain('Перейти к кейсам');
+    expect(html).not.toContain('Выбрать всё');
+    expect(html).not.toContain('из 12');
   });
 });
+
+const BASE_RUN = {
+  id: '00000000-0000-4000-8000-000000000002',
+  revision: 3,
+  roleTitle: 'Операционный директор (COO)',
+  roleVersion: 1,
+  status: 'cases',
+  consentedAt: '2026-10-25T00:00:00.000Z',
+  startedAt: '2026-10-25T00:00:00.000Z',
+  updatedAt: '2026-10-25T00:00:00.000Z',
+  completedAt: null,
+  sampleSize: 301,
+  evidenceObservedAt: '2026-10-25T00:00:00.000Z',
+  dialogueQuestions: ['Вопрос 1', 'Вопрос 2', 'Вопрос 3'],
+  dialogueEntries: [],
+  currentDialogueIndex: 3,
+  suggestions: [],
+  cases: [],
+  skills: Array.from({ length: 3 }, (_, index) => ({
+    id: `skill-${index}`,
+    name: `Навык ${index}`,
+    isKeySkill: index === 0,
+    grade: 'not_confirmed' as const,
+    explanation: 'Навык ещё не проверен.',
+    caseId: `case-skill-${index}`,
+    sourceRefs: [],
+  })),
+  currentCaseIndex: 0,
+  readiness: { ready: false, confirmedCount: 0, missingKeySkillIds: ['skill-0'] },
+  modelError: null,
+  lastRequest: null,
+} satisfies Partial<RoleSkillAssessmentRun>;
