@@ -11,7 +11,8 @@ import {
 
 describe('two independent payroll scenarios', () => {
   it('builds labelled chart parts from actual payroll amounts without FX', () => {
-    const payroll = calculateAnnualPayroll('DE', 60000);
+    // 140 000 € carries Germany's solidarity surcharge: it is part of «Налог», the parts still sum to gross.
+    const payroll = calculateAnnualPayroll('DE', 140000);
     const parts = payrollParts(payroll);
     expect(parts.reduce((sum, part) => sum + part.amount, 0)).toBeCloseTo(
       payroll.grossAnnualIncome,
