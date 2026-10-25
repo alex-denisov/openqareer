@@ -353,3 +353,41 @@ describe('regional actual observation isolation and bounds', () => {
     db.close();
   });
 });
+
+it('retains old-method observations unchanged while starting a separate clean history', () => {
+  const db = new DatabaseSync(':memory:');
+  write(db, '2026-01-05T12:00:00Z');
+  db.exec(
+    "UPDATE salary_market_skill_history SET method_version='b351-b267-skill-counts-v1'; UPDATE salary_market_skill_history_first SET method_version='b351-b267-skill-counts-v1'",
+  );
+  const old = db
+    .prepare(
+      "SELECT * FROM salary_market_skill_history WHERE method_version='b351-b267-skill-counts-v1'",
+    )
+    .all();
+  const first = db
+    .prepare(
+      "SELECT * FROM salary_market_skill_history_first WHERE method_version='b351-b267-skill-counts-v1'",
+    )
+    .all();
+  const current = write(db, '2026-04-05T12:00:00Z');
+  expect(current.skillQuarterlyTrend?.status).toBe('insufficient_history');
+  expect(
+    db
+      .prepare(
+        "SELECT * FROM salary_market_skill_history WHERE method_version='b351-b267-skill-counts-v1'",
+      )
+      .all(),
+  ).toEqual(old);
+  expect(
+    db
+      .prepare(
+        "SELECT * FROM salary_market_skill_history_first WHERE method_version='b351-b267-skill-counts-v1'",
+      )
+      .all(),
+  ).toEqual(first);
+  expect(
+    readSalarySkillHistory(db, 'frontend-engineer', new Date('2026-04-05T12:00:00Z')),
+  ).toHaveLength(1);
+  db.close();
+});

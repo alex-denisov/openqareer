@@ -11,7 +11,7 @@ import {
 } from '../../shared/salaryMarketSnapshot';
 
 /** Bump when classification, extraction, denominator or comparison semantics change. No cross-version comparison. */
-export const SALARY_SKILL_HISTORY_METHOD_VERSION = 'b351-b267-skill-counts-v1';
+export const SALARY_SKILL_HISTORY_METHOD_VERSION = 'b351-b267-skill-counts-source-evidence-v2';
 const DAY_MS = 86_400_000;
 const HISTORY_WEEKS = 16;
 export const SALARY_SKILL_HISTORY_TABLE_SQL = `CREATE TABLE IF NOT EXISTS salary_market_skill_history (
@@ -113,7 +113,7 @@ function cleanHistory(database: DatabaseSync, roles: readonly string[], now: Dat
   const keep = roles.length ? `role NOT IN (${roles.map(() => '?').join(',')})` : '1';
   database
     .prepare(
-      `DELETE FROM salary_market_skill_history WHERE method_version != ? OR ${keep} OR week_start < ? OR week_start > ? OR observed_at > ?`,
+      `DELETE FROM salary_market_skill_history WHERE method_version = ? AND (${keep} OR week_start < ? OR week_start > ? OR observed_at > ?)`,
     )
     .run(
       SALARY_SKILL_HISTORY_METHOD_VERSION,
@@ -123,7 +123,7 @@ function cleanHistory(database: DatabaseSync, roles: readonly string[], now: Dat
       now.toISOString(),
     );
   database
-    .prepare(`DELETE FROM salary_market_skill_history_first WHERE method_version != ? OR ${keep}`)
+    .prepare(`DELETE FROM salary_market_skill_history_first WHERE method_version = ? AND (${keep})`)
     .run(SALARY_SKILL_HISTORY_METHOD_VERSION, ...roles);
 }
 function validStoredSample(value: unknown): value is SkillSample {

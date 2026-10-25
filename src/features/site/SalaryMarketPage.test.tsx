@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { selectSalaryGrade } from '../../../shared/salaryMarketPublic';
+import { selectSalaryGrade, selectSalaryLocation } from '../../../shared/salaryMarketPublic';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { SalaryMarketPage, salarySnapshotIndexable, salaryRolePath } from './SalaryMarketPage';
@@ -200,7 +200,7 @@ describe('actual saved skill frequency history', () => {
     expect(html).toContain('24.07.2026');
     expect(html).toContain('25 вакансий');
     expect(html).toContain('20 вакансий');
-    expect(html).toContain('а не весь рынок');
+    expect(html).toContain('а не всего рынка');
   });
   it('does not turn a skill missing from the saved top-15 into zero', () => {
     const absent = {
@@ -355,4 +355,60 @@ it('annotates label categories without changing rank, frequency or denominator',
     { name: 'C++', count: 6, frequency: 30 },
     { name: 'Communication', count: 2, frequency: 10 },
   ]);
+});
+
+it('shows the selected cohort withholding evidence and the limits of absent labels', () => {
+  const source = {
+    ...TEST_SALARY_SNAPSHOT,
+    skillEvidence: {
+      method: 'exclude_role_taxonomy_clusters_v2' as const,
+      withheldClusterCount: 7,
+    },
+  };
+  const html = renderToStaticMarkup(<SalaryMarketPage snapshot={source} />);
+  expect(html).toContain('Карточек со скрытыми навыками: 7');
+  expect(html).toContain('категории должностей');
+  expect(html).toContain('Частоту считаем от всех карточек, в том числе без навыков');
+  expect(html).toContain('Нет в срезе — не значит нет в вакансии');
+});
+
+it('selects withholding counts from the region and then grade without borrowing global evidence', () => {
+  const skillEvidence = (withheldClusterCount: number) => ({
+    method: 'exclude_role_taxonomy_clusters_v2' as const,
+    withheldClusterCount,
+  });
+  const source: SalaryMarketSnapshot = {
+    ...TEST_SALARY_SNAPSHOT,
+    skillEvidence: skillEvidence(7),
+    locationSlices: [
+      {
+        location: 'remote',
+        evidenceMethod: 'stored_remote_flag_v1',
+        sampleSize: 10,
+        skills: [],
+        salary: TEST_SALARY_SNAPSHOT.salary,
+        skillEvidence: skillEvidence(2),
+        quarterlyTrend: 'unavailable',
+        gradeSlices: [
+          {
+            grade: 'senior',
+            sampleSize: 5,
+            skills: [],
+            salary: TEST_SALARY_SNAPSHOT.salary,
+            evidence: { field: 'title', markers: ['Senior'] },
+            skillEvidence: skillEvidence(1),
+          },
+        ],
+      },
+    ],
+  };
+  const regional = selectSalaryLocation(source, 'remote');
+  expect(regional?.skillEvidence?.withheldClusterCount).toBe(2);
+  const selected = selectSalaryGrade(regional, 'senior');
+  expect(selected?.skillEvidence?.withheldClusterCount).toBe(1);
+  const html = renderToStaticMarkup(
+    <SalaryMarketPage snapshot={source} location="remote" grade="senior" />,
+  );
+  expect(html).toContain('Карточек со скрытыми навыками: 1');
+  expect(html).not.toContain('Карточек со скрытыми навыками: 7');
 });

@@ -3,6 +3,12 @@ export const MAX_SALARY_MARKET_GROUPS = 12;
 export const SALARY_MARKET_ROLE_LIMIT = 100;
 export const SALARY_MARKET_INDEX_LIMIT = SALARY_MARKET_ROLE_LIMIT;
 
+export interface SalarySkillEvidence {
+  readonly method: 'exclude_role_taxonomy_clusters_v2';
+  /** Whole merged skill set withheld; vacancy stays in the denominator. */
+  readonly withheldClusterCount: number;
+}
+
 /** B351: one deduplicated catalog cluster is one observation; no source-row weighting.
  * Roles use unambiguous B267 ontology aliases. Unknown raw titles remain separate,
  * explicitly unclassified and noindex. Classification happens before the top100
@@ -22,6 +28,7 @@ export interface SalaryMarketSnapshot {
     readonly frequency: number;
   }[];
   readonly salary: SalaryMarketDistribution;
+  readonly skillEvidence?: SalarySkillEvidence;
   readonly quarterlyTrend: 'unavailable' | 'available';
   readonly skillQuarterlyTrend?: SalarySkillQuarterlyTrend;
   readonly grades: 'unavailable' | 'published_title_evidence';
@@ -111,6 +118,7 @@ export interface SalaryMarketGradeSlice {
   readonly sampleSize: number;
   readonly skills: SalaryMarketSnapshot['skills'];
   readonly salary: SalaryMarketDistribution;
+  readonly skillEvidence?: SalarySkillEvidence;
   readonly skillQuarterlyTrend?: SalarySkillQuarterlyTrend;
   readonly evidence: { readonly field: 'title'; readonly markers: readonly string[] };
 }
@@ -191,6 +199,7 @@ export interface SalaryMarketLocationSlice {
   readonly sampleSize: number;
   readonly skills: SalaryMarketSnapshot['skills'];
   readonly salary: SalaryMarketDistribution;
+  readonly skillEvidence?: SalarySkillEvidence;
   readonly gradeSlices?: readonly SalaryMarketGradeSlice[];
   readonly skillQuarterlyTrend?: SalarySkillQuarterlyTrend;
   readonly quarterlyTrend: 'unavailable' | 'available';

@@ -108,9 +108,7 @@ function MarketHeading({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
           'Зарплаты и навыки по профессиям'
         )}
       </h1>
-      <p className="ps-intro">
-        Опубликованные вилки и навыки. Без пересчёта валют и догадок о грейде.
-      </p>
+      <p className="ps-intro">Вилки и навыки вакансий. Без пересчёта валют и догадок о грейде.</p>
       {snapshot ? (
         <p className="sm-provenance">
           {snapshot.sampleSize.toLocaleString('ru-RU')} вакансий · последние {snapshot.windowDays}{' '}
@@ -242,7 +240,7 @@ function SkillHistoryContext({ trend }: { trend?: SalarySkillQuarterlyTrend }) {
             {trend.baseline.sampleSize.toLocaleString('ru-RU')} вакансий.{' '}
             {trend.status === 'insufficient_sample'
               ? 'В одной из выборок меньше 5 вакансий, сравнение недоступно.'
-              : 'Разница долей — в процентных пунктах. Это два среза каталога, а не весь рынок.'}
+              : 'Разница — в процентных пунктах.'}
           </p>
         </>
       )}
@@ -272,21 +270,20 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
       <h2>Методика</h2>
       <div className="sm-methodology-grid">
         <div>
-          <h3>Каталожная выборка за 90 дней</h3>
+          <h3>Выборка за 90 дней</h3>
           <p>
-            Карточка — наблюдение. Частота — от всех карточек, включая карточки без извлечённых
-            навыков.{' '}
+            Частоту считаем от всех карточек, в том числе без навыков.{' '}
             {snapshot?.profession?.kind === 'b267'
-              ? 'Профессия — по классификатору openqareer.'
+              ? 'Профессия — по классификатору.'
               : 'Профессия пока не определена; выборка по названию.'}{' '}
             Это срез каталога, а не всего рынка.
           </p>
         </div>
         <div>
-          <h3>Сравниваем только сопоставимое</h3>
+          <h3>Сопоставимость</h3>
           <p>
             Валюты, периоды и налоги отдельно. Ближайший ранг; P50 — медиана. Неполные вилки и суммы
-            без периода исключены. До {MAX_SALARY_MARKET_GROUPS} крупных групп.
+            без периода исключены. До {MAX_SALARY_MARKET_GROUPS} групп.
           </p>
         </div>
         <div>
@@ -296,12 +293,20 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
               : 'Категории и ограничения'}
           </h3>
           <p>
-            Individual contributor не означает junior. Словарь openqareer по названию: технические —
-            инструменты и инфраструктура; профильные — управление, продукт, комплаенс. Неизвестные
-            не классифицируем. Не оцениваем важность и владение.
+            Individual contributor не означает junior. Словарь openqareer: технические — инструменты
+            и инфраструктура; профильные — управление, продукт, комплаенс. Неизвестные не
+            классифицируем. Не оцениваем важность и владение. Нет в срезе — не значит нет в
+            вакансии.
           </p>
         </div>
       </div>
+      {snapshot?.skillEvidence && (
+        <p className="ps-note">
+          Карточек со скрытыми навыками: {snapshot.skillEvidence.withheldClusterCount}. Himalayas
+          передаёт категории должностей. В карточках из нескольких источников происхождение навыков
+          неизвестно.
+        </p>
+      )}
       <MarketExclusions snapshot={snapshot} />
     </section>
   );
@@ -312,18 +317,18 @@ function MarketExclusions({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>)
       {' '}
       {snapshot?.salary.excluded ? (
         <p className="ps-note">
-          Не вошли в расчёт зарплат: без периода {snapshot.salary.excluded.missingPeriod}, без
-          валюты {snapshot.salary.excluded.missingCurrency}, с неполной вилкой{' '}
-          {snapshot.salary.excluded.openRange}, с некорректной вилкой{' '}
-          {snapshot.salary.excluded.invalidRange}, в слишком малых группах{' '}
+          Исключены из зарплат: без периода {snapshot.salary.excluded.missingPeriod}, без валюты{' '}
+          {snapshot.salary.excluded.missingCurrency}, неполная вилка{' '}
+          {snapshot.salary.excluded.openRange}, некорректная вилка{' '}
+          {snapshot.salary.excluded.invalidRange}, малые группы{' '}
           {snapshot.salary.excluded.belowMinimumSample}.
           {snapshot.salary.excluded.outsidePublishedGroups ? (
             <>
               {' '}
-              В других сравнимых группах осталось {
+              За пределами опубликованных групп: {
                 snapshot.salary.excluded.outsidePublishedGroups
               }{' '}
-              вакансий, не включённых в публикацию.
+              вакансий.
             </>
           ) : null}
         </p>
@@ -489,9 +494,7 @@ function MarketGrades({
           </a>
         ))}
       </nav>
-      <p className="ps-soft">
-        Грейд — из названия, без маркера неизвестен. Показатели — для выбранного среза.
-      </p>
+      <p className="ps-soft">Грейд — из названия; без маркера неизвестен.</p>
       {selected && selected.evidence.markers.length > 0 ? (
         <p className="ps-note">
           Примеры маркеров:{' '}
@@ -534,8 +537,8 @@ function MarketLocations({ snapshot, grade, location = 'all' }: SalaryMarketPage
       <p className="ps-note">
         Явная страна: {snapshot.geography.explicitCountryCount}, неизвестна:{' '}
         {snapshot.geography.unknownCountryCount}, неоднозначна:{' '}
-        {snapshot.geography.ambiguousCountryCount}. Удалённый формат пересекается со странами и не
-        даёт права работать из любой страны.
+        {snapshot.geography.ambiguousCountryCount}. Удалённость пересекается со странами и не даёт
+        права работать из любой страны.
       </p>
     </section>
   );

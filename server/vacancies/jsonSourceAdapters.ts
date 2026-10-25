@@ -261,7 +261,8 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         location: stringList(job.locationRestrictions).join('; ') || undefined,
         isRemote: true,
         description: text(job.description) || text(job.excerpt) || text(job.title),
-        skills: stringList(job.categories),
+        // Himalayas categories are role taxonomy, not extracted skill evidence.
+        skills: [],
         employmentType: text(job.employmentType) || undefined,
         experienceLevel: firstOf(job.seniority),
         salary: from === undefined && to === undefined ? undefined : { from, to, currency },

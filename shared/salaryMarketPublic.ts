@@ -35,6 +35,7 @@ export function selectSalaryGrade(
         ...snapshot,
         sampleSize: slice.sampleSize,
         skills: slice.skills,
+        skillEvidence: slice.skillEvidence,
         salary: slice.salary,
         skillQuarterlyTrend: slice.skillQuarterlyTrend,
         quarterlyTrend: salarySkillTrendHasChanges(slice.skillQuarterlyTrend)
@@ -68,6 +69,7 @@ export function selectSalaryLocation(
         ...snapshot,
         sampleSize: slice.sampleSize,
         skills: slice.skills,
+        skillEvidence: slice.skillEvidence,
         salary: slice.salary,
         gradeSlices: slice.gradeSlices,
         skillQuarterlyTrend: slice.skillQuarterlyTrend,
