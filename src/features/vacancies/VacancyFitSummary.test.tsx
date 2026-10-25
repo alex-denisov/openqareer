@@ -160,3 +160,11 @@ it('B510: the short inline fit for the 390 status shows only the number', () => 
   expect(html).toMatch(/>50(\u00a0|&nbsp;)%</);
   expect(html).toContain('aria-label="соответствие 50 %"');
 });
+
+it('failed states the reason, not «try again»: the card button is the action (B562-r)', () => {
+  const html = renderToStaticMarkup(
+    <VacancyFitSummary compact view={{ state: 'failed', requirements: [] }} />,
+  );
+  expect(html).toContain('Соответствие: расчёт не завершился: сервис сравнения не ответил');
+  expect(html).not.toMatch(/Попробуйте|недоступен/u);
+});

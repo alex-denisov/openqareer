@@ -29,7 +29,7 @@ const fitView = {
   result: {
     candidateId: 'candidate-e2e',
     vacancyId: 'cluster-1',
-    algorithmVersion: 'evidence-coverage-2',
+    algorithmVersion: 'evidence-coverage-3',
     status: 'assessed',
     calculatedAt: '2026-10-20T09:00:00.000Z',
     dataState: 'partial',

@@ -76,4 +76,20 @@ describe('one requeue of model failures after a parser upgrade (B522)', () => {
     expect(fit.requeueFailedOnce(2, '2026-10-21T09:00:00.000Z')).toBe(0);
     database.close();
   });
+
+  it('requeues on the next worker start what failed before the B562-r quote fix: requirements and their fits', () => {
+    const database = new DatabaseSync(':memory:');
+    const store = new SqliteVacancyRequirementsStore(database);
+    const fit = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));
+    const now = Date.parse('2026-10-25T12:00:00Z');
+    failRequirement(store, 'french', 'requirements_model_invalid', now);
+    fit.enqueue(fitInput('french'), '2026-10-25T12:00:00.000Z');
+    fit.fail(fit.claim({ now: '2026-10-25T12:00:01.000Z' })!, { now: '2026-10-25T12:00:01.000Z', reason: 'requirements_failed' });
+    // Both rows were written by the 25.10 release, under revision 3.
+    database.exec('UPDATE vacancy_requirements_jobs SET requeue_revision=3; UPDATE vacancy_fit_queue SET requeue_revision=3');
+    expect(store.requeueModelFailures(undefined, now + 1e6)).toBe(1);
+    expect(fit.requeueFailedOnce(undefined, '2026-10-25T13:00:00.000Z')).toBe(1);
+    expect(fit.getJobState(fitInput('french'))).toBe('pending');
+    database.close();
+  });
 });

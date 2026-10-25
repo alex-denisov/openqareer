@@ -13,11 +13,16 @@ export function createVacancyFitAssessor(client: VacancyFitBulkClient, runId: st
   return {
     async assess(input) {
       const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(input.facts.map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096 });
-      const parsed: unknown = JSON.parse(response.content);
+      const parsed: unknown = JSON.parse(withoutMarkdownFence(response.content));
       if (!parsed || typeof parsed !== 'object' || !('assessments' in parsed) || !Array.isArray(parsed.assessments) || parsed.assessments.length > input.requirements.length) throw new Error('invalid vacancy fit assessment');
       return parsed.assessments.map(parseAssessment);
     },
   };
+}
+/** The model fences JSON despite the instructions (1 of 12 local answers, B562-r); that was a whole failed attempt. */
+function withoutMarkdownFence(content: string): string {
+  const trimmed = content.trim();
+  return trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu)?.[1] ?? trimmed;
 }
 function parseAssessment(value: unknown): VacancyFitRequirementAssessment {
   if (!value || typeof value !== 'object' || !('requirementId' in value) || typeof value.requirementId !== 'string' || !('status' in value) || !['matched', 'unmatched', 'unknown'].includes(String(value.status)) || !('evidence' in value) || !Array.isArray(value.evidence)) throw new Error('invalid vacancy fit assessment');

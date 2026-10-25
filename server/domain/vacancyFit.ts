@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
 import { isImportedMemoryId } from './resumeImport';
-import type { VacancyRequirement } from './vacancyRequirements';
+import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
 
 export interface VacancyFitFact extends ResumeEvidenceCandidate { readonly candidateId: string }
 export interface VacancyFitInput {
@@ -43,8 +43,9 @@ export function isSkillRequirement(requirement: VacancyRequirement): boolean {
   return requirement.kind === 'experience' || (requirement.skill ?? requirement.kind === 'other');
 }
 
+/** Quotes are spans of the decoded text: `&eacute;` and `&rsquo;` dropped sourced quotes until B562-r. */
 function normalizedSource(value: string): string {
-  return value.replace(/<[^>]*>/gu, ' ').replace(/&nbsp;/gu, ' ').replace(/&amp;/gu, '&').replace(/&#39;/gu, "'").replace(/&quot;/gu, '"').replace(/\s+/gu, ' ').trim();
+  return vacancySourceText(value).replace(/\s+/gu, ' ').trim();
 }
 /**
  * A fact from the candidate's own imported resume or profile is evidence while still `proposed`

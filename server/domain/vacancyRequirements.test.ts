@@ -291,3 +291,56 @@ describe('vacancy requirement extraction', () => {
     }
   });
 });
+
+describe('quotes from entity-encoded and non-English descriptions (B562-r)', () => {
+  const answer = (...quotes: string[]) => JSON.stringify({ requirements: quotes.map((quote) => ({ text: quote, sourceQuote: quote, origin: 'structural', label: 'Leadership', kind: 'skill' })) });
+  const run = async (description: string, response: string) => {
+    const issues: string[] = [];
+    const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => response }, (issue) => issues.push(issue));
+    return { result, issues };
+  };
+
+  it('decodes accented-letter entities: Indeed sends French as exp&eacute;rience (2 of 60 OWNER_TEST vacancies, 25.10)', async () => {
+    const description = 'Votre profil:\n- Vous disposez d&rsquo;une exp&eacute;rience significative en n&eacute;gociation.\n- Ma&icirc;trise de l&rsquo;anglais &agrave; l&rsquo;&eacute;crit.\n- Capacit&agrave; di leadership e c&oelig;ur d&rsquo;&eacute;quipe.';
+    const quotes = ['Vous disposez d’une expérience significative en négociation', 'Maîtrise de l’anglais à l’écrit', 'Capacità di leadership e cœur d’équipe'];
+    const { result, issues } = await run(description, answer(...quotes));
+    expect(issues).toEqual([]);
+    expect(result).toMatchObject({ method: 'model', status: 'extracted' });
+    expect(result.requirements.map((item) => item.sourceQuote)).toEqual(quotes);
+    expect(extractVacancyRequirements({ vacancyId: 'v', description }).requirements[0].text).toBe(`${quotes[0]}.`);
+  });
+
+  it('matches a quote that differs only in case and keeps the source casing', async () => {
+    const { result, issues } = await run('Requirements\n- This job needs to be performed primarily in the Office.', answer('this job needs to be performed primarily in the office'));
+    expect(issues).toEqual([]);
+    expect(result.requirements[0].sourceQuote).toBe('This job needs to be performed primarily in the Office.');
+  });
+
+  it('matches non-breaking and zero-width spaces the model input never had', async () => {
+    const { result, issues } = await run('Requirements\n- 10+ years of Java​ development', answer('10+ years of Java development'));
+    expect(issues).toEqual([]);
+    expect(result.requirements[0].sourceQuote).toBe('10+ years of Java​ development');
+  });
+
+  it('matches an ellipsis as the source span between its parts, in order and close together', async () => {
+    const description = 'Requirements\n- Experience with Kafka, Flink and Spark in production.\n- Deep expertise in OLTP databases, OLAP databases and stream processing';
+    const { result, issues } = await run(description, answer('Experience with Kafka … Spark in production', 'Deep expertise in OLTP databases...'));
+    expect(issues).toEqual([]);
+    expect(result.requirements.map((item) => item.sourceQuote)).toEqual(['Experience with Kafka, Flink and Spark in production.', 'Deep expertise in OLTP databases,']);
+    const reversed = await run(description, answer('Spark in production … Experience with Kafka'));
+    expect(reversed.issues).toContain('quote');
+  });
+
+  it('still rejects a translated quote: the requirement must be in the vacancy text', async () => {
+    const { result, issues } = await run('Votre profil:\n- Vous avez géré des négociations à fort enjeu.', answer('You have managed high-stakes negotiations'));
+    expect(issues).toContain('quote');
+    expect(result.fallbackStatus).toBe('invalid');
+    expect(result.requirements.map((item) => item.text)).toEqual(['Vous avez géré des négociations à fort enjeu.']);
+  });
+
+  it('tells the model to quote in the language of the description, without translating', async () => {
+    const model = { extract: vi.fn(async (_request: { description: string; instructions: string }) => answer('SQL')) };
+    await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description: 'Requirements\n- SQL' }, model);
+    expect(model.extract.mock.calls[0][0].instructions).toMatch(/sourceQuote is copied verbatim[^.]*in the language of the description[^.]*never translated/u);
+  });
+});

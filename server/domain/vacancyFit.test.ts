@@ -183,3 +183,15 @@ describe('imported profile facts as fit evidence (B562)', () => {
     expect(before).toBe(createHash('sha256').update(JSON.stringify([confirmed.candidateId, confirmed.facts, confirmed.gates, confirmed.profileContextHash])).digest('hex'));
   });
 });
+
+describe('requirement provenance on entity-encoded descriptions (B562-r)', () => {
+  it('keeps a quote decoded from &eacute; and &rsquo;: the extractor stores the decoded span', () => {
+    const input = fitInput();
+    const description = '<p>Votre profil:</p><ul><li>Exp&eacute;rience TypeScript</li><li>Node d&rsquo;abord</li><li>SQL&nbsp;avanc&eacute;</li></ul>';
+    const quotes = ['Expérience TypeScript', 'Node d’abord', 'SQL avancé'];
+    const requirements = input.requirements.map((item, index) => ({ ...item, sourceQuote: quotes[index] }));
+    const result = evaluateVacancyFit({ ...input, description, requirements });
+    expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0 });
+    expect(result.coveragePercent).toBe(100);
+  });
+});

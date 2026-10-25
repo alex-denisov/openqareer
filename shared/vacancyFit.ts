@@ -5,7 +5,8 @@ export interface VacancyFitView {
   readonly requirements: readonly VacancyRequirement[];
   readonly result?: VacancyFitResult;
 }
-export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-2';
+/** B562-r: quotes decoded from `&eacute;`/`&rsquo;` count, so results cached without them are recalculated. */
+export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-3';
 export const VACANCY_FIT_GATE_NAMES = ['role', 'level', 'region', 'workAuthorization', 'workFormat'] as const;
 export type VacancyFitGateName = typeof VACANCY_FIT_GATE_NAMES[number];
 export type VacancyFitGateStatus = 'matched' | 'blocked' | 'unknown';
