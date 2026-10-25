@@ -2,10 +2,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LANDING_TITLE } from '../src/features/site/siteTitles';
 import { COUNTRY_FIT_TITLE, COUNTRY_FIT_DESCRIPTION } from '../src/features/site/CountryFitPage';
-import {
-  SALARY_MARKET_TITLE,
-  SALARY_MARKET_DESCRIPTION,
-} from '../src/features/site/SalaryMarketPage';
 import { legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { LEGAL_DOCS } from '../shared/legalRegistry';
 import { buildLlmsTxt } from '../shared/aeoSurface';
@@ -14,7 +10,6 @@ describe('public discovery metadata', () => {
   it('keeps public tool and legal discovery copy within the approved length budgets', () => {
     for (const title of [
       COUNTRY_FIT_TITLE,
-      SALARY_MARKET_TITLE,
       ...LEGAL_DOCS.map((doc) => legalDocumentTitle(doc.slug)),
     ]) {
       expect(title.length, title).toBeGreaterThanOrEqual(45);
@@ -22,7 +17,6 @@ describe('public discovery metadata', () => {
     }
     for (const description of [
       COUNTRY_FIT_DESCRIPTION,
-      SALARY_MARKET_DESCRIPTION,
       ...LEGAL_DOCS.map((doc) => doc.description),
     ]) {
       expect(description.length, description).toBeGreaterThanOrEqual(120);

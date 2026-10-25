@@ -9,6 +9,7 @@ import {
   assertSitemapUrlPolicy,
   buildSitemap,
   compactCountryFitDocument,
+  pageHead,
   prerenderShells,
   sitemapUrls,
 } from './prerender-career-shell';
@@ -24,6 +25,16 @@ afterEach(async () => {
 });
 
 describe('production career shell prerender', () => {
+  it('escapes separate share copy and defaults other pages to their full description', () => {
+    const template = '<head><title>old</title><meta name="description" content="old"><meta property="og:description" content="old"><meta name="twitter:description" content="old"></head>';
+    const page = { path: '/tools/country-fit', title: 'Tax', description: 'Full & "verified" <description>' };
+    const defaultHead = pageHead(template, page);
+    expect(defaultHead.match(/Full &amp; &quot;verified&quot; &lt;description&gt;/gu)).toHaveLength(3);
+    const shared = pageHead(template, { ...page, shareDescription: 'Short & "safe" <share>' });
+    expect(shared).toContain('name="description" content="Full &amp; &quot;verified&quot; &lt;description&gt;"');
+    expect(shared.match(/Short &amp; &quot;safe&quot; &lt;share&gt;/gu)).toHaveLength(2);
+    expect(shared).not.toContain('<share>');
+  });
   it('places the real indexed landing page in the entry HTML before JavaScript runs', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'openqareer-prerender-'));
     temporaryDirectories.push(directory);
