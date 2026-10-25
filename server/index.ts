@@ -12,6 +12,8 @@ import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
 import { ResilientCoachProvider } from './providers/resilientCoachProvider';
+import { StructuredStageCoachProvider } from './providers/structuredStageCoachProvider';
+import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import {
   namedQueueDepth,
   selectProviderQueue,
@@ -112,12 +114,18 @@ const syntheticDataProvider = new ResilientCoachProvider({
     fallbacks: config.syntheticFallbacks,
   }),
 });
+// Структурные шаги проверки навыков начинают со связки воркера процента (B564):
+// очередь коуча отвечала им 156–372 с при тайм-ауте сервера 190 с.
+const bulkLlmRuntime = createBulkLlmRuntime({ databasePath: config.databasePath });
 const routedProvider = new HygienicCoachProvider({
   // Ни один ответ модели не доходит до кандидата с невидимыми метками: чистка
   // стоит там, где сходятся все ступени очереди моделей (B210).
-  inner: new PrivacyAwareCoachProvider({
-    personalDataProvider,
-    syntheticDataProvider,
+  inner: new StructuredStageCoachProvider({
+    bulk: bulkLlmRuntime.client,
+    fallback: new PrivacyAwareCoachProvider({
+      personalDataProvider,
+      syntheticDataProvider,
+    }),
   }),
 });
 const coachProvider = new CareerOrchestrator({
@@ -183,6 +191,7 @@ const linkedinRemoteLogin = new LinkedinRemoteLoginService({
 const app = await buildApp({
   config,
   coachProvider,
+  bulkLlmRuntime,
   candidateStore,
   authService,
   vacancyIntelligenceService,
@@ -360,6 +369,7 @@ async function shutdown(signal: string): Promise<void> {
   if (linkedinPoolSessionExpiryRetryTimer) clearTimeout(linkedinPoolSessionExpiryRetryTimer);
   await linkedinRemoteLogin.shutdown();
   await app.close();
+  bulkLlmRuntime.close();
   candidateStore.close();
   authService.close();
   vacancyEngine.close();
