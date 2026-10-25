@@ -263,6 +263,29 @@ describe('role skill assessment domain', () => {
     );
   });
 
+  it('cites the case sources when the model names none (live gpt grading, 25.10)', () => {
+    const result = validateRoleSkillEvaluation({
+      candidateAnswer: CANDIDATE_ANSWER,
+      criteria: [{ id: 'decision-evidence', description: 'Названо основание решения.' }],
+      allowedSourceRefs: [
+        { id: 'source-0', vacancyId: 'vacancy-0', observedAt: '2026-10-09T12:00:00.000Z' },
+      ],
+      modelEvaluation: validModelEvaluation({
+        criteria: [
+          {
+            criterionId: 'decision-evidence',
+            grade: 'confirmed',
+            explanation: 'Основание подтверждено.',
+            candidateExcerpt: 'Сначала сравнила стоимость операций',
+            sourceRefIds: [],
+          },
+        ],
+      }),
+    });
+
+    expect(result.criteria[0]!.sourceRefIds).toEqual(['source-0']);
+  });
+
   it('rejects a summary grade that does not follow the individual criteria', () => {
     const input = {
       candidateAnswer: CANDIDATE_ANSWER,

@@ -114,7 +114,8 @@ const roleSkillModelEvaluationSchema = z
             grade: roleSkillGradeSchema,
             explanation: z.string().trim().min(1).max(500),
             candidateExcerpt: z.string().trim().min(1).max(500),
-            sourceRefIds: z.array(z.string().trim().min(1).max(160)).min(1).max(20),
+            // An empty list cites the case sources (B564).
+            sourceRefIds: z.array(z.string().trim().min(1).max(160)).max(20),
           })
           .strict(),
       )
@@ -467,7 +468,10 @@ export function validateRoleSkillEvaluation(input: {
     if (criterion.sourceRefIds.some((sourceId) => !allowedSourceIds.has(sourceId))) {
       throw new Error('evaluation_source_not_allowed');
     }
-    return { ...criterion, candidateExcerpt, sourceRefIds: [...new Set(criterion.sourceRefIds)] };
+    // The criteria grade a case built from these sources; a model that names none cites them all.
+    const sourceRefIds =
+      criterion.sourceRefIds.length > 0 ? criterion.sourceRefIds : [...allowedSourceIds];
+    return { ...criterion, candidateExcerpt, sourceRefIds: [...new Set(sourceRefIds)] };
   });
   const gradeFromCriteria = aggregateGrade(criteria.map((criterion) => criterion.grade));
   if (evaluation.grade !== gradeFromCriteria) throw new Error('evaluation_grade_mismatch');
