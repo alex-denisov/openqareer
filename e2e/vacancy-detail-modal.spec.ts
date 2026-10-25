@@ -65,7 +65,7 @@ const LONG_DESCRIPTION = [
   'О роли',
   '',
   Array.from(
-    { length: 40 },
+    { length: 80 },
     (_, index) => `Абзац с описанием обязанностей номер ${index + 1}.`,
   ).join(' '),
   '',
