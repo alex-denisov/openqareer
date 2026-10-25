@@ -96,10 +96,31 @@ async function extractCandidateFacts(
       priorContributions: [],
       idempotencyKey: roleIdempotencyKey(idempotencyKey, 'fact-extraction'),
     });
+    console.warn(
+      JSON.stringify({
+        event: 'coach-fact-step',
+        facts: output.result.memoryCandidates.length,
+        model: output.model,
+      }),
+    );
     return output.result.memoryCandidates;
-  } catch {
+  } catch (error) {
+    logFactStepFailure(error);
     return [];
   }
+}
+
+/** The turn goes on without the facts; the journal still has to say why they are missing. */
+function logFactStepFailure(error: unknown): void {
+  const failure = error as { code?: string; attempts?: unknown; message?: string };
+  console.warn(
+    JSON.stringify({
+      event: 'coach-fact-step-failed',
+      code: failure.code ?? 'unknown',
+      attempts: failure.attempts ?? null,
+      message: failure.code ? undefined : String(failure.message ?? error).slice(0, 200),
+    }),
+  );
 }
 
 async function runRoles(
