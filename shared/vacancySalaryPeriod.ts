@@ -1,7 +1,7 @@
 /** Only explicit provider period metadata is accepted; unknown provider values stay unknown. */
 export type VacancySalaryPeriod = 'hour' | 'month' | 'year';
 export interface SalaryPeriodEvidence {
-  readonly field: 'lever.salaryRange.interval';
+  readonly field: 'lever.salaryRange.interval' | 'himalayas.salaryPeriod';
   readonly value: string;
 }
 
@@ -16,6 +16,24 @@ export function leverSalaryPeriod(value: unknown): VacancySalaryPeriod | undefin
     case 'per-month-salary':
       return 'month';
     case 'per-year-salary':
+      return 'year';
+    default:
+      return undefined;
+  }
+}
+
+/** Himalayas documents minSalary/maxSalary in the stated salaryPeriod.
+ * https://himalayas.app/docs/openapi.json (Job.salaryPeriod).
+ * Do not apply the provider's legacy annual default when the response omits it.
+ * Weekly/fortnightly cannot enter the supported hour/month/year cohorts.
+ */
+export function himalayasSalaryPeriod(value: unknown): VacancySalaryPeriod | undefined {
+  switch (value) {
+    case 'hourly':
+      return 'hour';
+    case 'monthly':
+      return 'month';
+    case 'annual':
       return 'year';
     default:
       return undefined;

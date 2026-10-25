@@ -51,6 +51,15 @@ reads only salary JSON from the existing catalog-to-cluster join; no migration o
 historical backfill assigns periods to legacy data. Until normal source sync has
 observed enough comparable records, the salary result remains unavailable.
 
+Himalayas' explicit `salaryPeriod` is also preserved with its original value:
+`hourly`, `monthly`, `annual` map to hour, month, year respectively. The adapter
+uses no default for an absent field; weekly, fortnightly and unknown values stay
+unsupported. The aggregator validates each provider's own field/value pair and
+rejects a stored period that disagrees with its evidence. The next ordinary
+scheduled source refresh updates existing rows and cluster projections; no
+historical backfill assigns periods. Publication still requires five comparable
+deduplicated clusters after the normal snapshot recomputation.
+
 Quarterly skill comparisons use only real, persisted observations of the same
 methodology. The first observation per role and UTC week is immutable; history
 and current snapshots publish atomically. Retention is bounded to the current
