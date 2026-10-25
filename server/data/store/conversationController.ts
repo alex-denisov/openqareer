@@ -45,6 +45,7 @@ import {
   CandidateNotFoundError,
   CandidateStoreConflictError,
 } from './errors';
+import { withStoredMemoryCap } from './storedTurnMemoryCap';
 
 export interface ConversationDeps extends StoreContext {
   documentRepository: SqliteDocumentRepository;
@@ -808,10 +809,12 @@ export class ConversationController {
       throw new Error('completed turn is incomplete');
     }
     const parsed = coachTurnResultSchema.parse(
-      JSON.parse(
-        this.sealedText.open(
-          turn.result_cipher,
-          turnAssociatedData(candidateId, idempotencyKey),
+      withStoredMemoryCap(
+        JSON.parse(
+          this.sealedText.open(
+            turn.result_cipher,
+            turnAssociatedData(candidateId, idempotencyKey),
+          ),
         ),
       ),
     ) as CoachTurnResult;
