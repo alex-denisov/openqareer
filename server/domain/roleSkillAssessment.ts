@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { verbatimQuote } from './vacancyRequirements';
 import { MIN_ROLE_SAMPLE } from '../../shared/poolRoleHypotheses';
 
 /** A requirement counts as repeated in this share of vacancies with extracted requirements. */
@@ -458,13 +459,15 @@ export function validateRoleSkillEvaluation(input: {
   }
 
   const criteria = evaluation.criteria.map((criterion) => {
-    if (!answer.includes(criterion.candidateExcerpt)) {
+    // Spacing, typographic quotes and the final period may differ; a retelling may not (B564).
+    const candidateExcerpt = verbatimQuote(criterion.candidateExcerpt, answer);
+    if (!candidateExcerpt) {
       throw new Error('evaluation_quote_not_in_answer');
     }
     if (criterion.sourceRefIds.some((sourceId) => !allowedSourceIds.has(sourceId))) {
       throw new Error('evaluation_source_not_allowed');
     }
-    return { ...criterion, sourceRefIds: [...new Set(criterion.sourceRefIds)] };
+    return { ...criterion, candidateExcerpt, sourceRefIds: [...new Set(criterion.sourceRefIds)] };
   });
   const gradeFromCriteria = aggregateGrade(criteria.map((criterion) => criterion.grade));
   if (evaluation.grade !== gradeFromCriteria) throw new Error('evaluation_grade_mismatch');

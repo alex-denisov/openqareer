@@ -208,6 +208,29 @@ describe('role skill assessment domain', () => {
     ).toThrow();
   });
 
+  it('keeps an answer quote off only by spacing or the final period as the answer span (B564)', () => {
+    const result = validateRoleSkillEvaluation({
+      candidateAnswer: CANDIDATE_ANSWER,
+      criteria: [{ id: 'decision-evidence', description: 'Названо основание решения.' }],
+      allowedSourceRefs: [
+        { id: 'source-0', vacancyId: 'vacancy-0', observedAt: '2026-10-09T12:00:00.000Z' },
+      ],
+      modelEvaluation: validModelEvaluation({
+        criteria: [
+          {
+            criterionId: 'decision-evidence',
+            grade: 'confirmed',
+            explanation: 'Основание подтверждено.',
+            candidateExcerpt: 'Сначала  сравнила стоимость операций.',
+            sourceRefIds: ['source-0'],
+          },
+        ],
+      }),
+    });
+
+    expect(result.criteria[0]!.candidateExcerpt).toBe('Сначала сравнила стоимость операций,');
+  });
+
   it('rejects a summary grade that does not follow the individual criteria', () => {
     const input = {
       candidateAnswer: CANDIDATE_ANSWER,

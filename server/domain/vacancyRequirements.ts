@@ -175,7 +175,7 @@ export type ModelAnswerIssue = 'parse' | 'shape' | 'no_valid_entries' | 'truncat
  * Models wrap JSON in a markdown fence despite instructions (4 of 12 sampled prod answers), and an
  * answer cut at the output limit keeps its complete entries: the array is closed after the last one.
  */
-function parseModelJson(response: string): { readonly value: unknown; readonly truncated: boolean } {
+export function parseModelJson(response: string): { readonly value: unknown; readonly truncated: boolean } {
   const trimmed = response.trim();
   const body = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu)?.[1] ?? trimmed.replace(/^```(?:json)?\s*/iu, '');
   try { return { value: JSON.parse(body), truncated: false }; } catch (error) {
@@ -196,7 +196,7 @@ const TYPOGRAPHIC: Readonly<Record<string, string>> = {
  * spaces and drops the final period (6 of 9 invalid prod answers on 22.10), and joins CJK lines
  * the source broke mid-sentence; the stored quote is then the original span, so it stays verbatim.
  */
-function verbatimQuote(quote: string, description: string): string | null {
+export function verbatimQuote(quote: string, description: string): string | null {
   if (description.includes(quote)) return quote;
   return spanIgnoringSpacing(quote, description, ' ') ?? spanIgnoringSpacing(quote, description, '');
 }
