@@ -19,14 +19,17 @@ describe('CareerOrchestrator', () => {
       },
     });
 
-    await orchestrator.createTurn({
-      candidateReference: 'candidate-test-001',
-      dataClass: 'synthetic',
-      locale: 'ru-RU',
-      phase: 'evidence',
-      internalPurpose: 'consultant-summary',
-      messages: [{ id: 'message-1', role: 'user', content: 'Я внедрил очередь платежей.' }],
-    }, '11111111-1111-4111-8111-111111111112');
+    await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'evidence',
+        internalPurpose: 'consultant-summary',
+        messages: [{ id: 'message-1', role: 'user', content: 'Я внедрил очередь платежей.' }],
+      },
+      '11111111-1111-4111-8111-111111111112',
+    );
 
     expect(calls).toEqual(['career_consultant']);
   });
@@ -42,15 +45,18 @@ describe('CareerOrchestrator', () => {
       },
     });
 
-    await orchestrator.createTurn({
-      candidateReference: 'candidate-reference-1',
-      dataClass: 'synthetic',
-      locale: 'ru-RU',
-      phase: 'role',
-      activeRole: 'career_expert',
-      internalPurpose: 'structured-stage',
-      messages: [{ id: 'message-1', role: 'user', content: 'Отвечал за операции.' }],
-    }, '11111111-1111-4111-8111-111111111113');
+    await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-reference-1',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'role',
+        activeRole: 'career_expert',
+        internalPurpose: 'structured-stage',
+        messages: [{ id: 'message-1', role: 'user', content: 'Отвечал за операции.' }],
+      },
+      '11111111-1111-4111-8111-111111111113',
+    );
 
     expect(calls).toEqual(['career_expert']);
   });
@@ -83,18 +89,10 @@ describe('CareerOrchestrator', () => {
       '11111111-1111-4111-8111-111111111111',
     );
 
-    expect(calls).toEqual([
-      'career_expert',
-      'career_strategist',
-      'career_consultant',
-    ]);
+    expect(calls).toEqual(['career_expert', 'career_strategist', 'career_consultant']);
     expect(output.result.message).toBe('career_consultant summary');
     expect(output.result.intelligence).toMatchObject({
-      roleCoverage: [
-        'career_expert',
-        'career_strategist',
-        'career_consultant',
-      ],
+      roleCoverage: ['career_expert', 'career_strategist', 'career_consultant'],
       evidenceCoverage: 1,
       unsupportedClaimCount: 0,
       marketEvidence: {
@@ -130,9 +128,7 @@ describe('CareerOrchestrator', () => {
           dataClass: 'synthetic',
           locale: 'ru-RU',
           phase: 'market',
-          messages: [
-            { id: 'message-1', role: 'user', content: 'Собери карьерный трек.' },
-          ],
+          messages: [{ id: 'message-1', role: 'user', content: 'Собери карьерный трек.' }],
         },
         '22222222-2222-4222-8222-222222222222',
       ),
@@ -170,6 +166,34 @@ describe('CareerOrchestrator', () => {
     expect(output.result.actionProposals).toEqual([]);
   });
 
+  it('keeps candidate facts found by the expert, not only the final consultant run', async () => {
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          return roleResult(input.role);
+        },
+      },
+    });
+
+    const output = await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'market',
+        marketObservations: [marketObservation()],
+        messages: [{ id: 'message-1', role: 'user', content: 'Проверим рынок.' }],
+      },
+      '44444444-4444-4444-8444-444444444444',
+    );
+
+    expect(output.result.memoryCandidates.map((item) => item.statement)).toEqual([
+      'career_expert statement',
+      'career_strategist statement',
+      'career_consultant statement',
+    ]);
+  });
+
   it('accepts candidate-owned document references as career evidence', async () => {
     const documentRef = 'document:11111111-1111-4111-8111-111111111111';
     const orchestrator = new CareerOrchestrator({
@@ -180,9 +204,7 @@ describe('CareerOrchestrator', () => {
             candidate.sourceMessageIds = [documentRef];
           });
           if (input.role === 'career_strategist') {
-            output.result.careerTrack!.alternatives[0]!.evidenceRefs = [
-              documentRef,
-            ];
+            output.result.careerTrack!.alternatives[0]!.evidenceRefs = [documentRef];
             output.result.actionProposals[0]!.evidenceRefs = [documentRef];
           }
           return output;
@@ -196,9 +218,7 @@ describe('CareerOrchestrator', () => {
         dataClass: 'synthetic',
         locale: 'ru-RU',
         phase: 'role',
-        messages: [
-          { id: 'message-1', role: 'user', content: 'Проверь мой опыт.' },
-        ],
+        messages: [{ id: 'message-1', role: 'user', content: 'Проверь мой опыт.' }],
         knowledgeContext: {
           confirmedFacts: [],
           openQuestions: [],
@@ -244,9 +264,7 @@ describe('CareerOrchestrator', () => {
         dataClass: 'synthetic',
         locale: 'ru-RU',
         phase: 'market',
-        messages: [
-          { id: 'message-1', role: 'user', content: 'Проверим рынок.' },
-        ],
+        messages: [{ id: 'message-1', role: 'user', content: 'Проверим рынок.' }],
       },
       '44444444-4444-4444-8444-444444444444',
     );
@@ -273,9 +291,7 @@ describe('CareerOrchestrator', () => {
         dataClass: 'synthetic',
         locale: 'ru-RU',
         phase: 'market',
-        messages: [
-          { id: 'message-1', role: 'user', content: 'Проверим рынок.' },
-        ],
+        messages: [{ id: 'message-1', role: 'user', content: 'Проверим рынок.' }],
         marketObservations: [marketObservation()],
       },
       '55555555-5555-4555-8555-555555555555',
@@ -290,9 +306,7 @@ describe('CareerOrchestrator', () => {
         async run(input) {
           const output = roleResult(input.role);
           if (input.role === 'career_strategist' && output.result.careerTrack) {
-            output.result.careerTrack.alternatives[0].evidenceRefs.push(
-              'assistant-1',
-            );
+            output.result.careerTrack.alternatives[0].evidenceRefs.push('assistant-1');
           }
           return output;
         },
@@ -344,16 +358,12 @@ function roleResult(role: CareerRole): CoachProviderResult {
           kind: role === 'career_expert' ? 'fact' : 'hypothesis',
           domain: 'role-evidence',
           statement: `${role} statement`,
-          confidence:
-            role === 'career_expert'
-              ? 'candidate-reported'
-              : 'coach-hypothesis',
+          confidence: role === 'career_expert' ? 'candidate-reported' : 'coach-hypothesis',
           sourceMessageIds: ['message-1'],
           sensitive: false,
         },
       ],
-      nextQuestion:
-        role === 'career_consultant' ? 'Какой маршрут проверить первым?' : null,
+      nextQuestion: role === 'career_consultant' ? 'Какой маршрут проверить первым?' : null,
       completeness: { known: ['Целевые рынки'], unknown: [] },
       safety: { needsHuman: false, reason: null },
       careerTrack:

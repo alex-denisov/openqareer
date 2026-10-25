@@ -7,9 +7,9 @@ import type {
   ProviderUsage,
 } from '../providers/coachProvider';
 import { CAREER_ROLE_PROMPT_REVISIONS } from '../prompts/careerRolePrompts';
+import { faithfulMemoryCandidates } from './memoryCandidateGuard';
 
-const CAREER_ORCHESTRATION_REVISION =
-  'career-orchestration-v1.0-2026-08-12' as const;
+const CAREER_ORCHESTRATION_REVISION = 'career-orchestration-v1.0-2026-08-12' as const;
 
 export type CareerRole = 'career_consultant' | 'career_strategist' | 'career_expert';
 
@@ -64,13 +64,7 @@ export class CareerOrchestrator implements CoachProvider {
     if (roles.length > this.maxModelCalls) {
       throw new CareerOrchestrationBudgetError();
     }
-    const runs = await runRoles(
-      this.roleAgent,
-      roles,
-      input,
-      idempotencyKey,
-      options,
-    );
+    const runs = await runRoles(this.roleAgent, roles, input, idempotencyKey, options);
     return finalizeCareerTurn(input, roles, runs);
   }
 }
@@ -118,8 +112,7 @@ function finalizeCareerTurn(
     output.result.memoryCandidates.map((candidate) => candidate.sourceMessageIds),
   );
   const supportedClaims = claimRefs.filter(
-    (refs) =>
-      refs.length > 0 && refs.every((ref) => supportedProposalRefs.has(ref)),
+    (refs) => refs.length > 0 && refs.every((ref) => supportedProposalRefs.has(ref)),
   ).length;
 
   return {
@@ -127,6 +120,12 @@ function finalizeCareerTurn(
     usage: sumUsage(runs.map(({ output }) => output.usage)),
     result: {
       ...final.output.result,
+      // Every role reads the candidate's message; facts the expert found are not the
+      // consultant's to drop (26.10: a detailed answer left the profile with no fact).
+      memoryCandidates: faithfulMemoryCandidates(
+        input,
+        runs.flatMap(({ output }) => output.result.memoryCandidates),
+      ),
       careerTrack: careerTrackFrom(input, strategist, final),
       actionProposals: proposalsFrom(strategist, final).filter((proposal) =>
         proposal.evidenceRefs.every((ref) => supportedProposalRefs.has(ref)),
@@ -142,21 +141,11 @@ function finalizeCareerTurn(
   };
 }
 
-function careerTrackFrom(
-  input: CoachTurnInput,
-  strategist: RoleRun | undefined,
-  final: RoleRun,
-) {
-  const track =
-    strategist?.output.result.careerTrack ?? final.output.result.careerTrack;
+function careerTrackFrom(input: CoachTurnInput, strategist: RoleRun | undefined, final: RoleRun) {
+  const track = strategist?.output.result.careerTrack ?? final.output.result.careerTrack;
   if (!track) return track;
-  const marketRefs = new Set(
-    input.marketObservations?.map((observation) => observation.ref) ?? [],
-  );
-  const supportedRefs = new Set([
-    ...candidateEvidenceRefs(input),
-    ...marketRefs,
-  ]);
+  const marketRefs = new Set(input.marketObservations?.map((observation) => observation.ref) ?? []);
+  const supportedRefs = new Set([...candidateEvidenceRefs(input), ...marketRefs]);
   const fullySupported = track.alternatives.every(
     (alternative) =>
       alternative.evidenceRefs.length > 0 &&
@@ -172,9 +161,7 @@ function careerTrackFrom(
 
 function candidateEvidenceRefs(input: CoachTurnInput): string[] {
   return [
-    ...input.messages
-      .filter((message) => message.role === 'user')
-      .map((message) => message.id),
+    ...input.messages.filter((message) => message.role === 'user').map((message) => message.id),
     ...(input.knowledgeContext?.confirmedFacts.map((fact) => fact.ref) ?? []),
     ...(input.knowledgeContext?.documents.map((document) => document.ref) ?? []),
     ...(input.knowledgeContext?.openQuestions.map((question) => question.ref) ?? []),
@@ -202,23 +189,19 @@ function intelligenceFrom(
       promptRevision: promptRevision(role),
       usage: output.usage,
     })),
-    evidenceCoverage:
-      claimRefs.length === 0 ? 1 : supportedClaims / claimRefs.length,
+    evidenceCoverage: claimRefs.length === 0 ? 1 : supportedClaims / claimRefs.length,
     unsupportedClaimCount: claimRefs.length - supportedClaims,
     marketEvidence: marketEvidenceFrom(marketObservations),
   };
 }
 
-function marketEvidenceFrom(
-  observations: NonNullable<CoachTurnInput['marketObservations']>,
-) {
+function marketEvidenceFrom(observations: NonNullable<CoachTurnInput['marketObservations']>) {
   if (!observations.length) return null;
   return {
     source: 'hh' as const,
     observationCount: observations.length,
     observedAt: observations.reduce(
-      (latest, observation) =>
-        observation.observedAt > latest ? observation.observedAt : latest,
+      (latest, observation) => (observation.observedAt > latest ? observation.observedAt : latest),
       observations[0].observedAt,
     ),
   };
@@ -244,11 +227,7 @@ function contribution(role: CareerRole, output: CoachProviderResult) {
     role,
     summary: output.result.message,
     evidenceRefs: Array.from(
-      new Set(
-        output.result.memoryCandidates.flatMap(
-          (candidate) => candidate.sourceMessageIds,
-        ),
-      ),
+      new Set(output.result.memoryCandidates.flatMap((candidate) => candidate.sourceMessageIds)),
     ),
     unknowns: output.result.completeness.unknown,
   };
