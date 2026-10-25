@@ -100,10 +100,10 @@ function DocumentsSection({ profile, onProfileChange }: RelocationDraftProps) {
                     <p>{documentTerm(document)}</p>
                   </div>
                   <span className="career-relocation-doc-actions">
-                    <button className="career-relocation-icon-action" type="button" aria-label={`Изменить: ${documentTitle(document)}`} onClick={() => setEditingId(document.id)}>
+                    <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Изменить: ${documentTitle(document)}`} onClick={() => setEditingId(document.id)}>
                       <PencilSimple aria-hidden="true" size={18} />
                     </button>
-                    <button className="career-relocation-icon-action" type="button" aria-label={`Удалить: ${documentTitle(document)}`} onClick={() => remove(document.id)}>
+                    <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Удалить: ${documentTitle(document)}`} onClick={() => remove(document.id)}>
                       <Trash aria-hidden="true" size={18} />
                     </button>
                   </span>
@@ -140,7 +140,7 @@ function DocumentEditor({
     <fieldset className="career-relocation-record">
       <legend>{relocationDocumentKindLabel(document.kind)}, {relocationCountryName(document.countryCode)}</legend>
       <DocumentFields document={document} onChange={update} prefix={document.id} />
-      <button className="career-btn career-btn-secondary" type="button" onClick={onDone}>
+      <button className="career-relocation-btn" type="button" onClick={onDone}>
         <Check aria-hidden="true" size={16} />Готово
       </button>
     </fieldset>
@@ -195,7 +195,7 @@ function NewDocumentForm({ profile, onProfileChange }: RelocationDraftProps) {
         <RelocationFormField id={countryId} label="Страна"><CountrySelect id={countryId} value={countryCode} onChange={setCountryCode} /></RelocationFormField>
         <RelocationFormField id={expiresId} label="Действует до"><RelocationDateInput id={expiresId} value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></RelocationFormField>
       </div>
-      <button className="career-btn career-btn-secondary" type="button" disabled={!countryCode} onClick={add}>
+      <button className="career-relocation-btn" type="button" disabled={!countryCode} onClick={add}>
         <Plus aria-hidden="true" size={16} />Добавить документ
       </button>
     </div>

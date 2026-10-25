@@ -68,7 +68,7 @@ test('B468-r3: Russia + Serbian permit → «Что получилось» → S
   expect(index).toBeLessThan(6);
 });
 
-test('B468-r3: 390 «Экономика» saves the calculation and it survives a reload', async ({
+test('B468-r3: 390 «Экономика» pushes the editor, «Рассчитать» saves with the family and it survives a reload', async ({
   page,
 }, info) => {
   test.skip(info.project.name !== 'mobile-390', 'Кадр vt=net 390.');
@@ -95,17 +95,32 @@ test('B468-r3: 390 «Экономика» saves the calculation and it survives 
   await openRelocation(page, true);
   await page.getByRole('tab', { name: 'Экономика' }).click();
   await page.locator('#relocation-mobile-economy-country').selectOption('AE');
-  await page.locator('#relocation-mobile-income').fill('120000');
-  const save = page.getByRole('button', { name: 'Сохранить расчёт в профиль' });
-  await expect(save).toBeDisabled();
-  await page.getByLabel('Город расчёта').fill('Дубай');
-  await save.click();
-  await expect(page.getByText('Расчёт сохранён в профиле.')).toBeVisible();
+  await page.getByLabel('Годовая зарплата до налогов').evaluate((input: HTMLInputElement) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+      input,
+      '120000',
+    );
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  // Mockup 15 at 390: one CTA pushes the scenario editor; «Рассчитать» saves and returns.
+  await page.getByRole('button', { name: 'Уточнить расходы' }).click();
+  await page.getByLabel('Город расчёта').selectOption('Дубай');
+  await page.getByLabel('Сколько детей переезжает').fill('2');
+  await expect(page.getByText('В бюджете 3 чел.')).toBeVisible();
+  await page.getByRole('button', { name: 'Рассчитать', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Уточнить расходы' })).toBeVisible();
   expect(saved).toHaveLength(1);
+  expect(saved[0]?.input.householdSize).toBe(3);
+  expect(saved[0]?.input.visa.family).toEqual({ hasPartner: false, children: 2 });
+  await expect(page.locator('#relocation-mobile-economy-country option:checked')).toHaveText(
+    'ОАЭ, Дубай',
+  );
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openRelocation(page, true);
   await page.getByRole('tab', { name: 'Экономика' }).click();
-  await expect(page.getByText('ОАЭ, Дубай')).toBeVisible();
+  await page.locator('#relocation-mobile-economy-country').selectOption('AE');
+  await page.getByRole('button', { name: 'Уточнить расходы' }).click();
+  await expect(page.getByRole('button', { name: 'Открыть: Мой сценарий' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

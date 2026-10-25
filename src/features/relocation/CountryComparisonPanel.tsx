@@ -124,9 +124,9 @@ function ReadyComparison({
       aria-labelledby="career-country-comparison-title"
     >
       <div className="career-country-comparison-head">
-        <h2 id="career-country-comparison-title" className="career-country-comparison-title">
+        <h3 id="career-country-comparison-title" className="career-country-comparison-title">
           {title}
-        </h2>
+        </h3>
         {titleAction}
       </div>
       <DesktopMatrix countries={countries} />
@@ -358,7 +358,10 @@ function ComparisonMeanings({ meanings }: { readonly meanings: readonly Comparis
           </li>
         ))}
       </ul>
-      <p className="career-country-comparison-disclaimer">{COUNTRY_FIT_DISCLAIMER}</p>
+      <p className="career-country-comparison-disclaimer">
+        <Info aria-hidden="true" size={18} />
+        <span>{COUNTRY_FIT_DISCLAIMER}</span>
+      </p>
     </section>
   );
 }

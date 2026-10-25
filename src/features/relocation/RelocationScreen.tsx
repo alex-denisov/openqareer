@@ -10,6 +10,9 @@ import { useRelocationWorkspace, type RelocationWorkspaceInput } from './useRelo
 import './RelocationScreen.css';
 import './RelocationForms.css';
 import './RelocationMobile.css';
+import './relocation-mockup.css';
+import './relocation-mockup-form.css';
+import './relocation-mockup-390.css';
 
 export interface RelocationScreenProps {
   /** Back to where the candidate came from: «Карьера» (roles) or «Профиль». */

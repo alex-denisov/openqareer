@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Check, LinkSimple, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import type { LanguagesStep } from '../../../../shared/relocationQuestionnaire';
 import type { RelocationQuestionnaireStepFormProps } from '../RelocationQuestionnaireSteps';
-import { LanguageLevelSelect, RelocationFormField, relocationRowId } from '../RelocationFormControls';
+import { LANGUAGE_NAME_OPTIONS, LanguageLevelSelect, OTHER_LANGUAGE, RelocationFormField, relocationRowId } from '../RelocationFormControls';
 import { relocationShortDay } from '../relocationDates';
 
 /** Mockup 15 `i4`: language cards with their source, then one inline row to add a language. */
@@ -52,10 +52,10 @@ function LanguageRows({ profile, onProfileChange }: RelocationQuestionnaireStepF
                   </p>
                 </div>
                 <span className="career-relocation-doc-actions">
-                  <button className="career-relocation-icon-action" type="button" aria-label={`Изменить: ${language.name}`} onClick={() => setEditingId(language.id)}>
+                  <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Изменить: ${language.name}`} onClick={() => setEditingId(language.id)}>
                     <PencilSimple aria-hidden="true" size={18} />
                   </button>
-                  <button className="career-relocation-icon-action" type="button" aria-label={`Удалить: ${language.name}`} onClick={() => remove(language.id)}>
+                  <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Удалить: ${language.name}`} onClick={() => remove(language.id)}>
                     <Trash aria-hidden="true" size={18} />
                   </button>
                 </span>
@@ -99,7 +99,7 @@ function LanguageRow({
           </select>
         </RelocationFormField>
       </div>
-      <button className="career-btn career-btn-secondary" type="button" onClick={onDone}>
+      <button className="career-relocation-btn" type="button" onClick={onDone}>
         <Check aria-hidden="true" size={16} />Готово
       </button>
     </fieldset>
@@ -107,8 +107,10 @@ function LanguageRow({
 }
 
 function NewLanguageForm({ profile, onProfileChange }: RelocationQuestionnaireStepFormProps) {
-  const [name, setName] = useState('');
+  const [choice, setChoice] = useState('');
+  const [other, setOther] = useState('');
   const [level, setLevel] = useState<LanguagesStep['languages'][number]['level']>('unknown');
+  const name = choice === OTHER_LANGUAGE ? other : choice;
   const add = () => {
     if (!name.trim()) return;
     onProfileChange({
@@ -119,18 +121,28 @@ function NewLanguageForm({ profile, onProfileChange }: RelocationQuestionnaireSt
         }],
       },
     });
-    setName('');
+    setChoice('');
+    setOther('');
     setLevel('unknown');
   };
   return (
     <div className="career-relocation-language-add">
       <RelocationFormField id="relocation-new-language-name" label="Добавить язык">
-        <input id="relocation-new-language-name" placeholder="Например, немецкий" value={name} onChange={(event) => setName(event.target.value)} />
+        <select id="relocation-new-language-name" value={choice} onChange={(event) => setChoice(event.target.value)}>
+          <option value="">Выберите язык</option>
+          {LANGUAGE_NAME_OPTIONS.map((language) => <option key={language} value={language}>{language}</option>)}
+          <option value={OTHER_LANGUAGE}>Другой язык</option>
+        </select>
       </RelocationFormField>
+      {choice === OTHER_LANGUAGE ? (
+        <RelocationFormField id="relocation-new-language-other" label="Какой язык">
+          <input id="relocation-new-language-other" maxLength={60} value={other} onChange={(event) => setOther(event.target.value)} />
+        </RelocationFormField>
+      ) : null}
       <RelocationFormField id="relocation-new-language-level" label="Уровень">
         <LanguageLevelSelect id="relocation-new-language-level" value={level} onChange={setLevel} />
       </RelocationFormField>
-      <button className="career-btn career-btn-secondary" type="button" disabled={!name.trim()} onClick={add}>
+      <button className="career-relocation-btn" type="button" disabled={!name.trim()} onClick={add}>
         <Plus aria-hidden="true" size={16} />Добавить
       </button>
     </div>
@@ -140,7 +152,7 @@ function NewLanguageForm({ profile, onProfileChange }: RelocationQuestionnaireSt
 function LinkedInImport({ onImportLinkedIn, importBusy, importError }: RelocationQuestionnaireStepFormProps) {
   return (
     <div className="career-relocation-linkedin-import">
-      <button className="career-relocation-text-action" type="button" disabled={importBusy} onClick={onImportLinkedIn}>
+      <button className="career-relocation-btn is-sm is-ghost" type="button" disabled={importBusy} onClick={onImportLinkedIn}>
         {importBusy ? 'Импортируем…' : 'Импортировать языки из подключённого профиля'}
       </button>
       {importError ? <p role="alert">{importError}</p> : null}

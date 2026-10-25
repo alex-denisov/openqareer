@@ -1,10 +1,31 @@
 import { useMemo, useState } from 'react';
-import { RelocationScenarioPanel } from './RelocationScenarioPanel';
 import type { RelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import type { SourcedThreshold } from '../../../shared/countryFit/types';
+import type { RelocationScenarioInput } from '../../../shared/relocationScenario';
 import { getCountryTaxData, supportedCountryCodes } from '../../../shared/taxData';
-import { calculateRelocationEconomy, countryFitForQuestionnaire, listRelocationCountries } from './relocationCountryData';
+import {
+  calculateRelocationEconomy,
+  countryFitForQuestionnaire,
+  listRelocationCountries,
+  relocationAssumptionSummary,
+  scenarioPayrollNow,
+} from './relocationCountryData';
 import { relocationDay } from './relocationDates';
+import type { PayrollResult } from '../../../shared/taxCalculators';
+import { relocationEconomyBreakdown } from './relocationEconomyBreakdown';
+import { RelocationScenarioEditor } from './RelocationScenarioEditor';
+import {
+  EconomyActions,
+  EconomyBreakdownView,
+  EconomyCountryField,
+  EconomyHeading,
+  EconomySalaryField,
+  EconomySources,
+  EconomySummaryNote,
+  formatMoney,
+} from './RelocationEconomyCalc';
+import './relocation-economy.css';
+import { useRelocationScenario, type RelocationScenarioState } from './useRelocationScenario';
 
 export interface RelocationEconomyProps {
   readonly profile: RelocationQuestionnaire;
@@ -16,122 +37,250 @@ export interface RelocationEconomyProps {
   readonly onShowComparison: () => void;
 }
 
-export function RelocationEconomy({
-  profile,
-  selectedCountryCodes,
-  selectedCountryCode,
-  grossAnnualIncome,
-  onCountryCodeChange,
-  onGrossAnnualIncomeChange,
-  onShowComparison,
-}: RelocationEconomyProps) {
-  const countries = useMemo(() => listRelocationCountries(), []);
-  const [incomeMode, setIncomeMode] = useState('local_employment');
-  const countryCode = selectedCountryCode || selectedCountryCodes[0] || '';
-  const country = countries.find((item) => item.countryCode === countryCode);
+type TaxData = ReturnType<typeof getCountryTaxData>;
+
+/**
+ * Mockup 15 `view=net`: one calculation with a salary slider, the breakdown and «Откуда цифры».
+ * «Уточнить расходы» opens the scenario editor; its «Рассчитать» brings the person back here.
+ */
+export function RelocationEconomy(props: RelocationEconomyProps) {
+  const countryCode = props.selectedCountryCode || props.selectedCountryCodes[0] || '';
   const supported = supportedCountryCodes.some((code) => code === countryCode);
-  const data = supported && countryCode ? getCountryTaxData(countryCode) : null;
-  const result = supported && grossAnnualIncome !== undefined
-    ? calculateRelocationEconomy(countryCode, grossAnnualIncome)
-    : undefined;
-  const belowThresholds = useMemo(
-    () => data ? belowAnnualSalaryThresholds(countryCode, profile, grossAnnualIncome, data.currency) : [],
-    [countryCode, data, grossAnnualIncome, profile],
-  );
-  return (
-    <section className="career-relocation-economy" aria-labelledby="career-relocation-economy-title">
-      <EconomyHeading />
-      <EconomyInputs countries={countries} countryCode={countryCode} data={data} income={grossAnnualIncome} onCountryChange={(code) => { onCountryCodeChange(code); onGrossAnnualIncomeChange(undefined); }} onIncomeChange={onGrossAnnualIncomeChange} />
-      <TaxDataFreshness data={data} />
-      {incomeMode === 'local_employment' && <EconomyOutput countryCode={countryCode} countryName={country?.name} supported={supported} income={grossAnnualIncome} result={result} />}
-      {supported && <RelocationScenarioPanel countryCode={countryCode} income={grossAnnualIncome} profile={profile} onCountryChange={onCountryCodeChange} onIncomeChange={onGrossAnnualIncomeChange} onIncomeModeChange={setIncomeMode} />}
-      <SalaryThresholdWarnings warnings={belowThresholds} />
-      <EconomyActions onShowComparison={onShowComparison} />
-    </section>
-  );
-}
-
-function EconomyHeading() {
-  return (
-    <header className="career-relocation-section-heading">
-      <div>
-        <h2 id="career-relocation-economy-title">Экономика переезда</h2>
-        <p>Показываем налоговый расчёт отдельно от расходов, которых нет в источниках.</p>
+  const scenario = useRelocationScenario({
+    countryCode,
+    income: props.grossAnnualIncome,
+    profile: props.profile,
+  });
+  const [editing, setEditing] = useState(false);
+  if (editing && supported) {
+    return (
+      <div className="career-relocation-card career-relocation-economy-editor">
+        <RelocationScenarioEditor
+          scenario={scenario}
+          countryCode={countryCode as RelocationScenarioInput['countryCode']}
+          onBack={() => setEditing(false)}
+          onCalculated={() => setEditing(false)}
+          onOpened={(input) => {
+            props.onCountryCodeChange(input.countryCode);
+            props.onGrossAnnualIncomeChange(input.grossAnnualIncome);
+          }}
+        />
       </div>
-    </header>
+    );
+  }
+  return (
+    <EconomyCalculation
+      {...props}
+      countryCode={countryCode}
+      supported={supported}
+      scenario={scenario}
+      onEdit={() => setEditing(true)}
+    />
   );
 }
 
-function EconomyInputs({
-  countries,
-  countryCode,
-  data,
-  income,
-  onCountryChange,
-  onIncomeChange,
-}: {
-  readonly countries: ReturnType<typeof listRelocationCountries>;
+type EconomyCalculationProps = RelocationEconomyProps & {
   readonly countryCode: string;
-  readonly data: ReturnType<typeof getCountryTaxData> | null;
-  readonly income: number | undefined;
-  readonly onCountryChange: (code: string) => void;
-  readonly onIncomeChange: (amount: number | undefined) => void;
-}) {
+  readonly supported: boolean;
+  readonly scenario: RelocationScenarioState;
+  readonly onEdit: () => void;
+};
+
+/** The scenario counts only for this country and salary; its payroll is recomputed by today's rules. */
+function useEconomyCalculation({
+  countryCode,
+  supported,
+  scenario,
+  grossAnnualIncome,
+}: EconomyCalculationProps) {
+  const countries = useMemo(() => listRelocationCountries(), []);
+  const data = supported && countryCode ? getCountryTaxData(countryCode) : null;
+  const expenses = scenarioExpenses(scenario, countryCode, grossAnnualIncome);
+  const calculated = expenses ? scenario.calculated : undefined;
+  const scenarioPayroll = calculated ? scenarioPayrollNow(calculated.input) : undefined;
+  return { countries, data, income: grossAnnualIncome, expenses, calculated, scenarioPayroll };
+}
+
+function EconomyCalculation(props: EconomyCalculationProps) {
+  const { countryCode, supported } = props;
+  const { countries, data, income, expenses, calculated, scenarioPayroll } =
+    useEconomyCalculation(props);
   return (
-    <div className="career-relocation-economy-controls">
-      <label>
-        <span>Страна</span>
-        <select value={countryCode} onChange={(event) => onCountryChange(event.target.value)}>
-          <option value="">Выберите страну</option>
-          {countries.map(({ countryCode: code, name }) => <option value={code} key={code}>{name}</option>)}
-        </select>
-      </label>
-      <label>
-        <span>Годовая зарплата до налогов</span>
-        <input type="number" min="0" step="any" inputMode="decimal" value={income ?? ''}
-          onChange={(event) => onIncomeChange(event.target.value === '' ? undefined : Number(event.target.value))}
-          aria-describedby="career-relocation-income-hint" />
-      </label>
-      <p id="career-relocation-income-hint">
-        {data ? `Валюта: ${data.currency}. Шкала налогов: ${data.taxYear}.` : 'Сначала выберите страну с доступной шкалой налогов.'}
-      </p>
+    <div className="career-relocation-economy-layout">
+      <section
+        className="career-relocation-card career-relocation-economy"
+        aria-labelledby="career-relocation-economy-title"
+      >
+        <EconomyHeading />
+        <EconomyInputs
+          {...props}
+          countries={countries}
+          city={calculated?.input.city ?? ''}
+          currency={data?.currency}
+        />
+        <TaxDataFreshness data={data} />
+        <EconomyResult
+          countryCode={countryCode}
+          countryName={countries.find((item) => item.countryCode === countryCode)?.name}
+          supported={supported}
+          income={income}
+          expenses={expenses}
+          scenarioPayroll={scenarioPayroll}
+          householdSize={calculated?.input.householdSize ?? 1}
+        />
+        <SalaryThresholdWarnings
+          countryCode={countryCode}
+          profile={props.profile}
+          income={income}
+          currency={data?.currency}
+        />
+        <EconomyActions onEdit={props.onEdit} onShowComparison={props.onShowComparison} />
+      </section>
+      <EconomySources
+        data={data}
+        assumption={relocationAssumptionSummary(countryCode, income, scenarioPayroll)}
+        expenses={expenses}
+        onEdit={props.onEdit}
+      />
     </div>
   );
 }
 
-function TaxDataFreshness({ data }: { readonly data: ReturnType<typeof getCountryTaxData> | null }) {
+function EconomyInputs(
+  props: RelocationEconomyProps & {
+    readonly countries: ReturnType<typeof listRelocationCountries>;
+    readonly countryCode: string;
+    readonly city: string;
+    readonly currency: string | undefined;
+  },
+) {
+  return (
+    <>
+      <EconomyCountryField
+        countries={props.countries}
+        countryCode={props.countryCode}
+        city={props.city}
+        onChange={(code) => {
+          props.onCountryCodeChange(code);
+          props.onGrossAnnualIncomeChange(undefined);
+        }}
+      />
+      {props.currency ? (
+        <EconomySalaryField
+          income={props.grossAnnualIncome}
+          currency={props.currency}
+          onChange={props.onGrossAnnualIncomeChange}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** The candidate's costs count only after «Рассчитать» for this very country and salary. */
+function scenarioExpenses(
+  scenario: RelocationScenarioState,
+  countryCode: string,
+  income: number | undefined,
+): RelocationScenarioInput['expenses'] | undefined {
+  const result = scenario.calculated?.result;
+  if (!result || !countryCode || result.currency !== getCountryTaxData(countryCode).currency)
+    return undefined;
+  if (result.payroll && result.payroll.grossAnnualIncome !== income) return undefined;
+  return scenario.calculated?.input.expenses;
+}
+
+function EconomyResult({
+  countryCode,
+  countryName,
+  supported,
+  income,
+  expenses,
+  householdSize,
+  scenarioPayroll,
+}: {
+  readonly countryCode: string;
+  readonly countryName: string | undefined;
+  readonly supported: boolean;
+  readonly income: number | undefined;
+  readonly expenses: RelocationScenarioInput['expenses'] | undefined;
+  readonly householdSize: number;
+  /** After «Рассчитать»: the payroll with the family's options (e.g. Germany's childless surcharge). */
+  readonly scenarioPayroll?: PayrollResult;
+}) {
+  const notice = economyNotice(countryCode, countryName, supported, income);
+  if (notice || income === undefined) return notice;
+  const result = calculateRelocationEconomy(countryCode, income);
+  if (result.status === 'invalid_input')
+    return (
+      <p className="career-relocation-error" role="alert">
+        {result.reason}
+      </p>
+    );
+  if (result.status !== 'available') return null;
+  const payroll = scenarioPayroll ?? result.payroll;
+  const breakdown = relocationEconomyBreakdown(payroll, expenses);
+  return (
+    <>
+      <EconomyBreakdownView breakdown={breakdown} />
+      <EconomySummaryNote
+        breakdown={breakdown}
+        currency={payroll.currency}
+        householdSize={householdSize}
+      />
+    </>
+  );
+}
+
+/** Why there is no calculation yet: no country, no verified scale or no salary. */
+function economyNotice(
+  countryCode: string,
+  countryName: string | undefined,
+  supported: boolean,
+  income: number | undefined,
+) {
+  if (!countryCode)
+    return (
+      <EconomyNotice
+        title="Выберите страну для расчёта"
+        detail="Расчёт использует годовую зарплату и налоговую шкалу страны."
+      />
+    );
+  if (!supported)
+    return (
+      <EconomyNotice
+        title="Нет проверенной шкалы"
+        detail={`Для ${countryName ?? 'этой страны'} расчёт не выполняется, пока нет проверенных налоговых данных.`}
+      />
+    );
+  if (income === undefined || !Number.isFinite(income))
+    return (
+      <EconomyNotice
+        title="Укажите зарплату"
+        detail="Пока сумма не указана, расчёт не выполняется."
+      />
+    );
+  return null;
+}
+
+function TaxDataFreshness({ data }: { readonly data: TaxData | null }) {
   if (!data) return null;
   const retrievedAt = Date.parse(data.incomeTax.source.retrievedAt);
   const ageDays = Math.floor((Date.now() - retrievedAt) / 86_400_000);
   if (!Number.isFinite(retrievedAt) || ageDays <= 90) return null;
   const dateLabel = new Intl.DateTimeFormat('ru-RU').format(new Date(retrievedAt));
   return (
-    <aside className="career-relocation-threshold-warning" role="status" aria-label="Данные устарели">
+    <aside
+      className="career-relocation-threshold-warning"
+      role="status"
+      aria-label="Данные устарели"
+    >
       <h3>Данные устарели</h3>
-      <p>Налоговые шкалы обновлены {dateLabel}, прошло больше 90 дней. Расчёт показан с пометкой; цифры могли измениться.</p>
+      <p>
+        Налоговые шкалы обновлены {dateLabel}, прошло больше 90 дней. Расчёт показан с пометкой;
+        цифры могли измениться.
+      </p>
     </aside>
   );
-}
-
-function EconomyOutput({
-  countryCode,
-  countryName,
-  supported,
-  income,
-  result,
-}: {
-  readonly countryCode: string;
-  readonly countryName: string | undefined;
-  readonly supported: boolean;
-  readonly income: number | undefined;
-  readonly result: ReturnType<typeof calculateRelocationEconomy> | undefined;
-}) {
-  if (!countryCode) return <EconomyNotice title="Выберите страну для расчёта" detail="Расчёт использует годовую зарплату и доступную налоговую шкалу." />;
-  if (!supported) return <EconomyNotice title="Налоговая шкала не подключена" detail={`Для ${countryName ?? 'этой страны'} расчёт не выполняется, пока нет проверенных налоговых данных.`} />;
-  if (result?.status === 'invalid_input') return <p className="career-relocation-error" role="alert">{result.reason}</p>;
-  if (income === undefined || !Number.isFinite(income) || income <= 0) return <EconomyNotice title="Укажите годовую зарплату" detail="Пока сумма не указана, налоговый результат не рассчитывается." />;
-  if (result?.status === 'available') return <PayrollResult countryName={countryName ?? countryCode} result={result} />;
-  return null;
 }
 
 interface SalaryThresholdWarning {
@@ -147,28 +296,52 @@ function belowAnnualSalaryThresholds(
 ): readonly SalaryThresholdWarning[] {
   if (annualIncome === undefined || !Number.isFinite(annualIncome) || annualIncome <= 0) return [];
   return countryFitForQuestionnaire(countryCode, profile).scenarios.flatMap(({ paths }) =>
-    paths.flatMap(({ label, thresholds }) => thresholds.flatMap((threshold) =>
-      threshold.requirement === 'minimum_annual_salary' &&
-      threshold.period === 'annual' &&
-      threshold.currency === currency &&
-      annualIncome < threshold.amount
-        ? [{ pathLabel: label, threshold }]
-        : [],
-    )),
+    paths.flatMap(({ label, thresholds }) =>
+      thresholds.flatMap((threshold) =>
+        threshold.requirement === 'minimum_annual_salary' &&
+        threshold.period === 'annual' &&
+        threshold.currency === currency &&
+        annualIncome < threshold.amount
+          ? [{ pathLabel: label, threshold }]
+          : [],
+      ),
+    ),
   );
 }
 
-function SalaryThresholdWarnings({ warnings }: { readonly warnings: readonly SalaryThresholdWarning[] }) {
+function SalaryThresholdWarnings({
+  countryCode,
+  profile,
+  income,
+  currency,
+}: {
+  readonly countryCode: string;
+  readonly profile: RelocationQuestionnaire;
+  readonly income: number | undefined;
+  readonly currency: string | undefined;
+}) {
+  const warnings = useMemo(
+    () => (currency ? belowAnnualSalaryThresholds(countryCode, profile, income, currency) : []),
+    [countryCode, currency, income, profile],
+  );
   if (!warnings.length) return null;
   return (
-    <section className="career-relocation-threshold-warning" role="status" aria-labelledby="career-relocation-threshold-title">
+    <section
+      className="career-relocation-threshold-warning"
+      role="status"
+      aria-labelledby="career-relocation-threshold-title"
+    >
       <h3 id="career-relocation-threshold-title">Зарплата ниже порога</h3>
-      <p>Сумма ниже опубликованных требований отдельных маршрутов. Это не оценка остальных условий визы.</p>
+      <p>
+        Сумма ниже опубликованных требований отдельных маршрутов. Это не оценка остальных условий
+        визы.
+      </p>
       <ul>
         {warnings.map(({ pathLabel, threshold }) => (
           <li key={`${pathLabel}-${threshold.amount}`}>
-            <strong>{pathLabel}:</strong> {formatCurrency(threshold.amount, threshold.currency ?? 'EUR')} в год.
-            {' '}Шкала {threshold.source.dataYear}, получено {relocationDay(threshold.source.retrievedAt)}.
+            <strong>{pathLabel}:</strong>{' '}
+            {formatMoney(threshold.amount, threshold.currency ?? 'EUR')} в год. Шкала{' '}
+            {threshold.source.dataYear}, получено {relocationDay(threshold.source.retrievedAt)}.
           </li>
         ))}
       </ul>
@@ -177,64 +350,10 @@ function SalaryThresholdWarnings({ warnings }: { readonly warnings: readonly Sal
 }
 
 function EconomyNotice({ title, detail }: { readonly title: string; readonly detail: string }) {
-  return <div className="career-relocation-empty" role="status"><strong>{title}</strong><span>{detail}</span></div>;
-}
-
-function EconomyActions({ onShowComparison }: { readonly onShowComparison: () => void }) {
   return (
-    <>
-
-      <div className="career-relocation-list-footer">
-        <button className="career-btn career-btn-secondary" type="button" onClick={onShowComparison}>К сравнению</button>
-      </div>
-    </>
-  );
-}
-
-function PayrollResult({
-  countryName,
-  result,
-}: {
-  readonly countryName: string;
-  readonly result: Extract<ReturnType<typeof calculateRelocationEconomy>, { readonly status: 'available' }>;
-}) {
-  const { payroll } = result;
-  return (
-    <div className="career-relocation-economy-result" aria-live="polite">
-      <h3>{countryName}</h3>
-      <p>Предварительная зарплатная оценка со стандартными условиями. Настройки и полный бюджет учитываются в итоге сценария ниже.</p>
-      <p>
-        Чистый доход: <strong>{formatCurrency(payroll.netMonthlyIncome, payroll.currency)}</strong> в месяц.
-      </p>
-      <div className="career-relocation-economy-breakdown">
-        <span>Налог на доход</span>
-        <strong>{formatCurrency(payroll.incomeTax.amount, payroll.currency)} в год</strong>
-        {payroll.employeeContributions.items.map((item) => (
-          <span key={item.name}>{item.name}: {formatCurrency(item.amount, payroll.currency)} в год</span>
-        ))}
-      </div>
-      <p>Расходы на жильё, страховку и другие обязательства задайте в полном сценарии ниже. Его итог учитывает заполненность бюджета.</p>
-      <ul className="career-relocation-source-list" aria-label="Источники расчёта">
-        {[payroll.incomeTax.source, ...payroll.employeeContributions.items.map(({ source }) => source)]
-          .filter((source, index, all) => all.findIndex((item) => item.url === source.url) === index)
-          .map((source) => (
-            <li key={source.url}>
-              <a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>
-              <span> · шкала {source.dataYear}, получено {relocationDay(source.retrievedAt)}</span>
-            </li>
-          ))}
-      </ul>
-      <ul className="career-relocation-assumptions">
-        {payroll.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}
-      </ul>
+    <div className="career-relocation-empty" role="status">
+      <strong>{title}</strong>
+      <span>{detail}</span>
     </div>
   );
-}
-
-function formatCurrency(amount: number, currency: string): string {
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
 }

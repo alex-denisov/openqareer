@@ -127,7 +127,7 @@ function CountryWorkspaceHeader() {
       <div className="career-relocation-section-title">
         <h3 id="career-relocation-countries-title">Страны под ваш профиль</h3>
         <button
-          className="career-relocation-icon-button"
+          className="career-relocation-btn is-sm is-icon is-ghost"
           type="button"
           aria-label="Пояснение"
           aria-expanded={explained}
@@ -163,7 +163,7 @@ function ScenarioChips({
           aria-pressed={scenario === item.id}
           onClick={() => onScenarioChange(item.id)}
         >
-          {item.label}
+          <span className="career-relocation-chip-label">{item.label}</span>
         </button>
       ))}
     </div>
@@ -249,7 +249,7 @@ function CountryCard({
         <RelocationStatusBadge status={summary.status} label={summary.statusLabel} />
       </div>
       <span className="career-relocation-country-scenario">{summary.scenarioLabel}</span>
-      <p>{summary.reason}</p>
+      <p className="career-relocation-country-reason">{summary.reason}</p>
       <CountryCardMeta summary={summary} />
       <CountryCardActions
         selected={selected}
@@ -290,7 +290,7 @@ function CountryCardActions({
     <div className="career-relocation-country-actions">
       <VacancyButton onOpenVacancies={onOpenVacancies} />
       <button
-        className="career-relocation-text-action"
+        className="career-relocation-btn is-sm is-ghost"
         type="button"
         aria-pressed={selected}
         disabled={compareDisabled}
@@ -336,7 +336,7 @@ export function RelocationStatusBadge({
 function VacancyButton({ onOpenVacancies }: { readonly onOpenVacancies?: () => void }) {
   if (!onOpenVacancies) return null;
   return (
-    <button className="career-btn career-btn-secondary" type="button" onClick={onOpenVacancies}>
+    <button className="career-relocation-btn is-sm" type="button" onClick={onOpenVacancies}>
       <Briefcase aria-hidden="true" size={17} />
       Вакансии
     </button>
@@ -510,7 +510,7 @@ function CountryWorkspaceFooter({
       </p>
       <div className="career-relocation-footer-actions">
         <button
-          className="career-btn career-btn-primary"
+          className="career-relocation-btn is-primary"
           type="button"
           disabled={selectedCount < 2}
           onClick={onCompare}
@@ -519,11 +519,11 @@ function CountryWorkspaceFooter({
           Сравнить страны
         </button>
         {!showAll && total > visible ? (
-          <button className="career-relocation-text-action" type="button" onClick={onShowAll}>
+          <button className="career-relocation-btn is-ghost" type="button" onClick={onShowAll}>
             Показать все {total}
           </button>
         ) : null}
-        <button className="career-relocation-text-action" type="button" onClick={onAddCountry}>
+        <button className="career-relocation-btn is-ghost" type="button" onClick={onAddCountry}>
           <Plus aria-hidden="true" size={17} />
           Добавить страну
         </button>

@@ -240,13 +240,13 @@ function ProfileActions({
   return (
     <>
       <div className="career-relocation-profile-actions">
-        <button className="career-btn career-btn-primary" type="button" onClick={onShowCountries}>
+        <button className="career-relocation-btn is-primary" type="button" onClick={onShowCountries}>
           <ArrowRight aria-hidden="true" size={17} />
           Показать страны
         </button>
         {profile.currentStep !== 'summary' ? (
           <button
-            className="career-btn career-btn-secondary"
+            className="career-relocation-btn"
             type="button"
             disabled={actions.busy}
             onClick={actions.continueQuestionnaire}
@@ -254,11 +254,11 @@ function ProfileActions({
             {profileContinueLabel(profile)}
           </button>
         ) : null}
-        <button className="career-btn career-btn-secondary" type="button" disabled={actions.busy} onClick={() => actions.setConfirmRestart(true)}>
+        <button className="career-relocation-btn is-ghost" type="button" disabled={actions.busy} onClick={() => actions.setConfirmRestart(true)}>
           <Trash aria-hidden="true" size={16} />
           Начать заново
         </button>
-        <button className="career-btn career-btn-destructive" type="button" disabled={actions.busy || !consent.granted} onClick={() => actions.setConfirmRevoke(true)}>
+        <button className="career-relocation-btn is-ghost" type="button" disabled={actions.busy || !consent.granted} onClick={() => actions.setConfirmRevoke(true)}>
           Отозвать согласие и удалить данные
         </button>
       </div>
@@ -314,10 +314,10 @@ function ProfileSection({
   readonly busy: boolean;
 }) {
   return (
-    <section className="career-relocation-profile-section" aria-labelledby={`career-relocation-data-${step}`}>
+    <section className="career-relocation-card career-relocation-profile-section" aria-labelledby={`career-relocation-data-${step}`}>
       <header>
         <h3 id={`career-relocation-data-${step}`}>{title}</h3>
-        <button className="career-btn career-btn-secondary" type="button" onClick={onEdit}>
+        <button className="career-relocation-btn is-sm" type="button" onClick={onEdit}>
           <PencilSimple aria-hidden="true" size={16} />
           Изменить
         </button>
@@ -398,27 +398,29 @@ function ProfileRows({ rows, actions }: {
   readonly actions: RowActions;
 }) {
   return (
-    <div className="career-relocation-profile-list">
+    <ul className="career-relocation-profile-list">
       {rows.map((row) => (
-        <div key={row.id} className="career-relocation-profile-row">
-          <strong>{row.label}</strong>
-          <span>{row.value}</span>
+        <li key={row.id} className="career-relocation-profile-row">
+          <div>
+            <strong>{row.label}</strong>
+            <p>{row.value}</p>
+          </div>
           <span className="career-relocation-row-actions">
-            <button className="career-relocation-icon-button" type="button" aria-label={`Изменить: ${row.label}`} onClick={actions.onEdit}>
+            <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Изменить: ${row.label}`} onClick={actions.onEdit}>
               <PencilSimple aria-hidden="true" size={17} />
             </button>
-            <button className="career-relocation-icon-button" type="button" aria-label={`Удалить: ${row.label}`} disabled={actions.busy} onClick={() => actions.onDelete(row.id)}>
+            <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Удалить: ${row.label}`} disabled={actions.busy} onClick={() => actions.onDelete(row.id)}>
               <Trash aria-hidden="true" size={17} />
             </button>
           </span>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
 
 function ProfileRow({ label, value }: { readonly label: string; readonly value: string }) {
-  return <div className="career-relocation-profile-row"><strong>{label}</strong><span>{value}</span></div>;
+  return <p className="career-relocation-profile-line">{label} · {value}</p>;
 }
 
 function EmptyProfileSection() {

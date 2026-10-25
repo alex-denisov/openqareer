@@ -14,7 +14,7 @@ function formatPayrollMoney(value: number, currency: string): string {
 }
 export function payrollParts(payroll: PayrollResult) {
   const amounts = [
-    payroll.incomeTax.amount,
+    payroll.incomeTax.amount + payroll.solidaritySurcharge,
     payroll.employeeContributions.total,
     payroll.netAnnualIncome,
   ];
