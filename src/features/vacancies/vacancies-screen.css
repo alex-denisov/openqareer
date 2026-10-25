@@ -37,6 +37,33 @@
   color: var(--career-text-dim);
 }
 
+.saved-intro-narrow {
+  display: none;
+}
+
+/* B510: на 390 заметка — .pm-note макета 4: без рамки и фона, поле 8, 13 px soft, значок 16. */
+@media (max-width: 760px) {
+  .saved-intro {
+    gap: var(--career-space-2);
+    padding: 0 var(--career-space-2);
+    border: 0;
+    background: none;
+    font-size: var(--career-text-xs);
+  }
+  .saved-intro svg {
+    inline-size: 16px;
+    block-size: 16px;
+    margin-block-start: 1px;
+    color: inherit;
+  }
+  .saved-intro-wide {
+    display: none;
+  }
+  .saved-intro-narrow {
+    display: inline;
+  }
+}
+
 .saved-controls {
   display: grid;
   /* B446-r (A6): поиск шире — плейсхолдер «…среди N сохранённых» не обрезается. */
@@ -1148,12 +1175,6 @@
 /* B446-g4: обёртка сводки не участвует в раскладке; на 390 «Сохранённые» без сводки (mock-390m-saved). */
 .vacancies-filter-host {
   display: contents;
-}
-
-@media (max-width: 760px) {
-  .vacancies-filter-host.is-saved-tab {
-    display: none;
-  }
 }
 
 /* B446-g4: длинные роли кампании не раздвигают ряд фильтров. */

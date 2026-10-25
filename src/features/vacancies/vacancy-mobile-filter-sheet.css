@@ -21,12 +21,15 @@
     inline-size: 100%;
     max-block-size: calc(100dvh - var(--career-space-8));
     margin: 0;
-    padding: 0 var(--career-space-4) calc(var(--career-space-4) + env(safe-area-inset-bottom));
+    /* B510: .vm-sheet макета 4 — поле 8/16, радиус 28, светлая линия сверху, строки 1.5. */
+    padding: var(--career-space-2) var(--career-space-4)
+      calc(var(--career-space-5) + env(safe-area-inset-bottom));
     overflow-y: auto;
     border: 0;
-    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+    border-radius: 28px 28px 0 0;
     background: var(--career-bg-elevated);
-    box-shadow: 0 -8px 32px color-mix(in oklch, black 45%, transparent);
+    box-shadow: inset 0 var(--career-border-width) 0 color-mix(in oklch, white 14%, transparent);
+    line-height: 1.5;
   }
 
   .vacancies-filters.is-mobile-open > .filters-panel-head {
@@ -39,23 +42,22 @@
 
   .vacancies-mobile-sheet {
     display: grid;
-    gap: var(--career-space-4);
+    gap: var(--career-space-3);
   }
 
   .vacancies-mobile-sheet-grab {
     justify-self: center;
     inline-size: 36px;
     block-size: 5px;
-    margin-block-start: var(--career-space-2);
+    margin-block: var(--career-space-1);
     border-radius: 3px;
-    background: var(--career-line-strong);
+    background: color-mix(in oklch, white 24%, transparent);
   }
 
   .vacancies-mobile-sheet-head {
     display: flex;
     align-items: center;
     gap: var(--career-space-2);
-    min-block-size: var(--career-target-min);
   }
 
   .vacancies-mobile-sheet-head h3 {
@@ -97,11 +99,14 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* B510: список фильтров — .pm-list/.pm-row макета 4: радиус 20, строки во всю ширину с полем
+     8/16, разделитель от 56 px, значок .pm-ico (белый 7 %, радиус 9, 18 px), подпись 16/500. */
   .vacancies-mobile-filter-overview {
     display: grid;
-    padding-inline: var(--career-space-4);
-    border-radius: var(--career-radius-md);
+    overflow: hidden;
+    border-radius: calc(var(--career-radius-md) + var(--career-space-1));
     background: var(--career-surface);
+    line-height: 1.5;
   }
 
   .vacancies-mobile-filter-row {
@@ -109,10 +114,10 @@
     grid-template-columns: auto auto minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--career-space-3);
+    position: relative;
     min-block-size: 56px;
-    padding: 0;
+    padding: var(--career-space-2) var(--career-space-4);
     border: 0;
-    border-block-end: var(--career-border-width) solid var(--career-line);
     background: transparent;
     color: var(--career-text);
     font: inherit;
@@ -120,8 +125,12 @@
     cursor: pointer;
   }
 
-  .vacancies-mobile-filter-row:last-child {
-    border-block-end: 0;
+  .vacancies-mobile-filter-row + .vacancies-mobile-filter-row::before {
+    content: '';
+    position: absolute;
+    inset-inline: 56px 0;
+    inset-block-start: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
   }
 
   .vacancies-mobile-filter-row-icon {
@@ -129,14 +138,19 @@
     place-items: center;
     inline-size: 32px;
     block-size: 32px;
-    border-radius: var(--career-radius-sm);
-    background: var(--career-bg-elevated);
+    border-radius: 9px;
+    background: color-mix(in oklch, white 7%, transparent);
     color: var(--career-text-soft);
+  }
+
+  .vacancies-mobile-filter-row-icon svg {
+    inline-size: 18px;
+    block-size: 18px;
   }
 
   .vacancies-mobile-filter-row-label {
     font-size: var(--career-text-md);
-    font-weight: 600;
+    font-weight: 500;
   }
 
   .vacancies-mobile-filter-row-value {
@@ -150,6 +164,8 @@
   }
 
   .vacancies-mobile-filter-row > svg {
+    inline-size: 14px;
+    block-size: 14px;
     color: var(--career-text-dim);
   }
 
@@ -171,14 +187,14 @@
   .vacancies-mobile-sheet-cta {
     position: sticky;
     inset-block-end: 0;
-    min-block-size: 52px;
+    min-block-size: 50px;
     border: 0;
-    border-radius: 26px;
+    border-radius: 25px;
     background: var(--career-accent);
-    color: var(--career-accent-ink);
+    color: var(--career-bg);
     font: inherit;
     font-size: var(--career-text-md);
-    font-weight: 700;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     cursor: pointer;
   }
