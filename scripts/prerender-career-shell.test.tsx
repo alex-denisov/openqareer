@@ -88,6 +88,9 @@ describe('production career shell prerender', () => {
       expect(html).toContain('content="noindex, follow"');
       expect(html).toContain('src="/assets/app.js"');
       expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/AuthPages-from-build.js">');
+      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/landing-from-build.js">');
+      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/auth-from-build.js">');
+      expect(html.match(/rel="modulepreload"/gu)).toHaveLength(3);
       expect(html).toContain('<link rel="preload" as="style" crossorigin href="/assets/landing-from-build.css">');
       expect(html).toContain('<link rel="preload" as="style" crossorigin href="/assets/auth-from-build.css">');
       const stylesheet = html.match(/href="(\/assets\/auth-first-paint-[a-f0-9]+\.css)"/u)?.[1];
@@ -118,6 +121,16 @@ describe('production career shell prerender', () => {
       ...authManifest, 'auth-key': { name: 'auth', file: 'assets/auth.js' },
     })).toThrow('Missing emitted auth stylesheet');
     expect(() => authResourceHints({ ...authManifest, 'index.html': { file: 'assets/app.js' } })).toThrow('Missing entry build graph');
+  });
+
+  it('validates CSS proxy module URLs as JavaScript assets before emitting hints', () => {
+    for (const key of ['landing-key', 'auth-key'] as const) {
+      for (const file of ['//example.test/proxy.js', 'assets/../proxy.js', 'assets/proxy.css', 'assets/proxy.js" onload="bad']) {
+        expect(() => authResourceHints({
+          ...authManifest, [key]: { ...authManifest[key], file },
+        })).toThrow('Invalid auth preload asset path');
+      }
+    }
   });
 
   it('fails closed when the root mount point is missing or already populated', async () => {

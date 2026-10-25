@@ -266,14 +266,15 @@ export function authResourceHints(manifest: Manifest): string {
     if (matches.length !== 1) throw new Error(`Expected one emitted auth chunk: ${name}`);
     return matches[0];
   };
-  const module = chunk('AuthPages');
-  const styles = ['landing', 'auth'].flatMap((name) => {
-    const css = chunk(name).css;
-    if (!Array.isArray(css) || css.length === 0) throw new Error(`Missing emitted auth stylesheet: ${name}`);
+  const styleChunks = ['landing', 'auth'].map(chunk);
+  const styles = styleChunks.flatMap((entry) => {
+    const css = entry.css;
+    if (!Array.isArray(css) || css.length === 0) throw new Error(`Missing emitted auth stylesheet: ${entry.name}`);
     return css.map((file) => asset(file, 'css'));
   });
   return [
-    `<link rel="modulepreload" crossorigin href="${asset(module?.file, 'js')}">`,
+    ...[chunk('AuthPages'), ...styleChunks].map((entry) =>
+      `<link rel="modulepreload" crossorigin href="${asset(entry.file, 'js')}">`),
     ...[...new Set(styles)].map((href) => `<link rel="preload" as="style" crossorigin href="${href}">`),
   ].join('');
 }

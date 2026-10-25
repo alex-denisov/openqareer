@@ -106,9 +106,9 @@ for (const path of ['/login', '/signup']) {
 }
 
 for (const path of ['/login', '/signup']) {
-  test(`${path} requests auth module and styles before entry JavaScript executes`, async ({
+  test(`${path} requests auth modules and styles before entry JavaScript executes`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -124,13 +124,15 @@ for (const path of ['/login', '/signup']) {
     page.on('request', (request) => {
       const url = new URL(request.url()).pathname;
       if (
-        /\/assets\/(?:AuthPages-[^/]+\.js|landing-[^/]+\.css|auth-(?!first-paint-)[^/]+\.css)$/u.test(
+        /\/assets\/(?:(?:AuthPages|landing|auth)-[^/]+\.js|landing-[^/]+\.css|auth-(?!first-paint-)[^/]+\.css)$/u.test(
           url,
         )
       ) {
         counts.set(request.url(), (counts.get(request.url()) ?? 0) + 1);
       }
       if (/\/assets\/AuthPages-[^/]+\.js$/u.test(url)) requested.add('module');
+      if (/\/assets\/landing-[^/]+\.js$/u.test(url)) requested.add('landing-proxy');
+      if (/\/assets\/auth-[^/]+\.js$/u.test(url)) requested.add('auth-proxy');
       if (/\/assets\/landing-[^/]+\.css$/u.test(url)) requested.add('landing-css');
       if (/\/assets\/auth-(?!first-paint-)[^/]+\.css$/u.test(url)) requested.add('auth-css');
     });
@@ -145,7 +147,9 @@ for (const path of ['/login', '/signup']) {
       await page.goto(path, { waitUntil: 'commit' });
       await entryStarted;
       await expect(page.locator('html')).not.toHaveAttribute('data-release');
-      await expect.poll(() => [...requested].sort()).toEqual(['auth-css', 'landing-css', 'module']);
+      await expect
+        .poll(() => [...requested].sort())
+        .toEqual(['auth-css', 'auth-proxy', 'landing-css', 'landing-proxy', 'module']);
       await expect(page.locator('.auth-card h1')).toBeVisible();
       await expect(page.locator('.auth-card')).toHaveAttribute('inert', '');
       await expect(page.locator('input:enabled')).toHaveCount(0);
@@ -157,5 +161,15 @@ for (const path of ['/login', '/signup']) {
     await expect(
       page.locator(path === '/login' ? '#login-identifier' : '#signup-email'),
     ).toBeEditable();
+    expect([...counts.values()]).toEqual([1, 1, 1, 1, 1]);
+    const resources = await page.evaluate(() =>
+      performance.getEntriesByType('resource').map((entry) => entry.name),
+    );
+    for (const url of counts.keys())
+      expect(resources.filter((resource) => resource === url)).toHaveLength(1);
+    await testInfo.attach('early-auth-resources', {
+      body: JSON.stringify([...counts.keys()], null, 2),
+      contentType: 'application/json',
+    });
   });
 }
