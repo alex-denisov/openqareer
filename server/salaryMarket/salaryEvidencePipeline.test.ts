@@ -5,6 +5,7 @@ import { SqliteVacancyPoolStore } from '../vacancies/sqliteVacancyPoolStore';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { normalizeAtsBoard } from '../vacancies/atsBoardAdapters';
+import { normalizeJsonSource } from '../vacancies/jsonSourceAdapters';
 import { clusterProjectionOf } from '../vacancies/vacancyPoolQuery';
 import { createClusterFromVacancy } from '../vacancies/vacancyDeduplicator';
 import {
@@ -95,6 +96,108 @@ describe('explicit salary evidence pipeline', () => {
       db.close();
       store.close();
       rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    ['hourly', 'hour'],
+    ['monthly', 'month'],
+    ['annual', 'year'],
+  ])('roundtrips Himalayas %s through persisted catalog to its own %s cohort', (value, period) => {
+    const directory = mkdtempSync(join(tmpdir(), 'himalayas-salary-pipeline-'));
+    const path = join(directory, 'pool.db');
+    const pool = new SqliteVacancyPoolStore({ databasePath: path });
+    const db = new DatabaseSync(path);
+    try {
+      for (let index = 0; index < 5; index += 1) {
+        const [vacancy] = normalizeJsonSource(
+          'src-himalayas-api',
+          {
+            jobs: [
+              {
+                guid: `himalayas-${index}`,
+                title: 'Frontend Developer',
+                companyName: `Company ${index}`,
+                description: 'Build software.',
+                applicationLink: `https://example.test/${index}`,
+                minSalary: 90000,
+                maxSalary: 120000,
+                currency: 'EUR',
+                salaryPeriod: value,
+                pubDate: Date.parse(observedAt) / 1000,
+              },
+            ],
+          },
+          { observedAt },
+        );
+        // An ordinary source refresh must enrich a pre-existing unknown-period row.
+        pool.mergeSourceSlice('src-himalayas-api', [
+          {
+            ...vacancy!,
+            salary: {
+              from: 90000,
+              to: 120000,
+              currency: 'EUR',
+            },
+          },
+        ]);
+        expect(pool.getVacancy(vacancy!.id)?.salary?.period).toBeUndefined();
+        pool.mergeSourceSlice('src-himalayas-api', [vacancy!]);
+        const persisted = pool.getVacancy(vacancy!.id)!;
+        const cluster = createClusterFromVacancy(clusterProjectionOf(persisted));
+        expect(cluster.salary?.periodEvidence).toEqual({ field: 'himalayas.salaryPeriod', value });
+        pool.upsertCluster(cluster);
+      }
+      const [snapshot] = computeSalaryMarketSnapshots(db, new Date(observedAt));
+      expect(snapshot?.role).toBe('frontend-engineer');
+      expect(snapshot?.sampleSize).toBe(5);
+      expect(snapshot?.salary).toMatchObject({
+        status: 'available',
+        groups: [
+          {
+            currency: 'EUR',
+            period,
+            taxBasis: 'unknown',
+            sampleSize: 5,
+            lower: { p50: 90000 },
+            upper: { p50: 120000 },
+          },
+        ],
+      });
+    } finally {
+      db.close();
+      pool.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  it.each([
+    { period: 'year' },
+    { period: 'year', periodEvidence: { field: 'himalayas.salaryPeriod', value: 'monthly' } },
+    { period: 'year', periodEvidence: { field: 'himalayas.salaryPeriod', value: 'weekly' } },
+    { period: 'year', periodEvidence: { field: 'himalayas.salaryPeriod', value: 'fortnightly' } },
+    {
+      period: 'year',
+      periodEvidence: { field: 'himalayas.salaryPeriod', value: 'per-year-salary' },
+    },
+    { period: 'year', periodEvidence: { field: 'lever.salaryRange.interval', value: 'annual' } },
+    { period: 'year', periodEvidence: { field: 'untrusted.salaryPeriod', value: 'annual' } },
+    {
+      period: 'year',
+      periodEvidence: { field: 'himalayas.salaryPeriod', value: { value: 'annual' } },
+    },
+  ])('rejects missing, mismatched or foreign provider period evidence %j', (evidence) => {
+    const db = database();
+    try {
+      for (let index = 0; index < 5; index += 1) {
+        store(db, `rejected-${index}`, { from: 90000, to: 120000, currency: 'EUR', ...evidence });
+      }
+      const [snapshot] = computeSalaryMarketSnapshots(db, new Date(observedAt));
+      expect(snapshot?.salary).toMatchObject({
+        status: 'unavailable',
+        reason: 'missing_explicit_salary_period',
+        excluded: { missingPeriod: 5 },
+      });
+    } finally {
+      db.close();
     }
   });
   it.each([

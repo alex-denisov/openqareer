@@ -1,3 +1,4 @@
+import { himalayasSalaryPeriod } from '../../shared/vacancySalaryPeriod';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
   asArray,
@@ -252,6 +253,8 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
       const from = numeric(job.minSalary);
       const to = numeric(job.maxSalary);
       const currency = text(job.currency) || undefined;
+      const rawPeriod = job.salaryPeriod;
+      const period = himalayasSalaryPeriod(rawPeriod);
       return build({
         sourceId,
         context,
@@ -265,7 +268,20 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         skills: [],
         employmentType: text(job.employmentType) || undefined,
         experienceLevel: firstOf(job.seniority),
-        salary: from === undefined && to === undefined ? undefined : { from, to, currency },
+        salary:
+          from === undefined && to === undefined
+            ? undefined
+            : {
+                from,
+                to,
+                currency,
+                ...(period && typeof rawPeriod === 'string'
+                  ? {
+                      period,
+                      periodEvidence: { field: 'himalayas.salaryPeriod', value: rawPeriod },
+                    }
+                  : {}),
+              },
         url: text(job.applicationLink) || text(job.guid),
         publishedAt: fromEpochSeconds(numeric(job.pubDate)),
       });
