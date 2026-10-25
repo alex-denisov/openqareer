@@ -341,7 +341,8 @@ jobs:
           /apple-touch-icon.png|image/png
           /og-cover.jpg|image/jpeg
           /robots.txt|text/plain
-          /llms.txt|text/plain
+          /llms.txt|text/markdown
+          /llms-full.txt|text/markdown
           /admin.html|text/html
           ROOT_FILES
           release_index="$(mktemp)"
