@@ -620,10 +620,13 @@
   min-inline-size: 0;
 }
 
+/* B510: как .section-head макета 4 — шаг 12 (у «Пояснения» поле 6 уходит в минус), заголовок 1.25. */
 .vacancy-path-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--career-space-2);
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
 }
 
 .vacancy-path-head h3 {
@@ -631,6 +634,7 @@
   color: var(--career-text);
   font-size: var(--career-text-sm);
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .vacancy-path-info {
@@ -1051,8 +1055,13 @@
     border-radius: 20px;
     background: var(--career-surface);
   }
+  /* .vm-row макета 4: строки 1.5, заголовок и подпись через 2 px. */
   .vacancies-list-container .vacancies-screen-row-shell.vac-row {
     padding: var(--career-space-3) var(--career-space-4);
+    line-height: 1.5;
+  }
+  .vacancies-list-container .vacancies-screen-cell--role {
+    gap: 2px;
   }
   .vacancies-list-container .vac-list-item + .vac-list-item .vacancies-screen-card {
     position: relative;
