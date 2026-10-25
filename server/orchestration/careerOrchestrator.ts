@@ -64,12 +64,43 @@ export class CareerOrchestrator implements CoachProvider {
     if (roles.length > this.maxModelCalls) {
       throw new CareerOrchestrationBudgetError();
     }
-    const runs = await runRoles(this.roleAgent, roles, input, idempotencyKey, options);
-    return finalizeCareerTurn(input, roles, runs);
+    const [runs, extracted] = await Promise.all([
+      runRoles(this.roleAgent, roles, input, idempotencyKey, options),
+      extractCandidateFacts(this.roleAgent, input, idempotencyKey),
+    ]);
+    return finalizeCareerTurn(input, roles, runs, extracted);
   }
 }
 
 type RoleRun = { role: CareerRole; output: CoachProviderResult };
+
+/** Shorter answers are questions; the roles' own fact rule covers them. */
+const FACT_STEP_MIN_CHARS = 300;
+
+/**
+ * The fact step runs beside the role chain, so it adds no wait; it reads only the candidate's
+ * answer and has one job. A failed step costs the profile its facts, never the turn.
+ */
+async function extractCandidateFacts(
+  roleAgent: CareerRoleAgent,
+  input: CoachTurnInput,
+  idempotencyKey: string,
+): Promise<CoachProviderResult['result']['memoryCandidates']> {
+  const latest = input.messages.at(-1);
+  if (input.internalPurpose || latest?.role !== 'user') return [];
+  if (latest.content.length < FACT_STEP_MIN_CHARS) return [];
+  try {
+    const output = await roleAgent.run({
+      role: 'career_consultant',
+      input: { ...input, internalPurpose: 'fact-extraction' },
+      priorContributions: [],
+      idempotencyKey: roleIdempotencyKey(idempotencyKey, 'fact-extraction'),
+    });
+    return output.result.memoryCandidates;
+  } catch {
+    return [];
+  }
+}
 
 async function runRoles(
   roleAgent: CareerRoleAgent,
@@ -99,6 +130,7 @@ function finalizeCareerTurn(
   input: CoachTurnInput,
   roles: CareerRole[],
   runs: RoleRun[],
+  extracted: CoachProviderResult['result']['memoryCandidates'] = [],
 ): CoachProviderResult {
   const final = runs.at(-1);
   if (!final) throw new Error('career orchestration produced no role output');
@@ -122,10 +154,10 @@ function finalizeCareerTurn(
       ...final.output.result,
       // Every role reads the candidate's message; facts the expert found are not the
       // consultant's to drop (26.10: a detailed answer left the profile with no fact).
-      memoryCandidates: faithfulMemoryCandidates(
-        input,
-        runs.flatMap(({ output }) => output.result.memoryCandidates),
-      ),
+      memoryCandidates: faithfulMemoryCandidates(input, [
+        ...extracted,
+        ...runs.flatMap(({ output }) => output.result.memoryCandidates),
+      ]),
       careerTrack: careerTrackFrom(input, strategist, final),
       actionProposals: proposalsFrom(strategist, final).filter((proposal) =>
         proposal.evidenceRefs.every((ref) => supportedProposalRefs.has(ref)),
@@ -248,7 +280,7 @@ function sumUsage(usages: ProviderUsage[]): ProviderUsage {
   );
 }
 
-function roleIdempotencyKey(key: string, role: CareerRole): string {
+function roleIdempotencyKey(key: string, role: CareerRole | 'fact-extraction'): string {
   const digest = createHash('sha256').update(`${key}:${role}`).digest('hex');
   return [
     digest.slice(0, 8),

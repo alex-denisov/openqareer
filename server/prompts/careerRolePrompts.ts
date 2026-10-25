@@ -104,10 +104,32 @@ const STRUCTURED_STAGE_PROMPT = `
 - Верни memoryCandidates и actionProposals пустыми, careerTrack = null, nextQuestion = null.
 `.trim();
 
+/**
+ * A server step beside the roles (26.10): a long answer gave the profile no fact when the
+ * consultant, busy with the reply, skipped the list. This step has one job.
+ */
+const FACT_EXTRACTION_PROMPT = `
+ЗАДАЧА: ВЫПИСАТЬ ФАКТЫ КАНДИДАТА
+- Это шаг сервера, а не реплика кандидату. message — одна строка «Факты выписаны.»
+- Прочитай последнее сообщение кандидата. Каждое его утверждение о себе — должность,
+  масштаб, команда, цифры, сроки, результаты, причины, ожидания по деньгам, формат
+  работы, ограничения — верни отдельным элементом memoryCandidates: kind = fact
+  (ожидания и предпочтения — preference), confidence = candidate-reported,
+  sourceMessageIds = [id этого сообщения], не больше 20 элементов.
+- Уточнение кандидата к известному факту (другое число, «не с нуля, а …», «80% такого
+  не было») — тоже факт, его словами.
+- Не выписывай то, что уже дословно есть в confirmedFacts, и не выписывай вопросы и
+  просьбы к ассистенту.
+- Верни careerTrack = null, actionProposals = [], quickReplies = [], nextQuestion = null.
+`.trim();
+
 export function careerInstructionsForRole(
   role: CareerRole = 'career_consultant',
-  internalPurpose?: 'consultant-summary' | 'structured-stage',
+  internalPurpose?: 'consultant-summary' | 'structured-stage' | 'fact-extraction',
 ): string {
+  if (internalPurpose === 'fact-extraction') {
+    return [CAREER_SUPER_PROMPT, FACT_EXTRACTION_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
+  }
   if (internalPurpose === 'consultant-summary') {
     return [CAREER_SUPER_PROMPT, CONSULTANT_SUMMARY_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
   }
