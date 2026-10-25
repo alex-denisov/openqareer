@@ -21,15 +21,47 @@
   margin: 0;
   padding: var(--career-space-3) var(--career-space-4);
   border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  background: var(--career-surface-soft);
-  color: var(--career-text-muted);
+  /* B510: как .note макета 4 — радиус sm, surface, текст soft, значок dim. */
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
   font-size: var(--career-text-sm);
+  line-height: 1.5;
 }
 
 .saved-intro svg {
   flex: none;
-  margin-block-start: var(--career-space-1);
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  margin-block-start: 2px;
+  color: var(--career-text-dim);
+}
+
+.saved-intro-narrow {
+  display: none;
+}
+
+/* B510: на 390 заметка — .pm-note макета 4: без рамки и фона, поле 8, 13 px soft, значок 16. */
+@media (max-width: 760px) {
+  .saved-intro {
+    gap: var(--career-space-2);
+    padding: 0 var(--career-space-2);
+    border: 0;
+    background: none;
+    font-size: var(--career-text-xs);
+  }
+  .saved-intro svg {
+    inline-size: 16px;
+    block-size: 16px;
+    margin-block-start: 1px;
+    color: inherit;
+  }
+  .saved-intro-wide {
+    display: none;
+  }
+  .saved-intro-narrow {
+    display: inline;
+  }
 }
 
 .saved-controls {
@@ -118,7 +150,7 @@
   gap: var(--career-space-3);
   align-items: center;
   grid-column: 1 / -1;
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
@@ -138,7 +170,7 @@
     );
   gap: var(--career-space-4);
   padding-inline: calc(var(--career-space-4) + var(--career-border-width));
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   font-weight: 600;
 }
@@ -178,13 +210,13 @@
 
 .saved-row-role p,
 .saved-row-closed {
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
 .saved-row.is-closed .saved-row-role,
 .saved-row.is-closed .saved-row-money strong {
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .saved-row-cell {
@@ -197,7 +229,7 @@
   display: inline-flex;
   gap: var(--career-space-1);
   align-items: center;
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
 }
 
 .saved-row-money {
@@ -261,7 +293,7 @@
   gap: var(--career-space-3);
   align-items: center;
   justify-content: space-between;
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
@@ -1085,7 +1117,7 @@
   flex-wrap: wrap;
   margin-block: var(--career-space-2);
   overflow: hidden;
-  border: var(--career-border-width) solid var(--career-line);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
 }
 
@@ -1109,8 +1141,13 @@
   color: var(--career-accent);
 }
 
-.vacancy-source-category[aria-pressed='true'] .vacancy-location-count {
+/* B510: число категории как .pop .seg .num макета 4 — шрифт и цвет кнопки, отступ space-1. */
+.vacancy-source-category .vacancy-location-count {
+  margin-inline-start: var(--career-space-1);
+  padding: 0;
   color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
 }
 
 .vacancy-source-group {
@@ -1140,10 +1177,118 @@
   display: contents;
 }
 
-@media (max-width: 760px) {
-  .vacancies-filter-host.is-saved-tab {
-    display: none;
+/* B446-g4: длинные роли кампании не раздвигают ряд фильтров. */
+
+/* B510: окно полного описания как модалка макета 4 — крестик .career-btn.is-ghost.is-icon
+   (44 px, радиус sm), кнопки подвала .career-btn: 14/600, рамка field-edge, радиус sm;
+   на 390 подвал столбцом во всю ширину, капсулы 36 px.
+   Карточка — .career-modal-card макета: 520 px, радиус lg, фон bg-elevated, рамка line-strong;
+   шапка 12/12/12/24 без значка, тело — сетка с шагом 8, текст 14/1.5, разделы 14/700. */
+.career-modal-card.is-detail:has(.vacancies-info-body) {
+  max-width: 520px;
+  max-height: 94dvh;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-bg-elevated);
+  box-shadow: var(--career-shadow-tooltip);
+}
+.career-modal-card:has(.vacancies-info-body) .career-modal-header {
+  gap: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-3) var(--career-space-3) var(--career-space-6);
+  border-bottom-color: var(--career-line);
+}
+.career-modal-card:has(.vacancies-info-body) .career-modal-header h2 {
+  line-height: 1.3;
+}
+.career-modal-card:has(.vacancies-info-body) .career-modal-body {
+  gap: var(--career-space-2);
+}
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-subtitle {
+  color: var(--career-text-soft);
+}
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-description,
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-description > section {
+  display: grid;
+  gap: var(--career-space-2);
+  font-size: var(--career-text-sm);
+}
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-description p,
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-description ul {
+  margin: 0;
+}
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-description ul {
+  padding-inline-start: var(--career-space-4);
+}
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-description h4 {
+  margin: var(--career-space-2) 0 0;
+  font-weight: 700;
+}
+.career-modal-card:has(.vacancies-info-body) .vacancies-info-footer {
+  padding: var(--career-space-4) var(--career-space-6);
+  border-top-color: var(--career-line);
+  background: var(--career-surface);
+}
+.career-modal-card:has(.vacancies-info-body) .career-modal-close {
+  padding: 0;
+  border: var(--career-border-width) solid transparent;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+.vacancies-info-footer .vacancies-info-btn {
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  padding: 0 var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background-color: transparent;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.career-modal-card:has(.vacancies-info-body) .career-modal-close svg,
+.vacancies-info-footer .vacancies-info-btn svg {
+  inline-size: 1.25em;
+  block-size: 1.25em;
+}
+@media (max-width: 600px) {
+  .career-modal-card:has(.vacancies-info-body) .vacancies-info-footer {
+    flex-direction: column-reverse;
+    padding: var(--career-space-4);
+  }
+  .vacancies-info-footer .vacancies-info-btn {
+    inline-size: 100%;
+    padding: 0 var(--career-space-3);
+    border-radius: 18px;
+  }
+  .vacancies-info-footer .vacancies-info-btn:last-child {
+    min-block-size: 36px;
+  }
+  .career-modal-backdrop:has(.vacancies-info-body) {
+    align-items: flex-end;
+  }
+  .career-modal-card.is-detail:has(.vacancies-info-body) {
+    height: auto;
+    border-inline: 0;
+    border-block-end: 0;
+    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+  }
+  .career-modal-card:has(.vacancies-info-body) .career-modal-header {
+    padding-inline-start: var(--career-space-4);
+  }
+  .career-modal-card:has(.vacancies-info-body) .career-modal-body {
+    padding: var(--career-space-4);
+  }
+  .career-modal-card:has(.vacancies-info-body) .career-modal-close {
+    flex: none;
+    min-inline-size: var(--career-target-min);
+    block-size: 36px;
+    padding: 0 var(--career-space-2);
+    border: var(--career-border-width) solid transparent;
+    border-radius: 18px;
   }
 }
-
-/* B446-g4: длинные роли кампании не раздвигают ряд фильтров. */

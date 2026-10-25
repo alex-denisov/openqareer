@@ -65,7 +65,7 @@ function WhySection({ summary }: { readonly summary: RelocationCountrySummary })
     <section className="vacancy-push-group">
       <h3 className="vacancy-push-cap">Почему так</h3>
       <p className="career-relocation-push-why">
-        <Info aria-hidden="true" size={18} />
+        <Info aria-hidden="true" size={20} />
         <span>{summary.reason}</span>
       </p>
       <p className="vacancy-push-foot">

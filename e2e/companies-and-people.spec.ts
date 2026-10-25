@@ -68,9 +68,16 @@ async function expectCompanyTouchTargets(page: import('@playwright/test').Page) 
     .evaluateAll((elements) =>
       elements.flatMap((element) => {
         const rect = element.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0 || rect.height >= 44) return [];
+        // Mockup 13 pills draw 32 px and take the rest of the 44 px target through ::after.
+        const after = window.getComputedStyle(element, '::after');
+        const extra =
+          after.content !== 'none' && after.position === 'absolute'
+            ? -(parseFloat(after.top) || 0) - (parseFloat(after.bottom) || 0)
+            : 0;
+        const height = rect.height + extra;
+        if (rect.width === 0 || rect.height === 0 || height >= 44) return [];
         return [
-          `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}: ${rect.height}`,
+          `${element.tagName.toLowerCase()}.${String(element.className).split(' ')[0]}: ${height}`,
         ];
       }),
     );
@@ -123,7 +130,7 @@ test('pages 400 companies and opens a source-backed company detail', async ({ pa
   await page.getByRole('button', { name: 'Открыть компанию Вектор Банк' }).click();
   await expect(page.getByRole('heading', { name: 'Вектор Банк' })).toBeVisible();
   await expect(page.getByText('Москва · Финансы · данные с hh.ru, 08.10.2026')).toBeVisible();
-  await expect(page.getByText(/Рекрутёр Мария Орлова взят из объявления/u)).toBeVisible();
+  await expect(page.getByText(/Рекрутер Мария Орлова взят из объявления/u)).toBeVisible();
   const mobile = testInfo.project.name === 'mobile-390';
   await expect(
     page.locator(mobile ? '[data-company-vacancy]' : '.companies-people-vacancy'),
@@ -191,10 +198,13 @@ test('sorts companies and filters the list by a typed name', async ({ page }, te
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const sheet = page.getByRole('dialog', { name: 'Фильтры' });
+    await sheet.getByRole('button', { name: /^Сортировка /u }).click();
     await sheet.getByRole('radio', { name: 'По алфавиту', exact: true }).check();
     await sheet.getByRole('button', { name: 'Показать 400', exact: true }).click();
   } else {
-    await page.getByRole('combobox', { name: 'Сортировка компаний' }).selectOption('alphabetical');
+    await page
+      .getByRole('combobox', { name: 'Сортировка', exact: true })
+      .selectOption('alphabetical');
   }
   await expect(
     page.getByRole('button', { name: 'Открыть компанию Арка Холдинг' }).first(),
@@ -212,12 +222,13 @@ test('the mobile filter sheet marks network-contact counts as unknown', async ({
   await page.getByRole('button', { name: 'Фильтры' }).click();
   const dialog = page.getByRole('dialog', { name: 'Фильтры' });
   await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: /^Показывать /u }).click();
   await expect(
     dialog.getByRole('radio', { name: 'Есть контакты в сети · неизвестно' }),
   ).toBeDisabled();
   await expectCompanyScreenAccessible(page);
   await captureCompanyState(page, testInfo, 'company-filter-sheet');
-  await dialog.getByRole('radio', { name: 'Хочу', exact: true }).check();
+  await dialog.getByRole('radio', { name: /^Хочу \d+$/u }).check();
   await dialog.getByRole('button', { name: /Показать/u }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText('3 компании в подборке')).toBeVisible();
@@ -239,7 +250,7 @@ test('recruiter lookup asks for consent and shows an honest queued state', async
   await page.getByRole('button', { name: 'Разрешить и найти' }).click();
   const queueStatus = page
     .getByRole('status')
-    .filter({ hasText: 'Ищем рекрутёра по вакансиям компании' });
+    .filter({ hasText: 'Ищем рекрутера по вакансиям компании' });
   await expect(queueStatus).toBeVisible();
   // The refetch after consent remounts the status node; scroll the fresh one.
   await expect(async () => queueStatus.scrollIntoViewIfNeeded({ timeout: 2_000 })).toPass();
@@ -324,7 +335,8 @@ test('empty Wants state adds every selection company after confirmation (B422)',
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const sheet = page.getByRole('dialog', { name: 'Фильтры' });
-    await sheet.getByRole('radio', { name: 'Хочу', exact: true }).check();
+    await sheet.getByRole('button', { name: /^Показывать /u }).click();
+    await sheet.getByRole('radio', { name: /^Хочу \d+$/u }).check();
     await sheet.getByRole('button', { name: 'Показать 0', exact: true }).click();
   } else {
     await page.getByRole('button', { name: 'Хочу 0', exact: true }).click();
@@ -350,10 +362,11 @@ test('a stale contact import keeps network counts unknown', async ({ page }, tes
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const filters = page.getByRole('dialog', { name: 'Фильтры' });
+    await filters.getByRole('button', { name: /^Показывать /u }).click();
     await expect(
       filters.getByRole('radio', { name: 'Есть контакты в сети · неизвестно' }),
     ).toBeDisabled();
-    await filters.getByRole('button', { name: 'Закрыть' }).click();
+    await page.keyboard.press('Escape');
   } else {
     await expect(
       page.getByRole('button', { name: 'Есть контакты в сети · неизвестно' }),
@@ -402,7 +415,7 @@ test('a completed recruiter search can report no result without claiming the rec
   });
   await page.getByRole('textbox', { name: 'Поиск среди 400' }).fill('Гринкод');
   await openCompany(page, 'Гринкод');
-  const notFound = page.getByText(/рекрутёра не нашли\. Поиск можно повторить/u);
+  const notFound = page.getByText(/рекрутера не нашли\. Поиск можно повторить/u);
   await expect(notFound).toBeVisible();
   await expect(page.getByRole('button', { name: 'Повторить поиск' })).toBeEnabled();
   await notFound.scrollIntoViewIfNeeded();

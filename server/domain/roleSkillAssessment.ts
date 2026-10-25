@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { MIN_ROLE_SAMPLE } from '../../shared/poolRoleHypotheses';
 
+/** A requirement counts as repeated in this share of vacancies with extracted requirements. */
+const REPEATED_SHARE = 0.2;
+const MIN_REPEATED_VACANCIES = 2;
+
 export type RoleSkillGrade = 'confirmed' | 'partial' | 'not_confirmed';
 
 export interface RoleSkillSourceRef {
@@ -310,7 +314,13 @@ export function buildRoleSkillRequirementSummaries(
   if (eligibleVacancies.length < MIN_ROLE_SAMPLE) return [];
 
   const requirements = aggregateRequirements(eligibleVacancies);
-  const repeatedThreshold = Math.max(2, Math.ceil(eligibleVacancies.length / 2));
+  // B509: most vacancies have no extracted requirements yet, so repetition is a share of
+  // the vacancies that do; a share of all of them made the check unreachable.
+  const withRequirements = eligibleVacancies.filter((vacancy) => vacancy.requirements.length > 0);
+  const repeatedThreshold = Math.max(
+    MIN_REPEATED_VACANCIES,
+    Math.ceil(withRequirements.length * REPEATED_SHARE),
+  );
   return [...requirements.values()]
     .filter((item) => item.vacancyIds.size >= repeatedThreshold)
     .sort(

@@ -4,11 +4,7 @@ import type {
   MobilityCandidateProfile,
   MobilityScenarioEvaluation,
 } from '../../../shared/countryFit/types';
-import {
-  calculateAnnualIncomeTax,
-  calculateAnnualPayroll,
-  calculateDisposableIncome,
-} from '../../../shared/taxCalculators';
+import { calculateAnnualPayroll, calculateDisposableIncome } from '../../../shared/taxCalculators';
 import { getCountryTaxData, supportedCountryCodes } from '../../../shared/taxData';
 import type {
   CountryComparisonCountry,
@@ -16,6 +12,7 @@ import type {
   CountryComparisonFact,
 } from '../../../shared/countryFit/countryComparison';
 import type { TaxDataSource } from '../../../shared/taxData/types';
+import type { PayrollOptions, PayrollResult } from '../../../shared/taxCalculators';
 import { localIsoDate } from './relocationDates';
 import { relocationStatusLabel } from './relocationStatus';
 import { leadingScenario } from './relocationLeadingScenario';
@@ -148,6 +145,35 @@ export function calculateRelocationEconomy(
   }
 }
 
+/**
+ * The payroll of a saved scenario by today's rules: a scenario saved before a tax fix keeps
+ * its input, the calculation screen does not show its stale tax.
+ */
+export function scenarioPayrollNow(input: {
+  readonly countryCode: string;
+  readonly incomeMode: string;
+  readonly grossAnnualIncome?: number;
+  readonly payrollOptions?: PayrollOptions;
+}): PayrollResult | undefined {
+  if (input.incomeMode !== 'local_employment' || input.grossAnnualIncome === undefined)
+    return undefined;
+  const economy = calculateRelocationEconomy(input.countryCode, input.grossAnnualIncome);
+  if (economy.status !== 'available') return undefined;
+  return calculateAnnualPayroll(input.countryCode, input.grossAnnualIncome, input.payrollOptions);
+}
+
+/** One line of the calculation's assumptions (tax class, church tax, insurance, children) for «Откуда цифры». */
+export function relocationAssumptionSummary(
+  countryCode: string,
+  income: number | undefined,
+  scenarioPayroll?: PayrollResult,
+): string | null {
+  if (scenarioPayroll) return scenarioPayroll.assumptionSummary;
+  if (income === undefined || !countryCode) return null;
+  const economy = calculateRelocationEconomy(countryCode, income);
+  return economy.status === 'available' ? economy.payroll.assumptionSummary : null;
+}
+
 export function buildCountryComparisonCountry(
   countryCode: string,
   profile: RelocationQuestionnaire | null,
@@ -200,16 +226,16 @@ function buildTaxComparisonFacts(
       ? grossAnnualIncome
       : undefined;
   if (!taxData || annualIncome === undefined) return unavailableTaxFacts(taxData !== null);
-  const incomeTax = calculateAnnualIncomeTax(countryCode, annualIncome);
   const payroll = calculateAnnualPayroll(countryCode, annualIncome);
+  const incomeTax = payroll.incomeTax.amount + payroll.solidaritySurcharge;
   return {
     incomeTax: {
       status: 'available',
       value: {
-        effectiveRate: Number(((incomeTax.amount / annualIncome) * 100).toFixed(2)),
-        basis: `Налог с указанной годовой зарплаты ${formatMoney(annualIncome, incomeTax.currency)}.`,
+        effectiveRate: Number(((incomeTax / annualIncome) * 100).toFixed(2)),
+        basis: `Налог с указанной годовой зарплаты ${formatMoney(annualIncome, payroll.currency)} (${payroll.assumptionSummary}).`,
       },
-      sources: [comparisonEvidence(incomeTax.source)],
+      sources: [comparisonEvidence(payroll.incomeTax.source)],
     },
     netIncome: {
       status: 'available',

@@ -1221,7 +1221,7 @@ test.describe('B250 vacancies screen', () => {
     await page.getByRole('tab', { name: /Компании и люди/u }).click();
     await page.getByRole('button', { name: 'Открыть компанию Вектор Банк' }).click();
 
-    await expect(page.getByText(/Рекрутёр Мария Орлова взят из объявления/u)).toBeVisible();
+    await expect(page.getByText(/Рекрутер Мария Орлова взят из объявления/u)).toBeVisible();
     await page.getByRole('button', { name: 'Написать рекрутеру' }).click();
 
     const message = page.getByRole('region', { name: 'Сообщение нанимающему' });
@@ -1609,7 +1609,7 @@ test.describe('B250 vacancies screen', () => {
     // prefers-reduced-motion: масштаб меняется без анимации перелёта.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     for (let step = 0; step < 6; step += 1) {
-      await mapView.getByRole('button', { name: 'Отдалить карту' }).click();
+      await mapView.getByRole('button', { name: 'Отдалить' }).click();
     }
     // Clusters should exist when zoomed out (Berlin + Prague + Vienna clustered)
     const clusterPin = mapView.locator('.career-map-cluster-node').first();

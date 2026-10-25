@@ -222,7 +222,17 @@
   content: ' · ';
 }
 
+/* B510: число соответствия в языке макета 4 — как подпись строки (.sub/.vm-f): soft, 400;
+   на 390 — короткое «70 %» сразу после «Подходит». */
 .vacancy-fit-inline.is-number {
-  color: var(--career-text);
-  font-weight: 600;
+  color: var(--career-text-soft);
+  font-weight: 400;
+}
+.vacancies-screen-cell--status .vacancy-fit-inline.is-short {
+  display: inline;
+  font-size: inherit;
+  white-space: nowrap;
+}
+.vacancies-screen-cell--status .vacancy-fit-inline.is-short::before {
+  content: '· ';
 }

@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, CheckCircle, Info } from '@phosphor-icons/react';
 import { RELOCATION_STEPS, type RelocationStepId } from '../../../shared/relocationQuestionnaire';
-import { evaluateCountryFit } from '../../../shared/countryFit';
 import {
   InlineConfirmation,
   STEP_DESCRIPTIONS,
@@ -10,9 +9,9 @@ import {
   type RelocationQuestionnaireProps,
 } from './RelocationQuestionnaire';
 import {
-  listRelocationCountries,
-  mobilityCandidateFromQuestionnaire,
-} from './relocationCountryData';
+  buildRelocationSummaryOverview,
+  relocationCountsSentence,
+} from './relocationSummaryOverview';
 import { MobilePush } from './RelocationMobilePush';
 import {
   MobileCertificateEditor,
@@ -182,44 +181,32 @@ function SummaryCountries({
   readonly profile: QuestionnaireController['savedProfile'];
   readonly onShowCountries: () => void;
 }) {
-  const candidate = mobilityCandidateFromQuestionnaire(profile);
-  const results = listRelocationCountries().map((country) => ({
-    country,
-    fit: evaluateCountryFit(country.countryCode, candidate),
-  }));
-  const counts = new Map<string, number>();
-  for (const { fit } of results) {
-    const label = shortStatus(fit.status);
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  const line = [...counts]
-    .map(([label, count]) => `${label.toLocaleLowerCase('ru')}: ${count}`)
-    .join(', ');
+  const overview = buildRelocationSummaryOverview(profile);
   return (
-    <MobileGroup
-      caption="Что получилось"
-      note={`Стран в каталоге правил: ${results.length}; ${line}.`}
-    >
-      {results.map(({ country, fit }) => (
-        <MobileNavRow
-          key={country.countryCode}
-          icon={
-            fit.status === 'available' ? (
-              <CheckCircle aria-hidden="true" />
-            ) : (
-              <Info aria-hidden="true" />
-            )
-          }
-          title={country.name}
-          sub={
-            fit.scenarios.flatMap(({ reasons }) => reasons)[0] ??
-            'По введённым данным нет дополнительных ограничений.'
-          }
-          value={shortStatus(fit.status)}
-          onClick={onShowCountries}
-        />
-      ))}
-    </MobileGroup>
+    <>
+      <p className="career-relocation-mobile-note">
+        <CheckCircle aria-hidden="true" size={16} />
+        <span>{relocationCountsSentence(overview.counts)}</span>
+      </p>
+      <MobileGroup caption="Что получилось">
+        {overview.key.map((summary) => (
+          <MobileNavRow
+            key={summary.countryCode}
+            icon={
+              summary.status === 'available' ? (
+                <CheckCircle aria-hidden="true" />
+              ) : (
+                <Info aria-hidden="true" />
+              )
+            }
+            title={summary.name}
+            sub={summary.reason}
+            value={shortStatus(summary.status)}
+            onClick={onShowCountries}
+          />
+        ))}
+      </MobileGroup>
+    </>
   );
 }
 
@@ -249,13 +236,6 @@ function MobileSummary({
           label="Показать страны"
           onClick={onShowCountries}
         />
-        <button
-          className="vacancy-push-text career-relocation-skip"
-          type="button"
-          onClick={() => controller.selectStep(RELOCATION_STEPS[0])}
-        >
-          Дополнить данные
-        </button>
       </div>
     </MobilePush>
   );

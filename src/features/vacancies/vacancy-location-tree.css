@@ -27,6 +27,17 @@
   padding-inline-start: calc(var(--career-space-3) * 2 + 16px);
 }
 
+/* B510: поле поиска поповера как .career-input макета 4 на десктопе — 14 px, 44 px, радиус sm. */
+@media (min-width: 761px) {
+  .vacancies-screen .vacancy-location-search .career-input {
+    min-block-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    border-color: var(--career-field-edge);
+    border-radius: var(--career-radius-sm);
+    font-size: var(--career-text-sm);
+  }
+}
+
 .vacancy-location-body {
   display: grid;
   gap: var(--career-space-2);
@@ -253,4 +264,58 @@
     flex: 1 1 auto;
     min-block-size: 0;
   }
+}
+
+/* B510: строка дерева как .career-check макета 4 — подпись 14 px/400, зазор до текста 12 px,
+   квадрат 24 px с рамкой field-edge на bg-elevated, радиус 4 px. */
+.vacancies-screen .vacancy-location-check {
+  gap: var(--career-space-3);
+  font-weight: 400;
+}
+.vacancies-screen .vacancy-location-check input[type='checkbox'] {
+  inline-size: var(--career-control-min);
+  block-size: var(--career-control-min);
+  border-radius: var(--career-space-1);
+}
+.vacancies-screen .vacancy-location-check input[type='checkbox']:not(:checked):not(:indeterminate) {
+  border-color: var(--career-field-edge);
+  background-color: var(--career-bg-elevated);
+}
+
+/* B510: поповер как .pop макета 4 — без общего поля: шапка 12 px (поиск и категории через 8),
+   тело 8/12, подвал 12. */
+@media (min-width: 761px) {
+  .vacancies-screen
+    .vacancies-filters.filters-panel:is(
+      [data-active-group='locations'],
+      [data-active-group='sources'],
+      [data-active-group='roles']
+    ) {
+    padding: 0;
+  }
+  .vacancies-screen .vacancies-filters .vacancy-location-head {
+    padding: var(--career-space-3);
+  }
+  .vacancies-screen .vacancies-filters .vacancy-location-body {
+    padding: var(--career-space-2) var(--career-space-3);
+  }
+  .vacancies-screen .vacancies-filters .vacancy-location-foot {
+    padding: var(--career-space-3);
+  }
+  /* Категории источников — .seg макета 4 во всю ширину поповера сразу под линией шапки. */
+  .vacancies-screen .vacancies-filters .vacancy-source-filter .vacancy-location-head {
+    border-block-end: 0;
+  }
+  .vacancies-screen .vacancies-filters .vacancy-source-filter .vacancy-source-categories {
+    margin: calc(var(--career-space-3) + var(--career-border-width) - var(--career-space-2))
+      calc(var(--career-space-3) * -1) calc(var(--career-space-3) * -1);
+    box-shadow: 0 calc(var(--career-border-width) * -1) 0 var(--career-line);
+  }
+}
+.vacancies-screen .vacancy-source-filter .vacancy-location-head {
+  display: grid;
+  gap: var(--career-space-2);
+}
+.vacancies-screen .vacancy-source-filter .vacancy-source-categories {
+  margin-block: 0;
 }

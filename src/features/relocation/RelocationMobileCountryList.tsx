@@ -55,13 +55,13 @@ export function RelocationMobileCountryList({
     : visibleRelocationCountries(filtered, PREVIEW_COUNT, workspace.pinnedCountryCodes);
   const selected = workspace.selectedCountryCodes.length;
   return (
-    <div className="career-relocation-mobile-section">
+    <div className="career-relocation-mobile-section career-relocation-mobile-countries">
       <ScenarioButton chosen={scenario !== 'all'} onOpen={() => setSheetOpen(true)} />
       <p className="career-relocation-mobile-count">
         <strong>{visible.length}</strong> из {filtered.length} стран под ваш профиль
       </p>
       <CountryRows countries={visible} profile={profile} onOpenCountry={onOpenCountry} />
-      <p className="career-relocation-muted">
+      <p className="career-relocation-mobile-foot">
         Показаны страны, где есть вакансии по вашим ролям и проверенные правила, сначала доступные,
         затем с условиями и барьерами. Нужной страны нет в списке? Добавьте её сами.
       </p>
@@ -212,7 +212,7 @@ function CompareFooter({
   return (
     <>
       <button
-        className="career-btn career-btn-primary"
+        className="career-relocation-mobile-cta"
         type="button"
         disabled={selected < 2}
         onClick={onCompare}

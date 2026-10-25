@@ -120,11 +120,11 @@ function VacanciesListContent(props: ListContentProps) {
         </p>
         <BulkCompanyWantButton
           count={props.companiesCount}
-          className="vacancies-screen-companies-action"
+          className="vacancies-screen-companies-action vac-sm"
           onDone={() => props.onCompanyWantsChanged?.()}
         />
         {props.hasMore ? (
-          <button type="button" className="companies-people-load-more" onClick={props.onLoadMore}>
+          <button type="button" className="companies-people-load-more vac-sm" onClick={props.onLoadMore}>
             Показать ещё 20
           </button>
         ) : null}

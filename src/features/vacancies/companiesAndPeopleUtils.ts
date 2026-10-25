@@ -27,6 +27,16 @@ export function companyVacancySummary(company: CandidateCompanyOpportunity): str
   return pluralRu(company.vacancyCount, ['вакансия', 'вакансии', 'вакансий']);
 }
 
+/** A company hiring in many places shows one line: the first place and how many more (mockup 13). */
+export function companyLocationLabel(location: string | null): string {
+  const places = (location ?? '')
+    .split(';')
+    .map((place) => place.trim())
+    .filter(Boolean);
+  if (places.length === 0) return 'Место неизвестно';
+  return places.length === 1 ? places[0] : `${places[0]} и ещё ${places.length - 1}`;
+}
+
 export function formatObservedDate(value: string | null): string {
   if (!value) return 'дата неизвестна';
   const parsed = new Date(value);

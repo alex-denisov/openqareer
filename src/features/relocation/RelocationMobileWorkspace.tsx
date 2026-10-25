@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { ArrowRight } from '@phosphor-icons/react';
+import { ArrowRight, ChatCircle } from '@phosphor-icons/react';
 import { MobilePush } from './RelocationMobilePush';
 import { CountryComparisonPanel } from './CountryComparisonPanel';
-import { RelocationAddCountry } from './RelocationAddCountry';
+import { MobileAddCountry } from './mobile/MobileAddCountry';
 import { RelocationMobileCountryList } from './RelocationMobileCountryList';
 import { RelocationMobileCountry } from './RelocationMobileCountry';
 import { RelocationMobileEconomy } from './RelocationMobileEconomy';
@@ -120,7 +120,7 @@ function MobileModeScreen(props: MobileProps) {
   }
   return (
     <MobilePush title="Добавить страну" onBack={workspace.closeMode}>
-      <RelocationAddCountry
+      <MobileAddCountry
         profile={profile}
         pinnedCountryCodes={workspace.pinnedCountryCodes}
         onAdd={workspace.pinCountry}
@@ -176,15 +176,18 @@ function MobileComparison({ workspace, onOpenExpert }: MobileProps) {
       />
       {props.onOpenExpert ? (
         <button
-          className="career-btn career-btn-secondary"
+          className="career-relocation-mobile-single-row"
           type="button"
           onClick={props.onOpenExpert}
         >
-          Обсудить с консультантом
+          <span className="career-relocation-mobile-action-icon">
+            <ChatCircle aria-hidden="true" size={18} />
+          </span>
+          <b>Обсудить с консультантом</b>
         </button>
       ) : null}
       <button
-        className="career-btn career-btn-primary"
+        className="career-relocation-mobile-cta"
         type="button"
         onClick={() => workspace.showTab('economy')}
       >

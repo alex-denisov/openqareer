@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { assessVacancyFit, evaluateVacancyFit, isSkillRequirement, MIN_SKILL_REQUIREMENTS, vacancyFitFingerprint, type VacancyFitInput } from './vacancyFit';
 
@@ -142,5 +143,43 @@ describe('verified vacancy fit coverage', () => {
     expect(vacancyFitFingerprint({ ...input, facts: [] })).not.toEqual(original);
     expect(vacancyFitFingerprint({ ...input, description: 'changed' })).not.toEqual(original);
     expect(vacancyFitFingerprint({ ...input, gates: { ...input.gates, role: { status: 'unknown', reason: 'changed' } } })).not.toEqual(original);
+  });
+});
+
+describe('imported profile facts as fit evidence (B562)', () => {
+  // Prod 24.10: a LinkedIn import left all 64 of the owner's facts `proposed`, so 787 vacancies
+  // read «no_eligible_facts» and none showed a percent. The import is the candidate's own profile.
+  const imported = (input: VacancyFitInput) => ({ ...input.facts[0], id: 'impe12a7b15ff-resp-1-1', status: 'proposed' });
+  const withImported = (input: VacancyFitInput): VacancyFitInput => ({
+    ...input, facts: [imported(input)],
+    assessments: input.assessments?.map((claim) => ({ ...claim, evidence: claim.evidence.map((entry) => ({ ...entry, factId: 'impe12a7b15ff-resp-1-1' })) })),
+  });
+
+  it('scores a vacancy against a proposed fact that came from a profile import', () => {
+    const result = evaluateVacancyFit(withImported(fitInput()));
+    expect(result).toMatchObject({ reason: 'assessed', coveragePercent: 100 });
+  });
+  it('still refuses a proposed fact the candidate only said in chat', () => {
+    const input = fitInput();
+    const result = evaluateVacancyFit({ ...input, facts: [{ ...input.facts[0], status: 'proposed' }] });
+    expect(result.reason).toBe('no_eligible_facts');
+  });
+  it('refuses imported facts that are sensitive or not facts', () => {
+    const input = withImported(fitInput());
+    for (const fact of [{ ...input.facts[0], sensitive: true }, { ...input.facts[0], kind: 'hypothesis' }]) {
+      expect(evaluateVacancyFit({ ...input, facts: [fact] }).reason).toBe('no_eligible_facts');
+    }
+  });
+  it('a profile with imported evidence gets a new cache key, a confirmed-only profile keeps its key', () => {
+    const confirmed = fitInput();
+    const before = vacancyFitFingerprint(confirmed).profileHash;
+    expect(vacancyFitFingerprint({ ...confirmed }).profileHash).toBe(before);
+    const legacy = vacancyFitFingerprint(withImported(confirmed)).profileHash;
+    // The legacy hash of the same input (facts, gates, context) must not be reused: its cached
+    // result was computed without the imported facts and its queue row is already completed.
+    const input = withImported(confirmed);
+    const old = createHash('sha256').update(JSON.stringify([input.candidateId, input.facts, input.gates, input.profileContextHash])).digest('hex');
+    expect(legacy).not.toBe(old);
+    expect(before).toBe(createHash('sha256').update(JSON.stringify([confirmed.candidateId, confirmed.facts, confirmed.gates, confirmed.profileContextHash])).digest('hex'));
   });
 });

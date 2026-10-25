@@ -16,7 +16,7 @@ import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacanc
 /** Requirements a fit job is waiting for jump ahead of title-strategy work (priority 1). */
 const FIT_DEPENDENCY_PRIORITY = 2;
 /** A vacancy a candidate is looking at gets model labels before the background tail (B510). */
-const SHOWN_PAGE_PRIORITY = 1.5;
+export const SHOWN_PAGE_PRIORITY = 1.5;
 
 /** The HTTP process enqueues/reads only. runNext is called by a separate worker. */
 export class VacancyMechanicsRuntime {

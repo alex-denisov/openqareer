@@ -162,7 +162,10 @@ for (const width of [900, 1024, 1176]) {
       const reset = document.querySelector<HTMLElement>('.vacancies-summary-reset')!;
       return {
         chipRight: Math.max(...chips.map((chip) => chip.getBoundingClientRect().right)),
-        resetRight: reset.getBoundingClientRect().right,
+        // Mockup 4 small button: a transparent 6 px edge around the visible 32 px pill.
+        resetRight:
+          reset.getBoundingClientRect().right -
+          parseFloat(getComputedStyle(reset).borderRightWidth),
         inner,
       };
     });

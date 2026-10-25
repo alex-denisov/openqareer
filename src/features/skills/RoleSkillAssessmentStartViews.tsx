@@ -161,6 +161,15 @@ export function InsufficientRequirementsState({
   current: Extract<RoleSkillAssessmentCurrent, { state: 'insufficient_requirements' }>;
   onOpenOpportunities: () => void;
 }) {
+  if (current.collecting)
+    return (
+      <EmptyState
+        title="Требования собираются"
+        text={`Разбираем тексты ${vacanciesGenitive(current.sampleSize)} роли: навыки и кейсы появятся, когда требования будут собраны.`}
+        action="К вакансиям"
+        onAction={onOpenOpportunities}
+      />
+    );
   return (
     <EmptyState
       title="Требований пока недостаточно"

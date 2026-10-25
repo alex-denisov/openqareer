@@ -71,9 +71,9 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     await evidence.getByRole('button', { name: 'Обновить результат' }).click();
     await expect(evidence.locator('.vacancy-fit-percent')).toHaveText('50%');
     // B525: строка списка — «соответствие 50 %» в той же строке «компания · источник» (V3).
-    await expect(card.locator('.vacancies-screen-row-trigger .vacancy-fit-inline')).toHaveText(
-      'соответствие 50\u00a0%',
-    );
+    await expect(
+      card.locator('.vacancies-screen-row-trigger .vac-sub .vacancy-fit-inline'),
+    ).toHaveText('соответствие 50\u00a0%');
     // B446-g4: в карточке 1440 соответствие одной строкой (макет 4), таблицы разбора нет.
     await expect(evidence).toContainText('2 из 4 требований');
     await expect(evidence).not.toContainText('fixture-fact-01');

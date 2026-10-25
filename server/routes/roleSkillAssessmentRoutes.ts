@@ -19,6 +19,10 @@ import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
 import type { RouteDeps } from './deps';
+import {
+  createRoleRequirementReader,
+  type RoleRequirementReader,
+} from './roleSkillRequirementSource';
 import { focusSchema, validateFocus, type ValidatedFocus } from './roleSkillAssessmentFocus';
 import { startFocusedRun } from './roleSkillAssessmentFocusRun';
 import {
@@ -114,6 +118,8 @@ export type AssessmentContext =
       readonly roleTitle: string;
       readonly sampleSize: number;
       readonly requirementCount: number;
+      /** Requirements of the role's vacancies are still being extracted («Требования собираются»). */
+      readonly collecting: boolean;
     }
   | {
       readonly state: 'ready';
@@ -379,7 +385,12 @@ async function readAssessmentContext(
   if (!role) return { state: 'role_not_selected' };
   const snapshot = await readRoleSnapshot(deps, candidateId, role.title);
   if (snapshot.state !== 'matched') return snapshot;
-  return summarizeAssessmentContext(role.title, role.version, snapshot.vacancies);
+  return summarizeAssessmentContext(
+    role.title,
+    role.version,
+    snapshot.vacancies,
+    createRoleRequirementReader(deps),
+  );
 }
 
 export async function readRoleSnapshot(
@@ -408,9 +419,10 @@ export function summarizeAssessmentContext(
   roleTitle: string,
   roleVersion: number,
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
+  requirementReader?: RoleRequirementReader,
 ): AssessmentContext {
   const roleId = titleKey(roleTitle);
-  const vacancies = toAssessmentVacancies(matched, roleId, new Date());
+  const vacancies = toAssessmentVacancies(matched, roleId, new Date(), requirementReader);
   const sampleSize = countFreshActiveRoleVacancies(vacancies, roleId);
   if (sampleSize < MIN_ROLE_SAMPLE) {
     return { state: 'too_few_vacancies', roleTitle, sampleSize, threshold: MIN_ROLE_SAMPLE };
@@ -423,6 +435,7 @@ export function summarizeAssessmentContext(
       roleTitle,
       sampleSize,
       requirementCount: skills.length,
+      collecting: (requirementReader?.pendingCount() ?? 0) > 0,
     };
   }
   const dates = cases.flatMap((assessmentCase) =>
@@ -444,6 +457,7 @@ export function toAssessmentVacancies(
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
   roleId: string,
   now: Date,
+  requirementReader?: RoleRequirementReader,
 ): RoleAssessmentVacancy[] {
   const cutoff = now.getTime() - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1_000;
   return matched.flatMap(({ cluster, explanation }) => {
@@ -461,7 +475,11 @@ export function toAssessmentVacancies(
       ];
     });
     const freshness = sourceRefs.length > 0 ? ('fresh' as const) : ('stale' as const);
-    const requirements = cluster.skills.map((label) => {
+    const labels =
+      cluster.skills.length > 0 || freshness !== 'fresh' || !requirementReader
+        ? cluster.skills
+        : requirementReader.skillsFor(cluster.id);
+    const requirements = labels.map((label) => {
       const normalizedSkill = canonicalizeSkill(label).trim();
       const skillId = normalizeSkillId(normalizedSkill);
       return {

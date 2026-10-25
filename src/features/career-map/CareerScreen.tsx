@@ -158,7 +158,7 @@ function CareerRolesSection({
         <SectionInfoToggle id="roles-explain" text={ROLES_EXPLAIN} />
       </div>
       <p className="career-plate">
-        <Info size={16} aria-hidden />
+        <Info size={18} aria-hidden />
         <span>
           Поиск по ролям открывается после проверки навыков: так подборка опирается на
           подтверждённое, а не на догадки. Пока его нет, доступен свободный просмотр всех вакансий

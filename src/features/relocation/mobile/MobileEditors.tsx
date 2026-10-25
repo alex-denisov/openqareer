@@ -2,6 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { Fingerprint, GraduationCap, MapPin, Translate } from '@phosphor-icons/react';
 import type { RelocationQuestionnaire } from '../../../../shared/relocationQuestionnaire';
 import {
+  LANGUAGE_NAME_OPTIONS,
+  OTHER_LANGUAGE,
   DOCUMENT_KIND_OPTIONS,
   EDUCATION_LEVEL_OPTIONS,
   LANGUAGE_LEVEL_OPTIONS,
@@ -452,14 +454,33 @@ function LanguageRows(props: {
   readonly setLevel: (value: RelocationLanguage['level']) => void;
 }) {
   const { name, setName, level, setLevel } = props;
+  const listed = name === '' || LANGUAGE_NAME_OPTIONS.includes(name);
+  const [other, setOther] = useState(!listed);
   return (
     <>
-      <MobileInputRow
+      <MobilePickerRow
         id="relocation-mobile-language-name"
+        icon={<Translate aria-hidden="true" />}
         label="Язык"
-        value={name}
-        onChange={setName}
+        value={other ? OTHER_LANGUAGE : name}
+        options={[
+          ['', 'Выберите'],
+          ...LANGUAGE_NAME_OPTIONS.map((language) => [language, language] as const),
+          [OTHER_LANGUAGE, 'Другой язык'],
+        ]}
+        onChange={(value) => {
+          setOther(value === OTHER_LANGUAGE);
+          setName(value === OTHER_LANGUAGE ? '' : value);
+        }}
       />
+      {other ? (
+        <MobileInputRow
+          id="relocation-mobile-language-other"
+          label="Какой язык"
+          value={name}
+          onChange={setName}
+        />
+      ) : null}
       <MobilePickerRow
         id="relocation-mobile-language-level"
         icon={<Translate aria-hidden="true" />}
