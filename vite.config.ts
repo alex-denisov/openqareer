@@ -8,6 +8,7 @@ export default defineConfig({
     __APP_COMMIT__: JSON.stringify(process.env.OPENQAREER_COMMIT_SHA ?? ''),
   },
   plugins: [react()],
+  build: { manifest: true },
   server: {
     port: 3000,
     open: false,
