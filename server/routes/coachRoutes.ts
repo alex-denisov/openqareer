@@ -1,4 +1,5 @@
 import { adaptationContextFromInput, decorateAdaptationResult, labelAdaptationMessage, scopeAdaptationKnowledge, registerAdaptationCoachRoutes } from './adaptationCoach';
+import { extractCandidateFacts, type ExtractedFacts } from '../coach/candidateFactExtractor';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -98,6 +99,7 @@ async function completeTurnWithProvider(
   key: string,
   input: Parameters<CoachProvider['createTurn']>[0],
 ) {
+  const factsPending = listCandidateFacts(deps, candidateId, key, input);
   try {
     const generated = decorateAdaptationResult(await deps.coachProvider.createTurn(input, key), input);
     // Quick replies are proposed candidate answers, unlike the consultant's
@@ -113,8 +115,11 @@ async function completeTurnWithProvider(
       },
     } : generated;
     deps.candidateStore.completeTurn(candidateId, key, output);
+    await proposeListedFacts(deps, candidateId, factsPending);
     return output;
   } catch (error) {
+    // A failed reply does not undo what the candidate told us.
+    await proposeListedFacts(deps, candidateId, factsPending);
     deps.candidateStore.failTurn(
       candidateId,
       key,
@@ -122,6 +127,31 @@ async function completeTurnWithProvider(
     );
     throw error;
   }
+}
+
+/** The bulk extractor reads the candidate's answer while the consultant writes the reply (26.10). */
+function listCandidateFacts(
+  deps: RouteDeps,
+  candidateId: string,
+  key: string,
+  input: Parameters<CoachProvider['createTurn']>[0],
+): Promise<ExtractedFacts> | null {
+  const bulk = deps.bulkLlmRuntime?.client;
+  const latest = input.messages.at(-1);
+  if (!bulk || input.internalPurpose || latest?.role !== 'user') return null;
+  const known = deps.candidateStore.getSnapshot(candidateId).memory.map((item) => item.statement);
+  return extractCandidateFacts({ bulk, messageId: latest.id, answer: latest.content, runId: `candidate-facts:${key}`, known });
+}
+
+async function proposeListedFacts(
+  deps: RouteDeps,
+  candidateId: string,
+  pending: Promise<ExtractedFacts> | null,
+): Promise<void> {
+  if (!pending) return;
+  const listed = await pending;
+  if (listed.facts.length > 0) deps.candidateStore.proposeCandidateFacts(candidateId, listed.facts);
+  console.warn(JSON.stringify({ event: 'candidate-facts-listed', facts: listed.facts.length, cost: listed.cost, failures: listed.failures }));
 }
 
 async function deliverTurn(

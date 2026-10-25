@@ -2,9 +2,9 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.3-2026-10-26',
-  career_strategist: 'career-strategist-v1.4-2026-10-26',
-  career_expert: 'career-expert-v1.3-2026-10-26',
+  career_consultant: 'career-consultant-v1.4-2026-10-26',
+  career_strategist: 'career-strategist-v1.5-2026-10-26',
+  career_expert: 'career-expert-v1.4-2026-10-26',
 };
 
 const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
@@ -21,12 +21,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   actionProposals. Для открытого вопроса верни пустой массив.
 - Верни careerTrack = null и actionProposals = []; итоговый трек оркестратор
   берёт только из валидированного вклада стратега.
-- Факты кандидата выписываешь только ты: всё, что он сам сообщил и чего нет в
-  confirmedFacts — должность, масштаб, цифры, сроки, результаты, причины,
-  ожидания по деньгам, формат работы, ограничения, — верни в memoryCandidates по
-  одному элементу на утверждение: kind = fact (ожидания — preference),
-  confidence = candidate-reported, sourceMessageIds = id сообщения кандидата, где
-  это сказано.
+- Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
+  свои гипотезы и открытые вопросы, не больше трёх.
 `.trim(),
   career_strategist: `
 РОЛЬ: КАРЬЕРНЫЙ СТРАТЕГ
@@ -37,8 +33,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - Не повышай confidence фактов и не обходи ограничения кандидата.
 - Верни quickReplies как пустой массив: варианты ответа формирует только
   карьерный консультант.
-- Факты кандидата в memoryCandidates не выписывай: это делает консультант.
-  Верни в memoryCandidates только свои гипотезы, не больше трёх.
+- Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
+  свои гипотезы и открытые вопросы, не больше трёх.
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
   на evidence, иметь критерии приёмки, ожидаемый сигнал и дату измерения.
 - Для resume.revise заполни resumeRevision точным разделом и существующим
@@ -70,8 +66,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   карьерный консультант.
 - Верни careerTrack = null и actionProposals = []; ты анализируешь, но не
   определяешь итоговый маршрут.
-- Факты кандидата в memoryCandidates не выписывай: это делает консультант.
-  Верни в memoryCandidates только свои гипотезы, не больше трёх.
+- Факты кандидата выписывает сервер отдельно. Верни в memoryCandidates только
+  свои гипотезы и открытые вопросы, не больше трёх.
 `.trim(),
 };
 
@@ -104,32 +100,10 @@ const STRUCTURED_STAGE_PROMPT = `
 - Верни memoryCandidates и actionProposals пустыми, careerTrack = null, nextQuestion = null.
 `.trim();
 
-/**
- * A server step beside the roles (26.10): a long answer gave the profile no fact when the
- * consultant, busy with the reply, skipped the list. This step has one job.
- */
-const FACT_EXTRACTION_PROMPT = `
-ЗАДАЧА: ВЫПИСАТЬ ФАКТЫ КАНДИДАТА
-- Это шаг сервера, а не реплика кандидату. message — одна строка «Факты выписаны.»
-- Прочитай последнее сообщение кандидата. Каждое его утверждение о себе — должность,
-  масштаб, команда, цифры, сроки, результаты, причины, ожидания по деньгам, формат
-  работы, ограничения — верни отдельным элементом memoryCandidates: kind = fact
-  (ожидания и предпочтения — preference), confidence = candidate-reported,
-  sourceMessageIds = [id этого сообщения], не больше 20 элементов.
-- Уточнение кандидата к известному факту (другое число, «не с нуля, а …», «80% такого
-  не было») — тоже факт, его словами.
-- Не выписывай то, что уже дословно есть в confirmedFacts, и не выписывай вопросы и
-  просьбы к ассистенту.
-- Верни careerTrack = null, actionProposals = [], quickReplies = [], nextQuestion = null.
-`.trim();
-
 export function careerInstructionsForRole(
   role: CareerRole = 'career_consultant',
-  internalPurpose?: 'consultant-summary' | 'structured-stage' | 'fact-extraction',
+  internalPurpose?: 'consultant-summary' | 'structured-stage',
 ): string {
-  if (internalPurpose === 'fact-extraction') {
-    return [CAREER_SUPER_PROMPT, FACT_EXTRACTION_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
-  }
   if (internalPurpose === 'consultant-summary') {
     return [CAREER_SUPER_PROMPT, CONSULTANT_SUMMARY_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
   }

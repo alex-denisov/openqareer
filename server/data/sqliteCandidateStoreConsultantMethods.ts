@@ -10,6 +10,7 @@ import type { ConversationController } from './store/conversationController';
 
 type PublicHistoryMethods = Pick<CandidateStore,
   | 'completeTurn'
+  | 'proposeCandidateFacts'
   | 'listConsultantConversations'
   | 'getConsultantConversation'
   | 'deleteConsultantConversation'
@@ -39,13 +40,17 @@ export function createSqliteCandidateStoreConsultantMethods(input: {
         input.history.recordAssistantTurn(candidateId, key);
       });
     },
+    proposeCandidateFacts(candidateId, facts) {
+      input.requireCandidate(candidateId);
+      input.transaction(() => input.conversations.proposeCandidateFacts(candidateId, facts));
+    },
     ...createPublicHistoryMethods(input),
   };
 }
 
 function createPublicHistoryMethods(
   input: Parameters<typeof createSqliteCandidateStoreConsultantMethods>[0],
-): Omit<ConsultantStoreMethods, 'decorateTurn' | 'completeTurn'> {
+): Omit<ConsultantStoreMethods, 'decorateTurn' | 'completeTurn' | 'proposeCandidateFacts'> {
   const requireCandidate = (candidateId: string) => input.requireCandidate(candidateId);
   return {
     listConsultantConversations(candidateId, options) {

@@ -458,6 +458,8 @@ export interface CandidateStore {
     idempotencyKey: string,
     output: CoachProviderResult,
   ): void;
+  /** Facts the extractor listed from the candidate's answer, proposed for review (26.10). */
+  proposeCandidateFacts(candidateId: string, facts: CoachProviderResult['result']['memoryCandidates']): void;
   failTurn(
     candidateId: string,
     idempotencyKey: string,
