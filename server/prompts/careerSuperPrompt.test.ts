@@ -26,10 +26,8 @@ describe('career super-prompt', () => {
     expect(compact).toContain('JSON-схеме');
   });
 
-  it('asks every role to store what the candidate said, in their own words (26.10)', () => {
+  it('keeps a candidate fact in their own words, hedges included (26.10)', () => {
     const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
-    expect(compact).toContain('confidence = candidate-reported');
-    expect(compact).toContain('sourceMessageIds = id сообщения кандидата');
     expect(compact).toContain('не округляй');
     expect(compact).toContain('Чего кандидат не знает, не превращай в факт');
   });

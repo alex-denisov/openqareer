@@ -2,9 +2,9 @@ import type { CareerRole } from '../domain/coach';
 import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
-  career_consultant: 'career-consultant-v1.2-2026-10-15',
-  career_strategist: 'career-strategist-v1.3-2026-10-15',
-  career_expert: 'career-expert-v1.2-2026-10-15',
+  career_consultant: 'career-consultant-v1.3-2026-10-26',
+  career_strategist: 'career-strategist-v1.4-2026-10-26',
+  career_expert: 'career-expert-v1.3-2026-10-26',
 };
 
 const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
@@ -21,6 +21,12 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   actionProposals. Для открытого вопроса верни пустой массив.
 - Верни careerTrack = null и actionProposals = []; итоговый трек оркестратор
   берёт только из валидированного вклада стратега.
+- Факты кандидата выписываешь только ты: всё, что он сам сообщил и чего нет в
+  confirmedFacts — должность, масштаб, цифры, сроки, результаты, причины,
+  ожидания по деньгам, формат работы, ограничения, — верни в memoryCandidates по
+  одному элементу на утверждение: kind = fact (ожидания — preference),
+  confidence = candidate-reported, sourceMessageIds = id сообщения кандидата, где
+  это сказано.
 `.trim(),
   career_strategist: `
 РОЛЬ: КАРЬЕРНЫЙ СТРАТЕГ
@@ -31,6 +37,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - Не повышай confidence фактов и не обходи ограничения кандидата.
 - Верни quickReplies как пустой массив: варианты ответа формирует только
   карьерный консультант.
+- Факты кандидата в memoryCandidates не выписывай: это делает консультант.
+  Верни в memoryCandidates только свои гипотезы, не больше трёх.
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
   на evidence, иметь критерии приёмки, ожидаемый сигнал и дату измерения.
 - Для resume.revise заполни resumeRevision точным разделом и существующим
@@ -62,6 +70,8 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   карьерный консультант.
 - Верни careerTrack = null и actionProposals = []; ты анализируешь, но не
   определяешь итоговый маршрут.
+- Факты кандидата в memoryCandidates не выписывай: это делает консультант.
+  Верни в memoryCandidates только свои гипотезы, не больше трёх.
 `.trim(),
 };
 
