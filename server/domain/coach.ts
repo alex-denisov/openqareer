@@ -296,7 +296,7 @@ export const coachTurnInputSchema = z.object({
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
-  internalPurpose: z.enum(['consultant-summary']).optional(),
+  internalPurpose: z.enum(['consultant-summary', 'structured-stage']).optional(),
   resumeContext: resumeContextSchema.optional(),
   stageContext: z.string().trim().max(10_000).optional(),
   rejectedProposals: z.array(z.string().trim().max(500)).max(50).optional(),
@@ -683,7 +683,9 @@ export function serializeCoachInput(input: CoachTurnInput): string {
     task:
       input.internalPurpose === 'consultant-summary'
         ? 'Summarize the closed candidate conversation'
-        : 'Continue the candidate discovery interview',
+        : input.internalPurpose === 'structured-stage'
+          ? 'Do the stageContext task and return its JSON result as message'
+          : 'Continue the candidate discovery interview',
     outputContract: COACH_TURN_JSON_SCHEMA,
     dataClass: input.dataClass,
     locale: input.locale,

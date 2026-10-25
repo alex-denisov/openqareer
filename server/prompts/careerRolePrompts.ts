@@ -82,12 +82,32 @@ const CONSULTANT_SUMMARY_PROMPT = `
 - Если раздел пуст, напиши «не указано». Не добавляй выводы, которых нет в беседе.
 `.trim();
 
+/**
+ * A server step (B461 suggestions, case grading) reads JSON from message. The constitution asks
+ * for prose there, and models followed it: every live answer on 25.10 was prose (B564).
+ */
+const STRUCTURED_STAGE_PROMPT = `
+ЗАДАЧА: СТРУКТУРНЫЙ ШАГ
+- Выполни задачу из stageContext. Это шаг сервера, а не реплика кандидату.
+- message содержит только JSON-объект по stageContext.outputSchema: без приветствия,
+  пояснения, markdown и обрамления. Правило ФОРМАТ ОТВЕТА о выводе в message здесь не действует.
+- Верни memoryCandidates и actionProposals пустыми, careerTrack = null, nextQuestion = null.
+`.trim();
+
 export function careerInstructionsForRole(
   role: CareerRole = 'career_consultant',
-  internalPurpose?: 'consultant-summary',
+  internalPurpose?: 'consultant-summary' | 'structured-stage',
 ): string {
   if (internalPurpose === 'consultant-summary') {
     return [CAREER_SUPER_PROMPT, CONSULTANT_SUMMARY_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
+  }
+  if (internalPurpose === 'structured-stage') {
+    return [
+      CAREER_SUPER_PROMPT,
+      CAREER_ROLE_PROMPTS[role],
+      EXECUTION_BOUNDARY,
+      STRUCTURED_STAGE_PROMPT,
+    ].join('\n\n');
   }
   return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], EXECUTION_BOUNDARY].join('\n\n');
 }
