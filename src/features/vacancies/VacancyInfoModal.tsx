@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Info } from '@phosphor-icons/react';
+import { ArrowSquareOut } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
@@ -27,7 +27,7 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
       onClose={onClose}
       titleId="vacancy-info-title"
       title={cluster.canonicalTitle}
-      icon={<Info size={18} aria-hidden="true" />}
+      icon={null}
       detail
       className="career-token-scope"
     >

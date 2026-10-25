@@ -61,6 +61,14 @@ describe('VacancyInfoModal (B266)', () => {
     expect(document.querySelector('.career-modal-card.career-token-scope')).not.toBeNull();
   });
 
+  it('B510: the title is plain text without a leading icon, as in mockup 4', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockRejectedValue(new Error('offline'));
+    await act(async () => {
+      root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
+    });
+    expect(document.querySelector('.career-modal-title svg')).toBeNull();
+  });
+
   it('renders nothing when closed', () => {
     act(() => {
       root.render(<VacancyInfoModal isOpen={false} onClose={vi.fn()} cluster={cluster()} />);

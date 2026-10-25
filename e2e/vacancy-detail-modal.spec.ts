@@ -280,8 +280,9 @@ test.describe('B250 vacancy detail modal', () => {
     const card = page.locator('.career-modal-card.is-detail');
     const box = await card.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.width).toBeLessThanOrEqual(720);
-    expect(box!.height).toBeLessThanOrEqual(900 * 0.85 + 1);
+    // B510: модалка макета 4 — 520 px, не выше 94dvh.
+    expect(box!.width).toBeLessThanOrEqual(520);
+    expect(box!.height).toBeLessThanOrEqual(900 * 0.94 + 1);
 
     // Заголовок и панель «Открыть на площадке» закреплены — тело прокручивается отдельно.
     const scroll = page.locator('.vacancies-info-scroll');
@@ -305,7 +306,7 @@ test.describe('B250 vacancy detail modal', () => {
     ).toBeFocused();
   });
 
-  test('fills the mobile 390 viewport as a full-screen sheet with no horizontal overflow', async ({
+  test('opens on 390 as a bottom sheet of mockup 4 with no horizontal overflow', async ({
     page,
   }) => {
     await stubSession(page);
@@ -322,8 +323,11 @@ test.describe('B250 vacancy detail modal', () => {
     const card = page.locator('.career-modal-card.is-detail');
     const box = await card.boundingBox();
     expect(box).not.toBeNull();
+    // B510: лист макета 4 — во всю ширину, прижат к низу, длинный текст доводит его до 94dvh.
     expect(box!.width).toBeGreaterThanOrEqual(389);
-    expect(box!.height).toBeGreaterThanOrEqual(843);
+    expect(box!.y + box!.height).toBeGreaterThanOrEqual(843);
+    expect(box!.height).toBeGreaterThanOrEqual(844 * 0.94 - 1);
+    expect(box!.height).toBeLessThanOrEqual(844 * 0.94 + 1);
     await expect(page.locator('.vacancies-info-footer')).toBeVisible();
 
     await page.screenshot({
