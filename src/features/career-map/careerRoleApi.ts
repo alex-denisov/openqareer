@@ -22,6 +22,8 @@ export interface RoleHypothesesWithDecisions {
   readonly decisions: RoleDecisionsRead;
   readonly acceptedTitle: string | null;
   readonly checkedTitles: readonly string[];
+  /** B565: подтверждённые проверкой навыки по названию роли. */
+  readonly checkedSkills: Readonly<Record<string, readonly string[]>>;
   readonly sample: RolesSample | null;
 }
 
@@ -62,6 +64,9 @@ export async function readRoleHypothesesWithDecisions(
     decisions: readDecisions(envelope.meta),
     acceptedTitle: strategy?.current.role.title ?? null,
     checkedTitles: checked.map((role) => role.roleTitle),
+    checkedSkills: Object.fromEntries(
+      checked.map((role) => [role.roleTitle, role.confirmedSkills ?? []]),
+    ),
     sample: readSample(envelope.meta),
   };
 }

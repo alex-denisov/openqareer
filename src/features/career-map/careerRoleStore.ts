@@ -20,6 +20,7 @@ export interface CareerRolesState {
   readonly offersDismissed: readonly string[];
   readonly acceptedTitle: string | null;
   readonly checkedTitles: readonly string[];
+  readonly checkedSkills: Readonly<Record<string, readonly string[]>>;
   readonly sample: RolesSample | null;
   readonly actionError: string | null;
 }
@@ -31,6 +32,7 @@ const INITIAL: CareerRolesState = {
   offersDismissed: [],
   acceptedTitle: null,
   checkedTitles: [],
+  checkedSkills: {},
   sample: null,
   actionError: null,
 };
@@ -62,6 +64,7 @@ export function loadCareerRoles(force = false): Promise<void> {
         offersDismissed: read.decisions.offersDismissed,
         acceptedTitle: read.acceptedTitle,
         checkedTitles: read.checkedTitles,
+        checkedSkills: read.checkedSkills,
         sample: read.sample,
       }),
     )

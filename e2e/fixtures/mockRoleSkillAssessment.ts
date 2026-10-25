@@ -259,7 +259,17 @@ function handleAssessmentRoute(
   if (path.endsWith('/candidate/role-skill-assessments/checked-roles') && method === 'GET') {
     const done = currentRun?.status === 'complete' && currentRun.completedAt;
     return {
-      data: done ? [{ roleTitle: currentRun.roleTitle, completedAt: currentRun.completedAt }] : [],
+      data: done
+        ? [
+            {
+              roleTitle: currentRun.roleTitle,
+              completedAt: currentRun.completedAt,
+              confirmedSkills: currentRun.skills
+                .filter((skill) => skill.grade === 'confirmed')
+                .map((skill) => skill.name),
+            },
+          ]
+        : [],
     };
   }
   if (path.endsWith('/candidate/role-skill-assessments/current') && method === 'GET') {

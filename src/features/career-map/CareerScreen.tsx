@@ -136,6 +136,22 @@ function ConditionEditor({
   }
 }
 
+/** B565: «пока его нет» — только пока ни одна роль не прошла проверку навыков. */
+function RolesSearchPlate({ hasCheckedRole }: { hasCheckedRole: boolean }): ReactElement {
+  return (
+    <p className="career-plate">
+      <Info size={18} aria-hidden />
+      <span>
+        Поиск по ролям открывается после проверки навыков: так подборка опирается на подтверждённое,
+        а не на догадки.
+        {hasCheckedRole
+          ? null
+          : ' Пока его нет, доступен свободный просмотр всех вакансий каталога.'}
+      </span>
+    </p>
+  );
+}
+
 function CareerRolesSection({
   state,
   handlers,
@@ -157,14 +173,7 @@ function CareerRolesSection({
         </span>
         <SectionInfoToggle id="roles-explain" text={ROLES_EXPLAIN} />
       </div>
-      <p className="career-plate">
-        <Info size={18} aria-hidden />
-        <span>
-          Поиск по ролям открывается после проверки навыков: так подборка опирается на
-          подтверждённое, а не на догадки. Пока его нет, доступен свободный просмотр всех вакансий
-          каталога.
-        </span>
-      </p>
+      <RolesSearchPlate hasCheckedRole={roles.some((role) => role.status !== 'hypothesis')} />
       {roles.length === 0 ? (
         <p className="career-role-meta">
           Ролей пока нет. Консультант назовёт их, когда в профиле будет опыт.

@@ -70,7 +70,7 @@ describe('mapProposedRoleToCareerRole (B445)', () => {
       offersDismissed: [],
     });
     expect(role.status).toBe('skills_checked');
-    expect(role.confirmedItems).toEqual(['Платёжные системы']);
+    expect(role.confirmedItems).toEqual([{ text: 'Платёжные системы', source: 'profile' }]);
     expect(role.missingItems.map((item) => item.text)).toEqual(['Kafka']);
     expect(role.requirementsNote).toBe('Сверка с требованиями 88 вакансий, 05.10.');
     expect(role.nextAction.action).toBe('fill_with_consultant');
@@ -96,6 +96,20 @@ describe('mapProposedRoleToCareerRole (B445)', () => {
       checkedTitles: ['director of engineering'],
     });
     expect(checked.status).toBe('skills_checked');
+  });
+
+  it('B565: «Подтверждено» у проверенной роли — навыки, подтверждённые проверкой', () => {
+    const unchecked = observed({ matchedRequirements: 0, matchedRequirementNames: [] });
+    const role = mapProposedRoleToCareerRole(unchecked, {
+      acceptedTitle: null,
+      offersDismissed: [],
+      checkedTitles: ['director of engineering'],
+      checkedSkills: { 'director of engineering': ['Найм', 'Бюджет'] },
+    });
+    expect(role.confirmedItems).toEqual([
+      { text: 'Найм', source: 'check' },
+      { text: 'Бюджет', source: 'check' },
+    ]);
   });
 
   it('роль без вакансий — гипотеза без чисел и без даты', () => {

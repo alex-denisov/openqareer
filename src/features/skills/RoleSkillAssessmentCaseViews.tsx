@@ -3,6 +3,7 @@ import { ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import { VoiceInput } from '../coach/VoiceInput';
 import type { VoiceInputState } from '../coach/voiceInputMachine';
 import type { RoleSkillAssessmentMutationResult } from './roleSkillAssessmentApi';
+import { criterionLabel } from './roleSkillLabels';
 
 type AssessmentRun = RoleSkillAssessmentMutationResult['run'];
 type CaseRecord = AssessmentRun['cases'][number];
@@ -346,7 +347,7 @@ export function EvaluationDetails({
       {evaluation.criteria.map((criterion) => (
         <article key={criterion.criterionId}>
           <strong>
-            {criterion.criterionId} · {GRADE_LABELS[criterion.grade]}
+            {criterionLabel(criterion.criterionId)} · {GRADE_LABELS[criterion.grade]}
           </strong>
           <p>{criterion.explanation}</p>
           <blockquote>{criterion.candidateExcerpt}</blockquote>

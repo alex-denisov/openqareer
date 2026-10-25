@@ -3,6 +3,7 @@ import { ArrowRight } from '@phosphor-icons/react';
 import { VoiceInput } from '../coach/VoiceInput';
 import type { VoiceInputState } from '../coach/voiceInputMachine';
 import type { RoleSkillAssessmentMutationResult } from './roleSkillAssessmentApi';
+import { suggestionDomainLabel } from './roleSkillLabels';
 
 type SuggestionDecision = { accepted: boolean; statement: string };
 type AssessmentRun = RoleSkillAssessmentMutationResult['run'];
@@ -283,7 +284,7 @@ function SuggestionItem({
       />
       <span className="career-role-assessment-suggestion-number">{index + 1}</span>
       <span className="career-role-assessment-suggestion-body">
-        <strong>{suggestion.domain}</strong>
+        <strong>{suggestionDomainLabel(suggestion.domain)}</strong>
         <textarea
           aria-label={`Поправить предложение ${index + 1}`}
           value={draft.statement}
