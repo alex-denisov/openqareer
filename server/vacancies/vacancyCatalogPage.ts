@@ -446,7 +446,7 @@ export function buildListingPageFromEntries(
     documentTitle: listingTitle(heading, page, total),
     description:
       `${heading}: ${countLabel(total)}. ` +
-      'У каждой — работодатель, источник и дата, отклик подаётся на сайте работодателя.',
+      'У каждой вакансии — работодатель, источник и дата публикации. Отклик подаётся на сайте работодателя.',
     indexable: isIndexableListing(total, Boolean(summary.role)),
     page,
     pageCount,

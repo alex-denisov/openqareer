@@ -27,9 +27,9 @@ import type {
   SalaryMarketSnapshot,
 } from '../../../shared/salaryMarketSnapshot';
 
-export const SALARY_MARKET_TITLE = 'Зарплаты и навыки по профессиям | openqareer';
+export const SALARY_MARKET_TITLE = 'Зарплаты и навыки по профессиям: каталог | openqareer';
 export const SALARY_MARKET_DESCRIPTION =
-  'Вилки и навыки из каталога вакансий: валюта, период, размер и дата выборки.';
+  'Зарплатные вилки и навыки из каталога вакансий по профессиям: сравните грейды и регионы, проверьте валюту, период оплаты, размер и дату выборки.';
 export const SALARY_MARKET_TEMPLATE = 'salary-market.html';
 
 type SalaryGroup = Extract<

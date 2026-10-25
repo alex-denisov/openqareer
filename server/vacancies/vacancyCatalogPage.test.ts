@@ -316,6 +316,8 @@ describe('страница списка каталога (B209, срез 2b)', (
       1,
     );
     expect(page.heading).toBe('Вакансии — Москва');
+    expect(page.description.length).toBeGreaterThanOrEqual(120);
+    expect(page.description.length).toBeLessThanOrEqual(160);
   });
 
   it('нумерует страницы списка адресами самого списка', () => {
