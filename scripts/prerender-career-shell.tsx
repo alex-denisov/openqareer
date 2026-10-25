@@ -1,7 +1,8 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { transform } from 'esbuild';
 import { pathToFileURL } from 'node:url';
+import type { Manifest } from 'vite';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AdminConsole } from '../src/features/admin/AdminConsole';
@@ -250,6 +251,34 @@ export const AUTH_PAGES = [
   },
 ] as const;
 
+/** Only exact files from Vite's emitted graph may become auth HTML hints. */
+export function authResourceHints(manifest: Manifest): string {
+  const asset = (file: unknown, extension: 'js' | 'css') => {
+    if (typeof file !== 'string' || !new RegExp(`^assets/[A-Za-z0-9_-]+\\.${extension}$`, 'u').test(file)) {
+      throw new Error('Invalid auth preload asset path');
+    }
+    return escapeHtml(`/${file}`);
+  };
+  const dynamicImports = manifest['index.html']?.dynamicImports;
+  if (!Array.isArray(dynamicImports)) throw new Error('Missing entry build graph');
+  const chunk = (name: string) => {
+    const matches = dynamicImports.map((key) => manifest[key]).filter((entry) => entry?.name === name);
+    if (matches.length !== 1) throw new Error(`Expected one emitted auth chunk: ${name}`);
+    return matches[0];
+  };
+  const styleChunks = ['landing', 'auth'].map(chunk);
+  const styles = styleChunks.flatMap((entry) => {
+    const css = entry.css;
+    if (!Array.isArray(css) || css.length === 0) throw new Error(`Missing emitted auth stylesheet: ${entry.name}`);
+    return css.map((file) => asset(file, 'css'));
+  });
+  return [
+    ...[chunk('AuthPages'), ...styleChunks].map((entry) =>
+      `<link rel="modulepreload" crossorigin href="${asset(entry.file, 'js')}">`),
+    ...[...new Set(styles)].map((href) => `<link rel="preload" as="style" crossorigin href="${href}">`),
+  ].join('');
+}
+
 async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string> {
   // Auth is a lazy route. Reuse its exact styles without putting the legacy
   // landing styles into every public document's initial CSS bundle.
@@ -273,11 +302,11 @@ async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string>
  * Show the exact auth page before JavaScript, with disabled inputs and an inert
  * card. createRoot replaces this shell, so credentials cannot be entered early.
  */
-async function writeAuthPages(html: string, distDirectory: string): Promise<void> {
+async function writeAuthPages(html: string, distDirectory: string, hints: string): Promise<void> {
   const stylesheet = await writeAuthFirstPaintStyles(distDirectory);
   for (const page of AUTH_PAGES) {
     const document = pageHead(html, page)
-        .replace('</head>', `<link rel="stylesheet" href="${stylesheet}"></head>`)
+        .replace('</head>', `${hints}<link rel="stylesheet" href="${stylesheet}"></head>`)
         .replace(
           /<link rel="canonical"[^>]*>/u,
           `<link rel="canonical" href="${SITE_ORIGIN}${page.path}"><meta name="robots" content="noindex, follow">`,
@@ -325,6 +354,7 @@ export async function prerenderShells(
   indexPath: string,
   adminPath: string,
   distDirectory = indexPath.replace(/\/[^/]+$/u, ''),
+  manifest?: Manifest,
 ): Promise<void> {
   const html = await readFile(indexPath, 'utf8');
   if (!html.includes('id="root"')) {
@@ -369,7 +399,7 @@ export async function prerenderShells(
   await writeCountryFitPage(html, distDirectory);
   await writeSalaryTemplate(html, distDirectory);
   await writeNotFoundPage(html, distDirectory);
-  await writeAuthPages(html, distDirectory);
+  await writeAuthPages(html, distDirectory, manifest ? authResourceHints(manifest) : '');
 
   // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
   // сборке больше нет. Постоянные адреса всё равно проверяются здесь: сборка
@@ -381,7 +411,6 @@ export async function prerenderShells(
   await writeFile(`${distDirectory}/llms-full.txt`, buildLlmsFullTxt());
   // Стиль публичного каталога — настоящий файл, а не инлайн: боевая политика
   // `style-src 'self'` инлайновый стиль не применит (B209).
-  await mkdir(`${distDirectory}/assets`, { recursive: true });
   await writeFile(`${distDirectory}${CATALOG_STYLESHEET_PATH}`, CATALOG_STYLE);
 }
 
@@ -389,7 +418,11 @@ const directPath = process.argv[1];
 if (directPath && import.meta.url === pathToFileURL(directPath).href) {
   const indexPath = process.argv[2] ?? 'dist/index.html';
   const adminPath = process.argv[3] ?? 'dist/admin.html';
-  await prerenderShells(indexPath, adminPath);
+  const distDirectory = indexPath.replace(/\/[^/]+$/u, '');
+  const manifest = JSON.parse(await readFile(`${distDirectory}/.vite/manifest.json`, 'utf8')) as Manifest;
+  await prerenderShells(indexPath, adminPath, distDirectory, manifest);
+  // The emitted graph is build input, not a public application resource.
+  await unlink(`${distDirectory}/.vite/manifest.json`);
   process.stdout.write(
     `prerendered career shell into ${indexPath}, administrator console into ${adminPath} and ${LEGAL_DOCS.length} legal documents\n`,
   );

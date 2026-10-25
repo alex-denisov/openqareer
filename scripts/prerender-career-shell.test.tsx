@@ -7,12 +7,20 @@ import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
 import { publicPathViolation } from '../shared/seoSlugPolicy';
 import {
   assertSitemapUrlPolicy,
+  authResourceHints,
   buildSitemap,
   compactCountryFitDocument,
   pageHead,
   prerenderShells,
   sitemapUrls,
 } from './prerender-career-shell';
+
+const authManifest = {
+  'index.html': { file: 'assets/app.js', dynamicImports: ['module-key', 'landing-key', 'auth-key'] },
+  'module-key': { name: 'AuthPages', file: 'assets/AuthPages-from-build.js' },
+  'landing-key': { name: 'landing', file: 'assets/landing-from-build.js', css: ['assets/landing-from-build.css'] },
+  'auth-key': { name: 'auth', file: 'assets/auth-from-build.js', css: ['assets/auth-from-build.css'] },
+};
 
 const temporaryDirectories: string[] = [];
 
@@ -69,7 +77,8 @@ describe('production career shell prerender', () => {
     temporaryDirectories.push(directory);
     const entry = join(directory, 'index.html');
     writeFileSync(entry, '<!doctype html><html><head><link rel="canonical" href="https://openqareer.com/"><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>');
-    await prerenderShells(entry, join(directory, 'admin.html'));
+    await prerenderShells(entry, join(directory, 'admin.html'), directory, authManifest);
+    expect(readFileSync(entry, 'utf8')).not.toContain('AuthPages-from-build.js');
     for (const [file, title] of [['login.html', 'Вход в кабинет'], ['signup.html', 'Создать аккаунт']]) {
       const html = readFileSync(join(directory, file), 'utf8');
       expect(html).toContain(`<h1>${title}</h1>`);
@@ -78,6 +87,12 @@ describe('production career shell prerender', () => {
       expect(html).toContain('role="status">Загружаем форму…');
       expect(html).toContain('content="noindex, follow"');
       expect(html).toContain('src="/assets/app.js"');
+      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/AuthPages-from-build.js">');
+      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/landing-from-build.js">');
+      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/auth-from-build.js">');
+      expect(html.match(/rel="modulepreload"/gu)).toHaveLength(3);
+      expect(html).toContain('<link rel="preload" as="style" crossorigin href="/assets/landing-from-build.css">');
+      expect(html).toContain('<link rel="preload" as="style" crossorigin href="/assets/auth-from-build.css">');
       const stylesheet = html.match(/href="(\/assets\/auth-first-paint-[a-f0-9]+\.css)"/u)?.[1];
       expect(stylesheet).toBeDefined();
       const styles = readFileSync(join(directory, stylesheet!), 'utf8');
@@ -85,6 +100,36 @@ describe('production career shell prerender', () => {
       expect(Buffer.byteLength(styles)).toBeLessThanOrEqual(20_000);
       for (const input of html.match(/<input\b[^>]*>/gu) ?? []) expect(input).toContain('disabled=""');
       expect(Buffer.byteLength(html)).toBeLessThanOrEqual(20_000);
+    }
+  });
+
+  it('rejects manifest paths that could escape the same-origin asset or HTML boundary', () => {
+    for (const file of [
+      'https://example.test/auth.js', '//example.test/auth.js', 'javascript:alert(1)',
+      'assets/../auth.js', 'assets/%2e%2e/auth.js', 'assets/auth.js?url=external',
+      'assets/auth.js" onload="alert(1)', 'assets/auth.css',
+    ]) {
+      expect(() => authResourceHints({
+        ...authManifest, 'module-key': { ...authManifest['module-key'], file },
+      })).toThrow('Invalid auth preload asset path');
+    }
+    expect(() => authResourceHints({
+      ...authManifest,
+      'auth-key': { name: 'auth', file: 'assets/auth.js', css: ['//example.test/auth.css'] },
+    })).toThrow('Invalid auth preload asset path');
+    expect(() => authResourceHints({
+      ...authManifest, 'auth-key': { name: 'auth', file: 'assets/auth.js' },
+    })).toThrow('Missing emitted auth stylesheet');
+    expect(() => authResourceHints({ ...authManifest, 'index.html': { file: 'assets/app.js' } })).toThrow('Missing entry build graph');
+  });
+
+  it('validates CSS proxy module URLs as JavaScript assets before emitting hints', () => {
+    for (const key of ['landing-key', 'auth-key'] as const) {
+      for (const file of ['//example.test/proxy.js', 'assets/../proxy.js', 'assets/proxy.css', 'assets/proxy.js" onload="bad']) {
+        expect(() => authResourceHints({
+          ...authManifest, [key]: { ...authManifest[key], file },
+        })).toThrow('Invalid auth preload asset path');
+      }
     }
   });
 
