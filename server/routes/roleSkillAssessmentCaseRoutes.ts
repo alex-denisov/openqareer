@@ -533,15 +533,26 @@ async function requestCaseEvaluation(
   requestId: string,
   appealReason?: string,
 ) {
+  const validate = (message: string) =>
+    validateRoleSkillEvaluation({
+      candidateAnswer: answer,
+      criteria: CASE_CRITERIA,
+      allowedSourceRefs: record.assessmentCase.sourceRefs,
+      modelEvaluation: parseModelJson(message),
+    });
   const response = await requestModel(deps, candidate, answer, providerKey(run.id, requestId), {
     stageContext: JSON.stringify(buildEvaluationContext(run, record, appealReason)),
+    structured: true,
+    accept: (result) => {
+      try {
+        validate(result.message);
+        return true;
+      } catch {
+        return false;
+      }
+    },
   });
-  return validateRoleSkillEvaluation({
-    candidateAnswer: answer,
-    criteria: CASE_CRITERIA,
-    allowedSourceRefs: record.assessmentCase.sourceRefs,
-    modelEvaluation: parseModelJson(response.result.message),
-  });
+  return validate(response.result.message);
 }
 
 function buildEvaluationContext(
@@ -561,6 +572,19 @@ function buildEvaluationContext(
     case: record.assessmentCase,
     criteria: CASE_CRITERIA,
     ...(appealReason ? { appealReason } : {}),
+    // Without the shape the model invented its own fields («status»: «met»), B564.
+    gradeRule:
+      'grade is confirmed when every criterion is confirmed, not_confirmed when none is, otherwise partial.',
+    outputSchema: {
+      grade: 'confirmed | partial | not_confirmed',
+      criteria: CASE_CRITERIA.map((criterion) => ({
+        criterionId: criterion.id,
+        grade: 'confirmed | partial | not_confirmed',
+        explanation: 'one or two sentences, at most 500 characters',
+        candidateExcerpt: 'verbatim fragment of the candidate answer',
+        sourceRefIds: record.assessmentCase.sourceRefs.map((source) => source.id),
+      })),
+    },
   };
 }
 

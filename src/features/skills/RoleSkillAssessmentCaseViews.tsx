@@ -369,23 +369,39 @@ export function ModelErrorState({
   run,
   busy,
   onRetry,
+  onSkipSuggestions,
 }: {
   run: AssessmentRun;
   busy: boolean;
   onRetry: () => void;
+  /** B564: the suggestion step is optional, so a failed one must not block the cases. */
+  onSkipSuggestions?: () => void;
 }) {
+  const suggestionStep = run.modelError?.action === 'suggestions';
   return (
     <section className="career-role-assessment-state" role="alert">
       <WarningCircle size={24} aria-hidden="true" />
       <h2>Модель не завершила проверку</h2>
       <p>
-        Ответ не оценён: модель не ответила. Ваш текст и шаги сохранены, ничего не потеряно.
-        Повторите этот шаг, когда сервис будет доступен.
+        {suggestionStep
+          ? 'Не удалось подготовить предложения в профиль. Ответы сохранены, ничего не потеряно. Повторите шаг или переходите к кейсам: профиль останется без изменений.'
+          : 'Ответ не оценён: модель не ответила. Ваш текст и шаги сохранены, ничего не потеряно. Повторите этот шаг, когда сервис будет доступен.'}
       </p>
-      <button className="career-primary-button" type="button" disabled={busy} onClick={onRetry}>
-        {busy ? 'Повторяем…' : 'Повторить шаг'}
-      </button>
-      <span className="career-role-assessment-meta">Действие: {run.modelError?.action}</span>
+      <div className="career-role-assessment-actions">
+        <button className="career-primary-button" type="button" disabled={busy} onClick={onRetry}>
+          {busy ? 'Повторяем…' : 'Повторить шаг'}
+        </button>
+        {suggestionStep && onSkipSuggestions ? (
+          <button
+            className="career-quiet-button"
+            type="button"
+            disabled={busy}
+            onClick={onSkipSuggestions}
+          >
+            Перейти к кейсам без предложений
+          </button>
+        ) : null}
+      </div>
     </section>
   );
 }

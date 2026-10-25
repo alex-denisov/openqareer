@@ -25,6 +25,7 @@ export class CoachProviderRoleAgent implements CareerRoleAgent {
         })),
       },
       input.idempotencyKey,
+      input.options,
     );
   }
 }

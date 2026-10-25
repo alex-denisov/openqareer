@@ -31,6 +31,30 @@ describe('CareerOrchestrator', () => {
     expect(calls).toEqual(['career_consultant']);
   });
 
+  it('asks only the requested role for a structured server step (B564)', async () => {
+    const calls: CareerRole[] = [];
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          calls.push(input.role);
+          return roleResult(input.role);
+        },
+      },
+    });
+
+    await orchestrator.createTurn({
+      candidateReference: 'candidate-reference-1',
+      dataClass: 'synthetic',
+      locale: 'ru-RU',
+      phase: 'role',
+      activeRole: 'career_expert',
+      internalPurpose: 'structured-stage',
+      messages: [{ id: 'message-1', role: 'user', content: 'Отвечал за операции.' }],
+    }, '11111111-1111-4111-8111-111111111113');
+
+    expect(calls).toEqual(['career_expert']);
+  });
+
   it('routes a material market turn through expert, strategist and consultant', async () => {
     const calls: CareerRole[] = [];
     const agent: CareerRoleAgent = {

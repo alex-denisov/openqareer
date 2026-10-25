@@ -27,4 +27,13 @@ describe('career role prompts', () => {
     expect(summary).toContain('ЗАДАЧА: ВЫЖИМКА ЗАКРЫТОЙ БЕСЕДЫ');
     expect(summary).toContain('Что осталось открытым');
   });
+
+  it('lets a structured server step override the prose rule for message (B564)', () => {
+    const stage = careerInstructionsForRole('career_expert', 'structured-stage');
+
+    expect(stage).toContain('ЗАДАЧА: СТРУКТУРНЫЙ ШАГ');
+    expect(stage).toContain('message содержит только JSON-объект');
+    expect(stage).toContain('датированные рыночные наблюдения');
+    expect(stage.indexOf('СТРУКТУРНЫЙ ШАГ')).toBeGreaterThan(stage.indexOf('ФОРМАТ ОТВЕТА'));
+  });
 });

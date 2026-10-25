@@ -21,8 +21,10 @@ export interface VacancyRequirementsJob {
 interface JobRow { id: string; input_json: string; lease_token: string; lease_until: number; attempts: number }
 
 /** Public vacancy data only. Constructed by the background worker's own DB connection. */
-/** Bumped when a parser change makes earlier model failures worth one more try (B522: 2). */
-export const MECHANICS_REQUEUE_REVISION = 3;
+/** Bumped when a parser change makes earlier model failures worth one more try (B522: 2; B562-r quotes: 4). */
+export const MECHANICS_REQUEUE_REVISION = 4;
+/** Claims per job: `claim` skips rows at this count and `fail` settles them as failed. */
+const MAX_ATTEMPTS = 3;
 /** Below title strategy (0.5–1), shown pages (1.5) and fit dependencies (2): the background tail (B510). */
 export const LABEL_UPGRADE_PRIORITY = 0.1;
 /** A requeue keeps label upgrades (0.1) and title strategy below shown pages, and never lifts a job above them (B510-r). */
@@ -148,8 +150,14 @@ export class SqliteVacancyRequirementsStore {
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
 
+  /**
+   * An invalid model answer is retried; after the last attempt the rule requirements it carries are
+   * the result, so the vacancy is not `failed` while its text has requirements (B562-r). An outage
+   * (`unavailable`) never becomes a final answer.
+   */
   complete(job: VacancyRequirementsJob, result: VacancyRequirementsResult, now = Date.now()): void {
-    if (result.fallbackStatus === 'unavailable' || result.fallbackStatus === 'invalid') throw new Error(`requirements_model_${result.fallbackStatus}`);
+    const finalInvalid = result.fallbackStatus === 'invalid' && job.attempts >= MAX_ATTEMPTS;
+    if ((result.fallbackStatus === 'unavailable' || result.fallbackStatus === 'invalid') && !finalInvalid) throw new Error(`requirements_model_${result.fallbackStatus}`);
     const expected = vacancyRequirementsCacheKey(job.input);
     const actual = JSON.stringify([result.vacancyId, result.clusterId ?? '', result.descriptionHash, result.extractorVersion]);
     if (expected !== actual) throw new Error('requirements_result_identity_mismatch');

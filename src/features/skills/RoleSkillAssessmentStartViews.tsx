@@ -430,7 +430,8 @@ function RunSkillRow({
   skill: RoleSkillAssessmentRun['skills'][number];
 }) {
   const caseRecord = run.cases.find((record) => record.assessmentCase.skillId === skill.id);
-  const untested = !caseRecord || caseRecord.status === 'skipped';
+  // A grade exists only once the case answer is evaluated; before that the skill is unchecked.
+  const untested = !caseRecord?.evaluation;
   const label = untested ? 'Не проверено' : gradeLabel(skill.grade);
   return (
     <li>

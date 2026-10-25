@@ -598,7 +598,7 @@ async function handleSuggestions(deps: RouteDeps, request: FastifyRequest, reply
   const digest = requestDigest('suggestions', runId, body);
   const replay = checkReplay(run, body.requestId, digest, request, reply);
   if (replay !== undefined) return replay;
-  if (run.revision !== body.expectedRevision || run.status !== 'suggestions')
+  if (run.revision !== body.expectedRevision || !acceptsSuggestionDecision(run))
     return conflict(reply, request);
   if (!hasMatchingSuggestionIds(run, body.suggestions)) {
     return sendError(
@@ -619,6 +619,20 @@ async function handleSuggestions(deps: RouteDeps, request: FastifyRequest, reply
     digest,
     () => saveSuggestionDecisions(deps, candidate, run, updatedRun, accepted, reply, request),
     () => conflict(reply, request),
+  );
+}
+
+/**
+ * A failed suggestion step is not a dead end (B564): with no suggestions to decide on, the
+ * candidate may go on to the cases instead of retrying the model.
+ */
+function acceptsSuggestionDecision(run: RoleSkillAssessmentRun): boolean {
+  if (run.status === 'suggestions') return true;
+  return (
+    run.status === 'model_error' &&
+    run.modelError?.action === 'suggestions' &&
+    run.modelError.code !== 'provider_pending' &&
+    run.suggestions.length === 0
   );
 }
 
@@ -657,6 +671,7 @@ function buildSuggestionDecisionRun(
     revision: run.revision + 1,
     updatedAt: new Date().toISOString(),
     status: 'cases',
+    modelError: null,
     profileChange: run.profileChange ?? { memoryIds: [], acceptedAt: null, revertedAt: null },
     suggestions: updates.map(({ original, accepted: selected, statement }) => ({
       ...original,

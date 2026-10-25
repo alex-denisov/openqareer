@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { verbatimQuote } from './vacancyRequirements';
 import { MIN_ROLE_SAMPLE } from '../../shared/poolRoleHypotheses';
 
 /** A requirement counts as repeated in this share of vacancies with extracted requirements. */
@@ -113,7 +114,8 @@ const roleSkillModelEvaluationSchema = z
             grade: roleSkillGradeSchema,
             explanation: z.string().trim().min(1).max(500),
             candidateExcerpt: z.string().trim().min(1).max(500),
-            sourceRefIds: z.array(z.string().trim().min(1).max(160)).min(1).max(20),
+            // An empty list cites the case sources (B564).
+            sourceRefIds: z.array(z.string().trim().min(1).max(160)).max(20),
           })
           .strict(),
       )
@@ -458,17 +460,36 @@ export function validateRoleSkillEvaluation(input: {
   }
 
   const criteria = evaluation.criteria.map((criterion) => {
-    if (!answer.includes(criterion.candidateExcerpt)) {
+    // Spacing, typographic quotes and the final period may differ; a retelling may not (B564).
+    const candidateExcerpt = answerQuote(criterion.candidateExcerpt, answer);
+    if (!candidateExcerpt) {
       throw new Error('evaluation_quote_not_in_answer');
     }
     if (criterion.sourceRefIds.some((sourceId) => !allowedSourceIds.has(sourceId))) {
       throw new Error('evaluation_source_not_allowed');
     }
-    return { ...criterion, sourceRefIds: [...new Set(criterion.sourceRefIds)] };
+    // The criteria grade a case built from these sources; a model that names none cites them all.
+    const sourceRefIds =
+      criterion.sourceRefIds.length > 0 ? criterion.sourceRefIds : [...allowedSourceIds];
+    return { ...criterion, candidateExcerpt, sourceRefIds: [...new Set(sourceRefIds)] };
   });
   const gradeFromCriteria = aggregateGrade(criteria.map((criterion) => criterion.grade));
   if (evaluation.grade !== gradeFromCriteria) throw new Error('evaluation_grade_mismatch');
   return { candidateAnswer: answer, grade: evaluation.grade, criteria };
+}
+
+/**
+ * The answer span a model quote stands for. Models stitch two sentences of the answer that are
+ * apart into one quote (live grading on 25.10, B564): each sentence must still be verbatim, and
+ * the stored quote marks the gap.
+ */
+function answerQuote(quote: string, answer: string): string | null {
+  const whole = verbatimQuote(quote, answer);
+  if (whole) return whole;
+  const fragments = quote.split(/(?<=[.!?;])\s+/u).filter((fragment) => fragment.trim());
+  if (fragments.length < 2) return null;
+  const spans = fragments.map((fragment) => verbatimQuote(fragment, answer));
+  return spans.every((span) => span !== null) ? spans.join(' … ') : null;
 }
 
 function aggregateGrade(grades: readonly RoleSkillGrade[]): RoleSkillGrade {

@@ -110,6 +110,27 @@ describe('durable public vacancy requirement queue', () => {
     expect(store.claim('retry', 5000)?.attempts).toBe(2);
   });
 
+  it('keeps the rule requirements after the last invalid model answer instead of failing the vacancy (B562-r)', async () => {
+    const { store } = setup(); store.enqueue(input);
+    const invalid = async () => ({ ...extractVacancyRequirements(input), fallbackStatus: 'invalid' as const });
+    for (const now of [1, 10000]) {
+      await store.runNext('worker', invalid, now);
+      expect(store.get(input)).toBeNull();
+    }
+    const last = await store.runNext('worker', invalid, 20000);
+    expect(last).toMatchObject({ method: 'rules', fallbackStatus: 'invalid', status: 'extracted' });
+    expect(store.get(input)?.requirements.map((item) => item.text)).toEqual(['SQL']);
+    expect(store.enqueue(input).state).toBe('cached');
+  });
+
+  it('still fails a vacancy whose model stayed unavailable: an outage is not a final answer', async () => {
+    const { store } = setup(); store.enqueue(input);
+    const down = async () => ({ ...extractVacancyRequirements(input), fallbackStatus: 'unavailable' as const });
+    for (const now of [1, 10000, 20000]) await store.runNext('worker', down, now);
+    expect(store.get(input)).toBeNull();
+    expect(store.enqueue(input).state).toBe('failed');
+  });
+
   it('preserves cached extraction across database process restarts', () => {
     const directory = mkdtempSync(join(tmpdir(), 'oq-requirements-'));
     let db = new DatabaseSync(join(directory, 'queue.sqlite'));

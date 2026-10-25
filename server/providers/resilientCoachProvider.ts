@@ -3,6 +3,7 @@ import {
   CoachProviderError,
   type CoachProvider,
   type CoachProviderResult,
+  type CoachTurnOptions,
 } from './coachProvider';
 import type { ProviderId } from './modelRegistry';
 
@@ -63,6 +64,7 @@ export class ResilientCoachProvider implements CoachProvider {
   async createTurn(
     input: CoachTurnInput,
     idempotencyKey: string,
+    options: CoachTurnOptions = {},
   ): Promise<CoachProviderResult> {
     const attempts: RoutingAttempt[] = [];
     let executed = 0;
@@ -79,6 +81,12 @@ export class ResilientCoachProvider implements CoachProvider {
 
       try {
         const output = await route.provider.createTurn(input, idempotencyKey);
+        if (options.accept && !options.accept(output.result)) {
+          // The route works; only this step cannot use its answer, so it is not cooled.
+          lastError = new CoachProviderError('provider_output_invalid', 502, true);
+          attempts.push(attemptOf(route, 'failed', 'provider_output_invalid'));
+          continue;
+        }
         attempts.push(attemptOf(route, 'succeeded'));
         return {
           ...output,

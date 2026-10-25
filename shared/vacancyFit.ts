@@ -1,11 +1,27 @@
 /** Percentages describe verified requirement coverage, never hiring probability. */
 import type { VacancyRequirement } from '../server/domain/vacancyRequirements';
 export interface VacancyFitView {
-  readonly state: 'not_requested' | 'processing' | 'retrying' | 'ready' | 'no_description' | 'no_requirements' | 'failed';
+  /** `refreshing`: `result` is from an earlier algorithm version, the new one is queued (B562-r). */
+  readonly state:
+    | 'not_requested'
+    | 'processing'
+    | 'retrying'
+    | 'refreshing'
+    | 'ready'
+    | 'no_description'
+    | 'no_requirements'
+    | 'failed';
   readonly requirements: readonly VacancyRequirement[];
   readonly result?: VacancyFitResult;
+  /** Why a `failed` job stopped, from its error class; the row names it instead of «try again». */
+  readonly failure?: VacancyFitFailure;
 }
-export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-2';
+export type VacancyFitFailure =
+  'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'other';
+/** B562-r: quotes decoded from `&eacute;`/`&rsquo;` count, so results cached without them are recalculated. */
+export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-3';
+/** Shown while the current version is calculated, so a version bump never hides a known percent. */
+export const LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS: readonly string[] = ['evidence-coverage-2'];
 export const VACANCY_FIT_GATE_NAMES = ['role', 'level', 'region', 'workAuthorization', 'workFormat'] as const;
 export type VacancyFitGateName = typeof VACANCY_FIT_GATE_NAMES[number];
 export type VacancyFitGateStatus = 'matched' | 'blocked' | 'unknown';

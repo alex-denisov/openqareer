@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BULK_BUDGET_EXCEEDED, type BulkLlmClient, type BulkLlmInput } from '../providers/bulkLlmClient';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { evaluateVacancyFit, type VacancyFitInput } from './vacancyFit';
-import { extractVacancyRequirements } from './vacancyRequirements';
+import { extractVacancyRequirements, vacancyDescriptionHash } from './vacancyRequirements';
+import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS } from '../../shared/vacancyFit';
 
 function input(candidateId = 'candidate-secret-owner'): VacancyFitInput {
   return {
@@ -55,6 +56,30 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(await runtime.runNext(null)).toBe(false);
     runtime.enqueue(source);
     expect(await runtime.runNext(null)).toBe(false);
+  });
+
+  it('keeps a result of the previous algorithm version on screen as «refreshing» until the new one is ready (B562-r)', async () => {
+    const runtime = setup();
+    const source = input();
+    runtime.enqueue(source);
+    await runtime.runNext(null);
+    const requirements = runtime.requirements.getLatest(
+      source.vacancyId,
+      vacancyDescriptionHash(source.description),
+    )!.requirements;
+    const resolved = { ...source, requirements };
+    const previous = {
+      ...evaluateVacancyFit(resolved),
+      algorithmVersion: LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS[0],
+    };
+    runtime.database.exec('DELETE FROM vacancy_fit_cache; DELETE FROM vacancy_fit_queue');
+    runtime.fit.putCache(resolved, previous, undefined, LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS[0]);
+    const view = runtime.view(source);
+    expect(view.state).toBe('refreshing');
+    expect(view.result).toMatchObject({ vacancyId: source.vacancyId, reason: previous.reason });
+    runtime.enqueue(source);
+    await runtime.runNext(null);
+    expect(runtime.view(source).state).toBe('ready');
   });
 
   it('extracts the fit job\'s own requirements in the same step instead of deferring it (B510)', async () => {
@@ -192,6 +217,32 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.view(source).state).toBe('failed');
   });
 
+  it('names an answered but invalid assessment apart from an outage (B562-r)', async () => {
+    const runtime = setup();
+    const original = input();
+    const source: VacancyFitInput = {
+      ...original,
+      gates: {
+        role: { status: 'matched', reason: 'confirmed' },
+        level: { status: 'matched', reason: 'confirmed' },
+        region: { status: 'matched', reason: 'confirmed' },
+        workFormat: { status: 'matched', reason: 'confirmed' },
+        workAuthorization: { status: 'matched', reason: 'confirmed' },
+      },
+    };
+    const client = fitClient(vi.fn().mockResolvedValue({ content: '{"score":95}' }));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    cleanup.push(() => vi.useRealTimers());
+    vi.setSystemTime(Date.parse('2026-10-25T04:00:00.000Z'));
+    runtime.enqueue(source);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await runtime.runNext(client);
+      vi.setSystemTime(Date.now() + 10 * 60_000);
+    }
+    expect(runtime.takeStats()).toMatchObject({ failed: 1, lastError: 'assessment_model_invalid' });
+    expect(runtime.view(source)).toMatchObject({ state: 'failed', failure: 'model_invalid' });
+  });
+
   it('bounds automatic retries and lets an explicit request retry a failed job after recovery', async () => {
     const runtime = setup(); const original = input();
     const source: VacancyFitInput = { ...original, gates: {
@@ -214,7 +265,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     }
     expect(complete).toHaveBeenCalledTimes(3);
     expect(runtime.takeStats()).toMatchObject({ claimed: 3, retried: 2, failed: 1, completed: 0, lastError: 'assessment_model_unavailable' });
-    expect(runtime.view(source).state).toBe('failed');
+    expect(runtime.view(source)).toMatchObject({ state: 'failed', failure: 'model_unavailable' });
     expect(await runtime.runNext(client)).toBe(false);
     expect(complete).toHaveBeenCalledTimes(3);
     const requirementId = runtime.view(source).requirements[0].id;

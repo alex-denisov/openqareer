@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
 import { isImportedMemoryId } from './resumeImport';
-import type { VacancyRequirement } from './vacancyRequirements';
+import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
 
 export interface VacancyFitFact extends ResumeEvidenceCandidate { readonly candidateId: string }
 export interface VacancyFitInput {
@@ -43,8 +43,9 @@ export function isSkillRequirement(requirement: VacancyRequirement): boolean {
   return requirement.kind === 'experience' || (requirement.skill ?? requirement.kind === 'other');
 }
 
+/** Quotes are spans of the decoded text: `&eacute;` and `&rsquo;` dropped sourced quotes until B562-r. */
 function normalizedSource(value: string): string {
-  return value.replace(/<[^>]*>/gu, ' ').replace(/&nbsp;/gu, ' ').replace(/&amp;/gu, '&').replace(/&#39;/gu, "'").replace(/&quot;/gu, '"').replace(/\s+/gu, ' ').trim();
+  return vacancySourceText(value).replace(/\s+/gu, ' ').trim();
 }
 /**
  * A fact from the candidate's own imported resume or profile is evidence while still `proposed`
@@ -61,7 +62,10 @@ function eligibleFacts(input: VacancyFitInput): readonly VacancyFitFact[] {
 }
 
 /** SHA hashes are transient; persistent tenant indexes are keyed HMACs in the store. */
-export function vacancyFitFingerprint(input: VacancyFitInput): { vacancyHash: string; profileHash: string; algorithmVersion: string } {
+export function vacancyFitFingerprint(
+  input: VacancyFitInput,
+  algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION,
+): { vacancyHash: string; profileHash: string; algorithmVersion: string } {
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   const importedIds = input.facts.filter(isImportedEvidence).map((fact) => fact.id);
   return {
@@ -69,7 +73,7 @@ export function vacancyFitFingerprint(input: VacancyFitInput): { vacancyHash: st
     // B562: a profile whose evidence includes imported facts gets a new key, so its result cached
     // without them (and the completed queue row) is not reused; confirmed-only profiles keep theirs.
     profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : [])]),
-    algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
+    algorithmVersion,
   };
 }
 
