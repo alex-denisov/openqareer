@@ -155,3 +155,8 @@ it('a single requirement never yields a percent, even from a stale result (A1)',
   }
   expect(renderToStaticMarkup(<VacancyFitSummary view={single} />)).toMatch(/Мало требований/);
 });
+it('B510: the short inline fit for the 390 status shows only the number', () => {
+  const html = renderToStaticMarkup(<VacancyFitInline view={readyVacancyFit()} short />);
+  expect(html).toMatch(/>50(\u00a0|&nbsp;)%</);
+  expect(html).toContain('aria-label="соответствие 50 %"');
+});

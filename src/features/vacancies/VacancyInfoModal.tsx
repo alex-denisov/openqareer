@@ -1,4 +1,4 @@
-import { ArrowSquareOut, Info } from '@phosphor-icons/react';
+import { ArrowSquareOut } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
@@ -27,8 +27,9 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
       onClose={onClose}
       titleId="vacancy-info-title"
       title={cluster.canonicalTitle}
-      icon={<Info size={18} aria-hidden="true" />}
+      icon={null}
       detail
+      className="career-token-scope"
     >
       <div className="career-modal-body vacancies-info-body vacancies-info-scroll">
         <p className="vacancies-info-subtitle">{infoSubtitle(cluster)}</p>
@@ -51,7 +52,7 @@ function VacancyInfoFooter({
       {primaryUrl ? (
         <button
           type="button"
-          className="career-btn career-btn-secondary"
+          className="career-btn career-btn-secondary vacancies-info-btn"
           onClick={() => {
             void openExternalLink(primaryUrl);
           }}
@@ -60,7 +61,11 @@ function VacancyInfoFooter({
           Открыть на площадке
         </button>
       ) : null}
-      <button type="button" className="career-btn career-btn-secondary" onClick={onClose}>
+      <button
+        type="button"
+        className="career-btn career-btn-secondary vacancies-info-btn"
+        onClick={onClose}
+      >
         Закрыть
       </button>
     </div>

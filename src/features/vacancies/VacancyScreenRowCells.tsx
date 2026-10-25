@@ -168,6 +168,7 @@ function VacancyScreenStatusCell({ item }: { readonly item: MatchedVacancyItem }
     <span className={`vacancies-screen-cell vacancies-screen-cell--status is-${status.tone}`}>
       <Icon aria-hidden="true" />
       {status.label}
+      <VacancyFitInline vacancyId={item.cluster.id} view={item.explanation.fitView} short />
     </span>
   );
 }

@@ -61,12 +61,12 @@ function RoleFooter({
   return (
     <div className="vacancy-location-foot">
       <span className="vacancy-location-chosen">Выбрано {numberFormat.format(chosen)}</span>
-      <button type="button" className="filters-reset" onClick={onCancel}>
+      <button type="button" className="vac-sm is-ghost" onClick={onCancel}>
         Отмена
       </button>
       <button
         type="button"
-        className="btn btn-secondary vacancies-filter-apply"
+        className="vac-sm vacancies-filter-apply"
         disabled={chosen === 0}
         onClick={onApply}
       >

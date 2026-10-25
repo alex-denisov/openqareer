@@ -1609,7 +1609,7 @@ test.describe('B250 vacancies screen', () => {
     // prefers-reduced-motion: масштаб меняется без анимации перелёта.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     for (let step = 0; step < 6; step += 1) {
-      await mapView.getByRole('button', { name: 'Отдалить карту' }).click();
+      await mapView.getByRole('button', { name: 'Отдалить' }).click();
     }
     // Clusters should exist when zoomed out (Berlin + Prague + Vienna clustered)
     const clusterPin = mapView.locator('.career-map-cluster-node').first();

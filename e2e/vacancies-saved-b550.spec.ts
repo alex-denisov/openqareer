@@ -19,7 +19,20 @@ test('B550: saved tab searches, filters closed, sorts by money and keeps the cho
   await mockSignedInCabinet(page, { savedVacanciesCount: 6 });
   await openSaved(page);
 
-  await expect(page.getByText(/ваша короткая подборка для разбора/u)).toBeVisible();
+  const intro = page.locator('.saved-intro');
+  await expect(intro).toBeVisible();
+  // B510: 1440 — .note макета 4 полным текстом; 390 — .pm-note коротким «Ваша короткая подборка…».
+  if (testInfo.project.name === 'mobile-390') {
+    await expect(intro).toHaveText(
+      'Ваша короткая подборка для разбора. Ничего не отправляется и не теряется при смене фильтров.',
+      { useInnerText: true },
+    );
+  } else {
+    await expect(intro).toContainText('Сохранённые вакансии: ваша короткая подборка для разбора.', {
+      useInnerText: true,
+    });
+    await expect(intro).toContainText('Вакансия остаётся здесь', { useInnerText: true });
+  }
   await expect(page.getByText('Показано 6 из 6')).toBeVisible();
   await expect(page.locator('.saved-row').first()).toContainText('сохранено');
   // B446-g4: в строке звезда и «Хочу», ссылки «На площадке» нет (макет 4).

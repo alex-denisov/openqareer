@@ -146,6 +146,8 @@ describe('VacancyMobilePush (B549)', () => {
     await click('Путь к компании');
     expect(title()).toBe('Путь к компании');
     expect(document.body.textContent).toContain('Вектор Банк · три круга связей');
+    // B510: метка «Круг N» на 390 — только текст, как .vm-circle small макета 4.
+    expect(document.querySelectorAll('.vacancy-push-circle small svg')).toHaveLength(0);
     await click('Знакомый в компании');
     expect(title()).toBe('Круг 1');
     expect(document.body.textContent).toContain('Ирина Захарова');

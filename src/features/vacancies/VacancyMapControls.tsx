@@ -111,7 +111,7 @@ export function MapZoomControls({
       <button
         type="button"
         className="career-map-zoom-btn"
-        aria-label="Приблизить карту"
+        aria-label="Приблизить"
         onClick={onZoomIn}
       >
         <Plus size={16} aria-hidden="true" />
@@ -119,7 +119,7 @@ export function MapZoomControls({
       <button
         type="button"
         className="career-map-zoom-btn"
-        aria-label="Отдалить карту"
+        aria-label="Отдалить"
         onClick={onZoomOut}
       >
         <Minus size={16} aria-hidden="true" />

@@ -21,12 +21,13 @@ export function OpportunityTabs({
   /** Режим карты (макет 4): под вкладками только «Подборка». */
   readonly selectionOnly?: boolean;
 }) {
-  const allTabs: Array<{ id: OpportunityTab; label: string }> = [
-    { id: 'selection', label: `Подборка ${tabCount.format(totalVacancies)}` },
-    { id: 'saved', label: `Сохранённые ${savedCount}` },
+  const allTabs: Array<{ id: OpportunityTab; name: string; count?: string }> = [
+    { id: 'selection', name: 'Подборка', count: tabCount.format(totalVacancies) },
+    { id: 'saved', name: 'Сохранённые', count: String(savedCount) },
     {
       id: 'companies',
-      label: companiesCount === undefined ? 'Компании и люди' : `Компании и люди ${companiesCount}`,
+      name: 'Компании и люди',
+      count: companiesCount === undefined ? undefined : String(companiesCount),
     },
   ];
   const tabs = selectionOnly ? allTabs.filter((tab) => tab.id === 'selection') : allTabs;
@@ -37,12 +38,15 @@ export function OpportunityTabs({
           type="button"
           role="tab"
           aria-selected={active === tab.id}
-          aria-label={tab.label}
+          aria-label={tab.count === undefined ? tab.name : `${tab.name} ${tab.count}`}
           className="companies-people-tab"
           key={tab.id}
           onClick={() => onSelect(tab.id)}
         >
-          <span className="opportunity-tab-label-desktop">{tab.label}</span>
+          <span className="opportunity-tab-label-desktop">
+            {tab.name}
+            {tab.count === undefined ? null : <span className="tab-count">{tab.count}</span>}
+          </span>
           <span className="opportunity-tab-label-mobile">
             {tab.id === 'companies' ? 'Компании' : tab.id === 'saved' ? 'Сохранённые' : 'Подборка'}
           </span>

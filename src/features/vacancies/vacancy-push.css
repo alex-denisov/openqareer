@@ -20,6 +20,8 @@
   overscroll-behavior: contain;
   background: var(--career-bg);
   color: var(--career-text);
+  /* B510: тело макета 4 — строки 1.5. */
+  line-height: 1.5;
   scroll-padding-block: var(--career-mobile-topbar-height)
     calc(var(--career-target-min) + var(--career-space-4));
 }
@@ -30,6 +32,8 @@
   z-index: 1;
   display: grid;
   grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
+  /* B510: заголовок макета 4 начинается в 4 px от круглой «Назад» (x 64 при поле 16). */
+  column-gap: var(--career-space-1);
   align-items: center;
   min-block-size: var(--career-mobile-topbar-height);
   padding-inline: var(--career-space-4);
@@ -41,6 +45,7 @@
   margin: 0;
   font-size: var(--career-text-md);
   font-weight: 600;
+  line-height: 1.25;
   text-align: center;
 }
 
@@ -87,6 +92,7 @@
 .vacancy-push-cap,
 .vacancy-push-requirements h3 {
   margin: 0;
+  line-height: 1.25;
   padding-inline: var(--career-space-4);
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
@@ -172,11 +178,22 @@
   color: var(--career-success);
 }
 
-.vacancy-push-kv + .vacancy-push-kv,
-.vacancy-push-row + .vacancy-push-row,
-.vacancy-push-quote + .vacancy-push-row,
-.vacancy-push-chain + .vacancy-push-chain {
+/* B510: разделители как .pm-row + .pm-row::before макета 4 — линия от 56 px, не рамка. */
+.vacancy-push-kv + .vacancy-push-kv::before,
+.vacancy-push-row + .vacancy-push-row::before,
+.vacancy-push-quote + .vacancy-push-row::before,
+.vacancy-push-chain + .vacancy-push-chain::before {
+  content: '';
+  position: absolute;
+  inset-inline: 56px 0;
+  inset-block-start: 0;
   border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+/* Строки «ключ — значение» и цепочки без значка: линия от поля 16 px (.vm-chain макета). */
+.vacancy-push-kv + .vacancy-push-kv::before,
+.vacancy-push-chain + .vacancy-push-chain::before {
+  inset-inline-start: var(--career-space-4);
 }
 
 .vacancy-push-row {
@@ -232,16 +249,32 @@ div.vacancy-push-row {
   font-size: var(--career-text-sm);
 }
 
+/* B510: черновик круга 1 — .pm-quote макета 4: свой блок surface, радиус 20, 16/1.5 цветом тела. */
+.vacancy-push-quote.is-box {
+  padding: var(--career-space-4);
+  border-radius: calc(var(--career-radius-md) + var(--career-space-1));
+  color: var(--career-text);
+  background: var(--career-surface);
+  font-size: var(--career-text-md);
+}
+
+/* .vm-cta внутри тела экрана стоит по полю тела, без своего. */
+.vacancy-push-body .vacancy-push-cta {
+  padding-inline: 0;
+}
+
 .vacancy-push-circle {
   display: grid;
   gap: var(--career-space-1);
   inline-size: 100%;
   padding: var(--career-space-4);
   border: 0;
-  border-radius: var(--career-radius-lg);
+  /* B510: как .vm-circle макета 4 — радиус 20, строки 1.5, заголовок 700. */
+  border-radius: calc(var(--career-radius-md) + var(--career-space-1));
   color: var(--career-text);
   background: var(--career-surface);
   font: inherit;
+  line-height: 1.5;
   text-align: start;
   cursor: pointer;
 }
@@ -257,7 +290,7 @@ div.vacancy-push-row {
 
 .vacancy-push-circle b {
   font-size: var(--career-text-md);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .vacancy-push-circle p {
@@ -272,10 +305,12 @@ div.vacancy-push-row {
   gap: var(--career-space-1);
   color: var(--career-accent);
   font-size: var(--career-text-sm);
-  font-weight: 600;
+  /* B510: как .vm-go макета 4 — 14 px, обычный вес. */
+  font-weight: 400;
 }
 
 .vacancy-push-chain {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -392,7 +427,7 @@ div.vacancy-push-row {
 }
 
 .vacancy-push-sheet-item.is-cancel {
-  color: var(--career-text-muted);
+  color: var(--career-text-soft);
 }
 
 .vacancy-push-sheet-item:focus-visible {
@@ -403,4 +438,74 @@ div.vacancy-push-row {
 .vacancy-push-sheet-item:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+/* B510: экран вакансии 390 по макету 4 — «Назад» стеклянный круг 44 (.topbar-back),
+   подписи групп как .pm-cap (13/600 soft) и у «Требований», «Откликнуться» как .pm-cta 50 px. */
+.vacancy-push-bar .vacancy-push-back {
+  border-color: color-mix(in oklch, var(--career-text) 14%, transparent);
+  background: color-mix(in oklch, var(--career-bg-elevated) 62%, transparent);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+}
+.vacancy-push-requirements .vacancies-screen-requirements h3 {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+.vacancy-push-cta .vacancy-push-primary {
+  min-block-size: 50px;
+  border-radius: 25px;
+  box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
+}
+
+/* B510: значок строки как .pm-ico макета 4 — квадрат 32 с радиусом 9 на белом 7 %, значок 18;
+   заголовок экрана (.pm-hero h2) 600; круглая «Править» — стекло bg-elevated 70 %, цвет dim, без рамки. */
+.vacancy-push-row .vacancy-push-ico {
+  border-radius: 9px;
+  background: color-mix(in oklch, white 7%, transparent);
+}
+.vacancy-push-row .vacancy-push-ico svg {
+  inline-size: 18px;
+  block-size: 18px;
+}
+.vacancy-push-body .vacancy-push-hero h2 {
+  font-weight: 600;
+}
+.vacancy-push-cta .vacancy-push-round {
+  /* B510: .vm-save.big макета 4 — 50 px, внутренняя обводка белым 14 %, «Сохранено» акцентом. */
+  inline-size: 50px;
+  block-size: 50px;
+  border: 0;
+  color: var(--career-text-dim);
+  background: color-mix(in oklch, var(--career-bg-elevated) 70%, transparent);
+  box-shadow: inset 0 0 0 var(--career-border-width) color-mix(in oklch, white 14%, transparent);
+  backdrop-filter: blur(16px);
+}
+.vacancy-push-cta .vacancy-push-round[aria-pressed='true'] {
+  color: var(--career-accent);
+}
+
+/* B510: навыки на 390 как .pm-chips макета 4 — капсула 16 px на surface, текст цвета тела,
+   цветной только значок 14 px (зелёный — подтверждено, жёлтый — нет). */
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-confirmed,
+.vacancy-push-requirements .vacancies-screen-skill-chip button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 16px;
+  color: var(--career-text);
+  background: var(--career-surface);
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-unconfirmed {
+  color: var(--career-text);
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-confirmed svg {
+  color: var(--career-success);
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-unconfirmed svg {
+  color: var(--career-warning);
 }

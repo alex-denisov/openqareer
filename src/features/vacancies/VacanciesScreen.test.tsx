@@ -4,6 +4,8 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacanciesScreen, filterByScreenState } from './VacanciesScreen';
+import { VacancyScreenRowCells } from './VacancyScreenRowCells';
+import { readyVacancyFit } from '../../../e2e/fixtures/vacancyFit';
 
 function matchedItem(
   id: string,
@@ -365,6 +367,8 @@ describe('VacanciesScreen (B250)', () => {
 
     expect(html).toContain('Сохранённые 1');
     expect(html).toContain('Компании и люди 61');
+    expect(html).toMatch(/Сохранённые<span class="tab-count">1<\/span>/);
+    expect(html).toMatch(/Компании и люди<span class="tab-count">61<\/span>/);
   });
 
   it('keeps the mobile map control available without optional facet metadata', () => {
@@ -410,5 +414,29 @@ describe('VacanciesScreen (B250)', () => {
     );
 
     expect(filtered.map((item) => item.cluster.id)).toEqual(['eligible']);
+  });
+});
+
+describe('VacanciesScreen mockup small buttons (B510)', () => {
+  it('renders «Сбросить всё» as the mockup ghost small button', () => {
+    const html = render();
+    expect(html).toMatch(/class="vacancies-summary-reset vac-sm is-ghost"[^>]*>Сбросить всё/);
+  });
+});
+
+describe('VacanciesScreen fit percent in the 390 status (B510)', () => {
+  it('puts the short percent right after the status label', () => {
+    const html = renderToStaticMarkup(
+      <VacancyScreenRowCells
+        item={matchedItem('v-fit', 'Head of Engineering', {
+          fitView: readyVacancyFit(),
+        } as never)}
+        applicationArchived={false}
+        alreadyApplied={false}
+      />,
+    );
+    expect(html).toMatch(
+      /vacancies-screen-cell--status[^>]*>[^]*?Подходит<span class="vacancy-fit-inline is-number is-short"/,
+    );
   });
 });

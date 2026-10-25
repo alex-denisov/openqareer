@@ -17,6 +17,8 @@ interface ImportModalShellProps {
    * and any pinned footer the caller renders as the last child stay in place.
    */
   readonly detail?: boolean;
+  /** Extra classes on the card, e.g. `career-token-scope` for a dialog styled with `--career-*` tokens. */
+  readonly className?: string;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -46,6 +48,7 @@ export function ImportModalShell({
   children,
   wide = false,
   detail = false,
+  className,
 }: ImportModalShellProps) {
   const card = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -91,7 +94,7 @@ export function ImportModalShell({
       }}
     >
       <div
-        className={`career-modal-card${wide ? ' is-wide' : ''}${detail ? ' is-detail' : ''}`}
+        className={`career-modal-card${wide ? ' is-wide' : ''}${detail ? ' is-detail' : ''}${className ? ` ${className}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

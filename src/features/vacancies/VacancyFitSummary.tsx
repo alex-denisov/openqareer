@@ -93,15 +93,31 @@ const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1
 export function VacancyFitInline({
   view: initialView,
   vacancyId,
+  short = false,
 }: {
   readonly view?: VacancyFitView;
   readonly vacancyId?: string;
+  /** B510: на 390 число стоит рядом с «Подходит», без слова «соответствие». */
+  readonly short?: boolean;
 }) {
   const view = useLatestVacancyFitView(vacancyId, initialView);
   if (!fitHasNumber(view)) return null;
+  const percent = view!.result!.coveragePercent;
+  if (short) {
+    return (
+      <span
+        className="vacancy-fit-inline is-number is-short"
+        data-fit-state={view!.state}
+        aria-label={`соответствие ${percent} %`}
+      >
+        {percent}
+        {'\u00a0%'}
+      </span>
+    );
+  }
   return (
     <span className="vacancy-fit-inline is-number" data-fit-state={view!.state}>
-      соответствие {view!.result!.coveragePercent}
+      соответствие {percent}
       {'\u00a0%'}
     </span>
   );
