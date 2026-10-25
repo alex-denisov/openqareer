@@ -20,6 +20,8 @@
   overscroll-behavior: contain;
   background: var(--career-bg);
   color: var(--career-text);
+  /* B510: тело макета 4 — строки 1.5. */
+  line-height: 1.5;
   scroll-padding-block: var(--career-mobile-topbar-height)
     calc(var(--career-target-min) + var(--career-space-4));
 }
@@ -90,6 +92,7 @@
 .vacancy-push-cap,
 .vacancy-push-requirements h3 {
   margin: 0;
+  line-height: 1.25;
   padding-inline: var(--career-space-4);
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
@@ -246,16 +249,32 @@ div.vacancy-push-row {
   font-size: var(--career-text-sm);
 }
 
+/* B510: черновик круга 1 — .pm-quote макета 4: свой блок surface, радиус 20, 16/1.5 цветом тела. */
+.vacancy-push-quote.is-box {
+  padding: var(--career-space-4);
+  border-radius: calc(var(--career-radius-md) + var(--career-space-1));
+  color: var(--career-text);
+  background: var(--career-surface);
+  font-size: var(--career-text-md);
+}
+
+/* .vm-cta внутри тела экрана стоит по полю тела, без своего. */
+.vacancy-push-body .vacancy-push-cta {
+  padding-inline: 0;
+}
+
 .vacancy-push-circle {
   display: grid;
   gap: var(--career-space-1);
   inline-size: 100%;
   padding: var(--career-space-4);
   border: 0;
-  border-radius: var(--career-radius-lg);
+  /* B510: как .vm-circle макета 4 — радиус 20, строки 1.5, заголовок 700. */
+  border-radius: calc(var(--career-radius-md) + var(--career-space-1));
   color: var(--career-text);
   background: var(--career-surface);
   font: inherit;
+  line-height: 1.5;
   text-align: start;
   cursor: pointer;
 }
@@ -271,7 +290,7 @@ div.vacancy-push-row {
 
 .vacancy-push-circle b {
   font-size: var(--career-text-md);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .vacancy-push-circle p {
@@ -437,6 +456,7 @@ div.vacancy-push-row {
 .vacancy-push-cta .vacancy-push-primary {
   min-block-size: 50px;
   border-radius: 25px;
+  box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
 }
 
 /* B510: значок строки как .pm-ico макета 4 — квадрат 32 с радиусом 9 на белом 7 %, значок 18;
@@ -453,10 +473,17 @@ div.vacancy-push-row {
   font-weight: 600;
 }
 .vacancy-push-cta .vacancy-push-round {
+  /* B510: .vm-save.big макета 4 — 50 px, внутренняя обводка белым 14 %, «Сохранено» акцентом. */
+  inline-size: 50px;
+  block-size: 50px;
   border: 0;
   color: var(--career-text-dim);
   background: color-mix(in oklch, var(--career-bg-elevated) 70%, transparent);
+  box-shadow: inset 0 0 0 var(--career-border-width) color-mix(in oklch, white 14%, transparent);
   backdrop-filter: blur(16px);
+}
+.vacancy-push-cta .vacancy-push-round[aria-pressed='true'] {
+  color: var(--career-accent);
 }
 
 /* B510: навыки на 390 как .pm-chips макета 4 — капсула 16 px на surface, текст цвета тела,

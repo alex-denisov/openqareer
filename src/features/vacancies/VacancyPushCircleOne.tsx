@@ -5,20 +5,20 @@ function DraftBody({ state }: { readonly state: ReturnType<typeof useVacancyLett
   const { draft } = state;
   if (draft.loading)
     return (
-      <p className="vacancy-push-quote" role="status">
+      <p className="vacancy-push-quote is-box" role="status">
         Консультант готовит черновик…
       </p>
     );
   if (draft.error)
     return (
-      <div className="vacancy-push-quote" role="alert">
+      <div className="vacancy-push-quote is-box" role="alert">
         <p>{draft.error}</p>
         <button type="button" className="vacancy-push-text" onClick={draft.retry}>
           Повторить
         </button>
       </div>
     );
-  return <p className="vacancy-push-quote">{draft.text}</p>;
+  return <p className="vacancy-push-quote is-box">{draft.text}</p>;
 }
 
 function DraftNote({
@@ -61,9 +61,7 @@ export function PushCircleOneDraft({
     <>
       <section className="vacancy-push-group">
         <h3 className="vacancy-push-cap">Черновик сообщения · {recipient.fullName}</h3>
-        <div className="vacancy-push-list">
-          <DraftBody state={state} />
-        </div>
+        <DraftBody state={state} />
         <DraftNote approval={approval} />
       </section>
       <div className="vacancy-push-cta">

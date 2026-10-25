@@ -1,11 +1,4 @@
-import {
-  CaretRight,
-  EnvelopeSimple,
-  FileText,
-  UserCircle,
-  UserFocus,
-  UsersThree,
-} from '@phosphor-icons/react';
+import { CaretRight, EnvelopeSimple, FileText, UserCircle } from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CompanyPathActions } from './VacancyCompanyPathPanel';
@@ -16,8 +9,6 @@ import { PushCircleOneDraft } from './VacancyPushCircleOne';
 import { PushRecruiterGroup } from './VacancyPushRecruiter';
 
 export type CirclePage = 'c1' | 'c2' | 'c3';
-
-const CIRCLE_ICONS = { 1: UserFocus, 2: UsersThree, 3: EnvelopeSimple } as const;
 
 export function PushHero({
   title,
@@ -111,13 +102,9 @@ function CircleLink({
   readonly card: PathCircleCard;
   readonly onOpen?: () => void;
 }) {
-  const Icon = CIRCLE_ICONS[card.circle];
   return (
     <button type="button" className="vacancy-push-circle" onClick={onOpen} disabled={!onOpen}>
-      <small>
-        <Icon size={14} aria-hidden="true" />
-        {card.label}
-      </small>
+      <small>{card.label}</small>
       <b>{card.title}</b>
       <p>{card.summary}</p>
       <span className="vacancy-push-go">
