@@ -1,4 +1,10 @@
-import type { UnifiedVacancy, VacancyCluster, VacancyProvenance } from '../domain/unifiedVacancy';
+import { himalayasSalaryPeriod, leverSalaryPeriod } from '../../shared/vacancySalaryPeriod';
+import type {
+  UnifiedVacancy,
+  VacancyCluster,
+  VacancyProvenance,
+  VacancySalary,
+} from '../domain/unifiedVacancy';
 import { normalizeTextForComparison } from './vacancyFingerprint';
 
 const ATS_URL_REGEX =
@@ -160,6 +166,26 @@ function updateClusterLocation(cluster: VacancyCluster, location?: string): void
   }
 }
 
+function hasExplicitSalaryPeriod(salary: VacancySalary): boolean {
+  const evidence = salary.periodEvidence;
+  const period =
+    evidence?.field === 'lever.salaryRange.interval'
+      ? leverSalaryPeriod(evidence.value)
+      : evidence?.field === 'himalayas.salaryPeriod'
+        ? himalayasSalaryPeriod(evidence.value)
+        : undefined;
+  return period !== undefined && period === salary.period;
+}
+
+function sameSalaryTuple(current: VacancySalary, incoming: VacancySalary): boolean {
+  return (
+    current.from === incoming.from &&
+    current.to === incoming.to &&
+    current.currency === incoming.currency &&
+    current.gross === incoming.gross
+  );
+}
+
 export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacancy): void {
   const existingSourceIndex = cluster.sources.findIndex((source) => {
     if (source.sourceId !== vacancy.provenance.sourceId) return false;
@@ -186,6 +212,17 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
   if (!cluster.salary && vacancy.salary) {
     cluster.salary = vacancy.salary;
   } else if (cluster.salary && vacancy.salary && !cluster.salary.to && vacancy.salary.to) {
+    cluster.salary = vacancy.salary;
+  } else if (
+    !isNewMembership &&
+    cluster.salary &&
+    vacancy.salary &&
+    sameSalaryTuple(cluster.salary, vacancy.salary) &&
+    !hasExplicitSalaryPeriod(cluster.salary) &&
+    hasExplicitSalaryPeriod(vacancy.salary)
+  ) {
+    // Re-observation may enrich an identical range, but never assemble salary
+    // fields across observations or change an already evidenced period.
     cluster.salary = vacancy.salary;
   }
 
