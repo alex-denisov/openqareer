@@ -121,7 +121,8 @@ function MobileRelocationRow({
   enabled,
   onOpen,
 }: {
-  enabled: boolean;
+  /** null — согласие ещё не прочитано: статус не показываем. */
+  enabled: boolean | null;
   onOpen: () => void;
 }): ReactElement {
   return (
@@ -133,13 +134,17 @@ function MobileRelocationRow({
           </span>
           <span className="career-m-row-main">
             <span className="career-m-row-title">Страны и релокация</span>
-            <span className="career-role-meta">
-              {enabled
-                ? 'подборка учитывает выбранные страны'
-                : 'сейчас подборка идёт только по России'}
-            </span>
+            {enabled === null ? null : (
+              <span className="career-role-meta">
+                {enabled
+                  ? 'подборка учитывает выбранные страны'
+                  : 'сейчас подборка идёт только по России'}
+              </span>
+            )}
           </span>
-          <span className="career-m-value">{enabled ? 'Включено' : 'Не включено'}</span>
+          {enabled === null ? null : (
+            <span className="career-m-value">{enabled ? 'Включено' : 'Не включено'}</span>
+          )}
           <CaretRight size={16} aria-hidden />
         </button>
       </li>
@@ -158,8 +163,8 @@ function MobileConditionsGroup({
   summary: RolesMarketSummary;
   onEditField: (field: Exclude<EditableConditionField, null>) => void;
   onOpenRelocation: () => void;
-  /** Согласие анкеты релокации — то же состояние, что в самом разделе (B445-r1). */
-  relocationEnabled?: boolean;
+  /** Согласие анкеты релокации — то же состояние, что в самом разделе (B445-r1); null — ещё не прочитано. */
+  relocationEnabled?: boolean | null;
 }): ReactElement {
   return (
     <section className="career-m-group" aria-labelledby="m-cond-h">
@@ -199,7 +204,7 @@ export function MobileCareerHome({
   summary: RolesMarketSummary;
   onPush: (view: CareerPushView) => void;
   onOpenRelocation: () => void;
-  relocationEnabled?: boolean;
+  relocationEnabled?: boolean | null;
 }): ReactElement {
   return (
     <div className="career-screen career-screen-mobile" data-testid="career-screen">
