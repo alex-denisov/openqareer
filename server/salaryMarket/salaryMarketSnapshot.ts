@@ -69,6 +69,7 @@ export function salaryPercentiles(observations: readonly SalaryObservation[]) {
 
 interface SliceState {
   count: number;
+  withheldSkills: number;
   excluded: MutableExclusions;
   markers: Set<string>;
 }
@@ -84,7 +85,7 @@ interface RoleState extends CohortState {
   };
 }
 function sliceState(): SliceState {
-  return { count: 0, excluded: emptySalaryExclusions(), markers: new Set() };
+  return { count: 0, withheldSkills: 0, excluded: emptySalaryExclusions(), markers: new Set() };
 }
 function roleState(row: ClassifiedSalaryRow): RoleState {
   const profession: SalaryMarketProfession = row.profession_id
@@ -118,6 +119,7 @@ function recordObservation(
   names: readonly string[],
 ): void {
   state.count += 1;
+  if (row.skills_withheld === 1) state.withheldSkills += 1;
   recordSalaryRange(database, key, row.cluster_id, row.salary_json, state.excluded);
   skills.add(key, names);
   if (row.marker && state.markers.size < 8) state.markers.add(row.marker);
@@ -147,7 +149,9 @@ function accumulateClassifiedRoles(
     if (rows.length === 0) break;
     for (const row of rows) {
       const group = groups.get(row.role) ?? roleState(row);
-      const names = salarySkillsOf(row.skills_json);
+      // Merged clusters lack per-label provenance: withhold the entire contaminated
+      // skill set, including mixed-source clusters. Keep the vacancy denominator.
+      const names = row.skills_withheld === 1 ? [] : salarySkillsOf(row.skills_json);
       recordCohort(database, skills, row.role, row, group, names);
       const geography = salaryGeography(row.location, row.is_remote === 1);
       if (geography.status === 'explicit_country') group.geography.explicitCountryCount += 1;
@@ -171,6 +175,12 @@ function accumulateClassifiedRoles(
     cursor = rows[rows.length - 1]!.cluster_id;
   }
   return groups;
+}
+function skillEvidence(state: SliceState) {
+  return {
+    method: 'exclude_role_taxonomy_clusters_v2' as const,
+    withheldClusterCount: state.withheldSkills,
+  };
 }
 function assembleCohort(
   database: DatabaseSync,
@@ -196,12 +206,14 @@ function assembleCohort(
       grade,
       sampleSize: slice.count,
       skills: skills.read(`${key}|${grade}`, slice.count),
+      skillEvidence: skillEvidence(slice),
       salary: salaryRangeDistribution(database, `${key}|${grade}`, slice.excluded),
       evidence: { field: 'title' as const, markers: [...slice.markers] },
     }));
   return {
     sampleSize: state.count,
     skills: skills.read(key, state.count),
+    skillEvidence: skillEvidence(state),
     salary: salaryRangeDistribution(database, key, state.excluded),
     gradeSlices,
     quarterlyTrend: 'unavailable' as const,

@@ -839,3 +839,26 @@ describe('Indeed adapter (B218)', () => {
     expect(vacancy?.url).toBe('https://www.indeed.com/viewjob?jk=zz9');
   });
 });
+
+it('does not turn Himalayas role taxonomy categories into required skills', () => {
+  const [vacancy] = normalizeJsonSource(
+    'src-himalayas-api',
+    {
+      jobs: [
+        {
+          guid: 'himalayas-role-taxonomy',
+          title: 'Senior Project Manager',
+          companyName: 'Example',
+          description: 'Source description remains available.',
+          applicationLink: 'https://example.test/pm',
+          categories: ['Senior-Project-Manager', 'Project-Manager', 'SQL'],
+          pubDate: 1787000000,
+        },
+      ],
+    },
+    { observedAt: OBSERVED_AT },
+  );
+  expect(vacancy?.title).toBe('Senior Project Manager');
+  expect(vacancy?.requiredSkills).toEqual([]);
+  expect(vacancy?.description).toBe('Source description remains available.');
+});

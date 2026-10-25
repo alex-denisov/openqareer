@@ -147,7 +147,10 @@ describe('B351: data-dependent raw HTML budget', () => {
         sampleSize: 300,
         skills,
         salary,
-        gradeSlices: snapshot.gradeSlices,
+        gradeSlices: snapshot.gradeSlices?.map((slice) => ({
+          ...slice,
+          skillEvidence: { method: 'exclude_role_taxonomy_clusters_v2', withheldClusterCount: 300 },
+        })),
         skillQuarterlyTrend: actualHistory(300),
         quarterlyTrend: 'available',
       })),

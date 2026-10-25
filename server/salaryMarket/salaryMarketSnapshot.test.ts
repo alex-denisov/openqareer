@@ -175,3 +175,47 @@ describe('salary evidence', () => {
     expect(salaryPercentiles([observation, observation])).toBeNull();
   });
 });
+
+it('withholds existing Himalayas taxonomy and mixed-source skills in every cohort without changing N', () => {
+  const { db, now } = fixture();
+  db.prepare('DELETE FROM catalog_entries WHERE cluster_id NOT IN (?, ?)').run('a', 'b');
+  db.prepare(
+    'INSERT INTO catalog_entries (cluster_id, role_slug, role_label, skills_json, published_ms, status) VALUES (?, ?, ?, ?, ?, ?)',
+  ).run('c', 'developer', 'Developer', '["SQL"]', now, 'active');
+  db.exec("UPDATE catalog_entries SET title='Senior Developer', is_remote=1");
+  db.prepare('INSERT INTO vacancy_clusters VALUES (?, ?)').run(
+    'a',
+    JSON.stringify({ sources: [{ sourceId: 'src-himalayas-api' }] }),
+  );
+  db.prepare('INSERT INTO vacancy_clusters VALUES (?, ?)').run(
+    'b',
+    JSON.stringify({ sources: [{ sourceId: 'src-hh-search' }, { sourceId: 'src-himalayas-api' }] }),
+  );
+  db.prepare('INSERT INTO vacancy_clusters VALUES (?, ?)').run(
+    'c',
+    JSON.stringify({ sources: [{ sourceId: 'src-hh-search' }] }),
+  );
+  db.prepare('UPDATE catalog_entries SET skills_json=? WHERE cluster_id=?').run(
+    '["Senior-Project-Manager"]',
+    'a',
+  );
+  const [snapshot] = computeSalaryMarketSnapshots(db, new Date(now));
+  for (const cohort of [
+    snapshot,
+    snapshot?.gradeSlices?.[0],
+    snapshot?.locationSlices?.find((row) => row.location === 'remote'),
+    snapshot?.locationSlices?.find((row) => row.location === 'remote')?.gradeSlices?.[0],
+  ]) {
+    expect(cohort?.sampleSize).toBe(3);
+    expect(cohort?.skills).toEqual([{ name: 'SQL', count: 1, frequency: 33.33 }]);
+    expect(cohort?.skillEvidence).toEqual({
+      method: 'exclude_role_taxonomy_clusters_v2',
+      withheldClusterCount: 2,
+    });
+  }
+  // Preparation does not rewrite the underlying catalogue or merged clusters.
+  expect(db.prepare('SELECT skills_json FROM catalog_entries WHERE cluster_id=?').get('a')).toEqual(
+    { skills_json: '["Senior-Project-Manager"]' },
+  );
+  db.close();
+});
