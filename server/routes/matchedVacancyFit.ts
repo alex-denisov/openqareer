@@ -10,6 +10,12 @@ import { wantedCompaniesFirst, wantedCompanyKeys } from '../domain/wantedCompany
 const FIT_ORDER_WINDOW_MS = 60_000;
 /** Столько точных разборов считается между уступками event loop при фоновом пересчёте. */
 const FIT_REFRESH_SLICE = 25;
+/**
+ * B562: a vacancy with a stored result whose profile key changed (imported facts now count) has a
+ * completed queue row, so the shown page never asks again. One read re-queues at most this many;
+ * the worker spends within the B522 budget.
+ */
+export const STALE_REFIT_LIMIT = 50;
 type FitViews = ReadonlyMap<string, VacancyFitView>;
 const fitViewsCache = createCandidateWindowCache<FitViews>(FIT_ORDER_WINDOW_MS);
 const refreshingFitViews = new Set<string>();
@@ -94,9 +100,17 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
     },
     read(ids) {
       const views = new Map<string, VacancyFitView>();
+      let requeued = 0;
       for (const id of ids) {
         const target = readVacancyFitTarget(deps, id);
-        if (target) views.set(id, compactFitView(runtime.view(context(target, []))));
+        if (!target) continue;
+        const input = context(target, []);
+        const view = runtime.view(input);
+        if (view.state === 'not_requested' && requeued < STALE_REFIT_LIMIT) {
+          runtime.enqueue(input);
+          requeued += 1;
+        }
+        views.set(id, compactFitView(view));
       }
       return views;
     },
