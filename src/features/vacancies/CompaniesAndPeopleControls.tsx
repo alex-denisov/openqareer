@@ -18,11 +18,8 @@ import type {
   CandidateCompanyPage,
   CandidateCompanySort,
 } from '../../../shared/candidateCompany';
-import {
-  companyLocationLabel,
-  companyVacancySummary,
-  isContactImportStale,
-} from './companiesAndPeopleUtils';
+import { pluralWordRu } from '../../../shared/pluralRu';
+import { companyLocationLabel, isContactImportStale } from './companiesAndPeopleUtils';
 import { CompanyAvatar } from './CompanyDetailPanel';
 
 const FILTERS: readonly { value: CandidateCompanyFilter; label: string }[] = [
@@ -332,7 +329,9 @@ function CompanyListRow({
         <span className="companies-people-company-text">
           <strong>{company.name}</strong>
           <span>
-            {companyLocationLabel(company.location)} · {companyVacancySummary(company)}
+            {companyLocationLabel(company.location)} ·{' '}
+            <span className="companies-people-num">{company.vacancyCount}</span>{' '}
+            {pluralWordRu(company.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}
           </span>
         </span>
         <CompanyRowMetrics company={company} />

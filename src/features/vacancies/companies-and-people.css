@@ -152,7 +152,11 @@
 }
 
 .companies-people-filter-count {
-  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mockup 13: every count is .num — tabular figures in the text font. */
+.companies-people-num {
   font-variant-numeric: tabular-nums;
 }
 
@@ -291,10 +295,6 @@
 }
 
 @media (min-width: 761px) {
-  .companies-people-company-metrics {
-    font-family: var(--font-mono, ui-monospace, monospace);
-  }
-
   .companies-people-contacts.is-known {
     font-size: 0;
   }
@@ -829,6 +829,7 @@
 }
 
 .companies-people-sheet-val {
+  font-variant-numeric: tabular-nums;
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
   line-height: 1.5;
@@ -905,6 +906,7 @@
 
 .company-push-aside {
   flex: none;
+  font-variant-numeric: tabular-nums;
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
   line-height: 1.5;
@@ -1334,7 +1336,7 @@ select.companies-people-select {
 
   .companies-people-detail .companies-people-count-badge {
     color: var(--career-text-soft);
-    font-family: var(--font-mono, ui-monospace, monospace);
+    font-variant-numeric: tabular-nums;
   }
 
   .companies-people-detail .companies-people-vacancy-list {
@@ -1398,7 +1400,9 @@ select.companies-people-select {
     font-size: var(--career-text-xs);
   }
 
+  /* Mockup 13 (1440): «Круг N» is a plain .tag, proportional figures; only .num counts are tabular. */
   .companies-people-detail .companies-people-person-body .companies-people-circle-badge {
+    font-variant-numeric: normal;
     color: var(--career-text-dim);
     font-weight: 600;
   }

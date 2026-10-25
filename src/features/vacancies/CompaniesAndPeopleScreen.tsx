@@ -7,7 +7,7 @@ import type {
   CandidateCompanyPage,
   CandidateCompanySort,
 } from '../../../shared/candidateCompany';
-import { pluralRu } from '../../../shared/pluralRu';
+import { pluralWordRu } from '../../../shared/pluralRu';
 import { CoachApiError } from '../coach/apiClient';
 import { usePageTitleOverride } from '../shell/pageTitleOverride';
 import { grantSearchConsent } from './recruiterContactsApi';
@@ -478,7 +478,7 @@ function CompanyListColumn({
   const more = page.items.length < total;
   const footer = page.page ? (
     <p className="companies-people-list-footer is-wide">
-      Показаны {page.items.length} из {total}
+      Показаны {page.items.length} из <span className="companies-people-num">{total}</span>
       {more ? ', список прокручивается' : ''}. {COMPANY_ORDER_NOTE[filters.sort]}
     </p>
   ) : null;
@@ -582,9 +582,14 @@ function CompanyToolbarView({
 function CompanyDirectorySummary({ page }: { readonly page: CompanyListState }) {
   return (
     <p className="companies-people-count" aria-live="polite">
-      {page.page
-        ? `${pluralRu(page.page.total, ['компания', 'компании', 'компаний'])} в подборке`
-        : 'Загружаем компании…'}
+      {page.page ? (
+        <>
+          <b className="companies-people-num">{page.page.total}</b>{' '}
+          {pluralWordRu(page.page.total, ['компания', 'компании', 'компаний'])} в подборке
+        </>
+      ) : (
+        'Загружаем компании…'
+      )}
     </p>
   );
 }
