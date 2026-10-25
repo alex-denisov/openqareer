@@ -30,6 +30,8 @@
   z-index: 1;
   display: grid;
   grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
+  /* B510: заголовок макета 4 начинается в 4 px от круглой «Назад» (x 64 при поле 16). */
+  column-gap: var(--career-space-1);
   align-items: center;
   min-block-size: var(--career-mobile-topbar-height);
   padding-inline: var(--career-space-4);

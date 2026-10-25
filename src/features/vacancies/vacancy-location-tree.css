@@ -302,6 +302,15 @@
   .vacancies-screen .vacancies-filters .vacancy-location-foot {
     padding: var(--career-space-3);
   }
+  /* Категории источников — .seg макета 4 во всю ширину поповера сразу под линией шапки. */
+  .vacancies-screen .vacancies-filters .vacancy-source-filter .vacancy-location-head {
+    border-block-end: 0;
+  }
+  .vacancies-screen .vacancies-filters .vacancy-source-filter .vacancy-source-categories {
+    margin: calc(var(--career-space-3) + var(--career-border-width) - var(--career-space-2))
+      calc(var(--career-space-3) * -1) calc(var(--career-space-3) * -1);
+    box-shadow: 0 calc(var(--career-border-width) * -1) 0 var(--career-line);
+  }
 }
 .vacancies-screen .vacancy-source-filter .vacancy-location-head {
   display: grid;
