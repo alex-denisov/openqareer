@@ -18,7 +18,7 @@ import {
 } from './relocationCountryData';
 import { relocationEconomyBreakdown, type EconomyBreakdown } from './relocationEconomyBreakdown';
 import { relocationDay } from './relocationDates';
-import { formatMoney } from './RelocationEconomyCalc';
+import { formatMoney, MissingShare } from './RelocationEconomyCalc';
 import { MobilePush } from './RelocationMobilePush';
 import { RelocationScenarioEditor } from './RelocationScenarioEditor';
 import { MobileGroup, MobilePickerRow } from './mobile/MobileRows';
@@ -111,6 +111,7 @@ function MobileCalculation(
         supported={supported}
         income={props.grossAnnualIncome}
         calculated={calculated}
+        onEdit={props.onEdit}
       />
       <MobileSources
         data={data}
@@ -211,11 +212,13 @@ function MobileResult({
   supported,
   income,
   calculated,
+  onEdit,
 }: {
   readonly countryCode: string;
   readonly supported: boolean;
   readonly income: number | undefined;
   readonly calculated: RelocationScenarioState['calculated'];
+  readonly onEdit: () => void;
 }) {
   if (!countryCode)
     return (
@@ -249,6 +252,7 @@ function MobileResult({
       breakdown={breakdown}
       currency={payroll.currency}
       householdSize={calculated?.input.householdSize ?? 1}
+      onEdit={onEdit}
     />
   );
 }
@@ -258,10 +262,12 @@ function MobileBreakdown({
   breakdown,
   currency,
   householdSize,
+  onEdit,
 }: {
   readonly breakdown: EconomyBreakdown;
   readonly currency: string;
   readonly householdSize: number;
+  readonly onEdit: () => void;
 }) {
   const shown = breakdown.items.filter((item) => item.key !== 'other' || item.share !== null);
   return (
@@ -274,9 +280,11 @@ function MobileBreakdown({
               <i className={`career-relocation-economy-swatch is-${item.key}`} aria-hidden="true" />
               {item.label}
             </span>
-            <b className={item.share === null ? 'is-missing' : undefined}>
-              {item.share === null ? 'нет данных' : `${Math.round(item.share * 100)} %`}
-            </b>
+            {item.share === null ? (
+              <MissingShare onEdit={onEdit} />
+            ) : (
+              <b>{`${Math.round(item.share * 100)} %`}</b>
+            )}
           </div>
         ))}
       </MobileGroup>

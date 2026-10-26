@@ -151,7 +151,7 @@ function CompanyVacancyCard({
     <>
       <strong>{vacancy.title}</strong>
       <span>
-        {vacancy.location ?? 'Место неизвестно'} · {vacancy.sourceName},{' '}
+        {companyLocationLabel(vacancy.location)} · {vacancy.sourceName},{' '}
         {formatObservedDate(vacancy.sourceDate)}
       </span>
     </>

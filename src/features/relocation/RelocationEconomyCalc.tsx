@@ -92,7 +92,14 @@ export function EconomySalaryField({
 }
 
 /** .rl-stack + .rl-legend: only the parts we know; the rest of the bar stays neutral. */
-export function EconomyBreakdownView({ breakdown }: { readonly breakdown: EconomyBreakdown }) {
+export function EconomyBreakdownView({
+  breakdown,
+  onEdit,
+}: {
+  readonly breakdown: EconomyBreakdown;
+  /** Rent and insurance have no source: the person enters them in the scenario editor (owner 24.10). */
+  readonly onEdit: () => void;
+}) {
   const known = breakdown.items.filter((item) => item.share !== null && item.share > 0);
   const label = known
     .map((item) => `${item.label.toLocaleLowerCase('ru')} ${percent(item.share ?? 0)}`)
@@ -120,13 +127,27 @@ export function EconomyBreakdownView({ breakdown }: { readonly breakdown: Econom
               aria-hidden="true"
             />
             <span>{item.label}</span>
-            <span className={item.share === null ? 'is-missing' : undefined}>
-              {item.share === null ? 'нет данных' : percent(item.share)}
-            </span>
+            {item.share === null ? (
+              <MissingShare onEdit={onEdit} />
+            ) : (
+              <span>{percent(item.share)}</span>
+            )}
           </li>
         ))}
       </ul>
     </>
+  );
+}
+
+/** Макет 15: «нет данных в источниках, указать» — «указать» открывает редактор сценария. */
+export function MissingShare({ onEdit }: { readonly onEdit: () => void }) {
+  return (
+    <span className="is-missing">
+      нет данных в источниках,{' '}
+      <button type="button" className="career-relocation-economy-specify" onClick={onEdit}>
+        указать
+      </button>
+    </span>
   );
 }
 

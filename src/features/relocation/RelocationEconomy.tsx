@@ -136,6 +136,7 @@ function EconomyCalculation(props: EconomyCalculationProps) {
           expenses={expenses}
           scenarioPayroll={scenarioPayroll}
           householdSize={calculated?.input.householdSize ?? 1}
+          onEdit={props.onEdit}
         />
         <SalaryThresholdWarnings
           countryCode={countryCode}
@@ -206,6 +207,7 @@ function EconomyResult({
   expenses,
   householdSize,
   scenarioPayroll,
+  onEdit,
 }: {
   readonly countryCode: string;
   readonly countryName: string | undefined;
@@ -215,6 +217,7 @@ function EconomyResult({
   readonly householdSize: number;
   /** After «Рассчитать»: the payroll with the family's options (e.g. Germany's childless surcharge). */
   readonly scenarioPayroll?: PayrollResult;
+  readonly onEdit: () => void;
 }) {
   const notice = economyNotice(countryCode, countryName, supported, income);
   if (notice || income === undefined) return notice;
@@ -230,7 +233,7 @@ function EconomyResult({
   const breakdown = relocationEconomyBreakdown(payroll, expenses);
   return (
     <>
-      <EconomyBreakdownView breakdown={breakdown} />
+      <EconomyBreakdownView breakdown={breakdown} onEdit={onEdit} />
       <EconomySummaryNote
         breakdown={breakdown}
         currency={payroll.currency}
