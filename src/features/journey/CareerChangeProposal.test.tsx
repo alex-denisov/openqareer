@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CareerChangeProposal } from './CareerChangeProposal';
+import { careerRoleId } from '../../../shared/roleProposals';
+import { CareerChangeProposal, roleChangeAlreadyApplied } from './CareerChangeProposal';
 
 const proposal = {
   kind: 'career.role.remove' as const,
@@ -30,5 +31,14 @@ describe('CareerChangeProposal (26.10)', () => {
     expect(html).toContain('Роль: Производственный директор');
     expect(html).toContain('Применить');
     expect(html).toContain('Не сейчас');
+  });
+
+  it('убранная роль после перезагрузки показана применённой, а не предложена снова', () => {
+    const change = proposal.careerChange;
+    const id = careerRoleId(change.roleTitle);
+    const ready = { status: 'ready' as const, roles: [], rejected: [id] };
+    expect(roleChangeAlreadyApplied('career.role.remove', change, ready)).toBe(true);
+    expect(roleChangeAlreadyApplied('career.role.remove', change, { ...ready, rejected: [] })).toBe(false);
+    expect(roleChangeAlreadyApplied('career.role.remove', change, { ...ready, status: 'idle' })).toBe(false);
   });
 });

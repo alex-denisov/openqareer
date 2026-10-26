@@ -1,6 +1,8 @@
 import { useState, type ReactElement } from 'react';
 import { Check, X } from '@phosphor-icons/react';
 import { computeProposalKey } from '../../../shared/consultantProposalKey';
+import { careerRoleId } from '../../../shared/roleProposals';
+import { useCareerRoles, type CareerRolesState } from '../career-map/careerRoleStore';
 import { rejectCoachProposal, type CoachResult } from '../coach/coachApi';
 import type { CareerChangeView } from '../coach/careerChangeView';
 import { applyCareerChange, describeCareerChange, type CareerChangeKind } from './careerChangeApply';
@@ -13,6 +15,22 @@ const TITLES: Readonly<Record<CareerChangeKind, string>> = {
 
 type Proposal = CoachResult['actionProposals'][number];
 type Phase = 'proposed' | 'applying' | 'applied' | 'dismissed';
+
+/**
+ * Изменение роли, которое уже стоит на «Карьере», не предлагается заново:
+ * после перезагрузки прошлый ответ консультанта иначе снова звал «Применить».
+ */
+export function roleChangeAlreadyApplied(
+  kind: CareerChangeKind,
+  change: CareerChangeView,
+  roles: Pick<CareerRolesState, 'status' | 'roles' | 'rejected'>,
+): boolean {
+  if (kind === 'career.conditions.update' || !change.roleTitle || roles.status !== 'ready') return false;
+  const id = careerRoleId(change.roleTitle);
+  const rejected = roles.rejected.includes(id);
+  if (kind === 'career.role.remove') return rejected;
+  return !rejected && roles.roles.some((role) => role.id === id);
+}
 
 function useCareerChange(kind: CareerChangeKind, change: CareerChangeView, lines: string[]) {
   const [phase, setPhase] = useState<Phase>('proposed');
@@ -75,7 +93,10 @@ function ChangeCard({
   readonly change: CareerChangeView;
 }): ReactElement | null {
   const lines = describeCareerChange(kind, change);
-  const { phase, error, apply, dismiss } = useCareerChange(kind, change, lines);
+  const { phase: ownPhase, error, apply, dismiss } = useCareerChange(kind, change, lines);
+  const roles = useCareerRoles(false);
+  const phase =
+    ownPhase === 'proposed' && roleChangeAlreadyApplied(kind, change, roles) ? 'applied' : ownPhase;
   if (phase === 'dismissed') return null;
   return (
     <section className="career-expert-proposal" aria-label={TITLES[kind]} data-testid="career-change-proposal">
