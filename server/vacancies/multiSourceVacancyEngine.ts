@@ -731,6 +731,11 @@ export class MultiSourceVacancyEngine {
    * Вакансии компании вне подборки (экран компании из «Хочу»): точечное чтение
    * по ключам работодателя, без загрузки всех кластеров в HTTP-путь.
    */
+  /** One stored cluster by id (company screen: a wanted company's pool vacancy). */
+  public getStoredCluster(clusterId: string): VacancyCluster | undefined {
+    return this.pool.getCluster?.(clusterId);
+  }
+
   public getCompanyClusters(companyName: string, limit = 20): VacancyCluster[] {
     return this.pool.loadClustersByCompany?.(companyName, limit) ?? [];
   }

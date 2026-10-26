@@ -171,7 +171,7 @@ function VacancyGroup({ props }: { readonly props: CompanyMobilePushProps }) {
             onClick={vacancy.href ? () => void openExternalLink(vacancy.href) : undefined}
           />
         ))}
-        {props.onOpenCompanyVacancies ? (
+        {props.onOpenCompanyVacancies && !company.outsideSelection ? (
           <Row
             icon={<ListChecks aria-hidden="true" />}
             title={`Все ${pluralRu(company.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])} компании`}

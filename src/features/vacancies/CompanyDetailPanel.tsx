@@ -195,7 +195,9 @@ function CompanyVacancySection(props: CompanyDetailPanelProps) {
           ))}
         </div>
       )}
-      {company.vacancyCount > vacancies.length && props.onOpenCompanyVacancies ? (
+      {company.vacancyCount > vacancies.length &&
+      !company.outsideSelection &&
+      props.onOpenCompanyVacancies ? (
         <button
           type="button"
           className="companies-people-link"

@@ -154,6 +154,12 @@ describe('CompanyMobilePush (mockup 13, 390 mv=main|none|found|noli)', () => {
     expect(props.onOpenLetter).toHaveBeenCalledWith(expect.objectContaining({ id: 'v1' }), 2);
   });
 
+  it('a company whose vacancies come from the pool has no «в подборке» link', () => {
+    render({ company: { ...company, outsideSelection: true } });
+    expect(document.body.textContent).toContain('Вакансии · 12');
+    expect(document.body.textContent).not.toContain('Все 12 вакансий компании');
+  });
+
   it('has one primary action: write to the first circle-1 person', () => {
     const props = render();
     const primary = document.querySelectorAll('.vacancy-push-primary');
