@@ -296,4 +296,28 @@ describe('SemanticBackfill (B267 S2)', () => {
     expect(rows.find((row) => row.id === 'v1')).toMatchObject({ level_rank: 1 });
     expect(rows.find((row) => row.id === 'v2')).toMatchObject({ level_rank: 1 });
   });
+
+  it('разбор правилами старого кода («Руководитель группы» как Head) тоже переписывается в lead', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Руководитель группы аналитики');
+    const backfill = new SemanticBackfill(database);
+    database
+      .prepare(
+        `INSERT INTO title_parse (title_key, sample_title, functions, level_rank, role_label, parsed_by, model, taxonomy_version, priority, parsed_at)
+         VALUES ('руководитель группы аналитики', 'Руководитель группы аналитики', '["data"]', 2, NULL, 'rules', NULL, 3, 0, 0)`,
+      )
+      .run();
+    database
+      .prepare(
+        `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
+         VALUES ('v1', 'data', 2, 'руководитель группы аналитики', 1000, 0)`,
+      )
+      .run();
+
+    backfill.step(100);
+    backfill.step(100);
+
+    expect(semanticRows(database).find((row) => row.id === 'v1')).toMatchObject({ level_rank: 1 });
+  });
 });
+
