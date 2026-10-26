@@ -11,7 +11,7 @@
  * от 15 000 и каждый город, которым начинается строка места вакансии в пуле
  * (`--pool`, JSON [{location, n}] из catalog_entries прода).
  *
- * Запуск: node scripts/generate-geo-directory.mjs --geonames <dir> [--pool <json>]
+ * Запуск: npx tsx scripts/generate-geo-directory.mjs --geonames <dir> [--pool <json>]
  */
 import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -49,12 +49,11 @@ const tsv = (path) =>
     .map((line) => line.split('\t'));
 
 function readCountries(dir) {
-  const ru = new Intl.DisplayNames(['ru'], { type: 'region' });
   return tsv(join(dir, 'countryInfo.txt')).map((f) => ({
     iso: f[0],
     iso3: f[1],
     en: f[4],
-    ruCldr: ru.of(f[0]),
+    ruCldr: new Intl.DisplayNames(['ru'], { type: 'region' }).of(f[0]),
   }));
 }
 
@@ -101,10 +100,9 @@ function poolHeads(poolPath) {
   });
 }
 
-function countryMaps(countries, ownCountry) {
-  const label = new Map(
-    countries.map((c) => [c.iso, ownCountry[c.iso.toLowerCase()] ?? c.ruCldr ?? c.en]),
-  );
+/** Подпись страны — общая с релокацией (`shared/geo/countryNames.ts`). */
+function countryMaps(countries, countryNameRu) {
+  const label = new Map(countries.map((c) => [c.iso, countryNameRu(c.iso)]));
   const alias = new Map();
   for (const c of countries)
     for (const name of [c.iso, c.iso3, c.en, c.ruCldr, label.get(c.iso)])
@@ -170,12 +168,12 @@ function cityRows(chosen, alt, poolMatched, regionLabel) {
 async function main() {
   const { geonames: dir, pool, output = 'shared/geo/geoDirectory.json' } = args();
   const countries = readCountries(dir);
-  const own = await import('../shared/locationGazetteer.ts');
+  const { countryNameRu } = await import('../shared/geo/countryNames.ts');
   const cities = readCities(dir);
   const admin1 = new Map(tsv(join(dir, 'admin1CodesASCII.txt')).map((f) => [f[0], f]));
   const ids = new Set([...cities.map((c) => c.id), ...[...admin1.values()].map((f) => f[3])]);
   const alt = await readAltNames(dir, ids);
-  const country = countryMaps(countries, own.COUNTRY_NAMES);
+  const country = countryMaps(countries, countryNameRu);
   const poolMatch = matchPool(cities, country.alias, pool);
   const chosen = cities.filter(
     (c) =>
