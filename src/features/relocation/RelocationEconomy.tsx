@@ -13,6 +13,7 @@ import {
 import { relocationDay } from './relocationDates';
 import type { PayrollResult } from '../../../shared/taxCalculators';
 import { relocationEconomyBreakdown } from './relocationEconomyBreakdown';
+import { useEconomyCountryPrompt } from './economyCountryPrompt';
 import { RelocationScenarioEditor } from './RelocationScenarioEditor';
 import {
   EconomyActions,
@@ -52,6 +53,7 @@ export function RelocationEconomy(props: RelocationEconomyProps) {
     profile: props.profile,
   });
   const [editing, setEditing] = useState(false);
+  const countryPrompt = useEconomyCountryPrompt(countryCode, 'career-relocation-economy-country');
   if (editing && supported) {
     return (
       <div className="career-relocation-card career-relocation-economy-editor">
@@ -74,7 +76,8 @@ export function RelocationEconomy(props: RelocationEconomyProps) {
       countryCode={countryCode}
       supported={supported}
       scenario={scenario}
-      onEdit={() => setEditing(true)}
+      countryPrompt={countryPrompt.message}
+      onEdit={() => (supported ? setEditing(true) : countryPrompt.ask())}
     />
   );
 }
@@ -83,6 +86,7 @@ type EconomyCalculationProps = RelocationEconomyProps & {
   readonly countryCode: string;
   readonly supported: boolean;
   readonly scenario: RelocationScenarioState;
+  readonly countryPrompt: string | null;
   readonly onEdit: () => void;
 };
 
@@ -118,6 +122,11 @@ function EconomyCalculation(props: EconomyCalculationProps) {
           city={calculated?.input.city ?? ''}
           currency={data?.currency}
         />
+        {props.countryPrompt ? (
+          <p className="career-relocation-economy-prompt" role="alert">
+            {props.countryPrompt}
+          </p>
+        ) : null}
         <TaxDataFreshness data={data} />
         <EconomyResult
           countryCode={countryCode}
