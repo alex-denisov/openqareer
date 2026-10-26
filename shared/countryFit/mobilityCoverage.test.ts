@@ -6,6 +6,18 @@ import type { MobilityCandidateProfile, MobilityScenarioId, ScenarioAvailability
 /** The six Country Fit countries plus GB: every scenario is backed by an official source. */
 const coveredCountries = ['DE', 'CY', 'RS', 'AE', 'GE', 'RU', 'GB'] as const;
 
+/** Wave 1 of the expansion (owner's choice, 26.10). */
+const waveOneCountries = ['AM', 'KZ', 'TR', 'UZ', 'BY', 'ME'] as const;
+
+/** Pairs whose official page could not be read on 26.10; they stay without thresholds. */
+const openWaveOnePairs = new Set([
+  'UZ × job_seeker_visa',
+  'UZ × digital_nomad',
+  'BY × job_seeker_visa',
+  'BY × digital_nomad',
+  'ME × job_seeker_visa',
+]);
+
 /** A typical candidate: Russian citizen in Russia, a degree, remote income from a foreign employer. */
 const typicalCandidate: MobilityCandidateProfile = {
   citizenshipCountryCodes: ['RU'],
@@ -40,8 +52,27 @@ describe('Country Fit route coverage', () => {
     },
   );
 
+  it.each(waveOneCountries)(
+    '%s answers every scenario from an official source unless the pair is listed as open',
+    (countryCode) => {
+      const data = getCountryMobilityData(countryCode);
+      expect(data.scenarios.map(({ id }) => id)).toHaveLength(5);
+      for (const scenario of data.scenarios) {
+        const pair = `${countryCode} × ${scenario.id}`;
+        if (openWaveOnePairs.has(pair)) {
+          expect(scenario.dataStatus, pair).toBe('no_data');
+          continue;
+        }
+        expect(scenario.dataStatus, pair).not.toBe('no_data');
+        if (scenario.dataStatus === 'unavailable') {
+          expect(scenario.sources?.length, pair).toBeGreaterThan(0);
+        }
+      }
+    },
+  );
+
   it('dates every official source and keeps it verifiable', () => {
-    for (const countryCode of coveredCountries) {
+    for (const countryCode of [...coveredCountries, ...waveOneCountries]) {
       const scenarios = getCountryMobilityData(countryCode).scenarios;
       const sources = scenarios.flatMap((scenario) => [
         ...(scenario.sources ?? []),
@@ -81,6 +112,25 @@ describe('Country Fit route coverage', () => {
     ['RU', 'job_seeker_visa', 'unavailable'],
     ['RU', 'digital_nomad', 'unavailable'],
     ['RU', 'simple_mobility', 'available'],
+    ['AM', 'employer_sponsorship', 'unknown'],
+    ['AM', 'job_seeker_visa', 'unavailable'],
+    ['AM', 'digital_nomad', 'unknown'],
+    ['AM', 'simple_mobility', 'available'],
+    ['KZ', 'employer_sponsorship', 'unknown'],
+    ['KZ', 'job_seeker_visa', 'unknown'],
+    ['KZ', 'digital_nomad', 'unknown'],
+    ['KZ', 'simple_mobility', 'available'],
+    ['TR', 'employer_sponsorship', 'unknown'],
+    ['TR', 'job_seeker_visa', 'unavailable'],
+    ['TR', 'digital_nomad', 'unknown'],
+    ['TR', 'simple_mobility', 'unknown'],
+    ['UZ', 'employer_sponsorship', 'unknown'],
+    ['UZ', 'simple_mobility', 'unknown'],
+    ['BY', 'employer_sponsorship', 'unknown'],
+    ['BY', 'simple_mobility', 'available'],
+    ['ME', 'employer_sponsorship', 'unknown'],
+    ['ME', 'digital_nomad', 'unknown'],
+    ['ME', 'simple_mobility', 'unknown'],
   ])('typical candidate: %s × %s is %s', (countryCode, scenarioId, expected) => {
     expect(statusOf(countryCode, scenarioId)?.status).toBe(expected);
   });
@@ -169,6 +219,31 @@ describe('Country Fit route coverage', () => {
       currency: 'RUB',
       period: 'quarterly',
     });
+  });
+
+  it('checks the Kazakh Neo Nomad income of $3 000 a month', () => {
+    const nomad: MobilityCandidateProfile = {
+      ...typicalCandidate,
+      citizenshipCountryCodes: ['GB'],
+      remoteMonthlyIncome: { amount: 3_000, currency: 'USD' },
+    };
+    expect(statusOf('KZ', 'digital_nomad', nomad)?.status).toBe('available');
+    expect(
+      statusOf('KZ', 'digital_nomad', {
+        ...nomad,
+        remoteMonthlyIncome: { amount: 2_999, currency: 'USD' },
+      })?.status,
+    ).toBe('barriers');
+  });
+
+  it('keeps Turkish and Montenegrin local work behind a permit despite visa-free entry', () => {
+    for (const countryCode of ['TR', 'ME', 'UZ']) {
+      const withRight = statusOf(countryCode, 'simple_mobility', {
+        ...typicalCandidate,
+        hasLocalWorkAuthorizationCountryCodes: [countryCode],
+      });
+      expect(withRight?.status, countryCode).toBe('available');
+    }
   });
 
   it('does not ask for UAE job-seeker health insurance the official page does not list', () => {

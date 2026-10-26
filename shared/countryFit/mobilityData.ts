@@ -9,6 +9,7 @@ import {
   scenario,
 } from './mobilityScenarioBuilders';
 import * as routes from './mobilityRoutes';
+import * as waveOne from './mobilityRoutesWaveOne';
 import {
   MOBILITY_SCENARIO_IDS,
   type CountryMobilityData,
@@ -34,12 +35,14 @@ const countryNames: Readonly<Record<string, string>> = {
   GE: 'Грузия',
   KG: 'Кыргызстан',
   KZ: 'Казахстан',
+  ME: 'Черногория',
   PT: 'Португалия',
   RS: 'Сербия',
   RU: 'Россия',
   SG: 'Сингапур',
   TR: 'Турция',
   US: 'США',
+  UZ: 'Узбекистан',
 };
 
 const countries: Readonly<Record<string, CountryMobilityData>> = {
@@ -59,10 +62,65 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
     name: 'Казахстан',
     scenarios: [
       domesticScenario('KZ'),
-      noDataScenario('employer_sponsorship'),
-      noDataScenario('job_seeker_visa'),
-      noDataScenario('digital_nomad'),
+      waveOne.kazakhstanEmployer,
+      waveOne.kazakhstanJobSeeker,
+      waveOne.kazakhstanRemote,
       regionalScenario('KZ', eaeuMembers, sources.eaeu, 'Работа для граждан государств ЕАЭС'),
+    ],
+  },
+  AM: {
+    countryCode: 'AM',
+    name: 'Армения',
+    scenarios: [
+      domesticScenario('AM'),
+      waveOne.armeniaEmployer,
+      waveOne.armeniaJobSeeker,
+      waveOne.armeniaRemote,
+      regionalScenario('AM', eaeuMembers, sources.eaeu, 'Работа для граждан государств ЕАЭС'),
+    ],
+  },
+  BY: {
+    countryCode: 'BY',
+    name: 'Беларусь',
+    scenarios: [
+      domesticScenario('BY'),
+      waveOne.belarusEmployer,
+      waveOne.waveOneNoData.belarusJobSeeker,
+      waveOne.waveOneNoData.belarusRemote,
+      regionalScenario('BY', eaeuMembers, sources.eaeu, 'Работа для граждан государств ЕАЭС'),
+    ],
+  },
+  TR: {
+    countryCode: 'TR',
+    name: 'Турция',
+    scenarios: [
+      domesticScenario('TR'),
+      waveOne.turkeyEmployer,
+      waveOne.turkeyJobSeeker,
+      waveOne.turkeyRemote,
+      waveOne.turkeyLocalWork,
+    ],
+  },
+  UZ: {
+    countryCode: 'UZ',
+    name: 'Узбекистан',
+    scenarios: [
+      domesticScenario('UZ'),
+      waveOne.uzbekistanEmployer,
+      waveOne.waveOneNoData.uzbekistanJobSeeker,
+      waveOne.waveOneNoData.uzbekistanRemote,
+      waveOne.uzbekistanLocalWork,
+    ],
+  },
+  ME: {
+    countryCode: 'ME',
+    name: 'Черногория',
+    scenarios: [
+      domesticScenario('ME'),
+      waveOne.montenegroEmployer,
+      waveOne.waveOneNoData.montenegroJobSeeker,
+      waveOne.montenegroRemote,
+      waveOne.montenegroLocalWork,
     ],
   },
   RS: {

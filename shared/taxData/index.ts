@@ -1,17 +1,15 @@
+import { numbeoTerms } from './costOfLiving';
 import type { CountryCode, CountryTaxData, TaxDataSource } from './types';
+import { waveOneTaxData } from './waveOneTaxData';
 
 const retrievedAt = '2026-10-10';
 
-const source = (
-  title: string,
-  url: string,
-  dataYear = 2026,
-): TaxDataSource => ({ title, url, dataYear, retrievedAt });
-
-const numbeoTerms = source(
-  'Numbeo: коммерческое использование требует лицензии',
-  'https://www.numbeo.com/common/terms_of_use.jsp',
-);
+const source = (title: string, url: string, dataYear = 2026): TaxDataSource => ({
+  title,
+  url,
+  dataYear,
+  retrievedAt,
+});
 
 const countryData = {
   DE: {
@@ -264,6 +262,7 @@ const countryData = {
       licensingSource: numbeoTerms,
     },
   },
+  ...waveOneTaxData,
 } as const satisfies Record<CountryCode, CountryTaxData>;
 
 export const supportedCountryCodes = Object.keys(countryData) as CountryCode[];
@@ -272,4 +271,15 @@ export function getCountryTaxData(countryCode: string): CountryTaxData {
   const data = countryData[countryCode as CountryCode];
   if (!data) throw new Error('Страна не поддерживается');
   return data;
+}
+
+/** Every official source behind a country's payroll: tax, contributions and separately published ceilings. */
+export function payrollSources(data: CountryTaxData): TaxDataSource[] {
+  const all = [
+    data.incomeTax.source,
+    ...data.employeeContributions.flatMap((item) =>
+      item.capSource ? [item.source, item.capSource] : [item.source],
+    ),
+  ];
+  return [...new Map(all.map((source) => [source.url, source])).values()];
 }

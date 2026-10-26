@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { evaluateCountryFit } from './countryFit';
 import { MOBILITY_SCENARIO_IDS, type MobilityCandidateProfile } from './countryFit/types';
 import { calculateAnnualPayroll } from './taxCalculators';
-import { getCountryTaxData } from './taxData';
+import { getCountryTaxData, payrollSources } from './taxData';
 
 export const RELOCATION_EXPENSES = ['rent', 'utilities', 'food', 'transport', 'insurance', 'education', 'other'] as const;
 export const RELOCATION_UPFRONT = ['visa', 'moving', 'deposit', 'documents', 'travel', 'furnishings'] as const;
@@ -99,7 +99,7 @@ export function calculateRelocationScenario(input: RelocationScenarioInput, prof
     comparisonCurrency: input.comparisonRate?.currency ?? null,
     comparisonMonthlyRemaining: input.comparisonRate && net !== null && missingCosts.length === 0
       ? cents((net - monthlyKnownCosts) * input.comparisonRate.amount) : null,
-    mobility, mobilityCandidate: visa, documentWarnings: profile ? relocationAlerts(profile, new Date().toISOString().slice(0, 10)) : [], taxSources: [data.incomeTax.source, ...data.employeeContributions.map((item) => item.source)],
+    mobility, mobilityCandidate: visa, documentWarnings: profile ? relocationAlerts(profile, new Date().toISOString().slice(0, 10)) : [], taxSources: payrollSources(data),
     assumptions: [...(payroll?.assumptions ?? []),
       'Зарплатная модель не устанавливает налоговое резидентство и не учитывает индивидуальные льготы и соглашения.',
       'Разрешение на въезд не означает право на работу. Доступность маршрута требует проверки документов.',

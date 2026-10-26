@@ -4,7 +4,19 @@ import {
   germanSolidaritySurcharge,
   germanWageTaxBase,
 } from './germanyPayroll';
-import type { CountryCode, SourcedMonthlyCost, TaxBand, TaxDataSource } from '../taxData/types';
+import {
+  isWaveOneCountry,
+  waveOneAssumptionSummary,
+  waveOneAssumptions,
+  waveOneTaxBase,
+} from './waveOnePayroll';
+import type {
+  ContributionRule,
+  CountryCode,
+  SourcedMonthlyCost,
+  TaxBand,
+  TaxDataSource,
+} from '../taxData/types';
 
 export interface IncomeTaxResult {
   readonly countryCode: CountryCode;
@@ -92,6 +104,11 @@ function calculateTaxAmount(countryCode: CountryCode, taxableIncome: number): nu
       return calculateGermanIncomeTax(taxableIncome);
     case 'brackets':
       return calculateBracketTax(taxableIncome, rule.bands);
+    case 'brackets-minus-exempt-base':
+      return roundToCents(
+        calculateBracketTax(taxableIncome, rule.bands) -
+          calculateBracketTax(Math.min(taxableIncome, rule.exemptAnnualBase), rule.bands),
+      );
     case 'flat-after-monthly-allowance':
       return roundToCents(Math.max(0, taxableIncome - rule.monthlyAllowance * 12) * rule.rate);
     case 'flat':
@@ -117,20 +134,27 @@ export function calculateAnnualIncomeTax(
   };
 }
 
-function contributionBase(
-  grossAnnualIncome: number,
-  rule: {
-    readonly annualCap?: number;
-    readonly monthlyCap?: number;
-    readonly monthlyFloor?: number;
-  },
-): number {
-  if (rule.monthlyCap !== undefined || rule.monthlyFloor !== undefined) {
+function contributionBase(grossAnnualIncome: number, rule: ContributionRule): number {
+  if (
+    rule.monthlyCap !== undefined ||
+    rule.monthlyFloor !== undefined ||
+    rule.monthlyExemptUpTo !== undefined
+  ) {
     const monthlyIncome = grossAnnualIncome / 12;
     const floorApplied = Math.max(monthlyIncome, rule.monthlyFloor ?? 0);
-    return Math.min(floorApplied, rule.monthlyCap ?? Number.POSITIVE_INFINITY) * 12;
+    const capped = Math.min(floorApplied, rule.monthlyCap ?? Number.POSITIVE_INFINITY);
+    return Math.max(0, capped - (rule.monthlyExemptUpTo ?? 0)) * 12;
   }
-  return Math.min(grossAnnualIncome, rule.annualCap ?? Number.POSITIVE_INFINITY);
+  const capped = Math.min(grossAnnualIncome, rule.annualCap ?? Number.POSITIVE_INFINITY);
+  return Math.max(0, capped - (rule.annualExemptUpTo ?? 0));
+}
+
+/** A fixed monthly payment chosen by the monthly salary band (Armenia); nothing on zero pay. */
+function fixedMonthlyAmount(grossAnnualIncome: number, rule: ContributionRule): number {
+  const monthlyIncome = grossAnnualIncome / 12;
+  if (!rule.monthlyFixedBands || monthlyIncome <= 0) return 0;
+  const band = rule.monthlyFixedBands.find(({ upTo }) => upTo === null || monthlyIncome <= upTo);
+  return (band?.amount ?? 0) * 12;
 }
 
 /** Without a family in the scenario Germany is calculated for an employee without children. */
@@ -155,6 +179,8 @@ function defaultTaxableIncome(
 ): number {
   if (countryCode === 'DE') return germanWageTaxBase(grossAnnualIncome, germanyChildless(options));
   if (countryCode === 'CY') return cyprusTaxBase(grossAnnualIncome, contributions);
+  if (isWaveOneCountry(countryCode))
+    return waveOneTaxBase(countryCode, grossAnnualIncome, contributions.total);
   return grossAnnualIncome;
 }
 
@@ -175,10 +201,13 @@ function collectEmployeeContributions(
   const data = getCountryTaxData(countryCode);
   const items = data.employeeContributions
     .filter(({ eligibility }) => isContributionApplicable(eligibility, options))
-    .map(({ name, rate, source, ...limits }) => ({
-      name,
-      amount: roundToCents(contributionBase(grossAnnualIncome, limits) * rate),
-      source,
+    .map((rule) => ({
+      name: rule.name,
+      amount: roundToCents(
+        contributionBase(grossAnnualIncome, rule) * rule.rate +
+          fixedMonthlyAmount(grossAnnualIncome, rule),
+      ),
+      source: rule.source,
     }));
   return { items, total: roundToCents(items.reduce((total, item) => total + item.amount, 0)) };
 }
@@ -187,6 +216,7 @@ function assumptionsFor(countryCode: CountryCode, options: PayrollOptions): stri
   const common = [
     'Расчёт относится к налоговому году 2026 и использует годовую зарплату, равномерно выплачиваемую 12 месяцев.',
   ];
+  if (isWaveOneCountry(countryCode)) return waveOneAssumptions(countryCode);
   switch (countryCode) {
     case 'DE':
       return [
@@ -230,6 +260,7 @@ function assumptionsFor(countryCode: CountryCode, options: PayrollOptions): stri
 }
 
 function assumptionSummaryFor(countryCode: CountryCode, options: PayrollOptions): string {
+  if (isWaveOneCountry(countryCode)) return waveOneAssumptionSummary(countryCode);
   switch (countryCode) {
     case 'DE':
       return `I налоговый класс, без церковного налога, государственная медстраховка со средней надбавкой 2,9%, ${germanyChildless(options) ? 'без детей' : 'есть дети'}`;

@@ -187,7 +187,7 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
         path: '/tools/country-fit',
         title: COUNTRY_FIT_TITLE,
         description: COUNTRY_FIT_DESCRIPTION,
-        shareDescription: 'Налоги и чистая зарплата за 2026 год в шести странах. Расчёт со своими расходами.',
+        shareDescription: 'Налоги и чистая зарплата за 2026 год в 13 странах. Расчёт со своими расходами.',
       }),
     ).replace(
       EMPTY_ROOT,

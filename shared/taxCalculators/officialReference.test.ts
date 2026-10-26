@@ -70,3 +70,67 @@ describe('one official reference point per country', () => {
     expect(calculateAnnualPayroll('RU', 3_000_000).incomeTax.amount).toBe(402_000);
   });
 });
+
+describe('wave 1 countries: one official reference point each', () => {
+  it('United Kingdom: allowance taper and two NI rates', () => {
+    // gov.uk «Income Tax rates and allowances» 2026–27; «Rates and thresholds for employers 2026 to 2027».
+    const payroll = calculateAnnualPayroll('GB', 60_000);
+    expect(payroll.incomeTax.amount).toBe(11_432);
+    expect(payroll.employeeContributions.total).toBe(3_210.6);
+    expect(calculateAnnualPayroll('GB', 120_000).incomeTax.amount).toBe(39_432);
+  });
+
+  it('Kazakhstan: contributions and 30 MRP a month come off the base, 15 % above 8 500 MRP', () => {
+    // Tax Code K2500000214 art. 363, 402, 403; budget law Z2500000239 art. 7 (MRP 4 325, MZP 85 000);
+    // Social Code art. 249 (10 %, ≤ 50 MZP); OSMS law art. 28 (2 %, ≤ 20 MZP).
+    const middle = calculateAnnualPayroll('KZ', 12_000_000);
+    expect(middle.employeeContributions.total).toBe(1_440_000);
+    expect(middle.incomeTax.amount).toBe(900_300);
+    const high = calculateAnnualPayroll('KZ', 60_000_000);
+    expect(high.employeeContributions.total).toBe(5_508_000);
+    expect(high.incomeTax.amount).toBe(6_102_125);
+  });
+
+  it('Armenia: 20 %, funded pension 5 % / 10 % − 25 000, stamp fee by salary band', () => {
+    // Tax Code art. 150 (arlis 230455); funded pensions law art. 6 (arlis 224823);
+    // minimum wage 75 000 (arlis 172160); stamp fee art. 12 (arlis 230046).
+    const middle = calculateAnnualPayroll('AM', 6_000_000);
+    expect(middle.incomeTax.amount).toBe(1_200_000);
+    expect(middle.employeeContributions.total).toBe(312_000);
+    const high = calculateAnnualPayroll('AM', 24_000_000);
+    expect(high.employeeContributions.total).toBe(1_230_000);
+  });
+
+  it('Türkiye: SGK 15 % off the base, minimum-wage part exempt from tax and stamp duty', () => {
+    // GİB «Gelir Vergisi Tarifesi 2026», «Ücret Geliri» 2026 (GVK 23/18, 63); SGK 2026 ceiling 297 270;
+    // Damga Vergisi Kanunu (1) tablo IV-1-b binde 7,59 and (2) tablo IV-34.
+    const payroll = calculateAnnualPayroll('TR', 1_200_000);
+    expect(payroll.taxableAnnualIncome).toBe(1_020_000);
+    expect(payroll.incomeTax.amount).toBe(180_018.8);
+    expect(payroll.employeeContributions.total).toBe(186_099.63);
+    expect(calculateAnnualPayroll('TR', 396_360).incomeTax.amount).toBe(0);
+  });
+
+  it('Uzbekistan: a flat 12 % with the pension contribution inside the tax', () => {
+    // Tax Code art. 381, 385 (lex.uz 4674893).
+    const payroll = calculateAnnualPayroll('UZ', 120_000_000);
+    expect(payroll.incomeTax.amount).toBe(14_400_000);
+    expect(payroll.employeeContributions.total).toBe(0);
+  });
+
+  it('Belarus: 13 %, 25 % above 350 000 BYN, 1 % pension contribution', () => {
+    // Tax Code (special part) art. 214, 209 (pravo.by hk0900071); FSZN contributions law art. 5.
+    expect(calculateAnnualPayroll('BY', 120_000).incomeTax.amount).toBe(15_600);
+    const high = calculateAnnualPayroll('BY', 500_000);
+    expect(high.incomeTax.amount).toBe(83_000);
+    expect(high.employeeContributions.total).toBe(5_000);
+  });
+
+  it('Montenegro: 0 / 9 / 15 % monthly bands on gross pay, 10 % + 0,5 % contributions', () => {
+    // Sl. list CG 160/2025 (ZPDFL čl. 10, from 01.01.2026); 94/2024 (PIO 10 %); 2025 PIO ceiling 75 453 €.
+    const payroll = calculateAnnualPayroll('ME', 24_000);
+    expect(payroll.incomeTax.amount).toBe(2_124);
+    expect(payroll.employeeContributions.total).toBe(2_520);
+    expect(calculateAnnualPayroll('ME', 120_000).employeeContributions.total).toBe(8_145.3);
+  });
+});
