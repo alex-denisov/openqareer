@@ -8,6 +8,7 @@ import type {
   RecruiterContactJob,
   RecruiterContactJobStatus,
 } from '../../shared/recruiterContact';
+import type { RecruiterChannel } from '../../shared/recruiterChannel';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 
 export const RECRUITER_CONTACTS_SCHEMA = `
@@ -46,6 +47,10 @@ CREATE TABLE IF NOT EXISTS recruiter_contact_jobs (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_recruiter_contact_jobs_due
   ON recruiter_contact_jobs(status, requested_at);
+CREATE TABLE IF NOT EXISTS recruiter_contact_channels (
+  contact_id TEXT PRIMARY KEY,
+  channels TEXT NOT NULL
+) STRICT;
 `;
 
 const RECRUITER_CONTACTS_SCHEMA_WITH_FK = RECRUITER_CONTACTS_SCHEMA.replace(
@@ -54,6 +59,7 @@ const RECRUITER_CONTACTS_SCHEMA_WITH_FK = RECRUITER_CONTACTS_SCHEMA.replace(
 );
 
 interface RecruiterContactRow {
+  channels?: string | null;
   id: string;
   candidate_id: string;
   vacancy_id: string;
@@ -108,6 +114,7 @@ function toContact(row: RecruiterContactRow): RecruiterContact {
     sourceType: row.source_type,
     confidence: Number(row.confidence),
     sourceReceipt: row.source_receipt ? JSON.parse(row.source_receipt) : undefined,
+    ...(row.channels ? { channels: JSON.parse(row.channels) as RecruiterChannel[] } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -242,12 +249,19 @@ export class SqliteRecruiterContactsRepository {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    const channelStmt = this.database.prepare(
+      'INSERT OR REPLACE INTO recruiter_contact_channels (contact_id, channels) VALUES (?, ?)',
+    );
     this.database.exec('BEGIN TRANSACTION');
     try {
         deleteStmt.run(candidateId, vacancyId);
       for (const contact of contacts) {
         insertStmt.run(contact.id, candidateId, ...contactToParams(contact, vacancyId).slice(1));
+        if (contact.channels && contact.channels.length > 0) {
+          channelStmt.run(contact.id, JSON.stringify(contact.channels));
+        }
       }
+      this.pruneChannels();
       this.database.exec('COMMIT');
     } catch (err) {
       this.database.exec('ROLLBACK');
@@ -266,8 +280,9 @@ export class SqliteRecruiterContactsRepository {
         id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp,
         linkedin_url, github_url, twitter_url, source_type,
-        confidence, source_receipt, created_at, updated_at
+        confidence, source_receipt, created_at, updated_at, ch.channels AS channels
       FROM recruiter_contacts
+      LEFT JOIN recruiter_contact_channels ch ON ch.contact_id = recruiter_contacts.id
       WHERE candidate_id = ? AND vacancy_id = ?
       ORDER BY confidence DESC, created_at ASC
     `);
@@ -279,8 +294,11 @@ export class SqliteRecruiterContactsRepository {
     const rows = this.database.prepare(`
       SELECT id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp, linkedin_url, github_url,
-        twitter_url, source_type, confidence, source_receipt, created_at, updated_at
-      FROM recruiter_contacts WHERE candidate_id = ?
+        twitter_url, source_type, confidence, source_receipt, created_at, updated_at,
+        ch.channels AS channels
+      FROM recruiter_contacts
+      LEFT JOIN recruiter_contact_channels ch ON ch.contact_id = recruiter_contacts.id
+      WHERE candidate_id = ?
       ORDER BY created_at DESC, id
     `).all(candidateId) as unknown as RecruiterContactRow[];
     return rows.map(toContact);
@@ -406,12 +424,22 @@ export class SqliteRecruiterContactsRepository {
     this.database
       .prepare('DELETE FROM recruiter_contacts WHERE candidate_id = ? AND vacancy_id = ?')
       .run(candidateId, vacancyId);
+    this.pruneChannels();
+  }
+
+  /** Каналы живут, пока жив контакт: удаление контакта уносит и досье. */
+  private pruneChannels(): void {
+    this.database.exec(
+      'DELETE FROM recruiter_contact_channels WHERE contact_id NOT IN (SELECT id FROM recruiter_contacts)',
+    );
   }
 
   deleteContactsByCandidateId(candidateId: string): number {
-    return Number(
+    const deleted = Number(
       this.database.prepare('DELETE FROM recruiter_contacts WHERE candidate_id = ?').run(candidateId).changes,
     );
+    this.pruneChannels();
+    return deleted;
   }
 
   close(): void {

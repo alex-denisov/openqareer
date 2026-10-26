@@ -1,3 +1,4 @@
+import type { CandidateRecruiterChannel } from './recruiterChannel';
 export type CandidateCompanySort = 'default' | 'contacts' | 'alphabetical';
 export type CandidateCompanyFilter = 'all' | 'want' | 'contacts' | 'recruiter';
 export type CandidateLinkedInStatus = 'connected' | 'profile-imported' | 'disconnected';
@@ -36,6 +37,8 @@ export interface CandidateCompanyRecruiter {
   readonly sourceLabel: string;
   readonly sourceDate: string;
   readonly isHypothesis: boolean;
+  /** Каналы связи по ценности для кандидата (B258); источник не отдаётся. */
+  readonly channels?: readonly CandidateRecruiterChannel[];
 }
 
 export interface CandidateCompanyNextStep {

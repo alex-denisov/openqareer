@@ -1,4 +1,5 @@
 import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { candidateChannels } from '../../shared/recruiterChannel';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { CandidateCompanyRecruiter } from '../../shared/candidateCompany';
@@ -134,6 +135,7 @@ function safeRecruiter(contact: RecruiterContact, companyKey: string): Candidate
     sourceLabel,
     sourceDate: contact.sourceReceipt?.observedAt ?? contact.updatedAt,
     isHypothesis: !isVacancySource || contact.emailStatus === 'hypothesis',
+    channels: candidateChannels(contact.channels ?? []),
   };
 }
 

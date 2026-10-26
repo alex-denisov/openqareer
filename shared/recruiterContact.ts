@@ -7,6 +7,8 @@
  * - 'unverified' — извлечена из текста или публичного источника без прямой валидации.
  */
 
+import type { RecruiterChannel } from './recruiterChannel';
+
 export type EmailStatus = 'verified' | 'hypothesis' | 'unverified';
 
 export type RecruiterContactJobStatus = 'queued' | 'running' | 'ready' | 'failed';
@@ -49,6 +51,8 @@ export interface RecruiterContact {
   readonly sourceType: string;
   readonly confidence: number;
   readonly sourceReceipt?: RecruiterSourceReceipt;
+  /** Досье B258: каналы связи по ценности для кандидата, у каждого источник. */
+  readonly channels?: readonly RecruiterChannel[];
   readonly createdAt: string;
   readonly updatedAt: string;
 }
