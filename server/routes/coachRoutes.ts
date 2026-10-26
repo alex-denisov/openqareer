@@ -1,3 +1,4 @@
+import { buildCoachCareerContext } from './coachCareerContext';
 import { adaptationContextFromInput, decorateAdaptationResult, labelAdaptationMessage, scopeAdaptationKnowledge, registerAdaptationCoachRoutes } from './adaptationCoach';
 import { extractCandidateFacts, type ExtractedFacts } from '../coach/candidateFactExtractor';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -355,10 +356,21 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   if (adaptationContext) body.content = labelAdaptationMessage(deps, candidate.id, key, adaptationContext, body.content);
   const started = candidateStore.startTurn(candidate.id, key, { ...body, phase, stageContext });
   if (body.stage === 'diary' && started.state === 'ready') started.input.knowledgeContext = scopeAdaptationKnowledge(started.input.knowledgeContext, stageContext ?? '');
+  if (started.state === 'ready' && !body.subject) started.input.careerContext = readCareerContext(deps, request, candidate.id);
   // A chosen vacancy is the topic itself: its turn needs no live market sample (block C R5).
   const marketQuery = body.subject?.kind === 'vacancy' ? undefined : body.marketQuery;
   return continueStartedTurn(deps, request, reply, candidate.id, key, started, marketQuery);
 };
+
+/** Контекст «Карьеры» — подсказка консультанту; его сбой не роняет ход. */
+function readCareerContext(deps: RouteDeps, request: FastifyRequest, candidateId: string) {
+  try {
+    return buildCoachCareerContext(deps, candidateId);
+  } catch (error) {
+    request.log.warn({ error }, 'coach_career_context_failed');
+    return undefined;
+  }
+}
 
 const handleRejectProposal: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;

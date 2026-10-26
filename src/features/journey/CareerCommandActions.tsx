@@ -6,6 +6,8 @@ import {
   getCareerCommands,
   prepareCareerCommand,
 } from '../coach/careerCommandApi';
+import { CareerChangeProposal } from './CareerChangeProposal';
+import { isCareerChangeKind } from './careerChangeApply';
 
 interface CareerActionProposalListProps {
   proposals: CoachResult['actionProposals'];
@@ -198,6 +200,9 @@ function refreshProposalCommand({ index, command, onRun }: CareerActionProposalI
 
 function CareerActionProposalItem(props: CareerActionProposalItemProps) {
   const { proposal, command, busy, turnIdempotencyKey } = props;
+  if (isCareerChangeKind(proposal.kind)) {
+    return <CareerChangeProposal proposal={proposal} kind={proposal.kind} />;
+  }
   return (
     <CareerActionProposalCard
       proposal={proposal}
@@ -406,6 +411,9 @@ function actionLabel(kind: CoachResult['actionProposals'][number]['kind']) {
     'outreach.prepare': 'Подготовить личный контакт',
     'outreach.send': 'Отправить сообщение',
     'connection.request': 'Запросить контакт',
+    'career.role.add': 'Добавить роль',
+    'career.role.remove': 'Убрать роль',
+    'career.conditions.update': 'Изменить условия поиска',
   }[kind];
 }
 

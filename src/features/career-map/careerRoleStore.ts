@@ -3,6 +3,7 @@ import type { ProposedRole } from '../../../shared/roleProposals';
 import type { RolesSample } from './roleHypothesisAdapter';
 import {
   acceptCareerRole,
+  changeCareerRole,
   dismissCareerRoleOffer,
   readRoleHypothesesWithDecisions,
   rejectCareerRole,
@@ -104,6 +105,16 @@ export function dismissRoleOffer(roleId: string): Promise<boolean> {
 
 export function acceptRole(title: string): Promise<boolean> {
   return runAction(async () => ({ acceptedTitle: await acceptCareerRole(title) }));
+}
+
+/** Изменение роли из предложения консультанта: роли «Карьеры» перечитываются целиком. */
+export async function changeRole(action: 'add' | 'remove', title: string): Promise<boolean> {
+  const done = await runAction(async () => {
+    await changeCareerRole(action, title);
+    return {};
+  });
+  if (done) await loadCareerRoles(true);
+  return done;
 }
 
 /** Только для тестов: сбросить состояние между сценариями. */

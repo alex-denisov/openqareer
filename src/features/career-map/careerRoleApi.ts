@@ -94,3 +94,13 @@ export async function acceptCareerRole(title: string): Promise<string> {
   });
   return strategy.current.role.title;
 }
+
+/** Роль добавлена или убрана кандидатом — по предложению консультанта (26.10). */
+export async function changeCareerRole(action: 'add' | 'remove', title: string): Promise<void> {
+  const response = await apiFetch('/api/v1/candidate/career-roles', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, title }),
+  });
+  if (!response.ok) await throwApiError(response);
+}

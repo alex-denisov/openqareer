@@ -3,7 +3,7 @@ import { CAREER_SUPER_PROMPT } from './careerSuperPrompt';
 
 export const CAREER_ROLE_PROMPT_REVISIONS: Record<CareerRole, string> = {
   career_consultant: 'career-consultant-v1.4-2026-10-26',
-  career_strategist: 'career-strategist-v1.5-2026-10-26',
+  career_strategist: 'career-strategist-v1.6-2026-10-26',
   career_expert: 'career-expert-v1.4-2026-10-26',
 };
 
@@ -47,6 +47,19 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   превращай год или относительную дату в месяц/дату. Для правки факта опыта
   заполни memoryId только из bulletMemoryIds этой позиции; для заголовка и
   «Обо мне» верни memoryId: null. Для остальных предложений верни null.
+- Раздел «Карьера» (роли и условия поиска) меняется только предложением с
+  подтверждением кандидата. careerChange заполняй только для career.*, для
+  остальных предложений верни careerChange: null.
+  career.role.add — роль, которой нет в списке ролей кандидата, если её
+  подтверждают его факты или он сам её назвал; career.role.remove — роль, от
+  которой кандидат прямо отказался или которую опровергают его факты. В обоих
+  случаях заполни только roleTitle (название роли как на рынке), остальные поля
+  null. career.conditions.update — кандидат назвал новое условие поиска:
+  locations (города или «Удалённо из РФ»), salaryFloorRubles (нижняя граница в
+  рублях на руки, целое число), formats (office, hybrid, remote), relocation
+  (true/false), stopCompanies (компании, куда он не пойдёт). Заполни только то,
+  что кандидат назвал сам, прочее — null, roleTitle — null. Не выводи условие из
+  догадки и не меняй то, что кандидат уже подтвердил, без его слов.
 - Переписывай только подтверждённые сведения из evidenceRefs и переданного
   профиля. Не добавляй метрики, масштабы, работодателей, результаты или сроки,
   которых нет в источниках. Если безопасной формулировки нет — не предлагай

@@ -60,9 +60,38 @@ export function vacancySummaryText(
   const fromPage = decodeVacancyText(pageSummary).trim();
   if (fromPage) return { text: fromPage };
   if (detail.status === 'loading' || detail.status === 'idle') return { loading: true };
-  if (detail.status === 'ready' && detail.detail.summary?.trim())
-    return { text: detail.detail.summary.trim() };
-  return {};
+  if (detail.status !== 'ready') return {};
+  if (detail.detail.summary?.trim()) return { text: detail.detail.summary.trim() };
+  const opening = openingOfDescription(detail.detail.description);
+  return opening ? { text: opening } : {};
+}
+
+/** Абзац короче — заголовок раздела или служебная строка («Job Requisition ID #»), не текст. */
+const MIN_PARAGRAPH_LENGTH = 60;
+const OPENING_TARGET_LENGTH = 280;
+const OPENING_MAX_LENGTH = 420;
+
+/**
+ * Выжимки нет ни у страницы, ни у кластера, а полный текст есть — карточка
+ * показывает его начало, а не «Краткого описания нет» (26.10, Autodesk).
+ */
+export function openingOfDescription(description: string): string | undefined {
+  const paragraphs = description
+    .split(/\n\s*\n|\n/u)
+    .map((part) => part.replace(/\s+/gu, ' ').trim())
+    .filter((part) => part.length >= MIN_PARAGRAPH_LENGTH);
+  let opening = '';
+  for (const paragraph of paragraphs) {
+    if (opening.length >= OPENING_TARGET_LENGTH) break;
+    opening = opening ? `${opening} ${paragraph}` : paragraph;
+  }
+  if (!opening) return undefined;
+  if (opening.length <= OPENING_MAX_LENGTH) return opening;
+  const cut = opening.slice(0, OPENING_MAX_LENGTH - 1);
+  const sentenceEnd = cut.lastIndexOf('. ');
+  return sentenceEnd >= OPENING_TARGET_LENGTH / 2
+    ? cut.slice(0, sentenceEnd + 1)
+    : `${cut.slice(0, cut.lastIndexOf(' '))}…`;
 }
 
 /** B446-g4: раскрытая карточка дочитывает выжимку вместе с деталями, если страница её не принесла. */

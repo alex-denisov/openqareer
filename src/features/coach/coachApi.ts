@@ -2,13 +2,13 @@ import { receiveCoachResult } from './coachResultDelivery';
 import { shareInFlight } from './shareInFlight';
 import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 import type { CoachTurnStage, CoachTurnSubject } from '../../../server/domain/coach';
+import type { CareerChangeKind, CareerChangeView } from './careerChangeView';
 export type { CoachTurnStage, CoachTurnSubject };
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
 import type {
   WorkFamilyCode,
-  WorkPreferenceAnswer,
   WorkPreferenceResult,
   WorkPreferenceTask,
 } from '../../../shared/workPreferences';
@@ -239,7 +239,8 @@ export interface CoachResult {
       | 'application.submit'
       | 'outreach.prepare'
       | 'outreach.send'
-      | 'connection.request';
+      | 'connection.request'
+      | CareerChangeKind;
     objective: string;
     evidenceRefs: string[];
     acceptanceCriteria: string[];
@@ -252,6 +253,8 @@ export interface CoachResult {
       memoryId: string | null;
       proposedText: string;
     } | null;
+    /** Изменение «Карьеры», которое кандидат применяет сам (26.10). */
+    careerChange?: CareerChangeView | null;
   }>;
   intelligence?: {
     orchestrationRevision: string;
@@ -875,23 +878,7 @@ export async function recordVacancyApplication(input: {
   return readDataObject<VacancyApplication>(response);
 }
 
-export async function getWorkPreferences(signal?: AbortSignal): Promise<WorkPreferencesRead> {
-  const response = await apiFetch('/api/v1/candidate/work-preferences', { signal });
-  return readDataObject<WorkPreferencesRead>(response);
-}
-
-export async function submitWorkPreferences(input: {
-  readonly answers: readonly WorkPreferenceAnswer[];
-  readonly excluded: readonly WorkFamilyCode[];
-}): Promise<NonNullable<WorkPreferencesRead['run']>> {
-  const response = await apiFetch('/api/v1/candidate/work-preferences', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  });
-  return readDataObject<NonNullable<WorkPreferencesRead['run']>>(response);
-}
-
+export { getWorkPreferences, submitWorkPreferences } from './workPreferencesApi';
 export { getDecisionProfile, putDecisionProfile } from './decisionProfileApi';
 
 /**

@@ -101,6 +101,16 @@
   font-size: var(--career-text-xs);
   font-weight: 600;
 }
+.career-change-lines {
+  display: grid;
+  gap: var(--career-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--career-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .career-expert-actions {
   display: flex;
   gap: var(--career-space-3);

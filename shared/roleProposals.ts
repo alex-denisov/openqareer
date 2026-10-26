@@ -52,8 +52,11 @@ export type RoleConfirmation =
 export interface ProposedRole {
   readonly id: string;
   readonly title: string;
-  /** Откуда имя: назвала модель по резюме или назвал рынок группой вакансий. */
-  readonly origin: 'model' | 'market';
+  /**
+   * Откуда имя: назвала модель по резюме, назвал рынок группой вакансий или
+   * кандидат сам (в мастере или принял предложение консультанта, 26.10).
+   */
+  readonly origin: 'model' | 'market' | 'candidate';
   readonly reason: string | null;
   readonly evidenceRefs: readonly string[];
   readonly confirmation: RoleConfirmation;
@@ -62,6 +65,14 @@ export interface ProposedRole {
    * `null` — таблица роль не знает, и ответы кандидата её не двигают.
    */
   readonly family: WorkFamilyCode | null;
+}
+
+/**
+ * Идентификатор роли «Карьеры» по названию: им же помечается отклонение
+ * кандидата (`career-role:<id>`), поэтому одна формулировка — один id.
+ */
+export function careerRoleId(title: string): string {
+  return `role-${titleKey(title).replace(/\s+/gu, '-')}`;
 }
 
 /** Больше пяти ролей кандидат не сравнивает — он их пролистывает. */
@@ -94,7 +105,7 @@ export function proposeRoles(input: {
       const group = groups.get(key);
       return [
         {
-          id: `role-${key.replace(/\s+/gu, '-')}`,
+          id: careerRoleId(role.title),
           title: role.title.trim(),
           origin: 'model',
           reason: role.reason.trim(),
