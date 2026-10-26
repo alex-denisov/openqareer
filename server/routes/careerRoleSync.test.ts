@@ -79,4 +79,25 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
       ['CTO', 'model'],
     ]);
   });
+
+  it('считает роль мастера по списку «Вакансий» (география и решения уже учтены)', () => {
+    const store = fakeStore({ campaign });
+    const vacancy = (title: string) => ({
+      cluster: { canonicalTitle: title, firstObservedAt: '2026-10-20', skills: [], sources: [] },
+      explanation: { roleMatch: 'target' },
+    });
+    const context = {
+      proposals: [],
+      matched: Array.from({ length: 12 }, () => vacancy('VP of Engineering')),
+      confirmedSkills: [],
+    } as unknown as RoleContext;
+    const listed = Array.from({ length: 9 }, () => vacancy('VP of Engineering'));
+    const [wizard] = careerRolesWithCandidateChoices(
+      { candidateStore: store as never },
+      'c1',
+      context,
+      listed as never,
+    );
+    expect(wizard?.confirmation.state === 'observed' && wizard.confirmation.sampleSize).toBe(9);
+  });
 });
