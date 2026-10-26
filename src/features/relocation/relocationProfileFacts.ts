@@ -51,7 +51,7 @@ function educationLevel(qualification: string): Education['level'] {
   const text = qualification.toLocaleLowerCase('ru');
   if (/phd|doctor|доктор|кандидат наук|аспирант/u.test(text)) return 'doctorate';
   if (/master|магистр|mba|\bmsc\b|\bma\b/u.test(text)) return 'master';
-  if (/bachelor|бакалавр|специалист|\bbsc\b|\bba\b|\bbe\b|engineer|инженер/u.test(text))
+  if (/bachelor|бакалавр|специалист|\bbsc\b|\bba\b|\bbe\b/u.test(text))
     return 'bachelor';
   if (/college|колледж|техникум|училищ/u.test(text)) return 'vocational';
   return 'other';
