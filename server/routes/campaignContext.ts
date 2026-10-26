@@ -119,6 +119,7 @@ export function campaignMeta(campaign: CampaignResolution) {
           },
         }
       : {}),
+    ...(campaign.salaryCurrency ? { salaryCurrency: campaign.salaryCurrency } : {}),
     ...(campaign.roleHypotheses
       ? { roleHypotheses: campaign.roleHypotheses.map((flag) => ({ ...flag })) }
       : {}),
