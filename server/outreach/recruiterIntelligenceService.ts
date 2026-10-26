@@ -39,6 +39,10 @@ export interface DiscoveryOptions {
   readonly smtpTimeoutMs?: number;
   readonly linkedinPool?: SqliteLinkedinPoolRepository;
   readonly companyRecruiterFinder?: CompanyRecruiterFinder;
+  /** Резерв без LinkedIn: рекрутёр из открытых профилей. */
+  readonly openWebRecruiterFinder?: (company: string) => Promise<CompanyRecruiterProfile | null>;
+  /** Домен почты компании с проверкой MX; без него — только ссылка вакансии. */
+  readonly resolveDomain?: (vacancy: UnifiedVacancyInput) => Promise<string | undefined>;
 }
 
 const AGGREGATOR_DOMAINS = new Set([
@@ -228,7 +232,7 @@ export async function passiveSmtpHandshake(
   });
 }
 
-const defaultMxResolver: MxResolver = async (domain: string) => {
+export const defaultMxResolver: MxResolver = async (domain: string) => {
   try {
     const records = await dns.resolveMx(domain);
     return records.sort((a, b) => a.priority - b.priority);
@@ -373,9 +377,9 @@ async function discoverFromPool(
       ? (comp: string, dom?: string) => findCompanyRecruitersFromPool(comp, dom, options.linkedinPool)
       : undefined
   );
-  if (!finder) return [];
-
-  const poolProfile = await finder(vacancy.company, domain);
+  const poolProfile =
+    (finder ? await finder(vacancy.company, domain) : null) ??
+    (options?.openWebRecruiterFinder ? await options.openWebRecruiterFinder(vacancy.company) : null);
   if (!poolProfile) return [];
 
   const person: ExtractedPerson = {
@@ -417,7 +421,9 @@ export async function discoverRecruiterContacts(
   options?: DiscoveryOptions,
 ): Promise<RecruiterContact[]> {
   const fullText = [vacancy.contactInfo, vacancy.description, vacancy.fullDescription].filter(Boolean).join('\n');
-  const domain = extractCompanyDomain(vacancy);
+  const domain = options?.resolveDomain
+    ? await options.resolveDomain(vacancy)
+    : extractCompanyDomain(vacancy);
   const person = findRecruiterPerson(fullText);
   const phones = extractPhones(fullText);
   const tgs = extractTelegramHandles(fullText);
