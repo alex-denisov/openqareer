@@ -56,6 +56,8 @@ describe('mergeProfileFacts', () => {
     });
     expect(isProfileFactRow(bachelor?.id ?? '')).toBe(true);
     expect(merged.education.education[0]?.completedAt).toBe('2023-04-01');
+    // «DevOps Engineering» names a field, not a bachelor degree.
+    expect(merged.education.education[0]?.level).toBe('other');
   });
 
   it('takes languages with their level in Russian names and certificates', () => {
