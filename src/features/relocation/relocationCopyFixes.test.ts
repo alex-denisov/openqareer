@@ -7,8 +7,8 @@ describe('relocation comparison copy', () => {
     expect(missingFactLabel('Укажите годовую зарплату для расчёта налога.')).toBe(
       'укажите зарплату',
     );
-    expect(missingFactLabel('Для этой страны нет проверенной налоговой шкалы.')).toBe('нет данных');
-    expect(missingFactLabel(undefined)).toBe('нет данных');
+    expect(missingFactLabel('Для этой страны нет проверенной налоговой шкалы.')).toBe('—');
+    expect(missingFactLabel(undefined)).toBe('—');
   });
 
   it('does not repeat the period a threshold label already names', () => {

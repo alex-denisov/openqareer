@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import { usePageTitleOverride } from '../shell/pageTitleOverride';
+import { PushConsultantContext } from '../shell/PushConsultantButton';
 import { RelocationConsentGate } from './RelocationConsentGate';
 import { RelocationDesktopWorkspace } from './RelocationDesktopWorkspace';
 import { RelocationMobileWorkspace } from './RelocationMobileWorkspace';
@@ -92,7 +93,9 @@ export interface RelocationWorkspaceProps extends RelocationScreenProps {
 function RelocationWorkspace(props: RelocationWorkspaceProps) {
   const workspace = useRelocationWorkspace(props.input);
   return props.mobile ? (
-    <RelocationMobileWorkspace {...props} workspace={workspace} />
+    <PushConsultantContext.Provider value={props.onOpenExpert ?? null}>
+      <RelocationMobileWorkspace {...props} workspace={workspace} />
+    </PushConsultantContext.Provider>
   ) : (
     <RelocationDesktopWorkspace {...props} workspace={workspace} />
   );

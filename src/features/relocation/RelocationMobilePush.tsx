@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { PushConsultantButton } from '../shell/PushConsultantButton';
 import { CaretLeft } from '@phosphor-icons/react';
 import '../vacancies/vacancy-push.css';
 
@@ -39,6 +40,7 @@ export function MobilePush({
             <CaretLeft aria-hidden="true" size={20} />
           </button>
           <h1 id="career-relocation-mobile-title">{title}</h1>
+          <PushConsultantButton />
         </header>
         <div className="vacancy-push-body career-relocation career-relocation-mobile">
           {children}

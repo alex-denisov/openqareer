@@ -16,6 +16,8 @@ import type { PayrollOptions, PayrollResult } from '../../../shared/taxCalculato
 import { localIsoDate } from './relocationDates';
 import { relocationStatusLabel } from './relocationStatus';
 import { leadingScenario } from './relocationLeadingScenario';
+import { countryVacancyFact, type CountryVacancySample } from './relocationCountryVacancies';
+import type { CountryMobilityData, MobilityRequirement } from '../../../shared/countryFit/types';
 
 const RELOCATION_COUNTRY_CODES = [
   'AE',
@@ -178,6 +180,7 @@ export function buildCountryComparisonCountry(
   countryCode: string,
   profile: RelocationQuestionnaire | null,
   grossAnnualIncome?: number,
+  vacancies?: CountryVacancySample | null,
 ): CountryComparisonCountry {
   const fit = countryFitForQuestionnaire(countryCode, profile);
   const country = getCountryMobilityData(countryCode);
@@ -194,9 +197,7 @@ export function buildCountryComparisonCountry(
       processingTime: noData(
         'В правилах по выбранному сценарию нет подтверждённого срока оформления.',
       ),
-      relocationVacancies: noData(
-        'Подбор вакансий по этой стране не содержит полной датированной выборки.',
-      ),
+      relocationVacancies: countryVacancyFact(vacancies, countryCode),
       salaryThreshold: salaryThresholdFact(fit.scenarios),
       incomeTax: taxFacts.incomeTax,
       netIncome: taxFacts.netIncome,
@@ -204,13 +205,69 @@ export function buildCountryComparisonCountry(
         taxData?.costOfLiving.unavailableReason ??
           'Нет проверенных данных об аренде и страховании для этой страны.',
       ),
-      workingLanguage: noData(
-        'В источниках по этой стране нет подтверждённых данных о языке работы.',
-      ),
-      familyAndResidence: noData(
-        'В источниках нет сопоставимых сведений о переезде семьи и дальнейшем проживании.',
-      ),
+      workingLanguage: languageFact(country),
+      familyAndResidence: familyFact(country, profile, candidateSource),
     },
+  };
+}
+
+function countryRequirements(country: CountryMobilityData): readonly MobilityRequirement[] {
+  return country.scenarios.flatMap(({ paths }) =>
+    paths.flatMap(({ requirements }) => requirements),
+  );
+}
+
+/** «Язык работы»: the language requirement of the country's own rules, or no row. */
+function languageFact(
+  country: CountryMobilityData,
+): CountryComparisonCountry['facts']['workingLanguage'] {
+  const requirement = countryRequirements(country).find(
+    (item) => item.kind === 'meets_language_requirements',
+  );
+  if (!requirement || !('source' in requirement))
+    return noData('В правилах страны нет требования к языку.');
+  return {
+    status: 'available',
+    value: { summary: requirement.explanation },
+    sources: [comparisonEvidence(requirement.source)],
+  };
+}
+
+const MOVE_PLAN: Readonly<Record<string, string>> = {
+  together: 'переезжаете вместе',
+  later: 'семья переедет позже',
+};
+
+/** «Семья»: who moves from the questionnaire, plus the country's income uplift for them. */
+function familyFact(
+  country: CountryMobilityData,
+  profile: RelocationQuestionnaire | null,
+  candidateSources: readonly ComparisonEvidence[],
+): CountryComparisonCountry['facts']['familyAndResidence'] {
+  const family = profile?.family;
+  if (!family || !candidateSources.length) return noData('В анкете нет сведений о семье.');
+  const parts = [
+    family.partnerStatus === 'has_partner' ? 'с партнёром' : null,
+    family.partnerStatus === 'no_partner' ? 'без партнёра' : null,
+    family.childrenCount ? `детей: ${family.childrenCount}` : null,
+    MOVE_PLAN[family.familyMovePlan] ?? null,
+  ].filter((part): part is string => Boolean(part));
+  if (!parts.length) return noData('В анкете нет сведений о семье.');
+  const uplift = countryRequirements(country).find(
+    (item) => item.kind === 'minimum_remote_income' && (item.partnerUplift || item.childUplift),
+  );
+  const upliftText =
+    uplift?.kind === 'minimum_remote_income'
+      ? `; порог дохода растёт${uplift.partnerUplift ? ` на ${formatMoney(uplift.partnerUplift, uplift.currency)} за партнёра` : ''}${uplift.childUplift ? ` и на ${formatMoney(uplift.childUplift, uplift.currency)} за ребёнка` : ''}`
+      : '';
+  const summary = parts.join(', ');
+  return {
+    status: 'available',
+    value: { summary: `${summary.charAt(0).toUpperCase()}${summary.slice(1)}${upliftText}` },
+    sources: uniqueEvidence([
+      ...candidateSources,
+      ...(uplift && 'source' in uplift ? [comparisonEvidence(uplift.source)] : []),
+    ]),
   };
 }
 

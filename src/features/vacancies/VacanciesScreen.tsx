@@ -569,11 +569,20 @@ function VacanciesScreenContent({
   );
 }
 
-function VacanciesScreenHeader({ input }: { readonly input: VacanciesScreenProps }) {
+function VacanciesScreenHeader({
+  input,
+  activeTab,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly activeTab: OpportunityTab;
+}) {
+  // Mockup 13 at 390: the companies tab is its own screen «Компании и люди».
+  const companies = activeTab === 'companies';
+  const title = companies ? 'Компании и люди' : 'Вакансии';
   return (
     <>
       <header className="vacancies-mobile-topbar" aria-label="Навигация по вакансиям">
-        <h1>Вакансии</h1>
+        <h1>{title}</h1>
         <div className="vacancies-mobile-header-actions">
           {input.onOpenConnections ? (
             <button type="button" aria-label="Подключения" onClick={input.onOpenConnections}>
@@ -588,7 +597,8 @@ function VacanciesScreenHeader({ input }: { readonly input: VacanciesScreenProps
           {input.onOpenExpert ? (
             <button
               type="button"
-              aria-label="Спросить консультанта"
+              className="vacancies-mobile-consultant"
+              aria-label={companies ? 'Консультант: открыть' : 'Спросить консультанта'}
               onClick={() => input.onOpenExpert?.('vacancies')}
             >
               <Sparkle className="vacancies-mobile-topbar-icon" aria-hidden="true" />
@@ -596,7 +606,7 @@ function VacanciesScreenHeader({ input }: { readonly input: VacanciesScreenProps
           ) : null}
         </div>
       </header>
-      <PageHeader kicker="" title="Вакансии" description="" />
+      <PageHeader kicker="" title={title} description="" />
     </>
   );
 }
@@ -638,6 +648,7 @@ function OpportunityContent({
         screenState.chooseTab('selection');
       }}
       initialSearch={screenState.companyPathSearch}
+      onOpenExpert={input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined}
     />
   );
 }
@@ -698,7 +709,7 @@ function VacanciesScreenFrame({
 }) {
   return (
     <div className="vacancies-screen">
-      <VacanciesScreenHeader input={input} />
+      <VacanciesScreenHeader input={input} activeTab={activeTab} />
       {/* B446-g4: на «Сохранённых» карточка сводки с фильтрами остаётся (макет 4, кадр sv). */}
       {activeTab !== 'companies' ? (
         <div className={`vacancies-filter-host${activeTab === 'saved' ? ' is-saved-tab' : ''}`}>

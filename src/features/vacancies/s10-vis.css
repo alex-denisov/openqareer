@@ -1102,7 +1102,7 @@
     grid-column: 3;
     grid-row: 1;
   }
-  .vacancies-mobile-topbar button[aria-label='Спросить консультанта'] {
+  .vacancies-mobile-topbar .vacancies-mobile-consultant {
     grid-column: 4;
     grid-row: 1;
   }

@@ -509,3 +509,18 @@ div.vacancy-push-row {
 .vacancy-push-requirements .vacancies-screen-skill-chip.is-unconfirmed svg {
   color: var(--career-warning);
 }
+
+/* Mockups 13/15 at 390: the push bar keeps the consultant on the right, as the shell top bar does. */
+.vacancy-push-consultant {
+  grid-column: 3;
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--career-accent);
+  background: transparent;
+  cursor: pointer;
+}

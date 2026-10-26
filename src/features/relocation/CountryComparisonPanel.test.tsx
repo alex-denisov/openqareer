@@ -88,7 +88,7 @@ describe('CountryComparisonPanel', () => {
     };
     const html = renderToStaticMarkup(<CountryComparisonPanel countries={[germany, cyprus]} />);
 
-    expect(html).toContain('нет данных');
+    expect(html).not.toContain('нет данных');
     // The reason stays reachable as the cell's hint.
     expect(html).toContain('title="Нет данных об аренде и расходах."');
     expect(html).toContain('Граница Парето пока не рассчитывается');
