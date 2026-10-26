@@ -231,7 +231,7 @@ test('the mobile filter sheet marks network-contact counts as unknown', async ({
   await expect(dialog.getByRole('button', { name: 'Закрыть', exact: true })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Назад к фильтрам' })).toHaveCount(0);
   // Макет 13 (лист «Показывать»): выбор применяется сразу и закрывает лист.
-  await dialog.getByRole('radio', { name: /^Хочу \d+$/u }).check();
+  await dialog.getByRole('radio', { name: /^Хочу \d+$/u }).click();
   await expect(dialog).toBeHidden();
   await expect(page.getByText('3 компании в подборке')).toBeVisible();
 });
@@ -338,7 +338,7 @@ test('empty Wants state adds every selection company after confirmation (B422)',
     await page.getByRole('button', { name: 'Фильтры' }).click();
     const sheet = page.getByRole('dialog', { name: 'Фильтры' });
     await sheet.getByRole('button', { name: /^Показывать /u }).click();
-    await sheet.getByRole('radio', { name: /^Хочу \d+$/u }).check();
+    await sheet.getByRole('radio', { name: /^Хочу \d+$/u }).click();
     await expect(sheet).toBeHidden();
   } else {
     await page.getByRole('button', { name: 'Хочу 0', exact: true }).click();
