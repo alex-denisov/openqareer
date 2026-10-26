@@ -31,7 +31,7 @@ describe('CareerScreen (B445)', () => {
     expect(html).toContain('aria-label="Изменить: География"');
     expect(html).toContain('Москва, удалённо из РФ');
     expect(html).toContain('2 компании');
-    expect(html).toContain('Источник: каталог openqareer, hh.ru и LinkedIn · 445 вакансий · 05.10');
+    expect(html).not.toContain('Источник:');
   });
 
   it('раскрытая роль с проверенными навыками — блоки и кнопки по статусу', () => {

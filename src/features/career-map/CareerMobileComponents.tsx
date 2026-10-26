@@ -18,7 +18,6 @@ import { CareerRoleBody, RoleStatusBadge, type RoleHandlers } from './CareerRole
 import {
   conditionRows,
   ConditionsMarketLine,
-  MarketSourceStamp,
   type EditableConditionField,
 } from './CareerConditionsComponents';
 import { formatVacancyCount } from './careerWageFork';
@@ -221,7 +220,6 @@ export function MobileCareerHome({
         onOpenRelocation={onOpenRelocation}
         relocationEnabled={relocationEnabled}
       />
-      <MarketSourceStamp summary={summary} />
     </div>
   );
 }

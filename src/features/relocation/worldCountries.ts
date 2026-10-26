@@ -1,3 +1,5 @@
+import { countryNameRu } from '../../../shared/geo/countryNames';
+
 /**
  * Every country by ISO 3166-1 alpha-2, named in Russian by the platform.
  * Citizenship and the country of a diploma are not limited to the rules
@@ -16,22 +18,13 @@ export interface WorldCountry {
   readonly name: string;
 }
 
-const EXTRA_NAMES: Readonly<Record<string, string>> = { XK: 'Косово' };
-
-function displayName(code: string): string {
-  try {
-    return EXTRA_NAMES[code] ?? new Intl.DisplayNames(['ru'], { type: 'region' }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
-
 let cache: readonly WorldCountry[] | undefined;
 
 export function listWorldCountries(): readonly WorldCountry[] {
-  cache ??= ISO_CODES.map((countryCode) => ({ countryCode, name: displayName(countryCode) })).sort(
-    (a, b) => a.name.localeCompare(b.name, 'ru'),
-  );
+  cache ??= ISO_CODES.map((countryCode) => ({
+    countryCode,
+    name: countryNameRu(countryCode),
+  })).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   return cache;
 }
 

@@ -732,3 +732,108 @@
 .career-m-push > .career-badge {
   align-self: flex-start;
 }
+
+/* «Города и регионы поиска»: выбор только из справочника мест. */
+.career-geo-combobox {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.career-geo-combobox .career-inline-input {
+  flex: 1 1 12rem;
+}
+
+.career-geo-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-geo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  min-block-size: 32px;
+  padding-inline-start: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  font-size: var(--career-text-sm);
+}
+
+.career-geo-chip-remove {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 32px;
+  min-block-size: 32px;
+  border: 0;
+  background: none;
+  color: var(--career-text-muted);
+  cursor: pointer;
+}
+
+.career-geo-chip-remove:focus-visible {
+  outline: 2px solid var(--career-accent);
+}
+
+.career-geo-options {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 100%;
+  z-index: 20;
+  max-block-size: 320px;
+  margin: var(--career-space-1) 0 0;
+  padding: var(--career-space-1);
+  overflow-y: auto;
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  list-style: none;
+}
+
+.career-geo-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+  min-block-size: 44px;
+  padding-inline: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-sm);
+  cursor: pointer;
+}
+
+.career-geo-option:hover,
+.career-geo-option[aria-selected='true'] {
+  background: var(--career-accent-soft, var(--career-bg));
+}
+
+.career-geo-option-context,
+.career-geo-status {
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs, var(--career-text-sm));
+}
+
+.career-geo-status {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .career-geo-chip,
+  .career-geo-chip-remove {
+    min-block-size: 44px;
+  }
+
+  .career-geo-chip-remove {
+    min-inline-size: 44px;
+  }
+}
