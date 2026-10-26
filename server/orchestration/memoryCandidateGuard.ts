@@ -6,7 +6,7 @@ type MemoryCandidate = CoachProviderResult['result']['memoryCandidates'][number]
 const MEMORY_CANDIDATE_LIMIT = 20;
 
 /** Grouped digits («600 000», «1 650») read as one number; a comma decimal reads as a dot. */
-function numbersIn(text: string): string[] {
+export function numbersIn(text: string): string[] {
   const joined = text.replace(/(\d)[\s\u00a0\u202f](?=\d{3}(?!\d))/gu, '$1');
   return (joined.match(/\d+(?:[.,]\d+)?/gu) ?? []).map((value) => value.replace(',', '.'));
 }
@@ -25,7 +25,7 @@ function citableSources(input: CoachTurnInput): Map<string, string> {
   return sources;
 }
 
-function statementKey(statement: string): string {
+export function statementKey(statement: string): string {
   return statement
     .toLocaleLowerCase('ru-RU')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')

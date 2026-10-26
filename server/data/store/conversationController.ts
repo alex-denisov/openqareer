@@ -198,6 +198,10 @@ export class ConversationController {
     });
   }
 
+  proposeCandidateFacts(candidateId: string, facts: CoachProviderResult['result']['memoryCandidates']): void {
+    this.insertMemoryCandidates(candidateId, this.conversationId(candidateId), facts, new Date().toISOString());
+  }
+
   private insertMemoryCandidates(
     candidateId: string,
     conversationId: string,

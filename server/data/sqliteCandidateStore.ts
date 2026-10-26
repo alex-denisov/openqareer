@@ -388,12 +388,9 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   declare completeTurn: CandidateStore['completeTurn'];
+  declare proposeCandidateFacts: CandidateStore['proposeCandidateFacts'];
 
-  failTurn(
-    candidateId: string,
-    idempotencyKey: string,
-    errorCode: string,
-  ): void {
+  failTurn(candidateId: string, idempotencyKey: string, errorCode: string): void {
     this.conversations.failTurn(candidateId, idempotencyKey, errorCode);
   }
 
