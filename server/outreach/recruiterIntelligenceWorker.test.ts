@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteRecruiterContactsRepository } from '../data/sqliteRecruiterContactsRepository';
 import { runRecruiterIntelligenceJobs } from './recruiterIntelligenceWorker';
@@ -78,6 +78,61 @@ describe('recruiter intelligence worker', () => {
     expect(contacts[0].fullName).toBe('Виктор Васильев');
     expect(contacts[0].sourceType).toBe('linkedin_pool');
     expect(contacts[0].sourceReceipt?.source).toBe('linkedin_pool');
+
+    linkedinPool.close();
+    rmSync(poolDir, { recursive: true, force: true });
+    repository.close();
+  });
+  it('finds a recruiter on the open web with a domain email hypothesis when LinkedIn gives nothing', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { SqliteLinkedinPoolRepository } = await import('../linkedinPool/sqliteLinkedinPoolRepository');
+    const { FootprintRequestGate } = await import('../osint/adapters/requestScheduler');
+
+    const database = new DatabaseSync(':memory:');
+    const repository = new SqliteRecruiterContactsRepository(database);
+    repository.enqueueJob('candidate-c', 'vac-web-1');
+    const poolDir = mkdtempSync(join(tmpdir(), 'open-web-worker-test-'));
+    const linkedinPool = new SqliteLinkedinPoolRepository({
+      databasePath: join(poolDir, 'pool.db'),
+      encryptionKey: Buffer.alloc(32, 2),
+      runtimeRoot: join(poolDir, 'runtime'),
+    });
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ results: [{
+      url: 'https://www.linkedin.com/in/anna-smith',
+      title: 'Anna Smith',
+      text: '# Anna Smith\nTalent Acquisition Partner at Acme\nLondon, United Kingdom (GB)',
+    }] }), { status: 200 }));
+
+    const result = await runRecruiterIntelligenceJobs({
+      repository,
+      linkedinPool,
+      openWeb: {
+        apiKey: 'test-key',
+        fetch,
+        requestGate: new FootprintRequestGate({ intervalMs: 0 }),
+        resolveMx: async (domain) => (domain === 'acme.com' ? [{ exchange: 'mx.acme.com', priority: 1 }] : []),
+      },
+      resolveVacancy: () => ({
+        id: 'vac-web-1',
+        company: 'Acme',
+        title: 'Engineering Manager',
+        url: 'https://acme.wd1.myworkdayjobs.com/jobs/1',
+        description: 'Build great products.',
+      }),
+    });
+
+    expect(result).toEqual({ claimed: 1, completed: 1, failed: 0 });
+    const [contact] = repository.getContactsByVacancyId('candidate-c', 'vac-web-1');
+    expect(contact).toMatchObject({
+      fullName: 'Anna Smith',
+      email: 'anna.smith@acme.com',
+      emailStatus: 'hypothesis',
+      linkedinUrl: 'https://www.linkedin.com/in/anna-smith',
+      sourceType: 'company_osint',
+    });
+    expect(contact.sourceReceipt?.sourceUrl).toBe('https://www.linkedin.com/in/anna-smith');
 
     linkedinPool.close();
     rmSync(poolDir, { recursive: true, force: true });

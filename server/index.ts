@@ -280,6 +280,7 @@ function runRecruiterIntelligence(): void {
     resolveVacancy: (vacancyId) => buildRecruiterVacancyInput(vacancyId, { multiSourceEngine }),
     maxJobs: 1,
     linkedinPool,
+    openWeb: { apiKey: config.exaApiKey },
   })
     .then((result) => {
       if (result.claimed > 0) app.log.info(result, 'recruiter-intelligence-completed');
