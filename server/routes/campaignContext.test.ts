@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { RouteDeps } from './deps';
-import { readCampaign } from './campaignContext';
+import { campaignMeta, readCampaign } from './campaignContext';
 
 function workspace(
   regions: readonly ('ru' | 'cis' | 'us' | 'eu' | 'mena' | 'apac' | 'latam')[],
@@ -153,5 +153,17 @@ describe('readCampaign profile geography (C22 / C63)', () => {
       evidenceRefs: ['memory:fact-1'],
       evidence: ['Руководил операциями в четырёх регионах.'],
     });
+  });
+});
+
+/** CPO 26.10: фильтр «Зарплата» начинается с валюты условий, поэтому она уходит в ответ. */
+describe('campaignMeta salary currency', () => {
+  it('passes the candidate conditions currency to the client', () => {
+    const store = {
+      ...storeFor(workspace([])),
+      decisionProfileRepo: { get: () => ({ salaryFloor: 600_000, salaryCurrency: 'RUB' }) },
+    } as unknown as RouteDeps['candidateStore'];
+    const meta = campaignMeta(readCampaign(store, 'c1'));
+    expect(meta.salaryCurrency).toBe('RUB');
   });
 });
