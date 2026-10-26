@@ -53,6 +53,8 @@ export interface UnifiedVacancy {
   fingerprint: string;
   title: string;
   company: string;
+  /** Площадка назвала работодателя частным лицом: имя в публичный каталог не идёт (INC-023). */
+  employerIsPerson?: boolean;
   location?: string;
   isRemote?: boolean;
   salary?: VacancySalary;
@@ -92,6 +94,8 @@ export interface VacancyCluster {
   id: string;
   canonicalTitle: string;
   canonicalCompany: string;
+  /** `canonicalCompany` — имя частного лица по признаку площадки (INC-023). */
+  employerIsPerson?: boolean;
   canonicalLocation?: string;
   isRemote: boolean;
   salary?: VacancySalary;

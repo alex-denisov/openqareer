@@ -171,6 +171,17 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain('Работодатель не указан');
   });
 
+  it('прячет имя частного лица даже в карточке, спроецированной до исправления (INC-023)', () => {
+    const page = buildCatalogPage([cluster()], 1);
+    const legacy = {
+      ...page,
+      entries: [{ ...page.entries[0]!, company: 'Иванова Мария Петровна' }],
+    };
+    const html = renderCatalogDocument(legacy);
+    expect(html).not.toContain('Иванова');
+    expect(html).toContain('Частный работодатель');
+  });
+
   it('печатает вилку и число площадок, когда они известны', () => {
     const html = renderVacancyDocument(
       buildVacancyDetail(
@@ -368,7 +379,6 @@ describe('описание карточки для поисковиков', () =
   });
 });
 
-
 function readMicrodata(element: Element): Record<string, unknown> {
   const result: Record<string, unknown> = {
     '@type': element.getAttribute('itemtype')?.split('/').at(-1),
@@ -381,15 +391,18 @@ function readMicrodata(element: Element): Record<string, unknown> {
       : name === 'description'
         ? property.textContent?.trim()
         : name === 'directApply'
-        ? property.getAttribute('content') === 'true'
-        : property.getAttribute('content') ?? property.textContent;
+          ? property.getAttribute('content') === 'true'
+          : (property.getAttribute('content') ?? property.textContent);
   }
   return result;
 }
 
 describe('JobPosting single-copy public document', () => {
   it('preserves every evidenced field while the entire description appears once', () => {
-    const full = 'Unique opening requirement. ' + 'Full requirements and responsibilities. '.repeat(250) + ' Unique final requirement.';
+    const full =
+      'Unique opening requirement. ' +
+      'Full requirements and responsibilities. '.repeat(250) +
+      ' Unique final requirement.';
     const detail = buildVacancyDetail(
       cluster({ salary: { from: 200000, to: 300000, currency: 'USD' } }),
       full,
@@ -428,7 +441,11 @@ describe('JobPosting single-copy public document', () => {
 
   it('preserves allowed applicant country for remote work without inventing a city', () => {
     const detail = buildVacancyDetail(
-      cluster({ isRemote: true, canonicalLocation: 'United States', salary: { from: 100000, to: 150000, currency: 'USD' } }),
+      cluster({
+        isRemote: true,
+        canonicalLocation: 'United States',
+        salary: { from: 100000, to: 150000, currency: 'USD' },
+      }),
       undefined,
       undefined,
       new Date('2026-09-06T12:00:00.000Z'),
@@ -448,15 +465,24 @@ describe('JobPosting single-copy public document', () => {
 
   it('escapes nested attributes and retains the noindex boundary', () => {
     const detail = buildVacancyDetail(
-      cluster({ canonicalCompany: 'Acme" onload="alert(1)', salary: { from: 100000, to: 150000, currency: 'USD' } }),
+      cluster({
+        canonicalCompany: 'Acme" onload="alert(1)',
+        salary: { from: 100000, to: 150000, currency: 'USD' },
+      }),
       'Description <script>alert(2)</script> with evidence.',
       undefined,
       new Date('2026-09-06T12:00:00.000Z'),
     )!;
     const document = parseTestDocument(renderVacancyDocument(detail));
     expect(document.querySelector('[onload]')).toBeNull();
-    expect(document.querySelector('[itemprop="hiringOrganization"] [itemprop="name"]')?.getAttribute('content')).toBe('Acme" onload="alert(1)');
-    expect(document.querySelectorAll('script:not([type="application/ld+json"]):not([src])')).toHaveLength(0);
+    expect(
+      document
+        .querySelector('[itemprop="hiringOrganization"] [itemprop="name"]')
+        ?.getAttribute('content'),
+    ).toBe('Acme" onload="alert(1)');
+    expect(
+      document.querySelectorAll('script:not([type="application/ld+json"]):not([src])'),
+    ).toHaveLength(0);
     const unindexed = renderVacancyDocument({ ...detail, indexable: false });
     expect(unindexed).toContain('noindex, follow');
     expect(unindexed).not.toContain('itemtype="https://schema.org/JobPosting"');

@@ -60,6 +60,8 @@ export function roleLabelFromTitle(title: string): string {
   const cleaned = title
     .replace(/\([^)]*\)|\[[^\]]*\]/gu, ' ')
     .replace(TITLE_NOISE, ' ')
+    // «Junior-маркетолог» без уровня — «-маркетолог»: дефис уходит вместе с ним.
+    .replace(/(^|\s)[—–-]+(?=\p{L})/gu, '$1')
     .replace(/\s+/gu, ' ')
     .replace(/[\s,.;:—–-]+$/u, '')
     .trim();
@@ -75,6 +77,23 @@ export function roleLabelFromTitle(title: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/**
+ * Страницы каталога русские, а в одном списке встречаются «Accountant» и
+ * «Бухгалтер». Заголовку нужен русский вариант, а из русских — самый короткий:
+ * он и есть имя роли («Маркетолог», а не «Маркетолог (B2B / B2C)»). Тот же
+ * порядок держит запрос списков в SQLite.
+ */
+export function preferredRoleTitle(current: string, candidate: string): string {
+  const rank = (title: string) => (CYRILLIC_START.test(title) ? 0 : 1);
+  const byScript = rank(candidate) - rank(current);
+  if (byScript !== 0) return byScript < 0 ? candidate : current;
+  const byLength = candidate.length - current.length;
+  if (byLength !== 0) return byLength < 0 ? candidate : current;
+  return candidate < current ? candidate : current;
+}
+
+const CYRILLIC_START = /^[А-ЯЁа-яё]/u;
+
 export function catalogRoleOf(
   entry: Pick<CatalogEntry, 'title'>,
 ): { slug: string; label: string } | null {
@@ -87,7 +106,7 @@ interface Bucket {
   readonly place: string;
   readonly placeLabel: string;
   readonly role?: string;
-  readonly roleLabel?: string;
+  readonly roleTitle?: string;
   count: number;
 }
 
@@ -114,15 +133,14 @@ export function catalogListings(entries: readonly CatalogEntry[]): CatalogListin
 
     if (!role) continue;
     const roleId = `r:${place.slug}:${role.slug}`;
-    const roleBucket = buckets.get(roleId) ?? {
+    const known = buckets.get(roleId);
+    buckets.set(roleId, {
       place: place.slug,
       placeLabel: place.label,
       role: role.slug,
-      roleLabel: role.label,
-      count: 0,
-    };
-    roleBucket.count += 1;
-    buckets.set(roleId, roleBucket);
+      roleTitle: known?.roleTitle ? preferredRoleTitle(known.roleTitle, entry.title) : entry.title,
+      count: (known?.count ?? 0) + 1,
+    });
   }
 
   const listings: CatalogListingSummary[] = [];
@@ -133,7 +151,9 @@ export function catalogListings(entries: readonly CatalogEntry[]): CatalogListin
     listings.push({
       place: bucket.place,
       placeLabel: bucket.placeLabel,
-      ...(bucket.role ? { role: bucket.role, roleLabel: bucket.roleLabel } : {}),
+      ...(bucket.role && bucket.roleTitle
+        ? { role: bucket.role, roleLabel: roleLabelFromTitle(bucket.roleTitle) }
+        : {}),
       path,
       count: bucket.count,
     });

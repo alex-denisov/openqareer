@@ -5,7 +5,7 @@ import type {
   SalaryMarketGroup,
   SalaryPercentiles,
 } from '../../shared/salaryMarketSnapshot';
-import { himalayasSalaryPeriod, leverSalaryPeriod } from '../../shared/vacancySalaryPeriod';
+import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 
 import {
   MIN_SALARY_MARKET_SAMPLE,
@@ -41,13 +41,7 @@ function parseEvidence(
   } catch {
     return 'invalidRange';
   }
-  const evidence = object(salary.periodEvidence);
-  const period =
-    evidence.field === 'lever.salaryRange.interval'
-      ? leverSalaryPeriod(evidence.value)
-      : evidence.field === 'himalayas.salaryPeriod'
-        ? himalayasSalaryPeriod(evidence.value)
-        : undefined;
+  const period = periodOfEvidence(salary.periodEvidence);
   if (!period || period !== salary.period) return 'missingPeriod';
   if (typeof salary.currency !== 'string' || !/^[A-Z]{3}$/u.test(salary.currency))
     return 'missingCurrency';

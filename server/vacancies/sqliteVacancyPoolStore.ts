@@ -2378,7 +2378,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
          HAVING count(*) >= 3
           UNION ALL
          SELECT place_slug, max(place_label) AS place_label,
-                role_slug, max(role_label) AS role_label, min(title) AS role_title,
+                role_slug, max(role_label) AS role_label,
+                -- preferredRoleTitle: a Russian title first, then the shortest.
+                substr(min(CASE WHEN title GLOB '[А-ЯЁа-яё]*' THEN '0' ELSE '1' END
+                           || printf('%05d', length(title)) || title), 7) AS role_title,
                 count(*) AS count
            FROM catalog_entries
           WHERE status = 'active' AND path <> ''

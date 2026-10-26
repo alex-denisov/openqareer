@@ -65,4 +65,18 @@ describe('catalog role listing labels', () => {
     const role = store.loadCatalogListings().find((listing) => listing.role);
     expect(role?.roleLabel).toBe('Программист 1С');
   });
+
+  it('prefers a Russian published title over an English one for the heading', () => {
+    const { store } = openStore();
+    const titles = ['Accountant', 'Accountant', 'Accountant', 'Бухгалтер', 'Бухгалтер'];
+    store.saveClusters(
+      titles.map((title, index) => ({
+        ...sampleCluster,
+        id: `cluster-accountant-${index}`,
+        canonicalTitle: title,
+      })),
+    );
+    const role = store.loadCatalogListings().find((listing) => listing.role === 'accountant');
+    expect(role?.roleLabel).toBe('Бухгалтер');
+  });
 });
