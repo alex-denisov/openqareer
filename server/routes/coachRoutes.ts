@@ -383,6 +383,20 @@ const handleRejectProposal: Handler = async (deps, request, reply) => {
   return reply.code(200).send({ data: { ok: true, proposalKey: body.proposalKey } });
 };
 
+const CAREER_CHANGE_KEY_PREFIX = 'career.';
+
+/** Отказы от изменений «Карьеры» (`career.*`): панель прячет такие предложения после перезагрузки (26.10). */
+const handleListCareerChangeRejections: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const keys = candidateStore
+    .getConsultantRejections(candidate.id)
+    .map((rejection) => rejection.proposalKey)
+    .filter((key) => key.startsWith(CAREER_CHANGE_KEY_PREFIX));
+  return { data: keys, meta: { requestId: request.id } };
+};
+
 const handleVerifySkillQuiz: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -420,6 +434,7 @@ export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps)
     },
     withDeps(deps, handleCoachTurn),
   );
+  app.get('/api/v1/coach/proposals/career-rejections', withDeps(deps, handleListCareerChangeRejections));
   app.post(
     '/api/v1/coach/proposals/reject',
     {

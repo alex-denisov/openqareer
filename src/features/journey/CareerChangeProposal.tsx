@@ -1,9 +1,9 @@
 import { useState, type ReactElement } from 'react';
 import { Check, X } from '@phosphor-icons/react';
-import { computeProposalKey } from '../../../shared/consultantProposalKey';
 import { careerRoleId } from '../../../shared/roleProposals';
 import { useCareerRoles, type CareerRolesState } from '../career-map/careerRoleStore';
-import { rejectCoachProposal, type CoachResult } from '../coach/coachApi';
+import type { CoachResult } from '../coach/coachApi';
+import { careerChangeKey, dismissCareerChange, useCareerChangeDismissed } from './careerChangeDismissals';
 import type { CareerChangeView } from '../coach/careerChangeView';
 import { applyCareerChange, describeCareerChange, type CareerChangeKind } from './careerChangeApply';
 
@@ -47,10 +47,10 @@ function useCareerChange(kind: CareerChangeKind, change: CareerChangeView, lines
   };
   const dismiss = () => {
     setPhase('dismissed');
-    void rejectCoachProposal({
-      proposalKey: computeProposalKey(kind, lines.join('; ')),
-      reason: 'Кандидат отложил изменение «Карьеры»',
-    }).catch(() => undefined);
+    dismissCareerChange(careerChangeKey(kind, lines)).catch(() => {
+      setPhase('proposed');
+      setError('«Не сейчас» не сохранилось. Попробуйте ещё раз.');
+    });
   };
   return { phase, error, apply, dismiss };
 }
@@ -95,9 +95,10 @@ function ChangeCard({
   const lines = describeCareerChange(kind, change);
   const { phase: ownPhase, error, apply, dismiss } = useCareerChange(kind, change, lines);
   const roles = useCareerRoles(false);
+  const dismissedBefore = useCareerChangeDismissed(careerChangeKey(kind, lines));
   const phase =
     ownPhase === 'proposed' && roleChangeAlreadyApplied(kind, change, roles) ? 'applied' : ownPhase;
-  if (phase === 'dismissed') return null;
+  if (phase === 'dismissed' || (dismissedBefore && ownPhase === 'proposed')) return null;
   return (
     <section className="career-expert-proposal" aria-label={TITLES[kind]} data-testid="career-change-proposal">
       <p className="career-expert-proposal-title">{TITLES[kind]}</p>

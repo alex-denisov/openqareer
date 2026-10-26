@@ -2,6 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { careerRoleId } from '../../../shared/roleProposals';
 import { CareerChangeProposal, roleChangeAlreadyApplied } from './CareerChangeProposal';
+import { describeCareerChange } from './careerChangeApply';
+import { careerChangeKey, resetCareerChangeDismissals } from './careerChangeDismissals';
 
 const proposal = {
   kind: 'career.role.remove' as const,
@@ -41,4 +43,15 @@ describe('CareerChangeProposal (26.10)', () => {
     expect(roleChangeAlreadyApplied('career.role.remove', change, { ...ready, rejected: [] })).toBe(false);
     expect(roleChangeAlreadyApplied('career.role.remove', change, { ...ready, status: 'idle' })).toBe(false);
   });
+
+  it('отложенное «Не сейчас» предложение после перезагрузки не показывается', () => {
+    const lines = describeCareerChange('career.role.remove', proposal.careerChange);
+    resetCareerChangeDismissals([careerChangeKey('career.role.remove', lines)]);
+    const html = renderToStaticMarkup(
+      <CareerChangeProposal proposal={proposal} kind="career.role.remove" />,
+    );
+    expect(html).toBe('');
+    resetCareerChangeDismissals();
+  });
 });
+

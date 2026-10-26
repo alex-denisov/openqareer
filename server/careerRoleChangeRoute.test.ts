@@ -88,3 +88,19 @@ describe('POST /api/v1/candidate/career-roles (26.10)', () => {
     expect((await change({ action: 'add', title: ' ' })).statusCode).toBe(400);
   });
 });
+
+describe('GET /api/v1/coach/proposals/career-rejections (26.10)', () => {
+  it('возвращает только отказы от изменений «Карьеры»', async () => {
+    const { candidateStore, candidate } = await setup();
+    candidateStore.rejectConsultantProposal(candidate.id, 'career.conditions.update:abc', 'Не сейчас');
+    candidateStore.rejectConsultantProposal(candidate.id, 'headline:xyz', 'нет');
+    const app = apps.at(-1)!;
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/coach/proposals/career-rejections',
+      headers: { authorization: `Bearer ${candidate.accessToken}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual(['career.conditions.update:abc']);
+  });
+});
