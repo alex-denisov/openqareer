@@ -6,6 +6,12 @@
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { setLandingStats } from './landingStatsCache';
+import {
+  computeCatalogSources,
+  readCatalogSources,
+  setCatalogSources,
+  writeCatalogSources,
+} from '../vacancies/catalogSources';
 import { computeLandingStats, readLandingStats, writeLandingStats } from './landingStatsJob';
 
 interface StatsLog {
@@ -29,6 +35,7 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
       const now = new Date();
       const stats = computeLandingStats(database, now);
       writeLandingStats(database, stats, now);
+      writeCatalogSources(database, computeCatalogSources(database), now);
       log.info(
         { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
         'landing-stats-written',
@@ -56,6 +63,7 @@ export function scheduleLandingStatsRefresh(databasePath: string, log: StatsLog)
       applySqliteBusyTimeout(database);
       const stats = readLandingStats(database);
       if (stats) setLandingStats(stats);
+      setCatalogSources(readCatalogSources(database));
     } catch (error: unknown) {
       log.error({ errorName: errorName(error) }, 'landing-stats-refresh-failed');
     } finally {

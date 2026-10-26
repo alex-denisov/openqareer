@@ -158,8 +158,7 @@ function catalogTotal(database: DatabaseSync): number | undefined {
     .get();
   if (!exists) return undefined;
   const row = database.prepare('SELECT catalog_total FROM catalog_totals WHERE id = 1').get() as
-    | { catalog_total: number }
-    | undefined;
+    { catalog_total: number } | undefined;
   return row ? Number(row.catalog_total) : undefined;
 }
 

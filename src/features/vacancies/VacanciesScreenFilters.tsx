@@ -19,7 +19,11 @@ import {
   mobileFilterValues,
   useRoleFocus,
 } from './VacanciesFilterPopover';
-import { VacancySourceCatalogFilter, useSourceCatalog } from './VacancySourceCatalogFilter';
+import {
+  VacancySourceCatalogFilter,
+  buildSourceOptions,
+  useSourceCatalog,
+} from './VacancySourceCatalogFilter';
 import { MobileFilterSheet } from './VacanciesMobileFilterSheet';
 import { VacancyFitSortControl } from './VacancyFitSort';
 import { VacancyRoleFilter, type RoleOption } from './VacancyRoleFilter';
@@ -531,7 +535,7 @@ function MobileFilterSheetContent({
       activeGroup={activeGroup}
       values={mobileFilterValues(
         withCampaignDefaults(draft, props.campaignRoles, props.regions, props.careerLocations),
-        catalog.sources.length,
+        buildSourceOptions(props.facets, catalog.sources, catalog.poolSources).length,
       )}
       subtitle={sheetSubtitle(props.facets, resultCount)}
       resultCount={resultCount}
