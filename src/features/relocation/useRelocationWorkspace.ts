@@ -1,3 +1,4 @@
+import { useCountryVacancySample } from './relocationCountryVacancies';
 import { useMemo, useState } from 'react';
 import type {
   RelocationAlert,
@@ -132,6 +133,7 @@ function useComparisonCountries(
   economyCountryCode: string,
   grossAnnualIncome: number | undefined,
 ) {
+  const vacancies = useCountryVacancySample();
   return useMemo(
     () =>
       selectedCountryCodes.map((countryCode) =>
@@ -139,9 +141,10 @@ function useComparisonCountries(
           countryCode,
           profile,
           countryCode === economyCountryCode ? grossAnnualIncome : undefined,
+          vacancies,
         ),
       ),
-    [economyCountryCode, grossAnnualIncome, selectedCountryCodes, profile],
+    [economyCountryCode, grossAnnualIncome, selectedCountryCodes, profile, vacancies],
   );
 }
 

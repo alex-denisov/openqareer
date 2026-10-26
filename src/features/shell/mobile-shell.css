@@ -517,3 +517,43 @@
     animation: none;
   }
 }
+
+/* Blocks B and C at 390 (owner, 26.10): what the approved mockups render.
+   Menu labels at 14 px — the mockup's `font` shorthand with `inherit` is dropped,
+   so its labels inherit 14 px; controls 24 px; list footnotes in the dim tone. */
+@media (max-width: 760px) {
+  .career-shell .career-mobile-nav .career-nav-button,
+  .career-shell .career-mobile-more-button {
+    font-size: var(--career-text-sm);
+  }
+
+  .career-shell .career-main input[type='checkbox'],
+  .career-shell .career-main input[type='radio'],
+  .career-shell .vacancy-push input[type='checkbox'],
+  .career-shell .vacancy-push input[type='radio'],
+  .career-shell dialog input[type='checkbox'],
+  .career-shell dialog input[type='radio'] {
+    inline-size: var(--career-space-6);
+    block-size: var(--career-space-6);
+  }
+
+  .career-shell input[type='radio']::after {
+    inline-size: 10px;
+    block-size: 10px;
+  }
+
+  .career-shell input[type='checkbox']::after {
+    inline-size: 12px;
+    block-size: 7px;
+  }
+
+  .career-shell .vacancies-mobile-topbar .vacancies-mobile-consultant {
+    color: var(--career-accent);
+  }
+
+  .career-shell .companies-people-list-footer,
+  .career-shell .vacancies-screen-page-count,
+  .career-shell .saved-footer > p {
+    color: var(--career-text-dim);
+  }
+}

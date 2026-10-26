@@ -16,15 +16,17 @@ describe('RelocationCountryWorkspace', () => {
     host = undefined;
   });
 
-  it('shows country facts with sources and explicit no-data reasons', async () => {
+  it('shows country facts with sources and hides rows without a source', async () => {
     render();
     await clickButton('Германия');
 
     expect(host?.textContent).toContain('Доступные сведения по стране');
     expect(host?.textContent).toContain('Порог зарплаты для доступа');
     expect(host?.textContent).toContain('EU Blue Card');
-    expect(host?.textContent).toContain('Вакансий с релокацией');
-    expect(host?.textContent).toContain('нет данных');
+    // Without a read pool and a dated rule there is no row: never «нет данных» (owner, 24.10).
+    expect(host?.textContent).not.toContain('Вакансий с релокацией');
+    expect(host?.textContent).not.toContain('Срок оформления');
+    expect(host?.textContent).not.toContain('нет данных');
     expect(host?.textContent).toContain('2026');
   });
 
@@ -41,22 +43,28 @@ describe('RelocationCountryWorkspace', () => {
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
-    act(() => root?.render(
-      <RelocationCountryWorkspace
-        profile={emptyRelocationQuestionnaire()}
-        selectedCountryCodes={[]}
-        onSelectedCountryCodesChange={() => undefined}
-        onCompare={() => undefined}
-        onAddCountry={() => undefined}
-        onCalculateEconomy={onCalculateEconomy}
-        onOpenProfile={() => undefined}
-      />,
-    ));
+    act(() =>
+      root?.render(
+        <RelocationCountryWorkspace
+          profile={emptyRelocationQuestionnaire()}
+          selectedCountryCodes={[]}
+          onSelectedCountryCodesChange={() => undefined}
+          onCompare={() => undefined}
+          onAddCountry={() => undefined}
+          onCalculateEconomy={onCalculateEconomy}
+          onOpenProfile={() => undefined}
+        />,
+      ),
+    );
   }
 
   async function clickButton(label: string) {
-    const button = [...(host?.querySelectorAll('button') ?? [])].find((item) => item.textContent?.includes(label));
+    const button = [...(host?.querySelectorAll('button') ?? [])].find((item) =>
+      item.textContent?.includes(label),
+    );
     expect(button).toBeDefined();
-    await act(async () => { button?.click(); });
+    await act(async () => {
+      button?.click();
+    });
   }
 });

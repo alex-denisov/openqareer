@@ -26,6 +26,16 @@ const CRITERIA: readonly { readonly key: FactKey; readonly label: string }[] = [
   { key: 'familyAndResidence', label: 'Семья и ПМЖ' },
 ];
 
+/** A row without a source for any compared country is not shown (owner rule: no «нет данных»). */
+function shownCriteria(countries: readonly CountryComparisonCountry[]) {
+  return CRITERIA.filter(({ key }) =>
+    countries.some(
+      (country) =>
+        visibleFact(country.facts[key] as CountryComparisonFact<unknown>, key).status !== 'no_data',
+    ),
+  );
+}
+
 export interface ComparisonMeaning {
   readonly countryCode: string;
   readonly name: string;
@@ -159,7 +169,7 @@ function DesktopMatrix({ countries }: { readonly countries: readonly CountryComp
           </tr>
         </thead>
         <tbody>
-          {CRITERIA.map((criterion) => (
+          {shownCriteria(countries).map((criterion) => (
             <tr key={criterion.key}>
               <th scope="row">{criterion.label}</th>
               {countries.map((country) => (
@@ -180,29 +190,31 @@ function MobileStack({ countries }: { readonly countries: readonly CountryCompar
   const sources = comparisonSources(countries);
   return (
     <div className="career-country-comparison-mobile">
-      {CRITERIA.filter(({ key }) => key !== 'monthlyRemainder').map((criterion) => (
-        <section className="career-country-comparison-mobile-criterion" key={criterion.key}>
-          <h3>{criterion.label}</h3>
-          <dl>
-            {countries.map((country) => {
-              const visible = visibleFact(
-                country.facts[criterion.key] as CountryComparisonFact<unknown>,
-                criterion.key,
-              );
-              return (
-                <div className="career-country-comparison-mobile-entry" key={country.countryCode}>
-                  <dt>{country.countryName}</dt>
-                  <dd title={visible.status === 'available' ? undefined : visible.reason}>
-                    {visible.status === 'available'
-                      ? formatFact(criterion.key, visible.value)
-                      : missingFactLabel(visible.reason)}
-                  </dd>
-                </div>
-              );
-            })}
-          </dl>
-        </section>
-      ))}
+      {shownCriteria(countries)
+        .filter(({ key }) => key !== 'monthlyRemainder')
+        .map((criterion) => (
+          <section className="career-country-comparison-mobile-criterion" key={criterion.key}>
+            <h3>{criterion.label}</h3>
+            <dl>
+              {countries.map((country) => {
+                const visible = visibleFact(
+                  country.facts[criterion.key] as CountryComparisonFact<unknown>,
+                  criterion.key,
+                );
+                return (
+                  <div className="career-country-comparison-mobile-entry" key={country.countryCode}>
+                    <dt>{country.countryName}</dt>
+                    <dd title={visible.status === 'available' ? undefined : visible.reason}>
+                      {visible.status === 'available'
+                        ? formatFact(criterion.key, visible.value)
+                        : missingFactLabel(visible.reason)}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </section>
+        ))}
       <p className="career-country-comparison-mobile-foot">
         Баллов и общего места нет: вес параметров вы определяете сами.
         {sources
@@ -366,7 +378,7 @@ function ComparisonMeanings({ meanings }: { readonly meanings: readonly Comparis
   );
 }
 
-/** A missing value that only waits for the candidate's salary says so instead of «нет данных». */
+/** A missing value that only waits for the candidate's salary says so; any other is a dash with the reason as a hint. */
 export function missingFactLabel(reason: string | undefined): string {
-  return reason && /укажите[^.]*зарплат/i.test(reason) ? 'укажите зарплату' : 'нет данных';
+  return reason && /укажите[^.]*зарплат/i.test(reason) ? 'укажите зарплату' : '—';
 }

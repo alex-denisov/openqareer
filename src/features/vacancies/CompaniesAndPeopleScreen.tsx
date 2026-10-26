@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PushConsultantContext } from '../shell/PushConsultantButton';
 import { Warning } from '@phosphor-icons/react';
 import type {
   CandidateCompanyDetails,
@@ -51,6 +52,8 @@ interface CompaniesAndPeopleScreenProps {
   /** «Все N вакансий компании в подборке»: the selection filtered by this company. */
   readonly onOpenCompanyVacancies?: (companyName: string) => void;
   readonly initialSearch?: string;
+  /** The consultant button of the 390 company push (mockup 13 `mv=main`). */
+  readonly onOpenExpert?: () => void;
 }
 
 interface CompanyListState {
@@ -654,15 +657,18 @@ export function CompaniesAndPeopleScreen({
   onOpenCareer,
   onOpenCompanyVacancies,
   initialSearch,
+  onOpenExpert,
 }: CompaniesAndPeopleScreenProps) {
   usePageTitleOverride('Компании и люди');
   const model = useCompaniesAndPeopleModel(initialSearch, onOpenCompanyVacancies);
   return (
-    <CompaniesAndPeopleView
-      model={model}
-      onOpenConnections={onOpenConnections}
-      onOpenLetter={onOpenLetter}
-      onOpenCareer={onOpenCareer}
-    />
+    <PushConsultantContext.Provider value={onOpenExpert ?? null}>
+      <CompaniesAndPeopleView
+        model={model}
+        onOpenConnections={onOpenConnections}
+        onOpenLetter={onOpenLetter}
+        onOpenCareer={onOpenCareer}
+      />
+    </PushConsultantContext.Provider>
   );
 }

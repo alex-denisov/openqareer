@@ -23,6 +23,11 @@ import {
   type RelocationCountrySummary,
 } from './relocationCountrySummary';
 import { relocationDay, relocationShortDay } from './relocationDates';
+import {
+  countryVacancyCount,
+  useCountryVacancySample,
+  vacancyCountLabel,
+} from './relocationCountryVacancies';
 
 type ScenarioFilter = 'all' | MobilityScenarioId;
 
@@ -262,9 +267,15 @@ function CountryCard({
 }
 
 function CountryCardMeta({ summary }: { readonly summary: RelocationCountrySummary }) {
+  const sample = useCountryVacancySample();
+  const vacancyCount = sample ? countryVacancyCount(sample, summary.countryCode) : null;
   return (
     <div className="career-relocation-country-meta">
-      <span className="career-relocation-country-vacancies">вакансии: нет данных</span>
+      {vacancyCount === null ? null : (
+        <span className="career-relocation-country-vacancies">
+          {vacancyCountLabel(vacancyCount)}
+        </span>
+      )}
       <span title={summary.source?.title}>
         <Clock aria-hidden="true" size={14} />
         {summary.source
@@ -358,7 +369,13 @@ function CountryDetails({
 }) {
   const detailsId = `career-relocation-country-details-${country.countryCode}`;
   const sources = uniqueSources(scenarios);
-  const comparisonCountry = buildCountryComparisonCountry(country.countryCode, profile);
+  const vacancies = useCountryVacancySample();
+  const comparisonCountry = buildCountryComparisonCountry(
+    country.countryCode,
+    profile,
+    undefined,
+    vacancies,
+  );
   return (
     <section
       id={detailsId}

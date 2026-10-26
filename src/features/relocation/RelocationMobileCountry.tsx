@@ -8,6 +8,11 @@ import {
 } from './relocationCountrySummary';
 import { MobilePush } from './RelocationMobilePush';
 import { relocationShortDay } from './relocationDates';
+import {
+  countryVacancyCount,
+  useCountryVacancySample,
+  vacancyCountLabel,
+} from './relocationCountryVacancies';
 
 export interface RelocationMobileCountryProps {
   readonly countryCode: string;
@@ -81,6 +86,7 @@ function WhySection({ summary }: { readonly summary: RelocationCountrySummary })
 
 /** Mockup 15 `mv=c4`: one country as a push screen — status, why, source, two next steps. */
 export function RelocationMobileCountry(props: RelocationMobileCountryProps) {
+  const sample = useCountryVacancySample();
   const country = listRelocationCountries().find(
     ({ countryCode }) => countryCode === props.countryCode,
   );
@@ -92,6 +98,10 @@ export function RelocationMobileCountry(props: RelocationMobileCountryProps) {
     );
   }
   const summary = summarizeRelocationCountry(country, props.profile);
+  // Mockup 15 `c4`: the count leads the row; the pool counts the country, not a relocation flag.
+  const vacancyTitle = sample
+    ? vacancyCountLabel(countryVacancyCount(sample, country.countryCode))
+    : 'Вакансии в стране';
   const compare = () => {
     if (!props.selected && !props.compareDisabled) props.onToggleCompare();
     props.onCompare();
@@ -108,8 +118,8 @@ export function RelocationMobileCountry(props: RelocationMobileCountryProps) {
         {props.onOpenVacancies ? (
           <Row
             icon={<Briefcase aria-hidden="true" />}
-            title="Вакансии с релокацией"
-            sub="по вашим ролям; число по стране пока не считается"
+            title={vacancyTitle}
+            sub="в стране по вашим ролям"
             onClick={props.onOpenVacancies}
           />
         ) : null}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { PushConsultantButton } from '../shell/PushConsultantButton';
 import {
   ArrowRight,
   Briefcase,
@@ -496,6 +497,7 @@ function PushBar({
         <CaretLeft size={20} aria-hidden="true" />
       </button>
       <h1 id="company-push-title">Компания</h1>
+      <PushConsultantButton />
     </header>
   );
 }
