@@ -2576,6 +2576,7 @@ export async function mockSignedInCabinet(
     if (
       path.endsWith('/candidate/vacancy-subscriptions') ||
       path.endsWith('/candidate/vacancy-sources') ||
+      path.endsWith('/candidate/vacancy-catalog-sources') ||
       path.endsWith('/candidate/vacancy-applications') ||
       path.endsWith('/candidate/career-commands')
     ) {

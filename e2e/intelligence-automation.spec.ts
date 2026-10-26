@@ -156,6 +156,9 @@ async function stubSession(
     if (pathname === '/api/v1/candidate/connections') {
       return route.fulfill({ json: { data: [] } });
     }
+    if (pathname === '/api/v1/candidate/vacancy-catalog-sources') {
+      return route.fulfill({ json: { data: [] } });
+    }
     if (pathname === '/api/v1/candidate/vacancy-sources') {
       return route.fulfill({
         json: {
