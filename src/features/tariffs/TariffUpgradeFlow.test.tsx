@@ -150,6 +150,8 @@ describe('TariffUpgradeFlow', () => {
     expect(host.textContent).toContain('Basic');
     expect(host.textContent?.replace(/[\u00a0\u202f]/gu, ' ')).toContain('3 990 ₽');
     expect(host.textContent).not.toContain('письмо за 2 дня');
+    expect(host.textContent).not.toContain('Пробный Pro');
+    expect(host.textContent).not.toMatch(/24\s+час/u);
     clickButton(host, 'Перейти на Basic');
     await flush();
     expect(host.textContent).toContain('Ваш заказ');

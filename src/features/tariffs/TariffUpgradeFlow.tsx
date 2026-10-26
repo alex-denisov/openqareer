@@ -172,7 +172,6 @@ function composeDialogState(
     onClose: props.onClose,
     onNavigate: props.onNavigate,
     onRetrySummary: billing.retry,
-    onTrialChanged: () => { void billing.reload().catch(billing.retry); },
     onChoosePlan: (planId) => {
       flow.setSelectedPlan(planId);
       flow.setAutoRenew(false);
