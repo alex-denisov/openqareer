@@ -5,6 +5,7 @@ import {
   type StoredCampaignSelection,
 } from '../vacancies/campaign';
 import { regionOfVacancy } from '../vacancies/vacancyGeography';
+import { careerGeographyOf } from '../vacancies/careerGeography';
 import { careerRoleId } from '../../shared/roleProposals';
 import type { RouteDeps } from './deps';
 
@@ -55,6 +56,7 @@ export function readCampaign(
     evidenceByRef: new Map(memory.map((fact) => [`memory:${fact.id}`, fact.statement])),
     rejectedRoleIds: rejectedCareerRoleIds(candidateStore, candidateId),
     roleIdOf: careerRoleId,
+    careerGeography: careerGeographyOf(candidateStore.decisionProfileRepo?.get(candidateId)),
     ...(vacancyCountsByRole ? { vacancyCountsByRole } : {}),
   });
 }
@@ -104,6 +106,15 @@ export function campaignMeta(campaign: CampaignResolution) {
         : null,
     },
     suggestedRegions: campaign.suggestedRegions ? [...campaign.suggestedRegions] : [],
+    ...(campaign.careerGeography
+      ? {
+          careerGeography: {
+            labels: [...campaign.careerGeography.labels],
+            places: [...campaign.careerGeography.places],
+            remote: campaign.careerGeography.remote,
+          },
+        }
+      : {}),
     ...(campaign.roleHypotheses
       ? { roleHypotheses: campaign.roleHypotheses.map((flag) => ({ ...flag })) }
       : {}),

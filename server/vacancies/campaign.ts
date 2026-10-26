@@ -15,6 +15,8 @@
  * данных, поэтому она проверяется без sqlite.
  */
 
+import type { CareerGeography } from './careerGeography';
+
 export interface CampaignMemoryFact {
   readonly domain: string;
   readonly kind: string;
@@ -99,6 +101,8 @@ export interface CampaignResolution {
    */
   readonly roleHypotheses?: readonly RoleHypothesisFlag[];
   readonly suggestedRegions?: readonly string[];
+  /** Города и форматы «Карьеры»; есть — география подбора берётся из них (CPO 26.10). */
+  readonly careerGeography?: CareerGeography;
 }
 
 export interface ResolveCampaignInput {
@@ -114,6 +118,8 @@ export interface ResolveCampaignInput {
   readonly rejectedRoleIds?: ReadonlySet<string>;
   /** Тот же id, что у роли «Карьеры»: отклонение роли мастера тоже убирает её из подбора. */
   readonly roleIdOf?: (title: string) => string;
+  /** Условия «Карьеры»; регионы мастера читаются, только если их нет. */
+  readonly careerGeography?: CareerGeography | null;
 }
 
 /**
@@ -211,9 +217,12 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
     origin: (input.explicit?.roles ?? []).length > 0 ? 'explicit' : 'default',
   };
   const explicitRegions = input.explicit?.regions;
-  const isProfileOrigin = (input.explicit as { readonly origin?: string } | null)?.origin === 'profile';
-  const regions: CampaignField<readonly string[]> =
-    explicitRegions !== undefined && !isProfileOrigin
+  const isProfileOrigin =
+    (input.explicit as { readonly origin?: string } | null)?.origin === 'profile';
+  const career = input.careerGeography ?? undefined;
+  const regions: CampaignField<readonly string[]> = career
+    ? { value: career.regions, origin: 'explicit' }
+    : explicitRegions !== undefined && !isProfileOrigin
       ? { value: explicitRegions, origin: 'explicit' }
       : { value: [], origin: 'default' };
 
@@ -233,9 +242,11 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
       // Баннер расхождения сравнивает с профилем только выбор мастера:
       // роли «Карьеры» и есть роли профиля.
       roles: divergenceOf(wizardRoles, derivedRoles),
-      regions: divergenceOf(regions, derivedRegions),
+      // География «Карьеры» и есть выбор кандидата — расходиться не с чем.
+      regions: career ? null : divergenceOf(regions, derivedRegions),
     },
     suggestedRegions: derivedRegions,
+    ...(career ? { careerGeography: career } : {}),
     ...(input.vacancyCountsByRole
       ? { roleHypotheses: annotateRoleHypotheses(roles.value, input.vacancyCountsByRole) }
       : {}),

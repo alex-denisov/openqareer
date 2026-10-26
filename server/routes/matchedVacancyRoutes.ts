@@ -21,6 +21,7 @@ import {
   type MatchedVacancyFilters,
 } from '../vacancies/matchedVacancyFilters';
 import { markGeography } from '../vacancies/vacancyGeography';
+import { withinCareerGeography } from '../vacancies/careerGeography';
 import {
   invalidateAllMatchedVacancies,
   readMatchedSnapshot,
@@ -57,9 +58,14 @@ export function finishMatchedVacancies(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
 ): MatchedVacancyItem[] {
-  const geographyAndRemote = campaign.remoteOnly
+  const remoteFiltered = campaign.remoteOnly
     ? snapshot.filter((item) => item.cluster.isRemote)
     : snapshot;
+  const career = campaign.careerGeography;
+  // CPO 26.10: подборка идёт по городам и форматам «Карьеры», если они заданы.
+  const geographyAndRemote = career
+    ? remoteFiltered.filter((item) => withinCareerGeography(item, career))
+    : remoteFiltered;
   const roleFiltered = markGeography(
     targetRoles.length > 0
       ? geographyAndRemote.filter((item) => item.explanation.roleMatch !== 'none')
@@ -133,6 +139,7 @@ function matchedListKey(
         campaign.regions.value,
         campaign.suggestedRegions ?? [],
         campaign.remoteOnly,
+        campaign.careerGeography ?? null,
         candidateStore.decisionProfileRepo.get(candidateId) ?? null,
         candidateStore.listVacancyDecisions(candidateId),
       ]),

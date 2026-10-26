@@ -34,7 +34,11 @@ function card(id: string, title: string) {
   };
 }
 
-function poolWith(matchMode: 'legacy' | 'semantic', label: boolean, includeAdjacentProduct = false) {
+function poolWith(
+  matchMode: 'legacy' | 'semantic',
+  label: boolean,
+  includeAdjacentProduct = false,
+) {
   const directory = mkdtempSync(join(tmpdir(), 'semantic-match-'));
   directories.push(directory);
   const path = join(directory, 'pool.db');
@@ -83,13 +87,13 @@ describe('подбор по смыслу на хранилище (B267 S3)', () 
     expect(ids).not.toContain('ru-sales');
   });
 
-  it('keeps an adjacent product role after target-function vacancies in semantic mode', () => {
+  it('leaves a product role out of an engineering campaign in semantic mode', () => {
     const store = poolWith('semantic', true, true);
 
     const ids = store.queryMatchCandidates(vp, { nowMs, limit: 50 }).map((vacancy) => vacancy.id);
 
-    expect(ids).toContain('cpo');
-    expect(ids.indexOf('vp-eng')).toBeLessThan(ids.indexOf('cpo'));
+    expect(ids).toContain('vp-eng');
+    expect(ids).not.toContain('cpo');
   });
 
   it('пока смысловой индекс пуст, отвечает прежним подбором, а не пустотой', () => {

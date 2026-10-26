@@ -65,7 +65,7 @@ const RESPONSE_SCHEMA = {
 const SYSTEM_PROMPT = `
 Разбери каждое название вакансии. Верни ровно по одной записи на titleKey.
 functions содержит 1–2 кода только из списка: ${FUNCTION_CODES.join(', ')}.
-levelRank — уровень должности по шкале: 0 — специалист любого грейда (junior…principal, senior, associate, analyst, engineer, manager без подчинённых руководителей); 1 — lead, team lead, руководитель группы; 2 — head of, director, руководитель направления/отдела; 3 — VP, senior director, вице-президент; 4 — C-level (CEO, CTO, CIO, COO, CFO, генеральный/технический/финансовый директор). null — если уровень не определить.
+levelRank — уровень должности по шкале: 0 — специалист любого грейда (junior…principal, senior, associate, analyst, engineer, manager без подчинённых руководителей); 1 — lead, team lead, senior manager, руководитель группы; 2 — head of, director, руководитель направления/отдела; 3 — VP, senior director, вице-президент; 4 — C-level (CEO, CTO, CIO, COO, CFO, генеральный/технический/финансовый директор). null — если уровень не определить.
 Chief of Staff — 2, не 4.
 roleId указывай только при уверенном соответствии роли из онтологии.
 Не добавляй пояснений и не меняй titleKey.

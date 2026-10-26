@@ -26,7 +26,8 @@ export interface RoleHandlers {
 const STATUS_LABELS: Readonly<Record<RoleStatus, string>> = {
   hypothesis: 'Гипотеза',
   skills_checked: 'Навыки проверены',
-  open_for_search: 'Открыта для поиска',
+  // CPO 26.10: ступени «Открыта для поиска» нет — подборка идёт по всем ролям.
+  open_for_search: 'Навыки проверены',
 };
 
 export function RoleStatusBadge({ status }: { status: RoleStatus }): ReactElement {
@@ -64,17 +65,14 @@ const STEP_ROWS: Readonly<Record<RoleStatus, readonly (readonly [string, StepSta
   hypothesis: [
     ['Гипотеза', 'done'],
     ['Проверка навыков', 'current'],
-    ['Открыть для поиска', 'future'],
   ],
   skills_checked: [
     ['Гипотеза', 'done'],
     ['Навыки проверены', 'current'],
-    ['Открыта для поиска', 'future'],
   ],
   open_for_search: [
     ['Гипотеза', 'done'],
-    ['Навыки проверены', 'done'],
-    ['Открыта для поиска', 'current'],
+    ['Навыки проверены', 'current'],
   ],
 };
 

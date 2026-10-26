@@ -41,3 +41,17 @@ describe('campaign regions in «Локации»', () => {
     expect(selectedLocationVacancies(tree, view.state)).toBe(900);
   });
 });
+
+describe('«Карьера» geography in the «Локации» tree (CPO 26.10)', () => {
+  it('отмечает города и удалёнку «Карьеры» вместо регионов мастера', () => {
+    const moscow = tree.countries
+      .flatMap((country) => country.children.flatMap((region) => region.children))
+      .find((node) => node.label === 'Москва')!;
+    const view = locationSelectionView(empty, tree, places, ['ru', 'cis'], {
+      places: [moscow.key],
+      remote: true,
+    });
+    expect(view.fromRegions).toBe(true);
+    expect(selectedLocationVacancies(tree, view.state)).toBe(31 + 7);
+  });
+});

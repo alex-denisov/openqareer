@@ -18,12 +18,6 @@ export interface SemanticMatchQueryInput {
 }
 
 const ALIVE = 'i.expired = 0';
-const PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS: readonly FunctionCode[] = [
-  'eng',
-  'eng-mgmt',
-  'it-ops',
-  'ops',
-];
 
 /**
  * Одна ветка на код функции (план §5 п.3): у массовой функции (`eng` ≈ 30 %
@@ -32,9 +26,9 @@ const PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS: readonly FunctionCode[] = [
  * тыс. строк). Каждая ветка использует `vacancy_semantic_match` напрямую под
  * свой `ORDER BY published_ms DESC LIMIT`, без полной сортировки функции;
  * слияние веток идёт уже по ограниченному числу строк (после правки — 3–9 мс
- * на том же наборе, см. `semanticMatchQuery.bench.test.ts`). Для кампаний
- * Eng/Ops продуктовые роли читаются отдельной помеченной веткой и попадают в
- * пул только после записей целевых семейств.
+ * на том же наборе, см. `semanticMatchQuery.bench.test.ts`). Смежной
+ * продуктовой ветки нет (CPO 26.10): продуктовая роль попадает в подбор, только
+ * если `product` есть среди функций ролей кандидата.
  */
 function buildFunctionBranch(
   levelFilter: string,
@@ -63,12 +57,7 @@ function buildExcludedTitleFilter(excludedFunctions: readonly ('sales' | 'market
 }
 
 function queryFunctionCodesFor(targetCodes: readonly FunctionCode[]): FunctionCode[] {
-  const includeProductAdjacents = targetCodes.some((code) =>
-    PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS.includes(code),
-  );
-  const adjacentFunctions: readonly FunctionCode[] =
-    includeProductAdjacents && !targetCodes.includes('product') ? ['product'] : [];
-  return Array.from(new Set([...targetCodes, ...adjacentFunctions]));
+  return Array.from(new Set(targetCodes));
 }
 
 function excludedFunctionCodesFor(targetCodes: readonly FunctionCode[]) {
@@ -90,9 +79,10 @@ function buildExcludedFunctionFilter(excludedFunctions: readonly string[]): stri
       ) ${buildExcludedTitleFilter(excludedCommercialFunctions)}`;
 }
 
-export function buildSemanticMatchQuery(
-  input: SemanticMatchQueryInput,
-): { sql: string; params: SQLInputValue[] } {
+export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
+  sql: string;
+  params: SQLInputValue[];
+} {
   // У источника уровень часто отсутствует даже у релевантной руководящей
   // роли. Неизвестный уровень остаётся видимым и ранжируется объяснением, а
   // не исчезает до того, как кандидат сможет его прочитать.
@@ -103,11 +93,7 @@ export function buildSemanticMatchQuery(
   const queryFunctionCodes = queryFunctionCodesFor(input.functionCodes);
   const branches = queryFunctionCodes
     .map((code) =>
-      buildFunctionBranch(
-        levelFilter,
-        excludedFunctionFilter,
-        input.functionCodes.includes(code),
-      ),
+      buildFunctionBranch(levelFilter, excludedFunctionFilter, input.functionCodes.includes(code)),
     )
     .join('\nUNION ALL\n');
   const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';

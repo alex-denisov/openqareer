@@ -4,6 +4,7 @@ import {
   type LocationTree,
 } from '../../../shared/locationTree';
 import type { MatchedVacancyPlaceFacet } from '../../../shared/matchedVacancyFacets';
+import type { CareerLocations } from './VacanciesFilterToolbar';
 import type { VacanciesScreenState } from './vacanciesScreenState';
 
 /**
@@ -45,8 +46,18 @@ export function locationSelectionView(
   tree: LocationTree,
   places: readonly MatchedVacancyPlaceFacet[],
   campaignRegions: readonly string[],
+  careerLocations?: CareerLocations,
 ): { readonly state: VacanciesScreenState; readonly fromRegions: boolean } {
   if (hasManualLocation(state)) return { state, fromRegions: false };
+  // CPO 26.10: города и удалёнка «Карьеры» важнее регионов мастера.
+  if (careerLocations && !state.regions.length) {
+    const selection = {
+      ...state,
+      selectedLocations: [...careerLocations.places],
+      locationRemote: careerLocations.remote,
+    };
+    return { state: selection, fromRegions: true };
+  }
   const regions = state.regions.length ? state.regions : campaignRegions;
   const keys = countryKeysForRegions(tree, places, regions);
   if (!keys.length) return { state, fromRegions: false };

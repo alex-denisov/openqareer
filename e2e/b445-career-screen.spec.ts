@@ -85,9 +85,11 @@ test.describe('B445: «Карьера» по макету 3', () => {
     await offer.getByRole('button', { name: 'Принять' }).click();
     // «Стратегия» хранит одну выбранную роль: предложение переходит к следующей.
     await expect(offer).not.toContainText('Director of Engineering');
+    // CPO 26.10: ступени «Открыта для поиска» нет — подборка идёт по всем ролям.
     await expect(
-      role(page, 'Director of Engineering').locator('summary').getByText('Открыта для поиска'),
+      role(page, 'Director of Engineering').locator('summary').getByText('Навыки проверены'),
     ).toBeVisible();
+    await expect(page.getByText('Открыта для поиска')).toHaveCount(0);
   });
 
   test('390: список ролей со строкой-действием → push-экран роли', async ({ page }, testInfo) => {

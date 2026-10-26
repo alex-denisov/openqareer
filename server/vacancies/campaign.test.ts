@@ -125,25 +125,43 @@ describe('resolveCampaign (B247, срез 1)', () => {
     const auto = {
       roles: [
         {
-          id: 'eng-mgmt.cto', title: 'Chief Technology Officer', titleRu: 'Технический директор (CTO)',
-          functions: ['eng-mgmt'] as const, level: 'c-level' as const, kind: 'primary' as const,
-          synonyms: ['CTO'], evidenceRefs: ['memory:1'], reason: 'Опыт руководства технологиями',
+          id: 'eng-mgmt.cto',
+          title: 'Chief Technology Officer',
+          titleRu: 'Технический директор (CTO)',
+          functions: ['eng-mgmt'] as const,
+          level: 'c-level' as const,
+          kind: 'primary' as const,
+          synonyms: ['CTO'],
+          evidenceRefs: ['memory:1'],
+          reason: 'Опыт руководства технологиями',
         },
       ],
-      factsDigest: 'digest', generatedAt: '2026-09-25T00:00:00.000Z', model: 'fixture',
+      factsDigest: 'digest',
+      generatedAt: '2026-09-25T00:00:00.000Z',
+      model: 'fixture',
     };
     const base = {
       memory: [fact({ statement: 'VP Tech', domain: 'role-evidence' })],
-      resumeTargetRole: null, profileRegions: [], auto,
+      resumeTargetRole: null,
+      profileRegions: [],
+      auto,
     };
 
     expect(resolveCampaign({ ...base, explicit: null }).roles).toEqual({
-      value: ['Chief Technology Officer'], origin: 'model',
+      value: ['Chief Technology Officer'],
+      origin: 'model',
     });
-    expect(resolveCampaign({
-      ...base,
-      explicit: { roles: ['COO'], regions: [], revision: 1, updatedAt: '2026-09-25T00:00:00.000Z' },
-    }).roles).toEqual({ value: ['COO'], origin: 'explicit' });
+    expect(
+      resolveCampaign({
+        ...base,
+        explicit: {
+          roles: ['COO'],
+          regions: [],
+          revision: 1,
+          updatedAt: '2026-09-25T00:00:00.000Z',
+        },
+      }).roles,
+    ).toEqual({ value: ['COO'], origin: 'explicit' });
   });
 
   it('явный выбор, совпадающий с профилем, не считается расхождением', () => {
@@ -258,5 +276,38 @@ describe('роли «Карьеры» в подборе (26.10)', () => {
       rejectedRoleIds: new Set([careerRoleId('CTO'), careerRoleId('VP of Engineering')]),
     });
     expect(resolved.roles.value).toEqual(['Head of Engineering']);
+  });
+});
+
+describe('география «Карьеры» в подборе (CPO 26.10)', () => {
+  const wizard = {
+    roles: ['VP of Engineering'],
+    regions: ['ru', 'cis', 'eu', 'mena'],
+    revision: 1,
+    updatedAt: '2026-10-26T00:00:00Z',
+  };
+  const careerGeography = {
+    labels: ['Москва', 'Удалённо из РФ'],
+    places: ['Россия › Центральный › Москва'],
+    remote: true,
+    regions: ['ru' as const],
+  };
+
+  it('условия «Карьеры» заменяют регионы мастера', () => {
+    const resolved = resolveCampaign({
+      memory: [],
+      profileRegions: [],
+      explicit: wizard,
+      careerGeography,
+    });
+    expect(resolved.regions.value).toEqual(['ru']);
+    expect(resolved.careerGeography).toEqual(careerGeography);
+    expect(resolved.divergence.regions).toBeNull();
+  });
+
+  it('без условий «Карьеры» остаются регионы мастера', () => {
+    const resolved = resolveCampaign({ memory: [], profileRegions: [], explicit: wizard });
+    expect(resolved.regions.value).toEqual(['ru', 'cis', 'eu', 'mena']);
+    expect(resolved.careerGeography).toBeUndefined();
   });
 });

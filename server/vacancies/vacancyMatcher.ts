@@ -41,13 +41,6 @@ interface MatchingFactPoint {
   readonly factId?: string;
 }
 
-const PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS: readonly FunctionCode[] = [
-  'eng',
-  'eng-mgmt',
-  'it-ops',
-  'ops',
-];
-
 function evaluateSkills(
   candidateSkills: string[],
   vacancySkills: string[],
@@ -149,20 +142,12 @@ function isNonTechNoise(functions: readonly FunctionCode[]): boolean {
 function determineRoleMatchPoints(
   parsedLevelRank: number | null,
   targetRank: number | undefined,
-  adjacentProductRole: boolean,
 ): { roleMatch: VacancyRoleMatch; matchingPoints: string[] } {
   const distance =
     targetRank !== undefined && parsedLevelRank !== null
       ? Math.abs(parsedLevelRank - targetRank)
       : undefined;
-  const roleMatch: VacancyRoleMatch = adjacentProductRole
-    ? 'partial'
-    : distance === 0
-      ? 'target'
-      : 'partial';
-  if (adjacentProductRole) {
-    return { roleMatch, matchingPoints: ['Смежная продуктовая роль вне семейств кампании.'] };
-  }
+  const roleMatch: VacancyRoleMatch = distance === 0 ? 'target' : 'partial';
   return {
     roleMatch,
     matchingPoints: [
@@ -183,8 +168,9 @@ export function evaluateSemanticRole(
   const parsed = rulesParse(vacancyTitle);
   const matchingPoints: string[] = [];
   const titleWords = new Set(normalizeTextForComparison(vacancyTitle).split(/\s+/u));
-  const containsOtherCommercialFunction = (['sales', 'marketing'] as const).some((code) =>
-    !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
+  const containsOtherCommercialFunction = (['sales', 'marketing'] as const).some(
+    (code) =>
+      !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
   );
 
   if (containsOtherCommercialFunction || isNonTechNoise(parsed.functions)) {
@@ -197,19 +183,19 @@ export function evaluateSemanticRole(
     return { roleMatch: 'partial' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
-  const primaryFunction = parsed.functions[0];
+  // Смежной продуктовой роли нет (CPO 26.10): продукт — только из ролей кандидата.
   const hasTargetFunction = parsed.functions.some((code) => roleFunctions.includes(code));
-  const adjacentProductRole =
-    PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS.some((code) => roleFunctions.includes(code)) &&
-    parsed.functions.includes('product') &&
-    (!primaryFunction || !roleFunctions.includes(primaryFunction));
-  if (!hasTargetFunction && !adjacentProductRole) {
+  if (!hasTargetFunction) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
   const targetRank = targetLevel ? LEVEL_RANK[targetLevel] : undefined;
-  const points = determineRoleMatchPoints(parsed.levelRank, targetRank, adjacentProductRole);
-  return { roleMatch: points.roleMatch, matchingPoints: points.matchingPoints, adjacentRole: adjacentProductRole };
+  const points = determineRoleMatchPoints(parsed.levelRank, targetRank);
+  return {
+    roleMatch: points.roleMatch,
+    matchingPoints: points.matchingPoints,
+    adjacentRole: false,
+  };
 }
 
 const ROLE_SENTENCE: Record<VacancyRoleMatch, string> = {
@@ -244,7 +230,11 @@ export function matchCandidateWithVacancy(
     candidate.confirmedSkillFacts,
   );
   const roleEval = candidate.semanticRoleFunctions?.length
-    ? evaluateSemanticRole(candidate.semanticRoleFunctions, candidate.targetLevel, vacancy.canonicalTitle)
+    ? evaluateSemanticRole(
+        candidate.semanticRoleFunctions,
+        candidate.targetLevel,
+        vacancy.canonicalTitle,
+      )
     : evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
   const levelMatch = evaluateLevelMatch(candidate.targetLevel, vacancy.canonicalTitle);
 

@@ -10,6 +10,7 @@ export function extractBoardRegions(campaign?: CampaignMetaView) {
   const isProfile = campaign?.regions.origin === 'profile';
   return {
     roles: campaign?.roles.value ?? [],
+    careerLocations: campaign?.careerGeography,
     regions: isProfile ? [] : (campaign?.regions.value ?? []),
     suggestedRegions: campaign?.suggestedRegions?.length
       ? campaign.suggestedRegions

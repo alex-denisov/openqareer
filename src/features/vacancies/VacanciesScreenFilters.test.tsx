@@ -7,7 +7,11 @@ import {
   countActiveFilters,
   type VacanciesScreenState,
 } from './VacanciesScreenFilters';
-import { summarizeVacancyFilterGroup, withCampaignDefaults } from './VacanciesFilterToolbar';
+import {
+  VacanciesFilterToolbarFromState,
+  summarizeVacancyFilterGroup,
+  withCampaignDefaults,
+} from './VacanciesFilterToolbar';
 
 describe('countActiveFilters', () => {
   it('returns 0 when state is empty', () => {
@@ -104,7 +108,9 @@ it('shows selected values on desktop triggers and mobile filter chips', () => {
     );
   });
 
-  expect(container.querySelector('[data-filter-group="roles"]')?.textContent).toContain(
+  // CPO 26.10: кнопка «Роли · N», названия — в чипе 390 и выпадающем списке.
+  expect(container.querySelector('[data-filter-group="roles"]')?.textContent).toBe('Роли · 2');
+  expect(container.querySelector('.vacancies-mobile-filter-chip')?.textContent).toBe(
     'Head, Director',
   );
   expect(container.querySelector('[data-filter-group="locations"]')?.textContent).toContain(
@@ -239,6 +245,50 @@ describe('withCampaignDefaults (B446-g4)', () => {
   it('keeps a hand-picked choice over the campaign', () => {
     const shown = withCampaignDefaults({ ...empty, roles: ['CTO'] }, ['Head'], []);
     expect(summarizeVacancyFilterGroup(shown, 'roles')).toBe('CTO');
+  });
+});
+
+describe('«Карьера» geography in «Локации» (CPO 26.10)', () => {
+  const empty = { roles: [], regions: [], remoteOnly: false };
+  const career = { places: ['Россия › Центральный › Москва'], remote: true };
+  it('names the «Карьера» cities instead of the wizard regions', () => {
+    const shown = withCampaignDefaults(empty, [], ['ru', 'cis', 'eu', 'mena'], career);
+    expect(summarizeVacancyFilterGroup(shown, 'locations')).toBe('Москва +1');
+    expect(shown.selectedLocations).toEqual(career.places);
+    expect(shown.locationRemote).toBe(true);
+  });
+  it('keeps the wizard regions when «Карьера» names no place', () => {
+    const shown = withCampaignDefaults(empty, [], ['ru', 'cis']);
+    expect(summarizeVacancyFilterGroup(shown, 'locations')).toBe('Россия, СНГ');
+  });
+});
+
+describe('roles button «Роли · N» (CPO 26.10)', () => {
+  it('shows the role count on the desktop button and keeps names in the label', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    const roles = [
+      'VP of Engineering',
+      'Head of Engineering',
+      'CTO',
+      'Director of Engineering',
+      'Engineering Manager',
+    ];
+    act(() =>
+      root.render(
+        <VacanciesFilterToolbarFromState
+          state={{ roles, regions: [], remoteOnly: false }}
+          expanded={false}
+          activeGroup={null}
+          onToggle={() => undefined}
+          onSelectGroup={() => undefined}
+        />,
+      ),
+    );
+    const button = container.querySelector('[data-filter-group="roles"]')!;
+    expect(button.querySelector('.vacancies-filter-group-text')?.textContent).toBe('Роли · 5');
+    expect(button.getAttribute('aria-label')).toBe(`Роли: ${roles.join(', ')}`);
+    act(() => root.unmount());
   });
 });
 

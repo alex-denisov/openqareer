@@ -162,7 +162,7 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   await expect(page.locator('.vacancies-filter-toolbar')).toBeVisible();
   if (testInfo.project.name === 'desktop-1440') {
     const expectedFilterSummaries = [
-      ['roles', 'Head, Director'],
+      ['roles', 'Роли · 2'], // CPO 26.10: «Роли · N», названия — в списке
       ['locations', 'Москва +46'],
       ['salary', 'от 450 тыс. ₽'],
       ['format', '2'],

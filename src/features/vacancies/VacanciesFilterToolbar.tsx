@@ -10,6 +10,10 @@ export interface VacancyFilterGroupOption {
   readonly label: string;
   readonly active: boolean;
   readonly summary?: string;
+  /** Кнопка показывает «Подпись · N» вместо значения (роли). */
+  readonly count?: number;
+  /** Полный перечень для чтения с экрана, когда на кнопке только число. */
+  readonly fullSummary?: string;
 }
 
 export const VACANCY_FILTER_GROUPS: readonly {
@@ -83,8 +87,8 @@ function compactSalary(amount: number): string {
 
 function summarizeLocations(state: VacanciesScreenState): string | undefined {
   const selected = [
-    ...(state.locationRemote ? ['Удалённо'] : []),
     ...(state.selectedLocations ?? []),
+    ...(state.locationRemote ? ['Удалённо'] : []),
   ];
   if (selected.length) {
     const first = selected[0]!.split(LOCATION_PATH_SEPARATOR).at(-1)!;
@@ -106,21 +110,36 @@ function summarizeLocations(state: VacanciesScreenState): string | undefined {
   return search || undefined;
 }
 
+/** Города и удалёнка из условий «Карьеры» — места дерева «Локаций» (CPO 26.10). */
+export interface CareerLocations {
+  readonly places: readonly string[];
+  readonly remote: boolean;
+}
+
 /**
  * B446-g4: роли и регионы кампании уже фильтруют подборку, значит кнопки и чипы их
- * называют (макет 4: «Роли Head, Director»). Ручной выбор важнее кампании.
+ * называют (макет 4: «Роли Head, Director»). Ручной выбор важнее кампании;
+ * география «Карьеры» важнее регионов мастера (CPO 26.10).
  */
 export function withCampaignDefaults(
   state: VacanciesScreenState,
   campaignRoles: readonly string[] = [],
   campaignRegions: readonly string[] = [],
+  careerLocations?: CareerLocations,
 ): VacanciesScreenState {
   const locationsPicked = filterGroupIsActive(state, 'locations');
-  return {
-    ...state,
-    roles: state.roles.length || state.levels?.length ? state.roles : campaignRoles,
-    regions: locationsPicked ? state.regions : campaignRegions,
-  };
+  const roles = state.roles.length || state.levels?.length ? state.roles : campaignRoles;
+  if (locationsPicked) return { ...state, roles };
+  if (careerLocations) {
+    return {
+      ...state,
+      roles,
+      regions: [],
+      selectedLocations: careerLocations.places,
+      locationRemote: careerLocations.remote,
+    };
+  }
+  return { ...state, roles, regions: campaignRegions };
 }
 
 const LEVEL_PREFIX = /^(\S+)\s+(of\s+.+)$/iu;
@@ -221,10 +240,15 @@ export function VacanciesFilterToolbarFromState({
   readonly onToggle: () => void;
   readonly onSelectGroup: (group: VacancyFilterGroup) => void;
 }) {
+  const roleCount = state.roles.length || (state.levels?.length ?? 0);
   const groups = VACANCY_FILTER_GROUPS.map((group) => ({
     ...group,
     active: filterGroupIsActive(state, group.id),
     summary: summarizeVacancyFilterGroup(state, group.id),
+    // CPO 26.10, макет 4: на кнопке «Роли · N», названия — в выпадающем списке.
+    ...(group.id === 'roles' && roleCount
+      ? { count: roleCount, fullSummary: state.roles.join(', ') || undefined }
+      : {}),
   }));
   return (
     <VacanciesFilterToolbar
@@ -236,6 +260,11 @@ export function VacanciesFilterToolbarFromState({
       onSelectGroup={onSelectGroup}
     />
   );
+}
+
+function groupAriaLabel(group: VacancyFilterGroupOption): string {
+  const summary = group.fullSummary ?? group.summary;
+  return summary ? `${group.label}: ${summary}` : group.label;
 }
 
 function VacancyFilterGroupButtons({
@@ -251,7 +280,7 @@ function VacancyFilterGroupButtons({
           key={group.id}
           className={`vacancies-filter-group-button${group.active ? ' is-active' : ''}`}
           aria-expanded={activeGroup === group.id}
-          aria-label={group.summary ? `${group.label}: ${group.summary}` : group.label}
+          aria-label={groupAriaLabel(group)}
           data-filter-group={group.id}
           aria-controls="vacancies-filter-popover"
           onClick={() => onSelectGroup(group.id)}
@@ -260,7 +289,9 @@ function VacancyFilterGroupButtons({
             {group.id === 'salary' && group.summary ? null : (
               <span className="vacancies-filter-group-label">{group.label}</span>
             )}
-            {group.summary ? (
+            {group.count ? (
+              <span className="vacancies-filter-group-value">{` · ${group.count}`}</span>
+            ) : group.summary ? (
               <span className="vacancies-filter-group-value">{group.summary}</span>
             ) : null}
           </span>

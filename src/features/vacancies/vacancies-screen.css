@@ -459,8 +459,8 @@
 .vacancies-filter-group-buttons {
   display: flex;
   flex: 1;
-  /* B446-r (R9): в уменьшенном окне .app чипы переносятся, отступ карточки сводки сохраняется. */
-  flex-wrap: wrap;
+  /* CPO 26.10: одна строка на 1440 и в окне .app 1176 — роли сведены в «Роли · N». */
+  flex-wrap: nowrap;
   gap: var(--career-space-2);
   min-inline-size: 0;
 }
@@ -502,11 +502,8 @@
 }
 
 .vacancies-filter-group-value {
-  max-inline-size: 24ch;
-  overflow: hidden;
   color: var(--career-text);
   font-weight: 600;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

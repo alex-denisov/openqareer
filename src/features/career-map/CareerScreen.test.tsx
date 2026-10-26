@@ -16,7 +16,9 @@ describe('CareerScreen (B445)', () => {
     );
     expect(html).toContain('вилка не считается · 4 вакансии');
     expect(html).toContain('Навыки проверены');
-    expect(html).toContain('Открыта для поиска');
+    // CPO 26.10: подборка уже идёт по всем ролям — ступени «Открыта для поиска» нет.
+    expect(html).not.toContain('Открыта для поиска');
+    expect(html).not.toContain('Открыть для поиска');
     expect(html).toContain('Гипотеза');
   });
 

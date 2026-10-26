@@ -23,10 +23,9 @@ describe('parseDescriptionSections (B549)', () => {
         {
           title: 'Чем предстоит заниматься',
           items: ['Развитие платёжной платформы', 'Найм руководителей'],
-          bullets: [true, true],
         },
-        { title: 'Что мы ждём', items: ['8+ лет в разработке'], bullets: [true] },
-        { title: 'Условия', items: ['ДМС с первого дня', 'Гибрид'], bullets: [false, false] },
+        { title: 'Что мы ждём', items: ['8+ лет в разработке'] },
+        { title: 'Условия', items: ['ДМС с первого дня', 'Гибрид'] },
       ],
     });
   });
@@ -34,8 +33,8 @@ describe('parseDescriptionSections (B549)', () => {
   it('keeps unknown headings verbatim', () => {
     const parsed = parseDescriptionSections('О проекте:\nНовый банк\n\nЗадачи:\n1. Строить');
     expect(parsed?.sections).toEqual([
-      { title: 'О проекте', items: ['Новый банк'], bullets: [false] },
-      { title: 'Чем предстоит заниматься', items: ['Строить'], bullets: [true] },
+      { title: 'О проекте', items: ['Новый банк'] },
+      { title: 'Чем предстоит заниматься', items: ['Строить'] },
     ]);
   });
 

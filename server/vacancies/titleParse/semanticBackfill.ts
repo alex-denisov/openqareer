@@ -2,6 +2,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import { TAXONOMY_VERSION, type FunctionCode } from '../../../shared/roleTaxonomy';
 import { MIGRATION_35 } from '../../data/sqliteSchema';
 import { normalizeTitleKey } from './normalizeTitleKey';
+import { LEVEL_RANK } from '../levelMatcher';
+import { isSeniorManagerLead } from './rulesLevel';
 import { exactOntologyTitleKeys, rulesParse } from './rulesParse';
 
 /**
@@ -93,11 +95,27 @@ export class SemanticBackfill {
   private correctByExactOntology(): number {
     if (this.ontologyCorrectionDone) return 0;
     this.ontologyCorrectionDone = true;
+    const ontology = this.exactOntologyCorrections();
+    const exactKeys = new Set(ontology.map((correction) => correction.key));
+    const corrections = [
+      ...ontology,
+      ...this.seniorManagerCorrections().filter((correction) => !exactKeys.has(correction.key)),
+    ];
+    if (corrections.length === 0) return 0;
+    this.applyCorrections(corrections);
+    return corrections.length;
+  }
+
+  private exactOntologyCorrections(): {
+    key: string;
+    functions: string;
+    levelRank: number | null;
+  }[] {
     const read = this.database.prepare(
       `SELECT title_key, sample_title, functions, level_rank FROM title_parse
        WHERE title_key = ? AND parsed_by = 'model'`,
     );
-    const corrections = exactOntologyTitleKeys().flatMap((key) => {
+    return exactOntologyTitleKeys().flatMap((key) => {
       const row = read.get(key) as
         | { title_key: string; sample_title: string; functions: string; level_rank: number | null }
         | undefined;
@@ -108,7 +126,11 @@ export class SemanticBackfill {
       if (functions === row.functions && parsed.levelRank === row.level_rank) return [];
       return [{ key: row.title_key, functions, levelRank: parsed.levelRank }];
     });
-    if (corrections.length === 0) return 0;
+  }
+
+  private applyCorrections(
+    corrections: readonly { key: string; functions: string; levelRank: number | null }[],
+  ): void {
     const update = this.database.prepare(
       `UPDATE title_parse SET functions = ?, level_rank = ?, parsed_by = 'rules', model = NULL,
          taxonomy_version = ?, parsed_at = ? WHERE title_key = ?`,
@@ -138,7 +160,25 @@ export class SemanticBackfill {
       this.database.exec('ROLLBACK');
       throw error;
     }
-    return corrections.length;
+  }
+
+  /**
+   * CPO 26.10: модель ставила «Senior Manager …» уровень Head (3 724 названия
+   * на проде). Уровень становится lead, функции модели остаются. Один проход
+   * по `title_parse` за процесс, вместе с исправлением по онтологии.
+   */
+  private seniorManagerCorrections(): { key: string; functions: string; levelRank: number }[] {
+    const rows = this.database
+      .prepare(
+        `SELECT title_key, sample_title, functions FROM title_parse
+         WHERE parsed_by = 'model' AND level_rank > ?
+           AND (title_key LIKE '%senior manager%' OR title_key LIKE '%sr manager%'
+             OR title_key LIKE '%sr. manager%')`,
+      )
+      .all(LEVEL_RANK.lead) as { title_key: string; sample_title: string; functions: string }[];
+    return rows
+      .filter((row) => isSeniorManagerLead(row.sample_title))
+      .map((row) => ({ key: row.title_key, functions: row.functions, levelRank: LEVEL_RANK.lead }));
   }
 
   /**

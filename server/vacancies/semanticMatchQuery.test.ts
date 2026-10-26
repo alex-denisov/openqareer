@@ -191,7 +191,7 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     ]);
   });
 
-  it('includes product roles after target-function rows for Eng/Ops campaigns', () => {
+  it('leaves product-only roles out of an Eng/Ops campaign (CPO 26.10)', () => {
     seed('target-ops', 'ops', 3, 1_000);
     seed('adjacent-product', 'product', 3, 2_000);
     const { sql, params } = buildSemanticMatchQuery({
@@ -203,9 +203,6 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     });
 
     const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
-    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual([
-      'target-ops',
-      'adjacent-product',
-    ]);
+    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['target-ops']);
   });
 });

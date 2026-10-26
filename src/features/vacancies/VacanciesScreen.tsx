@@ -114,7 +114,7 @@ function useVacanciesScreenBoard(
   onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
   initialFilters?: VacanciesScreenState,
 ) {
-  const { roles, regions, suggestedRegions } = extractBoardRegions(campaign);
+  const campaignView = extractBoardRegions(campaign);
   const [state, setState] = useState<VacanciesScreenState>(
     initialFilters ?? {
       roles: [],
@@ -142,10 +142,9 @@ function useVacanciesScreenBoard(
     () => filterBoardVacancies(matched, state, now, onFiltersChange),
     [matched, state, now, onFiltersChange],
   );
+  const { roles } = campaignView;
   return {
-    roles,
-    regions,
-    suggestedRegions,
+    ...campaignView,
     state,
     setState,
     filtered,
@@ -280,6 +279,7 @@ function buildVacanciesFilterProps({
     campaignRoles: board.roles,
     regions: board.regions,
     suggestedRegions: board.suggestedRegions,
+    careerLocations: board.careerLocations,
     candidateLevel: candidateLevel ?? undefined,
     onAddCustomRole: (role: string) => actions.addCustomRole(role),
     premises,
