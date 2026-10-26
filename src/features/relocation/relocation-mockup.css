@@ -47,6 +47,13 @@
   background: var(--career-accent);
 }
 
+/* Общее наведение выше по специфичности красило фон в --career-surface, а текст
+   оставался --career-accent-ink: после нажатия под курсором надпись пропадала (26.10). */
+.career-relocation .career-relocation-btn.is-primary:hover:not(:disabled) {
+  border-color: var(--career-accent);
+  background: color-mix(in oklch, var(--career-accent), var(--career-text) 16%);
+}
+
 .career-relocation .career-relocation-btn.is-ghost {
   border-color: transparent;
   color: var(--career-text-soft);

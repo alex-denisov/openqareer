@@ -198,6 +198,10 @@ export class ConversationController {
     });
   }
 
+  proposeCandidateFacts(candidateId: string, facts: CoachProviderResult['result']['memoryCandidates']): void {
+    this.insertMemoryCandidates(candidateId, this.conversationId(candidateId), facts, new Date().toISOString());
+  }
+
   private insertMemoryCandidates(
     candidateId: string,
     conversationId: string,
@@ -661,6 +665,10 @@ export class ConversationController {
 
   getConsultantRejections(candidateId: string): ConsultantRejection[] {
     return this.consultantRejections.list(candidateId);
+  }
+
+  withdrawConsultantRejection(candidateId: string, proposalKey: string): void {
+    this.consultantRejections.withdraw(candidateId, proposalKey);
   }
 
   private getMessage(

@@ -21,6 +21,13 @@ export class ConsultantRejectionStore {
       .run(candidateId, proposalKey, reason ?? null, now);
   }
 
+  /** Кандидат передумал: роль, которую он отклонил, снова принята (26.10). */
+  withdraw(candidateId: string, proposalKey: string): void {
+    this.database
+      .prepare('DELETE FROM consultant_rejections WHERE candidate_id = ? AND proposal_key = ?')
+      .run(candidateId, proposalKey);
+  }
+
   list(candidateId: string): ConsultantRejection[] {
     const rows = this.database
       .prepare(

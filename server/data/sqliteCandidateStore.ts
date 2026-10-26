@@ -388,12 +388,9 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   declare completeTurn: CandidateStore['completeTurn'];
+  declare proposeCandidateFacts: CandidateStore['proposeCandidateFacts'];
 
-  failTurn(
-    candidateId: string,
-    idempotencyKey: string,
-    errorCode: string,
-  ): void {
+  failTurn(candidateId: string, idempotencyKey: string, errorCode: string): void {
     this.conversations.failTurn(candidateId, idempotencyKey, errorCode);
   }
 
@@ -437,6 +434,10 @@ export class SqliteCandidateStore implements CandidateStore {
   getConsultantRejections(candidateId: string): ConsultantRejection[] {
     this.requireCandidate(candidateId);
     return this.conversations.getConsultantRejections(candidateId);
+  }
+
+  withdrawConsultantRejection(candidateId: string, proposalKey: string): void {
+    this.conversations.withdrawConsultantRejection(candidateId, proposalKey);
   }
 
   createVacancySubscription(candidateId: string, input: VacancySubscriptionInput, now: string): StoredVacancySubscription {

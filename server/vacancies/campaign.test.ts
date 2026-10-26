@@ -224,3 +224,39 @@ describe('annotateRoleHypotheses (B247, срез 2)', () => {
     ]);
   });
 });
+
+describe('роли «Карьеры» в подборе (26.10)', () => {
+  const careerRoleId = (title: string) => `role-${title.toLowerCase().replace(/\s+/gu, '-')}`;
+  const explicit = {
+    roles: ['VP of Engineering'],
+    regions: [],
+    revision: 1,
+    updatedAt: '2026-10-26T00:00:00Z',
+    careerRoles: [
+      { id: careerRoleId('Head of Engineering'), title: 'Head of Engineering' },
+      { id: careerRoleId('CTO'), title: 'CTO' },
+      { id: careerRoleId('vp of engineering'), title: 'vp of engineering' },
+    ],
+  };
+
+  it('подбирает по ролям мастера и «Карьеры» вместе, без повторов', () => {
+    const resolved = resolveCampaign({
+      memory: [],
+      profileRegions: [],
+      explicit,
+      roleIdOf: careerRoleId,
+    });
+    expect(resolved.roles.value).toEqual(['VP of Engineering', 'Head of Engineering', 'CTO']);
+  });
+
+  it('отклонённая кандидатом роль уходит из подбора, даже если её выбрали в мастере', () => {
+    const resolved = resolveCampaign({
+      memory: [],
+      profileRegions: [],
+      explicit,
+      roleIdOf: careerRoleId,
+      rejectedRoleIds: new Set([careerRoleId('CTO'), careerRoleId('VP of Engineering')]),
+    });
+    expect(resolved.roles.value).toEqual(['Head of Engineering']);
+  });
+});

@@ -25,7 +25,7 @@ describe('CareerScreen (B445)', () => {
     expect(html).toContain('Условия и география');
     expect(html).toContain('Мои роли на рынке');
     expect(html).toContain('aria-label="Пояснение"');
-    expect(html).toContain('Поиск по ролям открывается после проверки навыков');
+    expect(html).toContain('«Вакансии» подбираются по всем ролям этого списка, включая гипотезы');
     expect(html).toContain('aria-label="Изменить: География"');
     expect(html).toContain('Москва, удалённо из РФ');
     expect(html).toContain('2 компании');
@@ -43,10 +43,7 @@ describe('CareerScreen (B445)', () => {
     expect(html).toContain('Отклонить роль');
   });
 
-  it('B565: плашка не говорит «пока его нет», когда роль с проверенными навыками уже есть', () => {
-    const html = renderToStaticMarkup(<CareerScreen {...full} />);
-    expect(html).toContain('Поиск по ролям открывается после проверки навыков');
-    expect(html).not.toContain('Пока его нет');
+  it('26.10: подборка идёт по ролям сразу, без условия проверки навыков', () => {
     const hypothesesOnly = DEFAULT_MOCK_ROLES.map((role) => ({
       ...role,
       status: 'hypothesis' as const,
@@ -54,7 +51,8 @@ describe('CareerScreen (B445)', () => {
     const early = renderToStaticMarkup(
       <CareerScreen initialRoles={hypothesesOnly} initialConditions={DEFAULT_SEARCH_CONDITIONS} />,
     );
-    expect(early).toContain('Пока его нет, доступен свободный просмотр всех вакансий');
+    expect(early).toContain('Отклонённая роль уходит из подборки');
+    expect(early).not.toContain('после проверки навыков');
   });
 
   it('релокация — строка-раскрытие без включения одним нажатием', () => {

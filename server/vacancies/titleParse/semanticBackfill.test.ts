@@ -211,4 +211,36 @@ describe('SemanticBackfill (B267 S2)', () => {
     expect(report.relabeled).toBe(1);
     expect(semanticRows(database).map((row) => row.function_code)).toEqual(['eng-mgmt']);
   });
+
+  it('точное название из онтологии перебивает разбор модели (26.10: Software Development Manager как Head)', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Software Development Manager');
+    addVacancy(database, 'v2', 'Senior Manager, Renewals');
+    const backfill = new SemanticBackfill(database);
+    const insert = database.prepare(
+      `INSERT INTO title_parse (title_key, sample_title, functions, level_rank, role_label, parsed_by, model, taxonomy_version, priority, parsed_at)
+       VALUES (?, ?, ?, 2, NULL, 'model', 'gemini', 3, 0, 0)`,
+    );
+    insert.run('software development manager', 'Software Development Manager', '["eng-mgmt"]');
+    insert.run('senior manager, renewals', 'Senior Manager, Renewals', '["sales"]');
+    database
+      .prepare(
+        `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
+         VALUES ('v1', 'eng-mgmt', 2, 'software development manager', 1000, 1),
+                ('v2', 'sales', 2, 'senior manager, renewals', 1000, 1)`,
+      )
+      .run();
+
+    const first = backfill.step(100);
+    backfill.step(100);
+
+    expect(first.ontologyCorrected).toBe(1);
+    const rows = semanticRows(database);
+    expect(rows.find((row) => row.id === 'v1')).toMatchObject({
+      function_code: 'eng-mgmt',
+      level_rank: 1,
+    });
+    // Модельный разбор без точного варианта онтологии не трогается.
+    expect(rows.find((row) => row.id === 'v2')?.level_rank).toBe(2);
+  });
 });

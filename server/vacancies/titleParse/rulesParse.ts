@@ -351,6 +351,14 @@ function wordsFromTitle(normalizedTitle: string): readonly string[] {
   return normalizedTitle.match(/\p{L}+/gu) ?? [];
 }
 
+/**
+ * Названия, которые онтология знает дословно: их разбор правилами точнее
+ * модели (26.10: Gemini дал «Software Development Manager» уровень Head).
+ */
+export function exactOntologyTitleKeys(): readonly string[] {
+  return [...ONTOLOGY_VARIANTS.exact.keys()];
+}
+
 function findOntologyVariant(normalizedTitle: string): OntologyVariant | undefined {
   const exact = ONTOLOGY_VARIANTS.exact.get(normalizedTitle);
   if (exact) return exact;

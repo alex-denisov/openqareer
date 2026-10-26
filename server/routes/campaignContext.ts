@@ -5,6 +5,7 @@ import {
   type StoredCampaignSelection,
 } from '../vacancies/campaign';
 import { regionOfVacancy } from '../vacancies/vacancyGeography';
+import { careerRoleId } from '../../shared/roleProposals';
 import type { RouteDeps } from './deps';
 
 /**
@@ -52,8 +53,25 @@ export function readCampaign(
     explicit,
     auto: parsed?.success ? (parsed.data.campaign?.auto ?? null) : null,
     evidenceByRef: new Map(memory.map((fact) => [`memory:${fact.id}`, fact.statement])),
+    rejectedRoleIds: rejectedCareerRoleIds(candidateStore, candidateId),
+    roleIdOf: careerRoleId,
     ...(vacancyCountsByRole ? { vacancyCountsByRole } : {}),
   });
+}
+
+const CAREER_ROLE_REJECTION_PREFIX = 'career-role:';
+
+/** Отклонения ролей «Карьеры» лежат в общем хранилище отклонённых предложений (B445). */
+export function rejectedCareerRoleIds(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): Set<string> {
+  return new Set(
+    (candidateStore.getConsultantRejections?.(candidateId) ?? [])
+      .map((rejection) => rejection.proposalKey)
+      .filter((key) => key.startsWith(CAREER_ROLE_REJECTION_PREFIX))
+      .map((key) => key.slice(CAREER_ROLE_REJECTION_PREFIX.length)),
+  );
 }
 
 /**

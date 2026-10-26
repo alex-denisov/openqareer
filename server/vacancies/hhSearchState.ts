@@ -1,5 +1,6 @@
 import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { htmlToFeedText } from '../connectors/feedText';
+import { hhSalaryPeriod, type VacancySalaryPeriod } from '../../shared/vacancySalaryPeriod';
 
 /**
  * Разбор состояния страницы поиска hh.ru (B214).
@@ -102,12 +103,38 @@ function readSalary(value: unknown): VacancySalary | undefined {
   if (from === undefined && to === undefined) return undefined;
 
   const currency = text(compensation.currencyCode);
+  const period = readSalaryPeriod(compensation, from, to);
   return {
     ...(from === undefined ? {} : { from }),
     ...(to === undefined ? {} : { to }),
     ...(currency ? { currency } : {}),
     ...(typeof compensation.gross === 'boolean' ? { gross: compensation.gross } : {}),
+    ...(period
+      ? {
+          period,
+          periodEvidence: { field: 'hh.compensation.mode', value: String(compensation.mode) },
+        }
+      : {}),
   };
+}
+
+/**
+ * Период суммы — поле `mode`; `frequency` (как часто платят) его не заменяет.
+ * Сумма режима (`perModeFrom/To`), разошедшаяся с вилкой, значит, что период
+ * вилки не доказан, и тогда он остаётся неизвестным.
+ */
+function readSalaryPeriod(
+  compensation: Record<string, unknown>,
+  from: number | undefined,
+  to: number | undefined,
+): VacancySalaryPeriod | undefined {
+  const period = hhSalaryPeriod(compensation.mode);
+  if (!period) return undefined;
+  const perModeFrom = positiveNumber(compensation.perModeFrom);
+  const perModeTo = positiveNumber(compensation.perModeTo);
+  if (perModeFrom !== undefined && perModeFrom !== from) return undefined;
+  if (perModeTo !== undefined && perModeTo !== to) return undefined;
+  return period;
 }
 
 /**
@@ -169,11 +196,23 @@ function readHhDescription(vacancy: Record<string, unknown>): HhDescriptionData 
   };
 }
 
+/**
+ * Категории `company['@category']`, под которыми на живой странице (26.10.2026)
+ * стоит ФИО человека, а не название компании: частное лицо, частный рекрутер,
+ * руководитель проекта. `COMPANY` и `AGENCY` — организации (INC-023).
+ */
+const PERSON_EMPLOYER_CATEGORIES = new Set([
+  'PRIVATE_INDIVIDUAL',
+  'PRIVATE_RECRUITER',
+  'PROJECT_DIRECTOR',
+]);
+
 function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVacancy | null {
   const vacancy = record(value);
   const url = text(record(vacancy.links).desktop);
   const title = htmlToFeedText(text(vacancy.name));
-  const company = htmlToFeedText(text(record(vacancy.company).name));
+  const employer = record(vacancy.company);
+  const company = htmlToFeedText(text(employer.name));
 
   // Запись без ссылки, названия или работодателя не показывается вовсе: открыть
   // её нельзя, а выдуманный работодатель запрещён с B161.
@@ -189,6 +228,9 @@ function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVaca
     fingerprint: id,
     title,
     company,
+    ...(PERSON_EMPLOYER_CATEGORIES.has(text(employer['@category']))
+      ? { employerIsPerson: true }
+      : {}),
     ...(location ? { location } : {}),
     isRemote: readIsRemote(vacancy.workFormats),
     ...(readSalary(vacancy.compensation) ? { salary: readSalary(vacancy.compensation) } : {}),

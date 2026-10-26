@@ -11,6 +11,7 @@ import type { RouteDeps } from './deps';
 import { registerCoachRoutes } from './coachRoutes';
 import { registerCandidateRoutes } from './candidateRoutes';
 import { consultantProposalKey } from '../../shared/consultantProposalKey';
+import type { BulkCompletion } from '../domain/measuredBulkClient';
 
 describe('Coach Stage Routes (B340)', () => {
   const closeHandlers: (() => Promise<unknown>)[] = [];
@@ -22,7 +23,7 @@ describe('Coach Stage Routes (B340)', () => {
   });
 
   async function createTestServer(
-    options: { failSummary?: boolean; captureLogs?: boolean; searchVacancies?: RouteDeps['searchVacancies'] } = {},
+    options: { failSummary?: boolean; captureLogs?: boolean; searchVacancies?: RouteDeps['searchVacancies']; bulk?: BulkCompletion } = {},
   ) {
     const store = createStore();
     const candidate = createCandidate(store);
@@ -115,6 +116,7 @@ describe('Coach Stage Routes (B340)', () => {
       coachProvider,
       multiSourceEngine,
       searchVacancies: options.searchVacancies ?? vi.fn(),
+      bulkLlmRuntime: options.bulk ? { client: options.bulk } : undefined,
     } as unknown as RouteDeps;
 
     registerCoachRoutes(app, deps);
@@ -139,6 +141,56 @@ describe('Coach Stage Routes (B340)', () => {
       getLogOutput: () => logOutput,
     };
   }
+
+  it('lists the candidate facts of a long answer into the profile, even when the reply fails (26.10)', async () => {
+    const bulk: BulkCompletion = {
+      complete: vi.fn(async () => ({
+        content: JSON.stringify({
+          facts: [
+            {
+              kind: 'fact',
+              domain: 'responsibility',
+              statement: 'Точно было 254 человека в направлении',
+            },
+          ],
+        }),
+        model: 'deepseek/deepseek-v4-flash',
+        provider: 'DeepSeek',
+        usage: { cost: 0.0003, promptTokens: 800, cachedTokens: 0, completionTokens: 120 },
+      })),
+    };
+    const { app, headers, coachProvider } = await createTestServer({ bulk });
+    const answer =
+      'Ну, 256 человек – это примерная цифра, но точно было 254, то, что я помню. '.repeat(4);
+    const turn = (key: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/coach/turn',
+        headers: { ...headers, 'idempotency-key': key },
+        payload: { messageId: randomUUID(), content: answer, phase: 'evidence' },
+      });
+
+    expect((await turn(randomUUID())).statusCode).toBe(200);
+    const memory = await app.inject({ method: 'GET', url: '/api/v1/candidate/me/memory', headers });
+    const proposed = (
+      memory.json().data as Array<{ statement: string; status: string; confidence: string }>
+    ).filter((item) => item.status === 'proposed' && item.statement.includes('254'));
+    expect(proposed).toHaveLength(1);
+    expect(proposed[0].confidence).toBe('candidate-reported');
+
+    coachProvider.createTurn.mockRejectedValueOnce(new Error('provider down'));
+    vi.mocked(bulk.complete).mockResolvedValueOnce({
+      content: JSON.stringify({
+        facts: [{ kind: 'preference', domain: 'preference', statement: 'Готов к гибриду' }],
+      }),
+      model: 'deepseek/deepseek-v4-flash',
+      provider: 'DeepSeek',
+      usage: { cost: 0.0003, promptTokens: 800, cachedTokens: 0, completionTokens: 60 },
+    });
+    await turn(randomUUID());
+    const after = await app.inject({ method: 'GET', url: '/api/v1/candidate/me/memory', headers });
+    expect(JSON.stringify(after.json())).toContain('Готов к гибриду');
+  });
 
   it('B357 resolves the owned adaptation plan on the server and continues one diary thread', async () => {
     const { app, headers, store, candidate, getLastInput, coachProvider } = await createTestServer();

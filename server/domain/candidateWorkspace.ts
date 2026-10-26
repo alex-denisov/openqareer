@@ -79,6 +79,18 @@ export const candidateWorkspaceSchema = z
           .strict()
           .optional(),
         dismissed: z.array(z.string().min(1)).max(451).optional(),
+        /**
+         * Роли «Карьеры», которые видел кандидат (из профиля и разговора, без
+         * отклонённых): вместе с ролями мастера они задают подборку (26.10).
+         */
+        careerRoles: z
+          .array(
+            z
+              .object({ id: z.string().min(1).max(300), title: z.string().trim().min(1).max(200) })
+              .strict(),
+          )
+          .max(10)
+          .optional(),
       })
       .strict()
       .optional(),

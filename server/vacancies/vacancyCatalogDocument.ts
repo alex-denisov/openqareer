@@ -16,6 +16,7 @@
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import { employerLabel } from '../../shared/employerLabel';
+import { publicEmployerName } from '../../shared/privateEmployer';
 import type {
   CatalogEntry,
   CatalogPage,
@@ -177,7 +178,7 @@ function metaLine(entry: CatalogEntry): string {
   return (
     '<p class="cat-meta">' +
     (entry.salaryLabel ? `<span class="cat-salary">${escapeHtml(entry.salaryLabel)}</span>` : '') +
-    `<span>${escapeHtml(employerLabel(entry.company))}</span>` +
+    `<span>${escapeHtml(employerLabel(publicEmployerName(entry.company)))}</span>` +
     `<span>${escapeHtml(placeLabel(entry))}</span>` +
     '</p>'
   );
@@ -383,7 +384,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     ...detail.jsonLd,
     '@graph': detail.jsonLd['@graph'].filter((node) => node['@type'] !== 'JobPosting'),
   };
-  const employer = employerLabel(entry.company);
+  const employer = employerLabel(publicEmployerName(entry.company));
   const title = `${entry.title} — ${employer} · openqareer`;
   const description = plainSummary(
     // The body goes through plainSummary on its own first: the generated

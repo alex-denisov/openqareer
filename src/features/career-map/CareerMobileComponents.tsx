@@ -23,6 +23,10 @@ import {
 } from './CareerConditionsComponents';
 import { formatVacancyCount } from './careerWageFork';
 
+/** Подборка «Вакансий» идёт по ролям «Карьеры» сразу (решение владельца 26.10). */
+export const ROLES_SEARCH_NOTE =
+  '«Вакансии» подбираются по всем ролям этого списка, включая гипотезы. Отклонённая роль уходит из подборки.';
+
 export function MobileHeader({
   title,
   onBack,
@@ -103,8 +107,8 @@ function MobileRolesGroup({
         </ul>
       )}
       <p className="career-m-note">
-        Гипотеза — вывод консультанта, не факт. Вилка только по вакансиям с указанной зарплатой.
-        Поиск по роли открывается после проверки навыков.
+        Гипотеза — вывод консультанта, не факт. Вилка только по вакансиям с указанной зарплатой.{' '}
+        {ROLES_SEARCH_NOTE}
       </p>
     </section>
   );

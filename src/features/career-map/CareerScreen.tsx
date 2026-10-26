@@ -18,7 +18,12 @@ import {
   CareerMarketErrorState,
   CareerStaleMarketNote,
 } from './CareerStateComponents';
-import { MobileCareerHome, MobileConditionPush, MobileRolePush } from './CareerMobileComponents';
+import {
+  MobileCareerHome,
+  MobileConditionPush,
+  MobileRolePush,
+  ROLES_SEARCH_NOTE,
+} from './CareerMobileComponents';
 import { useCareerScreenState, type CareerScreenState } from './useCareerScreenState';
 import { loadCareerRoles } from './careerRoleStore';
 
@@ -136,18 +141,15 @@ function ConditionEditor({
   }
 }
 
-/** B565: «пока его нет» — только пока ни одна роль не прошла проверку навыков. */
-function RolesSearchPlate({ hasCheckedRole }: { hasCheckedRole: boolean }): ReactElement {
+/**
+ * Решение владельца 26.10: роли из профиля и разговора задают подборку сразу,
+ * проверка навыков роль подтверждает, но поиск её не ждёт (отменяет правило B445).
+ */
+function RolesSearchPlate(): ReactElement {
   return (
     <p className="career-plate">
       <Info size={18} aria-hidden />
-      <span>
-        Поиск по ролям открывается после проверки навыков: так подборка опирается на подтверждённое,
-        а не на догадки.
-        {hasCheckedRole
-          ? null
-          : ' Пока его нет, доступен свободный просмотр всех вакансий каталога.'}
-      </span>
+      <span>{ROLES_SEARCH_NOTE}</span>
     </p>
   );
 }
@@ -173,7 +175,7 @@ function CareerRolesSection({
         </span>
         <SectionInfoToggle id="roles-explain" text={ROLES_EXPLAIN} />
       </div>
-      <RolesSearchPlate hasCheckedRole={roles.some((role) => role.status !== 'hypothesis')} />
+      <RolesSearchPlate />
       {roles.length === 0 ? (
         <p className="career-role-meta">
           Ролей пока нет. Консультант назовёт их, когда в профиле будет опыт.

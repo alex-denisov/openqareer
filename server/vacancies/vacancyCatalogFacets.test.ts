@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { catalogListings, listingEntries, MIN_LISTING_SIZE } from './vacancyCatalogFacets';
+import {
+  catalogListings,
+  listingEntries,
+  MIN_LISTING_SIZE,
+  roleLabelFromTitle,
+} from './vacancyCatalogFacets';
 import type { CatalogEntry } from './vacancyCatalogPage';
 
 function entry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
@@ -72,6 +77,23 @@ describe('списки каталога по месту и роли (B209, ср�
     expect(place?.placeLabel).toBe('Москва');
     const role = listings.find((listing) => listing.role === 'frontend-developer');
     expect(role?.roleLabel).toBe('Frontend Developer');
+  });
+
+  it('называет роль по-русски, когда в списке есть русский заголовок', () => {
+    const entries = [
+      ...many(2, { title: 'Accountant', location: 'Москва' }),
+      ...many(2, { title: 'Бухгалтер', location: 'Москва' }).map((item, index) => ({
+        ...item,
+        key: `ru${index}`,
+      })),
+    ];
+    const role = catalogListings(entries).find((listing) => listing.role === 'accountant');
+    expect(role?.roleLabel).toBe('Бухгалтер');
+  });
+
+  it('не оставляет висящий дефис от снятого уровня', () => {
+    expect(roleLabelFromTitle('Junior-маркетолог')).toBe('Маркетолог');
+    expect(roleLabelFromTitle('Senior-разработчик')).toBe('Разработчик');
   });
 
   it('отдаёт вакансии выбранного списка', () => {

@@ -20,6 +20,7 @@ import {
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { registerCampaignRoutes } from './campaignRoutes';
 import { readRoleContext, type RoleContext } from './vacancyRoleContext';
+import { careerRolesWithCandidateChoices, persistCareerRoles } from './careerRoleSync';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
@@ -110,8 +111,16 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
     };
   }
 
+  const roles = careerRolesWithCandidateChoices(deps, candidate.id, context);
+  try {
+    persistCareerRoles(deps, candidate.id, roles);
+  } catch (error) {
+    // Подбор останется на прежних ролях; экран «Карьеры» от этого не падает.
+    request.log.error({ error }, 'career_roles_persist_failed');
+  }
+
   return {
-    data: context.proposals,
+    data: roles,
     meta: {
       requestId: request.id,
       poolSize: context.poolSize,

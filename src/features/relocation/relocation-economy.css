@@ -373,3 +373,14 @@
 .career-relocation-mobile-economy .career-relocation-economy-stack {
   margin-block: var(--career-space-1);
 }
+
+/* «Уточнить расходы» без страны со шкалой: просьба выбрать страну (26.10). */
+.career-relocation-economy-prompt {
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-warning);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}

@@ -37,15 +37,11 @@ describe('career role prompts', () => {
     expect(stage.indexOf('СТРУКТУРНЫЙ ШАГ')).toBeGreaterThan(stage.indexOf('ФОРМАТ ОТВЕТА'));
   });
 
-  it('only the consultant lists the candidate facts, so a long answer fits the stage (26.10)', () => {
-    const flat = (text: string) => text.replace(/\s+/g, ' ');
-    const consultant = flat(careerInstructionsForRole('career_consultant'));
-    expect(consultant).toContain('Факты кандидата выписываешь только ты');
-    expect(consultant).toContain('confidence = candidate-reported');
-    for (const role of ['career_strategist', 'career_expert'] as const) {
-      const text = flat(careerInstructionsForRole(role));
-      expect(text).toContain('Факты кандидата в memoryCandidates не выписывай');
-      expect(text).not.toContain('Факты кандидата выписываешь только ты');
+  it('leaves candidate facts to the server extractor (26.10)', () => {
+    for (const role of ['career_consultant', 'career_strategist', 'career_expert'] as const) {
+      const text = careerInstructionsForRole(role).replace(/\s+/g, ' ');
+      expect(text).toContain('Факты кандидата выписывает сервер отдельно');
+      expect(text).not.toContain('confidence = candidate-reported');
     }
   });
 });

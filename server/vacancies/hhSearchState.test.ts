@@ -72,6 +72,56 @@ describe('parseHhSearchState', () => {
     expect(parsed.provenance.externalId).toBe('133712099');
   });
 
+  it('помечает работодателя-человека по категории площадки (INC-023)', () => {
+    const person = (category: string) =>
+      parseHhSearchState(
+        pageWith({
+          vacancySearchResult: {
+            totalResults: 1,
+            vacancies: [{ ...vacancy, company: { '@category': category, name: 'Иванова Мария' } }],
+          },
+        }),
+        context,
+      ).vacancies[0];
+    expect(person('PRIVATE_INDIVIDUAL')?.employerIsPerson).toBe(true);
+    expect(person('PRIVATE_RECRUITER')?.employerIsPerson).toBe(true);
+    expect(person('PROJECT_DIRECTOR')?.employerIsPerson).toBe(true);
+    expect(person('COMPANY')?.employerIsPerson).toBeUndefined();
+    expect(person('AGENCY')?.employerIsPerson).toBeUndefined();
+  });
+
+  /**
+   * Живая страница 26.10.2026 отдаёт `mode: "MONTH"` и отдельно `frequency`
+   * (как часто платят). Период — только `mode`; частота выплат его не заменяет.
+   */
+  it('берёт период вилки из mode площадки и не выводит его из частоты выплат', () => {
+    const salaryOf = (compensation: Record<string, unknown>) =>
+      parseHhSearchState(
+        pageWith({
+          vacancySearchResult: { totalResults: 1, vacancies: [{ ...vacancy, compensation }] },
+        }),
+        context,
+      ).vacancies[0]?.salary;
+    const base = { currencyCode: 'RUR', from: 140000, to: 160000, gross: false };
+    expect(
+      salaryOf({
+        ...base,
+        perModeFrom: 140000,
+        perModeTo: 160000,
+        mode: 'MONTH',
+        frequency: 'TWICE_PER_MONTH',
+      }),
+    ).toEqual({
+      ...{ from: 140000, to: 160000, currency: 'RUR', gross: false },
+      period: 'month',
+      periodEvidence: { field: 'hh.compensation.mode', value: 'MONTH' },
+    });
+    expect(salaryOf({ ...base, frequency: 'MONTHLY' })?.period).toBeUndefined();
+    expect(salaryOf({ ...base, mode: 'SHIFT' })?.period).toBeUndefined();
+    // Сумма «за месяц» разошлась с суммой режима — какая из них месячная, неизвестно.
+    expect(salaryOf({ ...base, perModeFrom: 7000, mode: 'MONTH' })?.period).toBeUndefined();
+  });
+
   it('сохраняет требования и обязанности из сниппета поисковой выдачи', () => {
     const page = readFileSync(
       fileURLToPath(new URL('./__fixtures__/hh-search-snippet.html', import.meta.url)),
@@ -257,9 +307,7 @@ describe('parseHhSearchState', () => {
     const parsed = result.vacancies[0];
     expect(parsed.description).toContain('Опыт работы с TypeScript и Node.js от 3 лет.');
     expect(parsed.description).toContain('Проектирование и разработка масштабируемых сервисов.');
-    expect(parsed.qualifications).toEqual([
-      'Опыт работы с TypeScript и Node.js от 3 лет.',
-    ]);
+    expect(parsed.qualifications).toEqual(['Опыт работы с TypeScript и Node.js от 3 лет.']);
     expect(parsed.responsibilities).toEqual([
       'Проектирование и разработка масштабируемых сервисов.',
     ]);
