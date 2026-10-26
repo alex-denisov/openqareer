@@ -641,6 +641,7 @@ function VacancyScreenDetailGrid({ cluster, explanation, rowProps, rowState }: D
           item={{ cluster, explanation }}
           onAddToProfile={rowProps.onAddToProfile}
           showTable={false}
+          hideWhenNumber
         />
       </div>
       <VacancyScreenDescription cluster={cluster} onOpenFull={() => rowState.setInfoOpen(true)} />

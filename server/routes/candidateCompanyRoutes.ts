@@ -1,3 +1,4 @@
+import type { VacancyCluster } from '../domain/unifiedVacancy';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { CandidateCompanyRecruiter } from '../../shared/candidateCompany';
@@ -82,10 +83,11 @@ function publicSourceLabel(name?: string, sourceId?: string): string {
 }
 
 function projectVacancyItems(
-  items: Awaited<ReturnType<typeof readCurrentMatched>>,
+  items: ReadonlyArray<{ readonly cluster: VacancyCluster }>,
+  companyNameOverride?: string,
 ): CandidateCompanyVacancyInput[] {
   return items.flatMap(({ cluster }) => {
-    const companyName = cluster.canonicalCompany.trim();
+    const companyName = (companyNameOverride ?? cluster.canonicalCompany).trim();
     if (!companyName) return [];
     const source = cluster.sources[0];
     return [
@@ -179,12 +181,44 @@ function linkedinStatus(
   return { status: 'disconnected', importedAt: contactsImportedAt, contactsImported };
 }
 
+/** Per wanted company outside the selection; the company screen shows up to this many. */
+const WANTED_POOL_VACANCY_LIMIT = 20;
+
+/**
+ * A wanted company with no vacancy in the current selection takes its open vacancies from
+ * the pool, under the wanted name so they land on its row («Autodesk, Inc.» → «Autodesk»).
+ */
+function wantedPoolVacancies(
+  deps: RouteDeps,
+  wants: ReadonlyArray<{ readonly companyKey: string; readonly companyName: string }>,
+  selection: readonly CandidateCompanyVacancyInput[],
+): CandidateCompanyVacancyInput[] {
+  const engine = deps.multiSourceEngine as Partial<
+    Pick<RouteDeps['multiSourceEngine'], 'getCompanyClusters'>
+  >;
+  if (typeof engine.getCompanyClusters !== 'function') return [];
+  const covered = new Set(selection.map((vacancy) => candidateCompanyKey(vacancy.companyName)));
+  const seen = new Set(selection.map((vacancy) => vacancy.id));
+  return wants.flatMap((want) => {
+    if (covered.has(want.companyKey)) return [];
+    const clusters = engine.getCompanyClusters!(want.companyName, WANTED_POOL_VACANCY_LIMIT).filter(
+      (cluster) => !seen.has(cluster.id),
+    );
+    return projectVacancyItems(
+      clusters.map((cluster) => ({ cluster })),
+      want.companyName,
+    );
+  });
+}
+
 async function companyContext(
   deps: RouteDeps,
   candidateId: string,
 ): Promise<CandidateCompanyContext> {
   const matches = await readCurrentMatched(deps, candidateId);
-  const vacancies = projectVacancyItems(matches);
+  const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
+  const selection = projectVacancyItems(matches);
+  const vacancies = [...selection, ...wantedPoolVacancies(deps, wants, selection)];
   const vacancyCompanyKeys = new Map(
     vacancies.map((vacancy) => [vacancy.id, candidateCompanyKey(vacancy.companyName)]),
   );
@@ -194,7 +228,6 @@ async function companyContext(
   const jobs = (deps.recruiterContactsRepo?.listJobsByCandidateId(candidateId) ?? [])
     .filter((job) => vacancyCompanyKeys.has(job.vacancyId))
     .map((job) => ({ vacancyId: job.vacancyId, status: job.status }));
-  const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
   const networkContactCounts = readCandidateNetworkContactCounts(
     deps.recruiterContactsRepo,
     candidateId,

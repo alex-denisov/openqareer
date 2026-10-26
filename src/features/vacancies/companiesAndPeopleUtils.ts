@@ -157,14 +157,18 @@ export function groupCompanyPeople(responses: readonly VacancyConnectionCircles[
   return { people, coldVacancyId };
 }
 
-/** Saved step first; otherwise one derived from a real path or vacancy; otherwise honest «не задан». */
+/** A saved «написать <имя>» needs someone on the «Люди» list to write to. */
+const WRITE_STEP = /^\s*напис/iu;
+
+/** Saved step first; otherwise one derived from a real path or vacancy; otherwise none (''). */
 export function companyNextStepText(
   company: CandidateCompanyOpportunity,
   people: { readonly people: readonly CompanyPerson[] },
 ): string {
-  if (company.nextStep) {
-    const due = company.nextStep.dueAt ? `, до ${formatObservedDate(company.nextStep.dueAt)}` : '';
-    return `Следующий шаг: ${company.nextStep.text}${due}`;
+  const saved = company.nextStep;
+  if (saved && (people.people.length > 0 || !WRITE_STEP.test(saved.text))) {
+    const due = saved.dueAt ? `, до ${formatObservedDate(saved.dueAt)}` : '';
+    return `Следующий шаг: ${saved.text}${due}`;
   }
   const vacancy = company.vacancies[0];
   const person = people.people[0];
@@ -172,5 +176,5 @@ export function companyNextStepText(
     return `Следующий шаг: откликнуться на ${vacancy.title}, написать ${dativeNameRu(person.fullName)} (круг ${person.circle})`;
   }
   if (vacancy) return `Следующий шаг: откликнуться на ${vacancy.title}`;
-  return 'Следующий шаг не задан';
+  return '';
 }

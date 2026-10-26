@@ -526,7 +526,7 @@ export function CompanyMobilePush(props: CompanyMobilePushProps) {
   useEscape(props.onBack);
   const { company, people } = props;
   const view = peopleView(props, setMessageTo);
-  const showNextStep = company.nextStep !== null || people.people.length > 0;
+  const nextStep = people.loading ? '' : companyNextStepText(company, people);
   return (
     <>
       <div className="vacancy-push-backdrop" aria-hidden="true" />
@@ -535,7 +535,7 @@ export function CompanyMobilePush(props: CompanyMobilePushProps) {
         <div className="vacancy-push-body">
           <div className="vacancy-push-hero">
             <h2>{company.name}</h2>
-            <p>{companyMeta(company) || 'Источник данных неизвестен'}</p>
+            {companyMeta(company) ? <p>{companyMeta(company)}</p> : null}
           </div>
           <WantBlock props={props} />
           {props.actionError ? (
@@ -543,11 +543,7 @@ export function CompanyMobilePush(props: CompanyMobilePushProps) {
               {props.actionError}
             </p>
           ) : null}
-          {showNextStep ? (
-            <Note icon={<ArrowRight aria-hidden="true" />}>
-              {companyNextStepText(company, people)}
-            </Note>
-          ) : null}
+          {nextStep ? <Note icon={<ArrowRight aria-hidden="true" />}>{nextStep}</Note> : null}
           <VacancyGroup props={props} />
           <section className="company-push-people" aria-label="Люди">
             {view.body}

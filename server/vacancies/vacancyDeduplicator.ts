@@ -84,6 +84,16 @@ function cleanCompanyName(company: string): string {
     .trim();
 }
 
+/** Работодатель без юридической формы: «Autodesk, Inc.» и «Autodesk» — одна компания. */
+export function companyMatchName(company: string): string {
+  return cleanCompanyName(company).replace(/\./g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Токены работодателя, как в ключах `company_token` (B230). */
+export function companyNameTokens(company: string): string[] {
+  return Array.from(tokenize(cleanCompanyName(company)));
+}
+
 /**
  * Вакансия, разобранная один раз.
  *

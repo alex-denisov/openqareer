@@ -180,6 +180,8 @@ export interface VacancyPoolStore {
   }>;
   getCatalogEntry?(key: string): CatalogEntryRow | undefined;
   getCluster?(clusterId: string): VacancyCluster | undefined;
+  /** Действующие кластеры одного работодателя — экран компании, по индексу ключей. */
+  loadClustersByCompany?(companyName: string, limit: number): VacancyCluster[];
   /**
    * Запись независимо от того, снята ли она (B247 S5): нужна только чтобы
    * достать `externalId`/`sourceUrl` для поиска кластера по ключу `member`,

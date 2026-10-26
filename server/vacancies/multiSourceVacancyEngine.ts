@@ -727,6 +727,14 @@ export class MultiSourceVacancyEngine {
    * the production Node process. Internal matching keeps its full path; only
    * public HTML gets this deliberate freshness-bounded page.
    */
+  /**
+   * Вакансии компании вне подборки (экран компании из «Хочу»): точечное чтение
+   * по ключам работодателя, без загрузки всех кластеров в HTTP-путь.
+   */
+  public getCompanyClusters(companyName: string, limit = 20): VacancyCluster[] {
+    return this.pool.loadClustersByCompany?.(companyName, limit) ?? [];
+  }
+
   public getPublicCatalogClusters(limit = 24): VacancyCluster[] {
     if (typeof this.pool.loadClustersPage === 'function') {
       return this.pool.loadClustersPage(limit).filter((cluster) => cluster.status === 'active');

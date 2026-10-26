@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   companyLocationLabel,
+  companyNextStepText,
   companySourceSummary,
   groupCompanyPeople,
   isContactImportStale,
 } from './companiesAndPeopleUtils';
+import type { CandidateCompanyOpportunity } from '../../../shared/candidateCompany';
 import type { ConnectionCirclePath, VacancyConnectionCircles } from './vacancyLetterApi';
 
 const REFERENCE_NOW = Date.parse('2026-10-14T10:00:00.000Z');
@@ -176,5 +178,33 @@ describe('companyLocationLabel', () => {
   it('names an unknown place', () => {
     expect(companyLocationLabel(null)).toBe('Место неизвестно');
     expect(companyLocationLabel('  ')).toBe('Место неизвестно');
+  });
+});
+
+describe('companyNextStepText', () => {
+  const base = {
+    nextStep: { text: 'написать Igor Siusiukov', dueAt: null },
+    vacancies: [],
+  } as unknown as CandidateCompanyOpportunity;
+  const vacancy = { id: 'v1', title: 'Senior Director' };
+  const igor = { id: 'p1', fullName: 'Igor Siusiukov', circle: 1 } as never;
+
+  it('drops a saved «написать <имя>» step while the company has no people', () => {
+    expect(companyNextStepText(base, { people: [] })).toBe('');
+    expect(companyNextStepText({ ...base, vacancies: [vacancy] } as never, { people: [] })).toBe(
+      'Следующий шаг: откликнуться на Senior Director',
+    );
+  });
+
+  it('keeps the saved step once a person is there, and other saved steps always', () => {
+    expect(companyNextStepText(base, { people: [igor] })).toBe(
+      'Следующий шаг: написать Igor Siusiukov',
+    );
+    expect(
+      companyNextStepText(
+        { ...base, nextStep: { text: 'подготовить резюме', dueAt: null } } as never,
+        { people: [] },
+      ),
+    ).toBe('Следующий шаг: подготовить резюме');
   });
 });
