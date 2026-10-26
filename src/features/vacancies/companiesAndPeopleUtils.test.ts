@@ -167,6 +167,12 @@ describe('companyLocationLabel', () => {
     expect(companyLocationLabel('Argentina; Austria; Belgium; Brazil')).toBe('Argentina и ещё 3');
   });
 
+  it('translates a bare source count such as Workday «5 Locations»', () => {
+    expect(companyLocationLabel('5 Locations')).toBe('5 локаций');
+    expect(companyLocationLabel('2 locations')).toBe('2 локации');
+    expect(companyLocationLabel('Remote; 21 Locations')).toBe('Remote и ещё 1');
+  });
+
   it('names an unknown place', () => {
     expect(companyLocationLabel(null)).toBe('Место неизвестно');
     expect(companyLocationLabel('  ')).toBe('Место неизвестно');

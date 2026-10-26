@@ -56,7 +56,10 @@ describe('RelocationEconomy', () => {
     const legend = host?.querySelector('.career-relocation-economy-legend')?.textContent ?? '';
     expect(legend).toMatch(/Налоги и взносы\s*\d+ %/u);
     expect(legend).toContain('Аренда');
-    expect(legend).toContain('нет данных');
+    expect(legend).toContain('нет данных в источниках, указать');
+    expect(host?.querySelector('.career-relocation-economy-legend button')?.textContent).toBe(
+      'указать',
+    );
     expect(host?.textContent).toContain('Откуда цифры');
     expect(host?.querySelector('input[type="range"]')).not.toBeNull();
   });

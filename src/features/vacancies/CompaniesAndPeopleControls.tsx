@@ -369,15 +369,17 @@ function CompanyFilterSheetHeader({
   view,
   onBack,
   onReset,
+  onClose,
 }: {
   readonly view: SheetView;
   readonly onBack: () => void;
   readonly onReset: () => void;
+  readonly onClose: () => void;
 }) {
   const title = view === 'filter' ? 'Показывать' : view === 'sort' ? 'Сортировка' : 'Фильтры';
   return (
     <div className="companies-people-sheet-head">
-      {view === 'overview' ? null : (
+      {view === 'sort' ? (
         <button
           type="button"
           className="companies-people-sheet-back"
@@ -386,11 +388,16 @@ function CompanyFilterSheetHeader({
         >
           <CaretLeft aria-hidden="true" />
         </button>
-      )}
+      ) : null}
       <h2>{title}</h2>
       {view === 'overview' ? (
         <button type="button" className="companies-people-sheet-reset" onClick={onReset}>
           Сбросить
+        </button>
+      ) : null}
+      {view === 'filter' ? (
+        <button type="button" className="companies-people-sheet-reset" onClick={onClose}>
+          Закрыть
         </button>
       ) : null}
     </div>
@@ -482,6 +489,7 @@ function CompanyFilterSheetForm({
           setDraftFilter('all');
           setDraftSort('default');
         }}
+        onClose={close}
       />
       <SheetBody
         view={view}
@@ -489,19 +497,25 @@ function CompanyFilterSheetForm({
         sort={draftSort}
         counts={counts}
         onView={setView}
-        onFilter={setDraftFilter}
-        onSort={setDraftSort}
-      />
-      <button
-        type="button"
-        className="companies-people-sheet-cta"
-        onClick={() => {
-          onApply(draftFilter, draftSort);
+        onFilter={(value) => {
+          // Макет 13: выбор в листе «Показывать» применяется сразу и закрывает лист.
+          onApply(value, draftSort);
           close();
         }}
-      >
-        Показать {filterCount(counts, draftFilter) ?? 'неизвестно'}
-      </button>
+        onSort={setDraftSort}
+      />
+      {view === 'filter' ? null : (
+        <button
+          type="button"
+          className="companies-people-sheet-cta"
+          onClick={() => {
+            onApply(draftFilter, draftSort);
+            close();
+          }}
+        >
+          Показать {filterCount(counts, draftFilter) ?? 'неизвестно'}
+        </button>
+      )}
     </form>
   );
 }

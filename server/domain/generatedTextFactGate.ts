@@ -23,6 +23,25 @@ export interface GeneratedTextFactCheck {
 const OWNERSHIP = /(?:созда[лн]|основа[лт]|возглав|руковод|разработа[лн]|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|утро|автор|реализова[лн]|led|founded|created|built|launched|increased|reduced|achieved|implemented|authored|doubled|managed|delivered|организ|управл)/iu;
 const DENIAL = /(?:не могу подтвердить|не подтверждаю|не удалось подтвердить|(?:^|\s)не\s|cannot confirm|can't confirm|unable to confirm|did not|never)/iu;
 
+// Sentences of the letter template itself (vacancyPitchService copy): greetings,
+// interest, call proposals, profile intros. They say nothing checkable about the
+// candidate, so asking to confirm them buried the real claims (11 notices, 26.10).
+const TEMPLATE_SENTENCE = new RegExp([
+  String.raw`^(?:(?:hello|hi|dear)\b|здравствуйте|уважаем)`,
+  String.raw`\b(?:i'?m interested in|applying for|i'?m submitting my application|is a company i want to work for)`,
+  String.raw`\b(?:i'?d be glad|happy to discuss|let's set up|great to connect)`,
+  String.raw`\bmy profile (?:confirms hands-on experience|has no confirmed facts)`,
+  String.raw`requirements have not been matched`,
+  String.raw`(?:^|\s)(?:заинтересовал[аи]?|откликаюсь|пишу по поводу|меня зовут)\s`,
+  String.raw`(?:^|\s)(?:буду рад|готов обсудить|предлагаю созвониться|рад знакомству)`,
+  String.raw`компания, в которой я хочу работать`,
+  String.raw`в профиле (?:подтверждён практический опыт|нет подтверждённых фактов)`,
+  String.raw`требования вакансии не сопоставлены`,
+].join('|'), 'iu');
+
+// Intros glued to the first fact: the fact after them is still checked.
+const TEMPLATE_PREFIX = /^(?:my profile records the following facts:|в профиле зафиксированы следующие факты:|коротко о моём опыте:)\s*/iu;
+
 function normalized(text: string): string {
   return text.toLocaleLowerCase().replace(/ё/gu, 'е')
     .replace(/(\d),(\d)/gu, '$1.$2')
@@ -78,25 +97,38 @@ export function checkPitchOutputFacts(
   };
 }
 
+const SHOWN_CLAIMS = 3;
+
+/** Notices are for the candidate, not the letter: always in Russian, one line
+ *  for all unconfirmed claims instead of a question per sentence (26.10). */
 export function generatedTextFactNotices(
-  language: 'en' | 'ru',
+  _letterLanguage: 'en' | 'ru',
   outputChecks: readonly GeneratedTextFactCheck[],
   modelCheck?: GeneratedTextFactCheck,
 ): string[] {
   const notices: string[] = [];
   if (modelCheck?.status === 'needs_confirmation') {
-    notices.push(language === 'en'
-      ? 'The generated letter contains claims that need confirmation. A letter based on your profile facts is shown instead. Review the facts before sending.'
-      : 'В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.');
+    notices.push('В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.');
   }
-  const unresolved = outputChecks.flatMap((check) => check.claims)
-    .filter((claim) => claim.action === 'ask_candidate');
-  for (const claim of unresolved) {
-    notices.push(language === 'en'
-      ? `Can you confirm this statement from your profile? «${claim.text}»`
-      : `Можете подтвердить это утверждение из профиля? «${claim.text}»`);
+  const unresolved = Array.from(new Set(outputChecks.flatMap((check) => check.claims)
+    .filter((claim) => claim.action === 'ask_candidate')
+    .map((claim) => claim.text.trim())
+    .filter(Boolean)));
+  if (unresolved.length) {
+    const shown = unresolved.slice(0, SHOWN_CLAIMS).map((text) => `«${text}»`).join(', ');
+    const rest = unresolved.length - SHOWN_CLAIMS;
+    notices.push(`Перед отправкой сверьте с профилем ${unresolved.length} ${claimWord(unresolved.length)}: ${shown}${rest > 0 ? ` и ещё ${rest}` : ''}.`);
   }
-  return Array.from(new Set(notices));
+  return notices;
+}
+
+function claimWord(count: number): string {
+  const tens = count % 100;
+  const last = count % 10;
+  if (tens >= 11 && tens <= 14) return 'утверждений';
+  if (last === 1) return 'утверждение';
+  if (last >= 2 && last <= 4) return 'утверждения';
+  return 'утверждений';
 }
 
 /** Only candidate-owned, non-sensitive source facts can support generated claims. */
@@ -107,7 +139,9 @@ export function checkGeneratedTextFacts(
   const eligible = facts.filter((fact) => fact.kind === 'fact' && !fact.sensitive &&
     Boolean(fact.id.trim()) && Boolean(fact.statement.trim()) &&
     (fact.sourceMessageIds?.length ?? 0) > 0);
-  const sentences = text.split(/(?<=[.!?])\s+|\n+/u).map((part) => part.trim()).filter(Boolean);
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/u)
+    .map((part) => part.trim().replace(TEMPLATE_PREFIX, ''))
+    .filter((part) => part && !TEMPLATE_SENTENCE.test(part));
   const claims = sentences.filter((part) => /\d/u.test(part) || OWNERSHIP.test(part) || /проект|project/iu.test(part) || /(?:^|[\s,])(?:я|мой|моя|мои)(?=[\s,])|\b(?:i|my)\b/iu.test(part))
     .map((part) => checkClaim(part, eligible));
   return {

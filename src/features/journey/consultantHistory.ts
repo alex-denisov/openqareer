@@ -20,9 +20,34 @@ export function isImportAnnouncement(message: ConsultantHistoryMessage): boolean
 export function consultantTurns<T extends ConsultantHistoryMessage>(
   messages: readonly T[] | undefined,
 ): T[] {
-  return withoutRepeatedQuestions(
-    (messages ?? []).filter((message) => !isImportAnnouncement(message)),
+  return latestVacancyQuestionOnly(
+    withoutRepeatedQuestions((messages ?? []).filter((message) => !isImportAnnouncement(message))),
   );
+}
+
+/** «Обсудить» на вакансии отправляет один и тот же шаблон вопроса. */
+const VACANCY_QUESTION = /^Почему (?:«[^»]*»|эта вакансия) подходит\?/u;
+
+/**
+ * One theme, one question: earlier «Почему … подходит?» questions and their
+ * answers give way to the latest one (four in a row cluttered the panel, 26.10).
+ */
+function latestVacancyQuestionOnly<T extends ConsultantHistoryMessage>(
+  messages: readonly T[],
+): T[] {
+  const isVacancyQuestion = (message: T) =>
+    message.role === 'user' && VACANCY_QUESTION.test(message.content.trim());
+  const lastIndex = messages.reduce(
+    (last, message, index) => (isVacancyQuestion(message) ? index : last),
+    -1,
+  );
+  const visible: T[] = [];
+  let hiding = false;
+  messages.forEach((message, index) => {
+    if (message.role === 'user') hiding = isVacancyQuestion(message) && index !== lastIndex;
+    if (!hiding) visible.push(message);
+  });
+  return visible;
 }
 
 /**

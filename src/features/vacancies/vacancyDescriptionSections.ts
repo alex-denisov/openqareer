@@ -1,6 +1,8 @@
 export interface DescriptionSection {
   readonly title: string;
   readonly items: readonly string[];
+  /** Which items were list lines in the source; the rest are paragraphs and subheadings. */
+  readonly bullets: readonly boolean[];
 }
 
 export interface DescriptionSections {
@@ -47,17 +49,19 @@ export function parseDescriptionSections(text: string): DescriptionSections | nu
     .map((line) => line.trim())
     .filter(Boolean);
   const intro: string[] = [];
-  const sections: { title: string; items: string[] }[] = [];
+  const sections: { title: string; items: string[]; bullets: boolean[] }[] = [];
   for (const line of lines) {
     const heading = headingOf(line);
     if (heading) {
-      sections.push({ title: heading, items: [] });
+      sections.push({ title: heading, items: [], bullets: [] });
       continue;
     }
     const item = line.replace(BULLET, '');
     const current = sections.at(-1);
-    if (current) current.items.push(item);
-    else intro.push(line);
+    if (current) {
+      current.items.push(item);
+      current.bullets.push(BULLET.test(line));
+    } else intro.push(line);
   }
   const filled = sections.filter((section) => section.items.length > 0);
   if (filled.length === 0) return null;

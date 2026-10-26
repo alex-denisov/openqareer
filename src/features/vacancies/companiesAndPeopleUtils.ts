@@ -28,13 +28,20 @@ export function companyVacancySummary(company: CandidateCompanyOpportunity): str
 }
 
 /** A company hiring in many places shows one line: the first place and how many more (mockup 13). */
+/** Workday и подобные источники пишут вместо города «5 Locations». */
+function sourceLocationCountRu(place: string): string {
+  const count = /^(\d+)\s+locations?$/iu.exec(place);
+  return count ? pluralRu(Number(count[1]), ['локация', 'локации', 'локаций']) : place;
+}
+
 export function companyLocationLabel(location: string | null): string {
   const places = (location ?? '')
     .split(';')
     .map((place) => place.trim())
     .filter(Boolean);
   if (places.length === 0) return 'Место неизвестно';
-  return places.length === 1 ? places[0] : `${places[0]} и ещё ${places.length - 1}`;
+  if (places.length === 1) return sourceLocationCountRu(places[0]);
+  return `${places[0]} и ещё ${places.length - 1}`;
 }
 
 export function formatObservedDate(value: string | null): string {
