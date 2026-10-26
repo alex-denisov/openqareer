@@ -52,7 +52,7 @@ function openWebDiscovery(options: RecruiterIntelligenceWorkerOptions): Discover
   };
 }
 
-/** Досье B258 к каждому найденному человеку; без пути открытого веба — только известные каналы. */
+/** Каналы B258 к каждому найденному человеку; без пути открытого веба — только известные каналы. */
 async function withDossiers(
   contacts: readonly RecruiterContact[],
   vacancy: UnifiedVacancyInput,

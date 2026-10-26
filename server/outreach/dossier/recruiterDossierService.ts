@@ -72,7 +72,7 @@ export interface DossierServiceOptions extends DossierDeps {
   readonly database: DatabaseSync;
 }
 
-/** Досье только на конкретного человека: «Команда найма» без имени не ищется. */
+/** Сбор каналов только на конкретного человека: «Команда найма» без имени не ищется. */
 export async function withDossier(
   contact: RecruiterContact,
   companyDomain: string | undefined,

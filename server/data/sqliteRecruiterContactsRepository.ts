@@ -427,7 +427,7 @@ export class SqliteRecruiterContactsRepository {
     this.pruneChannels();
   }
 
-  /** Каналы живут, пока жив контакт: удаление контакта уносит и досье. */
+  /** Каналы живут, пока жив контакт: удаление контакта уносит и его каналы. */
   private pruneChannels(): void {
     this.database.exec(
       'DELETE FROM recruiter_contact_channels WHERE contact_id NOT IN (SELECT id FROM recruiter_contacts)',
