@@ -87,6 +87,17 @@ describe('RelocationEconomy', () => {
     expect(host?.textContent).toContain('Откуда цифры');
   });
 
+  it('без страны «Уточнить расходы» просит выбрать страну и ставит на неё фокус (26.10)', async () => {
+    render(120_000, '');
+    await click('Уточнить расходы');
+
+    expect(host?.querySelector('[role="alert"]')?.textContent).toContain(
+      'Выберите страну — редактор расходов откроется для неё',
+    );
+    expect(document.activeElement?.id).toBe('career-relocation-economy-country');
+    expect(host?.textContent).not.toContain('Сколько детей переезжает');
+  });
+
   async function click(label: string) {
     const button = [...(host?.querySelectorAll('button') ?? [])].find((item) =>
       item.textContent?.includes(label),
@@ -97,7 +108,7 @@ describe('RelocationEconomy', () => {
     });
   }
 
-  function render(income: number) {
+  function render(income: number, countryCode = 'DE') {
     vi.spyOn(scenarioApi, 'listRelocationScenarios').mockResolvedValue({
       items: [],
       nextOffset: null,
@@ -109,8 +120,8 @@ describe('RelocationEconomy', () => {
       root?.render(
         <RelocationEconomy
           profile={emptyRelocationQuestionnaire()}
-          selectedCountryCodes={['DE']}
-          selectedCountryCode="DE"
+          selectedCountryCodes={countryCode ? [countryCode] : []}
+          selectedCountryCode={countryCode}
           grossAnnualIncome={income}
           onCountryCodeChange={vi.fn()}
           onGrossAnnualIncomeChange={vi.fn()}
