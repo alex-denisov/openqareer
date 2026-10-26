@@ -46,8 +46,10 @@ export function careerRolesWithCandidateChoices(
 
 /**
  * Запоминает роли, которые кандидат видит на «Карьере», чтобы подбор
- * «Вакансий» шёл по ним же. Роли рынка не сохраняются: они выведены из самой
- * подборки, и подбор по ним кормил бы сам себя. Пишет только при изменении.
+ * «Вакансий» шёл по ним же: что на экране, то и в подборе. Роли рынка тоже
+ * идут в подбор — на проде модель называния часто молчит, и все пять ролей
+ * «Карьеры» приходят из пула (26.10). Подбор идёт по функции и уровню роли, а
+ * не по её названию, поэтому сам себя он не раскачивает. Пишет при изменении.
  */
 export function persistCareerRoles(
   deps: Pick<RouteDeps, 'candidateStore'> & Partial<Pick<RouteDeps, 'matchedPoolPrecompute'>>,
@@ -66,7 +68,7 @@ export function persistCareerRoles(
   const rejected = rejectedCareerRoleIds(deps.candidateStore, candidateId);
   const wizard = new Set(campaign.roles.map(careerRoleId));
   const next: CareerRoleRef[] = roles
-    .filter((role) => role.origin === 'model' && !rejected.has(role.id) && !wizard.has(role.id))
+    .filter((role) => role.origin !== 'candidate' && !rejected.has(role.id) && !wizard.has(role.id))
     .slice(0, MAX_CAREER_ROLES)
     .map((role) => ({ id: role.id, title: role.title }));
   const previous = campaign.careerRoles ?? [];

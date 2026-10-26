@@ -33,7 +33,7 @@ function fakeStore(workspace: Partial<CandidateWorkspaceState> | null, rejected:
 const campaign = { roles: ['VP of Engineering'], regions: [], revision: 1, updatedAt: 'x' };
 
 describe('роли «Карьеры» задают подбор (26.10)', () => {
-  it('сохраняет роли модели без отклонённых, рыночных и уже выбранных в мастере', () => {
+  it('сохраняет показанные роли без отклонённых и уже выбранных в мастере', () => {
     const store = fakeStore({ campaign }, [careerRoleId('CTO')]);
     const prioritizeCampaign = vi.fn();
     const changed = persistCareerRoles(
@@ -49,6 +49,7 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
     expect(changed).toBe(true);
     expect(store.getCandidateWorkspace()?.campaign?.careerRoles).toEqual([
       { id: careerRoleId('Head of Engineering'), title: 'Head of Engineering' },
+      { id: careerRoleId('Engineering Lead'), title: 'Engineering Lead' },
     ]);
     expect(prioritizeCampaign).toHaveBeenCalledWith('c1');
   });
