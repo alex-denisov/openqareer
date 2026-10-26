@@ -163,8 +163,8 @@ export class SemanticBackfill {
   }
 
   /**
-   * CPO 26.10: модель ставила «Senior Manager …» уровень Head (3 724 названия
-   * на проде). Уровень становится lead, функции модели остаются. Один проход
+   * CPO 26.10: модель ставила «Senior Manager …», «Senior Engineering Manager»
+   * и «Руководитель группы …» уровень Head (3 724 названия на проде). Уровень становится lead, функции модели остаются. Один проход
    * по `title_parse` за процесс, вместе с исправлением по онтологии.
    */
   private seniorManagerCorrections(): { key: string; functions: string; levelRank: number }[] {
@@ -173,7 +173,8 @@ export class SemanticBackfill {
         `SELECT title_key, sample_title, functions FROM title_parse
          WHERE parsed_by = 'model' AND level_rank > ?
            AND (title_key LIKE '%senior manager%' OR title_key LIKE '%sr manager%'
-             OR title_key LIKE '%sr. manager%')`,
+             OR title_key LIKE '%sr. manager%' OR title_key LIKE '%senior % manager%'
+             OR title_key LIKE '%руководитель группы%' OR title_key LIKE '%group lead%')`,
       )
       .all(LEVEL_RANK.lead) as { title_key: string; sample_title: string; functions: string }[];
     return rows

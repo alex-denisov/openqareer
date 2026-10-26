@@ -80,14 +80,21 @@ describe('VertexModelTitleParser (B267 S4)', () => {
     const parser = new VertexModelTitleParser(vertex, {
       fetchImpl: async () =>
         vertexResponse([
-          { titleKey: 'vp marketing creative operations', functions: ['marketing', 'ops'], levelRank: 3 },
+          {
+            titleKey: 'vp marketing creative operations',
+            functions: ['marketing', 'ops'],
+            levelRank: 3,
+          },
         ]),
       token: async () => 'token',
     });
 
     await expect(
       parser.parse([
-        { titleKey: 'vp marketing creative operations', sampleTitle: 'VP Marketing Creative & Operations' },
+        {
+          titleKey: 'vp marketing creative operations',
+          sampleTitle: 'VP Marketing Creative & Operations',
+        },
       ]),
     ).resolves.toEqual([
       {

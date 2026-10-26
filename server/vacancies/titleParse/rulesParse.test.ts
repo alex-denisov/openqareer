@@ -93,6 +93,17 @@ describe('rulesParse (B267 S1)', () => {
     expect(rulesParse('Senior Manager, Head of Payments').levelRank).toBe(LEVEL_RANK.head);
   });
 
+  it('reads Senior Engineering Manager and «Руководитель группы» as lead', () => {
+    expect(rulesParse('Senior Engineering Manager').levelRank).toBe(LEVEL_RANK.lead);
+    expect(rulesParse('Senior Product Marketing Manager').levelRank).toBe(LEVEL_RANK.lead);
+    expect(
+      rulesParse('Head of 1C development / Руководитель группы разработки систем 1С').levelRank,
+    ).toBe(LEVEL_RANK.lead);
+    expect(rulesParse('Руководитель группы аналитики').levelRank).toBe(LEVEL_RANK.lead);
+    expect(rulesParse('Руководитель отдела разработки').levelRank).toBe(LEVEL_RANK.head);
+    expect(rulesParse('Director, Group Lead Platform').levelRank).toBe(LEVEL_RANK.head);
+  });
+
   it('reads Director as head, not c-level, unless it is Senior Director or VP', () => {
     expect(rulesParse('Director, Demand Generation').levelRank).toBe(LEVEL_RANK.head);
     expect(rulesParse('Senior Director, Product Management').levelRank).toBe(LEVEL_RANK.vp);
