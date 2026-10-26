@@ -1,0 +1,39 @@
+import { describe, expect, it } from 'vitest';
+import { looksLikePersonName, PRIVATE_EMPLOYER, publicEmployerName } from './privateEmployer';
+
+describe('частный работодатель в публичном каталоге (INC-023)', () => {
+  it.each([
+    'Иванова Мария Петровна',
+    'Петров Сергей Ильич',
+    'Мария Петровна Иванова',
+    'Сидоров-Белый Олег Евгеньевич',
+    'Иван Петрович',
+    'Иванов И.И.',
+    'Иванов И. И.',
+    'ИП Иванов Иван Иванович',
+    'ИП Сидорова',
+    'Индивидуальный предприниматель Кузнецов',
+  ])('узнаёт имя человека «%s»', (name) => {
+    expect(looksLikePersonName(name)).toBe(true);
+  });
+
+  it.each([
+    'Яндекс Крауд',
+    'Т-Банк',
+    'Рабинович Групп',
+    'Стоматологическая клиника Владимира Новикова',
+    'Ростелеком',
+    'Institute of Directors Moscow',
+    'ООО Иванов и партнёры',
+    '',
+  ])('не принимает компанию «%s» за человека', (name) => {
+    expect(looksLikePersonName(name)).toBe(false);
+  });
+
+  it('прячет имя человека и по флагу площадки, и по форме имени', () => {
+    expect(publicEmployerName('Иванова Мария Петровна')).toBe(PRIVATE_EMPLOYER);
+    expect(publicEmployerName('Anna Smith', true)).toBe(PRIVATE_EMPLOYER);
+    expect(publicEmployerName('Яндекс Крауд')).toBe('Яндекс Крауд');
+    expect(PRIVATE_EMPLOYER).toBe('Частный работодатель');
+  });
+});

@@ -12,6 +12,7 @@
  * (`seo/catalogIndexing`).
  */
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
+import { PRIVATE_EMPLOYER, publicEmployerName } from '../../shared/privateEmployer';
 import { isCountryName } from '../../shared/placeNames';
 import {
   CATALOG_ROOT,
@@ -139,10 +140,12 @@ export function readableSkill(skill: string): string {
 
 /** Карточка каталога, или `null`, если правило адресов не даёт вакансии адрес. */
 export function toCatalogEntry(cluster: VacancyCluster): CatalogEntry | null {
+  const company = publicEmployerName(cluster.canonicalCompany, cluster.employerIsPerson);
   const path = vacancyPath({
     id: cluster.id,
     title: cluster.canonicalTitle,
-    company: cluster.canonicalCompany,
+    // Имя частного лица не ложится и в адрес (INC-023).
+    company: company === PRIVATE_EMPLOYER ? '' : company,
   });
   if (!path) return null;
 
@@ -150,7 +153,7 @@ export function toCatalogEntry(cluster: VacancyCluster): CatalogEntry | null {
     key: vacancyKey(cluster.id),
     path,
     title: closeDanglingParentheses(cluster.canonicalTitle),
-    company: cluster.canonicalCompany,
+    company,
     ...(cluster.canonicalLocation ? { location: cluster.canonicalLocation } : {}),
     isRemote: cluster.isRemote,
     ...(salaryLabel(cluster) ? { salaryLabel: salaryLabel(cluster) } : {}),
@@ -331,7 +334,8 @@ function jobPosting(
 ): StructuredNode {
   const withdrawnAt = vacancy?.archivedAt;
   const employmentType = googleEmploymentType(vacancy?.employmentType);
-  const company = cluster.canonicalCompany.trim();
+  // Частное лицо — не организация, и его имени в разметке не место (INC-023).
+  const company = entry.company === PRIVATE_EMPLOYER ? '' : entry.company.trim();
   const validThrough = validThroughOf(entry.publishedAt, withdrawnAt);
 
   return {

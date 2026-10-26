@@ -6,6 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { normalizeAtsBoard } from '../vacancies/atsBoardAdapters';
 import { normalizeJsonSource } from '../vacancies/jsonSourceAdapters';
+import { parseHhSearchState } from '../vacancies/hhSearchState';
 import { clusterProjectionOf } from '../vacancies/vacancyPoolQuery';
 import { createClusterFromVacancy } from '../vacancies/vacancyDeduplicator';
 import {
@@ -160,6 +161,64 @@ describe('explicit salary evidence pipeline', () => {
             sampleSize: 5,
             lower: { p50: 90000 },
             upper: { p50: 120000 },
+          },
+        ],
+      });
+    } finally {
+      db.close();
+      pool.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+  it('publishes hh.ru monthly ranges from the page mode as their own comparable cohort', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'hh-salary-pipeline-'));
+    const path = join(directory, 'pool.db');
+    const pool = new SqliteVacancyPoolStore({ databasePath: path });
+    const db = new DatabaseSync(path);
+    try {
+      const vacancies = Array.from({ length: 5 }, (_, index) => ({
+        vacancyId: 900 + index,
+        name: 'Бухгалтер',
+        area: { '@id': 1, name: 'Москва' },
+        company: { '@category': 'COMPANY', name: `Компания ${index}` },
+        compensation: {
+          from: 100000 + index * 10000,
+          to: 150000 + index * 10000,
+          currencyCode: 'RUR',
+          gross: false,
+          perModeFrom: 100000 + index * 10000,
+          perModeTo: 150000 + index * 10000,
+          mode: 'MONTH',
+          frequency: 'TWICE_PER_MONTH',
+        },
+        publicationTime: { $: observedAt },
+        links: { desktop: `https://hh.ru/vacancy/${900 + index}` },
+      }));
+      const state = JSON.stringify({ vacancySearchResult: { totalResults: 5, vacancies } })
+        .replaceAll('&', '&#38;')
+        .replaceAll('<', '&#60;')
+        .replaceAll('>', '&#62;')
+        .replaceAll('"', '&#34;');
+      const parsed = parseHhSearchState(`<template id="HH-Lux-InitialState">${state}</template>`, {
+        observedAt,
+        sourceName: 'hh.ru',
+      }).vacancies;
+      expect(parsed).toHaveLength(5);
+      for (const vacancy of parsed) {
+        pool.upsertCluster(createClusterFromVacancy(clusterProjectionOf(vacancy)));
+      }
+      const [snapshot] = computeSalaryMarketSnapshots(db, new Date(observedAt));
+      expect(snapshot?.sampleSize).toBe(5);
+      expect(snapshot?.salary).toMatchObject({
+        status: 'available',
+        groups: [
+          {
+            currency: 'RUR',
+            period: 'month',
+            taxBasis: 'net',
+            sampleSize: 5,
+            lower: { p50: 120000 },
+            upper: { p50: 170000 },
           },
         ],
       });

@@ -1,4 +1,4 @@
-import { himalayasSalaryPeriod, leverSalaryPeriod } from '../../shared/vacancySalaryPeriod';
+import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 import type {
   UnifiedVacancy,
   VacancyCluster,
@@ -153,6 +153,8 @@ function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacan
     cluster.primaryUrl = vacancy.url;
     cluster.canonicalTitle = vacancy.title;
     cluster.canonicalCompany = vacancy.company;
+    if (vacancy.employerIsPerson === true) cluster.employerIsPerson = true;
+    else delete cluster.employerIsPerson;
   }
 }
 
@@ -167,13 +169,7 @@ function updateClusterLocation(cluster: VacancyCluster, location?: string): void
 }
 
 function hasExplicitSalaryPeriod(salary: VacancySalary): boolean {
-  const evidence = salary.periodEvidence;
-  const period =
-    evidence?.field === 'lever.salaryRange.interval'
-      ? leverSalaryPeriod(evidence.value)
-      : evidence?.field === 'himalayas.salaryPeriod'
-        ? himalayasSalaryPeriod(evidence.value)
-        : undefined;
+  const period = periodOfEvidence(salary.periodEvidence);
   return period !== undefined && period === salary.period;
 }
 
@@ -197,6 +193,11 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
   const isNewMembership = existingSourceIndex === -1;
   if (isNewMembership) cluster.vacanciesCount += 1;
   pickHigherPrioritySource(cluster, vacancy);
+  // A cluster built before the platform's category was read learns it from the
+  // re-observation of the same employer (INC-023).
+  if (vacancy.employerIsPerson === true && vacancy.company === cluster.canonicalCompany) {
+    cluster.employerIsPerson = true;
+  }
 
   if (existingSourceIndex === -1) {
     cluster.sources.push(vacancy.provenance);
@@ -241,6 +242,7 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     id: `cluster-${vacancy.id}`,
     canonicalTitle: vacancy.title,
     canonicalCompany: vacancy.company,
+    ...(vacancy.employerIsPerson === true ? { employerIsPerson: true } : {}),
     canonicalLocation: vacancy.location,
     isRemote: Boolean(vacancy.isRemote),
     salary: vacancy.salary,

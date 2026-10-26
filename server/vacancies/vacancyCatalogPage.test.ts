@@ -109,6 +109,21 @@ describe('страница публичного каталога ваканси�
    * что видит читатель, поэтому полный текст идёт и в `JobPosting`, и на
    * страницу — одним и тем же значением.
    */
+  it('не печатает имя частного лица ни в карточке, ни в разметке, ни в адресе (INC-023)', () => {
+    const byName = buildVacancyDetail(cluster({ canonicalCompany: 'Иванова Мария Петровна' }))!;
+    const byFlag = buildVacancyDetail(
+      cluster({ canonicalCompany: 'Anna Smith', employerIsPerson: true }),
+    )!;
+    for (const detail of [byName, byFlag]) {
+      expect(detail.entry.company).toBe('Частный работодатель');
+      const graph = JSON.stringify(detail.jsonLd);
+      expect(graph).not.toContain('Иванова');
+      expect(graph).not.toContain('Smith');
+      expect(graph).not.toContain('hiringOrganization');
+    }
+    expect(byFlag.entry.path).not.toContain('smith');
+  });
+
   it('берёт полный текст вакансии, когда он известен', () => {
     const full = 'Полное описание вакансии. '.repeat(30);
     const detail = buildVacancyDetail(cluster(), full)!;
