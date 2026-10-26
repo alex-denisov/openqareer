@@ -523,18 +523,13 @@ function handleGetProTrial(deps: RouteDeps, request: FastifyRequest, reply: Fast
   return reply.send({ data: deps.billingRepository.getProTrial(principal.userId, new Date().toISOString()), meta: { requestId: request.id } });
 }
 
+// B571: new trials are discontinued; running trials expire on their own via hasActiveProTrial.
 function handleActivateProTrial(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const principal = billingPrincipal(deps, request, reply);
   if (!principal) return;
-  if (!z.object({}).strict().safeParse(request.body ?? {}).success) {
-    return sendError(reply, request, 400, 'invalid_request', 'Для включения пробного Pro дополнительные данные не нужны.', false);
-  }
-  if (!deps.billingRepository) return sendError(reply, request, 503, 'billing_unavailable', 'Пробный Pro временно недоступен. Попробуйте позже.', true);
-  const result = deps.billingRepository.activateProTrial(principal.userId, new Date().toISOString());
   reply.header('Cache-Control', 'no-store');
-  if (!result.activated) return sendError(reply, request, 409, 'pro_trial_unavailable', result.trial.status === 'unavailable' ? 'У вас уже действует платный тариф.' : 'Пробный Pro можно включить только один раз.', false);
-  return reply.code(201).send({ data: result.trial, meta: { requestId: request.id } });
+  return sendError(reply, request, 410, 'pro_trial_discontinued', 'Пробный период больше не предоставляется', false);
 }
 
 export function registerBillingRoutes(app: FastifyInstance, deps: RouteDeps): void {

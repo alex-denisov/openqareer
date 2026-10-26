@@ -40,6 +40,12 @@ describe('CareerTariffsView (B442)', () => {
     );
   });
 
+  it('offers no Pro trial on the tariffs page (B571)', () => {
+    const html = renderToStaticMarkup(<CareerTariffsView activeTierId="free" />);
+    expect(html).not.toContain('Пробный Pro');
+    expect(html).not.toMatch(/24\s+час/u);
+  });
+
   it('marks the current level with text «Ваш тариф», not color alone (Criterion 2)', () => {
     const htmlFree = renderToStaticMarkup(<CareerTariffsView activeTierId="free" />);
     expect(htmlFree).toContain('Ваш тариф');

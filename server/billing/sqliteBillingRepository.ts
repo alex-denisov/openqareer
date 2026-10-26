@@ -1,5 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { hasActiveProTrial, insertProTrial, readProTrial, type ProTrialState } from './proTrial';
+import { hasActiveProTrial, readProTrial, type ProTrialState } from './proTrial';
 import { randomUUID } from 'node:crypto';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { BILLING_PLANS } from './billingPlans';
@@ -177,20 +177,6 @@ export class SqliteBillingRepository {
   getProTrial(userId: string, now: string): ProTrialState {
     const paid = this.getSubscription(userId, now) !== null || this.getLegacyPaidPlan(userId, now) !== null;
     return readProTrial(this.database, userId, now, paid);
-  }
-
-  activateProTrial(userId: string, now: string): { activated: boolean; trial: ProTrialState } {
-    this.database.exec('BEGIN IMMEDIATE');
-    try {
-      const trial = this.getProTrial(userId, now);
-      const activated = trial.status === 'eligible' && insertProTrial(this.database, userId, now);
-      const result = { activated, trial: this.getProTrial(userId, now) };
-      this.database.exec('COMMIT');
-      return result;
-    } catch (error) {
-      this.database.exec('ROLLBACK');
-      throw error;
-    }
   }
 
   getSubscription(userId: string, now: string): BillingSubscription | null {
