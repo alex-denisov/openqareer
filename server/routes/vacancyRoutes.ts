@@ -18,6 +18,8 @@ import {
   type StrategyRole,
 } from '../../shared/careerStrategy';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
+import { finishMatchedVacancies } from './matchedVacancyRoutes';
+import { readCampaign } from './campaignContext';
 import { registerCampaignRoutes } from './campaignRoutes';
 import { readRoleContext, type RoleContext } from './vacancyRoleContext';
 import { careerRolesWithCandidateChoices, persistCareerRoles } from './careerRoleSync';
@@ -111,7 +113,15 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
     };
   }
 
-  const roles = careerRolesWithCandidateChoices(deps, candidate.id, context);
+  const campaign = readCampaign(deps.candidateStore, candidate.id);
+  const listed = finishMatchedVacancies(
+    context.matched,
+    [...campaign.roles.value],
+    campaign,
+    deps.candidateStore,
+    candidate.id,
+  );
+  const roles = careerRolesWithCandidateChoices(deps, candidate.id, context, listed);
   try {
     persistCareerRoles(deps, candidate.id, roles);
   } catch (error) {

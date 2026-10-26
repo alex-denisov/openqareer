@@ -1,6 +1,7 @@
 import { careerRoleId, type ProposedRole } from '../../shared/roleProposals';
 import { roleWorkFamily } from '../../shared/roleWorkFamilies';
 import type { CareerRoleRef } from '../vacancies/campaign';
+import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { rejectedCareerRoleIds } from './campaignContext';
 import type { RouteDeps } from './deps';
@@ -18,6 +19,11 @@ export function careerRolesWithCandidateChoices(
   deps: Pick<RouteDeps, 'candidateStore'>,
   candidateId: string,
   context: RoleContext,
+  /**
+   * Список «Вакансий» после географии «Карьеры», формата и решений кандидата:
+   * роль мастера считается по нему, как фильтр «Роли» (26.10). Без него — пул.
+   */
+  listed: readonly MatchedVacancyItem[] = context.matched,
 ): ProposedRole[] {
   const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
   const known = new Set(context.proposals.map((role) => role.id));
@@ -33,7 +39,7 @@ export function careerRolesWithCandidateChoices(
         reason: null,
         evidenceRefs: [],
         confirmation: confirmChosenTitle({
-          matched: context.matched,
+          matched: listed,
           title,
           candidateSkills: context.confirmedSkills,
         }),
