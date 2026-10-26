@@ -758,7 +758,7 @@ test.describe('B250 vacancies screen', () => {
     } else {
       await expect(page.getByRole('button', { name: 'Сбросить всё', exact: true })).toBeVisible();
       const expectedFilterSummaries = [
-        ['roles', 'Head, Director'],
+        ['roles', 'Роли · 2'], // CPO 26.10: «Роли · N», названия — в списке
         ['locations', 'Москва +46'],
         ['salary', 'от 450 тыс. ₽'],
         ['format', '2'],
