@@ -28,6 +28,7 @@ const DENIAL = /(?:не могу подтвердить|не подтвержд�
 // candidate, so asking to confirm them buried the real claims (11 notices, 26.10).
 const TEMPLATE_SENTENCE = new RegExp([
   String.raw`^(?:(?:hello|hi|dear)\b|здравствуйте|уважаем)`,
+  String.raw`^my name is .+, reaching out regarding`,
   String.raw`\b(?:i'?m interested in|applying for|i'?m submitting my application|is a company i want to work for)`,
   String.raw`\b(?:i'?d be glad|happy to discuss|let's set up|great to connect)`,
   String.raw`\bmy profile (?:confirms hands-on experience|has no confirmed facts)`,
@@ -40,7 +41,7 @@ const TEMPLATE_SENTENCE = new RegExp([
 ].join('|'), 'iu');
 
 // Intros glued to the first fact: the fact after them is still checked.
-const TEMPLATE_PREFIX = /^(?:my profile records the following facts:|в профиле зафиксированы следующие факты:|коротко о моём опыте:)\s*/iu;
+const TEMPLATE_PREFIX = /^(?:my profile records the following facts:|в профиле зафиксированы следующие факты:|коротко о моём опыте:|briefly on my background:|my experience:|мой опыт:)\s*/iu;
 
 function normalized(text: string): string {
   return text.toLocaleLowerCase().replace(/ё/gu, 'е')

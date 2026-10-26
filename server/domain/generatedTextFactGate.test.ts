@@ -35,6 +35,12 @@ describe('checkGeneratedTextFacts: only claims about the candidate (26.10)', () 
     );
     expect(claims).toEqual(['Scaled Fishance to $50M+ annual revenue.', 'Led 300 engineers.']);
     expect(claimsOf('Hired 40 engineers in 2024.')).toEqual(['Hired 40 engineers in 2024.']);
+    // Contact message and LinkedIn note intros (prod 26.10: 3 of 4 notices were these).
+    expect(
+      claimsOf(
+        'My name is Alexey Denisov, reaching out regarding the SVP, Engineering role at Covera Health.\nBriefly on my background: Led 300 engineers.\nMy experience: Led 300 engineers.\nМеня зовут Алексей, пишу по поводу позиции CTO.\nКоротко о моём опыте: Led 300 engineers.',
+      ),
+    ).toEqual(['Led 300 engineers.', 'Led 300 engineers.', 'Led 300 engineers.']);
     const checks = checkGeneratedTextFacts(
       'My profile records the following facts: Scaled Fishance to $50M+ annual revenue.',
       FACTS,
