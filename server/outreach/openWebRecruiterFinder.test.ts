@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SqliteLinkedinPoolRepository } from '../linkedinPool/sqliteLinkedinPoolRepository';
 import { FootprintRequestGate } from '../osint/adapters/requestScheduler';
-import { createOpenWebRecruiterFinder, resolveCompanyDomain } from './openWebRecruiterFinder';
+import {
+  createCompanySiteFinder,
+  createOpenWebRecruiterFinder,
+  resolveCompanyDomain,
+} from './openWebRecruiterFinder';
 
 const now = new Date('2026-10-26T12:00:00.000Z');
 const resources: Array<{ repository: SqliteLinkedinPoolRepository; directory: string }> = [];
@@ -117,5 +121,56 @@ describe('company domain', () => {
       mx({}),
     );
     expect(domain).toBeUndefined();
+  });
+});
+
+describe('company site finder', () => {
+  const site = (url: string) => ({ url, title: 'Site', text: '' });
+
+  it('takes the first non-platform site with mail records and caches it', async () => {
+    const repository = createRepository();
+    const fetch = exaFetch([site('https://www.linkedin.com/company/jpm'), site('https://www.jpmorganchase.com/about')]);
+    const resolveMx = vi.fn(async (domain: string) =>
+      domain === 'jpmorganchase.com' ? [{ exchange: 'mx', priority: 1 }] : [],
+    );
+    const findSite = createCompanySiteFinder({
+      repository,
+      apiKey: 'test-key',
+      fetch,
+      requestGate: new FootprintRequestGate({ intervalMs: 0 }),
+      now: () => now,
+      resolveMx,
+    });
+
+    expect(await findSite('JPMorganChase')).toBe('jpmorganchase.com');
+    expect(await findSite('jpmorganchase')).toBe('jpmorganchase.com');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('remembers a miss so a company without a site is not searched again', async () => {
+    const repository = createRepository();
+    const fetch = exaFetch([]);
+    const findSite = createCompanySiteFinder({
+      repository,
+      apiKey: 'test-key',
+      fetch,
+      requestGate: new FootprintRequestGate({ intervalMs: 0 }),
+      now: () => now,
+      resolveMx: async () => [],
+    });
+
+    expect(await findSite('Nobody Ltd')).toBeUndefined();
+    expect(await findSite('Nobody Ltd')).toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the found site before guessing from the name', async () => {
+    const resolveMx = vi.fn(async (domain: string) => (domain === 'jpmchase.com' ? [{ exchange: 'mx', priority: 1 }] : []));
+    const domain = await resolveCompanyDomain(
+      { id: 'v', company: 'JPMorganChase', url: 'https://jpmorganchase.contacthr.com/1' },
+      resolveMx,
+      async () => 'jpmchase.com',
+    );
+    expect(domain).toBe('jpmchase.com');
   });
 });

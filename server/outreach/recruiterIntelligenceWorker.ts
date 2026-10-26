@@ -1,7 +1,7 @@
 import type { SqliteRecruiterContactsRepository } from '../data/sqliteRecruiterContactsRepository';
 import type { SqliteLinkedinPoolRepository } from '../linkedinPool/sqliteLinkedinPoolRepository';
 import type { FootprintRequestGate } from '../osint/adapters/requestScheduler';
-import { createOpenWebRecruiterFinder, resolveCompanyDomain } from './openWebRecruiterFinder';
+import { createCompanySiteFinder, createOpenWebRecruiterFinder, resolveCompanyDomain } from './openWebRecruiterFinder';
 import { defaultMxResolver, discoverRecruiterContacts } from './recruiterIntelligenceService';
 import type { DiscoveryOptions, MxResolver, UnifiedVacancyInput } from './recruiterIntelligenceService';
 
@@ -25,9 +25,18 @@ function openWebDiscovery(options: RecruiterIntelligenceWorkerOptions): Discover
   const { openWeb, linkedinPool } = options;
   if (!openWeb) return {};
   const resolveMx = openWeb.resolveMx ?? defaultMxResolver;
+  const findSite = linkedinPool
+    ? createCompanySiteFinder({
+        repository: linkedinPool,
+        apiKey: openWeb.apiKey,
+        resolveMx,
+        ...(openWeb.fetch ? { fetch: openWeb.fetch } : {}),
+        ...(openWeb.requestGate ? { requestGate: openWeb.requestGate } : {}),
+      })
+    : undefined;
   return {
     mxResolver: resolveMx,
-    resolveDomain: (vacancy: UnifiedVacancyInput) => resolveCompanyDomain(vacancy, resolveMx),
+    resolveDomain: (vacancy: UnifiedVacancyInput) => resolveCompanyDomain(vacancy, resolveMx, findSite),
     ...(linkedinPool
       ? {
           openWebRecruiterFinder: createOpenWebRecruiterFinder({

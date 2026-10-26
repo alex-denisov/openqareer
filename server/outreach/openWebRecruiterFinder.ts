@@ -1,7 +1,8 @@
 import { extractDomainFromUrl } from '../domain/company';
 import type { CompanyRecruiterProfile } from '../linkedinPool/companyRecruiterDiscovery';
 import { ensureCompanyRecruitersSchema } from '../linkedinPool/companyRecruiterDiscovery';
-import { enrichRecruitersFromExa } from '../linkedinPool/exaRecruiterEnrichment';
+import { EXA_COMPANY_CACHE_DAYS, enrichRecruitersFromExa } from '../linkedinPool/exaRecruiterEnrichment';
+import { searchExaWeb } from '../osint/adapters/exaAdapter';
 import type { SqliteLinkedinPoolRepository } from '../linkedinPool/sqliteLinkedinPoolRepository';
 import type { FootprintRequestGate } from '../osint/adapters/requestScheduler';
 import type { MxResolver, UnifiedVacancyInput } from './recruiterIntelligenceService';
@@ -59,11 +60,14 @@ function companySlug(company: string): string {
 export async function resolveCompanyDomain(
   vacancy: UnifiedVacancyInput,
   resolveMx: MxResolver,
+  findSite?: (company: string) => Promise<string | undefined>,
 ): Promise<string | undefined> {
   const linkHost = extractDomainFromUrl(vacancy.url);
   if (linkHost && !isHiringPlatform(linkHost)) return registrableDomain(linkHost);
   const fromText = extractCompanyDomain({ ...vacancy, url: undefined });
   if (fromText && !isHiringPlatform(fromText)) return registrableDomain(fromText);
+  const found = vacancy.company && findSite ? await findSite(vacancy.company) : undefined;
+  if (found) return found;
   const slug = vacancy.company ? companySlug(vacancy.company) : '';
   if (slug.length < 2 || slug.length > 40) return undefined;
   for (const candidate of [`${slug}.com`, `${slug}.ru`]) {
@@ -126,5 +130,75 @@ export function createOpenWebRecruiterFinder(
       signal: AbortSignal.timeout(options.timeoutMs ?? EXA_TIMEOUT_MS),
     });
     return readStoredRecruiter(options.repository, name, now());
+  };
+}
+
+export interface CompanySiteFinderOptions extends OpenWebRecruiterFinderOptions {
+  readonly resolveMx: MxResolver;
+}
+
+const SITE_CACHE_SCHEMA = `
+CREATE TABLE IF NOT EXISTS company_mail_domain_cache (
+  company_name TEXT PRIMARY KEY COLLATE NOCASE,
+  domain TEXT,
+  queried_at TEXT NOT NULL
+) STRICT;`;
+
+async function acceptsMail(domain: string, resolveMx: MxResolver): Promise<boolean> {
+  try {
+    return (await resolveMx(domain)).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function firstMailDomain(urls: readonly string[], resolveMx: MxResolver): Promise<string | null> {
+  for (const url of urls) {
+    const host = extractDomainFromUrl(url);
+    if (!host || isHiringPlatform(host)) continue;
+    const domain = registrableDomain(host);
+    if (await acceptsMail(domain, resolveMx)) return domain;
+  }
+  return null;
+}
+
+/**
+ * Сайт компании через веб-поиск Exa; принимается первый домен, не являющийся
+ * площадкой, с записями MX. Результат и промах кэшируются на 30 дней.
+ */
+export function createCompanySiteFinder(
+  options: CompanySiteFinderOptions,
+): (companyName: string) => Promise<string | undefined> {
+  const now = options.now ?? (() => new Date());
+  return async (companyName) => {
+    const name = companyName.trim();
+    if (!name || !options.apiKey) return undefined;
+    const database = options.repository.getDatabase();
+    database.exec(SITE_CACHE_SCHEMA);
+    const cached = database
+      .prepare('SELECT domain, queried_at FROM company_mail_domain_cache WHERE company_name = ?')
+      .get(name) as { domain: string | null; queried_at: string } | undefined;
+    if (cached && Date.parse(cached.queried_at) > now().getTime() - EXA_COMPANY_CACHE_DAYS * 86_400_000) {
+      return cached.domain ?? undefined;
+    }
+    let urls: readonly string[];
+    try {
+      urls = await searchExaWeb(`${name} official website`, options.apiKey, AbortSignal.timeout(options.timeoutMs ?? EXA_TIMEOUT_MS), {
+        ...(options.fetch ? { fetch: options.fetch } : {}),
+        ...(options.requestGate ? { requestGate: options.requestGate } : {}),
+        numResults: 5,
+        contents: { text: { maxCharacters: 1 } },
+      });
+    } catch {
+      return undefined;
+    }
+    const domain = await firstMailDomain(urls, options.resolveMx);
+    database
+      .prepare(
+        `INSERT INTO company_mail_domain_cache (company_name, domain, queried_at) VALUES (?, ?, ?)
+         ON CONFLICT(company_name) DO UPDATE SET domain = excluded.domain, queried_at = excluded.queried_at`,
+      )
+      .run(name, domain, now().toISOString());
+    return domain ?? undefined;
   };
 }
