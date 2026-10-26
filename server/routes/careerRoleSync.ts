@@ -1,14 +1,23 @@
 import { careerRoleId, type ProposedRole } from '../../shared/roleProposals';
 import { roleWorkFamily } from '../../shared/roleWorkFamilies';
 import type { CareerRoleRef } from '../vacancies/campaign';
+import { careerRoleKey } from '../vacancies/careerRoleKey';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { rejectedCareerRoleIds } from './campaignContext';
 import type { RouteDeps } from './deps';
 import type { RoleContext } from './vacancyRoleContext';
 
-/** Больше ролей подбор не держит: схема кампании ограничена десятью. */
-const MAX_CAREER_ROLES = 10;
+/**
+ * Больше ролей подбор не держит (схема кампании). Роли, подтверждённые опытом,
+ * идут первыми и не срезаются ради ролей рынка (26.10).
+ */
+const MAX_CAREER_ROLES = 20;
+
+/** Ключ одной роли: функция и уровень, а без словаря — id по названию. */
+function sameRoleKey(title: string): string {
+  return careerRoleKey(title) ?? careerRoleId(title);
+}
 
 /**
  * Роли «Карьеры» = роли, названные по профилю и разговору, плюс роли,
@@ -27,10 +36,14 @@ export function careerRolesWithCandidateChoices(
 ): ProposedRole[] {
   const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
   const known = new Set(context.proposals.map((role) => role.id));
+  const chosenKeys = new Set<string>();
   const chosen = (workspace?.campaign?.roles ?? []).flatMap<ProposedRole>((title) => {
     const id = careerRoleId(title);
     if (known.has(id)) return [];
+    const key = sameRoleKey(title);
+    if (chosenKeys.has(key)) return [];
     known.add(id);
+    chosenKeys.add(key);
     return [
       {
         id,
@@ -47,7 +60,12 @@ export function careerRolesWithCandidateChoices(
       },
     ];
   });
-  return [...chosen, ...context.proposals];
+  // Роль мастера и та же роль под другим названием — одна строка: остаётся
+  // название кандидата, вакансии считаются по функции и уровню.
+  return [
+    ...chosen,
+    ...context.proposals.filter((role) => !chosenKeys.has(sameRoleKey(role.title))),
+  ];
 }
 
 /**
@@ -72,9 +90,16 @@ export function persistCareerRoles(
     updatedAt: new Date().toISOString(),
   };
   const rejected = rejectedCareerRoleIds(deps.candidateStore, candidateId);
-  const wizard = new Set(campaign.roles.map(careerRoleId));
+  const wizard = new Set([...campaign.roles.map(careerRoleId), ...campaign.roles.map(sameRoleKey)]);
   const next: CareerRoleRef[] = roles
-    .filter((role) => role.origin !== 'candidate' && !rejected.has(role.id) && !wizard.has(role.id))
+    .filter(
+      (role) =>
+        role.origin !== 'candidate' &&
+        !rejected.has(role.id) &&
+        !wizard.has(role.id) &&
+        !wizard.has(sameRoleKey(role.title)),
+    )
+    .sort((left, right) => Number(left.origin !== 'model') - Number(right.origin !== 'model'))
     .slice(0, MAX_CAREER_ROLES)
     .map((role) => ({ id: role.id, title: role.title }));
   const previous = campaign.careerRoles ?? [];

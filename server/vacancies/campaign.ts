@@ -118,6 +118,8 @@ export interface ResolveCampaignInput {
   readonly rejectedRoleIds?: ReadonlySet<string>;
   /** Тот же id, что у роли «Карьеры»: отклонение роли мастера тоже убирает её из подбора. */
   readonly roleIdOf?: (title: string) => string;
+  /** Ключ функции и уровня: разные названия одной роли — одна роль подбора (26.10). */
+  readonly roleKeyOf?: (title: string) => string | null;
   /** Условия «Карьеры»; регионы мастера читаются, только если их нет. */
   readonly careerGeography?: CareerGeography | null;
 }
@@ -138,7 +140,7 @@ function campaignRoleTitles(input: ResolveCampaignInput): string[] {
     .map((role) => role.title);
   const seen = new Set<string>();
   return [...explicit, ...career].filter((title) => {
-    const key = idOf ? idOf(title) : title.toLowerCase();
+    const key = input.roleKeyOf?.(title) ?? (idOf ? idOf(title) : title.toLowerCase());
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

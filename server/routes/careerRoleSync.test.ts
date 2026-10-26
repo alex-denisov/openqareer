@@ -101,3 +101,42 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
     expect(wizard?.confirmation.state === 'observed' && wizard.confirmation.sampleSize).toBe(9);
   });
 });
+
+describe('одна роль под разными названиями — одна строка (26.10)', () => {
+  it('роль рынка той же функции и уровня, что роль мастера, не дублирует её', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: ['Технический директор'] } });
+    const context = {
+      proposals: [role('Технический директор (CTO)', 'market'), role('Head of AI')],
+      matched: [],
+      confirmedSkills: [],
+    } as unknown as RoleContext;
+    const roles = careerRolesWithCandidateChoices(
+      { candidateStore: store as never },
+      'c1',
+      context,
+    );
+    expect(roles.map((r) => r.title)).toEqual(['Технический директор', 'Head of AI']);
+  });
+
+  it('в подбор не пишется второе название роли мастера', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: ['Операционный директор (COO)'] } });
+    persistCareerRoles({ candidateStore: store as never }, 'c1', [
+      role('Chief Operating Officer', 'market'),
+      role('Head of Support'),
+    ]);
+    expect(store.getCandidateWorkspace()?.campaign?.careerRoles).toEqual([
+      { id: careerRoleId('Head of Support'), title: 'Head of Support' },
+    ]);
+  });
+
+  it('держит в подборе больше десяти ролей, подтверждённых опытом', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: [] } });
+    const titles = Array.from({ length: 14 }, (_, index) => `Role number${'x'.repeat(index + 1)}`);
+    persistCareerRoles(
+      { candidateStore: store as never },
+      'c1',
+      titles.map((title) => role(title)),
+    );
+    expect(store.getCandidateWorkspace()?.campaign?.careerRoles).toHaveLength(14);
+  });
+});

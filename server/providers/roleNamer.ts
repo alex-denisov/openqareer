@@ -25,7 +25,7 @@ import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
-const MAX_FACTS = 40;
+const MAX_FACTS = 120;
 const MAX_STATEMENT = 400;
 
 /** Узкий срез OpenAI-совместимого клиента, который здесь действительно нужен. */
