@@ -291,6 +291,8 @@ function accessFact(
 const THRESHOLD_PERIOD_LABELS: Readonly<Record<string, string>> = {
   annual: 'в год',
   monthly: 'в месяц',
+  quarterly: 'в квартал',
+  one_time: 'на счёте',
   points: 'баллов',
   years: 'лет',
 };

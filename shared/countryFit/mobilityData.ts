@@ -1,128 +1,20 @@
 import type { TaxDataSource } from '../taxData/types';
+import { isVerifiableSource, sources } from './mobilitySources';
+import {
+  domesticScenario,
+  noDataScenario,
+  noDataScenarios,
+  path,
+  regionalScenario,
+  scenario,
+} from './mobilityScenarioBuilders';
+import * as routes from './mobilityRoutes';
 import {
   MOBILITY_SCENARIO_IDS,
   type CountryMobilityData,
-  type MobilityPath,
   type MobilityRequirement,
-  type MobilityScenarioDefinition,
   type MobilityScenarioId,
 } from './types';
-
-const retrievedAt = '2026-10-10';
-
-const source = (title: string, url: string, dataYear = 2026): TaxDataSource => ({
-  title,
-  url,
-  dataYear,
-  retrievedAt,
-});
-
-const sources = {
-  eaeu: source(
-    'Договор о Евразийском экономическом союзе, статья 97',
-    'https://old.adilet.zan.kz/eng/docs/Z1400000240',
-    2015,
-  ),
-  euFreeMovement: source(
-    'Европейский союз: право граждан ЕС работать в другой стране ЕС',
-    'https://europa.eu/youreurope/citizens/work/work-abroad/index_en.htm',
-  ),
-  germanBlueCard: source(
-    'Правительство Германии: требования EU Blue Card и пороги зарплаты на 2026 год',
-    'https://www.make-it-in-germany.com/en/visa-residence/types/eu-blue-card',
-  ),
-  germanOpportunityCard: source(
-    'Правительство Германии: Chancenkarte, баллы и средства на 2026 год',
-    'https://www.make-it-in-germany.com/en/visa-residence/opportunity-card/job-search',
-  ),
-  ukSkilledWorker: source(
-    'GOV.UK: требования Skilled Worker, минимальная зарплата и ставка профессии',
-    'https://www.gov.uk/skilled-worker-visa/your-job',
-  ),
-  uaeEmployment: source(
-    'Официальный портал ОАЭ: предложение о работе, разрешение и рабочая резиденция',
-    'https://u.ae/en/information-and-services/jobs/employment-in-the-private-sector/job-offers-and-work-permits-and-contracts/expatriates-employment-in-private-sector',
-  ),
-  uaeJobSeeker: source(
-    'Официальный портал ОАЭ: виза для поиска работы и критерии образования/квалификации',
-    'https://u.ae/en/information-and-services/visa-and-emirates-id/residence-visas/jobseeker-visit-visa',
-  ),
-  uaeRemoteWork: source(
-    'Официальный портал ОАЭ: виртуальная резиденция, удалённая работа и доход',
-    'https://u.ae/en/information-and-services/visa-and-emirates-id/residence-visas/residence-visa-for-working-outside-the-uae',
-  ),
-  serbiaWork: source(
-    'Правительство Сербии: единый ВНЖ и разрешение на работу для иностранцев',
-    'https://welcometoserbia.gov.rs/residence-and-work-permit',
-  ),
-  cyprusDigitalNomad: source(
-    'Migration Department of Cyprus: Digital Nomad Visa, доход и семейные надбавки',
-    'https://www.gov.cy/mip-md/en/documents/digital-nomads-and-family-members/',
-    2025,
-  ),
-};
-
-const labels: Readonly<Record<MobilityScenarioId, string>> = {
-  domestic_market: 'Домашний рынок',
-  employer_sponsorship: 'Переезд под оффер компании',
-  job_seeker_visa: 'Самостоятельный поиск работы',
-  digital_nomad: 'Международная удалёнка',
-  simple_mobility: 'Безвизовый въезд и региональные права на работу',
-};
-
-const noDataReason =
-  'Нет проверенного официального набора правил для этого маршрута. Числовые пороги не показываются.';
-
-const noDataScenario = (id: MobilityScenarioId): MobilityScenarioDefinition => ({
-  id,
-  label: labels[id],
-  dataStatus: 'no_data',
-  paths: [],
-  reason: noDataReason,
-});
-
-function scenario(
-  id: MobilityScenarioId,
-  paths: readonly MobilityPath[],
-  reason?: string,
-): MobilityScenarioDefinition {
-  return { id, label: labels[id], dataStatus: 'verified', paths, ...(reason ? { reason } : {}) };
-}
-
-function path(id: string, label: string, requirements: readonly MobilityRequirement[]): MobilityPath {
-  return { id, label, requirements };
-}
-
-function noDataScenarios(): MobilityScenarioDefinition[] {
-  return MOBILITY_SCENARIO_IDS.map(noDataScenario);
-}
-
-function domesticScenario(countryCode: string): MobilityScenarioDefinition {
-  return scenario('domestic_market', [
-    path('citizen-or-resident', 'Гражданство или право на работу в стране', [
-      { kind: 'domestic_right', countryCode },
-    ]),
-  ]);
-}
-
-function regionalScenario(
-  countryCode: string,
-  eligibleCitizenshipCountryCodes: readonly string[],
-  evidence: TaxDataSource,
-  label: string,
-): MobilityScenarioDefinition {
-  return scenario('simple_mobility', [
-    path('regional-work-right', label, [
-      {
-        kind: 'regional_work_right',
-        destinationCountryCodes: [countryCode],
-        eligibleCitizenshipCountryCodes,
-        source: evidence,
-        explanation: 'Право на работу проверяется по гражданству и стране назначения.',
-      },
-    ]),
-  ]);
-}
 
 const eaeuMembers = ['AM', 'BY', 'KG', 'KZ', 'RU'] as const;
 const euMembers = [
@@ -156,9 +48,9 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
     name: 'Россия',
     scenarios: [
       domesticScenario('RU'),
-      noDataScenario('employer_sponsorship'),
-      noDataScenario('job_seeker_visa'),
-      noDataScenario('digital_nomad'),
+      routes.russiaEmployer,
+      routes.russiaJobSeeker,
+      routes.russiaRemote,
       regionalScenario('RU', eaeuMembers, sources.eaeu, 'Работа для граждан государств ЕАЭС'),
     ],
   },
@@ -187,8 +79,8 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
           },
         ]),
       ]),
-      noDataScenario('job_seeker_visa'),
-      noDataScenario('digital_nomad'),
+      routes.serbiaJobSeeker,
+      routes.serbiaRemote,
       scenario(
         'simple_mobility',
         [
@@ -218,9 +110,9 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
             explanation: 'Работодатель подаёт заявление на разрешение на работу после оформленного предложения.',
           },
           {
-            kind: 'approved_sponsor',
+            kind: 'manual_check',
             source: sources.uaeEmployment,
-            explanation: 'Работодатель должен быть зарегистрирован и иметь право нанимать работников.',
+            explanation: 'После подписания договора работодатель оформляет разрешение на работу, затем рабочую визу.',
           },
         ]),
       ]),
@@ -241,11 +133,6 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
             source: sources.uaeJobSeeker,
             explanation: 'Нужно выполнить установленное требование к финансовой гарантии.',
           },
-          {
-            kind: 'private_health_insurance',
-            source: sources.uaeJobSeeker,
-            explanation: 'Требуется действующая медицинская страховка в ОАЭ.',
-          },
         ]),
         path('recent-top-university-graduate', 'Виза для поиска работы: недавний выпускник рейтингового университета', [
           {
@@ -264,11 +151,6 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
             source: sources.uaeJobSeeker,
             explanation: 'Нужно выполнить установленное требование к финансовой гарантии.',
           },
-          {
-            kind: 'private_health_insurance',
-            source: sources.uaeJobSeeker,
-            explanation: 'Требуется действующая медицинская страховка в ОАЭ.',
-          },
         ]),
       ]),
       scenario('digital_nomad', [
@@ -284,7 +166,7 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
             currency: 'USD',
             incomeBasis: 'unspecified',
             source: sources.uaeRemoteWork,
-            explanation: 'Нужна справка о зарплате не ниже порога.',
+            explanation: 'Нужно подтвердить доход не ниже $3 500 в месяц.',
           },
           {
             kind: 'private_health_insurance',
@@ -293,7 +175,7 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
           },
         ]),
       ]),
-      noDataScenario('simple_mobility'),
+      routes.uaeLocalWork,
     ],
   },
   DE: {
@@ -413,7 +295,7 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
           },
         ]),
       ]),
-      noDataScenario('digital_nomad'),
+      routes.germanyRemote,
       regionalScenario('DE', euMembers, sources.euFreeMovement, 'Свободное передвижение граждан ЕС'),
     ],
   },
@@ -453,9 +335,9 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
           },
         ]),
       ]),
-      noDataScenario('job_seeker_visa'),
-      noDataScenario('digital_nomad'),
-      noDataScenario('simple_mobility'),
+      routes.ukJobSeeker,
+      routes.ukRemote,
+      routes.ukLocalWork,
     ],
   },
   US: {
@@ -474,33 +356,21 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
     name: 'Кипр',
     scenarios: [
       domesticScenario('CY'),
-      noDataScenario('employer_sponsorship'),
-      noDataScenario('job_seeker_visa'),
-      scenario('digital_nomad', [
-        path('cyprus-digital-nomad', 'Digital Nomad residence permit', [
-          {
-            kind: 'foreign_remote_employment',
-            source: sources.cyprusDigitalNomad,
-            explanation: 'Работа или клиенты должны находиться за пределами Кипра.',
-          },
-          {
-            kind: 'minimum_remote_income',
-            amount: 3_500,
-            currency: 'EUR',
-            incomeBasis: 'net',
-            partnerUplift: 0.2,
-            childUplift: 0.15,
-            source: sources.cyprusDigitalNomad,
-            explanation: 'Минимум €3 500 чистого дохода в месяц; +20% для партнёра и +15% на каждого ребёнка.',
-          },
-          {
-            kind: 'private_health_insurance',
-            source: sources.cyprusDigitalNomad,
-            explanation: 'Нужно подтверждение медицинской страховки.',
-          },
-        ]),
-      ]),
+      routes.cyprusEmployer,
+      routes.cyprusJobSeeker,
+      routes.cyprusRemote,
       regionalScenario('CY', euMembers, sources.euFreeMovement, 'Свободное передвижение граждан ЕС'),
+    ],
+  },
+  GE: {
+    countryCode: 'GE',
+    name: 'Грузия',
+    scenarios: [
+      domesticScenario('GE'),
+      routes.georgiaEmployer,
+      routes.georgiaJobSeeker,
+      routes.georgiaRemote,
+      routes.georgiaLocalWork,
     ],
   },
 };
@@ -533,20 +403,10 @@ export function isNumberRequirement(requirement: MobilityRequirement): requireme
 export function getVisibleThresholdSource(requirement: MobilityRequirement): TaxDataSource | null {
   if (!isNumberRequirement(requirement)) return null;
   const candidate = requirement as MobilityRequirement & { readonly source?: TaxDataSource };
-  const evidence = candidate.source;
-  if (
-    !evidence ||
-    !evidence.title ||
-    !Number.isInteger(evidence.dataYear) ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(evidence.retrievedAt)
-  ) return null;
-  try {
-    if (new URL(evidence.url).protocol !== 'https:') return null;
-  } catch {
-    return null;
-  }
-  return evidence;
+  return isVerifiableSource(candidate.source) ? candidate.source : null;
 }
+
+export { isVerifiableSource } from './mobilitySources';
 
 export function getCountryMobilityScenarioIds(): readonly MobilityScenarioId[] {
   return MOBILITY_SCENARIO_IDS;

@@ -44,6 +44,8 @@ export const relocationScenarioInputSchema = z.object({
     remoteMonthlyIncomeIsNet: flag, remoteMonthlyIncome: z.object({ amount, currency: z.string().regex(/^[A-Z]{3}$/) }).strict().optional(),
     hasLocalWorkAuthorizationCountryCodes: z.array(z.string().regex(/^[A-Z]{2}$/)).max(10).optional(),
     minimumMonthlyFunds: z.object({ amount, currency: z.string().regex(/^[A-Z]{3}$/) }).strict().optional(),
+    monthlyOfferSalary: z.object({ amount, currency: z.string().regex(/^[A-Z]{3}$/) }).strict().optional(),
+    availableSavings: z.object({ amount, currency: z.string().regex(/^[A-Z]{3}$/) }).strict().optional(),
     meetsLanguageRequirementsByCountry: z.record(z.string().regex(/^[A-Z]{2}$/), z.boolean()).optional(),
     jobSeekerCategoryEligibleByCountry: z.record(z.string().regex(/^[A-Z]{2}$/), z.boolean()).optional(),
     recentTopUniversityGraduateWithinYearsByCountry: z.record(z.string().regex(/^[A-Z]{2}$/), z.number().int().min(0).max(50)).optional(),
