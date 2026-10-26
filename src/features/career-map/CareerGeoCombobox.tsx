@@ -62,7 +62,8 @@ function useGeoCombobox({ selected, onChange, onSubmit }: CareerGeoComboboxProps
     () => (ready || !query.trim() ? optionsFor(query, selected) : []),
     [query, selected, ready],
   );
-  const expanded = open && (options.length > 0 || query.trim().length > 0);
+  // Пустой список не раскрывается: «нет такого места» и загрузку называет строка статуса.
+  const expanded = open && options.length > 0;
 
   const choose = (option: GeoOption) => {
     onChange([...selected, option.value]);

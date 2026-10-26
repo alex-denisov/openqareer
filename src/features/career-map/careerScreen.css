@@ -828,6 +828,10 @@
 }
 
 @media (max-width: 600px) {
+  .career-geo-combobox {
+    flex-basis: 100%;
+  }
+
   .career-geo-chip,
   .career-geo-chip-remove {
     min-block-size: 44px;
