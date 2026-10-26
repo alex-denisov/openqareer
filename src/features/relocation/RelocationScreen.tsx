@@ -6,6 +6,7 @@ import { RelocationConsentGate } from './RelocationConsentGate';
 import { RelocationDesktopWorkspace } from './RelocationDesktopWorkspace';
 import { RelocationMobileWorkspace } from './RelocationMobileWorkspace';
 import { RelocationScreenState } from './RelocationScreenState';
+import { mergeProfileFacts } from './relocationProfileFacts';
 import { useRelocationSnapshot } from './useRelocationSnapshot';
 import { useRelocationWorkspace, type RelocationWorkspaceInput } from './useRelocationWorkspace';
 import './RelocationScreen.css';
@@ -70,7 +71,10 @@ export function RelocationScreen(props: RelocationScreenProps) {
   }
   const snapshot = {
     ...state.snapshot,
-    profile: state.snapshot.profile ?? emptyRelocationQuestionnaire(),
+    profile: mergeProfileFacts(
+      state.snapshot.profile ?? emptyRelocationQuestionnaire(),
+      state.snapshot.profileDraft,
+    ),
   };
   return (
     <RelocationWorkspace

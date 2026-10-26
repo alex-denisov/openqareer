@@ -204,7 +204,7 @@ function CertificateEntries({ profile, onProfileChange }: RelocationDraftProps) 
     return (
       <p className="career-relocation-summary-note">
         <Info aria-hidden="true" size={16} />
-        <span>В профиле сертификатов нет. Добавьте вручную.</span>
+        <span>Сертификатов пока нет. Добавьте здесь.</span>
       </p>
     );
   }

@@ -319,7 +319,7 @@ async function advanceQuestionnaire(input: AdvanceInput) {
       input.onProfileUpdated(base, stepResult.alerts);
     }
     await saveProgress(input, base, nextStepAfter(input.step), skippedSteps);
-    input.setNotice(input.skip ? 'Шаг пропущен. Его можно заполнить позже.' : 'Изменения сохранены.');
+    input.setNotice(input.skip ? 'Шаг пропущен. Его можно заполнить позже.' : stepResult?.profileSync === 'failed' ? 'Сохранено в релокации, в профиль записать не удалось. Сохраните шаг ещё раз.' : 'Изменения сохранены.');
   } catch (reason) {
     input.setError(questionnaireError(reason));
   } finally {
@@ -494,7 +494,7 @@ function QuestionnaireAside({ text }: { readonly text: string }) {
       <p>{text}</p>
       <p className="career-relocation-privacy-note">
         <ShieldCheck aria-hidden="true" size={16} />
-        <span>Данные хранятся в разделе «Страны и релокация», вкладка «Мои данные», в профиле только сводка. Третьим лицам не передаются, удалить можно в любой момент.</span>
+        <span>Что уже есть в профиле, подставлено отсюда; новое сохраняется и в профиль. Третьим лицам не передаётся, удалить можно в любой момент.</span>
       </p>
       <p>Любое поле можно пропустить: страны, зависящие от него, получат статус «нужно уточнить», а не угаданный.</p>
     </aside>

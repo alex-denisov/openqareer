@@ -10,7 +10,8 @@ import {
 } from '../../../shared/relocationQuestionnaire';
 import { apiErrorMessage } from '../coach/apiClient';
 import { restartRelocationQuestionnaire, revokeRelocationConsent } from './relocationApi';
-import { listRelocationCountries } from './relocationCountryData';
+import { relocationCountryName } from './RelocationFormControls';
+import { isProfileFactRow } from './relocationProfileFacts';
 import { RelocationQuestionnaire } from './RelocationQuestionnaire';
 import {
   citizenshipRowId,
@@ -364,12 +365,12 @@ function EducationProfileRows({ profile, actions }: { readonly profile: Relocati
   const educationRows = profile.education.education.map(({ id, title, countryCode, recognitionStatus, completedAt }) => ({
     id,
     label: title,
-    value: `${countryName(countryCode)} · ${recognitionLabel(recognitionStatus)}${completedAt ? ` · ${completedAt.slice(0, 4)}` : ''}`,
+    value: [isProfileFactRow(id) ? 'из профиля' : '', countryCode ? countryName(countryCode) : 'страна диплома не указана', recognitionLabel(recognitionStatus), completedAt?.slice(0, 4)].filter(Boolean).join(' · '),
   }));
   const certificateRows = profile.education.certificates.map(({ id, title, issuer, recognitionStatus }) => ({
     id,
     label: title,
-    value: `${issuer ?? 'Выдавшая организация не указана'} · ${recognitionLabel(recognitionStatus)}`,
+    value: [isProfileFactRow(id) ? 'из профиля' : '', issuer ?? 'выдавшая организация не указана', recognitionLabel(recognitionStatus)].filter(Boolean).join(' · '),
   }));
   const rows = [...educationRows, ...certificateRows];
   return rows.length ? <ProfileRows rows={rows} actions={actions} /> : <EmptyProfileSection />;
@@ -388,7 +389,7 @@ function LanguageProfileRows({ profile, actions }: { readonly profile: Relocatio
   const rows = profile.languages.languages.map((language) => ({
     id: language.id,
     label: `${language.name}: ${language.level === 'unknown' ? 'уровень не указан' : language.level}`,
-    value: language.sourceLabel ?? relocationLanguageSourceLabel(language.source),
+    value: isProfileFactRow(language.id) ? `из профиля${language.sourceLabel ? ` · ${language.sourceLabel}` : ''}` : language.sourceLabel ?? relocationLanguageSourceLabel(language.source),
   }));
   return rows.length ? <ProfileRows rows={rows} actions={actions} /> : <EmptyProfileSection />;
 }
@@ -409,9 +410,11 @@ function ProfileRows({ rows, actions }: {
             <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Изменить: ${row.label}`} onClick={actions.onEdit}>
               <PencilSimple aria-hidden="true" size={17} />
             </button>
-            <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Удалить: ${row.label}`} disabled={actions.busy} onClick={() => actions.onDelete(row.id)}>
-              <Trash aria-hidden="true" size={17} />
-            </button>
+            {isProfileFactRow(row.id) ? null : (
+              <button className="career-relocation-btn is-sm is-icon is-ghost" type="button" aria-label={`Удалить: ${row.label}`} disabled={actions.busy} onClick={() => actions.onDelete(row.id)}>
+                <Trash aria-hidden="true" size={17} />
+              </button>
+            )}
           </span>
         </li>
       ))}
@@ -424,7 +427,7 @@ function ProfileRow({ label, value }: { readonly label: string; readonly value: 
 }
 
 function EmptyProfileSection() {
-  return <p>Нет данных. Их можно добавить в анкете.</p>;
+  return <p>Не указано. Добавьте здесь, кнопкой «Изменить».</p>;
 }
 
 function ConfirmAction({
@@ -461,7 +464,7 @@ function ConfirmAction({
 }
 
 function countryName(code: string): string {
-  return listRelocationCountries().find((country) => country.countryCode === code)?.name ?? 'Страна не определена';
+  return relocationCountryName(code);
 }
 
 function documentKind(kind: string): string {

@@ -2,7 +2,9 @@ import type {
   RelocationQuestionnaire,
   RelocationStepId,
 } from '../../../shared/relocationQuestionnaire';
+import { getResumeStudio, saveResumeStudioDraft } from '../resume/resumeApi';
 import { putRelocationQuestionnaireStep, type RelocationStepInput } from './relocationApi';
+import { applyRelocationStepToDraft, isProfileFactRow } from './relocationProfileFacts';
 
 const CITIZENSHIP_ROW = 'citizenship:';
 
@@ -47,8 +49,35 @@ export function removeRelocationItem(
   return profile;
 }
 
-/** Saves one questionnaire step with optimistic revision; the server answers with the new profile. */
-export function saveRelocationStep(step: RelocationStepId, profile: RelocationQuestionnaire) {
+export type ProfileSync = 'saved' | 'unchanged' | 'failed';
+
+/**
+ * Saves one questionnaire step, then copies what it added into the candidate's
+ * profile (citizenship, diplomas, languages), so the facts live in one place.
+ * A failed profile write does not undo the relocation save; the caller says so.
+ */
+export async function saveRelocationStep(step: RelocationStepId, profile: RelocationQuestionnaire) {
+  const result = await saveRelocationStepOnly(step, profile);
+  return { ...result, profileSync: await syncStepToProfile(step, result.profile) };
+}
+
+async function syncStepToProfile(
+  step: RelocationStepId,
+  profile: RelocationQuestionnaire,
+): Promise<ProfileSync> {
+  try {
+    const { draft } = await getResumeStudio();
+    const next = draft ? applyRelocationStepToDraft(draft, step, profile) : null;
+    if (!next) return 'unchanged';
+    await saveResumeStudioDraft(next);
+    return 'saved';
+  } catch {
+    return 'failed';
+  }
+}
+
+/** One questionnaire step with optimistic revision; the server answers with the new profile. */
+function saveRelocationStepOnly(step: RelocationStepId, profile: RelocationQuestionnaire) {
   switch (step) {
     case 'citizenship_documents':
       return putRelocationQuestionnaireStep(step, profile.citizenshipDocuments, profile.revision);
@@ -78,7 +107,8 @@ export function relocationLanguageInput(
   };
 }
 
-export function relocationLanguageSourceLabel(source: string): string {
+export function relocationLanguageSourceLabel(source: string, rowId = ''): string {
+  if (isProfileFactRow(rowId)) return 'из профиля';
   if (source === 'candidate') return 'со слов кандидата';
   if (source === 'linkedin') return 'из LinkedIn';
   if (source === 'certificate') return 'по сертификату';

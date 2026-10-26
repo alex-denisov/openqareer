@@ -109,7 +109,7 @@ function ConsentBody(props: RelocationConsentGateProps) {
       <PromiseList mobile={props.mobile} />
       <h3>Что мы спросим</h3>
       <p className="career-relocation-muted">
-        В профиле этих данных пока нет, поэтому сначала короткая анкета, около 5 минут, 4 шага.
+        Что уже есть в профиле, подставим сами; недостающее спросим в короткой анкете, около 5 минут, 4 шага.
         Любое поле можно пропустить.
       </p>
       <QuestionList mobile={props.mobile} />
