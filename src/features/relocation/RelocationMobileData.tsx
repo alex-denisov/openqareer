@@ -18,6 +18,7 @@ import {
 import { InlineConfirmation } from './RelocationQuestionnaire';
 import { MobileGroup, MobileNavRow } from './mobile/MobileRows';
 import { mobileDate } from './mobile/MobileSteps';
+import { isProfileFactRow } from './relocationProfileFacts';
 
 export interface RelocationMobileDataProps {
   readonly profile: RelocationQuestionnaire;
@@ -100,6 +101,20 @@ function CitizenshipGroup({ profile, alerts, onEditStep }: RelocationMobileDataP
   );
 }
 
+type EducationRow = RelocationMobileDataProps['profile']['education']['education'][number];
+
+function educationSub(entry: EducationRow): string {
+  return [
+    isProfileFactRow(entry.id) ? 'из профиля' : '',
+    optionLabel(EDUCATION_LEVEL_OPTIONS, entry.level).toLocaleLowerCase('ru'),
+    [entry.startedAt?.slice(0, 4), entry.completedAt?.slice(0, 4)].filter(Boolean).join(' — '),
+    entry.countryCode ? relocationCountryName(entry.countryCode) : 'страна диплома не указана',
+    `признание за рубежом: ${relocationRecognitionLabel(entry.recognitionStatus)}`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
 function EducationGroup({ profile, onEditStep }: RelocationMobileDataProps) {
   const { education, certificates } = profile.education;
   const open = () => onEditStep('education');
@@ -111,16 +126,7 @@ function EducationGroup({ profile, onEditStep }: RelocationMobileDataProps) {
           key={entry.id}
           icon={icon}
           title={entry.title}
-          sub={[
-            optionLabel(EDUCATION_LEVEL_OPTIONS, entry.level).toLocaleLowerCase('ru'),
-            [entry.startedAt?.slice(0, 4), entry.completedAt?.slice(0, 4)]
-              .filter(Boolean)
-              .join(' — '),
-            relocationCountryName(entry.countryCode),
-            `признание за рубежом: ${relocationRecognitionLabel(entry.recognitionStatus)}`,
-          ]
-            .filter(Boolean)
-            .join(', ')}
+          sub={educationSub(entry)}
           onClick={open}
         />
       ))}
@@ -129,7 +135,12 @@ function EducationGroup({ profile, onEditStep }: RelocationMobileDataProps) {
           key={item.id}
           icon={icon}
           title={item.title}
-          sub={relocationRecognitionLabel(item.recognitionStatus)}
+          sub={[
+            isProfileFactRow(item.id) ? 'из профиля' : '',
+            relocationRecognitionLabel(item.recognitionStatus),
+          ]
+            .filter(Boolean)
+            .join(', ')}
           onClick={open}
         />
       ))}

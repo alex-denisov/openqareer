@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CaretRight, Check, Plus } from '@phosphor-icons/react';
-import { listRelocationCountries } from '../relocationCountryData';
+import { listWorldCountries, type WorldCountry } from '../worldCountries';
 import { MobilePush } from '../RelocationMobilePush';
 
 /** Mockup 15 at 390: a captioned group of list rows with an optional note below. */
@@ -220,7 +220,7 @@ function CountryOptions({
   value,
   onPick,
 }: {
-  readonly countries: ReturnType<typeof listRelocationCountries>;
+  readonly countries: readonly WorldCountry[];
   readonly value: string;
   readonly onPick: (countryCode: string) => void;
 }) {
@@ -242,7 +242,7 @@ function CountryOptions({
   );
 }
 
-/** Country choice of mockup 15 at 390: its own push screen with search over the rules catalog. */
+/** Country choice of mockup 15 at 390: its own push screen with search over every country. */
 export function MobileCountrySearch({
   title,
   value,
@@ -258,7 +258,7 @@ export function MobileCountrySearch({
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => searchRef.current?.focus(), []);
   const needle = query.trim().toLocaleLowerCase('ru');
-  const countries = listRelocationCountries().filter(
+  const countries = listWorldCountries().filter(
     ({ name }) => !needle || name.toLocaleLowerCase('ru').includes(needle),
   );
   return (

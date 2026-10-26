@@ -1,3 +1,4 @@
+import { listWorldCountries, worldCountryName } from './worldCountries';
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
 import type {
@@ -34,7 +35,7 @@ export const LANGUAGE_LEVEL_OPTIONS: readonly (readonly [LanguageLevel, string])
 export const LANGUAGE_NAME_OPTIONS: readonly string[] = [
   'Английский', 'Немецкий', 'Французский', 'Испанский', 'Итальянский', 'Португальский',
   'Сербский', 'Греческий', 'Турецкий', 'Арабский', 'Грузинский', 'Армянский', 'Казахский',
-  'Китайский', 'Японский', 'Нидерландский', 'Польский', 'Иврит',
+  'Китайский', 'Японский', 'Нидерландский', 'Польский', 'Иврит', 'Русский', 'Украинский', 'Румынский',
 ];
 export const OTHER_LANGUAGE = 'other';
 
@@ -73,7 +74,7 @@ export function CountrySelect({
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (open) searchRef.current?.focus(); }, [open]);
   const needle = query.trim().toLocaleLowerCase('ru');
-  const countries = listRelocationCountries().filter(({ name }) => !needle || name.toLocaleLowerCase('ru').includes(needle));
+  const countries = listWorldCountries().filter(({ name }) => !needle || name.toLocaleLowerCase('ru').includes(needle));
   const pick = (code: string) => { onChange(code); setOpen(false); setQuery(''); };
   return (
     <div className="career-relocation-country-picker">
@@ -93,7 +94,7 @@ export function CountrySelect({
                 <button type="button" onClick={() => pick(countryCode)}>{name}</button>
               </li>
             ))}
-            {countries.length ? null : <li role="presentation">Такой страны нет в каталоге правил.</li>}
+            {countries.length ? null : <li role="presentation">Такой страны нет.</li>}
           </ul>
         </div>
       ) : null}
@@ -154,7 +155,7 @@ export function relocationRowId(prefix: string): string {
 }
 
 export function relocationCountryName(code: string): string {
-  return listRelocationCountries().find((country) => country.countryCode === code)?.name ?? 'Страна не определена';
+  return listRelocationCountries().find((country) => country.countryCode === code)?.name ?? worldCountryName(code) ?? 'Страна не указана';
 }
 
 export function relocationDocumentKindLabel(kind: RelocationDocument['kind']): string {

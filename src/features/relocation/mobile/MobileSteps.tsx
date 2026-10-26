@@ -194,7 +194,7 @@ function CertificatesGroup({
             <Certificate aria-hidden="true" />
           </span>
           <span className="vacancy-push-main">
-            <b>В профиле нет</b>
+            <b>Сертификатов пока нет</b>
             <small>добавьте вручную</small>
           </span>
         </div>
