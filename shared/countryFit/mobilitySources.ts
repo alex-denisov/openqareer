@@ -282,12 +282,6 @@ export const sources = {
     2026,
     second,
   ),
-  turkeyVisaFree: source(
-    'МИД Турции: граждане России без визы до 60 дней для туризма и деловых поездок',
-    'https://www.mfa.gov.tr/visa-information-for-foreigners.en.mfa',
-    2026,
-    second,
-  ),
   uzbekistanEmployment: source(
     'Закон Узбекистана «О занятости населения», ст. 107 и 111: подтверждение права на трудовую деятельность',
     'https://lex.uz/ru/docs/5055696',
@@ -295,14 +289,32 @@ export const sources = {
     second,
   ),
   belarusLabourMigration: source(
-    'Pravo.by: МВД Беларуси о Законе «О внешней трудовой миграции» — специальное разрешение нанимателю',
-    'https://pravo.by/novosti/obshchestvenno-politicheskie-i-v-oblasti-prava/2023/june/74659/',
+    'Закон Беларуси «О внешней трудовой миграции» в редакции Закона № 233-З, ст. 25 и 28: специальное разрешение нанимателю',
+    'https://pravo.by/upload/docs/op/H12200233_1672779600.pdf',
     2023,
     second,
   ),
-  montenegroVisas: source(
-    'Правительство Черногории: визы, безвизовый въезд граждан России до 30 дней и виза D для цифровых кочевников',
-    'https://www.gov.me/en/article/visas',
+  belarusVisaRules: source(
+    'Визовые правила Беларуси (постановление Совмина № 464 от 14.09.2026), п. 12: категории въездных виз',
+    'https://pravo.by/upload/docs/op/C22600464_1789592400.pdf',
+    2026,
+    second,
+  ),
+  montenegroForeigners: source(
+    'Закон Черногории об иностранцах (Sl. list CG 12/2018), ст. 38: цели временного проживания и ВНЖ на 9 месяцев для поиска работы после учёбы или исследований',
+    'https://www.sluzbenilist.me/propisi/334183',
+    2018,
+    second,
+  ),
+  montenegroForeigners2026: source(
+    'Изменения Закона Черногории об иностранцах (Sl. list CG 3/2026), ст. 18 и 60a: виза D и ВНЖ цифрового кочевника',
+    'https://www.sluzbenilist.me/propisi/389913',
+    2026,
+    second,
+  ),
+  uzbekistanVisaCategories: source(
+    'Постановление Кабмина Узбекистана № 408, приложения 4 и 5: категории виз, IT-виза и безвизовый режим',
+    'https://lex.uz/ru/docs/513096',
     2026,
     second,
   ),

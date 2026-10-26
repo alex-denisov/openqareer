@@ -277,6 +277,7 @@ export function getCountryTaxData(countryCode: string): CountryTaxData {
 export function payrollSources(data: CountryTaxData): TaxDataSource[] {
   const all = [
     data.incomeTax.source,
+    ...(data.incomeTaxSurtax ? [data.incomeTaxSurtax.source] : []),
     ...data.employeeContributions.flatMap((item) =>
       item.capSource ? [item.source, item.capSource] : [item.source],
     ),

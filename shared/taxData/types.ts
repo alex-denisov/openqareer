@@ -60,6 +60,8 @@ export interface CountryTaxData {
   readonly taxYear: number;
   readonly incomeTax: IncomeTaxRule;
   readonly employeeContributions: readonly ContributionRule[];
+  /** A surtax charged as a share of the income tax (Montenegro's municipal prirez). */
+  readonly incomeTaxSurtax?: { readonly rate: number; readonly source: TaxDataSource };
   readonly costOfLiving: {
     readonly monthlyRent: null;
     readonly monthlyPrivateHealthInsurance: null;

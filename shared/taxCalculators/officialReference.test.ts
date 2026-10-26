@@ -123,13 +123,16 @@ describe('wave 1 countries: one official reference point each', () => {
     expect(calculateAnnualPayroll('BY', 120_000).incomeTax.amount).toBe(15_600);
     const high = calculateAnnualPayroll('BY', 500_000);
     expect(high.incomeTax.amount).toBe(83_000);
-    expect(high.employeeContributions.total).toBe(5_000);
+    // FSZN ceiling: five average wages, 5 × 3 135,9 BYN (Belstat, August 2026, via BelTA).
+    expect(high.employeeContributions.total).toBe(1_881.54);
   });
 
   it('Montenegro: 0 / 9 / 15 % monthly bands on gross pay, 10 % + 0,5 % contributions', () => {
     // Sl. list CG 160/2025 (ZPDFL čl. 10, from 01.01.2026); 94/2024 (PIO 10 %); 2025 PIO ceiling 75 453 €.
     const payroll = calculateAnnualPayroll('ME', 24_000);
     expect(payroll.incomeTax.amount).toBe(2_124);
+    // Podgorica prirez: 15 % of the tax (Sl. list CG — opštinski propisi 31/2019).
+    expect(payroll.solidaritySurcharge).toBe(318.6);
     expect(payroll.employeeContributions.total).toBe(2_520);
     expect(calculateAnnualPayroll('ME', 120_000).employeeContributions.total).toBe(8_145.3);
   });

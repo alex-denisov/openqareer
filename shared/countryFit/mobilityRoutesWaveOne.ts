@@ -4,7 +4,7 @@
  * where the official page could not be read.
  */
 import { sources } from './mobilitySources';
-import { noDataScenario, path, scenario, unavailableScenario } from './mobilityScenarioBuilders';
+import { path, scenario, unavailableScenario } from './mobilityScenarioBuilders';
 import type { MobilityRequirement, MobilityScenarioDefinition } from './types';
 
 /** Visa-free entry is not a right to work: local work needs a permit in the country. */
@@ -175,7 +175,7 @@ export const turkeyRemote: MobilityScenarioDefinition = scenario('digital_nomad'
 
 export const turkeyLocalWork = permitRequiredScenario(
   'TR',
-  'Граждане России въезжают без визы до 60 дней для туризма и деловых поездок, но работать можно только по разрешению.',
+  'Безвизовый въезд не даёт права работать: работать в Турции можно только по разрешению на работу.',
   sources.turkeyLabour,
 );
 
@@ -196,6 +196,29 @@ export const uzbekistanEmployer: MobilityScenarioDefinition = scenario('employer
   ),
 ]);
 
+export const uzbekistanJobSeeker: MobilityScenarioDefinition = unavailableScenario(
+  'job_seeker_visa',
+  'Визы для поиска работы в Узбекистане нет: рабочая виза E выдаётся только по разрешению на трудовую деятельность, которое оформляет работодатель.',
+  [sources.uzbekistanVisaCategories, sources.uzbekistanEmployment],
+);
+
+export const uzbekistanRemote: MobilityScenarioDefinition = scenario('digital_nomad', [
+  path('uzbekistan-it-visa', 'IT-виза для специалистов в сфере ИТ', [
+    {
+      kind: 'it_professional',
+      source: sources.uzbekistanVisaCategories,
+      explanation:
+        'IT-виза до трёх лет выдаётся специалистам в сфере ИТ, инвесторам и учредителям резидентов IT-парка.',
+    },
+    {
+      kind: 'manual_check',
+      source: sources.uzbekistanVisaCategories,
+      explanation:
+        'Нужна рекомендация дирекции IT-парка. Отдельной визы для удалённой работы нет; граждане России въезжают без визы без ограничения срока.',
+    },
+  ]),
+]);
+
 export const uzbekistanLocalWork = permitRequiredScenario(
   'UZ',
   'Иностранец может работать по найму только при подтверждении права на трудовую деятельность, полученном работодателем.',
@@ -210,10 +233,28 @@ export const belarusEmployer: MobilityScenarioDefinition = scenario('employer_sp
       kind: 'job_offer',
       source: sources.belarusLabourMigration,
       explanation:
-        'Наниматель получает специальное разрешение, кроме профессий из перечня, и уведомляет органы внутренних дел о приёме.',
+        'Работать можно только по трудовому договору и специальному разрешению, которое получает наниматель.',
+    },
+    {
+      kind: 'manual_check',
+      source: sources.belarusLabourMigration,
+      explanation:
+        'Разрешение выдают с учётом заключения областного комитета по труду, если вакансию не могут занять граждане и постоянно проживающие.',
     },
   ]),
 ]);
+
+export const belarusJobSeeker: MobilityScenarioDefinition = unavailableScenario(
+  'job_seeker_visa',
+  'Визы для поиска работы в Беларуси нет: виза «работа» выдаётся только по специальному разрешению нанимателя. Граждане ЕАЭС работают без разрешения.',
+  [sources.belarusVisaRules, sources.belarusLabourMigration],
+);
+
+export const belarusRemote: MobilityScenarioDefinition = unavailableScenario(
+  'digital_nomad',
+  'Отдельной визы или статуса для удалённой работы в Беларуси нет: категории виз — служебные, деловые, учёба, работа, туризм, частные дела и другие. Граждане ЕАЭС живут и работают по праву ЕАЭС.',
+  [sources.belarusVisaRules],
+);
 
 // Montenegro: temporary stay and work permit with an employer's written offer; digital nomad visa D.
 
@@ -242,32 +283,45 @@ export const montenegroEmployer: MobilityScenarioDefinition = scenario('employer
   ]),
 ]);
 
+export const montenegroJobSeeker: MobilityScenarioDefinition = scenario('job_seeker_visa', [
+  path(
+    'montenegro-job-search-after-study',
+    'ВНЖ на 9 месяцев для поиска работы после учёбы или исследований в Черногории',
+    [
+      {
+        kind: 'manual_check',
+        source: sources.montenegroForeigners,
+        explanation:
+          'Общего ВНЖ для поиска работы нет. После окончания учёбы или исследований в Черногории можно получить ВНЖ на 9 месяцев для поиска работы.',
+      },
+    ],
+  ),
+]);
+
 export const montenegroRemote: MobilityScenarioDefinition = scenario('digital_nomad', [
-  path('montenegro-digital-nomad', 'Виза D и ВНЖ цифрового кочевника', [
+  path('montenegro-digital-nomad', 'ВНЖ цифрового кочевника на срок до двух лет', [
     {
       kind: 'foreign_remote_employment',
-      source: sources.montenegroVisas,
+      source: sources.montenegroForeigners2026,
       explanation:
-        'Нужен договор или документ о работе в электронном виде на зарубежную компанию или свою компанию, не зарегистрированную в Черногории.',
+        'Нужен договор или документ о работе в электронном виде на зарубежную компанию или свою компанию, зарегистрированную в другой стране.',
+    },
+    {
+      kind: 'private_health_insurance',
+      source: sources.montenegroForeigners2026,
+      explanation: 'Нужна медицинская страховка.',
     },
     {
       kind: 'manual_check',
-      source: sources.montenegroVisas,
-      explanation: 'Порог дохода на официальной странице не указан; его уточняют при подаче.',
+      source: sources.montenegroForeigners2026,
+      explanation:
+        'Также проверяются средства на проживание и жильё; размер средств закон не называет. ВНЖ выдаётся до двух лет и продлевается ещё на два.',
     },
   ]),
 ]);
 
 export const montenegroLocalWork = permitRequiredScenario(
   'ME',
-  'Граждане России въезжают без визы до 30 дней; работать можно только на должности, на которую выдано разрешение.',
+  'Безвизовый въезд не даёт права работать: работать в Черногории можно только на должности, на которую выдано разрешение.',
   sources.montenegroWorkPermit,
 );
-
-export const waveOneNoData = {
-  uzbekistanJobSeeker: noDataScenario('job_seeker_visa'),
-  uzbekistanRemote: noDataScenario('digital_nomad'),
-  belarusJobSeeker: noDataScenario('job_seeker_visa'),
-  belarusRemote: noDataScenario('digital_nomad'),
-  montenegroJobSeeker: noDataScenario('job_seeker_visa'),
-} as const;

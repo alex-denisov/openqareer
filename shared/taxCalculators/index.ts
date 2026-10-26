@@ -41,7 +41,7 @@ export interface PayrollResult {
   readonly grossAnnualIncome: number;
   readonly taxableAnnualIncome: number;
   readonly incomeTax: IncomeTaxResult;
-  /** Germany's Solidaritätszuschlag on the income tax; 0 elsewhere. */
+  /** A surtax on the income tax: Germany's Solidaritätszuschlag or Montenegro's prirez; 0 elsewhere. */
   readonly solidaritySurcharge: number;
   readonly employeeContributions: {
     readonly items: readonly {
@@ -296,7 +296,10 @@ export function calculateAnnualPayroll(
     options.taxableIncome ??
     defaultTaxableIncome(data.code, grossAnnualIncome, options, employeeContributions);
   const incomeTax = calculateAnnualIncomeTax(data.code, taxableAnnualIncome);
-  const solidaritySurcharge = data.code === 'DE' ? germanSolidaritySurcharge(incomeTax.amount) : 0;
+  const solidaritySurcharge =
+    data.code === 'DE'
+      ? germanSolidaritySurcharge(incomeTax.amount)
+      : roundToCents(incomeTax.amount * (data.incomeTaxSurtax?.rate ?? 0));
   const netAnnualIncome = roundToCents(
     Math.max(
       0,

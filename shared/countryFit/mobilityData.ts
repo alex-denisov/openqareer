@@ -85,8 +85,8 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
     scenarios: [
       domesticScenario('BY'),
       waveOne.belarusEmployer,
-      waveOne.waveOneNoData.belarusJobSeeker,
-      waveOne.waveOneNoData.belarusRemote,
+      waveOne.belarusJobSeeker,
+      waveOne.belarusRemote,
       regionalScenario('BY', eaeuMembers, sources.eaeu, 'Работа для граждан государств ЕАЭС'),
     ],
   },
@@ -107,8 +107,8 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
     scenarios: [
       domesticScenario('UZ'),
       waveOne.uzbekistanEmployer,
-      waveOne.waveOneNoData.uzbekistanJobSeeker,
-      waveOne.waveOneNoData.uzbekistanRemote,
+      waveOne.uzbekistanJobSeeker,
+      waveOne.uzbekistanRemote,
       waveOne.uzbekistanLocalWork,
     ],
   },
@@ -118,7 +118,7 @@ const countries: Readonly<Record<string, CountryMobilityData>> = {
     scenarios: [
       domesticScenario('ME'),
       waveOne.montenegroEmployer,
-      waveOne.waveOneNoData.montenegroJobSeeker,
+      waveOne.montenegroJobSeeker,
       waveOne.montenegroRemote,
       waveOne.montenegroLocalWork,
     ],

@@ -84,6 +84,15 @@ const mePensionCeiling = source(
   'https://www.sluzbenilist.me/propisi/387933',
   2025,
 );
+const mePodgoricaSurtax = source(
+  'Главный город Подгорица: решение о надбавке к подоходному налогу, ставка 15% (Sl. list CG — opštinski propisi 31/2019)',
+  'https://www.sluzbenilist.me/propisi/387132',
+  2019,
+);
+const byAverageWage = source(
+  'БелТА со ссылкой на Белстат: средняя зарплата в августе 2026 года 3 135,9 рубля (потолок взноса — пять средних зарплат)',
+  'https://belta.by/society/view/belstat-srednjaja-zarplata-v-belarusi-v-avguste-sostavila-31359-rublja-802569-2026/',
+);
 const meUnemployment = source(
   'Закон Черногории о взносах, ст. 18: взнос работника на страхование от безработицы 0,5%',
   'https://wapi.gov.me/download/280ab36d-2ff7-4f06-aab5-0d2ca2af1875?version=1.0',
@@ -216,7 +225,15 @@ export const waveOneTaxData = {
       ],
       source: byTaxCode,
     },
-    employeeContributions: [{ name: 'Пенсионное страхование', rate: 0.01, source: bySocialFund }],
+    employeeContributions: [
+      {
+        name: 'Пенсионное страхование',
+        rate: 0.01,
+        monthlyCap: 15_679.5,
+        source: bySocialFund,
+        capSource: byAverageWage,
+      },
+    ],
     costOfLiving: unavailableCostOfLiving,
   },
   ME: {
@@ -233,6 +250,7 @@ export const waveOneTaxData = {
       ],
       source: meIncomeTax,
     },
+    incomeTaxSurtax: { rate: 0.15, source: mePodgoricaSurtax },
     employeeContributions: [
       {
         name: 'Пенсионное и инвалидное страхование',

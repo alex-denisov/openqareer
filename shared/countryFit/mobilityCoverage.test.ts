@@ -9,15 +9,6 @@ const coveredCountries = ['DE', 'CY', 'RS', 'AE', 'GE', 'RU', 'GB'] as const;
 /** Wave 1 of the expansion (owner's choice, 26.10). */
 const waveOneCountries = ['AM', 'KZ', 'TR', 'UZ', 'BY', 'ME'] as const;
 
-/** Pairs whose official page could not be read on 26.10; they stay without thresholds. */
-const openWaveOnePairs = new Set([
-  'UZ × job_seeker_visa',
-  'UZ × digital_nomad',
-  'BY × job_seeker_visa',
-  'BY × digital_nomad',
-  'ME × job_seeker_visa',
-]);
-
 /** A typical candidate: Russian citizen in Russia, a degree, remote income from a foreign employer. */
 const typicalCandidate: MobilityCandidateProfile = {
   citizenshipCountryCodes: ['RU'],
@@ -52,24 +43,17 @@ describe('Country Fit route coverage', () => {
     },
   );
 
-  it.each(waveOneCountries)(
-    '%s answers every scenario from an official source unless the pair is listed as open',
-    (countryCode) => {
-      const data = getCountryMobilityData(countryCode);
-      expect(data.scenarios.map(({ id }) => id)).toHaveLength(5);
-      for (const scenario of data.scenarios) {
-        const pair = `${countryCode} × ${scenario.id}`;
-        if (openWaveOnePairs.has(pair)) {
-          expect(scenario.dataStatus, pair).toBe('no_data');
-          continue;
-        }
-        expect(scenario.dataStatus, pair).not.toBe('no_data');
-        if (scenario.dataStatus === 'unavailable') {
-          expect(scenario.sources?.length, pair).toBeGreaterThan(0);
-        }
+  it.each(waveOneCountries)('%s answers every scenario from an official source', (countryCode) => {
+    const data = getCountryMobilityData(countryCode);
+    expect(data.scenarios.map(({ id }) => id)).toHaveLength(5);
+    for (const scenario of data.scenarios) {
+      const pair = `${countryCode} × ${scenario.id}`;
+      expect(scenario.dataStatus, pair).not.toBe('no_data');
+      if (scenario.dataStatus === 'unavailable') {
+        expect(scenario.sources?.length, pair).toBeGreaterThan(0);
       }
-    },
-  );
+    }
+  });
 
   it('dates every official source and keeps it verifiable', () => {
     for (const countryCode of [...coveredCountries, ...waveOneCountries]) {
@@ -125,10 +109,15 @@ describe('Country Fit route coverage', () => {
     ['TR', 'digital_nomad', 'unknown'],
     ['TR', 'simple_mobility', 'unknown'],
     ['UZ', 'employer_sponsorship', 'unknown'],
+    ['UZ', 'job_seeker_visa', 'unavailable'],
+    ['UZ', 'digital_nomad', 'unknown'],
     ['UZ', 'simple_mobility', 'unknown'],
     ['BY', 'employer_sponsorship', 'unknown'],
+    ['BY', 'job_seeker_visa', 'unavailable'],
+    ['BY', 'digital_nomad', 'unavailable'],
     ['BY', 'simple_mobility', 'available'],
     ['ME', 'employer_sponsorship', 'unknown'],
+    ['ME', 'job_seeker_visa', 'unknown'],
     ['ME', 'digital_nomad', 'unknown'],
     ['ME', 'simple_mobility', 'unknown'],
   ])('typical candidate: %s × %s is %s', (countryCode, scenarioId, expected) => {
