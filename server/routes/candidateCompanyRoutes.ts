@@ -13,6 +13,7 @@ import {
 import { finishMatchedVacancies } from './matchedVacancyRoutes';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
+import { isPrivateEmployerCluster } from '../vacancies/privateEmployerMask';
 import { readTargetLevel } from './vacancyRoleContext';
 import {
   listCandidateConnectionViews,
@@ -88,7 +89,8 @@ function projectVacancyItems(
 ): CandidateCompanyVacancyInput[] {
   return items.flatMap(({ cluster }) => {
     const companyName = (companyNameOverride ?? cluster.canonicalCompany).trim();
-    if (!companyName) return [];
+    // INC-023: частное лицо — не компания, в «Компаниях» его нет (CPO 26.10).
+    if (!companyName || isPrivateEmployerCluster(cluster)) return [];
     const source = cluster.sources[0];
     return [
       {

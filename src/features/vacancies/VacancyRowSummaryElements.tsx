@@ -147,7 +147,10 @@ export function VacancyDefaultSummaryContent({
         <span className="vac-fit">
           <RoleFitDot roleMatch={explanation.roleMatch} adjacent={explanation.adjacentRole} />
           <LevelFitDot levelMatch={explanation.levelMatch} />
-          <GeoFitDot outsideGeo={explanation.outsideGeography} />
+          <GeoFitDot
+            outsideGeo={explanation.outsideGeography || explanation.remoteCountry === 'other'}
+            unknown={explanation.remoteCountry === 'unknown'}
+          />
         </span>
       </span>
     </>

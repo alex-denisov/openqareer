@@ -35,7 +35,7 @@ describe('LandingPage (B535, approved mockup v18)', () => {
 
   it('shows pool numbers with a date and only salaried rows without company names', () => {
     const html = render();
-    expect(html).toContain('<b>1,1 млн</b> записей вакансий');
+    expect(html).toContain('<b>1,1 млн</b> вакансий в каталоге');
     expect(html).toContain('<b>324</b> источника');
     expect(html).toContain('Пул openqareer, обновлено 20.10.2026');
     expect(html).toContain('Одна вакансия может встречаться в нескольких источниках.');

@@ -95,22 +95,31 @@ function VacancyScreenLevelCell({ item }: { readonly item: MatchedVacancyItem })
   );
 }
 
+export interface VacancyGeoFit {
+  readonly state: 'yes' | 'no' | 'unknown';
+  readonly label: string;
+}
+
+/** Отметка колонки «Гео»: город, формат и страна удалёнки (CPO 26.10). */
+export function vacancyGeoFit(item: MatchedVacancyItem): VacancyGeoFit {
+  if (item.explanation.outsideGeography) return { state: 'no', label: 'другой город' };
+  if (formatGateBlocked(item)) return { state: 'no', label: 'формат не подходит' };
+  if (item.explanation.remoteCountry === 'other') return { state: 'no', label: 'другая страна' };
+  if (item.explanation.remoteCountry === 'unknown')
+    return { state: 'unknown', label: 'удалённо, страна не указана' };
+  return { state: 'yes', label: 'совпадает' };
+}
+
 function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
-  const formatBlocked = formatGateBlocked(item);
-  const outside = Boolean(item.explanation.outsideGeography) || formatBlocked;
-  const fitLabel = item.explanation.outsideGeography
-    ? 'другой город'
-    : formatBlocked
-      ? 'формат не подходит'
-      : 'совпадает';
+  const fit = vacancyGeoFit(item);
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--geo" data-label="Гео">
       <span>{vacancyGeoLabel(item)}</span>
       <span className="vacancies-screen-fit-status">
         <span aria-hidden="true">
-          <GeoFitDot outsideGeo={outside} />
+          <GeoFitDot outsideGeo={fit.state === 'no'} unknown={fit.state === 'unknown'} />
         </span>
-        <span>{fitLabel}</span>
+        <span>{fit.label}</span>
       </span>
     </span>
   );
@@ -141,6 +150,7 @@ export interface VacancyRowStatus {
 /** Статус строки 390 — из тех же отметок совпадения, что колонки «Уровень» и «Гео» на 1440. */
 export function vacancyRowStatus(item: MatchedVacancyItem): VacancyRowStatus {
   if (item.explanation.outsideGeography) return { tone: 'warn', label: 'Другой город' };
+  if (item.explanation.remoteCountry === 'other') return { tone: 'warn', label: 'Другая страна' };
   if (formatGateBlocked(item)) {
     const format = workFormatLabel(vacancyFormat(item));
     return {
@@ -151,6 +161,8 @@ export function vacancyRowStatus(item: MatchedVacancyItem): VacancyRowStatus {
   const level = item.explanation.levelMatch;
   if (level === 'above' || level === 'below') return { tone: 'warn', label: 'Другой уровень' };
   if (level === 'unknown') return { tone: 'unknown', label: 'Уровень не указан' };
+  if (item.explanation.remoteCountry === 'unknown')
+    return { tone: 'unknown', label: 'Страна не указана' };
   return { tone: 'ok', label: 'Подходит' };
 }
 
@@ -161,7 +173,7 @@ function VacancyScreenStatusCell({ item }: { readonly item: MatchedVacancyItem }
       ? CheckCircle
       : status.tone === 'unknown'
         ? Question
-        : status.label === 'Другой город'
+        : status.label === 'Другой город' || status.label === 'Другая страна'
           ? MapPin
           : WarningCircle;
   return (

@@ -206,6 +206,8 @@ interface VacancyMatchExplanation {
    */
   /** Вакансия вне рынков кампании кандидата (PRB-040): подписана, но не скрыта. */
   outsideGeography?: boolean;
+  /** Удалёнка без страны (`unknown`) или в другой стране (`other`), CPO 26.10. */
+  remoteCountry?: 'unknown' | 'other';
   /** B546: market estimate for a vacancy without salary, computed by maintenance. */
   marketSalary?: import('../../../shared/marketSalaryEstimate').MarketSalaryEstimateView;
   matchingCount?: number;

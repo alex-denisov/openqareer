@@ -5,6 +5,7 @@ import { performance } from 'node:perf_hooks';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
+import { maskPrivateEmployers } from '../vacancies/privateEmployerMask';
 import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
 import { buildMatchedVacancyPage, planMatchedVacancyPages } from '../vacancies/matchedVacancyPage';
 import { createHash } from 'node:crypto';
@@ -80,7 +81,9 @@ export function finishMatchedVacancies(
     roleFiltered,
     candidateStore.decisionProfileRepo.get(candidateId),
   );
-  return applyVacancyDecisions(withinProfile, candidateStore.listVacancyDecisions(candidateId));
+  return maskPrivateEmployers(
+    applyVacancyDecisions(withinProfile, candidateStore.listVacancyDecisions(candidateId)),
+  );
 }
 
 /** Снимок подбора уже отобран по уровню; роль — тот же признак, что в списке (B485). */

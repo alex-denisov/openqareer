@@ -117,7 +117,23 @@ export function LevelFitDot({
   );
 }
 
-export function GeoFitDot({ outsideGeo }: { readonly outsideGeo?: boolean }) {
+export function GeoFitDot({
+  outsideGeo,
+  unknown,
+}: {
+  readonly outsideGeo?: boolean;
+  readonly unknown?: boolean;
+}) {
+  if (unknown && !outsideGeo) {
+    return (
+      <FitDotView
+        className="fit-dot is-unknown"
+        label="География: страна не указана"
+        tooltip="География: страна не указана"
+        icon={<Question className="fit-dot-icon" aria-hidden="true" />}
+      />
+    );
+  }
   if (!outsideGeo) {
     return (
       <FitDotView

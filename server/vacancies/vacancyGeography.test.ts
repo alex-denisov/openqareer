@@ -33,7 +33,12 @@ describe('regionOfVacancy', () => {
 
 describe('markGeography', () => {
   const item = (id: string, location: string | undefined, isRemote = false) => ({
-    cluster: { id, canonicalLocation: location, isRemote, firstObservedAt: '2026-09-20T00:00:00.000Z' },
+    cluster: {
+      id,
+      canonicalLocation: location,
+      isRemote,
+      firstObservedAt: '2026-09-20T00:00:00.000Z',
+    },
     explanation: {
       clusterId: id,
       roleMatch: 'target' as const,
@@ -44,7 +49,11 @@ describe('markGeography', () => {
 
   it('flags records outside the campaign regions and orders them last', () => {
     const marked = markGeography(
-      [item('us', 'Austin, TX, United States'), item('mena', 'Riyadh, Saudi Arabia'), item('unknown', undefined)],
+      [
+        item('us', 'Austin, TX, United States'),
+        item('mena', 'Riyadh, Saudi Arabia'),
+        item('unknown', undefined),
+      ],
       ['mena'],
     );
     expect(marked.map((entry) => entry.cluster.id)).toEqual(['mena', 'unknown', 'us']);
@@ -94,5 +103,38 @@ describe('штаты и провинции после города (B546)', () =
     expect(regionOfVacancy({ location: 'Mississauga, ON L4W 5J1' })).toBe('us');
     expect(regionOfVacancy({ location: 'Atlanta, GA; Dallas, TX' })).toBe('us');
     expect(regionOfVacancy({ location: 'Tel Aviv, Israel' })).toBe('mena');
+  });
+});
+
+/** CPO 26.10: «Remote» без страны или в другой стране не равно «совпадает» для «Удалённо из РФ». */
+describe('remoteCountry', () => {
+  const remote = (id: string, location: string | undefined) => ({
+    cluster: {
+      id,
+      canonicalLocation: location,
+      isRemote: true,
+      firstObservedAt: '2026-09-20T00:00:00.000Z',
+    },
+    explanation: {
+      clusterId: id,
+      roleMatch: 'target' as const,
+      requirements: { matched: 3, total: 7 },
+    },
+  });
+
+  it('marks remote without a country and remote in another country', () => {
+    const marked = markGeography(
+      [
+        remote('none', 'Remote'),
+        remote('us', 'Remote, United States'),
+        remote('ru', 'Удалённо, Россия'),
+      ],
+      ['ru'],
+    );
+    const byId = new Map(marked.map((item) => [item.cluster.id, item.explanation]));
+    expect(byId.get('none')).toMatchObject({ remoteCountry: 'unknown' });
+    expect(byId.get('us')).toMatchObject({ remoteCountry: 'other' });
+    expect(byId.get('ru')).not.toHaveProperty('remoteCountry');
+    expect(byId.get('us')).not.toHaveProperty('outsideGeography');
   });
 });
