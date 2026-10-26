@@ -64,7 +64,58 @@ const CAREER_ACTION_KINDS = [
   'outreach.prepare',
   'outreach.send',
   'connection.request',
+  'career.role.add',
+  'career.role.remove',
+  'career.conditions.update',
 ] as const;
+
+/** Изменения «Карьеры», которые консультант предлагает, а кандидат подтверждает (26.10). */
+export const CAREER_CHANGE_KINDS = [
+  'career.role.add',
+  'career.role.remove',
+  'career.conditions.update',
+] as const;
+
+export const CAREER_CHANGE_FORMATS = ['office', 'hybrid', 'remote'] as const;
+
+export const careerChangeSchema = z
+  .object({
+    roleTitle: z.string().trim().min(2).max(200).nullable(),
+    locations: z.array(z.string().trim().min(2).max(120)).min(1).max(20).nullable(),
+    salaryFloorRubles: z.number().int().min(1).max(100_000_000).nullable(),
+    formats: z.array(z.enum(CAREER_CHANGE_FORMATS)).min(1).max(3).nullable(),
+    relocation: z.boolean().nullable(),
+    stopCompanies: z.array(z.string().trim().min(1).max(200)).min(1).max(20).nullable(),
+  })
+  .strict();
+
+export type CareerChange = z.infer<typeof careerChangeSchema>;
+
+function isCareerChangeKind(kind: string): boolean {
+  return (CAREER_CHANGE_KINDS as readonly string[]).includes(kind);
+}
+
+function careerChangeIssue(kind: string, change: CareerChange | null | undefined): string | null {
+  if (!isCareerChangeKind(kind))
+    return change ? 'only career.* proposals carry a careerChange' : null;
+  if (!change) return 'career.* proposals need a careerChange';
+  if (kind === 'career.conditions.update') {
+    const { roleTitle, ...conditions } = change;
+    if (roleTitle) return 'conditions updates do not name a role';
+    return Object.values(conditions).some((value) => value !== null)
+      ? null
+      : 'conditions updates need at least one changed condition';
+  }
+  const otherFields = [
+    change.locations,
+    change.salaryFloorRubles,
+    change.formats,
+    change.relocation,
+    change.stopCompanies,
+  ];
+  if (!change.roleTitle) return 'role changes need a roleTitle';
+  return otherFields.every((value) => value === null) ? null : 'role changes carry only roleTitle';
+}
 
 export const resumeExperienceDateTextSchema = z.union([
   z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/),
@@ -140,8 +191,11 @@ export const careerActionProposalSchema = z
     measureAfter: z.string().date(),
     risk: z.enum(['read_only', 'candidate_data_write', 'external_side_effect']),
     resumeRevision: resumeRevisionProposalSchema.nullable().optional(),
+    careerChange: careerChangeSchema.nullable().optional(),
   })
   .superRefine((proposal, context) => {
+    const changeIssue = careerChangeIssue(proposal.kind, proposal.careerChange);
+    if (changeIssue) context.addIssue({ code: z.ZodIssueCode.custom, message: changeIssue });
     if (proposal.kind === 'resume.revise' && !proposal.resumeRevision) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -298,6 +352,18 @@ export const coachTurnInputSchema = z.object({
   phase: z.enum(COACH_PHASES).default('discovery'),
   internalPurpose: z.enum(['consultant-summary', 'structured-stage']).optional(),
   resumeContext: resumeContextSchema.optional(),
+  /** Текущие роли и условия «Карьеры»: консультант предлагает их изменить (26.10). */
+  careerContext: z
+    .object({
+      roles: z.array(z.string().trim().min(1).max(200)).max(20),
+      locations: z.array(z.string().trim().min(1).max(120)).max(20),
+      salaryFloorRubles: z.number().nullable(),
+      formats: z.array(z.enum(CAREER_CHANGE_FORMATS)).max(3),
+      relocation: z.boolean(),
+      stopCompanies: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+    })
+    .strict()
+    .optional(),
   stageContext: z.string().trim().max(10_000).optional(),
   rejectedProposals: z.array(z.string().trim().max(500)).max(50).optional(),
   messages: z.array(coachMessageSchema).min(1).max(30),
@@ -648,6 +714,63 @@ export const COACH_TURN_JSON_SCHEMA = {
               { type: 'null' },
             ],
           },
+          careerChange: {
+            anyOf: [
+              {
+                type: 'object',
+                properties: {
+                  roleTitle: {
+                    anyOf: [{ type: 'string', minLength: 2, maxLength: 200 }, { type: 'null' }],
+                  },
+                  locations: {
+                    anyOf: [
+                      {
+                        type: 'array',
+                        minItems: 1,
+                        maxItems: 20,
+                        items: { type: 'string', minLength: 2, maxLength: 120 },
+                      },
+                      { type: 'null' },
+                    ],
+                  },
+                  salaryFloorRubles: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }] },
+                  formats: {
+                    anyOf: [
+                      {
+                        type: 'array',
+                        minItems: 1,
+                        maxItems: 3,
+                        items: { type: 'string', enum: [...CAREER_CHANGE_FORMATS] },
+                      },
+                      { type: 'null' },
+                    ],
+                  },
+                  relocation: { anyOf: [{ type: 'boolean' }, { type: 'null' }] },
+                  stopCompanies: {
+                    anyOf: [
+                      {
+                        type: 'array',
+                        minItems: 1,
+                        maxItems: 20,
+                        items: { type: 'string', minLength: 1, maxLength: 200 },
+                      },
+                      { type: 'null' },
+                    ],
+                  },
+                },
+                required: [
+                  'roleTitle',
+                  'locations',
+                  'salaryFloorRubles',
+                  'formats',
+                  'relocation',
+                  'stopCompanies',
+                ],
+                additionalProperties: false,
+              },
+              { type: 'null' },
+            ],
+          },
         },
         required: [
           'kind',
@@ -658,6 +781,7 @@ export const COACH_TURN_JSON_SCHEMA = {
           'measureAfter',
           'risk',
           'resumeRevision',
+          'careerChange',
         ],
         additionalProperties: false,
       },
@@ -696,6 +820,7 @@ export function serializeCoachInput(input: CoachTurnInput): string {
       ? { rejectedProposals: input.rejectedProposals }
       : {}),
     ...(input.resumeContext ? { resumeContext: input.resumeContext } : {}),
+    ...(input.careerContext ? { careerContext: input.careerContext } : {}),
     activeRole: input.activeRole ?? 'career_consultant',
     priorRoleContributions: input.priorRoleContributions ?? [],
     marketObservations: input.marketObservations ?? [],

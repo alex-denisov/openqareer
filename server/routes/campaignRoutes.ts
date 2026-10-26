@@ -12,6 +12,7 @@ import {
   withDeps,
 } from './helpers';
 import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
+import { handleChangeCareerRole } from './careerRoleChangeRoute';
 
 type Handler = (
   deps: RouteDeps,
@@ -113,6 +114,7 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
       revision: previousRevision + 1,
       updatedAt: new Date().toISOString(),
       ...(stored.campaign?.auto ? { auto: stored.campaign.auto } : {}),
+      ...(stored.campaign?.careerRoles ? { careerRoles: stored.campaign.careerRoles } : {}),
       ...(stored.campaign?.dismissed?.length || removedAutoIds.length
         ? { dismissed: [...new Set([...(stored.campaign?.dismissed ?? []), ...removedAutoIds])] }
         : {}),
@@ -143,6 +145,11 @@ const handleRebuildCampaignRoles: Handler = async (deps, request, reply) => {
 
 export function registerCampaignRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/candidate/campaign', withDeps(deps, handleReadCampaign));
+  app.post(
+    '/api/v1/candidate/career-roles',
+    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
+    withDeps(deps, handleChangeCareerRole),
+  );
   app.post(
     '/api/v1/candidate/campaign',
     { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },

@@ -13,3 +13,18 @@ it('uses the page summary first, then the detail summary, and is honest while lo
   expect(vacancySummaryText('', { status: 'ready', detail })).toEqual({});
   expect(vacancySummaryText('', { status: 'failed' })).toEqual({});
 });
+
+it('falls back to the opening of the full text when neither summary exists (26.10, Autodesk)', () => {
+  const description = [
+    'Job Requisition ID #',
+    '26WD101358',
+    'Position Overview',
+    'Autodesk is looking for an experienced Engineering Manager to lead a high-performing engineering team within the Enterprise Technology organization.',
+    'In this role, you will lead, hire, develop, and grow a team of talented engineers while remaining closely connected to the technology.',
+  ].join('\n\n');
+  const detail = { id: 'c', description, truncated: false, skills: [], responsibilities: [] };
+  const result = vacancySummaryText('', { status: 'ready', detail });
+  expect(result.text).toMatch(/^Autodesk is looking for an experienced Engineering Manager/);
+  expect(result.text).not.toContain('Requisition');
+  expect(result.text!.length).toBeLessThanOrEqual(420);
+});

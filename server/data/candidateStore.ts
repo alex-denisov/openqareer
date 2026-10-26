@@ -329,6 +329,7 @@ export type StartedTurn =
         messages: CoachMessage[];
         knowledgeContext: NonNullable<CoachTurnInput['knowledgeContext']>;
         resumeContext?: CoachTurnInput['resumeContext'];
+        careerContext?: CoachTurnInput['careerContext'];
         stageContext?: string;
         rejectedProposals?: string[];
       };
@@ -498,6 +499,7 @@ export interface CandidateStore {
     reason?: string,
   ): void;
   getConsultantRejections(candidateId: string): ConsultantRejection[];
+  withdrawConsultantRejection(candidateId: string, proposalKey: string): void;
   addManualExperienceFact(
     candidateId: string,
     memoryId: string,

@@ -20,6 +20,7 @@ import { rejectRole, useCareerRoles } from './careerRoleStore';
 import { getDecisionProfile, putDecisionProfile } from '../coach/coachApi';
 import { addCandidateStopCompany, listCandidateStopCompanies } from '../automation/automationApi';
 import type { CandidateDecisionProfile } from '../../../shared/workPreferences';
+import { CAREER_CONDITIONS_CHANGED } from '../journey/careerChangeApply';
 
 const STOP_ORIGIN_LABELS: Readonly<Record<string, string>> = {
   manual: 'добавлено вручную',
@@ -43,6 +44,13 @@ function useConditionsLoad(
   setConditions: React.Dispatch<React.SetStateAction<SearchConditionsDraft>>,
   setProfile: (profile: CandidateDecisionProfile | null) => void,
 ) {
+  const [revision, setRevision] = useState(0);
+  // Консультант изменил условия из панели — экран перечитывает их (26.10).
+  useEffect(() => {
+    const reload = () => setRevision((value) => value + 1);
+    window.addEventListener(CAREER_CONDITIONS_CHANGED, reload);
+    return () => window.removeEventListener(CAREER_CONDITIONS_CHANGED, reload);
+  }, []);
   useEffect(() => {
     if (initialConditions) return;
     const controller = new AbortController();
@@ -60,7 +68,7 @@ function useConditionsLoad(
       active = false;
       controller.abort();
     };
-  }, [initialConditions, setConditions, setProfile]);
+  }, [initialConditions, setConditions, setProfile, revision]);
 }
 
 function useStopListAdd(

@@ -667,6 +667,10 @@ export class ConversationController {
     return this.consultantRejections.list(candidateId);
   }
 
+  withdrawConsultantRejection(candidateId: string, proposalKey: string): void {
+    this.consultantRejections.withdraw(candidateId, proposalKey);
+  }
+
   private getMessage(
     candidateId: string,
     messageId: string,

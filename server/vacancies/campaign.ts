@@ -28,6 +28,12 @@ export interface StoredCampaignSelection {
   readonly remoteOnly?: boolean;
   readonly revision: number;
   readonly updatedAt: string;
+  readonly careerRoles?: readonly CareerRoleRef[];
+}
+
+export interface CareerRoleRef {
+  readonly id: string;
+  readonly title: string;
 }
 
 export type CampaignFieldOrigin = 'explicit' | 'model' | 'profile' | 'default';
@@ -104,6 +110,33 @@ export interface ResolveCampaignInput {
   readonly evidenceByRef?: ReadonlyMap<string, string>;
   /** Число подобранных вакансий на роль кампании — вход порога значимости. */
   readonly vacancyCountsByRole?: Readonly<Record<string, number>>;
+  /** Роли, которые кандидат отклонил на «Карьере» или в разговоре (`careerRoleId`). */
+  readonly rejectedRoleIds?: ReadonlySet<string>;
+  /** Тот же id, что у роли «Карьеры»: отклонение роли мастера тоже убирает её из подбора. */
+  readonly roleIdOf?: (title: string) => string;
+}
+
+/**
+ * Роли подбора = роли мастера ∪ роли «Карьеры» без отклонённых (решение
+ * владельца 26.10: роли из профиля и разговора видны в «Вакансиях» сразу,
+ * а не после проверки навыков). Порядок: сначала выбор кандидата в мастере.
+ */
+function campaignRoleTitles(input: ResolveCampaignInput): string[] {
+  const rejected = input.rejectedRoleIds ?? new Set<string>();
+  const idOf = input.roleIdOf;
+  const explicit = (input.explicit?.roles ?? []).filter(
+    (title) => !idOf || !rejected.has(idOf(title)),
+  );
+  const career = (input.explicit?.careerRoles ?? [])
+    .filter((role) => !rejected.has(role.id))
+    .map((role) => role.title);
+  const seen = new Set<string>();
+  return [...explicit, ...career].filter((title) => {
+    const key = idOf ? idOf(title) : title.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 const ACCEPTED_STATUSES = new Set(['confirmed', 'corrected']);
@@ -172,7 +205,11 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
   const derivedRegions = input.profileRegions;
   const modelRoles = input.auto?.roles.map((role) => role.title) ?? [];
 
-  const roles = resolveField(input.explicit?.roles, modelRoles, derivedRoles);
+  const roles = resolveField(campaignRoleTitles(input), modelRoles, derivedRoles);
+  const wizardRoles: CampaignField<readonly string[]> = {
+    value: input.explicit?.roles ?? [],
+    origin: (input.explicit?.roles ?? []).length > 0 ? 'explicit' : 'default',
+  };
   const explicitRegions = input.explicit?.regions;
   const isProfileOrigin = (input.explicit as { readonly origin?: string } | null)?.origin === 'profile';
   const regions: CampaignField<readonly string[]> =
@@ -193,7 +230,9 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
       }),
     })),
     divergence: {
-      roles: divergenceOf(roles, derivedRoles),
+      // Баннер расхождения сравнивает с профилем только выбор мастера:
+      // роли «Карьеры» и есть роли профиля.
+      roles: divergenceOf(wizardRoles, derivedRoles),
       regions: divergenceOf(regions, derivedRegions),
     },
     suggestedRegions: derivedRegions,

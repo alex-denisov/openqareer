@@ -436,6 +436,10 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.conversations.getConsultantRejections(candidateId);
   }
 
+  withdrawConsultantRejection(candidateId: string, proposalKey: string): void {
+    this.conversations.withdrawConsultantRejection(candidateId, proposalKey);
+  }
+
   createVacancySubscription(candidateId: string, input: VacancySubscriptionInput, now: string): StoredVacancySubscription {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.create(candidateId, input, now);

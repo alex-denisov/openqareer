@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { TAXONOMY_VERSION, type FunctionCode } from '../../../shared/roleTaxonomy';
 import { MIGRATION_35 } from '../../data/sqliteSchema';
 import { normalizeTitleKey } from './normalizeTitleKey';
-import { rulesParse } from './rulesParse';
+import { exactOntologyTitleKeys, rulesParse } from './rulesParse';
 
 /**
  * Фоновое наполнение смыслового индекса правилами (B267 S2, план §4 фаза 1).
@@ -23,6 +23,8 @@ export interface SemanticBackfillReport {
   readonly pruned: number;
   readonly passFinished: boolean;
   readonly relabeled: number;
+  /** Модельные разборы, исправленные точным вариантом онтологии (раз за процесс). */
+  readonly ontologyCorrected: number;
 }
 
 interface PoolRow {
@@ -47,6 +49,7 @@ export class SemanticBackfill {
   private cursor = '';
   /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
   private relabelDone = false;
+  private ontologyCorrectionDone = false;
 
   constructor(database: DatabaseSync) {
     this.database = database;
@@ -59,6 +62,7 @@ export class SemanticBackfill {
    * LIMIT по совпадениям на размеченном пуле обходил бы весь индекс за шаг.
    */
   step(chunk: number): SemanticBackfillReport {
+    const ontologyCorrected = this.correctByExactOntology();
     const relabeled = this.relabelStale(RELABEL_CHUNK);
     const windowEnd = this.windowEnd(chunk);
     const rows = this.readWindow(windowEnd);
@@ -75,7 +79,66 @@ export class SemanticBackfill {
       pruned,
       passFinished,
       relabeled,
+      ontologyCorrected,
     };
+  }
+
+  /**
+   * Точный вариант онтологии главнее модели: модель ставила рядовому
+   * руководителю группы уровень Head, и VP видел его как «совпадает».
+   * Читаются только ключи онтологии по первичному ключу (несколько тысяч),
+   * переписываются лишь расходящиеся; строки индекса по ним пересоберёт
+   * ближайший проход наполнения. Один раз за процесс.
+   */
+  private correctByExactOntology(): number {
+    if (this.ontologyCorrectionDone) return 0;
+    this.ontologyCorrectionDone = true;
+    const read = this.database.prepare(
+      `SELECT title_key, sample_title, functions, level_rank FROM title_parse
+       WHERE title_key = ? AND parsed_by = 'model'`,
+    );
+    const corrections = exactOntologyTitleKeys().flatMap((key) => {
+      const row = read.get(key) as
+        | { title_key: string; sample_title: string; functions: string; level_rank: number | null }
+        | undefined;
+      if (!row) return [];
+      const parsed = rulesParse(row.sample_title);
+      if (!parsed.roleId) return [];
+      const functions = JSON.stringify(parsed.functions);
+      if (functions === row.functions && parsed.levelRank === row.level_rank) return [];
+      return [{ key: row.title_key, functions, levelRank: parsed.levelRank }];
+    });
+    if (corrections.length === 0) return 0;
+    const update = this.database.prepare(
+      `UPDATE title_parse SET functions = ?, level_rank = ?, parsed_by = 'rules', model = NULL,
+         taxonomy_version = ?, parsed_at = ? WHERE title_key = ?`,
+    );
+    const drop = this.database.prepare('DELETE FROM vacancy_semantic WHERE title_key = ?');
+    // Без строки очереди модель взяла бы название снова и вернула свой разбор.
+    const keepFromModel = this.database.prepare(
+      `INSERT OR REPLACE INTO title_parse_model_queue (title_key, eligible, failures, frozen)
+       VALUES (?, 0, 0, 0)`,
+    );
+    const now = Date.now();
+    this.database.exec('BEGIN');
+    try {
+      for (const correction of corrections) {
+        update.run(
+          correction.functions,
+          correction.levelRank,
+          TAXONOMY_VERSION,
+          now,
+          correction.key,
+        );
+        drop.run(correction.key);
+        keepFromModel.run(correction.key);
+      }
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return corrections.length;
   }
 
   /**
