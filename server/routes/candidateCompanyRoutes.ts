@@ -628,7 +628,10 @@ function enqueueCompanyRecruiterJobs(
 ) {
   return vacancyIds.map((vacancyId) => {
     const current = repo.getJob(candidateId, vacancyId);
-    return current && current.status !== 'failed'
+    // Готовый поиск без единого контакта повторяется: кэш Exa не даёт платить дважды.
+    const foundNobody =
+      current?.status === 'ready' && repo.getContactsByVacancyId(candidateId, vacancyId).length === 0;
+    return current && current.status !== 'failed' && !foundNobody
       ? current
       : repo.enqueueJob(candidateId, vacancyId);
   });

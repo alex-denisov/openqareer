@@ -377,6 +377,28 @@ describe('candidate company routes (B439)', () => {
   });
 });
 
+describe('recruiter search repeat', () => {
+  it('searches again when an earlier finished search found nobody', async () => {
+    const items = [matchedVacancy('cluster-v2', 'Вектор Банк')];
+    const { app, authorization, candidate, contacts, consent } = await setup(items);
+    consent.set(candidate.id, { granted: true, policyVersion: SEARCH_CONSENT_POLICY_VERSION });
+    const job = contacts.enqueueJob(candidate.id, 'cluster-v2');
+    contacts.claimJobs(1);
+    contacts.finishJob(job.id, 'ready');
+    const url = `/api/v1/candidate/companies/${candidateCompanyKey('Вектор Банк')}/recruiter-search`;
+
+    const response = await app.inject({
+      method: 'POST',
+      url,
+      headers: { authorization, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(contacts.getJob(candidate.id, 'cluster-v2')?.status).toBe('queued');
+  });
+});
+
 describe('B448 candidate connection circles', () => {
   it('puts an imported LinkedIn contact at the vacancy company into circle 1 (B448)', async () => {
     const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);

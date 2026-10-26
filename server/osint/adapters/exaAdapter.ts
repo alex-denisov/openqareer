@@ -284,6 +284,26 @@ export async function searchExaPeople(
   );
 }
 
+/** Обычный веб-поиск Exa (без категории «люди») — например, сайт компании. */
+export async function searchExaWeb(
+  query: string,
+  apiKey: string,
+  signal: AbortSignal,
+  options: { readonly fetch?: typeof fetch; readonly requestGate?: FootprintRequestGate } & ExaSearchOverrides,
+): Promise<readonly string[]> {
+  const { fetch: fetcher, requestGate, ...overrides } = options;
+  const results = await runSearch(
+    query,
+    undefined,
+    apiKey,
+    fetcher ?? globalThis.fetch,
+    signal,
+    requestGate ?? sharedFootprintRequestGate,
+    overrides,
+  );
+  return results.flatMap((result) => (typeof result.url === 'string' ? [result.url] : []));
+}
+
 export function createExaAdapter(options: ExaAdapterOptions): FootprintAdapter<ExaAdapterInput> {
   const fetcher = options.fetch ?? globalThis.fetch;
   const now = options.now ?? (() => new Date());
