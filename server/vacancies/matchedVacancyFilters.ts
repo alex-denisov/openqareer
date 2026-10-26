@@ -9,6 +9,7 @@ import {
   matchedVacancyRegion,
   type MatchedVacancyLevelReader,
 } from './matchedVacancyFacets';
+import '../../shared/geo/serverGeoDirectory';
 
 const repeated = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess(

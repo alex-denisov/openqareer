@@ -1,11 +1,10 @@
-import { useState, type KeyboardEvent, type ReactElement } from 'react';
+import { useEffect, useState, type KeyboardEvent, type ReactElement } from 'react';
 import {
   Buildings,
   CaretDown,
   Check,
   CheckCircle,
   Circle,
-  Clock,
   FunnelSimple,
   Globe,
   Info,
@@ -20,8 +19,9 @@ import {
   formatConditionsFormat,
   formatSalaryFloor,
 } from './careerConditionsStorage';
-import { formatVacancyCount } from './careerWageFork';
 import { useEscapeLayer } from '../shell/escapeLayers';
+import { useGeoDirectory } from '../geo/useGeoDirectory';
+import { CareerGeoCombobox, normalizeGeoSelection } from './CareerGeoCombobox';
 
 function EditorError({ message }: { message?: string | null }): ReactElement | null {
   if (!message) return null;
@@ -253,16 +253,16 @@ export function CareerInlineGeoEditor({
   onCancel: () => void;
   errorMessage?: string | null;
 }): ReactElement {
-  const [val, setVal] = useState(initialSelected.join(', '));
-
-  const handleSave = () => {
-    const list = val
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    onSave(list);
-  };
-  const onKeyDown = useEditorKeys(handleSave, onCancel);
+  const { ready } = useGeoDirectory();
+  const [selected, setSelected] = useState<readonly string[]>(() =>
+    normalizeGeoSelection(initialSelected),
+  );
+  // Справочник на клиенте приходит чанком: старые значения сводятся к нему после загрузки.
+  useEffect(() => {
+    if (ready) setSelected((current) => normalizeGeoSelection(current));
+  }, [ready]);
+  const handleSave = () => onSave(selected);
+  useEscapeLayer(onCancel);
 
   return (
     <div className="career-inline-edit" aria-label="Редактирование географии">
@@ -270,13 +270,11 @@ export function CareerInlineGeoEditor({
         Города и регионы поиска
       </label>
       <div className="career-inline-row">
-        <input
-          onKeyDown={onKeyDown}
-          id="geo-input"
-          className="career-inline-input"
-          value={val}
-          onChange={(e) => setVal(e.target.value)}
-          placeholder="Например: Москва, Удалённо из РФ"
+        <CareerGeoCombobox
+          inputId="geo-input"
+          selected={selected}
+          onChange={setSelected}
+          onSubmit={handleSave}
         />
         <SalaryActionButtons onSave={handleSave} onCancel={onCancel} />
       </div>
@@ -455,25 +453,5 @@ export function CareerConditionsCard({
       <ConditionsMarketLine summary={summary} />
       <RelocationRow isRelocationEnabled={relocationEnabled} onOpenRelocation={onOpenRelocation} />
     </section>
-  );
-}
-
-export function MarketSourceStamp({
-  summary,
-}: {
-  summary: RolesMarketSummary;
-}): ReactElement | null {
-  if (summary.vacancyTotal === 0) return null;
-  const sources = ['каталог openqareer', ...summary.sources];
-  const named =
-    sources.length > 1 ? `${sources.slice(0, -1).join(', ')} и ${sources.at(-1)}` : sources[0];
-  return (
-    <p className="career-source-stamp career-meta-icon">
-      <Clock size={14} aria-hidden />
-      <span>
-        Источник: {named} · {formatVacancyCount(summary.vacancyTotal)}
-        {summary.asOf ? ` · ${summary.asOf}` : ''}
-      </span>
-    </p>
   );
 }

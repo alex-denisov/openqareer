@@ -6,6 +6,7 @@ import {
 } from '../../shared/locationTree';
 import type { CandidateDecisionProfile } from '../../shared/workPreferences';
 import { regionOfVacancy } from './vacancyGeography';
+import '../../shared/geo/serverGeoDirectory';
 
 /**
  * География подбора из условий «Карьеры» (CPO 26.10): города и форматы, а не

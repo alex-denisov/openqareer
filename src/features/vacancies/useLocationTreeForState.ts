@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 
 import { buildLocationTree, type LocationTree } from '../../../shared/locationTree';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import { useGeoDirectory } from '../geo/useGeoDirectory';
 import type { VacanciesScreenState } from './vacanciesScreenState';
 import { filterByScreenState } from './vacancyScreenCriteria';
 
@@ -17,6 +18,8 @@ export function useLocationTreeBuilder(
   matched: readonly MatchedVacancyItem[],
   serverFiltered: boolean,
 ): LocationTreeBuilder {
+  // Справочник приходит отдельным чанком: после загрузки дерево строится заново.
+  const { ready: directoryReady } = useGeoDirectory();
   return useCallback(
     (state) => {
       const withoutLocation: VacanciesScreenState = {
@@ -36,7 +39,7 @@ export function useLocationTreeBuilder(
         })),
       );
     },
-    [matched, serverFiltered],
+    [matched, serverFiltered, directoryReady],
   );
 }
 

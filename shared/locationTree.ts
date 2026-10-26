@@ -8,6 +8,7 @@ import {
   US_STATE_NAMES,
   US_STATES,
 } from './locationGazetteer';
+import { geoCity, geoCountry } from './geo/geoDirectory';
 
 /**
  * Дерево «страна › регион › город» для фильтра «Локации» (B547).
@@ -61,11 +62,12 @@ const NOT_A_PLACE = /^(remote|удал[её]нно|anywhere|worldwide|hybrid|г�
 const lower = (value: string) => value.toLocaleLowerCase('ru-RU');
 
 function countryOf(part: string | undefined): string | undefined {
-  return part ? COUNTRY_NAMES[lower(part.trim())] : undefined;
+  return part ? (COUNTRY_NAMES[lower(part.trim())] ?? geoCountry(part)) : undefined;
 }
 
-function cityLabel(raw: string): string {
-  return CITY_NAMES[lower(raw)] ?? raw;
+/** Ручной справочник первым: его подписи — ключи уже сохранённых выборов. */
+function cityLabel(raw: string, country?: string): string {
+  return CITY_NAMES[lower(raw)] ?? geoCity(raw, country)?.label ?? raw;
 }
 
 function usState(part: string | undefined): string | undefined {
@@ -85,20 +87,22 @@ function detectCountry(parts: string[], place: VacancyPlaceInput): string | unde
   if (given) return given;
   if (parts.length > 1 && usState(parts[1])) return 'США';
   if (parts[0] && RUSSIAN_CITY_DISTRICT[lower(cityLabel(parts[0]))]) return HOME_COUNTRY;
-  if (parts[0]) return CITY_COUNTRY[cityLabel(parts[0])];
+  if (parts[0]) return CITY_COUNTRY[cityLabel(parts[0])] ?? geoCity(parts[0])?.country;
   return undefined;
 }
 
 function regionFor(country: string, city: string | undefined, middle: string | undefined) {
+  const directory = city ? geoCity(city, country)?.region : undefined;
   if (country === HOME_COUNTRY) {
-    return (city && RUSSIAN_CITY_DISTRICT[lower(city)]) ?? UNKNOWN_REGION;
+    return (city && RUSSIAN_CITY_DISTRICT[lower(city)]) ?? directory ?? UNKNOWN_REGION;
   }
   if (country === 'США') return usState(middle) ?? (city && US_CITY_STATE[city]) ?? UNKNOWN_REGION;
-  return middle && middle !== city ? middle : UNKNOWN_REGION;
+  return directory ?? (middle && middle !== city ? middle : UNKNOWN_REGION);
 }
 
 export function parseVacancyLocation(place: VacancyPlaceInput): LocationPath | undefined {
   const parts = (place.location ?? '')
+    .replace(/\([^)]*\)/gu, '')
     .split(',')
     .map((part) => part.trim())
     .filter((part) => part && !NOT_A_PLACE.test(part));
@@ -106,7 +110,7 @@ export function parseVacancyLocation(place: VacancyPlaceInput): LocationPath | u
   if (!country) return undefined;
   if (parts.length === 1 && countryOf(parts[0]) === country) return { country };
   if (!parts.length) return { country };
-  const city = cityLabel(parts[0]!);
+  const city = cityLabel(parts[0]!, country);
   return { country, region: regionFor(country, city, parts[1]), city };
 }
 
