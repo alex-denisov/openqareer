@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getCountryTaxData } from '../../../shared/taxData';
+import { getCountryTaxData, payrollSources } from '../../../shared/taxData';
 import type { CountryCode } from '../../../shared/taxData/types';
 import type { PayrollResult } from '../../../shared/taxCalculators';
 import { CountryChoice, MoneyInput } from './CountryFitFields';
@@ -90,14 +90,7 @@ export function CountryFitDonut({ payroll }: { payroll?: PayrollResult }) {
 }
 function CurrentSources({ payroll }: { payroll?: PayrollResult }) {
   if (!payroll) return null;
-  const data = getCountryTaxData(payroll.countryCode);
-  const sources = [
-    ...new Map(
-      [data.incomeTax.source, ...data.employeeContributions.map((item) => item.source)].map(
-        (source) => [source.url, source],
-      ),
-    ).values(),
-  ];
+  const sources = payrollSources(getCountryTaxData(payroll.countryCode));
   return (
     <details className="cf-faq">
       <summary>Источники и допущения текущего сценария</summary>

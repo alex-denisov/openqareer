@@ -2,7 +2,21 @@ import { getCountryTaxData } from '../../../shared/taxData';
 import type { CountryCode } from '../../../shared/taxData/types';
 import { calculateAnnualPayroll } from '../../../shared/taxCalculators';
 
-export const COUNTRY_CODES: readonly CountryCode[] = ['DE', 'CY', 'RS', 'AE', 'GE', 'RU'];
+export const COUNTRY_CODES: readonly CountryCode[] = [
+  'DE',
+  'CY',
+  'RS',
+  'AE',
+  'GE',
+  'RU',
+  'AM',
+  'KZ',
+  'TR',
+  'UZ',
+  'BY',
+  'ME',
+  'GB',
+];
 export const COUNTRY_FIT_STORAGE_KEY = 'openqareer:country-fit-scenario:v1';
 export interface CountryFitScenario {
   readonly countryCode: CountryCode;

@@ -1,4 +1,4 @@
-import { getCountryMobilityData, getVisibleThresholdSource, isNumberRequirement } from './mobilityData';
+import { getCountryMobilityData, getVisibleThresholdSource, isNumberRequirement, isVerifiableSource } from './mobilityData';
 import { residenceRightIn } from './residenceDocuments';
 import { calculateGermanOpportunityCardPoints, germanOpportunityCardLanguageGate } from './germanyOpportunityCard';
 import type {
@@ -22,22 +22,17 @@ interface RequirementEvaluation {
 }
 
 function sourceIsValid(requirement: MobilityRequirement): boolean {
-  if (!('source' in requirement)) return true;
-  const evidence = requirement.source;
-  if (!evidence.title || !Number.isInteger(evidence.dataYear) || !/^\d{4}-\d{2}-\d{2}$/.test(evidence.retrievedAt)) {
-    return false;
-  }
-  try {
-    return new URL(evidence.url).protocol === 'https:';
-  } catch {
-    return false;
-  }
+  return !('source' in requirement) || isVerifiableSource(requirement.source);
 }
 
 function thresholdPeriod(requirement: MobilityRequirement): SourcedThreshold['period'] | null {
   switch (requirement.kind) {
     case 'minimum_annual_salary':
       return 'annual';
+    case 'minimum_offer_salary':
+      return requirement.per === 'quarter' ? 'quarterly' : 'monthly';
+    case 'minimum_savings':
+      return 'one_time';
     case 'minimum_remote_income':
     case 'minimum_monthly_funds':
       return 'monthly';
@@ -55,6 +50,10 @@ function thresholdLabel(requirement: MobilityRequirement): string {
   switch (requirement.kind) {
     case 'minimum_annual_salary':
       return 'Минимальная годовая зарплата';
+    case 'minimum_offer_salary':
+      return requirement.per === 'quarter' ? 'Минимальная зарплата за квартал' : 'Минимальная месячная зарплата';
+    case 'minimum_savings':
+      return 'Личные сбережения на счёте';
     case 'minimum_remote_income':
       return requirement.incomeBasis === 'net' ? 'Минимальный чистый доход в месяц' : 'Минимальный доход в месяц';
     case 'minimum_monthly_funds':
@@ -161,6 +160,19 @@ function evaluateRequirement(
       }
       return passes();
     }
+    case 'visa_free_stay': {
+      const citizenship = candidate.citizenshipCountryCodes;
+      if (!citizenship || citizenship.length === 0) return missing('Укажите гражданство в анкете.');
+      if (!citizenship.some((code) => requirement.eligibleCitizenshipCountryCodes.includes(code.toUpperCase()))) {
+        return missing('Безвизовый режим для этого гражданства не проверен; проверьте его на официальном сайте страны.');
+      }
+      if (candidate.stayDurationDays !== undefined && candidate.stayDurationDays > requirement.maximumStayDays) {
+        return fails('Планируемый срок дольше безвизового пребывания.');
+      }
+      return passes();
+    }
+    case 'manual_check':
+      return missing(requirement.explanation);
     case 'job_offer':
       if (candidate.hasJobOffer === undefined) return missing('Укажите, есть ли предложение работы для этой страны.');
       result = candidate.hasJobOffer ? passes() : fails('Для этого маршрута нужен оффер от работодателя.');
@@ -235,6 +247,25 @@ function evaluateRequirement(
         requirement.amount,
         requirement.currency,
         'Укажите ожидаемую годовую зарплату по офферу.',
+      );
+      break;
+    case 'minimum_offer_salary': {
+      const months = requirement.per === 'quarter' ? 3 : 1;
+      const monthly = candidate.monthlyOfferSalary;
+      result = candidateAmountMatches(
+        monthly && { amount: monthly.amount * months, currency: monthly.currency },
+        requirement.amount,
+        requirement.currency,
+        'Укажите месячную зарплату по офферу до налогов.',
+      );
+      break;
+    }
+    case 'minimum_savings':
+      result = candidateAmountMatches(
+        candidate.availableSavings,
+        requirement.amount,
+        requirement.currency,
+        'Укажите личные сбережения на счёте.',
       );
       break;
     case 'minimum_job_seeker_points': {
@@ -363,7 +394,7 @@ function evaluateScenario(
       status: 'unavailable',
       reasons: [definition.reason ?? 'Официальный источник подтверждает, что этот маршрут недоступен.'],
       thresholds: [],
-      sources: [],
+      sources: (definition.sources ?? []).filter(isVerifiableSource),
       paths: [],
     };
   }

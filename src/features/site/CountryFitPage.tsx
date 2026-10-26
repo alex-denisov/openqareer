@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { getCountryTaxData } from '../../../shared/taxData';
+import { getCountryTaxData, payrollSources } from '../../../shared/taxData';
 import type { CountryCode } from '../../../shared/taxData/types';
 import { CountryChoice, MoneyInput } from './CountryFitFields';
 import {
@@ -13,7 +13,7 @@ import { calculateCountryFitScenario, saveCountryFitScenario } from './countryFi
 
 export const COUNTRY_FIT_TITLE = 'Калькулятор налогов и чистой зарплаты 2026 | openqareer';
 export const COUNTRY_FIT_DESCRIPTION =
-  'Налоги и чистая зарплата за 2026 год в шести странах. Сравните доход после налогов и остаток со своими расходами на жильё и жизнь.';
+  'Налоги и чистая зарплата за 2026 год в 13 странах. Сравните доход после налогов и остаток со своими расходами на жильё и жизнь.';
 export const COUNTRY_FIT_FAQ = [
   [
     'Нужна ли регистрация для расчёта?',
@@ -38,16 +38,6 @@ interface CountryFitPageProps {
   readonly signedIn?: boolean;
   readonly isAdmin?: boolean;
 }
-function payrollSources(country: CountryCode) {
-  const data = getCountryTaxData(country);
-  return [
-    ...new Map(
-      [data.incomeTax.source, ...data.employeeContributions.map((item) => item.source)].map(
-        (source) => [source.url, source],
-      ),
-    ).values(),
-  ];
-}
 function useCountryFitModel(onNavigate: (path: string) => void, signedIn: boolean) {
   const [country, setCountry] = useState<CountryCode>('DE');
   const [gross, setGross] = useState('60000');
@@ -62,7 +52,7 @@ function useCountryFitModel(onNavigate: (path: string) => void, signedIn: boolea
       currency: data.currency,
       maximumFractionDigits: 0,
     }).format(amount);
-  const sources = payrollSources(country);
+  const sources = payrollSources(getCountryTaxData(country));
   const error = 'error' in result ? result.error : result.costsError;
   function continueToOnboarding() {
     if (signedIn) {
@@ -291,7 +281,7 @@ function ScenarioHeading() {
     <header className="cf-heading">
       <p className="ps-label">Country Fit · 2026</p>
       <h1>Зарплата после налогов</h1>
-      <p>Чистый доход в шести странах. Без регистрации.</p>
+      <p>Чистый доход в 13 странах. Без регистрации.</p>
     </header>
   );
 }

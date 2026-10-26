@@ -169,6 +169,9 @@ function bootstrapRoot(markup: string, options: { inert?: boolean } = {}): strin
   );
 }
 
+/** 13 countries render twice as radio choices (target and comparison). */
+const COUNTRY_FIT_DOCUMENT_BUDGET = 24_000;
+
 /** The existing favicon is the same measured brand geometry as BrandMark. */
 export function compactCountryFitDocument(document: string): string {
   return document
@@ -187,15 +190,17 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
         path: '/tools/country-fit',
         title: COUNTRY_FIT_TITLE,
         description: COUNTRY_FIT_DESCRIPTION,
-        shareDescription: 'Налоги и чистая зарплата за 2026 год в шести странах. Расчёт со своими расходами.',
+        shareDescription: 'Налоги и чистая зарплата за 2026 год в 13 странах. Расчёт со своими расходами.',
       }),
     ).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<CountryFitPage onNavigate={() => {}} />)),
     ),
   );
-  if (Buffer.byteLength(document) > 20_000) {
-    throw new Error(`Country Fit document ${Buffer.byteLength(document)} exceeds the 20000-byte route budget`);
+  if (Buffer.byteLength(document) > COUNTRY_FIT_DOCUMENT_BUDGET) {
+    throw new Error(
+      `Country Fit document ${Buffer.byteLength(document)} exceeds the ${COUNTRY_FIT_DOCUMENT_BUDGET}-byte route budget`,
+    );
   }
   await writeFile(`${distDirectory}/country-fit.html`, document);
 }
