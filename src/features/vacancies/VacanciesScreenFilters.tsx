@@ -7,6 +7,7 @@ import {
   VacanciesFilterToolbarFromState,
   withCampaignDefaults,
   filterGroupMatches,
+  type CareerLocations,
   type VacancyFilterGroup,
 } from './VacanciesFilterToolbar';
 import type { VacanciesScreenState } from './vacanciesScreenState';
@@ -41,6 +42,7 @@ export interface VacanciesScreenFiltersProps {
   readonly campaignRoles?: readonly string[];
   readonly regions?: readonly string[];
   readonly suggestedRegions?: readonly string[];
+  readonly careerLocations?: CareerLocations;
   readonly candidateLevel?: string;
   readonly onOpenProfileLevel?: () => void;
   readonly onAddCustomRole?: (title: string) => Promise<boolean>;
@@ -367,7 +369,13 @@ function LocationTreeSection({
     if (places) return buildLocationTree(places);
     return locationTreeFor?.(JSON.parse(otherFilters)) ?? EMPTY_LOCATION_TREE;
   }, [places, locationTreeFor, otherFilters]);
-  const view = locationSelectionView(props.state, tree, places ?? [], props.regions ?? []);
+  const view = locationSelectionView(
+    props.state,
+    tree,
+    places ?? [],
+    props.regions ?? [],
+    props.careerLocations,
+  );
   const onChange: VacanciesScreenFiltersProps['onChange'] = view.fromRegions
     ? (update) => props.onChange(() => ({ ...update(view.state), regions: [] }))
     : props.onChange;
@@ -522,7 +530,7 @@ function MobileFilterSheetContent({
     <MobileFilterSheet
       activeGroup={activeGroup}
       values={mobileFilterValues(
-        withCampaignDefaults(draft, props.campaignRoles, props.regions),
+        withCampaignDefaults(draft, props.campaignRoles, props.regions, props.careerLocations),
         catalog.sources.length,
       )}
       subtitle={sheetSubtitle(props.facets, resultCount)}
@@ -620,7 +628,12 @@ function VacancyFilterPanelBody({
   return (
     <div className="vacancies-filter-wrap">
       <VacanciesFilterToolbarFromState
-        state={withCampaignDefaults(model.draftProps.state, props.campaignRoles, props.regions)}
+        state={withCampaignDefaults(
+          model.draftProps.state,
+          props.campaignRoles,
+          props.regions,
+          props.careerLocations,
+        )}
         expanded={model.expanded}
         activeGroup={activeGroup}
         onToggle={onTogglePanel}

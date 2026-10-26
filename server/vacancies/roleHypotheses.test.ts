@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRoleProposals } from './roleHypotheses';
+import { buildRoleProposals, confirmChosenTitle } from './roleHypotheses';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 
 function matchedVacancy(title: string, skills: string[]): MatchedVacancyItem {
@@ -49,5 +49,30 @@ describe('buildRoleProposals (B180, срез 1в)', () => {
     expect(roles).toEqual([
       expect.objectContaining({ title: 'Аналитик данных', origin: 'market' }),
     ]);
+  });
+});
+
+describe('confirmChosenTitle: счёт роли мастера = счёт фильтра «Роли» (26.10)', () => {
+  const at = (title: string, roleMatch: 'target' | 'partial' | 'none') =>
+    ({
+      ...matchedVacancy(title, ['Kubernetes']),
+      explanation: { roleMatch },
+    }) as unknown as MatchedVacancyItem;
+
+  it('считает подобранные вакансии роли, а не точные совпадения заголовка', () => {
+    const matched = [
+      ...Array.from({ length: 5 }, () => at('VP of Engineering', 'target')),
+      ...Array.from({ length: 4 }, () => at('VP Engineering, Platform', 'partial')),
+      // Как в фильтре «Роли»: два общих слова («of», «technology»).
+      at('Head of Technology', 'partial'),
+      at('VP of Sales', 'none'),
+    ];
+    const confirmation = confirmChosenTitle({
+      matched,
+      title: 'VP of Engineering / Technology',
+      candidateSkills: ['Kubernetes'],
+    });
+    expect(confirmation.state).toBe('observed');
+    expect(confirmation.state === 'observed' && confirmation.sampleSize).toBe(10);
   });
 });

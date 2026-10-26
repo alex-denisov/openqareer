@@ -50,6 +50,12 @@ export interface CampaignMetaView {
   }[];
   readonly roleHypotheses?: readonly CampaignRoleHypothesis[];
   readonly suggestedRegions?: readonly string[];
+  /** Города и удалёнка из условий «Карьеры» (CPO 26.10); есть — «Локации» берут их. */
+  readonly careerGeography?: {
+    readonly labels: readonly string[];
+    readonly places: readonly string[];
+    readonly remote: boolean;
+  };
 }
 
 export interface CandidateCampaignUpdate {
@@ -132,8 +138,10 @@ export async function getMatchedVacancyPage(
 export function matchedVacancyQuery(offset: number, filters?: VacanciesScreenState): string {
   const query = new URLSearchParams({ offset: String(offset) });
   const groups = [
-    ['region', filters?.regions], ['level', filters?.levels],
-    ['source', filters?.sources], ['role', filters?.roles],
+    ['region', filters?.regions],
+    ['level', filters?.levels],
+    ['source', filters?.sources],
+    ['role', filters?.roles],
   ] as const;
   for (const [key, values] of groups) {
     for (const value of values ?? []) query.append(key, value);

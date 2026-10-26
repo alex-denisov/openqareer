@@ -104,21 +104,3 @@ export async function applyCareerChange(
   for (const company of change.stopCompanies ?? []) await addCandidateStopCompany(company);
   window.dispatchEvent(new Event(CAREER_CONDITIONS_CHANGED));
 }
-
-/**
- * Предложение изменить условия опирается на условия в момент ответа. Из
- * сохранённого хода оно не показывается: условия могли уже смениться, и
- * старая карточка («Зарплата от 800 000 ₽» после возврата к 600 000)
- * предлагала бы устаревшее. Роли проверяет `roleChangeAlreadyApplied`.
- */
-export function withoutStoredConditionChanges<
-  T extends { readonly actionProposals: readonly { readonly kind: string }[] },
->(result: T | undefined): T | undefined {
-  if (!result) return undefined;
-  return {
-    ...result,
-    actionProposals: result.actionProposals.filter(
-      (proposal) => proposal.kind !== 'career.conditions.update',
-    ),
-  };
-}

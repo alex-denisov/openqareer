@@ -36,7 +36,7 @@ describe('B528 generated text fact gate', () => {
     expect(data.atsCoverLetter).toContain('25%');
     expect(data.outputFactChecks.atsCoverLetter.status).toBe('needs_confirmation');
     expect(data.notices).toEqual(expect.arrayContaining([
-      expect.stringMatching(/Перед отправкой сверьте с профилем.*25%/u),
+      expect.stringMatching(/Можете подтвердить.*25%/u),
     ]));
     expect(candidates.getSnapshot(candidateId).memory.find((fact) => fact.id === 'imp0123456789-template')?.status).toBe('proposed');
   });
@@ -209,7 +209,7 @@ describe('B528 generated text fact gate', () => {
       expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
     } else {
       expect(data.atsCoverLetter).not.toBe(text);
-      expect(data.notices).toContain('В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.');
+      expect(data.notices).toContain('The generated letter contains claims that need confirmation. A letter based on your profile facts is shown instead. Review the facts before sending.');
     }
   });
 

@@ -1,7 +1,8 @@
 import type { RoleObservation } from '../../shared/poolRoleHypotheses';
 import type { WorkPreferenceResult } from '../../shared/workPreferences';
+import { titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
 import {
-  confirmRoleTitle,
+  confirmRoleObservations,
   proposeRoles,
   type NamedRole,
   type ProposedRole,
@@ -64,9 +65,16 @@ export function confirmChosenTitle(input: {
   readonly title: string;
   readonly candidateSkills: readonly string[];
 }): RoleConfirmation {
-  return confirmRoleTitle({
+  // Тот же признак, что у фильтра «Роли» и счёта кампании: вакансия подобрана
+  // по функции и уровню ролей кандидата и относится к этой роли (26.10).
+  const ofRole = input.matched.filter(
+    (item) =>
+      item.explanation?.roleMatch !== 'none' &&
+      titleMatchesRole(item.cluster.canonicalTitle, input.title),
+  );
+  return confirmRoleObservations({
     title: input.title,
-    pool: observations(input.matched),
+    observations: observations(ofRole),
     candidateSkills: input.candidateSkills,
   });
 }

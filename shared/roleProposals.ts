@@ -90,9 +90,7 @@ export function proposeRoles(input: {
   readonly preferences?: WorkPreferenceResult;
 }): ProposedRole[] {
   const groups = groupObservations(input.pool);
-  const skills = new Set(
-    input.candidateSkills.map((skill) => skill.toLowerCase().trim()),
-  );
+  const skills = new Set(input.candidateSkills.map((skill) => skill.toLowerCase().trim()));
   const claimed = new Set<string>();
 
   const fromModel = input.named
@@ -178,13 +176,33 @@ export function confirmRoleTitle(input: {
 }
 
 /**
+ * Подтверждение по уже отобранным вакансиям роли (26.10): роль мастера
+ * «VP of Engineering / Technology» дословно не встречается в пуле, и счёт по
+ * ключу заголовка давал «0 вакансий» при 273 в фильтре «Роли».
+ */
+export function confirmRoleObservations(input: {
+  readonly title: string;
+  readonly observations: readonly RoleObservation[];
+  readonly candidateSkills: readonly string[];
+}): RoleConfirmation {
+  const key = titleKey(input.title);
+  if (!key) return { state: 'not-found' };
+  const titles = new Map<string, number>();
+  for (const item of input.observations) {
+    const title = item.canonicalTitle?.trim();
+    if (title) titles.set(title, (titles.get(title) ?? 0) + 1);
+  }
+  return confirmationFor(
+    { key, items: [...input.observations], titles },
+    new Set(input.candidateSkills.map((skill) => skill.toLowerCase().trim())),
+  );
+}
+
+/**
  * Совпадение считается только по требованиям вакансий: пересечение имени роли
  * с самим собой давало бы каждой названной роли лишний балл из воздуха.
  */
-function confirmationFor(
-  group: RoleGroup | undefined,
-  skills: Set<string>,
-): RoleConfirmation {
+function confirmationFor(group: RoleGroup | undefined, skills: Set<string>): RoleConfirmation {
   const size = group?.items.length ?? 0;
   if (size === 0) return { state: 'not-found' };
   // Ниже порога наблюдений показывается только абсолютное число: доли и
@@ -196,9 +214,7 @@ function confirmationFor(
   };
 }
 
-function withoutIdentity(
-  hypothesis: PoolRoleHypothesis,
-): Omit<PoolRoleHypothesis, 'id' | 'title'> {
+function withoutIdentity(hypothesis: PoolRoleHypothesis): Omit<PoolRoleHypothesis, 'id' | 'title'> {
   return {
     sampleSize: hypothesis.sampleSize,
     observedFrom: hypothesis.observedFrom,

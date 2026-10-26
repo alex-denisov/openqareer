@@ -111,45 +111,18 @@ function SectionedDescription({
 }) {
   return (
     <>
-      {sections.intro.map((line, index) => (
-        <p key={`intro-${index}`}>{line}</p>
-      ))}
+      {sections.intro.length > 0 ? <p>{sections.intro.join(' ')}</p> : null}
       {sections.sections.map((section, index) => (
         <section key={`${section.title}-${index}`}>
           <h4>{section.title}</h4>
-          <SectionBody section={section} />
+          <ul>
+            {section.items.map((item, itemIndex) => (
+              <li key={`${itemIndex}-${item}`}>{item}</li>
+            ))}
+          </ul>
         </section>
       ))}
     </>
-  );
-}
-
-/** Source list lines stay a list; beside them paragraphs and subheadings stay
- *  paragraphs (Workday: «Product Strategy» above its bullets, 26.10). A section
- *  with no markers at all is a list, as in mockup 4 (B549). */
-function SectionBody({
-  section,
-}: {
-  readonly section: NonNullable<ReturnType<typeof parseDescriptionSections>>['sections'][number];
-}) {
-  const hasList = section.bullets.some(Boolean);
-  const groups = section.items.reduce<{ list: boolean; items: string[] }[]>((acc, item, index) => {
-    const list = !hasList || (section.bullets[index] ?? true);
-    const last = acc.at(-1);
-    return last && last.list && list
-      ? [...acc.slice(0, -1), { list, items: [...last.items, item] }]
-      : [...acc, { list, items: [item] }];
-  }, []);
-  return groups.map((group, index) =>
-    group.list ? (
-      <ul key={index}>
-        {group.items.map((item, itemIndex) => (
-          <li key={`${itemIndex}-${item}`}>{item}</li>
-        ))}
-      </ul>
-    ) : (
-      <p key={index}>{group.items[0]}</p>
-    ),
   );
 }
 

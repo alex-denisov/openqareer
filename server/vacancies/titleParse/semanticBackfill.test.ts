@@ -234,13 +234,35 @@ describe('SemanticBackfill (B267 S2)', () => {
     const first = backfill.step(100);
     backfill.step(100);
 
-    expect(first.ontologyCorrected).toBe(1);
+    expect(first.ontologyCorrected).toBe(2);
     const rows = semanticRows(database);
     expect(rows.find((row) => row.id === 'v1')).toMatchObject({
       function_code: 'eng-mgmt',
       level_rank: 1,
     });
-    // Модельный разбор без точного варианта онтологии не трогается.
-    expect(rows.find((row) => row.id === 'v2')?.level_rank).toBe(2);
+    // CPO 26.10: Senior Manager — lead; функции модели остаются.
+    expect(rows.find((row) => row.id === 'v2')).toMatchObject({
+      function_code: 'sales',
+      level_rank: 1,
+    });
+  });
+
+  it('Senior Manager с маркером Head остаётся Head, функции модели не меняются', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Senior Manager, Head of Payments');
+    addVacancy(database, 'v2', 'Director of Engineering');
+    const backfill = new SemanticBackfill(database);
+    const insert = database.prepare(
+      `INSERT INTO title_parse (title_key, sample_title, functions, level_rank, role_label, parsed_by, model, taxonomy_version, priority, parsed_at)
+       VALUES (?, ?, ?, 2, NULL, 'model', 'gemini', 3, 0, 0)`,
+    );
+    insert.run(
+      'senior manager, head of payments',
+      'Senior Manager, Head of Payments',
+      '["finance"]',
+    );
+    insert.run('director of engineering', 'Director of Engineering', '["eng-mgmt"]');
+
+    expect(backfill.step(100).ontologyCorrected).toBe(0);
   });
 });

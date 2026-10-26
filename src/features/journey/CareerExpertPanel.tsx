@@ -43,7 +43,6 @@ import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import { starterPromptsForStage } from './starterPrompts';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
-import { withoutStoredConditionChanges } from './careerChangeApply';
 import { ComposerModeSplit, type ComposerInputMode } from './ComposerModeSplit';
 import { CareerActionProposalList } from './CareerCommandActions';
 import { ConsultantMessage } from './ConsultantMessage';
@@ -408,8 +407,7 @@ export function CareerExpertPanel({
   const latestStoredTurn = [...(snapshot?.turns ?? [])]
     .reverse()
     .find((turn) => turn.status === 'completed' && turn.result);
-  const latestResult =
-    liveResult ?? withoutStoredConditionChanges(latestStoredTurn?.result ?? undefined);
+  const latestResult = liveResult ?? latestStoredTurn?.result ?? undefined;
   const lastAssistantMessage = [...turns].reverse().find((message) => message.role === 'assistant');
   const visibleQuickReplies =
     !quickRepliesDismissed &&

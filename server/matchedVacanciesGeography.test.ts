@@ -72,7 +72,12 @@ async function createApp(clusters: VacancyCluster[] = []) {
         description: cluster.descriptionSummary,
         requiredSkills: cluster.skills,
         url: cluster.primaryUrl,
-        provenance: { sourceId: 'test-source', sourceType: 'rss', sourceUrl: cluster.primaryUrl, observedAt: cluster.firstObservedAt },
+        provenance: {
+          sourceId: 'test-source',
+          sourceType: 'rss',
+          sourceUrl: cluster.primaryUrl,
+          observedAt: cluster.firstObservedAt,
+        },
         publishedAt: cluster.firstObservedAt,
         status: 'active',
       })),
@@ -124,7 +129,6 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>) {
   return { cookie, candidateId };
 }
 
-
 /**
  * PRB-040. «Xray Technician, MENA» открывался «Field Services Technician,
  * United States» и «Veterinary Assistant»: SQL добирал пул любыми свежими
@@ -135,7 +139,12 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>) {
 describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
   // Dated relative to now: a fixed date ages out of the freshness window and empties the pool.
   const at = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const cluster = (id: string, title: string, location: string, isRemote = false): VacancyCluster => ({
+  const cluster = (
+    id: string,
+    title: string,
+    location: string,
+    isRemote = false,
+  ): VacancyCluster => ({
     id,
     canonicalTitle: title,
     canonicalCompany: `Clinic ${id}`,
@@ -159,7 +168,11 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
       cluster('remote', 'Senior Xray Technician', 'Remote', true),
     ]);
     const { cookie, candidateId } = await login(app);
-    candidates.saveResumeDraft(candidateId, { ...EMPTY_RESUME_DRAFT, targetRole: 'Xray Technician' }, []);
+    candidates.saveResumeDraft(
+      candidateId,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Xray Technician' },
+      [],
+    );
     candidates.saveCandidateWorkspace(candidateId, {
       resumeText: 'Xray Technician, seven years in radiology.',
       resumeSource: 'text',
@@ -195,6 +208,62 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
     expect(response.json().meta.campaign.suggestedRegions).toEqual(['mena']);
   });
 
+  it('CPO 26.10: «Карьера» cities and remote replace the wizard regions', async () => {
+    const { app, candidates } = await createApp([
+      cluster('msk', 'Xray Technician', 'Moscow, Russia'),
+      cluster('spb', 'Xray Technician', 'Санкт-Петербург'),
+      cluster('dubai', 'Xray Technician', 'Dubai, United Arab Emirates'),
+      cluster('remote', 'Senior Xray Technician', 'Remote', true),
+    ]);
+    const { cookie, candidateId } = await login(app);
+    candidates.saveResumeDraft(
+      candidateId,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Xray Technician' },
+      [],
+    );
+    candidates.saveCandidateWorkspace(candidateId, {
+      resumeText: 'Xray Technician, seven years in radiology.',
+      resumeSource: 'text',
+      targetDirection: 'Xray Technician',
+      regions: ['ru', 'cis', 'mena'],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign: {
+        roles: ['Xray Technician'],
+        regions: ['ru', 'cis', 'mena'],
+        revision: 1,
+        updatedAt: at,
+      },
+    });
+    candidates.decisionProfileRepo.put(
+      candidateId,
+      {
+        citizenship: [],
+        languages: [],
+        searchLocations: ['Москва', 'Удалённо из РФ'],
+        workFormats: ['office', 'home_market', 'remote_home'],
+      },
+      at,
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const ids = (response.json().data as Array<{ cluster: { id: string } }>)
+      .map((item) => item.cluster.id)
+      .sort();
+    expect(ids).toEqual(['cluster-msk', 'cluster-remote']);
+    const campaign = response.json().meta.campaign;
+    expect(campaign.regions.value).toEqual(['ru']);
+    expect(campaign.careerGeography.labels).toEqual(['Москва', 'Удалённо из РФ']);
+    expect(campaign.careerGeography.remote).toBe(true);
+  });
+
   it('counts only role matches and pushes records outside explicit campaign regions last', async () => {
     const { app, candidates } = await createApp([
       cluster('us', 'Xray Technician', 'Austin, TX, United States'),
@@ -203,7 +272,11 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
       cluster('remote', 'Senior Xray Technician', 'Remote', true),
     ]);
     const { cookie, candidateId } = await login(app);
-    candidates.saveResumeDraft(candidateId, { ...EMPTY_RESUME_DRAFT, targetRole: 'Xray Technician' }, []);
+    candidates.saveResumeDraft(
+      candidateId,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Xray Technician' },
+      [],
+    );
     candidates.saveCandidateWorkspace(candidateId, {
       resumeText: 'Xray Technician, seven years in radiology.',
       resumeSource: 'text',
@@ -232,9 +305,18 @@ describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
       explanation: { outsideGeography?: boolean };
     }>;
     // Явный выбор кандидата сохраняется: запись из США — последняя и помечена outsideGeography
-    expect(items.slice(0, 2).map((item) => item.cluster.id).sort()).toEqual(['cluster-mena', 'cluster-remote']);
+    expect(
+      items
+        .slice(0, 2)
+        .map((item) => item.cluster.id)
+        .sort(),
+    ).toEqual(['cluster-mena', 'cluster-remote']);
     expect(items[2].cluster.id).toBe('cluster-us');
-    expect(items.map((item) => item.explanation.outsideGeography ?? false)).toEqual([false, false, true]);
+    expect(items.map((item) => item.explanation.outsideGeography ?? false)).toEqual([
+      false,
+      false,
+      true,
+    ]);
     expect(response.json().meta.total).toBe(3);
   });
 });

@@ -85,6 +85,14 @@ describe('rulesParse (B267 S1)', () => {
     expect(rulesParse('Account Executive').levelRank).toBe(LEVEL_RANK.ic);
   });
 
+  // CPO 26.10: Head = Head/Director/VP/C-level; Senior Manager — руководитель группы.
+  it('reads Senior Manager as lead, not head', () => {
+    expect(rulesParse('Senior Manager, Software Engineering').levelRank).toBe(LEVEL_RANK.lead);
+    expect(rulesParse('Sr. Manager, Data Platform').levelRank).toBe(LEVEL_RANK.lead);
+    expect(rulesParse('Growth Marketing Senior Manager').levelRank).toBe(LEVEL_RANK.lead);
+    expect(rulesParse('Senior Manager, Head of Payments').levelRank).toBe(LEVEL_RANK.head);
+  });
+
   it('reads Director as head, not c-level, unless it is Senior Director or VP', () => {
     expect(rulesParse('Director, Demand Generation').levelRank).toBe(LEVEL_RANK.head);
     expect(rulesParse('Senior Director, Product Management').levelRank).toBe(LEVEL_RANK.vp);
@@ -326,4 +334,3 @@ describe('rulesParse (B267 S1)', () => {
     }
   });
 });
-

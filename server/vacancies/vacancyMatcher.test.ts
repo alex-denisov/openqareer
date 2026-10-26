@@ -109,17 +109,13 @@ describe('Explainable Vacancy Matcher', () => {
         },
         sampleCluster,
       );
-      const reactFact = explanation.matchingFacts?.find((entry) =>
-        entry.text.includes('React'),
-      );
+      const reactFact = explanation.matchingFacts?.find((entry) => entry.text.includes('React'));
       expect(reactFact?.factId).toBe('fact-42');
     });
 
     it('не выдумывает id, когда факт для совпавшего навыка не передан', () => {
       const explanation = matchCandidateWithVacancy(strongCandidate, sampleCluster);
-      const reactFact = explanation.matchingFacts?.find((entry) =>
-        entry.text.includes('React'),
-      );
+      const reactFact = explanation.matchingFacts?.find((entry) => entry.text.includes('React'));
       expect(reactFact?.factId).toBeUndefined();
     });
 
@@ -180,14 +176,13 @@ describe('Explainable Vacancy Matcher', () => {
       expect(explanation.roleMatch).toBe('partial');
     });
 
-    it('labels a product role as adjacent and keeps it below campaign-function matches', () => {
+    it('does not match a product role for an engineering candidate (CPO 26.10)', () => {
       const explanation = matchCandidateWithVacancy(ctoCandidate, {
         ...sampleCluster,
         canonicalTitle: 'Product Manager',
       });
-      expect(explanation.roleMatch).toBe('partial');
-      expect(explanation.adjacentRole).toBe(true);
-      expect(explanation.summary).toContain('к смежной продуктовой роли');
+      expect(explanation.roleMatch).toBe('none');
+      expect(explanation.adjacentRole).toBeFalsy();
     });
 
     it('orders a target-function partial match above an adjacent product role', () => {
@@ -237,7 +232,10 @@ describe('Explainable Vacancy Matcher', () => {
       );
       const titleExplanation = matchCandidateWithVacancy(
         { ...ctoCandidate, semanticRoleFunctions: ['ops'], targetRoles: ['COO'] },
-        { ...sampleCluster, canonicalTitle: 'Chief of Staff VP Operations Marketing Advertising Ecommerce' },
+        {
+          ...sampleCluster,
+          canonicalTitle: 'Chief of Staff VP Operations Marketing Advertising Ecommerce',
+        },
       );
       expect(roleExplanation.roleMatch).toBe('none');
       expect(titleExplanation.roleMatch).toBe('none');
@@ -250,19 +248,22 @@ describe('Explainable Vacancy Matcher', () => {
         confirmedSkills: ['Artificial Intelligence (AI)'],
         confirmedFacts: [],
       };
-      const cluster: VacancyCluster = { ...sampleCluster, canonicalTitle: 'Head of AI', skills: ['AI'] };
-      expect(matchCandidateWithVacancy(candidate, cluster).requirements).toEqual({ matched: 1, total: 1 });
+      const cluster: VacancyCluster = {
+        ...sampleCluster,
+        canonicalTitle: 'Head of AI',
+        skills: ['AI'],
+      };
+      expect(matchCandidateWithVacancy(candidate, cluster).requirements).toEqual({
+        matched: 1,
+        total: 1,
+      });
     });
 
     it('matches management skill synonyms to canonical requirements (B307)', () => {
       const cooCandidate: CandidateMatchProfile = {
         candidateId: 'cand-coo',
         targetRoles: ['COO', 'Операционный директор'],
-        confirmedSkills: [
-          'Руководство командой',
-          'P&L Management',
-          'Business Strategy',
-        ],
+        confirmedSkills: ['Руководство командой', 'P&L Management', 'Business Strategy'],
         confirmedFacts: [],
         confirmedSkillFacts: [
           { id: 'fact-team', label: 'Руководство командой' },
@@ -272,11 +273,7 @@ describe('Explainable Vacancy Matcher', () => {
       const cooCluster: VacancyCluster = {
         ...sampleCluster,
         canonicalTitle: 'Операционный директор',
-        skills: [
-          'управление командой',
-          'управление P&L',
-          'Бюджетирование',
-        ],
+        skills: ['управление командой', 'управление P&L', 'Бюджетирование'],
       };
 
       const explanation = matchCandidateWithVacancy(cooCandidate, cooCluster);

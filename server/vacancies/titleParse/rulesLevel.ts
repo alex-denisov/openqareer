@@ -66,7 +66,19 @@ const HEAD_MARKERS = [
   '经理',
 ];
 
-const LEAD_MARKERS = ['tech lead', 'team lead', 'lead ', 'lead,', 'тимлид', 'тим-лид', 'リーダー'];
+/** CPO 26.10: Senior Manager — руководитель группы (lead), не Head. */
+const SENIOR_MANAGER_MARKERS = ['senior manager', 'sr. manager', 'sr manager'];
+
+const LEAD_MARKERS = [
+  ...SENIOR_MANAGER_MARKERS,
+  'tech lead',
+  'team lead',
+  'lead ',
+  'lead,',
+  'тимлид',
+  'тим-лид',
+  'リーダー',
+];
 
 const CJK_SCRIPT = /[\u3040-\u30ff\u3400-\u9fff]/u;
 
@@ -90,8 +102,18 @@ function containsAny(normalizedTitle: string, markers: readonly string[]): boole
 /** Отличает явно названный уровень от штатного IC-фолбэка. */
 export function hasRulesLevelMarker(title: string): boolean {
   const normalized = ` ${title.toLowerCase()} `;
-  return [C_LEVEL_MARKERS, VP_MARKERS, HEAD_MARKERS, LEAD_MARKERS]
-    .some((markers) => containsAny(normalized, markers));
+  return [C_LEVEL_MARKERS, VP_MARKERS, HEAD_MARKERS, LEAD_MARKERS].some((markers) =>
+    containsAny(normalized, markers),
+  );
+}
+
+/**
+ * Senior Manager без маркера Head/VP/C-level: такой заголовок правила читают
+ * как lead, и разбор модели с уровнем выше переписывается (CPO 26.10).
+ */
+export function isSeniorManagerLead(title: string): boolean {
+  const normalized = ` ${title.toLowerCase()} `;
+  return containsAny(normalized, SENIOR_MANAGER_MARKERS) && inferRulesLevel(title) === 'lead';
 }
 
 /** Заголовок нормализуется до нижнего регистра с пробелами по краям для якорей с пробелами внутри. */

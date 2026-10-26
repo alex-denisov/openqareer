@@ -186,47 +186,6 @@ describe('VacancyInfoModal full text (B266)', () => {
   });
 });
 
-describe('VacancyInfoModal Workday text (26.10)', () => {
-  afterEach(() => {
-    document.body.innerHTML = '';
-    vi.restoreAllMocks();
-  });
-
-  it('keeps the intro paragraphs and in-section subheadings apart from list items', async () => {
-    vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(new Response('{}'));
-    vi.spyOn(apiClient, 'readData').mockResolvedValue({
-      id: 'c-1',
-      description:
-        'Job Requisition ID #\n\n26WD101506\n\nPosition Overview\n\nWe are seeking a leader.\n\nResponsibilities\n\nProduct Strategy\n\n- Lead the vision\n- Own the roadmap',
-      skills: [],
-      responsibilities: [],
-    } as never);
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    await act(async () => {
-      root.render(<VacancyInfoModal isOpen onClose={vi.fn()} cluster={cluster()} />);
-    });
-    const paragraphs = [...document.querySelectorAll('.vacancies-info-description p')].map(
-      (p) => p.textContent,
-    );
-    expect(paragraphs).toEqual(
-      expect.arrayContaining([
-        'Job Requisition ID #',
-        '26WD101506',
-        'Position Overview',
-        'We are seeking a leader.',
-        'Product Strategy',
-      ]),
-    );
-    const items = [...document.querySelectorAll('.vacancies-info-description li')].map(
-      (li) => li.textContent,
-    );
-    expect(items).toEqual(['Lead the vision', 'Own the roadmap']);
-    act(() => root.unmount());
-  });
-});
-
 describe('VacancyInfoModal recruiter contacts (B266)', () => {
   let container: HTMLDivElement;
   let root: Root;
