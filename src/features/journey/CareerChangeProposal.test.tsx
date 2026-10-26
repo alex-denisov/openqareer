@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { careerRoleId } from '../../../shared/roleProposals';
 import { CareerChangeProposal, roleChangeAlreadyApplied } from './CareerChangeProposal';
 import { describeCareerChange } from './careerChangeApply';
+import { CareerActionProposalList } from './CareerCommandActions';
 import { careerChangeKey, resetCareerChangeDismissals } from './careerChangeDismissals';
 
 const proposal = {
@@ -53,5 +54,12 @@ describe('CareerChangeProposal (26.10)', () => {
     expect(html).toBe('');
     resetCareerChangeDismissals();
   });
-});
 
+  it('список без единого видимого предложения не рисует заголовок «Следующие задания»', () => {
+    const lines = describeCareerChange('career.role.remove', proposal.careerChange);
+    resetCareerChangeDismissals([careerChangeKey('career.role.remove', lines)]);
+    const html = renderToStaticMarkup(<CareerActionProposalList proposals={[proposal]} />);
+    expect(html).not.toContain('Следующие задания');
+    resetCareerChangeDismissals();
+  });
+});
