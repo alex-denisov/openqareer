@@ -71,6 +71,7 @@ describe('«Города и регионы поиска» — выбор из с
     press(input, 'Enter');
     expect(chips(node)).toEqual([]);
     expect(node.textContent).toContain('Нет такого места');
+    expect(input.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('предлагает удалённую работу и переводит старые значения в записи справочника', () => {
