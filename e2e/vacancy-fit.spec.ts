@@ -69,14 +69,13 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     await expect(evidence.locator('.vacancy-fit-percent')).toHaveCount(0);
     completed = true;
     await evidence.getByRole('button', { name: 'Обновить результат' }).click();
-    await expect(evidence.locator('.vacancy-fit-percent')).toHaveText('50%');
+    // Mockup 4: the number lives in the row; the card drops its fit block once it is known.
+    await expect(evidence).toHaveCount(0);
     // B525: строка списка — «соответствие 50 %» в той же строке «компания · источник» (V3).
     await expect(
       card.locator('.vacancies-screen-row-trigger .vac-sub .vacancy-fit-inline'),
     ).toHaveText('соответствие 50\u00a0%');
-    // B446-g4: в карточке 1440 соответствие одной строкой (макет 4), таблицы разбора нет.
-    await expect(evidence).toContainText('2 из 4 требований');
-    await expect(evidence).not.toContainText('fixture-fact-01');
+    await expect(card).not.toContainText('fixture-fact-01');
     // G5 item 9: the POST answer is the queued view, only «Обновить результат» reads again.
     expect(methods).toEqual(['POST', 'GET']);
   }

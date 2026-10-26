@@ -62,6 +62,8 @@ import {
 import { roleLabelFromTitle, type CatalogListingSummary } from './vacancyCatalogFacets';
 import {
   clusterKeys,
+  companyMatchName,
+  companyNameTokens,
   parseRepresentative,
   serializeRepresentative,
   type ClusterRepresentative,
@@ -1949,6 +1951,39 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       .get(kind, key) as { n: number };
     cache.set(cacheKey, row.n);
     return row.n;
+  }
+
+  /**
+   * Действующие кластеры одного работодателя для экрана компании: токены
+   * `company_token` по индексу, затем точное имя без юридической формы по
+   * колонке `company` — JSON читается только у совпавших, не больше `limit`.
+   */
+  loadClustersByCompany(companyName: string, limit: number): VacancyCluster[] {
+    const tokens = companyNameTokens(companyName);
+    const wanted = companyMatchName(companyName);
+    if (tokens.length === 0 || !wanted || limit <= 0) return [];
+    const marks = tokens.map(() => '?').join(', ');
+    const rows = this.database
+      .prepare(
+        `SELECT c.id AS id, c.company AS company FROM vacancy_clusters c
+          WHERE c.id IN (
+            SELECT cluster_id FROM vacancy_cluster_keys
+             WHERE kind = 'company_token' AND key IN (${marks})
+             GROUP BY cluster_id HAVING COUNT(DISTINCT key) = ?
+          )
+          ORDER BY c.updated_at DESC`,
+      )
+      .all(...tokens, tokens.length) as unknown as Array<{ id: string; company: string }>;
+    const ids = rows
+      .filter((row) => companyMatchName(row.company ?? '') === wanted)
+      .map((row) => row.id);
+    const found: VacancyCluster[] = [];
+    for (let offset = 0; offset < ids.length && found.length < limit; offset += limit) {
+      for (const item of this.loadClustersByIds(ids.slice(offset, offset + limit))) {
+        if (item.status === 'active' && found.length < limit) found.push(item);
+      }
+    }
+    return found;
   }
 
   private loadClustersByIds(ids: readonly string[]): VacancyCluster[] {

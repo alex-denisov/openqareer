@@ -264,6 +264,48 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     expect(html).toContain('Соответствие вашему профилю');
   });
 
+  it('keeps the expanded card as mockup 4: six chips, «Ещё N», percent only in the row', () => {
+    const base = item();
+    const names = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'B1', 'B2', 'B3'];
+    const withFit: MatchedVacancyItem = {
+      ...base,
+      explanation: {
+        ...base.explanation,
+        fitView: {
+          state: 'ready',
+          requirements: names.map((name) => ({
+            id: name,
+            text: name,
+            sourceQuote: name,
+            origin: 'explicit',
+            importance: 'high',
+            stopFactor: false,
+          })),
+          result: {
+            status: 'assessed',
+            reason: 'assessed',
+            dataState: 'complete',
+            coveragePercent: 70,
+            coverage: { matched: 7, total: 10 },
+            calculatedAt: '2026-10-26T10:00:00.000Z',
+            gates: {},
+            assessments: names
+              .filter((name) => name.startsWith('A'))
+              .map((name) => ({ requirementId: name, status: 'matched', evidence: [] })),
+          },
+        } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>,
+      },
+    };
+    const html = render({ item: withFit, layout: 'screen', isSelected: true });
+    const chips = html.match(/class="vacancies-screen-skill-chip /gu) ?? [];
+    expect(chips).toHaveLength(6);
+    expect(html).toMatch(/is-confirmed[^]*A3[^]*is-unconfirmed[^]*B1/u);
+    expect(html).not.toContain('>A4<');
+    expect(html).toContain('Ещё 4');
+    expect(html).toContain('соответствие 70');
+    expect(html).not.toContain('vacancy-fit-percent');
+  });
+
   it('says requirements are not parsed when nothing is known', () => {
     const base = item();
     const empty: MatchedVacancyItem = {

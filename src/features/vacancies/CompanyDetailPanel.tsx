@@ -119,7 +119,7 @@ function CompanyDetailHeader({
         <CompanyAvatar name={company.name} />
         <div className="companies-people-detail-title">
           <h2>{company.name}</h2>
-          <p>{companyMeta(company) || 'Источник данных неизвестен'}</p>
+          {companyMeta(company) ? <p>{companyMeta(company)}</p> : null}
         </div>
         <WantControls company={company} busy={busyWant} onToggle={onToggleWant} />
       </header>
@@ -134,10 +134,12 @@ function CompanyNextStep({
   readonly company: CandidateCompanyOpportunity;
   readonly people: CompanyPeopleState;
 }) {
-  if (people.loading && !company.nextStep) return null;
+  if (people.loading) return null;
+  const text = companyNextStepText(company, people);
+  if (!text) return null;
   return (
     <p className="companies-people-next-step">
-      <ArrowRight aria-hidden="true" /> {companyNextStepText(company, people)}
+      <ArrowRight aria-hidden="true" /> {text}
     </p>
   );
 }

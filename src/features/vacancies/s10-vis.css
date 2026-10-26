@@ -1130,3 +1130,31 @@
   inline-size: var(--career-target-min);
   padding: 0;
 }
+
+/* Mockup 4: a short chip set; «Ещё N» opens the rest, styled as a quiet chip. */
+.vacancies-screen-skill-more button {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--career-control-min);
+  padding: var(--career-space-1) var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+}
+
+.vacancies-screen-skill-more button:hover {
+  color: var(--career-text);
+}
+
+.vacancies-screen-skill-more button:focus-visible {
+  outline: var(--career-border-width) solid currentColor;
+  outline-offset: var(--career-border-width);
+}
+
+.vacancies-screen-requirements-conditions {
+  display: block;
+}

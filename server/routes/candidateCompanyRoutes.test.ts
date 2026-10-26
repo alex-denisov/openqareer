@@ -71,7 +71,10 @@ function matchedVacancy(id: string, company: string): MatchedVacancyItem {
   } as unknown as MatchedVacancyItem;
 }
 
-async function setup(items: readonly MatchedVacancyItem[] = []) {
+async function setup(
+  items: readonly MatchedVacancyItem[] = [],
+  engineExtra: Record<string, unknown> = {},
+) {
   const wantsDb = new DatabaseSync(':memory:');
   const contactsDb = new DatabaseSync(':memory:');
   const consentDb = new DatabaseSync(':memory:');
@@ -82,6 +85,7 @@ async function setup(items: readonly MatchedVacancyItem[] = []) {
   const engine = {
     getMatchedVacanciesAsync: async () => [...items],
     restore: () => ({ clusters: 0, sources: 0 }),
+    ...engineExtra,
   } as never;
   const app = await createApp(successProvider, undefined, undefined, {
     multiSourceVacancyEngine: engine,
@@ -231,6 +235,39 @@ describe('candidate company routes (B439)', () => {
       body.items.every((item: { contactsCount: number | null }) => item.contactsCount === null),
     ).toBe(true);
     expect(body.linkedin).toMatchObject({ status: 'disconnected', contactsImported: false });
+  });
+
+  it('fills a wanted company outside the selection with its vacancies from the pool', async () => {
+    const pool = matchedVacancy('cluster-autodesk', 'Autodesk, Inc.').cluster;
+    const asked: string[] = [];
+    const { app, authorization, candidate, wants } = await setup(
+      [matchedVacancy('cluster-v1', 'Вектор Банк')],
+      {
+        getCompanyClusters: (name: string) => {
+          asked.push(name);
+          return name === 'Autodesk' ? [{ ...pool, canonicalLocation: 'Remote, US' }] : [];
+        },
+      },
+    );
+    const key = candidateCompanyKey('Autodesk');
+    wants.setWanted(candidate.id, key, 'Autodesk');
+
+    const list = await app.inject({
+      url: '/api/v1/candidate/companies?limit=20',
+      headers: { authorization },
+    });
+    const row = list.json().data.items.find((item: { name: string }) => item.name === 'Autodesk');
+    expect(row).toMatchObject({ key, vacancyCount: 1, location: 'Remote, US', want: true });
+    expect(row.sources[0]).toMatchObject({ name: 'hh.ru' });
+    expect(asked).toEqual(['Autodesk']);
+
+    const detail = await app.inject({
+      url: `/api/v1/candidate/companies/${key}`,
+      headers: { authorization },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.totalVacancies).toBe(1);
+    expect(detail.json().data.vacancies[0]).toMatchObject({ id: 'cluster-autodesk' });
   });
 
   it('paginates the full company set by twenty and sorts by the selected rule', async () => {

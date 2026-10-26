@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowSquareOut,
   Briefcase,
@@ -323,9 +323,24 @@ export function VacancyScreenRequirementChips({
   );
 }
 
+/** Mockup 4 shows a short set of chips; the rest opens on «Ещё N». */
+const VISIBLE_SKILL_CHIPS = 6;
+
+/** Half confirmed, half to confirm; a short side gives its places to the other. */
+export function visibleSkillChips(
+  matching: readonly string[],
+  missing: readonly string[],
+  limit = VISIBLE_SKILL_CHIPS,
+): { readonly matching: readonly string[]; readonly missing: readonly string[] } {
+  const half = Math.ceil(limit / 2);
+  const missingCount = Math.min(missing.length, Math.max(limit - matching.length, limit - half));
+  const matchingCount = Math.min(matching.length, limit - missingCount);
+  return { matching: matching.slice(0, matchingCount), missing: missing.slice(0, missingCount) };
+}
+
 function VacancySkillChips({
-  matching,
-  missing,
+  matching: allMatching,
+  missing: allMissing,
   quotes,
   cluster,
   onAddToProfile,
@@ -336,6 +351,10 @@ function VacancySkillChips({
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const short = visibleSkillChips(allMatching, allMissing);
+  const { matching, missing } = expanded ? { matching: allMatching, missing: allMissing } : short;
+  const hidden = allMatching.length + allMissing.length - matching.length - missing.length;
   return (
     <ul className="vacancies-screen-skill-chips">
       {matching.map((skill) => (
@@ -354,6 +373,13 @@ function VacancySkillChips({
           onAddToProfile={onAddToProfile}
         />
       ))}
+      {hidden > 0 ? (
+        <li className="vacancies-screen-skill-more">
+          <button type="button" aria-expanded={false} onClick={() => setExpanded(true)}>
+            Ещё {hidden}
+          </button>
+        </li>
+      ) : null}
     </ul>
   );
 }
@@ -429,11 +455,7 @@ export function VacancyScreenDetailActions({
 
 export function VacancyScreenFullDescriptionButton({ onOpen }: { readonly onOpen: () => void }) {
   return (
-    <button
-      type="button"
-      className="vac-sm vacancies-screen-full-description"
-      onClick={onOpen}
-    >
+    <button type="button" className="vac-sm vacancies-screen-full-description" onClick={onOpen}>
       <FileText size={15} aria-hidden="true" />
       Полное описание
     </button>

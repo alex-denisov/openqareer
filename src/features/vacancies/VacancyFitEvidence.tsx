@@ -3,7 +3,7 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { useState, useEffect, useRef } from 'react';
 import { publishVacancyFitRead } from './vacancyFitViewUpdates';
 import type { VacancyFitView, VacancyFitResult } from '../../../shared/vacancyFit';
-import { VacancyFitSummary } from './VacancyFitSummary';
+import { VacancyFitSummary, fitHasNumber } from './VacancyFitSummary';
 import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
 const IMPORTANCE = {
   critical: 'Обязательное',
@@ -224,13 +224,17 @@ export function VacancyFitEvidence({
   initialView,
   onAddToProfile,
   showTable = true,
+  hideWhenNumber = false,
 }: {
   readonly vacancyId: string;
   readonly initialView?: VacancyFitView;
   readonly onAddToProfile?: (requirement: string) => void;
   readonly showTable?: boolean;
+  /** Mockup 4: the row already says «соответствие N %», so the card shows only states. */
+  readonly hideWhenNumber?: boolean;
 }) {
   const state = useFitRequest(vacancyId, initialView);
+  if (hideWhenNumber && fitHasNumber(state.view)) return null;
   const compact = !showTable;
   return (
     <section
@@ -259,15 +263,18 @@ export function VacancyFitEvidenceForItem({
   item,
   onAddToProfile,
   showTable,
+  hideWhenNumber,
 }: {
   readonly item: MatchedVacancyItem;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
   readonly showTable?: boolean;
+  readonly hideWhenNumber?: boolean;
 }) {
   return (
     <VacancyFitEvidence
       key={item.cluster.id}
       showTable={showTable}
+      hideWhenNumber={hideWhenNumber}
       vacancyId={item.cluster.id}
       initialView={item.explanation.fitView}
       onAddToProfile={
