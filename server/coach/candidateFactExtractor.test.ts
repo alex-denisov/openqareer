@@ -123,4 +123,24 @@ describe('extractCandidateFacts', () => {
     expect(bulk.calls).toEqual([]);
     expect(result.facts).toEqual([]);
   });
+
+  it('skips a fact the profile already has in other words, and keeps names letter for letter (26.10)', async () => {
+    const bulk = bulkAnswering(() => ({
+      facts: [
+        { kind: 'fact', domain: 'responsibility', statement: 'Точно было 254 человека в направлении' },
+        { kind: 'fact', domain: 'responsibility', statement: 'Нанял команду из прошлого коллектива в ВКТех' },
+      ],
+    }));
+    const answer = 'Ну, 256 человек – примерная цифра, но точно было 254. Нанял команду из прошлого коллектива в ВКТех. '.repeat(3);
+    const result = await extractCandidateFacts({
+      bulk,
+      messageId: MESSAGE_ID,
+      answer,
+      runId: 'turn-5',
+      known: ['256 человек — примерная цифра; точно было 254 человека в направлении'],
+    });
+    expect(result.facts.map((fact) => fact.statement)).toEqual([
+      'Нанял команду из прошлого коллектива в ВКТех',
+    ]);
+  });
 });
