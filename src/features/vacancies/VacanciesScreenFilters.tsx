@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check } from '@phosphor-icons/react';
+import { defaultSalaryCurrency } from './vacancyScreenCriteria';
 
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import {
@@ -59,6 +60,8 @@ export interface VacanciesScreenFiltersProps {
   /** Число выдачи для черновика; `undefined` — меняются серверные фильтры, число неизвестно. */
   readonly resultCountFor?: (state: VacanciesScreenState) => number | undefined;
   readonly salaryCurrencies?: readonly string[];
+  /** Валюта условий «Карьеры» (CPO 26.10): с неё фильтр «Зарплата» начинается. */
+  readonly candidateCurrency?: string;
   readonly marketEstimateCount?: number;
   readonly formatCounts?: Readonly<Record<string, number>>;
 }
@@ -257,7 +260,8 @@ function SalaryToggles({ props }: { readonly props: VacanciesScreenFiltersProps 
 
 function SalaryFilterSection({ props }: { readonly props: VacanciesScreenFiltersProps }) {
   const currencies = props.salaryCurrencies ?? [];
-  const currency = props.state.salaryCurrency ?? currencies[0] ?? '';
+  const currency =
+    props.state.salaryCurrency ?? defaultSalaryCurrency(currencies, props.candidateCurrency);
   return (
     <div className="field-group vacancy-salary-filter">
       <h4>Зарплата</h4>

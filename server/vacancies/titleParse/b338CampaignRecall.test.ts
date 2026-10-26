@@ -47,9 +47,7 @@ describe('B338-3 — recall и точность отбора кампании IT
     const recall = relevantTotal > 0 ? relevantPassed / relevantTotal : 0;
     const irrelevantLeakage = irrelevantTotal > 0 ? irrelevantPassed / irrelevantTotal : 0;
 
-    console.log(
-      `[B338-3 baseline/current] relevant: ${relevantPassed}/${relevantTotal} (${(recall * 100).toFixed(1)}%), irrelevant leak: ${irrelevantPassed}/${irrelevantTotal} (${(irrelevantLeakage * 100).toFixed(1)}%)`,
-    );
+    console.log(`[B338-3 baseline/current] relevant: ${relevantPassed}/${relevantTotal} (${(recall * 100).toFixed(1)}%), irrelevant leak: ${irrelevantPassed}/${irrelevantTotal} (${(irrelevantLeakage * 100).toFixed(1)}%)`);
     console.log('Sample Misses:', misses.slice(0, 20));
     console.log('Sample Leaks:', leaks.slice(0, 20));
 

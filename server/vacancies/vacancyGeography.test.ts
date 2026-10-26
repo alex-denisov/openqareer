@@ -33,12 +33,7 @@ describe('regionOfVacancy', () => {
 
 describe('markGeography', () => {
   const item = (id: string, location: string | undefined, isRemote = false) => ({
-    cluster: {
-      id,
-      canonicalLocation: location,
-      isRemote,
-      firstObservedAt: '2026-09-20T00:00:00.000Z',
-    },
+    cluster: { id, canonicalLocation: location, isRemote, firstObservedAt: '2026-09-20T00:00:00.000Z' },
     explanation: {
       clusterId: id,
       roleMatch: 'target' as const,
@@ -49,11 +44,7 @@ describe('markGeography', () => {
 
   it('flags records outside the campaign regions and orders them last', () => {
     const marked = markGeography(
-      [
-        item('us', 'Austin, TX, United States'),
-        item('mena', 'Riyadh, Saudi Arabia'),
-        item('unknown', undefined),
-      ],
+      [item('us', 'Austin, TX, United States'), item('mena', 'Riyadh, Saudi Arabia'), item('unknown', undefined)],
       ['mena'],
     );
     expect(marked.map((entry) => entry.cluster.id)).toEqual(['mena', 'unknown', 'us']);

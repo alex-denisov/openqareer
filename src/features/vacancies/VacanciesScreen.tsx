@@ -280,6 +280,7 @@ function buildVacanciesFilterProps({
     regions: board.regions,
     suggestedRegions: board.suggestedRegions,
     careerLocations: board.careerLocations,
+    candidateCurrency: board.candidateCurrency,
     candidateLevel: candidateLevel ?? undefined,
     onAddCustomRole: (role: string) => actions.addCustomRole(role),
     premises,

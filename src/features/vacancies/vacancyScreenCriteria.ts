@@ -47,6 +47,18 @@ export function normalizeSalaryCurrency(currency: string): string {
   return CURRENCY_ALIASES[code] ?? code;
 }
 
+/** Валюта фильтра «Зарплата» по умолчанию — из условий кандидата, если она есть в выдаче. */
+export function defaultSalaryCurrency(
+  currencies: readonly string[],
+  candidateCurrency: string | undefined,
+): string {
+  const wanted = candidateCurrency ? normalizeSalaryCurrency(candidateCurrency) : undefined;
+  const match = wanted
+    ? currencies.find((currency) => normalizeSalaryCurrency(currency) === wanted)
+    : undefined;
+  return match ?? currencies[0] ?? '';
+}
+
 function sameCurrency(currency: string | undefined, wanted: string | undefined): boolean {
   if (!wanted) return true;
   return (

@@ -40,6 +40,7 @@ export function readCampaign(
     : parsed?.success
       ? [...parsed.data.regions]
       : [];
+  const decisionProfile = candidateStore.decisionProfileRepo?.get(candidateId);
   const explicit: StoredCampaignSelection | null =
     parsed?.success && parsed.data.campaign ? parsed.data.campaign : null;
 
@@ -58,7 +59,8 @@ export function readCampaign(
     rejectedRoleIds: rejectedCareerRoleIds(candidateStore, candidateId),
     roleIdOf: careerRoleId,
     roleKeyOf: careerRoleKey,
-    careerGeography: careerGeographyOf(candidateStore.decisionProfileRepo?.get(candidateId)),
+    careerGeography: careerGeographyOf(decisionProfile),
+    ...(decisionProfile?.salaryCurrency ? { salaryCurrency: decisionProfile.salaryCurrency } : {}),
     ...(vacancyCountsByRole ? { vacancyCountsByRole } : {}),
   });
 }

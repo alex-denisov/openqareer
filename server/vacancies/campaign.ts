@@ -103,6 +103,8 @@ export interface CampaignResolution {
   readonly suggestedRegions?: readonly string[];
   /** Города и форматы «Карьеры»; есть — география подбора берётся из них (CPO 26.10). */
   readonly careerGeography?: CareerGeography;
+  /** Валюта условий кандидата: фильтр «Зарплата» начинается с неё (CPO 26.10). */
+  readonly salaryCurrency?: string;
 }
 
 export interface ResolveCampaignInput {
@@ -122,6 +124,7 @@ export interface ResolveCampaignInput {
   readonly roleKeyOf?: (title: string) => string | null;
   /** Условия «Карьеры»; регионы мастера читаются, только если их нет. */
   readonly careerGeography?: CareerGeography | null;
+  readonly salaryCurrency?: string;
 }
 
 /**
@@ -249,6 +252,7 @@ export function resolveCampaign(input: ResolveCampaignInput): CampaignResolution
     },
     suggestedRegions: derivedRegions,
     ...(career ? { careerGeography: career } : {}),
+    ...(input.salaryCurrency ? { salaryCurrency: input.salaryCurrency } : {}),
     ...(input.vacancyCountsByRole
       ? { roleHypotheses: annotateRoleHypotheses(roles.value, input.vacancyCountsByRole) }
       : {}),

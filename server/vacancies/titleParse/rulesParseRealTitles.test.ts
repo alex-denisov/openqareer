@@ -14,18 +14,13 @@ import type { FunctionCode } from '../../../shared/roleTaxonomy';
  * набор ниже — точность на вручную размеченных названиях из той же выборки.
  */
 const FIXTURE_PATH = join(__dirname, '__fixtures__', 'realTitles.txt');
-const REAL_TITLES = readFileSync(FIXTURE_PATH, 'utf8')
-  .split('\n')
-  .filter((line) => line.trim().length > 0);
+const REAL_TITLES = readFileSync(FIXTURE_PATH, 'utf8').split('\n').filter((line) => line.trim().length > 0);
 
 describe('rulesParse coverage on the real title sample (B267 S1)', () => {
   it('names a function for at least 90% of real titles', () => {
     const empty = REAL_TITLES.filter((title) => rulesParse(title).functions.length === 0);
     const coverage = (REAL_TITLES.length - empty.length) / REAL_TITLES.length;
-    expect(
-      coverage,
-      `${empty.length} titles got no function, e.g.:\n${empty.slice(0, 10).join('\n')}`,
-    ).toBeGreaterThanOrEqual(0.9);
+    expect(coverage, `${empty.length} titles got no function, e.g.:\n${empty.slice(0, 10).join('\n')}`).toBeGreaterThanOrEqual(0.9);
   });
 
   it('names a level for at least 95% of real titles (null level ≤5%)', () => {
@@ -50,20 +45,12 @@ const REAL_SAMPLE: readonly [string, FunctionCode, number][] = [
   ['Senior Cybersecurity Specialist', 'security', LEVEL_RANK.ic],
   ['Compensation Program Manager', 'hr', LEVEL_RANK.ic],
   ['Analytics Engineer 5 - Cloud Games Infrastructure Data Products', 'data', LEVEL_RANK.ic],
-  [
-    'Senior Backend Software Engineer - Core Backend, Cloud Customer Experience',
-    'eng',
-    LEVEL_RANK.ic,
-  ],
+  ['Senior Backend Software Engineer - Core Backend, Cloud Customer Experience', 'eng', LEVEL_RANK.ic],
   ['Senior Sales Manager, Regional Enterprise', 'sales', LEVEL_RANK.ic],
   ['Senior AI Engineer - AI Reinvent & Engineering', 'ai-ml', LEVEL_RANK.ic],
   ['Senior Associate Inbound Compliance Analyst (KYC)', 'audit-risk', LEVEL_RANK.ic],
   ['Product Development Engineer -- Post-Si Characterization', 'eng', LEVEL_RANK.ic],
-  [
-    'Senior Director, Product Management - Consumer & Developer Experience',
-    'product',
-    LEVEL_RANK.vp,
-  ],
+  ['Senior Director, Product Management - Consumer & Developer Experience', 'product', LEVEL_RANK.vp],
   ['Enterprise Account Executive (Atlanta)', 'sales', LEVEL_RANK.ic],
   ['Software Development Engineer, AWS Lambda', 'eng', LEVEL_RANK.ic],
   ['IT Support Specialist', 'it-ops', LEVEL_RANK.ic],
@@ -102,11 +89,7 @@ const REAL_SAMPLE: readonly [string, FunctionCode, number][] = [
   ['Senior Account Executive - Montreal/Atlantic Canada', 'sales', LEVEL_RANK.ic],
   ['Frontend Developer', 'eng', LEVEL_RANK.ic],
   ['Lead Test Engineer - Scenario Coverage & Evaluation Datasets', 'qa', LEVEL_RANK.lead],
-  [
-    'Senior Security Research Engineer, SONAR (Security Operations and Novel Adversary Research)',
-    'security',
-    LEVEL_RANK.ic,
-  ],
+  ['Senior Security Research Engineer, SONAR (Security Operations and Novel Adversary Research)', 'security', LEVEL_RANK.ic],
   ['Senior Lead Data Engineer', 'data', LEVEL_RANK.lead],
   ['Software Engineer', 'eng', LEVEL_RANK.ic],
   ['Enterprise Account Executive-South Bay', 'sales', LEVEL_RANK.ic],
@@ -232,8 +215,7 @@ describe('rulesParse precision on the manually labeled sample (B267 S1)', () => 
     const misses: string[] = [];
     for (const [title, expected] of LABELED) {
       const { functions } = rulesParse(title);
-      if (!functions.includes(expected))
-        misses.push(`${title} -> ${functions.join(',')} (expected ${expected})`);
+      if (!functions.includes(expected)) misses.push(`${title} -> ${functions.join(',')} (expected ${expected})`);
     }
     const accuracy = (LABELED.length - misses.length) / LABELED.length;
     expect(accuracy, `function misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);
@@ -243,8 +225,7 @@ describe('rulesParse precision on the manually labeled sample (B267 S1)', () => 
     const misses: string[] = [];
     for (const [title, , expectedLevel] of LABELED) {
       const { levelRank } = rulesParse(title);
-      if (levelRank !== expectedLevel)
-        misses.push(`${title} -> ${levelRank} (expected ${expectedLevel})`);
+      if (levelRank !== expectedLevel) misses.push(`${title} -> ${levelRank} (expected ${expectedLevel})`);
     }
     const accuracy = (LABELED.length - misses.length) / LABELED.length;
     expect(accuracy, `level misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);
@@ -255,9 +236,7 @@ describe('rulesParse precision on manually labeled JA/ZH titles (B267 C08)', () 
   it(`names the correct function for at least 85% of ${CJK_SAMPLE.length} titles`, () => {
     const misses = CJK_SAMPLE.flatMap(([title, expected]) => {
       const { functions } = rulesParse(title);
-      return functions.includes(expected)
-        ? []
-        : [`${title} -> ${functions.join(',')} (expected ${expected})`];
+      return functions.includes(expected) ? [] : [`${title} -> ${functions.join(',')} (expected ${expected})`];
     });
     const accuracy = (CJK_SAMPLE.length - misses.length) / CJK_SAMPLE.length;
     expect(accuracy, `function misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);

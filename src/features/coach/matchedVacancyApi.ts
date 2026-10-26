@@ -56,6 +56,8 @@ export interface CampaignMetaView {
     readonly places: readonly string[];
     readonly remote: boolean;
   };
+  /** Валюта условий кандидата (CPO 26.10): по умолчанию в фильтре «Зарплата». */
+  readonly salaryCurrency?: string;
 }
 
 export interface CandidateCampaignUpdate {
