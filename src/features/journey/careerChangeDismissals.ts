@@ -38,7 +38,8 @@ export async function dismissCareerChange(key: string): Promise<void> {
   await rejectCoachProposal({ proposalKey: key, reason: 'Кандидат отложил изменение «Карьеры»' });
 }
 
-export function useCareerChangeDismissed(key: string): boolean {
+/** Отложенные изменения «Карьеры» целиком: список предложений прячет пустой заголовок. */
+export function useCareerChangeDismissals(): ReadonlySet<string> {
   const snapshot = useSyncExternalStore(
     (listener) => {
       listeners.add(listener);
@@ -50,7 +51,11 @@ export function useCareerChangeDismissed(key: string): boolean {
   useEffect(() => {
     void loadCareerChangeDismissals();
   }, []);
-  return snapshot.has(key);
+  return snapshot;
+}
+
+export function useCareerChangeDismissed(key: string): boolean {
+  return useCareerChangeDismissals().has(key);
 }
 
 /** Только для тестов. */

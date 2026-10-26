@@ -7,7 +7,8 @@ import {
   prepareCareerCommand,
 } from '../coach/careerCommandApi';
 import { CareerChangeProposal } from './CareerChangeProposal';
-import { isCareerChangeKind } from './careerChangeApply';
+import { describeCareerChange, isCareerChangeKind } from './careerChangeApply';
+import { careerChangeKey, useCareerChangeDismissals } from './careerChangeDismissals';
 
 interface CareerActionProposalListProps {
   proposals: CoachResult['actionProposals'];
@@ -127,6 +128,9 @@ export function CareerActionProposalList({
 }: CareerActionProposalListProps) {
   const { commands, busyIndex, error, runCommandAction, prepareIdempotencyKeyFor } =
     useCareerCommandState({ proposals, turnIdempotencyKey });
+  const dismissed = useCareerChangeDismissals();
+  // Все предложения отложены «Не сейчас» — заголовок без карточек не нужен.
+  if (proposals.every((proposal) => isDismissedCareerChange(proposal, dismissed))) return null;
 
   return (
     <div className="career-action-proposals">
@@ -150,6 +154,16 @@ export function CareerActionProposalList({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function isDismissedCareerChange(
+  proposal: CoachResult['actionProposals'][number],
+  dismissed: ReadonlySet<string>,
+): boolean {
+  if (!isCareerChangeKind(proposal.kind) || !proposal.careerChange) return false;
+  return dismissed.has(
+    careerChangeKey(proposal.kind, describeCareerChange(proposal.kind, proposal.careerChange)),
   );
 }
 
