@@ -69,7 +69,21 @@ const HEAD_MARKERS = [
 /** CPO 26.10: Senior Manager — руководитель группы (lead), не Head. */
 const SENIOR_MANAGER_MARKERS = ['senior manager', 'sr. manager', 'sr manager'];
 
+/**
+ * CPO 26.10: «Senior Engineering Manager», «Senior Product Marketing Manager» —
+ * то же, что Senior Manager: между словами может стоять до трёх слов функции.
+ */
+const SENIOR_X_MANAGER =
+  /(?<![\p{L}])(?:senior|sr\.?)\s+(?:[\p{L}&/-]+\s+){1,3}manager(?![\p{L}])/u;
+
+/**
+ * CPO 26.10: «Руководитель группы …» — lead, даже рядом с «Head of» в
+ * двуязычном заголовке hh. Director/VP/C-level сильнее.
+ */
+const GROUP_LEAD_MARKERS = ['руководитель группы', 'group lead', 'group leader'];
+
 const LEAD_MARKERS = [
+  ...GROUP_LEAD_MARKERS,
   ...SENIOR_MANAGER_MARKERS,
   'tech lead',
   'team lead',
@@ -102,8 +116,11 @@ function containsAny(normalizedTitle: string, markers: readonly string[]): boole
 /** Отличает явно названный уровень от штатного IC-фолбэка. */
 export function hasRulesLevelMarker(title: string): boolean {
   const normalized = ` ${title.toLowerCase()} `;
-  return [C_LEVEL_MARKERS, VP_MARKERS, HEAD_MARKERS, LEAD_MARKERS].some((markers) =>
-    containsAny(normalized, markers),
+  return (
+    SENIOR_X_MANAGER.test(normalized) ||
+    [C_LEVEL_MARKERS, VP_MARKERS, HEAD_MARKERS, LEAD_MARKERS].some((markers) =>
+      containsAny(normalized, markers),
+    )
   );
 }
 
@@ -113,7 +130,19 @@ export function hasRulesLevelMarker(title: string): boolean {
  */
 export function isSeniorManagerLead(title: string): boolean {
   const normalized = ` ${title.toLowerCase()} `;
-  return containsAny(normalized, SENIOR_MANAGER_MARKERS) && inferRulesLevel(title) === 'lead';
+  const named =
+    containsAny(normalized, SENIOR_MANAGER_MARKERS) ||
+    SENIOR_X_MANAGER.test(normalized) ||
+    containsAny(normalized, GROUP_LEAD_MARKERS);
+  return named && inferRulesLevel(title) === 'lead';
+}
+
+function isHeadOnlyMarker(normalized: string): boolean {
+  return containsAny(normalized, HEAD_MARKERS) && !containsAny(normalized, GROUP_LEAD_MARKERS);
+}
+
+function hasDirectorMarker(normalized: string): boolean {
+  return containsAny(normalized, ['director', 'директор']);
 }
 
 /** Заголовок нормализуется до нижнего регистра с пробелами по краям для якорей с пробелами внутри. */
@@ -121,7 +150,7 @@ export function inferRulesLevel(title: string): SeniorityLevel {
   const normalized = ` ${title.toLowerCase()} `;
   if (containsAny(normalized, C_LEVEL_MARKERS)) return 'c-level';
   if (containsAny(normalized, VP_MARKERS)) return 'vp';
-  if (containsAny(normalized, HEAD_MARKERS)) return 'head';
-  if (containsAny(normalized, LEAD_MARKERS)) return 'lead';
+  if (isHeadOnlyMarker(normalized) || hasDirectorMarker(normalized)) return 'head';
+  if (containsAny(normalized, LEAD_MARKERS) || SENIOR_X_MANAGER.test(normalized)) return 'lead';
   return 'ic';
 }

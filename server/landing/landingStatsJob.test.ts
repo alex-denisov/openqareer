@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { CATALOG_TOTALS_TABLE } from '../vacancies/catalogTotalsTable';
 import { describe, expect, it } from 'vitest';
 import {
   cleanLandingTitle,
@@ -153,5 +154,20 @@ describe('formatLandingSalary with equal ends', () => {
     expect(formatLandingSalary({ from: 60_000, to: 60_000, currency: 'USD' })).toBe(
       '$60 тыс. в год',
     );
+  });
+});
+
+/** CPO 26.10: лендинг и «Вакансии» называют одно число — живые вакансии каталога. */
+describe('landing active count', () => {
+  it('takes the catalog total of live vacancies, not the per-source records', () => {
+    const database = poolDatabase();
+    database.exec(CATALOG_TOTALS_TABLE);
+    database
+      .prepare(
+        `INSERT INTO catalog_totals (id, catalog_total, observed_at, computed_at)
+         VALUES (1, 4, '2026-10-21', '2026-10-21')`,
+      )
+      .run();
+    expect(computeLandingStats(database, new Date('2026-10-21T09:00:00Z')).activeCount).toBe(4);
   });
 });

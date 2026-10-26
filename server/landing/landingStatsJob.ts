@@ -147,6 +147,21 @@ export function pickLandingVacancies(payloads: readonly PoolPayload[]): LandingV
   return picked;
 }
 
+/**
+ * CPO 26.10: «Вакансии» пишут «из N вакансий каталога» по живым сведённым
+ * вакансиям (B485), а лендинг считал записи по площадкам — вдвое больше.
+ * Обещание лендинга берётся из того же итога каталога.
+ */
+function catalogTotal(database: DatabaseSync): number | undefined {
+  const exists = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalog_totals'")
+    .get();
+  if (!exists) return undefined;
+  const row = database.prepare('SELECT catalog_total FROM catalog_totals WHERE id = 1').get() as
+    { catalog_total: number } | undefined;
+  return row ? Number(row.catalog_total) : undefined;
+}
+
 export function computeLandingStats(database: DatabaseSync, now: Date): LandingStats {
   const counts = database
     .prepare(
@@ -191,7 +206,7 @@ export function computeLandingStats(database: DatabaseSync, now: Date): LandingS
     }
   }
   return {
-    activeCount: Number(counts.active),
+    activeCount: catalogTotal(database) ?? Number(counts.active),
     sourceCount: Number(counts.sources),
     remoteCount: Number(counts.remote ?? 0),
     updatedAt: now.toISOString().slice(0, 10),

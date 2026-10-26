@@ -139,7 +139,34 @@ export interface GeographyMatch extends OrderableMatch {
     readonly isRemote?: boolean;
     readonly companyFeatures?: { readonly country?: string };
   };
-  readonly explanation: OrderableMatch['explanation'] & { readonly outsideGeography?: boolean };
+  readonly explanation: OrderableMatch['explanation'] & {
+    readonly outsideGeography?: boolean;
+    readonly remoteCountry?: RemoteCountryFit;
+  };
+}
+
+/** Удалёнка, которая не подтверждает рынок кандидата: страна не названа или другая. */
+export type RemoteCountryFit = 'unknown' | 'other';
+
+/**
+ * CPO 26.10: «Remote» без страны или «Remote, United States» для кандидата
+ * «Удалённо из РФ» — не совпадение. Запись не скрывается, а подписывается.
+ */
+export function remoteCountryFit(
+  cluster: {
+    readonly canonicalLocation?: string;
+    readonly isRemote?: boolean;
+    readonly companyFeatures?: { readonly country?: string };
+  },
+  regions: readonly CandidateRegion[],
+): RemoteCountryFit | undefined {
+  if (regions.length === 0 || !cluster.isRemote) return undefined;
+  const region = regionOfVacancy({
+    location: cluster.canonicalLocation,
+    country: cluster.companyFeatures?.country,
+  });
+  if (!region) return 'unknown';
+  return new Set<PlaceRegion>(regions).has(region as PlaceRegion) ? undefined : 'other';
 }
 
 /**
@@ -173,10 +200,11 @@ export function markGeography<T extends GeographyMatch>(
   regions: readonly CandidateRegion[],
 ): T[] {
   if (regions.length === 0) return [...matched];
-  const marked = matched.map((item) =>
-    isOutsideGeography(item.cluster, regions)
-      ? { ...item, explanation: { ...item.explanation, outsideGeography: true } }
-      : item,
-  );
+  const marked = matched.map((item) => {
+    if (isOutsideGeography(item.cluster, regions))
+      return { ...item, explanation: { ...item.explanation, outsideGeography: true } };
+    const remoteCountry = remoteCountryFit(item.cluster, regions);
+    return remoteCountry ? { ...item, explanation: { ...item.explanation, remoteCountry } } : item;
+  });
   return marked.sort(compareMatchedVacancies);
 }

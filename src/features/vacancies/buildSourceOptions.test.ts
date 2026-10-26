@@ -40,3 +40,29 @@ describe('buildSourceOptions', () => {
     expect(options.find(({ name }) => name === 'hh.ru')?.sourceId).toBe('hh-search');
   });
 });
+
+/** CPO 26.10: 35 из 322 — список дополняется всеми живыми источниками пула. */
+describe('buildSourceOptions with pool sources', () => {
+  it('adds every pool source once, without repeating the registry or the matches', () => {
+    const options = buildSourceOptions(
+      facets([{ sourceId: 'src-indeed', name: 'Indeed', count: 12, groupId: 'aggregators' }]),
+      [entry('hh', 'hh.ru', 'Агрегаторы и API')],
+      [
+        { sourceId: 'src-hh-search', name: 'hh.ru Search', count: 756922 },
+        { sourceId: 'src-indeed', name: 'Indeed', count: 175889 },
+        {
+          sourceId: 'ats-greenhouse-stripe',
+          name: 'Stripe · Greenhouse',
+          category: 'ATS компаний',
+          count: 202,
+        },
+      ],
+    );
+    expect(options.map(({ name }) => name)).toEqual(['Indeed', 'hh.ru', 'Stripe · Greenhouse']);
+    expect(options.find(({ name }) => name === 'Stripe · Greenhouse')).toMatchObject({
+      sourceId: 'ats-greenhouse-stripe',
+      groupId: 'ats',
+      count: 0,
+    });
+  });
+});

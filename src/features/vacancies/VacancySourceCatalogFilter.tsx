@@ -5,7 +5,12 @@ import {
   type MatchedVacancyFacets,
   type MatchedVacancySourceGroupId,
 } from '../../../shared/matchedVacancyFacets';
-import { getVacancySources, type VacancySourceRegistryEntry } from '../coach/coachApi';
+import type { CatalogSourceEntry } from '../../../shared/catalogSources';
+import {
+  getCatalogSourceList,
+  getVacancySources,
+  type VacancySourceRegistryEntry,
+} from '../coach/coachApi';
 import type { VacanciesScreenState } from './vacanciesScreenState';
 
 interface VacancySourceCatalogFilterProps {
@@ -38,17 +43,24 @@ const SOURCE_GROUP_BY_CATEGORY: Readonly<Record<string, MatchedVacancySourceGrou
 
 export function VacancySourceCatalogFilter(props: VacancySourceCatalogFilterProps) {
   const catalog = useSourceCatalog();
-  const view = useSourceFilterView(props, catalog.sources);
+  const view = useSourceFilterView(props, catalog.sources, catalog.poolSources);
   return <SourceCatalogContent props={props} catalog={catalog} view={view} />;
 }
 
 export function useSourceCatalog() {
   const [sources, setSources] = useState<VacancySourceRegistryEntry[]>([]);
+  const [poolSources, setPoolSources] = useState<CatalogSourceEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
+    // Полный список пула дополняет реестр; без него фильтр работает по реестру.
+    void getCatalogSourceList()
+      .then((items) => {
+        if (active) setPoolSources(Array.isArray(items) ? items : []);
+      })
+      .catch(() => undefined);
     void getVacancySources()
       .then((items) => {
         if (active) setSources(Array.isArray(items) ? items : []);
@@ -64,7 +76,7 @@ export function useSourceCatalog() {
     };
   }, []);
 
-  return { sources, loading, failed };
+  return { sources, poolSources, loading, failed };
 }
 
 const sourceNameKey = (name: string) =>
@@ -81,6 +93,7 @@ const sourceNameKey = (name: string) =>
 export function buildSourceOptions(
   facets: MatchedVacancyFacets,
   catalog: readonly VacancySourceRegistryEntry[],
+  poolSources: readonly CatalogSourceEntry[] = [],
 ): SourceOption[] {
   const byId = new Map(facets.sources.map((source) => [source.sourceId, source]));
   const byName = new Map(facets.sources.map((source) => [sourceNameKey(source.name), source]));
@@ -107,10 +120,43 @@ export function buildSourceOptions(
       groupId: groupId ?? null,
       searchableText: [sourceId, name].join(' ').toLocaleLowerCase(),
     }));
-  return [...fromCatalog, ...fromFacets]
+  const fromPool = poolOnlyOptions(poolSources, catalog, [...fromCatalog, ...fromFacets]);
+  return [...fromCatalog, ...fromFacets, ...fromPool]
     .map((option, index) => ({ option, index }))
     .sort((a, b) => b.option.count - a.option.count || a.index - b.index)
     .map(({ option }) => option);
+}
+
+/** «src-hh-search» — та же площадка, что «hh» реестра; повторять её нельзя. */
+function isRegistrySource(
+  sourceId: string,
+  catalog: readonly VacancySourceRegistryEntry[],
+): boolean {
+  const bare = sourceId.replace(/^src-/u, '');
+  return catalog.some((source) => bare === source.id || bare.startsWith(`${source.id}-`));
+}
+
+function poolOnlyOptions(
+  poolSources: readonly CatalogSourceEntry[],
+  catalog: readonly VacancySourceRegistryEntry[],
+  known: readonly SourceOption[],
+): SourceOption[] {
+  const ids = new Set(known.map((option) => option.sourceId));
+  const names = new Set(known.map((option) => sourceNameKey(option.name)));
+  return poolSources
+    .filter(
+      (source) =>
+        !ids.has(source.sourceId) &&
+        !names.has(sourceNameKey(source.name)) &&
+        !isRegistrySource(source.sourceId, catalog),
+    )
+    .map((source) => ({
+      sourceId: source.sourceId,
+      name: source.name,
+      count: 0,
+      groupId: (source.category ? SOURCE_GROUP_BY_CATEGORY[source.category] : undefined) ?? null,
+      searchableText: [source.sourceId, source.name].join(' ').toLocaleLowerCase(),
+    }));
 }
 
 function sourceSearchText(source: VacancySourceRegistryEntry): string {
@@ -324,19 +370,32 @@ function updateSelectedSource(
   }));
 }
 
+function filterSourceOptions(
+  options: readonly SourceOption[],
+  group: SourceGroupSelection,
+  query: string,
+): SourceOption[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return options.filter(
+    (source) =>
+      (group === 'all' || source.groupId === group) &&
+      source.searchableText.includes(normalizedQuery),
+  );
+}
+
 function useSourceFilterView(
   props: VacancySourceCatalogFilterProps,
   catalog: readonly VacancySourceRegistryEntry[],
+  poolSources: readonly CatalogSourceEntry[],
 ) {
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<SourceGroupSelection>('all');
   const [visibleCount, setVisibleCount] = useState(20);
-  const options = useMemo(() => buildSourceOptions(props.facets, catalog), [props.facets, catalog]);
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filtered = options.filter((source) => {
-    const inGroup = group === 'all' || source.groupId === group;
-    return inGroup && source.searchableText.includes(normalizedQuery);
-  });
+  const options = useMemo(
+    () => buildSourceOptions(props.facets, catalog, poolSources),
+    [props.facets, catalog, poolSources],
+  );
+  const filtered = filterSourceOptions(options, group, query);
   const visible = filtered.slice(0, visibleCount);
   const selected = props.state.sources ?? [];
   const allVisibleSelected =

@@ -1,4 +1,6 @@
 import { summarizeRoleSample } from './roleSampleSummary';
+import { catalogSourceView } from '../../shared/catalogSources';
+import { getCatalogSources } from '../vacancies/catalogSources';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
@@ -406,6 +408,20 @@ const handleListSources: Handler = async (
   };
 };
 
+/** CPO 26.10: все живые источники пула для фильтра «Источники»; память, не пул. */
+const handleListCatalogSources: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  return {
+    data: getCatalogSources().map((row) => catalogSourceView(row.sourceId, row.count)),
+    meta: { requestId: request.id },
+  };
+};
+
 const handleListSubscriptions: Handler = async (
   { authService, candidateStore, config },
   request,
@@ -660,6 +676,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     withDeps(deps, handleChooseStrategy),
   );
   app.get('/api/v1/candidate/vacancy-sources', withDeps(deps, handleListSources));
+  app.get('/api/v1/candidate/vacancy-catalog-sources', withDeps(deps, handleListCatalogSources));
   registerVacancySubscriptionRoutes(app, deps);
   registerRecruiterIntelligenceRoutes(app, deps);
   registerMatchedVacancyRoutes(app, deps);

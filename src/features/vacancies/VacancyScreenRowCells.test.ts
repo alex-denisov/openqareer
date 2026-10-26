@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { vacancyGeoLabel, vacancyLevelLabel, vacancyRowStatus } from './VacancyScreenRowCells';
+import {
+  vacancyGeoFit,
+  vacancyGeoLabel,
+  vacancyLevelLabel,
+  vacancyRowStatus,
+} from './VacancyScreenRowCells';
 
 function item(title: string, vacancyLevel?: MatchedVacancyItem['explanation']['vacancyLevel']) {
   return {
@@ -72,5 +77,34 @@ describe('geo label and format status (B446-g4)', () => {
       },
     );
     expect(vacancyRowStatus(blocked)).toEqual({ tone: 'warn', label: 'Офис, не подходит' });
+  });
+});
+
+/** CPO 26.10: удалёнка без страны или в другой стране не подписывается «совпадает». */
+describe('vacancyGeoFit', () => {
+  const make = (explanation: object) =>
+    ({
+      cluster: { canonicalTitle: 'Head', isRemote: true, canonicalLocation: 'Remote' },
+      explanation: { levelMatch: 'match', ...explanation },
+    }) as unknown as MatchedVacancyItem;
+
+  it('names remote without a country and remote in another country honestly', () => {
+    expect(vacancyGeoFit(make({ remoteCountry: 'unknown' }))).toEqual({
+      state: 'unknown',
+      label: 'удалённо, страна не указана',
+    });
+    expect(vacancyGeoFit(make({ remoteCountry: 'other' }))).toEqual({
+      state: 'no',
+      label: 'другая страна',
+    });
+    expect(vacancyGeoFit(make({}))).toEqual({ state: 'yes', label: 'совпадает' });
+    expect(vacancyRowStatus(make({ remoteCountry: 'other' }))).toEqual({
+      tone: 'warn',
+      label: 'Другая страна',
+    });
+    expect(vacancyRowStatus(make({ remoteCountry: 'unknown' }))).toEqual({
+      tone: 'unknown',
+      label: 'Страна не указана',
+    });
   });
 });

@@ -158,6 +158,8 @@ export interface VacancyMatchExplanation {
    * роли такая запись стоит после остальных и подписана, но не скрыта.
    */
   outsideGeography?: boolean;
+  /** Удалёнка без страны (`unknown`) или в другой стране (`other`), CPO 26.10. */
+  remoteCountry?: 'unknown' | 'other';
   /** B546: market estimate for a vacancy without salary, computed by maintenance. */
   marketSalary?: import('../../shared/marketSalaryEstimate').MarketSalaryEstimateView;
   /**

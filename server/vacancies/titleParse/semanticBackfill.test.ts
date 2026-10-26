@@ -265,4 +265,35 @@ describe('SemanticBackfill (B267 S2)', () => {
 
     expect(backfill.step(100).ontologyCorrected).toBe(0);
   });
+
+  it('Senior Engineering Manager и «Руководитель группы» от модели переписываются в lead', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Senior Engineering Manager');
+    addVacancy(database, 'v2', 'Head of 1C development / Руководитель группы разработки систем 1С');
+    const backfill = new SemanticBackfill(database);
+    const insert = database.prepare(
+      `INSERT INTO title_parse (title_key, sample_title, functions, level_rank, role_label, parsed_by, model, taxonomy_version, priority, parsed_at)
+       VALUES (?, ?, ?, 2, NULL, 'model', 'gemini', 3, 0, 0)`,
+    );
+    insert.run('senior engineering manager', 'Senior Engineering Manager', '["eng-mgmt"]');
+    insert.run(
+      'head of 1c development / руководитель группы разработки систем 1с',
+      'Head of 1C development / Руководитель группы разработки систем 1С',
+      '["eng-mgmt"]',
+    );
+    database
+      .prepare(
+        `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
+         VALUES ('v1', 'eng-mgmt', 2, 'senior engineering manager', 1000, 1),
+                ('v2', 'eng-mgmt', 2, 'head of 1c development / руководитель группы разработки систем 1с', 1000, 1)`,
+      )
+      .run();
+
+    backfill.step(100);
+    backfill.step(100);
+
+    const rows = semanticRows(database);
+    expect(rows.find((row) => row.id === 'v1')).toMatchObject({ level_rank: 1 });
+    expect(rows.find((row) => row.id === 'v2')).toMatchObject({ level_rank: 1 });
+  });
 });

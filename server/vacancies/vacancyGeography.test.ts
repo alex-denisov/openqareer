@@ -96,3 +96,36 @@ describe('штаты и провинции после города (B546)', () =
     expect(regionOfVacancy({ location: 'Tel Aviv, Israel' })).toBe('mena');
   });
 });
+
+/** CPO 26.10: «Remote» без страны или в другой стране не равно «совпадает» для «Удалённо из РФ». */
+describe('remoteCountry', () => {
+  const remote = (id: string, location: string | undefined) => ({
+    cluster: {
+      id,
+      canonicalLocation: location,
+      isRemote: true,
+      firstObservedAt: '2026-09-20T00:00:00.000Z',
+    },
+    explanation: {
+      clusterId: id,
+      roleMatch: 'target' as const,
+      requirements: { matched: 3, total: 7 },
+    },
+  });
+
+  it('marks remote without a country and remote in another country', () => {
+    const marked = markGeography(
+      [
+        remote('none', 'Remote'),
+        remote('us', 'Remote, United States'),
+        remote('ru', 'Удалённо, Россия'),
+      ],
+      ['ru'],
+    );
+    const byId = new Map(marked.map((item) => [item.cluster.id, item.explanation]));
+    expect(byId.get('none')).toMatchObject({ remoteCountry: 'unknown' });
+    expect(byId.get('us')).toMatchObject({ remoteCountry: 'other' });
+    expect(byId.get('ru')).not.toHaveProperty('remoteCountry');
+    expect(byId.get('us')).not.toHaveProperty('outsideGeography');
+  });
+});

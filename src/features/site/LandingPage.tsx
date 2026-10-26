@@ -88,7 +88,7 @@ function PoolFacts({ c }: { c: Counts }) {
   return (
     <div className="ps-facts">
       <span>
-        <b>{c.active}</b> записей вакансий
+        <b>{c.active}</b> вакансий в каталоге
       </span>
       <span>
         <b>{c.sources}</b> {c.sourcesWord}

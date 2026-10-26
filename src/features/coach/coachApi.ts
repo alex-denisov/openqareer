@@ -669,6 +669,12 @@ export async function createVacancySubscription(input: {
 }
 
 // B447: фильтр, сохранённые поиски и подборка просят каталог одновременно — один запрос на всех.
+/** CPO 26.10: все живые источники пула для фильтра «Источники». */
+export const getCatalogSourceList = shareInFlight(
+  async (): Promise<import('../../../shared/catalogSources').CatalogSourceEntry[]> =>
+    readDataArray(await apiFetch('/api/v1/candidate/vacancy-catalog-sources')),
+);
+
 export const getVacancySources = shareInFlight(async (): Promise<VacancySourceRegistryEntry[]> =>
   readDataArray<VacancySourceRegistryEntry>(await apiFetch('/api/v1/candidate/vacancy-sources')),
 );

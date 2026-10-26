@@ -93,7 +93,7 @@ function ConditionsGroup({ item }: { readonly item: MatchedVacancyItem }) {
   const rows: readonly [string, string, boolean][] = [
     ['Уровень', vacancyLevelLabel(item), explanation.levelMatch === 'match'],
     // Макет 4 (390): «✓ Москва, гибрид» — город и формат, как в колонке 1440 (G5 R2).
-    ['Гео', vacancyGeoLabel(item), !explanation.outsideGeography],
+    ['Гео', vacancyGeoLabel(item), !explanation.outsideGeography && !explanation.remoteCountry],
     ['Деньги', money.value, false],
   ];
   return (
