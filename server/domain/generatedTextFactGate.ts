@@ -78,25 +78,38 @@ export function checkPitchOutputFacts(
   };
 }
 
+const SHOWN_CLAIMS = 3;
+
+/** Notices are for the candidate, not the letter: always in Russian, one line
+ *  for all unconfirmed claims instead of a question per sentence (26.10). */
 export function generatedTextFactNotices(
-  language: 'en' | 'ru',
+  _letterLanguage: 'en' | 'ru',
   outputChecks: readonly GeneratedTextFactCheck[],
   modelCheck?: GeneratedTextFactCheck,
 ): string[] {
   const notices: string[] = [];
   if (modelCheck?.status === 'needs_confirmation') {
-    notices.push(language === 'en'
-      ? 'The generated letter contains claims that need confirmation. A letter based on your profile facts is shown instead. Review the facts before sending.'
-      : 'В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.');
+    notices.push('В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.');
   }
-  const unresolved = outputChecks.flatMap((check) => check.claims)
-    .filter((claim) => claim.action === 'ask_candidate');
-  for (const claim of unresolved) {
-    notices.push(language === 'en'
-      ? `Can you confirm this statement from your profile? «${claim.text}»`
-      : `Можете подтвердить это утверждение из профиля? «${claim.text}»`);
+  const unresolved = Array.from(new Set(outputChecks.flatMap((check) => check.claims)
+    .filter((claim) => claim.action === 'ask_candidate')
+    .map((claim) => claim.text.trim())
+    .filter(Boolean)));
+  if (unresolved.length) {
+    const shown = unresolved.slice(0, SHOWN_CLAIMS).map((text) => `«${text}»`).join(', ');
+    const rest = unresolved.length - SHOWN_CLAIMS;
+    notices.push(`Перед отправкой сверьте с профилем ${unresolved.length} ${claimWord(unresolved.length)}: ${shown}${rest > 0 ? ` и ещё ${rest}` : ''}.`);
   }
-  return Array.from(new Set(notices));
+  return notices;
+}
+
+function claimWord(count: number): string {
+  const tens = count % 100;
+  const last = count % 10;
+  if (tens >= 11 && tens <= 14) return 'утверждений';
+  if (last === 1) return 'утверждение';
+  if (last >= 2 && last <= 4) return 'утверждения';
+  return 'утверждений';
 }
 
 /** Only candidate-owned, non-sensitive source facts can support generated claims. */
