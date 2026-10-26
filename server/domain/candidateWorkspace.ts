@@ -89,7 +89,7 @@ export const candidateWorkspaceSchema = z
               .object({ id: z.string().min(1).max(300), title: z.string().trim().min(1).max(200) })
               .strict(),
           )
-          .max(10)
+          .max(20)
           .optional(),
       })
       .strict()

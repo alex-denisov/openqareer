@@ -1,6 +1,6 @@
 import type { RoleObservation } from '../../shared/poolRoleHypotheses';
 import type { WorkPreferenceResult } from '../../shared/workPreferences';
-import { titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
+import { careerRoleKey, sameCareerRole } from './careerRoleKey';
 import {
   confirmRoleObservations,
   proposeRoles,
@@ -50,6 +50,7 @@ export function buildRoleProposals(input: {
     named: input.named,
     pool: observations(input.matched),
     candidateSkills: input.candidateSkills,
+    roleKey: careerRoleKey,
     ...(input.preferences ? { preferences: input.preferences } : {}),
   });
 }
@@ -70,7 +71,7 @@ export function confirmChosenTitle(input: {
   const ofRole = input.matched.filter(
     (item) =>
       item.explanation?.roleMatch !== 'none' &&
-      titleMatchesRole(item.cluster.canonicalTitle, input.title),
+      sameCareerRole(item.cluster.canonicalTitle, input.title),
   );
   return confirmRoleObservations({
     title: input.title,

@@ -65,7 +65,18 @@ export interface ProposedRole {
    * `null` — таблица роль не знает, и ответы кандидата её не двигают.
    */
   readonly family: WorkFamilyCode | null;
+  /**
+   * Все названия, под которыми роль встречается в пуле, частые первыми:
+   * одна функция и уровень — одна строка «Карьеры» (26.10).
+   */
+  readonly aliases?: readonly string[];
 }
+
+/**
+ * Ключ роли по функции и уровню (сервер считает его словарём ролей). `null` —
+ * словарь название не узнал, и роль сводится только по строке названия.
+ */
+export type RoleKeyOf = (title: string) => string | null;
 
 /**
  * Идентификатор роли «Карьеры» по названию: им же помечается отклонение
@@ -75,8 +86,49 @@ export function careerRoleId(title: string): string {
   return `role-${titleKey(title).replace(/\s+/gu, '-')}`;
 }
 
-/** Больше пяти ролей кандидат не сравнивает — он их пролистывает. */
-const MAX_PROPOSALS = 5;
+/**
+ * Ролей рынка — не больше пяти: их никто не называл, кандидат их пролистывает.
+ * Роли, названные по опыту кандидата, не срезаются: у каждой есть факт-основание
+ * (решение владельца 26.10).
+ */
+const MAX_MARKET_PROPOSALS = 5;
+
+/** Пул по ключу роли: функция и уровень, а без словаря — строка названия. */
+function groupByRole(
+  pool: readonly RoleObservation[],
+  keyOf: (title: string) => string,
+): Map<string, RoleGroup> {
+  const groups = new Map<string, RoleGroup>();
+  for (const item of pool) {
+    const title = item.canonicalTitle?.trim();
+    if (!title) continue;
+    const key = keyOf(title);
+    if (!key) continue;
+    const group = groups.get(key) ?? { key, items: [], titles: new Map<string, number>() };
+    group.items.push(item);
+    group.titles.set(title, (group.titles.get(title) ?? 0) + 1);
+    groups.set(key, group);
+  }
+  return groups;
+}
+
+function memoizedKey(roleKey: RoleKeyOf | undefined): (title: string) => string {
+  const cache = new Map<string, string>();
+  return (title) => {
+    const known = cache.get(title);
+    if (known !== undefined) return known;
+    const key = roleKey?.(title) ?? titleKey(title);
+    cache.set(title, key);
+    return key;
+  };
+}
+
+function aliasesOf(title: string, group: RoleGroup | undefined): string[] {
+  const titles = [...(group?.titles.entries() ?? [])]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([alias]) => alias);
+  return [title, ...titles.filter((alias) => alias !== title)];
+}
 
 export function proposeRoles(input: {
   readonly named: readonly NamedRole[];
@@ -88,8 +140,11 @@ export function proposeRoles(input: {
    * уточняют порядок уже прошедших рынок гипотез, а не находят роли.
    */
   readonly preferences?: WorkPreferenceResult;
+  /** Сводит разные названия одной функции и уровня в одну роль (26.10). */
+  readonly roleKey?: RoleKeyOf;
 }): ProposedRole[] {
-  const groups = groupObservations(input.pool);
+  const keyOf = memoizedKey(input.roleKey);
+  const groups = groupByRole(input.pool, keyOf);
   const skills = new Set(input.candidateSkills.map((skill) => skill.toLowerCase().trim()));
   const claimed = new Set<string>();
 
@@ -97,7 +152,7 @@ export function proposeRoles(input: {
     // Роль без опоры на резюме — шум: объяснение обязательно, имя — нет.
     .filter((role) => role.title.trim() && role.reason.trim() && role.evidenceRefs.length > 0)
     .flatMap<ProposedRole>((role) => {
-      const key = titleKey(role.title);
+      const key = keyOf(role.title.trim());
       if (!key || claimed.has(key)) return [];
       claimed.add(key);
       const group = groups.get(key);
@@ -110,28 +165,30 @@ export function proposeRoles(input: {
           evidenceRefs: role.evidenceRefs,
           confirmation: confirmationFor(group, skills),
           family: roleWorkFamily(role.title),
+          aliases: aliasesOf(role.title.trim(), group),
         },
       ];
     });
 
   const fromMarket = [...groups.entries()]
     .filter(([key, group]) => !claimed.has(key) && group.items.length >= MIN_ROLE_SAMPLE)
-    .map<ProposedRole>(([key, group]) => {
+    .map<ProposedRole>(([, group]) => {
       const described = describeGroup(group, new Set<string>(), skills);
       return {
-        id: `role-${key.replace(/\s+/gu, '-')}`,
+        id: careerRoleId(described.title),
         title: described.title,
         origin: 'market',
         reason: null,
         evidenceRefs: [],
         confirmation: { state: 'observed', ...withoutIdentity(described) },
         family: roleWorkFamily(described.title),
+        aliases: aliasesOf(described.title, group),
       };
     });
 
-  return [...fromModel, ...fromMarket]
-    .sort(byEvidenceThen(preferenceRank(input.preferences)))
-    .slice(0, MAX_PROPOSALS);
+  const order = byEvidenceThen(preferenceRank(input.preferences));
+  const market = [...fromMarket].sort(order).slice(0, MAX_MARKET_PROPOSALS);
+  return [...fromModel, ...market].sort(order);
 }
 
 /**

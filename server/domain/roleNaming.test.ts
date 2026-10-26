@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dropOrganisationTitles, roleNamingInstructions } from './roleNaming';
+import { dropOrganisationTitles, roleNamingInstructions, roleNamingSchema } from './roleNaming';
 
 /**
  * PRB-039. Для профиля из LinkedIn модель назвала роли «Accessibility Talent
@@ -12,10 +12,22 @@ describe('role naming without organisation names (PRB-039)', () => {
 
   it('drops a role whose title is an employer or a product of the candidate', () => {
     const roles = [
-      { title: 'Accessibility Talent Solutions', reason: 'работал там', evidenceRefs: ['memory:1'] },
+      {
+        title: 'Accessibility Talent Solutions',
+        reason: 'работал там',
+        evidenceRefs: ['memory:1'],
+      },
       { title: 'marketing solutions', reason: 'вёл продукт', evidenceRefs: ['memory:2'] },
-      { title: 'Xray Technician', reason: 'семь лет в рентген-кабинете', evidenceRefs: ['memory:3'] },
-      { title: 'Solutions Engineer', reason: 'внедрял решения клиентам', evidenceRefs: ['memory:4'] },
+      {
+        title: 'Xray Technician',
+        reason: 'семь лет в рентген-кабинете',
+        evidenceRefs: ['memory:3'],
+      },
+      {
+        title: 'Solutions Engineer',
+        reason: 'внедрял решения клиентам',
+        evidenceRefs: ['memory:4'],
+      },
     ];
     expect(dropOrganisationTitles(roles, organisations).map((role) => role.title)).toEqual([
       'Xray Technician',
@@ -33,5 +45,22 @@ describe('role naming without organisation names (PRB-039)', () => {
     expect(instructions).toMatch(/компани/iu);
     expect(instructions).toMatch(/не роль/u);
     expect(instructions).toMatch(/Обоснование пиши по-русски/u);
+  });
+});
+
+describe('роли по всему опыту кандидата (26.10)', () => {
+  it('не ограничивает число ролей пятью и просит роль на каждое направление опыта', () => {
+    const text = roleNamingInstructions('en');
+    expect(text).not.toContain('от трёх до пяти');
+    expect(text).toContain('каждое направление');
+  });
+
+  it('принимает до двенадцати ролей', () => {
+    const roles = Array.from({ length: 12 }, (_, index) => ({
+      title: `Role ${index + 1}`,
+      reason: 'по фактам',
+      evidenceRefs: ['memory:1'],
+    }));
+    expect(roleNamingSchema.safeParse({ roles }).success).toBe(true);
   });
 });

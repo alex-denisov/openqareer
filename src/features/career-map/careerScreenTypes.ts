@@ -46,6 +46,11 @@ export interface CareerRoleModel {
   readonly hypothesisReason?: string;
   /** Кандидат ответил «Не сейчас» на предложение открыть роль для поиска. */
   readonly offerDismissed: boolean;
+  /**
+   * Роль уже у кандидата: выбрана в мастере, принята или навыки по ней
+   * проверены. Консультант её не предлагает (26.10).
+   */
+  readonly alreadyChosen?: boolean;
 }
 
 export interface StopCompany {

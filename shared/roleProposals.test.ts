@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  WORK_PREFERENCE_KEY_VERSION,
-  type WorkPreferenceResult,
-} from './workPreferences';
+import { WORK_PREFERENCE_KEY_VERSION, type WorkPreferenceResult } from './workPreferences';
 import type { RoleObservation } from './poolRoleHypotheses';
 import { proposeRoles, type NamedRole } from './roleProposals';
 
@@ -164,21 +161,27 @@ describe('порядок ролей после заданий «Какие ро�
     counts: [],
     excluded: [],
     discriminates: true,
-    ranked: [
-      { family, name: 'верх', value: 3, total: 3, basis: 'выбрали 3 раза из 3' },
-    ],
+    ranked: [{ family, name: 'верх', value: 3, total: 3, basis: 'выбрали 3 раза из 3' }],
   });
 
   it('ответы меняют порядок ролей одного яруса, но не состав', () => {
-    const flow = proposeRoles({ named, pool: [], candidateSkills: [], preferences: preferring('ПП') });
-    const numbers = proposeRoles({ named, pool: [], candidateSkills: [], preferences: preferring('РР') });
+    const flow = proposeRoles({
+      named,
+      pool: [],
+      candidateSkills: [],
+      preferences: preferring('ПП'),
+    });
+    const numbers = proposeRoles({
+      named,
+      pool: [],
+      candidateSkills: [],
+      preferences: preferring('РР'),
+    });
 
     expect(flow[0].title).toBe('Operations Manager');
     expect(numbers[0].title).toBe('Data Analyst');
     // Состав тот же: задания уточняют порядок гипотез, а не находят роли.
-    expect(flow.map((role) => role.title).sort()).toEqual(
-      numbers.map((role) => role.title).sort(),
-    );
+    expect(flow.map((role) => role.title).sort()).toEqual(numbers.map((role) => role.title).sort());
   });
 
   it('отказ различить оставляет порядок доказательству', () => {
@@ -214,7 +217,11 @@ describe('порядок ролей после заданий «Какие ро�
 });
 
 describe('вилка роли по вакансиям с зарплатой (B445)', () => {
-  function paid(from: number | undefined, to: number | undefined, currency = 'RUR'): RoleObservation {
+  function paid(
+    from: number | undefined,
+    to: number | undefined,
+    currency = 'RUR',
+  ): RoleObservation {
     return { ...vacancy('Director of Engineering'), salary: { from, to, currency } };
   }
 
@@ -224,7 +231,11 @@ describe('вилка роли по вакансиям с зарплатой (B44
       paid(9_000, 12_000, 'USD'),
       vacancy('Director of Engineering'),
     ];
-    const [role] = proposeRoles({ named: [named('Director of Engineering')], pool, candidateSkills: [] });
+    const [role] = proposeRoles({
+      named: [named('Director of Engineering')],
+      pool,
+      candidateSkills: [],
+    });
     expect(role.confirmation.state).toBe('observed');
     if (role.confirmation.state !== 'observed') return;
     expect(role.confirmation.sampleSize).toBe(12);
@@ -233,7 +244,11 @@ describe('вилка роли по вакансиям с зарплатой (B44
 
   it('без вакансий с зарплатой вилки нет', () => {
     const pool = Array.from({ length: 9 }, () => vacancy('Director of Engineering'));
-    const [role] = proposeRoles({ named: [named('Director of Engineering')], pool, candidateSkills: [] });
+    const [role] = proposeRoles({
+      named: [named('Director of Engineering')],
+      pool,
+      candidateSkills: [],
+    });
     if (role.confirmation.state !== 'observed') throw new Error('expected observed');
     expect(role.confirmation.wage).toEqual({ sampleSize: 0 });
   });
@@ -247,3 +262,83 @@ describe('какие требования роли подтверждены на
     expect(role.confirmation.matchedRequirementNames).toEqual(['Go']);
   });
 });
+
+describe('proposeRoles: одна роль под разными названиями (26.10)', () => {
+  // Ключ функции и уровня приходит с сервера; здесь — таблица из теста.
+  const KEYS: Record<string, string> = {
+    'Технический директор': 'eng-mgmt.cto',
+    'Технический директор (CTO)': 'eng-mgmt.cto',
+    'Операционный директор (COO)': 'ops.coo',
+    'Chief Operating Officer': 'ops.coo',
+    'Операционный директор': 'ops.coo',
+  };
+  const roleKey = (title: string) => KEYS[title] ?? null;
+  const many = (title: string, count: number) =>
+    Array.from({ length: count }, () => vacancy(title));
+
+  it('сводит названия одной функции и уровня в одну строку без потери вакансий', () => {
+    const roles = proposeRoles({
+      named: [],
+      pool: [
+        ...many('Операционный директор (COO)', 106),
+        ...many('Операционный директор', 46),
+        ...many('Chief Operating Officer', 45),
+        ...many('Технический директор', 69),
+        ...many('Технический директор (CTO)', 24),
+      ],
+      candidateSkills: [],
+      roleKey,
+    });
+
+    expect(roles.map((role) => [role.title, sampleOf(role)])).toEqual([
+      ['Операционный директор (COO)', 197],
+      ['Технический директор', 93],
+    ]);
+    expect(roles[0]?.aliases).toEqual([
+      'Операционный директор (COO)',
+      'Операционный директор',
+      'Chief Operating Officer',
+    ]);
+  });
+
+  it('роль модели забирает вакансии своей функции и уровня под любым названием', () => {
+    const roles = proposeRoles({
+      named: [named('Chief Operating Officer')],
+      pool: [...many('Операционный директор', 10), ...many('Операционный директор (COO)', 5)],
+      candidateSkills: [],
+      roleKey,
+    });
+
+    expect(roles).toHaveLength(1);
+    expect(roles[0]).toMatchObject({ title: 'Chief Operating Officer', origin: 'model' });
+    expect(sampleOf(roles[0]!)).toBe(15);
+  });
+
+  it('не срезает роли, подтверждённые опытом, ради ролей рынка', () => {
+    const modelTitles = [
+      'Head of AI',
+      'Head of Support',
+      'Customer Support Director',
+      'VP of Customer Support',
+    ];
+    const roles = proposeRoles({
+      named: modelTitles.map((title) => named(title)),
+      pool: ['Analyst', 'Designer', 'Recruiter', 'Accountant', 'Lawyer', 'Teacher'].flatMap(
+        (title) => many(title, 20),
+      ),
+      candidateSkills: [],
+    });
+
+    expect(
+      roles
+        .filter((role) => role.origin === 'model')
+        .map((role) => role.title)
+        .sort(),
+    ).toEqual([...modelTitles].sort());
+    expect(roles.filter((role) => role.origin === 'market')).toHaveLength(5);
+  });
+});
+
+function sampleOf(role: { confirmation: { state: string; sampleSize?: number } }): number {
+  return role.confirmation.sampleSize ?? 0;
+}

@@ -1,5 +1,5 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
-import { titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
+import { sameCareerRole } from './careerRoleKey';
 
 /**
  * Вакансий на роль кампании — вход порога значимости (`annotateRoleHypotheses`,
@@ -15,7 +15,7 @@ export function countMatchedVacanciesByRole(
   const counts: Record<string, number> = {};
   for (const role of roles) {
     counts[role] = matched.filter((item) =>
-      titleMatchesRole(item.cluster.canonicalTitle, role),
+      sameCareerRole(item.cluster.canonicalTitle, role),
     ).length;
   }
   return counts;

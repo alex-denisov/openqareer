@@ -161,3 +161,34 @@ describe('summarizeRolesMarket (B445)', () => {
     expect(summarizeRolesMarket([])).toEqual({ vacancyTotal: 0, asOf: null, sources: [] });
   });
 });
+
+describe('роль, которая уже есть у кандидата, не предлагается (26.10)', () => {
+  const base = { acceptedTitle: null, offersDismissed: [] };
+
+  it('роль с проверенными навыками — уже роль кандидата, под любым её названием', () => {
+    const role = mapProposedRoleToCareerRole(
+      {
+        ...observed(),
+        title: 'Операционный директор (COO)',
+        aliases: ['Операционный директор (COO)', 'Chief Operating Officer'],
+      },
+      { ...base, checkedTitles: ['Chief Operating Officer'] },
+    );
+    expect(role.status).toBe('skills_checked');
+    expect(role.alreadyChosen).toBe(true);
+  });
+
+  it('роль, выбранная в мастере или принятая, — уже роль кандидата', () => {
+    expect(
+      mapProposedRoleToCareerRole({ ...observed(), origin: 'candidate' }, base).alreadyChosen,
+    ).toBe(true);
+    expect(
+      mapProposedRoleToCareerRole(observed(), { ...base, acceptedTitle: 'Director of Engineering' })
+        .alreadyChosen,
+    ).toBe(true);
+  });
+
+  it('роль, которую подтвердил только рынок, ещё можно предложить', () => {
+    expect(mapProposedRoleToCareerRole(observed(), base).alreadyChosen).toBe(false);
+  });
+});

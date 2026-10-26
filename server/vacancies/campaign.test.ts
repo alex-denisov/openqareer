@@ -277,6 +277,25 @@ describe('роли «Карьеры» в подборе (26.10)', () => {
     });
     expect(resolved.roles.value).toEqual(['Head of Engineering']);
   });
+
+  it('разные названия одной функции и уровня — одна роль подбора', () => {
+    const keys: Record<string, string> = {
+      'Chief Operating Officer': 'ops.coo',
+      'Операционный директор': 'ops.coo',
+    };
+    const resolved = resolveCampaign({
+      memory: [],
+      profileRegions: [],
+      explicit: {
+        ...explicit,
+        roles: ['Операционный директор', 'Chief Operating Officer'],
+        careerRoles: [{ id: careerRoleId('Chief of Staff'), title: 'Chief of Staff' }],
+      },
+      roleIdOf: careerRoleId,
+      roleKeyOf: (title) => keys[title] ?? null,
+    });
+    expect(resolved.roles.value).toEqual(['Операционный директор', 'Chief of Staff']);
+  });
 });
 
 describe('география «Карьеры» в подборе (CPO 26.10)', () => {

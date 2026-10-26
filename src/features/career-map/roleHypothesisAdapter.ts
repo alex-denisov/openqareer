@@ -47,13 +47,22 @@ function sameTitle(left: string, right: string): boolean {
   return left.trim().toLocaleLowerCase('ru') === right.trim().toLocaleLowerCase('ru');
 }
 
+/** Одна роль под любым из своих названий: сервер сводит их по функции и уровню. */
+function namesRole(proposed: ProposedRole, title: string): boolean {
+  return [proposed.title, ...(proposed.aliases ?? [])].some((name) => sameTitle(name, title));
+}
+
+function isAccepted(proposed: ProposedRole, decisions: RoleDecisions): boolean {
+  return Boolean(decisions.acceptedTitle && namesRole(proposed, decisions.acceptedTitle));
+}
+
+function isChecked(proposed: ProposedRole, decisions: RoleDecisions): boolean {
+  return decisions.checkedTitles?.some((title) => namesRole(proposed, title)) ?? false;
+}
+
 function determineRoleStatus(proposed: ProposedRole, decisions: RoleDecisions): RoleStatus {
-  if (decisions.acceptedTitle && sameTitle(decisions.acceptedTitle, proposed.title)) {
-    return 'open_for_search';
-  }
-  if (decisions.checkedTitles?.some((title) => sameTitle(title, proposed.title))) {
-    return 'skills_checked';
-  }
+  if (isAccepted(proposed, decisions)) return 'open_for_search';
+  if (isChecked(proposed, decisions)) return 'skills_checked';
   const conf = proposed.confirmation;
   return conf.state === 'observed' && conf.matchedRequirements > 0
     ? 'skills_checked'
@@ -178,6 +187,10 @@ export function mapProposedRoleToCareerRole(
     nextAction: determineNextAction(status, evidence.vacancyCount),
     hypothesisReason: proposed.reason ?? undefined,
     offerDismissed: decisions.offersDismissed.includes(proposed.id),
+    alreadyChosen:
+      proposed.origin === 'candidate' ||
+      isAccepted(proposed, decisions) ||
+      isChecked(proposed, decisions),
   };
 }
 
