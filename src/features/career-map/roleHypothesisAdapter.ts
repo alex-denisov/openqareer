@@ -172,7 +172,8 @@ export function mapProposedRoleToCareerRole(
     requirementsNote: evidence.requirementsNote,
     skillCheckBenefit:
       status === 'hypothesis'
-        ? 'Роль перейдёт в «Навыки проверены», и её можно будет открыть для поиска.'
+        ? // Подборка уже идёт по роли (26.10): проверка подтверждает навыки, а не открывает поиск.
+          'Роль перейдёт в «Навыки проверены», а подтверждённые навыки войдут в сопоставление с вакансиями.'
         : undefined,
     nextAction: determineNextAction(status, evidence.vacancyCount),
     hypothesisReason: proposed.reason ?? undefined,
