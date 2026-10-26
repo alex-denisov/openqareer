@@ -7,7 +7,9 @@ interface EmployerCluster {
 
 /** Работодатель — частное лицо: признак площадки или форма ФИО (INC-023). */
 export function isPrivateEmployerCluster(cluster: EmployerCluster): boolean {
-  return publicEmployerName(cluster.canonicalCompany, cluster.employerIsPerson) === PRIVATE_EMPLOYER;
+  return (
+    publicEmployerName(cluster.canonicalCompany, cluster.employerIsPerson) === PRIVATE_EMPLOYER
+  );
 }
 
 /**

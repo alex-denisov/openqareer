@@ -5,7 +5,11 @@ import { isPrivateEmployerCluster, maskPrivateEmployers } from './privateEmploye
 /** CPO 26.10: ФИО работодателя с hh не показывается в «Вакансиях» и «Компаниях» (INC-023, как #100). */
 describe('maskPrivateEmployers', () => {
   const item = (canonicalCompany: string, employerIsPerson?: boolean) => ({
-    cluster: { id: canonicalCompany, canonicalCompany, ...(employerIsPerson ? { employerIsPerson } : {}) },
+    cluster: {
+      id: canonicalCompany,
+      canonicalCompany,
+      ...(employerIsPerson ? { employerIsPerson } : {}),
+    },
     explanation: {},
   });
 
@@ -25,7 +29,9 @@ describe('maskPrivateEmployers', () => {
 
   it('keeps a private employer out of the companies list', () => {
     expect(isPrivateEmployerCluster({ canonicalCompany: 'Матузова Олеся Васильевна' })).toBe(true);
-    expect(isPrivateEmployerCluster({ canonicalCompany: PRIVATE_EMPLOYER, employerIsPerson: true })).toBe(true);
+    expect(
+      isPrivateEmployerCluster({ canonicalCompany: PRIVATE_EMPLOYER, employerIsPerson: true }),
+    ).toBe(true);
     expect(isPrivateEmployerCluster({ canonicalCompany: 'Рабинович Групп' })).toBe(false);
   });
 });

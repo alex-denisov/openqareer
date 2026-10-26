@@ -370,6 +370,19 @@ function updateSelectedSource(
   }));
 }
 
+function filterSourceOptions(
+  options: readonly SourceOption[],
+  group: SourceGroupSelection,
+  query: string,
+): SourceOption[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return options.filter(
+    (source) =>
+      (group === 'all' || source.groupId === group) &&
+      source.searchableText.includes(normalizedQuery),
+  );
+}
+
 function useSourceFilterView(
   props: VacancySourceCatalogFilterProps,
   catalog: readonly VacancySourceRegistryEntry[],
@@ -382,11 +395,7 @@ function useSourceFilterView(
     () => buildSourceOptions(props.facets, catalog, poolSources),
     [props.facets, catalog, poolSources],
   );
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const filtered = options.filter((source) => {
-    const inGroup = group === 'all' || source.groupId === group;
-    return inGroup && source.searchableText.includes(normalizedQuery);
-  });
+  const filtered = filterSourceOptions(options, group, query);
   const visible = filtered.slice(0, visibleCount);
   const selected = props.state.sources ?? [];
   const allVisibleSelected =

@@ -539,7 +539,9 @@ function MobileFilterSheetContent({
       activeGroup={activeGroup}
       values={mobileFilterValues(
         withCampaignDefaults(draft, props.campaignRoles, props.regions, props.careerLocations),
-        buildSourceOptions(props.facets, catalog.sources, catalog.poolSources).length,
+        props.facets
+          ? buildSourceOptions(props.facets, catalog.sources, catalog.poolSources).length
+          : catalog.sources.length,
       )}
       subtitle={sheetSubtitle(props.facets, resultCount)}
       resultCount={resultCount}

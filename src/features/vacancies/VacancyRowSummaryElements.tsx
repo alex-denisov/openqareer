@@ -147,12 +147,20 @@ export function VacancyDefaultSummaryContent({
         <span className="vac-fit">
           <RoleFitDot roleMatch={explanation.roleMatch} adjacent={explanation.adjacentRole} />
           <LevelFitDot levelMatch={explanation.levelMatch} />
-          <GeoFitDot
-            outsideGeo={explanation.outsideGeography || explanation.remoteCountry === 'other'}
-            unknown={explanation.remoteCountry === 'unknown'}
-          />
+          <GeoFitDot {...geoFitDotProps(explanation)} />
         </span>
       </span>
     </>
   );
+}
+
+/** Удалёнка в другой стране — «не совпадает», без страны — «не указано» (CPO 26.10). */
+function geoFitDotProps(explanation: {
+  readonly outsideGeography?: boolean;
+  readonly remoteCountry?: 'unknown' | 'other';
+}) {
+  return {
+    outsideGeo: explanation.outsideGeography || explanation.remoteCountry === 'other',
+    unknown: explanation.remoteCountry === 'unknown',
+  };
 }

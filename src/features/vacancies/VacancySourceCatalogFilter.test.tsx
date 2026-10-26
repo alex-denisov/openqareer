@@ -12,7 +12,10 @@ const catalog = [
   { id: 'hh', name: 'hh.ru', category: 'Международные площадки', market: 'Россия' },
 ];
 
-vi.mock('../coach/coachApi', () => ({ getVacancySources: () => Promise.resolve(catalog) }));
+vi.mock('../coach/coachApi', () => ({
+  getVacancySources: () => Promise.resolve(catalog),
+  getCatalogSourceList: () => Promise.resolve([]),
+}));
 
 const facets = {
   total: 834,
