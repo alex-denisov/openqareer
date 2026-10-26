@@ -18,7 +18,7 @@ describe('consultant history (B266 S3)', () => {
 });
 
 describe('consultantTurns: repeated question in a row (B563)', () => {
-  const q = 'Почему «NewStore» подходит? Разбери вакансию «CTO».';
+  const q = 'Что уточнить в вакансии «CTO» в NewStore?';
   it('keeps the first question and answer, hides the repeats that follow', () => {
     const messages = [
       { id: '1', role: 'user', content: q },
@@ -44,5 +44,24 @@ describe('consultantTurns: repeated question in a row (B563)', () => {
       { id: '6', role: 'assistant', content: 'Ответ 2' },
     ];
     expect(consultantTurns(messages).map((m) => m.id)).toEqual(['1', '4']);
+  });
+});
+
+describe('consultantTurns: one vacancy question per theme (26.10)', () => {
+  const ask = (company: string, title: string) =>
+    `Почему «${company}» подходит? Разбери вакансию «${title}»: роль, уровень, гео, деньги.`;
+  it('keeps only the latest «Почему … подходит?» with its answer, other topics stay', () => {
+    const messages = [
+      { id: '1', role: 'user', content: ask('NewStore', 'VP, Engineering') },
+      { id: '2', role: 'assistant', content: 'Ответ 1' },
+      { id: '3', role: 'user', content: ask('Kerry', 'VP Engineering') },
+      { id: '4', role: 'user', content: 'Что с зарплатой?' },
+      { id: '5', role: 'assistant', content: 'Ответ 2' },
+      { id: '6', role: 'user', content: 'Почему эта вакансия подходит? Разбери вакансию «CTO».' },
+      { id: '7', role: 'assistant', content: 'Ответ 3' },
+      { id: '8', role: 'user', content: ask('Lone Wolf', 'VP of Engineering') },
+      { id: '9', role: 'assistant', content: 'Ответ 4' },
+    ];
+    expect(consultantTurns(messages).map((m) => m.id)).toEqual(['4', '5', '8', '9']);
   });
 });
