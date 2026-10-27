@@ -53,3 +53,8 @@ export function sameCareerRole(vacancyTitle: string, role: string): boolean {
   const roleKey = careerRoleKey(role);
   return roleKey !== null && careerRoleKey(vacancyTitle) === roleKey;
 }
+
+/** Функции, к которым словарь относит название; общий код `other` не в счёт. */
+export function careerRoleFunctions(title: string): string[] {
+  return rulesParse(title.trim()).functions.filter((code) => code !== 'other');
+}
