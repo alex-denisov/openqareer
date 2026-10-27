@@ -59,6 +59,15 @@ const PROFILE_HEAD_CHARS = 1_500;
 const REFUSAL_COOLDOWN_MS = 3_600_000;
 const REFUSED_UNTIL = new Map<string, number>();
 
+function refusedSites(): Set<string> {
+  return new Set([...REFUSED_UNTIL].flatMap(([name, until]) => (until > Date.now() ? [name] : [])));
+}
+
+function markRefused(refused: Set<string>, name: string): void {
+  refused.add(name);
+  REFUSED_UNTIL.set(name, Date.now() + REFUSAL_COOLDOWN_MS);
+}
+
 /** Для тестов: сброс отказов сайтов между сценариями. */
 export function resetProfileRefusals(): void {
   REFUSED_UNTIL.clear();
@@ -328,13 +337,8 @@ async function fromUsernameSites(
     (site): site is MaigretSite => Boolean(site),
   );
   const found: RecruiterChannel[] = [];
-  const refused = new Set<string>(
-    [...REFUSED_UNTIL].flatMap(([name, until]) => (until > Date.now() ? [name] : [])),
-  );
-  const refuse = (name: string) => {
-    refused.add(name);
-    REFUSED_UNTIL.set(name, Date.now() + REFUSAL_COOLDOWN_MS);
-  };
+  const refused = refusedSites();
+  const refuse = (name: string) => markRefused(refused, name);
   for (const nick of [...new Set([...nicknames(known), ...nameNicknames(person.fullName)])].slice(0, PROFILE_NICKS)) {
     for (const site of sites) {
       if (refused.has(site.name)) continue;

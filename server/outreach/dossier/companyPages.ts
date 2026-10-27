@@ -200,6 +200,15 @@ async function archivedPages(domain: string, livePages: readonly string[], deps:
   return found;
 }
 
+function onOwnSite(url: string, domain: string): boolean {
+  try {
+    const host = new URL(url.replace(/^https:\/\/web\.archive\.org\/web\/\d{14}(?:id_)?\//u, '')).hostname;
+    return host === domain || host.endsWith(`.${domain}`);
+  } catch {
+    return false;
+  }
+}
+
 /** Люди с адресами со страниц самой компании и упоминаний её домена в открытом поиске. */
 export async function collectCompanyPages(domain: string, deps: DossierDeps): Promise<CompanyPagesResult> {
   const pages: Array<{ url: string; text: string }> = [];
@@ -237,15 +246,7 @@ export async function collectCompanyPages(domain: string, deps: DossierDeps): Pr
     }
   }
   // Телефоны — только со страниц самой компании и их архива, не со сторонних сайтов из поиска.
-  const ownSite = (url: string) => {
-    try {
-      const host = new URL(url.replace(/^https:\/\/web\.archive\.org\/web\/\d{14}(?:id_)?\//u, '')).hostname;
-      return host === domain || host.endsWith(`.${domain}`);
-    } catch {
-      return false;
-    }
-  };
-  const snippets = pages.filter((page) => ownSite(page.url)).flatMap(contactSnippets).slice(0, MAX_SNIPPETS);
+  const snippets = pages.filter((page) => onOwnSite(page.url, domain)).flatMap(contactSnippets).slice(0, MAX_SNIPPETS);
   const format = inferEmailFormat(samples);
   const example = format ? samples.find((sample) => formatsOf(sample).includes(format.id)) : undefined;
   return {
