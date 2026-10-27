@@ -311,6 +311,13 @@ describe('evaluateSemanticRole: функция ролей «Карьеры» (27
     expect(roleOf('Head of Product Analytics - 100% Remote - EMEA')).toBe('none');
   });
 
+  it('Revenue/Sales/Marketing Operations — продажи, а не ops от COO (28.10)', () => {
+    expect(roleOf('Head of Revenue Operations')).toBe('none');
+    expect(roleOf('RevOps Director')).toBe('none');
+    expect(roleOf('Sales Operations Director')).toBe('none');
+    expect(roleOf('Marketing Operations Lead')).toBe('none');
+  });
+
   it('название без функции проходит, только если совпадает с ролью кандидата', () => {
     expect(roleOf('Head of Crypto')).toBe('none');
   });
