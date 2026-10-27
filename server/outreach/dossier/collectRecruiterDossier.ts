@@ -7,8 +7,10 @@ import { transliterateToLatin } from '../recruiterIntelligenceService';
 import { getCuratedMaigretSite } from '../../osint/adapters/maigretSiteCatalogue';
 import type { MaigretSite } from '../../osint/adapters/maigretSiteCatalogue';
 import { createUsernamePresenceAdapter } from '../../osint/adapters/usernamePresenceAdapter';
-import { fetchPublicPage } from './companyPages';
+import { fetchPublicPage, isContactBroker } from './companyPages';
 import { extractChannels } from './extractChannels';
+import type { PersonIdentity } from './identity';
+import { buildIdentity, CONFIRMED_THRESHOLD, LINK_THRESHOLD, linkEvidence } from './identity';
 
 /**
  * Сводка каналов рекрутёра (B258): каналы связи из открытых источников, где их
@@ -19,6 +21,10 @@ export interface DossierPerson {
   readonly fullName: string;
   readonly companyName: string;
   readonly companyDomain?: string;
+  /** Исходный профиль человека: из него берутся прошлые работодатели и город. */
+  readonly linkedinUrl?: string | null;
+  /** Каналы, уже известные из вакансии и поиска рекрутёра. */
+  readonly known?: readonly RecruiterChannel[];
 }
 
 /** Сбор неполный, если источник ответил ошибкой: такой результат не кэшируется. */
@@ -46,9 +52,26 @@ const MAX_BODY_CHARS = 200_000;
 const EXA_PAGES = 8;
 const EXA_PAGE_CHARS = 4_000;
 const GITHUB_CANDIDATES = 3;
-const TELEGRAM_NICKS = 4;
+const TELEGRAM_NICKS = 8;
 const PROFILE_NICKS = 2;
 const PROFILE_HEAD_CHARS = 1_500;
+/** Сайт, ответивший отказом, не спрашивается час — для всех людей и заданий процесса. */
+const REFUSAL_COOLDOWN_MS = 3_600_000;
+const REFUSED_UNTIL = new Map<string, number>();
+
+function refusedSites(): Set<string> {
+  return new Set([...REFUSED_UNTIL].flatMap(([name, until]) => (until > Date.now() ? [name] : [])));
+}
+
+function markRefused(refused: Set<string>, name: string): void {
+  refused.add(name);
+  REFUSED_UNTIL.set(name, Date.now() + REFUSAL_COOLDOWN_MS);
+}
+
+/** Для тестов: сброс отказов сайтов между сценариями. */
+export function resetProfileRefusals(): void {
+  REFUSED_UNTIL.clear();
+}
 /** Сайты из списка Maigret/Sherlock, где рекрутёры ведут профили с контактами в описании. */
 export const RECRUITER_PROFILE_SITES = [
   'Medium', 'Teletype', 'SlideShare', 'Speakerdeck', 'sessionize.com', 'clarity.fm',
@@ -59,13 +82,13 @@ function fold(value: string): string {
   return transliterateToLatin(value.normalize('NFKC')).replace(/[\s._-]+/gu, ' ').trim();
 }
 
-function namesPerson(text: string, fullName: string): boolean {
+export function namesPerson(text: string, fullName: string): boolean {
   const page = fold(text);
   const parts = fold(fullName).split(' ').filter((part) => part.length > 1);
   return parts.length >= 2 && parts.every((part) => page.includes(part));
 }
 
-function namesCompany(text: string, companyName: string): boolean {
+export function namesCompany(text: string, companyName: string): boolean {
   const company = fold(companyName).replace(/\s+/gu, '');
   return company.length > 1 && fold(text).replace(/\s+/gu, '').includes(company);
 }
@@ -109,14 +132,17 @@ async function getJson<T>(url: string, deps: DossierDeps, state: RunState): Prom
 const NEAR_NAME_CHARS = 400;
 
 /** Фрагменты страницы рядом с упоминанием фамилии: чужие контакты со страницы не берутся. */
-function nearName(text: string, fullName: string): string {
+export function nearName(text: string, fullName: string): string {
   const parts = fullName.trim().split(/\s+/u);
   const surname = parts[parts.length - 1] ?? '';
   const lower = text.toLocaleLowerCase('ru-RU');
   const needle = surname.toLocaleLowerCase('ru-RU');
   if (needle.length < 2) return '';
   const windows: string[] = [];
+  const letter = /[\p{L}\p{N}]/u;
   for (let index = lower.indexOf(needle); index >= 0; index = lower.indexOf(needle, index + needle.length)) {
+    // Фамилия целым словом: «Petrov» не находится внутри «Petrova».
+    if (letter.test(lower[index - 1] ?? '') || letter.test(lower[index + needle.length] ?? '')) continue;
     windows.push(text.slice(Math.max(0, index - NEAR_NAME_CHARS), index + needle.length + NEAR_NAME_CHARS));
   }
   return windows.join('\n');
@@ -132,8 +158,19 @@ export function emailNamesPerson(email: string, fullName: string): boolean {
   return parts.some((part) => local.includes(part.replace(/[^a-z]/gu, '')));
 }
 
+function onCompanySite(url: string, domain: string | undefined): boolean {
+  if (!domain) return false;
+  try {
+    const host = new URL(url).hostname;
+    return host === domain || host.endsWith(`.${domain}`);
+  } catch {
+    return false;
+  }
+}
+
 async function fromOpenPages(
   person: DossierPerson,
+  identityReady: Promise<PersonIdentity>,
   deps: DossierDeps,
   observedAt: string,
   state: RunState,
@@ -146,11 +183,19 @@ async function fromOpenPages(
       numResults: EXA_PAGES,
       contents: { text: { maxCharacters: EXA_PAGE_CHARS } },
     });
+    const identity = await identityReady;
     return pages
+      // Базы контактов — не публикация человека: их адреса не берутся (B258, без баз «пробива»).
+      .filter((page) => !isContactBroker(page.url))
       .filter((page) => namesPerson(`${page.title}\n${page.text}`, person.fullName))
-      .flatMap((page) =>
-        extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: page.url, observedAt }),
-      )
+      .flatMap((page) => {
+        // Страница с тем же именем может быть о однофамильце: нужна связь в графе соответствия.
+        // Страница на сайте самой компании — та же связь, что работодатель в тексте.
+        const score = linkEvidence(identity, `${page.title}\n${page.text}`).score + (onCompanySite(page.url, person.companyDomain) ? 2 : 0);
+        return extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: page.url, observedAt })
+          .filter((channel) => channel.kind === 'email_corporate' || score >= LINK_THRESHOLD)
+          .map((channel) => (channel.kind === 'email_corporate' || score >= CONFIRMED_THRESHOLD ? channel : { ...channel, status: 'hypothesis' as const }));
+      })
       .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName));
   } catch {
     state.failed = true;
@@ -225,13 +270,32 @@ function nicknames(channels: readonly RecruiterChannel[]): string[] {
     .slice(0, TELEGRAM_NICKS);
 }
 
-function telegramTitle(html: string): string | null {
-  const match = /<meta property="og:title" content="([^"]{1,200})"/u.exec(html);
+/**
+ * Ники, которые люди чаще всего берут от имени: annasmith, anna_smith,
+ * asmith, smithanna. Проверяются там, где ник открыт без входа (Telegram,
+ * сайты Maigret); принимается только страница с тем же именем.
+ */
+export function nameNicknames(fullName: string): string[] {
+  const parts = transliterateToLatin(fullName.normalize('NFKC')).replace(/[^a-z\s]/gu, '').split(/\s+/u).filter(Boolean);
+  if (parts.length < 2) return [];
+  const first = parts[0]!;
+  const last = parts[parts.length - 1]!;
+  return [`${first}${last}`, `${first}_${last}`, `${first[0]}${last}`, `${last}${first}`, `${first}${last[0]}`]
+    .filter((nick) => /^[a-z][a-z0-9_]{4,31}$/u.test(nick));
+}
+
+function metaContent(html: string, property: string): string | null {
+  const match = new RegExp(`<meta property="${property}" content="([^"]{1,400})"`, 'u').exec(html);
   return match ? match[1]! : null;
+}
+
+function telegramTitle(html: string): string | null {
+  return metaContent(html, 'og:title');
 }
 
 async function fromTelegramNicks(
   person: DossierPerson,
+  identity: PersonIdentity,
   known: readonly RecruiterChannel[],
   deps: DossierDeps,
   observedAt: string,
@@ -239,13 +303,24 @@ async function fromTelegramNicks(
 ): Promise<RecruiterChannel[]> {
   if (known.some((channel) => channel.kind === 'telegram')) return [];
   const found: RecruiterChannel[] = [];
-  for (const nick of nicknames(known)) {
+  // Бонус за тот же ник — только от подтверждённых профилей, не от догадок и не от адреса почты.
+  const linked = new Set(nicknames(known.filter((channel) => channel.status !== 'hypothesis' && !channel.kind.startsWith('email_'))));
+  const nicks = [...new Set([...linked, ...nameNicknames(person.fullName)])].slice(0, TELEGRAM_NICKS);
+  for (const nick of nicks) {
     const url = `https://t.me/${nick}`;
-    const title = telegramTitle((await getText(url, deps, 'text/html', state)) ?? '');
+    const html = (await getText(url, deps, 'text/html', state)) ?? '';
+    const title = telegramTitle(html);
     // Страница без профиля называется «Telegram: Contact @nick» — имени человека в ней нет.
-    if (title && namesPerson(title, person.fullName)) {
-      found.push({ kind: 'telegram', value: `@${nick}`, href: url, status: 'hypothesis', sourceUrl: url, observedAt });
-    }
+    // Пустой ник отдаёт «Telegram: Contact @nick»: ник из имени прошёл бы проверку имени сам.
+    if (!title || /^Telegram:/u.test(title) || !namesPerson(title, person.fullName)) continue;
+    // Одно имя — однофамилец, а не контакт: нужна связь с человеком в графе соответствия
+    // (общий контакт, тот же ник, любой работодатель из истории, город, профессия).
+    const bio = metaContent(html, 'og:description') ?? '';
+    const score = linkEvidence(identity, `${title}\n${bio}`).score + (linked.has(nick) ? CONFIRMED_THRESHOLD : 0);
+    if (score < LINK_THRESHOLD) continue;
+    const status = score >= CONFIRMED_THRESHOLD ? 'published' : 'hypothesis';
+    found.push({ kind: 'telegram', value: `@${nick}`, href: url, status, sourceUrl: url, observedAt });
+    if (status === 'published') break;
   }
   return found;
 }
@@ -256,6 +331,7 @@ async function fromTelegramNicks(
  */
 async function fromUsernameSites(
   person: DossierPerson,
+  identity: PersonIdentity,
   known: readonly RecruiterChannel[],
   deps: DossierDeps,
   observedAt: string,
@@ -265,8 +341,9 @@ async function fromUsernameSites(
     (site): site is MaigretSite => Boolean(site),
   );
   const found: RecruiterChannel[] = [];
-  const refused = new Set<string>();
-  for (const nick of nicknames(known).slice(0, PROFILE_NICKS)) {
+  const refused = refusedSites();
+  const refuse = (name: string) => markRefused(refused, name);
+  for (const nick of [...new Set([...nicknames(known), ...nameNicknames(person.fullName)])].slice(0, PROFILE_NICKS)) {
     for (const site of sites) {
       if (refused.has(site.name)) continue;
       const adapter = createUsernamePresenceAdapter(site.adapterId, {
@@ -279,19 +356,21 @@ async function fromUsernameSites(
         profileUrl = (await adapter.run({ username: nick }, AbortSignal.timeout(REQUEST_TIMEOUT_MS)))[0]?.url ?? null;
       } catch {
         // Сайт отказал (в том числе по частоте) — больше его в этом сборе не спрашиваем.
-        refused.add(site.name);
+        refuse(site.name);
         state.failed = true;
         continue;
       }
       if (!profileUrl) continue;
       const page = await fetchPublicPage(profileUrl, deps);
       if (page.failed) {
-        refused.add(site.name);
+        refuse(site.name);
         state.failed = true;
       }
       // Имя должно стоять в шапке профиля, а не где-то в ленте или блоке «похожие».
       if (!page.text || !namesPerson(page.text.slice(0, PROFILE_HEAD_CHARS), person.fullName)) continue;
-      const status: RecruiterChannel['status'] = namesCompany(page.text, person.companyName) ? 'published' : 'hypothesis';
+      const score = linkEvidence(identity, page.text).score;
+      if (score < LINK_THRESHOLD) continue;
+      const status: RecruiterChannel['status'] = score >= CONFIRMED_THRESHOLD ? 'published' : 'hypothesis';
       found.push({ kind: 'other', value: profileUrl.replace(/^https:\/\//u, ''), href: profileUrl, status, sourceUrl: profileUrl, observedAt });
       found.push(
         ...extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: profileUrl, observedAt })
@@ -303,6 +382,37 @@ async function fromUsernameSites(
   return found;
 }
 
+const SEED_PAGES = 3;
+const SEED_CHARS = 3_000;
+
+function sameProfile(left: string, right: string): boolean {
+  const norm = (url: string) => url.toLowerCase().replace(/^https?:\/\/([a-z]+\.)?linkedin\.com/u, '').replace(/\/$/u, '');
+  return norm(left) === norm(right);
+}
+
+/** Исходный профиль человека (поиск по имени): текст с историей работы и городом. */
+async function seedProfile(person: DossierPerson, deps: DossierDeps, state: RunState): Promise<{ texts: string[]; cities: string[] }> {
+  if (!deps.exaApiKey) return { texts: [], cities: [] };
+  try {
+    const pages = await searchExaPages(`"${person.fullName}"`, deps.exaApiKey, AbortSignal.timeout(REQUEST_TIMEOUT_MS), {
+      ...(deps.fetch ? { fetch: deps.fetch } : {}),
+      ...(deps.requestGate ? { requestGate: deps.requestGate } : {}),
+      numResults: SEED_PAGES,
+      includeDomains: ['linkedin.com'],
+      contents: { text: { maxCharacters: SEED_CHARS } },
+    });
+    const own = pages.filter((page) =>
+      person.linkedinUrl ? sameProfile(page.url, person.linkedinUrl) : namesPerson(page.title, person.fullName) && namesCompany(page.text, person.companyName),
+    );
+    // Вторая строка профиля Exa — город: «London, United Kingdom».
+    const cities = own.flatMap((page) => (page.text.split('\n').map((line) => line.trim()).filter(Boolean)[2] ?? '').split(',').slice(0, 1).map((city) => city.trim()));
+    return { texts: own.map((page) => `${page.title}\n${page.text}`), cities };
+  } catch {
+    state.failed = true;
+    return { texts: [], cities: [] };
+  }
+}
+
 export async function collectRecruiterDossier(person: DossierPerson, deps: DossierDeps): Promise<DossierResult> {
   const observedAt = (deps.now?.() ?? new Date()).toISOString();
   const state: RunState = { failed: false, githubBlocked: false };
@@ -310,14 +420,20 @@ export async function collectRecruiterDossier(person: DossierPerson, deps: Dossi
     state.failed = true;
     return [];
   };
-  const [pages, github] = await Promise.all([
-    fromOpenPages(person, deps, observedAt, state),
+  const seedReady = seedProfile(person, deps, state);
+  const baseIdentity = seedReady.then((seed) =>
+    buildIdentity({ fullName: person.fullName, companyName: person.companyName, seedTexts: seed.texts, cities: seed.cities, known: person.known }),
+  );
+  const [pages, github, seed] = await Promise.all([
+    fromOpenPages(person, baseIdentity, deps, observedAt, state),
     fromGithub(person, deps, observedAt, state).catch(failed),
+    seedReady,
   ]);
-  const known = [...pages, ...github];
+  const known = [...(person.known ?? []), ...pages, ...github];
+  const identity = buildIdentity({ fullName: person.fullName, companyName: person.companyName, seedTexts: seed.texts, cities: seed.cities, known });
   const [telegram, profiles] = await Promise.all([
-    fromTelegramNicks(person, known, deps, observedAt, state).catch(failed),
-    fromUsernameSites(person, known, deps, observedAt, state).catch(failed),
+    fromTelegramNicks(person, identity, known, deps, observedAt, state).catch(failed),
+    fromUsernameSites(person, identity, known, deps, observedAt, state).catch(failed),
   ]);
-  return { channels: rankChannels([...known, ...telegram, ...profiles]), complete: !state.failed };
+  return { channels: rankChannels([...pages, ...github, ...telegram, ...profiles]), complete: !state.failed };
 }

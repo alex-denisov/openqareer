@@ -26,7 +26,7 @@ const deps = (fetch: ReturnType<typeof site>) => ({
 });
 
 const teamPage =
-  '<h2>John Doe</h2><p>Head of Sales</p><a href="mailto:j.doe@acme.com">Write</a>' +
+  '<h2>John Carter</h2><p>Head of Sales</p><a href="mailto:j.carter@acme.com">Write</a>' +
   '<h2>Mary Major</h2><a href="mailto:m.major@acme.com">m.major@acme.com</a><p>hr@acme.com</p>';
 
 const contact: RecruiterContact = {
@@ -112,6 +112,26 @@ describe('company pages', () => {
     const result = await withDossier(contact, 'acme.com', { ...deps(exa), database });
     const emails = (result.channels ?? []).filter((channel) => channel.kind.startsWith('email_'));
     expect(emails.map((channel) => `${channel.value}:${channel.status}`)).toEqual(['asmith@acme.com:published']);
+  });
+
+  it('takes the phone the company lists next to the person', async () => {
+    const database = new DatabaseSync(':memory:');
+    const page = `${teamPage}<h2>Anna Smith</h2><p>Recruiter, +44 7700 900124</p><h2>Bob Brown</h2><p>+44 7700 900999</p>`;
+    const result = await withDossier(contact, 'acme.com', { ...deps(site({ 'https://acme.com/contacts': page })), database });
+    const phones = (result.channels ?? []).filter((channel) => channel.kind === 'phone');
+    expect(phones.map((channel) => channel.value.replace(/\D/gu, ''))).toEqual(['447700900124']);
+    expect(phones[0]?.sourceUrl).toBe('https://acme.com/contacts');
+  });
+
+  it('does not learn a format from email format guessing services', async () => {
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith('https://api.exa.ai/')) {
+        return new Response(JSON.stringify({ results: [{ url: 'https://www.clay.com/dossier/acme-email-format', title: 'Acme email format', text: 'John Major john.major@acme.com' }] }), { status: 200 });
+      }
+      return new Response('', { status: 404 });
+    });
+    expect((await collectCompanyPages('acme.com', deps(fetch))).format).toBeNull();
   });
 
   it('prefers the address the company published for the person', async () => {

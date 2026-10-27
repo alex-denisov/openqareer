@@ -7,12 +7,47 @@ import { formatsOf, inferEmailFormat, samplesFromText } from './emailFormat';
 import type { EmailFormat, EmailSample } from './emailFormat';
 import { sharedFootprintRequestGate } from '../../osint/adapters/requestScheduler';
 
+/** Базы контактов и «форматы почты»: чужие сборки, не публикация человека или компании. */
+export const CONTACT_BROKERS = [
+  'clay.com', 'rocketreach.co', 'zoominfo.com', 'leadiq.com', 'signalhire.com', 'contactout.com', 'hunter.io',
+  'apollo.io', 'lusha.com', 'email-format.com', 'emailformat.net', 'adapt.io', 'snov.io', 'skrapp.io', 'voilanorbert.com',
+  'peopledatalabs.com', 'spokeo.com', 'whitepages.com', 'truepeoplesearch.com', 'beenverified.com', 'radaris.com',
+  'nuwber.com', 'datanyze.com', 'uplead.com', 'kaspr.io', 'getprospect.com', 'findemails.com', 'emailsherlock.com',
+];
+
+export function isContactBroker(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./u, '');
+    return CONTACT_BROKERS.some((site) => host === site || host.endsWith(`.${site}`)) || /email[-_]?format/iu.test(url);
+  } catch {
+    return true;
+  }
+}
+
 /** Страницы сайта, где компании обычно публикуют людей и адреса. */
 export const COMPANY_PAGE_PATHS = ['/team', '/about', '/careers', '/contacts', '/contact', '/kontakty', '/o-kompanii'] as const;
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_BODY_BYTES = 100_000;
 const MAX_SAMPLES = 50;
+const MAX_SNIPPETS = 40;
+const SNIPPET_CHARS = 250;
+const CONTACT_MARK = /\+?\d[\d ()-]{8,18}\d|t\.me\/|wa\.me\/|viber:/gu;
+
+function contactSnippets(page: { url: string; text: string }): CompanySnippet[] {
+  const snippets: CompanySnippet[] = [];
+  let covered = 0;
+  for (const match of page.text.matchAll(CONTACT_MARK)) {
+    // Соседние контакты попадают в один фрагмент.
+    if (match.index < covered) continue;
+    const end = match.index + match[0].length + SNIPPET_CHARS;
+    snippets.push({ text: page.text.slice(Math.max(0, match.index - SNIPPET_CHARS), end), sourceUrl: page.url });
+    covered = end;
+    if (snippets.length >= 10) break;
+  }
+  return snippets;
+}
+
 const EXA_PAGES = 6;
 const EXA_PAGE_CHARS = 6_000;
 /** Страниц из архива на домен: снимки снятых со страниц команд и контактов. */
@@ -22,8 +57,15 @@ export interface CompanySample extends EmailSample {
   readonly sourceUrl: string;
 }
 
+/** Фрагмент страницы компании вокруг телефона или мессенджера: чей он — решается по имени рядом. */
+export interface CompanySnippet {
+  readonly text: string;
+  readonly sourceUrl: string;
+}
+
 export interface CompanyPagesResult {
   readonly samples: CompanySample[];
+  readonly snippets?: CompanySnippet[];
   readonly format: (EmailFormat & { readonly sourceUrl: string }) | null;
   readonly complete: boolean;
 }
@@ -158,11 +200,20 @@ async function archivedPages(domain: string, livePages: readonly string[], deps:
   return found;
 }
 
+function onOwnSite(url: string, domain: string): boolean {
+  try {
+    const host = new URL(url.replace(/^https:\/\/web\.archive\.org\/web\/\d{14}(?:id_)?\//u, '')).hostname;
+    return host === domain || host.endsWith(`.${domain}`);
+  } catch {
+    return false;
+  }
+}
+
 /** Люди с адресами со страниц самой компании и упоминаний её домена в открытом поиске. */
 export async function collectCompanyPages(domain: string, deps: DossierDeps): Promise<CompanyPagesResult> {
   const pages: Array<{ url: string; text: string }> = [];
   let failed = false;
-  if (!(await isPublicCompanyDomain(domain, deps))) return { samples: [], format: null, complete: true };
+  if (!(await isPublicCompanyDomain(domain, deps))) return { samples: [], snippets: [], format: null, complete: true };
   for (const path of COMPANY_PAGE_PATHS) {
     const url = `https://${domain}${path}`;
     const page = await fetchPublicPage(url, deps);
@@ -182,7 +233,8 @@ export async function collectCompanyPages(domain: string, deps: DossierDeps): Pr
         numResults: EXA_PAGES,
         contents: { text: { maxCharacters: EXA_PAGE_CHARS } },
       });
-      pages.push(...hits.map((hit) => ({ url: hit.url, text: hit.text })));
+      // Сервисы «формат почты компании» — догадки третьих лиц, а не адреса, опубликованные компанией.
+      pages.push(...hits.filter((hit) => !isContactBroker(hit.url)).map((hit) => ({ url: hit.url, text: hit.text })));
     } catch {
       failed = true;
     }
@@ -193,10 +245,13 @@ export async function collectCompanyPages(domain: string, deps: DossierDeps): Pr
       if (samples.length < MAX_SAMPLES && !samples.some((known) => known.email === sample.email)) samples.push({ ...sample, sourceUrl: page.url });
     }
   }
+  // Телефоны — только со страниц самой компании и их архива, не со сторонних сайтов из поиска.
+  const snippets = pages.filter((page) => onOwnSite(page.url, domain)).flatMap(contactSnippets).slice(0, MAX_SNIPPETS);
   const format = inferEmailFormat(samples);
   const example = format ? samples.find((sample) => formatsOf(sample).includes(format.id)) : undefined;
   return {
     samples,
+    snippets,
     format: format && example ? { ...format, sourceUrl: example.sourceUrl } : null,
     complete: !failed,
   };

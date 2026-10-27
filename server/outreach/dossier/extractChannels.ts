@@ -34,7 +34,15 @@ function handle(raw: string | undefined): string | null {
 function social(base: string): Build {
   return (match) => {
     const value = handle(match[1]);
-    return value ? { value, href: `${base}${value}` } : null;
+    if (!value) return null;
+    // Кириллический адрес профиля приходит закодированным: кандидат видит буквы, ссылка остаётся рабочей.
+    let shown = value;
+    try {
+      shown = decodeURIComponent(value);
+    } catch {
+      // Битая кодировка — показываем как есть.
+    }
+    return { value: shown, href: `${base}${value}` };
   };
 }
 

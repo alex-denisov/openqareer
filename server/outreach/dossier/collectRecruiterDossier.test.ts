@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FootprintRequestGate } from '../../osint/adapters/requestScheduler';
-import { collectRecruiterDossier } from './collectRecruiterDossier';
+import { collectRecruiterDossier, nameNicknames, resetProfileRefusals } from './collectRecruiterDossier';
 
 const now = () => new Date('2026-10-27T00:00:00.000Z');
 const person = { fullName: 'Anna Smith', companyName: 'Acme', companyDomain: 'acme.com' };
@@ -25,6 +25,7 @@ const deps = (fetch: ReturnType<typeof router>) => ({
 });
 
 describe('recruiter dossier', () => {
+  beforeEach(() => resetProfileRefusals());
   it('collects channels only from open pages that name the person', async () => {
     const fetch = router({
       'https://api.exa.ai/search': {
@@ -75,7 +76,7 @@ describe('recruiter dossier', () => {
 
     expect(dossier.find((c) => c.kind === 'telegram')).toMatchObject({
       value: '@annahires',
-      status: 'hypothesis',
+      status: 'published',
       sourceUrl: 'https://t.me/annahires',
     });
   });
@@ -126,5 +127,66 @@ describe('recruiter dossier', () => {
     expect(kinds).toContain('other=medium.com/@annahires');
     expect(kinds.some((kind) => kind.includes('someone_else') || kind.includes('teletype'))).toBe(false);
     expect(channels.find((c) => c.kind === 'whatsapp')).toMatchObject({ sourceUrl: 'https://medium.com/@annahires', status: 'published' });
+  });
+  it('derives nicknames from the name, Cyrillic included', () => {
+    expect(nameNicknames('Anna Smith')).toEqual(['annasmith', 'anna_smith', 'asmith', 'smithanna', 'annas']);
+    expect(nameNicknames('Ольга Петрова')[0]).toBe('olgapetrova');
+  });
+
+  it('finds Telegram by a name nickname and trusts it when the bio names the job', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [] },
+      'https://t.me/annasmith': '<meta property="og:title" content="Anna Smith"><meta property="og:description" content="Talent partner at Acme">',
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.find((c) => c.kind === 'telegram')).toMatchObject({ value: '@annasmith', status: 'published' });
+  });
+
+  it('drops a name-only Telegram match as a namesake', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [] },
+      'https://t.me/anna_smith': '<meta property="og:title" content="Anna Smith"><meta property="og:description" content="You can contact @anna_smith right away.">',
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'telegram')).toBe(false);
+  });
+  it('does not take an empty Telegram page whose nickname spells the name', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [] },
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @annasmith">',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'telegram')).toBe(false);
+  });
+
+  it('ignores contact broker pages', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [{ url: 'https://contactout.com/Anna-Smith-1', title: 'Anna Smith', text: 'Anna Smith Acme anna.smith@gmail.com' }] },
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind.startsWith('email_'))).toBe(false);
+  });
+  it('links a Telegram account through a past employer from the LinkedIn profile', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': {
+        results: [{ url: 'https://www.linkedin.com/in/anna-smith', title: 'Anna Smith', text: '# Anna Smith\nTalent Partner at Acme\nLondon, United Kingdom\nRecruiter at Globex (2019-2023)' }],
+      },
+      'https://t.me/annasmith': '<meta property="og:title" content="Anna Smith"><meta property="og:description" content="Globex alumni, London">',
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+    const { channels } = await collectRecruiterDossier({ ...person, linkedinUrl: 'https://www.linkedin.com/in/anna-smith' }, deps(fetch));
+    expect(channels.find((c) => c.kind === 'telegram')).toMatchObject({ value: '@annasmith', status: 'published' });
+  });
+  it('does not confirm a namesake Telegram through a nickname taken from an email', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [{ url: 'https://acme.com/team', title: 'Team', text: 'Anna Smith, anna_smith@acme.com' }] },
+      'https://t.me/anna_smith': '<meta property="og:title" content="Anna Smith"><meta property="og:description" content="Photos and travel">',
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'telegram')).toBe(false);
   });
 });
