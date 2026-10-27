@@ -61,6 +61,11 @@ function quantile(sorted: readonly number[], q: number): number {
   return Math.round(sorted[lower]! + (sorted[upper]! - sorted[lower]!) * (position - lower));
 }
 
+/** «150 125 ₽» reads as false precision; list figures show whole thousands. */
+function roundFigure(value: number): number {
+  return value >= 10_000 ? Math.round(value / 1000) * 1000 : Math.round(value);
+}
+
 export function salaryStats(labels: readonly string[]): SalaryStats {
   const parsed = labels.map(parseSalaryLabel).filter((p): p is ParsedSalary => p !== undefined);
   const ranges = parsed.filter(
@@ -76,9 +81,9 @@ export function salaryStats(labels: readonly string[]): SalaryStats {
   const sorted = [...mids].sort((a, b) => a - b);
   return {
     ...base,
-    median: quantile(sorted, 0.5),
-    low: quantile(sorted, 0.25),
-    high: quantile(sorted, 0.75),
+    median: roundFigure(quantile(sorted, 0.5)),
+    low: roundFigure(quantile(sorted, 0.25)),
+    high: roundFigure(quantile(sorted, 0.75)),
     sign: sign ?? '',
   };
 }
