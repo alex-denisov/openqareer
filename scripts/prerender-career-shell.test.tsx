@@ -65,7 +65,7 @@ describe('production career shell prerender', () => {
     expect(html).toContain('class="career-bootstrap-shell" data-bootstrap-shell="true">');
     expect(html).not.toContain('data-bootstrap-shell="true" inert');
     expect(html).toContain('href="/login"');
-    expect(html).toContain('Ваш опыт стоит больше');
+    expect(html).toContain('Вы выбираете работу');
     // B535: pool numbers are server tokens, replaced on every request.
     expect(html).toContain('%%OQ_ACTIVE%%');
     expect(html).toContain('Как это работает');

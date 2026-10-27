@@ -119,6 +119,7 @@ html:has(.hm) {
   font-size: var(--t-md);
 }
 .hm .tier .btn {
+  margin-top: var(--s2);
   white-space: normal;
   text-align: center;
   line-height: 1.3;
@@ -622,9 +623,6 @@ html:has(.hm) {
 }
 .hm .tier li.all {
   color: var(--mute);
-}
-.hm .tier .btn {
-  margin-top: var(--s2);
 }
 .hm .dots {
   display: none;
