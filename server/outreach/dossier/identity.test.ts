@@ -32,4 +32,11 @@ describe('identity graph', () => {
     const identity = buildIdentity({ fullName: 'Ольга Петрова', companyName: 'Сбер' });
     expect(linkEvidence(identity, 'Ольга Петрова, рекрутер').reasons).toEqual(['profession']);
   });
+
+  it('counts the same photo as strong evidence, and a different photo as nothing', () => {
+    const identity = buildIdentity({ fullName: 'Anna Smith', companyName: 'Acme', photoHashes: ['f0f0f0f0f0f0f0f0'] });
+    expect(linkEvidence(identity, 'Anna Smith', 'f0f0f0f0f0f0f0f1')).toEqual({ score: 3, reasons: ['same_photo'] });
+    expect(linkEvidence(identity, 'Anna Smith', '0f0f0f0f0f0f0f0f').score).toBe(0);
+    expect(linkEvidence(buildIdentity({ fullName: 'Anna Smith', companyName: 'Acme' }), 'Anna Smith', 'f0f0f0f0f0f0f0f0').score).toBe(0);
+  });
 });

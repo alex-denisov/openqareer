@@ -254,6 +254,8 @@ export interface ExaPeopleHit {
   readonly url: string;
   readonly title: string;
   readonly text: string;
+  /** Фото страницы (у профиля LinkedIn — фото человека). */
+  readonly image?: string;
 }
 
 /** Поиск людей Exa через тот же транспорт, лимитер и лимит размера ответа, что у адаптера. */
@@ -279,6 +281,7 @@ export async function searchExaPeople(
           url: result.url,
           title: typeof result.title === 'string' ? result.title : '',
           text: typeof result.text === 'string' ? result.text : '',
+          ...(typeof result.image === 'string' && validResultUrl(result.image) ? { image: result.image } : {}),
         }]
       : [],
   );
@@ -307,6 +310,7 @@ export async function searchExaPages(
           url: result.url,
           title: typeof result.title === 'string' ? result.title : '',
           text: typeof result.text === 'string' ? result.text : '',
+          ...(typeof result.image === 'string' && validResultUrl(result.image) ? { image: result.image } : {}),
         }]
       : [],
   );

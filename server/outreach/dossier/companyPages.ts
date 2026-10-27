@@ -125,7 +125,7 @@ async function readLimited(response: Response): Promise<string> {
 
 /** Открытая HTML-страница как текст, с лимитом размера; failed — отказ по частоте или сеть. */
 
-type PageResult = { text: string | null; failed: boolean };
+type PageResult = { text: string | null; failed: boolean; image?: string | null };
 
 const MAX_REDIRECTS = 3;
 
@@ -151,6 +151,12 @@ function sameSite(from: URL, to: URL): boolean {
   return a === b || b.endsWith(`.${a}`);
 }
 
+/** Фото профиля со страницы (og:image): для сравнения с фото исходного профиля. */
+export function ogImage(html: string): string | null {
+  const match = /<meta[^>]{0,40}property="og:image"[^>]{0,40}content="(https:\/\/[^"]{1,600})"/u.exec(html);
+  return match ? match[1]!.replace(/&amp;/gu, '&') : null;
+}
+
 async function fetchOnce(url: string, deps: DossierDeps): Promise<PageResult | { redirect: string }> {
   const fetcher = deps.fetch ?? globalThis.fetch;
   const gate = deps.requestGate ?? sharedFootprintRequestGate;
@@ -173,7 +179,8 @@ async function fetchOnce(url: string, deps: DossierDeps): Promise<PageResult | {
         await response.body?.cancel().catch(() => undefined);
         return { text: null, failed: false };
       }
-      return { text: htmlToText(await readLimited(response)), failed: false };
+      const html = await readLimited(response);
+      return { text: htmlToText(html), failed: false, image: ogImage(html) };
     });
   } catch (error) {
     // Таймаут — повод повторить позже; ошибка сертификата или DNS — свойство сайта, а не отказ.
