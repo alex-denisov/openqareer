@@ -1,4 +1,6 @@
 import { requiresAnalyticsDocumentNavigation } from './features/site/analyticsNavigation';
+import { authReturnPath } from './features/site/resumeBuilder/resumeBuilderStorage';
+import { RESUME_BUILDER_PATH } from './features/site/resumeBuilder/resumeBuilderContent';
 import { completeCandidateWorkspace } from './features/workspace/workspaceCompletionApi';
 import {
   clearCountryFitScenario,
@@ -55,6 +57,11 @@ const CareerWorkspaceShell = lazy(async () => {
   return { default: module.CareerWorkspaceShell };
 });
 const LandingPage = lazy(loadLandingPage);
+const ResumeBuilderPage = lazy(() =>
+  import('./features/site/resumeBuilder/ResumeBuilderPage').then((module) => ({
+    default: module.ResumeBuilderPage,
+  })),
+);
 const CountryFitPage = lazy(() =>
   import('./features/site/CountryFitPage').then((module) => ({ default: module.CountryFitPage })),
 );
@@ -155,21 +162,24 @@ export default function App() {
   const expiredSessionNotice = useRef(false);
   const sessionRevision = useRef(0);
 
-  const navigate = useCallback((path: string) => {
-    if (typeof window !== 'undefined') {
-      // B535: navigating to the page already open (the session check sends an
-      // anonymous visitor to `/`) must not throw the reader back to the top.
-      const here = `${window.location.pathname}${window.location.search}`;
-      if (path === here) return;
-      if (requiresAnalyticsDocumentNavigation(here, path, isDesktop)) {
-        window.location.assign(path);
-        return;
+  const navigate = useCallback(
+    (path: string) => {
+      if (typeof window !== 'undefined') {
+        // B535: navigating to the page already open (the session check sends an
+        // anonymous visitor to `/`) must not throw the reader back to the top.
+        const here = `${window.location.pathname}${window.location.search}`;
+        if (path === here) return;
+        if (requiresAnalyticsDocumentNavigation(here, path, isDesktop)) {
+          window.location.assign(path);
+          return;
+        }
+        window.history.pushState(null, '', path);
+        setCurrentPath(path);
+        window.scrollTo(0, 0);
       }
-      window.history.pushState(null, '', path);
-      setCurrentPath(path);
-      window.scrollTo(0, 0);
-    }
-  }, [isDesktop]);
+    },
+    [isDesktop],
+  );
 
   const resolveSession = useCallback(async () => {
     const revision = ++sessionRevision.current;
@@ -362,11 +372,12 @@ export default function App() {
           workspaceInputOf(workspace).constraints,
         );
         // Write through, so the answers survive this browser.
-        if (writeServer) void putCandidateWorkspace(workspaceInputOf(workspace)).catch(() => {
-          setStorageError(
-            'Ответы сохранены в этом браузере, но не на сервере. Они могут не открыться на другом устройстве.',
-          );
-        });
+        if (writeServer)
+          void putCandidateWorkspace(workspaceInputOf(workspace)).catch(() => {
+            setStorageError(
+              'Ответы сохранены в этом браузере, но не на сервере. Они могут не открыться на другом устройстве.',
+            );
+          });
       } else {
         clearWorkspace(window.localStorage);
       }
@@ -528,14 +539,19 @@ export default function App() {
           embedded={isDesktop}
           onNavigate={navigate}
           onSessionChange={handleSessionChange}
-          nextPath="/app"
+          nextPath={isDesktop ? '/app' : authReturnPath(window.location.search)}
           notice={signInNotice}
         />
       );
     }
     if (currentPath === '/signup') {
       return (
-        <ReadySignupPage embedded={isDesktop} onNavigate={navigate} onSessionChange={handleSessionChange} nextPath="/app" />
+        <ReadySignupPage
+          embedded={isDesktop}
+          onNavigate={navigate}
+          onSessionChange={handleSessionChange}
+          nextPath={isDesktop ? '/app' : authReturnPath(window.location.search)}
+        />
       );
     }
     if (currentPath === '/verify-email') {
@@ -544,7 +560,7 @@ export default function App() {
           onNavigate={navigate}
           onSessionChange={handleSessionChange}
           session={state.session}
-          nextPath="/app"
+          nextPath={isDesktop ? '/app' : authReturnPath(window.location.search)}
         />
       );
     }
@@ -626,6 +642,19 @@ export default function App() {
   }
 
   const helpPath = currentPath.replace(/\/$/u, '');
+  if (helpPath === RESUME_BUILDER_PATH && !isDesktop) {
+    return (
+      <AppErrorBoundary>
+        <Suspense fallback={null}>
+          <ResumeBuilderPage
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
+        </Suspense>
+      </AppErrorBoundary>
+    );
+  }
   if (helpPath === '/tools/country-fit' && !isDesktop) {
     return (
       <AppErrorBoundary>

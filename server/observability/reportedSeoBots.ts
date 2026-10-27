@@ -8,7 +8,7 @@ const BOT_NAMES = [
 const BOT_PATTERNS = BOT_NAMES.map((name) => ({ name, pattern: new RegExp(`(?:^|[^a-z0-9_-])${name}(?=$|[^a-z0-9_-])`, 'i') }));
 const STATIC_SURFACES = new Map([
   ['/', 'home'], ['/faq', 'faq'], ['/support', 'support'],
-  ['/tools/country-fit', 'country_fit'], ['/tools/relocation', 'relocation'], ['/legal/terms', 'legal_terms'],
+  ['/tools/country-fit', 'country_fit'], ['/tools/relocation', 'relocation'], ['/tools/resume', 'resume_builder'], ['/legal/terms', 'legal_terms'],
   ['/legal/privacy', 'legal_privacy'], ['/legal/consent', 'legal_consent'],
   ['/legal/disclaimer', 'legal_disclaimer'], ['/robots.txt', 'robots'],
   ['/llms.txt', 'llms'], ['/llms-full.txt', 'llms_full'],

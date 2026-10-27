@@ -79,6 +79,9 @@ export function PublicHeader({ onNavigate, onLanding, signedIn, isAdmin }: Publi
           <a href={anchor(onLanding, 'how')}>Как это работает</a>
           <a href={anchor(onLanding, 'apply')}>Кабинет</a>
           <a href={anchor(onLanding, 'tools')}>Вакансии</a>
+          <SiteLink to="/tools/resume" onNavigate={onNavigate}>
+            Резюме
+          </SiteLink>
           <a href={anchor(onLanding, 'tariffs')}>Тарифы</a>
           <SiteLink to="/faq" onNavigate={onNavigate}>
             Вопросы
@@ -161,6 +164,9 @@ export function PublicFooter({
           <a href="/vacancies">Каталог вакансий</a>
           <a href="/vacancies/remote">Удалённые вакансии</a>
           <a href="/salaries">Зарплаты и навыки</a>
+          <SiteLink to="/tools/resume" onNavigate={onNavigate}>
+            Конструктор резюме
+          </SiteLink>
           {toolLinks && <a href="/tools/relocation">В какую страну переехать</a>}
         </div>
         <FooterHelpAndDocs onNavigate={onNavigate} interviewLink={interviewLink} />

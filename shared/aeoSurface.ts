@@ -30,6 +30,7 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   '/faq',
   '/support',
   '/tools/country-fit',
+  '/tools/resume',
   '/tools/interview-questions',
   '/tools/relocation',
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
@@ -38,6 +39,7 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
 /** Что продукт делает — только то, что уже работает в выпущенной сборке. */
 const CAPABILITIES: readonly string[] = [
   'Публикует /tools/country-fit: ориентировочный расчёт налогов и чистой зарплаты наёмного работника по набору ставок 2026 года; остаток считает из расходов, которые вводит пользователь.',
+  'Публикует /tools/resume: конструктор резюме без регистрации — три шаблона (строгий формат Стэнфорда, современный, компактный), проверка структуры, дат и формата для ATS и ключевых слов по ссылке или тексту вакансии; PDF и DOCX скачиваются после бесплатной регистрации.',
   'Публикует /tools/interview-questions: вопросы на собеседовании по профессиям с разбором сильного ответа и тем, что проверяет работодатель; у каждого вопроса указано, в скольких вакансиях каталога за 90 дней встречается его тема, у страницы — выборка и дата замера. Первые 10 вопросов открыты, остальные — после бесплатной регистрации; тест на 5 вопросов без регистрации.',
   'Публикует /tools/relocation: по шести ответам и выбранным странам показывает лучший проверенный путь переезда по работе, его требования со ссылкой на официальный источник и датой проверки, а также зарплату до налогов для нужной суммы на руки. Если проверенного пути нет, так и говорит.',
   'Показывает навыки и опубликованные зарплатные вилки по профессиям на /salaries: дата, размер каталожной выборки за 90 дней, отдельные группы по валюте, периоду оплаты и налогам. Фильтр грейда опирается только на явные слова в исходном названии вакансии; уровень без такого подтверждения остаётся неизвестным. При недостатке сравнимых данных зарплатный результат недоступен.',
@@ -113,6 +115,7 @@ export function buildLlmsTxt(stats?: LandingStats): string {
     `- Vacancy catalogue: ${SITE_ORIGIN}/vacancies`,
     `- Remote vacancies: ${SITE_ORIGIN}/vacancies/remote`,
     `- Country Fit employee payroll calculator: ${SITE_ORIGIN}/tools/country-fit (2026 data; user-entered expenses; not tax advice)`,
+    `- Resume builder: ${SITE_ORIGIN}/tools/resume (3 templates, ATS check, PDF and DOCX after free sign-up)`,
     `- Pricing: ${tariffLine()}`,
     `- Updated: ${AEO_UPDATED_AT}`,
     `- Full specification: ${SITE_ORIGIN}/llms-full.txt`,
