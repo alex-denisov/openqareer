@@ -1,10 +1,12 @@
 /** B569: names and figures shared by the parts of a catalog list page. */
 import { cityGenitive, cityPrepositional, roleDative, roleGenitive } from './catalogListingForms';
+import { escapeHtml } from './catalogHtml';
 import { russianRoleLabel } from './vacancyCatalogSearch';
 import type { CatalogPage } from './vacancyCatalogPage';
 
+/** HTML-safe: the sign comes from a source label. */
 export const money = (value: number, sign = '₽') =>
-  `${value.toLocaleString('ru-RU')} ${sign}`.trim();
+  escapeHtml(`${value.toLocaleString('ru-RU')} ${sign}`.trim());
 
 export function dataDate(page: CatalogPage): string {
   const latest = page.entries

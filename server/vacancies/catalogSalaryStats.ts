@@ -34,10 +34,14 @@ function amount(text: string): number | undefined {
   return digits ? Number.parseInt(digits, 10) : undefined;
 }
 
+/** Currency marks a list may show; anything else in a label is not a salary sign. */
+const SALARY_SIGNS: ReadonlySet<string> = new Set(['₽', '$', '€', '£', '₸', '₴', '₾', '₼', 'Br']);
+
 export function parseSalaryLabel(raw: string): ParsedSalary | undefined {
   const label = normalizeSalaryLabel(raw).trim();
   const tail = /\s(\S+)$/u.exec(label);
   const sign = tail && !/\d/u.test(tail[1]!) ? tail[1]! : '';
+  if (sign && !SALARY_SIGNS.has(sign)) return undefined;
   const body = sign ? label.slice(0, label.length - sign.length) : label;
   const range = /^([\d\s\u00a0\u202f]+)—([\d\s\u00a0\u202f]+)$/u.exec(body.trim());
   if (range) {

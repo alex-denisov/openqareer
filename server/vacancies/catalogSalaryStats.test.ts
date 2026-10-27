@@ -41,3 +41,10 @@ describe('salaryStats', () => {
     expect(stats.withRange).toBe(6);
   });
 });
+
+describe('salary sign from a source label', () => {
+  it('drops a label whose tail is not a known currency mark', () => {
+    expect(parseSalaryLabel('100 000 — 120 000 <img/src=x>')).toBeUndefined();
+    expect(parseSalaryLabel('100 000 — 120 000 ₽')?.sign).toBe('₽');
+  });
+});
