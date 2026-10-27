@@ -51,22 +51,49 @@ function educationLevel(qualification: string): Education['level'] {
   const text = qualification.toLocaleLowerCase('ru');
   if (/phd|doctor|доктор|кандидат наук|аспирант/u.test(text)) return 'doctorate';
   if (/master|магистр|mba|\bmsc\b|\bma\b/u.test(text)) return 'master';
-  if (/bachelor|бакалавр|специалист|\bbsc\b|\bba\b|\bbe\b/u.test(text))
-    return 'bachelor';
+  if (/bachelor|бакалавр|специалист|\bbsc\b|\bba\b|\bbe\b/u.test(text)) return 'bachelor';
   if (/college|колледж|техникум|училищ/u.test(text)) return 'vocational';
   return 'other';
 }
 
-const clip = (value: string) => value.trim().slice(0, 160);
+/** Trimmed to the schema limit, without the dangling «,» or «—» an import leaves at the end. */
+const clip = (value: string) =>
+  value
+    .trim()
+    .replace(/[\s,;:—–-]+$/u, '')
+    .slice(0, 160);
+
+const sameSchool = (title: string) =>
+  title
+    .trim()
+    .toLowerCase()
+    .replace(/[\s,;:—–-]+$/u, '');
 
 function profileEducation(draft: ResumeDraft, known: readonly Education[]): Education[] {
   const ids = new Set(known.map(({ id }) => id));
-  const titles = new Set(known.map(({ title }) => title.trim().toLowerCase()));
+  const titles = known.map(({ title }) => sameSchool(title)).filter(Boolean);
+  // «МГТУ им. Баумана — Информатика…» from the profile is the «МГТУ им. Баумана» already saved here.
+  const savedSchool = (text: string) => {
+    const value = sameSchool(text);
+    return (
+      Boolean(value) &&
+      titles.some(
+        (title) =>
+          value === title || value.startsWith(`${title} `) || value.startsWith(`${title},`),
+      )
+    );
+  };
   return draft.education.flatMap((entry) => {
     const origin = relocationOrigin(entry.id);
     const title = clip(entry.qualification || entry.institution || '');
     const id = rowId(PROFILE_PREFIX, entry.id);
-    if (!title || ids.has(id) || (origin && ids.has(origin)) || titles.has(title.toLowerCase()))
+    if (
+      !title ||
+      ids.has(id) ||
+      (origin && ids.has(origin)) ||
+      savedSchool(title) ||
+      savedSchool(entry.institution ?? '')
+    )
       return [];
     const startedAt = profileDate(entry.startDate, false);
     const completedAt = profileDate(entry.endDate, true);

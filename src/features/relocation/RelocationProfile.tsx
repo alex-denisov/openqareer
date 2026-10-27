@@ -179,46 +179,16 @@ function RelocationProfileView({
           Согласие на обработку данных о мобильности: дано {formatDate(consent.grantedAt)}. Отзыв согласия удаляет данные анкеты, релокация выключится.
         </span>
       </p>
-      <RelocationProfileAlerts profile={profile} alerts={alerts} />
       {actions.notice ? <p className="career-relocation-success" role="status">{actions.notice}</p> : null}
       {actions.error ? <p className="career-relocation-error" role="alert">{actions.error}</p> : null}
       <div className="career-relocation-profile-sections">
         {STEP_SECTIONS.map(({ step, title }) => (
-          <ProfileSection key={step} step={step} title={title} profile={profile} busy={actions.busy} onEdit={() => onEdit(step)} onDelete={(itemId) => actions.removeItem(step, itemId)} />
+          <ProfileSection key={step} step={step} title={title} profile={profile} alerts={alerts} busy={actions.busy} onEdit={() => onEdit(step)} onDelete={(itemId) => actions.removeItem(step, itemId)} />
         ))}
       </div>
       <ProfileActions actions={actions} consent={consent} profile={profile} onShowCountries={onShowCountries} />
     </section>
   );
-}
-
-function RelocationProfileAlerts({
-  profile,
-  alerts,
-}: {
-  readonly profile: RelocationQuestionnaireData;
-  readonly alerts: readonly RelocationAlert[];
-}) {
-  if (alerts.length === 0) return null;
-  return (
-    <aside className="career-relocation-threshold-warning" aria-label="Предупреждения профиля" role="status">
-      <h3>Проверьте данные профиля</h3>
-      <ul>
-        {alerts.map((alert) => (
-          <li key={alert.kind === 'citizenship_missing' ? alert.kind : `${alert.kind}:${alert.documentId}:${alert.expiresAt}`}>
-            {relocationAlertMessage(alert, profile)}
-          </li>
-        ))}
-      </ul>
-    </aside>
-  );
-}
-
-function relocationAlertMessage(alert: RelocationAlert, profile: RelocationQuestionnaireData): string {
-  if (alert.kind === 'citizenship_missing') return 'Укажите страну гражданства, чтобы уточнить правила въезда.';
-  const document = profile.citizenshipDocuments.documents.find((item) => item.id === alert.documentId);
-  const state = alert.kind === 'document_expired' ? 'истёк' : 'истекает';
-  return `Срок действия документа «${documentKind(document?.kind ?? '')}» ${state} ${formatDate(alert.expiresAt)}.`;
 }
 
 function profileContinueLabel(profile: RelocationQuestionnaireData): string {
@@ -306,10 +276,12 @@ function ProfileSection({
   onEdit,
   onDelete,
   busy,
+  alerts,
 }: {
   readonly step: RelocationStepId;
   readonly title: string;
   readonly profile: RelocationQuestionnaireData;
+  readonly alerts: readonly RelocationAlert[];
   readonly onEdit: () => void;
   readonly onDelete: (itemId: string) => void;
   readonly busy: boolean;
@@ -323,12 +295,12 @@ function ProfileSection({
           Изменить
         </button>
       </header>
-      <ProfileSectionContent step={step} profile={profile} actions={{ onEdit, onDelete, busy }} />
+      <ProfileSectionContent step={step} profile={profile} actions={{ onEdit, onDelete, busy, alerts }} />
     </section>
   );
 }
 
-type RowActions = { readonly onEdit: () => void; readonly onDelete: (itemId: string) => void; readonly busy: boolean };
+type RowActions = { readonly onEdit: () => void; readonly onDelete: (itemId: string) => void; readonly busy: boolean; readonly alerts: readonly RelocationAlert[] };
 
 function ProfileSectionContent({
   step,
@@ -355,17 +327,30 @@ function CitizenshipProfileRows({ profile, actions }: { readonly profile: Reloca
   if (!citizenship.length && !documents.length) return <EmptyProfileSection />;
   const rows = documents.map((document) => ({
     id: document.id,
-    label: documentKind(document.kind),
-    value: `${countryName(document.countryCode)}${document.expiresAt ? ` · до ${formatDate(document.expiresAt)}` : ''}`,
+    label: `${documentKind(document.kind)}, ${countryName(document.countryCode)}`,
+    value: documentTerm(document, actions.alerts),
   }));
   return <ProfileRows rows={[...citizenship, ...rows]} actions={actions} />;
+}
+
+/** Mockup 15: the expiry warning sits in the document's own row, not in a banner above the page. */
+function documentTerm(
+  document: RelocationQuestionnaireData['citizenshipDocuments']['documents'][number],
+  alerts: readonly RelocationAlert[],
+): string {
+  if (!document.expiresAt) return 'срок не указан';
+  const alert = alerts.find((item) => item.kind !== 'citizenship_missing' && item.documentId === document.id);
+  const term = `До ${formatDate(document.expiresAt)}`;
+  if (alert?.kind === 'document_expired') return `${term}: срок закончился`;
+  if (alert?.kind === 'document_expiring') return `${term}: срок скоро закончится`;
+  return term;
 }
 
 function EducationProfileRows({ profile, actions }: { readonly profile: RelocationQuestionnaireData; readonly actions: RowActions }) {
   const educationRows = profile.education.education.map(({ id, title, countryCode, recognitionStatus, completedAt }) => ({
     id,
     label: title,
-    value: [isProfileFactRow(id) ? 'из профиля' : '', countryCode ? countryName(countryCode) : 'страна диплома не указана', recognitionLabel(recognitionStatus), completedAt?.slice(0, 4)].filter(Boolean).join(' · '),
+    value: [isProfileFactRow(id) ? 'из профиля' : '', countryCode ? countryName(countryCode) : '', recognitionLabel(recognitionStatus), completedAt?.slice(0, 4)].filter(Boolean).join(' · '),
   }));
   const certificateRows = profile.education.certificates.map(({ id, title, issuer, recognitionStatus }) => ({
     id,
@@ -373,7 +358,13 @@ function EducationProfileRows({ profile, actions }: { readonly profile: Relocati
     value: [isProfileFactRow(id) ? 'из профиля' : '', issuer ?? 'выдавшая организация не указана', recognitionLabel(recognitionStatus)].filter(Boolean).join(' · '),
   }));
   const rows = [...educationRows, ...certificateRows];
-  return rows.length ? <ProfileRows rows={rows} actions={actions} /> : <EmptyProfileSection />;
+  if (!rows.length) return <EmptyProfileSection />;
+  return (
+    <>
+      <ProfileRows rows={rows} actions={actions} />
+      {certificateRows.length ? null : <p>Сертификатов нет.</p>}
+    </>
+  );
 }
 
 function FamilyProfileRow({ profile }: { readonly profile: RelocationQuestionnaireData }) {
@@ -381,8 +372,8 @@ function FamilyProfileRow({ profile }: { readonly profile: RelocationQuestionnai
   const partner = family.partnerStatus === 'has_partner'
     ? 'С партнёром'
     : family.partnerStatus === 'no_partner' ? 'Один' : 'Не указано';
-  const children = family.childrenCount === undefined ? 'Число детей не указано' : `Детей: ${family.childrenCount}`;
-  return <ProfileRow label={partner} value={`${children} · ${timeframeLabel(family.relocationTimeframe)}`} />;
+  const children = family.childrenCount === undefined ? '' : `Детей: ${family.childrenCount}`;
+  return <ProfileRow label={partner} value={[children, timeframeLabel(family.relocationTimeframe)].filter(Boolean).join(' · ')} />;
 }
 
 function LanguageProfileRows({ profile, actions }: { readonly profile: RelocationQuestionnaireData; readonly actions: RowActions }) {
@@ -469,7 +460,7 @@ function countryName(code: string): string {
 
 function documentKind(kind: string): string {
   const labels: Readonly<Record<string, string>> = {
-    residence_permit: 'Вид на жительство',
+    residence_permit: 'ВНЖ',
     work_permit: 'Разрешение на работу',
     work_visa: 'Рабочая виза',
     study_visa: 'Учебная виза',

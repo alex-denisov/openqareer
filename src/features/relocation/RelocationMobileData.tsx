@@ -108,7 +108,7 @@ function educationSub(entry: EducationRow): string {
     isProfileFactRow(entry.id) ? 'из профиля' : '',
     optionLabel(EDUCATION_LEVEL_OPTIONS, entry.level).toLocaleLowerCase('ru'),
     [entry.startedAt?.slice(0, 4), entry.completedAt?.slice(0, 4)].filter(Boolean).join(' — '),
-    entry.countryCode ? relocationCountryName(entry.countryCode) : 'страна диплома не указана',
+    entry.countryCode ? relocationCountryName(entry.countryCode) : '',
     `признание за рубежом: ${relocationRecognitionLabel(entry.recognitionStatus)}`,
   ]
     .filter(Boolean)

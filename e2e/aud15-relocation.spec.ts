@@ -171,8 +171,8 @@ test('«Мои данные»: delete a document, edit opens the questionnaire, 
     await page.getByRole('button', { name: 'Дальше' }).click();
     await expectStep(page, info, 2);
   } else {
-    await page.getByRole('button', { name: 'Удалить: Вид на жительство' }).click();
-    await expect(page.getByRole('button', { name: 'Удалить: Вид на жительство' })).toHaveCount(0);
+    await page.getByRole('button', { name: /^Удалить: ВНЖ, /u }).click();
+    await expect(page.getByRole('button', { name: /^Удалить: ВНЖ, /u })).toHaveCount(0);
   }
 
   await page.reload({ waitUntil: 'domcontentloaded' });

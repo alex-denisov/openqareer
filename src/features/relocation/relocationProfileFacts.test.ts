@@ -94,6 +94,41 @@ describe('mergeProfileFacts', () => {
     expect(merged.citizenshipDocuments.citizenshipCountryCodes).toEqual(['MD']);
   });
 
+  it('merges a profile diploma into the same school already saved in relocation, and drops a trailing comma', () => {
+    const saved = {
+      ...emptyRelocationQuestionnaire(),
+      education: {
+        education: [
+          {
+            id: 'edu-bmstu',
+            level: 'master' as const,
+            title: 'МГТУ им. Баумана',
+            countryCode: 'RU',
+            recognitionStatus: 'unknown' as const,
+          },
+        ],
+        certificates: [],
+      },
+    };
+    const draft: ResumeDraft = {
+      ...ownerDraft,
+      education: [
+        {
+          id: 'hh-1',
+          evidenceMemoryId: 'hh-1',
+          qualification: 'МГТУ им. Баумана — Информатика и вычислительная техника,',
+          endDate: '2009',
+        },
+        { id: 'hh-2', evidenceMemoryId: 'hh-2', institution: 'ВШЭ', qualification: 'Менеджмент,' },
+      ],
+    };
+    const merged = mergeProfileFacts(saved, draft);
+    expect(merged.education.education.map(({ title }) => title)).toEqual([
+      'МГТУ им. Баумана',
+      'Менеджмент',
+    ]);
+  });
+
   it('returns the questionnaire unchanged without a profile', () => {
     const questionnaire = emptyRelocationQuestionnaire();
     expect(mergeProfileFacts(questionnaire, null)).toBe(questionnaire);
