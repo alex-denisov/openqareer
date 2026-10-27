@@ -111,6 +111,16 @@ function nearName(text: string, fullName: string): string {
   return windows.join('\n');
 }
 
+/**
+ * Адрес со страницы принимается, только если в нём есть имя или фамилия
+ * человека: рядом с именем на странице бывают чужие и обрезанные адреса.
+ */
+export function emailNamesPerson(email: string, fullName: string): boolean {
+  const local = (email.split('@')[0] ?? '').toLowerCase().replace(/[^a-z]/gu, '');
+  const parts = fold(fullName).toLowerCase().split(' ').filter((part) => part.length >= 3);
+  return parts.some((part) => local.includes(part.replace(/[^a-z]/gu, '')));
+}
+
 async function fromOpenPages(
   person: DossierPerson,
   deps: DossierDeps,
@@ -129,7 +139,8 @@ async function fromOpenPages(
       .filter((page) => namesPerson(`${page.title}\n${page.text}`, person.fullName))
       .flatMap((page) =>
         extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: page.url, observedAt }),
-      );
+      )
+      .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName));
   } catch {
     state.failed = true;
     return [];
