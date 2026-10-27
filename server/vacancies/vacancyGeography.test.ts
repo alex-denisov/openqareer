@@ -181,3 +181,26 @@ describe('страна в конце части и через тире (28.10)',
 it('строчное «in» в конце — не ISO-код Индии', () => {
   expect(regionOfVacancy({ location: 'Work from home in' })).toBeUndefined();
 });
+
+describe('города пула прода без страны (28.10)', () => {
+  it('города США и полное название страны', () => {
+    expect(regionOfVacancy({ location: 'Palo Alto' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Cupertino' })).toBe('us');
+    expect(regionOfVacancy({ location: 'San Diego, California, United States of America' })).toBe('us');
+  });
+
+  it('города СНГ с hh.ru', () => {
+    expect(regionOfVacancy({ location: 'Бишкек' })).toBe('cis');
+    expect(regionOfVacancy({ location: 'Караганда' })).toBe('cis');
+    expect(regionOfVacancy({ location: 'Гомель' })).toBe('cis');
+  });
+
+  it('прочий кириллический город с hh.ru — Россия; «удалённо» и спорные города — без страны', () => {
+    expect(regionOfVacancy({ location: 'Красноярск' })).toBe('ru');
+    expect(regionOfVacancy({ location: 'Подольск (Московская область)' })).toBe('ru');
+    expect(regionOfVacancy({ location: 'Удалённо' })).toBeUndefined();
+    expect(regionOfVacancy({ location: 'Донецк' })).toBeUndefined();
+    expect(regionOfVacancy({ location: 'Remote' })).toBeUndefined();
+    expect(regionOfVacancy({ location: '2 Locations' })).toBeUndefined();
+  });
+});
