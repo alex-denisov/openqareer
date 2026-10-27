@@ -130,6 +130,17 @@ function aliasesOf(title: string, group: RoleGroup | undefined): string[] {
   return [title, ...titles.filter((alias) => alias !== title)];
 }
 
+/** Руководящее слово без функции: «Директор» — не роль. */
+const BARE_LEADER_TITLES: ReadonlySet<string> = new Set([
+  'директор',
+  'director',
+  'руководитель',
+  'head',
+  'manager',
+  'менеджер',
+  'начальник',
+]);
+
 export function proposeRoles(input: {
   readonly named: readonly NamedRole[];
   readonly pool: readonly RoleObservation[];
@@ -172,8 +183,10 @@ export function proposeRoles(input: {
 
   const fromMarket = [...groups.entries()]
     .filter(([key, group]) => !claimed.has(key) && group.items.length >= MIN_ROLE_SAMPLE)
-    .map<ProposedRole>(([, group]) => {
-      const described = describeGroup(group, new Set<string>(), skills);
+    .map(([, group]) => ({ group, described: describeGroup(group, new Set<string>(), skills) }))
+    // «Директор» без функции — не роль: непонятно, чего директор (27.10).
+    .filter(({ described }) => !BARE_LEADER_TITLES.has(described.title.trim().toLowerCase()))
+    .map<ProposedRole>(({ group, described }) => {
       return {
         id: careerRoleId(described.title),
         title: described.title,

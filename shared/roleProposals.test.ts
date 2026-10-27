@@ -402,3 +402,14 @@ describe('proposeRoles: описание вакансии — не имя рол
     expect(roles[0]?.title).toBe('Director of AI');
   });
 });
+
+describe('proposeRoles: одно слово без функции — не роль (27.10)', () => {
+  it('«Директор» не предлагается ролью рынка', () => {
+    const roles = proposeRoles({
+      named: [],
+      pool: Array.from({ length: 12 }, () => vacancy('Директор')),
+      candidateSkills: [],
+    });
+    expect(roles).toEqual([]);
+  });
+});
