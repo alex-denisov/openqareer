@@ -458,6 +458,10 @@
   }
 }
 @media (max-width: 760px) {
+  .rl-page .rl-hero h1,
+  .rl-page h2 {
+    font-size: 30px;
+  }
   .rl-hero {
     padding: 12px 0 20px;
   }
