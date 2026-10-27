@@ -76,3 +76,32 @@ describe('confirmChosenTitle: счёт роли мастера = счёт фил
     expect(confirmation.state === 'observed' && confirmation.sampleSize).toBe(10);
   });
 });
+
+describe('вилка роли по зарплатам в валюте (28.10)', () => {
+  it('считает вилку по годовым долларовым зарплатам, а не «вилка не считается»', async () => {
+    const { setCurrencyRates } = await import('../currency/cbrRates');
+    setCurrencyRates({ date: '2026-10-27', rubPerUnit: { USD: 80 } });
+    const paid = (from: number, to: number) =>
+      ({
+        ...matchedVacancy('VP of Engineering', ['Kubernetes']),
+        cluster: {
+          ...matchedVacancy('VP of Engineering', ['Kubernetes']).cluster,
+          salary: { from, to, currency: 'USD' },
+        },
+        explanation: { roleMatch: 'target' },
+      }) as unknown as MatchedVacancyItem;
+    const confirmation = confirmChosenTitle({
+      matched: Array.from({ length: 9 }, () => paid(240_000, 300_000)),
+      title: 'VP of Engineering',
+      candidateSkills: [],
+    });
+    setCurrencyRates(undefined);
+
+    expect(confirmation.state).toBe('observed');
+    expect(confirmation.state === 'observed' && confirmation.wage).toEqual({
+      sampleSize: 9,
+      min: 1_600_000,
+      max: 2_000_000,
+    });
+  });
+});
