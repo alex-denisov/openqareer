@@ -182,8 +182,10 @@ export function calcQueryString(query: CalcQuery): string {
   return `?country=${query.country}&amount=${query.amount}&mode=${query.mode}`;
 }
 
-/** The catalog link for the result: vacancies paying at least the gross. */
-export function calcCatalogHref(result: CalcResult): string {
-  const country = result.country.code === 'RU' ? '' : `&country=${result.country.code}`;
-  return `/vacancies?salary_from=${Math.round(result.gross)}${country}`;
+/**
+ * The catalog link for the result. The open catalog has no salary or country
+ * filter yet (its entries carry only a salary label), so the link promises none.
+ */
+export function calcCatalogHref(): string {
+  return '/vacancies';
 }

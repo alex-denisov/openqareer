@@ -168,12 +168,8 @@ function Output({
       <span className="sc-big">{big}</span>
       <OutputRows result={result} />
       <div className="sc-act">
-        <SiteLink
-          to={calcCatalogHref(result)}
-          onNavigate={onNavigate}
-          className="sc-btn is-primary"
-        >
-          Показать вакансии от {formatCalcMoney(result.gross, country.symbol)}
+        <SiteLink to={calcCatalogHref()} onNavigate={onNavigate} className="sc-btn is-primary">
+          Смотреть вакансии
         </SiteLink>
         <button
           type="button"

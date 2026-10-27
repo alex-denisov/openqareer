@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  calcCatalogHref,
-  calculateSalary,
-  grossFromNet,
-  parseCalcQuery,
-} from './salaryCalculator';
+import { calcCatalogHref, calculateSalary, grossFromNet, parseCalcQuery } from './salaryCalculator';
 
 describe('salary calculator', () => {
   it('matches the mockup figures for 300 000 RUB', () => {
@@ -36,13 +31,8 @@ describe('salary calculator', () => {
     expect(calculateSalary('AE', 25000, 'gross').netMonthly).toBe(25000);
   });
 
-  it('links the result to the open catalog', () => {
-    expect(calcCatalogHref(calculateSalary('RU', 300000, 'gross'))).toBe(
-      '/vacancies?salary_from=300000',
-    );
-    expect(calcCatalogHref(calculateSalary('DE', 5000, 'gross'))).toBe(
-      '/vacancies?salary_from=5000&country=DE',
-    );
+  it('links the result to the open catalog without a filter it cannot apply', () => {
+    expect(calcCatalogHref()).toBe('/vacancies');
   });
 
   it('parses only valid query values', () => {
