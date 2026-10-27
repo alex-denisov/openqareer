@@ -358,3 +358,25 @@ describe('proposeRoles: имя роли рынка (27.10)', () => {
     expect(roles[0]?.title).toBe('Производственный директор');
   });
 });
+
+describe('proposeRoles: короткое имя при равной частоте (27.10)', () => {
+  it('из названий, встретившихся одинаково часто, берёт самое короткое', () => {
+    const titles = [
+      'Director of Applied Science and Engineering - Knowledge Graphs & AI',
+      'AI Director',
+      'AI Transformation Director',
+      'Associate Vice President, Model & AI Governance',
+      'AI Engineering Sr Director',
+      'Chief AI Officer',
+      'VP of AI',
+      'Director of AI Platform',
+    ];
+    const roles = proposeRoles({
+      named: [],
+      pool: titles.map((title) => vacancy(title)),
+      candidateSkills: [],
+      roleKey: () => 'ai-ml:top',
+    });
+    expect(roles[0]?.title).toBe('VP of AI');
+  });
+});
