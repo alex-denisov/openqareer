@@ -88,9 +88,9 @@ describe('salary city market (B351)', () => {
 
 describe('salary city inputs', () => {
   it('takes the first location token and keeps remote apart', () => {
-    expect(salaryCityOf('Санкт-Петербург, Невский проспект', false)).toBe('Санкт-Петербург');
-    expect(salaryCityOf('Москва', true)).toBe('remote');
-    expect(salaryCityOf('Удалённо', false)).toBeUndefined();
+    expect(salaryCityOf('Санкт-Петербург, Невский проспект', false)?.label).toBe('Санкт-Петербург');
+    expect(salaryCityOf('Москва, м. Арбатская', false)?.slug).toBe('moscow');
+    expect(salaryCityOf(null, true)?.slug).toBe('remote');
     expect(salaryCityOf(null, false)).toBeUndefined();
   });
 

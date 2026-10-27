@@ -6,18 +6,19 @@ import {
   type SalaryMidpointGroup,
 } from '../../shared/salaryMarketSnapshot';
 import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
+import { catalogPlaceOf, REMOTE_PLACE } from '../vacancies/vacancyCatalogFacets';
+import type { CatalogEntry } from '../vacancies/vacancyCatalogPage';
 
-/** Remote vacancies are one place of their own, never a city. */
-export const REMOTE_CITY = 'remote';
-const MAX_CITY_LENGTH = 60;
 const MAX_PUBLISHED_CITIES = 40;
 
-/** City is the first comma token of the stored location; no geocoding or guessing. */
-export function salaryCityOf(location: string | null, isRemote: boolean): string | undefined {
-  if (isRemote) return REMOTE_CITY;
-  const city = location?.split(',')[0]?.trim();
-  if (!city || city.length > MAX_CITY_LENGTH || /remote|удал[её]н/iu.test(city)) return undefined;
-  return city;
+export interface SalaryPlace {
+  readonly slug: string;
+  readonly label: string;
+}
+/** The catalog's own place, so a city row links to the same `/vacancies/<place>` page. */
+export function salaryCityOf(location: string | null, isRemote: boolean): SalaryPlace | undefined {
+  const place = catalogPlaceOf({ location: location ?? undefined, isRemote } as CatalogEntry);
+  return place ?? undefined;
 }
 
 interface Midpoint {
@@ -50,7 +51,12 @@ export function monthlyMidpointOf(json: string | null): Midpoint | undefined {
 }
 
 export interface CityCounter {
-  record(role: string, cityId: string | undefined, clusterId: string, json: string | null): void;
+  record(
+    role: string,
+    place: SalaryPlace | undefined,
+    clusterId: string,
+    json: string | null,
+  ): void;
   assemble(role: string): SalaryCityMarket;
 }
 
@@ -65,10 +71,13 @@ export function prepareSalaryCityScratch(database: DatabaseSync): CityCounter {
     'INSERT OR IGNORE INTO salary_market_city_ranges VALUES (?, ?, ?, ?, ?, ?)',
   );
   const vacancies = new Map<string, Map<string, number>>();
+  const labels = new Map<string, string>();
   const ranged = new Map<string, number>();
   return {
-    record(role, cityId, clusterId, json) {
-      if (!cityId) return;
+    record(role, place, clusterId, json) {
+      if (!place) return;
+      const cityId = place.slug;
+      if (!labels.has(cityId)) labels.set(cityId, place.label);
       const cities = vacancies.get(role) ?? new Map<string, number>();
       cities.set(cityId, (cities.get(cityId) ?? 0) + 1);
       vacancies.set(role, cities);
@@ -82,6 +91,7 @@ export function prepareSalaryCityScratch(database: DatabaseSync): CityCounter {
         database,
         role,
         vacancies.get(role) ?? new Map(),
+        labels,
         ranged.get(role) ?? 0,
       );
     },
@@ -125,6 +135,7 @@ function assembleCities(
   database: DatabaseSync,
   role: string,
   vacancies: ReadonlyMap<string, number>,
+  labels: ReadonlyMap<string, string>,
   rangedTotal: number,
 ): SalaryCityMarket {
   const rows = database
@@ -140,14 +151,15 @@ function assembleCities(
   for (const [city, row] of largest) {
     if (row.sampleSize < MIN_CITY_SALARY_SAMPLE) continue;
     places.push({
-      city,
+      city: labels.get(city) ?? city,
+      placeSlug: city,
       vacancyCount: vacancies.get(city) ?? row.sampleSize,
       salary: midpointGroup(database, role, row),
     });
   }
-  const remote = places.find((place) => place.city === REMOTE_CITY);
+  const remote = places.find((place) => place.placeSlug === REMOTE_PLACE);
   const cities = places
-    .filter((place) => place.city !== REMOTE_CITY)
+    .filter((place) => place.placeSlug !== REMOTE_PLACE)
     .sort((a, b) => b.vacancyCount - a.vacancyCount)
     .slice(0, MAX_PUBLISHED_CITIES);
   return {

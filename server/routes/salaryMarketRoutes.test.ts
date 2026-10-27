@@ -194,4 +194,65 @@ describe('bounded salary SSR', () => {
     expect(selected).not.toContain('"@type":"Occupation"');
     expect(selected).not.toContain('<dt>P50</dt>');
   });
+  it('serves the country page from the tax calculator with FAQPage (B351 06b)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'salary-country-'));
+    writeFileSync(join(dir, 'salary-market.html'), template);
+    const app = Fastify();
+    registerSalaryMarketRoutes(app, { staticRoot: dir, databasePath: join(dir, 'none.db') });
+    try {
+      const response = await app.inject('/salaries/germany');
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('Зарплата в Германии: сколько остаётся на руки');
+      expect(response.body).toContain('"@type":"FAQPage"');
+      expect(response.body).toContain('4 225 €');
+      expect(response.body).toContain('href="/signup?from=salaries&amp;country=DE&amp;next=match"');
+      expect(response.body).toContain('index, follow');
+    } finally {
+      await app.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it('serves the city page when a place reaches the minimum, the old view otherwise (06a)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'salary-city-'));
+    writeFileSync(join(dir, 'salary-market.html'), template);
+    const group = { currency: 'RUR', period: 'month', taxBasis: 'gross', sampleSize: 40 };
+    const withCities: SalaryMarketSnapshot = {
+      ...snapshot,
+      role: 'accountant',
+      roleLabel: 'Бухгалтер',
+      cityMarket: {
+        method: 'closed_monthly_range_midpoint_v1',
+        minSample: 30,
+        rangedTotal: 40,
+        publishedSample: 40,
+        cities: [
+          {
+            city: 'Москва',
+            placeSlug: 'moscow',
+            vacancyCount: 60,
+            salary: { ...group, p25: 105_000, p50: 125_000, p75: 140_000 } as never,
+          },
+        ],
+      },
+    };
+    const app = Fastify();
+    registerSalaryMarketRoutes(app, {
+      staticRoot: dir,
+      databasePath: join(dir, 'none.db'),
+      read: (role) => (role === 'accountant' ? withCities : snapshot),
+      readIndex: () => [],
+    });
+    try {
+      const city = await app.inject('/salaries/accountant');
+      expect(city.body).toContain('Зарплата бухгалтера в 2026 году по городам');
+      expect(city.body).toContain('105 000–140 000 ₽');
+      expect(city.body).toContain('href="/vacancies/moscow"');
+      expect(city.body).toContain('"@type":"FAQPage"');
+      const fallback = await app.inject('/salaries/analyst');
+      expect(fallback.body).not.toContain('по городам');
+    } finally {
+      await app.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

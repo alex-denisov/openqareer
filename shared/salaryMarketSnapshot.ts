@@ -16,8 +16,10 @@ export interface SalaryMidpointGroup {
   readonly p75: number;
 }
 export interface SalaryCityRow {
-  /** First token of the stored location, or `remote`. */
+  /** The catalog place label («Москва», «Удалённо»). */
   readonly city: string;
+  /** The catalog place slug: `/vacancies/<placeSlug>`. */
+  readonly placeSlug: string;
   /** All catalog vacancies of the role in the place, with or without a range. */
   readonly vacancyCount: number;
   readonly salary: SalaryMidpointGroup;

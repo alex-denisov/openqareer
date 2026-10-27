@@ -278,3 +278,292 @@
   outline: calc(var(--ps-border-width) * 2) solid var(--ps-blue);
   outline-offset: var(--ps-space-1);
 }
+
+/* B351 round 5: profession (06a) and country (06b) salary pages. */
+.sp {
+  display: grid;
+  gap: calc(var(--ps-space-8) * 1.5);
+  max-inline-size: 1180px;
+  margin-inline: auto;
+  padding: var(--ps-space-6) var(--ps-space-4) calc(var(--ps-space-8) * 2);
+  color: var(--ps-ink);
+  font-variant-numeric: tabular-nums;
+}
+.sp-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ps-space-2);
+  color: var(--ps-soft);
+  font-size: var(--ps-text-sm);
+}
+.sp-crumbs a,
+.sp-link {
+  color: var(--ps-blue);
+  text-decoration: none;
+}
+.sp-hero,
+.sp-s {
+  display: grid;
+  gap: var(--ps-space-4);
+}
+.sp-eyebrow,
+.sp-label {
+  color: var(--ps-blue);
+  font-size: var(--ps-text-sm);
+  font-weight: 600;
+}
+.sp h1 {
+  font-size: var(--ps-text-display);
+  line-height: 1.15;
+  max-inline-size: 24ch;
+  margin: 0;
+}
+.sp h2 {
+  font-size: var(--ps-text-lg);
+  margin: 0;
+}
+.sp .sp-h3 {
+  font-size: var(--ps-text-lg);
+}
+.sp-answer,
+.sp-lead {
+  max-inline-size: 72ch;
+  margin: 0;
+  line-height: 1.55;
+}
+.sp-lead,
+.sp-small,
+.sp-sub,
+.sp-stamp {
+  color: var(--ps-soft);
+  font-size: var(--ps-text-sm);
+}
+.sp-kpi,
+.sp-how,
+.sp-thr {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ps-space-4);
+}
+.sp-kpi > div,
+.sp-how > div,
+.sp-thr > div {
+  display: grid;
+  gap: var(--ps-space-1);
+  align-content: start;
+  padding: var(--ps-space-4);
+  border: var(--ps-border-width) solid var(--ps-line);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-surface);
+}
+.sp-kpi span,
+.sp-thr span,
+.sp-kpi small {
+  color: var(--ps-soft);
+  font-size: var(--ps-text-sm);
+}
+.sp-kpi b,
+.sp-thr b {
+  font-size: var(--ps-text-lg);
+}
+.sp-how p,
+.sp-thr p {
+  margin: 0;
+  color: var(--ps-soft);
+}
+.sp-stamp {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ps-space-2) var(--ps-space-6);
+}
+.sp-card {
+  border: var(--ps-border-width) solid var(--ps-line);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-surface);
+  overflow: hidden;
+}
+.sp-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+}
+.sp-table th,
+.sp-table td {
+  padding: var(--ps-space-3) var(--ps-space-4);
+  border-bottom: var(--ps-border-width) solid var(--ps-line);
+  text-align: start;
+  vertical-align: middle;
+}
+.sp-table th {
+  color: var(--ps-soft);
+  font-size: var(--ps-text-sm);
+  font-weight: 500;
+}
+.sp-table .n {
+  text-align: end;
+  white-space: nowrap;
+}
+.sp-sub {
+  display: block;
+}
+.sp-bar-c {
+  inline-size: 28%;
+}
+.sp-bar {
+  position: relative;
+  block-size: 8px;
+  border-radius: 4px;
+  background: var(--ps-bg-2);
+}
+.sp-bar i {
+  position: absolute;
+  inset-block: 0;
+  border-radius: 4px;
+  background: var(--ps-blue-soft);
+}
+.sp-bar b {
+  position: absolute;
+  inset-block: -3px;
+  inline-size: 3px;
+  border-radius: 2px;
+  background: var(--ps-blue);
+}
+.sp-me td {
+  background: var(--ps-blue-soft);
+}
+.sp-chip {
+  margin-inline-start: var(--ps-space-2);
+  padding: 2px var(--ps-space-2);
+  border-radius: var(--ps-radius-sm);
+  background: var(--ps-surface);
+  color: var(--ps-blue);
+  font-size: var(--ps-text-sm);
+}
+.sp-card-f {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--ps-space-3);
+  padding: var(--ps-space-3) var(--ps-space-4);
+  border-top: var(--ps-border-width) solid var(--ps-line);
+  background: var(--ps-bg);
+}
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 36px;
+  padding-inline: var(--ps-space-4);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-sm);
+  color: var(--ps-ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+.sp-primary {
+  min-block-size: 44px;
+  border-color: var(--ps-blue);
+  background: var(--ps-blue);
+  color: #fff;
+}
+.sp-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ps-space-1);
+  min-block-size: 32px;
+}
+.sp-ic {
+  inline-size: 16px;
+  block-size: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.sp-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--ps-space-4);
+  padding: var(--ps-space-6);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-blue-soft);
+}
+.sp-strip h3,
+.sp-strip p {
+  margin: 0;
+}
+.sp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ps-space-2) var(--ps-space-6);
+}
+.sp-gh {
+  grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+  align-items: start;
+}
+.sp-act {
+  display: grid;
+  gap: var(--ps-space-3);
+  padding: var(--ps-space-4);
+  border: var(--ps-border-width) solid var(--ps-line);
+  border-radius: var(--ps-radius-md);
+}
+.sp-faq {
+  display: grid;
+  gap: var(--ps-space-2);
+}
+.sp-faq details {
+  padding: var(--ps-space-3) var(--ps-space-4);
+  border: var(--ps-border-width) solid var(--ps-line);
+  border-radius: var(--ps-radius-md);
+}
+.sp-faq summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.sp-faq p {
+  margin: var(--ps-space-2) 0 0;
+  line-height: 1.55;
+}
+@media (max-width: 760px) {
+  .sp-kpi,
+  .sp-how,
+  .sp-thr,
+  .sp-gh {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sp-table thead {
+    display: none;
+  }
+  .sp-table tr {
+    display: grid;
+    gap: var(--ps-space-1);
+    padding: var(--ps-space-3) var(--ps-space-4);
+    border-bottom: var(--ps-border-width) solid var(--ps-line);
+  }
+  .sp-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--ps-space-3);
+    padding: 0;
+    border: 0;
+  }
+  .sp-table td[data-l]::before {
+    content: attr(data-l);
+    color: var(--ps-soft);
+    font-size: var(--ps-text-sm);
+  }
+  .sp-table td:first-child {
+    display: block;
+    font-weight: 600;
+  }
+  .sp-bar-c {
+    inline-size: auto;
+  }
+  .sp-bar-c:has(.sp-bar) {
+    display: block;
+    padding-block: var(--ps-space-2);
+  }
+}
