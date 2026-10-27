@@ -154,6 +154,21 @@ function wageOf(proposed: ProposedRole, vacancyCount: number) {
   return { fork, note };
 }
 
+function withoutPeriod(text: string): string {
+  return text.trim().replace(/[.…]+$/u, '');
+}
+
+/** Чем обоснована гипотеза: доводом консультанта или выборкой рынка (28.10). */
+function hypothesisNoteOf(proposed: ProposedRole, vacancyCount: number): string | undefined {
+  if (proposed.reason?.trim()) {
+    return `Гипотеза консультанта: ${withoutPeriod(proposed.reason)}. Это вывод из профиля, пока не проверенный.`;
+  }
+  if (proposed.origin === 'market' && vacancyCount > 0) {
+    return `Гипотеза по рынку: ${formatVacancyCount(vacancyCount)} с этим названием в функциях вашего опыта. Подходит ли она вам, пока не проверено.`;
+  }
+  return undefined;
+}
+
 export function mapProposedRoleToCareerRole(
   proposed: ProposedRole,
   decisions: RoleDecisions,
@@ -185,7 +200,7 @@ export function mapProposedRoleToCareerRole(
           'Роль перейдёт в «Навыки проверены», а подтверждённые навыки войдут в сопоставление с вакансиями.'
         : undefined,
     nextAction: determineNextAction(status, evidence.vacancyCount),
-    hypothesisReason: proposed.reason ?? undefined,
+    hypothesisNote: hypothesisNoteOf(proposed, evidence.vacancyCount),
     offerDismissed: decisions.offersDismissed.includes(proposed.id),
     alreadyChosen:
       proposed.origin === 'candidate' ||

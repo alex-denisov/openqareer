@@ -413,3 +413,26 @@ describe('proposeRoles: одно слово без функции — не ро�
     expect(roles).toEqual([]);
   });
 });
+
+describe('повторяющиеся требования большой роли (28.10)', () => {
+  it('находит требования, когда навыки есть не у каждой вакансии', () => {
+    // 266 вакансий «Технического директора»: навыки разные, и порог «у половины всех»
+    // не набирал ни одного требования — экран писал «совпадений нет».
+    const pool = [
+      ...Array.from({ length: 30 }, () => vacancy('CTO', ['Kubernetes', 'Архитектура'])),
+      ...Array.from({ length: 30 }, () => vacancy('CTO', ['Архитектура'])),
+      ...Array.from({ length: 60 }, (_, index) => vacancy('CTO', [`Навык ${index}`])),
+      ...Array.from({ length: 40 }, () => vacancy('CTO', [])),
+    ];
+    const roles = proposeRoles({ named: [], pool, candidateSkills: ['архитектура'] });
+    const confirmation = roles[0].confirmation;
+
+    expect(confirmation.state === 'observed' && confirmation.repeatedRequirements).toEqual([
+      'Архитектура',
+      'Kubernetes',
+    ]);
+    expect(confirmation.state === 'observed' && confirmation.matchedRequirementNames).toEqual([
+      'Архитектура',
+    ]);
+  });
+});

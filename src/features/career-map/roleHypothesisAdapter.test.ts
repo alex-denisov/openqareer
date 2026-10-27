@@ -222,3 +222,24 @@ describe('роль без вакансий (28.10)', () => {
     );
   });
 });
+
+describe('объяснение гипотезы (28.10)', () => {
+  const decisions = { acceptedTitle: null, offersDismissed: [] };
+
+  it('у роли консультанта — его довод', () => {
+    const role = mapProposedRoleToCareerRole(observed(), decisions);
+    expect(role.hypothesisNote).toBe(
+      'Гипотеза консультанта: вёл платформу. Это вывод из профиля, пока не проверенный.',
+    );
+  });
+
+  it('у роли рынка — откуда она, без выдуманного довода', () => {
+    const role = mapProposedRoleToCareerRole(
+      { ...observed({ sampleSize: 266 }), origin: 'market', reason: null },
+      decisions,
+    );
+    expect(role.hypothesisNote).toBe(
+      'Гипотеза по рынку: 266 вакансий с этим названием в функциях вашего опыта. Подходит ли она вам, пока не проверено.',
+    );
+  });
+});
