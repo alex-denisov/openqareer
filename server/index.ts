@@ -43,6 +43,7 @@ import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersiste
 import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
+import { openVacancyDemandStore } from './vacancies/vacancyDemandStore';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -155,6 +156,8 @@ const matchedPoolPrecompute = new MatchedPoolPrecompute({
   candidateStore,
   engine: multiSourceEngine,
 });
+// Роли кандидатов — запросы к площадкам: обслуживатель читает их из этой таблицы.
+const vacancyDemand = openVacancyDemandStore(config.databasePath);
 const roleNamingCache = new SqliteRoleNamingCache({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
@@ -203,6 +206,7 @@ const app = await buildApp({
   linkedinPool,
   linkedinRemoteLogin,
   matchedPoolPrecompute,
+  vacancyDemand,
   runtimeMemory: () => {
     const heap = readProcessHeap();
     return {
