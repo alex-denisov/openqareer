@@ -169,3 +169,15 @@ describe('словарь стран вне семи рынков (27.10)', () =>
     expect(remoteCountryFit({ canonicalLocation: 'Remote', isRemote: true }, ['ru'])).toBe('unknown');
   });
 });
+
+describe('страна в конце части и через тире (28.10)', () => {
+  it('узнаёт «California USA» и «Remote - US»', () => {
+    expect(regionOfVacancy({ location: 'Sunnyvale, California USA' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Remote - US' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Remote - Germany' })).toBe('eu');
+  });
+});
+
+it('строчное «in» в конце — не ISO-код Индии', () => {
+  expect(regionOfVacancy({ location: 'Work from home in' })).toBeUndefined();
+});
