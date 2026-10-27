@@ -50,6 +50,15 @@ describe('/tools/resume first paint (B567)', () => {
     expect(html).toContain('3/4');
     expect((html.match(/itemProp="mainEntity"/gu) ?? []).length).toBe(7);
   });
+
+  it('links to interview questions and resume FAQ, as on the mockup', () => {
+    const html = renderToStaticMarkup(<ResumeBuilderPage onNavigate={() => {}} />);
+    expect((html.match(/href="\/tools\/interview-questions"/gu) ?? []).length).toBe(2);
+    expect((html.match(/href="\/faq#resume"/gu) ?? []).length).toBe(2);
+    expect(html).toContain('Вопросы на собеседовании по вашей профессии');
+    expect(html).not.toContain('Сколько будет на руки');
+    expect(html).toContain('class="rb-hide-m"');
+  });
 });
 
 describe('/tools/resume interaction (B567)', () => {

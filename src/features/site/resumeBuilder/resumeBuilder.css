@@ -786,7 +786,28 @@
     position: static;
   }
 }
+.rbp .ps-faq summary {
+  align-items: center;
+}
+.rbp .ps-faq summary::after {
+  content: '';
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  border-right: 1.8px solid var(--ps-mute);
+  border-bottom: 1.8px solid var(--ps-mute);
+  transform: rotate(45deg) translate(-3px, -3px);
+  transition: transform 0.18s ease;
+}
+.rbp .ps-faq details[open] summary::after {
+  content: '';
+  transform: rotate(225deg) translate(-2px, -2px);
+}
 @media (max-width: 760px) {
+  .rbp .rb-hide-m {
+    display: none;
+  }
   .rbp .rb {
     gap: 20px;
   }

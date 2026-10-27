@@ -97,7 +97,7 @@ function ChecksSection({ model }: { readonly model: ResumeBuilderModel }) {
             <p className="ps-label">Проверка на ATS</p>
             <h2 id="rb-checks">Видно, почему резюме не доходит до рекрутера</h2>
           </div>
-          <p>
+          <p className="rb-hide-m">
             Компании принимают отклики через ATS: система разбирает резюме и ищет слова из вакансии.
             Структуру, даты и формат проверяем сразу, ключевые слова — по вакансии: вставьте ссылку
             или текст.
@@ -220,11 +220,11 @@ function FaqSection() {
             <h2 id="rb-faq">О конструкторе</h2>
           </div>
           <p className="rb-links">
-            <a className="link" href="/tools/country-fit">
-              Сколько будет на руки <ArrowRight aria-hidden="true" />
+            <a className="link" href="/tools/interview-questions">
+              Вопросы на собеседовании по профессиям <ArrowRight aria-hidden="true" />
             </a>
-            <a className="link" href="/faq">
-              Все вопросы и ответы <ArrowRight aria-hidden="true" />
+            <a className="link" href="/faq#resume">
+              Все вопросы о резюме <ArrowRight aria-hidden="true" />
             </a>
           </p>
         </div>
@@ -315,8 +315,11 @@ export function ResumeBuilderPage({
               <a className="link" href="/vacancies">
                 Вакансии, где подойдёт это резюме <ArrowRight aria-hidden="true" />
               </a>
-              <a className="link" href="/faq">
-                Все вопросы и ответы <ArrowRight aria-hidden="true" />
+              <a className="link" href="/tools/interview-questions">
+                Вопросы на собеседовании по вашей профессии <ArrowRight aria-hidden="true" />
+              </a>
+              <a className="link" href="/faq#resume">
+                Все вопросы о резюме <ArrowRight aria-hidden="true" />
               </a>
             </div>
           </div>
