@@ -2,6 +2,7 @@ import React from 'react';
 import {
   SALARY_BASIS_TEXT,
   vacancies,
+  type NetRow,
   type SalaryCityView,
   type SalaryCountryView,
   type SalaryFaq,
@@ -255,23 +256,22 @@ function ProfessionMethod() {
 
 function CountryHero({ view }: { readonly view: SalaryCountryView }) {
   return (
-    <>
-      <section className="sp-hero">
-        <span className="sp-eyebrow">Зарплаты по странам · ставки {view.taxYear} года</span>
-        <h1>Зарплата {view.inName}: сколько остаётся на руки</h1>
-        <p className="sp-answer">
-          <b>Коротко:</b> {view.answer}
-        </p>
-        <div className="sp-stamp">
-          <span>{view.assumptions}</span>
-          <span>Ставки {view.taxYear} года</span>
-        </div>
-      </section>
-    </>
+    <section className="sp-hero">
+      <span className="sp-eyebrow">Зарплаты по странам · ставки {view.taxYear} года</span>
+      <h1>Зарплата {view.inName}: сколько остаётся на руки</h1>
+      <p className="sp-answer sp-callout">
+        <b>Коротко:</b> {view.answer}
+      </p>
+      <div className="sp-stamp">
+        <span>{view.assumptions}</span>
+        <span>Ставки {view.taxYear} года</span>
+      </div>
+    </section>
   );
 }
 
 function CountryActions({ view }: { readonly view: SalaryCountryView }) {
+  const lead = view.cities[0];
   return (
     <aside className="sp-act">
       <b>Что дальше</b>
@@ -279,130 +279,204 @@ function CountryActions({ view }: { readonly view: SalaryCountryView }) {
         className="sp-btn sp-primary"
         href={`/signup?from=salaries&country=${view.code}&next=match`}
       >
-        Какие вакансии {view.inName} подходят вам
+        {lead
+          ? `Какие из ${lead.count.toLocaleString('ru-RU').replace(/\s/gu, ' ')} вакансий ${lead.genitive} подходят вам`
+          : `Какие вакансии ${view.inName} подходят вам`}
       </a>
-      <a className="sp-link" href={`/tools/country-fit?country=${view.code}`}>
-        Подходит ли вам переезд <Arrow />
+      <a className="sp-link" href={lead ? `/vacancies/${lead.slug}` : '/vacancies'}>
+        Вакансии {view.inName} <Arrow />
       </a>
-      <a className="sp-link" href="/salaries">
-        Зарплаты по профессиям <Arrow />
+      <a className="sp-link" href={`/tools/relocation?country=${view.code}`}>
+        Оценить переезд {view.toName} <Arrow />
       </a>
     </aside>
   );
 }
 
-function CountryNet({ view }: { readonly view: SalaryCountryView }) {
+const NET_FOLD = 5;
+
+function NetRows({ rows }: { readonly rows: readonly NetRow[] }) {
   return (
     <>
-      <section className="sp-s sp-gh">
-        <div>
-          <h2 className="sp-h3">До налогов → на руки, в месяц</h2>
-          <div className="sp-card">
-            <table className="sp-table">
-              <thead>
-                <tr>
-                  <th>До налогов</th>
-                  <th className="n">Налоги и взносы</th>
-                  <th className="n">На руки</th>
-                  <th className="n">Остаётся</th>
-                </tr>
-              </thead>
-              <tbody>
-                {view.rows.map((row) => (
-                  <tr key={row.gross} className={row.note ? 'sp-me' : undefined}>
-                    <td>
-                      {row.gross} {row.note ? <span className="sp-chip">{row.note}</span> : null}
-                    </td>
-                    <td className="n" data-l="Налоги и взносы">
-                      {row.deductions}
-                    </td>
-                    <td className="n" data-l="На руки">
-                      <b>{row.net}</b>
-                    </td>
-                    <td className="n" data-l="Остаётся">
-                      {row.share}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="sp-card-f sp-small">
-              Расчёт openqareer по ставкам {view.taxYear} года. Не заменяет консультацию налогового
-              консультанта.
-            </div>
-          </div>
-        </div>
-        <CountryActions view={view} />
-      </section>
+      {rows.map((row) => (
+        <tr key={row.gross} className={row.note ? 'sp-me' : undefined}>
+          <td>
+            {row.gross} {row.note ? <span className="sp-chip">{row.note}</span> : null}
+          </td>
+          <td className="n" data-l="Налоги и взносы">
+            {row.deductions}
+          </td>
+          <td className="n" data-l="На руки">
+            <b>{row.net}</b>
+          </td>
+          <td className="n" data-l="Остаётся">
+            {row.share}
+          </td>
+        </tr>
+      ))}
     </>
   );
 }
 
-function CountryThresholds({ view }: { readonly view: SalaryCountryView }) {
+function NetHead() {
   return (
-    <>
-      {view.thresholds.length ? (
-        <section className="sp-s" aria-labelledby="sp-thr">
-          <span className="sp-label">Переезд</span>
-          <h2 id="sp-thr">Какая зарплата нужна, чтобы переехать {view.inName} по работе</h2>
-          <div className="sp-thr">
-            {view.thresholds.map((item) => (
-              <div key={item.label + item.amount}>
-                <span>{item.label}</span>
-                <b>{item.amount}</b>
-                <p>{item.explanation}</p>
-                <a className="sp-link" href={item.source.url} rel="noopener">
-                  {new URL(item.source.url).hostname.replace(/^www\./u, '')}
-                </a>
-              </div>
-            ))}
+    <thead>
+      <tr>
+        <th>До налогов</th>
+        <th className="n">Налоги и взносы</th>
+        <th className="n">На руки</th>
+        <th className="n">Остаётся</th>
+      </tr>
+    </thead>
+  );
+}
+
+function CountryNet({ view }: { readonly view: SalaryCountryView }) {
+  const rest = view.rows.slice(NET_FOLD);
+  return (
+    <section className="sp-s sp-gh">
+      <div>
+        <h2 className="sp-h3">До налогов → на руки, в месяц</h2>
+        <div className="sp-card">
+          <table className="sp-table">
+            <NetHead />
+            <tbody>
+              <NetRows rows={view.rows.slice(0, NET_FOLD)} />
+            </tbody>
+          </table>
+          {rest.length ? (
+            <details className="sp-fold">
+              <summary>Все суммы</summary>
+              <table className="sp-table">
+                <tbody>
+                  <NetRows rows={rest} />
+                </tbody>
+              </table>
+            </details>
+          ) : null}
+          <div className="sp-card-f sp-small">
+            Расчёт openqareer по ставкам {view.taxYear} года. Не заменяет консультацию налогового
+            консультанта.
           </div>
-        </section>
+        </div>
+      </div>
+      <CountryActions view={view} />
+    </section>
+  );
+}
+
+function CountryCities({ view }: { readonly view: SalaryCountryView }) {
+  if (!view.cities.length) return null;
+  return (
+    <section className="sp-s sp-narrow" aria-labelledby="sp-where">
+      <h2 className="sp-h3" id="sp-where">
+        Где искать: города с вакансиями
+      </h2>
+      <ul className="sp-cities">
+        {view.cities.map((city) => (
+          <li key={city.slug}>
+            <a href={`/vacancies/${city.slug}`}>{city.label}</a>
+            <span>{vacancies(city.count)}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="sp-small">Города, где меньше 30 вакансий, не показываем.</p>
+      <p className="sp-note">
+        В вакансиях из каталога зарплата {view.inName} указана редко, поэтому медиану по стране не
+        считаем. Ориентируйтесь на таблицу «на руки» и на пороги переезда ниже.
+      </p>
+      {view.catalogDate ? (
+        <p className="sp-small">Открытый каталог openqareer, {view.catalogDate}.</p>
       ) : null}
-    </>
+    </section>
+  );
+}
+
+function CountryThresholds({ view }: { readonly view: SalaryCountryView }) {
+  if (!view.thresholds.length) return null;
+  return (
+    <section className="sp-s" aria-labelledby="sp-thr">
+      <div className="sp-sh">
+        <div>
+          <span className="sp-label">Переезд</span>
+          <h2 id="sp-thr">Какая зарплата нужна, чтобы переехать {view.toName} по работе</h2>
+        </div>
+        <p>
+          Пороги из правил {view.taxYear} года. Подходит ли вам какой-то из путей, зависит от
+          диплома, опыта и языка — это покажет оценка переезда.
+        </p>
+      </div>
+      <div className="sp-thr">
+        {view.thresholds.map((item) => (
+          <div key={item.label + item.amount}>
+            <span>{item.label}</span>
+            <b>{item.sum}</b>
+            <p>
+              {item.per}. {item.explanation}
+            </p>
+            <a className="sp-link" href={item.source.url} rel="noopener">
+              {new URL(item.source.url).hostname.replace(/^www\./u, '')}
+            </a>
+          </div>
+        ))}
+      </div>
+      <div className="sp-band">
+        <div>
+          <h3>Подходит ли вам один из этих путей?</h3>
+          <p>
+            6 вопросов: гражданство, язык, семья, профессия. Покажем варианты переезда и сколько
+            будет на руки.
+          </p>
+        </div>
+        <a className="sp-btn sp-primary" href={`/tools/relocation?country=${view.code}`}>
+          Оценить переезд
+        </a>
+      </div>
+    </section>
   );
 }
 
 function CountryOthers({ view }: { readonly view: SalaryCountryView }) {
   return (
-    <>
-      <section className="sp-s" aria-labelledby="sp-other">
-        <span className="sp-label">Другие страны</span>
-        <h2 id="sp-other">Сколько остаётся на руки в других странах</h2>
-        <div className="sp-card">
-          <table className="sp-table">
-            <thead>
-              <tr>
-                <th>Страна</th>
-                <th className="n">До налогов в месяц</th>
-                <th className="n">На руки</th>
-                <th className="n">Остаётся</th>
+    <section className="sp-s" aria-labelledby="sp-other">
+      <span className="sp-label">Другие страны</span>
+      <h2 id="sp-other">Сколько остаётся на руки в других странах</h2>
+      <div className="sp-card">
+        <table className="sp-table">
+          <thead>
+            <tr>
+              <th>Страна</th>
+              <th className="n">До налогов в месяц</th>
+              <th className="n">На руки</th>
+              <th className="n">Остаётся</th>
+            </tr>
+          </thead>
+          <tbody>
+            {view.others.map((row) => (
+              <tr key={row.slug}>
+                <td>
+                  <a className="sp-link" href={`/salaries/${row.slug}`}>
+                    {row.name}
+                  </a>
+                </td>
+                <td className="n" data-l="До налогов">
+                  {row.gross}
+                </td>
+                <td className="n" data-l="На руки">
+                  {row.net}
+                </td>
+                <td className="n" data-l="Остаётся">
+                  {row.share}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {view.others.map((row) => (
-                <tr key={row.slug}>
-                  <td>
-                    <a className="sp-link" href={`/salaries/${row.slug}`}>
-                      {row.name}
-                    </a>
-                  </td>
-                  <td className="n" data-l="До налогов">
-                    {row.gross}
-                  </td>
-                  <td className="n" data-l="На руки">
-                    {row.net}
-                  </td>
-                  <td className="n" data-l="Остаётся">
-                    {row.share}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </tbody>
+        </table>
+        <div className="sp-card-f sp-small">
+          Наёмный работник, ставки {view.taxYear} года, допущения по каждой стране — в калькуляторе.
         </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
 
@@ -434,6 +508,7 @@ export function SalaryCountryPage({ view }: { readonly view: SalaryCountryView }
       <Crumbs current={view.name} />
       <CountryHero view={view} />
       <CountryNet view={view} />
+      <CountryCities view={view} />
       <CountryThresholds view={view} />
       <Faq title={`Частые вопросы о зарплате ${view.inName}`} faqs={view.faqs} />
       <CountryOthers view={view} />

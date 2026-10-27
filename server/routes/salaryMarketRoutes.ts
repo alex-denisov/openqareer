@@ -38,10 +38,12 @@ import { escapeHtml } from '../vacancies/catalogHtml';
 import {
   faqStructuredData,
   isSalaryCountrySlug,
+  SALARY_COUNTRIES,
   salaryCountryView,
   salaryProfessionView,
   type SalaryFaq,
 } from '../../shared/salaryPublicPages';
+import { SALARY_COUNTRY_CITIES, type CountryCatalog } from '../../shared/salaryCountryCities';
 import { SalaryCountryPage, SalaryProfessionPage } from '../../src/features/site/SalaryPublicPages';
 
 interface PublicSalaryPage {
@@ -99,9 +101,48 @@ function sendPublicSalaryPage(
     .send(renderPublicSalaryPage(template, `/salaries/${role}`, page));
 }
 
-function countryPage(slug: string): PublicSalaryPage | null {
+const COUNTRY_CATALOG_TTL_MS = 15 * 60_000;
+const countryCatalogCache = new Map<string, { at: number; value: CountryCatalog }>();
+
+/**
+ * «Где искать» on 06b: active catalog entries of the country's known cities,
+ * counted over the (status, place_slug) index and cached for 15 minutes.
+ */
+export function loadCountryCatalog(databasePath: string, code: string): CountryCatalog | null {
+  const slugs = Object.keys(SALARY_COUNTRY_CITIES[code] ?? {});
+  if (!slugs.length || !existsSync(databasePath)) return null;
+  const cached = countryCatalogCache.get(code);
+  if (cached && Date.now() - cached.at < COUNTRY_CATALOG_TTL_MS) return cached.value;
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const rows = database
+      .prepare(
+        `SELECT place_slug AS slug, max(place_label) AS label, count(*) AS count
+           FROM catalog_entries
+          WHERE status = 'active' AND path <> '' AND place_slug IN (${slugs.map(() => '?').join(',')})
+          GROUP BY place_slug`,
+      )
+      .all(...slugs) as { slug: string; label: string; count: number }[];
+    const value = { cities: rows, readAt: new Date().toISOString() };
+    countryCatalogCache.set(code, { at: Date.now(), value });
+    return value;
+  } finally {
+    database.close();
+  }
+}
+
+function countryPage(slug: string, options: SalaryRouteOptions): PublicSalaryPage | null {
   if (!isSalaryCountrySlug(slug)) return null;
-  const view = salaryCountryView(slug);
+  const code = SALARY_COUNTRIES[slug].code;
+  let catalog: CountryCatalog | null = null;
+  try {
+    catalog = options.readCountryCatalog
+      ? options.readCountryCatalog(code)
+      : loadCountryCatalog(options.databasePath, code);
+  } catch {
+    /* The net table stands on the calculator alone; the city list is optional. */
+  }
+  const view = salaryCountryView(slug, catalog ?? undefined);
   return {
     title: `Зарплата ${view.inName} на руки в ${view.taxYear} году | openqareer`,
     description: view.answer,
@@ -253,6 +294,7 @@ interface SalaryRouteOptions {
   databasePath: string;
   read?: (role: string) => SalaryMarketSnapshot | null;
   readIndex?: () => readonly SalaryMarketIndexEntry[];
+  readCountryCatalog?: (code: string) => CountryCatalog | null;
 }
 export function registerSalaryMarketRoutes(
   app: FastifyInstance,
@@ -270,7 +312,7 @@ export function registerSalaryMarketRoutes(
     Querystring: { group?: string; grade?: string; skills?: string; location?: string };
   }>('/salaries/:role', (request, reply) => {
     const role = request.params.role;
-    const country = countryPage(role);
+    const country = countryPage(role, options);
     if (country && template) return sendPublicSalaryPage(reply, template, role, country);
     if (!salaryRolePath(role))
       return reply.code(404).header('X-Robots-Tag', 'noindex').send('Профессия не найдена');

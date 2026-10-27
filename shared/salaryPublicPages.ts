@@ -6,6 +6,12 @@ import type {
   SalaryMarketSnapshot,
   SalaryMidpointGroup,
 } from './salaryMarketSnapshot';
+import {
+  MIN_COUNTRY_CITY_VACANCIES,
+  SALARY_COUNTRY_CITIES,
+  type CountryCatalog,
+  type CountryCityCount,
+} from './salaryCountryCities';
 
 /** B351 round 5 (27.10): every figure comes from the prepared snapshot or the tax calculator. */
 const CURRENCY_SIGN: Readonly<Record<string, string>> = {
@@ -213,34 +219,29 @@ export const SALARY_BASIS_TEXT = BASIS_TEXT;
 
 /** Countries the tax calculator covers, with the reference amounts of mockup 06b. */
 export const SALARY_COUNTRIES = {
-  germany: {
-    code: 'DE',
-    name: 'Германия',
-    in: 'в Германии',
-    currency: 'EUR',
-    reference: 5000,
-    steps: [2000, 3000, 4000, 5000, 6000, 8000, 10_000],
-  },
   cyprus: {
     code: 'CY',
     name: 'Кипр',
     in: 'на Кипре',
+    to: 'на Кипр',
     currency: 'EUR',
     reference: 5000,
     steps: [2000, 3000, 4000, 5000, 6000, 8000, 10_000],
   },
-  serbia: {
-    code: 'RS',
-    name: 'Сербия',
-    in: 'в Сербии',
-    currency: 'RSD',
-    reference: 500_000,
-    steps: [150_000, 250_000, 350_000, 500_000, 700_000, 1_000_000],
+  germany: {
+    code: 'DE',
+    name: 'Германия',
+    in: 'в Германии',
+    to: 'в Германию',
+    currency: 'EUR',
+    reference: 5000,
+    steps: [2000, 3000, 4000, 5000, 6000, 8000, 10_000],
   },
   uae: {
     code: 'AE',
     name: 'ОАЭ',
     in: 'в ОАЭ',
+    to: 'в ОАЭ',
     currency: 'AED',
     reference: 20_000,
     steps: [10_000, 15_000, 20_000, 30_000, 50_000],
@@ -249,9 +250,19 @@ export const SALARY_COUNTRIES = {
     code: 'GE',
     name: 'Грузия',
     in: 'в Грузии',
+    to: 'в Грузию',
     currency: 'GEL',
     reference: 5000,
     steps: [2000, 3000, 5000, 8000, 12_000],
+  },
+  serbia: {
+    code: 'RS',
+    name: 'Сербия',
+    in: 'в Сербии',
+    to: 'в Сербию',
+    currency: 'RSD',
+    reference: 500_000,
+    steps: [150_000, 250_000, 350_000, 500_000, 700_000, 1_000_000],
   },
 } as const;
 export type SalaryCountrySlug = keyof typeof SALARY_COUNTRIES;
@@ -269,6 +280,8 @@ export interface NetRow {
 export interface RelocationThreshold {
   readonly label: string;
   readonly amount: string;
+  readonly sum: string;
+  readonly per: string;
   readonly explanation: string;
   readonly source: TaxDataSource;
 }
@@ -276,7 +289,10 @@ export interface SalaryCountryView {
   readonly slug: SalaryCountrySlug;
   readonly name: string;
   readonly inName: string;
+  readonly toName: string;
   readonly code: string;
+  readonly cities: readonly (CountryCityCount & { readonly genitive: string })[];
+  readonly catalogDate?: string;
   readonly taxYear: number;
   readonly assumptions: string;
   readonly rows: readonly NetRow[];
@@ -323,6 +339,8 @@ function relocationThresholds(code: string): RelocationThreshold[] {
         seen.add(key);
         out.push({
           label: path.label,
+          sum: formatMoney(requirement.amount, requirement.currency),
+          per: requirement.kind === 'minimum_annual_salary' ? 'в год' : 'в месяц',
           amount: `${formatMoney(requirement.amount, requirement.currency)} ${requirement.kind === 'minimum_annual_salary' ? 'в год' : 'в месяц'}`,
           explanation: requirement.explanation,
           source: requirement.source,
@@ -333,7 +351,18 @@ function relocationThresholds(code: string): RelocationThreshold[] {
   return out;
 }
 
-export function salaryCountryView(slug: SalaryCountrySlug): SalaryCountryView {
+function countryCities(code: string, catalog?: CountryCatalog) {
+  const genitives = SALARY_COUNTRY_CITIES[code] ?? {};
+  return (catalog?.cities ?? [])
+    .filter((city) => genitives[city.slug] && city.count >= MIN_COUNTRY_CITY_VACANCIES)
+    .map((city) => ({ ...city, genitive: genitives[city.slug]! }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export function salaryCountryView(
+  slug: SalaryCountrySlug,
+  catalog?: CountryCatalog,
+): SalaryCountryView {
   const country = SALARY_COUNTRIES[slug];
   const sample = calculateAnnualPayroll(country.code, country.reference * 12);
   const thresholds = relocationThresholds(country.code);
@@ -381,7 +410,10 @@ export function salaryCountryView(slug: SalaryCountrySlug): SalaryCountryView {
     slug,
     name: country.name,
     inName: country.in,
+    toName: country.to,
     code: country.code,
+    cities: countryCities(country.code, catalog),
+    ...(catalog ? { catalogDate: formatDate(catalog.readAt) } : {}),
     taxYear: sample.taxYear,
     assumptions: sample.assumptionSummary,
     rows,
