@@ -51,6 +51,7 @@ export const PUBLIC_FOOTER_COLUMNS: readonly ChromeColumn[] = [
     links: [
       { label: 'Конструктор резюме', href: '/tools/resume' },
       { label: 'Вопросы на собеседовании', href: '/tools/interview-questions' },
+      { label: 'Калькулятор зарплаты на руки', href: '/tools/salary-calculator' },
       { label: 'Зарплаты по профессиям', href: '/salaries' },
       { label: 'В какую страну переехать', href: '/tools/relocation' },
     ],

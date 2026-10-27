@@ -5,6 +5,7 @@
  * каталог, и поисковик его не увидит. HTML собирается на запросе, потому что
  * пул меняется каждый час, а сборка неизменяема.
  */
+import { searchIndexFor } from '../vacancies/vacancyCatalogSearch';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   CATALOG_ROOT,
@@ -204,6 +205,12 @@ function handleProjectedListing(
         place: listing.place,
         ...(listing.role ? { role: listing.role } : {}),
       }),
+      {
+        stats: deps.multiSourceEngine.getPublicCatalogSalaryStats({
+          place: listing.place,
+          ...(listing.role ? { role: listing.role } : {}),
+        }),
+      },
     ),
   );
 }
@@ -312,7 +319,17 @@ function sitemapFileHandler(name: (request: FastifyRequest) => string) {
   };
 }
 
+/** Cities and roles that have a public list, with counts, for the search box. */
+async function handleSearchIndex(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
+  const listings = deps.multiSourceEngine.getPublicCatalogListings() ?? [];
+  return reply
+    .header('Cache-Control', 'public, max-age=300')
+    .type('application/json; charset=utf-8')
+    .send(searchIndexFor(listings));
+}
+
 export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  app.get(`${CATALOG_ROOT}/search-index.json`, withDeps(deps, handleSearchIndex));
   app.get(CATALOG_ROOT, withDeps(deps, handleCatalog));
   app.get(`${CATALOG_ROOT}/page/:page`, withDeps(deps, handleCatalog));
   app.get(`${CATALOG_ROOT}/job/:slug`, withDeps(deps, handleVacancy));
@@ -326,10 +343,13 @@ export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDe
   app.get('/sitemap.xml', withDeps(deps, handleSitemapIndex));
   app.get(
     '/sitemaps/:name',
-    withDeps(deps, sitemapFileHandler((request) => {
-      const raw = (request.params as { name?: string }).name ?? '';
-      return /^[a-z]+-[1-9]\d{0,3}\.xml$/u.test(raw) ? raw : '';
-    })),
+    withDeps(
+      deps,
+      sitemapFileHandler((request) => {
+        const raw = (request.params as { name?: string }).name ?? '';
+        return /^[a-z]+-[1-9]\d{0,3}\.xml$/u.test(raw) ? raw : '';
+      }),
+    ),
   );
   const indexNowKey = process.env.INDEXNOW_KEY?.trim() ?? '';
   if (isValidIndexNowKey(indexNowKey)) {

@@ -68,6 +68,11 @@ const CountryFitPage = lazy(() =>
 const RelocationPage = lazy(() =>
   import('./features/site/relocationRoute').then((module) => ({ default: module.RelocationPage })),
 );
+const SalaryCalculatorPage = lazy(() =>
+  import('./features/site/salaryCalculatorRoute').then((module) => ({
+    default: module.SalaryCalculatorPage,
+  })),
+);
 const FaqPage = lazy(() =>
   import('./features/site/publicDocsRoute').then((module) => ({ default: module.FaqPage })),
 );
@@ -678,6 +683,19 @@ export default function App() {
       <AppErrorBoundary>
         <Suspense fallback={null}>
           <RelocationPage
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
+        </Suspense>
+      </AppErrorBoundary>
+    );
+  }
+  if (helpPath === '/tools/salary-calculator' && !isDesktop) {
+    return (
+      <AppErrorBoundary>
+        <Suspense fallback={null}>
+          <SalaryCalculatorPage
             onNavigate={navigate}
             signedIn={Boolean(state.session)}
             isAdmin={state.session?.role === 'admin'}

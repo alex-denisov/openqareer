@@ -75,6 +75,15 @@ export interface CatalogPage {
   readonly previousPath?: string;
   readonly nextPath?: string;
   readonly jsonLd: StructuredGraph;
+  /** Place and role of a list page; absent on the catalog root. */
+  readonly listing?: PageListing;
+}
+
+export interface PageListing {
+  readonly place: string;
+  readonly placeLabel: string;
+  readonly role?: string;
+  readonly roleLabel?: string;
 }
 
 export interface VacancyDetail {
@@ -433,6 +442,15 @@ export function buildListingPage(
   return buildListingPageFromEntries(slice, summary, page, entries.length, pageSize);
 }
 
+function pageListingOf(summary: ListingSummary): PageListing {
+  return {
+    place: summary.place,
+    placeLabel: summary.placeLabel,
+    ...(summary.role ? { role: summary.role } : {}),
+    ...(summary.roleLabel ? { roleLabel: summary.roleLabel } : {}),
+  };
+}
+
 /** Build a filtered page from the materialized catalog projection. */
 export function buildListingPageFromEntries(
   entries: readonly CatalogEntry[],
@@ -452,6 +470,7 @@ export function buildListingPageFromEntries(
       `${heading}: ${countLabel(total)}. ` +
       'У каждой вакансии — работодатель, источник и дата публикации. Отклик подаётся на сайте работодателя.',
     indexable: isIndexableListing(total, Boolean(summary.role)),
+    listing: pageListingOf(summary),
     page,
     pageCount,
     total,

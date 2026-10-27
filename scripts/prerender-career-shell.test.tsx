@@ -17,10 +17,11 @@ import {
 } from './prerender-career-shell';
 
 const authManifest = {
-  'index.html': { file: 'assets/app.js', dynamicImports: ['module-key', 'landing-key', 'auth-key', 'resume-key', 'relocation-key', 'docs-key'] },
+  'index.html': { file: 'assets/app.js', dynamicImports: ['module-key', 'landing-key', 'auth-key', 'resume-key', 'relocation-key', 'docs-key', 'calc-key'] },
   'resume-key': { name: 'resumeBuilderRoute', file: 'assets/resume.js', css: ['assets/resume.css'] },
   'docs-key': { name: 'publicDocsRoute', file: 'assets/docs.js', css: ['assets/docs.css'] },
   'relocation-key': { name: 'relocationRoute', file: 'assets/relocation.js', css: ['assets/relocation.css'] },
+  'calc-key': { name: 'salaryCalculatorRoute', file: 'assets/calc.js', css: ['assets/calc.css'] },
   'module-key': { name: 'AuthPages', file: 'assets/AuthPages-from-build.js' },
   'landing-key': { name: 'landing', file: 'assets/landing-from-build.js', css: ['assets/landing-from-build.css'] },
   'auth-key': { name: 'auth', file: 'assets/auth-from-build.js', css: ['assets/auth-from-build.css'] },

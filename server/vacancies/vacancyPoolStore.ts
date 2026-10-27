@@ -178,6 +178,8 @@ export interface VacancyPoolStore {
     path: string;
     count: number;
   }>;
+  /** Salary labels of one public list (B569): a narrow indexed read, never clusters. */
+  loadCatalogSalaryLabels?(query: { place: string; role?: string }): string[];
   getCatalogEntry?(key: string): CatalogEntryRow | undefined;
   getCluster?(clusterId: string): VacancyCluster | undefined;
   /** Действующие кластеры одного работодателя — экран компании, по индексу ключей. */

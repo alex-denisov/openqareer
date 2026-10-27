@@ -29,7 +29,8 @@ import { escapeHtml } from './catalogHtml';
 import { CATALOG_STYLE } from './catalogStyle';
 import { catalogChromeFooter, catalogChromeHeader } from './catalogChrome';
 import { meaningfulText, plainSummary, renderDescriptionHtml } from './catalogMarkdown';
-import { countLabel, formatRuDate, pageFacts } from './catalogCopy';
+import { renderListingMain, type ListingExtras } from './catalogListingHtml';
+import { formatRuDate } from './catalogCopy';
 import { jobPostingMetadata } from './jobPostingMicrodata';
 
 /**
@@ -117,6 +118,7 @@ function head(options: {
     jsonLdScript(options.jsonLd),
     '<script src="/assets/oq-analytics-3.js" defer></script>',
     '<script src="/assets/oq-chrome-1.js" defer></script>',
+    '<script src="/assets/oq-vacancy-search-1.js" defer></script>',
   ]
     .filter(Boolean)
     .join('');
@@ -151,14 +153,6 @@ function descriptionBlock(markdown: string, summary: string, structured = false)
   return html
     ? `<div class="cat-body"${property}>${content}</div>`
     : '<div class="cat-body"><p>Источник не передал полный текст. Условия и требования — на сайте работодателя, кнопка «Открыть у работодателя».</p></div>';
-}
-
-function factsBlock(page: CatalogPage): string {
-  const facts = pageFacts(page.total, page.entries);
-  if (facts.length === 0) return '';
-  return `<section class="cat-facts-box" aria-label="Коротко о разделе">${facts
-    .map((fact) => `<p>${escapeHtml(fact)}</p>`)
-    .join('')}</section>`;
 }
 
 function crumbs(trail: readonly { readonly label: string; readonly path: string }[]): string {
@@ -198,47 +192,6 @@ function entryCard(entry: CatalogEntry): string {
     summaryLine(entry) +
     '</li>'
   );
-}
-
-/**
- * Фильтры каталога — ссылки, сгруппированные по тому, по чему идёт сужение.
- *
- * Без них краулер доходит до страницы списка только через карту сайта, а
- * читатель — никогда: у каталога не было бы ни одного способа сузить выборку.
- * До этого среза группа была одна и плоская: «Берлин» стоял рядом с «Frontend
- * Developer — Берлин», и что из этого место, а что роль, читатель не видел.
- */
-function filterPanel(groups: readonly CatalogFilterGroup[]): string {
-  const filled = groups.filter((group) => group.links.length > 0);
-  if (filled.length === 0) return '';
-  return (
-    '<nav class="cat-box cat-filters" aria-label="Фильтры каталога"><h2>Сузить выборку</h2>' +
-    filled
-      .map(
-        (group) =>
-          `<section class="cat-filter"><h3>${escapeHtml(group.title)}</h3><ul>` +
-          group.links
-            .map(
-              (link) =>
-                `<li><a href="${escapeHtml(link.path)}">${escapeHtml(link.label)}</a> <span>${link.count}</span></li>`,
-            )
-            .join('') +
-          '</ul></section>',
-      )
-      .join('') +
-    '</nav>'
-  );
-}
-
-function pagination(page: CatalogPage): string {
-  if (page.pageCount <= 1) return '';
-  const previous = page.previousPath
-    ? `<a rel="prev" href="${escapeHtml(page.previousPath)}">← Предыдущая</a>`
-    : '';
-  const next = page.nextPath
-    ? `<a rel="next" href="${escapeHtml(page.nextPath)}">Следующая →</a>`
-    : '';
-  return `<nav class="cat-pager" aria-label="Страницы каталога">${previous}<span>Страница ${page.page} из ${page.pageCount}</span>${next}</nav>`;
 }
 
 /**
@@ -305,43 +258,30 @@ export function renderGoneDocument(
 /**
  * Одна страница-список на все случаи: корень каталога и списки по месту и роли
  * отличаются только заголовком и адресом, а вёрстка, разметка и постраничная
- * навигация у них общие (B209, срез 2b).
+ * навигация у них общие (B209, срез 2b). Вёрстка — макет 08 (B569).
  */
 export function renderCatalogDocument(
   page: CatalogPage,
   filters: readonly CatalogFilterGroup[] = [],
+  extras: ListingExtras = {},
 ): string {
   const empty = page.total === 0;
-  const title = page.documentTitle;
-  const description = page.description;
-
-  const root = page.canonicalPath === CATALOG_ROOT;
   const body =
     siteHeader() +
-    '<main id="main" class="ps-wrap ps-page">' +
-    crumbs(root ? [] : [{ label: 'Вакансии', path: CATALOG_ROOT }]) +
-    `<div class="cat-head"><h1>${escapeHtml(page.heading)}</h1>` +
+    '<main id="main" class="lv-main">' +
     (empty
-      ? '<p class="cat-empty">Каталог пока пуст: ни одной вакансии с публичным адресом ' +
-        'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p></div>'
-      : `<p class="cat-lead">${countLabel(page.total)} с открытых площадок и сайтов работодателей. ` +
-        'У каждой указаны источник и дата, отклик подаётся на сайте работодателя.</p></div>') +
-    '<div class="cat-layout"><div>' +
-    (empty
-      ? ''
-      : factsBlock(page) +
-        `<ul class="cat-list">${page.entries.map(entryCard).join('')}</ul>` +
-        pagination(page)) +
-    '</div><aside class="cat-side">' +
-    CTA_BOX +
-    filterPanel(filters) +
-    '</aside></div></main>' +
+      ? '<div class="ps-wrap ps-page">' +
+        `<div class="cat-head"><h1>${escapeHtml(page.heading)}</h1>` +
+        '<p class="cat-empty">Каталог пока пуст: ни одной вакансии с публичным адресом ' +
+        'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p></div></div>'
+      : renderListingMain(page, filters, extras)) +
+    '</main>' +
     siteFooter();
 
   return shell(
     head({
-      title,
-      description,
+      title: page.documentTitle,
+      description: page.description,
       canonicalPath: page.canonicalPath,
       jsonLd: page.jsonLd,
       // Пустой каталог индексировать нечего: пустая страница в выдаче вредит
