@@ -687,3 +687,38 @@ describe('глубокий проход по тикам (B219)', () => {
     expect(box.progress?.page).toBeGreaterThan(0);
   });
 });
+
+describe('HhCrawlCoordinator: роли кандидатов ищутся по названию (27.10)', () => {
+  it('на каждом тике спрашивает hh названия ролей кандидатов вдобавок к справочнику', async () => {
+    const { store } = settingsStore({ lastFullSweepAt: new Date().toISOString() });
+    const urls: string[] = [];
+    const coordinator = new HhCrawlCoordinator(store, {
+      fetchPage: async (url) => {
+        urls.push(url);
+        return { status: 200, body: page([1, 2]) };
+      },
+      sleep,
+      demandTerms: () => ['head of ai engineering'],
+    });
+    await coordinator.collect();
+    const byName = urls.map((url) => new URL(url)).filter((url) => url.searchParams.has('text'));
+    expect(byName.length).toBeGreaterThan(0);
+    expect(byName[0]?.searchParams.get('text')).toBe('head of ai engineering');
+    expect(byName[0]?.searchParams.get('search_field')).toBe('name');
+    expect(byName[0]?.searchParams.has('professional_role')).toBe(false);
+  });
+
+  it('без спроса запросов по названию нет', async () => {
+    const { store } = settingsStore({ lastFullSweepAt: new Date().toISOString() });
+    const urls: string[] = [];
+    const coordinator = new HhCrawlCoordinator(store, {
+      fetchPage: async (url) => {
+        urls.push(url);
+        return { status: 200, body: page([1]) };
+      },
+      sleep,
+    });
+    await coordinator.collect();
+    expect(urls.some((url) => new URL(url).searchParams.has('text'))).toBe(false);
+  });
+});

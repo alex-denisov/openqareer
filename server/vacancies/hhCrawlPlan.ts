@@ -49,18 +49,15 @@ export const HH_SCHEDULE_VALUES = [
 export type HhSchedule = (typeof HH_SCHEDULE_VALUES)[number];
 
 /** Значения типа занятости в фильтре площадки — четвёртая ось дробления (B219). */
-export const HH_EMPLOYMENT_VALUES = [
-  'full',
-  'part',
-  'project',
-  'volunteer',
-  'probation',
-] as const;
+export const HH_EMPLOYMENT_VALUES = ['full', 'part', 'project', 'volunteer', 'probation'] as const;
 
 export type HhEmployment = (typeof HH_EMPLOYMENT_VALUES)[number];
 
 export interface HhCrawlQuery {
+  /** Роль справочника площадки; пусто у запроса по названию. */
   readonly roleId: string;
+  /** Поиск по названию вакансии: роли кандидатов вне справочника (27.10). */
+  readonly text?: string;
   readonly experience?: HhExperience;
   readonly areaId?: string;
   readonly schedule?: HhSchedule;
@@ -106,7 +103,11 @@ export interface CrawlPlanDeps {
 
 export function planQueryUrl(query: HhCrawlQuery, searchPeriodDays: number, page: number): string {
   const url = new URL('https://hh.ru/search/vacancy');
-  url.searchParams.set('professional_role', query.roleId);
+  if (query.roleId) url.searchParams.set('professional_role', query.roleId);
+  if (query.text) {
+    url.searchParams.set('text', query.text);
+    url.searchParams.set('search_field', 'name');
+  }
   if (query.experience) url.searchParams.set('experience', query.experience);
   if (query.areaId) url.searchParams.set('area', query.areaId);
   if (query.schedule) url.searchParams.set('schedule', query.schedule);
