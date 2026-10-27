@@ -112,3 +112,11 @@ describe('опрос начинается с ролей кандидатов (27
     );
   });
 });
+
+describe('спрос LinkedIn и Indeed — только латиница (27.10)', () => {
+  it('русские названия ролей уходят только в поиск hh', () => {
+    const combos = fanCombosForSync(Date.now(), 60, 40, ['главный бухгалтер', 'head of ai']);
+    expect(combos.some((combo) => combo.term === 'главный бухгалтер')).toBe(false);
+    expect(combos.some((combo) => combo.term === 'head of ai')).toBe(true);
+  });
+});

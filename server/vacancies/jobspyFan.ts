@@ -277,14 +277,16 @@ export function fanCombosForSync(
   combosPerSync: number,
   demandTerms: readonly string[],
 ): FanCombo[] {
-  const demandSize = demandTerms.length * DEMAND_TARGETS.length;
+  // Русские названия — только для hh: LinkedIn и Indeed ищут по-английски.
+  const latin = demandTerms.filter((term) => LATIN_TERM.test(term));
+  const demandSize = latin.length * DEMAND_TARGETS.length;
   const demandCount = Math.min(demandSize, Math.floor(combosPerSync * DEMAND_SHARE));
   const tick = Math.floor(nowMs / (intervalMinutes * 60_000));
   const demandStart = demandSize > 0 ? (tick * demandCount) % demandSize : 0;
   const demand = Array.from({ length: demandCount }, (_, step) => {
     const at = (demandStart + step) % demandSize;
     return {
-      term: demandTerms[Math.floor(at / DEMAND_TARGETS.length)]!,
+      term: latin[Math.floor(at / DEMAND_TARGETS.length)]!,
       target: DEMAND_TARGETS[at % DEMAND_TARGETS.length]!,
     };
   });
@@ -294,6 +296,9 @@ export function fanCombosForSync(
   );
   return [...demand, ...fan];
 }
+
+/** Запрос, который понимают LinkedIn и Indeed. */
+const LATIN_TERM = /^[a-z0-9&+.,'\s-]+$/u;
 
 /** Источник ролей спроса для опроса; без него опрос — прежний веер. */
 let readDemandTerms: () => readonly string[] = () => [];

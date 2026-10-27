@@ -9,11 +9,15 @@ import { rulesParse } from './titleParse/rulesParse';
  * (Head of AI, руководитель поддержки, главный бухгалтер) получал ноль
  * вакансий из этих площадок, сколько бы их там ни было. Поэтому роль, которую
  * кандидат выбрал или которую ему назвал консультант, становится запросом
- * сама. Обе площадки ищут по-английски: русское название переводится через
- * словарь ролей, а непереведённое не уходит — запрос по-русски вернул бы шум.
+ * сама. LinkedIn и Indeed ищут по-английски: русское название переводится
+ * через словарь ролей. hh ищет по-русски: «Главный бухгалтер» там не
+ * «head of accounting», поэтому русское название роли, которую словарь узнал,
+ * остаётся запросом рядом с переводом. Название вне словаря не уходит вовсе.
  */
 
 const LATIN_ONLY = /^[a-z0-9&+.,'\s-]+$/u;
+const CYRILLIC_ROLE = /^[\p{Script=Cyrillic}a-z0-9&+.,'\s-]+$/u;
+
 const MIN_WORDS = 2;
 const MAX_TERM_LENGTH = 60;
 const KNOWN_TERMS: ReadonlySet<string> = new Set(FAN_TERMS);
@@ -54,6 +58,18 @@ function translate(part: string): string | null {
   return null;
 }
 
+function fitsTerm(term: string): boolean {
+  return term.split(' ').length >= MIN_WORDS && term.length <= MAX_TERM_LENGTH;
+}
+
+/** Русское название роли, которую словарь узнал, — запрос для hh. */
+function russianTermFor(part: string): string | null {
+  const normalized = normalize(part);
+  if (LATIN_ONLY.test(normalized) || !CYRILLIC_ROLE.test(normalized)) return null;
+  const known = rulesParse(part).functions.some((code) => code !== 'other');
+  return known && fitsTerm(normalized) ? normalized : null;
+}
+
 function termFor(part: string): string | null {
   const normalized = normalize(part);
   const english = LATIN_ONLY.test(normalized) ? normalized : normalize(translate(part) ?? '');
@@ -68,6 +84,8 @@ export function searchTermsForRoles(titles: readonly string[]): string[] {
     for (const part of title.split(/\s+\/\s+|\s*\|\s*/u)) {
       const term = termFor(part);
       if (term && !KNOWN_TERMS.has(term)) terms.add(term);
+      const russian = russianTermFor(part);
+      if (russian) terms.add(russian);
     }
   }
   return [...terms];

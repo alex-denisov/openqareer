@@ -380,3 +380,25 @@ describe('proposeRoles: короткое имя при равной частот
     expect(roles[0]?.title).toBe('VP of AI');
   });
 });
+
+describe('proposeRoles: описание вакансии — не имя роли (27.10)', () => {
+  it('короткое название побеждает длинное, даже встретившееся чаще', () => {
+    const long = 'Director of Applied Science and Engineering - Knowledge Graphs & AI';
+    const roles = proposeRoles({
+      named: [],
+      pool: [
+        ...Array.from({ length: 2 }, () => vacancy(long)),
+        ...[
+          'AI Director',
+          'Director, AI Platforms',
+          'VP of AI Engineering',
+          'Chief AI Officer',
+        ].flatMap((title) => [vacancy(title)]),
+        ...Array.from({ length: 2 }, () => vacancy('Director of AI')),
+      ],
+      candidateSkills: [],
+      roleKey: () => 'ai-ml:top',
+    });
+    expect(roles[0]?.title).toBe('Director of AI');
+  });
+});

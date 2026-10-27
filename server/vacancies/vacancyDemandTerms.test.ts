@@ -23,8 +23,14 @@ describe('роли кандидатов → запросы к LinkedIn и Indeed
     expect(searchTermsForRoles(['CTO', 'Chief of Staff'])).toEqual([]);
   });
 
-  it('название, которое словарь не перевёл, не уходит запросом по-русски', () => {
+  it('название, которого словарь не знает, не уходит запросом', () => {
     expect(searchTermsForRoles(['Совсем непонятная должность'])).toEqual([]);
+  });
+
+  it('русское название роли остаётся запросом для hh рядом с переводом', () => {
+    const terms = searchTermsForRoles(['Главный бухгалтер', 'Руководитель направления AI']);
+    expect(terms).toContain('главный бухгалтер');
+    expect(terms).toContain('руководитель направления ai');
   });
 
   it('без повторов', () => {
