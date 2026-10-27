@@ -1,6 +1,8 @@
+import jpeg from 'jpeg-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FootprintRequestGate } from '../../osint/adapters/requestScheduler';
 import { collectRecruiterDossier, nameNicknames, resetProfileRefusals } from './collectRecruiterDossier';
+import { resetPhotoRefusals } from './photoHash';
 
 const now = () => new Date('2026-10-27T00:00:00.000Z');
 const person = { fullName: 'Anna Smith', companyName: 'Acme', companyDomain: 'acme.com' };
@@ -11,6 +13,7 @@ function router(routes: Record<string, unknown>) {
     const key = Object.keys(routes).find((prefix) => url.startsWith(prefix));
     if (!key) return new Response('', { status: 404 });
     const body = routes[key];
+    if (Buffer.isBuffer(body)) return new Response(new Uint8Array(body), { status: 200, headers: { 'content-type': 'image/jpeg' } });
     return typeof body === 'string'
       ? new Response(body, { status: 200, headers: { 'content-type': 'text/html' } })
       : new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -21,11 +24,33 @@ const deps = (fetch: ReturnType<typeof router>) => ({
   exaApiKey: 'test-key',
   fetch,
   requestGate: new FootprintRequestGate({ intervalMs: 0 }),
+  lookupHost: async () => ['93.184.216.34'],
   now,
 });
 
+/** Портрет-заглушка: пятно в разном месте — разные люди. */
+function portrait(spotX: number, size = 96, mirror = false): Buffer {
+  const data = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const gradient = ((mirror ? size - x : x) / size) * 60 + (y / size) * 30;
+      const value = Math.min(255, Math.round(gradient) + (Math.hypot(x - spotX * size, y - size / 2) < size / 5 ? 120 : 0));
+      data.set([value, value, value, 255], (y * size + x) * 4);
+    }
+  }
+  return Buffer.from(jpeg.encode({ data, width: size, height: size }, 85).data);
+}
+
+const seedPage = {
+  url: 'https://www.linkedin.com/in/annasmith', title: 'Anna Smith - Acme', text: 'Anna Smith\nTalent Partner at Acme\nLondon, UK',
+  image: 'https://media.licdn.com/anna.jpg',
+};
+
 describe('recruiter dossier', () => {
-  beforeEach(() => resetProfileRefusals());
+  beforeEach(() => {
+    resetProfileRefusals();
+    resetPhotoRefusals();
+  });
   it('collects channels only from open pages that name the person', async () => {
     const fetch = router({
       'https://api.exa.ai/search': {
@@ -196,5 +221,67 @@ describe('recruiter dossier', () => {
     });
     const { channels } = await collectRecruiterDossier(person, deps(fetch));
     expect(channels.some((c) => c.kind === 'linkedin')).toBe(false);
+  });
+
+  it('confirms Telegram and VK through the same photo plus a second signal; a namesake from the same city stays out', async () => {
+    const vkPage = (nick: string, photo: string) => `<script>{"method":"users.get","response":[{"first_name":"Anna","last_name":"Smith",`
+      + `"about":"London","screen_name":"${nick}","photo_200":"${photo.replace(/\//gu, '\\/')}"}]}</script>`;
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [seedPage] },
+      'https://media.licdn.com/anna.jpg': portrait(0.3),
+      'https://cdn4.telesco.pe/anna.jpg': portrait(0.3, 64),
+      'https://sun9-1.userapi.com/anna.jpg': portrait(0.3, 200),
+      'https://sun9-1.userapi.com/other.jpg': portrait(0.75, 96, true),
+      'https://t.me/annasmith': '<meta property="og:title" content="Anna Smith"><meta property="og:description" content="London"><meta property="og:image" content="https://cdn4.telesco.pe/anna.jpg">',
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+      'https://vk.com/annasmith': vkPage('annasmith', 'https://sun9-1.userapi.com/other.jpg'),
+      'https://vk.com/anna_smith': vkPage('anna_smith', 'https://sun9-1.userapi.com/anna.jpg'),
+    });
+
+    const { channels } = await collectRecruiterDossier({ ...person, companyName: 'Globex', linkedinUrl: seedPage.url }, deps(fetch));
+
+    expect(channels.find((c) => c.kind === 'telegram')).toMatchObject({ value: '@annasmith', status: 'published' });
+    expect(channels.filter((c) => c.kind === 'vk').map((c) => `${c.value}:${c.status}`)).toEqual(['anna_smith:published']);
+  });
+
+  it('does not download candidate photos when the person has no profile photo', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [{ ...seedPage, image: undefined }] },
+      'https://t.me/annasmith': '<meta property="og:title" content="Anna Smith"><meta property="og:image" content="https://cdn4.telesco.pe/anna.jpg">',
+    });
+    await collectRecruiterDossier({ ...person, linkedinUrl: seedPage.url }, deps(fetch));
+    expect(fetch.mock.calls.map(([url]) => String(url)).some((url) => url.includes('telesco.pe'))).toBe(false);
+  });
+
+  it('never takes a Telegram channel or group for a personal account', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': {
+        results: [{ url: 'https://acme.com/team', title: 'Team', text: 'Anna Smith — recruiter. https://instagram.com/annahires' }],
+      },
+      'https://t.me/annahires': '<meta property="og:title" content="Anna Smith"><div class="tgme_page_extra">80 subscribers</div><a>Preview channel</a>',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'telegram' && c.value === '@annahires')).toBe(false);
+  });
+
+  it('drops a t.me link from a page when it leads to a channel', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': {
+        results: [{ url: 'https://conf.example/speakers', title: 'Speakers', text: 'Anna Smith, Talent Partner at Acme. t.me/anna_hr' }],
+      },
+      'https://t.me/anna_hr': '<meta property="og:title" content="HR notes"><div class="tgme_page_extra">80 subscribers</div>',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'telegram')).toBe(false);
+  });
+
+  it('takes the contacts a person published in the About section of their own open LinkedIn profile', async () => {
+    const own = { ...seedPage, text: 'Anna Smith\nTalent Partner at Acme\nLondon, UK\nAbout: write me anna.smith@gmail.com or WhatsApp +44 7700 900123' };
+    const fetch = router({ 'https://api.exa.ai/search': { results: [own] } });
+    const { channels } = await collectRecruiterDossier({ ...person, linkedinUrl: seedPage.url }, deps(fetch));
+    expect(channels.filter((c) => c.sourceUrl === seedPage.url).map((c) => `${c.kind}=${c.value}:${c.status}`)).toEqual(
+      expect.arrayContaining(['email_personal=anna.smith@gmail.com:published']),
+    );
+    expect(channels.some((c) => c.sourceUrl === seedPage.url && /7700900123/u.test(c.value.replace(/\D/gu, '')))).toBe(true);
   });
 });

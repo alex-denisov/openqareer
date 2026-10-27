@@ -51,7 +51,35 @@ const COUNTRY_REGION: ReadonlyArray<readonly [string, PlaceRegion]> = [
   ['azerbaijan', 'cis'], ['азербайджан', 'cis'], ['belarus', 'cis'], ['беларусь', 'cis'],
   ['kyrgyzstan', 'cis'], ['киргизия', 'cis'], ['moldova', 'cis'], ['молдова', 'cis'],
   ['tajikistan', 'cis'], ['таджикистан', 'cis'],
+  // 27.10: страны, которые Himalayas и Indeed пишут без города, — иначе «страна не указана».
+  ['jamaica', 'latam'], ['bahamas', 'latam'], ['the bahamas', 'latam'], ['suriname', 'latam'],
+  ['guyana', 'latam'], ['belize', 'latam'], ['haiti', 'latam'], ['cuba', 'latam'],
+  ['trinidad and tobago', 'latam'], ['barbados', 'latam'], ['puerto rico', 'latam'],
+  ['cayman islands', 'latam'], ['bermuda', 'latam'],
+  ['slovakia', 'eu'], ['slovenia', 'eu'], ['luxembourg', 'eu'], ['malta', 'eu'], ['iceland', 'eu'],
+  ['albania', 'eu'], ['bosnia and herzegovina', 'eu'], ['north macedonia', 'eu'], ['kosovo', 'eu'],
+  ['iraq', 'mena'], ['iran', 'mena'], ['libya', 'mena'], ['syria', 'mena'], ['yemen', 'mena'],
+  ['palestine', 'mena'],
+  ['sri lanka', 'apac'], ['nepal', 'apac'], ['cambodia', 'apac'], ['myanmar', 'apac'],
+  ['mongolia', 'apac'], ['laos', 'apac'], ['afghanistan', 'apac'],
 ];
+
+/**
+ * Страны вне семи рынков платформы: регион у них не выводится, но удалёнка
+ * оттуда — «другая страна», а не «страна не указана» (27.10, Нигерия).
+ */
+const COUNTRIES_OUTSIDE_MARKETS: ReadonlySet<string> = new Set([
+  'nigeria', 'kenya', 'south africa', 'ghana', 'ethiopia', 'uganda', 'tanzania', 'rwanda',
+  'senegal', 'cameroon', "cote d'ivoire", "côte d'ivoire", 'ivory coast', 'zambia', 'zimbabwe',
+  'botswana', 'namibia', 'mauritius', 'angola', 'mozambique', 'madagascar', 'malawi', 'benin',
+  'togo', 'mali', 'sudan',
+]);
+
+function namesCountryOutsideMarkets(location: string | undefined): boolean {
+  return (location ?? '')
+    .split(/[,·|/;]/u)
+    .some((part) => COUNTRIES_OUTSIDE_MARKETS.has(normalisePlace(part)));
+}
 
 /** ISO-коды стран, которыми площадки называют рынок (Indeed, LinkedIn). */
 const ISO_REGION: Readonly<Record<string, PlaceRegion>> = {
@@ -119,7 +147,7 @@ export function regionOfVacancy(place: VacancyPlace): PlaceRegion | undefined {
   const location = place.location?.trim();
   if (!location) return undefined;
   // Страна обычно стоит последней: «Düsseldorf, North Rhine-Westphalia, Germany».
-  const parts = location.split(/[,·|/;]/u).map((part) => part.trim()).filter(Boolean);
+  const parts = location.split(/[,·|/;]|\s[-–—]\s/u).map((part) => part.trim()).filter(Boolean);
   // «Chicago, IL»: после города код штата, а не ISO-код Израиля (B546).
   if (parts.length > 1 && northAmericanCountryOf(parts.at(-1) ?? '')) return 'us';
   for (const part of [...parts].reverse()) {
@@ -127,6 +155,14 @@ export function regionOfVacancy(place: VacancyPlace): PlaceRegion | undefined {
     if (byCountry) return byCountry;
   }
   const haystack = ` ${normalisePlace(location)} `;
+  // «Sunnyvale, California USA»: страна последним словом части (28.10).
+  for (const part of [...parts].reverse()) {
+    const word = part.split(/\s+/u).at(-1) ?? '';
+    // «Remote in» — не Индия: двухбуквенный код только заглавными.
+    if (word.length <= 2 && word !== word.toUpperCase()) continue;
+    const byLastWord = regionOfCountryName(word);
+    if (byLastWord) return byLastWord;
+  }
   for (const [city, region] of CITY_REGION) {
     if (haystack.includes(` ${city} `)) return region;
   }
@@ -165,7 +201,7 @@ export function remoteCountryFit(
     location: cluster.canonicalLocation,
     country: cluster.companyFeatures?.country,
   });
-  if (!region) return 'unknown';
+  if (!region) return namesCountryOutsideMarkets(cluster.canonicalLocation) ? 'other' : 'unknown';
   return new Set<PlaceRegion>(regions).has(region as PlaceRegion) ? undefined : 'other';
 }
 
