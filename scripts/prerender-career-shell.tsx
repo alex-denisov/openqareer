@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { transform } from 'esbuild';
 import { pathToFileURL } from 'node:url';
@@ -48,6 +48,14 @@ import {
   legalPath,
   type LegalDocSlug,
 } from '../shared/legalRegistry';
+
+import {
+  onestFontFaceCss,
+  withOgImage,
+  withOnestPreload,
+  type OgImageName,
+  type OnestFiles,
+} from '../shared/seoHead';
 
 const SITE_ORIGIN = 'https://openqareer.com';
 
@@ -354,7 +362,8 @@ async function writeServerPageStyles(distDirectory: string): Promise<string> {
   if (/@import\b|url\s*\(/iu.test(source)) {
     throw new Error('Server page styles must be self-contained before relocation');
   }
-  const { code: css } = await transform(source, { loader: 'css', minify: true });
+  const { code: minified } = await transform(source, { loader: 'css', minify: true });
+  const css = `${onestFontFaceCss(await onestFiles(distDirectory))}${minified}`;
   const path = `/assets/server-pages-${createHash('sha256').update(css).digest('hex').slice(0, 12)}.css`;
   await mkdir(`${distDirectory}/assets`, { recursive: true });
   await writeFile(`${distDirectory}${path}`, css);
@@ -554,6 +563,52 @@ async function writeNotFoundPage(html: string, distDirectory: string): Promise<v
   );
 }
 
+/** Hashed Onest woff2 files in `dist/assets`, keyed like `cyrillic-400`. */
+export async function onestFiles(distDirectory: string): Promise<OnestFiles> {
+  const names = await readdir(`${distDirectory}/assets`).catch(() => [] as string[]);
+  const entries = names.flatMap((name) => {
+    const match = /^onest-(cyrillic|latin)-(400|600)-normal-[\w-]+\.woff2$/u.exec(name);
+    return match ? [[`${match[1]}-${match[2]}`, `/assets/${name}`] as const] : [];
+  });
+  return Object.fromEntries(entries);
+}
+
+const OG_BY_FILE: Readonly<Record<string, OgImageName>> = {
+  'faq.html': 'faq',
+  'tariffs.html': 'tariffs',
+  'country-fit.html': 'salary-calculator',
+  'resume-builder.html': 'resume',
+  'relocation.html': 'relocation',
+  'salary-market.html': 'salaries',
+};
+
+/** SEO-03/04: font preload and the page's own share image, applied to the written documents. */
+async function applySeoHead(indexPath: string, distDirectory: string): Promise<void> {
+  const files = await onestFiles(distDirectory);
+  const targets = [
+    indexPath,
+    ...['support.html', ...Object.keys(OG_BY_FILE)].map((file) => `${distDirectory}/${file}`),
+    ...LEGAL_DOCS.map((doc) => `${distDirectory}/${legalDocumentFileName(doc.slug)}`),
+  ];
+  for (const target of targets) {
+    const file = target.slice(target.lastIndexOf('/') + 1);
+    const og = OG_BY_FILE[file];
+    const current = await readFile(target, 'utf8');
+    const withFonts = withOnestPreload(current, files);
+    await writeFile(target, og ? withOgImage(withFonts, og) : withFonts);
+  }
+}
+
+async function writeServerTemplates(
+  html: string,
+  indexPath: string,
+  distDirectory: string,
+): Promise<void> {
+  await writeSalaryTemplate(html, distDirectory);
+  await writeNotFoundPage(html, distDirectory);
+  await applySeoHead(indexPath, distDirectory);
+}
+
 export async function prerenderShells(
   indexPath: string,
   adminPath: string,
@@ -601,8 +656,7 @@ export async function prerenderShells(
   }
   await writeHelpPages(html, distDirectory, manifest);
   await writeToolPages(html, distDirectory, manifest);
-  await writeSalaryTemplate(html, distDirectory);
-  await writeNotFoundPage(html, distDirectory);
+  await writeServerTemplates(html, indexPath, distDirectory);
   await writeAuthPages(html, distDirectory, manifest ? authResourceHints(manifest) : '');
 
   // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
