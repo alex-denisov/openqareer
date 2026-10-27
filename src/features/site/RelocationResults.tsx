@@ -241,6 +241,12 @@ function CountryPicker({
   );
 }
 
+const PATHS_HEADING: Readonly<Record<number, string>> = {
+  1: 'Путь, который вам открыт',
+  2: 'Два пути, которые вам открыты',
+  3: 'Три пути, которые вам открыты',
+};
+
 interface RelocationResultsProps {
   readonly answers: RelocationAnswers;
   readonly cards: readonly RelocationCard[];
@@ -263,11 +269,7 @@ export function RelocationResults({
         <div className="rl-res-h">
           <div>
             <span className="ps-label">{isExample ? 'Пример результата' : 'Ваш результат'}</span>
-            <h2 id="rl-result-h">
-              {count === 1
-                ? 'Путь в выбранную страну'
-                : `Пути в ${count} ${count < 5 ? 'страны' : 'стран'}`}
-            </h2>
+            <h2 id="rl-result-h">{PATHS_HEADING[count] ?? PATHS_HEADING[3]}</h2>
           </div>
           <span className="ps-chip is-warn">
             <Clock size={14} weight="bold" aria-hidden="true" />

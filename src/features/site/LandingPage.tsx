@@ -378,6 +378,12 @@ function ToolsSection({ remote }: { remote: string }) {
             </p>
             <span className="ps-go">Открыть удалённые →</span>
           </a>
+          <a className="ps-tool" href="/tools/relocation">
+            <span className="ps-chip is-ok">работает</span>
+            <h3>В какую страну переехать</h3>
+            <p>Какие пути открыты с вашим паспортом и профессией.</p>
+            <span className="ps-go">Оценить переезд →</span>
+          </a>
         </div>
         <p className="ps-note">
           В кабинете уже есть сравнение стран и расчёт налогов при переезде.

@@ -18,6 +18,10 @@ describe('relocation public first paint (B354)', () => {
     expect(html).toContain('Скопировать ссылку');
     expect(html).toContain('Полная оценка в Pro');
     expect(html).toContain('Что дальше');
+    expect(html).toContain('Три пути, которые вам открыты');
+    for (const href of ['/salaries/germany', '/tools/resume', '/tools/interview-questions'])
+      expect(html).toContain(`href="${href}"`);
+    expect(html).toContain('href="/tools/relocation">В какую страну переехать');
     expect(html).toContain('Налога на доход нет');
     expect(html).not.toContain('пока недоступно');
   });

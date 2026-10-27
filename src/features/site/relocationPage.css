@@ -600,3 +600,23 @@
     display: none;
   }
 }
+
+/* faq chevron, as in the mockup */
+.rl-page summary {
+  align-items: center;
+}
+.rl-page summary::after {
+  content: '';
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 4px;
+  border-right: 1.8px solid var(--ps-mute);
+  border-bottom: 1.8px solid var(--ps-mute);
+  transform: rotate(45deg) translate(-3px, -3px);
+  transition: transform 0.18s ease;
+}
+.rl-page details[open] summary::after {
+  content: '';
+  transform: rotate(225deg) translate(-2px, -2px);
+}

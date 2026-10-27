@@ -195,9 +195,11 @@ function AfterSignup() {
 }
 
 const NEXT_LINKS = [
-  ['/vacancies', 'Вакансии в открытом каталоге'],
-  ['/tools/country-fit', 'Зарплата на руки в 13 странах'],
-  ['/faq', 'Все вопросы о сервисе'],
+  ['/vacancies/relocation', 'Вакансии с релокацией в открытом каталоге'],
+  ['/salaries/germany', 'Зарплаты в Германии на руки'],
+  ['/tools/resume', 'Резюме для работодателя за рубежом'],
+  ['/tools/interview-questions', 'Вопросы на собеседовании'],
+  ['/faq#abroad', 'Все вопросы о переезде'],
 ] as const;
 
 export function relocationFaq(): readonly (readonly [string, string])[] {
