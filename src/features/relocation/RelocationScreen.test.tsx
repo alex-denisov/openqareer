@@ -191,9 +191,9 @@ describe('RelocationScreen', () => {
     await flushLoad();
     await clickButton('Мои данные');
 
-    expect(host?.textContent).toContain('Укажите страну гражданства');
-    expect(host?.textContent).toContain('Срок действия документа «Вид на жительство» истекает');
-    expect(host?.querySelector('[aria-label="Предупреждения профиля"]')).not.toBeNull();
+    // Mockup 15: no banner above the page, the warning sits in the document's own row.
+    expect(host?.textContent).toContain('До 20.10.2026: срок скоро закончится');
+    expect(host?.querySelector('[aria-label="Предупреждения профиля"]')).toBeNull();
   });
 
   it('resumes an interrupted questionnaire at its saved step', async () => {
