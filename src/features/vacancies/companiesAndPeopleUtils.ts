@@ -177,11 +177,21 @@ export function groupCompanyPeople(responses: readonly VacancyConnectionCircles[
 const WRITE_STEP = /^\s*напис/iu;
 
 /** Saved step first; otherwise one derived from a real path or vacancy; otherwise none (''). */
+/** Срок прошёл, если его день закончился: шаг «до 27.10» 28.10 уже не показывают (28.10). */
+function isStepOverdue(dueAt: string | null, now: number): boolean {
+  const due = dueAt ? Date.parse(dueAt) : Number.NaN;
+  if (!Number.isFinite(due)) return false;
+  const endOfDueDay = new Date(due);
+  endOfDueDay.setHours(23, 59, 59, 999);
+  return endOfDueDay.getTime() < now;
+}
+
 export function companyNextStepText(
   company: CandidateCompanyOpportunity,
   people: { readonly people: readonly CompanyPerson[] },
+  now = Date.now(),
 ): string {
-  const saved = company.nextStep;
+  const saved = isStepOverdue(company.nextStep?.dueAt ?? null, now) ? null : company.nextStep;
   if (saved && (people.people.length > 0 || !WRITE_STEP.test(saved.text))) {
     const due = saved.dueAt ? `, до ${formatObservedDate(saved.dueAt)}` : '';
     return `Следующий шаг: ${saved.text}${due}`;
