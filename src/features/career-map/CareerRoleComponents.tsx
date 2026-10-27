@@ -46,7 +46,11 @@ export function withoutTrailingPeriod(text: string): string {
 }
 
 /** «вилка · N вакансий · дата» — числа только с выборкой и датой. */
+export const NO_VACANCIES_NOTE =
+  'Вакансий с этим названием пока нет, в подборку роль ничего не добавляет';
+
 export function roleMetaLine(role: CareerRoleModel): string {
+  if (role.vacancyCount === 0) return NO_VACANCIES_NOTE;
   const parts = [role.wageDisplay, formatVacancyCount(role.vacancyCount)];
   if (role.wageSampleNote) {
     parts.push(

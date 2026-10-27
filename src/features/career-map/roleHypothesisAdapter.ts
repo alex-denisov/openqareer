@@ -198,7 +198,12 @@ export function mapProposedRolesToCareerRoles(
   roles: readonly ProposedRole[],
   decisions: RoleDecisions,
 ): readonly CareerRoleModel[] {
-  return roles.map((role) => mapProposedRoleToCareerRole(role, decisions));
+  const mapped = roles.map((role) => mapProposedRoleToCareerRole(role, decisions));
+  // Роль без вакансий не стоит среди ролей рынка (28.10): она внизу, с честной подписью.
+  return [
+    ...mapped.filter((role) => role.vacancyCount > 0),
+    ...mapped.filter((role) => role.vacancyCount === 0),
+  ];
 }
 
 /** Дата и площадки выборки, из которой сервер назвал роли (B445). */
