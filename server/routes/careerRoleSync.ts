@@ -2,6 +2,7 @@ import { careerRoleId, type ProposedRole } from '../../shared/roleProposals';
 import { roleWorkFamily } from '../../shared/roleWorkFamilies';
 import type { CareerRoleRef } from '../vacancies/campaign';
 import { careerRoleKey } from '../vacancies/careerRoleKey';
+import { searchTermsForRoles } from '../vacancies/vacancyDemandTerms';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
 import { rejectedCareerRoleIds } from './campaignContext';
@@ -40,10 +41,8 @@ export function careerRolesWithCandidateChoices(
   const chosen = (workspace?.campaign?.roles ?? []).flatMap<ProposedRole>((title) => {
     const id = careerRoleId(title);
     if (known.has(id)) return [];
-    const key = sameRoleKey(title);
-    if (chosenKeys.has(key)) return [];
     known.add(id);
-    chosenKeys.add(key);
+    chosenKeys.add(sameRoleKey(title));
     return [
       {
         id,
@@ -76,12 +75,19 @@ export function careerRolesWithCandidateChoices(
  * не по её названию, поэтому сам себя он не раскачивает. Пишет при изменении.
  */
 export function persistCareerRoles(
-  deps: Pick<RouteDeps, 'candidateStore'> & Partial<Pick<RouteDeps, 'matchedPoolPrecompute'>>,
+  deps: Pick<RouteDeps, 'candidateStore'> &
+    Partial<Pick<RouteDeps, 'matchedPoolPrecompute' | 'vacancyDemand'>>,
   candidateId: string,
   roles: readonly ProposedRole[],
 ): boolean {
   const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
   if (!workspace) return false;
+  // Каждая роль на экране — запрос к площадкам, даже если вакансий по ней ещё
+  // нет: сбор подстраивается под кандидата, а не наоборот (27.10).
+  deps.vacancyDemand?.record(
+    searchTermsForRoles([...(workspace.campaign?.roles ?? []), ...roles.map((role) => role.title)]),
+    Date.now(),
+  );
   // Как и пересборка ролей: без выбора кандидата его поля остаются пустыми.
   const campaign = workspace.campaign ?? {
     roles: [],

@@ -16,7 +16,7 @@ import {
   ZIPRECRUITER_SOURCE_ID,
   GLASSDOOR_SOURCE_ID,
 } from './jobspyAdapters';
-import { FAN_SIZE, fanComboAt, fanStartIndex } from './jobspyFan';
+import { type FanCombo, currentFanDemand, fanCombosForSync } from './jobspyFan';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
 
 /**
@@ -455,36 +455,21 @@ const INDEED_PAGES_PER_COMBO = 4;
 const INDEED_INTERVAL_MINUTES = 60;
 
 interface IndeedState {
-  readonly index: number;
-  readonly startIndex: number;
+  /** Комбинации этого опроса: роли кандидатов, затем окно веера (27.10). */
+  readonly combos: readonly FanCombo[];
+  readonly position: number;
   readonly page: number;
-  readonly wrapped: boolean;
-}
-
-/** Ближайшая комбинация, которую Indeed вообще умеет читать (страна известна). */
-function indeedComboFrom(
-  index: number,
-): { combo: ReturnType<typeof fanComboAt>; index: number } | null {
-  for (let step = 0; step < FAN_SIZE; step += 1) {
-    const at = (index + step) % FAN_SIZE;
-    const combo = fanComboAt(at);
-    if (combo.target.indeedCountry) return { combo, index: at };
-  }
-  // Ни одного рынка со страной Indeed — сбор невозможен, и молчать об этом
-  // нельзя (B199).
-  return null;
 }
 
 function indeedRequest(state: IndeedState, cursor: string | null): PagedRequest | null {
-  const found = indeedComboFrom(state.index);
-  if (!found) return null;
-  const { combo, index } = found;
+  const combo = state.combos[state.position];
+  if (!combo?.target.indeedCountry) return null;
   return {
     url: INDEED_GRAPHQL_URL,
     method: 'POST',
     body: { query: indeedQuery(combo.term, cursor, combo.target.location) },
-    headers: indeedHeaders(combo.target.indeedCountry!),
-    state: { ...state, index },
+    headers: indeedHeaders(combo.target.indeedCountry),
+    state,
   };
 }
 
@@ -492,8 +477,16 @@ const indeed: PagingPlan = {
   pagesPerSync: INDEED_COMBOS_PER_SYNC * INDEED_PAGES_PER_COMBO,
   delayMs: 800,
   first: (_targetUrl, nowMs) => {
-    const startIndex = fanStartIndex(nowMs, INDEED_INTERVAL_MINUTES, INDEED_COMBOS_PER_SYNC);
-    const request = indeedRequest({ index: startIndex, startIndex, page: 1, wrapped: false }, null);
+    // Indeed читает только рынки со страной площадки: у России её нет (B218).
+    const combos = fanCombosForSync(
+      nowMs,
+      INDEED_INTERVAL_MINUTES,
+      INDEED_COMBOS_PER_SYNC,
+      currentFanDemand(),
+    ).filter((combo) => combo.target.indeedCountry);
+    const request = indeedRequest({ combos, position: 0, page: 1 }, null);
+    // Ни одного рынка со страной Indeed — сбор невозможен, и молчать об этом
+    // нельзя (B199).
     if (!request) throw new Error('indeed_fan_has_no_country');
     return request;
   },
@@ -506,15 +499,8 @@ const indeed: PagingPlan = {
     if (cursor && results.length > 0 && state.page < INDEED_PAGES_PER_COMBO) {
       return indeedRequest({ ...state, page: state.page + 1 }, cursor);
     }
-    // Комбинация закрыта — следующий рынок; полный круг означает, что веер
-    // прочитан целиком.
-    const nextIndex = (state.index + 1) % FAN_SIZE;
-    const wrapped = state.wrapped || nextIndex === 0;
-    if (wrapped && nextIndex === state.startIndex) return null;
-    return indeedRequest(
-      { index: nextIndex, startIndex: state.startIndex, page: 1, wrapped },
-      null,
-    );
+    // Комбинация закрыта — следующая из плана опроса.
+    return indeedRequest({ ...state, position: state.position + 1, page: 1 }, null);
   },
 };
 

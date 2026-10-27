@@ -20,6 +20,8 @@ import { TitleModelStep, VertexModelTitleParser } from './vacancies/titleParse/m
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
+import { useFanDemand } from './vacancies/jobspyFan';
+import { SqliteVacancyDemandStore } from './vacancies/vacancyDemandStore';
 import { scheduleSalaryMarketSnapshots } from './salaryMarket/salaryMarketSchedule';
 import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
@@ -47,6 +49,10 @@ const composed = composeVacancyEngine({
 const semanticDatabase = new DatabaseSync(config.databasePath);
 semanticDatabase.exec('PRAGMA journal_mode = WAL;');
 applySqliteBusyTimeout(semanticDatabase);
+// Роли кандидатов идут первыми в опросы LinkedIn и Indeed (27.10): новые первыми.
+const MAX_DEMAND_TERMS = 40;
+const vacancyDemand = new SqliteVacancyDemandStore(semanticDatabase);
+useFanDemand(() => vacancyDemand.recentTerms(Date.now(), MAX_DEMAND_TERMS));
 // Ошибка настройки исполнителя LinkedIn не должна останавливать обслуживание
 // пула вакансий: исполнитель остаётся выключенным, код ошибки — в журнал.
 function readExecutorConfigOrDisable(): LinkedinPoolExecutorConfig {

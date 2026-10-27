@@ -117,6 +117,7 @@ interface BuildAppOptions {
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
   linkedinRemoteLogin?: RouteDeps['linkedinRemoteLogin'];
   matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
+  vacancyDemand?: RouteDeps['vacancyDemand'];
   /** B546: tests inject estimates; runtime reads the table maintenance writes. */
   marketSalaryEstimates?: RouteDeps['marketSalaryEstimates'];
 
@@ -431,6 +432,7 @@ function assembleRouteDeps(
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
+    ...(options.vacancyDemand ? { vacancyDemand: options.vacancyDemand } : {}),
     ...services,
   };
 }

@@ -129,4 +129,25 @@ describe('LinkedIn guest source (B218)', () => {
       ),
     ).rejects.toThrow(/429/);
   });
+
+  it('сначала читает роли кандидатов, затем общий веер (27.10)', async () => {
+    const terms: string[] = [];
+    await fetchLinkedinGuest(
+      {
+        fetchPage: async (url) => {
+          const params = new URL(url).searchParams;
+          if (params.get('start') === '0') terms.push(params.get('keywords')!);
+          return { status: 200, body: '<ul></ul>' };
+        },
+        sleep: async () => {},
+        observedAt: '2026-10-27T09:00:00.000Z',
+        providerCapability: 'provider_permitted',
+        demandTerms: ['head of ai'],
+      },
+      0,
+    );
+    expect(terms[0]).toBe('head of ai');
+    expect(terms.filter((term) => term === 'head of ai').length).toBeGreaterThan(1);
+    expect(terms.at(-1)).not.toBe('head of ai');
+  });
 });

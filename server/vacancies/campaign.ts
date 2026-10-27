@@ -141,13 +141,20 @@ function campaignRoleTitles(input: ResolveCampaignInput): string[] {
   const career = (input.explicit?.careerRoles ?? [])
     .filter((role) => !rejected.has(role.id))
     .map((role) => role.title);
-  const seen = new Set<string>();
-  return [...explicit, ...career].filter((title) => {
-    const key = input.roleKeyOf?.(title) ?? (idOf ? idOf(title) : title.toLowerCase());
-    if (seen.has(key)) return false;
-    seen.add(key);
+  const idKey = (title: string) => (idOf ? idOf(title) : title.toLowerCase());
+  const roleKey = (title: string) => input.roleKeyOf?.(title) ?? idKey(title);
+  // Выбор кандидата не сводится: CTO рядом с VP of Engineering он добавил сам.
+  // Предложенная роль той же функции и уровня, что выбранная, — повтор (27.10).
+  const seenIds = new Set<string>();
+  const kept = explicit.filter((title) => !seenIds.has(idKey(title)) && seenIds.add(idKey(title)));
+  const seenKeys = new Set(kept.map(roleKey));
+  const offered = career.filter((title) => {
+    const key = roleKey(title);
+    if (seenIds.has(idKey(title)) || seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
+  return [...kept, ...offered];
 }
 
 const ACCEPTED_STATUSES = new Set(['confirmed', 'corrected']);

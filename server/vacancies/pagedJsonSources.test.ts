@@ -5,7 +5,7 @@ import {
   rotatingWindowStart,
   themuseQueries,
 } from './pagedJsonSources';
-import { FAN_SIZE, MARKET_TARGETS } from './jobspyFan';
+import { FAN_SIZE, MARKET_TARGETS, useFanDemand } from './jobspyFan';
 
 /**
  * B216 — у каждой постраничной площадки своя механика продолжения. План
@@ -226,6 +226,17 @@ describe('paging plans (B216)', () => {
     expect(withoutCountry).toContain('Russia');
     const request = plan.first('https://apis.indeed.com/graphql', 0);
     expect(request.headers?.['indeed-co']).toMatch(/^[A-Z]{2}$/);
+  });
+
+  it('Indeed: роли кандидатов идут первыми в опросе (27.10)', () => {
+    useFanDemand(() => ['head of customer support']);
+    try {
+      const plan = pagingPlanFor('src-indeed')!;
+      const first = plan.first('https://apis.indeed.com/graphql', 0);
+      expect((first.body as { query: string }).query).toContain('head of customer support');
+    } finally {
+      useFanDemand(() => []);
+    }
   });
 
   it('Indeed: бюджет опроса — порция веера, поэтому чтение частичное (B218)', () => {
