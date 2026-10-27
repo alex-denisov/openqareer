@@ -1,13 +1,23 @@
 import React from 'react';
-import { AppleLogo, Check } from '@phosphor-icons/react';
+import {
+  ArrowRight,
+  AppleLogo,
+  Calculator,
+  ChatCircleText,
+  FileText,
+  Globe,
+  ListBullets,
+  Target,
+} from '@phosphor-icons/react';
 import type { AuthUser } from '../coach/coachApi';
 import {
+  LANDING_NAMED_SOURCES,
   LANDING_STATS_SCRIPT_ID,
   LANDING_STATS_SNAPSHOT,
   LANDING_TOKENS,
   formatPoolCount,
   formatPoolDate,
-  sourcesWord,
+  landingFeed,
   type LandingStats,
 } from '../../../shared/landingStats';
 import { DESKTOP_DOWNLOAD_PATH } from './DesktopDownload';
@@ -15,13 +25,9 @@ import { SiteLink } from './SiteLink';
 import { capturedLandingStats } from './embeddedLandingStats';
 import { preloadAuthPages } from './authPagesLoader';
 import { FaqAnswer, PublicFooter, PublicHeader } from './PublicSiteChrome';
-import {
-  CONTROL_POINTS,
-  LANDING_FAQ_IDS,
-  LANDING_TARIFFS,
-  PIPELINE,
-  faqItemById,
-} from './publicSiteContent';
+import { LandingFeed } from './LandingFeed';
+import { LandingTiers } from './LandingTiers';
+import { HOME_FAQ, HOME_TOOLS, HOW_STEPS, type ToolIcon } from './landingHomeContent';
 import { landingStructuredData } from './publicSiteStructuredData';
 import { LANDING_TITLE } from './siteTitles';
 
@@ -29,16 +35,16 @@ interface LandingPageProps {
   readonly session?: AuthUser | null;
   readonly onNavigate: (path: string) => void;
   /**
-   * Pool numbers and featured vacancies. The prerenderer passes tokens the
+   * Pool numbers and the vacancy feed. The prerenderer passes tokens the
    * server replaces; in the browser the page reads the snapshot the server
    * embedded, so hydration shows the same text.
    */
   readonly stats?: LandingStats;
 }
 
-export const LANDING_HERO_TITLE = 'Ваш опыт стоит больше, чем видно в резюме';
+export const LANDING_HERO_TITLE = 'Вы выбираете работу. Резюме, поиск и отклики — на нас';
 
-/** Snapshot embedded by the server; the real 20.10 reading otherwise. */
+/** Snapshot embedded by the server; the last approved reading otherwise. */
 export function readEmbeddedLandingStats(): LandingStats {
   if (typeof document === 'undefined') return LANDING_STATS_SNAPSHOT;
   const captured = capturedLandingStats();
@@ -56,24 +62,26 @@ function counts(stats: LandingStats) {
   const tokens = stats.activeCount < 0;
   return {
     active: tokens ? LANDING_TOKENS.active : formatPoolCount(stats.activeCount),
-    sources: tokens ? LANDING_TOKENS.sources : String(stats.sourceCount),
-    sourcesWord: tokens ? LANDING_TOKENS.sourcesWord : sourcesWord(stats.sourceCount),
-    remote: tokens ? LANDING_TOKENS.remote : formatPoolCount(stats.remoteCount),
+    more: tokens
+      ? LANDING_TOKENS.sourcesMore
+      : String(Math.max(stats.sourceCount - LANDING_NAMED_SOURCES, 0)),
     date: tokens ? LANDING_TOKENS.date : formatPoolDate(stats.updatedAt),
     json: tokens ? LANDING_TOKENS.json : JSON.stringify(stats).replace(/</gu, '\\u003c'),
   };
 }
 
-function CtaLink({
+type Navigate = (path: string) => void;
+
+function Cta({
   to,
   className,
-  children,
   onNavigate,
+  children,
 }: {
   readonly to: string;
   readonly className: string;
+  readonly onNavigate: Navigate;
   readonly children: React.ReactNode;
-  readonly onNavigate: (path: string) => void;
 }) {
   return (
     <SiteLink to={to} className={className} onNavigate={onNavigate} onWarm={preloadAuthPages}>
@@ -82,87 +90,22 @@ function CtaLink({
   );
 }
 
-type Counts = ReturnType<typeof counts>;
-
-function PoolFacts({ c }: { c: Counts }) {
+function MacBadge() {
   return (
-    <div className="ps-facts">
+    <a className="macbadge" href={DESKTOP_DOWNLOAD_PATH} download>
+      <AppleLogo className="apl" weight="fill" aria-hidden="true" />
       <span>
-        <b>{c.active}</b> вакансий в каталоге
+        <small>Скачать для</small>macOS
       </span>
-      <span>
-        <b>{c.sources}</b> {c.sourcesWord}
-      </span>
-      <span>
-        <b>{c.remote}</b> удалённых записей
-      </span>
-      <small>
-        Пул openqareer, обновлено {c.date}. Одна вакансия может встречаться в нескольких источниках.
-      </small>
-    </div>
+    </a>
   );
 }
 
-function VacancyBoard({ stats, c }: { stats: LandingStats; c: Counts }) {
+function Count({ active, date }: { readonly active: string; readonly date: string }) {
   return (
-    <div className="ps-board" aria-label="Удалённые вакансии из пула">
-      <div className="ps-board-head">
-        <h2>Удалённая работа: {c.remote} записей в пуле</h2>
-        <span>зарплата</span>
-      </div>
-      {stats.vacancies.map((vacancy, index) => (
-        <div className="ps-job" key={index}>
-          <span className="ps-job-title">{vacancy.title}</span>
-          <span className="ps-job-salary">{vacancy.salary}</span>
-          <span className="ps-chip">{vacancy.country}</span>
-        </div>
-      ))}
-      <div className="ps-board-foot">
-        Процент совпадения появится после загрузки резюме.{' '}
-        <a href="/vacancies/remote">Все удалённые вакансии →</a>
-      </div>
-    </div>
-  );
-}
-
-function HeroCopy({
-  onNavigate,
-  signedIn,
-}: {
-  onNavigate: (p: string) => void;
-  signedIn: boolean;
-}) {
-  return (
-    <>
-      <p className="ps-label">Сервис для поиска работы с ИИ</p>
-      <h1 id="hero-heading">
-        Ваш опыт стоит больше, <span>чем видно в резюме</span>
-      </h1>
-      <p className="ps-lead">
-        openqareer помогает в поиске работы специалистам и руководителям: ИИ соберёт профиль из
-        резюме, проверит его на ATS и подберёт вакансии из сотен источников с зарплатой и процентом
-        совпадения.
-      </p>
-      <div className="ps-cta">
-        <CtaLink
-          to={signedIn ? '/app' : '/signup'}
-          className="ps-btn is-primary is-lg"
-          onNavigate={onNavigate}
-        >
-          {signedIn ? 'Открыть кабинет' : 'Найти работу'}
-        </CtaLink>
-        <CtaLink to="/signup" className="ps-btn is-lg" onNavigate={onNavigate}>
-          Подобрать вакансии
-        </CtaLink>
-      </div>
-      <p className="ps-fine">
-        Профиль в openqareer видите только вы; откликов без вашего одобрения нет.
-      </p>
-      <a className="ps-dl-link" href="#download">
-        <AppleLogo size={16} weight="fill" aria-hidden="true" />
-        <span>Скачать приложение</span>
-      </a>
-    </>
+    <p className="count">
+      <b>{active}</b> вакансий <span className="dt">· обновлено {date}</span>
+    </p>
   );
 }
 
@@ -171,19 +114,41 @@ function Hero({
   onNavigate,
   signedIn,
 }: {
-  stats: LandingStats;
-  onNavigate: (p: string) => void;
-  signedIn: boolean;
+  readonly stats: LandingStats;
+  readonly onNavigate: Navigate;
+  readonly signedIn: boolean;
 }) {
   const c = counts(stats);
+  const pool = landingFeed(stats);
   return (
-    <section className="ps-hero" aria-labelledby="hero-heading">
-      <div className="ps-wrap ps-hero-grid">
+    <section className="scr hero" aria-labelledby="hero-heading">
+      <div className="wrap">
         <div>
-          <HeroCopy onNavigate={onNavigate} signedIn={signedIn} />
-          <PoolFacts c={c} />
+          <h1 id="hero-heading">
+            Вы выбираете работу. <span>Резюме, поиск и отклики — на нас</span>
+          </h1>
+          <p className="lead">
+            Поиск работы с ИИ: openqareer соберёт сильное резюме из вашего опыта, найдёт свежие
+            вакансии по всему рынку и откликнется по вашим правилам.
+          </p>
+          <div className="cta">
+            <Cta
+              to={signedIn ? '/app' : '/signup?from=home'}
+              className="btn primary lg"
+              onNavigate={onNavigate}
+            >
+              {signedIn ? 'Открыть кабинет' : 'Найти работу'}
+            </Cta>
+            <a className="btn lg" href="/vacancies">
+              Смотреть вакансии
+            </a>
+          </div>
+          <div className="app">
+            <MacBadge />
+          </div>
+          <Count active={c.active} date={c.date} />
         </div>
-        <VacancyBoard stats={stats} c={c} />
+        <LandingFeed pool={pool} more={c.more} />
       </div>
       <script
         type="application/json"
@@ -194,355 +159,163 @@ function Hero({
   );
 }
 
-function Pipeline() {
+function How({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean }) {
   return (
-    <section className="ps-section" id="how" aria-labelledby="how-heading">
-      <div className="ps-wrap">
-        <div className="ps-sh">
+    <section className="scr" id="how" aria-labelledby="how-heading">
+      <div className="wrap">
+        <div className="sh one">
           <div>
-            <p className="ps-label">Как это работает</p>
-            <h2 id="how-heading">От резюме до оффера по одному маршруту</h2>
+            <span className="label">Как это работает</span>
+            <h2 id="how-heading">От резюме до оффера в одном месте</h2>
+            <p className="lead hide-m">Вы задаёте цель и правила, openqareer ищет и откликается.</p>
           </div>
-          <p>Каждый день одно следующее действие и зачем оно.</p>
         </div>
-        <ol className="ps-loop">
-          {PIPELINE.map((step, index) => (
-            <li key={step.title} className={step.done ? 'is-on' : undefined}>
-              <span className="ps-loop-n">{String(index + 1).padStart(2, '0')}</span>
-              <h3>{step.title}</h3>
-              <p>{step.text}</p>
-              <div className="ps-loop-who">{step.who}</div>
+        <ol className="how">
+          {HOW_STEPS.map(([title, text], index) => (
+            <li key={title}>
+              <span className="n">{String(index + 1).padStart(2, '0')}</span>
+              <h3>{title}</h3>
+              <p>{text}</p>
             </li>
           ))}
         </ol>
-      </div>
-    </section>
-  );
-}
-
-const MATCH_EXAMPLES = [
-  {
-    title: 'Director Project Management',
-    meta: 'США · $160–180 тыс. в год',
-    matched: '11 из 13',
-    pct: 84,
-  },
-  {
-    title: 'Директор по маркетингу',
-    meta: 'Россия · от 250 тыс. ₽ в месяц',
-    matched: '9 из 12',
-    pct: 75,
-  },
-  {
-    title: 'Director of Talent Automations',
-    meta: 'США · $180–250 тыс. в год',
-    matched: '6 из 11',
-    pct: 55,
-  },
-] as const;
-
-function MatchSection() {
-  return (
-    <section className="ps-section" aria-labelledby="match-heading">
-      <div className="ps-wrap ps-split">
-        <div>
-          <p className="ps-label">Вакансии</p>
-          <h2 id="match-heading">Подбор вакансий по резюме: сразу видно, на что откликаться</h2>
-          <p className="ps-soft">
-            Процент считается по требованиям из текста вакансии. В кабинете у каждого процента виден
-            список совпавших и недостающих требований.
-          </p>
-        </div>
-        <div className="ps-card">
-          <div className="ps-card-head">
-            <span>Вакансия</span>
-            <span>Совпавшие требования и процент</span>
-          </div>
-          {MATCH_EXAMPLES.map((row) => (
-            <div className="ps-row" key={row.title}>
-              <span>
-                <b>{row.title}</b>
-                <small>{row.meta}</small>
-              </span>
-              <span className="ps-chip">{row.matched}</span>
-              <span className={row.pct >= 70 ? 'ps-pct' : 'ps-pct is-mid'}>{row.pct}</span>
-            </div>
-          ))}
-          <div className="ps-card-foot">Демо-профиль.</div>
+        <div className="after">
+          <Cta
+            to={signedIn ? '/app' : '/signup?from=home'}
+            className="btn primary lg"
+            onNavigate={onNavigate}
+          >
+            {signedIn ? 'Открыть кабинет' : 'Найти работу'}
+          </Cta>
+          <a className="link" href="#tariffs">
+            Что входит в тарифы <ArrowRight className="ic" aria-hidden="true" />
+          </a>
         </div>
       </div>
     </section>
   );
 }
 
-function CabinetBand() {
-  return (
-    <section className="ps-band" id="apply" aria-labelledby="band-heading">
-      <div className="ps-wrap">
-        <p className="ps-label">Кабинет openqareer</p>
-        <h2 id="band-heading">Одно решение на день и все отклики в одном месте</h2>
-        <div className="ps-band-grid">
-          <figure>
-            <picture>
-              <source media="(max-width: 760px)" type="image/webp" srcSet="/landing/today-m.webp" />
-              <source media="(max-width: 760px)" srcSet="/landing/today-m.png" />
-              <source type="image/webp" srcSet="/landing/today.webp" />
-              <img
-                src="/landing/today.png"
-                alt="Экран «Сегодня»: следующее решение с причиной и очередь дня"
-                width={1960}
-                height={1340}
-                loading="lazy"
-                decoding="async"
-              />
-            </picture>
-            <figcaption>
-              <b>Решение на день:</b> причина, ожидаемый эффект и очередь дел. Снимок кабинета,
-              демо-профиль.
-            </figcaption>
-          </figure>
-          <figure className="ps-band-side">
-            <picture>
-              {/* 390: one readable column of the board instead of the whole board. */}
-              <source media="(max-width: 760px)" srcSet="/landing/apps-m.png" />
-              <source type="image/webp" srcSet="/landing/apps.webp" />
-              <img
-                src="/landing/apps.png"
-                alt="Экран «Отклики»: колонки «Ответили» и «Интервью»"
-                width={968}
-                height={1480}
-                loading="lazy"
-                decoding="async"
-              />
-            </picture>
-            <figcaption>
-              <b>Отклики.</b> Письмо и резюме у каждого отклика, интервью с датой. Снимок кабинета,
-              демо-профиль.
-            </figcaption>
-          </figure>
-        </div>
-      </div>
-    </section>
-  );
-}
+const TOOL_ICONS: Record<ToolIcon, React.ElementType> = {
+  list: ListBullets,
+  calc: Calculator,
+  target: Target,
+  doc: FileText,
+  chat: ChatCircleText,
+  globe: Globe,
+};
 
-function ControlSection() {
+function Tools() {
   return (
-    <section className="ps-section" aria-labelledby="control-heading">
-      <div className="ps-wrap">
-        <p className="ps-label">Границы</p>
-        <h2 id="control-heading">Что остаётся под вашим контролем</h2>
-        <div className="ps-control">
-          {CONTROL_POINTS.map((point) => (
-            <div key={point.title}>
-              <span className="ps-tick" aria-hidden="true">
-                <Check size={16} weight="bold" />
-              </span>
-              <h3>{point.title}</h3>
-              <p>{point.text}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-interface ToolCardProps {
-  readonly href: string;
-  readonly title: string;
-  readonly go: string;
-  readonly children: React.ReactNode;
-}
-
-function ToolCard({ href, title, go, children }: ToolCardProps) {
-  return (
-    <a className="ps-tool" href={href}>
-      <span className="ps-chip is-ok">работает</span>
-      <h3>{title}</h3>
-      <p>{children}</p>
-      <span className="ps-go">{go}</span>
-    </a>
-  );
-}
-
-function ToolsSection({ remote }: { remote: string }) {
-  return (
-    <section className="ps-section" id="tools" aria-labelledby="tools-heading">
-      <div className="ps-wrap">
-        <div className="ps-sh">
+    <section className="scr" id="tools" aria-labelledby="tools-heading">
+      <div className="wrap">
+        <div className="sh">
           <div>
-            <p className="ps-label">Без регистрации</p>
+            <span className="label">Без регистрации</span>
             <h2 id="tools-heading">Бесплатные инструменты для поиска работы</h2>
           </div>
-          <p>Открыты всем: свежие вакансии с источником и датой и резюме с проверкой на ATS.</p>
+          <p>Открыты всем. С профилем в openqareer они считают уже под вас.</p>
         </div>
-        <div className="ps-tools">
-          <ToolCard href="/vacancies" title="Каталог вакансий" go="Открыть каталог →">
-            Открытая часть пула: вакансии по городам и ролям, зарплата, где она указана, дата и
-            прямая ссылка на источник. Полный пул и процент совпадения: в кабинете.
-          </ToolCard>
-          <ToolCard href="/vacancies/remote" title="Удалённые вакансии" go="Открыть удалённые →">
-            {remote} удалённых вакансий в пуле, в том числе за рубежом. В каталоге открыта их часть:
-            роль, зарплата, источник.
-          </ToolCard>
-          <ToolCard
-            href="/tools/interview-questions"
-            title="Вопросы на собеседовании"
-            go="Открыть вопросы →"
-          >
-            Вопросы по профессиям с темами из требований вакансий: что проверяет работодатель, как
-            звучит сильный ответ, и тест на 5 вопросов без регистрации.
-          </ToolCard>
-          <ToolCard
-            href="/tools/relocation"
-            title="В какую страну переехать"
-            go="Оценить переезд →"
-          >
-            Какие пути открыты с вашим паспортом и профессией.
-          </ToolCard>
-          <ToolCard href="/tools/resume" title="Конструктор резюме" go="Собрать резюме →">
-            По шагам, с примерами и проверкой на ATS. Скачать в PDF и DOCX.
-          </ToolCard>
+        <div className="tools">
+          {HOME_TOOLS.map((tool) => {
+            const Icon = TOOL_ICONS[tool.icon];
+            return (
+              <a className="tool" href={tool.href} key={tool.href}>
+                <span className="ib">
+                  <Icon size={22} aria-hidden="true" />
+                </span>
+                <h3>
+                  {tool.title}
+                  <ArrowRight className="ic" aria-hidden="true" />
+                </h3>
+                <p>{tool.text}</p>
+              </a>
+            );
+          })}
         </div>
-        <p className="ps-note">
-          В кабинете уже есть сравнение стран и расчёт налогов при переезде.
-        </p>
       </div>
     </section>
   );
 }
 
-function TariffsSection({ onNavigate }: { onNavigate: (p: string) => void }) {
+function Tariffs() {
   return (
-    <section className="ps-section" id="tariffs" aria-labelledby="tariffs-heading">
-      <div className="ps-wrap">
-        <div className="ps-sh">
+    <section className="scr" id="tariffs" aria-labelledby="tariffs-heading">
+      <div className="wrap">
+        <div className="sh">
           <div>
-            <p className="ps-label">Тарифы</p>
-            <h2 id="tariffs-heading">Начните бесплатно, платите за объём работы</h2>
+            <span className="label">Тарифы</span>
+            <h2 id="tariffs-heading">Выберите, сколько работы отдать openqareer</h2>
           </div>
-          <p>Платные тарифы помесячно, отмена в один клик.</p>
+          <p>
+            <a className="link" href="/tariffs">
+              Сравнить тарифы подробно <ArrowRight className="ic" aria-hidden="true" />
+            </a>
+          </p>
         </div>
-        <div className="ps-tiers">
-          {LANDING_TARIFFS.map((tier) => (
-            <div key={tier.id} className={tier.recommended ? 'ps-tier is-hl' : 'ps-tier'}>
-              <span className="ps-tier-name">
-                {tier.name}
-                {tier.recommended ? <span className="ps-chip is-blue">рекомендуем</span> : null}
-              </span>
-              <span className="ps-tier-sub">{tier.sub}</span>
-              <span className={tier.id === 'exec' ? 'ps-tier-price is-long' : 'ps-tier-price'}>
-                {tier.price}
-              </span>
-              <span className="ps-tier-term">{tier.term}</span>
-              <span className="ps-tier-blurb">{tier.blurb}</span>
-              <CtaLink
-                to={tier.action.href}
-                className={tier.recommended ? 'ps-btn is-primary' : 'ps-btn'}
-                onNavigate={onNavigate}
-              >
-                {tier.action.label}
-              </CtaLink>
-            </div>
-          ))}
-        </div>
-        <p className="ps-note">
-          Ещё в продукте: путь в компанию через знакомых, карьерный консультант с памятью
-          разговоров, карьерный дневник. Полное сравнение в кабинете.
-        </p>
+        <LandingTiers />
       </div>
     </section>
   );
 }
 
-function LandingFaq({ onNavigate }: { onNavigate: (p: string) => void }) {
-  const items = LANDING_FAQ_IDS.map(faqItemById);
-  const half = Math.ceil(items.length / 2);
+function Faq() {
   return (
-    <section className="ps-section" id="faq" aria-labelledby="faq-heading">
-      <div className="ps-wrap">
-        <p className="ps-label">Вопросы</p>
-        <h2 id="faq-heading">Перед регистрацией</h2>
-        <div className="ps-faq">
-          {[items.slice(0, half), items.slice(half)].map((column, columnIndex) => (
+    <section className="scr" id="faq" aria-labelledby="faq-heading">
+      <div className="wrap">
+        <div className="sh">
+          <div>
+            <span className="label">Вопросы</span>
+            <h2 id="faq-heading">Частые вопросы</h2>
+          </div>
+          <p>
+            <a className="link" href="/faq">
+              Все вопросы и ответы <ArrowRight className="ic" aria-hidden="true" />
+            </a>
+          </p>
+        </div>
+        <div className="faq">
+          {HOME_FAQ.map((column, columnIndex) => (
             <div key={columnIndex}>
-              {column.map((item, index) => (
-                <details key={item.id} open={columnIndex === 0 && index === 0}>
+              {column.map((item) => (
+                <details className="q" key={item.question}>
                   <summary>{item.question}</summary>
-                  <FaqAnswer text={item.answer} links={item.links} />
+                  <div className="a">
+                    <FaqAnswer text={item.answer} links={item.links} />
+                  </div>
                 </details>
               ))}
             </div>
           ))}
         </div>
-        <p className="ps-note">
-          <SiteLink to="/faq" className="ps-strong-link" onNavigate={onNavigate}>
-            Все вопросы и ответы →
-          </SiteLink>
-        </p>
       </div>
     </section>
   );
 }
 
-function DownloadSection() {
+function End({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean }) {
   return (
-    <section className="ps-section" id="download" aria-labelledby="download-heading">
-      <div className="ps-wrap ps-dl">
+    <section className="scr end" aria-labelledby="end-heading">
+      <div className="wrap">
         <div>
-          <p className="ps-label">Приложение для компьютера</p>
-          <h2 id="download-heading">Площадки и отклики в одном окне</h2>
-          <p className="ps-soft">
-            Подключите профили на hh.ru, LinkedIn и других площадках и ведите отклики из приложения.
-            Кабинет тот же, что на сайте.
-          </p>
-        </div>
-        <div className="ps-dl-card">
-          <a className="ps-mac-badge" href={DESKTOP_DOWNLOAD_PATH} download>
-            <AppleLogo size={22} weight="fill" aria-hidden="true" />
-            <span>
-              <small>Скачать для</small>macOS
-            </span>
-          </a>
-          <p className="ps-dl-meta">Версия 1.0.0 · 36,5 МБ · Windows: в разработке.</p>
-          <p className="ps-dl-links">
-            <a href="/faq#mac-install">Как установить</a>
-            <a href="/faq#windows">Про Windows</a>
-          </p>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function FinalSection({
-  onNavigate,
-  signedIn,
-}: {
-  onNavigate: (p: string) => void;
-  signedIn: boolean;
-}) {
-  return (
-    <section className="ps-final" aria-labelledby="final-heading">
-      <div className="ps-wrap ps-final-grid">
-        <div>
-          <h2 id="final-heading">Узнайте, на какие вакансии вы подходите</h2>
-          <p>Профиль, роли и подходящие вакансии появятся в кабинете после загрузки.</p>
-        </div>
-        <div className="ps-cta">
-          <CtaLink
-            to={signedIn ? '/app' : '/signup'}
-            className="ps-btn is-primary is-lg"
-            onNavigate={onNavigate}
-          >
-            {signedIn ? 'Открыть кабинет' : 'Загрузить резюме бесплатно'}
-          </CtaLink>
-          {signedIn ? null : (
-            <CtaLink to="/login" className="ps-btn is-lg" onNavigate={onNavigate}>
-              Войти
-            </CtaLink>
-          )}
+          <h2 id="end-heading">Ваша следующая работа может быть уже в списке</h2>
+          <p>Загрузите резюме и посмотрите, куда вы проходите прямо сейчас.</p>
+          <div className="cta">
+            <Cta
+              to={signedIn ? '/app' : '/signup?from=home'}
+              className="btn primary lg"
+              onNavigate={onNavigate}
+            >
+              {signedIn ? 'Открыть кабинет' : 'Найти работу'}
+            </Cta>
+            <a className="btn lg" href="/vacancies">
+              Смотреть вакансии
+            </a>
+          </div>
+          <div className="getapp" id="download">
+            <MacBadge />
+            <p>Больше функций доступно в приложении</p>
+          </div>
         </div>
       </div>
     </section>
@@ -573,17 +346,13 @@ export function LandingPage({ session, onNavigate, stats }: LandingPageProps) {
         signedIn={signedIn}
         isAdmin={session?.role === 'admin'}
       />
-      <main id="main">
+      <main id="main" className="hm">
         <Hero stats={current} onNavigate={onNavigate} signedIn={signedIn} />
-        <Pipeline />
-        <MatchSection />
-        <CabinetBand />
-        <ControlSection />
-        <ToolsSection remote={counts(current).remote} />
-        <TariffsSection onNavigate={onNavigate} />
-        <LandingFaq onNavigate={onNavigate} />
-        <DownloadSection />
-        <FinalSection onNavigate={onNavigate} signedIn={signedIn} />
+        <How onNavigate={onNavigate} signedIn={signedIn} />
+        <Tools />
+        <Tariffs />
+        <Faq />
+        <End onNavigate={onNavigate} signedIn={signedIn} />
       </main>
       <PublicFooter onNavigate={onNavigate} onLanding signedIn={signedIn} />
     </div>

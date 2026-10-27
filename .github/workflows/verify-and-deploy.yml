@@ -340,6 +340,9 @@ jobs:
           /favicon.svg|image/svg+xml
           /apple-touch-icon.png|image/png
           /og-cover.jpg|image/jpeg
+          /og/home.png|image/png
+          /og/salaries.png|image/png
+          /og/vacancies.png|image/png
           /robots.txt|text/plain
           /llms.txt|text/markdown
           /llms-full.txt|text/markdown

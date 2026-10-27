@@ -8,7 +8,9 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import {
+  LANDING_FEED_ROWS,
   LANDING_VACANCY_ROWS,
+  type LandingFeedRow,
   type LandingStats,
   type LandingVacancy,
 } from '../../shared/landingStats';
@@ -162,6 +164,61 @@ function catalogTotal(database: DatabaseSync): number | undefined {
   return row ? Number(row.catalog_total) : undefined;
 }
 
+interface CatalogFeedRow {
+  title: string;
+  path: string;
+  salary_label: string | null;
+  place_label: string | null;
+  location: string | null;
+  is_remote: number;
+  source_name: string | null;
+  published_at: string;
+}
+
+/** «26.10» from an ISO timestamp; empty when it does not parse. */
+function shortDate(iso: string): string {
+  const match = /^\d{4}-(\d{2})-(\d{2})/u.exec(iso);
+  return match ? `${match[2]}.${match[1]}` : '';
+}
+
+function feedMeta(row: CatalogFeedRow): string {
+  const place = row.is_remote === 1 ? 'Удалённо' : (row.place_label ?? row.location ?? '');
+  return [place, row.source_name ?? '', shortDate(row.published_at)]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * Newest salaried cards of the public catalog, as links to their own pages
+ * (B569). Reads the materialized `catalog_entries`; empty when it is absent.
+ */
+export function readLandingFeed(database: DatabaseSync): LandingFeedRow[] {
+  const exists = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalog_entries'")
+    .get();
+  if (!exists) return [];
+  const rows = database
+    .prepare(
+      `SELECT title, path, salary_label, place_label, location, is_remote, source_name, published_at
+       FROM catalog_entries
+       WHERE status = 'active' AND salary_label IS NOT NULL AND salary_label != ''
+       ORDER BY published_ms DESC LIMIT ?`,
+    )
+    .all(CANDIDATE_ROWS) as unknown as CatalogFeedRow[];
+  const feed: LandingFeedRow[] = [];
+  const titles = new Set<string>();
+  for (const row of rows) {
+    if (feed.length >= LANDING_FEED_ROWS) break;
+    const title = cleanLandingTitle(row.title);
+    if (!isLandingTitle(title) || titles.has(title.toLowerCase())) continue;
+    if (!row.path.startsWith('/vacancies/job/') || !row.salary_label) continue;
+    titles.add(title.toLowerCase());
+    feed.push({ title, salary: row.salary_label, meta: feedMeta(row), href: row.path });
+  }
+  return feed;
+}
+
 export function computeLandingStats(database: DatabaseSync, now: Date): LandingStats {
   const counts = database
     .prepare(
@@ -211,6 +268,7 @@ export function computeLandingStats(database: DatabaseSync, now: Date): LandingS
     remoteCount: Number(counts.remote ?? 0),
     updatedAt: now.toISOString().slice(0, 10),
     vacancies,
+    feed: readLandingFeed(database),
   };
 }
 

@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
    are intentionally kept together so replacement, expiry and reclustering share
    one transaction boundary. */
+import type { SalaryStats } from './catalogSalaryStats';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 import type {
@@ -797,6 +798,14 @@ export class MultiSourceVacancyEngine {
     const value = this.pool.loadCatalogListings();
     this.listingsCache = { at: now, value };
     return value;
+  }
+
+  /** B569: one row by primary key; maintenance computes it, the request never scans. */
+  public getPublicCatalogSalaryStats(query: {
+    place: string;
+    role?: string;
+  }): SalaryStats | undefined {
+    return this.pool.getCatalogSalaryStats?.(query);
   }
 
   public getPublicCatalogEntry(key: string): CatalogEntryRow | undefined {

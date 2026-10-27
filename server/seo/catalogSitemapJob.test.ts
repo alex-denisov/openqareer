@@ -181,6 +181,7 @@ describe('buildSitemapFiles', () => {
     expect(urls).toContain('https://openqareer.com/');
     expect(urls).toContain('https://openqareer.com/faq');
     expect(urls).toContain('https://openqareer.com/support');
+    expect(urls).toContain('https://openqareer.com/tariffs');
     expect(urls).toContain('https://openqareer.com/legal/privacy');
     expect(urls).toContain('https://openqareer.com/vacancies');
     expect(urls).toContain('https://openqareer.com/tools/country-fit');
@@ -189,7 +190,7 @@ describe('buildSitemapFiles', () => {
     // B568: the interview hub and six reviewed professions.
     expect(urls).toContain('https://openqareer.com/tools/interview-questions');
     expect(urls).toContain('https://openqareer.com/tools/interview-questions/accountant');
-    expect(urls).toHaveLength(18);
+    expect(urls).toHaveLength(19);
   });
 
   it('splits 0, 1, 10,000, 10,001 and 25,000 URLs without truncation', () => {

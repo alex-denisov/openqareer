@@ -340,7 +340,7 @@ export function CountryFitPage({
           Посмотреть открытый каталог вакансий
         </a>
       </main>
-      <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} />
+      <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} planBar />
       <CountryFitSticky
         payroll={model.payroll}
         currency={model.data.currency}

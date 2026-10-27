@@ -268,9 +268,8 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain('href="/vacancies/berlin"');
     // Группа называет, по чему сужение: «Берлин» и «Frontend Developer —
     // удалённо» в одном плоском списке читателю ничего не объясняли.
-    expect(html).toContain('Места');
-    expect(html).toContain('Роли');
-    expect(html).toContain('Сузить выборку');
+    expect(html).toContain('<h2>Места</h2>');
+    expect(html).toContain('<h2>Роли</h2>');
   });
 
   it('не печатает пустой блок фильтров', () => {

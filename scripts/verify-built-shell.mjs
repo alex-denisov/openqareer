@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 
 // B535: hero of the v18 landing.
-const LANDING_HEADING = /Ваш опыт стоит больше/u;
+const LANDING_HEADING = /Вы выбираете работу/u;
 
 const BROWSER_WALK_MESSAGES = [
   {

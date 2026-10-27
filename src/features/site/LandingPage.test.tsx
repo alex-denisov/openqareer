@@ -1,9 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../coach/coachApi';
-import { LANDING_STATS_SNAPSHOT, landingTokenStats } from '../../../shared/landingStats';
+import {
+  LANDING_STATS_SNAPSHOT,
+  applyLandingStats,
+  landingTokenStats,
+  type LandingStats,
+} from '../../../shared/landingStats';
 import { LandingPage } from './LandingPage';
-import { FAQ_GROUPS } from './publicSiteContent';
+import { HOME_TIERS } from './landingHomeContent';
+import { TARIFF_LEVELS } from '../tariffs/tariffsData';
 
 const candidate = {
   id: 'u1',
@@ -14,86 +20,107 @@ const candidate = {
 } as unknown as AuthUser;
 const admin = { ...candidate, role: 'admin' } as unknown as AuthUser;
 
-function render(session?: AuthUser | null) {
-  return renderToStaticMarkup(
-    <LandingPage onNavigate={vi.fn()} session={session} stats={LANDING_STATS_SNAPSHOT} />,
-  );
+const FEED_STATS: LandingStats = {
+  ...LANDING_STATS_SNAPSHOT,
+  feed: Array.from({ length: 12 }, (_, index) => ({
+    title: `Бухгалтер ${index}`,
+    salary: '120–140 тыс. ₽ в месяц',
+    meta: 'Москва · hh.ru · 26.10',
+    href: `/vacancies/job/accountant-${index}`,
+  })),
+};
+
+function render(session?: AuthUser | null, stats: LandingStats = FEED_STATS) {
+  return renderToStaticMarkup(<LandingPage onNavigate={vi.fn()} session={session} stats={stats} />);
 }
 
-describe('LandingPage (B535, approved mockup v18)', () => {
-  it('leads with the approved hero and both registration actions', () => {
+describe('LandingPage (B569, mockup 01-home)', () => {
+  it('leads with the approved hero, lead and both actions', () => {
     const html = render();
-    expect(html).toContain('Ваш опыт стоит больше, <span>чем видно в резюме</span>');
-    expect(html).toContain('Сервис для поиска работы с ИИ');
-    expect(html).toContain('подберёт вакансии из сотен источников');
-    expect(html).toMatch(/href="\/signup" class="ps-btn is-primary is-lg">Найти работу</u);
-    expect(html).toMatch(/href="\/signup" class="ps-btn is-lg">Подобрать вакансии</u);
-    expect(html).toContain('Загрузить резюме бесплатно');
-    expect(html).toContain('href="#download"');
-    expect(html).toContain('Скачать приложение');
+    expect(html).toContain('Вы выбираете работу. <span>Резюме, поиск и отклики — на нас</span>');
+    expect(html).toContain('Поиск работы с ИИ: openqareer соберёт сильное резюме');
+    expect(html).toMatch(/href="\/signup\?from=home" class="btn primary lg">Найти работу</u);
+    expect(html).toMatch(/class="btn lg" href="\/vacancies">Смотреть вакансии</u);
+    expect(html).toContain('Скачать для');
+    expect(html).toContain('/downloads/openqareer-macos.dmg');
   });
 
-  it('shows pool numbers with a date and only salaried rows without company names', () => {
+  it('has the six screens of the mockup and the tools anchor', () => {
     const html = render();
-    expect(html).toContain('<b>1,1 млн</b> вакансий в каталоге');
-    expect(html).toContain('<b>324</b> источника');
-    expect(html).toContain('Пул openqareer, обновлено 20.10.2026');
-    expect(html).toContain('Одна вакансия может встречаться в нескольких источниках.');
-    expect(html).not.toContain('активных вакансий');
-    for (const row of LANDING_STATS_SNAPSHOT.vacancies) {
-      expect(html).toContain(row.title);
-      expect(html).toContain(row.salary);
+    expect(html.match(/class="scr[ "]/gu)).toHaveLength(6);
+    expect(html).toContain('id="tools"');
+    expect(html).toContain('Бесплатные инструменты для поиска работы');
+    for (const href of ['/tools/salary-calculator', '/tools/resume', '/salaries', '/vacancies']) {
+      expect(html).toContain(`href="${href}"`);
     }
-    for (const company of ['Datadog', 'Moderna', 'Reddit', 'Скопа', 'ROSSKO', 'FT capital']) {
-      expect(html).not.toContain(company);
-    }
+  });
+
+  it('counts unique vacancies with a date, never the 1.1 million records', () => {
+    const html = render();
+    expect(html).toContain('<b>712 тыс.</b> вакансий');
+    expect(html).toContain('· обновлено 26.10.2026');
+    expect(html).not.toContain('1,1 млн');
+    expect(html).toContain('и ещё 320');
+  });
+
+  it('feeds five rows that link to public catalog cards, with a pause button', () => {
+    const html = render();
+    expect(html.match(/<a href="\/vacancies\/job\/accountant-\d+">/gu)).toHaveLength(5);
+    expect(html).toContain('Бухгалтер 0');
+    expect(html).toContain('Москва · hh.ru · 26.10');
+    expect(html).toContain('aria-pressed="false">Пауза</button>');
+  });
+
+  it('falls back to the snapshot rows, linked to the catalog, before the first reading', () => {
+    const html = render(undefined, LANDING_STATS_SNAPSHOT);
+    expect(html).toContain(LANDING_STATS_SNAPSHOT.vacancies[0]?.title);
+    expect(html).toContain('<a href="/vacancies">');
   });
 
   it('prerenders tokens the server replaces, never a stale number', () => {
     const html = renderToStaticMarkup(
       <LandingPage onNavigate={vi.fn()} stats={landingTokenStats()} />,
     );
-    expect(html).toContain('%%OQ_ACTIVE%%');
-    expect(html).toContain('%%OQ_V0_TITLE%%');
-    expect(html).toContain('%%OQ_STATS_JSON%%');
-    expect(html).not.toContain('1 119 270');
-  });
-
-  it('keeps owner-rejected and unproven wording off the page', () => {
-    const html = render();
-    for (const banned of [
-      '—',
-      'квитанц',
-      'анонимн',
-      'Вход через вашу сессию',
-      'человек-эксперт',
-      'тянете',
-      'Бесплатно и без срока',
-      'Найти работу бесплатно',
-      'чаще выбирают',
-      'в тот же день',
+    for (const token of [
+      '%%OQ_ACTIVE%%',
+      '%%OQ_F0_HREF%%',
+      '%%OQ_SOURCES_MORE%%',
+      '%%OQ_STATS_JSON%%',
     ]) {
-      expect(html, banned).not.toContain(banned);
+      expect(html).toContain(token);
     }
+    const served = applyLandingStats(html, FEED_STATS);
+    expect(served).not.toContain('%%OQ_');
+    expect(served).toContain('href="/vacancies/job/accountant-0"');
+    expect(served).toContain('712 тыс.');
   });
 
-  it('publishes one organization graph with offers and no FAQPage on the landing', () => {
+  it('shows the tariffs of tariffsData in order, Pro recommended first on a phone', () => {
+    const html = render();
+    expect(HOME_TIERS.map((tier) => tier.name)).toEqual(TARIFF_LEVELS.map((level) => level.name));
+    expect(html).toContain('<span class="chip blue">Рекомендуем</span>');
+    expect(html).toMatch(
+      /class="btn primary" href="\/signup\?plan=pro&amp;from=home">Выбрать Pro</u,
+    );
+    expect(html).toContain('9 900 ₽');
+    expect(html).toContain('от 150 тыс. ₽');
+    expect(html.match(/aria-label="(Free|Basic|Pro|Max|Executive)"/gu)).toHaveLength(5);
+    expect(html).not.toMatch(/пробн|24 час|без карты|возврат/iu);
+  });
+
+  it('keeps eight questions with links and the Mac app card', () => {
+    const html = render();
+    expect(html.match(/<details class="q">/gu)).toHaveLength(8);
+    expect(html).toContain('href="/faq"');
+    expect(html).toContain('Больше функций доступно в приложении');
+  });
+
+  it('publishes one organization graph with offers and no FAQPage', () => {
     const html = render();
     expect(html).toContain('"@type":"WebSite"');
-    expect(html).toContain('"@id":"https://openqareer.com/#org"');
     expect(html).toContain('"operatingSystem":"Web, macOS"');
-    expect(html).toContain('"billingDuration":"P1M"');
     expect(html).toContain('"minPrice":150000');
     expect(html).not.toContain('"@type":"FAQPage"');
-    expect(html).not.toContain('Windows"');
-  });
-
-  it('shows six landing questions taken verbatim from the /faq set', () => {
-    const html = render();
-    const all = FAQ_GROUPS.flatMap((group) => group.items);
-    const shown = all.filter((item) => html.includes(item.question));
-    expect(shown).toHaveLength(6);
-    expect(html).toContain('href="/faq"');
   });
 
   it('switches the header to the cabinet for a signed-in candidate', () => {
@@ -107,11 +134,5 @@ describe('LandingPage (B535, approved mockup v18)', () => {
     const html = render(admin);
     expect(html).toContain('Администрирование');
     expect(html).toContain('href="/admin"');
-  });
-
-  it('renders every action as a link, never a styled button', () => {
-    for (const html of [render(), render(candidate), render(admin)]) {
-      expect(html).not.toMatch(/<button[^>]*class="[^"]*ps-btn/u);
-    }
   });
 });

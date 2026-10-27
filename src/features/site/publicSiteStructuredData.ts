@@ -8,8 +8,8 @@
 import { TARIFF_LEVELS } from '../tariffs/tariffsData';
 import { DESKTOP_DOWNLOAD_PATH } from './DesktopDownload';
 import { LANDING_TITLE } from './siteTitles';
+import { FAQ_TOPICS } from './faqPageContent';
 import {
-  FAQ_GROUPS,
   LANDING_DESCRIPTION,
   ORG_ID,
   OPERATOR_TAX_ID,
@@ -147,9 +147,28 @@ export function faqStructuredData(): Node {
         isPartOf: { '@id': WEBSITE_ID },
         publisher: { '@id': ORG_ID },
         dateModified: PUBLIC_COPY_UPDATED_AT,
-        mainEntity: FAQ_GROUPS.flatMap((group) => group.items.map(question)),
+        mainEntity: FAQ_TOPICS.flatMap((topic) => topic.items.map(question)),
       },
       breadcrumb('Вопросы и ответы', '/faq'),
+    ],
+  };
+}
+
+export function tariffsStructuredData(): Node {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'SoftwareApplication',
+        name: 'openqareer',
+        url: `${SITE_ORIGIN}/tariffs`,
+        applicationCategory: 'BusinessApplication',
+        operatingSystem: 'Web, macOS',
+        inLanguage: 'ru-RU',
+        publisher: { '@id': ORG_ID },
+        offers: offers(),
+      },
+      breadcrumb('Тарифы', '/tariffs'),
     ],
   };
 }

@@ -70,6 +70,8 @@ import {
   type VacancyClusterLookup,
 } from './vacancyDeduplicator';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import type { SalaryStats } from './catalogSalaryStats';
+import { readCatalogSalaryStats } from './catalogSalaryStatsStore';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 interface VacancyRow {
@@ -2434,6 +2436,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       count: number;
     }>;
     return rows.map(listingSummaryOf);
+  }
+
+  getCatalogSalaryStats(query: { place: string; role?: string }): SalaryStats | undefined {
+    return readCatalogSalaryStats(this.database, query);
   }
 
   getCatalogEntry(key: string): CatalogEntryRow | undefined {

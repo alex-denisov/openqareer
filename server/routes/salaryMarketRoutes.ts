@@ -44,6 +44,7 @@ import {
   type SalaryFaq,
 } from '../../shared/salaryPublicPages';
 import { SALARY_COUNTRY_CITIES, type CountryCatalog } from '../../shared/salaryCountryCities';
+import { withOgImage } from '../../shared/seoHead';
 import { SalaryCountryPage, SalaryProfessionPage } from '../../src/features/site/SalaryPublicPages';
 
 interface PublicSalaryPage {
@@ -279,7 +280,7 @@ function salaryDocumentHead(
     description = SALARY_MARKET_DESCRIPTION,
   }: { title: string; canonical: string; robots: string; structured: string; description?: string },
 ): string {
-  return template
+  return withOgImage(template, 'salaries', 'openqareer: зарплаты и навыки по профессиям')
     .replace(/<title>[^<]*<\/title>/u, () => `<title>${title}</title>`)
     .replace(
       /<meta name="description" content="[^"]*">/u,

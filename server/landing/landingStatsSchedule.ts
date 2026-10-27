@@ -12,6 +12,10 @@ import {
   setCatalogSources,
   writeCatalogSources,
 } from '../vacancies/catalogSources';
+import {
+  computeCatalogSalaryStats,
+  writeCatalogSalaryStats,
+} from '../vacancies/catalogSalaryStatsStore';
 import { computeLandingStats, readLandingStats, writeLandingStats } from './landingStatsJob';
 
 interface StatsLog {
@@ -36,6 +40,7 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
       const stats = computeLandingStats(database, now);
       writeLandingStats(database, stats, now);
       writeCatalogSources(database, computeCatalogSources(database), now);
+      writeCatalogSalaryStats(database, computeCatalogSalaryStats(database), now);
       log.info(
         { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
         'landing-stats-written',

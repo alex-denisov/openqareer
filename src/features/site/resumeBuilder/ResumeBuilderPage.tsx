@@ -326,7 +326,7 @@ export function ResumeBuilderPage({
         </section>
         <FinalSection onNavigate={onNavigate} />
       </main>
-      <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} />
+      <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} planBar />
     </div>
   );
 }

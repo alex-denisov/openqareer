@@ -28,6 +28,7 @@ import {
 } from '../../src/features/site/InterviewQuestionsPage';
 import { SALARY_MARKET_TEMPLATE } from '../../src/features/site/SalaryMarketPage';
 import { escapeHtml } from '../vacancies/catalogHtml';
+import { withOgImage } from '../../shared/seoHead';
 import { loadPublicSalaryIndex } from './salaryMarketRoutes';
 
 export const INTERVIEW_QUIZ_SCRIPT = '/assets/oq-interview-1.js';
@@ -146,7 +147,11 @@ export function renderInterviewDocument(
     '@context': 'https://schema.org',
     '@graph': meta.structured,
   }).replace(/</gu, '\\u003c');
-  return template
+  return withOgImage(
+    template,
+    'interview-questions',
+    'openqareer: вопросы на собеседовании с разбором ответов',
+  )
     .replace(/<title>[^<]*<\/title>/u, () => `<title>${title}</title>`)
     .replace(
       /<meta name="description" content="[^"]*">/u,

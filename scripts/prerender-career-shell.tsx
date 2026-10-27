@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { transform } from 'esbuild';
 import { pathToFileURL } from 'node:url';
@@ -23,19 +23,24 @@ import {
   RELOCATION_TITLE,
   RelocationPage,
 } from '../src/features/site/RelocationPage';
+import {
+  CALC_DESCRIPTION,
+  CALC_TITLE,
+  SalaryCalculatorPage,
+} from '../src/features/site/SalaryCalculatorPage';
 import { LoginPage, SignupPage } from '../src/features/site/AuthPages';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { PublicHeader, PublicFooter } from '../src/features/site/PublicSiteChrome';
 import {
-  FAQ_DESCRIPTION,
-  FAQ_TITLE,
-  FaqPage,
   NOT_FOUND_TITLE,
   NotFoundPage,
   SUPPORT_DESCRIPTION,
   SUPPORT_TITLE,
   SupportPage,
 } from '../src/features/site/PublicHelpPages';
+import { FAQ_DESCRIPTION, FAQ_TITLE, FaqPage } from '../src/features/site/FaqPage';
+import { TariffsPage } from '../src/features/site/TariffsPage';
+import { TARIFFS_DESCRIPTION, TARIFFS_TITLE } from '../src/features/site/tariffsPageContent';
 import { deferEntryScript, landingTokenStats } from '../shared/landingStats';
 import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
@@ -48,6 +53,14 @@ import {
   legalPath,
   type LegalDocSlug,
 } from '../shared/legalRegistry';
+
+import {
+  onestFontFaceCss,
+  withOgImage,
+  withOnestPreload,
+  type OgImageName,
+  type OnestFiles,
+} from '../shared/seoHead';
 
 const SITE_ORIGIN = 'https://openqareer.com';
 
@@ -71,6 +84,12 @@ function legalHead(html: string, slug: LegalDocSlug, description: string): strin
 /** B535: /faq and /support carry their own title, description, canonical and og. */
 export const HELP_PAGES = [
   { path: '/faq', file: 'faq.html', title: FAQ_TITLE, description: FAQ_DESCRIPTION },
+  {
+    path: '/tariffs',
+    file: 'tariffs.html',
+    title: TARIFFS_TITLE,
+    description: TARIFFS_DESCRIPTION,
+  },
   {
     path: '/support',
     file: 'support.html',
@@ -141,6 +160,7 @@ export function buildSitemap(): string {
       lastmod: row.lastmod as string | undefined,
     })),
     { loc: `${SITE_ORIGIN}/tools/relocation`, lastmod: '2026-10-27' },
+    { loc: `${SITE_ORIGIN}/tools/salary-calculator`, lastmod: '2026-10-27' },
     ...LEGAL_DOCS.map((doc) => ({
       loc: `${SITE_ORIGIN}${legalPath(doc.slug)}`,
       lastmod: LEGAL_PACK_PUBLISHED_AT,
@@ -288,6 +308,28 @@ async function writeRelocationPage(
   await writeFile(`${distDirectory}/relocation.html`, document);
 }
 
+/** B569: /tools/salary-calculator ships its first paint with the 300 000 RUB example. */
+async function writeSalaryCalculatorPage(
+  html: string,
+  distDirectory: string,
+  styles: string,
+): Promise<void> {
+  const document = deferEntryScript(
+    withPageStyles(
+      pageHead(html, {
+        path: '/tools/salary-calculator',
+        title: CALC_TITLE,
+        description: CALC_DESCRIPTION,
+      }),
+      styles,
+    ),
+  ).replace(
+    EMPTY_ROOT,
+    bootstrapRoot(renderToStaticMarkup(<SalaryCalculatorPage onNavigate={() => {}} />)),
+  );
+  await writeFile(`${distDirectory}/salary-calculator.html`, document);
+}
+
 async function writeToolPages(
   html: string,
   distDirectory: string,
@@ -295,6 +337,11 @@ async function writeToolPages(
 ): Promise<void> {
   await writeCountryFitPage(html, distDirectory);
   await writeRelocationPage(html, distDirectory, pageStylesheets(manifest, 'relocationRoute'));
+  await writeSalaryCalculatorPage(
+    html,
+    distDirectory,
+    pageStylesheets(manifest, 'salaryCalculatorRoute'),
+  );
 }
 
 /** B535: /faq and /support are indexed documents with their own first paint. */
@@ -308,16 +355,24 @@ async function writeHelpPages(
     distDirectory,
     pageStylesheets(manifest, 'resumeBuilderRoute'),
   );
+  const docStyles = pageStylesheets(manifest, 'publicDocsRoute');
   await writeFile(
     `${distDirectory}/faq.html`,
-    deferEntryScript(helpHead(html, HELP_PAGES[0])).replace(
+    deferEntryScript(withPageStyles(helpHead(html, HELP_PAGES[0]), docStyles)).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<FaqPage onNavigate={() => {}} />)),
     ),
   );
   await writeFile(
+    `${distDirectory}/tariffs.html`,
+    deferEntryScript(withPageStyles(helpHead(html, HELP_PAGES[1]), docStyles)).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<TariffsPage onNavigate={() => {}} />)),
+    ),
+  );
+  await writeFile(
     `${distDirectory}/support.html`,
-    deferEntryScript(helpHead(html, HELP_PAGES[1])).replace(
+    deferEntryScript(helpHead(html, HELP_PAGES[2])).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<SupportPage onNavigate={() => {}} />)),
     ),
@@ -340,7 +395,8 @@ async function writeServerPageStyles(distDirectory: string): Promise<string> {
   if (/@import\b|url\s*\(/iu.test(source)) {
     throw new Error('Server page styles must be self-contained before relocation');
   }
-  const { code: css } = await transform(source, { loader: 'css', minify: true });
+  const { code: minified } = await transform(source, { loader: 'css', minify: true });
+  const css = `${onestFontFaceCss(await onestFiles(distDirectory))}${minified}`;
   const path = `/assets/server-pages-${createHash('sha256').update(css).digest('hex').slice(0, 12)}.css`;
   await mkdir(`${distDirectory}/assets`, { recursive: true });
   await writeFile(`${distDirectory}${path}`, css);
@@ -354,6 +410,7 @@ async function writeSalaryTemplate(html: string, distDirectory: string): Promise
     `${distDirectory}/salary-market.html`,
     withPageStyles(html, `<link rel="stylesheet" href="${stylesheet}">`)
       .replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js')
+      .replace('</body>', '<script src="/assets/oq-chrome-1.js" defer></script></body>')
       .replace(
         EMPTY_ROOT,
         renderToStaticMarkup(
@@ -363,13 +420,7 @@ async function writeSalaryTemplate(html: string, distDirectory: string): Promise
             </a>
             <PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />
             {'%%SALARY_CONTENT%%'}
-            <PublicFooter
-              onNavigate={() => {}}
-              onLanding={false}
-              signedIn={false}
-              interviewLink={false}
-              toolLinks={false}
-            />
+            <PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} planBar />
           </div>,
         ),
       )
@@ -545,6 +596,52 @@ async function writeNotFoundPage(html: string, distDirectory: string): Promise<v
   );
 }
 
+/** Hashed Onest woff2 files in `dist/assets`, keyed like `cyrillic-400`. */
+export async function onestFiles(distDirectory: string): Promise<OnestFiles> {
+  const names = await readdir(`${distDirectory}/assets`).catch(() => [] as string[]);
+  const entries = names.flatMap((name) => {
+    const match = /^onest-(cyrillic|latin)-(400|600)-normal-[\w-]+\.woff2$/u.exec(name);
+    return match ? [[`${match[1]}-${match[2]}`, `/assets/${name}`] as const] : [];
+  });
+  return Object.fromEntries(entries);
+}
+
+const OG_BY_FILE: Readonly<Record<string, OgImageName>> = {
+  'faq.html': 'faq',
+  'tariffs.html': 'tariffs',
+  'country-fit.html': 'salary-calculator',
+  'resume-builder.html': 'resume',
+  'relocation.html': 'relocation',
+  'salary-market.html': 'salaries',
+};
+
+/** SEO-03/04: font preload and the page's own share image, applied to the written documents. */
+async function applySeoHead(indexPath: string, distDirectory: string): Promise<void> {
+  const files = await onestFiles(distDirectory);
+  const targets = [
+    indexPath,
+    ...['support.html', ...Object.keys(OG_BY_FILE)].map((file) => `${distDirectory}/${file}`),
+    ...LEGAL_DOCS.map((doc) => `${distDirectory}/${legalDocumentFileName(doc.slug)}`),
+  ];
+  for (const target of targets) {
+    const file = target.slice(target.lastIndexOf('/') + 1);
+    const og = OG_BY_FILE[file];
+    const current = await readFile(target, 'utf8');
+    const withFonts = withOnestPreload(current, files);
+    await writeFile(target, og ? withOgImage(withFonts, og) : withFonts);
+  }
+}
+
+async function writeServerTemplates(
+  html: string,
+  indexPath: string,
+  distDirectory: string,
+): Promise<void> {
+  await writeSalaryTemplate(html, distDirectory);
+  await writeNotFoundPage(html, distDirectory);
+  await applySeoHead(indexPath, distDirectory);
+}
+
 export async function prerenderShells(
   indexPath: string,
   adminPath: string,
@@ -592,8 +689,7 @@ export async function prerenderShells(
   }
   await writeHelpPages(html, distDirectory, manifest);
   await writeToolPages(html, distDirectory, manifest);
-  await writeSalaryTemplate(html, distDirectory);
-  await writeNotFoundPage(html, distDirectory);
+  await writeServerTemplates(html, indexPath, distDirectory);
   await writeAuthPages(html, distDirectory, manifest ? authResourceHints(manifest) : '');
 
   // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
@@ -604,9 +700,17 @@ export async function prerenderShells(
   // поэтому расхождение с ним невозможно (B209).
   await writeFile(`${distDirectory}/llms.txt`, buildLlmsTxt());
   await writeFile(`${distDirectory}/llms-full.txt`, buildLlmsFullTxt());
-  // Стиль публичного каталога — настоящий файл, а не инлайн: боевая политика
-  // `style-src 'self'` инлайновый стиль не применит (B209).
-  await writeFile(`${distDirectory}${CATALOG_STYLESHEET_PATH}`, CATALOG_STYLE);
+  await writeCatalogStylesheet(distDirectory);
+}
+
+/**
+ * Стиль публичного каталога — настоящий файл, а не инлайн: боевая политика
+ * `style-src 'self'` инлайновый стиль не применит (B209). Бандла у каталога нет,
+ * поэтому шрифт Onest объявлен в самом файле (B569).
+ */
+async function writeCatalogStylesheet(distDirectory: string): Promise<void> {
+  const faces = onestFontFaceCss(await onestFiles(distDirectory));
+  await writeFile(`${distDirectory}${CATALOG_STYLESHEET_PATH}`, `${faces}${CATALOG_STYLE}`);
 }
 
 const directPath = process.argv[1];

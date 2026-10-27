@@ -29,6 +29,7 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   '/salaries',
   '/faq',
   '/support',
+  '/tariffs',
   '/tools/country-fit',
   '/tools/resume',
   '/tools/interview-questions',
