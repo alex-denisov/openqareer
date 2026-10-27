@@ -47,8 +47,9 @@ export function employersFromText(text: string): string[] {
   return [...new Set(found)].filter((name) => fold(name).length >= MIN_TOKEN).slice(0, 10);
 }
 
+/** Связь дают только подтверждённые каналы: догадка не может подтвердить другую догадку. */
 function channelValues(channels: readonly RecruiterChannel[]): string[] {
-  return channels.flatMap((channel) => {
+  return channels.filter((channel) => channel.status !== 'hypothesis').flatMap((channel) => {
     const values = [channel.value.replace(/^@/u, '')];
     if (channel.href?.startsWith('https://')) values.push(channel.href.replace(/^https:\/\/(www\.)?/u, '').replace(/\/$/u, ''));
     return values;
@@ -76,7 +77,12 @@ export function linkEvidence(identity: PersonIdentity, pageText: string): Identi
   const reasons: string[] = [];
   let score = 0;
   const lower = pageText.toLowerCase();
-  if (identity.knownValues.some((value) => lower.includes(value.toLowerCase()))) {
+  // Значение целиком, а не кусок слова: короткий ник не должен находиться где угодно.
+  const whole = (value: string) => {
+    const escaped = value.toLowerCase().replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    return new RegExp(`(?<![\\p{L}\\p{N}_])${escaped}(?![\\p{L}\\p{N}_])`, 'u').test(lower);
+  };
+  if (identity.knownValues.some(whole)) {
     score += 3;
     reasons.push('shared_contact');
   }

@@ -139,7 +139,10 @@ export function nearName(text: string, fullName: string): string {
   const needle = surname.toLocaleLowerCase('ru-RU');
   if (needle.length < 2) return '';
   const windows: string[] = [];
+  const letter = /[\p{L}\p{N}]/u;
   for (let index = lower.indexOf(needle); index >= 0; index = lower.indexOf(needle, index + needle.length)) {
+    // Фамилия целым словом: «Petrov» не находится внутри «Petrova».
+    if (letter.test(lower[index - 1] ?? '') || letter.test(lower[index + needle.length] ?? '')) continue;
     windows.push(text.slice(Math.max(0, index - NEAR_NAME_CHARS), index + needle.length + NEAR_NAME_CHARS));
   }
   return windows.join('\n');
@@ -300,7 +303,8 @@ async function fromTelegramNicks(
 ): Promise<RecruiterChannel[]> {
   if (known.some((channel) => channel.kind === 'telegram')) return [];
   const found: RecruiterChannel[] = [];
-  const linked = new Set(nicknames(known));
+  // Бонус за тот же ник — только от подтверждённых профилей, не от догадок и не от адреса почты.
+  const linked = new Set(nicknames(known.filter((channel) => channel.status !== 'hypothesis' && !channel.kind.startsWith('email_'))));
   const nicks = [...new Set([...linked, ...nameNicknames(person.fullName)])].slice(0, TELEGRAM_NICKS);
   for (const nick of nicks) {
     const url = `https://t.me/${nick}`;
