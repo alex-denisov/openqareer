@@ -4,6 +4,7 @@ import type {
   CountryComparisonCountry,
   CountryComparisonFact,
 } from '../../../shared/countryFit/countryComparison';
+import { geoCity, loadGeoDirectory } from '../../../shared/geo/geoDirectory';
 import { getMatchedVacancyPage } from '../coach/matchedVacancyApi';
 import { localIsoDate } from './relocationDates';
 
@@ -42,10 +43,19 @@ function countryAliases(countryCode: string): ReadonlySet<string> {
   return new Set(names.filter((name): name is string => Boolean(name)).map(normalise));
 }
 
+/**
+ * The pool mostly stores a bare city («Москва») with the campaign region and no
+ * country: region `ru` is Russia alone, any other city is looked up in the
+ * shared city directory.
+ */
 function placeInCountry(place: MatchedVacancyPlaceFacet, aliases: ReadonlySet<string>): boolean {
   if (place.country) return aliases.has(normalise(place.country));
-  const last = place.location?.split(',').at(-1);
-  return last ? aliases.has(normalise(last)) : false;
+  if (place.region === 'ru') return aliases.has('ru');
+  const parts = place.location?.split(',') ?? [];
+  const last = parts.at(-1);
+  if (last && aliases.has(normalise(last))) return true;
+  const city = geoCity(parts[0]?.trim());
+  return city ? aliases.has(normalise(city.country)) : false;
 }
 
 export function countryVacancyCount(sample: CountryVacancySample, countryCode: string): number {
@@ -99,6 +109,8 @@ export function countryVacancyFact(
 
 async function readSample(): Promise<CountryVacancySample | null> {
   try {
+    // Without the city directory only places that name their country are counted.
+    await loadGeoDirectory().catch(() => undefined);
     const page = await getMatchedVacancyPage(0);
     if (!page.facets?.places) return null;
     return { places: page.facets.places, total: page.facets.total, capturedAt: localIsoDate() };

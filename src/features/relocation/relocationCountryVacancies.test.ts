@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { loadGeoDirectory } from '../../../shared/geo/geoDirectory';
 import {
   countryVacancyCount,
   countryVacancyFact,
@@ -17,10 +18,29 @@ const sample = {
 };
 
 describe('country vacancies from the matched pool', () => {
+  beforeAll(() => loadGeoDirectory());
+
   it('counts places by ISO, Russian and English country names', () => {
     expect(countryVacancyCount(sample, 'DE')).toBe(12);
     expect(countryVacancyCount(sample, 'RU')).toBe(80);
     expect(countryVacancyCount(sample, 'PT')).toBe(0);
+  });
+
+  it('counts the prod pool shape: a city with the campaign region and no country (OWNER_TEST, 28.10)', () => {
+    const pool = {
+      total: 145,
+      capturedAt: '2026-10-28',
+      places: [
+        { location: 'Москва', isRemote: true, region: 'ru' as const, count: 44 },
+        { location: 'Москва', region: 'ru' as const, count: 57 },
+        { location: 'Славгород (Алтайский край)', region: 'ru' as const, count: 1 },
+        { location: 'Белград', count: 4 },
+        { location: 'Remote', isRemote: true, count: 3 },
+      ],
+    };
+    expect(countryVacancyCount(pool, 'RU')).toBe(102);
+    expect(countryVacancyCount(pool, 'RS')).toBe(4);
+    expect(countryVacancyCount(pool, 'DE')).toBe(0);
   });
 
   it('builds a dated fact out of the pool size, or no fact without a pool', () => {
