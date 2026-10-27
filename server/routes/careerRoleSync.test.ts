@@ -154,3 +154,38 @@ describe('роли «Карьеры» задают сбор вакансий (27
     expect(record.mock.calls[0]?.[0]).toEqual(['head of ai', 'head of customer support']);
   });
 });
+
+describe('роли рынка — только в направлениях опыта кандидата (27.10)', () => {
+  it('убирает роль рынка чужой функции, когда роли по опыту известны', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: ['VP of Engineering'] } });
+    const context = {
+      proposals: [role('Head of AI'), role('Руководитель автосервиса', 'market'), role('Head of Data', 'market')],
+      matched: [],
+      confirmedSkills: [],
+    } as unknown as RoleContext;
+    const roles = careerRolesWithCandidateChoices({ candidateStore: store as never }, 'c1', context);
+    expect(roles.map((r) => r.title)).toEqual(['VP of Engineering', 'Head of AI']);
+  });
+
+  it('без ролей по опыту роли рынка остаются', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: [] } });
+    const context = {
+      proposals: [role('Chief of Staff', 'market')],
+      matched: [],
+      confirmedSkills: [],
+    } as unknown as RoleContext;
+    const roles = careerRolesWithCandidateChoices({ candidateStore: store as never }, 'c1', context);
+    expect(roles.map((r) => r.title)).toEqual(['Chief of Staff']);
+  });
+
+  it('роли рынка не становятся запросами к площадкам', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: [] } });
+    const record = vi.fn();
+    persistCareerRoles(
+      { candidateStore: store as never, vacancyDemand: { record, recentTerms: () => [] } },
+      'c1',
+      [role('Head of AI'), role('Logistics Manager', 'market')],
+    );
+    expect(record.mock.calls[0]?.[0]).toEqual(['head of ai']);
+  });
+});

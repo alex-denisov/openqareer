@@ -1,7 +1,7 @@
 import { careerRoleId, type ProposedRole } from '../../shared/roleProposals';
 import { roleWorkFamily } from '../../shared/roleWorkFamilies';
 import type { CareerRoleRef } from '../vacancies/campaign';
-import { careerRoleKey } from '../vacancies/careerRoleKey';
+import { careerRoleFunctions, careerRoleKey } from '../vacancies/careerRoleKey';
 import { searchTermsForRoles } from '../vacancies/vacancyDemandTerms';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
@@ -63,8 +63,29 @@ export function careerRolesWithCandidateChoices(
   // название кандидата, вакансии считаются по функции и уровню.
   return [
     ...chosen,
-    ...context.proposals.filter((role) => !chosenKeys.has(sameRoleKey(role.title))),
+    ...withinExperience(context.proposals, chosen).filter(
+      (role) => !chosenKeys.has(sameRoleKey(role.title)),
+    ),
   ];
+}
+
+/**
+ * Роль рынка показывается только в направлениях, где у кандидата есть опыт или
+ * выбор: «Руководитель автосервиса» руководителю ИТ — шум (решение владельца
+ * 27.10). Пока ролей по опыту нет, рынок остаётся единственной подсказкой.
+ */
+function withinExperience(
+  proposals: readonly ProposedRole[],
+  chosen: readonly ProposedRole[],
+): readonly ProposedRole[] {
+  const grounded = [...chosen, ...proposals.filter((role) => role.origin !== 'market')];
+  const functions = new Set(grounded.flatMap((role) => careerRoleFunctions(role.title)));
+  if (functions.size === 0) return proposals;
+  return proposals.filter(
+    (role) =>
+      role.origin !== 'market' ||
+      careerRoleFunctions(role.title).some((code) => functions.has(code)),
+  );
 }
 
 /**
@@ -85,7 +106,11 @@ export function persistCareerRoles(
   // Каждая роль на экране — запрос к площадкам, даже если вакансий по ней ещё
   // нет: сбор подстраивается под кандидата, а не наоборот (27.10).
   deps.vacancyDemand?.record(
-    searchTermsForRoles([...(workspace.campaign?.roles ?? []), ...roles.map((role) => role.title)]),
+    // Роли рынка не в счёт: их никто не выбирал и не называл по опыту.
+    searchTermsForRoles([
+      ...(workspace.campaign?.roles ?? []),
+      ...roles.filter((role) => role.origin !== 'market').map((role) => role.title),
+    ]),
     Date.now(),
   );
   // Как и пересборка ролей: без выбора кандидата его поля остаются пустыми.
