@@ -70,10 +70,7 @@ function AtsSummary({ model }: { readonly model: ResumeBuilderModel }) {
   const othersOk = others.every((check) => check.status === 'ok');
   return (
     <div className="ats">
-      <span
-        className="ring"
-        style={{ '--v': Math.round((passed / total) * 100) } as React.CSSProperties}
-      >
+      <span className={`ring is-${passed}`}>
         <b>
           {passed}/{total}
         </b>

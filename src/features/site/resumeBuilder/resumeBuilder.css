@@ -520,6 +520,22 @@
   place-items: center;
   flex: none;
 }
+/* Passed checks out of four; classes, not inline styles (CSP). */
+.rbp .ring.is-0 {
+  --v: 0;
+}
+.rbp .ring.is-1 {
+  --v: 25;
+}
+.rbp .ring.is-2 {
+  --v: 50;
+}
+.rbp .ring.is-3 {
+  --v: 75;
+}
+.rbp .ring.is-4 {
+  --v: 100;
+}
 .rbp .ring b {
   width: 40px;
   height: 40px;
@@ -567,19 +583,16 @@
   min-height: 48px;
   resize: vertical;
 }
-.rbp .vac p,
-.rbp .rb-notice {
+.rbp .vac p {
   margin: 0;
   font-size: var(--t-sm);
   color: var(--soft);
 }
 .rbp .rb-notice {
   margin: 0;
-  font-size: var(--t-sm);
-  color: var(--soft);
-}
-.rbp .rb-notice {
   padding: 0 16px 12px;
+  font-size: var(--t-sm);
+  color: var(--soft);
 }
 .rbp .nextj {
   display: flex;
