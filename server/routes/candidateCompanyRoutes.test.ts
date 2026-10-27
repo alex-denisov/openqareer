@@ -237,7 +237,7 @@ describe('candidate company routes (B439)', () => {
     expect(body.linkedin).toMatchObject({ status: 'disconnected', contactsImported: false });
   });
 
-  it('fills a wanted company outside the selection with its vacancies from the pool', async () => {
+  it('shows only selection vacancies for a wanted company (mockup 13, 28.10)', async () => {
     const pool = matchedVacancy('cluster-autodesk', 'Autodesk, Inc.').cluster;
     const asked: string[] = [];
     const { app, authorization, candidate, wants } = await setup(
@@ -257,23 +257,17 @@ describe('candidate company routes (B439)', () => {
       headers: { authorization },
     });
     const row = list.json().data.items.find((item: { name: string }) => item.name === 'Autodesk');
-    expect(row).toMatchObject({
-      key,
-      vacancyCount: 1,
-      location: 'Remote, US',
-      want: true,
-      outsideSelection: true,
-    });
-    expect(row.sources[0]).toMatchObject({ name: 'hh.ru' });
-    expect(asked).toEqual(['Autodesk']);
+    // Пул компании вне подборки не подмешивается: «Все N вакансий компании в подборке».
+    expect(row).toMatchObject({ key, vacancyCount: 0, want: true });
+    expect(asked).toEqual([]);
 
     const detail = await app.inject({
       url: `/api/v1/candidate/companies/${key}`,
       headers: { authorization },
     });
     expect(detail.statusCode).toBe(200);
-    expect(detail.json().data.totalVacancies).toBe(1);
-    expect(detail.json().data.vacancies[0]).toMatchObject({ id: 'cluster-autodesk' });
+    expect(detail.json().data.totalVacancies).toBe(0);
+    expect(detail.json().data.vacancies).toEqual([]);
   });
 
   it('paginates the full company set by twenty and sorts by the selected rule', async () => {
@@ -402,13 +396,29 @@ describe('candidate company routes (B439)', () => {
       createdAt: '2026-10-08T12:00:00.000Z',
       updatedAt: '2026-10-08T12:00:00.000Z',
     };
-    contacts.saveContacts(candidate.id, 'cluster-v1', [{
-      ...contact,
-      channels: [
-        { kind: 'linkedin', value: 'anna-sedova', href: 'https://www.linkedin.com/in/anna-sedova', status: 'published', sourceUrl: 'https://internal-source.example', observedAt: '2026-10-08T12:00:00.000Z' },
-        { kind: 'telegram', value: '@anna_hr', href: 'https://t.me/anna_hr', status: 'published', sourceUrl: 'https://internal-source.example', observedAt: '2026-10-08T12:00:00.000Z' },
-      ],
-    }]);
+    contacts.saveContacts(candidate.id, 'cluster-v1', [
+      {
+        ...contact,
+        channels: [
+          {
+            kind: 'linkedin',
+            value: 'anna-sedova',
+            href: 'https://www.linkedin.com/in/anna-sedova',
+            status: 'published',
+            sourceUrl: 'https://internal-source.example',
+            observedAt: '2026-10-08T12:00:00.000Z',
+          },
+          {
+            kind: 'telegram',
+            value: '@anna_hr',
+            href: 'https://t.me/anna_hr',
+            status: 'published',
+            sourceUrl: 'https://internal-source.example',
+            observedAt: '2026-10-08T12:00:00.000Z',
+          },
+        ],
+      },
+    ]);
 
     const page = await app.inject({
       url: '/api/v1/candidate/companies',
@@ -419,7 +429,13 @@ describe('candidate company routes (B439)', () => {
     expect(body).not.toContain('pool_session');
     expect(body).not.toContain('internal-source.example');
     expect(page.json().data.items[0].recruiters[0].channels).toEqual([
-      { kind: 'telegram', value: '@anna_hr', href: 'https://t.me/anna_hr', status: 'published', observedAt: '2026-10-08T12:00:00.000Z' },
+      {
+        kind: 'telegram',
+        value: '@anna_hr',
+        href: 'https://t.me/anna_hr',
+        status: 'published',
+        observedAt: '2026-10-08T12:00:00.000Z',
+      },
     ]);
     expect(page.json().data.items[0].recruiters[0]).toMatchObject({
       fullName: 'Анна Седова',
