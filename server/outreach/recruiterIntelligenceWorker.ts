@@ -4,6 +4,7 @@ import type { FootprintRequestGate } from '../osint/adapters/requestScheduler';
 import { createCompanySiteFinder, createOpenWebRecruiterFinder, resolveCompanyDomain } from './openWebRecruiterFinder';
 import type { RecruiterContact } from '../../shared/recruiterContact';
 import { withDossier } from './dossier/recruiterDossierService';
+import { findHiringManager, hiringManagerContact } from './hiringManagerFinder';
 import { defaultMxResolver, discoverRecruiterContacts } from './recruiterIntelligenceService';
 import type { DiscoveryOptions, MxResolver, UnifiedVacancyInput } from './recruiterIntelligenceService';
 
@@ -77,6 +78,25 @@ async function withDossiers(
   return result;
 }
 
+/** Нанимающий менеджер вакансии рядом с рекрутёром; тот же человек дважды не добавляется. */
+async function hiringManager(
+  vacancy: UnifiedVacancyInput,
+  found: readonly RecruiterContact[],
+  discovery: DiscoveryOptions,
+  options: RecruiterIntelligenceWorkerOptions,
+): Promise<RecruiterContact[]> {
+  const { openWeb, linkedinPool } = options;
+  if (!openWeb || !linkedinPool) return [];
+  const manager = await findHiringManager(vacancy, {
+    database: linkedinPool.getDatabase(),
+    apiKey: openWeb.apiKey,
+    ...(openWeb.fetch ? { fetch: openWeb.fetch } : {}),
+    ...(openWeb.requestGate ? { requestGate: openWeb.requestGate } : {}),
+  });
+  if (!manager || found.some((contact) => contact.fullName.toLowerCase() === manager.fullName.toLowerCase())) return [];
+  return [hiringManagerContact(vacancy, manager, await discovery.resolveDomain?.(vacancy), new Date())];
+}
+
 /** Processes a bounded durable batch outside the request handler. */
 export async function runRecruiterIntelligenceJobs(
   options: RecruiterIntelligenceWorkerOptions,
@@ -94,7 +114,8 @@ export async function runRecruiterIntelligenceJobs(
         linkedinPool: options.linkedinPool,
         ...discovery,
       });
-      const contacts = await withDossiers(found, vacancy, discovery, options);
+      const people = [...found, ...(await hiringManager(vacancy, found, discovery, options))];
+      const contacts = await withDossiers(people, vacancy, discovery, options);
       options.repository.saveContacts(job.candidateId, job.vacancyId, contacts);
       options.repository.finishJob(job.id, 'ready');
       completed += 1;

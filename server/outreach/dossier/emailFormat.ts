@@ -84,6 +84,18 @@ function nameCandidates(text: string): string[] {
   return pairs;
 }
 
+/** Общие ящики и шаблонные имена-примеры: по ним формула не выводится. */
+const ROLE_MAILBOXES = new Set([
+  'recruiting', 'recruitment', 'recruiter', 'hr', 'jobs', 'job', 'careers', 'career', 'talent', 'hiring', 'info',
+  'team', 'press', 'media', 'hello', 'contact', 'contacts', 'support', 'sales', 'office', 'admin', 'mail', 'privacy',
+]);
+const PLACEHOLDER_NAMES = new Set(['john doe', 'jane doe', 'john smith', 'jane smith', 'ivan ivanov', 'иван иванов', 'first last']);
+
+function isPersonalSample(sample: EmailSample): boolean {
+  const local = sample.email.split('@')[0] ?? '';
+  return !ROLE_MAILBOXES.has(local) && !PLACEHOLDER_NAMES.has(sample.fullName.trim().toLowerCase());
+}
+
 const LOCAL_CHAR = /[A-Za-z0-9._%+-]/u;
 const MAX_LOCAL_CHARS = 64;
 
@@ -105,7 +117,7 @@ export function samplesFromText(text: string, domain: string): EmailSample[] {
     const email = lower.slice(start, at + needle.length);
     const before = text.slice(Math.max(0, start - NAME_BEFORE_CHARS), start);
     const fullName = nameCandidates(before).reverse().find((name) => formatsOf({ fullName: name, email }).length > 0);
-    if (fullName && !samples.some((sample) => sample.email === email)) samples.push({ fullName, email });
+    if (fullName && isPersonalSample({ fullName, email }) && !samples.some((sample) => sample.email === email)) samples.push({ fullName, email });
   }
   return samples;
 }

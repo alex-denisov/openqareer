@@ -3,7 +3,7 @@ import type { RecruiterChannel, RecruiterChannelStatus } from '../../../shared/r
 import { rankChannels } from '../../../shared/recruiterChannel';
 import type { EmailStatus, RecruiterContact } from '../../../shared/recruiterContact';
 import type { DossierDeps } from './collectRecruiterDossier';
-import { collectRecruiterDossier } from './collectRecruiterDossier';
+import { collectRecruiterDossier, namesPerson } from './collectRecruiterDossier';
 import type { CompanyPagesResult } from './companyPages';
 import { collectCompanyPages } from './companyPages';
 import { applyEmailFormat, formatsOf } from './emailFormat';
@@ -109,6 +109,22 @@ function sameName(a: string, b: string): boolean {
   return fold(a) === fold(b);
 }
 
+const AFTER_NAME_CHARS = 160;
+const NEXT_PERSON = /\p{Lu}\p{Ll}+[ \t\u00a0]+\p{Lu}\p{Ll}+/u;
+
+/**
+ * Текст сразу после имени до следующего человека: на странице контактов
+ * телефон стоит под именем, а соседний — уже чужой.
+ */
+function afterName(text: string, fullName: string): string {
+  const surname = fullName.trim().split(/\s+/u).at(-1) ?? '';
+  const index = surname.length > 1 ? text.indexOf(surname) : -1;
+  if (index < 0) return '';
+  const tail = text.slice(index + surname.length, index + surname.length + AFTER_NAME_CHARS);
+  const next = NEXT_PERSON.exec(tail);
+  return next ? tail.slice(0, next.index) : tail;
+}
+
 /**
  * Рабочая почта по страницам компании: опубликованный адрес человека, иначе
  * формула по чужим опубликованным адресам. Формула заменяет общий шаблон-догадку.
@@ -119,18 +135,24 @@ export function companyEmailChannels(
   pages: CompanyPagesResult,
   observedAt: string,
 ): { channels: RecruiterChannel[]; replacesGuess: boolean } {
+  const direct = (pages.snippets ?? [])
+    .filter((snippet) => namesPerson(snippet.text, contact.fullName))
+    .flatMap((snippet) =>
+      extractChannels(afterName(snippet.text, contact.fullName), { companyDomain: domain, sourceUrl: snippet.sourceUrl, observedAt })
+        .filter((channel) => !channel.kind.startsWith('email_')),
+    );
   const own = pages.samples.find((sample) => sameName(sample.fullName, contact.fullName));
   if (own) {
     return {
-      channels: [{ kind: 'email_corporate', value: own.email, href: `mailto:${own.email}`, status: 'published', sourceUrl: own.sourceUrl, observedAt }],
+      channels: [...direct, { kind: 'email_corporate', value: own.email, href: `mailto:${own.email}`, status: 'published', sourceUrl: own.sourceUrl, observedAt }],
       replacesGuess: true,
     };
   }
-  if (!pages.format) return { channels: [], replacesGuess: false };
+  if (!pages.format) return { channels: direct, replacesGuess: false };
   const email = applyEmailFormat(pages.format.id, contact.fullName, domain);
-  if (!email || !formatsOf({ fullName: contact.fullName, email }).includes(pages.format.id)) return { channels: [], replacesGuess: false };
+  if (!email || !formatsOf({ fullName: contact.fullName, email }).includes(pages.format.id)) return { channels: direct, replacesGuess: false };
   return {
-    channels: [{ kind: 'email_corporate', value: email, href: `mailto:${email}`, status: 'hypothesis', sourceUrl: pages.format.sourceUrl, observedAt }],
+    channels: [...direct, { kind: 'email_corporate', value: email, href: `mailto:${email}`, status: 'hypothesis', sourceUrl: pages.format.sourceUrl, observedAt }],
     replacesGuess: true,
   };
 }

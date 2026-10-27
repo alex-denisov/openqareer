@@ -7,7 +7,7 @@ import { transliterateToLatin } from '../recruiterIntelligenceService';
 import { getCuratedMaigretSite } from '../../osint/adapters/maigretSiteCatalogue';
 import type { MaigretSite } from '../../osint/adapters/maigretSiteCatalogue';
 import { createUsernamePresenceAdapter } from '../../osint/adapters/usernamePresenceAdapter';
-import { fetchPublicPage } from './companyPages';
+import { fetchPublicPage, isContactBroker } from './companyPages';
 import { extractChannels } from './extractChannels';
 
 /**
@@ -46,7 +46,7 @@ const MAX_BODY_CHARS = 200_000;
 const EXA_PAGES = 8;
 const EXA_PAGE_CHARS = 4_000;
 const GITHUB_CANDIDATES = 3;
-const TELEGRAM_NICKS = 4;
+const TELEGRAM_NICKS = 8;
 const PROFILE_NICKS = 2;
 const PROFILE_HEAD_CHARS = 1_500;
 /** Сайты из списка Maigret/Sherlock, где рекрутёры ведут профили с контактами в описании. */
@@ -59,13 +59,13 @@ function fold(value: string): string {
   return transliterateToLatin(value.normalize('NFKC')).replace(/[\s._-]+/gu, ' ').trim();
 }
 
-function namesPerson(text: string, fullName: string): boolean {
+export function namesPerson(text: string, fullName: string): boolean {
   const page = fold(text);
   const parts = fold(fullName).split(' ').filter((part) => part.length > 1);
   return parts.length >= 2 && parts.every((part) => page.includes(part));
 }
 
-function namesCompany(text: string, companyName: string): boolean {
+export function namesCompany(text: string, companyName: string): boolean {
   const company = fold(companyName).replace(/\s+/gu, '');
   return company.length > 1 && fold(text).replace(/\s+/gu, '').includes(company);
 }
@@ -109,7 +109,7 @@ async function getJson<T>(url: string, deps: DossierDeps, state: RunState): Prom
 const NEAR_NAME_CHARS = 400;
 
 /** Фрагменты страницы рядом с упоминанием фамилии: чужие контакты со страницы не берутся. */
-function nearName(text: string, fullName: string): string {
+export function nearName(text: string, fullName: string): string {
   const parts = fullName.trim().split(/\s+/u);
   const surname = parts[parts.length - 1] ?? '';
   const lower = text.toLocaleLowerCase('ru-RU');
@@ -147,6 +147,8 @@ async function fromOpenPages(
       contents: { text: { maxCharacters: EXA_PAGE_CHARS } },
     });
     return pages
+      // Базы контактов — не публикация человека: их адреса не берутся (B258, без баз «пробива»).
+      .filter((page) => !isContactBroker(page.url))
       .filter((page) => namesPerson(`${page.title}\n${page.text}`, person.fullName))
       .flatMap((page) =>
         extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: page.url, observedAt }),
@@ -225,9 +227,29 @@ function nicknames(channels: readonly RecruiterChannel[]): string[] {
     .slice(0, TELEGRAM_NICKS);
 }
 
-function telegramTitle(html: string): string | null {
-  const match = /<meta property="og:title" content="([^"]{1,200})"/u.exec(html);
+/**
+ * Ники, которые люди чаще всего берут от имени: annasmith, anna_smith,
+ * asmith, smithanna. Проверяются там, где ник открыт без входа (Telegram,
+ * сайты Maigret); принимается только страница с тем же именем.
+ */
+export function nameNicknames(fullName: string): string[] {
+  const parts = transliterateToLatin(fullName.normalize('NFKC')).replace(/[^a-z\s]/gu, '').split(/\s+/u).filter(Boolean);
+  if (parts.length < 2) return [];
+  const first = parts[0]!;
+  const last = parts[parts.length - 1]!;
+  return [`${first}${last}`, `${first}_${last}`, `${first[0]}${last}`, `${last}${first}`, `${first}${last[0]}`]
+    .filter((nick) => /^[a-z][a-z0-9_]{4,31}$/u.test(nick));
+}
+
+const HR_WORDS = /\b(?:hr|recruit\w*|talent|hiring|рекрут\w*|подбор\w*|найм\w*|hrbp)\b/iu;
+
+function metaContent(html: string, property: string): string | null {
+  const match = new RegExp(`<meta property="${property}" content="([^"]{1,400})"`, 'u').exec(html);
   return match ? match[1]! : null;
+}
+
+function telegramTitle(html: string): string | null {
+  return metaContent(html, 'og:title');
 }
 
 async function fromTelegramNicks(
@@ -239,13 +261,22 @@ async function fromTelegramNicks(
 ): Promise<RecruiterChannel[]> {
   if (known.some((channel) => channel.kind === 'telegram')) return [];
   const found: RecruiterChannel[] = [];
-  for (const nick of nicknames(known)) {
+  const linked = new Set(nicknames(known));
+  const nicks = [...new Set([...linked, ...nameNicknames(person.fullName)])].slice(0, TELEGRAM_NICKS);
+  for (const nick of nicks) {
     const url = `https://t.me/${nick}`;
-    const title = telegramTitle((await getText(url, deps, 'text/html', state)) ?? '');
+    const html = (await getText(url, deps, 'text/html', state)) ?? '';
+    const title = telegramTitle(html);
     // Страница без профиля называется «Telegram: Contact @nick» — имени человека в ней нет.
-    if (title && namesPerson(title, person.fullName)) {
-      found.push({ kind: 'telegram', value: `@${nick}`, href: url, status: 'hypothesis', sourceUrl: url, observedAt });
-    }
+    // Пустой ник отдаёт «Telegram: Contact @nick»: ник из имени прошёл бы проверку имени сам.
+    if (!title || /^Telegram:/u.test(title) || !namesPerson(title, person.fullName)) continue;
+    // Одно имя — однофамилец, а не контакт (B258 п. 4а). Нужна вторая связь: компания или найм
+    // в описании профиля, либо тот же ник у уже найденного канала этого человека.
+    const bio = metaContent(html, 'og:description') ?? '';
+    const confirmed = namesCompany(bio, person.companyName) || HR_WORDS.test(bio);
+    if (!confirmed && !linked.has(nick)) continue;
+    found.push({ kind: 'telegram', value: `@${nick}`, href: url, status: confirmed ? 'published' : 'hypothesis', sourceUrl: url, observedAt });
+    break;
   }
   return found;
 }
@@ -266,7 +297,7 @@ async function fromUsernameSites(
   );
   const found: RecruiterChannel[] = [];
   const refused = new Set<string>();
-  for (const nick of nicknames(known).slice(0, PROFILE_NICKS)) {
+  for (const nick of [...new Set([...nicknames(known), ...nameNicknames(person.fullName)])].slice(0, PROFILE_NICKS)) {
     for (const site of sites) {
       if (refused.has(site.name)) continue;
       const adapter = createUsernamePresenceAdapter(site.adapterId, {
@@ -291,7 +322,9 @@ async function fromUsernameSites(
       }
       // Имя должно стоять в шапке профиля, а не где-то в ленте или блоке «похожие».
       if (!page.text || !namesPerson(page.text.slice(0, PROFILE_HEAD_CHARS), person.fullName)) continue;
-      const status: RecruiterChannel['status'] = namesCompany(page.text, person.companyName) ? 'published' : 'hypothesis';
+      // Профиль без компании — однофамилец, не контакт (B258 п. 4а).
+      if (!namesCompany(page.text, person.companyName)) continue;
+      const status: RecruiterChannel['status'] = 'published';
       found.push({ kind: 'other', value: profileUrl.replace(/^https:\/\//u, ''), href: profileUrl, status, sourceUrl: profileUrl, observedAt });
       found.push(
         ...extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: profileUrl, observedAt })

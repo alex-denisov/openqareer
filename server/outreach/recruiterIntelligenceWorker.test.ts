@@ -99,11 +99,14 @@ describe('recruiter intelligence worker', () => {
       encryptionKey: Buffer.alloc(32, 2),
       runtimeRoot: join(poolDir, 'runtime'),
     });
-    const fetch = vi.fn(async () => new Response(JSON.stringify({ results: [{
-      url: 'https://www.linkedin.com/in/anna-smith',
-      title: 'Anna Smith',
-      text: '# Anna Smith\nTalent Acquisition Partner at Acme\nLondon, United Kingdom (GB)',
-    }] }), { status: 200 }));
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      if (!String(input instanceof Request ? input.url : input).startsWith('https://api.exa.ai/')) return new Response('', { status: 404 });
+      return new Response(JSON.stringify({ results: [{
+        url: 'https://www.linkedin.com/in/anna-smith',
+        title: 'Anna Smith',
+        text: '# Anna Smith\nTalent Acquisition Partner at Acme\nLondon, United Kingdom (GB)',
+      }] }), { status: 200 });
+    });
 
     const result = await runRecruiterIntelligenceJobs({
       repository,

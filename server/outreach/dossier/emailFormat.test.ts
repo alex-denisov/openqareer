@@ -4,7 +4,7 @@ import { applyEmailFormat, inferEmailFormat, samplesFromText } from './emailForm
 describe('email format from public examples', () => {
   it('finds the format that most public addresses follow', () => {
     const format = inferEmailFormat([
-      { fullName: 'John Doe', email: 'j.doe@acme.com' },
+      { fullName: 'John Carter', email: 'j.carter@acme.com' },
       { fullName: 'Mary Major', email: 'm.major@acme.com' },
       { fullName: 'Ivan Petrov', email: 'ivan@acme.com' },
     ]);
@@ -13,7 +13,7 @@ describe('email format from public examples', () => {
   });
 
   it('gives no format without an address matching a name', () => {
-    expect(inferEmailFormat([{ fullName: 'John Doe', email: 'info@acme.com' }])).toBeNull();
+    expect(inferEmailFormat([{ fullName: 'John Carter', email: 'info@acme.com' }])).toBeNull();
   });
 
   it('builds the address of a Cyrillic name in Latin letters', () => {
@@ -22,10 +22,14 @@ describe('email format from public examples', () => {
   });
 
   it('pairs company addresses with the names written next to them', () => {
-    const text = 'Team\nJohn Doe, Head of Sales — john.doe@acme.com\nPress: press@acme.com\nMary Major mary.major@acme.com\nfoo@other.com';
+    const text = 'Team\nJohn Carter, Head of Sales — john.carter@acme.com\nPress: press@acme.com\nMary Major mary.major@acme.com\nfoo@other.com';
     expect(samplesFromText(text, 'acme.com')).toEqual([
-      { fullName: 'John Doe', email: 'john.doe@acme.com' },
+      { fullName: 'John Carter', email: 'john.carter@acme.com' },
       { fullName: 'Mary Major', email: 'mary.major@acme.com' },
     ]);
+  });
+  it('ignores shared mailboxes and placeholder names', () => {
+    const text = 'Recruiting Team recruiting@acme.com. Example: Jane Smith jane.smith@acme.com';
+    expect(samplesFromText(text, 'acme.com')).toEqual([]);
   });
 });
