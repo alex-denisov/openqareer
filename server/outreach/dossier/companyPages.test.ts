@@ -52,6 +52,23 @@ describe('company pages', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('reads an archived team page the live site no longer has', async () => {
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith('https://api.exa.ai/')) return new Response(JSON.stringify({ results: [] }), { status: 200 });
+      if (url.startsWith('https://web.archive.org/cdx/') && url.includes(encodeURIComponent('https://acme.com/team'))) {
+        return new Response(JSON.stringify([['timestamp', 'original', 'statuscode'], ['20240101000000', 'https://acme.com/team', '200']]), { status: 200 });
+      }
+      if (url.startsWith('https://web.archive.org/cdx/')) return new Response('[]', { status: 200 });
+      if (url === 'https://web.archive.org/web/20240101000000id_/https://acme.com/team') {
+        return new Response(teamPage, { status: 200, headers: { 'content-type': 'text/html' } });
+      }
+      return new Response('', { status: 404 });
+    });
+    const result = await collectCompanyPages('acme.com', deps(fetch));
+    expect(result.format).toEqual({ id: 'f.last', support: 2, sourceUrl: 'https://web.archive.org/web/20240101000000/https://acme.com/team' });
+  });
+
   it('stops asking the site after it refuses by rate', async () => {
     const fetch = site({ 'https://acme.com/team': '429', 'https://acme.com/about': teamPage });
     const result = await collectCompanyPages('acme.com', deps(fetch));
