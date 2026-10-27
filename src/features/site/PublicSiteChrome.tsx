@@ -17,6 +17,8 @@ export interface PublicChromeProps {
   readonly signedIn: boolean;
   /** Administrators also get a link to the console. */
   readonly isAdmin?: boolean;
+  /** B568: off on /salaries, whose raw HTML budget has no room for another footer link. */
+  readonly interviewLink?: boolean;
 }
 
 function anchor(onLanding: boolean, id: string): string {
@@ -88,7 +90,10 @@ export function PublicHeader({ onNavigate, onLanding, signedIn, isAdmin }: Publi
   );
 }
 
-function FooterHelpAndDocs({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>) {
+function FooterHelpAndDocs({
+  onNavigate,
+  interviewLink = true,
+}: Pick<PublicChromeProps, 'onNavigate' | 'interviewLink'>) {
   return (
     <>
       <div className="ps-footer-group">
@@ -96,7 +101,7 @@ function FooterHelpAndDocs({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>
         <SiteLink to="/tools/country-fit" onNavigate={onNavigate}>
           Калькулятор Country Fit
         </SiteLink>
-        <a href="/tools/interview-questions">Вопросы на собеседовании</a>
+        {interviewLink ? <a href="/tools/interview-questions">Вопросы на собеседовании</a> : null}
         <SiteLink to="/faq" onNavigate={onNavigate}>
           Вопросы и ответы
         </SiteLink>
@@ -124,7 +129,7 @@ function FooterHelpAndDocs({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>
 }
 
 /** B535: footer with grouped links, contacts and the operator's tax id. */
-export function PublicFooter({ onNavigate, onLanding }: PublicChromeProps) {
+export function PublicFooter({ onNavigate, onLanding, interviewLink }: PublicChromeProps) {
   return (
     <footer className="ps-footer">
       <div className="ps-wrap ps-footer-grid">
@@ -149,7 +154,7 @@ export function PublicFooter({ onNavigate, onLanding }: PublicChromeProps) {
           <a href="/vacancies/remote">Удалённые вакансии</a>
           <a href="/salaries">Зарплаты и навыки</a>
         </div>
-        <FooterHelpAndDocs onNavigate={onNavigate} />
+        <FooterHelpAndDocs onNavigate={onNavigate} interviewLink={interviewLink} />
         <div className="ps-footer-legal">
           <span>© {new Date().getFullYear()} openqareer</span>
           <span>ИП, ИНН {OPERATOR_TAX_ID}</span>
