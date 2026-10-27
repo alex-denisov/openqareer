@@ -30,6 +30,7 @@ import {
   salaryRangeDistribution,
   type MutableExclusions,
 } from './salaryMarketRanges';
+import { prepareSalaryCityScratch, salaryCityOf, type CityCounter } from './salaryMarketCities';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SalaryMarketSnapshot, SalaryObservation } from '../../shared/salaryMarketSnapshot';
 
@@ -140,6 +141,7 @@ function recordCohort(
 function accumulateClassifiedRoles(
   database: DatabaseSync,
   skills: SkillCounter,
+  cities: CityCounter,
   roles: readonly string[],
 ): Map<string, RoleState> {
   const groups = new Map<string, RoleState>();
@@ -153,6 +155,12 @@ function accumulateClassifiedRoles(
       // skill set, including mixed-source clusters. Keep the vacancy denominator.
       const names = row.skills_withheld === 1 ? [] : salarySkillsOf(row.skills_json);
       recordCohort(database, skills, row.role, row, group, names);
+      cities.record(
+        row.role,
+        salaryCityOf(row.location, row.is_remote === 1),
+        row.cluster_id,
+        row.salary_json,
+      );
       const geography = salaryGeography(row.location, row.is_remote === 1);
       if (geography.status === 'explicit_country') group.geography.explicitCountryCount += 1;
       else if (geography.status === 'ambiguous_country') group.geography.ambiguousCountryCount += 1;
@@ -226,6 +234,7 @@ function assembleRoleSnapshot(
   role: string,
   group: RoleState,
   now: Date,
+  cities: CityCounter,
 ): SalaryMarketSnapshot {
   const all = assembleCohort(database, skills, role, group);
   return {
@@ -251,6 +260,7 @@ function assembleRoleSnapshot(
         group.locationStates.get(location) ?? cohortState(),
       ),
     })),
+    cityMarket: cities.assemble(role),
   };
 }
 
@@ -261,8 +271,9 @@ function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMa
   if (roles.length === 0) return [];
   const skills = prepareSalarySkillCounts(database);
   prepareSalaryRangeScratch(database);
-  return [...accumulateClassifiedRoles(database, skills, roles)].map(([role, state]) =>
-    assembleRoleSnapshot(database, skills, role, state, now),
+  const cities = prepareSalaryCityScratch(database);
+  return [...accumulateClassifiedRoles(database, skills, cities, roles)].map(([role, state]) =>
+    assembleRoleSnapshot(database, skills, role, state, now, cities),
   );
 }
 
@@ -275,7 +286,7 @@ export function computeSalaryMarketSnapshots(
     return buildSalaryMarketSnapshots(database, now);
   } finally {
     database.exec(
-      'DROP TABLE IF EXISTS temp.salary_market_skill_counts; DROP TABLE IF EXISTS temp.salary_market_ranges; DROP TABLE IF EXISTS temp.salary_market_classified',
+      'DROP TABLE IF EXISTS temp.salary_market_skill_counts; DROP TABLE IF EXISTS temp.salary_market_ranges; DROP TABLE IF EXISTS temp.salary_market_city_ranges; DROP TABLE IF EXISTS temp.salary_market_classified',
     );
   }
 }

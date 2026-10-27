@@ -183,13 +183,25 @@ function hasExplicitSalaryPeriod(salary: VacancySalary): boolean {
   return period !== undefined && period === salary.period;
 }
 
-function sameSalaryTuple(current: VacancySalary, incoming: VacancySalary): boolean {
-  return (
-    current.from === incoming.from &&
-    current.to === incoming.to &&
-    current.currency === incoming.currency &&
-    current.gross === incoming.gross
-  );
+/**
+ * The cluster keeps one whole observed salary, never fields assembled across
+ * observations. A proven period outranks a closed range: before 26.10 hh.ru rows
+ * were stored without `compensation.mode`, and keeping such a range over a newer
+ * evidenced one left 11 424 prod clusters out of the salary market (B351).
+ * A proven period is never traded for an unproven one, and a closed unproven
+ * range is not traded for an open proven one.
+ */
+function prefersIncomingSalary(
+  current: VacancySalary | undefined,
+  incoming: VacancySalary,
+): boolean {
+  if (!current) return true;
+  const currentProven = hasExplicitSalaryPeriod(current);
+  const incomingProven = hasExplicitSalaryPeriod(incoming);
+  if (currentProven !== incomingProven) {
+    return incomingProven && (incoming.to !== undefined || current.to === undefined);
+  }
+  return !current.to && incoming.to !== undefined;
 }
 
 export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: UnifiedVacancy): void {
@@ -220,20 +232,7 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
   const skillSet = new Set([...cluster.skills, ...vacancy.requiredSkills]);
   cluster.skills = Array.from(skillSet);
 
-  if (!cluster.salary && vacancy.salary) {
-    cluster.salary = vacancy.salary;
-  } else if (cluster.salary && vacancy.salary && !cluster.salary.to && vacancy.salary.to) {
-    cluster.salary = vacancy.salary;
-  } else if (
-    !isNewMembership &&
-    cluster.salary &&
-    vacancy.salary &&
-    sameSalaryTuple(cluster.salary, vacancy.salary) &&
-    !hasExplicitSalaryPeriod(cluster.salary) &&
-    hasExplicitSalaryPeriod(vacancy.salary)
-  ) {
-    // Re-observation may enrich an identical range, but never assemble salary
-    // fields across observations or change an already evidenced period.
+  if (vacancy.salary && prefersIncomingSalary(cluster.salary, vacancy.salary)) {
     cluster.salary = vacancy.salary;
   }
 
