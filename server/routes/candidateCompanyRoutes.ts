@@ -186,47 +186,14 @@ function linkedinStatus(
   return { status: 'disconnected', importedAt: contactsImportedAt, contactsImported };
 }
 
-/** Per wanted company outside the selection; the company screen shows up to this many. */
-const WANTED_POOL_VACANCY_LIMIT = 20;
-
-/**
- * A wanted company with no vacancy in the current selection takes its open vacancies from
- * the pool, under the wanted name so they land on its row («Autodesk, Inc.» → «Autodesk»).
- */
-function wantedPoolVacancies(
-  deps: RouteDeps,
-  wants: ReadonlyArray<{ readonly companyKey: string; readonly companyName: string }>,
-  selection: readonly CandidateCompanyVacancyInput[],
-): CandidateCompanyVacancyInput[] {
-  const engine = deps.multiSourceEngine as Partial<
-    Pick<RouteDeps['multiSourceEngine'], 'getCompanyClusters'>
-  >;
-  if (typeof engine.getCompanyClusters !== 'function') return [];
-  const covered = new Set(selection.map((vacancy) => candidateCompanyKey(vacancy.companyName)));
-  const seen = new Set(selection.map((vacancy) => vacancy.id));
-  return wants.flatMap((want) => {
-    if (covered.has(want.companyKey)) return [];
-    const clusters = engine.getCompanyClusters!(want.companyName, WANTED_POOL_VACANCY_LIMIT).filter(
-      (cluster) => !seen.has(cluster.id),
-    );
-    return projectVacancyItems(
-      clusters.map((cluster) => ({ cluster })),
-      want.companyName,
-    );
-  });
-}
-
 async function companyContext(
   deps: RouteDeps,
   candidateId: string,
 ): Promise<CandidateCompanyContext> {
   const matches = await readCurrentMatched(deps, candidateId);
   const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
-  const selection = projectVacancyItems(matches);
-  const vacancies = [...selection, ...wantedPoolVacancies(deps, wants, selection)];
-  const selectionKeys = new Set(
-    selection.map((vacancy) => candidateCompanyKey(vacancy.companyName)),
-  );
+  // Макет 13: у компании только вакансии подборки, пул компании не подмешивается (28.10).
+  const vacancies = projectVacancyItems(matches);
   const vacancyCompanyKeys = new Map(
     vacancies.map((vacancy) => [vacancy.id, candidateCompanyKey(vacancy.companyName)]),
   );
@@ -248,13 +215,7 @@ async function companyContext(
     recruiters,
     jobs,
     networkContactCounts: networkContactCounts ?? undefined,
-  })
-    .map((row) => (dismissed?.has(row.key) ? { ...row, contactProposalDismissed: true } : row))
-    .map((row) =>
-      row.vacancyCount > 0 && !selectionKeys.has(row.key)
-        ? { ...row, outsideSelection: true }
-        : row,
-    );
+  }).map((row) => (dismissed?.has(row.key) ? { ...row, contactProposalDismissed: true } : row));
   const contactsImportedAt = networkContactCounts?.values().next().value?.importedAt ?? null;
   return {
     rows,
