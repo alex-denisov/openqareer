@@ -68,7 +68,7 @@ export function pickHiringManager(
   companyName: string,
   vacancyTitle: string,
 ): HiringManagerProfile | null {
-  const company = fold(companyName).replace(/\s+/gu, '');
+  const company = fold(companyName);
   const fn = vacancyFunction(vacancyTitle);
   let best: (HiringManagerProfile & { score: number }) | null = null;
   for (const hit of hits) {
@@ -76,13 +76,28 @@ export function pickHiringManager(
     const profile = parseExaProfileText(hit.text);
     const fullName = personNameFromTitle(hit.title);
     if (!linkedinUrl || !profile || fullName.split(' ').length < 2) continue;
-    const headline = profile.headline;
-    if (!company || !fold(headline).replace(/\s+/gu, '').includes(company)) continue;
+    // Exa склеивает в заголовок опыт и образование через « · »: должность — первая часть.
+    const headline = profile.headline.split(' · ')[0]!.trim();
+    // Компания целым словом и не короче трёх букв: «IT» не находится внутри «Digital».
+    if (company.replace(/\s+/gu, '').length < 3 || !` ${fold(headline)} `.includes(` ${company} `)) continue;
     if (!MANAGER_TITLE.test(headline) || RECRUITER_TITLE.test(headline)) continue;
     const score = overlap(headline, fn);
+    // Руководитель другого направления — не нанимающий по этой вакансии.
+    if (score === 0) continue;
     if (!best || score > best.score) best = { fullName, roleTitle: headline, linkedinUrl, score };
   }
   return best ? { fullName: best.fullName, roleTitle: best.roleTitle, linkedinUrl: best.linkedinUrl } : null;
+}
+
+function parseCached(raw: string): HiringManagerProfile | null {
+  try {
+    const value = JSON.parse(raw) as Partial<HiringManagerProfile>;
+    return typeof value.fullName === 'string' && typeof value.roleTitle === 'string' && typeof value.linkedinUrl === 'string'
+      ? { fullName: value.fullName, roleTitle: value.roleTitle, linkedinUrl: value.linkedinUrl }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Поиск по компании и направлению; результат и промах кэшируются на 30 дней. */
@@ -99,7 +114,7 @@ export async function findHiringManager(
     .prepare('SELECT result, queried_at FROM hiring_manager_cache WHERE query_key = ?')
     .get(key) as { result: string | null; queried_at: string } | undefined;
   if (cached && Date.parse(cached.queried_at) > now.getTime() - EXA_COMPANY_CACHE_DAYS * 86_400_000) {
-    return cached.result ? (JSON.parse(cached.result) as HiringManagerProfile) : null;
+    return cached.result ? parseCached(cached.result) : null;
   }
   let hits;
   try {
@@ -115,6 +130,9 @@ export async function findHiringManager(
     return null;
   }
   const manager = pickHiringManager(hits, vacancy.company, vacancy.title);
+  options.database
+    .prepare('DELETE FROM hiring_manager_cache WHERE queried_at <= ?')
+    .run(new Date(now.getTime() - EXA_COMPANY_CACHE_DAYS * 86_400_000).toISOString());
   options.database
     .prepare(
       `INSERT INTO hiring_manager_cache (query_key, result, queried_at) VALUES (?, ?, ?)

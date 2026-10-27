@@ -236,7 +236,16 @@ export async function collectCompanyPages(domain: string, deps: DossierDeps): Pr
       if (samples.length < MAX_SAMPLES && !samples.some((known) => known.email === sample.email)) samples.push({ ...sample, sourceUrl: page.url });
     }
   }
-  const snippets = pages.flatMap(contactSnippets).slice(0, MAX_SNIPPETS);
+  // Телефоны — только со страниц самой компании и их архива, не со сторонних сайтов из поиска.
+  const ownSite = (url: string) => {
+    try {
+      const host = new URL(url.replace(/^https:\/\/web\.archive\.org\/web\/\d{14}(?:id_)?\//u, '')).hostname;
+      return host === domain || host.endsWith(`.${domain}`);
+    } catch {
+      return false;
+    }
+  };
+  const snippets = pages.filter((page) => ownSite(page.url)).flatMap(contactSnippets).slice(0, MAX_SNIPPETS);
   const format = inferEmailFormat(samples);
   const example = format ? samples.find((sample) => formatsOf(sample).includes(format.id)) : undefined;
   return {

@@ -29,6 +29,11 @@ describe('hiring manager', () => {
     expect(manager).toEqual({ fullName: 'Nina Cole', roleTitle: 'Head of Data Platform at Acme', linkedinUrl: 'https://www.linkedin.com/in/nina' });
   });
 
+  it('does not match a short company name inside a word or a manager of another direction', () => {
+    expect(pickHiringManager([hit('Ann Lee', 'Head of Digital Data at Globex', 'ann')], 'IT', 'Data Engineer')).toBeNull();
+    expect(pickHiringManager([hit('Bob Ray', 'Property Manager at Acme', 'bob')], 'Acme', 'Data Engineer')).toBeNull();
+  });
+
   it('searches once per company and direction', async () => {
     const fetch = vi.fn(async () => new Response(JSON.stringify({ results: [hit('Nina Cole', 'Head of Data at Acme', 'nina')] }), { status: 200 }));
     const options = { database: new DatabaseSync(':memory:'), apiKey: 'k', fetch, requestGate: new FootprintRequestGate({ intervalMs: 0 }) };

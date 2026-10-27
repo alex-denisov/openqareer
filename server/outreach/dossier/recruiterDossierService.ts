@@ -118,7 +118,10 @@ const NEXT_PERSON = /\p{Lu}\p{Ll}+[ \t\u00a0]+\p{Lu}\p{Ll}+/u;
  */
 function afterName(text: string, fullName: string): string {
   const surname = fullName.trim().split(/\s+/u).at(-1) ?? '';
-  const index = surname.length > 1 ? text.indexOf(surname) : -1;
+  if (surname.length < 2) return '';
+  // Фамилия целым словом: «Petrov» не находится внутри «Petrova».
+  const escaped = surname.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const index = new RegExp(`(?<!\\p{L})${escaped}(?!\\p{L})`, 'u').exec(text)?.index ?? -1;
   if (index < 0) return '';
   const tail = text.slice(index + surname.length, index + surname.length + AFTER_NAME_CHARS);
   const next = NEXT_PERSON.exec(tail);
@@ -175,7 +178,7 @@ export async function withDossier(
   let found = cached(options.database, key, now);
   if (!found) {
     const result = await collectRecruiterDossier(
-      { fullName: contact.fullName, companyName: contact.companyName, ...(companyDomain ? { companyDomain } : {}) },
+      { fullName: contact.fullName, companyName: contact.companyName, linkedinUrl: contact.linkedinUrl, known, ...(companyDomain ? { companyDomain } : {}) },
       options,
     );
     found = result.channels;

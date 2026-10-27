@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FootprintRequestGate } from '../../osint/adapters/requestScheduler';
-import { collectRecruiterDossier, nameNicknames } from './collectRecruiterDossier';
+import { collectRecruiterDossier, nameNicknames, resetProfileRefusals } from './collectRecruiterDossier';
 
 const now = () => new Date('2026-10-27T00:00:00.000Z');
 const person = { fullName: 'Anna Smith', companyName: 'Acme', companyDomain: 'acme.com' };
@@ -25,6 +25,7 @@ const deps = (fetch: ReturnType<typeof router>) => ({
 });
 
 describe('recruiter dossier', () => {
+  beforeEach(() => resetProfileRefusals());
   it('collects channels only from open pages that name the person', async () => {
     const fetch = router({
       'https://api.exa.ai/search': {
@@ -75,7 +76,7 @@ describe('recruiter dossier', () => {
 
     expect(dossier.find((c) => c.kind === 'telegram')).toMatchObject({
       value: '@annahires',
-      status: 'hypothesis',
+      status: 'published',
       sourceUrl: 'https://t.me/annahires',
     });
   });
@@ -167,5 +168,16 @@ describe('recruiter dossier', () => {
     });
     const { channels } = await collectRecruiterDossier(person, deps(fetch));
     expect(channels.some((c) => c.kind.startsWith('email_'))).toBe(false);
+  });
+  it('links a Telegram account through a past employer from the LinkedIn profile', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': {
+        results: [{ url: 'https://www.linkedin.com/in/anna-smith', title: 'Anna Smith', text: '# Anna Smith\nTalent Partner at Acme\nLondon, United Kingdom\nRecruiter at Globex (2019-2023)' }],
+      },
+      'https://t.me/annasmith': '<meta property="og:title" content="Anna Smith"><meta property="og:description" content="Globex alumni, London">',
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+    const { channels } = await collectRecruiterDossier({ ...person, linkedinUrl: 'https://www.linkedin.com/in/anna-smith' }, deps(fetch));
+    expect(channels.find((c) => c.kind === 'telegram')).toMatchObject({ value: '@annasmith', status: 'published' });
   });
 });
