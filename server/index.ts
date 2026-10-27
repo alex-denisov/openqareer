@@ -1,6 +1,7 @@
 import { buildApp } from './app';
 import { readServerConfig } from './config';
 import { scheduleLandingStatsRefresh } from './landing/landingStatsSchedule';
+import { scheduleCurrencyRatesRefresh } from './currency/cbrRatesSchedule';
 import { scheduleCatalogSitemapRefresh } from './seo/catalogSitemapSchedule';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
@@ -396,6 +397,7 @@ try {
     error: (details: Record<string, unknown>, message: string) => app.log.error(details, message),
   };
   scheduleLandingStatsRefresh(config.databasePath, scheduleLog);
+  scheduleCurrencyRatesRefresh(config.databasePath, scheduleLog);
   // Sitemap files written by the maintenance process; the HTTP path reads memory only.
   scheduleCatalogSitemapRefresh(config.databasePath, scheduleLog);
   // Сервер слушает и отвечает на /health мгновенно (<10 мс). Пул читается

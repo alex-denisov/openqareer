@@ -124,6 +124,9 @@ async function stubSession(page: Page): Promise<void> {
     if (pathname === '/api/v1/candidate/vacancy-catalog-sources') {
       return route.fulfill({ json: { data: [] } });
     }
+    if (pathname === '/api/v1/candidate/currency-rates') {
+      return route.fulfill({ json: { data: null } });
+    }
     if (pathname === '/api/v1/candidate/vacancy-sources') {
       return route.fulfill({
         json: { data: [{ id: 'hh', name: 'hh.ru', health: { status: 'healthy' } }] },
