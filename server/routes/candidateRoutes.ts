@@ -372,7 +372,7 @@ async function importResumeIntoDossier(
     : 'profile';
   const early = nativeImportShortcut(candidateStore, candidate.id, body, mode);
   if (early) return { data: early.data, meta: { requestId: request.id, ...early.meta } };
-  const read = await readResume(body.text, resumeStructurerForCandidate(deps, candidate.id));
+  const read = await readResume(body.text, resumeStructurerForCandidate(deps));
   const plan = planResumeImport(read.resume, { idPrefix: newImportMemoryIdPrefix(randomUUID()) });
   if (plan.evidence.length === 0 || !carriesProfileSubstance(read.resume)) {
     return sendError(

@@ -23,6 +23,9 @@ export interface DetectedDateEntry {
   employer?: string;
   inlineTitle?: string;
   skipLines: number;
+  /** The employer follows the dates, so no header lines sit before this entry. */
+  headerAfterDate?: boolean;
+  location?: string;
 }
 
  

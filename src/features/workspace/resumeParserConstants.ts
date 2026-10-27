@@ -129,3 +129,10 @@ export function sectionLookahead(current: string): string {
   const others = SECTION_DELIMITERS.filter((d) => d.toLowerCase() !== current.toLowerCase());
   return `(?=\\n+(?:${others.join('|')}|$))`;
 }
+
+/**
+ * Words that make a line read as the name of a role rather than a company, an
+ * industry or a sentence about the work.
+ */
+export const ROLE_TITLE_WORDS =
+  /директор|руководител|начальник|менеджер|продакт|продукт|разработчик|программист|инженер|аналитик|лид|дизайнер|архитектор|администратор|head|lead|director|manager|developer|engineer|specialist|officer|owner|architect|vp|cto|cio|ceo|coo|founder|consultant/iu;
