@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { dropForeignRemote, markGeography, regionOfVacancy } from './vacancyGeography';
+import {
+  dropForeignRemote,
+  markGeography,
+  regionOfVacancy,
+  remoteCountryFit,
+} from './vacancyGeography';
 
 /**
  * PRB-040. Кампания «Xray Technician, MENA» получала первыми «Field Services
@@ -146,5 +151,21 @@ describe('dropForeignRemote (27.10)', () => {
   it('убирает удалёнку из другой страны и оставляет неизвестную с пометкой', () => {
     const kept = dropForeignRemote([item('other'), item('unknown'), item()]);
     expect(kept).toHaveLength(2);
+  });
+});
+
+describe('словарь стран вне семи рынков (27.10)', () => {
+  it('узнаёт страны Карибов, Африки и Южной Азии', () => {
+    expect(regionOfVacancy({ location: 'Jamaica' })).toBe('latam');
+    expect(regionOfVacancy({ location: 'Nassau, Bahamas' })).toBe('latam');
+    expect(regionOfVacancy({ location: 'Suriname' })).toBe('latam');
+    expect(regionOfVacancy({ location: 'Sri Lanka' })).toBe('apac');
+    expect(regionOfVacancy({ location: 'Luxembourg, Luxembourg' })).toBe('eu');
+  });
+
+  it('удалёнка из такой страны для кандидата «Удалённо из РФ» — другая страна', () => {
+    expect(remoteCountryFit({ canonicalLocation: 'Nigeria', isRemote: true }, ['ru'])).toBe('other');
+    expect(remoteCountryFit({ canonicalLocation: 'Jamaica', isRemote: true }, ['ru'])).toBe('other');
+    expect(remoteCountryFit({ canonicalLocation: 'Remote', isRemote: true }, ['ru'])).toBe('unknown');
   });
 });
