@@ -324,11 +324,35 @@ async function writeHelpPages(
   );
 }
 
+/**
+ * /salaries and /tools/interview-questions are server-rendered from one
+ * template, so their styles stay off the first-paint sheet every public
+ * document loads (one 12 KiB delivery part) and ride in their own file.
+ */
+async function writeServerPageStyles(distDirectory: string): Promise<string> {
+  const source = (
+    await Promise.all(
+      ['salaryMarketPage.css', 'interviewQuestions.css'].map((file) =>
+        readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
+      ),
+    )
+  ).join('\n');
+  if (/@import\b|url\s*\(/iu.test(source)) {
+    throw new Error('Server page styles must be self-contained before relocation');
+  }
+  const { code: css } = await transform(source, { loader: 'css', minify: true });
+  const path = `/assets/server-pages-${createHash('sha256').update(css).digest('hex').slice(0, 12)}.css`;
+  await mkdir(`${distDirectory}/assets`, { recursive: true });
+  await writeFile(`${distDirectory}${path}`, css);
+  return path;
+}
+
 async function writeSalaryTemplate(html: string, distDirectory: string): Promise<void> {
   // Runtime salary SSR uses the built head/assets; it never embeds sample market data.
+  const stylesheet = await writeServerPageStyles(distDirectory);
   await writeFile(
     `${distDirectory}/salary-market.html`,
-    html
+    withPageStyles(html, `<link rel="stylesheet" href="${stylesheet}">`)
       .replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js')
       .replace(
         EMPTY_ROOT,
