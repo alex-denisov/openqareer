@@ -70,6 +70,7 @@ async function withDossiers(
       await withDossier(contact, companyDomain, {
         database: linkedinPool.getDatabase(),
         exaApiKey: openWeb.apiKey,
+        githubToken: process.env.OPENQAREER_GITHUB_TOKEN,
         ...(openWeb.fetch ? { fetch: openWeb.fetch } : {}),
         ...(openWeb.requestGate ? { requestGate: openWeb.requestGate } : {}),
       }),

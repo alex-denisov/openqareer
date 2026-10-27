@@ -110,6 +110,16 @@ describe('recruiter dossier', () => {
     expect(emails[0]?.sourceUrl).toBe('https://github.com/annasmith/x/commit/1');
   });
 
+  it('sends the GitHub token only to the GitHub API', async () => {
+    const fetch = router({ 'https://api.exa.ai/search': { results: [] }, 'https://api.github.com/search/users': { items: [] } });
+    await collectRecruiterDossier(person, { ...deps(fetch), githubToken: 'gh-test' });
+    const auth = (url: string) => fetch.mock.calls.filter(([u]) => String(u).startsWith(url))
+      .map(([, init]) => (init as RequestInit | undefined)?.headers as Record<string, string> | undefined)
+      .map((headers) => headers?.authorization);
+    expect(auth('https://api.github.com')).toEqual(['Bearer gh-test']);
+    expect(auth('https://api.exa.ai').every((value) => value === undefined)).toBe(true);
+  });
+
   it('checks known nicknames in Telegram and keeps only a page with the same name', async () => {
     const fetch = router({
       'https://api.exa.ai/search': {

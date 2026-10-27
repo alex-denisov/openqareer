@@ -42,6 +42,8 @@ interface RunState {
 
 export interface DossierDeps {
   readonly exaApiKey: string | undefined;
+  /** Токен GitHub из окружения: без него 10 поисков в минуту на весь прод. */
+  readonly githubToken?: string | undefined;
   readonly fetch?: typeof fetch;
   readonly requestGate?: FootprintRequestGate;
   readonly now?: () => Date;
@@ -102,7 +104,11 @@ async function getText(url: string, deps: DossierDeps, accept: string, state: Ru
   try {
     return await gate.run(host, AbortSignal.timeout(REQUEST_TIMEOUT_MS), async () => {
       const response = await fetcher(url, {
-        headers: { accept, 'user-agent': 'openqareer-contact-check' },
+        headers: {
+          accept,
+          'user-agent': 'openqareer-contact-check',
+          ...(host === 'api.github.com' && deps.githubToken ? { authorization: `Bearer ${deps.githubToken}` } : {}),
+        },
         redirect: 'manual',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
