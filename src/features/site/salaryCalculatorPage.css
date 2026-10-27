@@ -86,9 +86,6 @@
 .sc-s {
   padding: 80px 0;
 }
-.sc-calc + .sc-s {
-  padding-top: 0;
-}
 
 /* buttons and links */
 .sc-btn {
@@ -326,7 +323,7 @@
   margin-bottom: 16px;
 }
 .sc-months {
-  margin-top: 0;
+  margin-top: 48px;
 }
 .sc-answer {
   margin-top: 24px;

@@ -5,6 +5,7 @@
  * каталог, и поисковик его не увидит. HTML собирается на запросе, потому что
  * пул меняется каждый час, а сборка неизменяема.
  */
+import { searchIndexFor } from '../vacancies/vacancyCatalogSearch';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   CATALOG_ROOT,
@@ -312,7 +313,17 @@ function sitemapFileHandler(name: (request: FastifyRequest) => string) {
   };
 }
 
+/** Cities and roles that have a public list, with counts, for the search box. */
+async function handleSearchIndex(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
+  const listings = deps.multiSourceEngine.getPublicCatalogListings() ?? [];
+  return reply
+    .header('Cache-Control', 'public, max-age=300')
+    .type('application/json; charset=utf-8')
+    .send(searchIndexFor(listings));
+}
+
 export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  app.get(`${CATALOG_ROOT}/search-index.json`, withDeps(deps, handleSearchIndex));
   app.get(CATALOG_ROOT, withDeps(deps, handleCatalog));
   app.get(`${CATALOG_ROOT}/page/:page`, withDeps(deps, handleCatalog));
   app.get(`${CATALOG_ROOT}/job/:slug`, withDeps(deps, handleVacancy));

@@ -117,6 +117,7 @@ function head(options: {
     jsonLdScript(options.jsonLd),
     '<script src="/assets/oq-analytics-3.js" defer></script>',
     '<script src="/assets/oq-chrome-1.js" defer></script>',
+    '<script src="/assets/oq-vacancy-search-1.js" defer></script>',
   ]
     .filter(Boolean)
     .join('');
@@ -159,6 +160,72 @@ function factsBlock(page: CatalogPage): string {
   return `<section class="cat-facts-box" aria-label="Коротко о разделе">${facts
     .map((fact) => `<p>${escapeHtml(fact)}</p>`)
     .join('')}</section>`;
+}
+
+/** Date the freshest vacancy on the page was last seen, as dd.mm.yyyy. */
+function dataDate(page: CatalogPage): string {
+  const latest = page.entries.map((entry) => entry.lastSeenAt.slice(0, 10)).sort().pop();
+  const [year, month, day] = (latest ?? new Date().toISOString().slice(0, 10)).split('-');
+  return `${day}.${month}.${year}`;
+}
+
+function catalogFactsLine(page: CatalogPage): string {
+  return (
+    '<div class="cat-vfacts">' +
+    `<span><b>${page.total.toLocaleString('ru-RU')}</b> ${countLabel(page.total).split(/\s/u).pop()}</span>` +
+    `<span>данные на <b>${dataDate(page)}</b></span>` +
+    '<a class="cat-alert" href="/signup?from=catalog&amp;alert=1">Присылать новые вакансии</a>' +
+    '</div>'
+  );
+}
+
+/** Role and city boxes; the script suggests real lists from the search index. */
+function searchForm(): string {
+  const box = (kind: 'role' | 'city', label: string, hint: string, list: string) =>
+    `<div class="cat-fld"><label for="cat-${kind}">${label}</label>` +
+    `<input class="cat-in" id="cat-${kind}" data-cat-${kind} placeholder="${hint}" role="combobox" ` +
+    `aria-autocomplete="list" aria-expanded="false" aria-controls="cat-${kind}-l" autocomplete="off">` +
+    `<ul class="cat-ac" id="cat-${kind}-l" role="listbox" aria-label="${list}" hidden></ul></div>`;
+  return (
+    '<form class="cat-search" role="search" action="/vacancies" data-cat-search>' +
+    box('role', 'Должность', 'Например, бухгалтер', 'Должности') +
+    box('city', 'Город', 'Например, Москва', 'Города') +
+    '<button class="ps-btn is-lg" type="submit">Найти</button></form>'
+  );
+}
+
+function prepBox(): string {
+  const link = (href: string, text: string) => `<a class="cat-prep-link" href="${href}">${text}</a>`;
+  return (
+    '<div class="cat-box"><h2>Подготовьтесь к отклику</h2>' +
+    link('/tools/resume', 'Резюме по шаблону') +
+    link('/tools/interview-questions', 'Вопросы на собеседовании') +
+    link('/salaries', 'Зарплаты по профессиям') +
+    '</div>'
+  );
+}
+
+function catalogFaq(page: CatalogPage): string {
+  const items: readonly (readonly [string, string])[] = [
+    [
+      'Сколько вакансий сейчас в этом разделе?',
+      `${countLabel(page.total)} в открытом каталоге на ${dataDate(page)}: с открытых площадок и сайтов работодателей. После регистрации видно больше — весь пул openqareer.`,
+    ],
+    [
+      'Как откликнуться?',
+      'Отклик подаётся на сайте работодателя по ссылке из вакансии. В openqareer вы один раз задаёте правила — какие вакансии, от какой зарплаты, сколько откликов в день, — и на тарифе Pro сервис откликается сам, показывая каждый отправленный отклик.',
+    ],
+  ];
+  return (
+    '<section class="cat-faq" aria-labelledby="cat-faq-h"><h2 id="cat-faq-h">Вопросы о вакансиях</h2>' +
+    items
+      .map(
+        ([q, a]) =>
+          `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`,
+      )
+      .join('') +
+    '</section>'
+  );
 }
 
 function crumbs(trail: readonly { readonly label: string; readonly path: string }[]): string {
@@ -320,12 +387,15 @@ export function renderCatalogDocument(
     siteHeader() +
     '<main id="main" class="ps-wrap ps-page">' +
     crumbs(root ? [] : [{ label: 'Вакансии', path: CATALOG_ROOT }]) +
-    `<div class="cat-head"><h1>${escapeHtml(page.heading)}</h1>` +
+    `<div class="cat-head"><div class="cat-vh"><div><h1>${escapeHtml(page.heading)}</h1>` +
     (empty
       ? '<p class="cat-empty">Каталог пока пуст: ни одной вакансии с публичным адресом ' +
-        'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p></div>'
+        'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p></div></div>'
       : `<p class="cat-lead">${countLabel(page.total)} с открытых площадок и сайтов работодателей. ` +
-        'У каждой указаны источник и дата, отклик подаётся на сайте работодателя.</p></div>') +
+        'У каждой указаны источник и дата, отклик подаётся на сайте работодателя.</p>' +
+        catalogFactsLine(page) +
+        '</div><a class="ps-btn is-primary is-lg" href="/signup?from=catalog">Подобрать под моё резюме</a></div>') +
+    (empty ? '' : searchForm() + '</div>') +
     '<div class="cat-layout"><div>' +
     (empty
       ? ''
@@ -335,7 +405,10 @@ export function renderCatalogDocument(
     '</div><aside class="cat-side">' +
     CTA_BOX +
     filterPanel(filters) +
-    '</aside></div></main>' +
+    prepBox() +
+    '</aside></div>' +
+    (empty ? '' : catalogFaq(page)) +
+    '</main>' +
     siteFooter();
 
   return shell(
