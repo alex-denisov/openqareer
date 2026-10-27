@@ -9,6 +9,7 @@ import type {
 import {
   MIN_COUNTRY_CITY_VACANCIES,
   SALARY_COUNTRY_CITIES,
+  russianCityName,
   type CountryCatalog,
   type CountryCityCount,
 } from './salaryCountryCities';
@@ -366,7 +367,11 @@ function countryCities(code: string, catalog?: CountryCatalog) {
   const genitives = SALARY_COUNTRY_CITIES[code] ?? {};
   return (catalog?.cities ?? [])
     .filter((city) => genitives[city.slug] && city.count >= MIN_COUNTRY_CITY_VACANCIES)
-    .map((city) => ({ ...city, genitive: genitives[city.slug]! }))
+    .map((city) => ({
+      ...city,
+      label: russianCityName(city.slug, city.label),
+      genitive: genitives[city.slug]!,
+    }))
     .sort((a, b) => b.count - a.count);
 }
 
