@@ -1,3 +1,4 @@
+import { isHiringPlatform } from '../../shared/hiringPlatforms';
 import { extractDomainFromUrl } from '../domain/company';
 import type { CompanyRecruiterProfile } from '../linkedinPool/companyRecruiterDiscovery';
 import { ensureCompanyRecruitersSchema } from '../linkedinPool/companyRecruiterDiscovery';
@@ -26,20 +27,8 @@ const EXA_TIMEOUT_MS = 15_000;
 const STORED_RECRUITER_DAYS = 180;
 
 /** Хосты ATS и площадок: адрес вакансии на них не говорит о домене почты компании. */
-const HIRING_PLATFORM_HOSTS = [
-  'contacthr.com', 'myworkdayjobs.com', 'workday.com', 'greenhouse.io', 'lever.co',
-  'smartrecruiters.com', 'ashbyhq.com', 'icims.com', 'taleo.net', 'successfactors.com',
-  'jobvite.com', 'bamboohr.com', 'recruitee.com', 'workable.com', 'personio.de',
-  'teamtailor.com', 'breezy.hr', 'themuse.com', 'indeed.com', 'glassdoor.com',
-  'hh.ru', 'headhunter.ru', 'linkedin.com', 'remotive.com', 'habr.com', 'superjob.ru',
-  'github.com', 't.me', 'huntflow.ru', 'potok.io', 'getmatch.ru', 'trudvsem.ru',
-];
 
 const SECOND_LEVEL_SUFFIXES = new Set(['co.uk', 'com.au', 'co.jp', 'com.br', 'co.in', 'com.tr']);
-
-function isHiringPlatform(host: string): boolean {
-  return HIRING_PLATFORM_HOSTS.some((platform) => host === platform || host.endsWith(`.${platform}`));
-}
 
 function registrableDomain(host: string): string {
   const labels = host.split('.');
