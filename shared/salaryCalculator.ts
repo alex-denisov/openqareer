@@ -61,6 +61,7 @@ export const CALC_COUNTRIES: readonly CalcCountryInfo[] = [
   },
 ];
 
+const NBSP = '\u00a0';
 export const CALC_PATH = '/tools/salary-calculator';
 export const RU_HIGH_RATE_FROM = 2_400_000;
 const MONTH_NAMES = [
@@ -83,7 +84,7 @@ export function calcCountry(code: string): CalcCountryInfo | undefined {
 }
 
 export function formatCalcMoney(amount: number, symbol: string): string {
-  return `${Math.round(amount).toLocaleString('ru-RU')} ${symbol}`;
+  return `${Math.round(amount).toLocaleString('ru-RU')}${NBSP}${symbol}`;
 }
 
 function payroll(code: CalcCountry, annualGross: number) {

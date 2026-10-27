@@ -164,7 +164,10 @@ function factsBlock(page: CatalogPage): string {
 
 /** Date the freshest vacancy on the page was last seen, as dd.mm.yyyy. */
 function dataDate(page: CatalogPage): string {
-  const latest = page.entries.map((entry) => entry.lastSeenAt.slice(0, 10)).sort().pop();
+  const latest = page.entries
+    .map((entry) => entry.lastSeenAt.slice(0, 10))
+    .sort()
+    .pop();
   const [year, month, day] = (latest ?? new Date().toISOString().slice(0, 10)).split('-');
   return `${day}.${month}.${year}`;
 }
@@ -195,7 +198,8 @@ function searchForm(): string {
 }
 
 function prepBox(): string {
-  const link = (href: string, text: string) => `<a class="cat-prep-link" href="${href}">${text}</a>`;
+  const link = (href: string, text: string) =>
+    `<a class="cat-prep-link" href="${href}">${text}</a>`;
   return (
     '<div class="cat-box"><h2>Подготовьтесь к отклику</h2>' +
     link('/tools/resume', 'Резюме по шаблону') +
@@ -220,8 +224,7 @@ function catalogFaq(page: CatalogPage): string {
     '<section class="cat-faq" aria-labelledby="cat-faq-h"><h2 id="cat-faq-h">Вопросы о вакансиях</h2>' +
     items
       .map(
-        ([q, a]) =>
-          `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`,
+        ([q, a]) => `<details><summary>${escapeHtml(q)}</summary><p>${escapeHtml(a)}</p></details>`,
       )
       .join('') +
     '</section>'

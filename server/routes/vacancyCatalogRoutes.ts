@@ -337,10 +337,13 @@ export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDe
   app.get('/sitemap.xml', withDeps(deps, handleSitemapIndex));
   app.get(
     '/sitemaps/:name',
-    withDeps(deps, sitemapFileHandler((request) => {
-      const raw = (request.params as { name?: string }).name ?? '';
-      return /^[a-z]+-[1-9]\d{0,3}\.xml$/u.test(raw) ? raw : '';
-    })),
+    withDeps(
+      deps,
+      sitemapFileHandler((request) => {
+        const raw = (request.params as { name?: string }).name ?? '';
+        return /^[a-z]+-[1-9]\d{0,3}\.xml$/u.test(raw) ? raw : '';
+      }),
+    ),
   );
   const indexNowKey = process.env.INDEXNOW_KEY?.trim() ?? '';
   if (isValidIndexNowKey(indexNowKey)) {

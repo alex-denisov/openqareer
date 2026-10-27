@@ -113,6 +113,34 @@ const MODES: readonly { id: CalcMode; label: string }[] = [
   { id: 'net', label: 'Сумма на руки' },
 ];
 
+function OutputRows({ result }: { readonly result: CalcResult }) {
+  const { country } = result;
+  const ru = country.code === 'RU';
+  return (
+    <>
+      <div className="sc-r2">
+        <span>{ru ? 'НДФЛ за год' : 'Налоги и взносы за год'}</span>
+        <b>{formatCalcMoney(result.annualTax, country.symbol)}</b>
+      </div>
+      <div className="sc-r2 sc-hide-m">
+        <span>На руки за год</span>
+        <b>{formatCalcMoney(result.netYear, country.symbol)}</b>
+      </div>
+      {ru ? (
+        <div className="sc-r2">
+          <span>Ставка выросла до 15 %</span>
+          <b>{result.raisedFrom ?? 'не выросла'}</b>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function outputLabel(mode: CalcMode, ru: boolean): string {
+  if (mode === 'net') return 'Зарплата до налогов в месяц';
+  return ru ? 'На руки в месяц, в среднем за год' : 'На руки в месяц';
+}
+
 function Output({
   result,
   mode,
@@ -133,30 +161,12 @@ function Output({
     mode === 'net'
       ? formatCalcMoney(result.gross, country.symbol)
       : formatCalcMoney(result.netMonthly, country.symbol);
-  const bigLabel =
-    mode === 'net'
-      ? 'Зарплата до налогов в месяц'
-      : ru
-        ? 'На руки в месяц, в среднем за год'
-        : 'На руки в месяц';
+  const bigLabel = outputLabel(mode, ru);
   return (
     <div className="sc-out" aria-live="polite">
       <span className="sc-label">{bigLabel}</span>
       <span className="sc-big">{big}</span>
-      <div className="sc-r2">
-        <span>{ru ? 'НДФЛ за год' : 'Налоги и взносы за год'}</span>
-        <b>{formatCalcMoney(result.annualTax, country.symbol)}</b>
-      </div>
-      <div className="sc-r2 sc-hide-m">
-        <span>На руки за год</span>
-        <b>{formatCalcMoney(result.netYear, country.symbol)}</b>
-      </div>
-      {ru ? (
-        <div className="sc-r2">
-          <span>Ставка выросла до 15 %</span>
-          <b>{result.raisedFrom ?? 'не выросла'}</b>
-        </div>
-      ) : null}
+      <OutputRows result={result} />
       <div className="sc-act">
         <SiteLink
           to={calcCatalogHref(result)}
@@ -240,8 +250,8 @@ function QuickTable() {
       rows={rows}
       footer={
         <div className="sc-card-f">
-          При зарплате выше 200 000 ₽ в месяц доход за год превышает 2,4 млн ₽, и с превышения
-          берут 15 %. Источник ставок: ФНС России.
+          При зарплате выше 200 000 ₽ в месяц доход за год превышает 2,4 млн ₽, и с превышения берут
+          15 %. Источник ставок: ФНС России.
         </div>
       }
     />
@@ -290,52 +300,75 @@ function useCalculator() {
   return { country, mode, amount, result, copied, pickCountry, pickMode, typeAmount, share };
 }
 
+function CalcForm({ calc }: { readonly calc: ReturnType<typeof useCalculator> }) {
+  const { mode, country } = calc;
+  return (
+    <form className="sc-in" onSubmit={(event) => event.preventDefault()}>
+      <div className="sc-field">
+        <span className="sc-lab" id="sc-cc">
+          Страна
+        </span>
+        <Segmented
+          labelId="sc-cc"
+          items={CALC_COUNTRIES.map((c) => ({ id: c.code, label: c.label }))}
+          value={country}
+          onPick={calc.pickCountry}
+        />
+      </div>
+      <div className="sc-field">
+        <span className="sc-lab" id="sc-dir">
+          Считать от
+        </span>
+        <Segmented labelId="sc-dir" items={MODES} value={mode} onPick={calc.pickMode} />
+      </div>
+      <div className="sc-field">
+        <label htmlFor="sc-g">
+          {mode === 'gross' ? 'Зарплата до налогов в месяц' : 'Сколько хотите на руки в месяц'}
+        </label>
+        <div className="sc-money">
+          <input
+            className="sc-input"
+            id="sc-g"
+            inputMode="numeric"
+            value={group(calc.amount)}
+            onChange={(event) => calc.typeAmount(event.target.value)}
+          />
+          <span>{calc.result.country.symbol}</span>
+        </div>
+      </div>
+      <p className="sc-small">{calc.result.country.note}</p>
+    </form>
+  );
+}
+
+function UnderLinks({ onNavigate }: { readonly onNavigate: (path: string) => void }) {
+  return (
+    <div className="sc-under">
+      <p className="sc-small">
+        Ставки: ФНС России, 2026 год. Расчёт не заменяет консультацию бухгалтера.
+      </p>
+      <p>
+        <SiteLink to="/salaries" onNavigate={onNavigate} className="sc-link">
+          Сравните с рынком своей профессии <ArrowRight size={16} aria-hidden="true" />
+        </SiteLink>
+        <SiteLink to="/tariffs?from=calc" onNavigate={onNavigate} className="sc-link">
+          Какую сумму назвать на собеседовании — подготовка к торгу в Pro{' '}
+          <ArrowRight size={16} aria-hidden="true" />
+        </SiteLink>
+      </p>
+    </div>
+  );
+}
+
 function Calculator({ onNavigate }: { readonly onNavigate: (path: string) => void }) {
   const calc = useCalculator();
   const { result, mode, country } = calc;
-  const info = result.country;
   return (
     <>
       <section className="sc-calc">
         <div className="sc-wrap">
           <div className="sc-box">
-            <form className="sc-in" onSubmit={(event) => event.preventDefault()}>
-              <div className="sc-field">
-                <span className="sc-lab" id="sc-cc">
-                  Страна
-                </span>
-                <Segmented
-                  labelId="sc-cc"
-                  items={CALC_COUNTRIES.map((c) => ({ id: c.code, label: c.label }))}
-                  value={country}
-                  onPick={calc.pickCountry}
-                />
-              </div>
-              <div className="sc-field">
-                <span className="sc-lab" id="sc-dir">
-                  Считать от
-                </span>
-                <Segmented labelId="sc-dir" items={MODES} value={mode} onPick={calc.pickMode} />
-              </div>
-              <div className="sc-field">
-                <label htmlFor="sc-g">
-                  {mode === 'gross'
-                    ? 'Зарплата до налогов в месяц'
-                    : 'Сколько хотите на руки в месяц'}
-                </label>
-                <div className="sc-money">
-                  <input
-                    className="sc-input"
-                    id="sc-g"
-                    inputMode="numeric"
-                    value={group(calc.amount)}
-                    onChange={(event) => calc.typeAmount(event.target.value)}
-                  />
-                  <span>{info.symbol}</span>
-                </div>
-              </div>
-              <p className="sc-small">{info.note}</p>
-            </form>
+            <CalcForm calc={calc} />
             <Output
               result={result}
               mode={mode}
@@ -344,20 +377,7 @@ function Calculator({ onNavigate }: { readonly onNavigate: (path: string) => voi
               copied={calc.copied}
             />
           </div>
-          <div className="sc-under">
-            <p className="sc-small">
-              Ставки: ФНС России, 2026 год. Расчёт не заменяет консультацию бухгалтера.
-            </p>
-            <p>
-              <SiteLink to="/salaries" onNavigate={onNavigate} className="sc-link">
-                Сравните с рынком своей профессии <ArrowRight size={16} aria-hidden="true" />
-              </SiteLink>
-              <SiteLink to="/tariffs?from=calc" onNavigate={onNavigate} className="sc-link">
-                Какую сумму назвать на собеседовании — подготовка к торгу в Pro{' '}
-                <ArrowRight size={16} aria-hidden="true" />
-              </SiteLink>
-            </p>
-          </div>
+          <UnderLinks onNavigate={onNavigate} />
         </div>
       </section>
       <section className="sc-s">
@@ -400,6 +420,79 @@ function Sh({
   );
 }
 
+function ScaleSection() {
+  return (
+    <section className="sc-s">
+      <div className="sc-wrap">
+        <Sh
+          label="Шкала НДФЛ 2026"
+          title="Пять ставок, и каждая — только на свою часть дохода"
+          text={`Доход за год делится на части. С 3 млн ₽ за год 13 % берут с первых ${(RU_HIGH_RATE_FROM / 1e6).toLocaleString('ru-RU')} млн ₽ и 15 % — с оставшихся 600 тыс. ₽.`}
+        />
+        <div className="sc-scale">
+          {CALC_SCALE.map((band, index) => (
+            <div key={band.rate} className={index === 0 ? 'me' : undefined}>
+              <b>{band.rate}</b>
+              <span>{band.range}</span>
+            </div>
+          ))}
+        </div>
+        <p className="sc-src">
+          Источник:{' '}
+          <a href="https://www.nalog.gov.ru/rn26/news/activities_fts/16653428/" rel="noopener">
+            ФНС России, ставки НДФЛ по основной налоговой базе в 2026 году
+          </a>
+          .
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function NextSection({ onNavigate }: { readonly onNavigate: (path: string) => void }) {
+  return (
+    <section className="sc-s">
+      <div className="sc-wrap">
+        <Sh
+          label="Что дальше"
+          title="Знаете, сколько хотите на руки? Найдите, где столько платят"
+          one
+        />
+        <div className="sc-hint">
+          {CALC_NEXT.map((item) => (
+            <SiteLink key={item.href} to={item.href} onNavigate={onNavigate}>
+              <b>{item.title}</b>
+              <span>{item.text}</span>
+            </SiteLink>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FaqSection() {
+  return (
+    <section className="sc-s">
+      <div className="sc-wrap">
+        <Sh label="Вопросы" title="Про НДФЛ и зарплату на руки" />
+        <div className="sc-faq">
+          {[CALC_FAQ.slice(0, 2), CALC_FAQ.slice(2)].map((column) => (
+            <div key={column[0].q}>
+              {column.map((item) => (
+                <details key={item.q} className="sc-q" open={item === CALC_FAQ[0]}>
+                  <summary>{item.q}</summary>
+                  <div className="sc-a">{item.a}</div>
+                </details>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Lower({ onNavigate }: { readonly onNavigate: (path: string) => void }) {
   return (
     <>
@@ -413,68 +506,25 @@ function Lower({ onNavigate }: { readonly onNavigate: (path: string) => void }) 
           <QuickTable />
         </div>
       </section>
-      <section className="sc-s">
-        <div className="sc-wrap">
-          <Sh
-            label="Шкала НДФЛ 2026"
-            title="Пять ставок, и каждая — только на свою часть дохода"
-            text={`Доход за год делится на части. С 3 млн ₽ за год 13 % берут с первых ${(RU_HIGH_RATE_FROM / 1e6).toLocaleString('ru-RU')} млн ₽ и 15 % — с оставшихся 600 тыс. ₽.`}
-          />
-          <div className="sc-scale">
-            {CALC_SCALE.map((band, index) => (
-              <div key={band.rate} className={index === 0 ? 'me' : undefined}>
-                <b>{band.rate}</b>
-                <span>{band.range}</span>
-              </div>
-            ))}
-          </div>
-          <p className="sc-src">
-            Источник:{' '}
-            <a
-              href="https://www.nalog.gov.ru/rn26/news/activities_fts/16653428/"
-              rel="noopener"
-            >
-              ФНС России, ставки НДФЛ по основной налоговой базе в 2026 году
-            </a>
-            .
-          </p>
-        </div>
-      </section>
-      <section className="sc-s">
-        <div className="sc-wrap">
-          <Sh
-            label="Что дальше"
-            title="Знаете, сколько хотите на руки? Найдите, где столько платят"
-            one
-          />
-          <div className="sc-hint">
-            {CALC_NEXT.map((item) => (
-              <SiteLink key={item.href} to={item.href} onNavigate={onNavigate}>
-                <b>{item.title}</b>
-                <span>{item.text}</span>
-              </SiteLink>
-            ))}
-          </div>
-        </div>
-      </section>
-      <section className="sc-s">
-        <div className="sc-wrap">
-          <Sh label="Вопросы" title="Про НДФЛ и зарплату на руки" />
-          <div className="sc-faq">
-            {[CALC_FAQ.slice(0, 2), CALC_FAQ.slice(2)].map((column) => (
-              <div key={column[0].q}>
-                {column.map((item) => (
-                  <details key={item.q} className="sc-q" open={item === CALC_FAQ[0]}>
-                    <summary>{item.q}</summary>
-                    <div className="sc-a">{item.a}</div>
-                  </details>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <ScaleSection />
+      <NextSection onNavigate={onNavigate} />
+      <FaqSection />
     </>
+  );
+}
+
+function Hero() {
+  return (
+    <section className="sc-hero">
+      <div className="sc-wrap">
+        <span className="sc-eyebrow">Ставки 2026 года · 6 стран</span>
+        <h1>Калькулятор зарплаты на руки и НДФЛ на 2026 год</h1>
+        <p className="sc-lead">
+          Введите зарплату до налогов — увидите сумму на руки по месяцам. Калькулятор учитывает
+          прогрессивную шкалу: после 2,4 млн ₽ за год ставка растёт только на превышение.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -512,16 +562,7 @@ export function SalaryCalculatorPage({ onNavigate, signedIn = false, isAdmin = f
           <span aria-hidden="true">/</span>
           <span>Калькулятор на руки</span>
         </nav>
-        <section className="sc-hero">
-          <div className="sc-wrap">
-            <span className="sc-eyebrow">Ставки 2026 года · 6 стран</span>
-            <h1>Калькулятор зарплаты на руки и НДФЛ на 2026 год</h1>
-            <p className="sc-lead">
-              Введите зарплату до налогов — увидите сумму на руки по месяцам. Калькулятор учитывает
-              прогрессивную шкалу: после 2,4 млн ₽ за год ставка растёт только на превышение.
-            </p>
-          </div>
-        </section>
+        <Hero />
         <Calculator onNavigate={onNavigate} />
         <Lower onNavigate={onNavigate} />
       </main>
