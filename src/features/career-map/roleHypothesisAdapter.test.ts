@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ProposedRole } from '../../../shared/roleProposals';
-import { mapProposedRoleToCareerRole, summarizeRolesMarket } from './roleHypothesisAdapter';
+import {
+  mapProposedRoleToCareerRole,
+  mapProposedRolesToCareerRoles,
+  summarizeRolesMarket,
+} from './roleHypothesisAdapter';
+import { roleMetaLine } from './CareerRoleComponents';
 
 function observed(
   overrides: Partial<Extract<ProposedRole['confirmation'], { state: 'observed' }>> = {},
@@ -190,5 +195,30 @@ describe('роль, которая уже есть у кандидата, не �
 
   it('роль, которую подтвердил только рынок, ещё можно предложить', () => {
     expect(mapProposedRoleToCareerRole(observed(), base).alreadyChosen).toBe(false);
+  });
+});
+
+describe('роль без вакансий (28.10)', () => {
+  const empty: ProposedRole = {
+    ...observed(),
+    id: 'role-turnaround',
+    title: 'Turnaround Executive',
+    confirmation: { state: 'not-found' },
+  };
+  const decisions = { acceptedTitle: null, offersDismissed: [] };
+
+  it('стоит в конце списка, даже если пришла раньше ролей с вакансиями', () => {
+    const roles = mapProposedRolesToCareerRoles([empty, observed()], decisions);
+    expect(roles.map((role) => role.title)).toEqual([
+      'Director of Engineering',
+      'Turnaround Executive',
+    ]);
+  });
+
+  it('подписана честно, без «вилка не считается · 0 вакансий»', () => {
+    const role = mapProposedRoleToCareerRole(empty, decisions);
+    expect(roleMetaLine(role)).toBe(
+      'Вакансий с этим названием пока нет, в подборку роль ничего не добавляет',
+    );
   });
 });

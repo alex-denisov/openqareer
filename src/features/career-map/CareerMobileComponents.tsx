@@ -14,7 +14,12 @@ import type {
   RolesMarketSummary,
   SearchConditionsDraft,
 } from './careerScreenTypes';
-import { CareerRoleBody, RoleStatusBadge, type RoleHandlers } from './CareerRoleComponents';
+import {
+  CareerRoleBody,
+  NO_VACANCIES_NOTE,
+  RoleStatusBadge,
+  type RoleHandlers,
+} from './CareerRoleComponents';
 import {
   conditionRows,
   ConditionsMarketLine,
@@ -64,7 +69,9 @@ function MobileRoleRow({
             <CaretRight size={16} aria-hidden />
           </span>
           <span className="career-role-meta">
-            {role.wageDisplay} · {formatVacancyCount(role.vacancyCount)}
+            {role.vacancyCount === 0
+              ? NO_VACANCIES_NOTE
+              : `${role.wageDisplay} · ${formatVacancyCount(role.vacancyCount)}`}
           </span>
           <span className="career-m-row-foot">
             <RoleStatusBadge status={role.status} />
