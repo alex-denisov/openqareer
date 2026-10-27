@@ -11173,6 +11173,28 @@
   transition: all 0.15s ease;
 }
 
+/* B258 — каналы связи с рекрутёром по ценности для кандидата. */
+.career-recruiter-channels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  margin: var(--career-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-recruiter-channel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.career-recruiter-channel-label {
+  color: var(--career-muted);
+}
+
 .career-recruiter-link span {
   min-width: 0;
   overflow: hidden;

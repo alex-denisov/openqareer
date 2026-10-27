@@ -133,6 +133,10 @@ describe('recruiter intelligence worker', () => {
       sourceType: 'company_osint',
     });
     expect(contact.sourceReceipt?.sourceUrl).toBe('https://www.linkedin.com/in/anna-smith');
+    expect(contact.channels?.map((channel) => `${channel.kind}:${channel.status}`)).toEqual([
+      'email_corporate:hypothesis',
+      'linkedin:published',
+    ]);
 
     linkedinPool.close();
     rmSync(poolDir, { recursive: true, force: true });

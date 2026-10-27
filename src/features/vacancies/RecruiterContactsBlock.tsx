@@ -22,6 +22,7 @@ import {
   type EnrichVacancyPayload,
 } from './recruiterContactsApi';
 import type { RecruiterContactJob } from '../../../shared/recruiterContact';
+import { RecruiterChannelList } from './RecruiterChannelList';
 import { RecruiterMessagePanel } from './RecruiterMessagePanel';
 
 export interface RecruiterContactsBlockProps {
@@ -177,9 +178,16 @@ function RecruiterCard({ contact }: { readonly contact: RecruiterContact }) {
           <PaperPlaneTilt size={14} aria-hidden="true" />
           <span>Написать</span>
         </button>
-        {contact.email && <EmailAction email={contact.email} />}
-        <SocialActions contact={contact} />
+        {contact.channels && contact.channels.length > 0 ? null : (
+          <>
+            {contact.email && <EmailAction email={contact.email} />}
+            <SocialActions contact={contact} />
+          </>
+        )}
       </div>
+      {contact.channels && contact.channels.length > 0 ? (
+        <RecruiterChannelList channels={contact.channels} />
+      ) : null}
       {showMessage && (
         <RecruiterMessagePanel
           contact={contact}
