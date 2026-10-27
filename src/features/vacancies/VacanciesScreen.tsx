@@ -98,7 +98,7 @@ export interface VacanciesScreenProps {
     subject?: CoachTurnSubject,
     subjectTitle?: string,
     initialPrompt?: string,
-    options?: { readonly send?: boolean },
+    options?: { readonly send?: boolean; readonly contextOnly?: boolean },
   ) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
@@ -652,6 +652,15 @@ function OpportunityContent({
       }}
       initialSearch={screenState.companyPathSearch}
       onOpenExpert={input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined}
+      onCompanyContext={(company) =>
+        input.onOpenExpert?.(
+          'vacancies',
+          company ? { kind: 'company', id: company.key } : undefined,
+          company?.name,
+          undefined,
+          { contextOnly: true },
+        )
+      }
     />
   );
 }

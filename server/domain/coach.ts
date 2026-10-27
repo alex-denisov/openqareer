@@ -505,7 +505,7 @@ export const coachTurnSubjectSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z.object({
-    kind: z.enum(['vacancy', 'application', 'interview']),
+    kind: z.enum(['vacancy', 'application', 'interview', 'company']),
     id: z.string().trim().min(1).max(200),
   }),
 ]);
