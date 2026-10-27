@@ -123,7 +123,14 @@ function FooterHelpAndDocs({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>
 }
 
 /** B535: footer with grouped links, contacts and the operator's tax id. */
-export function PublicFooter({ onNavigate, onLanding }: PublicChromeProps) {
+export function PublicFooter({
+  onNavigate,
+  onLanding,
+  toolLinks = true,
+}: PublicChromeProps & {
+  /** Off on /salaries: the page sits at its 20 KB HTML budget. */
+  readonly toolLinks?: boolean;
+}) {
   return (
     <footer className="ps-footer">
       <div className="ps-wrap ps-footer-grid">
@@ -147,6 +154,7 @@ export function PublicFooter({ onNavigate, onLanding }: PublicChromeProps) {
           <a href="/vacancies">Каталог вакансий</a>
           <a href="/vacancies/remote">Удалённые вакансии</a>
           <a href="/salaries">Зарплаты и навыки</a>
+          {toolLinks && <a href="/tools/relocation">В какую страну переехать</a>}
         </div>
         <FooterHelpAndDocs onNavigate={onNavigate} />
         <div className="ps-footer-legal">
