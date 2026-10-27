@@ -72,6 +72,22 @@ describe('company pages', () => {
     expect(result.format).toEqual({ id: 'f.last', support: 2, sourceUrl: 'https://web.archive.org/web/20240101000000/https://acme.com/team' });
   });
 
+  it('follows a redirect to the www site and ignores a certificate error', async () => {
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith('https://api.exa.ai/') || url.startsWith('https://web.archive.org/')) return new Response(JSON.stringify({ results: [] }), { status: 200 });
+      if (url === 'https://acme.com/team') return new Response('', { status: 301, headers: { location: 'https://www.acme.com/team' } });
+      if (url === 'https://www.acme.com/team') return new Response(teamPage, { status: 200, headers: { 'content-type': 'text/html' } });
+      if (url === 'https://acme.com/about') return new Response('', { status: 301, headers: { location: 'https://evil.example/about' } });
+      if (url === 'https://acme.com/careers') throw new Error('unable to verify the first certificate');
+      return new Response('', { status: 404 });
+    });
+    const result = await collectCompanyPages('acme.com', deps(fetch));
+    expect(result.format?.id).toBe('f.last');
+    expect(result.complete).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => String(url).startsWith('https://evil.example'))).toBe(false);
+  });
+
   it('stops asking the site after it refuses by rate', async () => {
     const fetch = site({ 'https://acme.com/team': '429', 'https://acme.com/about': teamPage });
     const result = await collectCompanyPages('acme.com', deps(fetch));

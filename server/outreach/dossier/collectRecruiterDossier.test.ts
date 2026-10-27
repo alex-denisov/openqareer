@@ -189,4 +189,12 @@ describe('recruiter dossier', () => {
     const { channels } = await collectRecruiterDossier(person, deps(fetch));
     expect(channels.some((c) => c.kind === 'telegram')).toBe(false);
   });
+  it('does not take a colleague LinkedIn link from the person page', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [{ url: 'https://acme.com/team', title: 'Anna Smith', text: 'Anna Smith, recruiter. Reposted from linkedin.com/in/kelliegillenwater' }] },
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'linkedin')).toBe(false);
+  });
 });
