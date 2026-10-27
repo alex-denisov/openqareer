@@ -8,6 +8,7 @@ import { applyLandingStats, deferEntryScript } from '../../shared/landingStats';
 import { getLandingStats } from '../landing/landingStatsCache';
 import { registerAeoRoutes } from '../seo/aeoRoutes';
 import { registerSalaryMarketRoutes } from './salaryMarketRoutes';
+import { registerInterviewQuestionRoutes } from './interviewQuestionRoutes';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
@@ -413,10 +414,12 @@ export async function registerStaticDelivery(
   app: FastifyInstance,
   config: ServerConfig,
   serveStatic: boolean,
+  signedIn?: (request: FastifyRequest) => boolean,
 ): Promise<void> {
   if (serveStatic) {
     registerAeoRoutes(app);
     registerSalaryMarketRoutes(app, config);
+    registerInterviewQuestionRoutes(app, { ...config, signedIn });
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,

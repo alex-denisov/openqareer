@@ -572,6 +572,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
-  await registerStaticDelivery(app, config, serveStatic);
+  await registerStaticDelivery(app, config, serveStatic, signedInCheck(config, deps.authService, deps.candidateStore));
   return app;
 }

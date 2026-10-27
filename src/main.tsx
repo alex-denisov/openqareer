@@ -15,6 +15,7 @@ import './features/site/publicSite.css';
 import './features/site/countryFitPage.css';
 import './features/site/relocationPage.css';
 import './features/site/salaryMarketPage.css';
+import './features/site/interviewQuestions.css';
 import './features/shell/session-gate.css';
 import './features/desktopNotify/desktopNotificationService';
 import { loadAuthPages } from './features/site/authPagesLoader';

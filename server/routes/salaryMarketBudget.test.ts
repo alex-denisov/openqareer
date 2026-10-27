@@ -106,6 +106,7 @@ function wholeTemplate(): string {
         onNavigate: () => {},
         onLanding: false,
         signedIn: false,
+        interviewLink: false,
         toolLinks: false,
       }),
     ),
