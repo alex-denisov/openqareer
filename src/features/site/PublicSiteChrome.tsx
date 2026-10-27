@@ -68,7 +68,7 @@ function HeaderActions({
             Администрирование
           </SiteLink>
         ) : null}
-        <SiteLink to="/app" className="ps-btn is-primary" onNavigate={onNavigate}>
+        <SiteLink to="/app" className="ps-btn is-cta" onNavigate={onNavigate}>
           Открыть кабинет
         </SiteLink>
       </>
@@ -86,7 +86,7 @@ function HeaderActions({
       </SiteLink>
       <SiteLink
         to="/signup"
-        className="ps-btn is-primary"
+        className="ps-btn is-cta"
         onNavigate={onNavigate}
         onWarm={preloadAuthPages}
       >

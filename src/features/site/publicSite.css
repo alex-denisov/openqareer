@@ -259,7 +259,7 @@
   }
 }
 @media (max-width: 360px) {
-  .ps-top-actions .is-primary {
+  .ps-top-actions .is-cta {
     display: none;
   }
 }
@@ -1069,7 +1069,7 @@
   .ps-top-actions .is-login {
     display: none;
   }
-  .ps-top-actions .is-primary {
+  .ps-top-actions .is-cta {
     min-height: 40px;
     padding: 0 12px;
   }
