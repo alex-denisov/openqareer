@@ -160,25 +160,47 @@ function determineRoleMatchPoints(
   };
 }
 
+/**
+ * Специализации, которые соседствуют с функцией кандидата в одном названии:
+ * «Head of People Operations» (hr рядом с ops), «Product Design Director»,
+ * «Head of Product Analytics». Без такой роли у кандидата вакансия чужая (27.10).
+ */
+const SPECIALIST_FUNCTIONS: readonly FunctionCode[] = [
+  'sales',
+  'marketing',
+  'hr',
+  'design',
+  'data',
+  'legal',
+  'finance',
+];
+
 export function evaluateSemanticRole(
   roleFunctions: readonly FunctionCode[],
   targetLevel: SeniorityLevel | undefined,
   vacancyTitle: string,
+  targetRoles: readonly string[] = [],
 ) {
   const parsed = rulesParse(vacancyTitle);
   const matchingPoints: string[] = [];
   const titleWords = new Set(normalizeTextForComparison(vacancyTitle).split(/\s+/u));
-  const containsOtherCommercialFunction = (['sales', 'marketing'] as const).some(
+  const containsOtherSpecialistFunction = SPECIALIST_FUNCTIONS.some(
     (code) =>
       !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
   );
 
-  if (containsOtherCommercialFunction || isNonTechNoise(parsed.functions)) {
+  if (containsOtherSpecialistFunction || isNonTechNoise(parsed.functions)) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
   // §3.4: Доверие к SQL. Если правила не нашли функций вовсе, вакансия не отбрасывается.
   if (parsed.functions.length === 0) {
+    // «Head of Crypto»: функции нет, и с ролями кандидата название не связано.
+    if (
+      targetRoles.length > 0 &&
+      evaluateRole([...targetRoles], vacancyTitle).roleMatch !== 'target'
+    )
+      return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
     matchingPoints.push('Функция определена разбором названия при сборе.');
     return { roleMatch: 'partial' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
@@ -234,6 +256,7 @@ export function matchCandidateWithVacancy(
         candidate.semanticRoleFunctions,
         candidate.targetLevel,
         vacancy.canonicalTitle,
+        candidate.targetRoles,
       )
     : evaluateRole(candidate.targetRoles, vacancy.canonicalTitle);
   const levelMatch = evaluateLevelMatch(candidate.targetLevel, vacancy.canonicalTitle);

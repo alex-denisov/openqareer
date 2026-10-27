@@ -53,16 +53,30 @@ export interface VacancySummaryText {
 }
 
 /** Краткое описание карточки: из страницы, иначе из деталей; пока грузится — честно «загружаем». */
+/**
+ * Выжимка — простой текст: `![…](url)` и `[url]` уходят, `[подпись](url)`
+ * остаётся подписью (27.10, «[https://docs.google.com/…]» в строке Xero).
+ */
+export function withoutMarkdownLinks(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)\s]*\)/gu, '')
+    .replace(/\[([^\]]+)\]\((?:https?:\/\/|www\.)[^)\s]*\)/gu, '$1')
+    .replace(/\[\s*(?:https?:\/\/|www\.)[^\]\s]*\s*\]/gu, '')
+    .replace(/[ \t]{2,}/gu, ' ')
+    .trim();
+}
+
 export function vacancySummaryText(
   pageSummary: string,
   detail: VacancyDetailState,
 ): VacancySummaryText {
-  const fromPage = decodeVacancyText(pageSummary).trim();
+  const fromPage = withoutMarkdownLinks(decodeVacancyText(pageSummary));
   if (fromPage) return { text: fromPage };
   if (detail.status === 'loading' || detail.status === 'idle') return { loading: true };
   if (detail.status !== 'ready') return {};
-  if (detail.detail.summary?.trim()) return { text: detail.detail.summary.trim() };
-  const opening = openingOfDescription(detail.detail.description);
+  const summary = withoutMarkdownLinks(detail.detail.summary ?? '');
+  if (summary) return { text: summary };
+  const opening = openingOfDescription(withoutMarkdownLinks(detail.detail.description));
   return opening ? { text: opening } : {};
 }
 

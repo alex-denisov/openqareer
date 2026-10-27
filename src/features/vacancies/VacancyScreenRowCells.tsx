@@ -114,7 +114,7 @@ function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
   const fit = vacancyGeoFit(item);
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--geo" data-label="Гео">
-      <span>{vacancyGeoLabel(item)}</span>
+      <span title={item.cluster.canonicalLocation}>{vacancyGeoLabel(item)}</span>
       <span className="vacancies-screen-fit-status">
         <span aria-hidden="true">
           <GeoFitDot outsideGeo={fit.state === 'no'} unknown={fit.state === 'unknown'} />
@@ -127,8 +127,11 @@ function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
 
 /** «Москва, гибрид» — город и формат из одного разбора с фильтром «Формат» (B446-g4). */
 export function vacancyGeoLabel(item: MatchedVacancyItem): string {
-  const place =
-    item.cluster.canonicalLocation ?? (item.cluster.isRemote ? 'Удалённо' : 'Не указано');
+  const place = item.cluster.canonicalLocation
+    ? compactPlaceLabel(item.cluster.canonicalLocation)
+    : item.cluster.isRemote
+      ? 'Удалённо'
+      : 'Не указано';
   const format = workFormatLabel(vacancyFormat(item));
   if (!format || place.toLocaleLowerCase('ru-RU').includes(format)) return place;
   return `${place}, ${format}`;
@@ -207,4 +210,26 @@ export function VacancyScreenRowCells({
       <VacancyScreenStatusCell item={item} />
     </>
   );
+}
+
+const PLACES_SHOWN = 2;
+
+function countriesWord(count: number): string {
+  const tens = count % 100;
+  const ones = count % 10;
+  if (tens >= 11 && tens <= 14) return 'стран';
+  if (ones === 1) return 'страна';
+  if (ones >= 2 && ones <= 4) return 'страны';
+  return 'стран';
+}
+
+/** Список из ~200 стран не занимает строку целиком: две первые и счёт, полный — в подсказке. */
+export function compactPlaceLabel(location: string): string {
+  const places = location
+    .split(';')
+    .map((place) => place.trim())
+    .filter(Boolean);
+  if (places.length <= PLACES_SHOWN + 1) return places.join(', ');
+  const rest = places.length - PLACES_SHOWN;
+  return `${places.slice(0, PLACES_SHOWN).join(', ')} и ещё ${rest} ${countriesWord(rest)}`;
 }

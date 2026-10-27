@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
-import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
+import {
+  evaluateSemanticRole,
+  matchCandidateWithVacancy,
+  type CandidateMatchProfile,
+} from './vacancyMatcher';
 import { lintTextQuality } from '../../shared/textQualityLinter';
 
 describe('Explainable Vacancy Matcher', () => {
@@ -292,5 +296,28 @@ describe('Explainable Vacancy Matcher', () => {
       );
       expect(explanation.missingPoints).toContain('Бюджетирование');
     });
+  });
+});
+
+describe('evaluateSemanticRole: функция ролей «Карьеры» (27.10)', () => {
+  const functions = ['eng-mgmt', 'ops', 'product', 'it-ops', 'support', 'ai-ml'] as const;
+  const roles = ['VP of Engineering / Technology', 'COO', 'Head of Product', 'Head of AI'];
+  const roleOf = (title: string) =>
+    evaluateSemanticRole([...functions], 'head', title, roles).roleMatch;
+
+  it('отсекает вакансии чужой специализации рядом с функцией кандидата', () => {
+    expect(roleOf('Head of People Operations')).toBe('none');
+    expect(roleOf('Product Design Director (x/f/m)')).toBe('none');
+    expect(roleOf('Head of Product Analytics - 100% Remote - EMEA')).toBe('none');
+  });
+
+  it('название без функции проходит, только если совпадает с ролью кандидата', () => {
+    expect(roleOf('Head of Crypto')).toBe('none');
+  });
+
+  it('оставляет роли кандидата', () => {
+    expect(roleOf('Head of Engineering')).not.toBe('none');
+    expect(roleOf('Head of Operations')).not.toBe('none');
+    expect(roleOf('Head of Product')).not.toBe('none');
   });
 });

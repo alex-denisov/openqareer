@@ -28,3 +28,16 @@ it('falls back to the opening of the full text when neither summary exists (26.1
   expect(result.text).not.toContain('Requisition');
   expect(result.text!.length).toBeLessThanOrEqual(420);
 });
+
+it('убирает ссылки markdown из выжимки, оставляя подпись (27.10)', () => {
+  expect(
+    vacancySummaryText('OUR PURPOSE [https://docs.google.com/drawings/d/1F] We build', {
+      status: 'idle',
+    }),
+  ).toEqual({ text: 'OUR PURPOSE We build' });
+  expect(
+    vacancySummaryText('See [our values](https://x.io/v) and ![logo](https://x.io/l.png).', {
+      status: 'idle',
+    }),
+  ).toEqual({ text: 'See our values and .' });
+});

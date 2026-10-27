@@ -208,3 +208,13 @@ export function markGeography<T extends GeographyMatch>(
   });
   return marked.sort(compareMatchedVacancies);
 }
+
+/**
+ * Удалёнка с найма из другой страны вне условий кандидата и в подборку не
+ * попадает (27.10); «Remote» без страны остаётся с честной пометкой.
+ */
+export function dropForeignRemote<
+  T extends { readonly explanation: { readonly remoteCountry?: RemoteCountryFit } },
+>(items: readonly T[]): T[] {
+  return items.filter((item) => item.explanation.remoteCountry !== 'other');
+}
