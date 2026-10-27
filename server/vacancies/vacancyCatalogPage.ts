@@ -442,6 +442,15 @@ export function buildListingPage(
   return buildListingPageFromEntries(slice, summary, page, entries.length, pageSize);
 }
 
+function pageListingOf(summary: ListingSummary): PageListing {
+  return {
+    place: summary.place,
+    placeLabel: summary.placeLabel,
+    ...(summary.role ? { role: summary.role } : {}),
+    ...(summary.roleLabel ? { roleLabel: summary.roleLabel } : {}),
+  };
+}
+
 /** Build a filtered page from the materialized catalog projection. */
 export function buildListingPageFromEntries(
   entries: readonly CatalogEntry[],
@@ -461,12 +470,7 @@ export function buildListingPageFromEntries(
       `${heading}: ${countLabel(total)}. ` +
       'У каждой вакансии — работодатель, источник и дата публикации. Отклик подаётся на сайте работодателя.',
     indexable: isIndexableListing(total, Boolean(summary.role)),
-    listing: {
-      place: summary.place,
-      placeLabel: summary.placeLabel,
-      ...(summary.role ? { role: summary.role } : {}),
-      ...(summary.roleLabel ? { roleLabel: summary.roleLabel } : {}),
-    },
+    listing: pageListingOf(summary),
     page,
     pageCount,
     total,
