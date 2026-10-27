@@ -246,7 +246,7 @@ describe('bounded salary SSR', () => {
       const city = await app.inject('/salaries/accountant');
       expect(city.body).toContain('Зарплата бухгалтера в 2026 году по городам');
       expect(city.body).toContain('105 000–140 000 ₽');
-      expect(city.body).toContain('href="/vacancies/moscow"');
+      expect(city.body).toContain('href="/vacancies/moscow/accountant"');
       expect(city.body).toContain('"@type":"FAQPage"');
       const fallback = await app.inject('/salaries/analyst');
       expect(fallback.body).not.toContain('по городам');

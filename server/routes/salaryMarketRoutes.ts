@@ -86,7 +86,13 @@ export function renderPublicSalaryPage(
     robots: 'index, follow',
     structured,
     description: page.description,
-  }).replace('%%SALARY_CONTENT%%', () => renderToStaticMarkup(page.element));
+  })
+    .replace('%%SALARY_CONTENT%%', () => renderToStaticMarkup(page.element))
+    .replace('</body>', () =>
+      page.occupation
+        ? '<script type="module" src="/assets/oq-salary-compare-1.js"></script></body>'
+        : '</body>',
+    );
 }
 
 function sendPublicSalaryPage(

@@ -78,6 +78,7 @@ export interface SalaryProfessionView {
   readonly role: string;
   readonly label: string;
   readonly labelGenitive: string;
+  readonly labelDative: string;
   readonly date: string;
   readonly lead: SalaryCityView;
   readonly leadGroup: SalaryMidpointGroup;
@@ -99,6 +100,13 @@ const BASIS_TEXT = { gross: 'до налогов', net: 'на руки', unknown
 function genitive(label: string): string {
   const lower = label.charAt(0).toLowerCase() + label.slice(1);
   if (/[^аеиоуыэюяйь]$/iu.test(lower) && !/\s/u.test(lower)) return `${lower}а`;
+  return lower;
+}
+
+/** «Где бухгалтеру платят больше»; the label itself when no form is known. */
+function dative(label: string): string {
+  const lower = label.charAt(0).toLowerCase() + label.slice(1);
+  if (/[^аеиоуыэюяйь]$/iu.test(lower) && !/\s/u.test(lower)) return `${lower}у`;
   return lower;
 }
 
@@ -197,6 +205,7 @@ export function salaryProfessionView(snapshot: SalaryMarketSnapshot): SalaryProf
     role: snapshot.role,
     label,
     labelGenitive,
+    labelDative: dative(label),
     date,
     lead,
     leadGroup: leadRow.salary,

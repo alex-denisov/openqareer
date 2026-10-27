@@ -28,12 +28,27 @@ function Crumbs({ current }: { readonly current: string }) {
     </nav>
   );
 }
-function Faq({ title, faqs }: { readonly title: string; readonly faqs: readonly SalaryFaq[] }) {
+function Faq({
+  title,
+  faqs,
+  aside,
+  columns,
+}: {
+  readonly title: string;
+  readonly faqs: readonly SalaryFaq[];
+  readonly aside?: React.ReactNode;
+  readonly columns?: boolean;
+}) {
   return (
     <section className="sp-s" aria-labelledby="sp-faq">
-      <span className="sp-label">Вопросы</span>
-      <h2 id="sp-faq">{title}</h2>
-      <div className="sp-faq">
+      <div className="sp-sh">
+        <div>
+          <span className="sp-label">Вопросы</span>
+          <h2 id="sp-faq">{title}</h2>
+        </div>
+        {aside ? <p>{aside}</p> : null}
+      </div>
+      <div className={columns ? 'sp-faq sp-faq-2' : 'sp-faq'}>
         {faqs.map((faq, index) => (
           <details key={faq.question} open={index === 0}>
             <summary>{faq.question}</summary>
@@ -45,7 +60,11 @@ function Faq({ title, faqs }: { readonly title: string; readonly faqs: readonly 
   );
 }
 
+const CITY_FOLD = 3;
+const CITY_FOLD_MOBILE = 2;
+
 function CityTable({ view }: { readonly view: SalaryProfessionView }) {
+  const rest = view.cities.slice(CITY_FOLD_MOBILE);
   return (
     <div className="sp-card">
       <table className="sp-table">
@@ -59,9 +78,27 @@ function CityTable({ view }: { readonly view: SalaryProfessionView }) {
           </tr>
         </thead>
         <tbody>
-          <CityRows view={view} />
+          <CityRows
+            cities={view.cities.slice(0, CITY_FOLD)}
+            rowClass={(index) => (index >= CITY_FOLD_MOBILE ? 'sp-wide-only' : undefined)}
+          />
         </tbody>
       </table>
+      {rest.length ? (
+        <details className="sp-fold">
+          <summary>Все города</summary>
+          <table className="sp-table">
+            <tbody>
+              <CityRows
+                cities={rest}
+                rowClass={(index) =>
+                  index + CITY_FOLD_MOBILE < CITY_FOLD ? 'sp-narrow-only' : undefined
+                }
+              />
+            </tbody>
+          </table>
+        </details>
+      ) : null}
       <CityTableFooter view={view} />
     </div>
   );
@@ -84,11 +121,17 @@ function SalaryBar({ bar }: { readonly bar: NonNullable<SalaryCityView['bar']> }
   );
 }
 
-function CityRows({ view }: { readonly view: SalaryProfessionView }) {
+function CityRows({
+  cities,
+  rowClass,
+}: {
+  readonly cities: readonly SalaryCityView[];
+  readonly rowClass?: (index: number) => string | undefined;
+}) {
   return (
     <>
-      {view.cities.map((city) => (
-        <tr key={city.placeSlug}>
+      {cities.map((city, index) => (
+        <tr key={city.placeSlug} className={rowClass?.(index)}>
           <td>
             {city.city}
             <span className="sp-sub">{vacancies(city.vacancyCount)}</span>
@@ -127,10 +170,10 @@ function CityTableFooter({ view }: { readonly view: SalaryProfessionView }) {
       {view.remote ? (
         <div className="sp-card-f">
           <span>
-            Удалённые вакансии в другой валюте: медиана {view.remote.median}, выборка —{' '}
-            {vacancies(view.remote.sampleSize)} с вилкой
+            Удалённые вакансии: медиана {view.remote.median}, по{' '}
+            {view.remote.sampleSize.toLocaleString('ru-RU')} вакансиям с вилкой
           </span>
-          <a className="sp-link" href="/vacancies/remote">
+          <a className="sp-link" href={`/vacancies/remote/${view.role}`}>
             Удалённые вакансии <Arrow />
           </a>
         </div>
@@ -153,8 +196,8 @@ function ProfessionHero({ view }: { readonly view: SalaryProfessionView }) {
         <p className="sp-answer">
           <b>Коротко:</b> {view.answer}
         </p>
-        <div className="sp-kpi">
-          <div>
+        <div className="sp-kpi sp-kpi-joined">
+          <div className="sp-kpi-lead">
             <span>Медиана, {view.lead.city}</span>
             <b>{view.lead.median}</b>
             <small>{view.leadNet ? `на руки ${view.leadNet}` : `в месяц, ${basis}`}</small>
@@ -183,13 +226,54 @@ function ProfessionHero({ view }: { readonly view: SalaryProfessionView }) {
   );
 }
 
+function ProfessionCompare({ view }: { readonly view: SalaryProfessionView }) {
+  const group = view.leadGroup;
+  return (
+    <section className="sp-card sp-cmp" aria-labelledby="sp-cmp-h">
+      <div>
+        <h2 id="sp-cmp-h" className="sp-h3">
+          Сравните свою зарплату: {view.lead.city}
+        </h2>
+        <p className="sp-small">
+          {vacancies(group.sampleSize)} {view.labelGenitive} с вилкой,{' '}
+          {SALARY_BASIS_TEXT[view.basis]}, открытый каталог на {view.date}. Считается в браузере,
+          ничего не сохраняем.
+        </p>
+      </div>
+      <div
+        className="sp-cmp-row"
+        data-salary-compare=""
+        data-p25={group.p25}
+        data-p50={group.p50}
+        data-p75={group.p75}
+        data-currency={group.currency}
+      >
+        <label htmlFor="sp-my-pay">Ваша зарплата {SALARY_BASIS_TEXT[view.basis]} в месяц</label>
+        <input
+          className="sp-input"
+          id="sp-my-pay"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder={`например, ${view.lead.median}`}
+        />
+        <p className="sp-cmp-out" id="sp-my-out" aria-live="polite">
+          Введите сумму — покажем, где она в вилках вакансий: {view.lead.city}.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function ProfessionNext({ view }: { readonly view: SalaryProfessionView }) {
   return (
     <>
-      <section className="sp-strip">
+      <section className="sp-band">
         <div>
           <h3>Узнайте, сколько стоите именно вы</h3>
-          <p>Загрузите резюме: покажем вакансии от нужной вам суммы и процент совпадения.</p>
+          <p>
+            Загрузите резюме: покажем вакансии {view.labelGenitive} от нужной вам суммы и что
+            поднимет вас в вилке.
+          </p>
         </div>
         <a className="sp-btn sp-primary" href={`/signup?from=salaries&role=${view.role}`}>
           Найти вакансии от {view.lead.median}
@@ -200,27 +284,27 @@ function ProfessionNext({ view }: { readonly view: SalaryProfessionView }) {
 }
 
 function ProfessionLinks({ view }: { readonly view: SalaryProfessionView }) {
+  const lead = view.lead;
   return (
-    <>
-      <section className="sp-s" aria-labelledby="sp-next">
-        <h2 id="sp-next" className="sp-h3">
-          Что дальше
-        </h2>
-        <div className="sp-links">
-          {view.cities
-            .filter((city) => city.bar)
-            .slice(0, 2)
-            .map((city) => (
-              <a key={city.placeSlug} className="sp-link" href={`/vacancies/${city.placeSlug}`}>
-                Вакансии: {city.city} <Arrow />
-              </a>
-            ))}
-          <a className="sp-link" href="/tools/country-fit">
-            В какую страну переехать <Arrow />
-          </a>
-        </div>
-      </section>
-    </>
+    <section className="sp-s" aria-labelledby="sp-next">
+      <h2 id="sp-next" className="sp-h3">
+        Что дальше
+      </h2>
+      <div className="sp-links">
+        <a className="sp-link" href={`/vacancies/${lead.placeSlug}/${view.role}`}>
+          {vacancies(lead.vacancyCount)} {view.labelGenitive}: {lead.city} <Arrow />
+        </a>
+        <a className="sp-link" href={`/tools/interview-questions/${view.role}`}>
+          Вопросы на собеседовании {view.labelGenitive} <Arrow />
+        </a>
+        <a className="sp-link" href="/tools/resume">
+          Резюме {view.labelGenitive} в конструкторе <Arrow />
+        </a>
+        <a className="sp-link" href="/#tariffs">
+          Какую сумму назвать на собеседовании — подготовка к торгу в Pro <Arrow />
+        </a>
+      </div>
+    </section>
   );
 }
 
@@ -230,7 +314,7 @@ function ProfessionMethod() {
       <section className="sp-s" aria-labelledby="sp-how">
         <span className="sp-label">Как мы считаем</span>
         <h2 id="sp-how">Откуда эти цифры</h2>
-        <div className="sp-how">
+        <div className="sp-how sp-how-plain">
           <div>
             <b>Только вакансии с вилкой</b>
             <p>
@@ -508,17 +592,27 @@ export function SalaryProfessionPage({ view }: { readonly view: SalaryProfession
       <ProfessionHero view={view} />
       <section className="sp-s" aria-labelledby="sp-cities">
         <span className="sp-label">По городам</span>
-        <h2 id="sp-cities">Где платят больше</h2>
+        <h2 id="sp-cities">Где {view.labelDative} платят больше</h2>
         <p className="sp-lead">
           Полоса — вилка, в которую попадает половина вакансий города. Отметка — медиана. Считаем по
           серединам вилок «от — до» в вакансиях с обеими границами, {SALARY_BASIS_TEXT[view.basis]}.
         </p>
         <CityTable view={view} />
       </section>
+      <ProfessionCompare view={view} />
       <ProfessionNext view={view} />
       <ProfessionLinks view={view} />
       <ProfessionMethod />
-      <Faq title={`О зарплате ${view.labelGenitive}`} faqs={view.faqs} />
+      <Faq
+        title={`О зарплате ${view.labelGenitive}`}
+        faqs={view.faqs}
+        columns
+        aside={
+          <a className="sp-link" href={`/tools/interview-questions/${view.role}`}>
+            Вопросы на собеседовании {view.labelGenitive} <Arrow />
+          </a>
+        }
+      />
     </main>
   );
 }
