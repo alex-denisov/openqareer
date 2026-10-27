@@ -409,23 +409,18 @@
   inline-size: 28%;
 }
 .sp-bar {
-  position: relative;
-  block-size: 8px;
-  border-radius: 4px;
-  background: var(--ps-bg-2);
+  display: block;
+  inline-size: 100%;
+  block-size: 12px;
 }
-.sp-bar i {
-  position: absolute;
-  inset-block: 0;
-  border-radius: 4px;
-  background: var(--ps-blue-soft);
+.sp-bar-track {
+  fill: var(--ps-bg-2);
 }
-.sp-bar b {
-  position: absolute;
-  inset-block: -3px;
-  inline-size: 3px;
-  border-radius: 2px;
-  background: var(--ps-blue);
+.sp-bar-range {
+  fill: var(--ps-blue-soft);
+}
+.sp-bar-mark {
+  fill: var(--ps-blue);
 }
 .sp-me td {
   background: var(--ps-blue-soft);

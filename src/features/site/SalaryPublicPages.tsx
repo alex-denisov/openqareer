@@ -2,6 +2,7 @@ import React from 'react';
 import {
   SALARY_BASIS_TEXT,
   vacancies,
+  type SalaryCityView,
   type SalaryCountryView,
   type SalaryFaq,
   type SalaryProfessionView,
@@ -65,6 +66,23 @@ function CityTable({ view }: { readonly view: SalaryProfessionView }) {
   );
 }
 
+function SalaryBar({ bar }: { readonly bar: NonNullable<SalaryCityView['bar']> }) {
+  return (
+    <svg className="sp-bar" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true">
+      <rect className="sp-bar-track" x="0" y="3" width="100" height="4" rx="2" />
+      <rect
+        className="sp-bar-range"
+        x={bar.left}
+        y="3"
+        width={100 - bar.left - bar.right}
+        height="4"
+        rx="2"
+      />
+      <rect className="sp-bar-mark" x={bar.mark - 0.6} y="0" width="1.2" height="10" />
+    </svg>
+  );
+}
+
 function CityRows({ view }: { readonly view: SalaryProfessionView }) {
   return (
     <>
@@ -82,10 +100,7 @@ function CityRows({ view }: { readonly view: SalaryProfessionView }) {
           </td>
           <td className="sp-bar-c">
             {city.bar ? (
-              <div className="sp-bar" aria-hidden="true">
-                <i style={{ left: `${city.bar.left}%`, right: `${city.bar.right}%` }} />
-                <b style={{ left: `${city.bar.mark}%` }} />
-              </div>
+              <SalaryBar bar={city.bar} />
             ) : (
               <span className="sp-small">другая валюта</span>
             )}
