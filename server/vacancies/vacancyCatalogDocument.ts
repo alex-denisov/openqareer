@@ -27,7 +27,7 @@ import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import { isIndexablePage } from '../seo/catalogIndexing';
 import { escapeHtml } from './catalogHtml';
 import { CATALOG_STYLE } from './catalogStyle';
-import { CATALOG_CHROME_FOOTER, catalogChromeHeader } from './catalogChrome';
+import { catalogChromeFooter, catalogChromeHeader } from './catalogChrome';
 import { meaningfulText, plainSummary, renderDescriptionHtml } from './catalogMarkdown';
 import { countLabel, formatRuDate, pageFacts } from './catalogCopy';
 import { jobPostingMetadata } from './jobPostingMicrodata';
@@ -116,6 +116,7 @@ function head(options: {
     `<link rel="stylesheet" href="${CATALOG_STYLESHEET_PATH}">`,
     jsonLdScript(options.jsonLd),
     '<script src="/assets/oq-analytics-3.js" defer></script>',
+    '<script src="/assets/oq-chrome-1.js" defer></script>',
   ]
     .filter(Boolean)
     .join('');
@@ -130,7 +131,7 @@ function siteHeader(): string {
 }
 
 function siteFooter(): string {
-  return CATALOG_CHROME_FOOTER;
+  return catalogChromeFooter();
 }
 
 const CTA_BOX =

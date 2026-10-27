@@ -354,6 +354,7 @@ async function writeSalaryTemplate(html: string, distDirectory: string): Promise
     `${distDirectory}/salary-market.html`,
     withPageStyles(html, `<link rel="stylesheet" href="${stylesheet}">`)
       .replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js')
+      .replace('</body>', '<script src="/assets/oq-chrome-1.js" defer></script></body>')
       .replace(
         EMPTY_ROOT,
         renderToStaticMarkup(
@@ -363,13 +364,7 @@ async function writeSalaryTemplate(html: string, distDirectory: string): Promise
             </a>
             <PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />
             {'%%SALARY_CONTENT%%'}
-            <PublicFooter
-              onNavigate={() => {}}
-              onLanding={false}
-              signedIn={false}
-              interviewLink={false}
-              toolLinks={false}
-            />
+            <PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} planBar />
           </div>,
         ),
       )

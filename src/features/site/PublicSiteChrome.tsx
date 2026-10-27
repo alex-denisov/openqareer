@@ -1,28 +1,58 @@
 import React from 'react';
+import { List } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
-import { LEGAL_DOCS, legalPath } from '../../../shared/legalRegistry';
+import {
+  FOOTER_ABOUT,
+  MENU_ID,
+  MENU_LABEL,
+  OPERATOR_LINE,
+  PLAN_BAR,
+  PUBLIC_FOOTER_COLUMNS,
+  PUBLIC_NAV,
+  SUPPORT_CONTACT,
+  type ChromeLink,
+  type PublicSection,
+} from '../../../shared/publicSiteChrome';
 import { SiteLink } from './SiteLink';
 import { preloadAuthPages } from './authPagesLoader';
-import {
-  OPERATOR_TAX_ID,
-  SUPPORT_EMAIL,
-  TELEGRAM_BOT_URL,
-  TELEGRAM_COMMUNITY_URL,
-} from './publicSiteContent';
 
 export interface PublicChromeProps {
   readonly onNavigate: (path: string) => void;
-  /** Section anchors are relative on the landing and absolute elsewhere. */
-  readonly onLanding: boolean;
+  /** Kept for callers; section links are absolute on every page now. */
+  readonly onLanding?: boolean;
   readonly signedIn: boolean;
   /** Administrators also get a link to the console. */
   readonly isAdmin?: boolean;
-  /** B568: off on /salaries, whose raw HTML budget has no room for another footer link. */
-  readonly interviewLink?: boolean;
+  /** Nav section that gets `aria-current="page"`. */
+  readonly current?: PublicSection;
 }
 
-function anchor(onLanding: boolean, id: string): string {
-  return onLanding ? `#${id}` : `/#${id}`;
+/** Paths the SPA opens without a document load; the rest are plain links. */
+const IN_APP =
+  /^\/(faq|support|login|signup|tools\/(resume|relocation|country-fit)|legal\/[a-z-]+)?$/u;
+
+function ChromeAnchor({
+  link,
+  onNavigate,
+  current,
+}: {
+  readonly link: ChromeLink;
+  readonly onNavigate: (path: string) => void;
+  readonly current?: boolean;
+}) {
+  const aria = current ? ({ 'aria-current': 'page' } as const) : {};
+  if (!link.external && IN_APP.test(link.href)) {
+    return (
+      <SiteLink to={link.href} onNavigate={onNavigate} {...aria}>
+        {link.label}
+      </SiteLink>
+    );
+  }
+  return (
+    <a href={link.href} rel={link.external ? 'noopener' : undefined} {...aria}>
+      {link.label}
+    </a>
+  );
 }
 
 function HeaderActions({
@@ -30,156 +60,144 @@ function HeaderActions({
   signedIn,
   isAdmin,
 }: Pick<PublicChromeProps, 'onNavigate' | 'signedIn' | 'isAdmin'>) {
+  if (signedIn) {
+    return (
+      <>
+        {isAdmin ? (
+          <SiteLink to="/admin" className="ps-btn is-ghost" onNavigate={onNavigate}>
+            Администрирование
+          </SiteLink>
+        ) : null}
+        <SiteLink to="/app" className="ps-btn is-primary" onNavigate={onNavigate}>
+          Открыть кабинет
+        </SiteLink>
+      </>
+    );
+  }
   return (
-    <div className="ps-top-actions">
-      {signedIn ? (
-        <>
-          {isAdmin ? (
-            <SiteLink to="/admin" className="ps-btn is-ghost" onNavigate={onNavigate}>
-              Администрирование
-            </SiteLink>
-          ) : null}
-          <SiteLink to="/app" className="ps-btn is-primary" onNavigate={onNavigate}>
-            Открыть кабинет
-          </SiteLink>
-        </>
-      ) : (
-        <>
-          <SiteLink
-            to="/login"
-            className="ps-btn is-login"
-            onNavigate={onNavigate}
-            onWarm={preloadAuthPages}
-          >
-            Войти
-          </SiteLink>
-          <SiteLink
-            to="/signup"
-            className="ps-btn is-primary"
-            onNavigate={onNavigate}
-            onWarm={preloadAuthPages}
-          >
-            Найти работу
-          </SiteLink>
-        </>
-      )}
-    </div>
+    <>
+      <SiteLink
+        to="/login"
+        className="ps-btn is-login"
+        onNavigate={onNavigate}
+        onWarm={preloadAuthPages}
+      >
+        Войти
+      </SiteLink>
+      <SiteLink
+        to="/signup"
+        className="ps-btn is-primary"
+        onNavigate={onNavigate}
+        onWarm={preloadAuthPages}
+      >
+        Найти работу
+      </SiteLink>
+    </>
   );
 }
 
-/** B535: header shared by the landing, /faq and /support. */
-export function PublicHeader({ onNavigate, onLanding, signedIn, isAdmin }: PublicChromeProps) {
+/** B569: header shared by every public page (mockup `header()`), with a section menu on phones. */
+export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicChromeProps) {
+  const [open, setOpen] = React.useState(false);
+  const button = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+  const links = PUBLIC_NAV.map((item) => (
+    <ChromeAnchor key={item.id} link={item} onNavigate={onNavigate} current={item.id === current} />
+  ));
   return (
     <header className="ps-top">
       <div className="ps-wrap ps-top-row">
         <SiteLink to="/" className="ps-brand" onNavigate={onNavigate} aria-label="openqareer">
           <BrandMark variant="lockup" size={26} />
         </SiteLink>
-        <nav className="ps-nav" aria-label="Разделы сайта">
-          <a href={anchor(onLanding, 'how')}>Как это работает</a>
-          <a href={anchor(onLanding, 'apply')}>Кабинет</a>
-          <a href={anchor(onLanding, 'tools')}>Вакансии</a>
-          <SiteLink to="/tools/resume" onNavigate={onNavigate}>
-            Резюме
-          </SiteLink>
-          <a href={anchor(onLanding, 'tariffs')}>Тарифы</a>
-          <SiteLink to="/faq" onNavigate={onNavigate}>
-            Вопросы
-          </SiteLink>
+        <nav className="ps-nav" aria-label="Разделы">
+          {links}
         </nav>
-        <HeaderActions onNavigate={onNavigate} signedIn={signedIn} isAdmin={isAdmin} />
+        <div className="ps-top-actions">
+          <HeaderActions onNavigate={onNavigate} signedIn={signedIn} isAdmin={isAdmin} />
+          <button
+            ref={button}
+            type="button"
+            className="ps-menu-btn"
+            aria-label={MENU_LABEL}
+            aria-expanded={open}
+            aria-controls={MENU_ID}
+            data-ps-menu=""
+            onClick={() => setOpen((value) => !value)}
+          >
+            <List size={22} aria-hidden="true" />
+          </button>
+        </div>
       </div>
+      <nav className="ps-menu" id={MENU_ID} aria-label="Разделы" hidden={!open}>
+        {links}
+      </nav>
     </header>
   );
 }
 
-function FooterHelpAndDocs({
-  onNavigate,
-  interviewLink = true,
-}: Pick<PublicChromeProps, 'onNavigate' | 'interviewLink'>) {
+/** B569: «Free навсегда» strip above the footer on tool, salary and vacancy pages. */
+export function PublicPlanBar() {
   return (
-    <>
-      <div className="ps-footer-group">
-        <b>Помощь</b>
-        <SiteLink to="/tools/country-fit" onNavigate={onNavigate}>
-          Калькулятор Country Fit
-        </SiteLink>
-        {interviewLink ? <a href="/tools/interview-questions">Вопросы на собеседовании</a> : null}
-        <SiteLink to="/faq" onNavigate={onNavigate}>
-          Вопросы и ответы
-        </SiteLink>
-        <SiteLink to="/support" onNavigate={onNavigate}>
-          Поддержка
-        </SiteLink>
-        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
-        <a href={TELEGRAM_BOT_URL} rel="noopener">
-          Telegram-бот
-        </a>
-        <a href={TELEGRAM_COMMUNITY_URL} rel="noopener">
-          Сообщество в Telegram
+    <aside className="ps-plan" aria-label="Тарифы">
+      <div className="ps-wrap">
+        <span>
+          <b>{PLAN_BAR.strong}</b>
+          {PLAN_BAR.rest}
+        </span>
+        <a className="ps-plan-link" href={PLAN_BAR.href}>
+          {PLAN_BAR.label}
         </a>
       </div>
-      <div className="ps-footer-group">
-        <b>Документы</b>
-        {LEGAL_DOCS.map((doc) => (
-          <SiteLink key={doc.slug} to={legalPath(doc.slug)} onNavigate={onNavigate}>
-            {doc.navLabel}
-          </SiteLink>
-        ))}
-      </div>
-    </>
+    </aside>
   );
 }
 
-/** B535: footer with grouped links, contacts and the operator's tax id. */
+/** B569: footer from the shared columns (mockup `FOOTER`). */
 export function PublicFooter({
   onNavigate,
-  onLanding,
-  interviewLink,
-  toolLinks = true,
-}: PublicChromeProps & {
-  /** Off on /salaries: the page sits at its 20 KB HTML budget. */
-  readonly toolLinks?: boolean;
-}) {
+  planBar = false,
+}: PublicChromeProps & { readonly planBar?: boolean }) {
   return (
-    <footer className="ps-footer">
-      <div className="ps-wrap ps-footer-grid">
-        <div>
-          <SiteLink to="/" className="ps-brand" onNavigate={onNavigate} aria-label="openqareer">
-            <BrandMark variant="lockup" size={26} />
-          </SiteLink>
-          <p className="ps-footer-about">Сервис для поиска работы специалистам и руководителям.</p>
+    <>
+      {planBar ? <PublicPlanBar /> : null}
+      <footer className="ps-footer">
+        <div className="ps-wrap ps-footer-grid">
+          <div>
+            <SiteLink to="/" className="ps-brand" onNavigate={onNavigate} aria-label="openqareer">
+              <BrandMark variant="lockup" size={26} />
+            </SiteLink>
+            <p className="ps-footer-about">{FOOTER_ABOUT}</p>
+          </div>
+          {PUBLIC_FOOTER_COLUMNS.map((column) => (
+            <div className="ps-footer-group" key={column.title}>
+              <b>{column.title}</b>
+              {column.links.map((link) => (
+                <ChromeAnchor key={link.href} link={link} onNavigate={onNavigate} />
+              ))}
+            </div>
+          ))}
+          <div className="ps-footer-legal">
+            <span>© {new Date().getFullYear()} openqareer</span>
+            <span>{OPERATOR_LINE}</span>
+            <span>{SUPPORT_CONTACT}</span>
+            {/* Opens the cookie notice from public/assets/oq-analytics-3.js. */}
+            <button type="button" className="ps-footer-cookie" data-oq-consent-open="">
+              Настройки cookie
+            </button>
+          </div>
         </div>
-        <div className="ps-footer-group">
-          <b>Продукт</b>
-          <a href={anchor(onLanding, 'how')}>Как это работает</a>
-          <a href={anchor(onLanding, 'tariffs')}>Тарифы</a>
-          <a href={anchor(onLanding, 'download')}>Приложение для компьютера</a>
-          <SiteLink to="/login" onNavigate={onNavigate} onWarm={preloadAuthPages}>
-            Войти
-          </SiteLink>
-        </div>
-        <div className="ps-footer-group">
-          <b>Инструменты</b>
-          <a href="/vacancies">Каталог вакансий</a>
-          <a href="/vacancies/remote">Удалённые вакансии</a>
-          <a href="/salaries">Зарплаты и навыки</a>
-          <SiteLink to="/tools/resume" onNavigate={onNavigate}>
-            Конструктор резюме
-          </SiteLink>
-          {toolLinks && <a href="/tools/relocation">В какую страну переехать</a>}
-        </div>
-        <FooterHelpAndDocs onNavigate={onNavigate} interviewLink={interviewLink} />
-        <div className="ps-footer-legal">
-          <span>© {new Date().getFullYear()} openqareer</span>
-          <span>ИП, ИНН {OPERATOR_TAX_ID}</span>
-          {/* Opens the cookie notice from public/assets/oq-analytics-3.js. */}
-          <button type="button" className="ps-footer-cookie" data-oq-consent-open="">
-            Настройки cookie
-          </button>
-        </div>
-      </div>
-    </footer>
+      </footer>
+    </>
   );
 }
 

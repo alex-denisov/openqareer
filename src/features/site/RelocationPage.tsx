@@ -346,7 +346,7 @@ export function RelocationPage({
         <AfterSignup />
         <NextAndFaq />
       </main>
-      <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} />
+      <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} planBar />
     </div>
   );
 }

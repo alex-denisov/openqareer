@@ -30,8 +30,10 @@ function HelpShell({
   isAdmin = false,
   title,
   structuredData,
+  current,
   children,
 }: HelpPageProps & {
+  readonly current?: 'faq';
   readonly title: string;
   readonly structuredData: Record<string, unknown>;
   readonly children: React.ReactNode;
@@ -57,6 +59,7 @@ function HelpShell({
         onLanding={false}
         signedIn={signedIn}
         isAdmin={isAdmin}
+        current={current}
       />
       <main id="main" className="ps-wrap ps-page">
         {children}
@@ -229,6 +232,7 @@ export function FaqPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
       signedIn={signedIn}
       isAdmin={isAdmin}
       title={FAQ_TITLE}
+      current="faq"
       structuredData={faqStructuredData()}
     >
       <Crumbs current="Вопросы и ответы" onNavigate={onNavigate} />

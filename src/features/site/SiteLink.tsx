@@ -8,6 +8,7 @@ export interface SiteLinkProps {
   onNavigate: (path: string) => void;
   onWarm?: () => void;
   'aria-label'?: string;
+  'aria-current'?: 'page';
 }
 
 export function SiteLink({
@@ -17,6 +18,7 @@ export function SiteLink({
   onNavigate,
   onWarm,
   'aria-label': ariaLabel,
+  'aria-current': ariaCurrent,
 }: SiteLinkProps): React.JSX.Element {
   const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (shouldHandleInApp(event)) {
@@ -33,6 +35,7 @@ export function SiteLink({
       onFocus={onWarm}
       onMouseEnter={onWarm}
       aria-label={ariaLabel}
+      aria-current={ariaCurrent}
     >
       {children}
     </a>
