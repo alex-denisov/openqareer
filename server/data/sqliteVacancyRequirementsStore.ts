@@ -132,15 +132,16 @@ export class SqliteVacancyRequirementsStore {
     return { state: row.status === 'failed' ? 'failed' : 'queued', jobId: row.id };
   }
 
-  claim(workerId: string, now = Date.now(), leaseMs = 60000): VacancyRequirementsJob | null {
+  /** `minPriority` limits the claim to work a candidate waits for (shown page, fit dependency). */
+  claim(workerId: string, now = Date.now(), leaseMs = 60000, minPriority = Number.NEGATIVE_INFINITY): VacancyRequirementsJob | null {
     if (!workerId.trim() || !Number.isFinite(leaseMs) || leaseMs <= 0) throw new Error('invalid_worker_lease');
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='failed',lease_token=NULL
         WHERE status='leased' AND lease_until<=? AND attempts>=3`).run(now);
       const row = this.db.prepare(`SELECT id,input_json,attempts FROM vacancy_requirements_jobs
-        WHERE attempts<3 AND ((status='queued' AND available_at<=?) OR (status='leased' AND lease_until<=?))
-        ORDER BY priority DESC,fresh_at DESC,created_at,id LIMIT 1`).get(now, now) as JobRow | undefined;
+        WHERE attempts<3 AND priority>=? AND ((status='queued' AND available_at<=?) OR (status='leased' AND lease_until<=?))
+        ORDER BY priority DESC,fresh_at DESC,created_at,id LIMIT 1`).get(minPriority, now, now) as JobRow | undefined;
       if (!row) { this.db.exec('COMMIT'); return null; }
       const token = `${workerId}:${randomUUID()}`;
       this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='leased',attempts=attempts+1,
@@ -209,11 +210,11 @@ export class SqliteVacancyRequirementsStore {
     if (!row) throw new Error('requirements_job_lease_lost');
   }
 
-  async runNext(workerId: string, extract: (input: VacancyRequirementsInput) => Promise<VacancyRequirementsResult>, now = Date.now()): Promise<VacancyRequirementsResult | null> {
+  async runNext(workerId: string, extract: (input: VacancyRequirementsInput) => Promise<VacancyRequirementsResult>, now = Date.now(), minPriority = Number.NEGATIVE_INFINITY): Promise<VacancyRequirementsResult | null> {
     const startedAt = Date.now();
     // Provider work is bounded by three 60-second attempts plus two 5-second pauses.
     // Keep the lease beyond that complete retry window, not just one request.
-    const job = this.claim(workerId, now, 300000);
+    const job = this.claim(workerId, now, 300000, minPriority);
     if (!job) return null;
     try {
       const result = this.get(job.input) ?? await extract(job.input);

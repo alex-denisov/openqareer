@@ -43,6 +43,26 @@ describe('background vacancy mechanics with real SQLite', () => {
     return runtime;
   }
 
+  it('a queued fit goes before the background requirements tail, a shown page before both', async () => {
+    const runtime = setup(); const source = input();
+    const tasks: string[] = [];
+    const client = fitClient(async (request) => { tasks.push(request.task); return { content: '{"assessments":[]}' }; });
+    const traced = { complete: async (request: BulkLlmInput) => {
+      if (request.task === 'vacancy-requirements') tasks.push(`requirements:${request.input.slice(0, 10)}`);
+      return client.complete(request);
+    } } as unknown as BulkLlmClient;
+    runtime.enqueue(source);
+    // The background tail at the priority title strategy and label upgrades use, and fresher.
+    runtime.requirements.enqueue({ vacancyId: 'tail', description: 'Background tail\n- Go' }, { titleStrategyPriority: 1, freshAt: Date.now() + 60_000 });
+    await runtime.runNext(traced);
+    expect(tasks.some((task) => task.startsWith('requirements:Background'))).toBe(false);
+    expect(tasks).toContain('vacancy-fit');
+    tasks.length = 0;
+    // Nothing else to assess: the worker returns to the tail.
+    await runtime.runNext(traced);
+    expect(tasks).toEqual(['requirements:Background']);
+  });
+
   it('enqueues idempotently, extracts in worker and caches an honest unavailable result without a model instead of a fabricated percentage', async () => {
     const runtime = setup(); const source = input();
     runtime.enqueue(source); runtime.enqueue(source);
