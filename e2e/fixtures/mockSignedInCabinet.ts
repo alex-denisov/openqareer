@@ -2573,6 +2573,9 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    if (path.endsWith('/candidate/currency-rates')) {
+      return route.fulfill({ json: { data: null } });
+    }
     if (
       path.endsWith('/candidate/vacancy-subscriptions') ||
       path.endsWith('/candidate/vacancy-sources') ||

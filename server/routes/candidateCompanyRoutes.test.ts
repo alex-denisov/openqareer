@@ -402,7 +402,13 @@ describe('candidate company routes (B439)', () => {
       createdAt: '2026-10-08T12:00:00.000Z',
       updatedAt: '2026-10-08T12:00:00.000Z',
     };
-    contacts.saveContacts(candidate.id, 'cluster-v1', [contact]);
+    contacts.saveContacts(candidate.id, 'cluster-v1', [{
+      ...contact,
+      channels: [
+        { kind: 'linkedin', value: 'anna-sedova', href: 'https://www.linkedin.com/in/anna-sedova', status: 'published', sourceUrl: 'https://internal-source.example', observedAt: '2026-10-08T12:00:00.000Z' },
+        { kind: 'telegram', value: '@anna_hr', href: 'https://t.me/anna_hr', status: 'published', sourceUrl: 'https://internal-source.example', observedAt: '2026-10-08T12:00:00.000Z' },
+      ],
+    }]);
 
     const page = await app.inject({
       url: '/api/v1/candidate/companies',
@@ -411,6 +417,10 @@ describe('candidate company routes (B439)', () => {
     const body = JSON.stringify(page.json());
     expect(body).not.toContain('linkedin_pool');
     expect(body).not.toContain('pool_session');
+    expect(body).not.toContain('internal-source.example');
+    expect(page.json().data.items[0].recruiters[0].channels).toEqual([
+      { kind: 'telegram', value: '@anna_hr', href: 'https://t.me/anna_hr', status: 'published', observedAt: '2026-10-08T12:00:00.000Z' },
+    ]);
     expect(page.json().data.items[0].recruiters[0]).toMatchObject({
       fullName: 'Анна Седова',
       source: 'public-profile',

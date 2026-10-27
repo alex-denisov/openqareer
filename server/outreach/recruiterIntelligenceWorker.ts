@@ -2,6 +2,8 @@ import type { SqliteRecruiterContactsRepository } from '../data/sqliteRecruiterC
 import type { SqliteLinkedinPoolRepository } from '../linkedinPool/sqliteLinkedinPoolRepository';
 import type { FootprintRequestGate } from '../osint/adapters/requestScheduler';
 import { createCompanySiteFinder, createOpenWebRecruiterFinder, resolveCompanyDomain } from './openWebRecruiterFinder';
+import type { RecruiterContact } from '../../shared/recruiterContact';
+import { withDossier } from './dossier/recruiterDossierService';
 import { defaultMxResolver, discoverRecruiterContacts } from './recruiterIntelligenceService';
 import type { DiscoveryOptions, MxResolver, UnifiedVacancyInput } from './recruiterIntelligenceService';
 
@@ -50,6 +52,31 @@ function openWebDiscovery(options: RecruiterIntelligenceWorkerOptions): Discover
   };
 }
 
+/** Каналы B258 к каждому найденному человеку; без пути открытого веба — только известные каналы. */
+async function withDossiers(
+  contacts: readonly RecruiterContact[],
+  vacancy: UnifiedVacancyInput,
+  discovery: DiscoveryOptions,
+  options: RecruiterIntelligenceWorkerOptions,
+): Promise<RecruiterContact[]> {
+  const { openWeb, linkedinPool } = options;
+  if (!openWeb || !linkedinPool || contacts.length === 0) return [...contacts];
+  const companyDomain =
+    contacts.find((contact) => contact.email)?.email?.split('@')[1] ?? (await discovery.resolveDomain?.(vacancy));
+  const result: RecruiterContact[] = [];
+  for (const contact of contacts) {
+    result.push(
+      await withDossier(contact, companyDomain, {
+        database: linkedinPool.getDatabase(),
+        exaApiKey: openWeb.apiKey,
+        ...(openWeb.fetch ? { fetch: openWeb.fetch } : {}),
+        ...(openWeb.requestGate ? { requestGate: openWeb.requestGate } : {}),
+      }),
+    );
+  }
+  return result;
+}
+
 /** Processes a bounded durable batch outside the request handler. */
 export async function runRecruiterIntelligenceJobs(
   options: RecruiterIntelligenceWorkerOptions,
@@ -62,14 +89,21 @@ export async function runRecruiterIntelligenceJobs(
     try {
       const vacancy = options.resolveVacancy(job.vacancyId);
       if (!vacancy.title) throw new Error('vacancy_not_found');
-      const contacts = await discoverRecruiterContacts(vacancy, {
+      const discovery = openWebDiscovery(options);
+      const found = await discoverRecruiterContacts(vacancy, {
         linkedinPool: options.linkedinPool,
-        ...openWebDiscovery(options),
+        ...discovery,
       });
+      const contacts = await withDossiers(found, vacancy, discovery, options);
       options.repository.saveContacts(job.candidateId, job.vacancyId, contacts);
       options.repository.finishJob(job.id, 'ready');
       completed += 1;
     } catch (error) {
+      // Занятая база — не ошибка поиска: задание вернётся в очередь и пройдёт на следующем тике.
+      if (error instanceof Error && /database is (locked|busy)/iu.test(error.message)) {
+        options.repository.requeueJob(job.id);
+        continue;
+      }
       options.repository.finishJob(
         job.id,
         'failed',

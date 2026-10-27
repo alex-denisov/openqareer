@@ -39,6 +39,7 @@
   var path = location.pathname.replace(/\/$/, '') || '/';
   var publicTool =
     path === '/tools/country-fit' ||
+    path === '/tools/relocation' ||
     path === '/salaries' ||
     /^\/salaries\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
   var publicPage =

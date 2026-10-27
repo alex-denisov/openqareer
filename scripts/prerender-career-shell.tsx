@@ -11,6 +11,11 @@ import {
   COUNTRY_FIT_TITLE,
   COUNTRY_FIT_DESCRIPTION,
 } from '../src/features/site/CountryFitPage';
+import {
+  RELOCATION_DESCRIPTION,
+  RELOCATION_TITLE,
+  RelocationPage,
+} from '../src/features/site/RelocationPage';
 import { LoginPage, SignupPage } from '../src/features/site/AuthPages';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { PublicHeader, PublicFooter } from '../src/features/site/PublicSiteChrome';
@@ -122,6 +127,7 @@ export function buildSitemap(): string {
       loc: `${SITE_ORIGIN}${row.path}`,
       lastmod: row.lastmod as string | undefined,
     })),
+    { loc: `${SITE_ORIGIN}/tools/relocation`, lastmod: '2026-10-27' },
     ...LEGAL_DOCS.map((doc) => ({
       loc: `${SITE_ORIGIN}${legalPath(doc.slug)}`,
       lastmod: LEGAL_PACK_PUBLISHED_AT,
@@ -210,6 +216,29 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
   await writeFile(`${distDirectory}/country-fit.html`, document);
 }
 
+/** B354: /tools/relocation ships its first paint with the example estimate. */
+async function writeRelocationPage(html: string, distDirectory: string): Promise<void> {
+  const document = compactCountryFitDocument(
+    deferEntryScript(
+      pageHead(html, {
+        path: '/tools/relocation',
+        title: RELOCATION_TITLE,
+        description: RELOCATION_DESCRIPTION,
+        shareDescription: 'Пути переезда по работе в выбранные страны с официальными порогами 2026 года.',
+      }),
+    ).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<RelocationPage onNavigate={() => {}} />)),
+    ),
+  );
+  await writeFile(`${distDirectory}/relocation.html`, document);
+}
+
+async function writeToolPages(html: string, distDirectory: string): Promise<void> {
+  await writeCountryFitPage(html, distDirectory);
+  await writeRelocationPage(html, distDirectory);
+}
+
 /** B535: /faq and /support are indexed documents with their own first paint. */
 async function writeHelpPages(html: string, distDirectory: string): Promise<void> {
   await writeFile(
@@ -231,7 +260,7 @@ async function writeHelpPages(html: string, distDirectory: string): Promise<void
 async function writeSalaryTemplate(html: string, distDirectory: string): Promise<void> {
   // Runtime salary SSR uses the built head/assets; it never embeds sample market data.
   await writeFile(`${distDirectory}/salary-market.html`, html.replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js').replace(EMPTY_ROOT,
-    renderToStaticMarkup(<div className="ps sm-public"><a className="ps-skip" href="#main">К содержимому</a><PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />{'%%SALARY_CONTENT%%'}<PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} interviewLink={false} /></div>))
+    renderToStaticMarkup(<div className="ps sm-public"><a className="ps-skip" href="#main">К содержимому</a><PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />{'%%SALARY_CONTENT%%'}<PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} interviewLink={false} toolLinks={false} /></div>))
     .replace(/<script type="module"[^>]*><\/script>/gu, ''));
 }
 
@@ -406,7 +435,7 @@ export async function prerenderShells(
     );
   }
   await writeHelpPages(html, distDirectory);
-  await writeCountryFitPage(html, distDirectory);
+  await writeToolPages(html, distDirectory);
   await writeSalaryTemplate(html, distDirectory);
   await writeNotFoundPage(html, distDirectory);
   await writeAuthPages(html, distDirectory, manifest ? authResourceHints(manifest) : '');

@@ -33,6 +33,7 @@ const HELP_DOCUMENTS: Record<string, string> = {
   '/faq': 'faq.html',
   '/support': 'support.html',
   '/tools/country-fit': 'country-fit.html',
+  '/tools/relocation': 'relocation.html',
 };
 const AUTH_DOCUMENTS: Record<string, string> = { '/login': 'login.html', '/signup': 'signup.html' };
 const NOT_FOUND_DOCUMENT = 'not-found.html';

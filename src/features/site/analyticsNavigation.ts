@@ -19,6 +19,7 @@ export function analyticsBoundary(path: string): AnalyticsBoundary {
     pathname === '/tools/country-fit' ||
     pathname === '/tools/interview-questions' ||
     /^\/tools\/interview-questions\/[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(pathname) ||
+    pathname === '/tools/relocation' ||
     pathname === '/salaries' ||
     /^\/salaries\/[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(pathname)
   )

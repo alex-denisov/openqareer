@@ -107,6 +107,7 @@ function wholeTemplate(): string {
         onLanding: false,
         signedIn: false,
         interviewLink: false,
+        toolLinks: false,
       }),
     ),
   );

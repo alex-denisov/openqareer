@@ -67,9 +67,30 @@ export interface PoolRoleHypothesis {
 
 /** Слова уровня и формата не меняют роль: они меняют грейд и условия. */
 const NOISE = new Set([
-  'senior', 'middle', 'junior', 'lead', 'ведущий', 'старший', 'младший',
-  'главный', 'sr', 'jr', 'intern', 'стажёр', 'стажер', 'remote', 'удалённо',
-  'удаленно', 'офис', 'гибрид', 'fulltime', 'parttime', 'в', 'и', 'на', 'для',
+  'senior',
+  'middle',
+  'junior',
+  'lead',
+  'ведущий',
+  'старший',
+  'младший',
+  'главный',
+  'sr',
+  'jr',
+  'intern',
+  'стажёр',
+  'стажер',
+  'remote',
+  'удалённо',
+  'удаленно',
+  'офис',
+  'гибрид',
+  'fulltime',
+  'parttime',
+  'в',
+  'и',
+  'на',
+  'для',
 ]);
 
 /**
@@ -78,16 +99,18 @@ const NOISE = new Set([
  * (`roleProposals.ts`, срез 1в) — иначе имя и доказательство разошлись бы.
  */
 export function titleKey(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[()«»"'’,.:;/\\|—–-]/gu, ' ')
-    .split(/\s+/u)
-    .filter((word) => word.length > 1 && !NOISE.has(word))
-    // «Продакт-менеджер» и «Product Manager» — одна роль: без склейки обе
-    // выборки оказывались ниже порога наблюдений.
-    .map(canonicalRoleWord)
-    .sort()
-    .join(' ');
+  return (
+    title
+      .toLowerCase()
+      .replace(/[()«»"'’,.:;/\\|—–-]/gu, ' ')
+      .split(/\s+/u)
+      .filter((word) => word.length > 1 && !NOISE.has(word))
+      // «Продакт-менеджер» и «Product Manager» — одна роль: без склейки обе
+      // выборки оказывались ниже порога наблюдений.
+      .map(canonicalRoleWord)
+      .sort()
+      .join(' ')
+  );
 }
 
 function normalizeWords(text: string): Set<string> {
@@ -112,9 +135,7 @@ function emptyGroup(key: string): RoleGroup {
 }
 
 /** Пул, сгруппированный по ключу роли. Один проход для обоих вызывающих. */
-export function groupObservations(
-  pool: readonly RoleObservation[],
-): Map<string, RoleGroup> {
+export function groupObservations(pool: readonly RoleObservation[]): Map<string, RoleGroup> {
   const groups = new Map<string, RoleGroup>();
   for (const item of pool) {
     const title = item.canonicalTitle?.trim();
@@ -155,10 +176,20 @@ export function describeGroup(
   };
 }
 
-/** Каноническое имя — самая частая форма, даже если она разговорная. */
+/** Склейка двух должностей: «Производственный директор / Технический директор». */
+const JOINED_TITLE = /\s[/|]\s/u;
+
+/**
+ * Каноническое имя — самая частая форма, даже если она разговорная. Склейка
+ * двух должностей уступает одиночному названию, при равной частоте — короче
+ * лучше: «AI Director», а не «Director of Applied Science … & AI» (27.10).
+ */
 function canonicalTitle(group: RoleGroup): string {
-  return [...group.titles.entries()].sort(
-    (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+  const entries = [...group.titles.entries()];
+  const single = entries.filter(([title]) => !JOINED_TITLE.test(title));
+  return (single.length > 0 ? single : entries).sort(
+    (left, right) =>
+      right[1] - left[1] || left[0].length - right[0].length || left[0].localeCompare(right[0]),
   )[0][0];
 }
 
@@ -177,9 +208,7 @@ function repeatedRequirements(items: readonly RoleObservation[]): string[] {
     .slice(0, 6);
 }
 
-function countSources(
-  items: readonly RoleObservation[],
-): Array<{ source: string; count: number }> {
+function countSources(items: readonly RoleObservation[]): Array<{ source: string; count: number }> {
   const counts = new Map<string, number>();
   for (const item of items) {
     for (const source of new Set(item.sources.map((entry) => entry.sourceType))) {

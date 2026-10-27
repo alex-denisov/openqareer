@@ -244,3 +244,70 @@ export function fanStartIndex(
 export function fanRegions(): readonly FanRegion[] {
   return [...new Set(MARKET_TARGETS.map((target) => target.region))];
 }
+
+/**
+ * Рынки для ролей спроса (27.10): удалёнка, крупнейшие рынки и Дубай.
+ * Роль кандидата читается по ним всем за сутки, а не за круг всего веера.
+ */
+const DEMAND_LOCATIONS: readonly string[] = [
+  'Remote',
+  'Worldwide',
+  'United States',
+  'London',
+  'Berlin',
+  'Dubai',
+  'Moscow',
+];
+const DEMAND_TARGETS: readonly FanTarget[] = DEMAND_LOCATIONS.flatMap(
+  (location) => MARKET_TARGETS.find((target) => target.location === location) ?? [],
+);
+export const DEMAND_TARGET_COUNT = DEMAND_TARGETS.length;
+
+/** Половина опроса — роли кандидатов, половина — общий веер. */
+const DEMAND_SHARE = 0.5;
+
+/**
+ * Комбинации одного опроса: сначала роли, которые выбрали кандидаты или назвал
+ * им консультант (решение владельца 27.10), затем обычное окно веера. Роли
+ * спроса идут новыми первыми; окно по ним сдвигается от времени, как и у веера.
+ */
+export function fanCombosForSync(
+  nowMs: number,
+  intervalMinutes: number,
+  combosPerSync: number,
+  demandTerms: readonly string[],
+): FanCombo[] {
+  const demandSize = demandTerms.length * DEMAND_TARGETS.length;
+  const demandCount = Math.min(demandSize, Math.floor(combosPerSync * DEMAND_SHARE));
+  const tick = Math.floor(nowMs / (intervalMinutes * 60_000));
+  const demandStart = demandSize > 0 ? (tick * demandCount) % demandSize : 0;
+  const demand = Array.from({ length: demandCount }, (_, step) => {
+    const at = (demandStart + step) % demandSize;
+    return {
+      term: demandTerms[Math.floor(at / DEMAND_TARGETS.length)]!,
+      target: DEMAND_TARGETS[at % DEMAND_TARGETS.length]!,
+    };
+  });
+  const start = fanStartIndex(nowMs, intervalMinutes, combosPerSync);
+  const fan = Array.from({ length: combosPerSync - demandCount }, (_, step) =>
+    fanComboAt(start + step),
+  );
+  return [...demand, ...fan];
+}
+
+/** Источник ролей спроса для опроса; без него опрос — прежний веер. */
+let readDemandTerms: () => readonly string[] = () => [];
+
+/** Обслуживатель пула подключает таблицу спроса при старте (27.10). */
+export function useFanDemand(reader: () => readonly string[]): void {
+  readDemandTerms = reader;
+}
+
+export function currentFanDemand(): readonly string[] {
+  try {
+    return readDemandTerms();
+  } catch {
+    // Спрос — ускорение, а не условие сбора: без него опрос идёт по вееру.
+    return [];
+  }
+}

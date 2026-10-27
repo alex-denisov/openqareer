@@ -14,7 +14,7 @@ import type {
   SourcedThreshold,
 } from './types';
 
-interface RequirementEvaluation {
+export interface RequirementEvaluation {
   readonly status: 'satisfied' | 'barrier' | 'unknown';
   readonly reason?: string;
   readonly threshold?: SourcedThreshold;
@@ -127,7 +127,7 @@ function candidateAmountMatches(
   return passes();
 }
 
-function evaluateRequirement(
+export function evaluateRequirement(
   requirement: MobilityRequirement,
   countryCode: string,
   candidate: MobilityCandidateProfile,

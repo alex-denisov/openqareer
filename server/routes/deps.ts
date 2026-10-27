@@ -63,6 +63,8 @@ export interface RouteDeps {
     import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute,
     'prioritizeCampaign'
   >;
+  /** Роли кандидатов — запросы к площадкам вакансий (27.10). */
+  vacancyDemand?: import('../vacancies/vacancyDemandStore').VacancyDemandStore;
   searchVacancies: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
   importProfile: (url: string) => Promise<ProfileUrlImportResult>;
   /** Absent when no provider credential is configured; the rules parser runs alone. */
