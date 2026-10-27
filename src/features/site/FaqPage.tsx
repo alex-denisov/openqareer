@@ -26,12 +26,14 @@ function ArrowLink({
 
 function Entry({
   entry,
+  choice,
   open,
   onToggle,
   hidden,
   isFirst,
 }: Readonly<{
   entry: FaqEntry;
+  choice: boolean | undefined;
   open: boolean;
   onToggle: () => void;
   hidden: boolean;
@@ -39,7 +41,7 @@ function Entry({
 }>) {
   return (
     <article
-      className={`pg-qa${open ? ' is-open' : ''}${isFirst ? ' is-first' : ''}`}
+      className={`pg-qa${choice === true ? ' is-open' : ''}${choice === false ? ' is-closed' : ''}${isFirst ? ' is-first' : ''}`}
       id={entry.id}
       hidden={hidden}
     >
@@ -61,11 +63,15 @@ function Entry({
 function Topic({
   topic,
   isOpen,
+  choiceOf,
   toggle,
   query,
+  children,
 }: Readonly<{
+  children?: React.ReactNode;
   topic: FaqTopic;
   isOpen: (id: string, first: boolean) => boolean;
+  choiceOf: (id: string) => boolean | undefined;
   toggle: (id: string, first: boolean) => void;
   query: string;
 }>) {
@@ -84,6 +90,7 @@ function Topic({
           key={entry.id}
           entry={entry}
           isFirst={index === 0}
+          choice={choiceOf(entry.id)}
           open={isOpen(entry.id, index === 0)}
           onToggle={() => toggle(entry.id, index === 0)}
           hidden={
@@ -91,6 +98,7 @@ function Topic({
           }
         />
       ))}
+      {children}
     </section>
   );
 }
@@ -107,7 +115,8 @@ function useOpenState() {
   const isOpen = (id: string, first: boolean) => chosen[id] ?? (first && desktop);
   const toggle = (id: string, first: boolean) =>
     setChosen((state) => ({ ...state, [id]: !(state[id] ?? (first && desktop)) }));
-  return { isOpen, toggle };
+  const choiceOf = (id: string) => chosen[id];
+  return { isOpen, choiceOf, toggle };
 }
 
 /** The topic the reader is in, for the contents list. */
@@ -182,7 +191,7 @@ function FaqHero({
 
 export function FaqPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
   const [query, setQuery] = React.useState('');
-  const { isOpen, toggle } = useOpenState();
+  const { isOpen, choiceOf, toggle } = useOpenState();
   const current = useCurrentTopic();
   const needle = query.trim().toLowerCase();
   return (
@@ -199,20 +208,31 @@ export function FaqPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
       <div className="ps-wrap pg-fq">
         <Contents current={current} />
         <div>
-          {FAQ_TOPICS.map((topic) => (
-            <Topic key={topic.id} topic={topic} isOpen={isOpen} toggle={toggle} query={needle} />
+          {FAQ_TOPICS.map((topic, index) => (
+            <Topic
+              key={topic.id}
+              topic={topic}
+              isOpen={isOpen}
+              choiceOf={choiceOf}
+              toggle={toggle}
+              query={needle}
+            >
+              {index === FAQ_TOPICS.length - 1 ? (
+                <div className="pg-strip pg-cta-mid">
+                  <div>
+                    <h3>Узнайте, что мешает именно вам</h3>
+                    <p>
+                      Загрузите резюме: покажем должности, на которые вы проходите, и вакансии под
+                      них.
+                    </p>
+                  </div>
+                  <SiteLink to={SIGNUP} className="pg-btn is-primary is-lg" onNavigate={onNavigate}>
+                    Найти работу
+                  </SiteLink>
+                </div>
+              ) : null}
+            </Topic>
           ))}
-          <div className="pg-strip pg-cta-mid">
-            <div>
-              <h3>Узнайте, что мешает именно вам</h3>
-              <p>
-                Загрузите резюме: покажем должности, на которые вы проходите, и вакансии под них.
-              </p>
-            </div>
-            <SiteLink to={SIGNUP} className="pg-btn is-primary is-lg" onNavigate={onNavigate}>
-              Найти работу
-            </SiteLink>
-          </div>
         </div>
       </div>
     </PublicDocShell>

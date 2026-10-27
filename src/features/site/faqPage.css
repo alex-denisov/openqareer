@@ -140,6 +140,11 @@
 .pg-qa.is-open h3::after {
   transform: rotate(225deg) translate(-2px, -2px);
 }
+@media (min-width: 761px) {
+  .pg-qa.is-first:not(.is-closed) h3::after {
+    transform: rotate(225deg) translate(-2px, -2px);
+  }
+}
 .pg-qbtn {
   display: block;
   flex: 1;
@@ -164,8 +169,16 @@
   margin-top: 6px;
   font-size: var(--pg-t-sm);
 }
-.pg-qa:not(.is-open) > :not(h3) {
-  display: none;
+@media (max-width: 760px) {
+  .pg-qa:not(.is-open) > :not(h3) {
+    display: none;
+  }
+}
+@media (min-width: 761px) {
+  .pg-qa:not(.is-open):not(.is-first) > :not(h3),
+  .pg-qa.is-first.is-closed > :not(h3) {
+    display: none;
+  }
 }
 .pg-qa[hidden] {
   display: none;
