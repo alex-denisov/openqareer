@@ -11,12 +11,15 @@ import {
   buildSitemap,
   compactCountryFitDocument,
   pageHead,
+  pageStylesheets,
   prerenderShells,
   sitemapUrls,
 } from './prerender-career-shell';
 
 const authManifest = {
-  'index.html': { file: 'assets/app.js', dynamicImports: ['module-key', 'landing-key', 'auth-key'] },
+  'index.html': { file: 'assets/app.js', dynamicImports: ['module-key', 'landing-key', 'auth-key', 'resume-key', 'relocation-key'] },
+  'resume-key': { name: 'resumeBuilderRoute', file: 'assets/resume.js', css: ['assets/resume.css'] },
+  'relocation-key': { name: 'relocationRoute', file: 'assets/relocation.js', css: ['assets/relocation.css'] },
   'module-key': { name: 'AuthPages', file: 'assets/AuthPages-from-build.js' },
   'landing-key': { name: 'landing', file: 'assets/landing-from-build.js', css: ['assets/landing-from-build.css'] },
   'auth-key': { name: 'auth', file: 'assets/auth-from-build.js', css: ['assets/auth-from-build.css'] },
@@ -121,6 +124,24 @@ describe('production career shell prerender', () => {
       ...authManifest, 'auth-key': { name: 'auth', file: 'assets/auth.js' },
     })).toThrow('Missing emitted auth stylesheet');
     expect(() => authResourceHints({ ...authManifest, 'index.html': { file: 'assets/app.js' } })).toThrow('Missing entry build graph');
+  });
+
+  it('links a tool page chunk stylesheet, off the first-paint sheet', () => {
+    const manifest = {
+      'index.html': { file: 'assets/app.js', dynamicImports: ['page-key'] },
+      'page-key': { name: 'resumeBuilderRoute', file: 'assets/r.js', css: ['assets/r-1.css'] },
+    };
+    expect(pageStylesheets(manifest, 'resumeBuilderRoute')).toBe(
+      '<link rel="stylesheet" crossorigin href="/assets/r-1.css">',
+    );
+    expect(pageStylesheets(undefined, 'resumeBuilderRoute')).toBe('');
+    expect(() => pageStylesheets(manifest, 'relocationRoute')).toThrow('Expected one emitted page chunk');
+    expect(() =>
+      pageStylesheets(
+        { ...manifest, 'page-key': { ...manifest['page-key'], css: ['assets/x.css" onload="bad'] } },
+        'resumeBuilderRoute',
+      ),
+    ).toThrow('Invalid page stylesheet path');
   });
 
   it('validates CSS proxy module URLs as JavaScript assets before emitting hints', () => {

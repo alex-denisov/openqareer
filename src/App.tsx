@@ -58,7 +58,7 @@ const CareerWorkspaceShell = lazy(async () => {
 });
 const LandingPage = lazy(loadLandingPage);
 const ResumeBuilderPage = lazy(() =>
-  import('./features/site/resumeBuilder/ResumeBuilderPage').then((module) => ({
+  import('./features/site/resumeBuilder/resumeBuilderRoute').then((module) => ({
     default: module.ResumeBuilderPage,
   })),
 );
@@ -66,7 +66,7 @@ const CountryFitPage = lazy(() =>
   import('./features/site/CountryFitPage').then((module) => ({ default: module.CountryFitPage })),
 );
 const RelocationPage = lazy(() =>
-  import('./features/site/RelocationPage').then((module) => ({ default: module.RelocationPage })),
+  import('./features/site/relocationRoute').then((module) => ({ default: module.RelocationPage })),
 );
 const FaqPage = lazy(() => loadHelpPage('FaqPage'));
 const SupportPage = lazy(() => loadHelpPage('SupportPage'));
