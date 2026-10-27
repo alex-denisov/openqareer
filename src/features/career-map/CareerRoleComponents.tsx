@@ -289,13 +289,10 @@ export function CareerRoleBody({
   return (
     <div className="career-role-body">
       <RoleStageStepper status={role.status} />
-      {role.status === 'hypothesis' && role.hypothesisReason ? (
+      {role.status === 'hypothesis' && role.hypothesisNote ? (
         <p className="career-note">
           <Lightbulb size={16} aria-hidden />
-          <span>
-            Гипотеза консультанта: {withoutTrailingPeriod(role.hypothesisReason)}. Это вывод из
-            профиля, пока не проверенный.
-          </span>
+          <span>{role.hypothesisNote}</span>
         </p>
       ) : null}
       <RoleConfirmedSection items={role.confirmedItems} />

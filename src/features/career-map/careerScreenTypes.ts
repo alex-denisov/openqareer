@@ -43,7 +43,8 @@ export interface CareerRoleModel {
   readonly requirementsNote: string;
   readonly skillCheckBenefit?: string;
   readonly nextAction: RoleNextAction;
-  readonly hypothesisReason?: string;
+  /** Строка «Гипотеза консультанта: …» или «Гипотеза по рынку: …». */
+  readonly hypothesisNote?: string;
   /** Кандидат ответил «Не сейчас» на предложение открыть роль для поиска. */
   readonly offerDismissed: boolean;
   /**

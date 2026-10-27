@@ -201,6 +201,8 @@ function canonicalTitle(group: RoleGroup): string {
   )[0][0];
 }
 
+const REQUIREMENT_SHARE = 0.25;
+
 function repeatedRequirements(items: readonly RoleObservation[]): string[] {
   const counts = new Map<string, number>();
   for (const item of items) {
@@ -208,7 +210,10 @@ function repeatedRequirements(items: readonly RoleObservation[]): string[] {
       if (skill) counts.set(skill, (counts.get(skill) ?? 0) + 1);
     }
   }
-  const threshold = Math.max(2, Math.ceil(items.length / 2));
+  // Доля считается среди вакансий с навыками и от четверти (28.10): у большой
+  // роли навыки разные, и «у половины всех» не набирало ни одного требования.
+  const described = items.filter((item) => item.skills.some((value) => value.trim())).length;
+  const threshold = Math.max(2, Math.ceil(described * REQUIREMENT_SHARE));
   return [...counts.entries()]
     .filter(([, count]) => count >= threshold)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
