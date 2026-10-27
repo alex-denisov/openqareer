@@ -130,6 +130,8 @@ export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
     // B535: help pages next to the landing.
     { path: '/faq', lastmod: PUBLIC_PAGES_UPDATED_AT },
     { path: '/support', lastmod: PUBLIC_PAGES_UPDATED_AT },
+    // B569: the tariffs page is a document of its own.
+    { path: '/tariffs', lastmod: '2026-10-27' },
     { path: '/tools/country-fit', lastmod: '2026-10-23' },
     // B567: the page, its menu item and the landing card ship in one release.
     { path: '/tools/resume', lastmod: '2026-10-27' },

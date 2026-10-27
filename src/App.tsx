@@ -68,7 +68,12 @@ const CountryFitPage = lazy(() =>
 const RelocationPage = lazy(() =>
   import('./features/site/relocationRoute').then((module) => ({ default: module.RelocationPage })),
 );
-const FaqPage = lazy(() => loadHelpPage('FaqPage'));
+const FaqPage = lazy(() =>
+  import('./features/site/publicDocsRoute').then((module) => ({ default: module.FaqPage })),
+);
+const TariffsPage = lazy(() =>
+  import('./features/site/publicDocsRoute').then((module) => ({ default: module.TariffsPage })),
+);
 const SupportPage = lazy(() => loadHelpPage('SupportPage'));
 const NotFoundPage = lazy(() => loadHelpPage('NotFoundPage'));
 const LegalDocumentPage = lazy(loadLegalDocumentPage);
@@ -107,7 +112,7 @@ async function loadLandingPage() {
   return { default: module.LandingPage };
 }
 
-async function loadHelpPage(name: 'FaqPage' | 'SupportPage' | 'NotFoundPage') {
+async function loadHelpPage(name: 'SupportPage' | 'NotFoundPage') {
   const module = await import('./features/site/PublicHelpPages');
   markAppReady();
   return { default: module[name] };
@@ -681,8 +686,8 @@ export default function App() {
       </AppErrorBoundary>
     );
   }
-  if ((helpPath === '/faq' || helpPath === '/support') && !isDesktop) {
-    const HelpPage = helpPath === '/faq' ? FaqPage : SupportPage;
+  if ((helpPath === '/faq' || helpPath === '/tariffs' || helpPath === '/support') && !isDesktop) {
+    const HelpPage = { '/faq': FaqPage, '/tariffs': TariffsPage, '/support': SupportPage }[helpPath];
     return (
       <AppErrorBoundary>
         <Suspense fallback={null}>

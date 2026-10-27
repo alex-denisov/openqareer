@@ -27,15 +27,15 @@ import { LoginPage, SignupPage } from '../src/features/site/AuthPages';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { PublicHeader, PublicFooter } from '../src/features/site/PublicSiteChrome';
 import {
-  FAQ_DESCRIPTION,
-  FAQ_TITLE,
-  FaqPage,
   NOT_FOUND_TITLE,
   NotFoundPage,
   SUPPORT_DESCRIPTION,
   SUPPORT_TITLE,
   SupportPage,
 } from '../src/features/site/PublicHelpPages';
+import { FAQ_DESCRIPTION, FAQ_TITLE, FaqPage } from '../src/features/site/FaqPage';
+import { TariffsPage } from '../src/features/site/TariffsPage';
+import { TARIFFS_DESCRIPTION, TARIFFS_TITLE } from '../src/features/site/tariffsPageContent';
 import { deferEntryScript, landingTokenStats } from '../shared/landingStats';
 import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
@@ -71,6 +71,12 @@ function legalHead(html: string, slug: LegalDocSlug, description: string): strin
 /** B535: /faq and /support carry their own title, description, canonical and og. */
 export const HELP_PAGES = [
   { path: '/faq', file: 'faq.html', title: FAQ_TITLE, description: FAQ_DESCRIPTION },
+  {
+    path: '/tariffs',
+    file: 'tariffs.html',
+    title: TARIFFS_TITLE,
+    description: TARIFFS_DESCRIPTION,
+  },
   {
     path: '/support',
     file: 'support.html',
@@ -308,16 +314,24 @@ async function writeHelpPages(
     distDirectory,
     pageStylesheets(manifest, 'resumeBuilderRoute'),
   );
+  const docStyles = pageStylesheets(manifest, 'publicDocsRoute');
   await writeFile(
     `${distDirectory}/faq.html`,
-    deferEntryScript(helpHead(html, HELP_PAGES[0])).replace(
+    deferEntryScript(withPageStyles(helpHead(html, HELP_PAGES[0]), docStyles)).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<FaqPage onNavigate={() => {}} />)),
     ),
   );
   await writeFile(
+    `${distDirectory}/tariffs.html`,
+    deferEntryScript(withPageStyles(helpHead(html, HELP_PAGES[1]), docStyles)).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<TariffsPage onNavigate={() => {}} />)),
+    ),
+  );
+  await writeFile(
     `${distDirectory}/support.html`,
-    deferEntryScript(helpHead(html, HELP_PAGES[1])).replace(
+    deferEntryScript(helpHead(html, HELP_PAGES[2])).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<SupportPage onNavigate={() => {}} />)),
     ),
