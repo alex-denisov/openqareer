@@ -805,6 +805,9 @@
   transform: rotate(225deg) translate(-2px, -2px);
 }
 @media (max-width: 760px) {
+  .rbp .ps-section h2 {
+    font-size: 30px;
+  }
   .rbp .rb-hide-m {
     display: none;
   }
