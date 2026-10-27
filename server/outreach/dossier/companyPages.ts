@@ -1,6 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { searchExaPages } from '../../osint/adapters/exaAdapter';
+import { createWaybackAdapter } from '../../osint/adapters/waybackAdapter';
 import type { DossierDeps } from './collectRecruiterDossier';
 import { formatsOf, inferEmailFormat, samplesFromText } from './emailFormat';
 import type { EmailFormat, EmailSample } from './emailFormat';
@@ -14,6 +15,8 @@ const MAX_BODY_BYTES = 100_000;
 const MAX_SAMPLES = 50;
 const EXA_PAGES = 6;
 const EXA_PAGE_CHARS = 6_000;
+/** Страниц из архива на домен: снимки снятых со страниц команд и контактов. */
+const ARCHIVE_PAGES = 3;
 
 export interface CompanySample extends EmailSample {
   readonly sourceUrl: string;
@@ -78,7 +81,19 @@ async function readLimited(response: Response): Promise<string> {
   return new TextDecoder().decode(Buffer.concat(chunks).subarray(0, MAX_BODY_BYTES));
 }
 
-async function sitePage(url: string, deps: DossierDeps): Promise<{ text: string | null; failed: boolean }> {
+/** Открытая HTML-страница как текст, с лимитом размера; failed — отказ по частоте или сеть. */
+const ARCHIVE_HOST = 'web.archive.org';
+
+type PageResult = { text: string | null; failed: boolean };
+
+export async function fetchPublicPage(url: string, deps: DossierDeps): Promise<PageResult> {
+  const first = await fetchOnce(url, deps, 0);
+  if (!('redirect' in first)) return first;
+  const second = await fetchOnce(first.redirect, deps, 1);
+  return 'redirect' in second ? { text: null, failed: false } : second;
+}
+
+async function fetchOnce(url: string, deps: DossierDeps, hops: number): Promise<PageResult | { redirect: string }> {
   const fetcher = deps.fetch ?? globalThis.fetch;
   const gate = deps.requestGate ?? sharedFootprintRequestGate;
   try {
@@ -89,6 +104,14 @@ async function sitePage(url: string, deps: DossierDeps): Promise<{ text: string 
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (response.status === 429) return { text: null, failed: true };
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location && !hops) {
+        await response.body?.cancel().catch(() => undefined);
+        // Архив отдаёт снимок через переадресацию на свой же хост; на чужой хост не идём.
+        const next = new URL(location, url);
+        if (new URL(url).hostname === ARCHIVE_HOST && next.hostname === ARCHIVE_HOST) return { redirect: next.href };
+        return { text: null, failed: false };
+      }
       const type = response.headers.get('content-type') ?? '';
       if (!response.ok || !/text\/html|text\/plain/u.test(type)) {
         await response.body?.cancel().catch(() => undefined);
@@ -101,6 +124,40 @@ async function sitePage(url: string, deps: DossierDeps): Promise<{ text: string 
   }
 }
 
+/**
+ * Последние снимки Internet Archive для страниц, которых на живом сайте нет:
+ * снятые страницы команды и контактов по-прежнему показывают формулу адресов.
+ */
+async function archivedPages(domain: string, livePages: readonly string[], deps: DossierDeps): Promise<Array<{ url: string; text: string }>> {
+  const wayback = createWaybackAdapter({
+    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    ...(deps.requestGate ? { requestGate: deps.requestGate } : {}),
+    ...(deps.lookupHost ? { resolveHost: deps.lookupHost } : {}),
+  });
+  const found: Array<{ url: string; text: string }> = [];
+  for (const path of COMPANY_PAGE_PATHS) {
+    if (found.length >= ARCHIVE_PAGES) break;
+    const original = `https://${domain}${path}`;
+    if (livePages.includes(original)) continue;
+    let latest: string | undefined;
+    try {
+      // Архив отдаёт до 20 снимков с самых ранних: старая страница команды тоже показывает формулу.
+      const captures = await wayback.run({ profileUrl: original }, AbortSignal.timeout(REQUEST_TIMEOUT_MS));
+      latest = captures.map((capture) => capture.url).filter((url): url is string => Boolean(url)).sort().at(-1);
+    } catch {
+      // Отказ архива (в том числе по частоте) — остальные пути не спрашиваем.
+      break;
+    }
+    if (!latest) continue;
+    // id_ отдаёт снимок без обвязки архива — текст страницы как был.
+    const raw = latest.replace(/\/web\/(\d{14})\//u, '/web/$1id_/');
+    const page = await fetchPublicPage(raw, deps);
+    if (page.failed) break;
+    if (page.text) found.push({ url: latest, text: page.text });
+  }
+  return found;
+}
+
 /** Люди с адресами со страниц самой компании и упоминаний её домена в открытом поиске. */
 export async function collectCompanyPages(domain: string, deps: DossierDeps): Promise<CompanyPagesResult> {
   const pages: Array<{ url: string; text: string }> = [];
@@ -108,7 +165,7 @@ export async function collectCompanyPages(domain: string, deps: DossierDeps): Pr
   if (!(await isPublicCompanyDomain(domain, deps))) return { samples: [], format: null, complete: true };
   for (const path of COMPANY_PAGE_PATHS) {
     const url = `https://${domain}${path}`;
-    const page = await sitePage(url, deps);
+    const page = await fetchPublicPage(url, deps);
     // Отказ сайта по частоте — остальные страницы не запрашиваем.
     if (page.failed) {
       failed = true;
@@ -116,6 +173,7 @@ export async function collectCompanyPages(domain: string, deps: DossierDeps): Pr
     }
     if (page.text) pages.push({ url, text: page.text });
   }
+  if (!failed) pages.push(...(await archivedPages(domain, pages.map((page) => page.url), deps)));
   if (deps.exaApiKey) {
     try {
       const hits = await searchExaPages(`"@${domain}"`, deps.exaApiKey, AbortSignal.timeout(REQUEST_TIMEOUT_MS), {

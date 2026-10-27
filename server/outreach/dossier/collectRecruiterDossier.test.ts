@@ -109,4 +109,22 @@ describe('recruiter dossier', () => {
     expect(channels.map((c) => c.kind)).toContain('telegram');
     expect(channels.some((c) => c.kind === 'whatsapp')).toBe(false);
   });
+  it('takes a profile found by nickname only when the page names the person', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': {
+        results: [{ url: 'https://conf.example/talk', title: 'Anna Smith', text: 'Anna Smith, Acme recruiting. x.com/annahires' }],
+      },
+      'https://medium.com/@annahires': '<h1>Anna Smith</h1><p>Talent partner at Acme. Write me: wa.me/447700900124</p>',
+      'https://teletype.in/@annahires': '<h1>Someone Else</h1><p>t.me/someone_else</p>',
+      'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
+    });
+
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    const kinds = channels.map((c) => `${c.kind}=${c.value}`);
+
+    expect(kinds).toContain('whatsapp=+447700900124');
+    expect(kinds).toContain('other=medium.com/@annahires');
+    expect(kinds.some((kind) => kind.includes('someone_else') || kind.includes('teletype'))).toBe(false);
+    expect(channels.find((c) => c.kind === 'whatsapp')).toMatchObject({ sourceUrl: 'https://medium.com/@annahires', status: 'published' });
+  });
 });

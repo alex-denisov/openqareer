@@ -4,6 +4,10 @@ import { searchExaPages } from '../../osint/adapters/exaAdapter';
 import type { FootprintRequestGate } from '../../osint/adapters/requestScheduler';
 import { sharedFootprintRequestGate } from '../../osint/adapters/requestScheduler';
 import { transliterateToLatin } from '../recruiterIntelligenceService';
+import { getCuratedMaigretSite } from '../../osint/adapters/maigretSiteCatalogue';
+import type { MaigretSite } from '../../osint/adapters/maigretSiteCatalogue';
+import { createUsernamePresenceAdapter } from '../../osint/adapters/usernamePresenceAdapter';
+import { fetchPublicPage } from './companyPages';
 import { extractChannels } from './extractChannels';
 
 /**
@@ -43,6 +47,13 @@ const EXA_PAGES = 8;
 const EXA_PAGE_CHARS = 4_000;
 const GITHUB_CANDIDATES = 3;
 const TELEGRAM_NICKS = 4;
+const PROFILE_NICKS = 2;
+const PROFILE_HEAD_CHARS = 1_500;
+/** Сайты из списка Maigret/Sherlock, где рекрутёры ведут профили с контактами в описании. */
+export const RECRUITER_PROFILE_SITES = [
+  'Medium', 'Teletype', 'SlideShare', 'Speakerdeck', 'sessionize.com', 'clarity.fm',
+  'ProductHunt', 'Hashnode', 'DEV Community', 'Behance', 'write.as',
+] as const;
 
 function fold(value: string): string {
   return transliterateToLatin(value.normalize('NFKC')).replace(/[\s._-]+/gu, ' ').trim();
@@ -239,6 +250,59 @@ async function fromTelegramNicks(
   return found;
 }
 
+/**
+ * Профили по нику (Maigret/Sherlock): наличие ника — ещё не человек, поэтому
+ * профиль принимается, только если на странице его имя; каналы — из описания.
+ */
+async function fromUsernameSites(
+  person: DossierPerson,
+  known: readonly RecruiterChannel[],
+  deps: DossierDeps,
+  observedAt: string,
+  state: RunState,
+): Promise<RecruiterChannel[]> {
+  const sites = RECRUITER_PROFILE_SITES.map((name) => getCuratedMaigretSite(name)).filter(
+    (site): site is MaigretSite => Boolean(site),
+  );
+  const found: RecruiterChannel[] = [];
+  const refused = new Set<string>();
+  for (const nick of nicknames(known).slice(0, PROFILE_NICKS)) {
+    for (const site of sites) {
+      if (refused.has(site.name)) continue;
+      const adapter = createUsernamePresenceAdapter(site.adapterId, {
+        site,
+        ...(deps.fetch ? { fetch: deps.fetch } : {}),
+        ...(deps.requestGate ? { requestGate: deps.requestGate } : {}),
+      });
+      let profileUrl: string | null = null;
+      try {
+        profileUrl = (await adapter.run({ username: nick }, AbortSignal.timeout(REQUEST_TIMEOUT_MS)))[0]?.url ?? null;
+      } catch {
+        // Сайт отказал (в том числе по частоте) — больше его в этом сборе не спрашиваем.
+        refused.add(site.name);
+        state.failed = true;
+        continue;
+      }
+      if (!profileUrl) continue;
+      const page = await fetchPublicPage(profileUrl, deps);
+      if (page.failed) {
+        refused.add(site.name);
+        state.failed = true;
+      }
+      // Имя должно стоять в шапке профиля, а не где-то в ленте или блоке «похожие».
+      if (!page.text || !namesPerson(page.text.slice(0, PROFILE_HEAD_CHARS), person.fullName)) continue;
+      const status: RecruiterChannel['status'] = namesCompany(page.text, person.companyName) ? 'published' : 'hypothesis';
+      found.push({ kind: 'other', value: profileUrl.replace(/^https:\/\//u, ''), href: profileUrl, status, sourceUrl: profileUrl, observedAt });
+      found.push(
+        ...extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: profileUrl, observedAt })
+          .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName))
+          .map((channel) => ({ ...channel, status })),
+      );
+    }
+  }
+  return found;
+}
+
 export async function collectRecruiterDossier(person: DossierPerson, deps: DossierDeps): Promise<DossierResult> {
   const observedAt = (deps.now?.() ?? new Date()).toISOString();
   const state: RunState = { failed: false, githubBlocked: false };
@@ -251,6 +315,9 @@ export async function collectRecruiterDossier(person: DossierPerson, deps: Dossi
     fromGithub(person, deps, observedAt, state).catch(failed),
   ]);
   const known = [...pages, ...github];
-  const telegram = await fromTelegramNicks(person, known, deps, observedAt, state).catch(failed);
-  return { channels: rankChannels([...known, ...telegram]), complete: !state.failed };
+  const [telegram, profiles] = await Promise.all([
+    fromTelegramNicks(person, known, deps, observedAt, state).catch(failed),
+    fromUsernameSites(person, known, deps, observedAt, state).catch(failed),
+  ]);
+  return { channels: rankChannels([...known, ...telegram, ...profiles]), complete: !state.failed };
 }
