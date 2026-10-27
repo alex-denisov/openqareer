@@ -161,23 +161,27 @@ describe('groupCompanyPeople', () => {
 });
 
 describe('companyLocationLabel', () => {
-  it('keeps one place as is', () => {
-    expect(companyLocationLabel('Bengaluru, IND')).toBe('Bengaluru, IND');
+  it('names a place as «Город, Страна» in Russian, by the «Вакансии» gazetteer (28.10)', () => {
+    expect(companyLocationLabel('Toronto, ON, CAN')).toBe('Торонто, Канада');
+    expect(companyLocationLabel('US-CA-Menlo Park')).toBe('Menlo Park, США');
+    expect(companyLocationLabel('London, United Kingdom')).toBe('Лондон, Великобритания');
+    expect(companyLocationLabel('Germany')).toBe('Германия');
+    expect(companyLocationLabel('Remote')).toBe('Удалённо');
   });
 
   it('folds a long list of places into the first one and a count', () => {
-    expect(companyLocationLabel('Argentina; Austria; Belgium; Brazil')).toBe('Argentina и ещё 3');
+    expect(companyLocationLabel('Germany; Austria; Belgium; Brazil')).toBe('Германия и ещё 3');
   });
 
   it('translates a bare source count such as Workday «5 Locations»', () => {
     expect(companyLocationLabel('5 Locations')).toBe('5 локаций');
     expect(companyLocationLabel('2 locations')).toBe('2 локации');
-    expect(companyLocationLabel('Remote; 21 Locations')).toBe('Remote и ещё 1');
+    expect(companyLocationLabel('Remote; 21 Locations')).toBe('Удалённо и ещё 1');
   });
 
-  it('names an unknown place', () => {
-    expect(companyLocationLabel(null)).toBe('Место неизвестно');
-    expect(companyLocationLabel('  ')).toBe('Место неизвестно');
+  it('returns null without a place: the line is not shown', () => {
+    expect(companyLocationLabel(null)).toBeNull();
+    expect(companyLocationLabel('  ')).toBeNull();
   });
 });
 

@@ -329,7 +329,9 @@ function CompanyListRow({
         <span className="companies-people-company-text">
           <strong>{company.name}</strong>
           <span>
-            {companyLocationLabel(company.location)} ·{' '}
+            {companyLocationLabel(company.location)
+              ? `${companyLocationLabel(company.location)} · `
+              : null}
             <span className="companies-people-num">{company.vacancyCount}</span>{' '}
             {pluralWordRu(company.vacancyCount, ['вакансия', 'вакансии', 'вакансий'])}
           </span>

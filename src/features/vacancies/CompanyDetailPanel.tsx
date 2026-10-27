@@ -153,8 +153,12 @@ function CompanyVacancyCard({
     <>
       <strong>{vacancy.title}</strong>
       <span>
-        {companyLocationLabel(vacancy.location)} · {vacancy.sourceName},{' '}
-        {formatObservedDate(vacancy.sourceDate)}
+        {[
+          companyLocationLabel(vacancy.location),
+          `${vacancy.sourceName}, ${formatObservedDate(vacancy.sourceDate)}`,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
       </span>
     </>
   );
