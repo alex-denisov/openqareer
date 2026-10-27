@@ -79,3 +79,16 @@ describe('sameCareerRole', () => {
     expect(sameCareerRole('Chief Operating Officer', 'Технический директор')).toBe(false);
   });
 });
+
+describe('careerRoleKey: название вне словаря (27.10)', () => {
+  it('расшифровка в скобках не делает вторую роль', () => {
+    expect(careerRoleKey('Исполнительный директор (CEO)')).not.toBeNull();
+    expect(careerRoleKey('Исполнительный директор (CEO)')).toBe(
+      careerRoleKey('Исполнительный директор'),
+    );
+  });
+
+  it('разные названия вне словаря остаются разными', () => {
+    expect(careerRoleKey('Исполнительный директор')).not.toBe(careerRoleKey('Chief of Staff'));
+  });
+});
