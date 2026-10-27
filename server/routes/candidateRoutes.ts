@@ -372,7 +372,7 @@ async function importResumeIntoDossier(
     : 'profile';
   const early = nativeImportShortcut(candidateStore, candidate.id, body, mode);
   if (early) return { data: early.data, meta: { requestId: request.id, ...early.meta } };
-  const read = await readResume(body.text, resumeStructurerForCandidate(deps, candidate.id));
+  const read = await readResume(body.text, resumeStructurerForCandidate(deps));
   const plan = planResumeImport(read.resume, { idPrefix: newImportMemoryIdPrefix(randomUUID()) });
   if (plan.evidence.length === 0 || !carriesProfileSubstance(read.resume)) {
     return sendError(
@@ -463,12 +463,16 @@ function nativeResumeImportReplay(
   };
 }
 
-function resumeImportLabel(source: 'pdf' | 'linkedin' | 'hh' | 'text', fileName?: string): string {
+function resumeImportLabel(
+  source: z.infer<typeof resumeImportSchema>['source'],
+  fileName?: string,
+): string {
   const origin = {
     pdf: 'PDF-резюме',
     linkedin: 'профиль LinkedIn',
     hh: 'резюме hh.ru',
     text: 'текст резюме',
+    builder: 'конструктор резюме',
   }[source];
   return fileName ? `Импорт: ${origin} «${fileName}»` : `Импорт: ${origin}`;
 }

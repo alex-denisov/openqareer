@@ -342,3 +342,63 @@ describe('proposeRoles: одна роль под разными названия
 function sampleOf(role: { confirmation: { state: string; sampleSize?: number } }): number {
   return role.confirmation.sampleSize ?? 0;
 }
+
+describe('proposeRoles: имя роли рынка (27.10)', () => {
+  it('называет роль одним названием, а не склейкой двух должностей через «/»', () => {
+    const joined = 'Производственный директор / Технический директор';
+    const roles = proposeRoles({
+      named: [],
+      pool: [
+        ...Array.from({ length: 6 }, () => vacancy(joined)),
+        ...Array.from({ length: 4 }, () => vacancy('Производственный директор')),
+      ],
+      candidateSkills: [],
+      roleKey: () => 'manufacturing:top',
+    });
+    expect(roles[0]?.title).toBe('Производственный директор');
+  });
+});
+
+describe('proposeRoles: короткое имя при равной частоте (27.10)', () => {
+  it('из названий, встретившихся одинаково часто, берёт самое короткое', () => {
+    const titles = [
+      'Director of Applied Science and Engineering - Knowledge Graphs & AI',
+      'AI Director',
+      'AI Transformation Director',
+      'Associate Vice President, Model & AI Governance',
+      'AI Engineering Sr Director',
+      'Chief AI Officer',
+      'VP of AI',
+      'Director of AI Platform',
+    ];
+    const roles = proposeRoles({
+      named: [],
+      pool: titles.map((title) => vacancy(title)),
+      candidateSkills: [],
+      roleKey: () => 'ai-ml:top',
+    });
+    expect(roles[0]?.title).toBe('VP of AI');
+  });
+});
+
+describe('proposeRoles: описание вакансии — не имя роли (27.10)', () => {
+  it('короткое название побеждает длинное, даже встретившееся чаще', () => {
+    const long = 'Director of Applied Science and Engineering - Knowledge Graphs & AI';
+    const roles = proposeRoles({
+      named: [],
+      pool: [
+        ...Array.from({ length: 2 }, () => vacancy(long)),
+        ...[
+          'AI Director',
+          'Director, AI Platforms',
+          'VP of AI Engineering',
+          'Chief AI Officer',
+        ].flatMap((title) => [vacancy(title)]),
+        ...Array.from({ length: 2 }, () => vacancy('Director of AI')),
+      ],
+      candidateSkills: [],
+      roleKey: () => 'ai-ml:top',
+    });
+    expect(roles[0]?.title).toBe('Director of AI');
+  });
+});

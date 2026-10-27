@@ -8,6 +8,13 @@
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { LEGAL_DOCS, LEGAL_PACK_PUBLISHED_AT, legalPath } from '../../shared/legalRegistry';
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
+import {
+  INTERVIEW_EVIDENCE,
+  INTERVIEW_HUB_PATH,
+  interviewProfessionIndexable,
+  interviewProfessionPath,
+  publishedInterviewProfessions,
+} from '../../shared/interviewQuestions';
 
 /**
  * URLs per child file. The site's working limit leaves headroom below the
@@ -105,6 +112,17 @@ function file(name: string, urls: readonly SitemapUrl[]): SitemapFile {
  */
 export const PUBLIC_PAGES_UPDATED_AT = '2026-10-20';
 
+/** B568: the hub and every reviewed profession; noindex professions stay out. */
+export function interviewSitemapUrls(): SitemapUrl[] {
+  const lastmod = INTERVIEW_EVIDENCE.measuredAt;
+  return [
+    { path: INTERVIEW_HUB_PATH, lastmod },
+    ...publishedInterviewProfessions()
+      .filter(interviewProfessionIndexable)
+      .map((profession) => ({ path: interviewProfessionPath(profession.slug), lastmod })),
+  ];
+}
+
 /** `catalogLastmod` — the freshest listing date; the catalog root changes with it. */
 export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
   return [
@@ -113,6 +131,10 @@ export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
     { path: '/faq', lastmod: PUBLIC_PAGES_UPDATED_AT },
     { path: '/support', lastmod: PUBLIC_PAGES_UPDATED_AT },
     { path: '/tools/country-fit', lastmod: '2026-10-23' },
+    // B567: the page, its menu item and the landing card ship in one release.
+    { path: '/tools/resume', lastmod: '2026-10-27' },
+    ...interviewSitemapUrls(),
+    { path: '/tools/relocation', lastmod: '2026-10-27' },
     ...LEGAL_DOCS.map((doc) => ({ path: legalPath(doc.slug), lastmod: LEGAL_PACK_PUBLISHED_AT })),
     { path: CATALOG_ROOT, ...(catalogLastmod ? { lastmod: catalogLastmod } : {}) },
   ];

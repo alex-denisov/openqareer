@@ -3,7 +3,9 @@ export interface BulkLlmConfig {
   model: string;
   provider: string;
   quantization: string;
+  /** Cap of one run id (for the worker: one UTC day of that worker, see `workerDayRunId`). */
   runUsd: number;
+  /** Cap of the whole channel per UTC day, across every run id. */
   dayUsd: number;
   totalUsd: number;
   perRequestUsd: number;
@@ -46,9 +48,7 @@ export function readBulkLlmConfig(env: NodeJS.ProcessEnv = process.env): BulkLlm
   )
     throw new Error('Bulk model must be pinned and support disabled reasoning');
   if (
-    !config.provider
-      .split(',')
-      .every((provider) => /^[a-z0-9][a-z0-9./_-]+$/u.test(provider)) ||
+    !config.provider.split(',').every((provider) => /^[a-z0-9][a-z0-9./_-]+$/u.test(provider)) ||
     !['fp4', 'fp8', 'fp16', 'bf16', 'fp32', 'int4', 'int8', 'mxfp4'].includes(config.quantization)
   )
     throw new Error('Invalid pinned provider or quantization');

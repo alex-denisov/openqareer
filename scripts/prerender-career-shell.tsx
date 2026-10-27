@@ -11,6 +11,18 @@ import {
   COUNTRY_FIT_TITLE,
   COUNTRY_FIT_DESCRIPTION,
 } from '../src/features/site/CountryFitPage';
+import { ResumeBuilderPage } from '../src/features/site/resumeBuilder/ResumeBuilderPage';
+import {
+  RESUME_BUILDER_DESCRIPTION,
+  RESUME_BUILDER_PATH,
+  RESUME_BUILDER_PUBLISHED_AT,
+  RESUME_BUILDER_TITLE,
+} from '../src/features/site/resumeBuilder/resumeBuilderContent';
+import {
+  RELOCATION_DESCRIPTION,
+  RELOCATION_TITLE,
+  RelocationPage,
+} from '../src/features/site/RelocationPage';
 import { LoginPage, SignupPage } from '../src/features/site/AuthPages';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { PublicHeader, PublicFooter } from '../src/features/site/PublicSiteChrome';
@@ -29,6 +41,7 @@ import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/Leg
 import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
 import { CATALOG_STYLE, CATALOG_STYLESHEET_PATH } from '../server/vacancies/vacancyCatalogDocument';
 import { publicPathViolation } from '../shared/seoSlugPolicy';
+import { interviewSitemapUrls } from '../server/seo/sitemapXml';
 import {
   LEGAL_DOCS,
   LEGAL_PACK_PUBLISHED_AT,
@@ -73,7 +86,12 @@ function helpHead(html: string, page: (typeof HELP_PAGES)[number]): string {
 /** Title, description, canonical and the og/twitter copies of them. */
 export function pageHead(
   html: string,
-  page: { readonly path: string; readonly title: string; readonly description: string; readonly shareDescription?: string },
+  page: {
+    readonly path: string;
+    readonly title: string;
+    readonly description: string;
+    readonly shareDescription?: string;
+  },
 ): string {
   const title = escapeHtml(page.title);
   const description = escapeHtml(page.description);
@@ -117,6 +135,12 @@ export function buildSitemap(): string {
       lastmod: undefined as string | undefined,
     })),
     { loc: `${SITE_ORIGIN}/tools/country-fit`, lastmod: '2026-10-23' },
+    { loc: `${SITE_ORIGIN}${RESUME_BUILDER_PATH}`, lastmod: RESUME_BUILDER_PUBLISHED_AT },
+    ...interviewSitemapUrls().map((row) => ({
+      loc: `${SITE_ORIGIN}${row.path}`,
+      lastmod: row.lastmod as string | undefined,
+    })),
+    { loc: `${SITE_ORIGIN}/tools/relocation`, lastmod: '2026-10-27' },
     ...LEGAL_DOCS.map((doc) => ({
       loc: `${SITE_ORIGIN}${legalPath(doc.slug)}`,
       lastmod: LEGAL_PACK_PUBLISHED_AT,
@@ -190,7 +214,8 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
         path: '/tools/country-fit',
         title: COUNTRY_FIT_TITLE,
         description: COUNTRY_FIT_DESCRIPTION,
-        shareDescription: 'Налоги и чистая зарплата за 2026 год в 13 странах. Расчёт со своими расходами.',
+        shareDescription:
+          'Налоги и чистая зарплата за 2026 год в 13 странах. Расчёт со своими расходами.',
       }),
     ).replace(
       EMPTY_ROOT,
@@ -205,8 +230,84 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
   await writeFile(`${distDirectory}/country-fit.html`, document);
 }
 
+/** B567: the builder renders its sample resume and copy before the bundle loads. */
+const RESUME_BUILDER_DOCUMENT_BUDGET = 28_000;
+
+async function writeResumeBuilderPage(
+  html: string,
+  distDirectory: string,
+  styles: string,
+): Promise<void> {
+  const document = compactCountryFitDocument(
+    deferEntryScript(
+      withPageStyles(
+        pageHead(html, {
+          path: RESUME_BUILDER_PATH,
+          title: RESUME_BUILDER_TITLE,
+          description: RESUME_BUILDER_DESCRIPTION,
+          shareDescription: 'Резюме по шагам с подсказками и проверкой на ATS. PDF и DOCX.',
+        }),
+        styles,
+      ),
+    ).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<ResumeBuilderPage onNavigate={() => {}} />)),
+    ),
+  );
+  if (Buffer.byteLength(document) > RESUME_BUILDER_DOCUMENT_BUDGET) {
+    throw new Error(
+      `Resume builder document ${Buffer.byteLength(document)} exceeds the ${RESUME_BUILDER_DOCUMENT_BUDGET}-byte route budget`,
+    );
+  }
+  await writeFile(`${distDirectory}/resume-builder.html`, document);
+}
+
+/** B354: /tools/relocation ships its first paint with the example estimate. */
+async function writeRelocationPage(
+  html: string,
+  distDirectory: string,
+  styles: string,
+): Promise<void> {
+  const document = compactCountryFitDocument(
+    deferEntryScript(
+      withPageStyles(
+        pageHead(html, {
+          path: '/tools/relocation',
+          title: RELOCATION_TITLE,
+          description: RELOCATION_DESCRIPTION,
+          shareDescription:
+            'Пути переезда по работе в выбранные страны с официальными порогами 2026 года.',
+        }),
+        styles,
+      ),
+    ).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<RelocationPage onNavigate={() => {}} />)),
+    ),
+  );
+  await writeFile(`${distDirectory}/relocation.html`, document);
+}
+
+async function writeToolPages(
+  html: string,
+  distDirectory: string,
+  manifest?: Manifest,
+): Promise<void> {
+  await writeCountryFitPage(html, distDirectory);
+  await writeRelocationPage(html, distDirectory, pageStylesheets(manifest, 'relocationRoute'));
+}
+
 /** B535: /faq and /support are indexed documents with their own first paint. */
-async function writeHelpPages(html: string, distDirectory: string): Promise<void> {
+async function writeHelpPages(
+  html: string,
+  distDirectory: string,
+  manifest?: Manifest,
+): Promise<void> {
+  await writeResumeBuilderPage(
+    html,
+    distDirectory,
+    pageStylesheets(manifest, 'resumeBuilderRoute'),
+  );
   await writeFile(
     `${distDirectory}/faq.html`,
     deferEntryScript(helpHead(html, HELP_PAGES[0])).replace(
@@ -225,9 +326,31 @@ async function writeHelpPages(html: string, distDirectory: string): Promise<void
 
 async function writeSalaryTemplate(html: string, distDirectory: string): Promise<void> {
   // Runtime salary SSR uses the built head/assets; it never embeds sample market data.
-  await writeFile(`${distDirectory}/salary-market.html`, html.replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js').replace(EMPTY_ROOT,
-    renderToStaticMarkup(<div className="ps sm-public"><a className="ps-skip" href="#main">К содержимому</a><PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />{'%%SALARY_CONTENT%%'}<PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} /></div>))
-    .replace(/<script type="module"[^>]*><\/script>/gu, ''));
+  await writeFile(
+    `${distDirectory}/salary-market.html`,
+    html
+      .replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js')
+      .replace(
+        EMPTY_ROOT,
+        renderToStaticMarkup(
+          <div className="ps sm-public">
+            <a className="ps-skip" href="#main">
+              К содержимому
+            </a>
+            <PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />
+            {'%%SALARY_CONTENT%%'}
+            <PublicFooter
+              onNavigate={() => {}}
+              onLanding={false}
+              signedIn={false}
+              interviewLink={false}
+              toolLinks={false}
+            />
+          </div>,
+        ),
+      )
+      .replace(/<script type="module"[^>]*><\/script>/gu, ''),
+  );
 }
 
 /**
@@ -259,7 +382,10 @@ export const AUTH_PAGES = [
 /** Only exact files from Vite's emitted graph may become auth HTML hints. */
 export function authResourceHints(manifest: Manifest): string {
   const asset = (file: unknown, extension: 'js' | 'css') => {
-    if (typeof file !== 'string' || !new RegExp(`^assets/[A-Za-z0-9_-]+\\.${extension}$`, 'u').test(file)) {
+    if (
+      typeof file !== 'string' ||
+      !new RegExp(`^assets/[A-Za-z0-9_-]+\\.${extension}$`, 'u').test(file)
+    ) {
       throw new Error('Invalid auth preload asset path');
     }
     return escapeHtml(`/${file}`);
@@ -267,36 +393,76 @@ export function authResourceHints(manifest: Manifest): string {
   const dynamicImports = manifest['index.html']?.dynamicImports;
   if (!Array.isArray(dynamicImports)) throw new Error('Missing entry build graph');
   const chunk = (name: string) => {
-    const matches = dynamicImports.map((key) => manifest[key]).filter((entry) => entry?.name === name);
+    const matches = dynamicImports
+      .map((key) => manifest[key])
+      .filter((entry) => entry?.name === name);
     if (matches.length !== 1) throw new Error(`Expected one emitted auth chunk: ${name}`);
     return matches[0];
   };
   const styleChunks = ['landing', 'auth'].map(chunk);
   const styles = styleChunks.flatMap((entry) => {
     const css = entry.css;
-    if (!Array.isArray(css) || css.length === 0) throw new Error(`Missing emitted auth stylesheet: ${entry.name}`);
+    if (!Array.isArray(css) || css.length === 0)
+      throw new Error(`Missing emitted auth stylesheet: ${entry.name}`);
     return css.map((file) => asset(file, 'css'));
   });
   return [
-    ...[chunk('AuthPages'), ...styleChunks].map((entry) =>
-      `<link rel="modulepreload" crossorigin href="${asset(entry.file, 'js')}">`),
-    ...[...new Set(styles)].map((href) => `<link rel="preload" as="style" crossorigin href="${href}">`),
+    ...[chunk('AuthPages'), ...styleChunks].map(
+      (entry) => `<link rel="modulepreload" crossorigin href="${asset(entry.file, 'js')}">`,
+    ),
+    ...[...new Set(styles)].map(
+      (href) => `<link rel="preload" as="style" crossorigin href="${href}">`,
+    ),
   ].join('');
+}
+
+/**
+ * A tool page's own styles live in its lazy chunk, off the first-paint sheet
+ * every public document loads (one 12 KiB delivery part). Its prerendered
+ * document links that chunk's stylesheet, so the page never paints unstyled.
+ */
+export function pageStylesheets(manifest: Manifest | undefined, name: string): string {
+  if (!manifest) return '';
+  const dynamicImports = manifest['index.html']?.dynamicImports;
+  if (!Array.isArray(dynamicImports)) throw new Error('Missing entry build graph');
+  const matches = dynamicImports
+    .map((key) => manifest[key])
+    .filter((entry) => entry?.name === name);
+  if (matches.length !== 1) throw new Error(`Expected one emitted page chunk: ${name}`);
+  const css = matches[0].css;
+  if (!Array.isArray(css) || css.length === 0)
+    throw new Error(`Missing emitted page stylesheet: ${name}`);
+  return css
+    .map((file) => {
+      if (typeof file !== 'string' || !/^assets\/[A-Za-z0-9_-]+\.css$/u.test(file))
+        throw new Error('Invalid page stylesheet path');
+      return `<link rel="stylesheet" crossorigin href="${escapeHtml(`/${file}`)}">`;
+    })
+    .join('');
+}
+
+function withPageStyles(html: string, styles: string): string {
+  return styles ? html.replace('</head>', `${styles}</head>`) : html;
 }
 
 async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string> {
   // Auth is a lazy route. Reuse its exact styles without putting the legacy
   // landing styles into every public document's initial CSS bundle.
-  const source = (await Promise.all(['landing.css', 'auth.css'].map((file) =>
-    readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
-  ))).join('\n');
+  const source = (
+    await Promise.all(
+      ['landing.css', 'auth.css'].map((file) =>
+        readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
+      ),
+    )
+  ).join('\n');
   // transform() does not bundle/rebase dependencies. Quoted @import paths
   // need this guard too; checking only url() would miss them.
   if (/@import\b|url\s*\(/iu.test(source)) {
     throw new Error('Auth first-paint styles must be self-contained before relocation');
   }
   const { code: css } = await transform(source, { loader: 'css', minify: true });
-  if (Buffer.byteLength(css) > 20_000) throw new Error('Auth first-paint CSS exceeds the 20000-byte route budget');
+  if (Buffer.byteLength(css) > 20_000)
+    throw new Error('Auth first-paint CSS exceeds the 20000-byte route budget');
   const path = `/assets/auth-first-paint-${createHash('sha256').update(css).digest('hex').slice(0, 12)}.css`;
   await mkdir(`${distDirectory}/assets`, { recursive: true });
   await writeFile(`${distDirectory}${path}`, css);
@@ -311,25 +477,25 @@ async function writeAuthPages(html: string, distDirectory: string, hints: string
   const stylesheet = await writeAuthFirstPaintStyles(distDirectory);
   for (const page of AUTH_PAGES) {
     const document = pageHead(html, page)
-        .replace('</head>', `${hints}<link rel="stylesheet" href="${stylesheet}"></head>`)
-        .replace(
-          /<link rel="canonical"[^>]*>/u,
-          `<link rel="canonical" href="${SITE_ORIGIN}${page.path}"><meta name="robots" content="noindex, follow">`,
-        )
-        .replace(
-          EMPTY_ROOT,
-          bootstrapRoot(
-            renderToStaticMarkup(
-              <div className="ps ps-auth">
-                {page.path === '/login' ? (
-                  <LoginPage onNavigate={() => {}} bootstrapPending />
-                ) : (
-                  <SignupPage onNavigate={() => {}} bootstrapPending />
-                )}
-              </div>,
-            ),
+      .replace('</head>', `${hints}<link rel="stylesheet" href="${stylesheet}"></head>`)
+      .replace(
+        /<link rel="canonical"[^>]*>/u,
+        `<link rel="canonical" href="${SITE_ORIGIN}${page.path}"><meta name="robots" content="noindex, follow">`,
+      )
+      .replace(
+        EMPTY_ROOT,
+        bootstrapRoot(
+          renderToStaticMarkup(
+            <div className="ps ps-auth">
+              {page.path === '/login' ? (
+                <LoginPage onNavigate={() => {}} bootstrapPending />
+              ) : (
+                <SignupPage onNavigate={() => {}} bootstrapPending />
+              )}
+            </div>,
           ),
-        );
+        ),
+      );
     if (Buffer.byteLength(document) > 20_000) {
       throw new Error(`Auth document ${page.path} exceeds the 20000-byte route budget`);
     }
@@ -400,8 +566,8 @@ export async function prerenderShells(
       ),
     );
   }
-  await writeHelpPages(html, distDirectory);
-  await writeCountryFitPage(html, distDirectory);
+  await writeHelpPages(html, distDirectory, manifest);
+  await writeToolPages(html, distDirectory, manifest);
   await writeSalaryTemplate(html, distDirectory);
   await writeNotFoundPage(html, distDirectory);
   await writeAuthPages(html, distDirectory, manifest ? authResourceHints(manifest) : '');
@@ -424,7 +590,9 @@ if (directPath && import.meta.url === pathToFileURL(directPath).href) {
   const indexPath = process.argv[2] ?? 'dist/index.html';
   const adminPath = process.argv[3] ?? 'dist/admin.html';
   const distDirectory = indexPath.replace(/\/[^/]+$/u, '');
-  const manifest = JSON.parse(await readFile(`${distDirectory}/.vite/manifest.json`, 'utf8')) as Manifest;
+  const manifest = JSON.parse(
+    await readFile(`${distDirectory}/.vite/manifest.json`, 'utf8'),
+  ) as Manifest;
   await prerenderShells(indexPath, adminPath, distDirectory, manifest);
   // The emitted graph is build input, not a public application resource.
   await unlink(`${distDirectory}/.vite/manifest.json`);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { BulkLlmConfig } from './bulkLlmConfig';
 import type { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
+import type { BulkFallback } from './bulkGeminiFallback';
 /** The ledger refused a reservation: a spend limit, not a provider or answer failure (B556). */
 export const BULK_BUDGET_EXCEEDED = 'Bulk budget exceeded';
 
@@ -23,6 +24,29 @@ export interface BulkLlmResult {
   model: string;
   provider: string;
   usage: BulkLlmUsage;
+  /** Set when the answer came from the reserve lane: why OpenRouter was skipped (`openrouter_402`). */
+  fallbackReason?: string;
+}
+/** A switch of the channel to the reserve lane, for the worker journal and the owner alert. */
+export interface BulkLlmChannelEvent {
+  kind: 'fallback' | 'balance_exhausted';
+  reason: string;
+}
+export interface BulkLlmClientOptions {
+  fallback?: BulkFallback;
+  now?: () => number;
+  onEvent?: (event: BulkLlmChannelEvent) => void;
+}
+/** OpenRouter is probed again no more often than this after it failed (27.10 incident). */
+export const PRIMARY_RETRY_AFTER_MS = 10 * 60_000;
+/** Outages worth the reserve lane: no balance, rate limit after retries, server errors. */
+function isOutage(status: number): boolean {
+  return status === 402 || status === 429 || status >= 500;
+}
+function transportReason(error: unknown): string {
+  return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+    ? 'openrouter_timeout'
+    : 'openrouter_network';
 }
 const usageSchema = z.object({
   usage: z.object({
@@ -64,7 +88,12 @@ export class BulkLlmClient {
     private readonly transport: typeof fetch = fetch,
     private readonly delay: (ms: number) => Promise<void> = (ms) =>
       new Promise((r) => setTimeout(r, ms)),
+    private readonly options: BulkLlmClientOptions = {},
   ) {}
+  private primaryDown: { until: number; reason: string } | null = null;
+  private now(): number {
+    return (this.options.now ?? Date.now)();
+  }
   private get providers(): string[] {
     return this.config.provider.split(',');
   }
@@ -135,17 +164,35 @@ export class BulkLlmClient {
   }
   async complete(input: BulkLlmInput): Promise<BulkLlmResult> {
     const body = this.body(input);
+    if (this.options.fallback && this.primaryDown && this.now() < this.primaryDown.until)
+      return this.completeFallback(input, this.primaryDown.reason);
     const id = this.ledger.reserve(
       { ...input, model: this.config.model, provider: this.config.provider },
       this.config,
     );
     if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
+    let response: Response;
     try {
-      const response = await this.request('/chat/completions', body);
-      if (!response.ok) {
-        if ([400, 401, 403, 404, 422, 429].includes(response.status)) this.ledger.release(id);
-        throw new Error(`Bulk provider status ${response.status}`);
-      }
+      response = await this.request('/chat/completions', body);
+    } catch (error) {
+      // No answer came back: nothing was billed, so the hold is freed at once.
+      this.ledger.release(id);
+      this.ledger.event('completion_failed_or_unknown');
+      return this.failover(input, transportReason(error), error);
+    }
+    if (!response.ok) {
+      this.ledger.release(id);
+      await response.body?.cancel();
+      const failure = new Error(`Bulk provider status ${response.status}`);
+      if (isOutage(response.status))
+        return this.failover(input, `openrouter_${response.status}`, failure);
+      this.ledger.event('completion_failed_or_unknown');
+      throw failure;
+    }
+    return this.settlePrimary(id, response);
+  }
+  private async settlePrimary(id: string, response: Response): Promise<BulkLlmResult> {
+    try {
       const result: unknown = await response.json();
       const usage = parseUsage(result);
       const actual = z
@@ -158,6 +205,7 @@ export class BulkLlmClient {
       const content = completion.choices[0]?.message.content;
       if (typeof content !== 'string' || !content) throw new Error('Invalid bulk completion');
       if (completion.model !== this.config.model) throw new Error('Unexpected bulk model');
+      this.primaryDown = null;
       return {
         content,
         model: completion.model,
@@ -168,6 +216,43 @@ export class BulkLlmClient {
       this.ledger.event('completion_failed_or_unknown');
       throw error;
     }
+  }
+  private failover(input: BulkLlmInput, reason: string, error: unknown): Promise<BulkLlmResult> {
+    const fallback = this.options.fallback;
+    if (!fallback) throw error;
+    this.ledger.event(`fallback_${reason}`);
+    this.primaryDown = { until: this.now() + PRIMARY_RETRY_AFTER_MS, reason };
+    this.options.onEvent?.({ kind: 'fallback', reason });
+    if (reason === 'openrouter_402') this.options.onEvent?.({ kind: 'balance_exhausted', reason });
+    return this.completeFallback(input, reason);
+  }
+  private async completeFallback(input: BulkLlmInput, reason: string): Promise<BulkLlmResult> {
+    const fallback = this.options.fallback!;
+    const id = this.ledger.reserve(
+      { ...input, model: fallback.model, provider: fallback.provider },
+      this.config,
+    );
+    if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
+    let answer: Awaited<ReturnType<BulkFallback['complete']>>;
+    try {
+      answer = await fallback.complete({
+        prefix: input.prefix,
+        input: input.input,
+        maxTokens: input.maxTokens ?? 2048,
+      });
+    } catch (error) {
+      this.ledger.release(id);
+      this.ledger.event('fallback_failed');
+      throw error;
+    }
+    this.ledger.settle(id, answer.usage, { model: answer.model, provider: fallback.provider });
+    return {
+      content: answer.content,
+      model: answer.model,
+      provider: fallback.provider,
+      usage: answer.usage,
+      fallbackReason: reason,
+    };
   }
   async submitBatch(inputs: BulkLlmInput[]): Promise<{ reservationId: string; batchId: string }> {
     if (!this.config.batchEnabled) throw new Error('Batch endpoint eligibility not enabled');
@@ -195,7 +280,7 @@ export class BulkLlmClient {
         requests,
       });
       if (!response.ok) {
-        if ([400, 401, 403, 404, 422, 429].includes(response.status)) this.ledger.release(id);
+        this.ledger.release(id);
         throw new Error(`Batch submission status ${response.status}`);
       }
       const raw: unknown = await response.json();

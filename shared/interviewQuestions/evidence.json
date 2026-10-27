@@ -1,0 +1,103 @@
+{
+  "measuredAt": "2026-10-27",
+  "windowDays": 90,
+  "minDescribed": 100,
+  "professions": {
+    "accountant": {
+      "vacancies": 9776,
+      "described": 1543,
+      "topics": {
+        "month-close": 804,
+        "payroll": 380,
+        "automation": 1260,
+        "erp-1c": 1025,
+        "primary-docs": 786,
+        "ifrs": 527,
+        "banks": 425,
+        "audit": 1009,
+        "tax-audit": 720,
+        "vat-request": 238
+      }
+    },
+    "project-manager": {
+      "vacancies": 9736,
+      "described": 7087,
+      "topics": {
+        "stakeholders": 4350,
+        "plan": 6001,
+        "budget": 5166,
+        "vendors": 3921,
+        "risks": 4117,
+        "scope-change": 3792,
+        "status": 4602,
+        "methodology": 1693,
+        "certification": 3072,
+        "tools": 1476
+      }
+    },
+    "data-analyst": {
+      "vacancies": 2413,
+      "described": 1445,
+      "topics": {
+        "sql": 1004,
+        "metric-drop": 641,
+        "ab-test": 614,
+        "dashboard": 1036,
+        "excel": 885,
+        "priorities": 1133,
+        "python": 703,
+        "model": 297,
+        "data-quality": 572,
+        "cohorts": 107
+      }
+    },
+    "recruiter-talent-acquisition-specialist": {
+      "vacancies": 4542,
+      "described": 1147,
+      "topics": {
+        "candidate-experience": 719,
+        "volume": 585,
+        "intake": 884,
+        "sourcing": 1017,
+        "ats": 689,
+        "offer-decline": 855,
+        "assessment": 941,
+        "onboarding": 400,
+        "metrics": 809,
+        "law": 104
+      }
+    },
+    "customer-support-agent": {
+      "vacancies": 2112,
+      "described": 1228,
+      "topics": {
+        "metrics": 229,
+        "channels": 855,
+        "angry-customer": 503,
+        "escalation": 432,
+        "tone": 629,
+        "tech": 470,
+        "languages": 528,
+        "sales": 386,
+        "stress": 472,
+        "unknown-answer": 100
+      }
+    },
+    "head-sales": {
+      "vacancies": 3394,
+      "described": 1374,
+      "topics": {
+        "funnel": 947,
+        "key-accounts": 395,
+        "marketing": 951,
+        "motivation-scheme": 599,
+        "pricing": 871,
+        "process": 403,
+        "hiring": 730,
+        "underperformer": 573,
+        "reporting": 768,
+        "plan": 1206
+      }
+    }
+  }
+}

@@ -451,7 +451,7 @@ export const assessmentIdSchema = z.enum(['product-case-v1']);
 export const resumeImportSchema = z
   .object({
     text: z.string().min(10).max(500_000),
-    source: z.enum(['pdf', 'linkedin', 'hh', 'text']),
+    source: z.enum(['pdf', 'linkedin', 'hh', 'text', 'builder']),
     fileName: z.string().trim().max(200).optional(),
     /** Why the device's LinkedIn structured capture fell back to text (B266). */
     structuredFallback: z.enum(['extract_failed', 'no_substance', 'schema_rejected']).optional(),

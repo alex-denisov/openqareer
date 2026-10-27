@@ -1,6 +1,8 @@
+import { registerResumeBuilderRoutes } from './resumeBuilderRoutes';
 import { summarizeRoleSample } from './roleSampleSummary';
 import { catalogSourceView } from '../../shared/catalogSources';
 import { getCatalogSources } from '../vacancies/catalogSources';
+import { getCurrencyRates } from '../currency/cbrRates';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
@@ -422,6 +424,17 @@ const handleListCatalogSources: Handler = async (
   };
 };
 
+/** CPO 27.10: курсы ЦБ для пересчёта порога фильтра «Зарплата»; null до первой записи. */
+const handleCurrencyRates: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  return { data: getCurrencyRates() ?? null, meta: { requestId: request.id } };
+};
+
 const handleListSubscriptions: Handler = async (
   { authService, candidateStore, config },
   request,
@@ -666,6 +679,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   registerVacancyApplicationRoutes(app, deps);
   registerSavedVacancyStateRoutes(app, deps);
   registerApplicationRoutes(app, deps);
+  registerResumeBuilderRoutes(app, deps);
   registerPlanRequestRoutes(app, deps);
   registerExecutiveRequestRoutes(app, deps);
   registerCampaignRoutes(app, deps);
@@ -677,6 +691,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   );
   app.get('/api/v1/candidate/vacancy-sources', withDeps(deps, handleListSources));
   app.get('/api/v1/candidate/vacancy-catalog-sources', withDeps(deps, handleListCatalogSources));
+  app.get('/api/v1/candidate/currency-rates', withDeps(deps, handleCurrencyRates));
   registerVacancySubscriptionRoutes(app, deps);
   registerRecruiterIntelligenceRoutes(app, deps);
   registerMatchedVacancyRoutes(app, deps);

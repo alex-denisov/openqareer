@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { emptyVacancyMechanicsStats, formatVacancyMechanicsStats } from './vacancyMechanicsStats';
 
 describe('vacancy mechanics batch journal line', () => {
+  it('names the reserve lane and why OpenRouter was skipped', () => {
+    const line = formatVacancyMechanicsStats(
+      {
+        ...emptyVacancyMechanicsStats(),
+        requirementsDone: 1,
+        llmCalls: 1,
+        llmMs: 10,
+        lastModel: 'gemini-3.8-flash',
+        providers: ['gemini'],
+        fallbackCalls: 1,
+        fallbackReason: 'openrouter_402',
+      },
+      60_000,
+    );
+    expect(line).toContain('fallback=gemini reason=openrouter_402 fallback_calls=1');
+  });
   it('stays silent for an idle batch', () => {
     expect(formatVacancyMechanicsStats(emptyVacancyMechanicsStats(), 60_000)).toBeNull();
   });

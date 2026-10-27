@@ -167,7 +167,7 @@ function VacancyGroup({ props }: { readonly props: CompanyMobilePushProps }) {
             data-company-vacancy={vacancy.id}
             icon={<Briefcase aria-hidden="true" />}
             title={vacancy.title}
-            sub={`${vacancy.location ?? 'Место неизвестно'} · ${vacancy.sourceName}, ${formatObservedDate(vacancy.sourceDate)}`}
+            sub={`${companyLocationLabel(vacancy.location)} · ${vacancy.sourceName}, ${formatObservedDate(vacancy.sourceDate)}`}
             onClick={vacancy.href ? () => void openExternalLink(vacancy.href) : undefined}
           />
         ))}

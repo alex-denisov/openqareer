@@ -16,6 +16,7 @@ import type {
   CandidateCompanyRecruiter,
 } from '../../../shared/candidateCompany';
 import { pluralRu } from '../../../shared/pluralRu';
+import { RecruiterChannelList } from './RecruiterChannelList';
 import { SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
 import {
   CompanyPeopleCards,
@@ -99,6 +100,7 @@ function RecruiterCard({
           <LinkSimple aria-hidden="true" /> {person.sourceLabel},{' '}
           {formatObservedDate(person.sourceDate)}
         </small>
+        <RecruiterChannelList channels={person.channels ?? []} />
         <div className="companies-people-actions">
           <span className="companies-people-circle-badge">Круг 3</span>
           {vacancy && onOpenLetter ? (

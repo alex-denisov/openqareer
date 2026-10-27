@@ -107,6 +107,14 @@ describe('company domain', () => {
     expect(domain).toBe('jpmorganchase.com');
   });
 
+  it('does not take a job board host for the company domain', async () => {
+    const domain = await resolveCompanyDomain(
+      { id: 'v', company: 'Veeva Systems', url: 'https://himalayas.app/companies/veeva/jobs/1' },
+      mx({ 'veevasystems.com': true }),
+    );
+    expect(domain).toBe('veevasystems.com');
+  });
+
   it('keeps a real company site from the vacancy link', async () => {
     const domain = await resolveCompanyDomain(
       { id: 'v', company: 'Acme', url: 'https://careers.acme.io/jobs/1' },
@@ -145,6 +153,36 @@ describe('company site finder', () => {
     expect(await findSite('JPMorganChase')).toBe('jpmorganchase.com');
     expect(await findSite('jpmorganchase')).toBe('jpmorganchase.com');
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('searches a Russian company in Russian and prefers its .ru site', async () => {
+    const repository = createRepository();
+    const fetch = exaFetch([site('https://ancor.org/about'), site('https://www.ancor.ru/')]);
+    const findSite = createCompanySiteFinder({
+      repository,
+      apiKey: 'test-key',
+      fetch,
+      requestGate: new FootprintRequestGate({ intervalMs: 0 }),
+      now: () => now,
+      resolveMx: async () => [{ exchange: 'mx', priority: 1 }],
+    });
+
+    expect(await findSite('ANCOR', 'ru')).toBe('ancor.ru');
+    expect(JSON.stringify(fetch.mock.calls)).toContain('официальный сайт');
+  });
+
+  it('treats an hh.ru vacancy as a Russian company', async () => {
+    const seen: string[] = [];
+    const domain = await resolveCompanyDomain(
+      { id: 'v', company: 'ANCOR', url: 'https://hh.ru/vacancy/138649447' },
+      async () => [{ exchange: 'mx', priority: 1 }],
+      async (_company, market) => {
+        seen.push(market ?? 'global');
+        return undefined;
+      },
+    );
+    expect(seen).toEqual(['ru']);
+    expect(domain).toBe('ancor.ru');
   });
 
   it('remembers a miss so a company without a site is not searched again', async () => {

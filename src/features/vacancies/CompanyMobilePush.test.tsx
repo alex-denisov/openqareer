@@ -160,6 +160,14 @@ describe('CompanyMobilePush (mockup 13, 390 mv=main|none|found|noli)', () => {
     expect(document.body.textContent).not.toContain('Все 12 вакансий компании');
   });
 
+  it('vacancy row place reads in Russian, as on 1440', () => {
+    render({
+      company: { ...company, vacancies: [{ ...vacancy, location: '5 Locations' }] },
+    });
+    expect(document.body.textContent).toContain('5 локаций');
+    expect(document.body.textContent).not.toContain('5 Locations');
+  });
+
   it('has one primary action: write to the first circle-1 person', () => {
     const props = render();
     const primary = document.querySelectorAll('.vacancy-push-primary');

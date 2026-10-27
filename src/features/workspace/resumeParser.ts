@@ -1,7 +1,14 @@
 import {
+  ROLE_TITLE_WORDS,
   SECTION_DELIMITERS,
   sectionLookahead,
 } from './resumeParserConstants';
+import {
+  joinWrappedLines,
+  readSplitDateColumn,
+  readSplitHeader,
+  SPLIT_START_LINE,
+} from './resumeParserHhSplit';
 import { normalizeResumeSourceText } from './resumeSourceText';
 import type {
   ParsedResume,
@@ -32,13 +39,58 @@ export type {
   ProfileFactDraft,
 } from './resumeParserTypes';
 
+const EXPERIENCE_HEADERS = new Set([
+  'опыт работы',
+  'experience',
+  'work experience',
+  'professional experience',
+]);
+const ABOUT_HEADERS = new Set(['о себе', 'обо мне', 'about me', 'about', 'summary']);
+const INLINE_ONLY_HEADERS = new Set(['знание языков']);
+
+/**
+ * A candidate may open a place's description with «О себе …». Inside work
+ * experience that is prose of the place, not the start of a section: read as a
+ * heading, it swallowed every later place into «О себе» (owner report, 2026-10-27).
+ */
+function isDescriptionInsideExperience(
+  currentHeader: string,
+  matchedHeader: string,
+  line: string,
+  morePlacesFollow: boolean,
+): boolean {
+  return (
+    EXPERIENCE_HEADERS.has(currentHeader.toLowerCase()) &&
+    ABOUT_HEADERS.has(matchedHeader.toLowerCase()) &&
+    (line.length > matchedHeader.length || morePlacesFollow)
+  );
+}
+
+function lastPeriodLineIndex(lines: string[]): number {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (SPLIT_START_LINE.test(line) || SINGLE_DATE_REGEX.test(line) || HH_START_DATE_REGEX.test(line)) return i;
+  }
+  return -1;
+}
+
+/** hh.ru repeats «Имя • Резюме обновлено 27 октября 2026 в 09:39» at every page break. */
+const HH_PAGE_FOOTER = /^.*Резюме обновлено \d{1,2}\s+[А-Яа-яЁё]+\s+\d{4}(?:\s+в\s+\d{1,2}:\d{2})?\s*$/gmu;
+
+function appendSection(sections: Map<string, string>, header: string, body: string): void {
+  const key = header.toLowerCase();
+  const existing = sections.get(key);
+  sections.set(key, existing ? `${existing}\n${body}` : body);
+}
+
 function parseDocumentSections(text: string): Map<string, string> {
   const sections = new Map<string, string>();
   const lines = text.split('\n');
   let currentHeader = '__preamble__';
   let currentLines: string[] = [];
+  const lastPeriodLine = lastPeriodLineIndex(lines);
 
-  for (const rawLine of lines) {
+  for (const [index, rawLine] of lines.entries()) {
     const trimmed = rawLine.trim();
     if (!trimmed) {
       currentLines.push('');
@@ -52,13 +104,19 @@ function parseDocumentSections(text: string): Map<string, string> {
         (tLow.startsWith(hLow) && /[\s:—–\d,(]/.test(tLow[hLow.length] || ''))
       );
     });
+    if (matchedHeader && isDescriptionInsideExperience(currentHeader, matchedHeader, trimmed, index < lastPeriodLine)) {
+      currentLines.push(rawLine);
+      continue;
+    }
+    if (matchedHeader && INLINE_ONLY_HEADERS.has(matchedHeader.toLowerCase()) && trimmed.length > matchedHeader.length) {
+      // hh.ru prints every language on the heading's own line, inside «Навыки»;
+      // the skills that follow still belong to «Навыки», not to languages.
+      appendSection(sections, matchedHeader, rawLine);
+      continue;
+    }
     if (matchedHeader) {
       if (currentLines.length > 0) {
-        const existing = sections.get(currentHeader.toLowerCase()) ?? '';
-        sections.set(
-          currentHeader.toLowerCase(),
-          existing ? `${existing}\n${currentLines.join('\n').trim()}` : currentLines.join('\n').trim(),
-        );
+        appendSection(sections, currentHeader, currentLines.join('\n').trim());
       }
       currentHeader = matchedHeader;
       const isStandalone = trimmed.toLowerCase() === matchedHeader.toLowerCase();
@@ -69,22 +127,12 @@ function parseDocumentSections(text: string): Map<string, string> {
   }
 
   if (currentLines.length > 0) {
-    const existing = sections.get(currentHeader.toLowerCase()) ?? '';
-    sections.set(
-      currentHeader.toLowerCase(),
-      existing ? `${existing}\n${currentLines.join('\n').trim()}` : currentLines.join('\n').trim(),
-    );
+    appendSection(sections, currentHeader, currentLines.join('\n').trim());
   }
 
   return sections;
 }
 
-/**
- * Words that make a line read as the name of a role rather than a company, an
- * industry or a sentence about the work.
- */
-const ROLE_TITLE_WORDS =
-  /директор|руководител|начальник|менеджер|продакт|продукт|разработчик|инженер|аналитик|лид|дизайнер|архитектор|администратор|head|lead|director|manager|developer|engineer|specialist|officer|owner|architect|vp|cto|cio|ceo|coo|founder|consultant/iu;
 
 // eslint-disable-next-line max-lines-per-function
 export function parseResumeContent(rawText: string): ParsedResume {
@@ -92,6 +140,7 @@ export function parseResumeContent(rawText: string): ParsedResume {
   const cleanText = normalizeResumeSourceText(rawText)
     .replace(/Page \d+ of \d+/giu, '')
     .replace(/Страница \d+ из \d+/giu, '')
+    .replace(HH_PAGE_FOOTER, '')
     .trim();
   const lines = cleanText.split('\n').map((line) => line.trim()).filter(Boolean);
   const sections = parseDocumentSections(cleanText);
@@ -434,6 +483,13 @@ function extractExperience(text: string): ParsedResumeExperience[] {
       continue;
     }
 
+    const split = readSplitDateColumn(lines, i);
+    if (split) {
+      dateEntries.push(split);
+      i += split.skipLines;
+      continue;
+    }
+
     const hhMatch = line.match(HH_START_DATE_REGEX);
     if (hhMatch && i + 1 < lines.length) {
       const nextLine = lines[i + 1];
@@ -463,9 +519,9 @@ function extractExperience(text: string): ParsedResumeExperience[] {
     let employer = entry.employer;
     let title = entry.inlineTitle;
     let bodyStartIdx = entry.lineIdx + 1 + entry.skipLines;
-    let headerLocation: string | undefined;
+    let headerLocation: string | undefined = entry.location;
 
-    if (!employer || !title) {
+    if ((!employer || !title) && !entry.headerAfterDate) {
       const headerLines: string[] = [];
       for (let k = entry.lineIdx - 1; k > prevEntryIdx; k--) {
         const l = lines[k];
@@ -500,6 +556,13 @@ function extractExperience(text: string): ParsedResumeExperience[] {
           headerLocation = oneLine.location;
         } else if (!employer) employer = headerLines[0];
       }
+    }
+
+    if (entry.headerAfterDate && !title) {
+      const header = readSplitHeader(lines, bodyStartIdx, nextEntryIdx);
+      title = header.title;
+      headerLocation ??= header.location;
+      bodyStartIdx = header.bodyStartIdx;
     }
 
     if (!employer || !title) {
@@ -586,7 +649,7 @@ function extractExperience(text: string): ParsedResumeExperience[] {
     const achievements: string[] = [];
 
     let nextHeaderLinesCount = 0;
-    if (d + 1 < dateEntries.length) {
+    if (d + 1 < dateEntries.length && !dateEntries[d + 1].headerAfterDate) {
       for (let k = nextEntryIdx - 1; k >= bodyStartIdx; k--) {
         const l = lines[k];
         if (l.startsWith('•') || l.startsWith('-') || l.startsWith('*') || l.startsWith('●') || l.length > 100) {
@@ -598,12 +661,12 @@ function extractExperience(text: string): ParsedResumeExperience[] {
     }
     const bodyEnd = nextEntryIdx - nextHeaderLinesCount;
 
-    for (let j = bodyStartIdx; j < bodyEnd; j++) {
-      const line = lines[j];
+    const body = lines.slice(bodyStartIdx, Math.max(bodyStartIdx, bodyEnd));
+    for (const line of entry.headerAfterDate ? joinWrappedLines(body) : body) {
       if (/^(?:page \d+|\d+\s+yrs?|\d+\s+mos?|full-time|part-time|contract)/iu.test(line) && line.length < 30) {
         continue;
       }
-      if (!location && !line.startsWith('•') && !line.startsWith('-') && !line.startsWith('●') && line.length < 50 && /^[A-Za-zА-Яа-яЁё\s,.-]+$/u.test(line)) {
+      if (!location && !entry.headerAfterDate && !line.startsWith('•') && !line.startsWith('-') && !line.startsWith('●') && line.length < 50 && /^[A-Za-zА-Яа-яЁё\s,.-]+$/u.test(line)) {
         location = line;
         continue;
       }

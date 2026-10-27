@@ -83,6 +83,12 @@ export interface HhCrawlCoordinatorDeps {
   readonly sourceName?: string;
   /** Знает ли пул запись с таким id — правило остановки быстрого прохода. */
   readonly isKnown?: (id: string) => boolean;
+  /**
+   * Названия ролей, которые кандидаты выбрали или получили от консультанта
+   * (27.10). Справочник hh не знает «Head of AI Engineering», поэтому такие
+   * роли ищутся по названию вакансии на каждом тике.
+   */
+  readonly demandTerms?: () => readonly string[];
 }
 
 export interface HhCollectResult {
@@ -99,6 +105,9 @@ export interface HhCollectResult {
 }
 
 export class HhCrawlCoordinator {
+  /** Откуда начать круг по названиям на следующем тике. */
+  private demandOffset = 0;
+
   constructor(
     private readonly settings: HhCrawlSettingsStore,
     private readonly deps: HhCrawlCoordinatorDeps,
@@ -119,7 +128,15 @@ export class HhCrawlCoordinator {
     // же: на холодном пуле хвосты 133 ролей — это тысячи страниц, и без предела
     // первый тик после выката шёл бы часы.
     const freshPlan = planFreshSweep(roleIds);
-    const fresh = await this.runSweep(freshPlan, FRESH_PERIOD_DAYS, now, mode, { deadlineMs });
+    const byRole = await this.runSweep(freshPlan, FRESH_PERIOD_DAYS, now, mode, { deadlineMs });
+    const demandPlan = planDemandSweep(this.nextDemandTerms());
+    const fresh =
+      demandPlan.queries.length === 0
+        ? byRole
+        : mergeResults(
+            byRole,
+            await this.runSweep(demandPlan, settings.searchPeriodDays, now, mode, { deadlineMs }),
+          );
     if (mode === 'fresh') return collected(mode, fresh, freshPlan, true);
 
     return this.continueFullSweep(
@@ -130,6 +147,15 @@ export class HhCrawlCoordinator {
       deadlineMs,
       fresh,
     );
+  }
+
+  /** Следующие названия по кругу: за несколько тиков обходится весь спрос. */
+  private nextDemandTerms(): readonly string[] {
+    const terms = this.deps.demandTerms?.() ?? [];
+    if (terms.length <= DEMAND_TERMS_PER_TICK) return terms;
+    const start = this.demandOffset % terms.length;
+    this.demandOffset = start + DEMAND_TERMS_PER_TICK;
+    return [...terms.slice(start), ...terms.slice(0, start)];
   }
 
   private async continueFullSweep(
@@ -419,6 +445,28 @@ function sameRoles(a: readonly string[], b: readonly string[]): boolean {
  * выдачи, пока на странице попадается неизвестное пулу. Пустая страница
  * обрывает роль, поэтому у маленьких ролей лишних обращений не будет.
  */
+/** Страниц на одно название: выдача свежими первыми, дальше — уже известное. */
+const DEMAND_MAX_PAGES = 4;
+/** Названий за тик: тик идёт раз в несколько минут, спрос обходится по кругу. */
+const DEMAND_TERMS_PER_TICK = 12;
+
+function planDemandSweep(terms: readonly string[]): HhCrawlPlan {
+  const queries = terms.slice(0, DEMAND_TERMS_PER_TICK).map((text) => ({
+    roleId: '',
+    text,
+    totalResults: DEMAND_MAX_PAGES * 50,
+    pages: DEMAND_MAX_PAGES,
+    truncated: false,
+    stopWhenNothingNewAfter: FRESH_MIN_PAGES,
+  }));
+  return {
+    queries,
+    expectedResults: queries.length * DEMAND_MAX_PAGES * 50,
+    expectedPages: queries.length * DEMAND_MAX_PAGES,
+    truncatedQueries: 0,
+  };
+}
+
 function planFreshSweep(roleIds: readonly string[]): HhCrawlPlan {
   const queries = roleIds.map((roleId) => ({
     roleId,

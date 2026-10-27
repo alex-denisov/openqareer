@@ -14,6 +14,7 @@ import '@fontsource/onest/latin-700.css';
 import './features/site/publicSite.css';
 import './features/site/countryFitPage.css';
 import './features/site/salaryMarketPage.css';
+import './features/site/interviewQuestions.css';
 import './features/shell/session-gate.css';
 import './features/desktopNotify/desktopNotificationService';
 import { loadAuthPages } from './features/site/authPagesLoader';
@@ -53,5 +54,7 @@ if (!isTauriEnvironment() && ['/login', '/signup'].includes(window.location.path
 
 if (isTauriEnvironment()) {
   // B359: one updater for the window; «Сегодня» shows its strip.
-  void import('./features/appUpdate/useDesktopUpdater').then(({ desktopUpdater }) => desktopUpdater.start());
+  void import('./features/appUpdate/useDesktopUpdater').then(({ desktopUpdater }) =>
+    desktopUpdater.start(),
+  );
 }

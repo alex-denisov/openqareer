@@ -2,8 +2,17 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import type { SourceReading } from './multiSourceVacancyEngine';
 import { buildJsonVacancy, fromIso, isUsableVacancy } from './jsonVacancyRecord';
 import { LINKEDIN_GUEST_URL } from './jobspyEndpoints';
-import { FAN_SIZE, type FanCombo, fanComboAt, fanStartIndex } from './jobspyFan';
-import { linkedinProviderCapability, type LinkedinProviderCapabilityVerdict } from '../crawler/linkedinProviderCapability';
+import {
+  FAN_SIZE,
+  type FanCombo,
+  currentFanDemand,
+  fanComboAt,
+  fanCombosForSync,
+} from './jobspyFan';
+import {
+  linkedinProviderCapability,
+  type LinkedinProviderCapabilityVerdict,
+} from '../crawler/linkedinProviderCapability';
 
 /**
  * LinkedIn — гостевой список вакансий (B218). Механика JobSpy: адрес
@@ -122,6 +131,8 @@ export interface LinkedinFetchDeps {
   readonly observedAt: string;
   /** Test/provider adapter must opt in explicitly; the default is fail-closed. */
   readonly providerCapability?: LinkedinProviderCapabilityVerdict;
+  /** Роли спроса; без них — то, что подключил обслуживатель пула. */
+  readonly demandTerms?: readonly string[];
 }
 
 export async function fetchLinkedinGuest(
@@ -132,15 +143,20 @@ export async function fetchLinkedinGuest(
   if (capability === 'not_configured') {
     return { vacancies: [], partial: true };
   }
-  const startIndex = fanStartIndex(nowMs, LINKEDIN_INTERVAL_MINUTES, LINKEDIN_COMBOS_PER_SYNC);
+  // Сначала роли кандидатов, затем окно веера (27.10).
+  const combos = fanCombosForSync(
+    nowMs,
+    LINKEDIN_INTERVAL_MINUTES,
+    LINKEDIN_COMBOS_PER_SYNC,
+    deps.demandTerms ?? currentFanDemand(),
+  );
   const vacancies: UnifiedVacancy[] = [];
   // Веер шире одного опроса, поэтому чтение частичное: движок дополняет срез,
   // а не заменяет его — иначе каждый опрос стирал бы прошлые комбинации.
   let partial = true;
   let requests = 0;
 
-  for (let step = 0; step < LINKEDIN_COMBOS_PER_SYNC; step += 1) {
-    const combo = fanComboAt(startIndex + step);
+  for (const combo of combos) {
     for (let page = 0; page < LINKEDIN_PAGES_PER_COMBO; page += 1) {
       const start = page * LINKEDIN_PAGE;
       // Джиттер: LinkedIn быстро отдаёт 429 ровному такту (B218 security-review).

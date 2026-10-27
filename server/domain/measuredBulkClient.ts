@@ -20,6 +20,10 @@ export function measuredBulkClient(
         record.providers = record.providers.includes(result.provider)
           ? record.providers
           : [...record.providers, result.provider];
+        if (result.fallbackReason) {
+          record.fallbackCalls += 1;
+          record.fallbackReason = result.fallbackReason;
+        }
         return result;
       } catch (error) {
         record.llmFailed += 1;

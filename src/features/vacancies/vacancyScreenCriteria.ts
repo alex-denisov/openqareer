@@ -9,6 +9,7 @@ import {
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
 import { matchesVacancyCity } from './vacancyFacets';
 import { matchesLocationSelection } from '../../../shared/locationTree';
+import { convertAmount, type CurrencyRates } from '../../../shared/currencyRates';
 
 export interface VacancyScreenFilterOptions {
   readonly locations: readonly {
@@ -59,34 +60,62 @@ export function defaultSalaryCurrency(
   return match ?? currencies[0] ?? '';
 }
 
-function sameCurrency(currency: string | undefined, wanted: string | undefined): boolean {
-  if (!wanted) return true;
-  return (
-    currency !== undefined && normalizeSalaryCurrency(currency) === normalizeSalaryCurrency(wanted)
+/** Сумма вакансии в валюте порога: та же валюта как есть, другая — по курсу ЦБ (CPO 27.10). */
+function inWantedCurrency(
+  amount: number | undefined,
+  currency: string | undefined,
+  wanted: string | undefined,
+  rates: CurrencyRates | undefined,
+): number | undefined {
+  if (amount === undefined || !wanted) return amount;
+  if (currency === undefined) return undefined;
+  return convertAmount(
+    amount,
+    normalizeSalaryCurrency(currency),
+    normalizeSalaryCurrency(wanted),
+    rates,
   );
+}
+
+function convertedRange(
+  lower: number | undefined,
+  upper: number | undefined,
+  currency: string | undefined,
+  state: VacanciesScreenState,
+  rates: CurrencyRates | undefined,
+): { readonly lower?: number; readonly upper?: number } | undefined {
+  const low = inWantedCurrency(lower, currency, state.salaryCurrency, rates);
+  const high = inWantedCurrency(upper, currency, state.salaryCurrency, rates);
+  if (low === undefined && high === undefined) return undefined;
+  return { lower: low, upper: high };
 }
 
 /** Stated salary, or the market estimate when the candidate asked to compare by it (B546). */
 function comparableSalary(
   item: MatchedVacancyItem,
   state: VacanciesScreenState,
+  rates: CurrencyRates | undefined,
 ): { readonly lower?: number; readonly upper?: number } | undefined {
   const salary = item.cluster.salary;
   if (salary) {
-    if (!sameCurrency(salary.currency, state.salaryCurrency)) return undefined;
-    return { lower: salary.from ?? salary.to, upper: salary.to ?? salary.from };
+    const lower = salary.from ?? salary.to;
+    const upper = salary.to ?? salary.from;
+    return convertedRange(lower, upper, salary.currency, state, rates);
   }
   const estimate = item.explanation.marketSalary;
   if (!state.useMarketEstimate || estimate?.low === undefined || estimate.high === undefined) {
     return undefined;
   }
-  if (!sameCurrency(estimate.currency, state.salaryCurrency)) return undefined;
-  return { lower: estimate.low, upper: estimate.high };
+  return convertedRange(estimate.low, estimate.high, estimate.currency, state, rates);
 }
 
-function matchesSalaryRange(item: MatchedVacancyItem, state: VacanciesScreenState): boolean {
+function matchesSalaryRange(
+  item: MatchedVacancyItem,
+  state: VacanciesScreenState,
+  rates: CurrencyRates | undefined,
+): boolean {
   if (state.salaryMinimum === undefined && state.salaryMaximum === undefined) return true;
-  const range = comparableSalary(item, state);
+  const range = comparableSalary(item, state, rates);
   if (!range) return Boolean(state.includeMissingSalary);
   if (state.salaryMinimum !== undefined && (range.upper ?? -Infinity) < state.salaryMinimum)
     return false;
@@ -136,6 +165,7 @@ function matchesScreenCriteria(
   item: MatchedVacancyItem,
   state: VacanciesScreenState,
   allItems: readonly MatchedVacancyItem[],
+  rates: CurrencyRates | undefined,
 ): boolean {
   const { cluster } = item;
   if (
@@ -150,7 +180,7 @@ function matchesScreenCriteria(
     !cluster.sources.some((source) => state.sources?.includes(source.sourceId))
   )
     return false;
-  if (!matchesScreenLocation(item, state, allItems) || !matchesSalaryRange(item, state))
+  if (!matchesScreenLocation(item, state, allItems) || !matchesSalaryRange(item, state, rates))
     return false;
   return !state.formats?.length || state.formats.includes(vacancyFormat(item));
 }
@@ -159,10 +189,11 @@ export function filterByScreenState(
   items: readonly MatchedVacancyItem[],
   state: VacanciesScreenState,
   now: string,
+  rates?: CurrencyRates,
 ): MatchedVacancyItem[] {
   void now;
   return filterVacanciesByDecisionProfile(items, loadDecisionProfile()).filter((item) =>
-    matchesScreenCriteria(item, state, items),
+    matchesScreenCriteria(item, state, items, rates),
   );
 }
 

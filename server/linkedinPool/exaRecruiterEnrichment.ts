@@ -1,3 +1,4 @@
+import { personNameFromTitle } from '../../shared/personName';
 import type { DatabaseSync } from 'node:sqlite';
 import { searchExaPeople } from '../osint/adapters/exaAdapter';
 import type { FootprintRequestGate } from '../osint/adapters/requestScheduler';
@@ -161,7 +162,7 @@ export async function enrichRecruitersFromExa(input: ExaEnrichmentInput): Promis
   for (const hit of hits) {
     const linkedinUrl = normalizeExaLinkedinUrl(hit.url);
     const profile = parseExaProfileText(hit.text);
-    const fullName = hit.title.trim();
+    const fullName = personNameFromTitle(hit.title);
     if (!linkedinUrl || !profile || !fullName || fullName.length > 200) continue;
     if (!acceptsProfile(profile, input.companyName)) continue;
     const stored = savePoolCompanyRecruiter(input.repository, {

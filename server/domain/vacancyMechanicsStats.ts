@@ -18,6 +18,9 @@ export interface VacancyMechanicsStats {
   llmMs: number;
   lastModel: string | null;
   providers: string[];
+  /** Calls answered by the reserve lane, and why OpenRouter was skipped last (27.10). */
+  fallbackCalls: number;
+  fallbackReason: string | null;
 }
 
 export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
@@ -38,6 +41,8 @@ export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
     llmMs: 0,
     lastModel: null,
     providers: [],
+    fallbackCalls: 0,
+    fallbackReason: null,
   };
 }
 
@@ -48,21 +53,25 @@ function issuesPart(issues: Readonly<Record<string, number>>): string {
   return parts.length ? ` extract_issues=${parts.join(',')}` : '';
 }
 
+function fallbackPart(stats: VacancyMechanicsStats): string {
+  return stats.fallbackCalls
+    ? ` fallback=gemini reason=${stats.fallbackReason ?? 'unknown'} fallback_calls=${stats.fallbackCalls}`
+    : '';
+}
+
 function modelPart(stats: VacancyMechanicsStats): string {
   if (stats.llmCalls === 0) return '';
   const extractions =
     stats.requirementsDone + stats.requirementsUnavailable + stats.requirementsInvalid;
   const failedShare = extractions
-    ? Math.round(
-        ((stats.requirementsUnavailable + stats.requirementsInvalid) / extractions) * 100,
-      )
+    ? Math.round(((stats.requirementsUnavailable + stats.requirementsInvalid) / extractions) * 100)
     : 0;
   return (
     ` | model=${stats.lastModel ?? 'unknown'} providers=${stats.providers.join(',') || 'unknown'} ` +
     `llm_calls=${stats.llmCalls} llm_failed=${stats.llmFailed} ` +
     `llm_avg_ms=${Math.round(stats.llmMs / stats.llmCalls)} ` +
     `extract_unavailable=${stats.requirementsUnavailable} extract_invalid=${stats.requirementsInvalid} ` +
-    `extract_failed_share=${failedShare}%${stats.budgetPaused ? ` extract_budget_paused=${stats.budgetPaused}` : ''}${issuesPart(stats.modelIssues)}`
+    `extract_failed_share=${failedShare}%${fallbackPart(stats)}${stats.budgetPaused ? ` extract_budget_paused=${stats.budgetPaused}` : ''}${issuesPart(stats.modelIssues)}`
   );
 }
 

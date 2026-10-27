@@ -64,3 +64,11 @@ describe('роли по всему опыту кандидата (26.10)', () =>
     expect(roleNamingSchema.safeParse({ roles }).success).toBe(true);
   });
 });
+
+describe('уровень названных ролей (27.10)', () => {
+  it('просит роли на уровне, до которого кандидат дорос, а не роли специалиста', () => {
+    const text = roleNamingInstructions('ru');
+    expect(text).toContain('самому высокому уровню');
+    expect(text).toContain('Head of AI');
+  });
+});

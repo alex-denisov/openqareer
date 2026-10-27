@@ -278,10 +278,11 @@ describe('роли «Карьеры» в подборе (26.10)', () => {
     expect(resolved.roles.value).toEqual(['Head of Engineering']);
   });
 
-  it('разные названия одной функции и уровня — одна роль подбора', () => {
+  it('предложенная роль той же функции и уровня, что выбранная, — повтор; выбор не сводится', () => {
     const keys: Record<string, string> = {
-      'Chief Operating Officer': 'ops.coo',
-      'Операционный директор': 'ops.coo',
+      'Chief Operating Officer': 'ops:lead',
+      'Операционный директор': 'ops:lead',
+      'Director of Operations': 'ops:lead',
     };
     const resolved = resolveCampaign({
       memory: [],
@@ -289,12 +290,19 @@ describe('роли «Карьеры» в подборе (26.10)', () => {
       explicit: {
         ...explicit,
         roles: ['Операционный директор', 'Chief Operating Officer'],
-        careerRoles: [{ id: careerRoleId('Chief of Staff'), title: 'Chief of Staff' }],
+        careerRoles: [
+          { id: careerRoleId('Director of Operations'), title: 'Director of Operations' },
+          { id: careerRoleId('Chief of Staff'), title: 'Chief of Staff' },
+        ],
       },
       roleIdOf: careerRoleId,
       roleKeyOf: (title) => keys[title] ?? null,
     });
-    expect(resolved.roles.value).toEqual(['Операционный директор', 'Chief of Staff']);
+    expect(resolved.roles.value).toEqual([
+      'Операционный директор',
+      'Chief Operating Officer',
+      'Chief of Staff',
+    ]);
   });
 });
 

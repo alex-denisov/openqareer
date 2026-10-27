@@ -3,6 +3,7 @@ import { buildApp } from './app';
 import type { SessionAuth } from './auth/authService';
 import type { ServerConfig } from './config';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import type { SqliteBillingRepository } from './billing/sqliteBillingRepository';
 import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import type { ResumeStudioProjection } from './domain/resumeStudio';
@@ -81,7 +82,10 @@ afterEach(async () => {
   stores.splice(0).forEach((store) => store.close());
 });
 
-async function createApp(resumeStructurer?: ResumeStructurer) {
+async function createApp(
+  resumeStructurer?: ResumeStructurer,
+  billing?: { billingEnforcement: true; billingRepository: SqliteBillingRepository },
+) {
   const store = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: config.dataEncryptionKey,
@@ -91,12 +95,13 @@ async function createApp(resumeStructurer?: ResumeStructurer) {
     locale: 'ru-RU',
   });
   const app = await buildApp({
-    config,
+    config: billing ? { ...config, billingEnforcement: true } : config,
     coachProvider: unusedProvider,
     candidateStore: store,
     authService: noSessions,
     serveStatic: false,
     resumeStructurer,
+    ...(billing ? { billingRepository: billing.billingRepository } : {}),
   });
   apps.push(app);
   stores.push(store);
@@ -181,6 +186,30 @@ describe('POST /api/v1/candidate/resume/import', () => {
       method: 'model',
       model: 'openai:gpt-5.6-mini',
     });
+  });
+
+  it('reads the document with the model on the free plan too: the wizard runs before any plan', async () => {
+    const structurer: ResumeStructurer = {
+      provenance: { model: 'openai:gpt-5.6-mini', promptRevision: 'resume-structuring-v1' },
+      async structure() {
+        return { ...parseResumeContent(LINKEDIN_MARKDOWN), rawText: LINKEDIN_MARKDOWN };
+      },
+    };
+    const freePlan = { canCandidateUseLlm: () => false } as unknown as SqliteBillingRepository;
+    const { app, authorization } = await createApp(structurer, {
+      billingEnforcement: true,
+      billingRepository: freePlan,
+    });
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: importBody(),
+    });
+
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().data.resume.reader).toMatchObject({ method: 'model' });
   });
 
   it('records rules rather than inventing a model when no structurer is configured (B184)', async () => {

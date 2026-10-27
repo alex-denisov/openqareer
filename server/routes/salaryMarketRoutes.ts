@@ -193,6 +193,15 @@ export function loadPublicSalaryIndex(databasePath: string): readonly SalaryMark
     database.close();
   }
 }
+/**
+ * The page is never hydrated, so the brand sign in the header and footer can be
+ * the existing favicon (same measured geometry) instead of two inline SVGs —
+ * as on /tools/country-fit. It keeps the 20 KB budget for the chrome's links.
+ */
+const BRAND_SIGN = /<svg class="brand-lockup-sign"[^]*?<\/svg>/gu;
+const BRAND_SIGN_IMAGE =
+  '<img class="brand-lockup-sign" src="/favicon.svg" width="26" height="26" alt="" aria-hidden="true"/>';
+
 export function renderSalaryMarketDocument(
   template: string,
   snapshot: SalaryMarketSnapshot | null,
@@ -227,6 +236,7 @@ export function renderSalaryMarketDocument(
         }),
   );
   return salaryDocumentHead(template, { title, canonical, robots, structured })
+    .replace(BRAND_SIGN, BRAND_SIGN_IMAGE)
     .replace('%%SALARY_CONTENT%%', () => content)
     .replace('</body>', '<script type="module" src="/assets/oq-salary-gap-2.js"></script></body>');
 }

@@ -348,36 +348,62 @@ function ControlSection() {
   );
 }
 
+interface ToolCardProps {
+  readonly href: string;
+  readonly title: string;
+  readonly go: string;
+  readonly children: React.ReactNode;
+}
+
+function ToolCard({ href, title, go, children }: ToolCardProps) {
+  return (
+    <a className="ps-tool" href={href}>
+      <span className="ps-chip is-ok">работает</span>
+      <h3>{title}</h3>
+      <p>{children}</p>
+      <span className="ps-go">{go}</span>
+    </a>
+  );
+}
+
 function ToolsSection({ remote }: { remote: string }) {
   return (
     <section className="ps-section" id="tools" aria-labelledby="tools-heading">
       <div className="ps-wrap">
         <div className="ps-sh">
           <div>
-            <p className="ps-label">Инструменты</p>
-            <h2 id="tools-heading">Каталог вакансий без регистрации</h2>
+            <p className="ps-label">Без регистрации</p>
+            <h2 id="tools-heading">Бесплатные инструменты для поиска работы</h2>
           </div>
-          <p>Свежие вакансии по ролям, городам и странам: источник и дата у каждой.</p>
+          <p>Открыты всем: свежие вакансии с источником и датой и резюме с проверкой на ATS.</p>
         </div>
         <div className="ps-tools">
-          <a className="ps-tool" href="/vacancies">
-            <span className="ps-chip is-ok">работает</span>
-            <h3>Каталог вакансий</h3>
-            <p>
-              Открытая часть пула: вакансии по городам и ролям, зарплата, где она указана, дата и
-              прямая ссылка на источник. Полный пул и процент совпадения: в кабинете.
-            </p>
-            <span className="ps-go">Открыть каталог →</span>
-          </a>
-          <a className="ps-tool" href="/vacancies/remote">
-            <span className="ps-chip is-ok">работает</span>
-            <h3>Удалённые вакансии</h3>
-            <p>
-              {remote} удалённых вакансий в пуле, в том числе за рубежом. В каталоге открыта их
-              часть: роль, зарплата, источник.
-            </p>
-            <span className="ps-go">Открыть удалённые →</span>
-          </a>
+          <ToolCard href="/vacancies" title="Каталог вакансий" go="Открыть каталог →">
+            Открытая часть пула: вакансии по городам и ролям, зарплата, где она указана, дата и
+            прямая ссылка на источник. Полный пул и процент совпадения: в кабинете.
+          </ToolCard>
+          <ToolCard href="/vacancies/remote" title="Удалённые вакансии" go="Открыть удалённые →">
+            {remote} удалённых вакансий в пуле, в том числе за рубежом. В каталоге открыта их часть:
+            роль, зарплата, источник.
+          </ToolCard>
+          <ToolCard
+            href="/tools/interview-questions"
+            title="Вопросы на собеседовании"
+            go="Открыть вопросы →"
+          >
+            Вопросы по профессиям с темами из требований вакансий: что проверяет работодатель, как
+            звучит сильный ответ, и тест на 5 вопросов без регистрации.
+          </ToolCard>
+          <ToolCard
+            href="/tools/relocation"
+            title="В какую страну переехать"
+            go="Оценить переезд →"
+          >
+            Какие пути открыты с вашим паспортом и профессией.
+          </ToolCard>
+          <ToolCard href="/tools/resume" title="Конструктор резюме" go="Собрать резюме →">
+            По шагам, с примерами и проверкой на ATS. Скачать в PDF и DOCX.
+          </ToolCard>
         </div>
         <p className="ps-note">
           В кабинете уже есть сравнение стран и расчёт налогов при переезде.

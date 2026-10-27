@@ -1,3 +1,5 @@
+import { isHiringPlatform } from '../../shared/hiringPlatforms';
+import { personNameFromTitle } from '../../shared/personName';
 import { extractDomainFromUrl } from '../domain/company';
 import type { CompanyRecruiterProfile } from '../linkedinPool/companyRecruiterDiscovery';
 import { ensureCompanyRecruitersSchema } from '../linkedinPool/companyRecruiterDiscovery';
@@ -26,20 +28,8 @@ const EXA_TIMEOUT_MS = 15_000;
 const STORED_RECRUITER_DAYS = 180;
 
 /** Хосты ATS и площадок: адрес вакансии на них не говорит о домене почты компании. */
-const HIRING_PLATFORM_HOSTS = [
-  'contacthr.com', 'myworkdayjobs.com', 'workday.com', 'greenhouse.io', 'lever.co',
-  'smartrecruiters.com', 'ashbyhq.com', 'icims.com', 'taleo.net', 'successfactors.com',
-  'jobvite.com', 'bamboohr.com', 'recruitee.com', 'workable.com', 'personio.de',
-  'teamtailor.com', 'breezy.hr', 'themuse.com', 'indeed.com', 'glassdoor.com',
-  'hh.ru', 'headhunter.ru', 'linkedin.com', 'remotive.com', 'habr.com', 'superjob.ru',
-  'github.com', 't.me', 'huntflow.ru', 'potok.io', 'getmatch.ru', 'trudvsem.ru',
-];
 
 const SECOND_LEVEL_SUFFIXES = new Set(['co.uk', 'com.au', 'co.jp', 'com.br', 'co.in', 'com.tr']);
-
-function isHiringPlatform(host: string): boolean {
-  return HIRING_PLATFORM_HOSTS.some((platform) => host === platform || host.endsWith(`.${platform}`));
-}
 
 function registrableDomain(host: string): string {
   const labels = host.split('.');
@@ -57,20 +47,32 @@ function companySlug(company: string): string {
  * Домен почты компании: сайт из вакансии, если это не ATS и не площадка;
  * иначе «имя компании» в .com / .ru, принятый только при наличии MX.
  */
+export type CompanyMarket = 'ru';
+
+const RUSSIAN_BOARD_HOSTS = ['hh.ru', 'headhunter.ru', 'superjob.ru', 'trudvsem.ru', 'habr.com', 'getmatch.ru', 'rabota.ru', 'zarplata.ru'];
+
+/** Вакансия с российской площадки или на русском — сайт компании ищется в зоне .ru. */
+export function companyMarket(vacancy: UnifiedVacancyInput): CompanyMarket | undefined {
+  const host = extractDomainFromUrl(vacancy.url) ?? '';
+  if (RUSSIAN_BOARD_HOSTS.some((board) => host === board || host.endsWith(`.${board}`))) return 'ru';
+  return /[А-Яа-яЁё]/u.test(`${vacancy.company ?? ''} ${vacancy.title ?? ''}`) ? 'ru' : undefined;
+}
+
 export async function resolveCompanyDomain(
   vacancy: UnifiedVacancyInput,
   resolveMx: MxResolver,
-  findSite?: (company: string) => Promise<string | undefined>,
+  findSite?: (company: string, market?: CompanyMarket) => Promise<string | undefined>,
 ): Promise<string | undefined> {
+  const market = companyMarket(vacancy);
   const linkHost = extractDomainFromUrl(vacancy.url);
   if (linkHost && !isHiringPlatform(linkHost)) return registrableDomain(linkHost);
   const fromText = extractCompanyDomain({ ...vacancy, url: undefined });
   if (fromText && !isHiringPlatform(fromText)) return registrableDomain(fromText);
-  const found = vacancy.company && findSite ? await findSite(vacancy.company) : undefined;
+  const found = vacancy.company && findSite ? await findSite(vacancy.company, market) : undefined;
   if (found) return found;
   const slug = vacancy.company ? companySlug(vacancy.company) : '';
   if (slug.length < 2 || slug.length > 40) return undefined;
-  for (const candidate of [`${slug}.com`, `${slug}.ru`]) {
+  for (const candidate of market === 'ru' ? [`${slug}.ru`, `${slug}.com`] : [`${slug}.com`, `${slug}.ru`]) {
     try {
       if ((await resolveMx(candidate)).length > 0) return candidate;
     } catch {
@@ -99,7 +101,7 @@ function readStoredRecruiter(
     | undefined;
   if (!row) return null;
   return {
-    fullName: row.full_name,
+    fullName: personNameFromTitle(row.full_name),
     roleTitle: row.role_title,
     linkedinUrl: row.linkedin_url,
     sourcePlatform: 'company_osint',
@@ -152,8 +154,11 @@ async function acceptsMail(domain: string, resolveMx: MxResolver): Promise<boole
   }
 }
 
-async function firstMailDomain(urls: readonly string[], resolveMx: MxResolver): Promise<string | null> {
-  for (const url of urls) {
+async function firstMailDomain(urls: readonly string[], resolveMx: MxResolver, market?: CompanyMarket): Promise<string | null> {
+  // Для российской компании первыми проверяются сайты в .ru и .рф: одноимённая зарубежная организация не подменяет её.
+  const local = (url: string) => /\.(?:ru|xn--p1ai)(?:[/:]|$)/u.test(extractDomainFromUrl(url) ?? '');
+  const ordered = market === 'ru' ? [...urls.filter(local), ...urls.filter((url) => !local(url))] : urls;
+  for (const url of ordered) {
     const host = extractDomainFromUrl(url);
     if (!host || isHiringPlatform(host)) continue;
     const domain = registrableDomain(host);
@@ -168,22 +173,24 @@ async function firstMailDomain(urls: readonly string[], resolveMx: MxResolver): 
  */
 export function createCompanySiteFinder(
   options: CompanySiteFinderOptions,
-): (companyName: string) => Promise<string | undefined> {
+): (companyName: string, market?: CompanyMarket) => Promise<string | undefined> {
   const now = options.now ?? (() => new Date());
-  return async (companyName) => {
+  return async (companyName, market) => {
     const name = companyName.trim();
+    // Ключ кэша с рынком: прежний промах поиска по-английски не мешает поиску по-русски.
+    const cacheKey = market ? `${name}|${market}` : name;
     if (!name || !options.apiKey) return undefined;
     const database = options.repository.getDatabase();
     database.exec(SITE_CACHE_SCHEMA);
     const cached = database
       .prepare('SELECT domain, queried_at FROM company_mail_domain_cache WHERE company_name = ?')
-      .get(name) as { domain: string | null; queried_at: string } | undefined;
+      .get(cacheKey) as { domain: string | null; queried_at: string } | undefined;
     if (cached && Date.parse(cached.queried_at) > now().getTime() - EXA_COMPANY_CACHE_DAYS * 86_400_000) {
       return cached.domain ?? undefined;
     }
     let urls: readonly string[];
     try {
-      urls = await searchExaWeb(`${name} official website`, options.apiKey, AbortSignal.timeout(options.timeoutMs ?? EXA_TIMEOUT_MS), {
+      urls = await searchExaWeb(market === 'ru' ? `${name} официальный сайт компании` : `${name} official website`, options.apiKey, AbortSignal.timeout(options.timeoutMs ?? EXA_TIMEOUT_MS), {
         ...(options.fetch ? { fetch: options.fetch } : {}),
         ...(options.requestGate ? { requestGate: options.requestGate } : {}),
         numResults: 5,
@@ -192,13 +199,13 @@ export function createCompanySiteFinder(
     } catch {
       return undefined;
     }
-    const domain = await firstMailDomain(urls, options.resolveMx);
+    const domain = await firstMailDomain(urls, options.resolveMx, market);
     database
       .prepare(
         `INSERT INTO company_mail_domain_cache (company_name, domain, queried_at) VALUES (?, ?, ?)
          ON CONFLICT(company_name) DO UPDATE SET domain = excluded.domain, queried_at = excluded.queried_at`,
       )
-      .run(name, domain, now().toISOString());
+      .run(cacheKey, domain, now().toISOString());
     return domain ?? undefined;
   };
 }

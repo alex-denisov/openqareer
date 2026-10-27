@@ -215,4 +215,22 @@ describe('SqliteRecruiterContactsRepository', () => {
     const reclaimed = repo.claimJobs(1, '2026-09-22T10:30:00.000Z');
     expect(reclaimed).toHaveLength(1);
   });
+
+  it('stores the recruiter channels with the contact and replaces them on resave (B258)', () => {
+    const { repo } = createRepo();
+    const channel = {
+      kind: 'telegram' as const,
+      value: '@elena_hr',
+      href: 'https://t.me/elena_hr',
+      status: 'published' as const,
+      sourceUrl: 'https://conf.example/speakers',
+      observedAt: '2026-10-27T00:00:00.000Z',
+    };
+    repo.saveContacts('cand-1', 'vac-101', [{ ...sampleContact1, channels: [channel] }]);
+    expect(repo.getContactsByVacancyId('cand-1', 'vac-101')[0]?.channels).toEqual([channel]);
+    expect(repo.listContactsByCandidateId('cand-1')[0]?.channels).toEqual([channel]);
+
+    repo.saveContacts('cand-1', 'vac-101', [{ ...sampleContact1, id: 'rc-new' }]);
+    expect(repo.getContactsByVacancyId('cand-1', 'vac-101')[0]?.channels).toBeUndefined();
+  });
 });

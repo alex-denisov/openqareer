@@ -43,6 +43,15 @@ function fitFailure(lastError: string | null | undefined): VacancyFitFailure {
 }
 
 /** The HTTP process enqueues/reads only. runNext is called by a separate worker. */
+/**
+ * The worker's budget run is one UTC day of this worker: RUN_USD is its explicit daily cap, while
+ * DAY_USD caps the whole bulk channel per day (worker plus server-side fact extraction). A run per
+ * process launch would stop a worker that never restarts for good once RUN_USD was spent.
+ */
+export function workerDayRunId(workerId: string, now = new Date()): string {
+  return `${workerId}:${now.toISOString().slice(0, 10)}`;
+}
+
 export class VacancyMechanicsRuntime {
   readonly database: DatabaseSync;
   readonly requirements: SqliteVacancyRequirementsStore;
@@ -118,8 +127,7 @@ export class VacancyMechanicsRuntime {
 
   async runNext(rawClient: BulkLlmClient | null, workerId = 'vacancy-mechanics'): Promise<boolean> {
     const client = rawClient ? measuredBulkClient(rawClient, () => this.stats) : null;
-    // B522 run budget is per run: a worker that never restarts is one run per UTC day, not one forever.
-    const runId = `${workerId}:${new Date().toISOString().slice(0, 10)}`;
+    const runId = workerDayRunId(workerId);
     const extracted = await this.extractNextRequirements(client, runId, workerId);
     const job = this.fit.claim({ leaseMs: 300000 });
     if (!job) return Boolean(extracted);

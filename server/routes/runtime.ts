@@ -8,6 +8,7 @@ import { applyLandingStats, deferEntryScript } from '../../shared/landingStats';
 import { getLandingStats } from '../landing/landingStatsCache';
 import { registerAeoRoutes } from '../seo/aeoRoutes';
 import { registerSalaryMarketRoutes } from './salaryMarketRoutes';
+import { registerInterviewQuestionRoutes } from './interviewQuestionRoutes';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
@@ -32,6 +33,8 @@ const HELP_DOCUMENTS: Record<string, string> = {
   '/faq': 'faq.html',
   '/support': 'support.html',
   '/tools/country-fit': 'country-fit.html',
+  '/tools/resume': 'resume-builder.html',
+  '/tools/relocation': 'relocation.html',
 };
 const AUTH_DOCUMENTS: Record<string, string> = { '/login': 'login.html', '/signup': 'signup.html' };
 const NOT_FOUND_DOCUMENT = 'not-found.html';
@@ -412,10 +415,12 @@ export async function registerStaticDelivery(
   app: FastifyInstance,
   config: ServerConfig,
   serveStatic: boolean,
+  signedIn?: (request: FastifyRequest) => boolean,
 ): Promise<void> {
   if (serveStatic) {
     registerAeoRoutes(app);
     registerSalaryMarketRoutes(app, config);
+    registerInterviewQuestionRoutes(app, { ...config, signedIn });
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,
