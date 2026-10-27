@@ -41,10 +41,8 @@ export function careerRolesWithCandidateChoices(
   const chosen = (workspace?.campaign?.roles ?? []).flatMap<ProposedRole>((title) => {
     const id = careerRoleId(title);
     if (known.has(id)) return [];
-    const key = sameRoleKey(title);
-    if (chosenKeys.has(key)) return [];
     known.add(id);
-    chosenKeys.add(key);
+    chosenKeys.add(sameRoleKey(title));
     return [
       {
         id,

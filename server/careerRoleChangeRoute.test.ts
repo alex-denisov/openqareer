@@ -23,7 +23,7 @@ async function setup() {
       regions: [],
       revision: 3,
       updatedAt: '2026-10-06T00:00:00Z',
-      careerRoles: [{ id: careerRoleId('Head of Engineering'), title: 'Head of Engineering' }],
+      careerRoles: [{ id: careerRoleId('Head of Product'), title: 'Head of Product' }],
     },
   });
   const app = await buildApp({
@@ -61,10 +61,10 @@ describe('POST /api/v1/candidate/career-roles (26.10)', () => {
     expect(added.json().data.roles.value).toEqual([
       'VP of Engineering',
       'CTO',
-      'Head of Engineering',
+      'Head of Product',
     ]);
 
-    const removed = await change({ action: 'remove', title: 'Head of Engineering' });
+    const removed = await change({ action: 'remove', title: 'Head of Product' });
     expect(removed.json().data.roles.value).toEqual(['VP of Engineering', 'CTO']);
 
     const removedWizard = await change({ action: 'remove', title: 'VP of Engineering' });
@@ -73,13 +73,13 @@ describe('POST /api/v1/candidate/career-roles (26.10)', () => {
 
   it('повторное добавление снимает прежнее отклонение роли', async () => {
     const { change, candidateStore, candidate } = await setup();
-    await change({ action: 'remove', title: 'Head of Engineering' });
-    const readded = await change({ action: 'add', title: 'Head of Engineering' });
-    expect(readded.json().data.roles.value).toContain('Head of Engineering');
+    await change({ action: 'remove', title: 'Head of Product' });
+    const readded = await change({ action: 'add', title: 'Head of Product' });
+    expect(readded.json().data.roles.value).toContain('Head of Product');
     expect(
       candidateStore
         .getConsultantRejections(candidate.id)
-        .some((rejection) => rejection.proposalKey.endsWith(careerRoleId('Head of Engineering'))),
+        .some((rejection) => rejection.proposalKey.endsWith(careerRoleId('Head of Product'))),
     ).toBe(false);
   });
 
