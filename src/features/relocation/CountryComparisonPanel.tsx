@@ -26,8 +26,13 @@ const CRITERIA: readonly { readonly key: FactKey; readonly label: string }[] = [
   { key: 'familyAndResidence', label: 'Семья и ПМЖ' },
 ];
 
-/** A row without a source for any compared country is not shown (owner rule: no «нет данных»). */
+/**
+ * The comparison shows all eight rows of mockup 15 `cmp`. A cell without a
+ * sourced value says why in plain words (owner rule: no «нет данных» stub).
+ */
 function shownCriteria(countries: readonly CountryComparisonCountry[]) {
+  if (countries.length > 1) return CRITERIA;
+  // One country's own facts (its card) keep only the rows that have a source.
   return CRITERIA.filter(({ key }) =>
     countries.some(
       (country) =>
@@ -35,6 +40,16 @@ function shownCriteria(countries: readonly CountryComparisonCountry[]) {
     ),
   );
 }
+
+const MISSING_BY_METRIC: Readonly<Partial<Record<FactKey, string>>> = {
+  processingTime: 'в правилах не указан',
+  relocationVacancies: 'подборка ещё не прочитана',
+  salaryThreshold: 'в правилах не указан',
+  incomeTax: 'нет налоговой шкалы',
+  monthlyRemainder: 'см. «Экономика»',
+  workingLanguage: 'в правилах не указан',
+  familyAndResidence: 'в анкете не указано',
+};
 
 export interface ComparisonMeaning {
   readonly countryCode: string;
@@ -207,7 +222,7 @@ function MobileStack({ countries }: { readonly countries: readonly CountryCompar
                     <dd title={visible.status === 'available' ? undefined : visible.reason}>
                       {visible.status === 'available'
                         ? formatFact(criterion.key, visible.value)
-                        : missingFactLabel(visible.reason)}
+                        : missingCellLabel(criterion.key, visible.reason)}
                     </dd>
                   </div>
                 );
@@ -225,17 +240,28 @@ function MobileStack({ countries }: { readonly countries: readonly CountryCompar
   );
 }
 
-/** One line under the matrix, as in mockup 15 `cmp`: each source once, with its date and link. */
+/**
+ * One line under the matrix, as in mockup 15 `cmp` («Источники: официальные
+ * порталы стран, каталог вакансий, 07.10»); the dated documents open under it.
+ */
 function SourcesLine({ countries }: { readonly countries: readonly CountryComparisonCountry[] }) {
   const sources = uniqueSources(countries);
+  if (!sources.length)
+    return (
+      <p className="career-country-comparison-sources-line">
+        <Clock aria-hidden="true" size={14} />
+        <span>Проверенных источников по этим показателям пока нет.</span>
+      </p>
+    );
   return (
-    <p className="career-country-comparison-sources-line">
-      <Clock aria-hidden="true" size={14} />
-      <span>
-        {sources.length ? 'Источники: ' : 'Проверенных источников по этим показателям пока нет.'}
-        {sources.map((source, index) => (
-          <span key={source.title}>
-            {index ? '; ' : ''}
+    <details className="career-country-comparison-sources-line">
+      <summary>
+        <Clock aria-hidden="true" size={14} />
+        <span>{sourcesSummary(sources)}</span>
+      </summary>
+      <ul>
+        {sources.map((source) => (
+          <li key={source.title}>
             {source.url ? (
               <a href={source.url} target="_blank" rel="noopener noreferrer">
                 {source.title}
@@ -245,11 +271,28 @@ function SourcesLine({ countries }: { readonly countries: readonly CountryCompar
             )}
             {source.dataYear ? `, год шкалы ${source.dataYear}` : ''},{' '}
             {relocationDay(source.capturedAt)}
-          </span>
+          </li>
         ))}
-      </span>
-    </p>
+      </ul>
+    </details>
   );
+}
+
+const SOURCE_KIND_LABELS: Readonly<Record<string, string>> = {
+  official: 'официальные порталы стран',
+  vacancy_catalog: 'подборка вакансий',
+  candidate_profile: 'ваша анкета',
+  calculation: 'расчёт по шкале',
+};
+
+export function sourcesSummary(sources: readonly ComparisonEvidence[]): string {
+  const kinds = [...new Set(sources.map(({ kind }) => SOURCE_KIND_LABELS[kind] ?? 'документы'))];
+  const latest =
+    sources
+      .map(({ capturedAt }) => capturedAt)
+      .sort()
+      .at(-1) ?? '';
+  return `Источники: ${kinds.join(', ')}, ${relocationDay(latest)}`;
 }
 
 function uniqueSources(countries: readonly CountryComparisonCountry[]) {
@@ -298,7 +341,9 @@ function FactContent({
   if (visible.status !== 'available') {
     return (
       <span className="career-country-comparison-no-data" title={visible.reason}>
-        {visible.status === 'unknown' ? 'статус неизвестен' : missingFactLabel(visible.reason)}
+        {visible.status === 'unknown'
+          ? 'статус неизвестен'
+          : missingCellLabel(metric, visible.reason)}
       </span>
     );
   }
@@ -312,12 +357,13 @@ function formatFact(metric: FactKey, fact: unknown): string {
   if (metric === 'access') return String(value.label);
   if (metric === 'processingTime')
     return `${value.amount} ${value.unit === 'days' ? 'дн.' : 'нед.'}`;
-  if (metric === 'relocationVacancies')
-    return `${value.count} из ${value.sampleSize}: ${value.scope} · ${value.periodStart} — ${value.periodEnd}`;
+  if (metric === 'relocationVacancies') return String(value.count);
   if (metric === 'salaryThreshold')
     return `${formatAmount(Number(value.amount))} ${value.currency} · ${value.basis}`;
   if (metric === 'incomeTax')
-    return `${formatAmount(Number(value.effectiveRate))}% · ${value.basis}`;
+    return typeof value.label === 'string'
+      ? value.label
+      : `${formatAmount(Number(value.effectiveRate))}% · ${value.basis}`;
   if (metric === 'netIncome' || metric === 'monthlyRemainder')
     return `${formatAmount(Number(value.amount))} ${value.currency}/мес. · ${value.basis}`;
   return String(value.summary);
@@ -376,6 +422,11 @@ function ComparisonMeanings({ meanings }: { readonly meanings: readonly Comparis
       </p>
     </section>
   );
+}
+
+function missingCellLabel(metric: FactKey, reason: string | undefined): string {
+  const label = missingFactLabel(reason);
+  return label === '—' ? (MISSING_BY_METRIC[metric] ?? label) : label;
 }
 
 /** A missing value that only waits for the candidate's salary says so; any other is a dash with the reason as a hint. */

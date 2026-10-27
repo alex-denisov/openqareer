@@ -99,6 +99,21 @@ describe('relocation country data', () => {
   });
 });
 
+describe('comparison rows of mockup 15 without a salary', () => {
+  it('names the income tax from the country scale: flat, progressive or none', () => {
+    const tax = (code: string) => {
+      const fact = buildCountryComparisonCountry(code, emptyRelocationQuestionnaire()).facts
+        .incomeTax;
+      return fact.status === 'available' ? fact.value.label : fact.status;
+    };
+    expect(tax('AM')).toBe('20 %, плоский');
+    expect(tax('KZ')).toMatch(/^прогрессивный, до \d+ %$/u);
+    expect(tax('DE')).toBe('прогрессивный, до 45 %');
+    expect(tax('AE')).toBe('0 %');
+    expect(tax('SG')).toBe('no_data');
+  });
+});
+
 function withoutDocumentClock<
   T extends { readonly asOf?: string; readonly residenceDocuments?: unknown },
 >(candidate: T): Omit<T, 'asOf' | 'residenceDocuments'> {

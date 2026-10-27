@@ -62,6 +62,8 @@ export interface CountryComparisonCountry {
     readonly incomeTax: CountryComparisonFact<{
       readonly effectiveRate: number;
       readonly basis: string;
+      /** Without a salary: the scale itself, «прогрессивный, до 45 %» (mockup 15 `cmp`). */
+      readonly label?: string;
     }>;
     readonly netIncome: CountryComparisonFact<MoneyComparisonValue>;
     readonly monthlyRemainder: CountryComparisonFact<MoneyComparisonValue>;
