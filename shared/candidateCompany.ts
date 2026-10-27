@@ -55,6 +55,8 @@ export interface CandidateCompanyOpportunity {
   readonly want: boolean;
   /** B439: the candidate answered «Не сейчас» to the consultant's contact proposal. */
   readonly contactProposalDismissed?: boolean;
+  /** Vacancies come from the pool: none of them is in the current selection. */
+  readonly outsideSelection?: boolean;
   readonly nextStep: CandidateCompanyNextStep | null;
   readonly hasRecruiter: boolean;
   readonly recruiterSearchStatus: CandidateCompanyRecruiterSearchStatus;

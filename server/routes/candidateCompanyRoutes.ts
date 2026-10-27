@@ -221,6 +221,9 @@ async function companyContext(
   const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
   const selection = projectVacancyItems(matches);
   const vacancies = [...selection, ...wantedPoolVacancies(deps, wants, selection)];
+  const selectionKeys = new Set(
+    selection.map((vacancy) => candidateCompanyKey(vacancy.companyName)),
+  );
   const vacancyCompanyKeys = new Map(
     vacancies.map((vacancy) => [vacancy.id, candidateCompanyKey(vacancy.companyName)]),
   );
@@ -242,7 +245,13 @@ async function companyContext(
     recruiters,
     jobs,
     networkContactCounts: networkContactCounts ?? undefined,
-  }).map((row) => (dismissed?.has(row.key) ? { ...row, contactProposalDismissed: true } : row));
+  })
+    .map((row) => (dismissed?.has(row.key) ? { ...row, contactProposalDismissed: true } : row))
+    .map((row) =>
+      row.vacancyCount > 0 && !selectionKeys.has(row.key)
+        ? { ...row, outsideSelection: true }
+        : row,
+    );
   const contactsImportedAt = networkContactCounts?.values().next().value?.importedAt ?? null;
   return {
     rows,
@@ -665,7 +674,8 @@ function enqueueCompanyRecruiterJobs(
     const current = repo.getJob(candidateId, vacancyId);
     // Готовый поиск без единого контакта повторяется: кэш Exa не даёт платить дважды.
     const foundNobody =
-      current?.status === 'ready' && repo.getContactsByVacancyId(candidateId, vacancyId).length === 0;
+      current?.status === 'ready' &&
+      repo.getContactsByVacancyId(candidateId, vacancyId).length === 0;
     return current && current.status !== 'failed' && !foundNobody
       ? current
       : repo.enqueueJob(candidateId, vacancyId);

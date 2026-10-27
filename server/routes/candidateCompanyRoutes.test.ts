@@ -257,7 +257,13 @@ describe('candidate company routes (B439)', () => {
       headers: { authorization },
     });
     const row = list.json().data.items.find((item: { name: string }) => item.name === 'Autodesk');
-    expect(row).toMatchObject({ key, vacancyCount: 1, location: 'Remote, US', want: true });
+    expect(row).toMatchObject({
+      key,
+      vacancyCount: 1,
+      location: 'Remote, US',
+      want: true,
+      outsideSelection: true,
+    });
     expect(row.sources[0]).toMatchObject({ name: 'hh.ru' });
     expect(asked).toEqual(['Autodesk']);
 
@@ -469,6 +475,34 @@ describe('B448 candidate connection circles', () => {
       nextStep: 'write_known_contact',
       recipient: { fullName: 'Ирина Котова', companyName: 'Вектор Банк' },
     });
+  });
+
+  it('builds circles for a pool vacancy of a wanted company outside the selection', async () => {
+    const pool = matchedVacancy('cluster-autodesk', 'Autodesk, Inc.').cluster;
+    const { app, authorization, candidate, wants } = await setup(
+      [matchedVacancy('cluster-v1', 'Вектор Банк')],
+      { getStoredCluster: (id: string) => (id === pool.id ? pool : undefined) },
+    );
+    wants.setWanted(candidate.id, candidateCompanyKey('Autodesk'), 'Autodesk');
+    await importConnectionContacts(app, authorization, [
+      { fullName: 'Igor Siusiukov', companyName: 'Autodesk', roleTitle: 'Engineering Manager' },
+    ]);
+
+    const response = await app.inject({
+      url: '/api/v1/candidate/vacancies/cluster-autodesk/connection-circles',
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.companyKey).toBe(candidateCompanyKey('Autodesk'));
+    expect(response.json().data.circles[0].paths[0].recipient).toMatchObject({
+      fullName: 'Igor Siusiukov',
+    });
+    const unknown = await app.inject({
+      url: '/api/v1/candidate/vacancies/cluster-other/connection-circles',
+      headers: { authorization },
+    });
+    expect(unknown.statusCode).toBe(404);
   });
 
   it('accepts a full network import well above 400 contacts (B448)', async () => {
