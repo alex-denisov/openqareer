@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   SALARY_BASIS_TEXT,
+  groupDigits,
   vacancies,
   type NetRow,
   type SalaryCityView,
@@ -8,6 +9,7 @@ import {
   type SalaryFaq,
   type SalaryProfessionView,
 } from '../../../shared/salaryPublicPages';
+import { MIN_CITY_SALARY_SAMPLE } from '../../../shared/salaryMarketSnapshot';
 
 /** B351 round 5 (27.10): mockups 06a and 06b; every figure arrives in the view model. */
 function Arrow() {
@@ -171,7 +173,7 @@ function CityTableFooter({ view }: { readonly view: SalaryProfessionView }) {
         <div className="sp-card-f">
           <span>
             Удалённые вакансии: медиана {view.remote.median}, по{' '}
-            {view.remote.sampleSize.toLocaleString('ru-RU')} вакансиям с вилкой
+            {groupDigits(view.remote.sampleSize)} вакансиям с вилкой
           </span>
           <a className="sp-link" href={`/vacancies/remote/${view.role}`}>
             Удалённые вакансии <Arrow />
@@ -180,7 +182,7 @@ function CityTableFooter({ view }: { readonly view: SalaryProfessionView }) {
       ) : null}
       <div className="sp-card-f sp-small">
         {view.scaleMax ? `Шкала полос — от 0 до ${view.scaleMax} в месяц. ` : ''}
-        Город без 30 вакансий с вилкой не показываем.
+        Город без {MIN_CITY_SALARY_SAMPLE} вакансий с вилкой не показываем.
       </div>
     </>
   );
@@ -209,14 +211,14 @@ function ProfessionHero({ view }: { readonly view: SalaryProfessionView }) {
           </div>
           <div>
             <span>Вакансий, {view.lead.city}</span>
-            <b>{view.lead.vacancyCount.toLocaleString('ru-RU')}</b>
+            <b>{groupDigits(view.lead.vacancyCount)}</b>
             <small>из {vacancies(view.totalVacancies)} за 90 дней</small>
           </div>
         </div>
         <div className="sp-stamp">
           <span>
             Выборка: {vacancies(view.sampleSize)} с вилкой в {view.placesShown} местах из{' '}
-            {view.totalVacancies.toLocaleString('ru-RU')} за 90 дней
+            {groupDigits(view.totalVacancies)} за 90 дней
           </span>
           <span>Источник: открытый каталог openqareer</span>
           <span>Дата: {view.date}</span>
@@ -328,8 +330,8 @@ function ProfessionMethod() {
           <div>
             <b>Дата и выборка у каждой цифры</b>
             <p>
-              Пересчитываем каждый день. Если в городе меньше 30 вакансий с вилкой, город не
-              показываем.
+              Пересчитываем каждый день. Если в городе меньше {MIN_CITY_SALARY_SAMPLE} вакансий с
+              вилкой, город не показываем.
             </p>
           </div>
         </div>
@@ -364,7 +366,7 @@ function CountryActions({ view }: { readonly view: SalaryCountryView }) {
         href={`/signup?from=salaries&country=${view.code}&next=match`}
       >
         {lead
-          ? `Какие из ${lead.count.toLocaleString('ru-RU').replace(/\s/gu, ' ')} вакансий ${lead.genitive} подходят вам`
+          ? `Какие из ${groupDigits(lead.count)}\u00a0вакансий ${lead.genitive} подходят вам`
           : `Какие вакансии ${view.inName} подходят вам`}
       </a>
       <a className="sp-link" href={lead ? `/vacancies/${lead.slug}` : '/vacancies'}>
@@ -596,7 +598,7 @@ export function SalaryProfessionPage({ view }: { readonly view: SalaryProfession
             <span className="sp-label">По городам</span>
             <h2 id="sp-cities">Где {view.labelDative} платят больше</h2>
           </div>
-          <p>
+          <p className="sp-hide-m">
             Полоса — вилка, в которую попадает половина вакансий города. Отметка — медиана. Считаем
             по серединам вилок «от — до» в вакансиях с обеими границами,{' '}
             {SALARY_BASIS_TEXT[view.basis]}.

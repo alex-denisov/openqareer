@@ -30,14 +30,16 @@ const CURRENCY_SIGN: Readonly<Record<string, string>> = {
 };
 const RUBLE = new Set(['RUR', 'RUB']);
 
+/** Thousands with a narrow no-break space (U+202F): «125 000» never splits across lines. */
+export function groupDigits(value: number): string {
+  return Math.round(value).toLocaleString('ru-RU').replace(/\s/gu, '\u202f');
+}
 export function formatMoney(amount: number, currency: string): string {
-  const value = Math.round(amount).toLocaleString('ru-RU').replace(/\s/gu, ' ');
-  return `${value} ${CURRENCY_SIGN[currency] ?? currency}`;
+  return `${groupDigits(amount)}\u00a0${CURRENCY_SIGN[currency] ?? currency}`;
 }
 export function formatRange(group: SalaryMidpointGroup): string {
   const sign = CURRENCY_SIGN[group.currency] ?? group.currency;
-  const low = Math.round(group.p25).toLocaleString('ru-RU').replace(/\s/gu, ' ');
-  return `${low}–${formatMoney(group.p75, group.currency).replace(` ${sign}`, '')} ${sign}`;
+  return `${groupDigits(group.p25)}–${groupDigits(group.p75)}\u00a0${sign}`;
 }
 export function formatDate(iso: string): string {
   const [year, month, day] = iso.slice(0, 10).split('-');
@@ -52,7 +54,7 @@ function vacancyWord(count: number): string {
   return 'вакансий';
 }
 export function vacancies(count: number): string {
-  return `${count.toLocaleString('ru-RU').replace(/\s/gu, ' ')} ${vacancyWord(count)}`;
+  return `${groupDigits(count)}\u00a0${vacancyWord(count)}`;
 }
 
 /** Monthly take-home from a Russian monthly gross, by the product's own calculator. */
@@ -316,7 +318,7 @@ export interface SalaryCountryView {
 }
 
 function percent(value: number): string {
-  return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} %`;
+  return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}\u00a0%`;
 }
 function netRow(code: string, currency: string, monthly: number, note?: string): NetRow {
   const result = calculateAnnualPayroll(code, monthly * 12);

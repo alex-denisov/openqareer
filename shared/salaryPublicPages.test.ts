@@ -25,7 +25,7 @@ const snapshot = {
   sampleSize: 4554,
   cityMarket: {
     method: 'closed_monthly_range_midpoint_v1',
-    minSample: 30,
+    minSample: 20,
     rangedTotal: 400,
     publishedSample: 338,
     cities: [
@@ -55,12 +55,12 @@ describe('salary profession view (B351 06a)', () => {
   it('builds the answer, ranges and remote line from the snapshot only', () => {
     const view = salaryProfessionView(snapshot)!;
     expect(view.lead.city).toBe('Москва');
-    expect(view.lead.range).toBe('105 000–140 000 ₽');
-    expect(view.lead.median).toBe('125 000 ₽');
-    expect(view.leadNet).toBe('108 750 ₽');
-    expect(view.answer).toContain('266 вакансий с вилкой');
+    expect(view.lead.range).toBe('105 000–140 000 ₽');
+    expect(view.lead.median).toBe('125 000 ₽');
+    expect(view.leadNet).toBe('108 750 ₽');
+    expect(view.answer).toContain('266 вакансий с вилкой');
     expect(view.answer).toContain('27.10.2026');
-    expect(view.remote).toEqual({ median: '5 000 $ в месяц', sampleSize: 48 });
+    expect(view.remote).toEqual({ median: '5 000 $ в месяц', sampleSize: 48 });
     expect(view.cities.map((city) => city.city)).toEqual(['Москва', 'Санкт-Петербург']);
     expect(view.cities[0]!.bar!.mark).toBeGreaterThan(view.cities[1]!.bar!.mark);
   });
@@ -81,11 +81,11 @@ describe('salary profession view (B351 06a)', () => {
 describe('salary country view (B351 06b)', () => {
   it('takes every net figure from the tax calculator', () => {
     const view = salaryCountryView('germany');
-    expect(view.reference.gross).toBe('5 000 €');
-    expect(view.rows.some((row) => row.note === 'порог Blue Card' && row.gross === '4 225 €')).toBe(
+    expect(view.reference.gross).toBe('5 000 €');
+    expect(view.rows.some((row) => row.note === 'порог Blue Card' && row.gross === '4 225 €')).toBe(
       true,
     );
-    expect(view.thresholds.map((item) => item.amount)).toContain('50 700 € в год');
+    expect(view.thresholds.map((item) => item.amount)).toContain('50 700 € в год');
     expect(view.others.map((item) => item.slug)).toContain('cyprus');
     expect(view.faqs.length).toBeGreaterThanOrEqual(2);
   });
@@ -109,6 +109,6 @@ describe('salary country view (B351 06b)', () => {
 
   it('keeps the Russian take-home consistent with the calculator', () => {
     expect(russianNetMonthly(125_000)).toBe(108_750);
-    expect(formatRange(group(1, 2, 3, 30))).toBe('1–3 ₽');
+    expect(formatRange(group(1, 2, 3, 30))).toBe('1–3 ₽');
   });
 });

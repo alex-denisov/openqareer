@@ -204,7 +204,7 @@ describe('bounded salary SSR', () => {
       expect(response.statusCode).toBe(200);
       expect(response.body).toContain('Зарплата в Германии: сколько остаётся на руки');
       expect(response.body).toContain('"@type":"FAQPage"');
-      expect(response.body).toContain('4 225 €');
+      expect(response.body).toContain('4 225 €');
       expect(response.body).toContain('href="/signup?from=salaries&amp;country=DE&amp;next=match"');
       expect(response.body).toContain('index, follow');
     } finally {
@@ -245,7 +245,7 @@ describe('bounded salary SSR', () => {
     try {
       const city = await app.inject('/salaries/accountant');
       expect(city.body).toContain('Зарплата бухгалтера в 2026 году по городам');
-      expect(city.body).toContain('105 000–140 000 ₽');
+      expect(city.body).toContain('105 000–140 000 ₽');
       expect(city.body).toContain('href="/vacancies/moscow/accountant"');
       expect(city.body).toContain('"@type":"FAQPage"');
       const fallback = await app.inject('/salaries/analyst');

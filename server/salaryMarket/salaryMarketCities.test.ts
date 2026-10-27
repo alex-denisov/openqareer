@@ -49,7 +49,7 @@ const rub = (from: number, to: number) => ({
 });
 
 describe('salary city market (B351)', () => {
-  it('publishes midpoint percentiles per city and hides places under 30 ranges', () => {
+  it('publishes midpoint percentiles per city and hides places under 20 ranges', () => {
     const db = database();
     add(db, 'msk', 40, 'Москва, м. Арбатская', (i) => rub(100_000 + i * 1000, 120_000 + i * 1000));
     add(db, 'msk-open', 5, 'Москва', () => ({
@@ -59,11 +59,11 @@ describe('salary city market (B351)', () => {
       periodEvidence: hhMonth,
     }));
     add(db, 'msk-legacy', 5, 'Москва', () => ({ from: 90_000, to: 95_000, currency: 'RUR' }));
-    add(db, 'kzn', 29, 'Казань', (i) => rub(60_000 + i, 70_000 + i));
+    add(db, 'kzn', 19, 'Казань', (i) => rub(60_000 + i, 70_000 + i));
     add(db, 'rem', 30, 'Anywhere', () => ({ ...rub(4000, 6000), currency: 'USD' }), true);
     const [snapshot] = computeSalaryMarketSnapshots(db, now);
     const market = snapshot!.cityMarket!;
-    expect(market.minSample).toBe(30);
+    expect(market.minSample).toBe(20);
     expect(market.cities.map((city) => city.city)).toEqual(['Москва']);
     const moscow = market.cities[0]!;
     expect(moscow.vacancyCount).toBe(50);
@@ -73,7 +73,7 @@ describe('salary city market (B351)', () => {
     expect(moscow.salary.p50).toBe(129_000);
     expect(moscow.salary.p75).toBe(139_000);
     expect(market.remote?.salary).toMatchObject({ currency: 'USD', p50: 5000, sampleSize: 30 });
-    expect(market.rangedTotal).toBe(40 + 29 + 30);
+    expect(market.rangedTotal).toBe(40 + 19 + 30);
     expect(market.publishedSample).toBe(40);
   });
 

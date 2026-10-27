@@ -3,7 +3,7 @@ export const MAX_SALARY_MARKET_GROUPS = 12;
 export const SALARY_MARKET_ROLE_LIMIT = 100;
 export const SALARY_MARKET_INDEX_LIMIT = SALARY_MARKET_ROLE_LIMIT;
 /** A place without this many closed ranges is not published (B351 mockup 06a). */
-export const MIN_CITY_SALARY_SAMPLE = 30;
+export const MIN_CITY_SALARY_SAMPLE = 20;
 
 /** Nearest-rank percentiles of «от — до» midpoints in one currency and tax basis. */
 export interface SalaryMidpointGroup {

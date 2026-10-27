@@ -425,10 +425,10 @@
   fill: var(--ps-bg-2);
 }
 .sp-bar-range {
-  fill: var(--ps-blue-soft);
+  fill: color-mix(in oklch, var(--ps-blue) 32%, var(--ps-surface));
 }
 .sp-bar-mark {
-  fill: var(--ps-blue);
+  fill: var(--ps-ink);
 }
 .sp-me td {
   background: var(--ps-blue-soft);
@@ -778,6 +778,24 @@
   color: var(--ps-soft);
 }
 @media (max-width: 760px) {
+  .sp-hide-m {
+    display: none;
+  }
+  .sp .sp-kpi-joined {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 78%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+  }
+  .sp .sp-kpi-joined > div {
+    scroll-snap-align: start;
+    border-top: 0;
+    border-inline-start: var(--ps-border-width) solid var(--ps-line);
+  }
+  .sp .sp-kpi-joined > .sp-kpi-lead {
+    border-inline-start: 0;
+  }
   .sp-kpi-joined > div {
     padding: var(--ps-space-4) 18px;
     border-inline-start: 0;
