@@ -129,7 +129,7 @@
 .pg-link:hover {
   color: oklch(46% 0.19 256);
 }
-:is(p, li, td) .pg-link {
+:is(p, li, td, .pg-consent span) .pg-link {
   display: inline;
   min-height: 0;
 }

@@ -297,10 +297,11 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0 56px;
 }
-.pg-q {
+.pg details.pg-q {
+  padding: 0;
   border-top: 1px solid var(--ps-line);
 }
-.pg-q summary {
+.pg .pg-q summary {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -311,11 +312,12 @@
   list-style: none;
   cursor: pointer;
 }
-.pg-q summary::-webkit-details-marker {
+.pg .pg-q summary::-webkit-details-marker {
   display: none;
 }
-.pg-q summary::after {
+.pg .pg-q summary::after {
   content: '';
+  font-size: 0;
   flex: none;
   width: 10px;
   height: 10px;
@@ -325,7 +327,8 @@
   transform: rotate(45deg) translate(-3px, -3px);
   transition: transform 0.18s var(--pg-ease);
 }
-.pg-q[open] summary::after {
+.pg details.pg-q[open] summary::after {
+  content: '';
   transform: rotate(225deg) translate(-2px, -2px);
 }
 .pg-a {
@@ -435,6 +438,9 @@
   .pg-exec-l ul,
   .pg-exec-l p {
     display: none;
+  }
+  .pg-exec-l h2 {
+    font-size: var(--pg-t-2xl);
   }
   .pg-exec form {
     gap: 12px;
