@@ -24,6 +24,7 @@ import { useFanDemand } from './vacancies/jobspyFan';
 import { SqliteVacancyDemandStore } from './vacancies/vacancyDemandStore';
 import { scheduleSalaryMarketSnapshots } from './salaryMarket/salaryMarketSchedule';
 import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
+import { scheduleCurrencyRatesJob } from './currency/cbrRatesSchedule';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 
@@ -164,6 +165,8 @@ try {
   worker.start();
   // B535: landing numbers are counted here, never on the web server's event loop.
   scheduleLandingStatsJob(semanticDatabase, log);
+  // CPO 27.10: курсы ЦБ для фильтра «Зарплата», раз в сутки, наружу ходит только этот процесс.
+  scheduleCurrencyRatesJob(semanticDatabase, log);
   stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
   scheduleCatalogSitemapJob(semanticDatabase, log);

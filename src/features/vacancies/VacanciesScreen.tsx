@@ -1,6 +1,7 @@
 import type { VacancyFitSort } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCurrencyRates } from './useCurrencyRates';
 import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
 import { vacancyConsultantPrompt } from './vacancyConsultantPrompt';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -137,10 +138,11 @@ function useVacanciesScreenBoard(
     onFiltersChange?.(state);
   }, [state, onFiltersChange]);
   useEffect(() => setVisibleCount(20), [state]);
+  const rates = useCurrencyRates();
 
   const filtered = useMemo(
-    () => filterBoardVacancies(matched, state, now, onFiltersChange),
-    [matched, state, now, onFiltersChange],
+    () => filterBoardVacancies(matched, state, now, onFiltersChange, rates),
+    [matched, state, now, onFiltersChange, rates],
   );
   const { roles } = campaignView;
   return {
