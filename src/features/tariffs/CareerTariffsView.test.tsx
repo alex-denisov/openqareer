@@ -23,8 +23,8 @@ describe('CareerTariffsView (B442)', () => {
     // Volume items
     expect(html).toContain('Профиль из LinkedIn и hh.ru, источник у каждого факта');
     expect(html).toContain('Резюме и письма под вакансии');
-    expect(html).toContain('Отправка откликов по вашим правилам');
-    expect(html).toContain('Ворота эксперта: резюме перед рассылкой, интервью, оффер');
+    expect(html).toContain('Отклики за вас каждый день по вашим правилам');
+    expect(html).toContain('Эксперт проверит резюме вручную до первых откликов');
     expect(html).toContain('Скрытый рынок и рекрутеры');
 
     // The approved Free layout shows included and not included columns. Its

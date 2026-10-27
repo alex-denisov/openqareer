@@ -32,6 +32,7 @@ const ENTRY_DOCUMENT = 'index.html';
 const HELP_DOCUMENTS: Record<string, string> = {
   '/faq': 'faq.html',
   '/support': 'support.html',
+  '/tariffs': 'tariffs.html',
   '/tools/country-fit': 'country-fit.html',
   '/tools/resume': 'resume-builder.html',
   '/tools/relocation': 'relocation.html',

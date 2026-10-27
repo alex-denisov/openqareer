@@ -1,19 +1,15 @@
 import React from 'react';
 import { SiteLink } from './SiteLink';
 import { preloadAuthPages } from './authPagesLoader';
-import { FaqAnswer, PublicFooter, PublicHeader } from './PublicSiteChrome';
+import { PublicFooter, PublicHeader } from './PublicSiteChrome';
 import {
-  FAQ_GROUPS,
   OPERATOR_TAX_ID,
   SUPPORT_EMAIL,
   TELEGRAM_BOT_URL,
   TELEGRAM_COMMUNITY_URL,
 } from './publicSiteContent';
-import { faqStructuredData, supportStructuredData } from './publicSiteStructuredData';
+import { supportStructuredData } from './publicSiteStructuredData';
 
-export const FAQ_TITLE = 'Как найти работу: резюме, ATS и отклики | openqareer';
-export const FAQ_DESCRIPTION =
-  'Как найти работу с openqareer: проверка резюме на ATS, подбор вакансий по резюме, сопроводительные письма, отклики, тарифы и данные.';
 export const SUPPORT_TITLE = 'Поддержка openqareer: почта, Telegram-бот и сообщество';
 export const SUPPORT_DESCRIPTION =
   'Поддержка openqareer: support@openqareer.com, Telegram-бот @openqareer_bot. Отвечаем в течение рабочего дня на вопросы о резюме, вакансиях и тарифах.';
@@ -77,65 +73,6 @@ function Crumbs({ current, onNavigate }: { current: string; onNavigate: (p: stri
       </SiteLink>{' '}
       / <span aria-current="page">{current}</span>
     </nav>
-  );
-}
-
-function FaqBody() {
-  return (
-    <>
-      <nav className="ps-toc" aria-label="Разделы">
-        {FAQ_GROUPS.map((group) => (
-          <a key={group.id} href={`#${group.id}`}>
-            {group.title}
-          </a>
-        ))}
-      </nav>
-      {FAQ_GROUPS.map((group) => (
-        <section
-          key={group.id}
-          className="ps-group"
-          id={group.id}
-          aria-labelledby={`${group.id}-h`}
-        >
-          <h2 id={`${group.id}-h`}>{group.title}</h2>
-          {group.items.map((item) => (
-            <details key={item.id} id={item.id} open={item.id === 'find-job'}>
-              <summary>{item.question}</summary>
-              <FaqAnswer text={item.answer} links={item.links} />
-            </details>
-          ))}
-          <a className="ps-totop" href="#main">
-            Наверх ↑
-          </a>
-        </section>
-      ))}
-    </>
-  );
-}
-
-function FaqCta({ onNavigate }: { onNavigate: (p: string) => void }) {
-  return (
-    <>
-      <div className="ps-cta-box">
-        <div>
-          <h2>Не нашли ответ?</h2>
-          <p>Напишите в поддержку: почта или Telegram.</p>
-        </div>
-        <div className="ps-cta">
-          <SiteLink to="/support" className="ps-btn" onNavigate={onNavigate}>
-            Написать в поддержку
-          </SiteLink>
-          <SiteLink
-            to="/signup"
-            className="ps-btn is-primary"
-            onNavigate={onNavigate}
-            onWarm={preloadAuthPages}
-          >
-            Загрузить резюме бесплатно
-          </SiteLink>
-        </div>
-      </div>
-    </>
   );
 }
 
@@ -222,28 +159,6 @@ function SupportExtras({ onNavigate }: { onNavigate: (p: string) => void }) {
         </span>
       </div>
     </>
-  );
-}
-
-export function FaqPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
-  return (
-    <HelpShell
-      onNavigate={onNavigate}
-      signedIn={signedIn}
-      isAdmin={isAdmin}
-      title={FAQ_TITLE}
-      current="faq"
-      structuredData={faqStructuredData()}
-    >
-      <Crumbs current="Вопросы и ответы" onNavigate={onNavigate} />
-      <h1>Вопросы о поиске работы с openqareer</h1>
-      <p className="ps-intro">
-        Как работает поиск работы с openqareer: резюме и проверка на ATS, подбор вакансий, отклики,
-        тарифы и данные.
-      </p>
-      <FaqBody />
-      <FaqCta onNavigate={onNavigate} />
-    </HelpShell>
   );
 }
 
