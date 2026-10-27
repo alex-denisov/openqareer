@@ -176,13 +176,6 @@
   flex-wrap: wrap;
   gap: var(--ps-space-2);
 }
-.sm-public .ps-top-row {
-  min-block-size: calc(var(--ps-space-8) + var(--ps-space-6));
-  block-size: auto;
-  flex-wrap: wrap;
-  gap: var(--ps-space-2);
-  padding-block: var(--ps-space-2);
-}
 .sm-public .ps-btn {
   white-space: normal;
   text-align: center;
