@@ -75,6 +75,15 @@ export interface CatalogPage {
   readonly previousPath?: string;
   readonly nextPath?: string;
   readonly jsonLd: StructuredGraph;
+  /** Place and role of a list page; absent on the catalog root. */
+  readonly listing?: PageListing;
+}
+
+export interface PageListing {
+  readonly place: string;
+  readonly placeLabel: string;
+  readonly role?: string;
+  readonly roleLabel?: string;
 }
 
 export interface VacancyDetail {
@@ -452,6 +461,12 @@ export function buildListingPageFromEntries(
       `${heading}: ${countLabel(total)}. ` +
       'У каждой вакансии — работодатель, источник и дата публикации. Отклик подаётся на сайте работодателя.',
     indexable: isIndexableListing(total, Boolean(summary.role)),
+    listing: {
+      place: summary.place,
+      placeLabel: summary.placeLabel,
+      ...(summary.role ? { role: summary.role } : {}),
+      ...(summary.roleLabel ? { roleLabel: summary.roleLabel } : {}),
+    },
     page,
     pageCount,
     total,

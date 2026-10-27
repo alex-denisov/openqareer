@@ -453,6 +453,16 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
+  loadCatalogSalaryLabels(query: { place: string; role?: string }): string[] {
+    return Array.from(this.clusters.values())
+      .filter((cluster) => cluster.status === 'active')
+      .map(catalogEntryRowOfCluster)
+      .filter((entry): entry is CatalogEntryRow => entry !== null)
+      .filter((entry) => entry.placeSlug === query.place)
+      .filter((entry) => !query.role || entry.roleSlug === query.role)
+      .flatMap((entry) => (entry.salaryLabel ? [entry.salaryLabel] : []));
+  }
+
   getCatalogEntry(key: string): CatalogEntryRow | undefined {
     for (const cluster of this.clusters.values()) {
       const entry = catalogEntryRowOfCluster(cluster);

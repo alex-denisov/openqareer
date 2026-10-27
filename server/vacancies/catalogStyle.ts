@@ -3,7 +3,10 @@
  * те же правила, что в src/features/site/publicSite.css; каталог отдаётся
  * сервером без бандла, поэтому правила продублированы здесь.
  */
-export const CATALOG_STYLE = `body{margin:0}
+import { LISTING_STYLE } from './catalogListingStyle';
+
+export const CATALOG_STYLE =
+  `body{margin:0}
 .ps {
   --ps-bg: oklch(98.4% 0.004 250);
   --ps-bg-2: oklch(96.2% 0.006 250);
@@ -11,9 +14,9 @@ export const CATALOG_STYLE = `body{margin:0}
   --ps-line: oklch(30% 0.02 255 / 0.1);
   --ps-line-2: oklch(30% 0.02 255 / 0.18);
   --ps-ink: oklch(20% 0.02 260);
-  --ps-soft: oklch(42% 0.02 260);
-  --ps-mute: oklch(52% 0.015 260);
-  --ps-blue: oklch(50% 0.19 256);
+  --ps-soft: oklch(40% 0.02 260);
+  --ps-mute: oklch(50% 0.015 260);
+  --ps-blue: oklch(52% 0.19 256);
   --ps-blue-ink: oklch(98% 0.01 256);
   --ps-blue-soft: oklch(95% 0.03 256);
   --ps-ok: oklch(48% 0.12 155);
@@ -476,7 +479,6 @@ export const CATALOG_STYLE = `body{margin:0}
 .cat-head h1{font-size:clamp(30px,3.6vw,44px);line-height:1.1;letter-spacing:-0.03em}
 .cat-lead{margin-top:12px;font-size:17px;color:var(--ps-soft);max-width:62ch}
 .cat-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:40px;align-items:start;margin-top:32px}
-.cat-facts-box{display:grid;gap:6px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--ps-bg-2);font-size:14px;color:var(--ps-soft)}
 .cat-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}
 .cat-card{background:var(--ps-surface);border:1px solid var(--ps-line);border-radius:16px;padding:20px 22px;transition:border-color 180ms ease}
 .cat-card:hover{border-color:var(--ps-line-2)}
@@ -486,18 +488,11 @@ export const CATALOG_STYLE = `body{margin:0}
 .cat-salary{color:var(--ps-ink);font-weight:600;font-variant-numeric:tabular-nums}
 .cat-summary{margin-top:10px;font-size:15px;color:var(--ps-soft)}
 .cat-empty{margin-top:24px;color:var(--ps-soft)}
-.cat-pager{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:24px;font-size:14px;color:var(--ps-mute);flex-wrap:wrap}
 .cat-side{position:sticky;top:88px;display:grid;gap:16px}
 .cat-box{background:var(--ps-surface);border:1px solid var(--ps-line);border-radius:16px;padding:20px}
 .cat-box h2{font-size:16px;margin-bottom:12px}
 .cat-box p{font-size:14px;color:var(--ps-soft)}
 .cat-box .ps-btn{margin-top:14px;width:100%}
-.cat-filters{display:grid;gap:18px}
-.cat-filter h3{font-size:13px;font-weight:600;color:var(--ps-mute);margin-bottom:8px}
-.cat-filter ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
-.cat-filter a{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border-radius:8px;background:var(--ps-bg-2);font-size:13px;color:var(--ps-soft)}
-.cat-filter a:hover{color:var(--ps-ink);background:var(--ps-blue-soft)}
-.cat-filter span{color:var(--ps-mute);font-variant-numeric:tabular-nums}
 .cat-detail{display:grid;grid-template-columns:minmax(0,46rem) 300px;justify-content:space-between;gap:48px;align-items:start;margin-top:8px}
 .cat-detail h1{font-size:clamp(28px,3.2vw,40px);line-height:1.12;letter-spacing:-0.03em}
 .cat-body{margin-top:28px;font-size:16px;line-height:1.65;color:var(--ps-soft)}
@@ -521,9 +516,6 @@ export const CATALOG_STYLE = `body{margin:0}
 /* B569: mockup 08 — head with facts, search combobox, FAQ */
 .cat-vh{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:start}
 .cat-vh>.ps-btn{margin-top:8px}
-.cat-vfacts{display:flex;flex-wrap:wrap;gap:6px 24px;font-size:16px;color:var(--ps-soft);margin-top:16px}
-.cat-vfacts b{color:var(--ps-ink);font-variant-numeric:proportional-nums}
-.cat-alert{color:var(--ps-blue);font-weight:600;display:inline-flex;align-items:center;min-height:44px}
 .cat-search{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:8px;margin:32px 0 24px;padding:8px;border-radius:16px;background:var(--ps-surface);border:1px solid var(--ps-line);box-shadow:0 1px 2px oklch(20% 0.02 260 / .04),0 12px 32px -16px oklch(20% 0.02 260 / .16)}
 .cat-fld{position:relative;display:grid;gap:2px;padding:6px 14px;border-radius:10px}
 .cat-fld+.cat-fld{border-left:1px solid var(--ps-line);border-radius:0}
@@ -537,11 +529,5 @@ export const CATALOG_STYLE = `body{margin:0}
 .cat-ac li[aria-selected=true],.cat-ac li:hover{background:var(--ps-bg-2)}
 .cat-ac li.sep{min-height:0;height:1px;padding:0;margin:4px 0;background:var(--ps-line);cursor:default}
 .cat-ac li.hint{color:var(--ps-mute);cursor:default}
-.cat-prep-link{display:flex;align-items:center;min-height:44px;color:var(--ps-blue);font-weight:600}
-.cat-faq{margin-top:48px}
-.cat-faq h2{font-size:24px;margin-bottom:16px}
-.cat-faq details{border-top:1px solid var(--ps-line);padding:0}
-.cat-faq summary{min-height:56px;display:flex;align-items:center;padding:12px 0}
-.cat-faq details p{padding:0 0 20px;color:var(--ps-soft);max-width:68ch}
 @media (max-width:760px){.cat-vh{grid-template-columns:minmax(0,1fr)}.cat-vh>.ps-btn{display:none}.cat-search{grid-template-columns:minmax(0,1fr);box-shadow:none}.cat-fld+.cat-fld{border-left:0;border-top:1px solid var(--ps-line)}}
-`;
+` + LISTING_STYLE;

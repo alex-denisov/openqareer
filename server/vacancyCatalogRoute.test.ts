@@ -205,11 +205,10 @@ describe('B209: публичный каталог вакансий', () => {
   it('печатает фильтры группами на корне каталога', async () => {
     const app = await appWithPool(Array.from({ length: 5 }, (_, index) => vacancy(index)));
     const response = await app.inject({ method: 'GET', url: '/vacancies' });
-    expect(response.body).toContain('Сузить выборку');
     // Место и роль названы порознь: в плоском списке читатель не видел, что из
     // этого город, а что должность (B209, срез 2b).
-    expect(response.body).toContain('<h3>Места</h3>');
-    expect(response.body).toContain('<h3>Роли</h3>');
+    expect(response.body).toContain('<h2>Места</h2>');
+    expect(response.body).toContain('<h2>Роли</h2>');
     expect(response.body).toContain('href="/vacancies/berlin"');
     expect(response.body).toContain('href="/vacancies/berlin/frontend-developer"');
   });

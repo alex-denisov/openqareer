@@ -205,6 +205,12 @@ function handleProjectedListing(
         place: listing.place,
         ...(listing.role ? { role: listing.role } : {}),
       }),
+      {
+        stats: deps.multiSourceEngine.getPublicCatalogSalaryStats({
+          place: listing.place,
+          ...(listing.role ? { role: listing.role } : {}),
+        }),
+      },
     ),
   );
 }

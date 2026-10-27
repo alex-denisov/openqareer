@@ -193,3 +193,47 @@
     });
   });
 })();
+
+/* B569: long blocks fold to their first rows. data-fold="N" shows N rows (the
+ * header marked .lv-keep stays); data-fold-m folds on phones only. Without this
+ * script every row is in the page, so crawlers and readers without scripts see
+ * the whole list. */
+(function () {
+  var phone = window.matchMedia && window.matchMedia('(max-width:760px)').matches;
+  [].forEach.call(document.querySelectorAll('[data-fold],[data-fold-m]'), function (box) {
+    var both = box.hasAttribute('data-fold') && box.hasAttribute('data-fold-m');
+    var onlyPhone = !both && box.hasAttribute('data-fold-m');
+    var attr = both
+      ? phone
+        ? 'data-fold-m'
+        : 'data-fold'
+      : onlyPhone
+        ? 'data-fold-m'
+        : 'data-fold';
+    var n = +box.getAttribute(attr);
+    var items = [].slice.call(box.children).filter(function (c) {
+      return !c.classList.contains('lv-keep');
+    });
+    if (items.length <= n) return;
+    var cls = onlyPhone ? 'fx-m fx' : 'fx';
+    items.slice(n).forEach(function (c) {
+      c.className += ' ' + cls;
+    });
+    var label = box.getAttribute('data-fold-label') || 'Показать все: ' + items.length;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ps-btn lv-fold-more' + (onlyPhone ? ' m-only' : '');
+    b.textContent = label;
+    b.setAttribute('aria-expanded', 'false');
+    b.addEventListener('click', function () {
+      var open = b.getAttribute('aria-expanded') !== 'true';
+      items.slice(n).forEach(function (c) {
+        c.classList.toggle('fx', !open);
+      });
+      b.setAttribute('aria-expanded', String(open));
+      b.textContent = open ? 'Свернуть' : label;
+    });
+    var anchor = box.closest('.lv-card') || box;
+    anchor.parentNode.insertBefore(b, anchor.nextSibling);
+  });
+})();
