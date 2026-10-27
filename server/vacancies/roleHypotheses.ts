@@ -9,6 +9,8 @@ import {
   type RoleConfirmation,
 } from '../../shared/roleProposals';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
+import { getCurrencyRates } from '../currency/cbrRates';
+import { monthlyRubSalary } from './roleWageSalary';
 
 /**
  * Роли считаются на сервере (B180, срез 1б).
@@ -22,12 +24,13 @@ import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 
 /** Пул в том виде, в каком его читает расчёт ролей. */
 function observations(matched: readonly MatchedVacancyItem[]): RoleObservation[] {
+  const rates = getCurrencyRates();
   return matched.map((item) => ({
     canonicalTitle: item.cluster.canonicalTitle,
     firstObservedAt: item.cluster.firstObservedAt,
     skills: item.cluster.skills,
     sources: item.cluster.sources,
-    salary: item.cluster.salary,
+    salary: item.cluster.salary ? monthlyRubSalary(item.cluster.salary, rates) : undefined,
   }));
 }
 
