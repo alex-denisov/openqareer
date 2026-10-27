@@ -1,4 +1,5 @@
 import { titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
+import { titleKey } from '../../shared/poolRoleHypotheses';
 import { rulesParse } from './titleParse/rulesParse';
 
 /**
@@ -40,12 +41,21 @@ function leadershipTier(title: string, levelRank: number): 'top' | 'head' {
   return DIRECTOR.test(title) && !BELOW_DIRECTOR.test(title) ? 'top' : 'head';
 }
 
+/**
+ * Название вне словаря сводится по словам без расшифровки в скобках:
+ * «Исполнительный директор (CEO)» и «Исполнительный директор» — одна роль.
+ */
+function untaggedKey(title: string): string | null {
+  const words = titleKey(title.replace(/\([^)]*\)/gu, ' '));
+  return words ? `title:${words}` : null;
+}
+
 function keyOf(title: string): string | null {
   const parsed = rulesParse(title);
   const primary = parsed.roleId?.split('.')[0] ?? parsed.functions[0];
   const rank = parsed.levelRank;
   if (!primary || rank === null || rank < LEADERSHIP_RANK || UNMERGED_FUNCTIONS.has(primary)) {
-    return parsed.roleId ?? null;
+    return parsed.roleId ?? untaggedKey(title);
   }
   return `${primary}:${leadershipTier(title, rank)}`;
 }
