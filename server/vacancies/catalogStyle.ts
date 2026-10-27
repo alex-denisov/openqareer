@@ -243,6 +243,18 @@ export const CATALOG_STYLE =
     flex-direction: column;
   }
 }
+.ps-menu a.ps-menu-login {
+  border-top: 1px solid var(--ps-line);
+  border-radius: 0;
+  margin-top: 4px;
+  color: var(--ps-ink);
+  font-weight: 600;
+}
+@media (min-width: 761px) {
+  .ps-menu a.ps-menu-login {
+    display: none;
+  }
+}
 @media (max-width: 760px) {
   .ps-menu {
     padding: 8px 16px;

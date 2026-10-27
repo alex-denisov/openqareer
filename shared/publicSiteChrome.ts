@@ -115,7 +115,8 @@ export function renderChromeHeaderHtml(brand: string, current?: PublicSection): 
     '<div class="ps-top-actions"><a class="ps-btn is-login" href="/login">Войти</a>' +
     '<a class="ps-btn is-cta" href="/signup">Найти работу</a>' +
     `<button class="ps-menu-btn" type="button" aria-label="${MENU_LABEL}" aria-expanded="false" aria-controls="${MENU_ID}" data-ps-menu>${MENU_ICON}</button></div></div>` +
-    `<nav class="ps-menu" id="${MENU_ID}" aria-label="Разделы" hidden>${links.join('')}</nav></header>`
+    `<nav class="ps-menu" id="${MENU_ID}" aria-label="Разделы" hidden>${links.join('')}` +
+    '<a class="ps-menu-login" href="/login">Войти</a></nav></header>'
   );
 }
 

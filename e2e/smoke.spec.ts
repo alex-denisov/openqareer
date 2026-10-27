@@ -30,11 +30,15 @@ test('public landing page is ready, indexed and free of critical accessibility v
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
-  await expect(
-    page.getByRole('heading', { level: 1, name: /Ваш опыт стоит больше/u }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /Вы выбираете работу/u })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Найти работу', exact: true }).first()).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Войти' }).first()).toBeVisible();
+  // B569: on phones «Войти» lives in the section menu, as in mockup 01.
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await page.getByRole('button', { name: 'Меню разделов' }).click();
+  }
+  await expect(
+    page.getByRole('link', { name: 'Войти', exact: true }).filter({ visible: true }).first(),
+  ).toBeVisible();
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,

@@ -140,6 +140,17 @@ export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicC
       </div>
       <nav className="ps-menu" id={MENU_ID} aria-label="Разделы" hidden={!open}>
         {links}
+        {signedIn ? null : (
+          // On phones the header hides «Войти»; the menu keeps the way in.
+          <SiteLink
+            to="/login"
+            className="ps-menu-login"
+            onNavigate={onNavigate}
+            onWarm={preloadAuthPages}
+          >
+            Войти
+          </SiteLink>
+        )}
       </nav>
     </header>
   );
