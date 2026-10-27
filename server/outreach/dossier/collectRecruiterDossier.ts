@@ -305,6 +305,25 @@ function metaContent(html: string, property: string): string | null {
   return match ? match[1]! : null;
 }
 
+/** Страница канала («Preview channel», «N subscribers») или группы («N members»). */
+export function isTelegramBroadcast(html: string): boolean {
+  return /Preview channel|tgme_page_extra">[^<]{0,40}(?:subscriber|member)/u.test(html);
+}
+
+/** Ссылка t.me со страницы может вести на канал человека: такой канал не контакт и отбрасывается. */
+async function withoutBroadcasts(channels: readonly RecruiterChannel[], deps: DossierDeps, state: RunState): Promise<RecruiterChannel[]> {
+  const kept: RecruiterChannel[] = [];
+  for (const channel of channels) {
+    const nick = channel.kind === 'telegram' ? channel.value.replace(/^@/u, '') : '';
+    if (/^[A-Za-z][A-Za-z0-9_]{3,31}$/u.test(nick)) {
+      const html = await getText(`https://t.me/${nick}`, deps, 'text/html', state);
+      if (html !== null && isTelegramBroadcast(html)) continue;
+    }
+    kept.push(channel);
+  }
+  return kept;
+}
+
 function telegramTitle(html: string): string | null {
   return metaContent(html, 'og:title');
 }
@@ -329,6 +348,8 @@ async function fromTelegramNicks(
     // Страница без профиля называется «Telegram: Contact @nick» — имени человека в ней нет.
     // Пустой ник отдаёт «Telegram: Contact @nick»: ник из имени прошёл бы проверку имени сам.
     if (!title || /^Telegram:/u.test(title) || !namesPerson(title, person.fullName)) continue;
+    // Канал или группа — не человек: им не написать в личные сообщения (замер t.me 27.10).
+    if (isTelegramBroadcast(html)) continue;
     // Одно имя — однофамилец, а не контакт: нужна связь с человеком в графе соответствия
     // (общий контакт, тот же ник, любой работодатель из истории, город, профессия).
     const bio = metaContent(html, 'og:description') ?? '';
@@ -493,5 +514,6 @@ export async function collectRecruiterDossier(person: DossierPerson, deps: Dossi
     fromUsernameSites(person, identity, known, deps, observedAt, state).catch(failed),
     fromVkNicks(person, identity, known, deps, observedAt, state).catch(failed),
   ]);
-  return { channels: rankChannels([...pages, ...github, ...telegram, ...profiles, ...vk]), complete: !state.failed };
+  const personal = await withoutBroadcasts([...pages, ...profiles], deps, state);
+  return { channels: rankChannels([...personal, ...github, ...telegram, ...vk]), complete: !state.failed };
 }
