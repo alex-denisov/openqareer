@@ -43,4 +43,15 @@ describe('catalog salary stats store (B569)', () => {
     expect(computeCatalogSalaryStats(empty).size).toBe(0);
     expect(readCatalogSalaryStats(empty, { place: 'moscow' })).toBeUndefined();
   });
+
+  it('marks a list whose role has a prepared /salaries page', () => {
+    const database = catalog();
+    database.exec('CREATE TABLE salary_market_index (id INTEGER PRIMARY KEY, payload TEXT)');
+    database
+      .prepare('INSERT INTO salary_market_index VALUES (1, ?)')
+      .run(JSON.stringify([{ role: 'accountant' }]));
+    const stats = computeCatalogSalaryStats(database);
+    expect(stats.get('moscow|accountant')?.salaryPage).toBe(true);
+    expect(stats.get('moscow')?.salaryPage).toBeUndefined();
+  });
 });

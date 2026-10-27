@@ -6,6 +6,7 @@
  * primary key per page.
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { readSalaryMarketIndex } from '../salaryMarket/salaryMarketSnapshot';
 import { salaryStats, type SalaryStats } from './catalogSalaryStats';
 
 const TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_salary_stats (
@@ -44,9 +45,13 @@ export function computeCatalogSalaryStats(database: DatabaseSync): Map<string, S
     push(byList, row.place_slug, row.salary_label);
     if (row.role_slug) push(byList, `${row.place_slug}|${row.role_slug}`, row.salary_label);
   }
+  // A role page exists only for roles in the prepared salary directory.
+  const salaryRoles = new Set(readSalaryMarketIndex(database).map((entry) => entry.role));
   for (const [key, labels] of byList) {
     const stats = salaryStats(labels);
-    if (stats.withSalary > 0) result.set(key, stats);
+    if (stats.withSalary === 0) continue;
+    const role = key.split('|')[1];
+    result.set(key, role && salaryRoles.has(role) ? { ...stats, salaryPage: true } : stats);
   }
   return result;
 }

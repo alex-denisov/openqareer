@@ -27,6 +27,8 @@ export interface SalaryStats {
   readonly low?: number;
   readonly high?: number;
   readonly sign?: string;
+  /** The role of the list has its own /salaries/<role> page (B569). */
+  readonly salaryPage?: boolean;
 }
 
 function amount(text: string): number | undefined {

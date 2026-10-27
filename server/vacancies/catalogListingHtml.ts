@@ -114,7 +114,7 @@ function answer(page: CatalogPage, names: Names, stats?: SalaryStats): string {
 function salaryCard(page: CatalogPage, names: Names, stats?: SalaryStats): string {
   if (stats?.median === undefined || stats.low === undefined || stats.high === undefined) return '';
   const role = page.listing?.role;
-  const href = (role ? salaryRolePath(role) : undefined) ?? '/salaries';
+  const href = (role && stats?.salaryPage ? salaryRolePath(role) : undefined) ?? '/salaries';
   const title = names.placeGen
     ? `Зарплаты в вакансиях ${names.placeGen}`
     : 'Зарплаты в этих вакансиях';
@@ -167,7 +167,7 @@ function facetCards(groups: readonly CatalogFilterGroup[], names: Names): string
     .join('');
 }
 
-function prepCard(page: CatalogPage, names: Names): string {
+function prepCard(page: CatalogPage, names: Names, stats?: SalaryStats): string {
   const role = page.listing?.role;
   const link = (href: string, text: string) =>
     `<a class="lv-link" href="${escapeHtml(href)}">${escapeHtml(text)} ${ARROW}</a>`;
@@ -180,8 +180,8 @@ function prepCard(page: CatalogPage, names: Names): string {
       genitive ? `Вопросы на собеседовании ${genitive}` : 'Вопросы на собеседовании',
     ),
     link(
-      (role ? salaryRolePath(role) : undefined) ?? '/salaries',
-      genitive ? `Зарплаты ${genitive} по городам` : 'Зарплаты по профессиям',
+      (role && stats?.salaryPage ? salaryRolePath(role) : undefined) ?? '/salaries',
+      genitive && stats?.salaryPage ? `Зарплаты ${genitive} по городам` : 'Зарплаты по профессиям',
     ),
   ];
   return `<div class="lv-card lv-side-like lv-hm"><h2>Подготовьтесь к отклику</h2><div class="lv-prep">${links.join('')}</div></div>`;
@@ -207,7 +207,7 @@ export function renderListingMain(
     '<div class="lv-sticky"><a class="ps-btn is-primary is-lg" href="/signup?from=catalog">Показать мой процент совпадения · бесплатно</a></div>' +
     pager(page) +
     `</div><aside class="lv-side">${salaryCard(page, names, extras.stats)}${alertCard(page, names)}</aside></div>` +
-    `<section class="lv-sec"><div class="ps-wrap lv-facets">${facetCards(filters, names)}${prepCard(page, names)}</div></section>` +
+    `<section class="lv-sec"><div class="ps-wrap lv-facets">${facetCards(filters, names)}${prepCard(page, names, extras.stats)}</div></section>` +
     listingFaq(page, names, extras.stats)
   );
 }

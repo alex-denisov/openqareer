@@ -37,7 +37,8 @@ function items(page: CatalogPage, names: Names, stats?: SalaryStats): Item[] {
     },
   ];
   if (stats?.median !== undefined) {
-    const salaryPath = (role ? salaryRolePath(role) : undefined) ?? '/salaries';
+    const salaryPath =
+      (role && stats?.salaryPage ? salaryRolePath(role) : undefined) ?? '/salaries';
     list.push({
       question:
         names.roleDat && names.placePrep
