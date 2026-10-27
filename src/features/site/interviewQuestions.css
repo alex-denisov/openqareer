@@ -150,8 +150,9 @@
   background: var(--ps-band);
   color: var(--ps-blue-ink);
 }
-.iq-strip h2 {
-  font-size: var(--ps-text-lg);
+.ps .iq-strip h2 {
+  font-size: 24px;
+  font-weight: 600;
 }
 .iq-strip p {
   margin-top: 8px;
