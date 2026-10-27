@@ -94,14 +94,15 @@ describe('salary country view (B351 06b)', () => {
     const view = salaryCountryView('germany', {
       readAt: '2026-10-27T10:00:00Z',
       cities: [
-        { slug: 'munich', label: 'Мюнхен', count: 612 },
+        { slug: 'munich', label: 'München', count: 612 },
         { slug: 'hamburg', label: 'Гамбург', count: 29 },
-        { slug: 'berlin', label: 'Берлин', count: 945 },
+        { slug: 'berlin', label: 'Berlin', count: 945 },
         { slug: 'paris', label: 'Париж', count: 900 },
       ],
     });
     expect(view.cities.map((city) => city.slug)).toEqual(['berlin', 'munich']);
     expect(view.cities[0]!.genitive).toBe('Берлина');
+    expect(view.cities.map((city) => city.label)).toEqual(['Берлин', 'Мюнхен']);
     expect(view.catalogDate).toBe('27.10.2026');
     expect(view.toName).toBe('в Германию');
     expect(salaryCountryView('germany').cities).toEqual([]);
