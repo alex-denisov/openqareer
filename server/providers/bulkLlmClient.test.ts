@@ -194,7 +194,14 @@ it('an upstream cost above reservation records actual charge and stops later dis
   runtime.close();
 });
 it('routes through an ordered list of pinned providers so one price change or rate limit does not stop the work', async () => {
-  let body: { provider: { order: string[]; only: string[]; allow_fallbacks: boolean; quantizations: string[] } };
+  let body: {
+    provider: {
+      order: string[];
+      only: string[];
+      allow_fallbacks: boolean;
+      quantizations: string[];
+    };
+  };
   const base = options((async (_u, init) => {
     body = JSON.parse(String(init?.body));
     return response(0.001);
@@ -222,15 +229,25 @@ it('expires a hold left by a call that never settled after the TTL at the deares
     vi.setSystemTime(Date.parse('2026-10-22T03:00:00.000Z'));
     let mode: 'ok' | 'timeout' = 'ok';
     const opts = options((async () => {
-      if (mode === 'timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      if (mode === 'timeout')
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
       return response(0.004);
     }) as typeof fetch);
     const runtime = createBulkLlmRuntime(opts);
     await runtime.client!.complete(req);
     mode = 'timeout';
+    // A call with no answer frees its hold at once (27.10): it never blocks the next call.
     await expect(runtime.client!.complete(req)).rejects.toThrow('timeout');
-    expect(runtime.status().heldUsd).toBe(0.06);
+    expect(runtime.status().heldUsd).toBe(0);
     mode = 'ok';
+    // A worker stopped mid-call leaves its hold behind: that one waits for the TTL.
+    runtime.ledger.reserve({ ...req, model: 'deepseek/deepseek-v4-flash', provider: 'p' }, {
+      runUsd: 0.1,
+      dayUsd: 0.1,
+      totalUsd: 0.1,
+      perRequestUsd: 0.06,
+    } as never);
+    expect(runtime.status().heldUsd).toBe(0.06);
     // Inside the TTL the hold still blocks: the charge may yet be real.
     await expect(runtime.client!.complete(req)).rejects.toThrow('budget');
     vi.setSystemTime(Date.parse('2026-10-22T03:16:00.000Z'));
