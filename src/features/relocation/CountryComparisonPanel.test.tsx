@@ -1,3 +1,5 @@
+import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
+import { buildCountryComparisonCountry } from './relocationCountryData';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { CountryComparisonPanel } from './CountryComparisonPanel';
@@ -114,5 +116,24 @@ describe('CountryComparisonPanel', () => {
     expect(
       renderToStaticMarkup(<CountryComparisonPanel state="error" errorMessage="Ошибка." />),
     ).not.toContain('<button');
+  });
+
+  it('shows the eight rows of mockup 15 and one line of sources for compared countries (28.10)', () => {
+    const profile = emptyRelocationQuestionnaire();
+    const html = renderToStaticMarkup(
+      <CountryComparisonPanel
+        countries={[
+          buildCountryComparisonCountry('DE', profile),
+          buildCountryComparisonCountry('KZ', profile),
+        ]}
+        showParetoSummary={false}
+      />,
+    );
+    const table = html.slice(html.indexOf('<table'), html.indexOf('</table>'));
+    expect(table.match(/scope="row"/gu)).toHaveLength(8);
+    expect(table).toContain('прогрессивный, до 45 %');
+    expect(table).toContain('в правилах не указан');
+    expect(table).not.toContain('нет данных');
+    expect(html).toMatch(/Источники: официальные порталы стран, \d{2}\.\d{2}\.\d{4}/u);
   });
 });

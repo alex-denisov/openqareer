@@ -282,7 +282,9 @@ function buildTaxComparisonFacts(
     grossAnnualIncome !== undefined && Number.isFinite(grossAnnualIncome) && grossAnnualIncome > 0
       ? grossAnnualIncome
       : undefined;
-  if (!taxData || annualIncome === undefined) return unavailableTaxFacts(taxData !== null);
+  if (!taxData) return unavailableTaxFacts(false);
+  if (annualIncome === undefined)
+    return { incomeTax: scaleTaxFact(taxData), netIncome: unavailableTaxFacts(true).netIncome };
   const payroll = calculateAnnualPayroll(countryCode, annualIncome);
   const incomeTax = payroll.incomeTax.amount + payroll.solidaritySurcharge;
   return {
@@ -306,6 +308,34 @@ function buildTaxComparisonFacts(
         payroll.employeeContributions.items.map(({ source }) => source),
       ),
     },
+  };
+}
+
+/** Germany's §32a EStG top rate; the 2026 formula has no band table to read it from. */
+const GERMANY_TOP_RATE = 0.45;
+
+function topRate(rule: NonNullable<ReturnType<typeof getCountryTaxData>>['incomeTax']): number {
+  if (rule.kind === 'germany-2026') return GERMANY_TOP_RATE;
+  if (rule.kind === 'none') return 0;
+  if (rule.kind === 'flat' || rule.kind === 'flat-after-monthly-allowance') return rule.rate;
+  return Math.max(...rule.bands.map(({ rate }) => rate));
+}
+
+/** «Налог на доход» before a salary is known: the shape of the country's own scale. */
+function scaleTaxFact(
+  taxData: NonNullable<ReturnType<typeof getCountryTaxData>>,
+): TaxComparisonFacts['incomeTax'] {
+  const rule = taxData.incomeTax;
+  const rate = Math.round(topRate(rule) * 100);
+  const progressive =
+    rule.kind === 'germany-2026' ||
+    ((rule.kind === 'brackets' || rule.kind === 'brackets-minus-exempt-base') &&
+      new Set(rule.bands.map(({ rate: bandRate }) => bandRate)).size > 1);
+  const label = rate === 0 ? '0 %' : progressive ? `прогрессивный, до ${rate} %` : `${rate} %, плоский`;
+  return {
+    status: 'available',
+    value: { effectiveRate: rate, basis: `Шкала налога ${taxData.taxYear} года.`, label },
+    sources: [comparisonEvidence(rule.source)],
   };
 }
 

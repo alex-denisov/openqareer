@@ -74,6 +74,29 @@
   font-size: var(--career-text-xs);
 }
 
+details.career-country-comparison-sources-line {
+  display: block;
+}
+
+.career-country-comparison-sources-line summary {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  cursor: pointer;
+  list-style: none;
+}
+
+.career-country-comparison-sources-line summary::-webkit-details-marker {
+  display: none;
+}
+
+.career-country-comparison-sources-line ul {
+  display: grid;
+  gap: var(--career-space-1);
+  margin: var(--career-space-2) 0 0;
+  padding-left: calc(var(--career-space-2) + 14px);
+}
+
 .career-country-comparison-sources-line a {
   border-radius: var(--career-space-1);
   color: var(--career-accent);
