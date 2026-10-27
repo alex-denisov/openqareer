@@ -233,15 +233,22 @@ async function writeCountryFitPage(html: string, distDirectory: string): Promise
 /** B567: the builder renders its sample resume and copy before the bundle loads. */
 const RESUME_BUILDER_DOCUMENT_BUDGET = 28_000;
 
-async function writeResumeBuilderPage(html: string, distDirectory: string): Promise<void> {
+async function writeResumeBuilderPage(
+  html: string,
+  distDirectory: string,
+  styles: string,
+): Promise<void> {
   const document = compactCountryFitDocument(
     deferEntryScript(
-      pageHead(html, {
-        path: RESUME_BUILDER_PATH,
-        title: RESUME_BUILDER_TITLE,
-        description: RESUME_BUILDER_DESCRIPTION,
-        shareDescription: 'Резюме по шагам с подсказками и проверкой на ATS. PDF и DOCX.',
-      }),
+      withPageStyles(
+        pageHead(html, {
+          path: RESUME_BUILDER_PATH,
+          title: RESUME_BUILDER_TITLE,
+          description: RESUME_BUILDER_DESCRIPTION,
+          shareDescription: 'Резюме по шагам с подсказками и проверкой на ATS. PDF и DOCX.',
+        }),
+        styles,
+      ),
     ).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<ResumeBuilderPage onNavigate={() => {}} />)),
@@ -256,15 +263,23 @@ async function writeResumeBuilderPage(html: string, distDirectory: string): Prom
 }
 
 /** B354: /tools/relocation ships its first paint with the example estimate. */
-async function writeRelocationPage(html: string, distDirectory: string): Promise<void> {
+async function writeRelocationPage(
+  html: string,
+  distDirectory: string,
+  styles: string,
+): Promise<void> {
   const document = compactCountryFitDocument(
     deferEntryScript(
-      pageHead(html, {
-        path: '/tools/relocation',
-        title: RELOCATION_TITLE,
-        description: RELOCATION_DESCRIPTION,
-        shareDescription: 'Пути переезда по работе в выбранные страны с официальными порогами 2026 года.',
-      }),
+      withPageStyles(
+        pageHead(html, {
+          path: '/tools/relocation',
+          title: RELOCATION_TITLE,
+          description: RELOCATION_DESCRIPTION,
+          shareDescription:
+            'Пути переезда по работе в выбранные страны с официальными порогами 2026 года.',
+        }),
+        styles,
+      ),
     ).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<RelocationPage onNavigate={() => {}} />)),
@@ -273,14 +288,26 @@ async function writeRelocationPage(html: string, distDirectory: string): Promise
   await writeFile(`${distDirectory}/relocation.html`, document);
 }
 
-async function writeToolPages(html: string, distDirectory: string): Promise<void> {
+async function writeToolPages(
+  html: string,
+  distDirectory: string,
+  manifest?: Manifest,
+): Promise<void> {
   await writeCountryFitPage(html, distDirectory);
-  await writeRelocationPage(html, distDirectory);
+  await writeRelocationPage(html, distDirectory, pageStylesheets(manifest, 'relocationRoute'));
 }
 
 /** B535: /faq and /support are indexed documents with their own first paint. */
-async function writeHelpPages(html: string, distDirectory: string): Promise<void> {
-  await writeResumeBuilderPage(html, distDirectory);
+async function writeHelpPages(
+  html: string,
+  distDirectory: string,
+  manifest?: Manifest,
+): Promise<void> {
+  await writeResumeBuilderPage(
+    html,
+    distDirectory,
+    pageStylesheets(manifest, 'resumeBuilderRoute'),
+  );
   await writeFile(
     `${distDirectory}/faq.html`,
     deferEntryScript(helpHead(html, HELP_PAGES[0])).replace(
@@ -387,6 +414,35 @@ export function authResourceHints(manifest: Manifest): string {
       (href) => `<link rel="preload" as="style" crossorigin href="${href}">`,
     ),
   ].join('');
+}
+
+/**
+ * A tool page's own styles live in its lazy chunk, off the first-paint sheet
+ * every public document loads (one 12 KiB delivery part). Its prerendered
+ * document links that chunk's stylesheet, so the page never paints unstyled.
+ */
+export function pageStylesheets(manifest: Manifest | undefined, name: string): string {
+  if (!manifest) return '';
+  const dynamicImports = manifest['index.html']?.dynamicImports;
+  if (!Array.isArray(dynamicImports)) throw new Error('Missing entry build graph');
+  const matches = dynamicImports
+    .map((key) => manifest[key])
+    .filter((entry) => entry?.name === name);
+  if (matches.length !== 1) throw new Error(`Expected one emitted page chunk: ${name}`);
+  const css = matches[0].css;
+  if (!Array.isArray(css) || css.length === 0)
+    throw new Error(`Missing emitted page stylesheet: ${name}`);
+  return css
+    .map((file) => {
+      if (typeof file !== 'string' || !/^assets\/[A-Za-z0-9_-]+\.css$/u.test(file))
+        throw new Error('Invalid page stylesheet path');
+      return `<link rel="stylesheet" crossorigin href="${escapeHtml(`/${file}`)}">`;
+    })
+    .join('');
+}
+
+function withPageStyles(html: string, styles: string): string {
+  return styles ? html.replace('</head>', `${styles}</head>`) : html;
 }
 
 async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string> {
@@ -510,8 +566,8 @@ export async function prerenderShells(
       ),
     );
   }
-  await writeHelpPages(html, distDirectory);
-  await writeToolPages(html, distDirectory);
+  await writeHelpPages(html, distDirectory, manifest);
+  await writeToolPages(html, distDirectory, manifest);
   await writeSalaryTemplate(html, distDirectory);
   await writeNotFoundPage(html, distDirectory);
   await writeAuthPages(html, distDirectory, manifest ? authResourceHints(manifest) : '');
