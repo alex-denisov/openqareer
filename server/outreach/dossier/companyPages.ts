@@ -124,18 +124,34 @@ async function readLimited(response: Response): Promise<string> {
 }
 
 /** Открытая HTML-страница как текст, с лимитом размера; failed — отказ по частоте или сеть. */
-const ARCHIVE_HOST = 'web.archive.org';
 
 type PageResult = { text: string | null; failed: boolean };
 
+const MAX_REDIRECTS = 3;
+
 export async function fetchPublicPage(url: string, deps: DossierDeps): Promise<PageResult> {
-  const first = await fetchOnce(url, deps, 0);
-  if (!('redirect' in first)) return first;
-  const second = await fetchOnce(first.redirect, deps, 1);
-  return 'redirect' in second ? { text: null, failed: false } : second;
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const result = await fetchOnce(current, deps);
+    if (!('redirect' in result)) return result;
+    current = result.redirect;
+  }
+  return { text: null, failed: false };
 }
 
-async function fetchOnce(url: string, deps: DossierDeps, hops: number): Promise<PageResult | { redirect: string }> {
+function siteOf(host: string): string {
+  return host.toLowerCase().replace(/^www\./u, '');
+}
+
+/** Переадресация в пределах того же сайта: efko.ru → www.efko.ru, архив → архив; на чужой хост не идём. */
+function sameSite(from: URL, to: URL): boolean {
+  if (to.protocol !== 'https:') return false;
+  const a = siteOf(from.hostname);
+  const b = siteOf(to.hostname);
+  return a === b || b.endsWith(`.${a}`);
+}
+
+async function fetchOnce(url: string, deps: DossierDeps): Promise<PageResult | { redirect: string }> {
   const fetcher = deps.fetch ?? globalThis.fetch;
   const gate = deps.requestGate ?? sharedFootprintRequestGate;
   try {
@@ -147,12 +163,10 @@ async function fetchOnce(url: string, deps: DossierDeps, hops: number): Promise<
       });
       if (response.status === 429) return { text: null, failed: true };
       const location = response.headers.get('location');
-      if (response.status >= 300 && response.status < 400 && location && !hops) {
+      if (response.status >= 300 && response.status < 400 && location) {
         await response.body?.cancel().catch(() => undefined);
-        // Архив отдаёт снимок через переадресацию на свой же хост; на чужой хост не идём.
         const next = new URL(location, url);
-        if (new URL(url).hostname === ARCHIVE_HOST && next.hostname === ARCHIVE_HOST) return { redirect: next.href };
-        return { text: null, failed: false };
+        return sameSite(new URL(url), next) ? { redirect: next.href } : { text: null, failed: false };
       }
       const type = response.headers.get('content-type') ?? '';
       if (!response.ok || !/text\/html|text\/plain/u.test(type)) {
@@ -161,8 +175,10 @@ async function fetchOnce(url: string, deps: DossierDeps, hops: number): Promise<
       }
       return { text: htmlToText(await readLimited(response)), failed: false };
     });
-  } catch {
-    return { text: null, failed: true };
+  } catch (error) {
+    // Таймаут — повод повторить позже; ошибка сертификата или DNS — свойство сайта, а не отказ.
+    const timedOut = error instanceof Error && /timeout|abort/iu.test(`${error.name} ${error.message}`);
+    return { text: null, failed: timedOut };
   }
 }
 

@@ -196,7 +196,9 @@ async function fromOpenPages(
           .filter((channel) => channel.kind === 'email_corporate' || score >= LINK_THRESHOLD)
           .map((channel) => (channel.kind === 'email_corporate' || score >= CONFIRMED_THRESHOLD ? channel : { ...channel, status: 'hypothesis' as const }));
       })
-      .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName));
+      .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName))
+      // Ссылка LinkedIn рядом с именем бывает чужой (коллега, автор поста): адрес профиля несёт имя.
+      .filter((channel) => channel.kind !== 'linkedin' || emailNamesPerson(`${channel.value}@x`, person.fullName));
   } catch {
     state.failed = true;
     return [];
