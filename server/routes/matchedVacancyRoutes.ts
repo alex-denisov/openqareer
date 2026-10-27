@@ -21,7 +21,7 @@ import {
   matchedVacanciesQuerySchema,
   type MatchedVacancyFilters,
 } from '../vacancies/matchedVacancyFilters';
-import { markGeography } from '../vacancies/vacancyGeography';
+import { dropForeignRemote, markGeography } from '../vacancies/vacancyGeography';
 import { withinCareerGeography } from '../vacancies/careerGeography';
 import {
   invalidateAllMatchedVacancies,
@@ -67,7 +67,7 @@ export function finishMatchedVacancies(
   const geographyAndRemote = career
     ? remoteFiltered.filter((item) => withinCareerGeography(item, career))
     : remoteFiltered;
-  const roleFiltered = markGeography(
+  const marked = markGeography(
     targetRoles.length > 0
       ? geographyAndRemote.filter((item) => item.explanation.roleMatch !== 'none')
       : geographyAndRemote,
@@ -76,6 +76,8 @@ export function finishMatchedVacancies(
       ...((campaign.suggestedRegions ?? []) as CandidateRegion[]),
     ],
   );
+  // Подборка по «Карьере»: удалёнка из другой страны — вне условий кандидата.
+  const roleFiltered = career ? dropForeignRemote(marked) : marked;
   // B384: жёсткие ограничения профиля — теми же функциями, что на клиенте; O(размер подборки).
   const withinProfile = filterVacanciesByDecisionProfile(
     roleFiltered,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import {
+  compactPlaceLabel,
   vacancyGeoFit,
   vacancyGeoLabel,
   vacancyLevelLabel,
@@ -106,5 +107,17 @@ describe('vacancyGeoFit', () => {
       tone: 'unknown',
       label: 'Страна не указана',
     });
+  });
+});
+
+describe('compactPlaceLabel (27.10)', () => {
+  it('сворачивает длинный список стран в «первые две +N стран»', () => {
+    const many = Array.from({ length: 120 }, (_, index) => `Country ${index}`).join('; ');
+    expect(compactPlaceLabel(many)).toBe('Country 0, Country 1 и ещё 118 стран');
+  });
+
+  it('оставляет короткое место как есть', () => {
+    expect(compactPlaceLabel('Москва')).toBe('Москва');
+    expect(compactPlaceLabel('India; Nepal')).toBe('India, Nepal');
   });
 });

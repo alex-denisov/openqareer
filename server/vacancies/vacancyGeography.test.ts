@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markGeography, regionOfVacancy } from './vacancyGeography';
+import { dropForeignRemote, markGeography, regionOfVacancy } from './vacancyGeography';
 
 /**
  * PRB-040. Кампания «Xray Technician, MENA» получала первыми «Field Services
@@ -33,7 +33,12 @@ describe('regionOfVacancy', () => {
 
 describe('markGeography', () => {
   const item = (id: string, location: string | undefined, isRemote = false) => ({
-    cluster: { id, canonicalLocation: location, isRemote, firstObservedAt: '2026-09-20T00:00:00.000Z' },
+    cluster: {
+      id,
+      canonicalLocation: location,
+      isRemote,
+      firstObservedAt: '2026-09-20T00:00:00.000Z',
+    },
     explanation: {
       clusterId: id,
       roleMatch: 'target' as const,
@@ -44,7 +49,11 @@ describe('markGeography', () => {
 
   it('flags records outside the campaign regions and orders them last', () => {
     const marked = markGeography(
-      [item('us', 'Austin, TX, United States'), item('mena', 'Riyadh, Saudi Arabia'), item('unknown', undefined)],
+      [
+        item('us', 'Austin, TX, United States'),
+        item('mena', 'Riyadh, Saudi Arabia'),
+        item('unknown', undefined),
+      ],
       ['mena'],
     );
     expect(marked.map((entry) => entry.cluster.id)).toEqual(['mena', 'unknown', 'us']);
@@ -127,5 +136,15 @@ describe('remoteCountry', () => {
     expect(byId.get('us')).toMatchObject({ remoteCountry: 'other' });
     expect(byId.get('ru')).not.toHaveProperty('remoteCountry');
     expect(byId.get('us')).not.toHaveProperty('outsideGeography');
+  });
+});
+
+describe('dropForeignRemote (27.10)', () => {
+  const item = (remoteCountry?: 'unknown' | 'other') =>
+    ({ explanation: remoteCountry ? { remoteCountry } : {} }) as never;
+
+  it('убирает удалёнку из другой страны и оставляет неизвестную с пометкой', () => {
+    const kept = dropForeignRemote([item('other'), item('unknown'), item()]);
+    expect(kept).toHaveLength(2);
   });
 });
