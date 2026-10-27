@@ -30,7 +30,7 @@ export async function saveResumeStudioDraft(
   return readData<ResumeStudioView>(response);
 }
 
-export type ResumeImportSource = 'pdf' | 'linkedin' | 'hh' | 'text';
+export type ResumeImportSource = 'pdf' | 'linkedin' | 'hh' | 'text' | 'builder';
 
 export interface NativeSourceReceipt {
   readonly platform: 'hh' | 'linkedin';

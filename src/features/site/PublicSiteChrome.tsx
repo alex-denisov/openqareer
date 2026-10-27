@@ -77,6 +77,9 @@ export function PublicHeader({ onNavigate, onLanding, signedIn, isAdmin }: Publi
           <a href={anchor(onLanding, 'how')}>Как это работает</a>
           <a href={anchor(onLanding, 'apply')}>Кабинет</a>
           <a href={anchor(onLanding, 'tools')}>Вакансии</a>
+          <SiteLink to="/tools/resume" onNavigate={onNavigate}>
+            Резюме
+          </SiteLink>
           <a href={anchor(onLanding, 'tariffs')}>Тарифы</a>
           <SiteLink to="/faq" onNavigate={onNavigate}>
             Вопросы
@@ -147,6 +150,9 @@ export function PublicFooter({ onNavigate, onLanding }: PublicChromeProps) {
           <a href="/vacancies">Каталог вакансий</a>
           <a href="/vacancies/remote">Удалённые вакансии</a>
           <a href="/salaries">Зарплаты и навыки</a>
+          <SiteLink to="/tools/resume" onNavigate={onNavigate}>
+            Конструктор резюме
+          </SiteLink>
         </div>
         <FooterHelpAndDocs onNavigate={onNavigate} />
         <div className="ps-footer-legal">

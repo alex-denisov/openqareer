@@ -1,3 +1,4 @@
+import { registerResumeBuilderRoutes } from './resumeBuilderRoutes';
 import { summarizeRoleSample } from './roleSampleSummary';
 import { catalogSourceView } from '../../shared/catalogSources';
 import { getCatalogSources } from '../vacancies/catalogSources';
@@ -666,6 +667,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   registerVacancyApplicationRoutes(app, deps);
   registerSavedVacancyStateRoutes(app, deps);
   registerApplicationRoutes(app, deps);
+  registerResumeBuilderRoutes(app, deps);
   registerPlanRequestRoutes(app, deps);
   registerExecutiveRequestRoutes(app, deps);
   registerCampaignRoutes(app, deps);

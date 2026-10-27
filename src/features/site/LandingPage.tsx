@@ -354,10 +354,10 @@ function ToolsSection({ remote }: { remote: string }) {
       <div className="ps-wrap">
         <div className="ps-sh">
           <div>
-            <p className="ps-label">Инструменты</p>
-            <h2 id="tools-heading">Каталог вакансий без регистрации</h2>
+            <p className="ps-label">Без регистрации</p>
+            <h2 id="tools-heading">Бесплатные инструменты для поиска работы</h2>
           </div>
-          <p>Свежие вакансии по ролям, городам и странам: источник и дата у каждой.</p>
+          <p>Открыты всем: свежие вакансии с источником и датой и резюме с проверкой на ATS.</p>
         </div>
         <div className="ps-tools">
           <a className="ps-tool" href="/vacancies">
@@ -377,6 +377,12 @@ function ToolsSection({ remote }: { remote: string }) {
               часть: роль, зарплата, источник.
             </p>
             <span className="ps-go">Открыть удалённые →</span>
+          </a>
+          <a className="ps-tool" href="/tools/resume">
+            <span className="ps-chip is-ok">работает</span>
+            <h3>Конструктор резюме</h3>
+            <p>По шагам, с примерами и проверкой на ATS. Скачать в PDF и DOCX.</p>
+            <span className="ps-go">Собрать резюме →</span>
           </a>
         </div>
         <p className="ps-note">

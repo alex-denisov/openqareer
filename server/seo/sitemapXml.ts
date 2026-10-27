@@ -113,6 +113,8 @@ export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
     { path: '/faq', lastmod: PUBLIC_PAGES_UPDATED_AT },
     { path: '/support', lastmod: PUBLIC_PAGES_UPDATED_AT },
     { path: '/tools/country-fit', lastmod: '2026-10-23' },
+    // B567: the page, its menu item and the landing card ship in one release.
+    { path: '/tools/resume', lastmod: '2026-10-27' },
     ...LEGAL_DOCS.map((doc) => ({ path: legalPath(doc.slug), lastmod: LEGAL_PACK_PUBLISHED_AT })),
     { path: CATALOG_ROOT, ...(catalogLastmod ? { lastmod: catalogLastmod } : {}) },
   ];

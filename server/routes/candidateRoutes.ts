@@ -463,12 +463,16 @@ function nativeResumeImportReplay(
   };
 }
 
-function resumeImportLabel(source: 'pdf' | 'linkedin' | 'hh' | 'text', fileName?: string): string {
+function resumeImportLabel(
+  source: z.infer<typeof resumeImportSchema>['source'],
+  fileName?: string,
+): string {
   const origin = {
     pdf: 'PDF-резюме',
     linkedin: 'профиль LinkedIn',
     hh: 'резюме hh.ru',
     text: 'текст резюме',
+    builder: 'конструктор резюме',
   }[source];
   return fileName ? `Импорт: ${origin} «${fileName}»` : `Импорт: ${origin}`;
 }

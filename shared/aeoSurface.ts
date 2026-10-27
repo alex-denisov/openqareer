@@ -30,12 +30,14 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   '/faq',
   '/support',
   '/tools/country-fit',
+  '/tools/resume',
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
 ];
 
 /** Что продукт делает — только то, что уже работает в выпущенной сборке. */
 const CAPABILITIES: readonly string[] = [
   'Публикует /tools/country-fit: ориентировочный расчёт налогов и чистой зарплаты наёмного работника по набору ставок 2026 года; остаток считает из расходов, которые вводит пользователь.',
+  'Публикует /tools/resume: конструктор резюме без регистрации — три шаблона (строгий формат Стэнфорда, современный, компактный), проверка структуры, дат и формата для ATS и ключевых слов по ссылке или тексту вакансии; PDF и DOCX скачиваются после бесплатной регистрации.',
   'Показывает навыки и опубликованные зарплатные вилки по профессиям на /salaries: дата, размер каталожной выборки за 90 дней, отдельные группы по валюте, периоду оплаты и налогам. Фильтр грейда опирается только на явные слова в исходном названии вакансии; уровень без такого подтверждения остаётся неизвестным. При недостатке сравнимых данных зарплатный результат недоступен.',
   'Проверяет резюме на ATS: показывает, что система отбора работодателя не прочитает, и предлагает правки.',
   'Подбирает вакансии по резюме с процентом совпадения и объясняет, каких требований не хватает.',
@@ -109,6 +111,7 @@ export function buildLlmsTxt(stats?: LandingStats): string {
     `- Vacancy catalogue: ${SITE_ORIGIN}/vacancies`,
     `- Remote vacancies: ${SITE_ORIGIN}/vacancies/remote`,
     `- Country Fit employee payroll calculator: ${SITE_ORIGIN}/tools/country-fit (2026 data; user-entered expenses; not tax advice)`,
+    `- Resume builder: ${SITE_ORIGIN}/tools/resume (3 templates, ATS check, PDF and DOCX after free sign-up)`,
     `- Pricing: ${tariffLine()}`,
     `- Updated: ${AEO_UPDATED_AT}`,
     `- Full specification: ${SITE_ORIGIN}/llms-full.txt`,

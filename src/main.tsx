@@ -13,6 +13,7 @@ import '@fontsource/onest/latin-600.css';
 import '@fontsource/onest/latin-700.css';
 import './features/site/publicSite.css';
 import './features/site/countryFitPage.css';
+import './features/site/resumeBuilder/resumeBuilder.css';
 import './features/site/salaryMarketPage.css';
 import './features/shell/session-gate.css';
 import './features/desktopNotify/desktopNotificationService';
