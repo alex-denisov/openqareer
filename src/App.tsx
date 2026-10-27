@@ -65,6 +65,9 @@ const ResumeBuilderPage = lazy(() =>
 const CountryFitPage = lazy(() =>
   import('./features/site/CountryFitPage').then((module) => ({ default: module.CountryFitPage })),
 );
+const RelocationPage = lazy(() =>
+  import('./features/site/RelocationPage').then((module) => ({ default: module.RelocationPage })),
+);
 const FaqPage = lazy(() => loadHelpPage('FaqPage'));
 const SupportPage = lazy(() => loadHelpPage('SupportPage'));
 const NotFoundPage = lazy(() => loadHelpPage('NotFoundPage'));
@@ -657,6 +660,19 @@ export default function App() {
       <AppErrorBoundary>
         <Suspense fallback={null}>
           <CountryFitPage
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
+        </Suspense>
+      </AppErrorBoundary>
+    );
+  }
+  if (helpPath === '/tools/relocation' && !isDesktop) {
+    return (
+      <AppErrorBoundary>
+        <Suspense fallback={null}>
+          <RelocationPage
             onNavigate={navigate}
             signedIn={Boolean(state.session)}
             isAdmin={state.session?.role === 'admin'}

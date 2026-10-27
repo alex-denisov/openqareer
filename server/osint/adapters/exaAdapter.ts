@@ -284,13 +284,13 @@ export async function searchExaPeople(
   );
 }
 
-/** Обычный веб-поиск Exa (без категории «люди») — например, сайт компании. */
-export async function searchExaWeb(
+/** Обычный веб-поиск Exa (без категории «люди»): адрес, заголовок и текст страниц. */
+export async function searchExaPages(
   query: string,
   apiKey: string,
   signal: AbortSignal,
   options: { readonly fetch?: typeof fetch; readonly requestGate?: FootprintRequestGate } & ExaSearchOverrides,
-): Promise<readonly string[]> {
+): Promise<readonly ExaPeopleHit[]> {
   const { fetch: fetcher, requestGate, ...overrides } = options;
   const results = await runSearch(
     query,
@@ -301,7 +301,25 @@ export async function searchExaWeb(
     requestGate ?? sharedFootprintRequestGate,
     overrides,
   );
-  return results.flatMap((result) => (typeof result.url === 'string' ? [result.url] : []));
+  return results.flatMap((result) =>
+    typeof result.url === 'string'
+      ? [{
+          url: result.url,
+          title: typeof result.title === 'string' ? result.title : '',
+          text: typeof result.text === 'string' ? result.text : '',
+        }]
+      : [],
+  );
+}
+
+/** Только адреса страниц — например, поиск сайта компании. */
+export async function searchExaWeb(
+  query: string,
+  apiKey: string,
+  signal: AbortSignal,
+  options: { readonly fetch?: typeof fetch; readonly requestGate?: FootprintRequestGate } & ExaSearchOverrides,
+): Promise<readonly string[]> {
+  return (await searchExaPages(query, apiKey, signal, options)).map((hit) => hit.url);
 }
 
 export function createExaAdapter(options: ExaAdapterOptions): FootprintAdapter<ExaAdapterInput> {

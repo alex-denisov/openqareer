@@ -10,6 +10,7 @@ import OpenAI from 'openai';
 import {
   ROLE_NAMING_JSON_SCHEMA,
   roleNamingInstructions,
+  ROLE_NAMING_PROMPT_VERSION,
   roleNamingSchema,
 } from '../domain/roleNaming';
 import type { RoleNameLanguage } from '../domain/roleNameLanguage';
@@ -432,7 +433,7 @@ export class CachedRoleNamer implements RoleNamer {
   ): Promise<RoleNamingOutcome> {
     // Язык — часть ключа: те же факты на другом языке дают другой ответ.
     const key = createHash('sha256')
-      .update(`${language}\n${serializeFacts(facts)}`)
+      .update(`${ROLE_NAMING_PROMPT_VERSION}\n${language}\n${serializeFacts(facts)}`)
       .digest('hex');
     const cached = this.entries.get(key);
     if (cached && this.now() - cached.at < this.ttlMs) return cached.outcome;

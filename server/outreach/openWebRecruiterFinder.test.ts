@@ -107,6 +107,14 @@ describe('company domain', () => {
     expect(domain).toBe('jpmorganchase.com');
   });
 
+  it('does not take a job board host for the company domain', async () => {
+    const domain = await resolveCompanyDomain(
+      { id: 'v', company: 'Veeva Systems', url: 'https://himalayas.app/companies/veeva/jobs/1' },
+      mx({ 'veevasystems.com': true }),
+    );
+    expect(domain).toBe('veevasystems.com');
+  });
+
   it('keeps a real company site from the vacancy link', async () => {
     const domain = await resolveCompanyDomain(
       { id: 'v', company: 'Acme', url: 'https://careers.acme.io/jobs/1' },

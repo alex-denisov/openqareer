@@ -1,6 +1,7 @@
 import { buildApp } from './app';
 import { readServerConfig } from './config';
 import { scheduleLandingStatsRefresh } from './landing/landingStatsSchedule';
+import { scheduleCurrencyRatesRefresh } from './currency/cbrRatesSchedule';
 import { scheduleCatalogSitemapRefresh } from './seo/catalogSitemapSchedule';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
@@ -43,6 +44,7 @@ import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersiste
 import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
+import { openVacancyDemandStore } from './vacancies/vacancyDemandStore';
 
 const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
@@ -155,6 +157,8 @@ const matchedPoolPrecompute = new MatchedPoolPrecompute({
   candidateStore,
   engine: multiSourceEngine,
 });
+// Роли кандидатов — запросы к площадкам: обслуживатель читает их из этой таблицы.
+const vacancyDemand = openVacancyDemandStore(config.databasePath);
 const roleNamingCache = new SqliteRoleNamingCache({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
@@ -203,6 +207,7 @@ const app = await buildApp({
   linkedinPool,
   linkedinRemoteLogin,
   matchedPoolPrecompute,
+  vacancyDemand,
   runtimeMemory: () => {
     const heap = readProcessHeap();
     return {
@@ -392,6 +397,7 @@ try {
     error: (details: Record<string, unknown>, message: string) => app.log.error(details, message),
   };
   scheduleLandingStatsRefresh(config.databasePath, scheduleLog);
+  scheduleCurrencyRatesRefresh(config.databasePath, scheduleLog);
   // Sitemap files written by the maintenance process; the HTTP path reads memory only.
   scheduleCatalogSitemapRefresh(config.databasePath, scheduleLog);
   // Сервер слушает и отвечает на /health мгновенно (<10 мс). Пул читается

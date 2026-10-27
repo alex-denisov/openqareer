@@ -3,6 +3,7 @@ import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { sortVacancyFitItems } from './VacancyFitSort';
 import type { VacanciesScreenState } from './vacanciesScreenState';
 import { filterByScreenState } from './vacancyScreenCriteria';
+import type { CurrencyRates } from '../../../shared/currencyRates';
 import { countActiveFilters } from './VacanciesScreenFilters';
 
 /** Pure helpers of the «Вакансии» board, kept out of the screen file (size limit). */
@@ -34,9 +35,10 @@ export function filterBoardVacancies(
   state: VacanciesScreenState,
   now: string,
   onFiltersChange?: unknown,
+  rates?: CurrencyRates,
 ) {
   const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
-  const items = filterByScreenState(matched, filters, now);
+  const items = filterByScreenState(matched, filters, now, rates);
   return onFiltersChange ? items : sortVacancyFitItems(items, state.sort);
 }
 

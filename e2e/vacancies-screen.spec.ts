@@ -222,6 +222,9 @@ async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Prom
     if (pathname === '/api/v1/candidate/vacancy-catalog-sources') {
       return route.fulfill({ json: { data: [] } });
     }
+    if (pathname === '/api/v1/candidate/currency-rates') {
+      return route.fulfill({ json: { data: null } });
+    }
     if (pathname === '/api/v1/candidate/vacancy-sources') {
       if (scenario.sourceCatalogReadCount) scenario.sourceCatalogReadCount.value += 1;
       return route.fulfill({

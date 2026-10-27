@@ -133,9 +133,35 @@ describe('recruiter intelligence worker', () => {
       sourceType: 'company_osint',
     });
     expect(contact.sourceReceipt?.sourceUrl).toBe('https://www.linkedin.com/in/anna-smith');
+    expect(contact.channels?.map((channel) => `${channel.kind}:${channel.status}`)).toEqual([
+      'email_corporate:hypothesis',
+      'linkedin:published',
+    ]);
 
     linkedinPool.close();
     rmSync(poolDir, { recursive: true, force: true });
+    repository.close();
+  });
+
+  it('puts the job back in the queue when the database is busy', async () => {
+    const database = new DatabaseSync(':memory:');
+    const repository = new SqliteRecruiterContactsRepository(database);
+    repository.enqueueJob('candidate-d', 'vac-busy');
+    const saveContacts = repository.saveContacts.bind(repository);
+    let calls = 0;
+    repository.saveContacts = ((...args: Parameters<typeof saveContacts>) => {
+      calls += 1;
+      if (calls === 1) throw new Error('database is locked');
+      return saveContacts(...args);
+    }) as typeof repository.saveContacts;
+    const resolveVacancy = () => ({ id: 'vac-busy', company: 'Acme', title: 'PM', description: 'Recruiter: Anna Petrova' });
+
+    const first = await runRecruiterIntelligenceJobs({ repository, resolveVacancy });
+    expect(first.failed).toBe(0);
+    expect(repository.getJob('candidate-d', 'vac-busy')?.status).toBe('queued');
+
+    await runRecruiterIntelligenceJobs({ repository, resolveVacancy });
+    expect(repository.getJob('candidate-d', 'vac-busy')?.status).toBe('ready');
     repository.close();
   });
 });

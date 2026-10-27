@@ -18,6 +18,11 @@ import {
   RESUME_BUILDER_PUBLISHED_AT,
   RESUME_BUILDER_TITLE,
 } from '../src/features/site/resumeBuilder/resumeBuilderContent';
+import {
+  RELOCATION_DESCRIPTION,
+  RELOCATION_TITLE,
+  RelocationPage,
+} from '../src/features/site/RelocationPage';
 import { LoginPage, SignupPage } from '../src/features/site/AuthPages';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { PublicHeader, PublicFooter } from '../src/features/site/PublicSiteChrome';
@@ -36,6 +41,7 @@ import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/Leg
 import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
 import { CATALOG_STYLE, CATALOG_STYLESHEET_PATH } from '../server/vacancies/vacancyCatalogDocument';
 import { publicPathViolation } from '../shared/seoSlugPolicy';
+import { interviewSitemapUrls } from '../server/seo/sitemapXml';
 import {
   LEGAL_DOCS,
   LEGAL_PACK_PUBLISHED_AT,
@@ -130,6 +136,11 @@ export function buildSitemap(): string {
     })),
     { loc: `${SITE_ORIGIN}/tools/country-fit`, lastmod: '2026-10-23' },
     { loc: `${SITE_ORIGIN}${RESUME_BUILDER_PATH}`, lastmod: RESUME_BUILDER_PUBLISHED_AT },
+    ...interviewSitemapUrls().map((row) => ({
+      loc: `${SITE_ORIGIN}${row.path}`,
+      lastmod: row.lastmod as string | undefined,
+    })),
+    { loc: `${SITE_ORIGIN}/tools/relocation`, lastmod: '2026-10-27' },
     ...LEGAL_DOCS.map((doc) => ({
       loc: `${SITE_ORIGIN}${legalPath(doc.slug)}`,
       lastmod: LEGAL_PACK_PUBLISHED_AT,
@@ -244,6 +255,29 @@ async function writeResumeBuilderPage(html: string, distDirectory: string): Prom
   await writeFile(`${distDirectory}/resume-builder.html`, document);
 }
 
+/** B354: /tools/relocation ships its first paint with the example estimate. */
+async function writeRelocationPage(html: string, distDirectory: string): Promise<void> {
+  const document = compactCountryFitDocument(
+    deferEntryScript(
+      pageHead(html, {
+        path: '/tools/relocation',
+        title: RELOCATION_TITLE,
+        description: RELOCATION_DESCRIPTION,
+        shareDescription: 'Пути переезда по работе в выбранные страны с официальными порогами 2026 года.',
+      }),
+    ).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<RelocationPage onNavigate={() => {}} />)),
+    ),
+  );
+  await writeFile(`${distDirectory}/relocation.html`, document);
+}
+
+async function writeToolPages(html: string, distDirectory: string): Promise<void> {
+  await writeCountryFitPage(html, distDirectory);
+  await writeRelocationPage(html, distDirectory);
+}
+
 /** B535: /faq and /support are indexed documents with their own first paint. */
 async function writeHelpPages(html: string, distDirectory: string): Promise<void> {
   await writeResumeBuilderPage(html, distDirectory);
@@ -278,7 +312,13 @@ async function writeSalaryTemplate(html: string, distDirectory: string): Promise
             </a>
             <PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />
             {'%%SALARY_CONTENT%%'}
-            <PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} />
+            <PublicFooter
+              onNavigate={() => {}}
+              onLanding={false}
+              signedIn={false}
+              interviewLink={false}
+              toolLinks={false}
+            />
           </div>,
         ),
       )
@@ -471,7 +511,7 @@ export async function prerenderShells(
     );
   }
   await writeHelpPages(html, distDirectory);
-  await writeCountryFitPage(html, distDirectory);
+  await writeToolPages(html, distDirectory);
   await writeSalaryTemplate(html, distDirectory);
   await writeNotFoundPage(html, distDirectory);
   await writeAuthPages(html, distDirectory, manifest ? authResourceHints(manifest) : '');

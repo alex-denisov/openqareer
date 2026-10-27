@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CANDIDATE_REGIONS } from '../../src/features/workspace/candidateRegions';
 import {
+  DEMAND_TARGET_COUNT,
   FAN_SIZE,
   FAN_TERMS,
+  fanCombosForSync,
   MARKET_TARGETS,
   fanComboAt,
   fanRegions,
@@ -77,5 +79,44 @@ describe('веер рынков (B218)', () => {
     expect(fanStartIndex(windows * intervalMinutes * 60_000, intervalMinutes, combosPerSync)).toBe(
       0,
     );
+  });
+});
+
+describe('опрос начинается с ролей кандидатов (27.10)', () => {
+  it('роли спроса идут первыми и не съедают весь опрос', () => {
+    const combos = fanCombosForSync(0, 60, 30, ['head of ai', 'vp of customer support']);
+    expect(combos).toHaveLength(30);
+    const demand = combos.filter((combo) =>
+      ['head of ai', 'vp of customer support'].includes(combo.term),
+    );
+    expect(demand.length).toBeGreaterThan(0);
+    expect(demand.length).toBeLessThanOrEqual(15);
+    expect(combos[0]?.term).toBe('head of ai');
+    expect(combos.slice(demand.length).every((combo) => FAN_TERMS.includes(combo.term))).toBe(true);
+  });
+
+  it('новая роль за сутки проходит все рынки спроса', () => {
+    const seen = new Set<string>();
+    for (let hour = 0; hour < 24; hour += 1) {
+      for (const combo of fanCombosForSync(hour * 3_600_000, 60, 30, ['head of ai'])) {
+        if (combo.term === 'head of ai') seen.add(combo.target.location);
+      }
+    }
+    expect(seen.size).toBe(DEMAND_TARGET_COUNT);
+  });
+
+  it('без спроса опрос — прежнее окно веера', () => {
+    const start = fanStartIndex(0, 60, 30);
+    expect(fanCombosForSync(0, 60, 30, [])).toEqual(
+      Array.from({ length: 30 }, (_, step) => fanComboAt(start + step)),
+    );
+  });
+});
+
+describe('спрос LinkedIn и Indeed — только латиница (27.10)', () => {
+  it('русские названия ролей уходят только в поиск hh', () => {
+    const combos = fanCombosForSync(Date.now(), 60, 40, ['главный бухгалтер', 'head of ai']);
+    expect(combos.some((combo) => combo.term === 'главный бухгалтер')).toBe(false);
+    expect(combos.some((combo) => combo.term === 'head of ai')).toBe(true);
   });
 });

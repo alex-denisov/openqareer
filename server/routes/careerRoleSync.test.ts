@@ -34,21 +34,21 @@ const campaign = { roles: ['VP of Engineering'], regions: [], revision: 1, updat
 
 describe('роли «Карьеры» задают подбор (26.10)', () => {
   it('сохраняет показанные роли без отклонённых и уже выбранных в мастере', () => {
-    const store = fakeStore({ campaign }, [careerRoleId('CTO')]);
+    const store = fakeStore({ campaign }, [careerRoleId('CIO')]);
     const prioritizeCampaign = vi.fn();
     const changed = persistCareerRoles(
       { candidateStore: store as never, matchedPoolPrecompute: { prioritizeCampaign } as never },
       'c1',
       [
-        role('Head of Engineering'),
-        role('CTO'),
+        role('Head of Product'),
+        role('CIO'),
         role('Engineering Lead', 'market'),
         role('VP of Engineering'),
       ],
     );
     expect(changed).toBe(true);
     expect(store.getCandidateWorkspace()?.campaign?.careerRoles).toEqual([
-      { id: careerRoleId('Head of Engineering'), title: 'Head of Engineering' },
+      { id: careerRoleId('Head of Product'), title: 'Head of Product' },
       { id: careerRoleId('Engineering Lead'), title: 'Engineering Lead' },
     ]);
     expect(prioritizeCampaign).toHaveBeenCalledWith('c1');
@@ -56,16 +56,16 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
 
   it('не пишет, когда набор ролей не изменился', () => {
     const store = fakeStore({
-      campaign: { ...campaign, careerRoles: [{ id: careerRoleId('CTO'), title: 'CTO' }] },
+      campaign: { ...campaign, careerRoles: [{ id: careerRoleId('CIO'), title: 'CIO' }] },
     });
-    expect(persistCareerRoles({ candidateStore: store as never }, 'c1', [role('CTO')])).toBe(false);
+    expect(persistCareerRoles({ candidateStore: store as never }, 'c1', [role('CIO')])).toBe(false);
     expect(store.saveCandidateWorkspace).not.toHaveBeenCalled();
   });
 
   it('показывает на «Карьере» роль из мастера, которой нет среди названных', () => {
     const store = fakeStore({ campaign });
     const context = {
-      proposals: [role('CTO')],
+      proposals: [role('CIO')],
       matched: [],
       confirmedSkills: [],
     } as unknown as RoleContext;
@@ -76,7 +76,7 @@ describe('роли «Карьеры» задают подбор (26.10)', () => 
     );
     expect(roles.map((r) => [r.title, r.origin])).toEqual([
       ['VP of Engineering', 'candidate'],
-      ['CTO', 'model'],
+      ['CIO', 'model'],
     ]);
   });
 
@@ -138,5 +138,70 @@ describe('одна роль под разными названиями — од�
       titles.map((title) => role(title)),
     );
     expect(store.getCandidateWorkspace()?.campaign?.careerRoles).toHaveLength(14);
+  });
+});
+
+describe('роли «Карьеры» задают сбор вакансий (27.10)', () => {
+  it('отдаёт роли кандидата, включая роль мастера, в спрос площадок', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: ['Head of AI'] } });
+    const record = vi.fn();
+    persistCareerRoles(
+      { candidateStore: store as never, vacancyDemand: { record, recentTerms: () => [] } },
+      'c1',
+      [role('Head of AI', 'candidate'), role('Руководитель службы поддержки')],
+    );
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record.mock.calls[0]?.[0]).toEqual([
+      'head of ai',
+      'head of customer support',
+      'руководитель службы поддержки',
+    ]);
+  });
+});
+
+describe('роли рынка — только в направлениях опыта кандидата (27.10)', () => {
+  it('убирает роль рынка чужой функции, когда роли по опыту известны', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: ['VP of Engineering'] } });
+    const context = {
+      proposals: [
+        role('Head of AI'),
+        role('Руководитель автосервиса', 'market'),
+        role('Head of Data', 'market'),
+      ],
+      matched: [],
+      confirmedSkills: [],
+    } as unknown as RoleContext;
+    const roles = careerRolesWithCandidateChoices(
+      { candidateStore: store as never },
+      'c1',
+      context,
+    );
+    expect(roles.map((r) => r.title)).toEqual(['VP of Engineering', 'Head of AI']);
+  });
+
+  it('без ролей по опыту роли рынка остаются', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: [] } });
+    const context = {
+      proposals: [role('Chief of Staff', 'market')],
+      matched: [],
+      confirmedSkills: [],
+    } as unknown as RoleContext;
+    const roles = careerRolesWithCandidateChoices(
+      { candidateStore: store as never },
+      'c1',
+      context,
+    );
+    expect(roles.map((r) => r.title)).toEqual(['Chief of Staff']);
+  });
+
+  it('роли рынка не становятся запросами к площадкам', () => {
+    const store = fakeStore({ campaign: { ...campaign, roles: [] } });
+    const record = vi.fn();
+    persistCareerRoles(
+      { candidateStore: store as never, vacancyDemand: { record, recentTerms: () => [] } },
+      'c1',
+      [role('Head of AI'), role('Logistics Manager', 'market')],
+    );
+    expect(record.mock.calls[0]?.[0]).toEqual(['head of ai']);
   });
 });

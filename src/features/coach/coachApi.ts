@@ -675,6 +675,12 @@ export const getCatalogSourceList = shareInFlight(
     readDataArray(await apiFetch('/api/v1/candidate/vacancy-catalog-sources')),
 );
 
+/** CPO 27.10: курсы ЦБ для порога фильтра «Зарплата»; null, пока сервер их не получил. */
+export const getCurrencyRates = shareInFlight(
+  async (): Promise<import('../../../shared/currencyRates').CurrencyRates | null> =>
+    readData(await apiFetch('/api/v1/candidate/currency-rates')),
+);
+
 export const getVacancySources = shareInFlight(async (): Promise<VacancySourceRegistryEntry[]> =>
   readDataArray<VacancySourceRegistryEntry>(await apiFetch('/api/v1/candidate/vacancy-sources')),
 );
