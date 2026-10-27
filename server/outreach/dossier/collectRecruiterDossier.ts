@@ -460,7 +460,7 @@ async function fromVkNicks(
 }
 
 const SEED_PAGES = 3;
-const SEED_CHARS = 3_000;
+const SEED_CHARS = 6_000;
 
 function sameProfile(left: string, right: string): boolean {
   const norm = (url: string) => url.toLowerCase().replace(/^https?:\/\/([a-z]+\.)?linkedin\.com/u, '').replace(/\/$/u, '');
@@ -468,8 +468,26 @@ function sameProfile(left: string, right: string): boolean {
 }
 
 /** Исходный профиль человека (поиск по имени): текст с историей работы и городом. */
-async function seedProfile(person: DossierPerson, deps: DossierDeps, state: RunState): Promise<{ texts: string[]; cities: string[]; photoHashes: string[] }> {
-  if (!deps.exaApiKey) return { texts: [], cities: [], photoHashes: [] };
+interface SeedProfile {
+  readonly texts: string[];
+  readonly cities: string[];
+  readonly photoHashes: string[];
+  /** Открытые страницы самого профиля: из «О себе» берутся опубликованные человеком контакты. */
+  readonly pages: Array<{ url: string; text: string }>;
+}
+
+/** Контакты, которые человек сам указал в открытом тексте своего профиля LinkedIn («О себе»). */
+function fromOwnProfile(person: DossierPerson, seed: SeedProfile, observedAt: string): RecruiterChannel[] {
+  return seed.pages.filter((page) => /^https:\/\/([a-z]+\.)?linkedin\.com\//u.test(page.url)).flatMap((page) =>
+    extractChannels(page.text, { companyDomain: person.companyDomain, sourceUrl: page.url, observedAt })
+      .filter((channel) => channel.kind !== 'linkedin')
+      .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName))
+      .map((channel) => ({ ...channel, status: 'published' as const })),
+  );
+}
+
+async function seedProfile(person: DossierPerson, deps: DossierDeps, state: RunState): Promise<SeedProfile> {
+  if (!deps.exaApiKey) return { texts: [], cities: [], photoHashes: [], pages: [] };
   try {
     const pages = await searchExaPages(`"${person.fullName}"`, deps.exaApiKey, AbortSignal.timeout(REQUEST_TIMEOUT_MS), {
       ...(deps.fetch ? { fetch: deps.fetch } : {}),
@@ -484,10 +502,15 @@ async function seedProfile(person: DossierPerson, deps: DossierDeps, state: RunS
     // Вторая строка профиля Exa — город: «London, United Kingdom».
     const cities = own.flatMap((page) => (page.text.split('\n').map((line) => line.trim()).filter(Boolean)[2] ?? '').split(',').slice(0, 1).map((city) => city.trim()));
     const photos = await Promise.all(own.slice(0, 1).flatMap((page) => (page.image ? [photoHash(page.image, deps)] : [])));
-    return { texts: own.map((page) => `${page.title}\n${page.text}`), cities, photoHashes: photos.filter((hash): hash is string => Boolean(hash)) };
+    return {
+      texts: own.map((page) => `${page.title}\n${page.text}`),
+      cities,
+      photoHashes: photos.filter((hash): hash is string => Boolean(hash)),
+      pages: own.map((page) => ({ url: page.url, text: page.text })),
+    };
   } catch {
     state.failed = true;
-    return { texts: [], cities: [], photoHashes: [] };
+    return { texts: [], cities: [], photoHashes: [], pages: [] };
   }
 }
 
@@ -507,13 +530,14 @@ export async function collectRecruiterDossier(person: DossierPerson, deps: Dossi
     fromGithub(person, baseIdentity, deps, observedAt, state).catch(failed),
     seedReady,
   ]);
-  const known = [...(person.known ?? []), ...pages, ...github];
+  const own = fromOwnProfile(person, seed, observedAt);
+  const known = [...(person.known ?? []), ...own, ...pages, ...github];
   const identity = buildIdentity({ fullName: person.fullName, companyName: person.companyName, seedTexts: seed.texts, cities: seed.cities, known, photoHashes: seed.photoHashes });
   const [telegram, profiles, vk] = await Promise.all([
     fromTelegramNicks(person, identity, known, deps, observedAt, state).catch(failed),
     fromUsernameSites(person, identity, known, deps, observedAt, state).catch(failed),
     fromVkNicks(person, identity, known, deps, observedAt, state).catch(failed),
   ]);
-  const personal = await withoutBroadcasts([...pages, ...profiles], deps, state);
+  const personal = await withoutBroadcasts([...own, ...pages, ...profiles], deps, state);
   return { channels: rankChannels([...personal, ...github, ...telegram, ...vk]), complete: !state.failed };
 }

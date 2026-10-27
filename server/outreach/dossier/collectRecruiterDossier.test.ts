@@ -274,4 +274,14 @@ describe('recruiter dossier', () => {
     const { channels } = await collectRecruiterDossier(person, deps(fetch));
     expect(channels.some((c) => c.kind === 'telegram')).toBe(false);
   });
+
+  it('takes the contacts a person published in the About section of their own open LinkedIn profile', async () => {
+    const own = { ...seedPage, text: 'Anna Smith\nTalent Partner at Acme\nLondon, UK\nAbout: write me anna.smith@gmail.com or WhatsApp +44 7700 900123' };
+    const fetch = router({ 'https://api.exa.ai/search': { results: [own] } });
+    const { channels } = await collectRecruiterDossier({ ...person, linkedinUrl: seedPage.url }, deps(fetch));
+    expect(channels.filter((c) => c.sourceUrl === seedPage.url).map((c) => `${c.kind}=${c.value}:${c.status}`)).toEqual(
+      expect.arrayContaining(['email_personal=anna.smith@gmail.com:published']),
+    );
+    expect(channels.some((c) => c.sourceUrl === seedPage.url && /7700900123/u.test(c.value.replace(/\D/gu, '')))).toBe(true);
+  });
 });
