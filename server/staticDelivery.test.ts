@@ -6,6 +6,7 @@ import { buildApp } from './app';
 import type { SessionAuth } from './auth/authService';
 import type { ServerConfig } from './config';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import { resetLandingStats, setLandingStats } from './landing/landingStatsCache';
 import type { CoachProvider } from './providers/coachProvider';
 
 const resources: Array<{
@@ -146,10 +147,31 @@ describe('static release delivery', () => {
       expect(response.headers['content-type'], url).toContain('text/html');
       expect(response.headers['cache-control'], url).toContain('no-store');
       expect(response.body, url).not.toContain('%%OQ_');
-      expect(response.body, url).toContain('<b>1,1 млн</b>');
+      expect(response.body, url).toContain('<b>712 тыс.</b>');
       expect(response.body, url).toContain('<b>324</b> источника');
-      expect(response.body, url).toContain('<i>20.10.2026</i>');
+      expect(response.body, url).toContain('<i>26.10.2026</i>');
       expect(response.body, url).toContain('<u>Manager II, Developer Advocacy</u>');
+    }
+  });
+
+  it('takes the landing numbers from the live pool reading, not the snapshot', async () => {
+    setLandingStats({
+      ...{ activeCount: 698_400, remoteCount: 1, sourceCount: 330, updatedAt: '2026-10-28' },
+      vacancies: Array.from({ length: 7 }, () => ({
+        title: 'Бухгалтер',
+        salary: '1',
+        country: 'Россия',
+      })),
+    });
+    try {
+      const app = await createStaticApp({
+        indexHtml: '<!doctype html><b>%%OQ_ACTIVE%%</b> <i>%%OQ_DATE%%</i>',
+      });
+      const response = await app.inject({ method: 'GET', url: '/' });
+      expect(response.body).toContain('<b>698 тыс.</b>');
+      expect(response.body).toContain('<i>28.10.2026</i>');
+    } finally {
+      resetLandingStats();
     }
   });
 

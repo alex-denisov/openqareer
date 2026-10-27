@@ -96,6 +96,20 @@ function HeaderActions({
   );
 }
 
+/** On phones the header hides «Войти»; the section menu keeps the way in. */
+function MenuLogin({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>) {
+  return (
+    <SiteLink
+      to="/login"
+      className="ps-menu-login"
+      onNavigate={onNavigate}
+      onWarm={preloadAuthPages}
+    >
+      Войти
+    </SiteLink>
+  );
+}
+
 /** B569: header shared by every public page (mockup `header()`), with a section menu on phones. */
 export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicChromeProps) {
   const [open, setOpen] = React.useState(false);
@@ -140,17 +154,7 @@ export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicC
       </div>
       <nav className="ps-menu" id={MENU_ID} aria-label="Разделы" hidden={!open}>
         {links}
-        {signedIn ? null : (
-          // On phones the header hides «Войти»; the menu keeps the way in.
-          <SiteLink
-            to="/login"
-            className="ps-menu-login"
-            onNavigate={onNavigate}
-            onWarm={preloadAuthPages}
-          >
-            Войти
-          </SiteLink>
-        )}
+        {signedIn ? null : <MenuLogin onNavigate={onNavigate} />}
       </nav>
     </header>
   );
