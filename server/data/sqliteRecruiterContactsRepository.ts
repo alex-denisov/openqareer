@@ -321,6 +321,16 @@ export class SqliteRecruiterContactsRepository {
     return this.getJob(candidateId, vacancyId)!;
   }
 
+  /** Взятое задание возвращается в очередь (база была занята). */
+  requeueJob(jobId: string): void {
+    this.database
+      .prepare(
+        `UPDATE recruiter_contact_jobs SET status = 'queued', started_at = NULL, finished_at = NULL
+         WHERE id = ? AND status = 'running'`,
+      )
+      .run(jobId);
+  }
+
   getJob(candidateId: string, vacancyId: string): RecruiterContactJob | null {
     const row = this.database
       .prepare(

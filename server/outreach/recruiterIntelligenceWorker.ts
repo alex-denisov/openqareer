@@ -99,6 +99,11 @@ export async function runRecruiterIntelligenceJobs(
       options.repository.finishJob(job.id, 'ready');
       completed += 1;
     } catch (error) {
+      // Занятая база — не ошибка поиска: задание вернётся в очередь и пройдёт на следующем тике.
+      if (error instanceof Error && /database is (locked|busy)/iu.test(error.message)) {
+        options.repository.requeueJob(job.id);
+        continue;
+      }
       options.repository.finishJob(
         job.id,
         'failed',
