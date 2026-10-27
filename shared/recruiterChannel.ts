@@ -1,3 +1,5 @@
+import { isHiringPlatform } from './hiringPlatforms';
+
 /**
  * Каналы связи с рекрутёром (B258). Порядок — ценность для кандидата по
  * решению владельца 27.10: мессенджеры и телефон, затем почта, затем Instagram;
@@ -73,7 +75,10 @@ export function rankChannels(channels: readonly RecruiterChannel[]): RecruiterCh
 
 /** Что показать кандидату: все основные каналы; второстепенные — только если основных нет. */
 export function candidateChannels(channels: readonly RecruiterChannel[]): CandidateRecruiterChannel[] {
-  const ranked = rankChannels(channels);
+  // Почта на домене площадки вакансий — ошибка определения домена компании, не канал человека.
+  const ranked = rankChannels(channels).filter(
+    (channel) => !channel.kind.startsWith('email_') || !isHiringPlatform(channel.value.split('@')[1] ?? ''),
+  );
   const primary = ranked.filter((channel) => isPrimaryChannel(channel.kind));
   return (primary.length > 0 ? primary : ranked).map(({ sourceUrl: _internal, ...shown }) => shown);
 }
