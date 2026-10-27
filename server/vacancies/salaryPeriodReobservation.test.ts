@@ -88,22 +88,45 @@ it('validates Lever evidence by its own provider contract during re-observation'
   });
 });
 
+// B351: an observation with a proven period replaces the whole unevidenced salary,
+// whatever its tuple or membership — a newer published range, a repost or another
+// source of the same cluster. Nothing is assembled across observations.
+const replacing: { name: string; incoming: VacancySalary; newMember?: boolean }[] = [
+  { name: 'different lower bound', incoming: { ...explicit(), from: 80000 } },
+  { name: 'different upper bound', incoming: { ...explicit(), to: 130000 } },
+  { name: 'different currency', incoming: { ...explicit(), currency: 'USD' } },
+  { name: 'different tax basis', incoming: { ...explicit(), gross: false } },
+  { name: 'new source membership', incoming: explicit(), newMember: true },
+];
+
+it.each(replacing)('takes the whole evidenced salary for $name', ({ incoming, newMember }) => {
+  const vacancy = observed();
+  vacancy.salary = incoming;
+  if (newMember) vacancy.provenance = { ...vacancy.provenance, sourceId: 'src-other-source' };
+  const cluster = createClusterFromVacancy({ ...observed(), salary: { ...tuple } });
+  mergeVacancyIntoCluster(cluster, vacancy);
+  expect(cluster.salary).toBe(incoming);
+});
+
+it('keeps an evidenced salary when a later observation only closes the range', () => {
+  const evidenced: VacancySalary = { ...explicit(), to: undefined };
+  const cluster = createClusterFromVacancy({ ...observed(), salary: evidenced });
+  mergeVacancyIntoCluster(cluster, { ...observed(), salary: { ...tuple } });
+  expect(cluster.salary).toBe(evidenced);
+});
+
+it('does not trade a closed unevidenced range for an open evidenced one', () => {
+  const closed = { ...tuple };
+  const cluster = createClusterFromVacancy({ ...observed(), salary: closed });
+  mergeVacancyIntoCluster(cluster, { ...observed(), salary: { ...explicit(), to: undefined } });
+  expect(cluster.salary).toBe(closed);
+});
+
 const rejected: {
   name: string;
   current?: VacancySalary;
   incoming?: unknown;
-  newMember?: boolean;
 }[] = [
-  { name: 'different lower bound', incoming: { ...explicit(), from: 80000 } },
-  { name: 'different upper bound', incoming: { ...explicit(), to: 130000 } },
-  { name: 'different currency', incoming: { ...explicit(), currency: 'USD' } },
-  { name: 'unknown tax is not net', incoming: { ...explicit(), gross: false } },
-  { name: 'unknown tax is not gross', incoming: { ...explicit(), gross: true } },
-  {
-    name: 'gross is not net',
-    current: { ...tuple, gross: true },
-    incoming: { ...explicit(), gross: false },
-  },
   {
     name: 'unknown provider field',
     incoming: { ...explicit(), periodEvidence: { field: 'untrusted.period', value: 'annual' } },
@@ -134,23 +157,23 @@ const rejected: {
     },
   },
   { name: 'known current period with same value', current: explicit() },
-  { name: 'new source membership', newMember: true },
+  {
+    name: 'known current period against a different evidenced range',
+    current: explicit('monthly'),
+    incoming: { ...explicit(), from: 80000 },
+  },
 ];
 
-it.each(rejected)(
-  'preserves the whole existing salary for $name',
-  ({ current, incoming, newMember }) => {
-    const vacancy = observed();
-    // External JSON may violate TypeScript's field/value union; the runtime boundary must reject it.
-    if (incoming) vacancy.salary = JSON.parse(JSON.stringify(incoming)) as VacancySalary;
-    if (newMember) vacancy.provenance = { ...vacancy.provenance, sourceId: 'src-other-source' };
-    const oldSalary = current ?? { ...tuple };
-    const original = observed();
-    const cluster = createClusterFromVacancy({ ...original, salary: oldSalary });
-    mergeVacancyIntoCluster(cluster, vacancy);
-    expect(cluster.salary).toBe(oldSalary);
-  },
-);
+it.each(rejected)('preserves the whole existing salary for $name', ({ current, incoming }) => {
+  const vacancy = observed();
+  // External JSON may violate TypeScript's field/value union; the runtime boundary must reject it.
+  if (incoming) vacancy.salary = JSON.parse(JSON.stringify(incoming)) as VacancySalary;
+  const oldSalary = current ?? { ...tuple };
+  const original = observed();
+  const cluster = createClusterFromVacancy({ ...original, salary: oldSalary });
+  mergeVacancyIntoCluster(cluster, vacancy);
+  expect(cluster.salary).toBe(oldSalary);
+});
 
 it('roundtrips period enrichment through the real keyed-cluster caller after reopening the store', () => {
   const directory = mkdtempSync(join(tmpdir(), 'salary-period-reobservation-'));

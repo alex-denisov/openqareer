@@ -2,6 +2,38 @@ export const MIN_SALARY_MARKET_SAMPLE = 5;
 export const MAX_SALARY_MARKET_GROUPS = 12;
 export const SALARY_MARKET_ROLE_LIMIT = 100;
 export const SALARY_MARKET_INDEX_LIMIT = SALARY_MARKET_ROLE_LIMIT;
+/** A place without this many closed ranges is not published (B351 mockup 06a). */
+export const MIN_CITY_SALARY_SAMPLE = 20;
+
+/** Nearest-rank percentiles of «от — до» midpoints in one currency and tax basis. */
+export interface SalaryMidpointGroup {
+  readonly currency: string;
+  readonly period: 'month';
+  readonly taxBasis: 'gross' | 'net' | 'unknown';
+  readonly sampleSize: number;
+  readonly p25: number;
+  readonly p50: number;
+  readonly p75: number;
+}
+export interface SalaryCityRow {
+  /** The catalog place label («Москва», «Удалённо»). */
+  readonly city: string;
+  /** The catalog place slug: `/vacancies/<placeSlug>`. */
+  readonly placeSlug: string;
+  /** All catalog vacancies of the role in the place, with or without a range. */
+  readonly vacancyCount: number;
+  readonly salary: SalaryMidpointGroup;
+}
+export interface SalaryCityMarket {
+  readonly method: 'closed_monthly_range_midpoint_v1';
+  readonly minSample: number;
+  /** Closed monthly ranges with a proven period over every place. */
+  readonly rangedTotal: number;
+  /** Ranges behind the published cities. */
+  readonly publishedSample: number;
+  readonly cities: readonly SalaryCityRow[];
+  readonly remote?: SalaryCityRow;
+}
 
 export interface SalarySkillEvidence {
   readonly method: 'exclude_role_taxonomy_clusters_v2';
@@ -37,6 +69,7 @@ export interface SalaryMarketSnapshot {
   readonly source: 'deduplicated_public_catalog';
   readonly geography?: SalaryMarketGeographyEvidence;
   readonly locationSlices?: readonly SalaryMarketLocationSlice[];
+  readonly cityMarket?: SalaryCityMarket;
 }
 
 /** Explicit comparable salary evidence only. No currency conversion or inferred periods.

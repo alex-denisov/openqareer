@@ -35,6 +35,141 @@ import {
 } from '../salaryMarket/salaryMarketSnapshot';
 import { MIN_SALARY_MARKET_SAMPLE } from '../../shared/salaryMarketSnapshot';
 import { escapeHtml } from '../vacancies/catalogHtml';
+import {
+  faqStructuredData,
+  isSalaryCountrySlug,
+  SALARY_COUNTRIES,
+  salaryCountryView,
+  salaryProfessionView,
+  type SalaryFaq,
+} from '../../shared/salaryPublicPages';
+import { SALARY_COUNTRY_CITIES, type CountryCatalog } from '../../shared/salaryCountryCities';
+import { SalaryCountryPage, SalaryProfessionPage } from '../../src/features/site/SalaryPublicPages';
+
+interface PublicSalaryPage {
+  readonly title: string;
+  readonly description: string;
+  readonly crumb: string;
+  readonly faqs: readonly SalaryFaq[];
+  readonly occupation?: string;
+  readonly element: React.ReactElement;
+}
+
+/** B351 mockups 06a/06b: the head, FAQPage and visible text come from one view model. */
+export function renderPublicSalaryPage(
+  template: string,
+  path: string,
+  page: PublicSalaryPage,
+): string {
+  const canonical = `${SITE_ORIGIN}${path}`;
+  const graph: Record<string, unknown>[] = [
+    {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Главная', item: `${SITE_ORIGIN}/` },
+        { '@type': 'ListItem', position: 2, name: 'Зарплаты', item: `${SITE_ORIGIN}/salaries` },
+        { '@type': 'ListItem', position: 3, name: page.crumb, item: canonical },
+      ],
+    },
+    faqStructuredData(page.faqs),
+    ...(page.occupation
+      ? [{ '@type': 'Occupation', name: page.occupation, mainEntityOfPage: canonical }]
+      : []),
+  ];
+  const structured = JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(
+    /</gu,
+    '\\u003c',
+  );
+  return salaryDocumentHead(template, {
+    title: escapeHtml(page.title),
+    canonical,
+    robots: 'index, follow',
+    structured,
+    description: page.description,
+  })
+    .replace('%%SALARY_CONTENT%%', () => renderToStaticMarkup(page.element))
+    .replace('</body>', () =>
+      page.occupation
+        ? '<script type="module" src="/assets/oq-salary-compare-1.js"></script></body>'
+        : '</body>',
+    );
+}
+
+function sendPublicSalaryPage(
+  reply: FastifyReply,
+  template: string,
+  role: string,
+  page: PublicSalaryPage,
+) {
+  return reply
+    .type('text/html; charset=utf-8')
+    .header('Cache-Control', 'no-cache')
+    .send(renderPublicSalaryPage(template, `/salaries/${role}`, page));
+}
+
+const COUNTRY_CATALOG_TTL_MS = 15 * 60_000;
+const countryCatalogCache = new Map<string, { at: number; value: CountryCatalog }>();
+
+/**
+ * «Где искать» on 06b: active catalog entries of the country's known cities,
+ * counted over the (status, place_slug) index and cached for 15 minutes.
+ */
+export function loadCountryCatalog(databasePath: string, code: string): CountryCatalog | null {
+  const slugs = Object.keys(SALARY_COUNTRY_CITIES[code] ?? {});
+  if (!slugs.length || !existsSync(databasePath)) return null;
+  const cached = countryCatalogCache.get(code);
+  if (cached && Date.now() - cached.at < COUNTRY_CATALOG_TTL_MS) return cached.value;
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const rows = database
+      .prepare(
+        `SELECT place_slug AS slug, max(place_label) AS label, count(*) AS count
+           FROM catalog_entries
+          WHERE status = 'active' AND path <> '' AND place_slug IN (${slugs.map(() => '?').join(',')})
+          GROUP BY place_slug`,
+      )
+      .all(...slugs) as { slug: string; label: string; count: number }[];
+    const value = { cities: rows, readAt: new Date().toISOString() };
+    countryCatalogCache.set(code, { at: Date.now(), value });
+    return value;
+  } finally {
+    database.close();
+  }
+}
+
+function countryPage(slug: string, options: SalaryRouteOptions): PublicSalaryPage | null {
+  if (!isSalaryCountrySlug(slug)) return null;
+  const code = SALARY_COUNTRIES[slug].code;
+  let catalog: CountryCatalog | null = null;
+  try {
+    catalog = options.readCountryCatalog
+      ? options.readCountryCatalog(code)
+      : loadCountryCatalog(options.databasePath, code);
+  } catch {
+    /* The net table stands on the calculator alone; the city list is optional. */
+  }
+  const view = salaryCountryView(slug, catalog ?? undefined);
+  return {
+    title: `Зарплата ${view.inName} на руки в ${view.taxYear} году | openqareer`,
+    description: view.answer,
+    crumb: view.name,
+    faqs: view.faqs,
+    element: React.createElement(SalaryCountryPage, { view }),
+  };
+}
+
+function professionPage(snapshot: SalaryMarketSnapshot | null): PublicSalaryPage | null {
+  const view = snapshot ? salaryProfessionView(snapshot) : null;
+  if (!view) return null;
+  return {
+    title: `Зарплата ${view.labelGenitive} в 2026 году по городам | openqareer`,
+    description: view.answer,
+    crumb: view.label,
+    faqs: view.faqs,
+    occupation: view.label,
+    element: React.createElement(SalaryProfessionPage, { view }),
+  };
+}
 
 /** Role lookup only: no catalog, aggregate or list query belongs on this HTTP path. */
 export function loadPublicSalarySnapshot(
@@ -141,13 +276,14 @@ function salaryDocumentHead(
     canonical,
     robots,
     structured,
-  }: { title: string; canonical: string; robots: string; structured: string },
+    description = SALARY_MARKET_DESCRIPTION,
+  }: { title: string; canonical: string; robots: string; structured: string; description?: string },
 ): string {
   return template
     .replace(/<title>[^<]*<\/title>/u, () => `<title>${title}</title>`)
     .replace(
       /<meta name="description" content="[^"]*">/u,
-      `<meta name="description" content="${escapeHtml(SALARY_MARKET_DESCRIPTION)}">`,
+      () => `<meta name="description" content="${escapeHtml(description)}">`,
     )
     .replace(/<link rel="canonical" href="[^"]*">/u, `<link rel="canonical" href="${canonical}">`)
     .replace(/<meta name="robots"[^>]*>/gu, '')
@@ -161,7 +297,7 @@ function salaryDocumentHead(
     )
     .replace(
       /(<meta (?:property|name)="(?:og|twitter):description" content=")[^"]*/gu,
-      `$1${escapeHtml(SALARY_MARKET_DESCRIPTION)}`,
+      (_match, prefix: string) => `${prefix}${escapeHtml(description)}`,
     )
     .replace(
       '</head>',
@@ -174,6 +310,7 @@ interface SalaryRouteOptions {
   databasePath: string;
   read?: (role: string) => SalaryMarketSnapshot | null;
   readIndex?: () => readonly SalaryMarketIndexEntry[];
+  readCountryCatalog?: (code: string) => CountryCatalog | null;
 }
 export function registerSalaryMarketRoutes(
   app: FastifyInstance,
@@ -191,6 +328,8 @@ export function registerSalaryMarketRoutes(
     Querystring: { group?: string; grade?: string; skills?: string; location?: string };
   }>('/salaries/:role', (request, reply) => {
     const role = request.params.role;
+    const country = countryPage(role, options);
+    if (country && template) return sendPublicSalaryPage(reply, template, role, country);
     if (!salaryRolePath(role))
       return reply.code(404).header('X-Robots-Tag', 'noindex').send('Профессия не найдена');
     if (!template)
@@ -201,6 +340,9 @@ export function registerSalaryMarketRoutes(
     } catch {
       return reply.code(503).header('X-Robots-Tag', 'noindex').send('Данные временно недоступны');
     }
+    const plainView = Object.keys(request.query).length === 0;
+    const profession = plainView ? professionPage(snapshot) : null;
+    if (profession) return sendPublicSalaryPage(reply, template, role, profession);
     let related: readonly SalaryMarketIndexEntry[] = [];
     if (snapshot?.profession?.kind === 'b267') {
       try {
