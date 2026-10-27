@@ -34,8 +34,8 @@ export const FOOTER_ABOUT =
   'Поиск работы с ИИ: резюме, вакансии со всего рынка и отклики в одном месте.';
 
 /**
- * `/vacancies/relocation` answers 410 and `/tools/salary-calculator` has no
- * page yet: a link joins the footer in the slice that makes its route 200.
+ * `/vacancies/relocation` answers 410: its link joins the footer in the slice
+ * that makes the route 200.
  */
 export const PUBLIC_FOOTER_COLUMNS: readonly ChromeColumn[] = [
   {

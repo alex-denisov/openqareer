@@ -272,7 +272,7 @@ export const FAQ_TOPICS: readonly FaqTopic[] = [
         question: 'Как найти работу за границей?',
         answer:
           'Ищите вакансии с релокацией и спонсорством визы, переводите резюме под формат страны и откликайтесь на английском. Шансы выше в профессиях, где не хватает людей.',
-        go: { text: 'Вакансии с релокацией', href: '/vacancies/relocation' },
+        go: { text: 'В какую страну переехать', href: '/tools/relocation' },
       },
       {
         id: 'remote-work',
