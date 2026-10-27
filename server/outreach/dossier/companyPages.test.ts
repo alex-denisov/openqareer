@@ -80,6 +80,20 @@ describe('company pages', () => {
     expect(fetch.mock.calls.filter(([url]) => String(url).startsWith('https://acme.com')).length).toBe(sitePages);
   });
 
+  it('drops the guess once a work address of the person is published', async () => {
+    const database = new DatabaseSync(':memory:');
+    const exa = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (url.startsWith('https://api.exa.ai/')) {
+        return new Response(JSON.stringify({ results: [{ url: 'https://talk.example', title: 'Anna Smith', text: 'Anna Smith, recruiter: asmith@acme.com, i@gmail.com, bob@gmail.com' }] }), { status: 200 });
+      }
+      return new Response('', { status: 404 });
+    });
+    const result = await withDossier(contact, 'acme.com', { ...deps(exa), database });
+    const emails = (result.channels ?? []).filter((channel) => channel.kind.startsWith('email_'));
+    expect(emails.map((channel) => `${channel.value}:${channel.status}`)).toEqual(['asmith@acme.com:published']);
+  });
+
   it('prefers the address the company published for the person', async () => {
     const database = new DatabaseSync(':memory:');
     const page = `${teamPage}<h2>Anna Smith</h2><a href="mailto:anna@acme.com">anna@acme.com</a>`;

@@ -169,5 +169,9 @@ export async function withDossier(
     }
     channels = [...channels, ...company.channels];
   }
+  // Опубликованный или подтверждённый рабочий адрес делает догадку лишней.
+  if (channels.some((channel) => channel.kind === 'email_corporate' && channel.status !== 'hypothesis')) {
+    channels = channels.filter((channel) => !(channel.kind === 'email_corporate' && channel.status === 'hypothesis'));
+  }
   return { ...contact, channels: rankChannels(channels) };
 }
