@@ -4,14 +4,10 @@ import { VacancyMechanicsRuntime } from '../server/domain/vacancyMechanicsRuntim
 import { createBulkLlmRuntime } from '../server/providers/bulkLlmRuntime';
 import { runVacancyMechanicsStep } from '../server/domain/vacancyMechanicsLoop';
 import { formatVacancyMechanicsStats } from '../server/domain/vacancyMechanicsStats';
+import { vacancyMechanicsLanes } from '../server/domain/vacancyMechanicsLanes';
 
 const BATCH_LOG_MS = 60_000;
-/**
- * Model calls in flight at once (B510). Jobs are leased, so lanes never take the same job, and
- * every call still passes the B522 budget reservation: lanes change speed, not spend. One lane
- * at ~12 s per call left a candidate's first page without percentages for over an hour.
- */
-const WORKER_LANES = 3;
+const WORKER_LANES = vacancyMechanicsLanes(process.env);
 
 const path = process.env.OPENQAREER_DATABASE_PATH;
 const key = process.env.OPENQAREER_DATA_ENCRYPTION_KEY;

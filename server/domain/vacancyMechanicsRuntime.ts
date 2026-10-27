@@ -128,9 +128,12 @@ export class VacancyMechanicsRuntime {
   async runNext(rawClient: BulkLlmClient | null, workerId = 'vacancy-mechanics'): Promise<boolean> {
     const client = rawClient ? measuredBulkClient(rawClient, () => this.stats) : null;
     const runId = workerDayRunId(workerId);
-    const extracted = await this.extractNextRequirements(client, runId, workerId);
+    // Work a candidate waits for first: shown-page labels, then a queued fit; the background
+    // tail of requirements only when no fit is waiting (before, every fit paid one tail call).
+    const shown = await this.extractNextRequirements(client, runId, workerId, SHOWN_PAGE_PRIORITY);
     const job = this.fit.claim({ leaseMs: 300000 });
-    if (!job) return Boolean(extracted);
+    if (!job) return shown || (await this.extractNextRequirements(client, runId, workerId));
+    const extracted = shown;
     this.stats.claimed += 1;
     try {
       const requirementsInput = { vacancyId: job.input.vacancyId, description: job.input.description };
@@ -200,7 +203,7 @@ export class VacancyMechanicsRuntime {
   }
 
   /** One queued requirements job (highest priority first); the counters feed the batch journal line. */
-  private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string): Promise<boolean> {
+  private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string, minPriority = Number.NEGATIVE_INFINITY): Promise<boolean> {
     if (client && Date.now() < this.budgetPausedUntil) return false;
     const extracted = await this.requirements.runNext(workerId, async (input) => {
       const result = await extractVacancyRequirementsWithFallback(input,
@@ -220,7 +223,7 @@ export class VacancyMechanicsRuntime {
       if (result.fallbackStatus === 'unavailable') this.stats.requirementsUnavailable += 1;
       else if (result.fallbackStatus === 'invalid') this.stats.requirementsInvalid += 1;
       return result;
-    });
+    }, Date.now(), minPriority);
     if (extracted) this.stats.requirementsDone += 1;
     return Boolean(extracted);
   }
