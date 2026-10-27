@@ -16,6 +16,16 @@ export interface LandingVacancy {
   readonly country: string;
 }
 
+/** A row of the live feed: a card of the open catalog (B569). */
+export interface LandingFeedRow {
+  readonly title: string;
+  readonly salary: string;
+  /** «Москва · hh.ru · 26.10». */
+  readonly meta: string;
+  /** Path of the public card, `/vacancies/job/<slug>`. */
+  readonly href: string;
+}
+
 export interface LandingStats {
   readonly activeCount: number;
   readonly sourceCount: number;
@@ -23,9 +33,16 @@ export interface LandingStats {
   /** ISO date (YYYY-MM-DD) of the pool reading. */
   readonly updatedAt: string;
   readonly vacancies: readonly LandingVacancy[];
+  /** Newest salaried cards of the open catalog; absent until the next reading. */
+  readonly feed?: readonly LandingFeedRow[];
 }
 
 export const LANDING_VACANCY_ROWS = 7;
+/** Rows the feed paints in HTML; the ticker takes the rest from the JSON. */
+export const LANDING_FEED_SHOWN = 5;
+export const LANDING_FEED_ROWS = 12;
+/** Sources the hero names one by one: hh.ru, LinkedIn, Telegram, company sites. */
+export const LANDING_NAMED_SOURCES = 4;
 export const LANDING_STATS_SCRIPT_ID = 'oq-landing-stats';
 
 /**
@@ -33,10 +50,11 @@ export const LANDING_STATS_SCRIPT_ID = 'oq-landing-stats';
  * only until the first background reading of the live pool is cached.
  */
 export const LANDING_STATS_SNAPSHOT: LandingStats = {
-  activeCount: 1_119_270,
+  // B545: unique vacancies of the catalog, not 1.1 M records with repeats.
+  activeCount: 712_000,
   sourceCount: 324,
   remoteCount: 155_319,
-  updatedAt: '2026-10-20',
+  updatedAt: '2026-10-26',
   vacancies: [
     { title: 'Manager II, Developer Advocacy', salary: '$212–265 тыс. в год', country: 'США' },
     {
@@ -81,12 +99,26 @@ export const LANDING_TOKENS = {
   active: '%%OQ_ACTIVE%%',
   sources: '%%OQ_SOURCES%%',
   sourcesWord: '%%OQ_SOURCES_WORD%%',
+  /** Sources beyond the four named in the hero. */
+  sourcesMore: '%%OQ_SOURCES_MORE%%',
   remote: '%%OQ_REMOTE%%',
   date: '%%OQ_DATE%%',
   json: '%%OQ_STATS_JSON%%',
   vacancy: (index: number, field: keyof LandingVacancy) =>
     `%%OQ_V${index}_${field.toUpperCase()}%%`,
+  feed: (index: number, field: keyof LandingFeedRow) => `%%OQ_F${index}_${field.toUpperCase()}%%`,
 } as const;
+
+/** Catalog rows for the feed; before the first reading, the salaried rows with a link to the catalog. */
+export function landingFeed(stats: LandingStats): readonly LandingFeedRow[] {
+  if (stats.feed && stats.feed.length >= LANDING_FEED_SHOWN) return stats.feed;
+  return stats.vacancies.map((row) => ({
+    title: row.title,
+    salary: row.salary,
+    meta: row.country,
+    href: '/vacancies',
+  }));
+}
 
 /** Stats object whose fields are the tokens themselves, for prerendering. */
 export function landingTokenStats(): LandingStats {
@@ -99,6 +131,12 @@ export function landingTokenStats(): LandingStats {
       title: LANDING_TOKENS.vacancy(index, 'title'),
       salary: LANDING_TOKENS.vacancy(index, 'salary'),
       country: LANDING_TOKENS.vacancy(index, 'country'),
+    })),
+    feed: Array.from({ length: LANDING_FEED_SHOWN }, (_, index) => ({
+      title: LANDING_TOKENS.feed(index, 'title'),
+      salary: LANDING_TOKENS.feed(index, 'salary'),
+      meta: LANDING_TOKENS.feed(index, 'meta'),
+      href: LANDING_TOKENS.feed(index, 'href'),
     })),
   };
 }
@@ -124,6 +162,8 @@ export function applyLandingStats(html: string, stats: LandingStats): string {
     .join(escapeHtml(formatPoolCount(stats.activeCount)))
     .split(LANDING_TOKENS.sourcesWord)
     .join(sourcesWord(stats.sourceCount))
+    .split(LANDING_TOKENS.sourcesMore)
+    .join(String(Math.max(stats.sourceCount - LANDING_NAMED_SOURCES, 0)))
     .split(LANDING_TOKENS.sources)
     .join(String(stats.sourceCount))
     .split(LANDING_TOKENS.remote)
@@ -136,6 +176,13 @@ export function applyLandingStats(html: string, stats: LandingStats): string {
     const row = stats.vacancies[index] ?? LANDING_STATS_SNAPSHOT.vacancies[index];
     for (const field of ['title', 'salary', 'country'] as const) {
       out = out.split(LANDING_TOKENS.vacancy(index, field)).join(escapeHtml(row?.[field] ?? ''));
+    }
+  }
+  const feed = landingFeed(stats);
+  for (let index = 0; index < LANDING_FEED_SHOWN; index += 1) {
+    const row = feed[index];
+    for (const field of ['title', 'salary', 'meta', 'href'] as const) {
+      out = out.split(LANDING_TOKENS.feed(index, field)).join(escapeHtml(row?.[field] ?? ''));
     }
   }
   return out;
