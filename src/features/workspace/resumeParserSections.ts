@@ -12,6 +12,10 @@ import type {
   ParsedResumeTest,
 } from './resumeParserTypes';
 
+/** hh.ru's second «Навыки» block is about driving, and its footer heading is no skill. */
+const NOT_A_SKILL =
+  /^(?:опыт вождения|имеется собственный автомобиль|права категории|дополнительная информация)/iu;
+
 export function extractSkills(text: string): string[] {
   const lookahead = sectionLookahead('Ключевые навыки');
   const regex = new RegExp(
@@ -23,7 +27,7 @@ export function extractSkills(text: string): string[] {
   const items = raw
     .split(/[\n,;•·]+/u)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 2 && s.length <= 60);
+    .filter((s) => s.length >= 2 && s.length <= 80 && !NOT_A_SKILL.test(s));
   return [...new Set(items)].slice(0, 50);
 }
 
@@ -34,8 +38,25 @@ const EDUCATION_LEVELS = new Set([
   'среднее специальное',
   'среднее',
   'начальное профессиональное',
+  'бакалавр',
+  'магистр',
+  'специалитет',
+  'аспирантура',
   'higher education',
 ]);
+
+/**
+ * hh.ru's PDF puts the level beside the heading («Образование Бакалавр») and
+ * again in the year column before the speciality («Бакалавр Информатика…»).
+ */
+function stripEducationLevel(line: string): string {
+  const withoutHeading = line.replace(/^(?:высшее образование|образование|education)\s+/iu, '');
+  const level = withoutHeading.match(/^([А-Яа-яЁёA-Za-z]+(?:\s[А-Яа-яЁёA-Za-z]+)?)\s+(.+)$/u);
+  if (level && EDUCATION_LEVELS.has(level[1].toLowerCase())) return level[2];
+  const single = withoutHeading.match(/^([А-Яа-яЁёA-Za-z]+)\s+(.+)$/u);
+  if (single && EDUCATION_LEVELS.has(single[1].toLowerCase())) return single[2];
+  return withoutHeading;
+}
 
 const SECTION_HEADINGS = new Set(
   [
@@ -169,6 +190,7 @@ export function extractEducation(
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean)
+    .map((l) => (EDUCATION_LEVELS.has(l.toLowerCase().replace(/[.:]+$/u, '')) ? l : stripEducationLevel(l)))
     .filter((l) => !EDUCATION_LEVELS.has(l.toLowerCase().replace(/[.:]+$/u, '')));
   const result: ParsedResumeEducation[] = [];
 
@@ -290,9 +312,25 @@ export function extractRecommendations(text: string): ParsedResumeRecommendation
 }
 
  
+/**
+ * hh.ru prints «Знание языков Русский — Родной Английский — A2 — Элементарный»
+ * as one line: drop the heading and give each language its own line.
+ */
+function splitInlineLanguages(line: string): string[] {
+  return line
+    .replace(/^(?:знание языков|языки|languages)\s+/iu, '')
+    .split(/\s+(?=[А-ЯЁA-Z][а-яёa-z]+\s+[—–-]\s)/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 // eslint-disable-next-line max-lines-per-function
 export function extractLanguages(text: string): ParsedResumeLanguage[] {
-  const lines = text.split(/\n+/u).map((l) => l.trim()).filter(Boolean);
+  const lines = text
+    .split(/\n+/u)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .flatMap(splitInlineLanguages);
   const result: ParsedResumeLanguage[] = [];
 
   for (let i = 0; i < lines.length; i++) {

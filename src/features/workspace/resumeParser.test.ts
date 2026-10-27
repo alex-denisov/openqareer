@@ -350,3 +350,282 @@ describe('one-line «Компания, город — должность» heade
     ]);
   });
 });
+
+/**
+ * An hh.ru PDF read by the inspector: the date column breaks into «Месяц ГГГГ —»,
+ * the employer, and «Месяц ГГГГ Город, сайт стаж отрасль» on separate lines.
+ * A Free candidate is read by rules alone, so this layout gave zero places and
+ * the whole résumé landed in «О себе» (owner report, 2026-10-27).
+ */
+describe('hh.ru PDF with the date column split across lines', () => {
+  const text = [
+    '<!-- Page 1 -->',
+    '# Петров Пётр Петрович',
+    'Мужчина',
+    '+7 (900) 000-00-00 petr.petrov@example.com',
+    'Проживает: Казань Гражданство: Россия',
+    '### Желаемая должность и зарплата',
+    '## Руководитель группы разработки',
+    '### Опыт работы — 9 лет 3 месяца',
+    'Сентябрь 2024 —',
+    '',
+    '## Альфа Софт',
+    '',
+    'по настоящее время Москва, alfa.example 2 года 1 месяц Информационные технологии, системная интеграция, интернет',
+    '',
+    '- Разработка программного обеспечения',
+    '## Руководитель группы разработки',
+    '',
+    'О себе Руководитель разработки с 9-летним опытом в IT. Выстраиваю процессы разработки с нуля и устраняю техдолг.',
+    '',
+    'Зоны ответственности: руководство командой из 6 человек, планирование спринтов и приоритезация бэклога.',
+    'Резюме обновлено 27 октября 2026 в 09:39',
+    '',
+    '<!-- Page 2 -->',
+    '',
+    'Март 2023 —',
+    '',
+    'ООО Бета Тревел',
+    '',
+    'Сентябрь 2024 Сочи, beta.example/ 1 год 7 месяцев Информационные технологии, системная интеграция, интернет',
+    '',
+    '- Интернет-компания (поисковики, платежные системы)',
+    '- Системная интеграция, ИТ-консалтинг',
+    'Руководитель отдела разработки CRM систем',
+    '',
+    'Обсуждение задачи с заказчиком, составление технических заданий и контроль исполнения задач.',
+    'Петров Пётр • Резюме обновлено 27 октября 2026 в 09:39',
+    '',
+    'Июль 2015 —',
+    '',
+    'Гамма Фарм',
+    '',
+    'Июнь 2017 Ижевск, 2 года',
+    '',
+    '- Фармацевтическая продукция (производство)',
+    'Старший бухгалтер по расчётам',
+    '',
+    'Техническая поддержка, обеспечение работоспособности оборудования и программного обеспечения.',
+    '',
+    '### Образование Бакалавр',
+    '',
+    'ИжГТУ',
+    '',
+    'Бакалавр Автоматизированные системы управления',
+    '',
+    '### Навыки',
+    '',
+    'Знание языков Русский — Родной Английский — A2 — Элементарный',
+    '',
+    '1С-Битрикс',
+    'PHP Git Docker',
+    'Unit-экономика Agile Scrum Kanban Waterfall Управление стейкхолдерами',
+    'Управление командой',
+    '',
+    '### Навыки',
+    '',
+    'Опыт вождения',
+    '',
+    'Имеется собственный автомобиль Права категории B',
+  ].join('\n');
+
+  it('reads every place with its employer, title, dates and city', () => {
+    const experience = parseResumeContent(text).experience;
+    expect(
+      experience.map(({ employer, title, location, startDate, endDate, current }) => ({
+        employer,
+        title,
+        location,
+        startDate,
+        endDate,
+        current,
+      })),
+    ).toEqual([
+      {
+        employer: 'Альфа Софт',
+        title: 'Руководитель группы разработки',
+        location: 'Москва',
+        startDate: '2024-09',
+        endDate: undefined,
+        current: true,
+      },
+      {
+        employer: 'ООО Бета Тревел',
+        title: 'Руководитель отдела разработки CRM систем',
+        location: 'Сочи',
+        startDate: '2023-03',
+        endDate: '2024-09',
+        current: false,
+      },
+      {
+        employer: 'Гамма Фарм',
+        title: 'Старший бухгалтер по расчётам',
+        location: 'Ижевск',
+        startDate: '2015-07',
+        endDate: '2017-06',
+        current: false,
+      },
+    ]);
+  });
+
+  it('keeps a description that opens with «О себе» inside its place', () => {
+    const parsed = parseResumeContent(text);
+    const first = parsed.experience[0];
+    expect(first.responsibilities.join(' ')).toContain('Руководитель разработки с 9-летним опытом');
+    expect(parsed.about ?? '').not.toContain('Обсуждение задачи с заказчиком');
+  });
+
+  it('drops the hh.ru page footer from the text of a place', () => {
+    const all = parseResumeContent(text)
+      .experience.flatMap((place) => [...place.responsibilities, ...place.achievements])
+      .join('\n');
+    expect(all).not.toContain('Резюме обновлено');
+  });
+
+  it('reads languages from their one line and leaves the skills list to skills', () => {
+    const parsed = parseResumeContent(text);
+    expect(parsed.languages.map(({ name, cefr }) => ({ name, cefr }))).toEqual([
+      { name: 'Русский', cefr: 'C2' },
+      { name: 'Английский', cefr: 'A2' },
+    ]);
+    expect(parsed.skills).toEqual(expect.arrayContaining(['1С-Битрикс', 'Управление командой']));
+    expect(parsed.skills).toContain(
+      'Unit-экономика Agile Scrum Kanban Waterfall Управление стейкхолдерами',
+    );
+    expect(parsed.skills).not.toContain('Опыт вождения');
+  });
+
+  it('reads the school and speciality, never the level, as education', () => {
+    expect(parseResumeContent(text).education).toEqual([
+      { institution: 'ИжГТУ', qualification: 'Автоматизированные системы управления', endDate: undefined },
+    ]);
+  });
+});
+
+/**
+ * The same hh.ru PDF read by the pdf.js fallback, which is what reached the
+ * server on prod (2026-10-27): the city and the length of service get lines of
+ * their own, «О себе» opens a description on its own line, and the title,
+ * the bullets and the description wrap at the page width.
+ */
+describe('hh.ru PDF read by the pdf.js fallback', () => {
+  const text = [
+    'Петров Пётр Петрович',
+    'Опыт работы — 9 лет 3 месяца',
+    'Сентябрь 2024 —',
+    'Альфа Софт',
+    'по настоящее время',
+    'Москва , alfa.example',
+    '2 года 1 месяц',
+    'Информационные технологии , системная интеграция , интернет',
+    '• Разработка программного обеспечения',
+    'Руководитель группы разработки',
+    'О себе',
+    'Руководитель разработки с 9- летним опытом в IT (5+ лет в управлении',
+    'командами ). Выстраиваю процессы разработки с нуля .',
+    'Март 2023 —',
+    'ООО Бета Тревел',
+    'Сентябрь 2024',
+    'Сочи , beta.example/',
+    '1 год 7 месяцев',
+    'Информационные технологии , системная',
+    '• Интернет - компания ( поисковики , платежные системы ,',
+    'информационно - познавательные ресурсы и',
+    'прочее )',
+    '• Системная интеграция , автоматизация бизнес - процессов предприятия ,',
+    'ИТ - консалтинг',
+    'Руководитель отдела разработки и внедрения CRM систем и',
+    'интеграции',
+    'Обсуждение задачи с заказчиком , составление технических заданий и',
+    'контроль исполнения задач .',
+    'Петров Пётр • Резюме обновлено 27 октября 2026 в 09:39',
+    'Июнь 2018 —',
+    'Гамма Фарм',
+    'Апрель 2021',
+    'Казань , gamma.example',
+    '2 года 11',
+    'месяцев',
+    'Медицина , фармацевтика',
+    '• Аптека , оптика',
+    'Старший бухгалтер по расчётам',
+    'Сверка расчётов с поставщиками и подготовка отчётности .',
+    'Образование',
+    'Бакалавр',
+    '2017',
+    'ИжГТУ',
+    'Бакалавр',
+    'Автоматизированные системы управления',
+    'Навыки',
+    'Знание языков',
+    'Русский — Родной',
+    'Английский — A2 — Элементарный',
+    'Навыки',
+    'PHP',
+    'Управление командой',
+    'Опыт вождения',
+    'Дополнительная информация',
+    'Обо мне',
+    'Ищу команду для долгой работы .',
+  ].join('\n');
+
+  it('reads every place with its employer, whole title, dates and city', () => {
+    expect(
+      parseResumeContent(text).experience.map(({ employer, title, location, startDate, endDate, current }) => ({
+        employer,
+        title,
+        location,
+        startDate,
+        endDate,
+        current,
+      })),
+    ).toEqual([
+      {
+        employer: 'Альфа Софт',
+        title: 'Руководитель группы разработки',
+        location: 'Москва',
+        startDate: '2024-09',
+        endDate: undefined,
+        current: true,
+      },
+      {
+        employer: 'ООО Бета Тревел',
+        title: 'Руководитель отдела разработки и внедрения CRM систем и интеграции',
+        location: 'Сочи',
+        startDate: '2023-03',
+        endDate: '2024-09',
+        current: false,
+      },
+      {
+        employer: 'Гамма Фарм',
+        title: 'Старший бухгалтер по расчётам',
+        location: 'Казань',
+        startDate: '2018-06',
+        endDate: '2021-04',
+        current: false,
+      },
+    ]);
+  });
+
+  it('keeps a description under its own «О себе» line inside the place, as whole sentences', () => {
+    const parsed = parseResumeContent(text);
+    expect(parsed.experience[0].responsibilities.join('\n')).toContain(
+      'Руководитель разработки с 9-летним опытом в IT (5+ лет в управлении командами). Выстраиваю процессы разработки с нуля.',
+    );
+    expect(parsed.experience[1].responsibilities).toEqual([
+      'Обсуждение задачи с заказчиком, составление технических заданий и контроль исполнения задач.',
+    ]);
+    expect(parsed.about).toBe('Ищу команду для долгой работы.');
+  });
+
+  it('reads education, languages and skills from their sections', () => {
+    const parsed = parseResumeContent(text);
+    expect(parsed.education).toEqual([
+      { institution: 'ИжГТУ', qualification: 'Автоматизированные системы управления', endDate: '2017' },
+    ]);
+    expect(parsed.languages.map(({ name, cefr }) => ({ name, cefr }))).toEqual([
+      { name: 'Русский', cefr: 'C2' },
+      { name: 'Английский', cefr: 'A2' },
+    ]);
+    expect(parsed.skills).toEqual(['PHP', 'Управление командой']);
+  });
+});
