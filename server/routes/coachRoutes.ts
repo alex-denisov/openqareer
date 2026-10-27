@@ -1,3 +1,4 @@
+import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
 import { buildCoachCareerContext } from './coachCareerContext';
 import { adaptationContextFromInput, decorateAdaptationResult, labelAdaptationMessage, scopeAdaptationKnowledge, registerAdaptationCoachRoutes } from './adaptationCoach';
 import { extractCandidateFacts, type ExtractedFacts } from '../coach/candidateFactExtractor';
@@ -102,7 +103,9 @@ async function completeTurnWithProvider(
 ) {
   const factsPending = listCandidateFacts(deps, candidateId, key, input);
   try {
-    const generated = decorateAdaptationResult(await deps.coachProvider.createTurn(input, key), input);
+    const raw = decorateAdaptationResult(await deps.coachProvider.createTurn(input, key), input);
+    // Названный кандидатом порог зарплаты меняется только подтверждаемой карточкой (28.10).
+    const generated = { ...raw, result: withSalaryFloorProposal(raw.result, input) };
     // Quick replies are proposed candidate answers, unlike the consultant's
     // general advice. Check them before persistence so replay cannot restore
     // an invented achievement that was suppressed in the initial response.
