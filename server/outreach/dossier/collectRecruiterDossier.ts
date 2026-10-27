@@ -33,6 +33,8 @@ export interface DossierDeps {
   readonly fetch?: typeof fetch;
   readonly requestGate?: FootprintRequestGate;
   readonly now?: () => Date;
+  /** Адреса хоста для проверки, что сайт компании не во внутренней сети. */
+  readonly lookupHost?: (host: string) => Promise<readonly string[]>;
 }
 
 const REQUEST_TIMEOUT_MS = 15_000;
