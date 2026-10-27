@@ -276,12 +276,12 @@ function CountryCardMeta({ summary }: { readonly summary: RelocationCountrySumma
           {vacancyCountLabel(vacancyCount)}
         </span>
       )}
-      <span title={summary.source?.title}>
-        <Clock aria-hidden="true" size={14} />
-        {summary.source
-          ? `каталог правил, ${relocationShortDay(summary.source.retrievedAt)}`
-          : 'источник не указан'}
-      </span>
+      {summary.source ? (
+        <span title={summary.source.title}>
+          <Clock aria-hidden="true" size={14} />
+          {`каталог правил, ${relocationShortDay(summary.source.retrievedAt)}`}
+        </span>
+      ) : null}
     </div>
   );
 }
