@@ -252,4 +252,26 @@ describe('recruiter dossier', () => {
     await collectRecruiterDossier({ ...person, linkedinUrl: seedPage.url }, deps(fetch));
     expect(fetch.mock.calls.map(([url]) => String(url)).some((url) => url.includes('telesco.pe'))).toBe(false);
   });
+
+  it('never takes a Telegram channel or group for a personal account', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': {
+        results: [{ url: 'https://acme.com/team', title: 'Team', text: 'Anna Smith — recruiter. https://instagram.com/annahires' }],
+      },
+      'https://t.me/annahires': '<meta property="og:title" content="Anna Smith"><div class="tgme_page_extra">80 subscribers</div><a>Preview channel</a>',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'telegram' && c.value === '@annahires')).toBe(false);
+  });
+
+  it('drops a t.me link from a page when it leads to a channel', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': {
+        results: [{ url: 'https://conf.example/speakers', title: 'Speakers', text: 'Anna Smith, Talent Partner at Acme. t.me/anna_hr' }],
+      },
+      'https://t.me/anna_hr': '<meta property="og:title" content="HR notes"><div class="tgme_page_extra">80 subscribers</div>',
+    });
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    expect(channels.some((c) => c.kind === 'telegram')).toBe(false);
+  });
 });
