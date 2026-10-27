@@ -1,3 +1,4 @@
+import { currentFanDemand } from './jobspyFan';
 import { searchHhVacancies } from '../connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from '../connectors/remotiveVacancySearch';
 import { HhCrawlCoordinator } from './hhCrawlCoordinator';
@@ -58,6 +59,8 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     // Быстрый проход останавливается на странице, где пул всё уже знает (B219).
     // Движок собирается ниже, поэтому спрашивается через замыкание, а не значением.
     isKnown: (id: string): boolean => engine.hasVacancy(id),
+    // Роли кандидатов вне справочника hh ищутся по названию (27.10).
+    demandTerms: currentFanDemand,
   });
   const engine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
     fetcher:

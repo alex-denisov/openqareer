@@ -342,3 +342,19 @@ describe('proposeRoles: одна роль под разными названия
 function sampleOf(role: { confirmation: { state: string; sampleSize?: number } }): number {
   return role.confirmation.sampleSize ?? 0;
 }
+
+describe('proposeRoles: имя роли рынка (27.10)', () => {
+  it('называет роль одним названием, а не склейкой двух должностей через «/»', () => {
+    const joined = 'Производственный директор / Технический директор';
+    const roles = proposeRoles({
+      named: [],
+      pool: [
+        ...Array.from({ length: 6 }, () => vacancy(joined)),
+        ...Array.from({ length: 4 }, () => vacancy('Производственный директор')),
+      ],
+      candidateSkills: [],
+      roleKey: () => 'manufacturing:top',
+    });
+    expect(roles[0]?.title).toBe('Производственный директор');
+  });
+});

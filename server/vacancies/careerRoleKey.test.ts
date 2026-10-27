@@ -16,41 +16,55 @@ describe('careerRoleKey', () => {
   });
 });
 
-describe('careerRoleKey: руководитель одной функции — одна роль (27.10)', () => {
+describe('careerRoleKey: одна роль — один смысл и один уровень (27.10)', () => {
   const same = (a: string, b: string) => expect(careerRoleKey(a)).toBe(careerRoleKey(b));
+  const differ = (a: string, b: string) => expect(careerRoleKey(a)).not.toBe(careerRoleKey(b));
 
-  it('CIO, IT Director и директор по IT — одна роль', () => {
+  it('CIO, IT Director и директор по IT — первое лицо IT, одна роль', () => {
     expect(careerRoleKey('CIO')).not.toBeNull();
     same('CIO', 'IT Director');
     same('Директор по IT (CIO)', 'ИТ-директор');
-    same('Директор по IT', 'Head of IT');
+    same('Директор по IT', 'Директор по информационным технологиям');
     same('Директор по IT-операциям', 'IT Director');
   });
 
-  it('VP of Customer Support, Customer Support Director и Head of Support — одна роль', () => {
+  it('руководитель направления внутри IT — не CIO', () => {
+    differ('Head of IT Service Management', 'CIO');
+    differ('Head of IT Service Management', 'IT Director');
+  });
+
+  it('VP of Customer Support и Customer Support Director — одна роль, Head of Support ниже', () => {
     expect(careerRoleKey('Customer Support Director')).not.toBeNull();
     same('VP of Customer Support', 'Customer Support Director');
     same('Head of Support', 'Руководитель технической поддержки');
-    same('Head of Customer Success', 'Director of Customer Support');
+    differ('Head of Support', 'Customer Support Director');
   });
 
-  it('Head of AI, VP of AI и Chief AI Officer — одна роль', () => {
-    same('Head of AI', 'VP of AI');
-    same('Chief AI Officer', 'Director of AI');
+  it('Head of AI и Head of AI Engineering — одна роль; VP of AI и Chief AI Officer выше', () => {
+    same('Head of AI', 'Head of AI Engineering');
+    same('Head of AI', 'Руководитель направления AI');
+    same('Chief AI Officer', 'VP of AI');
+    differ('Head of AI', 'VP of AI');
   });
 
-  it('руководство бухгалтерией сводится, а специалисты — нет', () => {
+  it('руководство бухгалтерией сводится, финансовый директор выше, специалисты — нет', () => {
     same('Руководитель бухгалтерии', 'Главный бухгалтер');
+    same('Финансовый директор', 'CFO');
+    differ('Главный бухгалтер', 'CFO');
     expect(careerRoleKey('AI Solutions Architect')).not.toBe(careerRoleKey('Software Engineer'));
   });
 
   it('Chief of Staff и генеральный директор остаются разными ролями', () => {
-    expect(careerRoleKey('Chief of Staff')).not.toBe(careerRoleKey('Генеральный директор'));
+    differ('Chief of Staff', 'Генеральный директор');
+  });
+
+  it('производственный и технический директор — разные роли', () => {
+    differ('Производственный директор', 'Технический директор');
   });
 
   it('руководители разных функций не сводятся', () => {
-    expect(careerRoleKey('Head of AI')).not.toBe(careerRoleKey('Head of Support'));
-    expect(careerRoleKey('CIO')).not.toBe(careerRoleKey('Chief Operating Officer'));
+    differ('Head of AI', 'Head of Support');
+    differ('CIO', 'Chief Operating Officer');
   });
 });
 

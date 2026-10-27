@@ -7,17 +7,27 @@ import { rulesParse } from './titleParse/rulesParse';
  * директор» — одна функция и уровень. Ключ даёт словарь ролей (онтология
  * подбора); название, которого словарь не знает, сводится только по строке.
  *
- * Руководитель функции — одна роль, как бы его ни звали (решение владельца
- * 27.10): CIO, IT Director и директор по IT; VP of Customer Support и Customer
- * Support Director. Уровень от руководителя направления до C-level один, потому
- * что рынок называет их по-разному. Специалисты сводятся только по роли
- * словаря: «AI Solutions Architect» — не «Software Engineer».
+ * Одна роль — один смысл и один уровень (владелец 27.10). Руководители
+ * функции делятся на две ступени:
+ *  - первое лицо функции: C-level, VP и «директор» функции — CIO, IT Director
+ *    и директор по IT; VP of Customer Support и Customer Support Director;
+ *  - руководитель направления: Head of, «руководитель» — Head of AI и Head of
+ *    AI Engineering; Head of IT Service Management — не CIO.
+ * Специалисты сводятся только по роли словаря: «AI Solutions Architect» — не
+ * «Software Engineer».
  */
 const keys = new Map<string, string | null>();
 const MAX_CACHED_KEYS = 50_000;
 
 /** От руководителя направления (head, director) и выше. */
 const LEADERSHIP_RANK = 2;
+/** VP и выше — первое лицо функции. */
+const TOP_RANK = 3;
+
+/** «Директор» функции, а не руководитель внутри неё и не помощник директора. */
+const DIRECTOR = /(?<!\p{L})(?:director|директор)(?!\p{L})/iu;
+const BELOW_DIRECTOR =
+  /(?<!\p{L})(?:head of|руководитель|associate|assistant|deputy|заместитель|помощник)(?!\p{L})/iu;
 
 /**
  * Функции, внутри которых руководители разных смыслов: Chief of Staff — не
@@ -25,12 +35,19 @@ const LEADERSHIP_RANK = 2;
  */
 const UNMERGED_FUNCTIONS: ReadonlySet<string> = new Set(['exec-general', 'other']);
 
+function leadershipTier(title: string, levelRank: number): 'top' | 'head' {
+  if (levelRank >= TOP_RANK) return 'top';
+  return DIRECTOR.test(title) && !BELOW_DIRECTOR.test(title) ? 'top' : 'head';
+}
+
 function keyOf(title: string): string | null {
   const parsed = rulesParse(title);
   const primary = parsed.roleId?.split('.')[0] ?? parsed.functions[0];
-  const leads = parsed.levelRank !== null && parsed.levelRank >= LEADERSHIP_RANK;
-  if (primary && leads && !UNMERGED_FUNCTIONS.has(primary)) return `${primary}:lead`;
-  return parsed.roleId ?? null;
+  const rank = parsed.levelRank;
+  if (!primary || rank === null || rank < LEADERSHIP_RANK || UNMERGED_FUNCTIONS.has(primary)) {
+    return parsed.roleId ?? null;
+  }
+  return `${primary}:${leadershipTier(title, rank)}`;
 }
 
 export function careerRoleKey(title: string): string | null {
@@ -54,7 +71,13 @@ export function sameCareerRole(vacancyTitle: string, role: string): boolean {
   return roleKey !== null && careerRoleKey(vacancyTitle) === roleKey;
 }
 
-/** Функции, к которым словарь относит название; общий код `other` не в счёт. */
+/**
+ * Основная функция названия; общий код `other` не в счёт. Только основная:
+ * «Производственный директор / Технический директор» — производство, а не
+ * опыт технического директора (27.10).
+ */
 export function careerRoleFunctions(title: string): string[] {
-  return rulesParse(title.trim()).functions.filter((code) => code !== 'other');
+  const parsed = rulesParse(title.trim());
+  const primary = parsed.roleId?.split('.')[0] ?? parsed.functions[0];
+  return primary && primary !== 'other' ? [primary] : [];
 }
