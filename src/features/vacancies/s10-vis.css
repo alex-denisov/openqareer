@@ -205,11 +205,17 @@
 
 .vacancies-screen-fit-status {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--career-space-1);
+  max-inline-size: 100%;
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
-  white-space: nowrap;
+}
+
+/* «удалённо, страна не указана» и длинный город переносятся внутри колонки «Гео» (27.10). */
+.vacancies-screen-cell--geo > span {
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 .vacancies-screen-fit-status .fit-dot {
