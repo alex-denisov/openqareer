@@ -69,7 +69,13 @@ describe('B568 interview question pages', () => {
     expect(names).toEqual(
       ACCOUNTANT.questions.slice(0, INTERVIEW_OPEN_QUESTIONS).map((row) => row.question),
     );
-    expect(response.body).toContain('Открыть ещё 4 бесплатно');
+    expect(response.body).toContain('Открыть ещё 8 бесплатно');
+    // Acceptance 27.10 (04b): lock icon per locked row, trainer note, links after the gate.
+    expect(response.body.match(/<rect x="5" y="11"/gu)).toHaveLength(locked.length);
+    expect(response.body).toContain('ИИ разберёт ваш ответ по тем же критериям');
+    expect(response.body).toContain('href="/tools/resume"');
+    expect(response.body).toContain('Зарплаты бухгалтера по городам');
+    expect(response.body).toMatch(/[\d\s ]+ вакансий бухгалтера в каталоге/u);
     expect(response.headers['cache-control']).toBe('no-cache');
   });
 

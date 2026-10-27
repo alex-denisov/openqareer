@@ -146,14 +146,26 @@ function HubHero() {
   );
 }
 
+function lockedMax(entries: readonly InterviewHubEntry[]): number {
+  return Math.max(0, ...entries.map((row) => lockedInterviewQuestions(row.profession).length));
+}
+
+const ARROW = (
+  <svg className="iq-ic" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </svg>
+);
+
 function HubProfessions({ entries }: { entries: readonly InterviewHubEntry[] }) {
   return (
     <section className="iq-section" aria-labelledby="iq-pick">
       <h2 id="iq-pick">Выберите свою профессию</h2>
       <p className="ps-soft">
-        {INTERVIEW_OPEN_QUESTIONS} вопросов с разбором открыты сразу, остальные — после бесплатной
-        регистрации. <a href={signupHref('trainer')}>Отрепетировать ответы под вашу профессию</a> —
-        тренажёр с ИИ в Basic.
+        {`${INTERVIEW_OPEN_QUESTIONS} вопросов с разбором открыты сразу${
+          lockedMax(entries) ? `, ещё ${lockedMax(entries)} — после бесплатной регистрации` : ''
+        }. `}{' '}
+        <a href={signupHref('trainer')}>Отрепетировать ответы под вашу профессию</a> — тренажёр с ИИ
+        в Basic.
       </p>
       <div className="iq-tools">
         <label className="iq-visually-hidden" htmlFor="iq-search">
@@ -270,8 +282,13 @@ function OpenQuestion({
         ) : null}
         <QuestionEvidence question={question} profession={profession} />
         <a className="iq-train" href={signupHref(profession.slug)}>
-          Отрепетировать ответ в тренажёре →
+          Отрепетировать ответ в тренажёре {ARROW}
         </a>
+        {first ? (
+          <p className="ps-soft iq-train-note">
+            ИИ разберёт ваш ответ по тем же критериям, что и работодатель. Тренажёр — в Basic.
+          </p>
+        ) : null}
       </div>
     </details>
   );
@@ -317,6 +334,10 @@ function LockedQuestions({ profession }: { profession: InterviewProfession }) {
       >
         {locked.map((row) => (
           <li key={row.id}>
+            <svg className="iq-ic" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="5" y="11" width="14" height="9" rx="2" />
+              <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+            </svg>
             <span>{row.question}</span>
             <span className="ps-soft">после регистрации</span>
           </li>
@@ -429,18 +450,27 @@ function ProfessionHero({
 
 function ProfessionLinks({
   profession,
+  vacancies,
   related,
 }: {
   profession: InterviewProfession;
+  vacancies: number;
   related: readonly InterviewHubEntry[];
 }) {
   return (
     <>
       <nav className="iq-links" aria-label="По этой профессии">
+        {vacancies > 0 ? (
+          <a href="/vacancies">
+            {count(vacancies, VACANCIES)} {profession.genitive} в каталоге {ARROW}
+          </a>
+        ) : null}
         <a href={`/salaries/${profession.slug}`}>
-          Зарплаты и навыки: {profession.label.toLowerCase()} →
+          Зарплаты {profession.genitive} по городам {ARROW}
         </a>
-        <a href="/vacancies">Каталог вакансий →</a>
+        <a href="/tools/resume">
+          Резюме {profession.genitive}: результаты, за которые зовут {ARROW}
+        </a>
       </nav>
       {related.length ? (
         <section className="iq-related" aria-labelledby="iq-related-h">
@@ -496,7 +526,7 @@ export function InterviewProfessionPage({
             ))}
           </div>
           {unlocked ? null : <LockedQuestions profession={profession} />}
-          <ProfessionLinks profession={profession} related={related} />
+          <ProfessionLinks profession={profession} vacancies={vacancies} related={related} />
         </div>
         <Quiz profession={profession} unlocked={unlocked} />
       </div>

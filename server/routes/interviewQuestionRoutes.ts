@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import {
+  interviewEvidence,
   INTERVIEW_HUB_PATH,
   interviewProfession,
   interviewProfessionIndexable,
@@ -56,7 +57,10 @@ function hubEntries(readIndex: () => readonly SalaryMarketIndexEntry[]): Intervi
     /* Counts are optional; the bank itself does not depend on the index. */
   }
   return publishedInterviewProfessions()
-    .map((profession) => ({ profession, vacancies: counts.get(profession.slug) ?? 0 }))
+    .map((profession) => ({
+      profession,
+      vacancies: counts.get(profession.slug) ?? interviewEvidence(profession.slug)?.vacancies ?? 0,
+    }))
     .sort((a, b) => b.vacancies - a.vacancies);
 }
 
