@@ -82,7 +82,18 @@ async function readLimited(response: Response): Promise<string> {
 }
 
 /** Открытая HTML-страница как текст, с лимитом размера; failed — отказ по частоте или сеть. */
-export async function fetchPublicPage(url: string, deps: DossierDeps): Promise<{ text: string | null; failed: boolean }> {
+const ARCHIVE_HOST = 'web.archive.org';
+
+type PageResult = { text: string | null; failed: boolean };
+
+export async function fetchPublicPage(url: string, deps: DossierDeps): Promise<PageResult> {
+  const first = await fetchOnce(url, deps, 0);
+  if (!('redirect' in first)) return first;
+  const second = await fetchOnce(first.redirect, deps, 1);
+  return 'redirect' in second ? { text: null, failed: false } : second;
+}
+
+async function fetchOnce(url: string, deps: DossierDeps, hops: number): Promise<PageResult | { redirect: string }> {
   const fetcher = deps.fetch ?? globalThis.fetch;
   const gate = deps.requestGate ?? sharedFootprintRequestGate;
   try {
@@ -93,6 +104,14 @@ export async function fetchPublicPage(url: string, deps: DossierDeps): Promise<{
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
       if (response.status === 429) return { text: null, failed: true };
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location && !hops) {
+        await response.body?.cancel().catch(() => undefined);
+        // Архив отдаёт снимок через переадресацию на свой же хост; на чужой хост не идём.
+        const next = new URL(location, url);
+        if (new URL(url).hostname === ARCHIVE_HOST && next.hostname === ARCHIVE_HOST) return { redirect: next.href };
+        return { text: null, failed: false };
+      }
       const type = response.headers.get('content-type') ?? '';
       if (!response.ok || !/text\/html|text\/plain/u.test(type)) {
         await response.body?.cancel().catch(() => undefined);
@@ -120,18 +139,21 @@ async function archivedPages(domain: string, livePages: readonly string[], deps:
     if (found.length >= ARCHIVE_PAGES) break;
     const original = `https://${domain}${path}`;
     if (livePages.includes(original)) continue;
+    let latest: string | undefined;
     try {
+      // Архив отдаёт до 20 снимков с самых ранних: старая страница команды тоже показывает формулу.
       const captures = await wayback.run({ profileUrl: original }, AbortSignal.timeout(REQUEST_TIMEOUT_MS));
-      const latest = captures.map((capture) => capture.url).filter((url): url is string => Boolean(url)).sort().at(-1);
-      if (!latest) continue;
-      // id_ отдаёт снимок без обвязки архива — текст страницы как был.
-      const raw = latest.replace(/\/web\/(\d{14})\//u, '/web/$1id_/');
-      const page = await fetchPublicPage(raw, deps);
-      if (page.failed) break;
-      if (page.text) found.push({ url: latest, text: page.text });
+      latest = captures.map((capture) => capture.url).filter((url): url is string => Boolean(url)).sort().at(-1);
     } catch {
-      // Архив недоступен — остаются живые страницы и поиск.
+      // Отказ архива (в том числе по частоте) — остальные пути не спрашиваем.
+      break;
     }
+    if (!latest) continue;
+    // id_ отдаёт снимок без обвязки архива — текст страницы как был.
+    const raw = latest.replace(/\/web\/(\d{14})\//u, '/web/$1id_/');
+    const page = await fetchPublicPage(raw, deps);
+    if (page.failed) break;
+    if (page.text) found.push({ url: latest, text: page.text });
   }
   return found;
 }

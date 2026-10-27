@@ -61,6 +61,9 @@ describe('company pages', () => {
       }
       if (url.startsWith('https://web.archive.org/cdx/')) return new Response('[]', { status: 200 });
       if (url === 'https://web.archive.org/web/20240101000000id_/https://acme.com/team') {
+        return new Response('', { status: 302, headers: { location: '/web/20240101000001id_/https://acme.com/team' } });
+      }
+      if (url === 'https://web.archive.org/web/20240101000001id_/https://acme.com/team') {
         return new Response(teamPage, { status: 200, headers: { 'content-type': 'text/html' } });
       }
       return new Response('', { status: 404 });

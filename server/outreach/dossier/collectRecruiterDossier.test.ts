@@ -125,6 +125,6 @@ describe('recruiter dossier', () => {
     expect(kinds).toContain('whatsapp=+447700900124');
     expect(kinds).toContain('other=medium.com/@annahires');
     expect(kinds.some((kind) => kind.includes('someone_else') || kind.includes('teletype'))).toBe(false);
-    expect(channels.find((c) => c.kind === 'whatsapp')?.sourceUrl).toBe('https://medium.com/@annahires');
+    expect(channels.find((c) => c.kind === 'whatsapp')).toMatchObject({ sourceUrl: 'https://medium.com/@annahires', status: 'published' });
   });
 });

@@ -48,6 +48,7 @@ const EXA_PAGE_CHARS = 4_000;
 const GITHUB_CANDIDATES = 3;
 const TELEGRAM_NICKS = 4;
 const PROFILE_NICKS = 2;
+const PROFILE_HEAD_CHARS = 1_500;
 /** Сайты из списка Maigret/Sherlock, где рекрутёры ведут профили с контактами в описании. */
 export const RECRUITER_PROFILE_SITES = [
   'Medium', 'Teletype', 'SlideShare', 'Speakerdeck', 'sessionize.com', 'clarity.fm',
@@ -264,8 +265,10 @@ async function fromUsernameSites(
     (site): site is MaigretSite => Boolean(site),
   );
   const found: RecruiterChannel[] = [];
+  const refused = new Set<string>();
   for (const nick of nicknames(known).slice(0, PROFILE_NICKS)) {
     for (const site of sites) {
+      if (refused.has(site.name)) continue;
       const adapter = createUsernamePresenceAdapter(site.adapterId, {
         site,
         ...(deps.fetch ? { fetch: deps.fetch } : {}),
@@ -275,16 +278,25 @@ async function fromUsernameSites(
       try {
         profileUrl = (await adapter.run({ username: nick }, AbortSignal.timeout(REQUEST_TIMEOUT_MS)))[0]?.url ?? null;
       } catch {
+        // Сайт отказал (в том числе по частоте) — больше его в этом сборе не спрашиваем.
+        refused.add(site.name);
+        state.failed = true;
         continue;
       }
       if (!profileUrl) continue;
       const page = await fetchPublicPage(profileUrl, deps);
-      if (page.failed) state.failed = true;
-      if (!page.text || !namesPerson(page.text, person.fullName)) continue;
-      found.push({ kind: 'other', value: profileUrl.replace(/^https:\/\//u, ''), href: profileUrl, status: 'published', sourceUrl: profileUrl, observedAt });
+      if (page.failed) {
+        refused.add(site.name);
+        state.failed = true;
+      }
+      // Имя должно стоять в шапке профиля, а не где-то в ленте или блоке «похожие».
+      if (!page.text || !namesPerson(page.text.slice(0, PROFILE_HEAD_CHARS), person.fullName)) continue;
+      const status: RecruiterChannel['status'] = namesCompany(page.text, person.companyName) ? 'published' : 'hypothesis';
+      found.push({ kind: 'other', value: profileUrl.replace(/^https:\/\//u, ''), href: profileUrl, status, sourceUrl: profileUrl, observedAt });
       found.push(
         ...extractChannels(nearName(page.text, person.fullName), { companyDomain: person.companyDomain, sourceUrl: profileUrl, observedAt })
-          .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName)),
+          .filter((channel) => !channel.kind.startsWith('email_') || emailNamesPerson(channel.value, person.fullName))
+          .map((channel) => ({ ...channel, status })),
       );
     }
   }
