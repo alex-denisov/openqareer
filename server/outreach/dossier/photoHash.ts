@@ -3,6 +3,7 @@ import { PNG } from 'pngjs';
 import { sharedFootprintRequestGate } from '../../osint/adapters/requestScheduler';
 import type { DossierDeps } from './collectRecruiterDossier';
 import { isPublicCompanyDomain } from './companyPages';
+import { pinnedFetch } from './pinnedFetch';
 
 /**
  * Отпечаток фото (dHash, 64 бита) как признак того же человека (B258): фото
@@ -146,7 +147,7 @@ async function publicHttps(url: string, deps: DossierDeps): Promise<URL | null> 
 
 /** Отпечаток фото по публичной ссылке https; любая ошибка — нет отпечатка, а не отказ сбора. */
 export async function photoHash(url: string, deps: DossierDeps): Promise<string | null> {
-  const fetcher = deps.fetch ?? globalThis.fetch;
+  const fetcher = deps.fetch ?? pinnedFetch;
   const gate = deps.requestGate ?? sharedFootprintRequestGate;
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {

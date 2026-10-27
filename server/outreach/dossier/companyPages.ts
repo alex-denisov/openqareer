@@ -1,5 +1,4 @@
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { defaultResolve, pinnedFetch, privateAddress } from './pinnedFetch';
 import { searchExaPages } from '../../osint/adapters/exaAdapter';
 import { createWaybackAdapter } from '../../osint/adapters/waybackAdapter';
 import type { DossierDeps } from './collectRecruiterDossier';
@@ -82,26 +81,11 @@ function htmlToText(html: string): string {
 const PUBLIC_FQDN = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/u;
 const INTERNAL_SUFFIX = /\.(?:local|localhost|internal|lan|home|corp|test|invalid|example)$/u;
 
-function privateAddress(address: string): boolean {
-  if (isIP(address) === 6) {
-    const v6 = address.toLowerCase();
-    if (v6.startsWith('::ffff:')) return privateAddress(v6.slice(7));
-    return v6 === '::1' || v6 === '::' || /^f[cd]/u.test(v6) || /^fe[89ab]/u.test(v6);
-  }
-  const [a = 0, b = 0] = address.split('.').map(Number);
-  return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
-    || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
-}
-
-async function defaultLookup(host: string): Promise<readonly string[]> {
-  return (await lookup(host, { all: true })).map((entry) => entry.address);
-}
-
 /** Только публичное имя, все адреса которого вне частных сетей. */
 export async function isPublicCompanyDomain(domain: string, deps: DossierDeps): Promise<boolean> {
   if (!PUBLIC_FQDN.test(domain) || INTERNAL_SUFFIX.test(domain)) return false;
   try {
-    const addresses = await (deps.lookupHost ?? defaultLookup)(domain);
+    const addresses = await (deps.lookupHost ?? defaultResolve)(domain);
     return addresses.length > 0 && !addresses.some(privateAddress);
   } catch {
     return false;
@@ -158,7 +142,7 @@ export function ogImage(html: string): string | null {
 }
 
 async function fetchOnce(url: string, deps: DossierDeps): Promise<PageResult | { redirect: string }> {
-  const fetcher = deps.fetch ?? globalThis.fetch;
+  const fetcher = deps.fetch ?? pinnedFetch;
   const gate = deps.requestGate ?? sharedFootprintRequestGate;
   try {
     return await gate.run(new URL(url).hostname, AbortSignal.timeout(REQUEST_TIMEOUT_MS), async () => {
