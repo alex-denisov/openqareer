@@ -175,6 +175,9 @@ const SPECIALIST_FUNCTIONS: readonly FunctionCode[] = [
   'finance',
 ];
 
+/** Revenue Operations и RevOps — продажи, а не ops от роли COO (28.10). */
+const REVENUE_TITLE = /\b(?:revenue|revops)\b/iu;
+
 export function evaluateSemanticRole(
   roleFunctions: readonly FunctionCode[],
   targetLevel: SeniorityLevel | undefined,
@@ -184,10 +187,12 @@ export function evaluateSemanticRole(
   const parsed = rulesParse(vacancyTitle);
   const matchingPoints: string[] = [];
   const titleWords = new Set(normalizeTextForComparison(vacancyTitle).split(/\s+/u));
-  const containsOtherSpecialistFunction = SPECIALIST_FUNCTIONS.some(
-    (code) =>
-      !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
-  );
+  const containsOtherSpecialistFunction =
+    SPECIALIST_FUNCTIONS.some(
+      (code) =>
+        !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
+    ) ||
+    (!roleFunctions.includes('sales') && REVENUE_TITLE.test(vacancyTitle));
 
   if (containsOtherSpecialistFunction || isNonTechNoise(parsed.functions)) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
