@@ -1,5 +1,6 @@
 import type { CandidateRecruiterChannel } from '../../shared/recruiterChannel';
 import { candidateChannels } from '../../shared/recruiterChannel';
+import { personNameFromTitle } from '../../shared/personName';
 import type { RecruiterContact } from '../../shared/recruiterContact';
 
 /**
@@ -10,5 +11,5 @@ export function toCandidateContact(
   contact: RecruiterContact,
 ): Omit<RecruiterContact, 'channels'> & { channels: CandidateRecruiterChannel[] } {
   const { sourceReceipt: _internal, channels, ...shown } = contact;
-  return { ...shown, channels: candidateChannels(channels ?? []) };
+  return { ...shown, fullName: personNameFromTitle(shown.fullName), channels: candidateChannels(channels ?? []) };
 }

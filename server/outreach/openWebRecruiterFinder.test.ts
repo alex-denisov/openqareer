@@ -155,6 +155,36 @@ describe('company site finder', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('searches a Russian company in Russian and prefers its .ru site', async () => {
+    const repository = createRepository();
+    const fetch = exaFetch([site('https://ancor.org/about'), site('https://www.ancor.ru/')]);
+    const findSite = createCompanySiteFinder({
+      repository,
+      apiKey: 'test-key',
+      fetch,
+      requestGate: new FootprintRequestGate({ intervalMs: 0 }),
+      now: () => now,
+      resolveMx: async () => [{ exchange: 'mx', priority: 1 }],
+    });
+
+    expect(await findSite('ANCOR', 'ru')).toBe('ancor.ru');
+    expect(String(fetch.mock.calls[0]?.[1]?.body)).toContain('официальный сайт');
+  });
+
+  it('treats an hh.ru vacancy as a Russian company', async () => {
+    const seen: string[] = [];
+    const domain = await resolveCompanyDomain(
+      { id: 'v', company: 'ANCOR', url: 'https://hh.ru/vacancy/138649447' },
+      async () => [{ exchange: 'mx', priority: 1 }],
+      async (_company, market) => {
+        seen.push(market ?? 'global');
+        return undefined;
+      },
+    );
+    expect(seen).toEqual(['ru']);
+    expect(domain).toBe('ancor.ru');
+  });
+
   it('remembers a miss so a company without a site is not searched again', async () => {
     const repository = createRepository();
     const fetch = exaFetch([]);
