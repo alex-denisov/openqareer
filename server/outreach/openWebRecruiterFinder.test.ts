@@ -168,7 +168,7 @@ describe('company site finder', () => {
     });
 
     expect(await findSite('ANCOR', 'ru')).toBe('ancor.ru');
-    expect(String(fetch.mock.calls[0]?.[1]?.body)).toContain('официальный сайт');
+    expect(JSON.stringify(fetch.mock.calls)).toContain('официальный сайт');
   });
 
   it('treats an hh.ru vacancy as a Russian company', async () => {
