@@ -198,6 +198,9 @@ html:has(.hm) {
   font-size: var(--t-md);
   max-width: 50ch;
 }
+.hm .sh .lead {
+  margin-top: var(--s3);
+}
 .hm .sh p:has(> .link) {
   display: flex;
   flex-direction: column;
@@ -635,6 +638,13 @@ html:has(.hm) {
 }
 .hm details.q {
   border-top: 1px solid var(--line);
+  padding: 0;
+}
+.hm details.q .a p {
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+  max-width: none;
 }
 .hm .faq > div:first-child details.q:first-child {
   border-top-color: var(--line-2);
@@ -909,6 +919,7 @@ html:has(.hm) {
     margin-top: var(--s3);
   }
   .hm .dots button {
+    color: var(--ink);
     width: 44px;
     height: 24px;
     border: 0;

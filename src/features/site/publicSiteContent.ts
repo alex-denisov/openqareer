@@ -15,7 +15,8 @@ export const OPERATOR_TAX_ID = '774315089677';
 export const ORG_ID = `${SITE_ORIGIN}/#org`;
 export const WEBSITE_ID = `${SITE_ORIGIN}/#website`;
 
-export const LANDING_TITLE_SEO = 'Поиск работы с ИИ: вакансии со всего рынка и отклики · openqareer';
+export const LANDING_TITLE_SEO =
+  'Поиск работы с ИИ: вакансии со всего рынка и отклики · openqareer';
 export const LANDING_DESCRIPTION =
   'Найдите работу быстрее: свежие вакансии с hh.ru, LinkedIn, сайтов компаний и Telegram-каналов в одном списке, сильное резюме из вашего опыта и отклики по вашим правилам.';
 

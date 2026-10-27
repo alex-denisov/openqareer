@@ -43,6 +43,49 @@ function useFeed(pool: readonly LandingFeedRow[]) {
   return { rows, paused, reduced, setPaused, setHeld };
 }
 
+function FeedList({
+  rows,
+  setHeld,
+}: {
+  readonly rows: readonly ShownRow[];
+  readonly setHeld: (held: boolean) => void;
+}) {
+  return (
+    <ul
+      className="rows"
+      aria-label="Новые вакансии из открытого каталога"
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={() => setHeld(false)}
+    >
+      {rows.map(({ id, row, fresh }) => (
+        <li key={id} className={fresh ? 'new' : undefined}>
+          <a href={row.href}>
+            <span className="t">{row.title}</span>
+            <span className="s">{row.salary}</span>
+            <span className="m">{row.meta}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function FeedSources({ more }: { readonly more: string }) {
+  return (
+    <div className="src" aria-label="Источники вакансий">
+      {HERO_SOURCES.map((name) => (
+        <span className="chip" key={name}>
+          <i />
+          {name}
+        </span>
+      ))}
+      <span className="more">и ещё {more}</span>
+    </div>
+  );
+}
+
 export function LandingFeed({
   pool,
   more,
@@ -54,15 +97,7 @@ export function LandingFeed({
   const { rows, paused, reduced, setPaused, setHeld } = useFeed(pool);
   return (
     <div className="feed">
-      <div className="src" aria-label="Источники вакансий">
-        {HERO_SOURCES.map((name) => (
-          <span className="chip" key={name}>
-            <i />
-            {name}
-          </span>
-        ))}
-        <span className="more">и ещё {more}</span>
-      </div>
+      <FeedSources more={more} />
       <div className="card raised">
         <div className="card-h">
           <b>
@@ -80,24 +115,7 @@ export function LandingFeed({
             </button>
           )}
         </div>
-        <ul
-          className="rows"
-          aria-label="Новые вакансии из открытого каталога"
-          onMouseEnter={() => setHeld(true)}
-          onMouseLeave={() => setHeld(false)}
-          onFocus={() => setHeld(true)}
-          onBlur={() => setHeld(false)}
-        >
-          {rows.map(({ id, row, fresh }) => (
-            <li key={id} className={fresh ? 'new' : undefined}>
-              <a href={row.href}>
-                <span className="t">{row.title}</span>
-                <span className="s">{row.salary}</span>
-                <span className="m">{row.meta}</span>
-              </a>
-            </li>
-          ))}
-        </ul>
+        <FeedList rows={rows} setHeld={setHeld} />
         <div className="card-f">
           <a className="link" href="/signup?from=home&alert=1">
             Присылать новые по моей профессии

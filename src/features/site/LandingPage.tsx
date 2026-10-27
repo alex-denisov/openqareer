@@ -101,6 +101,14 @@ function MacBadge() {
   );
 }
 
+function Count({ active, date }: { readonly active: string; readonly date: string }) {
+  return (
+    <p className="count">
+      <b>{active}</b> вакансий <span className="dt">· обновлено {date}</span>
+    </p>
+  );
+}
+
 function Hero({
   stats,
   onNavigate,
@@ -138,9 +146,7 @@ function Hero({
           <div className="app">
             <MacBadge />
           </div>
-          <p className="count">
-            <b>{c.active}</b> вакансий <span className="dt">· обновлено {c.date}</span>
-          </p>
+          <Count active={c.active} date={c.date} />
         </div>
         <LandingFeed pool={pool} more={c.more} />
       </div>
