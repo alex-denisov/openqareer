@@ -193,7 +193,7 @@ function ProfessionHero({ view }: { readonly view: SalaryProfessionView }) {
       <section className="sp-hero">
         <span className="sp-eyebrow">Зарплаты · обновлено {view.date}</span>
         <h1>Зарплата {view.labelGenitive} в 2026 году по городам</h1>
-        <p className="sp-answer">
+        <p className="sp-answer sp-callout">
           <b>Коротко:</b> {view.answer}
         </p>
         <div className="sp-kpi sp-kpi-joined">
@@ -591,12 +591,17 @@ export function SalaryProfessionPage({ view }: { readonly view: SalaryProfession
       <Crumbs current={view.label} />
       <ProfessionHero view={view} />
       <section className="sp-s" aria-labelledby="sp-cities">
-        <span className="sp-label">По городам</span>
-        <h2 id="sp-cities">Где {view.labelDative} платят больше</h2>
-        <p className="sp-lead">
-          Полоса — вилка, в которую попадает половина вакансий города. Отметка — медиана. Считаем по
-          серединам вилок «от — до» в вакансиях с обеими границами, {SALARY_BASIS_TEXT[view.basis]}.
-        </p>
+        <div className="sp-sh">
+          <div>
+            <span className="sp-label">По городам</span>
+            <h2 id="sp-cities">Где {view.labelDative} платят больше</h2>
+          </div>
+          <p>
+            Полоса — вилка, в которую попадает половина вакансий города. Отметка — медиана. Считаем
+            по серединам вилок «от — до» в вакансиях с обеими границами,{' '}
+            {SALARY_BASIS_TEXT[view.basis]}.
+          </p>
+        </div>
         <CityTable view={view} />
       </section>
       <ProfessionCompare view={view} />

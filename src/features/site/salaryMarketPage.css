@@ -515,12 +515,11 @@
 }
 .sp-faq {
   display: grid;
-  gap: var(--ps-space-2);
+  gap: 0;
 }
 .sp-faq details {
-  padding: var(--ps-space-3) var(--ps-space-4);
-  border: var(--ps-border-width) solid var(--ps-line);
-  border-radius: var(--ps-radius-md);
+  padding: var(--ps-space-4) 0;
+  border-bottom: var(--ps-border-width) solid var(--ps-line);
 }
 .sp-faq summary {
   cursor: pointer;
@@ -745,7 +744,7 @@
 .sp-faq-2 {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
-  gap: var(--ps-space-2) 56px;
+  gap: 0 56px;
 }
 .sp-cmp {
   display: grid;
@@ -794,4 +793,8 @@
   .sp-cmp {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+.sp > .sp-s {
+  padding-block-start: calc(var(--ps-space-8) * 1.5);
+  border-top: var(--ps-border-width) solid var(--ps-line);
 }
