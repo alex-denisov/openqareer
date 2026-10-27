@@ -23,6 +23,11 @@ import {
   RELOCATION_TITLE,
   RelocationPage,
 } from '../src/features/site/RelocationPage';
+import {
+  CALC_DESCRIPTION,
+  CALC_TITLE,
+  SalaryCalculatorPage,
+} from '../src/features/site/SalaryCalculatorPage';
 import { LoginPage, SignupPage } from '../src/features/site/AuthPages';
 import { LandingPage } from '../src/features/site/LandingPage';
 import { PublicHeader, PublicFooter } from '../src/features/site/PublicSiteChrome';
@@ -141,6 +146,7 @@ export function buildSitemap(): string {
       lastmod: row.lastmod as string | undefined,
     })),
     { loc: `${SITE_ORIGIN}/tools/relocation`, lastmod: '2026-10-27' },
+    { loc: `${SITE_ORIGIN}/tools/salary-calculator`, lastmod: '2026-10-27' },
     ...LEGAL_DOCS.map((doc) => ({
       loc: `${SITE_ORIGIN}${legalPath(doc.slug)}`,
       lastmod: LEGAL_PACK_PUBLISHED_AT,
@@ -288,6 +294,28 @@ async function writeRelocationPage(
   await writeFile(`${distDirectory}/relocation.html`, document);
 }
 
+/** B569: /tools/salary-calculator ships its first paint with the 300 000 RUB example. */
+async function writeSalaryCalculatorPage(
+  html: string,
+  distDirectory: string,
+  styles: string,
+): Promise<void> {
+  const document = deferEntryScript(
+    withPageStyles(
+      pageHead(html, {
+        path: '/tools/salary-calculator',
+        title: CALC_TITLE,
+        description: CALC_DESCRIPTION,
+      }),
+      styles,
+    ),
+  ).replace(
+    EMPTY_ROOT,
+    bootstrapRoot(renderToStaticMarkup(<SalaryCalculatorPage onNavigate={() => {}} />)),
+  );
+  await writeFile(`${distDirectory}/salary-calculator.html`, document);
+}
+
 async function writeToolPages(
   html: string,
   distDirectory: string,
@@ -295,6 +323,11 @@ async function writeToolPages(
 ): Promise<void> {
   await writeCountryFitPage(html, distDirectory);
   await writeRelocationPage(html, distDirectory, pageStylesheets(manifest, 'relocationRoute'));
+  await writeSalaryCalculatorPage(
+    html,
+    distDirectory,
+    pageStylesheets(manifest, 'salaryCalculatorRoute'),
+  );
 }
 
 /** B535: /faq and /support are indexed documents with their own first paint. */

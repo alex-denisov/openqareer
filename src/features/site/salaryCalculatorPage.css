@@ -15,16 +15,14 @@
   --sc-shadow: 0 1px 2px oklch(20% 0.02 260 / 0.04), 0 12px 32px -16px oklch(20% 0.02 260 / 0.16);
   line-height: 1.6;
 }
-.sc-page h1,
-.sc-page h2,
-.sc-page h3 {
+:where(.sc-page) :where(h1, h2, h3) {
   font-weight: 600;
   letter-spacing: -0.025em;
   overflow-wrap: break-word;
   text-wrap: balance;
   margin: 0;
 }
-.sc-page p {
+:where(.sc-page) p {
   margin: 0;
   text-wrap: pretty;
 }

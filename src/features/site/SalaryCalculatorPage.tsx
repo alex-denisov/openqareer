@@ -382,13 +382,15 @@ function Sh({
   label,
   title,
   text,
+  one = false,
 }: {
   readonly label: string;
   readonly title: string;
   readonly text?: string;
+  readonly one?: boolean;
 }) {
   return (
-    <div className={`sc-sh${text ? '' : ' is-one'}`}>
+    <div className={`sc-sh${one ? ' is-one' : ''}`}>
       <div>
         <span className="sc-label">{label}</span>
         <h2>{title}</h2>
@@ -443,6 +445,7 @@ function Lower({ onNavigate }: { readonly onNavigate: (path: string) => void }) 
           <Sh
             label="Что дальше"
             title="Знаете, сколько хотите на руки? Найдите, где столько платят"
+            one
           />
           <div className="sc-hint">
             {CALC_NEXT.map((item) => (
