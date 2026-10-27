@@ -17,7 +17,7 @@ import { northAmericanCountryOf } from '../../shared/postalPlace';
 type PlaceRegion = CandidateRegion;
 
 const COUNTRY_REGION: ReadonlyArray<readonly [string, PlaceRegion]> = [
-  ['united states', 'us'], ['usa', 'us'], ['us', 'us'], ['сша', 'us'], ['canada', 'us'], ['канада', 'us'],
+  ['united states', 'us'], ['united states of america', 'us'], ['usa', 'us'], ['us', 'us'], ['сша', 'us'], ['canada', 'us'], ['канада', 'us'],
   ['united kingdom', 'eu'], ['uk', 'eu'], ['england', 'eu'], ['великобритания', 'eu'],
   ['germany', 'eu'], ['германия', 'eu'], ['deutschland', 'eu'], ['france', 'eu'], ['франция', 'eu'],
   ['netherlands', 'eu'], ['нидерланды', 'eu'], ['spain', 'eu'], ['испания', 'eu'], ['italy', 'eu'],
@@ -98,6 +98,20 @@ const ISO_REGION: Readonly<Record<string, PlaceRegion>> = {
 
 /** Города веера «роль × рынок» и крупные города hh.ru. */
 const CITY_REGION: ReadonlyArray<readonly [string, PlaceRegion]> = [
+  // 28.10: города пула прода без страны (топ мест, которые словарь не узнавал).
+  ['palo alto', 'us'], ['cupertino', 'us'], ['mountain view', 'us'], ['menlo park', 'us'],
+  ['sunnyvale', 'us'], ['san jose', 'us'], ['san diego', 'us'], ['redmond', 'us'],
+  ['bellevue', 'us'], ['santa clara', 'us'], ['denver', 'us'], ['atlanta', 'us'], ['dallas', 'us'],
+  ['houston', 'us'], ['miami', 'us'], ['washington', 'us'], ['philadelphia', 'us'],
+  ['montreal', 'us'], ['ottawa', 'us'], ['calgary', 'us'],
+  ['бишкек', 'cis'], ['ош', 'cis'], ['караганда', 'cis'], ['шымкент', 'cis'], ['атырау', 'cis'],
+  ['усть-каменогорск', 'cis'], ['костанай', 'cis'], ['павлодар', 'cis'], ['актобе', 'cis'],
+  ['актау', 'cis'], ['кокшетау', 'cis'], ['уральск', 'cis'], ['тараз', 'cis'], ['кызылорда', 'cis'],
+  ['экибастуз', 'cis'], ['темиртау', 'cis'], ['талдыкорган', 'cis'],
+  ['брест', 'cis'], ['гомель', 'cis'], ['гродно', 'cis'], ['могилев', 'cis'], ['витебск', 'cis'],
+  ['барановичи', 'cis'], ['борисов', 'cis'], ['молодечно', 'cis'], ['пинск', 'cis'],
+  ['солигорск', 'cis'], ['бобруйск', 'cis'],
+  ['самарканд', 'cis'], ['фергана', 'cis'], ['андижан', 'cis'], ['бухара', 'cis'],
   ['new york', 'us'], ['san francisco', 'us'], ['seattle', 'us'], ['austin', 'us'], ['boston', 'us'],
   ['chicago', 'us'], ['los angeles', 'us'], ['toronto', 'us'], ['vancouver', 'us'],
   ['london', 'eu'], ['manchester', 'eu'], ['berlin', 'eu'], ['munich', 'eu'], ['paris', 'eu'],
@@ -166,7 +180,23 @@ export function regionOfVacancy(place: VacancyPlace): PlaceRegion | undefined {
   for (const [city, region] of CITY_REGION) {
     if (haystack.includes(` ${city} `)) return region;
   }
-  return undefined;
+  return russianCityOf(location);
+}
+
+/** Не город: формат работы или пустая отметка площадки. */
+const NOT_A_CITY = /удал|дистанц|любой|не указ|гибрид|офис/iu;
+/** Города, страну которых платформа не называет. */
+const CONTESTED_CITIES: ReadonlySet<string> = new Set(['донецк', 'луганск', 'мариуполь']);
+
+/**
+ * hh.ru пишет город кириллицей без страны: «Красноярск», «Подольск (Московская
+ * область)». Города СНГ стоят в словаре явно, остальной кириллический город —
+ * Россия (28.10, топ мест пула прода).
+ */
+function russianCityOf(location: string): PlaceRegion | undefined {
+  if (!/^[\p{Script=Cyrillic}\s().\-–]+$/u.test(location) || NOT_A_CITY.test(location)) return undefined;
+  const city = normalisePlace(location.replace(/\(.*\)/u, ''));
+  return city && !CONTESTED_CITIES.has(city) ? 'ru' : undefined;
 }
 
 export interface GeographyMatch extends OrderableMatch {
