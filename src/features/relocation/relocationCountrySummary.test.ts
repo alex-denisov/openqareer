@@ -94,4 +94,22 @@ describe('relocation tab counters', () => {
     expect(visible.map(({ countryCode }) => countryCode)).toContain(last.countryCode);
     expect(visible).toHaveLength(4);
   });
+
+  it('names a dated rules source for every country in the catalog, Kyrgyzstan included (28.10)', () => {
+    const profile = {
+      ...emptyRelocationQuestionnaire(),
+      citizenshipDocuments: { citizenshipCountryCodes: ['RU'], documents: [] },
+    };
+    // США, Канада и Сингапур правил в каталоге пока не имеют: источника нет, и его не выдумываем.
+    const withRules = listRelocationCountries().filter(({ mobility }) =>
+      mobility.scenarios.some(
+        ({ id, dataStatus }) => id !== 'domestic_market' && dataStatus !== 'no_data',
+      ),
+    );
+    const missing = withRules
+      .map((country) => summarizeRelocationCountry(country, profile))
+      .filter(({ source }) => !source?.retrievedAt)
+      .map(({ countryCode }) => countryCode);
+    expect(missing).toEqual([]);
+  });
 });

@@ -36,7 +36,8 @@ export function summarizeRelocationCountry(
 ): RelocationCountrySummary {
   const fit = countryFitForQuestionnaire(country.countryCode, profile);
   const lead = leadingScenario(fit.scenarios);
-  const source = lead?.sources[0] ?? fit.scenarios.flatMap(({ sources }) => sources)[0];
+  const source =
+    lead?.sources[0] ?? fit.scenarios.flatMap(({ sources }) => sources)[0] ?? ruleSource(country);
   return {
     countryCode: country.countryCode,
     name: country.name,
@@ -141,4 +142,21 @@ function permitLabel(
   if (kinds.includes('residence_permit')) return 'Вид на жительство';
   if (kinds.includes('work_permit')) return 'Разрешение на работу';
   return null;
+}
+
+/**
+ * A met rule (ЕАЭС for Kyrgyzstan) reports no sources of its own; the card
+ * still names the dated document the rule comes from.
+ */
+function ruleSource(country: RelocationCountry) {
+  return country.mobility.scenarios
+    .flatMap((scenario) => [
+      ...(scenario.sources ?? []),
+      ...scenario.paths.flatMap(({ requirements }) =>
+        requirements.flatMap((requirement) =>
+          'source' in requirement && requirement.source ? [requirement.source] : [],
+        ),
+      ),
+    ])
+    .find((source) => source.retrievedAt);
 }
