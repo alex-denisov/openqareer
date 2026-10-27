@@ -78,6 +78,7 @@ function PlanRow() {
         className="pg-tp pg-swipe"
         ref={row}
         onScroll={onScroll}
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard scroll of the card row
         tabIndex={0}
         role="group"
         aria-label="Тарифы, листаются вбок"
@@ -97,7 +98,13 @@ function PlanRow() {
 
 function ReplyModes() {
   return (
-    <div className="pg-modes pg-swipe" tabIndex={0} role="group" aria-label="Режимы, листаются вбок">
+    <div
+      className="pg-modes pg-swipe"
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- keyboard scroll of the card row
+      tabIndex={0}
+      role="group"
+      aria-label="Режимы, листаются вбок"
+    >
       {REPLY_MODES.map((mode) => (
         <div key={mode.title} className={`pg-mode${mode.accent ? ' is-accent' : ''}`}>
           <span className={`pg-chip${mode.accent ? ' is-blue' : ''}`}>{mode.badge}</span>
@@ -134,6 +141,57 @@ function PaymentFaq() {
   );
 }
 
+function TariffsHero() {
+  return (
+    <section className="pg-hero is-short">
+      <div className="ps-wrap">
+        <span className="pg-eyebrow">Тарифы</span>
+        <h1>Выберите, сколько работы отдать openqareer</h1>
+        <p className="pg-lead">
+          Free показывает ваш рынок. Каждый следующий тариф забирает ещё часть поиска: резюме под
+          каждую вакансию, сами отклики, эксперта в решающие моменты.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function ReplyModesSection() {
+  return (
+    <section className="pg-sec">
+      <div className="ps-wrap">
+        <div className="pg-sh">
+          <div>
+            <span className="pg-label">Отклики: сколько контроля оставить себе</span>
+            <h2>Сколько контроля оставить себе — решаете вы</h2>
+          </div>
+          <p>
+            Три режима: от черновиков до полностью автоматических. Режим можно сменить в любой
+            момент; в режимах Pro виден каждый отправленный отклик.
+          </p>
+        </div>
+        <ReplyModes />
+      </div>
+    </section>
+  );
+}
+
+function PaymentSection() {
+  return (
+    <section className="pg-sec">
+      <div className="ps-wrap">
+        <div className="pg-sh">
+          <div>
+            <span className="pg-label">Вопросы</span>
+            <h2>Об оплате</h2>
+          </div>
+        </div>
+        <PaymentFaq />
+      </div>
+    </section>
+  );
+}
+
 export function TariffsPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
   return (
     <PublicDocShell
@@ -145,16 +203,7 @@ export function TariffsPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
       structuredData={tariffsStructuredData()}
     >
       <DocCrumbs current="Тарифы" onNavigate={onNavigate} />
-      <section className="pg-hero is-short">
-        <div className="ps-wrap">
-          <span className="pg-eyebrow">Тарифы</span>
-          <h1>Выберите, сколько работы отдать openqareer</h1>
-          <p className="pg-lead">
-            Free показывает ваш рынок. Каждый следующий тариф забирает ещё часть поиска: резюме под
-            каждую вакансию, сами отклики, эксперта в решающие моменты.
-          </p>
-        </div>
-      </section>
+      <TariffsHero />
       <section className="pg-sec is-first">
         <div className="ps-wrap">
           <PlanRow />
@@ -175,34 +224,10 @@ export function TariffsPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
           </p>
         </div>
       </section>
-      <section className="pg-sec">
-        <div className="ps-wrap">
-          <div className="pg-sh">
-            <div>
-              <span className="pg-label">Отклики: сколько контроля оставить себе</span>
-              <h2>Сколько контроля оставить себе — решаете вы</h2>
-            </div>
-            <p>
-              Три режима: от черновиков до полностью автоматических. Режим можно сменить в любой
-              момент; в режимах Pro виден каждый отправленный отклик.
-            </p>
-          </div>
-          <ReplyModes />
-        </div>
-      </section>
+      <ReplyModesSection />
       <TariffComparison />
       <ExecutiveRequest />
-      <section className="pg-sec">
-        <div className="ps-wrap">
-          <div className="pg-sh">
-            <div>
-              <span className="pg-label">Вопросы</span>
-              <h2>Об оплате</h2>
-            </div>
-          </div>
-          <PaymentFaq />
-        </div>
-      </section>
+      <PaymentSection />
     </PublicDocShell>
   );
 }

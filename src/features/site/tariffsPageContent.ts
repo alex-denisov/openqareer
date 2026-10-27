@@ -135,8 +135,7 @@ export const REPLY_MODES: readonly ReplyMode[] = [
 ];
 
 export type CompareRow =
-  | { readonly group: string }
-  | { readonly label: string; readonly marks: string };
+  { readonly group: string } | { readonly label: string; readonly marks: string };
 
 /** `marks`: one letter per tariff (Free, Basic, Pro, Max, Executive): y = included. */
 export const COMPARE_ROWS: readonly CompareRow[] = [
@@ -181,7 +180,10 @@ export const PAYMENT_FAQ: readonly (readonly PaymentQuestion[])[] = [
       a: 'Резюме и проверка на ATS, подходящие должности, вакансии со всего рынка и все отклики в одном месте — без срока.',
       more: { text: 'Подробнее', href: '/faq#service' },
     },
-    { q: 'Как оплатить?', a: 'Картой, через СБП, SberPay или T-Pay. Оплата помесячная, договор не нужен.' },
+    {
+      q: 'Как оплатить?',
+      a: 'Картой, через СБП, SberPay или T-Pay. Оплата помесячная, договор не нужен.',
+    },
     {
       q: 'Отправит ли openqareer отклик туда, куда я не хочу?',
       a: 'Отклики уходят только на вакансии, которые подходят под ваши правила: должность, зарплата, город или удалёнка, лимит в день. Автоматическая отправка включается отдельным согласием и только на Pro; без него openqareer готовит черновики или ждёт вашего одобрения. Каждый отправленный отклик виден в списке.',

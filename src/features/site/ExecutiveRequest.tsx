@@ -23,7 +23,9 @@ const FIELDS = [
 /** The request goes to support by mail: the public site has no account to attach it to. */
 function mailtoRequest(form: HTMLFormElement): string {
   const data = new FormData(form);
-  const body = FIELDS.map((field) => `${field.name}: ${String(data.get(field.id) ?? '')}`).join('\n');
+  const body = FIELDS.map((field) => `${field.name}: ${String(data.get(field.id) ?? '')}`).join(
+    '\n',
+  );
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Заявка на Executive')}&body=${encodeURIComponent(body)}`;
 }
 
@@ -42,6 +44,20 @@ function Field({ field }: Readonly<{ field: (typeof FIELDS)[number] }>) {
   );
 }
 
+function Consent() {
+  return (
+    <label className="pg-small pg-consent">
+      <input type="checkbox" required />
+      <span>
+        Согласен на обработку персональных данных по{' '}
+        <a className="pg-link" href="/legal/consent">
+          согласию
+        </a>
+      </span>
+    </label>
+  );
+}
+
 export function ExecutiveRequest() {
   const send = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,8 +71,8 @@ export function ExecutiveRequest() {
             <span className="pg-label">Executive</span>
             <h2>Для руководителей, чья следующая позиция не публикуется</h2>
             <p>
-              Многие позиции уровня директора закрываются без публикации. Команда openqareer
-              выходит на них через рекрутеров и связи.
+              Многие позиции уровня директора закрываются без публикации. Команда openqareer выходит
+              на них через рекрутеров и связи.
             </p>
             <ul>
               {POINTS.map((point) => (
@@ -75,15 +91,7 @@ export function ExecutiveRequest() {
             </div>
             <Field field={FIELDS[2]} />
             <Field field={FIELDS[3]} />
-            <label className="pg-small pg-consent">
-              <input type="checkbox" required />
-              <span>
-                Согласен на обработку персональных данных по{' '}
-                <a className="pg-link" href="/legal/consent">
-                  согласию
-                </a>
-              </span>
-            </label>
+            <Consent />
             <button className="pg-btn is-primary is-lg" type="submit">
               Отправить заявку
             </button>

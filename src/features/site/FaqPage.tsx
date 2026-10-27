@@ -11,7 +11,11 @@ export const FAQ_DESCRIPTION =
 const SIGNUP = '/signup?from=faq';
 const PHONE_QUERY = '(max-width: 760px)';
 
-function ArrowLink({ href, className, children }: Readonly<{ href: string; className: string; children: React.ReactNode }>) {
+function ArrowLink({
+  href,
+  className,
+  children,
+}: Readonly<{ href: string; className: string; children: React.ReactNode }>) {
   return (
     <a className={className} href={href}>
       {children}
@@ -82,7 +86,9 @@ function Topic({
           isFirst={index === 0}
           open={isOpen(entry.id, index === 0)}
           onToggle={() => toggle(entry.id, index === 0)}
-          hidden={query !== '' && !`${entry.question} ${entry.answer}`.toLowerCase().includes(query)}
+          hidden={
+            query !== '' && !`${entry.question} ${entry.answer}`.toLowerCase().includes(query)
+          }
         />
       ))}
     </section>
@@ -144,6 +150,36 @@ function Contents({ current }: Readonly<{ current: string }>) {
   );
 }
 
+function FaqHero({
+  query,
+  onQuery,
+}: Readonly<{ query: string; onQuery: (value: string) => void }>) {
+  return (
+    <section className="pg-hero">
+      <div className="ps-wrap">
+        <span className="pg-eyebrow">Ответы на 48 главных вопросов о поиске работы</span>
+        <h1>Вопросы о поиске работы: короткие ответы</h1>
+        <p className="pg-lead">
+          Кем работать с вашим опытом, почему нет ответа на отклики, что говорить на собеседовании и
+          как не продешевить с оффером.
+        </p>
+        <form className="pg-search" role="search" onSubmit={(event) => event.preventDefault()}>
+          <MagnifyingGlass size={18} aria-hidden="true" />
+          <label className="pg-sr" htmlFor="fq-s">
+            Найти вопрос
+          </label>
+          <input
+            id="fq-s"
+            placeholder="Например: что писать в отклике"
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+          />
+        </form>
+      </div>
+    </section>
+  );
+}
+
 export function FaqPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
   const [query, setQuery] = React.useState('');
   const { isOpen, toggle } = useOpenState();
@@ -159,28 +195,7 @@ export function FaqPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
       structuredData={faqStructuredData()}
     >
       <DocCrumbs current="Вопросы и ответы" onNavigate={onNavigate} />
-      <section className="pg-hero">
-        <div className="ps-wrap">
-          <span className="pg-eyebrow">Ответы на 48 главных вопросов о поиске работы</span>
-          <h1>Вопросы о поиске работы: короткие ответы</h1>
-          <p className="pg-lead">
-            Кем работать с вашим опытом, почему нет ответа на отклики, что говорить на собеседовании
-            и как не продешевить с оффером.
-          </p>
-          <form className="pg-search" role="search" onSubmit={(event) => event.preventDefault()}>
-            <MagnifyingGlass size={18} aria-hidden="true" />
-            <label className="pg-sr" htmlFor="fq-s">
-              Найти вопрос
-            </label>
-            <input
-              id="fq-s"
-              placeholder="Например: что писать в отклике"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </form>
-        </div>
-      </section>
+      <FaqHero query={query} onQuery={setQuery} />
       <div className="ps-wrap pg-fq">
         <Contents current={current} />
         <div>
@@ -190,7 +205,9 @@ export function FaqPage({ onNavigate, signedIn, isAdmin }: DocPageProps) {
           <div className="pg-strip pg-cta-mid">
             <div>
               <h3>Узнайте, что мешает именно вам</h3>
-              <p>Загрузите резюме: покажем должности, на которые вы проходите, и вакансии под них.</p>
+              <p>
+                Загрузите резюме: покажем должности, на которые вы проходите, и вакансии под них.
+              </p>
             </div>
             <SiteLink to={SIGNUP} className="pg-btn is-primary is-lg" onNavigate={onNavigate}>
               Найти работу

@@ -8,7 +8,9 @@ const FOLD_LABEL = 'Все возможности тарифов';
 const PRO_COLUMN = PLAN_CARDS.findIndex((card) => card.recommended) + 1;
 
 function cellClass(column: number, tab: number): string | undefined {
-  const names = [column === PRO_COLUMN ? 'is-hl' : '', column === tab ? 'is-on' : ''].filter(Boolean);
+  const names = [column === PRO_COLUMN ? 'is-hl' : '', column === tab ? 'is-on' : ''].filter(
+    Boolean,
+  );
   return names.length > 0 ? names.join(' ') : undefined;
 }
 
@@ -26,7 +28,6 @@ function Row({ row, tab }: Readonly<{ row: CompareRow; tab: number }>) {
       {Array.from(row.marks).map((mark, index) => {
         const included = mark === 'y';
         return (
-          // eslint-disable-next-line react/no-array-index-key -- fixed five columns
           <td key={index} className={cellClass(index + 1, tab)}>
             {included ? (
               <Check size={16} className="pg-icon pg-yes" aria-label="Входит" />
@@ -39,6 +40,30 @@ function Row({ row, tab }: Readonly<{ row: CompareRow; tab: number }>) {
         );
       })}
     </tr>
+  );
+}
+
+function CompareTable({ rows, tab }: Readonly<{ rows: readonly CompareRow[]; tab: number }>) {
+  return (
+    <div className="pg-card pg-cmp-wrap">
+      <table className="pg-cmp" id="cmp">
+        <thead>
+          <tr>
+            <th>Что делает openqareer</th>
+            {PLAN_CARDS.map((card, index) => (
+              <th key={card.id} className={cellClass(index + 1, tab)}>
+                {card.name}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <Row key={'group' in row ? row.group : row.label} row={row} tab={tab} />
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -67,25 +92,7 @@ export function TariffComparison() {
             </button>
           ))}
         </div>
-        <div className="pg-card pg-cmp-wrap">
-          <table className="pg-cmp" id="cmp">
-            <thead>
-              <tr>
-                <th>Что делает openqareer</th>
-                {PLAN_CARDS.map((card, index) => (
-                  <th key={card.id} className={cellClass(index + 1, tab)}>
-                    {card.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <Row key={'group' in row ? row.group : row.label} row={row} tab={tab} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <CompareTable rows={rows} tab={tab} />
         <button
           type="button"
           className="pg-btn pg-fold-more"

@@ -687,7 +687,9 @@ export default function App() {
     );
   }
   if ((helpPath === '/faq' || helpPath === '/tariffs' || helpPath === '/support') && !isDesktop) {
-    const HelpPage = { '/faq': FaqPage, '/tariffs': TariffsPage, '/support': SupportPage }[helpPath];
+    const HelpPage = { '/faq': FaqPage, '/tariffs': TariffsPage, '/support': SupportPage }[
+      helpPath
+    ];
     return (
       <AppErrorBoundary>
         <Suspense fallback={null}>
