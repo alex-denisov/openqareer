@@ -294,12 +294,25 @@ function CountryActions({ view }: { readonly view: SalaryCountryView }) {
 }
 
 const NET_FOLD = 5;
+/** Mockup 06b at 390: two rows open, the rest under «Все суммы». */
+const NET_FOLD_MOBILE = 2;
 
-function NetRows({ rows }: { readonly rows: readonly NetRow[] }) {
+function NetRows({
+  rows,
+  rowClass,
+}: {
+  readonly rows: readonly NetRow[];
+  readonly rowClass?: (index: number) => string | undefined;
+}) {
   return (
     <>
-      {rows.map((row) => (
-        <tr key={row.gross} className={row.note ? 'sp-me' : undefined}>
+      {rows.map((row, index) => (
+        <tr
+          key={row.gross}
+          className={
+            [row.note ? 'sp-me' : '', rowClass?.(index) ?? ''].join(' ').trim() || undefined
+          }
+        >
           <td>
             {row.gross} {row.note ? <span className="sp-chip">{row.note}</span> : null}
           </td>
@@ -332,7 +345,7 @@ function NetHead() {
 }
 
 function CountryNet({ view }: { readonly view: SalaryCountryView }) {
-  const rest = view.rows.slice(NET_FOLD);
+  const rest = view.rows.slice(NET_FOLD_MOBILE);
   return (
     <section className="sp-s sp-gh">
       <div>
@@ -341,7 +354,10 @@ function CountryNet({ view }: { readonly view: SalaryCountryView }) {
           <table className="sp-table">
             <NetHead />
             <tbody>
-              <NetRows rows={view.rows.slice(0, NET_FOLD)} />
+              <NetRows
+                rows={view.rows.slice(0, NET_FOLD)}
+                rowClass={(index) => (index >= NET_FOLD_MOBILE ? 'sp-wide-only' : undefined)}
+              />
             </tbody>
           </table>
           {rest.length ? (
@@ -349,7 +365,12 @@ function CountryNet({ view }: { readonly view: SalaryCountryView }) {
               <summary>Все суммы</summary>
               <table className="sp-table">
                 <tbody>
-                  <NetRows rows={rest} />
+                  <NetRows
+                    rows={rest}
+                    rowClass={(index) =>
+                      index + NET_FOLD_MOBILE < NET_FOLD ? 'sp-narrow-only' : undefined
+                    }
+                  />
                 </tbody>
               </table>
             </details>

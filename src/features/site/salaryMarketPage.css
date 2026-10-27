@@ -289,7 +289,7 @@
   color: var(--ps-ink);
   font-variant-numeric: tabular-nums;
   --sp-text-xl: 1.5rem;
-  --sp-text-h2: clamp(1.75rem, 3.2vw, 2.5rem);
+  --sp-text-h2: clamp(28px, 3.2vw, 40px);
   --sp-warn-bg: oklch(96% 0.05 85);
   --sp-warn-ink: oklch(32% 0.07 70);
   padding-inline: var(--ps-space-8);
@@ -318,8 +318,9 @@
   font-weight: 600;
 }
 .sp h1 {
-  font-size: var(--ps-text-display);
-  line-height: 1.15;
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
   max-inline-size: 24ch;
   margin: 0;
 }
@@ -686,7 +687,20 @@
 .sp-faq details[open] summary::after {
   transform: rotate(225deg) translate(-2px, -2px);
 }
+.sp-narrow-only {
+  display: none;
+}
 @media (max-width: 760px) {
+  .sp h1,
+  .sp h2 {
+    font-size: 30px;
+  }
+  .sp .sp-table tr.sp-narrow-only {
+    display: grid;
+  }
+  .sp .sp-table tr.sp-wide-only {
+    display: none;
+  }
   .sp {
     padding-inline: var(--ps-space-4);
   }
