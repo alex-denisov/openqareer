@@ -378,6 +378,15 @@ function ToolsSection({ remote }: { remote: string }) {
             </p>
             <span className="ps-go">Открыть удалённые →</span>
           </a>
+          <a className="ps-tool" href="/tools/interview-questions">
+            <span className="ps-chip is-ok">работает</span>
+            <h3>Вопросы на собеседовании</h3>
+            <p>
+              Вопросы по профессиям с темами из требований вакансий: что проверяет работодатель, как
+              звучит сильный ответ, и тест на 5 вопросов без регистрации.
+            </p>
+            <span className="ps-go">Открыть вопросы →</span>
+          </a>
         </div>
         <p className="ps-note">
           В кабинете уже есть сравнение стран и расчёт налогов при переезде.

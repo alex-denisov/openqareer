@@ -96,6 +96,7 @@ function FooterHelpAndDocs({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>
         <SiteLink to="/tools/country-fit" onNavigate={onNavigate}>
           Калькулятор Country Fit
         </SiteLink>
+        <a href="/tools/interview-questions">Вопросы на собеседовании</a>
         <SiteLink to="/faq" onNavigate={onNavigate}>
           Вопросы и ответы
         </SiteLink>
