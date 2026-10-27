@@ -6,6 +6,8 @@ import { sharedFootprintRequestGate } from '../../osint/adapters/requestSchedule
  * vk.com/<ник> отдаёт данные профиля в кэше предзагрузки (`users.get`): имя,
  * о себе, город, работу и фото. Instagram без входа уводит на страницу входа —
  * его здесь нет. Профили, закрытые владельцем, данных не отдают и пропускаются.
+ * Запрос идёт под своим именем клиента: если VK отдаёт заглушку «браузер
+ * устарел», данных нет — обходить её подменой браузера нельзя.
  */
 export interface VkProfile {
   readonly nick: string;
@@ -23,9 +25,6 @@ interface VkDeps {
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_BODY_BYTES = 600_000;
 const SEGMENT_CHARS = 80_000;
-/** Без обычного браузера VK отдаёт заглушку «браузер устарел» вместо профиля. */
-const BROWSER_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
 function field(segment: string, name: string): string {
   const match = new RegExp(`"${name}":"((?:[^"\\\\]|\\\\.){0,600})"`, 'u').exec(segment);
@@ -99,7 +98,7 @@ export async function fetchVkProfile(nick: string, deps: VkDeps): Promise<VkFetc
         headers: {
           accept: 'text/html',
           'accept-language': 'ru-RU,ru;q=0.9',
-          'user-agent': BROWSER_UA,
+          'user-agent': 'openqareer-contact-check',
         },
         redirect: 'manual',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -115,10 +114,18 @@ export async function fetchVkProfile(nick: string, deps: VkDeps): Promise<VkFetc
       const charset =
         /charset=([\w-]+)/iu.exec(response.headers.get('content-type') ?? '')?.[1] ??
         'windows-1251';
-      const html = new TextDecoder(charset).decode(await readLimited(response));
+      const body = await readLimited(response);
+      let html: string;
+      try {
+        html = new TextDecoder(charset).decode(body);
+      } catch {
+        html = new TextDecoder('windows-1251').decode(body);
+      }
       return { profile: parseVkProfile(html, nick), refused: false };
     });
-  } catch {
-    return { profile: null, refused: true };
+  } catch (error) {
+    // Отказом считается только таймаут: остальное — свойство страницы, а не запрет сайта.
+    const timedOut = error instanceof Error && /timeout|abort/iu.test(`${error.name} ${error.message}`);
+    return { profile: null, refused: timedOut };
   }
 }

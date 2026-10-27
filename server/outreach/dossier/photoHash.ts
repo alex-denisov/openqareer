@@ -26,11 +26,24 @@ type Gray = {
   readonly luma: (x: number, y: number) => number;
 };
 
-function decode(body: Buffer, type: string): Gray | null {
+/** Аватар — сотни точек; больше — не фото профиля, а риск распаковать в гигабайты. */
+const MAX_PIXELS = 4_000_000;
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/** Размер PNG из заголовка IHDR — до распаковки: файл в 100 КБ может заявить 10000×10000. */
+function pngFits(body: Buffer): boolean {
+  return body.length >= 24 && body.readUInt32BE(16) * body.readUInt32BE(20) <= MAX_PIXELS;
+}
+
+function decode(body: Buffer): Gray | null {
   try {
-    const image = /png/u.test(type)
+    const isPng = body.subarray(0, 8).equals(PNG_MAGIC);
+    const isJpeg = body[0] === 0xff && body[1] === 0xd8;
+    if (isPng && !pngFits(body)) return null;
+    if (!isPng && !isJpeg) return null;
+    const image = isPng
       ? PNG.sync.read(body)
-      : jpeg.decode(body, { useTArray: true, maxResolutionInMP: 25, maxMemoryUsageInMB: 256 });
+      : jpeg.decode(body, { useTArray: true, maxResolutionInMP: MAX_PIXELS / 1_000_000, maxMemoryUsageInMB: 64 });
     const { width, height, data } = image;
     if (!width || !height) return null;
     return {
@@ -111,10 +124,20 @@ async function readBounded(response: Response): Promise<Buffer | null> {
   return Buffer.concat(chunks);
 }
 
+/** Хост фото, ответивший отказом, не спрашивается час — как сайты профилей. */
+const REFUSAL_COOLDOWN_MS = 3_600_000;
+const REFUSED_UNTIL = new Map<string, number>();
+
+/** Для тестов: сброс отказов между сценариями. */
+export function resetPhotoRefusals(): void {
+  REFUSED_UNTIL.clear();
+}
+
 async function publicHttps(url: string, deps: DossierDeps): Promise<URL | null> {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' || parsed.port) return null;
+    if ((REFUSED_UNTIL.get(parsed.hostname) ?? 0) > Date.now()) return null;
     return (await isPublicCompanyDomain(parsed.hostname.toLowerCase(), deps)) ? parsed : null;
   } catch {
     return null;
@@ -144,6 +167,11 @@ export async function photoHash(url: string, deps: DossierDeps): Promise<string 
             await response.body?.cancel().catch(() => undefined);
             return { redirect: new URL(location, target).href };
           }
+          if (response.status === 403 || response.status === 429) {
+            await response.body?.cancel().catch(() => undefined);
+            REFUSED_UNTIL.set(target.hostname, Date.now() + REFUSAL_COOLDOWN_MS);
+            return { hash: null };
+          }
           const type = response.headers.get('content-type') ?? '';
           const length = Number(response.headers.get('content-length') ?? 0);
           if (!response.ok || !/^image\/(?:jpe?g|png)/u.test(type) || length > MAX_PHOTO_BYTES) {
@@ -151,7 +179,7 @@ export async function photoHash(url: string, deps: DossierDeps): Promise<string 
             return { hash: null };
           }
           const body = await readBounded(response);
-          const image = body ? decode(body, type) : null;
+          const image = body ? decode(body) : null;
           return { hash: image ? dHash(image) : null };
         },
       );

@@ -1,7 +1,7 @@
 import jpeg from 'jpeg-js';
 import { PNG } from 'pngjs';
-import { describe, expect, it } from 'vitest';
-import { photoDistance, photoHash, samePhoto } from './photoHash';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { photoDistance, photoHash, resetPhotoRefusals, samePhoto } from './photoHash';
 
 /** Картинка с вертикальным градиентом и пятном: разные «лица» — разные пятна. */
 function pixels(width: number, height: number, spotX: number, mirror = false): Buffer {
@@ -46,6 +46,8 @@ function deps(
 }
 
 describe('photo hash', () => {
+  beforeEach(() => resetPhotoRefusals());
+
   it('gives the same photo the same hash across size and recompression', async () => {
     const a = await photoHash('https://media.example.com/a.jpg', deps(jpegOf(0.3, 200, 95)).deps);
     const b = await photoHash('https://cdn.example.org/b.jpg', deps(jpegOf(0.3, 96, 60)).deps);
@@ -95,5 +97,19 @@ describe('photo hash', () => {
     expect(
       await photoHash('https://media.example.com/a.jpg', deps(Buffer.alloc(2_100_000, 1)).deps),
     ).toBeNull();
+  });
+
+  it('refuses a png that claims a huge size before inflating it', async () => {
+    const png = pngOf(0.3);
+    png.writeUInt32BE(10_000, 16);
+    png.writeUInt32BE(10_000, 20);
+    expect(await photoHash('https://media.example.com/bomb.png', deps(png, { 'content-type': 'image/png' }).deps)).toBeNull();
+  });
+
+  it('stops asking an image host that refused', async () => {
+    const refused = deps(Buffer.alloc(0), { 'content-type': 'text/plain' }, 429);
+    expect(await photoHash('https://cdn.example.com/a.jpg', refused.deps)).toBeNull();
+    expect(await photoHash('https://cdn.example.com/b.jpg', refused.deps)).toBeNull();
+    expect(refused.calls).toHaveLength(1);
   });
 });

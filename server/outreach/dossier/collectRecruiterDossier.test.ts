@@ -2,6 +2,7 @@ import jpeg from 'jpeg-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FootprintRequestGate } from '../../osint/adapters/requestScheduler';
 import { collectRecruiterDossier, nameNicknames, resetProfileRefusals } from './collectRecruiterDossier';
+import { resetPhotoRefusals } from './photoHash';
 
 const now = () => new Date('2026-10-27T00:00:00.000Z');
 const person = { fullName: 'Anna Smith', companyName: 'Acme', companyDomain: 'acme.com' };
@@ -46,7 +47,10 @@ const seedPage = {
 };
 
 describe('recruiter dossier', () => {
-  beforeEach(() => resetProfileRefusals());
+  beforeEach(() => {
+    resetProfileRefusals();
+    resetPhotoRefusals();
+  });
   it('collects channels only from open pages that name the person', async () => {
     const fetch = router({
       'https://api.exa.ai/search': {
@@ -219,16 +223,16 @@ describe('recruiter dossier', () => {
     expect(channels.some((c) => c.kind === 'linkedin')).toBe(false);
   });
 
-  it('links Telegram and VK accounts through the same photo as the LinkedIn profile, not a namesake', async () => {
+  it('confirms Telegram and VK through the same photo plus a second signal; a namesake from the same city stays out', async () => {
     const vkPage = (nick: string, photo: string) => `<script>{"method":"users.get","response":[{"first_name":"Anna","last_name":"Smith",`
-      + `"about":"","screen_name":"${nick}","photo_200":"${photo.replace(/\//gu, '\\/')}"}]}</script>`;
+      + `"about":"London","screen_name":"${nick}","photo_200":"${photo.replace(/\//gu, '\\/')}"}]}</script>`;
     const fetch = router({
       'https://api.exa.ai/search': { results: [seedPage] },
       'https://media.licdn.com/anna.jpg': portrait(0.3),
       'https://cdn4.telesco.pe/anna.jpg': portrait(0.3, 64),
       'https://sun9-1.userapi.com/anna.jpg': portrait(0.3, 200),
       'https://sun9-1.userapi.com/other.jpg': portrait(0.75, 96, true),
-      'https://t.me/annasmith': '<meta property="og:title" content="Anna Smith"><meta property="og:image" content="https://cdn4.telesco.pe/anna.jpg">',
+      'https://t.me/annasmith': '<meta property="og:title" content="Anna Smith"><meta property="og:description" content="London"><meta property="og:image" content="https://cdn4.telesco.pe/anna.jpg">',
       'https://t.me/': '<meta property="og:title" content="Telegram: Contact @x">',
       'https://vk.com/annasmith': vkPage('annasmith', 'https://sun9-1.userapi.com/other.jpg'),
       'https://vk.com/anna_smith': vkPage('anna_smith', 'https://sun9-1.userapi.com/anna.jpg'),

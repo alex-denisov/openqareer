@@ -33,9 +33,9 @@ describe('identity graph', () => {
     expect(linkEvidence(identity, 'Ольга Петрова, рекрутер').reasons).toEqual(['profession']);
   });
 
-  it('counts the same photo as strong evidence, and a different photo as nothing', () => {
+  it('counts the same photo as a link that still needs a second signal to confirm, and a different photo as nothing', () => {
     const identity = buildIdentity({ fullName: 'Anna Smith', companyName: 'Acme', photoHashes: ['f0f0f0f0f0f0f0f0'] });
-    expect(linkEvidence(identity, 'Anna Smith', 'f0f0f0f0f0f0f0f1')).toEqual({ score: 3, reasons: ['same_photo'] });
+    expect(linkEvidence(identity, 'Anna Smith', 'f0f0f0f0f0f0f0f1')).toEqual({ score: 2, reasons: ['same_photo'] });
     expect(linkEvidence(identity, 'Anna Smith', '0f0f0f0f0f0f0f0f').score).toBe(0);
     expect(linkEvidence(buildIdentity({ fullName: 'Anna Smith', companyName: 'Acme' }), 'Anna Smith', 'f0f0f0f0f0f0f0f0').score).toBe(0);
   });

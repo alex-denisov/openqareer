@@ -17,7 +17,7 @@ export interface PersonIdentity {
   readonly cities: readonly string[];
   /** Значения уже найденных каналов: адреса, телефоны, ники, ссылки профилей. */
   readonly knownValues: readonly string[];
-  /** Отпечатки фото исходного профиля (LinkedIn): то же фото — сильный признак, как общий контакт. */
+  /** Отпечатки фото исходного профиля (LinkedIn): то же фото — признак той же силы, что работодатель. */
   readonly photoHashes: readonly string[];
 }
 
@@ -91,8 +91,9 @@ export function linkEvidence(identity: PersonIdentity, pageText: string, photoHa
     score += 3;
     reasons.push('shared_contact');
   }
+  // Публичное фото можно скопировать: само по себе оно связывает, но подтверждает только вместе с другим признаком.
   if (photoHash && identity.photoHashes.some((seed) => samePhoto(seed, photoHash))) {
-    score += 3;
+    score += 2;
     reasons.push('same_photo');
   }
   if (identity.employers.some((employer) => containsWord(pageText, employer))) {
