@@ -34,7 +34,7 @@ describe('salary sitemap publication', () => {
     expect(salaryMarketSitemapUrls(db)).toEqual([
       { path: '/salaries', lastmod: '2026-10-23' },
       { path: '/salaries/software-engineer', lastmod: '2026-10-23' },
-      ...['germany', 'cyprus', 'serbia', 'uae', 'georgia'].map((slug) => ({
+      ...['cyprus', 'germany', 'uae', 'georgia', 'serbia'].map((slug) => ({
         path: `/salaries/${slug}`,
         lastmod: '2026-10-27',
       })),
