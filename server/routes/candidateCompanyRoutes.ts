@@ -1,3 +1,4 @@
+import { personNameFromTitle } from '../../shared/personName';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { candidateChannels } from '../../shared/recruiterChannel';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -121,7 +122,7 @@ function safeRecruiter(contact: RecruiterContact, companyKey: string): Candidate
     id: contact.id,
     companyKey,
     vacancyId: contact.vacancyId,
-    fullName: contact.fullName,
+    fullName: personNameFromTitle(contact.fullName),
     roleTitle: contact.roleTitle,
     email: contact.email,
     emailStatus: contact.emailStatus,
