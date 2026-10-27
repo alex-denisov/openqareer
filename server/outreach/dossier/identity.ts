@@ -1,5 +1,6 @@
 import type { RecruiterChannel } from '../../../shared/recruiterChannel';
 import { transliterateToLatin } from '../recruiterIntelligenceService';
+import { samePhoto } from './photoHash';
 
 /**
  * Граф соответствия человека (B258). Одно имя — ещё не человек, а текущая
@@ -16,6 +17,8 @@ export interface PersonIdentity {
   readonly cities: readonly string[];
   /** Значения уже найденных каналов: адреса, телефоны, ники, ссылки профилей. */
   readonly knownValues: readonly string[];
+  /** Отпечатки фото исходного профиля (LinkedIn): то же фото — признак той же силы, что работодатель. */
+  readonly photoHashes: readonly string[];
 }
 
 export interface IdentityEvidence {
@@ -62,6 +65,7 @@ export function buildIdentity(input: {
   readonly seedTexts?: readonly string[];
   readonly cities?: readonly string[];
   readonly known?: readonly RecruiterChannel[];
+  readonly photoHashes?: readonly string[];
 }): PersonIdentity {
   const seed = (input.seedTexts ?? []).join('\n');
   return {
@@ -69,11 +73,12 @@ export function buildIdentity(input: {
     employers: [...new Set([input.companyName, ...employersFromText(seed)])].filter(Boolean),
     cities: [...new Set(input.cities ?? [])].filter((city) => city.length >= MIN_TOKEN),
     knownValues: [...new Set(channelValues(input.known ?? []))].filter((value) => value.length >= 5),
+    photoHashes: [...new Set(input.photoHashes ?? [])],
   };
 }
 
 /** Чем найденная страница связана с человеком, кроме имени. */
-export function linkEvidence(identity: PersonIdentity, pageText: string): IdentityEvidence {
+export function linkEvidence(identity: PersonIdentity, pageText: string, photoHash?: string | null): IdentityEvidence {
   const reasons: string[] = [];
   let score = 0;
   const lower = pageText.toLowerCase();
@@ -85,6 +90,11 @@ export function linkEvidence(identity: PersonIdentity, pageText: string): Identi
   if (identity.knownValues.some(whole)) {
     score += 3;
     reasons.push('shared_contact');
+  }
+  // Публичное фото можно скопировать: само по себе оно связывает, но подтверждает только вместе с другим признаком.
+  if (photoHash && identity.photoHashes.some((seed) => samePhoto(seed, photoHash))) {
+    score += 2;
+    reasons.push('same_photo');
   }
   if (identity.employers.some((employer) => containsWord(pageText, employer))) {
     score += 2;

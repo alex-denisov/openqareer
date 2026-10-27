@@ -11,6 +11,8 @@ import { fetchPublicPage, isContactBroker } from './companyPages';
 import { extractChannels } from './extractChannels';
 import type { PersonIdentity } from './identity';
 import { buildIdentity, CONFIRMED_THRESHOLD, LINK_THRESHOLD, linkEvidence } from './identity';
+import { photoHash } from './photoHash';
+import { fetchVkProfile } from './vkProfiles';
 
 /**
  * Сводка каналов рекрутёра (B258): каналы связи из открытых источников, где их
@@ -129,6 +131,11 @@ async function getJson<T>(url: string, deps: DossierDeps, state: RunState): Prom
   }
 }
 
+/** Отпечаток фото аккаунта-кандидата — только если есть с чем сравнить (фото исходного профиля). */
+async function candidatePhoto(identity: PersonIdentity, url: string | null | undefined, deps: DossierDeps): Promise<string | null> {
+  return identity.photoHashes.length > 0 && url ? photoHash(url, deps) : null;
+}
+
 const NEAR_NAME_CHARS = 400;
 
 /** Фрагменты страницы рядом с упоминанием фамилии: чужие контакты со страницы не берутся. */
@@ -214,6 +221,7 @@ interface GithubUser {
   readonly blog?: string | null;
   readonly twitter_username?: string | null;
   readonly html_url?: string;
+  readonly avatar_url?: string;
 }
 
 function githubChannels(user: GithubUser, person: DossierPerson, observedAt: string): RecruiterChannel[] {
@@ -239,6 +247,7 @@ function githubChannels(user: GithubUser, person: DossierPerson, observedAt: str
 
 async function fromGithub(
   person: DossierPerson,
+  identityReady: Promise<PersonIdentity>,
   deps: DossierDeps,
   observedAt: string,
   state: RunState,
@@ -254,7 +263,12 @@ async function fromGithub(
   for (const login of logins) {
     const user = await getJson<GithubUser>(`https://api.github.com/users/${encodeURIComponent(login)}`, deps, state);
     if (!user?.login || !user.name || !namesPerson(user.name, person.fullName)) continue;
-    if (!namesCompany(`${user.company ?? ''} ${user.bio ?? ''}`, person.companyName)) continue;
+    // Компания в профиле или то же фото, что в исходном профиле: однофамилец без связи не берётся.
+    if (!namesCompany(`${user.company ?? ''} ${user.bio ?? ''}`, person.companyName)) {
+      const identity = await identityReady;
+      const photo = await candidatePhoto(identity, user.avatar_url, deps);
+      if (!linkEvidence(identity, '', photo).reasons.includes('same_photo')) continue;
+    }
     found.push(...githubChannels(user, person, observedAt));
   }
   return found;
@@ -318,7 +332,8 @@ async function fromTelegramNicks(
     // Одно имя — однофамилец, а не контакт: нужна связь с человеком в графе соответствия
     // (общий контакт, тот же ник, любой работодатель из истории, город, профессия).
     const bio = metaContent(html, 'og:description') ?? '';
-    const score = linkEvidence(identity, `${title}\n${bio}`).score + (linked.has(nick) ? CONFIRMED_THRESHOLD : 0);
+    const photo = await candidatePhoto(identity, metaContent(html, 'og:image'), deps);
+    const score = linkEvidence(identity, `${title}\n${bio}`, photo).score + (linked.has(nick) ? CONFIRMED_THRESHOLD : 0);
     if (score < LINK_THRESHOLD) continue;
     const status = score >= CONFIRMED_THRESHOLD ? 'published' : 'hypothesis';
     found.push({ kind: 'telegram', value: `@${nick}`, href: url, status, sourceUrl: url, observedAt });
@@ -370,7 +385,7 @@ async function fromUsernameSites(
       }
       // Имя должно стоять в шапке профиля, а не где-то в ленте или блоке «похожие».
       if (!page.text || !namesPerson(page.text.slice(0, PROFILE_HEAD_CHARS), person.fullName)) continue;
-      const score = linkEvidence(identity, page.text).score;
+      const score = linkEvidence(identity, page.text, await candidatePhoto(identity, page.image, deps)).score;
       if (score < LINK_THRESHOLD) continue;
       const status: RecruiterChannel['status'] = score >= CONFIRMED_THRESHOLD ? 'published' : 'hypothesis';
       found.push({ kind: 'other', value: profileUrl.replace(/^https:\/\//u, ''), href: profileUrl, status, sourceUrl: profileUrl, observedAt });
@@ -384,6 +399,45 @@ async function fromUsernameSites(
   return found;
 }
 
+const VK_NICKS = 6;
+const VK_SITE = 'VK';
+
+/**
+ * VK по тем же никам, что Telegram: открытый профиль без входа. Одно имя —
+ * однофамилец; аккаунт принимается только через граф соответствия.
+ */
+async function fromVkNicks(
+  person: DossierPerson,
+  identity: PersonIdentity,
+  known: readonly RecruiterChannel[],
+  deps: DossierDeps,
+  observedAt: string,
+  state: RunState,
+): Promise<RecruiterChannel[]> {
+  if (known.some((channel) => channel.kind === 'vk')) return [];
+  const refused = refusedSites();
+  const linked = new Set(nicknames(known.filter((channel) => channel.status !== 'hypothesis' && !channel.kind.startsWith('email_'))));
+  const found: RecruiterChannel[] = [];
+  for (const nick of [...new Set([...linked, ...nameNicknames(person.fullName)])].slice(0, VK_NICKS)) {
+    if (refused.has(VK_SITE)) break;
+    const { profile, refused: refusedNow } = await fetchVkProfile(nick, deps);
+    if (refusedNow) {
+      markRefused(refused, VK_SITE);
+      state.failed = true;
+      break;
+    }
+    if (!profile || !namesPerson(profile.fullName, person.fullName)) continue;
+    const photo = await candidatePhoto(identity, profile.photoUrl, deps);
+    const score = linkEvidence(identity, profile.text, photo).score + (linked.has(nick) ? CONFIRMED_THRESHOLD : 0);
+    if (score < LINK_THRESHOLD) continue;
+    const status: RecruiterChannel['status'] = score >= CONFIRMED_THRESHOLD ? 'published' : 'hypothesis';
+    const url = `https://vk.com/${nick}`;
+    found.push({ kind: 'vk', value: nick, href: url, status, sourceUrl: url, observedAt });
+    if (status === 'published') break;
+  }
+  return found;
+}
+
 const SEED_PAGES = 3;
 const SEED_CHARS = 3_000;
 
@@ -393,8 +447,8 @@ function sameProfile(left: string, right: string): boolean {
 }
 
 /** Исходный профиль человека (поиск по имени): текст с историей работы и городом. */
-async function seedProfile(person: DossierPerson, deps: DossierDeps, state: RunState): Promise<{ texts: string[]; cities: string[] }> {
-  if (!deps.exaApiKey) return { texts: [], cities: [] };
+async function seedProfile(person: DossierPerson, deps: DossierDeps, state: RunState): Promise<{ texts: string[]; cities: string[]; photoHashes: string[] }> {
+  if (!deps.exaApiKey) return { texts: [], cities: [], photoHashes: [] };
   try {
     const pages = await searchExaPages(`"${person.fullName}"`, deps.exaApiKey, AbortSignal.timeout(REQUEST_TIMEOUT_MS), {
       ...(deps.fetch ? { fetch: deps.fetch } : {}),
@@ -408,10 +462,11 @@ async function seedProfile(person: DossierPerson, deps: DossierDeps, state: RunS
     );
     // Вторая строка профиля Exa — город: «London, United Kingdom».
     const cities = own.flatMap((page) => (page.text.split('\n').map((line) => line.trim()).filter(Boolean)[2] ?? '').split(',').slice(0, 1).map((city) => city.trim()));
-    return { texts: own.map((page) => `${page.title}\n${page.text}`), cities };
+    const photos = await Promise.all(own.slice(0, 1).flatMap((page) => (page.image ? [photoHash(page.image, deps)] : [])));
+    return { texts: own.map((page) => `${page.title}\n${page.text}`), cities, photoHashes: photos.filter((hash): hash is string => Boolean(hash)) };
   } catch {
     state.failed = true;
-    return { texts: [], cities: [] };
+    return { texts: [], cities: [], photoHashes: [] };
   }
 }
 
@@ -424,18 +479,19 @@ export async function collectRecruiterDossier(person: DossierPerson, deps: Dossi
   };
   const seedReady = seedProfile(person, deps, state);
   const baseIdentity = seedReady.then((seed) =>
-    buildIdentity({ fullName: person.fullName, companyName: person.companyName, seedTexts: seed.texts, cities: seed.cities, known: person.known }),
+    buildIdentity({ fullName: person.fullName, companyName: person.companyName, seedTexts: seed.texts, cities: seed.cities, known: person.known, photoHashes: seed.photoHashes }),
   );
   const [pages, github, seed] = await Promise.all([
     fromOpenPages(person, baseIdentity, deps, observedAt, state),
-    fromGithub(person, deps, observedAt, state).catch(failed),
+    fromGithub(person, baseIdentity, deps, observedAt, state).catch(failed),
     seedReady,
   ]);
   const known = [...(person.known ?? []), ...pages, ...github];
-  const identity = buildIdentity({ fullName: person.fullName, companyName: person.companyName, seedTexts: seed.texts, cities: seed.cities, known });
-  const [telegram, profiles] = await Promise.all([
+  const identity = buildIdentity({ fullName: person.fullName, companyName: person.companyName, seedTexts: seed.texts, cities: seed.cities, known, photoHashes: seed.photoHashes });
+  const [telegram, profiles, vk] = await Promise.all([
     fromTelegramNicks(person, identity, known, deps, observedAt, state).catch(failed),
     fromUsernameSites(person, identity, known, deps, observedAt, state).catch(failed),
+    fromVkNicks(person, identity, known, deps, observedAt, state).catch(failed),
   ]);
-  return { channels: rankChannels([...pages, ...github, ...telegram, ...profiles]), complete: !state.failed };
+  return { channels: rankChannels([...pages, ...github, ...telegram, ...profiles, ...vk]), complete: !state.failed };
 }
