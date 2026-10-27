@@ -12,6 +12,7 @@ export const CONTACT_BROKERS = [
   'apollo.io', 'lusha.com', 'email-format.com', 'emailformat.net', 'adapt.io', 'snov.io', 'skrapp.io', 'voilanorbert.com',
   'peopledatalabs.com', 'spokeo.com', 'whitepages.com', 'truepeoplesearch.com', 'beenverified.com', 'radaris.com',
   'nuwber.com', 'datanyze.com', 'uplead.com', 'kaspr.io', 'getprospect.com', 'findemails.com', 'emailsherlock.com',
+  'aeroleads.com', 'salesql.com', 'lead411.com', 'seamless.ai', 'wiza.co',
 ];
 
 export function isContactBroker(url: string): boolean {
