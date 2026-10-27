@@ -70,6 +70,8 @@ import {
   type VacancyClusterLookup,
 } from './vacancyDeduplicator';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import type { SalaryStats } from './catalogSalaryStats';
+import { readCatalogSalaryStats } from './catalogSalaryStatsStore';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 interface VacancyRow {
@@ -2436,18 +2438,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return rows.map(listingSummaryOf);
   }
 
-  loadCatalogSalaryLabels(query: { place: string; role?: string }): string[] {
-    const rows = this.database
-      .prepare(
-        `SELECT salary_label FROM catalog_entries
-          WHERE status = 'active' AND path <> '' AND place_slug = ?
-            ${query.role ? 'AND role_slug = ?' : ''}
-            AND salary_label IS NOT NULL AND salary_label <> ''`,
-      )
-      .all(...(query.role ? [query.place, query.role] : [query.place])) as Array<{
-      salary_label: string;
-    }>;
-    return rows.map((row) => row.salary_label);
+  getCatalogSalaryStats(query: { place: string; role?: string }): SalaryStats | undefined {
+    return readCatalogSalaryStats(this.database, query);
   }
 
   getCatalogEntry(key: string): CatalogEntryRow | undefined {

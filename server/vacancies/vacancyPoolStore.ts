@@ -1,6 +1,7 @@
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { ClusterRepresentative, VacancyClusterLookup } from './vacancyDeduplicator';
 import type { SourceObservations } from './sourceHealthVerdict';
+import type { SalaryStats } from './catalogSalaryStats';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type { FunctionCode } from '../../shared/roleTaxonomy';
 import type {
@@ -178,9 +179,9 @@ export interface VacancyPoolStore {
     path: string;
     count: number;
   }>;
-  /** Salary labels of one public list (B569): a narrow indexed read, never clusters. */
-  loadCatalogSalaryLabels?(query: { place: string; role?: string }): string[];
   getCatalogEntry?(key: string): CatalogEntryRow | undefined;
+  /** B569: salary facts of one public list, written by maintenance; a primary-key read. */
+  getCatalogSalaryStats?(query: { place: string; role?: string }): SalaryStats | undefined;
   getCluster?(clusterId: string): VacancyCluster | undefined;
   /** Действующие кластеры одного работодателя — экран компании, по индексу ключей. */
   loadClustersByCompany?(companyName: string, limit: number): VacancyCluster[];

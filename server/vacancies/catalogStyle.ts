@@ -249,7 +249,7 @@ export const CATALOG_STYLE =
   }
 }
 @media (max-width: 360px) {
-  .ps-top-actions .is-primary {
+  .ps-top-actions .is-cta {
     display: none;
   }
 }
@@ -510,7 +510,7 @@ export const CATALOG_STYLE =
 .cat-facts dd{margin:0 0 4px;color:var(--ps-ink);font-variant-numeric:tabular-nums}
 .cat-note{margin-top:32px;font-size:13px;color:var(--ps-mute)}
 @media (max-width:900px){.cat-layout,.cat-detail{grid-template-columns:minmax(0,1fr);gap:24px}.cat-side{position:static}}
-@media (max-width:760px){.ps-wrap{padding:0 16px}.ps-top-row{height:56px;gap:12px}.ps-top-actions .is-login{display:none}.ps-top-actions .is-primary{min-height:40px;padding:0 12px}.ps-footer-grid{grid-template-columns:1fr 1fr;gap:24px}.ps-footer-grid>div:first-child{grid-column:1/-1}.ps-page{padding-top:28px;padding-bottom:64px}.cat-card{padding:16px}}
+@media (max-width:760px){.ps-wrap{padding:0 16px}.ps-top-row{height:56px;gap:12px}.ps-top-actions .is-login{display:none}.ps-top-actions .is-cta{min-height:40px;padding:0 12px}.ps-footer-grid{grid-template-columns:1fr 1fr;gap:24px}.ps-footer-grid>div:first-child{grid-column:1/-1}.ps-page{padding-top:28px;padding-bottom:64px}.cat-card{padding:16px}}
 @media (prefers-reduced-motion:reduce){.cat-card{transition:none}}
 
 /* B569: mockup 08 — head with facts, search combobox, FAQ */

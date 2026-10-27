@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
    are intentionally kept together so replacement, expiry and reclustering share
    one transaction boundary. */
+import type { SalaryStats } from './catalogSalaryStats';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 import type {
@@ -51,7 +52,7 @@ import type {
   CatalogEntryRow,
 } from './vacancyCatalogProjection';
 import type { CatalogListingSummary } from './vacancyCatalogFacets';
-import { salaryStats, type SalaryStats } from './catalogSalaryStats';
+
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
@@ -315,7 +316,6 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
 
 export class MultiSourceVacancyEngine {
   private listingsCache: { at: number; value: CatalogListingSummary[] | undefined } | null = null;
-  private readonly salaryStatsCache = new Map<string, { at: number; value: SalaryStats }>();
   private readonly now: () => number = () => Date.now();
 
   private sources: Map<string, VacancySourceConfig> = new Map();
@@ -800,24 +800,12 @@ export class MultiSourceVacancyEngine {
     return value;
   }
 
-  /**
-   * Salary facts of one public list (B569). Labels of a list are read by the
-   * indexed place/role columns and parsed once per cache window; the figures
-   * move only with maintenance, like the listing counts.
-   */
+  /** B569: one row by primary key; maintenance computes it, the request never scans. */
   public getPublicCatalogSalaryStats(query: {
     place: string;
     role?: string;
   }): SalaryStats | undefined {
-    if (typeof this.pool.loadCatalogSalaryLabels !== 'function') return undefined;
-    const key = `${query.place}|${query.role ?? ''}`;
-    const now = this.now();
-    const known = this.salaryStatsCache.get(key);
-    if (known && now - known.at < LISTINGS_CACHE_MS) return known.value;
-    const value = salaryStats(this.pool.loadCatalogSalaryLabels(query));
-    if (this.salaryStatsCache.size >= 200) this.salaryStatsCache.clear();
-    this.salaryStatsCache.set(key, { at: now, value });
-    return value;
+    return this.pool.getCatalogSalaryStats?.(query);
   }
 
   public getPublicCatalogEntry(key: string): CatalogEntryRow | undefined {

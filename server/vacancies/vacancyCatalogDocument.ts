@@ -26,6 +26,7 @@ import type {
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import { isIndexablePage } from '../seo/catalogIndexing';
 import { escapeHtml } from './catalogHtml';
+import { ogImageUrl } from '../../shared/seoHead';
 import { CATALOG_STYLE } from './catalogStyle';
 import { catalogChromeFooter, catalogChromeHeader } from './catalogChrome';
 import { meaningfulText, plainSummary, renderDescriptionHtml } from './catalogMarkdown';
@@ -102,14 +103,14 @@ function head(options: {
       : '',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
     `<meta property="og:type" content="${options.ogType ?? 'website'}">`,
-    `<meta property="og:image" content="${SITE_ORIGIN}/og-cover-4.png">`,
+    `<meta property="og:image" content="${ogImageUrl('vacancies')}">`,
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
     '<meta property="og:locale" content="ru_RU">',
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${escapeHtml(shareTitle(options.title))}">`,
     `<meta name="twitter:description" content="${escapeHtml(options.description)}">`,
-    `<meta name="twitter:image" content="${SITE_ORIGIN}/og-cover-4.png">`,
+    `<meta name="twitter:image" content="${ogImageUrl('vacancies')}">`,
     '<meta property="og:site_name" content="openqareer">',
     `<meta property="og:title" content="${escapeHtml(shareTitle(options.title))}">`,
     `<meta property="og:description" content="${escapeHtml(options.description)}">`,

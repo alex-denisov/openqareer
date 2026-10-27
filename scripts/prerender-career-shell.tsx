@@ -700,9 +700,17 @@ export async function prerenderShells(
   // поэтому расхождение с ним невозможно (B209).
   await writeFile(`${distDirectory}/llms.txt`, buildLlmsTxt());
   await writeFile(`${distDirectory}/llms-full.txt`, buildLlmsFullTxt());
-  // Стиль публичного каталога — настоящий файл, а не инлайн: боевая политика
-  // `style-src 'self'` инлайновый стиль не применит (B209).
-  await writeFile(`${distDirectory}${CATALOG_STYLESHEET_PATH}`, CATALOG_STYLE);
+  await writeCatalogStylesheet(distDirectory);
+}
+
+/**
+ * Стиль публичного каталога — настоящий файл, а не инлайн: боевая политика
+ * `style-src 'self'` инлайновый стиль не применит (B209). Бандла у каталога нет,
+ * поэтому шрифт Onest объявлен в самом файле (B569).
+ */
+async function writeCatalogStylesheet(distDirectory: string): Promise<void> {
+  const faces = onestFontFaceCss(await onestFiles(distDirectory));
+  await writeFile(`${distDirectory}${CATALOG_STYLESHEET_PATH}`, `${faces}${CATALOG_STYLE}`);
 }
 
 const directPath = process.argv[1];
