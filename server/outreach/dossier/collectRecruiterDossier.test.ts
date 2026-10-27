@@ -89,6 +89,27 @@ describe('recruiter dossier', () => {
     expect(kinds.join()).not.toContain('anna-other');
   });
 
+  it('takes the personal email from the person\'s own public commits, not noreply or other authors', async () => {
+    const fetch = router({
+      'https://api.exa.ai/search': { results: [] },
+      'https://api.github.com/search/users': { items: [{ login: 'annasmith' }] },
+      'https://api.github.com/users/annasmith': { login: 'annasmith', name: 'Anna Smith', company: 'Acme', html_url: 'https://github.com/annasmith' },
+      'https://api.github.com/search/commits': {
+        items: [
+          { html_url: 'https://github.com/annasmith/x/commit/1', commit: { author: { name: 'Anna Smith', email: 'anna.s@gmail.com' } } },
+          { html_url: 'https://github.com/annasmith/x/commit/2', commit: { author: { name: 'Anna Smith', email: '1+annasmith@users.noreply.github.com' } } },
+          { html_url: 'https://github.com/annasmith/x/commit/3', commit: { author: { name: 'Bob Brown', email: 'bob@gmail.com' } } },
+        ],
+      },
+    });
+
+    const { channels } = await collectRecruiterDossier(person, deps(fetch));
+    const emails = channels.filter((c) => c.kind.startsWith('email'));
+
+    expect(emails.map((c) => c.value)).toEqual(['anna.s@gmail.com']);
+    expect(emails[0]?.sourceUrl).toBe('https://github.com/annasmith/x/commit/1');
+  });
+
   it('checks known nicknames in Telegram and keeps only a page with the same name', async () => {
     const fetch = router({
       'https://api.exa.ai/search': {

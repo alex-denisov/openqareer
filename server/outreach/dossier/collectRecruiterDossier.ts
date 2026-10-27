@@ -263,15 +263,47 @@ async function fromGithub(
   for (const login of logins) {
     const user = await getJson<GithubUser>(`https://api.github.com/users/${encodeURIComponent(login)}`, deps, state);
     if (!user?.login || !user.name || !namesPerson(user.name, person.fullName)) continue;
-    // Компания в профиле или то же фото, что в исходном профиле: однофамилец без связи не берётся.
-    if (!namesCompany(`${user.company ?? ''} ${user.bio ?? ''}`, person.companyName)) {
+    // Текущая компания, прежний работодатель из истории или то же фото: однофамилец без связи не берётся.
+    const profileText = `${user.company ?? ''} ${user.bio ?? ''}`;
+    if (!namesCompany(profileText, person.companyName)) {
       const identity = await identityReady;
       const photo = await candidatePhoto(identity, user.avatar_url, deps);
-      if (!linkEvidence(identity, '', photo).reasons.includes('same_photo')) continue;
+      if (linkEvidence(identity, profileText, photo).score < LINK_THRESHOLD) continue;
     }
     found.push(...githubChannels(user, person, observedAt));
+    found.push(...(await commitEmails(user.login, person, deps, observedAt, state)));
   }
   return found;
+}
+
+interface CommitSearch {
+  readonly items?: ReadonlyArray<{ html_url?: string; commit?: { author?: { name?: string; email?: string } } }>;
+}
+
+const COMMITS_PER_USER = 10;
+
+/** Почта из собственных открытых коммитов человека: автор с тем же именем, без адресов noreply. */
+async function commitEmails(
+  login: string,
+  person: DossierPerson,
+  deps: DossierDeps,
+  observedAt: string,
+  state: RunState,
+): Promise<RecruiterChannel[]> {
+  const search = await getJson<CommitSearch>(
+    `https://api.github.com/search/commits?q=${encodeURIComponent(`author:${login}`)}&per_page=${COMMITS_PER_USER}`,
+    deps,
+    state,
+  );
+  const seen = new Set<string>();
+  return (search?.items ?? []).flatMap((item) => {
+    const author = item.commit?.author;
+    const email = author?.email?.toLowerCase();
+    if (!email || !author?.name || !item.html_url || seen.has(email)) return [];
+    if (/noreply/u.test(email) || !namesPerson(author.name, person.fullName)) return [];
+    seen.add(email);
+    return extractChannels(email, { companyDomain: person.companyDomain, sourceUrl: item.html_url, observedAt });
+  });
 }
 
 /** Ники из найденных профилей и почт: с ними проверяется Telegram. */
