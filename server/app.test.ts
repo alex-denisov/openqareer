@@ -147,9 +147,9 @@ describe('OpenQareer API boundary', () => {
       },
       modelChains: {
         coach: [
-          'openai:gpt-5.6-luna',
+          'openrouter:deepseek/deepseek-v4.1-flash-1017',
           'openrouter:deepseek/deepseek-v4.1-flash',
-          'openrouter:z-ai/glm-5.3-flash',
+          'openai:gpt-5.6-luna',
         ],
       },
       qualityFloor: 'gpt-5.6-sol',

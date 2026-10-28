@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -240,4 +240,11 @@ it('expires a hold left by a call that never settled after the TTL at the deares
   } finally {
     vi.useRealTimers();
   }
+});
+
+describe('Vertex hold (prod 28.10)', () => {
+  it('covers the largest realistic Vertex call', async () => {
+    const { VERTEX_HOLD_USD } = await import('./bulkLlmClient');
+    expect(VERTEX_HOLD_USD).toBeGreaterThanOrEqual(0.02);
+  });
 });

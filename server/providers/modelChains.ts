@@ -19,6 +19,7 @@ const VERTEX = { provider: 'vertex' } as const;
 const LUNA = { provider: 'openai', model: 'gpt-5.6-luna' } as const;
 const DEEPSEEK_FLASH = { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash' } as const;
 const DEEPSEEK_V4_FLASH = { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash' } as const;
+const DEEPSEEK_1017 = { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' } as const;
 const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as const;
 
 /**
@@ -34,8 +35,14 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * ведёт фон на проде; бонусный кредит Vertex конечен.
  */
 export const MODEL_CHAINS = {
-  /** Ход консультанта, его роли, сводка беседы, тренажёр интервью, запас служебных шагов. */
-  coach: [LUNA, DEEPSEEK_FLASH, GLM_FLASH],
+  /**
+   * Ход консультанта, его роли, сводка беседы, тренажёр интервью, запас служебных шагов.
+   * B580 (решение владельца 29.10): платные тарифы — deepseek-v4.1-flash-1017 с запасной
+   * deepseek-v4.1-flash; luna последней — обе первые ступени идут через OpenRouter, и его
+   * авария не должна оставить ход без ответа. Цепочка Free (glm-5.3-flash) появится вместе
+   * с квотами B579.
+   */
+  coach: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Разбор резюме: только платные маршруты (решение владельца 28.10). */
   resumeParsing: [LUNA, DEEPSEEK_FLASH, GLM_FLASH],
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */

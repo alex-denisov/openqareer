@@ -10,6 +10,10 @@ const STALE_HOLD_TTL_MS = 15 * 60_000;
 function monthStart(): string {
   return `${new Date().toISOString().slice(0, 7)}-01`;
 }
+/** The overrun mark names its model for the admin; no overrun mark closes anything (B580). */
+function overrunKind(model: string): string {
+  return `cost_exceeds_reservation:${model}`;
+}
 export class SqliteBulkLlmLedger {
   readonly db: DatabaseSync;
   constructor(path: string) {
@@ -98,11 +102,18 @@ export class SqliteBulkLlmLedger {
     actual?: { model?: string; provider?: string },
   ) {
     runSqliteTransaction(this.db, () => {
-      const row = this.db.prepare('SELECT reserved,cost FROM bulk_llm_spend WHERE id=?').get(id) as
-        { reserved: number; cost: number | null } | undefined;
+      const row = this.db
+        .prepare('SELECT reserved,cost,model FROM bulk_llm_spend WHERE id=?')
+        .get(id) as { reserved: number; cost: number | null; model: string } | undefined;
       if (!row) throw new Error('Unknown reservation');
       if (row.cost !== null) return;
-      if (usage.cost > row.reserved) this.event('cost_exceeds_reservation');
+      if (usage.cost > row.reserved) {
+        this.event(overrunKind(row.model));
+        // The journal names the overrun at once; the admin spend page lists the event too.
+        console.warn(
+          JSON.stringify({ msg: 'bulk-llm-cost-exceeds-reservation', model: row.model, reserved: row.reserved, cost: usage.cost }),
+        );
+      }
       this.db
         .prepare(
           "UPDATE bulk_llm_spend SET cost=?,prompt_tokens=?,cached_tokens=?,completion_tokens=?,day=?,model=COALESCE(?,model),provider=COALESCE(?,provider),status='settled' WHERE id=? AND cost IS NULL",

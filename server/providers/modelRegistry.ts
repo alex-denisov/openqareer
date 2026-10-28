@@ -163,6 +163,18 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         structuredOutput: true,
       },
       {
+        // B580 (решение владельца 29.10): консультант платных тарифов. Замер
+        // 29.10 на ходах adenisov.test: 4/4 хода и при high, и при low; low
+        // дешевле ($0,011 против $0,013 за ход) и быстрее (32–50 с против 40–53 с).
+        id: 'deepseek/deepseek-v4.1-flash-1017',
+        releaseDate: '2026-10-17',
+        pinned: true,
+        ownerPinned: true,
+        lifecycle: 'production',
+        structuredOutput: true,
+        thinkingLevel: 'low',
+      },
+      {
         // B580 (решение владельца 29.10): первая ступень фона, ролей кампании и
         // разбора названий — модель, которая ведёт фон на проде с 19.10.
         id: 'deepseek/deepseek-v4-flash',

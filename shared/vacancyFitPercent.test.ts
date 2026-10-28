@@ -111,6 +111,8 @@ describe('compareFitPercent: the CPO order of 28.10 evening', () => {
     expect(vacancyFitStage(view(12))).toBe('counted_low');
     expect(vacancyFitStage(undefined)).toBe('counting');
     expect(vacancyFitStage(view(null, 12, {}, 'refreshing'))).toBe('counting');
-    expect(vacancyFitStage({ state: 'failed', requirements: [] })).toBe('none');
+    // 29.10: a failed count is re-queued on show and reads «считаем».
+    expect(vacancyFitStage({ state: 'failed', requirements: [] })).toBe('counting');
+    expect(vacancyFitStage({ state: 'no_requirements', requirements: [] })).toBe('none');
   });
 });

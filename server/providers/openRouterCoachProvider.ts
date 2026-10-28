@@ -41,6 +41,8 @@ export interface OpenRouterCoachProviderOptions {
    * прозы: разбор `extractJsonPayload` оставался лишь на случай отказа модели.
    */
   structuredOutput?: boolean;
+  /** `reasoning_effort` запроса; `high`, пока модель в реестре не названа иначе (B580). */
+  reasoningEffort?: 'low' | 'high';
   timeoutMs?: number;
   client?: OpenAI;
 }
@@ -48,10 +50,12 @@ export class OpenRouterCoachProvider implements CoachProvider {
   private readonly client: OpenAI;
   private readonly model: string;
   private readonly structuredOutput: boolean;
+  private readonly reasoningEffort: 'low' | 'high';
 
   constructor(options: OpenRouterCoachProviderOptions) {
     this.model = options.model ?? OPENROUTER_MODEL;
     this.structuredOutput = options.structuredOutput ?? false;
+    this.reasoningEffort = options.reasoningEffort ?? 'high';
     this.client =
       options.client ??
       new OpenAI({
@@ -88,7 +92,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
             content: serializeCoachInput(input),
           },
         ],
-        reasoning_effort: 'high',
+        reasoning_effort: this.reasoningEffort,
         // Рассуждение тратит тот же бюджет, что и ответ: потолок в 2 400
         // обрезал ход на середине JSON, и наружу это выглядело как
         // `provider_output_invalid` (замер B185). Место под ответ считается той

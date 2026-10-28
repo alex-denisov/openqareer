@@ -78,8 +78,8 @@ export class VacancyMechanicsRuntime {
     const job = this.fit.getJobStatus(input) ?? this.fit.getJobStatus(resolved);
     const queued = job?.state;
     // B562-r: a version bump keeps the known percent on screen until the new result is ready.
-    const previous =
-      current || queued === 'failed' ? undefined : this.fit.getPreviousCache(resolved);
+    // A failed refresh keeps it too (29.10): «не посчитан» over a known percent broke the order.
+    const previous = current ? undefined : this.fit.getPreviousCache(resolved);
     const result = current ?? previous;
     const state = !input.description.trim()
       ? 'no_description'

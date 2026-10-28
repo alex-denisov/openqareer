@@ -55,7 +55,7 @@ describe('потолок фоновой обработки — месячный 
     expect(ledger.reserve(call, limits)).not.toBeNull();
     const status = ledger.status(limits);
     expect(status.spentUsd).toBeCloseTo(0.4001, 6);
-    expect(status.events.some((event) => event.kind === 'cost_exceeds_reservation')).toBe(true);
+    expect(status.events.some((event) => String(event.kind).startsWith('cost_exceeds_reservation:'))).toBe(true);
   });
 
   it('фон останавливает только фактический расход месяца у потолка', () => {
@@ -63,5 +63,30 @@ describe('потолок фоновой обработки — месячный 
     const id = ledger.reserve(call, limits);
     ledger.settle(id!, { cost: 0.9, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
     expect(ledger.reserve(call, limits)).toBeNull();
+  });
+});
+
+describe('перерасход одной модели не останавливает весь фон (прод 28.10)', () => {
+  let dir = '';
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+  const roomy = { runUsd: 100, dayUsd: 100, monthUsd: 100, perRequestUsd: 0.01 } as BulkLlmConfig;
+  const vertex = { ...call, model: 'gemini-3.8-flash', provider: 'gemini' };
+
+  it('после перерасхода Vertex открыты и Vertex, и deepseek (B580: перерасход ничего не закрывает)', () => {
+    dir = mkdtempSync(join(tmpdir(), 'bulk-ledger-'));
+    const ledger = new SqliteBulkLlmLedger(join(dir, 'ledger.db'));
+    const id = ledger.reserve(vertex, roomy);
+    ledger.settle(id!, { cost: 0.010127, promptTokens: 9532, cachedTokens: 0, completionTokens: 1787 });
+    expect(ledger.reserve(vertex, roomy)).not.toBeNull();
+    expect(ledger.reserve(call, roomy)).not.toBeNull();
+  });
+
+  it('старая отметка без модели больше ничего не закрывает', () => {
+    dir = mkdtempSync(join(tmpdir(), 'bulk-ledger-'));
+    const ledger = new SqliteBulkLlmLedger(join(dir, 'ledger.db'));
+    ledger.event('cost_exceeds_reservation');
+    expect(ledger.reserve(call, roomy)).not.toBeNull();
   });
 });
