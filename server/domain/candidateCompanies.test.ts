@@ -26,6 +26,16 @@ function vacancy(
 }
 
 describe('B439 candidate company projection', () => {
+  it('a finished search that found nobody reads as done, not as never searched (28.10)', () => {
+    const [row] = buildCandidateCompanyRows({
+      vacancies: [vacancy('v1', 'Випсервис')],
+      wants: [],
+      recruiters: [],
+      jobs: [{ vacancyId: 'v1', status: 'ready' }],
+    });
+    expect(row).toMatchObject({ recruiterSearchStatus: 'ready', hasRecruiter: false });
+  });
+
   it('unions matched companies with wanted companies that have no matched vacancy', () => {
     const wantedKey = candidateCompanyKey('Арка Холдинг');
     const rows = buildCandidateCompanyRows({

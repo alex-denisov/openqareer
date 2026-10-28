@@ -29,6 +29,7 @@ import {
   CompanyLoadingState,
   CompanyToolbar,
 } from './CompaniesAndPeopleControls';
+import { useRecruiterSearchPolling } from './useRecruiterSearchPolling';
 import { isContactImportStale, readableError } from './companiesAndPeopleUtils';
 
 /** Mockup 13 on 390 words the default order shorter than on 1440. */
@@ -187,6 +188,7 @@ function useCompanyDetail(companyKey: string | null): CompanyDetailState {
     }
   };
 
+  useRecruiterSearchPolling(detail?.company.recruiterSearchStatus, reload);
   return { detail, loading, loadingMore, error, reload, loadMore };
 }
 
