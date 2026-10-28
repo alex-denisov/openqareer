@@ -3,6 +3,7 @@ import {
   FIT_KEY_GATES,
   vacancyFitCeiling,
   vacancyFitPercent,
+  vacancyFitStage,
   vacancyFitTier,
   type VacancyFitTier,
 } from '../../../shared/vacancyFitPercent';
@@ -20,13 +21,6 @@ export type VacancyFitMark =
     }
   | { readonly kind: 'pending'; readonly ariaLabel: string }
   | { readonly kind: 'none'; readonly caption: string; readonly ariaLabel: string };
-
-const PENDING_STATES: readonly VacancyFitView['state'][] = [
-  'not_requested',
-  'processing',
-  'retrying',
-  'refreshing',
-];
 
 function noneCaption(view: VacancyFitView | undefined): string {
   if (view?.state === 'no_description') return 'нет описания';
@@ -58,7 +52,7 @@ export function vacancyFitMark(view: VacancyFitView | undefined): VacancyFitMark
       ariaLabel: `Совпадение ${percent} %, по ${total} требованиям`,
     };
   }
-  if (!view || PENDING_STATES.includes(view.state))
+  if (vacancyFitStage(view) === 'counting')
     return { kind: 'pending', ariaLabel: 'Совпадение считается' };
   const caption = noneCaption(view);
   return { kind: 'none', caption, ariaLabel: `Процента нет: ${caption}` };

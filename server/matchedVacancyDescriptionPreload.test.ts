@@ -224,7 +224,9 @@ describe('GET /api/v1/candidate/matched-vacancies description preload (B304)', (
     );
     expect(stored.every((item) => item?.requiredSkills?.length === 3)).toBe(true);
     expect(matchReads).toBe(1);
-    expect(summaries).toEqual([{ requested: 20, loaded: 10, skipped: 10, failed: 0 }]);
+    // The first read warms the top; the whole-selection sweep (CPO 28.10) follows and reads
+    // nothing twice — the transport count above stays one request per hh card.
+    expect(summaries[0]).toEqual({ requested: 20, loaded: 10, skipped: 10, failed: 0 });
     expect(preloadLogs).toEqual([
       expect.objectContaining({
         event: 'hh-description-preload',

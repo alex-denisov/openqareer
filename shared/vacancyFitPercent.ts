@@ -37,15 +37,42 @@ export function vacancyFitCeiling(result: Pick<VacancyFitResult, 'gates'>): numb
   return 100 - FIT_UNCONFIRMED_GATE_PENALTY * unconfirmed.length;
 }
 
-/** Descending by percent; rows still computing or without a percent go after all counted rows. */
+/** States whose percent is still coming: the row says «считаем» (28.10 mockup). */
+export const FIT_COUNTING_STATES: readonly VacancyFitView['state'][] = [
+  'not_requested',
+  'processing',
+  'retrying',
+  'refreshing',
+];
+/** Below this a counted row does not push rows still counting down (CPO, 28.10 evening). */
+export const FIT_LOW_PERCENT = 40;
+
+export type VacancyFitStage = 'counted' | 'counting' | 'counted_low' | 'none';
+
+/** The one stage the row, the expanded block and the order read. */
+export function vacancyFitStage(view: VacancyFitView | undefined): VacancyFitStage {
+  const percent = vacancyFitPercent(view);
+  if (percent !== null) return percent >= FIT_LOW_PERCENT ? 'counted' : 'counted_low';
+  if (!view || FIT_COUNTING_STATES.includes(view.state)) return 'counting';
+  return 'none';
+}
+
+const STAGE_RANK: Readonly<Record<VacancyFitStage, number>> = {
+  counted: 0,
+  counting: 1,
+  counted_low: 2,
+  none: 3,
+};
+
+/**
+ * 40 %+ by percent, then rows still counting (the caller keeps relevance among them), then
+ * counted rows below 40 % by percent, then rows that cannot be counted.
+ */
 export function compareFitPercent(
   left: VacancyFitView | undefined,
   right: VacancyFitView | undefined,
 ): number {
-  const a = vacancyFitPercent(left);
-  const b = vacancyFitPercent(right);
-  if (a === null && b === null) return 0;
-  if (a === null) return 1;
-  if (b === null) return -1;
-  return b - a;
+  const stage = STAGE_RANK[vacancyFitStage(left)] - STAGE_RANK[vacancyFitStage(right)];
+  if (stage !== 0) return stage;
+  return (vacancyFitPercent(right) ?? 0) - (vacancyFitPercent(left) ?? 0);
 }
