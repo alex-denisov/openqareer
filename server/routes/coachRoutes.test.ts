@@ -575,6 +575,12 @@ describe('Coach Stage Routes (B340)', () => {
     const summaryCalls = coachProvider.createTurn.mock.calls.filter(([input]) => input.internalPurpose === 'consultant-summary');
     expect(summaryCalls).toHaveLength(1);
     expect(coachProvider.createTurn).toHaveBeenCalledTimes(3);
+    // 28.10: the candidate gets the reply first; the closed conversation is summarized after it.
+    expect(coachProvider.createTurn.mock.calls.map(([input]) => input.internalPurpose ?? 'turn')).toEqual([
+      'turn',
+      'turn',
+      'consultant-summary',
+    ]);
 
     const list = await app.inject({ method: 'GET', url: '/api/v1/candidate/consultant-history', headers });
     expect(list.statusCode).toBe(200);

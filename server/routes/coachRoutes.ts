@@ -166,9 +166,6 @@ async function deliverTurn(
   key: string,
   input: Omit<Parameters<CoachProvider['createTurn']>[0], 'marketObservations'>,
   marketQuery?: string,
-  summaryTasks: NonNullable<
-    Extract<ReturnType<CandidateStore['startTurn']>, { state: 'ready' }>['closedConversations']
-  > = [],
 ) {
   const active = activeTurns.get(deps) ?? new Set<string>();
   activeTurns.set(deps, active);
@@ -176,11 +173,11 @@ async function deliverTurn(
   const pending = () => reply.code(202).send({ data: { status: 'pending', idempotencyKey: key } });
   if (active.has(operation)) return pending();
   active.add(operation);
-  const work = generateClosedConversationSummaries(deps, request, candidateId, summaryTasks)
-    .then((attempted) =>
-      generateTurn(deps, request, candidateId, key, input, marketQuery, attempted),
-    )
-    .finally(() => active.delete(operation));
+  // 28.10: a closed conversation is summarized after the reply, never before it —
+  // this turn's context is built at start and does not read the new summary.
+  const work = generateTurn(deps, request, candidateId, key, input, marketQuery).finally(() =>
+    active.delete(operation),
+  );
   if ((request.query as { delivery?: string }).delivery === 'receipt') {
     // Failure is persisted by the worker; polling does not restart generation.
     void work.catch((error: unknown) => {
@@ -238,10 +235,10 @@ async function generateTurn(
         idempotencyKey: `consultant-edits:${key}`,
       });
     }
-    await generatePendingConversationSummaries(deps, request, candidateId, attemptedSummaries);
+    void generatePendingConversationSummaries(deps, request, candidateId, attemptedSummaries);
     return output;
   } catch (error) {
-    await generatePendingConversationSummaries(deps, request, candidateId, attemptedSummaries);
+    void generatePendingConversationSummaries(deps, request, candidateId, attemptedSummaries);
     throw error;
   }
 }
@@ -314,7 +311,6 @@ function continueStartedTurn(
     key,
     started.input,
     marketQuery,
-    started.closedConversations,
   );
 }
 

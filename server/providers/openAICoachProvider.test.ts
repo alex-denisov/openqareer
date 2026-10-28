@@ -135,6 +135,9 @@ describe('OpenAI career coach provider', () => {
     );
 
     expect(calls[0]).toMatchObject({ max_output_tokens: 12_000 });
+    // 28.10 (owner): the strategist is the longest step (25–48 s); it reasons at medium,
+    // and keeps the high ceiling so a long plan is never cut.
+    expect(calls[0]).toMatchObject({ reasoning: { effort: 'medium' } });
   });
 
   it('classifies a token-limited response without parsing partial JSON', async () => {
