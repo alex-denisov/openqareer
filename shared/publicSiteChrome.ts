@@ -136,10 +136,12 @@ function navLinksHtml(current?: PublicSection): string {
 }
 
 /**
- * Both pairs of header actions are printed; `oq-auth-1.js` marks a signed-in
- * visitor on `<html>` before the first paint and CSS shows one pair (B574).
+ * Both pairs of header actions are printed; `oq-auth-2.js` marks a signed-in
+ * visitor on `<html>` before the first paint and CSS shows one pair (B574);
+ * the console link is shown only for a marked administrator (B575).
  */
 const HEADER_ACTIONS_HTML =
+  '<a class="ps-btn is-ghost ps-admin" href="/admin">Администрирование</a>' +
   '<a class="ps-btn is-login ps-guest" href="/login">Войти</a>' +
   '<a class="ps-btn is-cta ps-guest" href="/signup">Найти работу</a>' +
   '<a class="ps-btn is-cta ps-member" href="/app">Открыть кабинет</a>';

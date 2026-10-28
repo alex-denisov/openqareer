@@ -58,22 +58,18 @@ function ChromeAnchor({
 }
 
 /**
- * B574: both pairs of actions are rendered; `oq-auth-1.js` marks a signed-in
+ * B574: both pairs of actions are rendered; `oq-auth-2.js` marks a signed-in
  * visitor on `<html>` before the first paint and CSS shows one pair, so the
  * header never redraws «Войти» into «Открыть кабинет» after the session check.
+ * B575: the console link is always rendered too and shown for an administrator
+ * marked the same way; the server still checks access to /admin.
  */
-function HeaderActions({
-  onNavigate,
-  signedIn,
-  isAdmin,
-}: Pick<PublicChromeProps, 'onNavigate' | 'signedIn' | 'isAdmin'>) {
+function HeaderActions({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>) {
   return (
     <>
-      {signedIn && isAdmin ? (
-        <SiteLink to="/admin" className="ps-btn is-ghost" onNavigate={onNavigate}>
-          Администрирование
-        </SiteLink>
-      ) : null}
+      <SiteLink to="/admin" className="ps-btn is-ghost ps-admin" onNavigate={onNavigate}>
+        Администрирование
+      </SiteLink>
       <SiteLink
         to="/login"
         className="ps-btn is-login ps-guest"
@@ -152,7 +148,7 @@ function useMenu() {
 }
 
 /** B569: header shared by every public page (mockup `header()`), with a section menu on phones. */
-export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicChromeProps) {
+export function PublicHeader({ onNavigate, current }: PublicChromeProps) {
   const { open, setOpen, button } = useMenu();
   return (
     <header className="ps-top">
@@ -164,7 +160,7 @@ export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicC
           <NavLinks where="nav" onNavigate={onNavigate} current={current} />
         </nav>
         <div className="ps-top-actions">
-          <HeaderActions onNavigate={onNavigate} signedIn={signedIn} isAdmin={isAdmin} />
+          <HeaderActions onNavigate={onNavigate} />
           <button
             ref={button}
             type="button"

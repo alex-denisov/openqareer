@@ -234,7 +234,7 @@ export default function App() {
       session = await getSession();
       if (!isCurrent()) return;
       // B574: the public header learns the answer now, not after the workspace read.
-      rememberSignedIn(Boolean(session));
+      rememberSignedIn(Boolean(session), session?.role);
       if (session?.emailVerified === false) {
         setState({
           session,
@@ -317,7 +317,7 @@ export default function App() {
   }, [isDesktop, connectorAccount]);
 
   useEffect(() => {
-    if (state.session !== undefined) rememberSignedIn(Boolean(state.session));
+    if (state.session !== undefined) rememberSignedIn(Boolean(state.session), state.session?.role);
   }, [state.session]);
 
   useEffect(() => {

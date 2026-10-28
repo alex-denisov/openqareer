@@ -127,12 +127,13 @@ describe('LandingPage (B569, mockup 01-home)', () => {
     const html = render(candidate);
     expect(html).toContain('Открыть кабинет');
     expect(html).toContain('href="/app"');
-    expect(html).not.toContain('Администрирование');
   });
 
-  it('adds the console link for an administrator', () => {
-    const html = render(admin);
-    expect(html).toContain('Администрирование');
-    expect(html).toContain('href="/admin"');
+  it('renders the console link for everyone, hidden until oq-auth-2.js marks an admin (B575)', () => {
+    for (const html of [render(), render(candidate), render(admin)]) {
+      expect(html).toMatch(
+        /class="ps-btn is-ghost ps-admin"[^>]*href="\/admin"|href="\/admin"[^>]*class="ps-btn is-ghost ps-admin"/,
+      );
+    }
   });
 });
