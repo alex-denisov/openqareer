@@ -69,7 +69,22 @@ export class StageMessageStore {
     return row ?? null;
   }
 
-  queryMessages(candidateId: string, stage?: CoachTurnStage): MessageRow[] {
+  queryMessages(
+    candidateId: string,
+    stage?: CoachTurnStage,
+    subject?: Pick<CoachTurnSubject, 'kind' | 'id'>,
+  ): MessageRow[] {
+    if (stage && subject) {
+      return this.database
+        .prepare(
+          `SELECT m.id, m.role, m.body_cipher, m.created_at
+           FROM messages m
+           INNER JOIN message_stages ms ON ms.message_id = m.id AND ms.candidate_id = m.candidate_id
+           WHERE m.candidate_id = ? AND ms.stage = ? AND ms.subject_kind = ? AND ms.subject_id = ?
+           ORDER BY m.created_at, m.id`,
+        )
+        .all(candidateId, stage, subject.kind, subject.id) as unknown as MessageRow[];
+    }
     if (!stage) {
       return this.database
         .prepare('SELECT id, role, body_cipher, created_at FROM messages WHERE candidate_id = ? ORDER BY created_at, id')

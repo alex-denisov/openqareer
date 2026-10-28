@@ -185,6 +185,7 @@ export function CareerExpertPanel({
   const contextKey = JSON.stringify([stage, subject]);
   // Макет 13: на вкладке «Компании и люди» консультант подписан ею, а не «Вакансии».
   const sectionTitle = subject?.kind === 'company' ? 'Компании и люди' : STAGE_TITLE[stage];
+  const threadCompany = subject?.kind === 'company' ? subject.id : undefined;
   const currentContext = useRef(contextKey);
   currentContext.current = contextKey;
   const previousContext = useRef(contextKey);
@@ -282,7 +283,7 @@ export function CareerExpertPanel({
     setLoadingSnapshot(true);
     setLiveResult(undefined);
     setQuickRepliesDismissed(false);
-    void getCandidateWithMessages(stage)
+    void getCandidateWithMessages(stage, threadCompany)
       .then((candidate) => {
         if (active) setSnapshot(candidate);
       })
@@ -295,7 +296,7 @@ export function CareerExpertPanel({
     return () => {
       active = false;
     };
-  }, [user, stage]);
+  }, [user, stage, threadCompany]);
   useEffect(() => {
     if (!sendRequest || sendRequest <= lastHandledSendRequest) return;
     if (!user || loadingSnapshot || !initialPrompt) return;
@@ -384,7 +385,7 @@ export function CareerExpertPanel({
     }
     if (!delivered) return false;
     try {
-      const updated = await getCandidateWithMessages(stage);
+      const updated = await getCandidateWithMessages(stage, threadCompany);
       if (currentContext.current === operationContext) setSnapshot(updated);
     } catch {
       if (currentContext.current === operationContext) setError('Ответ сохранён, но историю пока не удалось обновить.');

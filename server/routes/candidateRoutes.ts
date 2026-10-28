@@ -160,6 +160,8 @@ const snapshotQuerySchema = z.object({
 const messagesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
   stage: coachTurnStageSchema.optional(),
+  /** Лента выбранной компании на «Компании и люди» (28.10). */
+  company: z.string().trim().min(1).max(200).optional(),
 });
 
 const handleGetSnapshot: Handler = async (
@@ -225,8 +227,12 @@ const handleGetMessages: Handler = async (
 ) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const { offset, stage } = messagesQuerySchema.parse(request.query);
-  const messages = candidateStore.getMessages(candidate.id, stage);
+  const { offset, stage, company } = messagesQuerySchema.parse(request.query);
+  const messages = candidateStore.getMessages(
+    candidate.id,
+    stage,
+    company ? { kind: 'company', id: company } : undefined,
+  );
   const page = buildMessagePage(messages, offset);
   return {
     data: page.items,
