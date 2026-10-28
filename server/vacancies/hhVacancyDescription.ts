@@ -31,6 +31,9 @@ const BACKOFF: HhVacancyDetails = { blocked: 'backoff', skills: [] };
  */
 const FORBIDDEN_VACANCY_MARKER =
   /(?:&#34;|")forbidden(?:&#34;|"):true,(?:&#34;|")errorPage(?:&#34;|"):\{(?:&#34;|")isError(?:&#34;|"):true/u;
+export function isForbiddenVacancyPage(body: string | undefined): boolean {
+  return Boolean(body) && FORBIDDEN_VACANCY_MARKER.test(body!);
+}
 const ARCHIVED_MARKER = /(?:&#34;|")status(?:&#34;|"):\{(?:&#34;|")archived(?:&#34;|"):true/u;
 
 export interface HhVacancyDescriptionLoaderOptions {
