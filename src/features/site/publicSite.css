@@ -931,6 +931,22 @@
   padding-top: 64px;
   padding-bottom: 96px;
 }
+/* B574: crumbs of /tools/* pages, one line right under the header. */
+.ps-tool-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 16px;
+  font-size: var(--career-text-xs, 0.8125rem);
+  line-height: 1.6;
+  color: var(--ps-mute);
+}
+.ps-tool-crumbs a:hover {
+  color: var(--ps-ink);
+}
+.ps-tool-crumbs span[aria-hidden] {
+  opacity: 0.6;
+}
 .ps-crumbs {
   font-size: 13px;
   color: var(--ps-mute);

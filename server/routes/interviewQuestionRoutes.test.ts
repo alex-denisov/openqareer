@@ -50,7 +50,7 @@ describe('B568 interview question pages', () => {
     expect(response.body).toContain('index, follow');
     expect(response.body).toContain('4 570 вакансий');
     expect(response.body).toContain('/tools/interview-questions/accountant');
-    expect(response.body).toContain('/assets/oq-interview-1.js');
+    expect(response.body).toContain('/assets/oq-interview-2.js');
     const types = structured(response.body)['@graph'].map((row) => row['@type']);
     expect(types).toEqual(['BreadcrumbList', 'CollectionPage', 'FAQPage']);
   });

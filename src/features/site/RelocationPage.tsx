@@ -22,6 +22,7 @@ import { RelocationResults, formatDate, formatMoney } from './RelocationResults'
 import { RelocationWizard, countryName } from './RelocationWizard';
 import { COUNTRY_CODES } from './countryFitScenario';
 import { RELOCATION_PATH, parseRelocationQuery, relocationQuery } from './relocationQuery';
+import { ToolCrumbs } from './ToolCrumbs';
 
 export const RELOCATION_TITLE = 'Куда переехать работать в 2026: пути по странам | openqareer';
 export const RELOCATION_DESCRIPTION =
@@ -273,11 +274,7 @@ function NextAndFaq() {
 }
 
 function Crumbs() {
-  return (
-    <nav className="ps-wrap ps-crumbs rl-crumbs" aria-label="Навигационная цепочка">
-      <a href="/">Главная</a> / <span aria-current="page">В какую страну переехать</span>
-    </nav>
-  );
+  return <ToolCrumbs trail={[{ label: 'В какую страну переехать' }]} />;
 }
 
 /** The answers live in the address: a copied link opens the same estimate. */

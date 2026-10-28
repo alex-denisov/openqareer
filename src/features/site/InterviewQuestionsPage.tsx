@@ -1,5 +1,6 @@
 import React from 'react';
 import { pluralWordRu } from '../../../shared/pluralRu';
+import { ToolCrumbs } from './ToolCrumbs';
 import {
   INTERVIEW_EVIDENCE,
   INTERVIEW_HUB_PATH,
@@ -64,19 +65,17 @@ export function interviewProfessionDescription(profession: InterviewProfession):
 
 function Crumbs({ profession }: { profession?: InterviewProfession }) {
   return (
-    <nav className="ps-crumbs" aria-label="Хлебные крошки">
-      <a href="/">Главная</a>
-      <span aria-hidden="true">/</span>
-      {profession ? (
-        <>
-          <a href={INTERVIEW_HUB_PATH}>Вопросы на собеседовании</a>
-          <span aria-hidden="true">/</span>
-          <span>{profession.label}</span>
-        </>
-      ) : (
-        <span>Вопросы на собеседовании</span>
-      )}
-    </nav>
+    <ToolCrumbs
+      wrapped
+      trail={
+        profession
+          ? [
+              { label: 'Вопросы на собеседовании', href: INTERVIEW_HUB_PATH },
+              { label: profession.label },
+            ]
+          : [{ label: 'Вопросы на собеседовании' }]
+      }
+    />
   );
 }
 
@@ -193,12 +192,35 @@ function HubProfessions({ entries }: { entries: readonly InterviewHubEntry[] }) 
       <p className="iq-empty" data-iq-empty="" hidden>
         Такой профессии пока нет. Тренажёр задаст вопросы по требованиям любой вакансии.
       </p>
+      <MoreProfessions total={entries.length} />
       <div className="iq-actions">
         <a className="ps-btn is-primary" href={signupHref()}>
           Открыть все вопросы с разбором — бесплатно
         </a>
       </div>
     </section>
+  );
+}
+
+/** Phones fold the list after FOLD_PHONE professions, wider screens after FOLD_WIDE (mockup 04a). */
+const FOLD_PHONE = 5;
+const FOLD_WIDE = 12;
+
+function MoreProfessions({ total }: { readonly total: number }) {
+  if (total <= FOLD_PHONE) return null;
+  return (
+    <div className={total > FOLD_WIDE ? 'iq-more' : 'iq-more iq-only-m'}>
+      <button
+        className="ps-btn"
+        type="button"
+        aria-controls="iq-list"
+        aria-expanded="false"
+        data-iq-more=""
+      >
+        Показать все профессии
+      </button>
+      <span className="ps-soft iq-hide-m">Частые профессии из разных сфер</span>
+    </div>
   );
 }
 

@@ -6,6 +6,7 @@ import { ResumeEditor } from './ResumeEditor';
 import { VacancyBox } from './VacancyBox';
 import { RESUME_BUILDER_FAQ, RESUME_BUILDER_TITLE, RESUME_GUIDE } from './resumeBuilderContent';
 import { useResumeBuilder, type ResumeBuilderModel } from './useResumeBuilder';
+import { ToolCrumbs } from '../ToolCrumbs';
 
 interface ResumeBuilderPageProps {
   readonly onNavigate: (path: string) => void;
@@ -296,9 +297,7 @@ export function ResumeBuilderPage({
         isAdmin={isAdmin}
       />
       <main id="main">
-        <nav className="ps-wrap ps-crumbs" aria-label="Хлебные крошки">
-          <a href="/">Главная</a> / <span aria-current="page">Конструктор резюме</span>
-        </nav>
+        <ToolCrumbs trail={[{ label: 'Конструктор резюме' }]} />
         <section className="phero">
           <div className="ps-wrap rb">
             <Hero model={model} />

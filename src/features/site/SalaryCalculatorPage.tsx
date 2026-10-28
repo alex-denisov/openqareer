@@ -17,6 +17,7 @@ import {
 } from '../../../shared/salaryCalculator';
 import { SiteLink } from './SiteLink';
 import { PublicFooter, PublicHeader } from './PublicSiteChrome';
+import { ToolCrumbs } from './ToolCrumbs';
 import {
   CALC_DESCRIPTION,
   CALC_FAQ,
@@ -547,17 +548,7 @@ export function SalaryCalculatorPage({ onNavigate, signedIn = false, isAdmin = f
         current="tools"
       />
       <main id="main">
-        <nav className="sc-wrap sc-crumbs" aria-label="Хлебные крошки">
-          <SiteLink to="/" onNavigate={onNavigate}>
-            Главная
-          </SiteLink>
-          <span aria-hidden="true">/</span>
-          <SiteLink to="/salaries" onNavigate={onNavigate}>
-            Зарплаты
-          </SiteLink>
-          <span aria-hidden="true">/</span>
-          <span>Калькулятор на руки</span>
-        </nav>
+        <ToolCrumbs trail={[{ label: 'Калькулятор зарплаты на руки' }]} />
         <Hero />
         <Calculator onNavigate={onNavigate} />
         <Lower onNavigate={onNavigate} />
