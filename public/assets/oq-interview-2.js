@@ -11,6 +11,20 @@ function text(tag, value, className) {
   return node;
 }
 
+const MORE_LABEL = 'Показать все профессии';
+
+/* B574: on phones the list shows five professions until «Показать все профессии». */
+function bindMore(root) {
+  const button = root.querySelector('[data-iq-more]');
+  const list = root.querySelector('#iq-list');
+  if (!button || !list) return;
+  button.addEventListener('click', () => {
+    const open = list.classList.toggle('is-open');
+    button.setAttribute('aria-expanded', String(open));
+    button.textContent = open ? 'Свернуть' : MORE_LABEL;
+  });
+}
+
 function bindSearch(root) {
   const input = root.querySelector('[data-iq-search]');
   const list = root.querySelector('#iq-list');
@@ -18,6 +32,7 @@ function bindSearch(root) {
   if (!input || !list) return;
   input.addEventListener('input', () => {
     const query = input.value.trim().toLocaleLowerCase('ru-RU');
+    list.classList.toggle('is-searching', Boolean(query));
     let visible = 0;
     for (const item of list.querySelectorAll('li')) {
       const match = !query || item.textContent.toLocaleLowerCase('ru-RU').includes(query);
@@ -135,6 +150,7 @@ function bindQuiz(root) {
 
 if (typeof document !== 'undefined') {
   bindSearch(document);
+  bindMore(document);
   bindFilters(document);
   bindQuiz(document);
 }

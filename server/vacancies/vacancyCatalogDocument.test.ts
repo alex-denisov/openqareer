@@ -74,6 +74,15 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain('&lt;script&gt;');
   });
 
+  it('B574: «В кабинете вакансий больше» стоит над «О вакансии» с одной кнопкой', () => {
+    const html = renderVacancyDocument(buildVacancyDetail(cluster())!);
+    const side = html.slice(html.indexOf('<aside class="cat-side">'), html.indexOf('</aside>'));
+    expect(side.indexOf('В кабинете вакансий больше')).toBeLessThan(side.indexOf('О вакансии'));
+    const about = side.slice(side.indexOf('<h2>О вакансии'));
+    expect(about.match(/class="ps-btn/gu)).toHaveLength(1);
+    expect(about).toContain('>Открыть у работодателя</a>');
+  });
+
   it('печатает микроразметку списка и карточки', () => {
     expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).toContain('"@type":"ItemList"');
     const paid = cluster({ salary: { from: 200000, to: 300000, currency: 'USD' } });

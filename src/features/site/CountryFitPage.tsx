@@ -10,6 +10,7 @@ import {
 } from './CountryFitComparison';
 import { PublicFooter, PublicHeader } from './PublicSiteChrome';
 import { calculateCountryFitScenario, saveCountryFitScenario } from './countryFitScenario';
+import { ToolCrumbs } from './ToolCrumbs';
 
 export const COUNTRY_FIT_TITLE = 'Калькулятор налогов и чистой зарплаты 2026 | openqareer';
 export const COUNTRY_FIT_DESCRIPTION =
@@ -286,11 +287,7 @@ function ScenarioHeading() {
   );
 }
 function CountryFitCrumbs() {
-  return (
-    <nav className="ps-crumbs" aria-label="Навигационная цепочка">
-      <a href="/">openqareer</a> / <span aria-current="page">Country Fit</span>
-    </nav>
-  );
+  return <ToolCrumbs wrapped trail={[{ label: 'Country Fit' }]} />;
 }
 function CountryFitHeader(props: CountryFitPageProps) {
   return (
@@ -299,6 +296,7 @@ function CountryFitHeader(props: CountryFitPageProps) {
       onLanding={false}
       signedIn={Boolean(props.signedIn)}
       isAdmin={props.isAdmin}
+      current="tools"
     />
   );
 }

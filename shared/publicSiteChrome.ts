@@ -29,20 +29,35 @@ export const PUBLIC_NAV: readonly (ChromeLink & { readonly id: PublicSection })[
 
 export const MENU_LABEL = 'Меню разделов';
 export const MENU_ID = 'ps-menu';
+export const BRAND_LABEL = 'openqareer — на главную';
+
+/**
+ * B574: «Инструменты» opens this list; without JS the item stays a link to
+ * /#tools. The list is drawn on opening (React) or by `oq-chrome-2.js`, which
+ * repeats it — `publicSiteChrome.test.ts` keeps the two equal.
+ */
+export const PUBLIC_TOOLS: readonly ChromeLink[] = [
+  { label: 'Каталог вакансий', href: '/vacancies' },
+  { label: 'Калькулятор зарплаты на руки', href: '/tools/salary-calculator' },
+  { label: 'Зарплаты по профессиям', href: '/salaries' },
+  { label: 'Конструктор резюме', href: '/tools/resume' },
+  { label: 'Вопросы на собеседовании', href: '/tools/interview-questions' },
+  { label: 'В какую страну переехать', href: '/tools/relocation' },
+];
+/** Desktop dropdown and the phone menu group each get their own list id. */
+export const TOOLS_MENU_IDS = { nav: 'ps-tooldrop-menu', menu: 'ps-menu-tools' } as const;
 
 export const FOOTER_ABOUT =
   'Поиск работы с ИИ: резюме, вакансии со всего рынка и отклики в одном месте.';
 
-/**
- * `/vacancies/relocation` answers 410: its link joins the footer in the slice
- * that makes the route 200.
- */
+/** Footer columns of mockup `FOOTER`; every link answers 200 (B574 returned relocation). */
 export const PUBLIC_FOOTER_COLUMNS: readonly ChromeColumn[] = [
   {
     title: 'Поиск',
     links: [
       { label: 'Все вакансии', href: '/vacancies' },
       { label: 'Удалённая работа', href: '/vacancies/remote' },
+      { label: 'Вакансии с релокацией', href: '/vacancies/relocation' },
       { label: 'Тарифы', href: '/tariffs' },
     ],
   },
@@ -84,6 +99,7 @@ export const SUPPORT_CONTACT = 'support@openqareer.com';
 /** The nav section a public path belongs to, for `aria-current`. */
 export function sectionForPath(path: string): PublicSection | undefined {
   const clean = path.split(/[?#]/u)[0] ?? '';
+  if (/^\/(tools|salaries)(\/|$)/u.test(clean)) return 'tools';
   return PUBLIC_NAV.find(
     (item) => item.href !== '/#tools' && (clean === item.href || clean.startsWith(`${item.href}/`)),
   )?.id;
@@ -103,20 +119,43 @@ function attrs(link: ChromeLink, current: boolean): string {
   return `href="${link.href}"${link.external ? ' rel="noopener"' : ''}${current ? ' aria-current="page"' : ''}`;
 }
 
+/** The list itself is built by oq-chrome-2.js; without it the item stays a link. */
+function toolsDisclosureHtml(current: boolean): string {
+  return (
+    '<div class="ps-tooldrop is-nav"><a class="ps-tooldrop-trigger" href="/#tools" aria-expanded="false" ' +
+    `data-ps-disclosure${current ? ' aria-current="true"' : ''}>Инструменты</a></div>`
+  );
+}
+
+function navLinksHtml(current?: PublicSection): string {
+  return PUBLIC_NAV.map((item) =>
+    item.id === 'tools'
+      ? toolsDisclosureHtml(current === 'tools')
+      : `<a ${attrs(item, item.id === current)}>${item.label}</a>`,
+  ).join('');
+}
+
+/**
+ * Both pairs of header actions are printed; `oq-auth-1.js` marks a signed-in
+ * visitor on `<html>` before the first paint and CSS shows one pair (B574).
+ */
+const HEADER_ACTIONS_HTML =
+  '<a class="ps-btn is-login ps-guest" href="/login">Войти</a>' +
+  '<a class="ps-btn is-cta ps-guest" href="/signup">Найти работу</a>' +
+  '<a class="ps-btn is-cta ps-member" href="/app">Открыть кабинет</a>';
+
 /** Server-side header; `brand` is the page's own logo anchor. */
 export function renderChromeHeaderHtml(brand: string, current?: PublicSection): string {
-  const links = PUBLIC_NAV.map(
-    (item) => `<a ${attrs(item, item.id === current)}>${item.label}</a>`,
-  );
   return (
     '<header class="ps-top"><div class="ps-wrap ps-top-row">' +
     brand +
-    `<nav class="ps-nav" aria-label="Разделы">${links.join('')}</nav>` +
-    '<div class="ps-top-actions"><a class="ps-btn is-login" href="/login">Войти</a>' +
-    '<a class="ps-btn is-cta" href="/signup">Найти работу</a>' +
+    `<nav class="ps-nav" aria-label="Разделы">${navLinksHtml(current)}</nav>` +
+    `<div class="ps-top-actions">${HEADER_ACTIONS_HTML}` +
     `<button class="ps-menu-btn" type="button" aria-label="${MENU_LABEL}" aria-expanded="false" aria-controls="${MENU_ID}" data-ps-menu>${MENU_ICON}</button></div></div>` +
-    `<nav class="ps-menu" id="${MENU_ID}" aria-label="Разделы" hidden>${links.join('')}` +
-    '<a class="ps-menu-login" href="/login">Войти</a></nav></header>'
+    // The phone menu opens only with oq-chrome-2.js, which copies the nav into
+    // it: the links are printed once (vacancy pages keep to a 20 KB budget).
+    `<nav class="ps-menu" id="${MENU_ID}" aria-label="Разделы" hidden>` +
+    '<a class="ps-menu-login ps-guest" href="/login">Войти</a></nav></header>'
   );
 }
 

@@ -47,6 +47,7 @@ import {
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
 import type {
+  CatalogChipQuery,
   CatalogTotalsRow,
   MergeSliceResult,
   StoredSourceState,
@@ -72,6 +73,8 @@ import {
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { SalaryStats } from './catalogSalaryStats';
 import { readCatalogSalaryStats } from './catalogSalaryStatsStore';
+import { readCatalogChipCounts, readCatalogChipKeys } from './catalogChipStore';
+import type { ChipCounts } from './catalogChips';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 interface VacancyRow {
@@ -2440,6 +2443,29 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   getCatalogSalaryStats(query: { place: string; role?: string }): SalaryStats | undefined {
     return readCatalogSalaryStats(this.database, query);
+  }
+
+  getCatalogChipCounts(listKey: string): ChipCounts {
+    return readCatalogChipCounts(this.database, listKey);
+  }
+
+  /** B574: `limit + 1` keys by primary-key range, then those rows by the unique key. */
+  loadCatalogChipPage(query: CatalogChipQuery): CatalogEntriesPage {
+    const limit = Math.max(1, Math.min(Math.trunc(query.limit), 500));
+    const keys = readCatalogChipKeys(this.database, { ...query, limit: limit + 1 }, Date.now());
+    const hasNext = keys.length > limit;
+    const selected = hasNext ? keys.slice(0, limit) : keys;
+    const items = selected
+      .map((key) => this.getCatalogEntry(key.entryKey))
+      .filter((entry): entry is CatalogEntryRow => entry !== undefined);
+    const last = selected.at(-1);
+    return {
+      items,
+      total: this.getCatalogChipCounts(query.listKey)[query.chip] ?? 0,
+      ...(hasNext && last
+        ? { nextCursor: { publishedMs: last.publishedMs, key: last.entryKey } }
+        : {}),
+    };
   }
 
   getCatalogEntry(key: string): CatalogEntryRow | undefined {

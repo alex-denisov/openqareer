@@ -31,20 +31,6 @@
   margin: 0 auto;
   padding: 0 32px;
 }
-.sc-crumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--sc-mute);
-  padding-top: 24px;
-}
-.sc-crumbs a:hover {
-  color: var(--ps-ink);
-}
-.sc-crumbs span[aria-hidden] {
-  opacity: 0.6;
-}
 .sc-hero {
   padding: 40px 0 40px;
 }
@@ -523,9 +509,6 @@
 @media (max-width: 760px) {
   .sc-wrap {
     padding: 0 16px;
-  }
-  .sc-crumbs {
-    padding-top: 16px;
   }
   .sc-hero {
     padding: 16px 0 40px;

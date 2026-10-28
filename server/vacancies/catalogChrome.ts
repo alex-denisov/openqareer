@@ -4,13 +4,14 @@
  * в shared/publicSiteChrome.ts, `publicSiteChrome.test.ts` держит их равными.
  */
 import {
+  BRAND_LABEL,
   renderChromeFooterHtml,
   renderChromeHeaderHtml,
   renderPlanBarHtml,
 } from '../../shared/publicSiteChrome';
 
 const BRAND =
-  '<a class="ps-brand" href="/" aria-label="openqareer"><span class="brand-lockup">' +
+  `<a class="ps-brand" href="/" aria-label="${BRAND_LABEL}"><span class="brand-lockup">` +
   '<img src="/favicon.svg" width="26" height="26" alt="">' +
   '<span class="brand-lockup-word">open<span class="brand-lockup-qareer">qareer</span></span>' +
   '</span></a>';

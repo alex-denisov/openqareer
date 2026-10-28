@@ -22,6 +22,7 @@ import { RelocationResults, formatDate, formatMoney } from './RelocationResults'
 import { RelocationWizard, countryName } from './RelocationWizard';
 import { COUNTRY_CODES } from './countryFitScenario';
 import { RELOCATION_PATH, parseRelocationQuery, relocationQuery } from './relocationQuery';
+import { ToolCrumbs } from './ToolCrumbs';
 
 export const RELOCATION_TITLE = 'Куда переехать работать в 2026: пути по странам | openqareer';
 export const RELOCATION_DESCRIPTION =
@@ -196,6 +197,7 @@ function AfterSignup() {
 
 // «Вакансии с релокацией» returns with a live /vacancies/relocation (410 for now).
 const NEXT_LINKS = [
+  ['/vacancies/relocation', 'Вакансии с релокацией в открытом каталоге'],
   ['/salaries/germany', 'Зарплаты в Германии на руки'],
   ['/tools/resume', 'Резюме для работодателя за рубежом'],
   ['/tools/interview-questions', 'Вопросы на собеседовании'],
@@ -272,11 +274,7 @@ function NextAndFaq() {
 }
 
 function Crumbs() {
-  return (
-    <nav className="ps-wrap ps-crumbs rl-crumbs" aria-label="Навигационная цепочка">
-      <a href="/">Главная</a> / <span aria-current="page">В какую страну переехать</span>
-    </nav>
-  );
+  return <ToolCrumbs trail={[{ label: 'В какую страну переехать' }]} />;
 }
 
 /** The answers live in the address: a copied link opens the same estimate. */
@@ -331,6 +329,7 @@ export function RelocationPage({
         onLanding={false}
         signedIn={signedIn}
         isAdmin={isAdmin}
+        current="tools"
       />
       <main id="main" className="ym-hide-content">
         <Crumbs />

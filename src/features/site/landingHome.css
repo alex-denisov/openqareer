@@ -3,8 +3,9 @@
  * Everything is scoped to `.hm`; the palette and sizes are the mockup's own,
  * so computed values match it. No inline styles (CSP style-src 'self').
  */
+/* B574: no vertical scroll snap — the owner found the page pulling back to
+   the start of a block while reading its middle; anchors keep the header gap. */
 html:has(.hm) {
-  scroll-snap-type: y proximity;
   scroll-padding-top: 64px;
 }
 .hm {
@@ -170,7 +171,6 @@ html:has(.hm) {
   align-items: center;
   padding: var(--s12) 0;
   border-top: 1px solid var(--line);
-  scroll-snap-align: start;
 }
 .hm .scr > .wrap {
   width: 100%;

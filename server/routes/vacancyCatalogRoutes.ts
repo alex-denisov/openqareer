@@ -22,6 +22,7 @@ import {
   buildListingPageFromEntries,
   buildVacancyDetail,
   catalogEntries,
+  type CatalogPage,
 } from '../vacancies/vacancyCatalogPage';
 import {
   catalogListings,
@@ -45,6 +46,13 @@ import {
 import { getCatalogSitemaps } from '../seo/catalogSitemapSchedule';
 import { isValidIndexNowKey } from '../seo/indexNow';
 import { renderSitemapIndex, type SitemapFile } from '../seo/sitemapXml';
+import {
+  RELOCATION_LIST_KEY,
+  RELOCATION_PLACE,
+  parseListingChip,
+  type CatalogChip,
+} from '../vacancies/catalogChips';
+import { salaryStatsKey } from '../vacancies/catalogSalaryStatsStore';
 import type { RouteDeps } from './deps';
 import { withDeps } from './helpers';
 
@@ -109,15 +117,38 @@ function cursorlessPageTarget(
   return (pathPage !== undefined && pathPage > 1) || pageQuery !== undefined ? basePath : null;
 }
 
-function withCursor(path: string, cursor: ReturnType<typeof decodeCatalogCursor>): string {
-  return cursor ? `${path}?after=${encodeCatalogCursor(cursor)}` : path;
+function withCursor(
+  path: string,
+  cursor: ReturnType<typeof decodeCatalogCursor>,
+  chip?: CatalogChip,
+): string {
+  const query = [
+    ...(chip ? [`f=${chip}`] : []),
+    ...(cursor ? [`after=${encodeCatalogCursor(cursor)}`] : []),
+  ];
+  return query.length > 0 ? `${path}?${query.join('&')}` : path;
 }
 
 function projectedPage(
   page: CatalogEntriesPage,
   requestedPage: number,
   listing?: CatalogListingSummary,
-) {
+  chip?: CatalogChip,
+): CatalogPage {
+  if (listing && chip) {
+    // B574: a chip narrows the list; the unfiltered list stays the indexed one.
+    const {
+      nextPath: _next,
+      previousPath: _previous,
+      ...built
+    } = projectedPage(page, requestedPage, listing);
+    return {
+      ...built,
+      indexable: false,
+      canonicalPath: listing.path,
+      ...(page.nextCursor ? { nextPath: withCursor(listing.path, page.nextCursor, chip) } : {}),
+    };
+  }
   if (listing) {
     const built = buildListingPageFromEntries(
       page.items,
@@ -169,6 +200,34 @@ async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: Fa
   return sendDocument(reply, renderCatalogDocument(page, filtersFor(catalogEntries(clusters))));
 }
 
+/** B574: a list page, narrowed by `?f=` when that chip has vacancies behind it. */
+function listingEntriesPage(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  listing: { place: string; role?: string },
+  cursor: ReturnType<typeof cursorOf>,
+) {
+  const listKey = salaryStatsKey(listing);
+  const counts = deps.multiSourceEngine.getPublicCatalogChipCounts(listKey);
+  const wanted = parseListingChip(queryValue(request, 'f'));
+  const chip = wanted && (counts[wanted] ?? 0) > 0 ? wanted : undefined;
+  const after = cursor ? { after: cursor } : {};
+  const projected = chip
+    ? deps.multiSourceEngine.getPublicCatalogChipPage({
+        listKey,
+        chip,
+        limit: CATALOG_PAGE_SIZE,
+        ...after,
+      })
+    : deps.multiSourceEngine.getPublicCatalogEntriesPage({
+        limit: CATALOG_PAGE_SIZE,
+        ...after,
+        place: listing.place,
+        ...(listing.role ? { role: listing.role } : {}),
+      });
+  return { counts, chip, projected };
+}
+
 /**
  * Список по месту и роли. Список, которого нет или который опустел ниже порога
  * публикации, отвечает `410`, а не пустой страницей: адрес, который мы сами же
@@ -189,18 +248,13 @@ function handleProjectedListing(
   );
   if (!summary) return undefined;
   const cursor = cursorOf(request);
-  const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
-    limit: CATALOG_PAGE_SIZE,
-    ...(cursor ? { after: cursor } : {}),
-    place: listing.place,
-    ...(listing.role ? { role: listing.role } : {}),
-  });
+  const { counts, chip, projected } = listingEntriesPage(deps, request, listing, cursor);
   if (!projected) return undefined;
   const requestedPage = cursor ? (listing.page ?? 1) : 1;
   return sendDocument(
     reply,
     renderCatalogDocument(
-      projectedPage(projected, requestedPage, summary),
+      projectedPage(projected, requestedPage, summary, chip),
       filtersForListings(projectedListings, {
         place: listing.place,
         ...(listing.role ? { role: listing.role } : {}),
@@ -210,7 +264,44 @@ function handleProjectedListing(
           place: listing.place,
           ...(listing.role ? { role: listing.role } : {}),
         }),
+        chips: { counts, ...(chip ? { active: chip } : {}), path: summary.path },
       },
+    ),
+  );
+}
+
+/**
+ * B574: `/vacancies/relocation` — vacancies that mention relocation, over the
+ * whole catalog. The maintenance process writes the list; empty means 410.
+ */
+function handleRelocation(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  listing: NonNullable<ReturnType<typeof parseListingPath>>,
+): FastifyReply | undefined {
+  const count = deps.multiSourceEngine.getPublicCatalogChipCounts(RELOCATION_LIST_KEY).relocation;
+  if (!count) return undefined;
+  const cursor = cursorOf(request);
+  const projected = deps.multiSourceEngine.getPublicCatalogChipPage({
+    listKey: RELOCATION_LIST_KEY,
+    chip: 'relocation',
+    limit: CATALOG_PAGE_SIZE,
+    ...(cursor ? { after: cursor } : {}),
+  });
+  if (!projected) return undefined;
+  const summary: CatalogListingSummary = {
+    place: RELOCATION_PLACE,
+    placeLabel: 'С релокацией',
+    path: listingPath(RELOCATION_PLACE) ?? `${CATALOG_ROOT}/${RELOCATION_PLACE}`,
+    count,
+  };
+  const listings = deps.multiSourceEngine.getPublicCatalogListings() ?? [];
+  return sendDocument(
+    reply,
+    renderCatalogDocument(
+      projectedPage(projected, cursor ? (listing.page ?? 1) : 1, summary),
+      filtersForListings(listings),
     ),
   );
 }
@@ -220,6 +311,10 @@ async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const basePath = listing ? listingPath(listing.place, listing.role) : null;
   const redirect = basePath ? cursorlessPageTarget(request, basePath, listing?.page) : null;
   if (redirect) return reply.redirect(redirect, 301);
+  if (listing?.place === RELOCATION_PLACE && !listing.role) {
+    const relocationReply = handleRelocation(deps, request, reply, listing);
+    if (relocationReply) return relocationReply;
+  }
   const projectedReply = handleProjectedListing(deps, request, reply, listing);
   if (projectedReply) return projectedReply;
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();

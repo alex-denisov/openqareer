@@ -54,7 +54,7 @@ describe('/tools/resume first paint (B567)', () => {
   it('links to interview questions and resume FAQ, as on the mockup', () => {
     const html = renderToStaticMarkup(<ResumeBuilderPage onNavigate={() => {}} />);
     // The site footer links to interview questions too; count the page body only.
-    const body = html.slice(0, html.indexOf('<footer'));
+    const body = html.slice(html.indexOf('</header>'), html.indexOf('<footer'));
     expect((body.match(/href="\/tools\/interview-questions"/gu) ?? []).length).toBe(2);
     expect((body.match(/href="\/faq#resume"/gu) ?? []).length).toBe(2);
     expect(html).toContain('Вопросы на собеседовании по вашей профессии');

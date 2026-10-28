@@ -31,7 +31,7 @@ import { escapeHtml } from '../vacancies/catalogHtml';
 import { withOgImage } from '../../shared/seoHead';
 import { loadPublicSalaryIndex } from './salaryMarketRoutes';
 
-export const INTERVIEW_QUIZ_SCRIPT = '/assets/oq-interview-1.js';
+export const INTERVIEW_QUIZ_SCRIPT = '/assets/oq-interview-2.js';
 
 interface InterviewRouteOptions {
   readonly staticRoot: string;

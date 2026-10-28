@@ -8,6 +8,7 @@
 import { CATALOG_ROOT, listingPath } from '../../shared/vacancyCatalogRoutes';
 import { interviewProfession, interviewProfessionPath } from '../../shared/interviewQuestions';
 import { salaryRolePath } from '../../shared/salaryMarketPublic';
+import { LISTING_CHIPS, type CatalogChip, type ChipCounts } from './catalogChips';
 import { countLabel } from './catalogCopy';
 import { escapeHtml } from './catalogHtml';
 import { ARROW, jobsCard, pager } from './catalogListingJobs';
@@ -17,9 +18,30 @@ import type { CatalogPage } from './vacancyCatalogPage';
 import { listingFaq } from './catalogListingFaq';
 import { dataDate, money, namesOf, type Names } from './catalogListingNames';
 
+/** B574: chips of the list; only chips with vacancies behind them are printed. */
+export interface ListingChips {
+  readonly counts: ChipCounts;
+  readonly active?: CatalogChip;
+  /** The list without a filter; an active chip links back to it. */
+  readonly path: string;
+}
+
 export interface ListingExtras {
   readonly stats?: SalaryStats;
   readonly now?: Date;
+  readonly chips?: ListingChips;
+}
+
+function chipRow(chips?: ListingChips): string {
+  if (!chips) return '';
+  const shown = LISTING_CHIPS.filter((chip) => (chips.counts[chip.id] ?? 0) > 0);
+  if (shown.length === 0) return '';
+  const links = shown.map((chip) => {
+    const on = chip.id === chips.active;
+    const href = on ? chips.path : `${chips.path}?f=${chip.id}`;
+    return `<a class="lv-chip is-out" href="${escapeHtml(href)}"${on ? ' aria-current="true"' : ''}>${escapeHtml(chip.label)}</a>`;
+  });
+  return `<div class="lv-vf" role="group" aria-label="Фильтры" tabindex="0">${links.join('')}</div>`;
 }
 
 function heading(page: CatalogPage, names: Names): string {
@@ -200,7 +222,7 @@ export function renderListingMain(
     '<section class="lv-phero"><div class="ps-wrap"><div class="cat-vh"><div>' +
     `<h1>${escapeHtml(heading(page, names))}</h1>${factsLine(page, names, extras.stats)}</div>` +
     `<a class="ps-btn is-primary is-lg" href="/signup?from=catalog${role ? `&amp;role=${encodeURIComponent(role)}` : ''}">Подобрать под моё резюме</a></div>` +
-    `${searchForm(page, names)}</div></section>` +
+    `${searchForm(page, names)}${chipRow(extras.chips)}</div></section>` +
     '<div class="ps-wrap lv-grid"><div>' +
     jobsCard(page, now) +
     answer(page, names, extras.stats) +

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scoreQuiz } from '../../public/assets/oq-interview-1.js';
+import { scoreQuiz } from '../../public/assets/oq-interview-2.js';
 
 const items = [{ correct: 1 }, { correct: 0 }, { correct: 2 }, { correct: 1 }, { correct: 0 }];
 

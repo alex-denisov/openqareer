@@ -22,6 +22,9 @@ describe('relocation public first paint (B354)', () => {
     for (const href of ['/salaries/germany', '/tools/resume', '/tools/interview-questions'])
       expect(html).toContain(`href="${href}"`);
     expect(html).toContain('href="/tools/relocation">В какую страну переехать');
+    expect(html).toContain(
+      'href="/vacancies/relocation">Вакансии с релокацией в открытом каталоге',
+    );
     expect(html).toContain('Налога на доход нет');
     expect(html).not.toContain('пока недоступно');
   });

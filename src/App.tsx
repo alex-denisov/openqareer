@@ -47,6 +47,7 @@ import {
 import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
 import { SESSION_EXPIRED_TEXT } from './features/onboarding/firstRunSpecialState';
+import { rememberSignedIn } from './features/site/signedInFlag';
 
 const EXPIRED_SESSION_NOTICE = SESSION_EXPIRED_TEXT;
 
@@ -57,6 +58,9 @@ const CareerWorkspaceShell = lazy(async () => {
   return { default: module.CareerWorkspaceShell };
 });
 const LandingPage = lazy(loadLandingPage);
+const AuthSiteFrame = lazy(() =>
+  loadAuthPages().then((module) => ({ default: module.AuthSiteFrame })),
+);
 const ResumeBuilderPage = lazy(() =>
   import('./features/site/resumeBuilder/resumeBuilderRoute').then((module) => ({
     default: module.ResumeBuilderPage,
@@ -229,6 +233,8 @@ export default function App() {
     try {
       session = await getSession();
       if (!isCurrent()) return;
+      // B574: the public header learns the answer now, not after the workspace read.
+      rememberSignedIn(Boolean(session));
       if (session?.emailVerified === false) {
         setState({
           session,
@@ -309,6 +315,10 @@ export default function App() {
       .then(({ bindConnectorAccount }) => bindConnectorAccount(connectorAccount))
       .catch(() => false);
   }, [isDesktop, connectorAccount]);
+
+  useEffect(() => {
+    if (state.session !== undefined) rememberSignedIn(Boolean(state.session));
+  }, [state.session]);
 
   useEffect(() => {
     void resolveSession();
@@ -538,6 +548,7 @@ export default function App() {
       });
   }
 
+  const ReadyAuthSiteFrame = startupAuthPages?.AuthSiteFrame ?? AuthSiteFrame;
   const renderAuthContent = () => {
     // Initial auth bootstrap has already awaited these modules and styles.
     // Render them directly so React.lazy cannot commit a fallback for one frame.
@@ -643,9 +654,14 @@ export default function App() {
 
     return (
       <AppErrorBoundary>
-        {/* B535: on the web the auth pages wear the public site palette. */}
+        {/* B535: on the web the auth pages wear the public site palette;
+            B574: and the site header and footer. */}
         <div className="ps ps-auth">
-          <Suspense fallback={<AuthLoadingFallback />}>{renderAuthContent()}</Suspense>
+          <Suspense fallback={<AuthLoadingFallback />}>
+            <ReadyAuthSiteFrame onNavigate={navigate} signedIn={Boolean(state.session)}>
+              {renderAuthContent()}
+            </ReadyAuthSiteFrame>
+          </Suspense>
         </div>
       </AppErrorBoundary>
     );

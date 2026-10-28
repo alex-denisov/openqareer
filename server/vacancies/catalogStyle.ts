@@ -17,6 +17,7 @@ export const CATALOG_STYLE =
   --ps-soft: oklch(40% 0.02 260);
   --ps-mute: oklch(50% 0.015 260);
   --ps-blue: oklch(52% 0.19 256);
+  --ps-blue-hover: oklch(46% 0.19 256);
   --ps-blue-ink: oklch(98% 0.01 256);
   --ps-blue-soft: oklch(95% 0.03 256);
   --ps-ok: oklch(48% 0.12 155);
@@ -264,6 +265,103 @@ export const CATALOG_STYLE =
   .ps-top-actions .is-cta {
     display: none;
   }
+}
+/* B574: header states. Both action pairs are in the markup; oq-auth-1.js marks
+   a signed-in visitor on <html> before the first paint. */
+.ps-btn.ps-member,
+.ps-menu a.ps-member {
+  display: none;
+}
+html[data-oq-signed-in] .ps-btn.ps-guest,
+html[data-oq-signed-in] .ps-menu a.ps-guest {
+  display: none;
+}
+html[data-oq-signed-in] .ps-btn.ps-member {
+  display: inline-flex;
+}
+.ps-btn {
+  cursor: pointer;
+  transition:
+    background-color 0.18s,
+    border-color 0.18s,
+    transform 0.18s;
+}
+.ps-btn:hover {
+  border-color: var(--ps-ink);
+}
+.ps-top-actions .ps-btn:hover {
+  background: var(--ps-bg-2);
+}
+.ps-btn:active {
+  transform: translateY(1px);
+}
+.ps-btn.is-primary:hover {
+  background: var(--ps-blue-hover);
+  border-color: var(--ps-blue-hover);
+}
+.ps-top :is(a, button):focus-visible {
+  outline: 2px solid var(--ps-blue);
+  outline-offset: 2px;
+}
+.ps-brand {
+  border-radius: 8px;
+  transition: opacity 0.18s;
+}
+.ps-brand:hover {
+  opacity: 0.8;
+}
+.ps-nav a[aria-current],
+.ps-menu a[aria-current] {
+  color: var(--ps-blue);
+  font-weight: 600;
+}
+/* «Инструменты»: a dropdown in the nav, a group in the phone menu. */
+.ps-tooldrop {
+  position: relative;
+}
+.ps-tooldrop-trigger {
+  gap: 6px;
+  cursor: pointer;
+}
+.ps-tooldrop-trigger::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  margin-left: 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 0.18s;
+}
+.ps-tooldrop-trigger[aria-expanded='true']::after {
+  transform: translateY(1px) rotate(225deg);
+}
+.ps-tooldrop.is-nav .ps-tooldrop-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 288px;
+  padding: 6px;
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px oklch(20% 0.02 255 / 0.12);
+}
+.ps-tooldrop.is-nav .ps-tooldrop-menu a {
+  color: var(--ps-ink);
+}
+.ps-tooldrop-menu[hidden] {
+  display: none !important;
+}
+.ps-tooldrop.is-menu .ps-tooldrop-trigger {
+  justify-content: space-between;
+}
+.ps-tooldrop.is-menu .ps-tooldrop-menu {
+  display: flex;
+  flex-direction: column;
+  padding-left: 12px;
 }
 
 /* footer */

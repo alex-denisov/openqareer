@@ -14,10 +14,6 @@
   gap: 8px;
   height: 26px;
 }
-.rl-crumbs {
-  padding-top: 24px;
-  margin-bottom: 0;
-}
 .rl-page h2 {
   font-size: clamp(28px, 3.2vw, 40px);
   line-height: 1.12;

@@ -17,34 +17,70 @@ import {
 } from './prerender-career-shell';
 
 const authManifest = {
-  'index.html': { file: 'assets/app.js', dynamicImports: ['module-key', 'landing-key', 'auth-key', 'resume-key', 'relocation-key', 'docs-key', 'calc-key'] },
-  'resume-key': { name: 'resumeBuilderRoute', file: 'assets/resume.js', css: ['assets/resume.css'] },
+  'index.html': {
+    file: 'assets/app.js',
+    dynamicImports: [
+      'module-key',
+      'landing-key',
+      'auth-key',
+      'resume-key',
+      'relocation-key',
+      'docs-key',
+      'calc-key',
+    ],
+  },
+  'resume-key': {
+    name: 'resumeBuilderRoute',
+    file: 'assets/resume.js',
+    css: ['assets/resume.css'],
+  },
   'docs-key': { name: 'publicDocsRoute', file: 'assets/docs.js', css: ['assets/docs.css'] },
-  'relocation-key': { name: 'relocationRoute', file: 'assets/relocation.js', css: ['assets/relocation.css'] },
+  'relocation-key': {
+    name: 'relocationRoute',
+    file: 'assets/relocation.js',
+    css: ['assets/relocation.css'],
+  },
   'calc-key': { name: 'salaryCalculatorRoute', file: 'assets/calc.js', css: ['assets/calc.css'] },
   'module-key': { name: 'AuthPages', file: 'assets/AuthPages-from-build.js' },
-  'landing-key': { name: 'landing', file: 'assets/landing-from-build.js', css: ['assets/landing-from-build.css'] },
-  'auth-key': { name: 'auth', file: 'assets/auth-from-build.js', css: ['assets/auth-from-build.css'] },
+  'landing-key': {
+    name: 'landing',
+    file: 'assets/landing-from-build.js',
+    css: ['assets/landing-from-build.css'],
+  },
+  'auth-key': {
+    name: 'auth',
+    file: 'assets/auth-from-build.js',
+    css: ['assets/auth-from-build.css'],
+  },
 };
 
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
 describe('production career shell prerender', () => {
   it('escapes separate share copy and defaults other pages to their full description', () => {
-    const template = '<head><title>old</title><meta name="description" content="old"><meta property="og:description" content="old"><meta name="twitter:description" content="old"></head>';
-    const page = { path: '/tools/country-fit', title: 'Tax', description: 'Full & "verified" <description>' };
+    const template =
+      '<head><title>old</title><meta name="description" content="old"><meta property="og:description" content="old"><meta name="twitter:description" content="old"></head>';
+    const page = {
+      path: '/tools/country-fit',
+      title: 'Tax',
+      description: 'Full & "verified" <description>',
+    };
     const defaultHead = pageHead(template, page);
-    expect(defaultHead.match(/Full &amp; &quot;verified&quot; &lt;description&gt;/gu)).toHaveLength(3);
+    expect(defaultHead.match(/Full &amp; &quot;verified&quot; &lt;description&gt;/gu)).toHaveLength(
+      3,
+    );
     const shared = pageHead(template, { ...page, shareDescription: 'Short & "safe" <share>' });
-    expect(shared).toContain('name="description" content="Full &amp; &quot;verified&quot; &lt;description&gt;"');
+    expect(shared).toContain(
+      'name="description" content="Full &amp; &quot;verified&quot; &lt;description&gt;"',
+    );
     expect(shared.match(/Short &amp; &quot;safe&quot; &lt;share&gt;/gu)).toHaveLength(2);
     expect(shared).not.toContain('<share>');
   });
@@ -53,10 +89,7 @@ describe('production career shell prerender', () => {
     temporaryDirectories.push(directory);
     const indexPath = join(directory, 'index.html');
     const adminPath = join(directory, 'admin.html');
-    writeFileSync(
-      indexPath,
-      '<!doctype html><html><body><div id="root"></div></body></html>',
-    );
+    writeFileSync(indexPath, '<!doctype html><html><body><div id="root"></div></body></html>');
 
     await prerenderShells(indexPath, adminPath);
 
@@ -81,51 +114,86 @@ describe('production career shell prerender', () => {
     const directory = await mkdtemp(join(tmpdir(), 'openqareer-auth-prerender-'));
     temporaryDirectories.push(directory);
     const entry = join(directory, 'index.html');
-    writeFileSync(entry, '<!doctype html><html><head><link rel="canonical" href="https://openqareer.com/"><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>');
+    writeFileSync(
+      entry,
+      '<!doctype html><html><head><link rel="canonical" href="https://openqareer.com/"><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>',
+    );
     await prerenderShells(entry, join(directory, 'admin.html'), directory, authManifest);
     expect(readFileSync(entry, 'utf8')).not.toContain('AuthPages-from-build.js');
-    for (const [file, title] of [['login.html', 'Вход в кабинет'], ['signup.html', 'Создать аккаунт']]) {
+    for (const [file, title] of [
+      ['login.html', 'Вход в кабинет'],
+      ['signup.html', 'Создать аккаунт'],
+    ]) {
       const html = readFileSync(join(directory, file), 'utf8');
       expect(html).toContain(`<h1>${title}</h1>`);
-      expect(html).toContain('<div class="ps ps-auth"><main class="auth-page-container">');
+      // B574: the site header and footer frame the form.
+      expect(html).toContain('<div class="ps ps-auth"><header class="ps-top">');
+      expect(html).toContain('</header><main class="auth-page-container">');
+      expect(html).toContain('<footer class="ps-footer">');
       expect(html).toContain('class="auth-card" inert=""');
       expect(html).toContain('role="status">Загружаем форму…');
       expect(html).toContain('content="noindex, follow"');
       expect(html).toContain('src="/assets/app.js"');
-      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/AuthPages-from-build.js">');
-      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/landing-from-build.js">');
-      expect(html).toContain('<link rel="modulepreload" crossorigin href="/assets/auth-from-build.js">');
+      expect(html).toContain(
+        '<link rel="modulepreload" crossorigin href="/assets/AuthPages-from-build.js">',
+      );
+      expect(html).toContain(
+        '<link rel="modulepreload" crossorigin href="/assets/landing-from-build.js">',
+      );
+      expect(html).toContain(
+        '<link rel="modulepreload" crossorigin href="/assets/auth-from-build.js">',
+      );
       expect(html.match(/rel="modulepreload"/gu)).toHaveLength(3);
-      expect(html).toContain('<link rel="preload" as="style" crossorigin href="/assets/landing-from-build.css">');
-      expect(html).toContain('<link rel="preload" as="style" crossorigin href="/assets/auth-from-build.css">');
+      expect(html).toContain(
+        '<link rel="preload" as="style" crossorigin href="/assets/landing-from-build.css">',
+      );
+      expect(html).toContain(
+        '<link rel="preload" as="style" crossorigin href="/assets/auth-from-build.css">',
+      );
       const stylesheet = html.match(/href="(\/assets\/auth-first-paint-[a-f0-9]+\.css)"/u)?.[1];
       expect(stylesheet).toBeDefined();
       const styles = readFileSync(join(directory, stylesheet!), 'utf8');
       expect(styles).toContain('.auth-page-container');
       expect(Buffer.byteLength(styles)).toBeLessThanOrEqual(20_000);
-      for (const input of html.match(/<input\b[^>]*>/gu) ?? []) expect(input).toContain('disabled=""');
+      for (const input of html.match(/<input\b[^>]*>/gu) ?? [])
+        expect(input).toContain('disabled=""');
       expect(Buffer.byteLength(html)).toBeLessThanOrEqual(20_000);
     }
   });
 
   it('rejects manifest paths that could escape the same-origin asset or HTML boundary', () => {
     for (const file of [
-      'https://example.test/auth.js', '//example.test/auth.js', 'javascript:alert(1)',
-      'assets/../auth.js', 'assets/%2e%2e/auth.js', 'assets/auth.js?url=external',
-      'assets/auth.js" onload="alert(1)', 'assets/auth.css',
+      'https://example.test/auth.js',
+      '//example.test/auth.js',
+      'javascript:alert(1)',
+      'assets/../auth.js',
+      'assets/%2e%2e/auth.js',
+      'assets/auth.js?url=external',
+      'assets/auth.js" onload="alert(1)',
+      'assets/auth.css',
     ]) {
-      expect(() => authResourceHints({
-        ...authManifest, 'module-key': { ...authManifest['module-key'], file },
-      })).toThrow('Invalid auth preload asset path');
+      expect(() =>
+        authResourceHints({
+          ...authManifest,
+          'module-key': { ...authManifest['module-key'], file },
+        }),
+      ).toThrow('Invalid auth preload asset path');
     }
-    expect(() => authResourceHints({
-      ...authManifest,
-      'auth-key': { name: 'auth', file: 'assets/auth.js', css: ['//example.test/auth.css'] },
-    })).toThrow('Invalid auth preload asset path');
-    expect(() => authResourceHints({
-      ...authManifest, 'auth-key': { name: 'auth', file: 'assets/auth.js' },
-    })).toThrow('Missing emitted auth stylesheet');
-    expect(() => authResourceHints({ ...authManifest, 'index.html': { file: 'assets/app.js' } })).toThrow('Missing entry build graph');
+    expect(() =>
+      authResourceHints({
+        ...authManifest,
+        'auth-key': { name: 'auth', file: 'assets/auth.js', css: ['//example.test/auth.css'] },
+      }),
+    ).toThrow('Invalid auth preload asset path');
+    expect(() =>
+      authResourceHints({
+        ...authManifest,
+        'auth-key': { name: 'auth', file: 'assets/auth.js' },
+      }),
+    ).toThrow('Missing emitted auth stylesheet');
+    expect(() =>
+      authResourceHints({ ...authManifest, 'index.html': { file: 'assets/app.js' } }),
+    ).toThrow('Missing entry build graph');
   });
 
   it('links a tool page chunk stylesheet, off the first-paint sheet', () => {
@@ -137,10 +205,15 @@ describe('production career shell prerender', () => {
       '<link rel="stylesheet" crossorigin href="/assets/r-1.css">',
     );
     expect(pageStylesheets(undefined, 'resumeBuilderRoute')).toBe('');
-    expect(() => pageStylesheets(manifest, 'relocationRoute')).toThrow('Expected one emitted page chunk');
+    expect(() => pageStylesheets(manifest, 'relocationRoute')).toThrow(
+      'Expected one emitted page chunk',
+    );
     expect(() =>
       pageStylesheets(
-        { ...manifest, 'page-key': { ...manifest['page-key'], css: ['assets/x.css" onload="bad'] } },
+        {
+          ...manifest,
+          'page-key': { ...manifest['page-key'], css: ['assets/x.css" onload="bad'] },
+        },
         'resumeBuilderRoute',
       ),
     ).toThrow('Invalid page stylesheet path');
@@ -148,10 +221,18 @@ describe('production career shell prerender', () => {
 
   it('validates CSS proxy module URLs as JavaScript assets before emitting hints', () => {
     for (const key of ['landing-key', 'auth-key'] as const) {
-      for (const file of ['//example.test/proxy.js', 'assets/../proxy.js', 'assets/proxy.css', 'assets/proxy.js" onload="bad']) {
-        expect(() => authResourceHints({
-          ...authManifest, [key]: { ...authManifest[key], file },
-        })).toThrow('Invalid auth preload asset path');
+      for (const file of [
+        '//example.test/proxy.js',
+        'assets/../proxy.js',
+        'assets/proxy.css',
+        'assets/proxy.js" onload="bad',
+      ]) {
+        expect(() =>
+          authResourceHints({
+            ...authManifest,
+            [key]: { ...authManifest[key], file },
+          }),
+        ).toThrow('Invalid auth preload asset path');
       }
     }
   });
@@ -183,10 +264,7 @@ describe('production career shell prerender', () => {
     temporaryDirectories.push(directory);
     const indexPath = join(directory, 'index.html');
     const adminPath = join(directory, 'admin.html');
-    writeFileSync(
-      indexPath,
-      '<!doctype html><html><body><div id="root"></div></body></html>',
-    );
+    writeFileSync(indexPath, '<!doctype html><html><body><div id="root"></div></body></html>');
 
     await prerenderShells(indexPath, adminPath);
 
@@ -234,10 +312,7 @@ describe('production career shell prerender', () => {
     temporaryDirectories.push(directory);
     const indexPath = join(directory, 'index.html');
     const adminPath = join(directory, 'admin.html');
-    writeFileSync(
-      indexPath,
-      '<!doctype html><html><body><div id="root"></div></body></html>',
-    );
+    writeFileSync(indexPath, '<!doctype html><html><body><div id="root"></div></body></html>');
 
     await prerenderShells(indexPath, adminPath);
 
@@ -249,7 +324,7 @@ describe('production career shell prerender', () => {
    * B209 — правило владельца про адреса без транслита проверяет сборка, а не
    * память агента: страница с транслитом в пути не доедет до продакшена.
    */
-  it('refuses to publish a sitemap URL that breaks the owner\'s URL policy', () => {
+  it("refuses to publish a sitemap URL that breaks the owner's URL policy", () => {
     for (const url of sitemapUrls(buildSitemap())) {
       expect(publicPathViolation(new URL(url).pathname)).toBeNull();
     }
@@ -259,10 +334,10 @@ describe('production career shell prerender', () => {
   });
 });
 
-
 describe('Country Fit route document budget', () => {
   it('reuses the exact brand asset without dropping copy or whitespace inside text', () => {
-    const html = '<!-- build note --><header><svg class="brand-lockup-sign" width="26"><path d="M0 0"/></svg></header>\n <p>Две страны и два сценария</p>';
+    const html =
+      '<!-- build note --><header><svg class="brand-lockup-sign" width="26"><path d="M0 0"/></svg></header>\n <p>Две страны и два сценария</p>';
     const compact = compactCountryFitDocument(html);
     expect(compact).toContain('src="/favicon.svg" width="26" height="26" alt=""');
     expect(compact).toContain('<p>Две страны и два сценария</p>');

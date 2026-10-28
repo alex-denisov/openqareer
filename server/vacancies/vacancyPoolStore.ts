@@ -1,3 +1,4 @@
+import type { CatalogChip, ChipCounts } from './catalogChips';
 import type { UnifiedVacancy, VacancyCluster, VacancySourceConfig } from '../domain/unifiedVacancy';
 import type { ClusterRepresentative, VacancyClusterLookup } from './vacancyDeduplicator';
 import type { SourceObservations } from './sourceHealthVerdict';
@@ -63,6 +64,13 @@ export interface VacancyLink {
  * of a request rather than the size of the pool. Before that the store only
  * made the pool outlive the process (B164).
  */
+export interface CatalogChipQuery {
+  readonly listKey: string;
+  readonly chip: CatalogChip;
+  readonly limit: number;
+  readonly after?: CatalogCursor;
+}
+
 export interface VacancyPoolStore {
   /** Непохороненные записи; с окном — только свежие (вход сведения кластеров). */
   loadVacancies(window?: FreshnessWindow): UnifiedVacancy[];
@@ -182,6 +190,10 @@ export interface VacancyPoolStore {
   getCatalogEntry?(key: string): CatalogEntryRow | undefined;
   /** B569: salary facts of one public list, written by maintenance; a primary-key read. */
   getCatalogSalaryStats?(query: { place: string; role?: string }): SalaryStats | undefined;
+  /** B574: chip counts of one list (`place`, `place|role`, `''` for the whole catalog). */
+  getCatalogChipCounts?(listKey: string): ChipCounts;
+  /** B574: one page of a chip list, read by key range from the maintenance tables. */
+  loadCatalogChipPage?(query: CatalogChipQuery): CatalogEntriesPage;
   getCluster?(clusterId: string): VacancyCluster | undefined;
   /** Действующие кластеры одного работодателя — экран компании, по индексу ключей. */
   loadClustersByCompany?(companyName: string, limit: number): VacancyCluster[];

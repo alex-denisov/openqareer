@@ -2,6 +2,7 @@ import React from 'react';
 import { List } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import {
+  BRAND_LABEL,
   FOOTER_ABOUT,
   MENU_ID,
   MENU_LABEL,
@@ -15,6 +16,7 @@ import {
 } from '../../../shared/publicSiteChrome';
 import { SiteLink } from './SiteLink';
 import { preloadAuthPages } from './authPagesLoader';
+import { PublicToolsMenu, openInShell } from './PublicToolsMenu';
 
 export interface PublicChromeProps {
   readonly onNavigate: (path: string) => void;
@@ -55,30 +57,26 @@ function ChromeAnchor({
   );
 }
 
+/**
+ * B574: both pairs of actions are rendered; `oq-auth-1.js` marks a signed-in
+ * visitor on `<html>` before the first paint and CSS shows one pair, so the
+ * header never redraws «Войти» into «Открыть кабинет» after the session check.
+ */
 function HeaderActions({
   onNavigate,
   signedIn,
   isAdmin,
 }: Pick<PublicChromeProps, 'onNavigate' | 'signedIn' | 'isAdmin'>) {
-  if (signedIn) {
-    return (
-      <>
-        {isAdmin ? (
-          <SiteLink to="/admin" className="ps-btn is-ghost" onNavigate={onNavigate}>
-            Администрирование
-          </SiteLink>
-        ) : null}
-        <SiteLink to="/app" className="ps-btn is-cta" onNavigate={onNavigate}>
-          Открыть кабинет
-        </SiteLink>
-      </>
-    );
-  }
   return (
     <>
+      {signedIn && isAdmin ? (
+        <SiteLink to="/admin" className="ps-btn is-ghost" onNavigate={onNavigate}>
+          Администрирование
+        </SiteLink>
+      ) : null}
       <SiteLink
         to="/login"
-        className="ps-btn is-login"
+        className="ps-btn is-login ps-guest"
         onNavigate={onNavigate}
         onWarm={preloadAuthPages}
       >
@@ -86,11 +84,14 @@ function HeaderActions({
       </SiteLink>
       <SiteLink
         to="/signup"
-        className="ps-btn is-cta"
+        className="ps-btn is-cta ps-guest"
         onNavigate={onNavigate}
         onWarm={preloadAuthPages}
       >
         Найти работу
+      </SiteLink>
+      <SiteLink to="/app" className="ps-btn is-cta ps-member" onNavigate={onNavigate}>
+        Открыть кабинет
       </SiteLink>
     </>
   );
@@ -101,7 +102,7 @@ function MenuLogin({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>) {
   return (
     <SiteLink
       to="/login"
-      className="ps-menu-login"
+      className="ps-menu-login ps-guest"
       onNavigate={onNavigate}
       onWarm={preloadAuthPages}
     >
@@ -110,31 +111,57 @@ function MenuLogin({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>) {
   );
 }
 
-/** B569: header shared by every public page (mockup `header()`), with a section menu on phones. */
-export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicChromeProps) {
-  const [open, setOpen] = React.useState(false);
+function NavLinks({
+  where,
+  onNavigate,
+  current,
+}: Pick<PublicChromeProps, 'onNavigate' | 'current'> & { readonly where: 'nav' | 'menu' }) {
+  return (
+    <>
+      {PUBLIC_NAV.map((item) =>
+        item.id === 'tools' ? (
+          <PublicToolsMenu key={item.id} where={where} current={current === 'tools'} />
+        ) : (
+          <ChromeAnchor
+            key={item.id}
+            link={item}
+            onNavigate={onNavigate}
+            current={item.id === current}
+          />
+        ),
+      )}
+    </>
+  );
+}
+
+function useMenu() {
+  const [open, setOpen] = React.useState(() => openInShell(MENU_ID));
   const button = React.useRef<HTMLButtonElement>(null);
   React.useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || document.querySelector('.ps-tooldrop-menu:not([hidden])'))
+        return;
       setOpen(false);
       button.current?.focus();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
-  const links = PUBLIC_NAV.map((item) => (
-    <ChromeAnchor key={item.id} link={item} onNavigate={onNavigate} current={item.id === current} />
-  ));
+  return { open, setOpen, button };
+}
+
+/** B569: header shared by every public page (mockup `header()`), with a section menu on phones. */
+export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicChromeProps) {
+  const { open, setOpen, button } = useMenu();
   return (
     <header className="ps-top">
       <div className="ps-wrap ps-top-row">
-        <SiteLink to="/" className="ps-brand" onNavigate={onNavigate} aria-label="openqareer">
+        <SiteLink to="/" className="ps-brand" onNavigate={onNavigate} aria-label={BRAND_LABEL}>
           <BrandMark variant="lockup" size={26} />
         </SiteLink>
         <nav className="ps-nav" aria-label="Разделы">
-          {links}
+          <NavLinks where="nav" onNavigate={onNavigate} current={current} />
         </nav>
         <div className="ps-top-actions">
           <HeaderActions onNavigate={onNavigate} signedIn={signedIn} isAdmin={isAdmin} />
@@ -153,8 +180,10 @@ export function PublicHeader({ onNavigate, signedIn, isAdmin, current }: PublicC
         </div>
       </div>
       <nav className="ps-menu" id={MENU_ID} aria-label="Разделы" hidden={!open}>
-        {links}
-        {signedIn ? null : <MenuLogin onNavigate={onNavigate} />}
+        {/* Drawn when opened: server-rendered pages copy the nav in with
+            oq-chrome-2.js, and /salaries keeps to a 20 KB budget. */}
+        {open ? <NavLinks where="menu" onNavigate={onNavigate} current={current} /> : null}
+        <MenuLogin onNavigate={onNavigate} />
       </nav>
     </header>
   );
@@ -188,7 +217,7 @@ export function PublicFooter({
       <footer className="ps-footer">
         <div className="ps-wrap ps-footer-grid">
           <div>
-            <SiteLink to="/" className="ps-brand" onNavigate={onNavigate} aria-label="openqareer">
+            <SiteLink to="/" className="ps-brand" onNavigate={onNavigate} aria-label={BRAND_LABEL}>
               <BrandMark variant="lockup" size={26} />
             </SiteLink>
             <p className="ps-footer-about">{FOOTER_ABOUT}</p>

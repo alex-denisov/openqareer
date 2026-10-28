@@ -1,5 +1,6 @@
 /** B569: names and figures shared by the parts of a catalog list page. */
 import { cityGenitive, cityPrepositional, roleDative, roleGenitive } from './catalogListingForms';
+import { RELOCATION_PLACE } from './catalogChips';
 import { escapeHtml } from './catalogHtml';
 import { russianRoleLabel } from './vacancyCatalogSearch';
 import type { CatalogPage } from './vacancyCatalogPage';
@@ -28,7 +29,7 @@ export interface Names {
 
 export function namesOf(page: CatalogPage): Names {
   const listing = page.listing;
-  if (!listing) return {};
+  if (!listing || listing.place === RELOCATION_PLACE) return {};
   return {
     placeName: listing.placeLabel,
     ...(cityGenitive(listing.place) ? { placeGen: cityGenitive(listing.place) } : {}),

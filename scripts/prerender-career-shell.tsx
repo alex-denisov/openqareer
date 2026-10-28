@@ -410,7 +410,7 @@ async function writeSalaryTemplate(html: string, distDirectory: string): Promise
     `${distDirectory}/salary-market.html`,
     withPageStyles(html, `<link rel="stylesheet" href="${stylesheet}">`)
       .replace('/assets/oq-analytics-2.js', '/assets/oq-analytics-3.js')
-      .replace('</body>', '<script src="/assets/oq-chrome-1.js" defer></script></body>')
+      .replace('</body>', '<script src="/assets/oq-chrome-2.js" defer></script></body>')
       .replace(
         EMPTY_ROOT,
         renderToStaticMarkup(
@@ -418,7 +418,12 @@ async function writeSalaryTemplate(html: string, distDirectory: string): Promise
             <a className="ps-skip" href="#main">
               К содержимому
             </a>
-            <PublicHeader onNavigate={() => {}} onLanding={false} signedIn={false} />
+            <PublicHeader
+              onNavigate={() => {}}
+              onLanding={false}
+              signedIn={false}
+              current="tools"
+            />
             {'%%SALARY_CONTENT%%'}
             <PublicFooter onNavigate={() => {}} onLanding={false} signedIn={false} planBar />
           </div>,
@@ -525,7 +530,7 @@ async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string>
   // landing styles into every public document's initial CSS bundle.
   const source = (
     await Promise.all(
-      ['landing.css', 'auth.css'].map((file) =>
+      ['landing.css', 'auth.css', 'authSite.css'].map((file) =>
         readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
       ),
     )
@@ -562,11 +567,13 @@ async function writeAuthPages(html: string, distDirectory: string, hints: string
         bootstrapRoot(
           renderToStaticMarkup(
             <div className="ps ps-auth">
+              <PublicHeader onNavigate={() => {}} signedIn={false} />
               {page.path === '/login' ? (
                 <LoginPage onNavigate={() => {}} bootstrapPending />
               ) : (
                 <SignupPage onNavigate={() => {}} bootstrapPending />
               )}
+              <PublicFooter onNavigate={() => {}} signedIn={false} />
             </div>,
           ),
         ),
