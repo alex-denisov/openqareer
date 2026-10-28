@@ -32,6 +32,8 @@ export const CONFIRMED_THRESHOLD = 3;
 
 const HR_WORDS = /(?<!\p{L})(?:hr|hrbp|recruit\p{L}*|talent|hiring|рекрут\p{L}*|подбор\p{L}*|найм\p{L}*|кадр\p{L}*|персонал\p{L}*)(?!\p{L})/iu;
 const EMPLOYER_MARK = /(?<!\p{L})(?:at|@|в компании|в)\s+([\p{Lu}0-9][\p{L}0-9&.' -]{2,40}?)(?=\s*(?:[,|·\n(]|$|\s-\s))/gu;
+/** Заголовок опыта в тексте LinkedIn от Exa: «### Должность - [Компания](ссылка)». */
+const EXPERIENCE_HEADING = /^#{2,4}[^\n[]{0,120}\s-\s\[([^\]\n]{3,60})\]\(/gmu;
 const MIN_TOKEN = 3;
 
 function fold(value: string): string {
@@ -46,8 +48,8 @@ function containsWord(text: string, token: string): boolean {
 
 /** Работодатели из текста профиля: «Recruiter at Acme», «HR в компании Ромашка». */
 export function employersFromText(text: string): string[] {
-  const found = [...text.matchAll(EMPLOYER_MARK)].map((match) => match[1]!.trim());
-  return [...new Set(found)].filter((name) => fold(name).length >= MIN_TOKEN).slice(0, 10);
+  const found = [...text.matchAll(EMPLOYER_MARK), ...text.matchAll(EXPERIENCE_HEADING)].map((match) => match[1]!.trim());
+  return [...new Set(found)].filter((name) => fold(name).length >= MIN_TOKEN).slice(0, 15);
 }
 
 /** Связь дают только подтверждённые каналы: догадка не может подтвердить другую догадку. */

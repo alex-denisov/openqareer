@@ -10,6 +10,12 @@ describe('identity graph', () => {
     ]);
   });
 
+  it('reads employers from the experience headings of a LinkedIn page', () => {
+    const text = '### Sr. Manager - [iRhythm Technologies, Inc.](https://www.linkedin.com/company/irhythm) (Current)\n'
+      + '### Manager, Software Engineering - [Availity](https://www.linkedin.com/company/availity)';
+    expect(employersFromText(text)).toEqual(expect.arrayContaining(['iRhythm Technologies, Inc.', 'Availity']));
+  });
+
   it('links an account through a past employer, not only the current one', () => {
     const identity = buildIdentity({ fullName: 'Anna Smith', companyName: 'Optilab', seedTexts: ['Talent lead at Optilab\nRecruiter at Rosseti Digital'] });
     expect(linkEvidence(identity, 'Anna Smith. Подбор в Rosseti Digital').reasons).toEqual(['employer', 'profession']);
