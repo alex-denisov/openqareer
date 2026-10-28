@@ -8,6 +8,10 @@ export interface ProviderUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Сколько входа модель прочла из кэша; есть только у провайдеров, которые это сообщают (B580). */
+  cachedInputTokens?: number;
+  /** Цена хода по счёту провайдера, USD; OpenRouter присылает её в `usage.cost`. */
+  costUsd?: number;
 }
 
 export interface CoachProviderResult {

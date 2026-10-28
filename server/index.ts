@@ -12,7 +12,11 @@ import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
-import type { TimedRoutingAttempt } from './providers/resilientCoachProvider';
+import type {
+  ResilientCoachProviderOptions,
+  TimedRoutingAttempt,
+} from './providers/resilientCoachProvider';
+import type { ProviderUsage } from './providers/coachProvider';
 import { StructuredStageCoachProvider } from './providers/structuredStageCoachProvider';
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import { buildCoachChainProvider } from './providers/modelChains';
@@ -73,7 +77,7 @@ await authService.seedAccounts(config.seedAccounts, candidateStore);
 // Цепочка консультанта названа в коде (B580, решение владельца 29.10):
 // deepseek-v4.1-flash-1017 → deepseek-v4.1-flash → luna. Обоим классам данных — одна цепочка;
 // очередь из `OPENQAREER_PERSONAL_AI_*` и `OPENQAREER_SYNTHETIC_AI_*` консультант не читает.
-const buildCoachQueue = (onAttempts: (attempts: readonly TimedRoutingAttempt[]) => void) =>
+const buildCoachQueue = (onAttempts: ResilientCoachProviderOptions['onAttempts']) =>
   buildCoachChainProvider({
     credentials: config.providerCredentials ?? {},
     onAttempts,
@@ -87,11 +91,13 @@ const buildCoachQueue = (onAttempts: (attempts: readonly TimedRoutingAttempt[]) 
   });
 
 // Время каждой ступени хода — в журнал сервера: без него 140 с хода не
-// раскладывались по ступеням (28.10). Только провайдер, модель, статус и мс.
+// раскладывались по ступеням (28.10). Только провайдер, модель, статус и мс;
+// с B580 — ещё токены и цена ответившей ступени, без содержания хода.
 const logRouteAttempts =
-  (dataClass: 'personal' | 'synthetic') => (attempts: readonly TimedRoutingAttempt[]) =>
+  (dataClass: 'personal' | 'synthetic') =>
+  (attempts: readonly TimedRoutingAttempt[], usage?: ProviderUsage) =>
     process.stdout.write(
-      `${JSON.stringify({ level: 30, time: Date.now(), msg: 'coach-route-attempts', dataClass, attempts })}\n`,
+      `${JSON.stringify({ level: 30, time: Date.now(), msg: 'coach-route-attempts', dataClass, attempts, ...(usage ? { usage } : {}) })}\n`,
     );
 const personalDataProvider = buildCoachQueue(logRouteAttempts('personal'));
 const syntheticDataProvider = buildCoachQueue(logRouteAttempts('synthetic'));

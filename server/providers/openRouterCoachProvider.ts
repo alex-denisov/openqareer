@@ -8,9 +8,9 @@ import {
 import {
   COACH_TURN_JSON_SCHEMA,
   coachProviderTurnResultSchema as coachTurnResultSchema,
-  serializeCoachInput,
   type CoachTurnInput,
 } from '../domain/coach';
+import { serializeCoachInput } from '../domain/coachInputSerialization';
 import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
 import { outputBudgetForRole } from './openAICoachProvider';
 import {
@@ -155,11 +155,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
         provider: 'openrouter',
         model: response.model,
         responseId: response.id,
-        usage: {
-          inputTokens: response.usage?.prompt_tokens ?? 0,
-          outputTokens: response.usage?.completion_tokens ?? 0,
-          totalTokens: response.usage?.total_tokens ?? 0,
-        },
+        usage: usageOf(response.usage),
       };
     } catch (error) {
       if (error instanceof CoachProviderError) {
@@ -208,6 +204,20 @@ export class OpenRouterCoachProvider implements CoachProvider {
       throw new CoachProviderError('provider_unavailable', 503, true);
     }
   }
+}
+
+/** OpenRouter кладёт в `usage` ещё кэш и цену — поля вне типов OpenAI SDK. */
+type OpenRouterUsage = OpenAI.Completions.CompletionUsage & { cost?: number };
+
+function usageOf(usage: OpenRouterUsage | undefined) {
+  const cached = usage?.prompt_tokens_details?.cached_tokens;
+  return {
+    inputTokens: usage?.prompt_tokens ?? 0,
+    outputTokens: usage?.completion_tokens ?? 0,
+    totalTokens: usage?.total_tokens ?? 0,
+    ...(typeof cached === 'number' ? { cachedInputTokens: cached } : {}),
+    ...(typeof usage?.cost === 'number' ? { costUsd: usage.cost } : {}),
+  };
 }
 
 function extractJsonPayload(text: string): string {
