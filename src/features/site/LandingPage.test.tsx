@@ -132,7 +132,7 @@ describe('LandingPage (B569, mockup 01-home)', () => {
   it('renders the console link for everyone, hidden until oq-auth-2.js marks an admin (B575)', () => {
     for (const html of [render(), render(candidate), render(admin)]) {
       expect(html).toMatch(
-        /class="ps-btn is-ghost ps-admin"[^>]*href="\/admin"|href="\/admin"[^>]*class="ps-btn is-ghost ps-admin"/,
+        /class="ps-btn is-cta ps-admin"[^>]*href="\/admin"|href="\/admin"[^>]*class="ps-btn is-cta ps-admin"/,
       );
     }
   });
