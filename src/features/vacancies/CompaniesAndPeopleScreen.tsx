@@ -54,6 +54,8 @@ interface CompaniesAndPeopleScreenProps {
   readonly initialSearch?: string;
   /** The consultant button of the 390 company push (mockup 13 `mv=main`). */
   readonly onOpenExpert?: () => void;
+  /** The consultant follows the selected company; `null` when the tab is left (mockup 13). */
+  readonly onCompanyContext?: (company: { key: string; name: string } | null) => void;
 }
 
 interface CompanyListState {
@@ -651,6 +653,20 @@ function CompanyPageError({
   );
 }
 
+function useCompanyConsultantContext(
+  selected: CandidateCompanyOpportunity | null,
+  onCompanyContext: CompaniesAndPeopleScreenProps['onCompanyContext'],
+) {
+  const key = selected?.key ?? null;
+  const name = selected?.name ?? null;
+  const report = useRef(onCompanyContext);
+  report.current = onCompanyContext;
+  useEffect(() => {
+    report.current?.(key && name ? { key, name } : null);
+  }, [key, name]);
+  useEffect(() => () => report.current?.(null), []);
+}
+
 export function CompaniesAndPeopleScreen({
   onOpenConnections,
   onOpenLetter,
@@ -658,9 +674,11 @@ export function CompaniesAndPeopleScreen({
   onOpenCompanyVacancies,
   initialSearch,
   onOpenExpert,
+  onCompanyContext,
 }: CompaniesAndPeopleScreenProps) {
   usePageTitleOverride('Компании и люди');
   const model = useCompaniesAndPeopleModel(initialSearch, onOpenCompanyVacancies);
+  useCompanyConsultantContext(model.selected, onCompanyContext);
   return (
     <PushConsultantContext.Provider value={onOpenExpert ?? null}>
       <CompaniesAndPeopleView

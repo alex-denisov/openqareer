@@ -183,6 +183,8 @@ export function CareerExpertPanel({
     }
   }
   const contextKey = JSON.stringify([stage, subject]);
+  // Макет 13: на вкладке «Компании и люди» консультант подписан ею, а не «Вакансии».
+  const sectionTitle = subject?.kind === 'company' ? 'Компании и люди' : STAGE_TITLE[stage];
   const currentContext = useRef(contextKey);
   currentContext.current = contextKey;
   const previousContext = useRef(contextKey);
@@ -447,12 +449,12 @@ export function CareerExpertPanel({
       role={overlay && !onExpand ? 'dialog' : 'complementary'}
       aria-modal={overlay && !onExpand ? true : undefined}
       data-mobile-expanded={mobileExpanded}
-      aria-label={`Консультант · ${intakeMode ? 'Старт' : STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
+      aria-label={`Консультант · ${intakeMode ? 'Старт' : sectionTitle}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
     >
       {collapsed ? (
         <ConsultantStripButton
           count={loadingSnapshot ? 0 : proposalCount}
-          stageTitle={intakeMode ? 'Старт' : STAGE_TITLE[stage]}
+          stageTitle={intakeMode ? 'Старт' : sectionTitle}
           onExpand={onExpand}
         />
       ) : null}
@@ -463,7 +465,7 @@ export function CareerExpertPanel({
           </span>
           <div>
             <strong>Консультант</strong>
-            <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
+            <small>{intakeMode ? 'Старт' : sectionTitle}</small>
           </div>
         </div>
         <div className="career-expert-panel-controls">
@@ -762,7 +764,7 @@ export function CareerExpertPanel({
                 if (event.target.value.trim()) setQuickRepliesDismissed(true);
                 if (!event.target.value.trim()) setVoiceDraft(false);
               }}
-              placeholder="Спросите по этому разделу"
+              placeholder={subject?.kind === 'company' ? 'Спросите про компании и людей' : 'Спросите по этому разделу'}
               rows={1}
               disabled={sending || voiceTextLocked}
             />

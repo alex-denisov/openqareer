@@ -1,5 +1,6 @@
 import { buildAdaptationContext } from './adaptationCoach';
 import type { CoachTurnSubject } from '../domain/coach';
+import { candidateCompanyCoachContext } from './candidateCompanyRoutes';
 import type { RouteDeps } from './deps';
 
 /**
@@ -26,7 +27,9 @@ async function buildVacancyContext(
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const memory = snapshot?.memory ?? [];
   const confirmedSkills = memory
-    .filter((m) => m.kind === 'fact' && (m.domain === 'skill' || m.confidence === 'candidate-confirmed'))
+    .filter(
+      (m) => m.kind === 'fact' && (m.domain === 'skill' || m.confidence === 'candidate-confirmed'),
+    )
     .map((m) => m.statement.trim().toLowerCase());
   const skillSet = new Set(confirmedSkills);
 
@@ -65,7 +68,7 @@ function buildApplicationContext(
   const lines: string[] = [];
   const vacancyTitle = app.vacancy?.title
     ? `${app.vacancy.title}${app.vacancy.company ? ` (${app.vacancy.company})` : ''}`
-    : app.clusterId ?? undefined;
+    : (app.clusterId ?? undefined);
   if (vacancyTitle) lines.push(`Вакансия: ${vacancyTitle}`);
   if (app.stage) lines.push(`Этап: ${app.stage}`);
   const dates: string[] = [];
@@ -115,6 +118,9 @@ export async function buildCoachSubjectContext(
   }
   if (subject.kind === 'application') {
     return buildApplicationContext(deps, candidateId, subject.id);
+  }
+  if (subject.kind === 'company') {
+    return candidateCompanyCoachContext(deps, candidateId, subject.id);
   }
   if (subject.kind === 'interview') {
     return buildInterviewContext(deps, candidateId, subject.id);
