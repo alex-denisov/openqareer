@@ -530,7 +530,7 @@ async function writeAuthFirstPaintStyles(distDirectory: string): Promise<string>
   // landing styles into every public document's initial CSS bundle.
   const source = (
     await Promise.all(
-      ['landing.css', 'auth.css'].map((file) =>
+      ['landing.css', 'auth.css', 'authSite.css'].map((file) =>
         readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
       ),
     )

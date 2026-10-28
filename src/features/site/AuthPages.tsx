@@ -444,3 +444,7 @@ export function SignupPage({
     </Container>
   );
 }
+
+// B574: the site frame ships in this module, which main.tsx awaits before
+// mounting an auth path, so no fallback frame is ever committed.
+export { default as AuthSiteFrame } from './AuthSiteFrame';

@@ -58,7 +58,9 @@ const CareerWorkspaceShell = lazy(async () => {
   return { default: module.CareerWorkspaceShell };
 });
 const LandingPage = lazy(loadLandingPage);
-const AuthSiteFrame = lazy(() => import('./features/site/AuthSiteFrame'));
+const AuthSiteFrame = lazy(() =>
+  loadAuthPages().then((module) => ({ default: module.AuthSiteFrame })),
+);
 const ResumeBuilderPage = lazy(() =>
   import('./features/site/resumeBuilder/resumeBuilderRoute').then((module) => ({
     default: module.ResumeBuilderPage,
@@ -546,6 +548,7 @@ export default function App() {
       });
   }
 
+  const ReadyAuthSiteFrame = startupAuthPages?.AuthSiteFrame ?? AuthSiteFrame;
   const renderAuthContent = () => {
     // Initial auth bootstrap has already awaited these modules and styles.
     // Render them directly so React.lazy cannot commit a fallback for one frame.
@@ -655,9 +658,9 @@ export default function App() {
             B574: and the site header and footer. */}
         <div className="ps ps-auth">
           <Suspense fallback={<AuthLoadingFallback />}>
-            <AuthSiteFrame onNavigate={navigate} signedIn={Boolean(state.session)}>
+            <ReadyAuthSiteFrame onNavigate={navigate} signedIn={Boolean(state.session)}>
               {renderAuthContent()}
-            </AuthSiteFrame>
+            </ReadyAuthSiteFrame>
           </Suspense>
         </div>
       </AppErrorBoundary>

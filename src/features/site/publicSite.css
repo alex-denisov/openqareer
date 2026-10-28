@@ -1763,148 +1763,15 @@ html[data-oq-signed-in] .ps-btn.ps-member {
 }
 .ps-auth .auth-page-container {
   background: var(--ps-bg);
-  min-height: auto;
-  justify-content: flex-start;
-  padding: 56px 16px 96px;
 }
-.ps-auth input:not([type='checkbox']) {
-  background: var(--ps-surface);
-  color: var(--ps-ink);
-  border-color: var(--ps-line-2);
-}
-/* B574: web auth pages sit under the site header and footer and use the site
-   system: tokens, an accent primary button, an outlined secondary one, no
-   grey fills, no underlines. The desktop overlay never renders `.ps-auth`. */
 .ps-auth .auth-card {
-  max-width: 440px;
-  padding: 40px;
-  border-color: var(--ps-line);
-  border-radius: 16px;
   backdrop-filter: none;
   box-shadow:
     0 1px 2px oklch(20% 0.02 260 / 0.04),
     0 12px 32px -16px oklch(20% 0.02 260 / 0.14);
 }
-.ps-auth .auth-card-logo {
-  display: none;
-}
-.ps-auth .auth-card-header {
-  margin-bottom: 28px;
-}
-.ps-auth .auth-card-header h1 {
-  margin: 0 0 8px;
-  font-size: clamp(24px, 3vw, 28px);
-  font-weight: 700;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
-  color: var(--ps-ink);
-}
-.ps-auth .auth-card-header p {
-  font-size: 15px;
-  color: var(--ps-soft);
-}
-.ps-auth .auth-field label {
-  font-size: 14px;
-  color: var(--ps-ink);
-}
-.ps-auth .auth-field input:not([type='checkbox']) {
-  min-block-size: 48px;
-  font-size: 16px;
-}
-.ps-auth .auth-field input:focus {
-  border-color: var(--ps-blue);
-  box-shadow: 0 0 0 3px oklch(50% 0.19 256 / 0.16);
-}
-.ps-auth .site-btn {
-  min-block-size: 50px;
-  border-radius: 10px;
-  font-size: 15px;
-  box-shadow: none;
-  transition:
-    background-color 0.18s,
-    border-color 0.18s,
-    transform 0.18s;
-}
-.ps-auth .site-btn:active {
-  transform: translateY(1px);
-}
-.ps-auth .site-btn:focus-visible {
-  outline: 2px solid var(--ps-blue);
-  outline-offset: 2px;
-}
-.ps-auth .site-btn.is-primary {
-  background: var(--ps-blue);
-  color: var(--ps-blue-ink);
-  border-color: var(--ps-blue);
-  box-shadow: none;
-}
-.ps-auth .auth-page-container .career-quiet-button.auth-field-action {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ps-blue);
-}
-.ps-auth .auth-page-container .career-quiet-button.auth-field-action:not(:disabled):hover {
-  color: var(--ps-blue-hover);
-}
-.ps-auth .site-btn.is-primary:hover {
-  background: var(--ps-blue-hover);
-  border-color: var(--ps-blue-hover);
-}
-.ps-auth .site-btn.is-primary:disabled {
-  opacity: 0.55;
-  cursor: progress;
-}
-.ps-auth .site-btn.is-secondary {
+.ps-auth input:not([type='checkbox']) {
   background: var(--ps-surface);
   color: var(--ps-ink);
   border-color: var(--ps-line-2);
-}
-.ps-auth .site-btn.is-secondary:hover {
-  background: var(--ps-surface);
-  border-color: var(--ps-ink);
-}
-.ps-auth .auth-links a,
-.ps-auth .auth-links button,
-.ps-auth .auth-legal-consent a {
-  color: var(--ps-blue);
-  font-weight: 600;
-}
-.ps-auth .auth-links a:hover,
-.ps-auth .auth-links button:hover {
-  text-decoration: none;
-  color: var(--ps-blue-hover);
-}
-.ps-auth .auth-notice,
-.ps-auth .auth-field-notice {
-  margin: 0;
-  padding: 12px 14px;
-  border: 1px solid oklch(50% 0.19 256 / 0.18);
-  border-radius: 10px;
-  background: var(--ps-blue-soft);
-  color: var(--ps-ink);
-  font-size: 15px;
-  line-height: 1.5;
-}
-.ps-auth .auth-notice {
-  margin-bottom: 16px;
-}
-.ps-auth .career-cabinet-global-error {
-  margin-bottom: 16px;
-  padding: 12px 14px;
-  border: 1px solid oklch(52% 0.19 25 / 0.25);
-  border-radius: 10px;
-  background: oklch(97% 0.02 25);
-  color: oklch(45% 0.17 25);
-  font-size: 15px;
-}
-.ps-auth .auth-field-error {
-  color: oklch(50% 0.19 25);
-}
-@media (max-width: 760px) {
-  .ps-auth .auth-page-container {
-    padding: 24px 16px 64px;
-  }
-  .ps-auth .auth-card {
-    padding: 28px 20px;
-  }
 }
