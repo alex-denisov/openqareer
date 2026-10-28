@@ -1,6 +1,6 @@
 /**
- * Owner 28.10: candidate data may go to OpenRouter (B082 lifted) only if it is
- * never stored or trained on. Every request with such data asks providers to
+ * Owner 28.10 lifted B082; CPO 28.10: candidate data only with data_collection
+ * deny, never to free models. Every request with such data asks providers to
  * deny data collection; free models and pools, whose endpoints may train on
  * prompts, never receive it. A live check from prod (28.10): the paid chain
  * models answer 200 with `data_collection: 'deny'`, a `:free` model gets 404
