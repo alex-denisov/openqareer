@@ -61,15 +61,12 @@ function ChromeAnchor({
  * B574: both pairs of actions are rendered; `oq-auth-2.js` marks a signed-in
  * visitor on `<html>` before the first paint and CSS shows one pair, so the
  * header never redraws «Войти» into «Открыть кабинет» after the session check.
- * B575: the console link is always rendered too and shown for an administrator
- * marked the same way; the server still checks access to /admin.
+ * B575, B576: an administrator marked the same way sees «Администрирование»
+ * in place of «Открыть кабинет»; the server still checks access to /admin.
  */
 function HeaderActions({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>) {
   return (
     <>
-      <SiteLink to="/admin" className="ps-btn is-ghost ps-admin" onNavigate={onNavigate}>
-        Администрирование
-      </SiteLink>
       <SiteLink
         to="/login"
         className="ps-btn is-login ps-guest"
@@ -88,6 +85,9 @@ function HeaderActions({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>) {
       </SiteLink>
       <SiteLink to="/app" className="ps-btn is-cta ps-member" onNavigate={onNavigate}>
         Открыть кабинет
+      </SiteLink>
+      <SiteLink to="/admin" className="ps-btn is-cta ps-admin" onNavigate={onNavigate}>
+        Администрирование
       </SiteLink>
     </>
   );

@@ -274,7 +274,8 @@ export const CATALOG_STYLE =
   display: none;
 }
 html[data-oq-signed-in] .ps-btn.ps-guest,
-html[data-oq-signed-in] .ps-menu a.ps-guest {
+html[data-oq-signed-in] .ps-menu a.ps-guest,
+html[data-oq-signed-in][data-oq-admin] .ps-btn.ps-member {
   display: none;
 }
 html[data-oq-signed-in] .ps-btn.ps-member,
