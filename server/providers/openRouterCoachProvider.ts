@@ -25,6 +25,12 @@ import {
 import { isMutableModelAlias } from './modelRegistry';
 
 const OPENROUTER_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
+/**
+ * Имя приложения в заголовке `X-Title`. Раньше здесь стояло «synthetic
+ * evaluation»: до решения владельца 28.10 в OpenRouter уходили только
+ * синтетические ходы (B082), теперь туда идут и персональные данные кандидатов.
+ */
+export const OPENROUTER_APP_TITLE = 'OpenQareer';
 
 export interface OpenRouterCoachProviderOptions {
   apiKey: string;
@@ -54,7 +60,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
         maxRetries: PROVIDER_STAGE_MAX_RETRIES,
         defaultHeaders: {
           'HTTP-Referer': 'https://openqareer.com',
-          'X-Title': 'OpenQareer synthetic evaluation',
+          'X-Title': OPENROUTER_APP_TITLE,
         },
       });
   }
@@ -63,14 +69,6 @@ export class OpenRouterCoachProvider implements CoachProvider {
     input: CoachTurnInput,
     idempotencyKey: string,
   ): Promise<CoachProviderResult> {
-    if (input.dataClass !== 'synthetic') {
-      throw new CoachProviderError(
-        'provider_unavailable',
-        503,
-        false,
-      );
-    }
-
     try {
       const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
         model: this.model,
