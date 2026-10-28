@@ -1,6 +1,7 @@
 .cf-page {
   display: grid;
   gap: var(--ps-space-6);
+  padding-top: 0;
 }
 .cf-heading {
   display: grid;
@@ -195,9 +196,6 @@
   }
 }
 
-.cf-page {
-  padding-top: 0;
-}
 .cf-public {
   padding-block-end: calc(var(--ps-space-8) + var(--ps-space-8) + var(--ps-space-4));
 }
