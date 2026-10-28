@@ -8,9 +8,26 @@ import { PUBLIC_TOOLS, TOOLS_MENU_IDS } from '../../../shared/publicSiteChrome';
  * opening, which keeps the six links out of every page's HTML. Click
  * and Enter/Space open it, Escape or a click outside closes it.
  */
+const SHELL_OPEN = 'data-ps-open';
+
+/**
+ * B574: a prerendered page runs its header with oq-chrome-2.js until the
+ * bundle mounts, and that script notes the lists it opened on <html>. The
+ * header React draws opens the same lists, then forgets the note so a later
+ * page does not reopen them.
+ */
+export function openInShell(controls: string): boolean {
+  if (typeof document === 'undefined') return false;
+  const ids = (document.documentElement.getAttribute(SHELL_OPEN) ?? '').split(' ');
+  if (!ids.includes(controls)) return false;
+  const rest = ids.filter((id) => id && id !== controls).join(' ');
+  document.documentElement.setAttribute(SHELL_OPEN, rest);
+  return true;
+}
+
 /** Open state that Escape or a click outside `root` closes. */
-function useDismissible() {
-  const [open, setOpen] = React.useState(false);
+function useDismissible(controls: string) {
+  const [open, setOpen] = React.useState(() => openInShell(controls));
   const root = React.useRef<HTMLDivElement>(null);
   const trigger = React.useRef<HTMLAnchorElement>(null);
   React.useEffect(() => {
@@ -41,7 +58,7 @@ export function PublicToolsMenu({
   readonly where: keyof typeof TOOLS_MENU_IDS;
   readonly current?: boolean;
 }) {
-  const { open, toggle, root, trigger } = useDismissible();
+  const { open, toggle, root, trigger } = useDismissible(TOOLS_MENU_IDS[where]);
   const id = TOOLS_MENU_IDS[where];
   return (
     <div className={`ps-tooldrop is-${where}`} ref={root}>

@@ -200,6 +200,9 @@ const ENTRY_SCRIPT =
 export function deferEntryScript(html: string): string {
   return html.replace(
     ENTRY_SCRIPT,
-    '<script defer src="/assets/oq-entry-loader-2.js" data-entry="$1"></script>',
+    // B574: until the bundle mounts, oq-chrome-2.js runs the header menus, so
+    // the first tap on «Инструменты» or the phone menu is never lost.
+    '<script defer src="/assets/oq-entry-loader-2.js" data-entry="$1"></script>' +
+      '<script defer src="/assets/oq-chrome-2.js"></script>',
   );
 }

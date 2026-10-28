@@ -567,11 +567,13 @@ async function writeAuthPages(html: string, distDirectory: string, hints: string
         bootstrapRoot(
           renderToStaticMarkup(
             <div className="ps ps-auth">
+              <PublicHeader onNavigate={() => {}} signedIn={false} />
               {page.path === '/login' ? (
                 <LoginPage onNavigate={() => {}} bootstrapPending />
               ) : (
                 <SignupPage onNavigate={() => {}} bootstrapPending />
               )}
+              <PublicFooter onNavigate={() => {}} signedIn={false} />
             </div>,
           ),
         ),

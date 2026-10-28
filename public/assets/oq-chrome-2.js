@@ -34,9 +34,20 @@
     box.appendChild(panel);
     trigger.setAttribute('aria-controls', panel.id);
   });
+  // Open lists are noted on <html>: when the app bundle replaces this markup,
+  // the header it draws opens the same lists (PublicToolsMenu.openInShell).
+  function note(id, open) {
+    var root = document.documentElement;
+    var ids = (root.getAttribute('data-ps-open') || '').split(' ').filter(function (item) {
+      return item && item !== id;
+    });
+    if (open) ids.push(id);
+    root.setAttribute('data-ps-open', ids.join(' '));
+  }
   function setOpen(trigger, panel, open) {
     trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
     panel.hidden = !open;
+    note(panel.id, open);
   }
   var pairs = [];
   document.querySelectorAll('[data-ps-menu],[data-ps-disclosure]').forEach(function (trigger) {

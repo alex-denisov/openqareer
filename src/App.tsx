@@ -58,6 +58,7 @@ const CareerWorkspaceShell = lazy(async () => {
   return { default: module.CareerWorkspaceShell };
 });
 const LandingPage = lazy(loadLandingPage);
+const AuthSiteFrame = lazy(() => import('./features/site/AuthSiteFrame'));
 const ResumeBuilderPage = lazy(() =>
   import('./features/site/resumeBuilder/resumeBuilderRoute').then((module) => ({
     default: module.ResumeBuilderPage,
@@ -650,9 +651,14 @@ export default function App() {
 
     return (
       <AppErrorBoundary>
-        {/* B535: on the web the auth pages wear the public site palette. */}
+        {/* B535: on the web the auth pages wear the public site palette;
+            B574: and the site header and footer. */}
         <div className="ps ps-auth">
-          <Suspense fallback={<AuthLoadingFallback />}>{renderAuthContent()}</Suspense>
+          <Suspense fallback={<AuthLoadingFallback />}>
+            <AuthSiteFrame onNavigate={navigate} signedIn={Boolean(state.session)}>
+              {renderAuthContent()}
+            </AuthSiteFrame>
+          </Suspense>
         </div>
       </AppErrorBoundary>
     );

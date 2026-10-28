@@ -16,7 +16,7 @@ import {
 } from '../../../shared/publicSiteChrome';
 import { SiteLink } from './SiteLink';
 import { preloadAuthPages } from './authPagesLoader';
-import { PublicToolsMenu } from './PublicToolsMenu';
+import { PublicToolsMenu, openInShell } from './PublicToolsMenu';
 
 export interface PublicChromeProps {
   readonly onNavigate: (path: string) => void;
@@ -135,12 +135,13 @@ function NavLinks({
 }
 
 function useMenu() {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState(() => openInShell(MENU_ID));
   const button = React.useRef<HTMLButtonElement>(null);
   React.useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || document.querySelector('.ps-tooldrop-menu:not([hidden])')) return;
+      if (event.key !== 'Escape' || document.querySelector('.ps-tooldrop-menu:not([hidden])'))
+        return;
       setOpen(false);
       button.current?.focus();
     };
