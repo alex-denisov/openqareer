@@ -16,6 +16,12 @@ function usd(value: number) {
     maximumFractionDigits: 6,
   }).format(value);
 }
+const OVERRUN = 'cost_exceeds_reservation:';
+function eventLabel(kind: string): string {
+  if (kind.startsWith(OVERRUN))
+    return `Стоимость выше резерва: модель ${kind.slice(OVERRUN.length)} остановлена`;
+  return EVENTS[kind] ?? 'Событие расчётов';
+}
 const EVENTS: Record<string, string> = {
   budget_exceeded: 'Достигнут лимит расходов',
   cost_exceeds_reservation: 'Стоимость выше резерва: новые запросы остановлены',
@@ -86,7 +92,7 @@ function SpendEvents({ events }: { readonly events: SpendStatus['events'] }) {
     <ul>
       {events.map((event, index) => (
         <li key={`${event.created_at}:${index}`}>
-          {EVENTS[event.kind] ?? 'Событие расчётов'} ·{' '}
+          {eventLabel(event.kind)} ·{' '}
           {new Date(event.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })}
         </li>
       ))}

@@ -37,12 +37,16 @@ export function vacancyFitCeiling(result: Pick<VacancyFitResult, 'gates'>): numb
   return 100 - FIT_UNCONFIRMED_GATE_PENALTY * unconfirmed.length;
 }
 
-/** States whose percent is still coming: the row says «считаем» (28.10 mockup). */
+/**
+ * States whose percent is still coming: the row says «считаем» (28.10 mockup). A failed count is
+ * one of them (29.10): the shown page re-queues it, and the mockup has no «failed» state.
+ */
 export const FIT_COUNTING_STATES: readonly VacancyFitView['state'][] = [
   'not_requested',
   'processing',
   'retrying',
   'refreshing',
+  'failed',
 ];
 /** Below this a counted row does not push rows still counting down (CPO, 28.10 evening). */
 export const FIT_LOW_PERCENT = 40;
