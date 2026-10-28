@@ -34,6 +34,8 @@ export interface ExpertPanelConfig {
 export interface OpenExpertOptions {
   /** Send `initialPrompt` as the candidate's message instead of leaving it in the input. */
   readonly send?: boolean;
+  /** Only switch the consultant's context (tab, selected company); the panel stays as it is. */
+  readonly contextOnly?: boolean;
 }
 
 let expertSendRequest = 0;
@@ -50,6 +52,18 @@ export function openExpertPanel(
   initialPrompt?: string,
   options?: OpenExpertOptions,
 ) {
+  if (options?.contextOnly) {
+    const contextStage = stage ?? stageForView(activeView);
+    setConfig((previous) => ({
+      ...previous,
+      stage: contextStage,
+      subject,
+      subjectTitle,
+      initialPrompt: undefined,
+      sendRequest: undefined,
+    }));
+    return;
+  }
   setAccountOpen(false);
   const sendRequest = options?.send && initialPrompt ? ++expertSendRequest : undefined;
   setExpanded(isCompactViewport);

@@ -3,6 +3,7 @@ import type {
   CandidateCompanySource,
 } from '../../../shared/candidateCompany';
 import type { ConnectionCirclePath, VacancyConnectionCircles } from './vacancyLetterApi';
+import { parseVacancyLocation } from '../../../shared/locationTree';
 import { pluralRu } from '../../../shared/pluralRu';
 import { dativeNameRu } from '../today/dativeNameRu';
 
@@ -34,14 +35,29 @@ function sourceLocationCountRu(place: string): string {
   return count ? pluralRu(Number(count[1]), ['локация', 'локации', 'локаций']) : place;
 }
 
-export function companyLocationLabel(location: string | null): string {
+const REMOTE_PLACE = /^(remote|удал[её]нно|anywhere|worldwide)$/iu;
+/** Workday: «US-CA-Menlo Park» → «Menlo Park, CA, US». */
+const CODED_PLACE = /^([A-Z]{2,3})-([A-Z]{2})-(.+)$/u;
+
+/** «Город, Страна» по-русски тем же словарём, что «Локации» в «Вакансиях» (28.10). */
+function placeLabelRu(place: string): string {
+  if (REMOTE_PLACE.test(place)) return 'Удалённо';
+  const coded = CODED_PLACE.exec(place);
+  const location = coded ? `${coded[3]}, ${coded[2]}, ${coded[1]}` : place;
+  const path = parseVacancyLocation({ location });
+  if (!path) return sourceLocationCountRu(place);
+  return path.city ? `${path.city}, ${path.country}` : path.country;
+}
+
+/** `null` — места нет, строку не выводят. */
+export function companyLocationLabel(location: string | null): string | null {
   const places = (location ?? '')
     .split(';')
     .map((place) => place.trim())
     .filter(Boolean);
-  if (places.length === 0) return 'Место неизвестно';
-  if (places.length === 1) return sourceLocationCountRu(places[0]);
-  return `${places[0]} и ещё ${places.length - 1}`;
+  if (places.length === 0) return null;
+  if (places.length === 1) return placeLabelRu(places[0]);
+  return `${placeLabelRu(places[0])} и ещё ${places.length - 1}`;
 }
 
 export function formatObservedDate(value: string | null): string {
@@ -161,11 +177,21 @@ export function groupCompanyPeople(responses: readonly VacancyConnectionCircles[
 const WRITE_STEP = /^\s*напис/iu;
 
 /** Saved step first; otherwise one derived from a real path or vacancy; otherwise none (''). */
+/** Срок прошёл, если его день закончился: шаг «до 27.10» 28.10 уже не показывают (28.10). */
+function isStepOverdue(dueAt: string | null, now: number): boolean {
+  const due = dueAt ? Date.parse(dueAt) : Number.NaN;
+  if (!Number.isFinite(due)) return false;
+  const endOfDueDay = new Date(due);
+  endOfDueDay.setHours(23, 59, 59, 999);
+  return endOfDueDay.getTime() < now;
+}
+
 export function companyNextStepText(
   company: CandidateCompanyOpportunity,
   people: { readonly people: readonly CompanyPerson[] },
+  now = Date.now(),
 ): string {
-  const saved = company.nextStep;
+  const saved = isStepOverdue(company.nextStep?.dueAt ?? null, now) ? null : company.nextStep;
   if (saved && (people.people.length > 0 || !WRITE_STEP.test(saved.text))) {
     const due = saved.dueAt ? `, до ${formatObservedDate(saved.dueAt)}` : '';
     return `Следующий шаг: ${saved.text}${due}`;
@@ -177,4 +203,10 @@ export function companyNextStepText(
   }
   if (vacancy) return `Следующий шаг: откликнуться на ${vacancy.title}`;
   return '';
+}
+
+/** Буква аватара: первая буква или цифра, кавычки и знаки пропускаются («Уралхим» → У). */
+export function companyInitial(name: string): string {
+  const first = /[\p{L}\p{N}]/u.exec(name);
+  return first ? first[0].toLocaleUpperCase('ru-RU') : '·';
 }

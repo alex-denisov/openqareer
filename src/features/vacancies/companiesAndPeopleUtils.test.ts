@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  companyInitial,
   companyLocationLabel,
   companyNextStepText,
   companySourceSummary,
@@ -161,23 +162,27 @@ describe('groupCompanyPeople', () => {
 });
 
 describe('companyLocationLabel', () => {
-  it('keeps one place as is', () => {
-    expect(companyLocationLabel('Bengaluru, IND')).toBe('Bengaluru, IND');
+  it('names a place as «Город, Страна» in Russian, by the «Вакансии» gazetteer (28.10)', () => {
+    expect(companyLocationLabel('Toronto, ON, CAN')).toBe('Торонто, Канада');
+    expect(companyLocationLabel('US-CA-Menlo Park')).toBe('Menlo Park, США');
+    expect(companyLocationLabel('London, United Kingdom')).toBe('Лондон, Великобритания');
+    expect(companyLocationLabel('Germany')).toBe('Германия');
+    expect(companyLocationLabel('Remote')).toBe('Удалённо');
   });
 
   it('folds a long list of places into the first one and a count', () => {
-    expect(companyLocationLabel('Argentina; Austria; Belgium; Brazil')).toBe('Argentina и ещё 3');
+    expect(companyLocationLabel('Germany; Austria; Belgium; Brazil')).toBe('Германия и ещё 3');
   });
 
   it('translates a bare source count such as Workday «5 Locations»', () => {
     expect(companyLocationLabel('5 Locations')).toBe('5 локаций');
     expect(companyLocationLabel('2 locations')).toBe('2 локации');
-    expect(companyLocationLabel('Remote; 21 Locations')).toBe('Remote и ещё 1');
+    expect(companyLocationLabel('Remote; 21 Locations')).toBe('Удалённо и ещё 1');
   });
 
-  it('names an unknown place', () => {
-    expect(companyLocationLabel(null)).toBe('Место неизвестно');
-    expect(companyLocationLabel('  ')).toBe('Место неизвестно');
+  it('returns null without a place: the line is not shown', () => {
+    expect(companyLocationLabel(null)).toBeNull();
+    expect(companyLocationLabel('  ')).toBeNull();
   });
 });
 
@@ -206,5 +211,35 @@ describe('companyNextStepText', () => {
         { people: [] },
       ),
     ).toBe('Следующий шаг: подготовить резюме');
+  });
+
+  it('hides a saved step whose due date has passed and suggests the next one (28.10)', () => {
+    const now = Date.parse('2026-10-28T10:00:00.000Z');
+    const overdue = {
+      ...base,
+      nextStep: { text: 'написать Igor Siusiukov', dueAt: '2026-10-27T00:00:00.000Z' },
+      vacancies: [vacancy],
+    } as never;
+    expect(companyNextStepText(overdue, { people: [igor] }, now)).toBe(
+      'Следующий шаг: откликнуться на Senior Director, написать Igor Siusiukov (круг 1)',
+    );
+    const today = {
+      ...base,
+      nextStep: { text: 'написать Igor Siusiukov', dueAt: '2026-10-28T00:00:00.000Z' },
+    } as never;
+    expect(companyNextStepText(today, { people: [igor] }, now)).toBe(
+      'Следующий шаг: написать Igor Siusiukov, до 28.10.2026',
+    );
+  });
+});
+
+describe('companyInitial', () => {
+  it('takes the first letter after quotes and signs (28.10)', () => {
+    expect(companyInitial('«Уралхим»')).toBe('У');
+    expect(companyInitial('ОХК «Уралхим»')).toBe('О');
+    expect(companyInitial('"Яндекс"')).toBe('Я');
+    expect(companyInitial('  @mail.ru')).toBe('M');
+    expect(companyInitial('1С')).toBe('1');
+    expect(companyInitial('«»')).toBe('·');
   });
 });

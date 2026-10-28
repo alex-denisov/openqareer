@@ -183,6 +183,9 @@ export function CareerExpertPanel({
     }
   }
   const contextKey = JSON.stringify([stage, subject]);
+  // Макет 13: на вкладке «Компании и люди» консультант подписан ею, а не «Вакансии».
+  const sectionTitle = subject?.kind === 'company' ? 'Компании и люди' : STAGE_TITLE[stage];
+  const threadCompany = subject?.kind === 'company' ? subject.id : undefined;
   const currentContext = useRef(contextKey);
   currentContext.current = contextKey;
   const previousContext = useRef(contextKey);
@@ -280,7 +283,7 @@ export function CareerExpertPanel({
     setLoadingSnapshot(true);
     setLiveResult(undefined);
     setQuickRepliesDismissed(false);
-    void getCandidateWithMessages(stage)
+    void getCandidateWithMessages(stage, threadCompany)
       .then((candidate) => {
         if (active) setSnapshot(candidate);
       })
@@ -293,7 +296,7 @@ export function CareerExpertPanel({
     return () => {
       active = false;
     };
-  }, [user, stage]);
+  }, [user, stage, threadCompany]);
   useEffect(() => {
     if (!sendRequest || sendRequest <= lastHandledSendRequest) return;
     if (!user || loadingSnapshot || !initialPrompt) return;
@@ -382,7 +385,7 @@ export function CareerExpertPanel({
     }
     if (!delivered) return false;
     try {
-      const updated = await getCandidateWithMessages(stage);
+      const updated = await getCandidateWithMessages(stage, threadCompany);
       if (currentContext.current === operationContext) setSnapshot(updated);
     } catch {
       if (currentContext.current === operationContext) setError('Ответ сохранён, но историю пока не удалось обновить.');
@@ -447,12 +450,12 @@ export function CareerExpertPanel({
       role={overlay && !onExpand ? 'dialog' : 'complementary'}
       aria-modal={overlay && !onExpand ? true : undefined}
       data-mobile-expanded={mobileExpanded}
-      aria-label={`Консультант · ${intakeMode ? 'Старт' : STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
+      aria-label={`Консультант · ${intakeMode ? 'Старт' : sectionTitle}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
     >
       {collapsed ? (
         <ConsultantStripButton
           count={loadingSnapshot ? 0 : proposalCount}
-          stageTitle={intakeMode ? 'Старт' : STAGE_TITLE[stage]}
+          stageTitle={intakeMode ? 'Старт' : sectionTitle}
           onExpand={onExpand}
         />
       ) : null}
@@ -463,7 +466,7 @@ export function CareerExpertPanel({
           </span>
           <div>
             <strong>Консультант</strong>
-            <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
+            <small>{intakeMode ? 'Старт' : sectionTitle}</small>
           </div>
         </div>
         <div className="career-expert-panel-controls">
@@ -762,7 +765,7 @@ export function CareerExpertPanel({
                 if (event.target.value.trim()) setQuickRepliesDismissed(true);
                 if (!event.target.value.trim()) setVoiceDraft(false);
               }}
-              placeholder="Спросите по этому разделу"
+              placeholder={subject?.kind === 'company' ? 'Спросите про компании и людей' : 'Спросите по этому разделу'}
               rows={1}
               disabled={sending || voiceTextLocked}
             />

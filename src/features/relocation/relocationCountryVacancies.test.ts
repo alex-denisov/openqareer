@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadGeoDirectory } from '../../../shared/geo/geoDirectory';
+import { visibleFact } from '../../../shared/countryFit/countryComparison';
 import {
   countryVacancyCount,
   countryVacancyFact,
@@ -41,6 +42,13 @@ describe('country vacancies from the matched pool', () => {
     expect(countryVacancyCount(pool, 'RU')).toBe(102);
     expect(countryVacancyCount(pool, 'RS')).toBe(4);
     expect(countryVacancyCount(pool, 'DE')).toBe(0);
+  });
+
+  it('keeps the pool count visible in the comparison: the pool has no URL, only a dated sample', () => {
+    expect(visibleFact(countryVacancyFact(sample, 'DE'), 'relocationVacancies')).toMatchObject({
+      status: 'available',
+      value: { count: 12 },
+    });
   });
 
   it('builds a dated fact out of the pool size, or no fact without a pool', () => {

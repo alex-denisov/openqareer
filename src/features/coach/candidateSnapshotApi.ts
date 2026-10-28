@@ -14,9 +14,7 @@ interface SnapshotHeadEnvelope {
   meta?: { memory?: { nextOffset?: unknown }; turns?: { nextOffset?: unknown } };
 }
 
-async function readSnapshotPage(
-  memoryOffset: number,
-): Promise<{
+async function readSnapshotPage(memoryOffset: number): Promise<{
   snapshot: CandidateSnapshot;
   nextMemoryOffset: number | null;
   nextTurnOffset: number | null;
@@ -105,8 +103,14 @@ export async function getCandidate(): Promise<CandidateSnapshot> {
 }
 
 /** Снимок вместе с диалогом — его просит только панель эксперта. */
-export async function getCandidateWithMessages(stage?: CoachTurnStage): Promise<CandidateSnapshot> {
-  const [snapshot, messages] = await Promise.all([getCandidate(), getCandidateMessages(stage)]);
+export async function getCandidateWithMessages(
+  stage?: CoachTurnStage,
+  companyKey?: string,
+): Promise<CandidateSnapshot> {
+  const [snapshot, messages] = await Promise.all([
+    getCandidate(),
+    getCandidateMessages(stage, companyKey),
+  ]);
   return { ...snapshot, messages };
 }
 
@@ -118,8 +122,11 @@ export interface CandidateMessagePage {
 export async function getCandidateMessagePage(
   offset = 0,
   stage?: CoachTurnStage,
+  companyKey?: string,
 ): Promise<CandidateMessagePage> {
-  const stageQuery = stage ? `&stage=${encodeURIComponent(stage)}` : '';
+  const stageQuery = `${stage ? `&stage=${encodeURIComponent(stage)}` : ''}${
+    companyKey ? `&company=${encodeURIComponent(companyKey)}` : ''
+  }`;
   const response = await apiFetch(
     `/api/v1/candidate/me/messages?offset=${encodeURIComponent(String(offset))}${stageQuery}`,
   );
@@ -143,12 +150,13 @@ export async function getCandidateMessagePage(
 /** Весь диалог кандидата — страницами, как и всё, что не влезает в ответ. */
 export async function getCandidateMessages(
   stage?: CoachTurnStage,
+  companyKey?: string,
 ): Promise<CandidateSnapshot['messages']> {
   const items: CandidateSnapshot['messages'] = [];
   let offset: number | null = 0;
   let pages = 0;
   while (offset !== null && pages < 60) {
-    const page: CandidateMessagePage = await getCandidateMessagePage(offset, stage);
+    const page: CandidateMessagePage = await getCandidateMessagePage(offset, stage, companyKey);
     if (page.items.length === 0) break;
     items.push(...page.items);
     offset = page.nextOffset;

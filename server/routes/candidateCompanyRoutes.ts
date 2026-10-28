@@ -17,6 +17,7 @@ import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { isPrivateEmployerCluster } from '../vacancies/privateEmployerMask';
 import { readTargetLevel } from './vacancyRoleContext';
+import { companyCoachContextText } from './companyCoachContext';
 import {
   listCandidateConnectionViews,
   deriveImportedFactSources,
@@ -684,6 +685,23 @@ async function handleSearchRecruiter(
     data: { searchStatus: status },
     meta: { requestId: request.id },
   });
+}
+
+/** Тема консультанта «Компании и люди»: выбранная компания по ключу; `null` — нет такой. */
+export async function candidateCompanyCoachContext(
+  deps: RouteDeps,
+  candidateId: string,
+  companyKey: string,
+): Promise<string | null> {
+  const context = await companyContext(deps, candidateId);
+  const row = context.rows.find((item) => item.key === companyKey);
+  if (!row) return null;
+  return companyCoachContextText(
+    row,
+    context.vacancies
+      .filter((vacancy) => candidateCompanyKey(vacancy.companyName) === companyKey)
+      .map((vacancy) => ({ title: vacancy.title })),
+  );
 }
 
 export function registerCandidateCompanyRoutes(app: FastifyInstance, deps: RouteDeps): void {

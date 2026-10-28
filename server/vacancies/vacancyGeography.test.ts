@@ -204,3 +204,12 @@ describe('города пула прода без страны (28.10)', () => {
     expect(regionOfVacancy({ location: '2 Locations' })).toBeUndefined();
   });
 });
+
+describe('код страны в начале места (28.10)', () => {
+  it('Workday «US-CA-Menlo Park», «AU-Sydney» и «United States (Remote)»', () => {
+    expect(regionOfVacancy({ location: 'US-CA-Menlo Park' })).toBe('us');
+    expect(regionOfVacancy({ location: 'AU-Sydney' })).toBe('apac');
+    expect(regionOfVacancy({ location: 'United States (Remote)' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Remote, Global' })).toBeUndefined();
+  });
+});

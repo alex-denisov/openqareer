@@ -639,8 +639,8 @@ export class ConversationController {
       );
   }
 
-  private messages(candidateId: string, stage?: CoachTurnStage): CoachMessage[] {
-    const rows = this.stageMessages.queryMessages(candidateId, stage);
+  private messages(candidateId: string, stage?: CoachTurnStage, subject?: TurnRequest['subject']) {
+    const rows = this.stageMessages.queryMessages(candidateId, stage, subject);
     return rows.map((row) => ({
       id: row.id,
       role: row.role,
@@ -651,8 +651,8 @@ export class ConversationController {
     }));
   }
 
-  getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[] {
-    return this.messages(candidateId, stage);
+  getMessages(candidateId: string, stage?: CoachTurnStage, subject?: TurnRequest['subject']) {
+    return this.messages(candidateId, stage, subject);
   }
 
   rejectConsultantProposal(

@@ -166,6 +166,19 @@ export class ConsultantHistoryStore {
     return active;
   }
 
+  /** Компания последней реплики кандидата в беседе; `null` — беседа не о компании. */
+  private activeCompany(candidateId: string, conversationId: string): string | null {
+    const row = this.database
+      .prepare(
+        `SELECT ms.subject_kind, ms.subject_id FROM consultant_conversation_messages cm
+         JOIN message_stages ms ON ms.message_id = cm.message_id AND ms.candidate_id = cm.candidate_id
+         WHERE cm.candidate_id = ? AND cm.conversation_id = ? AND cm.role = 'user'
+         ORDER BY cm.ordinal DESC LIMIT 1`,
+      )
+      .get(candidateId, conversationId) as { subject_kind: string | null; subject_id: string | null } | undefined;
+    return row?.subject_kind === 'company' ? row.subject_id : null;
+  }
+
   recordUserTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -183,8 +196,10 @@ export class ConsultantHistoryStore {
     const active = this.activeConversation(candidateId);
     const closedConversations: ConsultantSummaryTask[] = [];
     let conversation = active;
-    if (active && (active.stage !== stage || Date.now() - Date.parse(active.last_message_at) > IDLE_CLOSE_MS)) {
-      const reason = active.stage === stage ? 'idle_timeout' : 'stage_changed';
+    // 28.10: беседа о компании («Компании и люди») не продолжает беседу о вакансии того же раздела.
+    const topicChanged = active !== null && companyTopic(request.subject) !== this.activeCompany(candidateId, active.id);
+    if (active && (active.stage !== stage || topicChanged || Date.now() - Date.parse(active.last_message_at) > IDLE_CLOSE_MS)) {
+      const reason = active.stage === stage && !topicChanged ? 'idle_timeout' : 'stage_changed';
       const task = this.close(active, reason, now);
       if (task) closedConversations.push(task);
       conversation = null;
@@ -627,4 +642,8 @@ export class ConsultantHistoryStore {
     }
     throw new Error('invalid consultant history cursor');
   }
+}
+
+function companyTopic(subject: TurnRequest['subject']): string | null {
+  return subject?.kind === 'company' ? subject.id : null;
 }

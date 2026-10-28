@@ -470,7 +470,11 @@ export interface CandidateStore {
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot;
   /** Minimal language facts from the candidate's latest stored LinkedIn import; never calls LinkedIn. */
   getLinkedInLanguageImport(candidateId: string): LinkedInLanguageImportSnapshot | null;
-  getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[];
+  getMessages(
+    candidateId: string,
+    stage?: CoachTurnStage,
+    subject?: CoachTurnSubject,
+  ): CoachMessage[];
   listConsultantConversations(
     candidateId: string,
     options?: { readonly cursor?: string; readonly limit?: number },

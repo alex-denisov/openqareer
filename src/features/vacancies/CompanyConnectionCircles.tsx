@@ -5,6 +5,7 @@ import {
   groupCompanyPeople,
   type CompanyPeople,
   type CompanyPerson,
+  companyInitial,
 } from './companiesAndPeopleUtils';
 import {
   getVacancyConnectionCircles,
@@ -95,7 +96,7 @@ function PersonCard({
   return (
     <article className="companies-people-person" aria-label={person.fullName}>
       <span className="companies-people-avatar is-small" aria-hidden="true">
-        {person.fullName.trim().charAt(0).toLocaleUpperCase('ru-RU')}
+        {companyInitial(person.fullName)}
       </span>
       <div className="companies-people-person-body">
         <strong>{person.fullName}</strong>
