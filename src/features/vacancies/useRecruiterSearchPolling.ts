@@ -10,7 +10,8 @@ const PENDING = new Set(['queued', 'running']);
 export function useRecruiterSearchPolling(status: string | undefined, reload: () => void): void {
   useEffect(() => {
     if (!status || !PENDING.has(status)) return undefined;
-    const timer = window.setTimeout(reload, POLL_MS);
-    return () => window.clearTimeout(timer);
+    // Интервал, а не таймер: «queued» → «queued» не меняет статус и не перезапустил бы эффект.
+    const timer = window.setInterval(reload, POLL_MS);
+    return () => window.clearInterval(timer);
   }, [status, reload]);
 }

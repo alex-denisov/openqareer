@@ -21,12 +21,16 @@ describe('useRecruiterSearchPolling (макет 13, 28.10)', () => {
     act(() => root.render(<Probe status="queued" reload={reload} />));
     act(() => vi.advanceTimersByTime(3_000));
     expect(reload).toHaveBeenCalledTimes(1);
-    act(() => root.render(<Probe status="running" reload={reload} />));
+    // Тот же «queued» после перечитывания: опрос не должен замолкать.
+    act(() => root.render(<Probe status="queued" reload={reload} />));
     act(() => vi.advanceTimersByTime(3_000));
     expect(reload).toHaveBeenCalledTimes(2);
+    act(() => root.render(<Probe status="running" reload={reload} />));
+    act(() => vi.advanceTimersByTime(3_000));
+    expect(reload).toHaveBeenCalledTimes(3);
     act(() => root.render(<Probe status="ready" reload={reload} />));
     act(() => vi.advanceTimersByTime(30_000));
-    expect(reload).toHaveBeenCalledTimes(2);
+    expect(reload).toHaveBeenCalledTimes(3);
     act(() => root.unmount());
   });
 });
