@@ -4,6 +4,8 @@ import {
   getCurrentRoleSkillAssessment,
   type RoleSkillAssessmentCurrent,
 } from '../skills/roleSkillAssessmentApi';
+import { skillSourceLabel } from './ProfileMobileSkills';
+import { useProvenanceLabelOf } from './ProfileProvenanceChip';
 import { SkillsEditForm } from './ProfileSkillsSection';
 import type { ProfileMobileDataProps } from './profileMobileTypes';
 import type { ResumeSkillInput } from './resumeTypes';
@@ -25,6 +27,7 @@ export function skillVerification(skill: ResumeSkillInput) {
 
 function DesktopSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
   const status = skillVerification(skill);
+  const labelOf = useProvenanceLabelOf();
   const date = skill.verifiedAt ? new Date(skill.verifiedAt) : null;
   const stamp =
     date && !Number.isNaN(date.getTime())
@@ -39,7 +42,7 @@ function DesktopSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
       </span>
       <span className="profile-desktop-skill-source">
         <Link size="1em" aria-hidden="true" />
-        {[skill.source?.trim() || 'Источник не указан', stamp].filter(Boolean).join(', ')}
+        {[skillSourceLabel(skill, labelOf), stamp].filter(Boolean).join(', ')}
       </span>
     </div>
   );

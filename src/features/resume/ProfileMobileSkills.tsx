@@ -12,6 +12,8 @@ import {
 import { addSkill } from './resumeStudioModel';
 import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './ProfileMobileElements';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
+import { useProvenanceLabelOf } from './ProfileProvenanceChip';
+import { provenanceLabel } from './profileProvenance';
 import type { ResumeSkillInput } from './resumeTypes';
 import {
   SKILL_CONFIRMATION_HINT,
@@ -21,11 +23,27 @@ import {
 
 // Mockup 2 (390): «Подтверждён», «Не проверен» or «Без квиза»; an unknown status code is never
 // shown as is. The source and its date read as one phrase: «из LinkedIn, 12.09».
-export function mobileSkillLabels(skill: ResumeSkillInput) {
+const UNKNOWN_SOURCE = 'Источник не указан';
+
+/** Своя подпись навыка, иначе импорт, из которого он пришёл («из LinkedIn, 25.09»), как у «Опыта». */
+export function skillSourceLabel(
+  skill: ResumeSkillInput,
+  labelOf: (memoryId: string | undefined) => string = () => UNKNOWN_SOURCE,
+): string {
+  const own = skill.source?.trim();
+  if (own) return own;
+  const imported = skill.evidenceMemoryId ? labelOf(skill.evidenceMemoryId) : '';
+  return imported && imported !== provenanceLabel(undefined) ? imported : UNKNOWN_SOURCE;
+}
+
+export function mobileSkillLabels(
+  skill: ResumeSkillInput,
+  labelOf?: (memoryId: string | undefined) => string,
+) {
   const verified = skill.status === 'подтверждён';
   const rejected = skill.status === 'не подтверждён';
   const status = verified ? 'Подтверждён' : rejected ? 'Не проверен' : 'Без квиза';
-  const source = skill.source || 'Источник не указан';
+  const source = skillSourceLabel(skill, labelOf);
   const date = profileMobileDate(skill.verifiedAt);
   return {
     verified,
@@ -38,7 +56,10 @@ export function mobileSkillLabels(skill: ResumeSkillInput) {
 }
 
 function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
-  const { verified, rejected, status, source, date, origin } = mobileSkillLabels(skill);
+  const { verified, rejected, status, source, date, origin } = mobileSkillLabels(
+    skill,
+    useProvenanceLabelOf(),
+  );
   const Icon = verified ? CheckCircle : rejected ? Question : Circle;
   return (
     <details className="profile-mobile-skill">

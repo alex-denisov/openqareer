@@ -48,11 +48,11 @@ const ADAPTER_IDS: readonly FootprintAdapterId[] = [
 ];
 
 const ADAPTER_LABELS: Readonly<Record<FootprintAdapterId, string>> = {
-  sherlock: 'Публичные профили Sherlock',
-  maigret: 'Публичные профили Maigret',
-  hibp: 'Утечки почты HIBP',
-  wayback: 'Архивные страницы Wayback',
-  exa: 'Поиск в открытом вебе Exa',
+  sherlock: 'Профили по никнейму',
+  maigret: 'Профили по никнейму: расширенная проверка',
+  hibp: 'Утечки почты',
+  wayback: 'Старые версии страниц',
+  exa: 'Упоминания в открытом вебе',
 };
 
 export interface CandidateFootprintAuditSurfaceProps {
@@ -710,11 +710,8 @@ function FootprintPlanControls(props: CandidateFootprintAuditSurfaceProps) {
         onToggleQuery={props.onToggleQuery}
       />
       <p className="career-footprint-disclosure">
-        Exa получает выбранные имя, компании и город; ссылка на фото профиля остаётся только для
-        локального сопоставления с URL изображения в ответе Exa. HIBP получает только 6 символов
-        SHA-1-отпечатка почты; сам адрес и пароль не отправляются. Wayback получает выбранную
-        ссылку. Sherlock и Maigret проверяют выбранные страницы только запросом GET, без входа в
-        аккаунты.
+        Ищем только по тому, что вы отметили. Полный адрес почты и пароль никуда не передаются, по
+        фото из профиля в интернете не ищем, в ваши аккаунты не входим.
       </p>
       <AdapterStatusList
         audit={props.audit}

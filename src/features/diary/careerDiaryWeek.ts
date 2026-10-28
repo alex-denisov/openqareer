@@ -6,11 +6,11 @@ export interface CareerDiaryWeek {
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-export function currentCareerDiaryWeek(asOf: string, workplaceStart: string | null): CareerDiaryWeek {
+export function currentCareerDiaryWeek(asOf: string, platformStart: string | null): CareerDiaryWeek {
   const weekStart = mondayOf(asOf);
   const end = new Date(weekStart + 'T00:00:00.000Z');
   end.setUTCDate(end.getUTCDate() + 6);
-  const firstWeek = workplaceStart ? mondayOf(workplaceStart) : null;
+  const firstWeek = platformStart ? mondayOf(platformStart) : null;
   const elapsedWeeks = firstWeek ? Math.floor((Date.parse(weekStart) - Date.parse(firstWeek)) / WEEK_MS) : -1;
 
   return {

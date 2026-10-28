@@ -94,10 +94,13 @@
     inset-inline-start: 27px;
     display: grid;
     place-items: center;
-    inline-size: var(--career-space-4);
-    min-inline-size: 0;
+    /* Mockup 1/2 (390): a 16 px pill that grows with the digits instead of covering the bell. */
+    inline-size: auto;
+    min-inline-size: var(--career-space-4);
     block-size: var(--career-space-4);
-    padding: 0;
+    padding: 0 var(--career-space-1);
+    border: 0;
+    border-radius: var(--career-space-2);
     font-size: var(--career-text-aux);
     line-height: 1;
   }

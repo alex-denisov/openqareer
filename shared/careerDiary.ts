@@ -160,6 +160,8 @@ export interface CareerDiaryPage<T> {
 
 export interface CareerDiaryOverview {
   readonly asOf: string;
+  /** День, когда кандидат появился на платформе: от него считаются недели дневника. */
+  readonly platformStartedAt?: string | null;
   readonly primaryWorkplace: CareerDiaryWorkplace | null;
   readonly summary: {
     readonly goalsAchieved: number;

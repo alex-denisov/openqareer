@@ -19,6 +19,7 @@ const workplace = {
 function overview(patch: Partial<CareerDiaryOverview> = {}): CareerDiaryOverview {
   return {
     asOf: '2026-10-07',
+    platformStartedAt: '2026-09-07',
     primaryWorkplace: workplace,
     summary: {
       goalsAchieved: 0,
@@ -43,6 +44,19 @@ describe('todayDiaryDecision (макет 1 «Вы работаете: решен
     );
     expect(decision?.label).toBe('Открыть карьерный дневник');
     expect(decision && actionSourceSummary(decision)).toBe('карьерный дневник');
+  });
+
+  it('counts weeks from the start on the platform, not from the start of the job', () => {
+    const longJob = { ...workplace, startDate: '2024-01-08' };
+    const decision = todayDiaryDecision(
+      overview({ primaryWorkplace: longJob, platformStartedAt: '2026-10-01' }),
+      null,
+    );
+    expect(decision?.headline).toBe('Разбор недели 2');
+    expect(
+      todayDiaryDecision(overview({ primaryWorkplace: longJob, platformStartedAt: null }), null)
+        ?.headline,
+    ).toBe('Разбор недели');
   });
 
   it('is silent once this week is reviewed or without an active workplace', () => {

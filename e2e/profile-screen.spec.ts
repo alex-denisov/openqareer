@@ -626,7 +626,8 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await expect(profileHeader).toContainText('VP of Engineering');
     await expect(profileHeader).toContainText('Берлин, Германия');
     await expect(profileHeader.getByText(/Резюме собрано 10 из 11 блоков/u)).toBeVisible();
-    await expect(profileHeader.getByText(/\d+ фактов ждут подтверждения/u)).toBeVisible();
+    // The fixture has no pending facts, and the line shows only when N > 0 (block A recheck).
+    await expect(profileHeader.getByText(/(ждут|ждёт) подтверждения/u)).toHaveCount(0);
 
     const name = profileHeader.getByRole('heading', { level: 1 });
     const role = profileHeader.getByText('VP of Engineering', { exact: false }).first();

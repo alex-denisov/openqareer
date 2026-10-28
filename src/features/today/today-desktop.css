@@ -1,9 +1,20 @@
-/* Полоса профиля «Сегодня» (макет 1-segodnya, .pfstrip): счётчик, шкала и малые кнопки. */
+/* Полоса профиля «Сегодня» (макет 1-segodnya, .pfstrip): счётчик, шкала и малые кнопки.
+   Длинные подписи не рвут кнопки на два ряда: ряд кнопок целиком уходит под заголовок. */
 .career-today-desktop .career-today-profile-progress {
-  grid-template-columns: minmax(0, calc(var(--career-space-8) * 9.5)) minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--career-space-4) var(--career-space-6);
   padding: var(--career-space-4) var(--career-space-6);
   border-color: color-mix(in oklch, var(--career-warning) 45%, var(--career-line-strong));
+}
+
+.career-today-desktop .career-today-profile-progress-main {
+  flex: 0 1 calc(var(--career-space-8) * 9.5);
+}
+
+.career-today-desktop .career-today-profile-actions {
+  flex: 1 0 auto;
+  flex-wrap: nowrap;
 }
 
 .career-today-profile-progress-main p {
@@ -63,8 +74,10 @@
 
 /* Макет: в узком окне заголовок полосы профиля и кнопки идут друг под другом. */
 @media (max-width: 1100px) {
-  .career-today-desktop .career-today-profile-progress {
-    grid-template-columns: minmax(0, 1fr);
+  .career-today-desktop .career-today-profile-progress-main,
+  .career-today-desktop .career-today-profile-actions {
+    flex-basis: 100%;
+    flex-wrap: wrap;
   }
 
   .career-today-profile-actions {
@@ -307,8 +320,10 @@
 /* Окно приложения 1280 с докованной панелью: колонка «Сегодня» уже 900 px — полоса профиля
    складывается (заголовок над кнопками), как в узком окне, вместо переноса кнопок в два ряда. */
 @container (max-width: 900px) {
-  .career-today-desktop .career-today-profile-progress {
-    grid-template-columns: minmax(0, 1fr);
+  .career-today-desktop .career-today-profile-progress-main,
+  .career-today-desktop .career-today-profile-actions {
+    flex-basis: 100%;
+    flex-wrap: wrap;
   }
   .career-today-profile-actions {
     justify-content: flex-start;

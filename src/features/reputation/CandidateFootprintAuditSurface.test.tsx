@@ -79,7 +79,7 @@ function baseProps(
       wayback: true,
       exa: false,
     },
-    consent: { approved: false, granted: false, versionId: 'digital_footprint-v1.1' },
+    consent: { approved: false, granted: false, versionId: 'digital_footprint-v1.2' },
     audit: null,
     selectedQueryIds: new Set(['query-github']),
     onRetry: vi.fn(),
@@ -141,7 +141,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
     expect(button('3 Находки')?.disabled).toBe(true);
     expect(button('4 Чек-лист')?.disabled).toBe(true);
     expect(container.textContent).toContain('Текст согласия ждёт утверждения');
-    expect(container.textContent).toContain('Ссылка на фото из профиля не передаётся поисковику');
+    expect(container.textContent).toContain('По фото из профиля в интернете не ищем');
     expect(button('Запустить выбранные проверки')).toBeUndefined();
     expect(props.onStart).not.toHaveBeenCalled();
 
@@ -151,7 +151,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
   it('shows the real query plan, source states, and start action in the scan step after consent', async () => {
     const props = baseProps({
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
     });
     await renderSurface(props);
@@ -170,7 +170,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
   it('routes actual review actions to their finding and derives checklist rows from review state', async () => {
     const props = baseProps({
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
       audit: completedAudit('unreviewed'),
     });
@@ -193,7 +193,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
     expect(button('3 Находки')?.getAttribute('aria-current')).toBe('step');
 
     const reviewedProps = baseProps({
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
       audit: completedAudit('confirmed_self'),
     });
@@ -214,7 +214,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
       ],
     };
     const props = baseProps({
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
       audit,
       onMarkFinding: vi.fn(),
@@ -233,7 +233,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
   it('counts resume metadata from the real check and leads to «Резюме и версии»', async () => {
     const props = baseProps({
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
       audit: completedAudit('confirmed_self'),
       metadataCheck: {
@@ -256,7 +256,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
     await renderSurface(
       baseProps({
-        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
         ownershipConfirmed: true,
         audit: completedAudit(),
         loading: false,
@@ -267,7 +267,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
   it('preserves a step selected before the first audit response resolves', async () => {
     const initial = baseProps({
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
       loading: true,
     });
@@ -276,7 +276,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
     await renderSurface(
       baseProps({
-        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
         ownershipConfirmed: true,
         audit: completedAudit(),
         loading: false,
@@ -287,7 +287,7 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
   it('opens real privacy, revoke, and deletion controls from the findings privacy line', async () => {
     const props = baseProps({
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
       audit: completedAudit(),
     });

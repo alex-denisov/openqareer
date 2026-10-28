@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Info } from '@phosphor-icons/react';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
+import { displayYear } from './experienceDate';
 import { addEducation, removeEducation, updateEducation } from './resumeStudioModel';
 import {
   SectionAddButton,
@@ -98,7 +99,9 @@ function EducationRow({
   readonly onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const years = [entry.startDate, entry.endDate].filter(Boolean).join(' — ');
+  const years = [displayYear(entry.startDate), displayYear(entry.endDate)]
+    .filter(Boolean)
+    .join(' — ');
   if (editing) {
     return (
       <EducationEditForm

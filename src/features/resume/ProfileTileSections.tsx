@@ -15,6 +15,7 @@ import {
   SectionPencilButton,
   SectionRemoveButton,
 } from './ProfileSectionEdit';
+import { displayMonth } from './experienceDate';
 import { SectionHead } from './ProfileSectionHead';
 import type { ResumeCertificationInput, ResumeDraft, ResumeProjectInput } from './resumeTypes';
 
@@ -296,8 +297,10 @@ function ProjectTile({ entry, saving, onSave, onRemove }: ProjectTileProps) {
           </p>
         </div>
         <span className="profile-project-period">
-          {[entry.startDate, entry.current ? 'по н. в.' : entry.endDate]
-            .map((value) => value?.replace(/^(\d{4})-(\d{2})$/u, '$2.$1'))
+          {[
+            entry.startDate && displayMonth(entry.startDate),
+            entry.current ? 'по н. в.' : entry.endDate && displayMonth(entry.endDate),
+          ]
             .filter(Boolean)
             .join(' — ')}
         </span>

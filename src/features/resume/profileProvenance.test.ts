@@ -37,6 +37,12 @@ describe('profile provenance copy (B541, макет 2)', () => {
     );
   });
 
+  it('says «Подключено» for a source that only connected and brought no facts', () => {
+    expect(sourceCountLabel({ factCount: 0, lastImportedAt: '2026-10-23T08:00:00Z' })).toBe(
+      'Подключено · 23.10',
+    );
+  });
+
   it('names only the platforms really imported in the courses note', () => {
     expect(coursesNotFoundLead([{ platform: 'linkedin' }, { platform: 'hh' }])).toBe(
       'Курсы не найдены ни в LinkedIn, ни в hh.ru.',
