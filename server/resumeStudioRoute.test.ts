@@ -467,7 +467,9 @@ describe('candidate resume studio API', () => {
     expect(new Set(references).size).toBe(references.length);
 
     const snapshot = store.getSnapshot(candidateId);
-    const messages = store.getMessages(candidateId);
+    // Provenance rows are service records: the full snapshot keeps them, the panel feed does not.
+    const { messages } = snapshot;
+    expect(store.getMessages(candidateId, 'profile')).toEqual([]);
     const expectedText = [
       'Platform Engineer',
       'Example Institute',

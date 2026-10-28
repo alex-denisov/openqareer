@@ -497,7 +497,7 @@ export class ConversationController {
   } {
     const memory = this.memory(candidateId);
     return {
-      messages: this.messages(candidateId, stage),
+      messages: stage ? this.getMessages(candidateId, stage) : this.messages(candidateId),
       memory,
       turns: this.turns(candidateId),
       dossier: buildExperienceDossier(memory),
@@ -652,7 +652,7 @@ export class ConversationController {
   }
 
   getMessages(candidateId: string, stage?: CoachTurnStage, subject?: TurnRequest['subject']) {
-    return this.messages(candidateId, stage, subject);
+    return this.stageMessages.dialogueOnly(candidateId, this.messages(candidateId, stage, subject));
   }
 
   rejectConsultantProposal(
