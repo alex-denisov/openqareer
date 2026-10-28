@@ -188,17 +188,21 @@ function ScenarioCosts({ model }: { model: CountryFitModel }) {
 }
 
 function ScenarioNext({ model }: { model: CountryFitModel }) {
-  const { continueToOnboarding, payroll, storageError, signedIn } = model;
+  const { continueToOnboarding, payroll, storageError } = model;
   return (
     <section className="cf-section cf-next" aria-labelledby="cf-next">
       <div>
         <h2 id="cf-next">
-          {signedIn ? 'Продолжить карьерный план' : 'Сохранить сценарий для карьерного плана'}
+          <span className="ps-member">Продолжить карьерный план</span>
+          <span className="ps-guest">Сохранить сценарий для карьерного плана</span>
         </h2>
-        <p>
-          {signedIn
-            ? 'Откройте кабинет, чтобы продолжить карьерный план. Этот расчёт не меняет данные существующего профиля.'
-            : 'Страна, валюта и годовой доход перейдут в контекст первого онбординга в этой вкладке. Расходы останутся только в калькуляторе.'}
+        <p className="ps-member">
+          Откройте кабинет, чтобы продолжить карьерный план. Этот расчёт не меняет данные
+          существующего профиля.
+        </p>
+        <p className="ps-guest">
+          Страна, валюта и годовой доход перейдут в контекст первого онбординга в этой вкладке.
+          Расходы останутся только в калькуляторе.
         </p>
       </div>
       <button
@@ -207,7 +211,8 @@ function ScenarioNext({ model }: { model: CountryFitModel }) {
         onClick={continueToOnboarding}
         disabled={!payroll}
       >
-        {signedIn ? 'Открыть кабинет' : 'Продолжить с этим сценарием'}
+        <span className="ps-member">Открыть кабинет</span>
+        <span className="ps-guest">Продолжить с этим сценарием</span>
       </button>
       {storageError && (
         <p role="alert">
@@ -342,7 +347,6 @@ export function CountryFitPage({
       <CountryFitSticky
         payroll={model.payroll}
         currency={model.data.currency}
-        signedIn={signedIn}
         onContinue={model.continueToOnboarding}
         storageError={model.storageError}
       />

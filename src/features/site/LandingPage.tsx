@@ -91,6 +91,23 @@ function Cta({
   );
 }
 
+/**
+ * B577: both variants are in the markup and CSS shows one by the
+ * `data-oq-signed-in` mark on <html>, so the session answer never redraws it.
+ */
+function SessionCta({ onNavigate }: { readonly onNavigate: Navigate }) {
+  return (
+    <>
+      <Cta to="/signup?from=home" className="btn primary lg ps-guest" onNavigate={onNavigate}>
+        Найти работу
+      </Cta>
+      <Cta to="/app" className="btn primary lg ps-member" onNavigate={onNavigate}>
+        Открыть кабинет
+      </Cta>
+    </>
+  );
+}
+
 function AppBadges() {
   return (
     <>
@@ -121,11 +138,9 @@ function Count({ active, date }: { readonly active: string; readonly date: strin
 function Hero({
   stats,
   onNavigate,
-  signedIn,
 }: {
   readonly stats: LandingStats;
   readonly onNavigate: Navigate;
-  readonly signedIn: boolean;
 }) {
   const c = counts(stats);
   const pool = landingFeed(stats);
@@ -141,13 +156,7 @@ function Hero({
             вакансии по всему рынку и откликнется по вашим правилам.
           </p>
           <div className="cta">
-            <Cta
-              to={signedIn ? '/app' : '/signup?from=home'}
-              className="btn primary lg"
-              onNavigate={onNavigate}
-            >
-              {signedIn ? 'Открыть кабинет' : 'Найти работу'}
-            </Cta>
+            <SessionCta onNavigate={onNavigate} />
             <a className="btn lg" href="/vacancies">
               Смотреть вакансии
             </a>
@@ -168,7 +177,7 @@ function Hero({
   );
 }
 
-function How({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean }) {
+function How({ onNavigate }: { onNavigate: Navigate }) {
   return (
     <section className="scr" id="how" aria-labelledby="how-heading">
       <div className="wrap">
@@ -189,13 +198,7 @@ function How({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean
           ))}
         </ol>
         <div className="after">
-          <Cta
-            to={signedIn ? '/app' : '/signup?from=home'}
-            className="btn primary lg"
-            onNavigate={onNavigate}
-          >
-            {signedIn ? 'Открыть кабинет' : 'Найти работу'}
-          </Cta>
+          <SessionCta onNavigate={onNavigate} />
           <a className="link" href="#tariffs">
             Что входит в тарифы <ArrowRight className="ic" aria-hidden="true" />
           </a>
@@ -302,7 +305,7 @@ function Faq() {
   );
 }
 
-function End({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean }) {
+function End({ onNavigate }: { onNavigate: Navigate }) {
   return (
     <section className="scr end" aria-labelledby="end-heading">
       <div className="wrap">
@@ -310,13 +313,7 @@ function End({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean
           <h2 id="end-heading">Ваша следующая работа может быть уже в списке</h2>
           <p>Загрузите резюме и посмотрите, куда вы проходите прямо сейчас.</p>
           <div className="cta">
-            <Cta
-              to={signedIn ? '/app' : '/signup?from=home'}
-              className="btn primary lg"
-              onNavigate={onNavigate}
-            >
-              {signedIn ? 'Открыть кабинет' : 'Найти работу'}
-            </Cta>
+            <SessionCta onNavigate={onNavigate} />
             <a className="btn lg" href="/vacancies">
               Смотреть вакансии
             </a>
@@ -356,12 +353,12 @@ export function LandingPage({ session, onNavigate, stats }: LandingPageProps) {
         isAdmin={session?.role === 'admin'}
       />
       <main id="main" className="hm">
-        <Hero stats={current} onNavigate={onNavigate} signedIn={signedIn} />
-        <How onNavigate={onNavigate} signedIn={signedIn} />
+        <Hero stats={current} onNavigate={onNavigate} />
+        <How onNavigate={onNavigate} />
         <Tools />
         <Tariffs />
         <Faq />
-        <End onNavigate={onNavigate} signedIn={signedIn} />
+        <End onNavigate={onNavigate} />
       </main>
       <PublicFooter onNavigate={onNavigate} onLanding signedIn={signedIn} />
     </div>
