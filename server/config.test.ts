@@ -398,6 +398,18 @@ describe('очередь моделей (B183)', () => {
     ).toEqual([]);
   });
 
+  it('по умолчанию очередь консультанта начинается с OpenAI, переменная это переопределяет (28.10)', () => {
+    expect(readServerConfig(validEnvironment, import.meta.url).coachPreferredRoutes).toEqual([
+      { provider: 'openai' },
+    ]);
+    expect(
+      readServerConfig(
+        { ...validEnvironment, OPENQAREER_COACH_PREFERRED_ROUTES: 'none' },
+        import.meta.url,
+      ).coachPreferredRoutes,
+    ).toEqual([]);
+  });
+
   it('опечатка в имени провайдера останавливает запуск, а не молча теряет маршрут', () => {
     expect(() =>
       readServerConfig(

@@ -30,6 +30,7 @@ import {
   buildSkillVerificationFact,
   createSkillVerificationProposal,
 } from '../../src/services/hhSkillQuizzes';
+import { COACH_TURN_BUDGET_MS } from '../providers/stageTimeout';
 
 const activeTurns = new WeakMap<RouteDeps, Set<string>>();
 
@@ -100,10 +101,12 @@ async function completeTurnWithProvider(
   candidateId: string,
   key: string,
   input: Parameters<CoachProvider['createTurn']>[0],
+  deadlineAt?: number,
 ) {
   const factsPending = listCandidateFacts(deps, candidateId, key, input);
   try {
-    const raw = decorateAdaptationResult(await deps.coachProvider.createTurn(input, key), input);
+    const turn = await deps.coachProvider.createTurn(input, key, deadlineAt ? { deadlineAt } : {});
+    const raw = decorateAdaptationResult(turn, input);
     // Названный кандидатом порог зарплаты меняется только подтверждаемой карточкой (28.10).
     const generated = { ...raw, result: withSalaryFloorProposal(raw.result, input) };
     // Quick replies are proposed candidate answers, unlike the consultant's
@@ -176,9 +179,11 @@ async function deliverTurn(
   const pending = () => reply.code(202).send({ data: { status: 'pending', idempotencyKey: key } });
   if (active.has(operation)) return pending();
   active.add(operation);
-  const work = generateClosedConversationSummaries(deps, request, candidateId, summaryTasks)
+  // Сводка прошлой беседы и роли хода делят одно время: клиент ждёт 240 с (28.10).
+  const deadlineAt = Date.now() + COACH_TURN_BUDGET_MS;
+  const work = generateClosedConversationSummaries(deps, request, candidateId, summaryTasks, deadlineAt)
     .then((attempted) =>
-      generateTurn(deps, request, candidateId, key, input, marketQuery, attempted),
+      generateTurn(deps, request, candidateId, key, input, marketQuery, attempted, deadlineAt),
     )
     .finally(() => active.delete(operation));
   if ((request.query as { delivery?: string }).delivery === 'receipt') {
@@ -212,6 +217,7 @@ async function generateTurn(
   input: Omit<Parameters<CoachProvider['createTurn']>[0], 'marketObservations'>,
   marketQuery?: string,
   attemptedSummaries: ReadonlySet<string> = new Set(),
+  deadlineAt?: number,
 ) {
   let marketObservations: MarketObservation[] = [];
   if (input.phase === 'market' && marketQuery) {
@@ -223,10 +229,13 @@ async function generateTurn(
     marketObservations = fetched;
   }
   try {
-    const output = await completeTurnWithProvider(deps, candidateId, key, {
-      ...input,
-      marketObservations,
-    });
+    const output = await completeTurnWithProvider(
+      deps,
+      candidateId,
+      key,
+      { ...input, marketObservations },
+      deadlineAt,
+    );
     if (
       input.internalPurpose !== 'consultant-summary' &&
       output.result.actionProposals.length > 0
@@ -253,6 +262,7 @@ async function generateClosedConversationSummaries(
   tasks: NonNullable<
     Extract<ReturnType<CandidateStore['startTurn']>, { state: 'ready' }>['closedConversations']
   >,
+  deadlineAt?: number,
 ): Promise<ReadonlySet<string>> {
   const attempted = new Set<string>();
   for (const task of tasks) {
@@ -267,7 +277,11 @@ async function generateClosedConversationSummaries(
       .update(`consultant-summary:${candidateId}:${task.conversationId}:${task.messageCount}`)
       .digest('hex');
     try {
-      const result = await deps.coachProvider.createTurn(summaryInput, summaryKey);
+      const result = await deps.coachProvider.createTurn(
+        summaryInput,
+        summaryKey,
+        deadlineAt ? { deadlineAt } : {},
+      );
       deps.candidateStore.saveConsultantSummary(candidateId, task, result);
     } catch (error) {
       deps.candidateStore.releaseConsultantSummaryClaim(candidateId, task);

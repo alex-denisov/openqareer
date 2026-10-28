@@ -37,6 +37,8 @@ export interface CoachTurnOptions {
    * queue then asks the next route instead of returning it (B564).
    */
   readonly accept?: (result: CoachProviderResult['result']) => boolean;
+  /** Момент (мс эпохи), к которому весь ход должен быть готов: клиент ждёт 240 с (28.10). */
+  readonly deadlineAt?: number;
 }
 
 export interface CoachProvider {
@@ -60,7 +62,9 @@ export type ProviderOutputDiagnostic =
   | 'response_refusal'
   | 'response_text_missing'
   | 'response_json_invalid'
-  | 'response_schema_invalid';
+  | 'response_schema_invalid'
+  /** Ход исчерпал своё время до ответа ступени (28.10). */
+  | 'turn_deadline';
 
 export class CoachProviderError extends Error {
   constructor(
