@@ -93,6 +93,28 @@ export function careerRoleId(title: string): string {
  */
 const MAX_MARKET_PROPOSALS = 5;
 
+/**
+ * «Подходит» и «встречается рядом» — разное (решение CPO 28.10). Подборку
+ * собирает функция ролей кандидата, поэтому в неё попадают и соседние
+ * профессии: у PHP-руководителя — восемь iOS-вакансий без единого общего
+ * навыка, и рынок назвал ему «iOS разработчик». Один общий навык — это Git или
+ * Jira, они есть почти в любой вакансии своей функции и о совпадении профессии
+ * не говорят. Два разных подтверждённых навыка среди повторяющихся требований
+ * группы — уже стек кандидата, а не фон функции.
+ */
+export const MIN_MARKET_ROLE_SKILL_MATCHES = 2;
+
+/**
+ * Роль модели держится на направлении опыта: месте работы или хотя бы двух
+ * фактах. Одна строка, похожая на текст вакансии, роль не называет.
+ */
+const MIN_MODEL_ROLE_FACTS = 2;
+
+function hasExperienceBasis(role: NamedRole, workplaceRefs: ReadonlySet<string>): boolean {
+  const refs = new Set(role.evidenceRefs);
+  return refs.size >= MIN_MODEL_ROLE_FACTS || [...refs].some((ref) => workplaceRefs.has(ref));
+}
+
 /** Пул по ключу роли: функция и уровень, а без словаря — строка названия. */
 function groupByRole(
   pool: readonly RoleObservation[],
@@ -153,6 +175,8 @@ export function proposeRoles(input: {
   readonly preferences?: WorkPreferenceResult;
   /** Сводит разные названия одной функции и уровня в одну роль (26.10). */
   readonly roleKey?: RoleKeyOf;
+  /** Ссылки на места работы: одной такой хватает, чтобы роль модели имела опору. */
+  readonly workplaceRefs?: ReadonlySet<string>;
 }): ProposedRole[] {
   const keyOf = memoizedKey(input.roleKey);
   const groups = groupByRole(input.pool, keyOf);
@@ -161,7 +185,12 @@ export function proposeRoles(input: {
 
   const fromModel = input.named
     // Роль без опоры на резюме — шум: объяснение обязательно, имя — нет.
-    .filter((role) => role.title.trim() && role.reason.trim() && role.evidenceRefs.length > 0)
+    .filter(
+      (role) =>
+        role.title.trim() &&
+        role.reason.trim() &&
+        hasExperienceBasis(role, input.workplaceRefs ?? new Set()),
+    )
     .flatMap<ProposedRole>((role) => {
       const key = keyOf(role.title.trim());
       if (!key || claimed.has(key)) return [];
@@ -186,12 +215,17 @@ export function proposeRoles(input: {
     .map(([, group]) => ({ group, described: describeGroup(group, new Set<string>(), skills) }))
     // «Директор» без функции — не роль: непонятно, чего директор (27.10).
     .filter(({ described }) => !BARE_LEADER_TITLES.has(described.title.trim().toLowerCase()))
+    // Без совпадения со стеком кандидата у рыночной роли нет основания для показа.
+    .filter(
+      ({ described }) =>
+        (described.matchedRequirementNames ?? []).length >= MIN_MARKET_ROLE_SKILL_MATCHES,
+    )
     .map<ProposedRole>(({ group, described }) => {
       return {
         id: careerRoleId(described.title),
         title: described.title,
         origin: 'market',
-        reason: null,
+        reason: `совпадают ваши навыки: ${(described.matchedRequirementNames ?? []).join(', ')}`,
         evidenceRefs: [],
         confirmation: { state: 'observed', ...withoutIdentity(described) },
         family: roleWorkFamily(described.title),

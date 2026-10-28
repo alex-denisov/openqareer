@@ -20,7 +20,9 @@ async function createApp() {
     roleNamer: {
       async nameRoles() {
         return {
-          roles: [{ title: 'CTO', reason: 'вёл платформу', evidenceRefs: ['memory:1'] }],
+          roles: [
+            { title: 'CTO', reason: 'вёл платформу', evidenceRefs: ['memory:1', 'memory:2'] },
+          ],
           stage: 'gemini:gemini-3.6-flash',
         };
       },

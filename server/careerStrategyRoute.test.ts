@@ -9,7 +9,7 @@ const named: NamedRole[] = [
   {
     title: 'Head of Product',
     reason: 'вёл продукты девять лет',
-    evidenceRefs: ['memory:1'],
+    evidenceRefs: ['memory:1', 'memory:1b'],
   },
 ];
 
@@ -91,7 +91,7 @@ describe('career strategy route', () => {
         title: 'Head of Product',
         origin: 'model',
         reason: 'вёл продукты девять лет',
-        evidenceRefs: ['memory:1'],
+        evidenceRefs: ['memory:1', 'memory:1b'],
       },
       provenance: { namedBy: 'gemini:gemini-3.6-flash', language: expect.any(String) },
     });

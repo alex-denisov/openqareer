@@ -262,7 +262,7 @@ function sameTitle(left: string | undefined, right: string): boolean {
 function originLabel(role: ProposedRole): string {
   return role.origin === 'model'
     ? `названо по вашему опыту: ${role.reason ?? ''}`.trim()
-    : 'названо рынком: так эту роль называют в вакансиях';
+    : `названо рынком: так эту роль называют в вакансиях${role.reason ? `; ${role.reason}` : ''}`;
 }
 
 function ConfirmationLine({ confirmation }: { readonly confirmation: RoleConfirmation }) {

@@ -41,8 +41,16 @@ async function createApp() {
       async nameRoles() {
         return {
           roles: [
-            { title: 'Operations Manager', reason: 'вёл операции', evidenceRefs: ['memory:1'] },
-            { title: 'Data Analyst', reason: 'считал когорты', evidenceRefs: ['memory:2'] },
+            {
+              title: 'Operations Manager',
+              reason: 'вёл операции',
+              evidenceRefs: ['memory:1', 'memory:1b'],
+            },
+            {
+              title: 'Data Analyst',
+              reason: 'считал когорты',
+              evidenceRefs: ['memory:2', 'memory:2b'],
+            },
           ],
           stage: 'gemini:gemini-3.6-flash',
         };

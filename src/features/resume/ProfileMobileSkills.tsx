@@ -13,6 +13,11 @@ import { addSkill } from './resumeStudioModel';
 import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './ProfileMobileElements';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
 import type { ResumeSkillInput } from './resumeTypes';
+import {
+  SKILL_CONFIRMATION_HINT,
+  confirmedSkillsLine,
+  orderSkillsByVerification,
+} from './skillConfirmation';
 
 // Mockup 2 (390): «Подтверждён», «Не проверен» or «Без квиза»; an unknown status code is never
 // shown as is. The source and its date read as one phrase: «из LinkedIn, 12.09».
@@ -91,7 +96,7 @@ function ProfileMobileSkillActions(props: ProfileMobileDataProps & ProfileMobile
 }
 
 export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobileNavigationProps) {
-  const skills = props.draft.skills ?? [];
+  const skills = orderSkillsByVerification(props.draft.skills ?? []);
   const [all, setAll] = useState(false);
   const visible = all ? skills : skills.slice(0, 5);
   return (
@@ -129,6 +134,10 @@ export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobil
         <ListChecks size="1em" aria-hidden="true" />
         Пройти квиз по навыкам
       </button>
+      <p className="pm-foot">
+        {skills.length ? `${confirmedSkillsLine(skills)} ` : ''}
+        {SKILL_CONFIRMATION_HINT}
+      </p>
     </>
   );
 }

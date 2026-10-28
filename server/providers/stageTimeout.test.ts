@@ -4,7 +4,13 @@ import { OpenAICoachProvider } from './openAICoachProvider';
 import { OpenAICompatibleCoachProvider } from './openAICompatibleCoachProvider';
 import { OpenRouterCoachProvider } from './openRouterCoachProvider';
 import { LlmRoleNamer } from './roleNamer';
-import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
+import { buildCoachProvider } from './coachProviderFactory';
+import {
+  LAST_PROVIDER_STAGE_TIMEOUT_MS,
+  PROVIDER_STAGE_MAX_RETRIES,
+  PROVIDER_STAGE_TIMEOUT_MS,
+  queueStageTimeoutMs,
+} from './stageTimeout';
 
 function clientOf(instance: unknown): OpenAI {
   return (instance as { client: OpenAI }).client;
@@ -40,5 +46,32 @@ describe('потолок ступени', () => {
       expect(clientOf(stage).timeout).toBe(PROVIDER_STAGE_TIMEOUT_MS);
       expect(clientOf(stage).maxRetries).toBe(PROVIDER_STAGE_MAX_RETRIES);
     }
+  });
+});
+
+describe('потолок последней ступени очереди', () => {
+  it('последней ступени даёт больше времени: за ней некому передать ход', () => {
+    // 25–27.10: три хода из тринадцати по профилю упали, когда gpt-5.6-luna,
+    // последняя ступень, упиралась в общий потолок 50 с.
+    expect(queueStageTimeoutMs(0, 5)).toBe(PROVIDER_STAGE_TIMEOUT_MS);
+    expect(queueStageTimeoutMs(3, 5)).toBe(PROVIDER_STAGE_TIMEOUT_MS);
+    expect(queueStageTimeoutMs(4, 5)).toBe(LAST_PROVIDER_STAGE_TIMEOUT_MS);
+    expect(queueStageTimeoutMs(0, 1)).toBe(LAST_PROVIDER_STAGE_TIMEOUT_MS);
+    expect(LAST_PROVIDER_STAGE_TIMEOUT_MS).toBeGreaterThan(PROVIDER_STAGE_TIMEOUT_MS);
+  });
+
+  it('три роли на последней ступени укладываются в ожидание результата клиентом', () => {
+    const clientResultWaitMs = 240_000; // RESULT_WAIT_MS, src/features/coach/coachResultDelivery.ts
+    expect(LAST_PROVIDER_STAGE_TIMEOUT_MS * 3).toBeLessThanOrEqual(clientResultWaitMs);
+  });
+
+  it('фабрика передаёт потолок ступени клиенту провайдера', () => {
+    const stage = buildCoachProvider({
+      provider: 'openai',
+      apiKey: 'k',
+      model: 'gpt-5.6-luna',
+      timeoutMs: LAST_PROVIDER_STAGE_TIMEOUT_MS,
+    });
+    expect(clientOf(stage).timeout).toBe(LAST_PROVIDER_STAGE_TIMEOUT_MS);
   });
 });

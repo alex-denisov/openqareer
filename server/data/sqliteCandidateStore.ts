@@ -16,7 +16,7 @@ import type {
   ResumeVersionUpdateResult,
   StoredResumeVersion,
 } from '../domain/resumeVersions';
-import type { CoachMessage, CoachTurnInput, CoachTurnStage, CoachTurnSubject } from '../domain/coach';
+import type { CoachMessage, CoachTurnStage, CoachTurnSubject } from '../domain/coach';
 import type {
   CandidateCredentials,
   CandidateIdentity,
@@ -136,6 +136,7 @@ import {
   type SqliteStoreOptions,
 } from './store/shared';
 import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from './sqliteBusyTimeout';
+import { resumeContextOf, withStoredTeamSizes } from './resumeTurnContext';
 
 export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentRetentionError };
 
@@ -382,7 +383,7 @@ export class SqliteCandidateStore implements CandidateStore {
       ...started,
       input: {
         ...started.input,
-        resumeContext: resumeContextOf(this.resumeRepository.get(candidateId)?.draft),
+        resumeContext: resumeContextOf(this.getSnapshot(candidateId).resume?.draft),
       },
     };
   }
@@ -405,7 +406,7 @@ export class SqliteCandidateStore implements CandidateStore {
       ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
-      resume: this.resumeRepository.get(candidateId),
+      resume: withStoredTeamSizes(this.resumeRepository.get(candidateId), parts.memory),
       documents: this.documentRepository.list(candidateId),
       vacancySubscriptions: this.vacancyRepository.list(candidateId),
     };
@@ -855,21 +856,6 @@ export class SqliteCandidateStore implements CandidateStore {
   transaction<T>(operation: () => T): T {
     return runSqliteTransaction(this.database, operation);
   }
-}
-
-function resumeContextOf(
-  draft?: ResumeDraft,
-): NonNullable<CoachTurnInput['resumeContext']> {
-  return {
-    headline: draft?.candidate.headline ?? null,
-    about: draft?.candidate.about ?? null,
-    experiences: (draft?.experience ?? []).map((experience) => ({
-      id: experience.id,
-      title: experience.title ?? null,
-      employer: experience.employer ?? null,
-      bulletMemoryIds: [...experience.bulletMemoryIds],
-    })),
-  };
 }
 
 /** Every `candidate_media` row a draft still points at — the rest gets pruned. */

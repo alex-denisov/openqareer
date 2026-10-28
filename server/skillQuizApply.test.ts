@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
+import { getSkillQuizById } from '../src/services/hhSkillQuizzes';
 import { candidateAuthorization, createApp, stores } from './appTestHarness';
 
 const origin = 'http://localhost:3000';
@@ -106,5 +107,50 @@ describe('B376 skill quiz result goes through a revertable career command', () =
       payload: { quizId: 'nope', skillName: 'X', answers: {} },
     });
     expect(bad.statusCode).toBe(404);
+  });
+});
+
+describe('quiz verdict lands on the profile skill the quiz checks', () => {
+  const dockerQuiz = getSkillQuizById('docker')!;
+  const allCorrect = Object.fromEntries(
+    dockerQuiz.questions.map((question) => [question.id, question.correctOptionIndex]),
+  );
+
+  it('confirms the existing «Docker» skill instead of adding one named after the quiz title', async () => {
+    const t = await setup([
+      { id: 'sk-1', name: 'TypeScript' },
+      { id: 'sk-2', name: 'Docker' },
+    ]);
+    const applied = await t.app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/skill-quiz/apply',
+      headers: { authorization: t.authorization, origin, 'idempotency-key': randomUUID() },
+      // The panel sends the quiz title, as it did on prod (27.10).
+      payload: {
+        quizId: 'docker',
+        skillName: 'Docker & Контейнеризация сервисов',
+        answers: allCorrect,
+      },
+    });
+    expect(applied.statusCode).toBe(201);
+    const skills = t.readSkills();
+    expect(skills).toHaveLength(2);
+    expect(skills[1]).toMatchObject({ id: 'sk-2', name: 'Docker', status: 'подтверждён' });
+    expect(applied.json().data.fact.skillName).toBe('Docker');
+  });
+
+  it('adds a short skill name, not the quiz title, when the profile has no such skill', async () => {
+    const t = await setup([{ id: 'sk-1', name: 'TypeScript' }]);
+    await t.app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/skill-quiz/apply',
+      headers: { authorization: t.authorization, origin, 'idempotency-key': randomUUID() },
+      payload: {
+        quizId: 'docker',
+        skillName: 'Docker & Контейнеризация сервисов',
+        answers: allCorrect,
+      },
+    });
+    expect(t.readSkills().map((skill) => skill.name)).toEqual(['TypeScript', 'Docker']);
   });
 });

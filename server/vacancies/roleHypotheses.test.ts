@@ -14,8 +14,8 @@ function matchedVacancy(title: string, skills: string[]): MatchedVacancyItem {
 }
 
 const named = [
-  { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1'] },
-  { title: 'Head of Growth', reason: 'запускал рост', evidenceRefs: ['memory:2'] },
+  { title: 'Продакт-менеджер', reason: 'вёл продукты', evidenceRefs: ['memory:1', 'memory:1b'] },
+  { title: 'Head of Growth', reason: 'запускал рост', evidenceRefs: ['memory:2', 'memory:2b'] },
 ];
 
 describe('buildRoleProposals (B180, срез 1в)', () => {
@@ -41,9 +41,11 @@ describe('buildRoleProposals (B180, срез 1в)', () => {
 
   it('без названных ролей отдаёт только то, что назвал сам рынок', () => {
     const roles = buildRoleProposals({
-      matched: Array.from({ length: 9 }, () => matchedVacancy('Аналитик данных', ['SQL'])),
+      matched: Array.from({ length: 9 }, () =>
+        matchedVacancy('Аналитик данных', ['SQL', 'Python']),
+      ),
       named: [],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles).toEqual([
