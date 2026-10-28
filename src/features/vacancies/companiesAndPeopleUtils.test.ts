@@ -211,4 +211,23 @@ describe('companyNextStepText', () => {
       ),
     ).toBe('Следующий шаг: подготовить резюме');
   });
+
+  it('hides a saved step whose due date has passed and suggests the next one (28.10)', () => {
+    const now = Date.parse('2026-10-28T10:00:00.000Z');
+    const overdue = {
+      ...base,
+      nextStep: { text: 'написать Igor Siusiukov', dueAt: '2026-10-27T00:00:00.000Z' },
+      vacancies: [vacancy],
+    } as never;
+    expect(companyNextStepText(overdue, { people: [igor] }, now)).toBe(
+      'Следующий шаг: откликнуться на Senior Director, написать Igor Siusiukov (круг 1)',
+    );
+    const today = {
+      ...base,
+      nextStep: { text: 'написать Igor Siusiukov', dueAt: '2026-10-28T00:00:00.000Z' },
+    } as never;
+    expect(companyNextStepText(today, { people: [igor] }, now)).toBe(
+      'Следующий шаг: написать Igor Siusiukov, до 28.10.2026',
+    );
+  });
 });
