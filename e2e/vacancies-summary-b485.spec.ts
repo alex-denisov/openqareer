@@ -47,7 +47,7 @@ test.describe('B485 — сводка каталога, подвал и счёт�
     const footer = page.locator('.vacancies-screen-footer');
     if (mobile) {
       await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
-        '148 вакансий по вашим условиям',
+        '148 вакансий · по совпадению',
       );
       await expect(footer).toContainText(/Показано 20 из 148\. Каталог на 07\.10 09:12\./u);
     } else {

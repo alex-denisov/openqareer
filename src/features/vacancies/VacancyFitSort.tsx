@@ -1,5 +1,5 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { fitHasNumber } from './VacancyFitSummary';
+import { compareFitPercent } from '../../../shared/vacancyFitPercent';
 export type VacancyFitSort = 'fit' | 'freshness';
 export function sortVacancyFitItems(
   items: readonly MatchedVacancyItem[],
@@ -16,23 +16,10 @@ export function sortVacancyFitItems(
           a.index - b.index
         );
       }
-      const left = fitHasNumber(a.item.explanation.fitView)
-        ? a.item.explanation.fitView!.result!.coveragePercent!
-        : -1;
-      const right = fitHasNumber(b.item.explanation.fitView)
-        ? b.item.explanation.fitView!.result!.coveragePercent!
-        : -1;
-      const leftRequired = a.item.explanation.fitView?.result?.requiredCoverage.percent;
-      const rightRequired = b.item.explanation.fitView?.result?.requiredCoverage.percent;
-      if (
-        left >= 0 &&
-        right >= 0 &&
-        typeof leftRequired === 'number' &&
-        typeof rightRequired === 'number' &&
-        leftRequired !== rightRequired
-      )
-        return rightRequired - leftRequired;
-      return right - left || a.index - b.index;
+      return (
+        compareFitPercent(a.item.explanation.fitView, b.item.explanation.fitView) ||
+        a.index - b.index
+      );
     })
     .map((row) => row.item);
 }
@@ -45,9 +32,13 @@ export function VacancyFitSortControl({
 }) {
   return (
     <label className="vacancy-fit-sort">
-      <span className="career-sr-only">Порядок вакансий</span>
-      <select value={value} onChange={(event) => onChange(event.target.value as VacancyFitSort)}>
-        <option value="fit">По соответствию</option>
+      <span>Порядок</span>
+      <select
+        aria-label="Порядок вакансий"
+        value={value}
+        onChange={(event) => onChange(event.target.value as VacancyFitSort)}
+      >
+        <option value="fit">По совпадению с профилем</option>
         <option value="freshness">Сначала новые</option>
       </select>
     </label>

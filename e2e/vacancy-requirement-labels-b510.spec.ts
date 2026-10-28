@@ -68,7 +68,7 @@ test('B510: long prod requirements become short skill chips, the sentence stays 
   const chips = page.locator('.vacancies-screen-skill-chips').first();
   await expect(chips).toBeVisible();
   const texts = (await chips.locator('.vacancies-screen-skill-chip').allInnerTexts()).map((text) =>
-    text.replace(/^(?:Подтверждено|Не проверено):\s*/u, '').trim(),
+    text.replace(/^(?:Есть в профиле|Нет в профиле):\s*/u, '').trim(),
   );
   expect(texts).toEqual(expect.arrayContaining(['Kafka', 'Kubernetes']));
   for (const text of texts) expect(text.split(/\s+/u).length).toBeLessThanOrEqual(5);

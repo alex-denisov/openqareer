@@ -1,4 +1,4 @@
-import { VacancyFitInline } from './VacancyFitSummary';
+import { VacancyFitCell } from './VacancyFitMark';
 import { VacancyMoneyCell } from './VacancyMoneyCell';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -64,7 +64,6 @@ function VacancyScreenRoleCell({
       <span className="vac-sub">
         {item.cluster.canonicalCompany} · {source}
         {date ? `, ${date}` : ''}
-        <VacancyFitInline vacancyId={item.cluster.id} view={item.explanation.fitView} />
       </span>
       {applicationStatus ? (
         <span className={`applied-note${applicationArchived ? ' is-archived' : ''}`}>
@@ -183,7 +182,6 @@ function VacancyScreenStatusCell({ item }: { readonly item: MatchedVacancyItem }
     <span className={`vacancies-screen-cell vacancies-screen-cell--status is-${status.tone}`}>
       <Icon aria-hidden="true" />
       {status.label}
-      <VacancyFitInline vacancyId={item.cluster.id} view={item.explanation.fitView} short />
     </span>
   );
 }
@@ -207,6 +205,7 @@ export function VacancyScreenRowCells({
       <VacancyScreenLevelCell item={item} />
       <VacancyScreenGeoCell item={item} />
       <VacancyMoneyCell item={item} observedDate={observedDate(item)} />
+      <VacancyFitCell item={item} />
       <VacancyScreenStatusCell item={item} />
     </>
   );

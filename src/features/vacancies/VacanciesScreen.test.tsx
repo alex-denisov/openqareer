@@ -425,7 +425,7 @@ describe('VacanciesScreen mockup small buttons (B510)', () => {
 });
 
 describe('VacanciesScreen fit percent in the 390 status (B510)', () => {
-  it('puts the short percent right after the status label', () => {
+  it('replaces the 390 status with the coloured percent and «по N треб.» (28.10)', () => {
     const html = renderToStaticMarkup(
       <VacancyScreenRowCells
         item={matchedItem('v-fit', 'Head of Engineering', {
@@ -435,8 +435,7 @@ describe('VacanciesScreen fit percent in the 390 status (B510)', () => {
         alreadyApplied={false}
       />,
     );
-    expect(html).toMatch(
-      /vacancies-screen-cell--status[^>]*>[^]*?Подходит<span class="vacancy-fit-inline is-number is-short"/,
-    );
+    expect(html).toMatch(/vacancies-screen-cell--fit[^]*Совпадение 50 %[^]*по \d+ треб\./u);
+    expect(html).not.toContain('vacancy-fit-inline');
   });
 });

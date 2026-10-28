@@ -2,6 +2,8 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyRow } from './VacancyRow';
 import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
 import { VacancyFitSortControl } from './VacancyFitSort';
+import { VacancyFitBar } from './VacancyFitMark';
+import { vacancyFitMark } from './vacancyFitModel';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
 import type { SavedCardRenderer } from './SavedVacanciesPanel';
@@ -39,19 +41,39 @@ interface VacanciesMainBodyProps {
 function VacanciesTableHeader({
   sort,
   onSortChange,
-}: Pick<ListContentProps, 'sort' | 'onSortChange'>) {
+  items,
+  onOpenResumeUpload,
+}: Pick<ListContentProps, 'sort' | 'onSortChange' | 'items' | 'onOpenResumeUpload'>) {
+  const noProfile = items.some((item) => {
+    const mark = vacancyFitMark(item.explanation.fitView);
+    return mark.kind === 'none' && mark.caption === 'нет профиля';
+  });
   return (
-    <div className="vacancies-table-header" role="group" aria-label="Колонки списка вакансий">
-      <div className="vacancies-table-header-cells">
-        <span>Роль</span>
-        <span>Уровень</span>
-        <span>Гео</span>
-        <span>Деньги</span>
-      </div>
-      <span className="vacancies-table-header-actions">
+    <>
+      <VacancyFitBar>
         {onSortChange ? <VacancyFitSortControl value={sort} onChange={onSortChange} /> : null}
-      </span>
-    </div>
+      </VacancyFitBar>
+      {noProfile && onOpenResumeUpload ? (
+        <div className="vacancy-fit-no-profile">
+          <p>
+            Без профиля процента нет. Загрузите резюме — проценты посчитаются для всей подборки.
+          </p>
+          <button type="button" className="career-btn is-primary" onClick={onOpenResumeUpload}>
+            Загрузить резюме
+          </button>
+        </div>
+      ) : null}
+      <div className="vacancies-table-header" role="group" aria-label="Колонки списка вакансий">
+        <div className="vacancies-table-header-cells">
+          <span>Роль</span>
+          <span>Уровень</span>
+          <span>Гео</span>
+          <span>Деньги</span>
+          <span>Совпадение</span>
+        </div>
+        <span className="vacancies-table-header-actions" />
+      </div>
+    </>
   );
 }
 
@@ -102,7 +124,12 @@ function VacanciesListContent(props: ListContentProps) {
   const catalogDate = catalogSnapshotLabel(props.catalogObservedAt);
   return (
     <div className="vacancies-list-container">
-      <VacanciesTableHeader sort={props.sort} onSortChange={props.onSortChange} />
+      <VacanciesTableHeader
+        sort={props.sort}
+        onSortChange={props.onSortChange}
+        items={props.items}
+        onOpenResumeUpload={props.onOpenResumeUpload}
+      />
       <ul className="vac-list">
         {props.items.map((item) => (
           <VacancyScreenRow key={item.cluster.id} item={item} props={props} />
@@ -124,7 +151,11 @@ function VacanciesListContent(props: ListContentProps) {
           onDone={() => props.onCompanyWantsChanged?.()}
         />
         {props.hasMore ? (
-          <button type="button" className="companies-people-load-more vac-sm" onClick={props.onLoadMore}>
+          <button
+            type="button"
+            className="companies-people-load-more vac-sm"
+            onClick={props.onLoadMore}
+          >
             Показать ещё 20
           </button>
         ) : null}
