@@ -350,8 +350,10 @@
   .vacancies-screen-row-trigger .vacancies-screen-cell--status {
     display: none;
   }
-  .vacancies-screen-cell--fit {
+  .vacancies-screen-row-trigger .vacancies-screen-cell--fit {
     display: inline-flex;
+    flex-direction: row;
+    white-space: nowrap;
     grid-column: 2;
     grid-row: 2;
     align-items: baseline;
