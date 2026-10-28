@@ -267,3 +267,38 @@ describe('время ступеней хода (28.10)', () => {
     ]);
   });
 });
+
+describe('дедлайн хода (28.10)', () => {
+  it('не начинает ступень, когда до дедлайна хода осталось меньше минимума, и не ждёт дольше остатка', async () => {
+    let clock = 0;
+    const slow: CoachProvider = {
+      createTurn: () => new Promise(() => {}),
+    };
+    const calls: string[] = [];
+    const never: CoachProvider = {
+      async createTurn() {
+        calls.push('second');
+        return result('nvidia');
+      },
+    };
+    const provider = new ResilientCoachProvider({
+      routes: [
+        { id: 'openai', provider: slow },
+        { id: 'nvidia', provider: never },
+      ],
+      now: () => clock,
+    });
+    const started = Date.now();
+    clock = 0;
+    const turn = provider.createTurn(input, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', {
+      deadlineAt: 50,
+    });
+    // The first route may wait only the 50 ms left; after it the deadline is gone.
+    setTimeout(() => {
+      clock = 100;
+    }, 20);
+    await expect(turn).rejects.toMatchObject({ code: 'provider_timeout' });
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(calls).toEqual([]);
+  });
+});

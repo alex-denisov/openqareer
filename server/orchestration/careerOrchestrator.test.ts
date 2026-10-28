@@ -412,25 +412,75 @@ describe('ответ консультанта сразу, разбор фоно�
     dataClass: 'synthetic' as const,
     locale: 'ru-RU' as const,
     phase: 'market' as const,
-    messages: [{ id: 'message-1', role: 'user' as const, content: 'Почему эта вакансия подходит?' }],
+    messages: [
+      { id: 'message-1', role: 'user' as const, content: 'Почему эта вакансия подходит?' },
+    ],
   };
 
   it('reply: отвечает один консультант', async () => {
     const calls: CareerRole[] = [];
     const orchestrator = new CareerOrchestrator({
-      roleAgent: { async run(run) { calls.push(run.role); return roleResult(run.role); } },
+      roleAgent: {
+        async run(run) {
+          calls.push(run.role);
+          return roleResult(run.role);
+        },
+      },
     });
-    await orchestrator.createTurn(input, '11111111-1111-4111-8111-111111111201', { split: 'reply' });
+    await orchestrator.createTurn(input, '11111111-1111-4111-8111-111111111201', {
+      split: 'reply',
+    });
     expect(calls).toEqual(['career_consultant']);
   });
 
   it('analysis: эксперт и стратег, предложения и трек стратега', async () => {
     const calls: CareerRole[] = [];
     const orchestrator = new CareerOrchestrator({
-      roleAgent: { async run(run) { calls.push(run.role); return roleResult(run.role); } },
+      roleAgent: {
+        async run(run) {
+          calls.push(run.role);
+          return roleResult(run.role);
+        },
+      },
     });
-    const out = await orchestrator.createTurn(input, '11111111-1111-4111-8111-111111111202', { split: 'analysis' });
+    const out = await orchestrator.createTurn(input, '11111111-1111-4111-8111-111111111202', {
+      split: 'analysis',
+    });
     expect(calls).toEqual(['career_expert', 'career_strategist']);
     expect(out.result.intelligence?.roleCoverage).toEqual(['career_expert', 'career_strategist']);
+  });
+});
+
+describe('дедлайн хода доходит до каждой роли (28.10)', () => {
+  it('передаёт deadlineAt всем трём ролям, а accept — только последней', async () => {
+    const seen: Array<{ role: CareerRole; deadlineAt?: number; accept: boolean }> = [];
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          seen.push({
+            role: input.role,
+            deadlineAt: input.options?.deadlineAt,
+            accept: Boolean(input.options?.accept),
+          });
+          return roleResult(input.role);
+        },
+      },
+    });
+    await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'resume',
+        messages: [{ id: 'message-1', role: 'user', content: 'Проверь резюме.' }],
+      },
+      '11111111-1111-4111-8111-111111111199',
+      { deadlineAt: 123_456, accept: () => true },
+    );
+    expect(seen).toEqual([
+      { role: 'career_expert', deadlineAt: 123_456, accept: false },
+      { role: 'career_strategist', deadlineAt: 123_456, accept: false },
+      { role: 'career_consultant', deadlineAt: 123_456, accept: true },
+    ]);
   });
 });

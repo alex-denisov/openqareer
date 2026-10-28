@@ -12,12 +12,21 @@ const INSTRUCTIONS = `Assess only the supplied sourced vacancy requirements agai
 export function createVacancyFitAssessor(client: VacancyFitBulkClient, runId: string): VacancyFitAssessor {
   return {
     async assess(input) {
-      const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(input.facts.map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096 });
+      const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(input.facts.map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length) });
       const parsed: unknown = JSON.parse(withoutMarkdownFence(response.content));
       if (!parsed || typeof parsed !== 'object' || !('assessments' in parsed) || !Array.isArray(parsed.assessments) || parsed.assessments.length > input.requirements.length) throw new Error('invalid vacancy fit assessment');
       return parsed.assessments.map(parseAssessment);
     },
   };
+}
+/** An answer the parser can read moves no further down the bulk chain; any other answer does. */
+function hasAssessments(content: string, limit: number): boolean {
+  try {
+    const parsed: unknown = JSON.parse(withoutMarkdownFence(content));
+    return !!parsed && typeof parsed === 'object' && 'assessments' in parsed && Array.isArray(parsed.assessments) && parsed.assessments.length <= limit;
+  } catch {
+    return false;
+  }
 }
 /** The model fences JSON despite the instructions (1 of 12 local answers, B562-r); that was a whole failed attempt. */
 function withoutMarkdownFence(content: string): string {

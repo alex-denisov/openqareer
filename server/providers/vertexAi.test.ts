@@ -90,9 +90,8 @@ describe('Vertex AI (B266, решение владельца 25.09)', () => {
     });
   });
 
-  it('очередь письма ставит Vertex первым', () => {
+  it('цепочка письма ставит Vertex первым', () => {
     const writer = buildCoverLetterWriter({
-      personalProvider: 'openrouter',
       providerCredentials: { openrouter: 'o' },
       vertex: readVertexConfig({ OPENQAREER_VERTEX_SERVICE_ACCOUNT_B64: encoded }),
     }) as unknown as { descriptors: readonly string[] };

@@ -1,18 +1,62 @@
-export interface BulkLlmConfig {
-  apiKey: string;
+import { MODEL_CHAINS } from './modelChains';
+
+/** OpenRouter lane of the bulk chain: a pinned model, its pinned hosts and a price cap. */
+export interface BulkOpenRouterLane {
   model: string;
+  /** Pinned hosts in order: a price change or a rate limit of one does not stop the work. */
   provider: string;
   quantization: string;
+  inputPerMillionUsd: number;
+  outputPerMillionUsd: number;
+}
+
+/**
+ * Hosts and price caps of each OpenRouter model of the bulk chain (catalog 28.10). A cap is the
+ * catalog list price: a host dearer than it is never chosen. Every host supports disabled
+ * reasoning and `max_tokens`, so `require_parameters` keeps the request on them.
+ */
+export const BULK_LANE_PINS: Readonly<Record<string, Omit<BulkOpenRouterLane, 'model'>>> = {
+  'deepseek/deepseek-v4.1-flash': {
+    provider: 'deepinfra/fp8,baidu/fp8,morph/fp8',
+    quantization: 'fp8',
+    inputPerMillionUsd: 0.14,
+    outputPerMillionUsd: 0.42,
+  },
+  'z-ai/glm-5.3-flash': {
+    provider: 'streamlake/fp8,gmicloud/fp8,novita/fp8',
+    quantization: 'fp8',
+    inputPerMillionUsd: 0.15,
+    outputPerMillionUsd: 0.5,
+  },
+};
+
+/** OpenRouter lanes in the order of the bulk chain (`MODEL_CHAINS.bulk`); Vertex is not one of them. */
+export function bulkOpenRouterLanes(): BulkOpenRouterLane[] {
+  return MODEL_CHAINS.bulk.flatMap((stage) => {
+    if (stage.provider !== 'openrouter') return [];
+    const pins = BULK_LANE_PINS[stage.model];
+    if (!pins) throw new Error(`Bulk lane ${stage.model} has no pinned hosts`);
+    return [{ model: stage.model, ...pins }];
+  });
+}
+
+export interface BulkLlmConfig {
+  apiKey: string;
+  /** OpenRouter lanes of the chain in order; the model and hosts live in code, not in the env. */
+  lanes: readonly BulkOpenRouterLane[];
   /** Cap of one run id (for the worker: one UTC day of that worker, see `workerDayRunId`). */
   runUsd: number;
   /** Cap of the whole channel per UTC day, across every run id. */
   dayUsd: number;
   totalUsd: number;
   perRequestUsd: number;
-  inputPerMillionUsd: number;
-  outputPerMillionUsd: number;
   batchEnabled: boolean;
 }
+/**
+ * The env holds the switch and the spend caps. The chain (28.10: Vertex → deepseek-v4.1-flash →
+ * glm-5.3-flash) is code: `OPENQAREER_BULK_LLM_MODEL`, `_PROVIDER`, `_QUANTIZATION` and the price
+ * variables are no longer read.
+ */
 export function readBulkLlmConfig(env: NodeJS.ProcessEnv = process.env): BulkLlmConfig | null {
   if (env.OPENQAREER_BULK_LLM_ENABLED !== 'true') return null;
   const text = (key: string) => {
@@ -26,31 +70,13 @@ export function readBulkLlmConfig(env: NodeJS.ProcessEnv = process.env): BulkLlm
       throw new Error(`Invalid bulk configuration: ${key}`);
     return value;
   };
-  const config = {
+  return {
     apiKey: text('OPENQAREER_OPENROUTER_API_KEY'),
-    model: text('OPENQAREER_BULK_LLM_MODEL'),
-    provider: text('OPENQAREER_BULK_LLM_PROVIDER'),
-    quantization: text('OPENQAREER_BULK_LLM_QUANTIZATION'),
+    lanes: bulkOpenRouterLanes(),
     runUsd: number('OPENQAREER_BULK_LLM_RUN_USD'),
     dayUsd: number('OPENQAREER_BULK_LLM_DAY_USD'),
     totalUsd: number('OPENQAREER_BULK_LLM_TOTAL_USD'),
     perRequestUsd: number('OPENQAREER_BULK_LLM_REQUEST_USD'),
-    inputPerMillionUsd: number('OPENQAREER_BULK_LLM_INPUT_PER_MILLION_USD'),
-    outputPerMillionUsd: number('OPENQAREER_BULK_LLM_OUTPUT_PER_MILLION_USD'),
     batchEnabled: env.OPENQAREER_BULK_LLM_BATCH_ENABLED === 'true',
   };
-  if (
-    ![
-      'deepseek/deepseek-v4-flash',
-      'deepseek/deepseek-v4.1-flash',
-      'deepseek/deepseek-v4.1-flash-1017',
-    ].includes(config.model)
-  )
-    throw new Error('Bulk model must be pinned and support disabled reasoning');
-  if (
-    !config.provider.split(',').every((provider) => /^[a-z0-9][a-z0-9./_-]+$/u.test(provider)) ||
-    !['fp4', 'fp8', 'fp16', 'bf16', 'fp32', 'int4', 'int8', 'mxfp4'].includes(config.quantization)
-  )
-    throw new Error('Invalid pinned provider or quantization');
-  return config;
 }

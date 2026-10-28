@@ -270,34 +270,28 @@ function namedRoleHygieneIsWired(namer: unknown): boolean {
 }
 
 describe('buildRoleNamer', () => {
-  it('строит очередь и пропускает ступени с другим транспортом', () => {
+  it('цепочка называния: Vertex → deepseek-v4.1-flash → luna, без бесплатных и Gemini AI Studio (28.10)', () => {
     const built = buildRoleNamer({
-      personalProvider: 'openrouter',
-      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-      fallbacks: [
-        { provider: 'openrouter', model: 'openrouter/free' },
-        // Gemini говорит не на chat/completions — честнее пропустить ступень,
-        // чем звать её транспортом, которого она не понимает.
-        { provider: 'gemini', model: 'gemini-3.6-flash' },
-        { provider: 'openai', model: 'gpt-5.6-luna' },
-      ],
-      providerCredentials: { openrouter: 'k', gemini: 'k', openai: 'k' },
+      providerCredentials: { openrouter: 'k', gemini: 'k', openai: 'k', nvidia: 'k' },
+      vertex: {
+        projectId: 'p',
+        clientEmail: 'bot@p.iam.gserviceaccount.com',
+        privateKey: 'unused-in-this-test',
+        model: 'gemini-3.8-flash',
+        location: 'global',
+      },
     });
 
     expect(describeRoleNamerQueue(built)).toEqual([
-      'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free',
-      'openrouter:openrouter/free',
+      'vertex:gemini-3.8-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
     ]);
-    // Названия ролей уходят кандидату и переживают рестарт в хранилище — они
-    // обязаны проходить чистку до записи в него (B210).
     expect(namedRoleHygieneIsWired(built)).toBe(true);
   });
 
   it('ставит Vertex первым, когда он настроен (решение владельца 25.09)', () => {
     const built = buildRoleNamer({
-      personalProvider: 'openrouter',
-      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
       providerCredentials: { openrouter: 'k' },
       vertex: {
         projectId: 'p',
@@ -341,7 +335,7 @@ describe('buildRoleNamer', () => {
 
   it('без ключей ступеней нет вовсе', () => {
     expect(
-      buildRoleNamer({ personalProvider: 'openrouter', providerCredentials: {} }),
+      buildRoleNamer({ providerCredentials: {} }),
     ).toBeUndefined();
   });
 });
@@ -402,38 +396,6 @@ describe('GeminiRoleNamer', () => {
       fetchImpl: async () => new Response('overloaded', { status: 503 }),
     });
     await expect(namer.nameRoles(facts, 'ru')).resolves.toMatchObject({ roles: [] });
-  });
-});
-
-describe('buildRoleNamer с Gemini', () => {
-  it('ставит Gemini головой очереди называния ролей', () => {
-    const built = buildRoleNamer({
-      personalProvider: 'openrouter',
-      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-      fallbacks: [
-        { provider: 'openrouter', model: 'openrouter/free' },
-        { provider: 'gemini', model: 'gemini-3.6-flash' },
-        { provider: 'openai', model: 'gpt-5.6-luna' },
-      ],
-      providerCredentials: { openrouter: 'k', gemini: 'k', openai: 'k' },
-      cloudflareGateway: { accountId: 'acc', gatewayId: 'gate' },
-    });
-
-    // Решение владельца 2026-09-03: 14.7 с против 59 с у бесплатной головы.
-    expect(describeRoleNamerQueue(built)[0]).toBe('gemini:gemini-3.6-flash');
-  });
-
-  it('без тоннеля ступень Gemini пропускается, а не зовётся напрямую', () => {
-    const built = buildRoleNamer({
-      personalProvider: 'openrouter',
-      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-      fallbacks: [{ provider: 'gemini', model: 'gemini-3.6-flash' }],
-      providerCredentials: { openrouter: 'k', gemini: 'k' },
-    });
-
-    expect(describeRoleNamerQueue(built)).toEqual([
-      'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free',
-    ]);
   });
 });
 

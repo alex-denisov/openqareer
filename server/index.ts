@@ -6,24 +6,16 @@ import { scheduleCatalogSitemapRefresh } from './seo/catalogSitemapSchedule';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
-import { VertexCampaignRoleModel } from './providers/campaignRoleModel';
+import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildCoverLetterWriter } from './providers/coverLetterWriter';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
-import {
-  ResilientCoachProvider,
-  type TimedRoutingAttempt,
-} from './providers/resilientCoachProvider';
+import type { TimedRoutingAttempt } from './providers/resilientCoachProvider';
 import { StructuredStageCoachProvider } from './providers/structuredStageCoachProvider';
-import { queueStageTimeoutMs } from './providers/stageTimeout';
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
-import {
-  namedQueueDepth,
-  selectProviderQueue,
-  type ProviderQueueEntry,
-} from './providers/providerQueue';
+import { buildCoachChainProvider } from './providers/modelChains';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
 import { buildEmailVerificationSender } from './auth/emailVerificationEmail';
@@ -78,38 +70,22 @@ const authService = new AuthService({
     : {}),
 });
 await authService.seedAccounts(config.seedAccounts, candidateStore);
-const personalProviderId = config.personalProvider ?? 'openai';
-const syntheticProviderId = config.syntheticProvider ?? 'openrouter';
-// Обоим классам данных — одна и та же очередь моделей: провайдер, который
-// не ответил, уступает следующему, а не роняет ход (решение владельца
-// 2026-09-02). Персональный класс отличается только своим списком.
-const buildQueue = (
-  head: ProviderQueueEntry,
-  fallbacks: readonly ProviderQueueEntry[] | undefined,
-) =>
-  selectProviderQueue({
-    head,
-    fallbacks,
+// Цепочка консультанта названа в коде (решение владельца 28.10): OpenAI luna →
+// deepseek-v4.1-flash → glm-5.3-flash. Обоим классам данных — одна цепочка;
+// очередь из `OPENQAREER_PERSONAL_AI_*` и `OPENQAREER_SYNTHETIC_AI_*` консультант не читает.
+const buildCoachQueue = (onAttempts: (attempts: readonly TimedRoutingAttempt[]) => void) =>
+  buildCoachChainProvider({
     credentials: config.providerCredentials ?? {},
-    // Только очередь консультанта: роли и письма читают свои очереди сами.
-    excluded: config.coachExcludedRoutes ?? [],
-  }).map((route, index, routes) => ({
-    id: route.provider,
-    model: route.model,
-    provider: buildCoachProvider({
-      ...route,
-      folderId: config.yandexFolderId,
-      cloudflareGateway: config.cloudflareGateway,
-      // Последней ступени некому уступить ход: её не обрываем общим потолком.
-      timeoutMs: queueStageTimeoutMs(index, routes.length),
-    }),
-  }));
+    onAttempts,
+    buildStage: (route, timeoutMs) =>
+      buildCoachProvider({
+        ...route,
+        folderId: config.yandexFolderId,
+        cloudflareGateway: config.cloudflareGateway,
+        timeoutMs,
+      }),
+  });
 
-const personalHead = { provider: personalProviderId, model: config.model };
-const syntheticHead = {
-  provider: syntheticProviderId,
-  model: config.syntheticModel,
-};
 // Время каждой ступени хода — в журнал сервера: без него 140 с хода не
 // раскладывались по ступеням (28.10). Только провайдер, модель, статус и мс.
 const logRouteAttempts =
@@ -117,22 +93,8 @@ const logRouteAttempts =
     process.stdout.write(
       `${JSON.stringify({ level: 30, time: Date.now(), msg: 'coach-route-attempts', dataClass, attempts })}\n`,
     );
-const personalDataProvider = new ResilientCoachProvider({
-  onAttempts: logRouteAttempts('personal'),
-  routes: buildQueue(personalHead, config.personalFallbacks),
-  maxAttempts: namedQueueDepth({
-    head: personalHead,
-    fallbacks: config.personalFallbacks,
-  }),
-});
-const syntheticDataProvider = new ResilientCoachProvider({
-  onAttempts: logRouteAttempts('synthetic'),
-  routes: buildQueue(syntheticHead, config.syntheticFallbacks),
-  maxAttempts: namedQueueDepth({
-    head: syntheticHead,
-    fallbacks: config.syntheticFallbacks,
-  }),
-});
+const personalDataProvider = buildCoachQueue(logRouteAttempts('personal'));
+const syntheticDataProvider = buildCoachQueue(logRouteAttempts('synthetic'));
 // Структурные шаги проверки навыков начинают со связки воркера процента (B564):
 // очередь коуча отвечала им 156–372 с при тайм-ауте сервера 190 с.
 const bulkLlmRuntime = createBulkLlmRuntime({ databasePath: config.databasePath });
@@ -238,34 +200,22 @@ const app = await buildApp({
   },
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
-    personalProvider: personalProviderId,
-    model: config.model,
     providerCredentials: config.providerCredentials,
   }),
   roleNamer: buildRoleNamer({
-    personalProvider: personalProviderId,
-    model: config.model,
-    // Очередь та же, что у хода коуча: с потолком ступени в тридцать секунд
-    // одинокая бесплатная голова оставляла панель пустой (B180, 2026-09-03).
-    fallbacks: config.personalFallbacks,
     providerCredentials: config.providerCredentials,
-    // Голова называния — Gemini, и без тоннеля она не строится (решение
-    // владельца 2026-09-03).
-    cloudflareGateway: config.cloudflareGateway,
     vertex: config.vertex,
     // Названные роли переживают рестарт: без хранилища каждый деплой снова звал
     // модель и упирался в исчерпанную бесплатную квоту (INC-035, B191).
     cacheStore: roleNamingCache,
   }),
-  campaignRoleModel: config.vertex ? new VertexCampaignRoleModel(config.vertex) : undefined,
-  // Та же очередь провайдеров, что и у называния ролей: письмо пишет модель,
-  // шаблон остаётся запасом (B266, пункт 7).
-  coverLetterWriter: buildCoverLetterWriter({
-    personalProvider: personalProviderId,
-    model: config.model,
-    fallbacks: config.personalFallbacks,
+  campaignRoleModel: buildCampaignRoleModel({
     providerCredentials: config.providerCredentials,
-    cloudflareGateway: config.cloudflareGateway,
+    vertex: config.vertex,
+  }),
+  // Письмо пишет модель по своей цепочке, шаблон остаётся запасом (B266, пункт 7).
+  coverLetterWriter: buildCoverLetterWriter({
+    providerCredentials: config.providerCredentials,
     vertex: config.vertex,
   }),
   serveStatic: process.env.NODE_ENV === 'production',

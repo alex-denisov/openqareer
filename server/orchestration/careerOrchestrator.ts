@@ -87,12 +87,18 @@ async function runRoles(
         contribution(priorRole, priorOutput),
       ),
       idempotencyKey: roleIdempotencyKey(idempotencyKey, role),
-      // Only the last role writes the answer the caller checks.
-      ...(role === roles.at(-1) && options ? { options } : {}),
+      // Only the last role writes the answer the caller checks; every role shares the turn deadline.
+      ...roleOptions(role === roles.at(-1), options),
     });
     runs.push({ role, output });
   }
   return runs;
+}
+
+function roleOptions(last: boolean, options: CoachTurnOptions | undefined) {
+  if (!options) return {};
+  if (last) return { options };
+  return options.deadlineAt === undefined ? {} : { options: { deadlineAt: options.deadlineAt } };
 }
 
 function finalizeCareerTurn(

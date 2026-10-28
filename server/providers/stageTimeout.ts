@@ -35,3 +35,10 @@ export const LAST_PROVIDER_STAGE_TIMEOUT_MS = 80_000;
 export function queueStageTimeoutMs(index: number, total: number): number {
   return index === total - 1 ? LAST_PROVIDER_STAGE_TIMEOUT_MS : PROVIDER_STAGE_TIMEOUT_MS;
 }
+
+/**
+ * Время на весь ход консультанта (28.10): сводка прошлой беседы и три роли
+ * идут подряд, а клиент ждёт результат 240 с. 225 с оставляют запас на опрос
+ * результата и передачу; ступень, начатая позже, не уложится и не начинается.
+ */
+export const COACH_TURN_BUDGET_MS = 225_000;

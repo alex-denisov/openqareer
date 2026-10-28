@@ -503,11 +503,7 @@ function createCandidateDraftDeps(
     linkedinDraftWriter:
       options.linkedinDraftWriter ??
       buildLinkedinDraftWriter({
-        personalProvider: config.personalProvider,
-        model: config.model,
-        fallbacks: config.personalFallbacks,
         providerCredentials: config.providerCredentials,
-        cloudflareGateway: config.cloudflareGateway,
         vertex: config.vertex,
       }),
   };
