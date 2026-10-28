@@ -73,6 +73,7 @@ export interface HomeTier {
   readonly lead?: string;
   readonly items: readonly string[];
   readonly action: { readonly label: string; readonly href: string };
+  readonly memberAction?: { readonly label: string; readonly href: string };
   readonly recommended: boolean;
 }
 
@@ -83,6 +84,8 @@ interface TierText {
   readonly lead?: string;
   readonly items: readonly string[];
   readonly action: { readonly label: string; readonly href: string };
+  /** Shown instead of `action` to a signed-in visitor (B574, rule of #191). */
+  readonly memberAction?: { readonly label: string; readonly href: string };
 }
 
 const TIER_TEXT: Record<TariffTierId, TierText> = {
@@ -96,6 +99,7 @@ const TIER_TEXT: Record<TariffTierId, TierText> = {
       'Все отклики в одном списке',
     ],
     action: { label: 'Найти работу', href: '/signup?from=home-tariffs' },
+    memberAction: { label: 'Открыть кабинет', href: '/app' },
   },
   go: {
     who: 'Резюме и письмо под каждую вакансию',
@@ -155,6 +159,7 @@ export const HOME_TIERS: readonly HomeTier[] = TARIFF_LEVELS.map((level) => {
     ...(text.lead ? { lead: text.lead } : {}),
     items: text.items,
     action: text.action,
+    ...(text.memberAction ? { memberAction: text.memberAction } : {}),
     recommended: level.id === 'pro',
   };
 });

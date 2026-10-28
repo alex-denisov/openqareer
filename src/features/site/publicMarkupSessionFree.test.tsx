@@ -59,3 +59,13 @@ describe('public pages do not depend on the session (B577)', () => {
     for (const html of others) expect(html).toBe(guest);
   });
 });
+
+describe('landing tariffs Free action (B574)', () => {
+  it('carries a guest sign-up link and a member cabinet link', () => {
+    const html = renderToStaticMarkup(<LandingPage onNavigate={onNavigate} session={null} />);
+    expect(html).toMatch(
+      /<a class="btn ps-guest" href="\/signup\?from=home-tariffs">Найти работу<\/a>/u,
+    );
+    expect(html).toMatch(/<a class="btn ps-member" href="\/app">Открыть кабинет<\/a>/u);
+  });
+});

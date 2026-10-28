@@ -1,8 +1,11 @@
 /*
  * B535: the landing, /faq and /support are complete prerendered pages; every
- * link on them works without JavaScript. The application bundle is fetched on
- * the first interaction or after a few seconds, so it never competes with the
- * first paint. Other paths load the bundle directly and never see this file.
+ * link on them works without JavaScript. The bundle starts as soon as the
+ * document is parsed: the first paint is the prerender and does not wait for
+ * it, and the head already modulepreloads the entry and the page chunk, so
+ * the page is live in one round of parallel requests. It used to wait for an
+ * interaction or 6 s, which kept the page dead for 9–12 s on prod (B574).
+ * Other paths load the bundle directly and never see this file.
  *
  * Mounting replaces the prerendered shell; for a frame the page is short and
  * the browser clamps the scroll to the top. The reader keeps their place: the
@@ -13,9 +16,7 @@
   var script = document.currentScript;
   var entry = script && script.getAttribute('data-entry');
   if (!entry) return;
-  var loaded = false;
   var lastTop = 0;
-  var events = ['pointerdown', 'keydown', 'touchstart', 'scroll'];
 
   window.addEventListener(
     'scroll',
@@ -40,18 +41,6 @@
     })();
   }
 
-  function load() {
-    if (loaded) return;
-    loaded = true;
-    events.forEach(function (name) {
-      window.removeEventListener(name, load, { passive: true });
-    });
-    if (window.scrollY > 0) lastTop = window.scrollY;
-    import(entry).then(restore);
-  }
-
-  events.forEach(function (name) {
-    window.addEventListener(name, load, { passive: true });
-  });
-  setTimeout(load, 6000);
+  if (window.scrollY > 0) lastTop = window.scrollY;
+  import(entry).then(restore);
 })();
