@@ -60,7 +60,7 @@ export class CareerOrchestrator implements CoachProvider {
     idempotencyKey: string,
     options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
-    const roles = rolesFor(input);
+    const roles = splitRoles(rolesFor(input), options?.split);
     if (roles.length > this.maxModelCalls) {
       throw new CareerOrchestrationBudgetError();
     }
@@ -226,6 +226,22 @@ function rolesFor(input: CoachTurnInput): CareerRole[] {
     return ['career_consultant'];
   }
   return ['career_expert', 'career_strategist', 'career_consultant'];
+}
+
+/**
+ * Ход из трёх ролей в диалоге делится надвое (28.10): консультант отвечает
+ * сразу, эксперт и стратег разбирают фоном и приносят предложения и трек.
+ */
+/** A dialog turn that has an expert/strategist analysis to run after the reply. */
+export function turnHasAnalysis(input: CoachTurnInput): boolean {
+  return rolesFor(input).length === 3;
+}
+
+export function splitRoles(roles: CareerRole[], split: CoachTurnOptions['split']): CareerRole[] {
+  if (!split || roles.length < 3) return roles;
+  return split === 'reply'
+    ? roles.filter((role) => role === 'career_consultant')
+    : roles.filter((role) => role !== 'career_consultant');
 }
 
 function contribution(role: CareerRole, output: CoachProviderResult) {

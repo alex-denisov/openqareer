@@ -120,3 +120,27 @@ async function receiveParts<T extends object>(url: string): Promise<T | undefine
     return result as T;
   } catch { throw incomplete(); }
 }
+
+/**
+ * 28.10: the consultant's reply arrives first with `analysis: 'pending'`; the
+ * expert/strategist proposals join the same stored turn later. Reads the turn
+ * until the analysis is no longer pending; a failed read just ends the wait.
+ */
+const ANALYSIS_WAIT_MS = 240_000;
+export async function waitForCoachAnalysis<T extends { analysis?: string }>(
+  key: string,
+  options: { pollMs?: number } = {},
+): Promise<T | undefined> {
+  const url = `/api/v1/coach/turn/${encodeURIComponent(key)}/result`;
+  const deadline = Date.now() + ANALYSIS_WAIT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const read = await readWithDeadline<T>(url);
+      if (!read.pending && read.data && read.data.analysis !== 'pending') return read.data;
+    } catch {
+      return undefined;
+    }
+    await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 3_000));
+  }
+  return undefined;
+}

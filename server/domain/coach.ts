@@ -443,6 +443,10 @@ export const coachTurnResultSchema = z.object({
     .preprocess(normalizeQuickReplies, z.array(z.string().min(2).max(40)).max(3))
     .optional(),
   actionProposals: z.array(careerActionProposalSchema).max(20).default([]),
+  /** 28.10: the consultant answered first; the expert/strategist analysis is `pending` until merged in. */
+  analysis: z.enum(['pending', 'ready', 'failed']).optional(),
+  /** When the background analysis started; a stale `pending` is read as failed (28.10). */
+  analysisStartedAt: z.string().datetime().optional(),
   intelligence: z
     .object({
       orchestrationRevision: z.string().min(1).max(80),

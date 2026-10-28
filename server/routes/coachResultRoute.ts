@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, sendError } from './helpers';
+import { withStaleAnalysis } from './coachTurnAnalysis';
 
 /** Reads the durable result only; never starts or retries a provider operation. */
 export function registerCoachResultRoute(app: FastifyInstance, deps: RouteDeps) {
@@ -17,9 +18,10 @@ export function registerCoachResultRoute(app: FastifyInstance, deps: RouteDeps) 
     if (turn.status !== 'completed' || !turn.result) {
       return sendError(reply, request, 409, 'turn_failed', 'Не удалось завершить ответ. Повторите действие.', true);
     }
-    if (offset === undefined) return { data: turn.result };
+    const result = withStaleAnalysis(turn.result);
+    if (offset === undefined) return { data: result };
     // Base64 keeps arbitrary UTF-8 byte boundaries reversible and JSON overhead bounded.
-    const bytes = Buffer.from(JSON.stringify(turn.result));
+    const bytes = Buffer.from(JSON.stringify(result));
     if (offset > bytes.length) return sendError(reply, request, 416, 'invalid_offset', 'Запросите ответ заново.', true);
     const end = Math.min(offset + 8_192, bytes.length);
     return { data: {
