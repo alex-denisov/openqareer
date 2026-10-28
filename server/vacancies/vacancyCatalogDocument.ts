@@ -103,7 +103,7 @@ function head(options: {
       : '',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
     // B574: before the header paints; marks a signed-in visitor on <html>.
-    '<script src="/assets/oq-auth-1.js"></script>',
+    '<script src="/assets/oq-auth-2.js"></script>',
     `<meta property="og:type" content="${options.ogType ?? 'website'}">`,
     `<meta property="og:image" content="${ogImageUrl('vacancies')}">`,
     '<meta property="og:image:width" content="1200">',

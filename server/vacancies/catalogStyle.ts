@@ -266,9 +266,10 @@ export const CATALOG_STYLE =
     display: none;
   }
 }
-/* B574: header states. Both action pairs are in the markup; oq-auth-1.js marks
+/* B574: header states. Both action pairs are in the markup; oq-auth-2.js marks
    a signed-in visitor on <html> before the first paint. */
 .ps-btn.ps-member,
+.ps-btn.ps-admin,
 .ps-menu a.ps-member {
   display: none;
 }
@@ -276,7 +277,8 @@ html[data-oq-signed-in] .ps-btn.ps-guest,
 html[data-oq-signed-in] .ps-menu a.ps-guest {
   display: none;
 }
-html[data-oq-signed-in] .ps-btn.ps-member {
+html[data-oq-signed-in] .ps-btn.ps-member,
+html[data-oq-signed-in][data-oq-admin] .ps-btn.ps-admin {
   display: inline-flex;
 }
 .ps-btn {
