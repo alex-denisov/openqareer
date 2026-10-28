@@ -635,7 +635,7 @@ test.describe('B250 vacancies screen', () => {
       page.getByRole('main').getByRole('heading', { name: 'Вакансии', exact: true }),
     ).toBeVisible();
     await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
-      '61 вакансия по вашим условиям',
+      '61 вакансия · по совпадению',
     );
     const tabs = page.getByRole('tablist', { name: 'Разделы вакансий' });
     await expect(tabs.getByRole('tab')).toHaveCount(3);
@@ -738,7 +738,7 @@ test.describe('B250 vacancies screen', () => {
     } else {
       // B546/B547: the count follows local filters (salary, locations), not the pool total.
       await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
-        /\d+ ваканс[а-я]* по вашим условиям/u,
+        /\d+ ваканс[а-я]* · по совпадению/u,
       );
     }
 
@@ -783,6 +783,7 @@ test.describe('B250 vacancies screen', () => {
         'Уровень',
         'Гео',
         'Деньги',
+        'Совпадение',
       ]);
     }
     const firstItem = await setRowExpanded(page, 0, !isMobile);

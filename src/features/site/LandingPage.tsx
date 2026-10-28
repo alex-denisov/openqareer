@@ -96,6 +96,23 @@ function Cta({
   );
 }
 
+/**
+ * B577: both variants are in the markup and CSS shows one by the
+ * `data-oq-signed-in` mark on <html>, so the session answer never redraws it.
+ */
+function SessionCta({ onNavigate }: { readonly onNavigate: Navigate }) {
+  return (
+    <>
+      <Cta to="/signup?from=home" className="btn primary lg ps-guest" onNavigate={onNavigate}>
+        Найти работу
+      </Cta>
+      <Cta to="/app" className="btn primary lg ps-member" onNavigate={onNavigate}>
+        Открыть кабинет
+      </Cta>
+    </>
+  );
+}
+
 function AppBadges() {
   return (
     <>
@@ -126,11 +143,10 @@ function Count({ active, date }: { readonly active: string; readonly date: strin
 interface HeroProps {
   readonly stats: LandingStats;
   readonly onNavigate: Navigate;
-  readonly signedIn: boolean;
   readonly appVersion: string | null;
 }
 
-function Hero({ stats, onNavigate, signedIn, appVersion }: HeroProps) {
+function Hero({ stats, onNavigate, appVersion }: HeroProps) {
   const c = counts(stats);
   const pool = landingFeed(stats);
   return (
@@ -145,13 +161,7 @@ function Hero({ stats, onNavigate, signedIn, appVersion }: HeroProps) {
             вакансии по всему рынку и откликнется по вашим правилам.
           </p>
           <div className="cta">
-            <Cta
-              to={signedIn ? '/app' : '/signup?from=home'}
-              className="btn primary lg"
-              onNavigate={onNavigate}
-            >
-              {signedIn ? 'Открыть кабинет' : 'Найти работу'}
-            </Cta>
+            <SessionCta onNavigate={onNavigate} />
             <a className="btn lg" href="/vacancies">
               Смотреть вакансии
             </a>
@@ -173,7 +183,7 @@ function Hero({ stats, onNavigate, signedIn, appVersion }: HeroProps) {
   );
 }
 
-function How({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean }) {
+function How({ onNavigate }: { onNavigate: Navigate }) {
   return (
     <section className="scr" id="how" aria-labelledby="how-heading">
       <div className="wrap">
@@ -194,13 +204,7 @@ function How({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean
           ))}
         </ol>
         <div className="after">
-          <Cta
-            to={signedIn ? '/app' : '/signup?from=home'}
-            className="btn primary lg"
-            onNavigate={onNavigate}
-          >
-            {signedIn ? 'Открыть кабинет' : 'Найти работу'}
-          </Cta>
+          <SessionCta onNavigate={onNavigate} />
           <a className="link" href="#tariffs">
             Что входит в тарифы <ArrowRight className="ic" aria-hidden="true" />
           </a>
@@ -309,11 +313,9 @@ function Faq() {
 
 function End({
   onNavigate,
-  signedIn,
   appVersion,
 }: {
   onNavigate: Navigate;
-  signedIn: boolean;
   appVersion: string | null;
 }) {
   return (
@@ -323,13 +325,7 @@ function End({
           <h2 id="end-heading">Ваша следующая работа может быть уже в списке</h2>
           <p>Загрузите резюме и посмотрите, куда вы проходите прямо сейчас.</p>
           <div className="cta">
-            <Cta
-              to={signedIn ? '/app' : '/signup?from=home'}
-              className="btn primary lg"
-              onNavigate={onNavigate}
-            >
-              {signedIn ? 'Открыть кабинет' : 'Найти работу'}
-            </Cta>
+            <SessionCta onNavigate={onNavigate} />
             <a className="btn lg" href="/vacancies">
               Смотреть вакансии
             </a>
@@ -371,12 +367,12 @@ export function LandingPage({ session, onNavigate, stats }: LandingPageProps) {
         isAdmin={session?.role === 'admin'}
       />
       <main id="main" className="hm">
-        <Hero stats={current} onNavigate={onNavigate} signedIn={signedIn} appVersion={appVersion} />
-        <How onNavigate={onNavigate} signedIn={signedIn} />
+        <Hero stats={current} onNavigate={onNavigate} appVersion={appVersion} />
+        <How onNavigate={onNavigate} />
         <Tools />
         <Tariffs />
         <Faq />
-        <End onNavigate={onNavigate} signedIn={signedIn} appVersion={appVersion} />
+        <End onNavigate={onNavigate} appVersion={appVersion} />
       </main>
       <PublicFooter onNavigate={onNavigate} onLanding signedIn={signedIn} />
     </div>

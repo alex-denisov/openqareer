@@ -1,3 +1,4 @@
+import { VacancyFitBlock } from './VacancyFitMark';
 import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
 import type { RowLetterOpen } from './useVacancyLetterRoute';
 import { useState, type FormEvent } from 'react';
@@ -659,6 +660,7 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
       id={`vacancy-details-${cluster.id}`}
       className="vac-detail vacancies-detail-panel vacancies-screen-detail"
     >
+      <VacancyFitBlock cluster={cluster} view={explanation.fitView} />
       <DetailTrustAlert trust={rowState.trust} />
       <VacancyScreenDetailGrid
         cluster={cluster}

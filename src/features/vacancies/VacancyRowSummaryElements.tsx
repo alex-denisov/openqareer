@@ -1,4 +1,3 @@
-import { VacancyFitInline } from './VacancyFitSummary';
 import { CaretDown, CaretUp, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { formatCompensationCompact } from './vacancyCompensation';
@@ -137,7 +136,6 @@ export function VacancyDefaultSummaryContent({
           skillMissing={skillMissing}
           trust={trust}
         />
-        <VacancyFitInline vacancyId={cluster.id} view={explanation.fitView} />
         <VacancyRowMeta
           comp={formatCompensationCompact(cluster.salary)}
           age={age}

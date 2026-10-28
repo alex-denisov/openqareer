@@ -1,4 +1,5 @@
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
+import { compareFitPercent } from '../../shared/vacancyFitPercent';
 import type { RouteDeps } from './deps';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
@@ -152,7 +153,9 @@ function orderByFit(
 ): MatchedVacancyItem[] {
   const decorated = items.map((item) => {
     const fitView = views.get(item.cluster.id);
-    return fitView ? { ...item, explanation: explanationWithFitView(item.explanation, fitView) } : item;
+    return fitView
+      ? { ...item, explanation: explanationWithFitView(item.explanation, fitView) }
+      : item;
   });
   return decorated.sort((left, right) => compareFitOrder(left, right, sort));
 }
@@ -184,7 +187,10 @@ const COVERAGE_SENTENCE = /^Совпало \d+ из \d+ требований в�
  * Строка и раскрытая карточка считают требования одним разбором: счёт правил по
  * тегам («2 из 3») уступает разбору требований из текста, когда тот готов (B525).
  */
-export function explanationWithFitView(explanation: Explanation, fitView: VacancyFitView): Explanation {
+export function explanationWithFitView(
+  explanation: Explanation,
+  fitView: VacancyFitView,
+): Explanation {
   const coverage = fitView.result?.coverage;
   if (!coverage || coverage.total === 0) return { ...explanation, fitView };
   const sentence = `Совпало ${coverage.matched} из ${coverage.total} требований вакансии.`;
@@ -258,20 +264,9 @@ export function compareFitOrder(
     };
     return time(right) - time(left) || compareMatchedVacancies(left, right);
   }
-  const a = left.explanation.fitView?.result;
-  const b = right.explanation.fitView?.result;
-  const score = (result: typeof a) =>
-    result?.status === 'assessed' ? result.coveragePercent : null;
-  const aScore = score(a),
-    bScore = score(b);
-  if (aScore === null && bScore !== null) return 1;
-  if (aScore !== null && bScore === null) return -1;
-  if (aScore !== null && bScore !== null) {
-    const mandatory =
-      a?.requiredCoverage.percent !== null && b?.requiredCoverage.percent !== null
-        ? (b?.requiredCoverage.percent ?? 0) - (a?.requiredCoverage.percent ?? 0)
-        : 0;
-    return mandatory || bScore - aScore || compareMatchedVacancies(left, right);
-  }
-  return compareMatchedVacancies(left, right);
+  // 28.10 mockup: the order the row's percent promises — descending; rows without one go last.
+  return (
+    compareFitPercent(left.explanation.fitView, right.explanation.fitView) ||
+    compareMatchedVacancies(left, right)
+  );
 }

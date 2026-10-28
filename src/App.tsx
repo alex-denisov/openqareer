@@ -1,6 +1,7 @@
 import { requiresAnalyticsDocumentNavigation } from './features/site/analyticsNavigation';
 import { authReturnPath } from './features/site/resumeBuilder/resumeBuilderStorage';
 import { RESUME_BUILDER_PATH } from './features/site/resumeBuilder/resumeBuilderContent';
+import { preloadablePage } from './features/site/preloadablePage';
 import { completeCandidateWorkspace } from './features/workspace/workspaceCompletionApi';
 import {
   clearCountryFitScenario,
@@ -57,35 +58,68 @@ const CareerWorkspaceShell = lazy(async () => {
   markAppReady();
   return { default: module.CareerWorkspaceShell };
 });
-const LandingPage = lazy(loadLandingPage);
+const landingPage = preloadablePage(loadLandingPage);
+const LandingPage = landingPage.Page;
 const AuthSiteFrame = lazy(() =>
   loadAuthPages().then((module) => ({ default: module.AuthSiteFrame })),
 );
-const ResumeBuilderPage = lazy(() =>
+const resumeBuilderPage = preloadablePage(() =>
   import('./features/site/resumeBuilder/resumeBuilderRoute').then((module) => ({
     default: module.ResumeBuilderPage,
   })),
 );
-const CountryFitPage = lazy(() =>
+const ResumeBuilderPage = resumeBuilderPage.Page;
+const countryFitPage = preloadablePage(() =>
   import('./features/site/CountryFitPage').then((module) => ({ default: module.CountryFitPage })),
 );
-const RelocationPage = lazy(() =>
+const CountryFitPage = countryFitPage.Page;
+const relocationPage = preloadablePage(() =>
   import('./features/site/relocationRoute').then((module) => ({ default: module.RelocationPage })),
 );
-const SalaryCalculatorPage = lazy(() =>
+const RelocationPage = relocationPage.Page;
+const salaryCalculatorPage = preloadablePage(() =>
   import('./features/site/salaryCalculatorRoute').then((module) => ({
     default: module.SalaryCalculatorPage,
   })),
 );
-const FaqPage = lazy(() =>
+const SalaryCalculatorPage = salaryCalculatorPage.Page;
+const faqPage = preloadablePage(() =>
   import('./features/site/publicDocsRoute').then((module) => ({ default: module.FaqPage })),
 );
-const TariffsPage = lazy(() =>
+const FaqPage = faqPage.Page;
+const tariffsPage = preloadablePage(() =>
   import('./features/site/publicDocsRoute').then((module) => ({ default: module.TariffsPage })),
 );
-const SupportPage = lazy(() => loadHelpPage('SupportPage'));
-const NotFoundPage = lazy(() => loadHelpPage('NotFoundPage'));
-const LegalDocumentPage = lazy(loadLegalDocumentPage);
+const TariffsPage = tariffsPage.Page;
+const supportPage = preloadablePage(() => loadHelpPage('SupportPage'));
+const SupportPage = supportPage.Page;
+const notFoundPage = preloadablePage(() => loadHelpPage('NotFoundPage'));
+const NotFoundPage = notFoundPage.Page;
+const legalDocumentPage = preloadablePage(loadLegalDocumentPage);
+const LegalDocumentPage = legalDocumentPage.Page;
+
+const PUBLIC_PAGE_PRELOADS: Readonly<Record<string, () => Promise<void>>> = {
+  '/': landingPage.preload,
+  '/index.html': landingPage.preload,
+  [RESUME_BUILDER_PATH]: resumeBuilderPage.preload,
+  '/tools/country-fit': countryFitPage.preload,
+  '/tools/relocation': relocationPage.preload,
+  '/tools/salary-calculator': salaryCalculatorPage.preload,
+  '/faq': faqPage.preload,
+  '/tariffs': tariffsPage.preload,
+  '/support': supportPage.preload,
+};
+
+/**
+ * B577: loads the public page for `path` before the first mount, so React
+ * draws it in one commit instead of an empty root and then the page again.
+ * Resolves at once for paths that are not public pages.
+ */
+export function preloadPublicPage(path: string): Promise<void> {
+  const page = path === '/' ? '/' : path.replace(/\/$/u, '');
+  if (legalSlugFromPath(path)) return legalDocumentPage.preload();
+  return PUBLIC_PAGE_PRELOADS[page]?.() ?? Promise.resolve();
+}
 const LoginPage = lazy(() => loadAuthPages().then((module) => ({ default: module.LoginPage })));
 const SignupPage = lazy(() => loadAuthPages().then((module) => ({ default: module.SignupPage })));
 const EmailVerificationPage = lazy(() =>

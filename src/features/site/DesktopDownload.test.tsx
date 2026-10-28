@@ -10,8 +10,10 @@ describe('desktop release on the landing (B576)', () => {
     expect(parseDesktopRelease(null)).toBeNull();
   });
 
-  it('writes the version note and nothing before the server answers', () => {
-    expect(renderToStaticMarkup(<AppVersionNote version={null} />)).toBe('');
+  it('keeps the line in place before the server answers, then writes the version', () => {
+    expect(renderToStaticMarkup(<AppVersionNote version={null} />)).toBe(
+      '<p class="appver" aria-hidden="true"></p>',
+    );
     expect(renderToStaticMarkup(<AppVersionNote version="1.1.4" />)).toBe(
       '<p class="appver">Версия <span class="appver-num">1.1.4</span> · приложение обновляется само</p>',
     );

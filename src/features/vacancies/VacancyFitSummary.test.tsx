@@ -1,6 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
-import { VacancyFitInline, VacancyFitSummary } from './VacancyFitSummary';
+import { VacancyFitSummary } from './VacancyFitSummary';
+import { VacancyFitCell } from './VacancyFitMark';
+
+const cell = (view?: MatchedVacancyItem['explanation']['fitView']) =>
+  renderToStaticMarkup(
+    <VacancyFitCell
+      item={
+        { cluster: { id: 'v1' }, explanation: { fitView: view } } as unknown as MatchedVacancyItem
+      }
+    />,
+  );
 import { readyVacancyFit } from '../../../e2e/fixtures/vacancyFit';
 import { sortVacancyFitItems } from './VacancyFitSort';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -54,7 +64,7 @@ it('known coverage precedes unknown, ties preserve existing order, freshness is 
   ]);
 });
 
-it('mandatory requirement coverage precedes overall coverage for supplied local pools', () => {
+it('orders by the shown percent, as the server does (28.10)', () => {
   const base = readyVacancyFit();
   const make = (id: string, overall: number, required: number) =>
     ({
@@ -74,7 +84,7 @@ it('mandatory requirement coverage precedes overall coverage for supplied local 
     sortVacancyFitItems([make('overall-high', 90, 50), make('mandatory-high', 50, 100)]).map(
       (item) => item.cluster.id,
     ),
-  ).toEqual(['mandatory-high', 'overall-high']);
+  ).toEqual(['overall-high', 'mandatory-high']);
 });
 
 it('names unconfirmed conditions next to the percent instead of passing them off as a match', () => {
@@ -99,27 +109,20 @@ it('names unconfirmed conditions next to the percent instead of passing them off
   expect(html).toContain('Не подтверждено: регион, право на работу');
 });
 
-it('row inline fit shows only a calculated percent, states stay in the card (B525 V3)', () => {
-  const inline = (view?: Parameters<typeof VacancyFitInline>[0]['view']) =>
-    renderToStaticMarkup(<VacancyFitInline view={view} />);
-  expect(inline(readyVacancyFit())).toContain('соответствие 50\u00a0%');
-  for (const state of [
-    'not_requested',
-    'processing',
-    'retrying',
-    'failed',
-    'no_requirements',
-  ] as const) {
-    expect(inline({ state, requirements: [] })).toBe('');
+it('the row cell shows the coloured percent, «считаем» or «нет процента» (28.10 mockup)', () => {
+  expect(cell(readyVacancyFit())).toMatch(/aria-label="Совпадение 50 %, по \d+ требованиям"/u);
+  expect(cell(readyVacancyFit())).toContain('is-mid');
+  for (const state of ['not_requested', 'processing', 'retrying'] as const) {
+    expect(cell({ state, requirements: [] })).toContain('считаем');
   }
   const ready = readyVacancyFit();
   expect(
-    inline({
+    cell({
       ...ready,
       result: { ...ready.result!, status: 'unknown', reason: 'no_eligible_facts' },
     }),
-  ).toBe('');
-  expect(inline()).toBe('');
+  ).toContain('нет профиля');
+  expect(cell(readyVacancyFit())).not.toContain('соответствие');
 });
 
 it('compact card summary is one caption line «Соответствие: …» (B525 V4)', () => {
@@ -147,20 +150,11 @@ it('a single requirement never yields a percent, even from a stale result (A1)',
       coverage: { matched: 1, total: 1, unknown: 0 },
     },
   };
-  for (const html of [
-    renderToStaticMarkup(<VacancyFitInline view={single} />),
-    renderToStaticMarkup(<VacancyFitSummary view={single} />),
-  ]) {
+  for (const html of [cell(single), renderToStaticMarkup(<VacancyFitSummary view={single} />)]) {
     expect(html).not.toContain('100');
   }
   expect(renderToStaticMarkup(<VacancyFitSummary view={single} />)).toMatch(/Мало требований/);
 });
-it('B510: the short inline fit for the 390 status shows only the number', () => {
-  const html = renderToStaticMarkup(<VacancyFitInline view={readyVacancyFit()} short />);
-  expect(html).toMatch(/>50(\u00a0|&nbsp;)%</);
-  expect(html).toContain('aria-label="соответствие 50 %"');
-});
-
 it.each([
   ['model_unavailable', 'Соответствие: расчёт не завершился: сервис сравнения не ответил'],
   [
@@ -184,7 +178,5 @@ it.each([
 it('keeps the previous percent while the new version is calculated (B562-r)', () => {
   const view = { ...readyVacancyFit(), state: 'refreshing' as const };
   expect(renderToStaticMarkup(<VacancyFitSummary view={view} />)).toMatch(/50%.*Пересчитывается/su);
-  expect(renderToStaticMarkup(<VacancyFitInline view={view} />)).toContain(
-    'соответствие 50\u00a0%',
-  );
+  expect(cell(view)).toContain('Совпадение 50 %');
 });

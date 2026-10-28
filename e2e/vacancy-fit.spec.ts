@@ -71,10 +71,11 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     await evidence.getByRole('button', { name: 'Обновить результат' }).click();
     // Mockup 4: the number lives in the row; the card drops its fit block once it is known.
     await expect(evidence).toHaveCount(0);
-    // B525: строка списка — «соответствие 50 %» в той же строке «компания · источник» (V3).
+    // 28.10 mockup: the row's «Совпадение» column holds the coloured number, the company line none.
     await expect(
-      card.locator('.vacancies-screen-row-trigger .vac-sub .vacancy-fit-inline'),
-    ).toHaveText('соответствие 50\u00a0%');
+      card.locator('.vacancies-screen-row-trigger .vacancies-screen-cell--fit [role="img"]'),
+    ).toHaveAttribute('aria-label', /^Совпадение 50 %/u);
+    await expect(card.locator('.vac-sub')).not.toContainText('соответствие');
     await expect(card).not.toContainText('fixture-fact-01');
     // G5 item 9: the POST answer is the queued view, only «Обновить результат» reads again.
     expect(methods).toEqual(['POST', 'GET']);
@@ -91,7 +92,7 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   const sortScope =
     testInfo.project.name === 'mobile-390'
       ? page.locator('.vacancies-mobile-sheet')
-      : page.locator('.vacancies-table-header');
+      : page.locator('.vacancy-fit-bar');
   await sortScope.getByLabel('Порядок вакансий').selectOption('freshness');
   if (testInfo.project.name === 'mobile-390')
     await page.locator('.vacancies-mobile-sheet-cta').click();

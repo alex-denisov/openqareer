@@ -1,7 +1,7 @@
 import './services/schemaRuntime';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
+import App, { preloadPublicPage } from './App.tsx';
 import './App.css';
 import '@fontsource/onest/cyrillic-400.css';
 import '@fontsource/onest/cyrillic-500.css';
@@ -47,6 +47,12 @@ if (!isTauriEnvironment() && ['/login', '/signup'].includes(window.location.path
   // Keep the styled, disabled server form until its lazy module AND CSS are
   // ready. Otherwise createRoot commits an empty Suspense fallback in between.
   void loadAuthPages().then(mountApp);
+} else if (!isTauriEnvironment()) {
+  // B577: a public page is loaded before the mount, so createRoot replaces the
+  // prerendered page with the same page in one commit, never with an empty root.
+  void preloadPublicPage(window.location.pathname)
+    .catch(() => undefined)
+    .then(mountApp);
 } else {
   mountApp();
 }

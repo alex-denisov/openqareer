@@ -1,3 +1,4 @@
+import { vacancyFitPercent } from '../../../shared/vacancyFitPercent';
 import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 const STATE_LABELS = {
@@ -27,19 +28,9 @@ const REASONS = {
   too_few_skills: 'Мало требований к навыкам для расчёта',
   assessed: 'Недостаточно подтверждённых данных для расчёта',
 };
-/** Mirrors the server's MIN_SKILL_REQUIREMENTS (B510-r): fewer skills never make a percent (A1). */
-const MIN_SKILL_REQUIREMENTS = 3;
+/** One rule with the row, the block and the order (shared/vacancyFitPercent). */
 export function fitHasNumber(view?: VacancyFitView) {
-  return (
-    (view?.state === 'ready' || view?.state === 'refreshing') &&
-    view.result?.status === 'assessed' &&
-    view.result.dataState !== 'unknown' &&
-    typeof view.result.coveragePercent === 'number' &&
-    Number.isFinite(view.result.coveragePercent) &&
-    view.result.coveragePercent >= 0 &&
-    view.result.coveragePercent <= 100 &&
-    (view.result.coverage?.total ?? 0) >= MIN_SKILL_REQUIREMENTS
-  );
+  return vacancyFitPercent(view) !== null;
 }
 function fitDate(value?: string) {
   if (!value || Number.isNaN(Date.parse(value))) return 'Дата расчёта неизвестна';
@@ -100,40 +91,6 @@ export function VacancyFitSummary({
 }
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
-
-/** The row shows only a calculated percent inside its subtitle line (V3); states live in the card. */
-export function VacancyFitInline({
-  view: initialView,
-  vacancyId,
-  short = false,
-}: {
-  readonly view?: VacancyFitView;
-  readonly vacancyId?: string;
-  /** B510: на 390 число стоит рядом с «Подходит», без слова «соответствие». */
-  readonly short?: boolean;
-}) {
-  const view = useLatestVacancyFitView(vacancyId, initialView);
-  if (!fitHasNumber(view)) return null;
-  const percent = view!.result!.coveragePercent;
-  if (short) {
-    return (
-      <span
-        className="vacancy-fit-inline is-number is-short"
-        data-fit-state={view!.state}
-        aria-label={`соответствие ${percent} %`}
-      >
-        {percent}
-        {'\u00a0%'}
-      </span>
-    );
-  }
-  return (
-    <span className="vacancy-fit-inline is-number" data-fit-state={view!.state}>
-      соответствие {percent}
-      {'\u00a0%'}
-    </span>
-  );
-}
 
 const GATE_NAMES: Record<string, string> = {
   role: 'роль',

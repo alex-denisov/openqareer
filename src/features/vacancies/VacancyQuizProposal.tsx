@@ -70,7 +70,7 @@ export function focusCheckStartable(state: RoleSkillAssessmentCurrent['state']):
 /** The answer is kept across remounts. */
 let lastFocusStartable: boolean | undefined;
 
-function useFocusCheckStartable(): boolean | undefined {
+export function useFocusCheckStartable(): boolean | undefined {
   const [startable, setStartable] = useState(lastFocusStartable);
   useEffect(() => {
     let active = true;

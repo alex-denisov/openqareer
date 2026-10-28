@@ -242,6 +242,7 @@ export interface ListContentProps {
   readonly catalogObservedAt?: string;
   readonly sort?: VacancyFitSort;
   readonly onSortChange?: (sort: VacancyFitSort) => void;
+  readonly onOpenResumeUpload?: () => void;
 }
 
 interface VacanciesFiltersSectionProps {
@@ -457,6 +458,7 @@ function buildListProps(
     catalogObservedAt: input.facets?.catalogSummary?.observedAt,
     sort: board.state.sort,
     onSortChange: (sort) => board.setState((previous) => ({ ...previous, sort })),
+    onOpenResumeUpload: () => input.pathIndicator?.onNavigate('profile'),
   };
 }
 
@@ -546,7 +548,6 @@ function VacanciesScreenContent({
   const { board, activeCampaign } = screenState;
   const filteredTotal = screenFilteredCount(input, board.filtered.length, board.state);
   // B485: число выдачи с условиями, а не число загруженных строк.
-  const shown = filteredTotal;
   return (
     <div className="vacancies-content">
       <VacancyHypothesisSection
@@ -556,11 +557,12 @@ function VacanciesScreenContent({
       />
       <ResultCount
         poolTotal={input.facets?.total}
-        shown={shown}
+        shown={filteredTotal}
         onToggleView={() =>
           screenState.setViewMode((current) => (current === 'list' ? 'map' : 'list'))
         }
         viewMode={screenState.viewMode}
+        byFit={board.state.sort !== 'freshness'}
       />
       <CompanySelectionFilterChip
         companyName={board.state.companyName}

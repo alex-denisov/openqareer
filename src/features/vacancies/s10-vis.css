@@ -69,7 +69,7 @@
 
 .vacancies-screen-row-trigger {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr) 96px;
   align-items: center;
   gap: var(--career-space-4);
   min-inline-size: 0;
@@ -183,7 +183,7 @@
 
 .vacancies-table-header-cells {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr) 96px;
   align-items: end;
   gap: var(--career-space-4);
   min-inline-size: 0;
@@ -877,7 +877,7 @@
   }
   .vacancies-screen-row-trigger,
   .vacancies-table-header-cells {
-    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.6fr);
+    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.5fr) 96px;
   }
   .vacancies-screen-row-trigger {
     align-items: start;

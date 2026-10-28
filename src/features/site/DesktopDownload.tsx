@@ -27,8 +27,12 @@ export function useDesktopRelease(): string | null {
   return version;
 }
 
+/**
+ * Строка всегда в разметке и держит свою высоту: ответ сервера дописывает
+ * текст, но не сдвигает страницу и не меняет предрендер (B577).
+ */
 export function AppVersionNote({ version }: { readonly version: string | null }) {
-  if (!version) return null;
+  if (!version) return <p className="appver" aria-hidden="true" />;
   return (
     <p className="appver">
       Версия <span className="appver-num">{version}</span> · приложение обновляется само
