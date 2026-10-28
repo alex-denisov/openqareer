@@ -37,6 +37,11 @@ export interface CoachTurnOptions {
    * queue then asks the next route instead of returning it (B564).
    */
   readonly accept?: (result: CoachProviderResult['result']) => boolean;
+  /**
+   * 28.10 (владелец): ход в диалоге делится на ответ консультанта (`reply`) и
+   * фоновый разбор эксперта и стратега (`analysis`) с предложениями и треком.
+   */
+  readonly split?: 'reply' | 'analysis';
 }
 
 export interface CoachProvider {

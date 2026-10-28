@@ -13,6 +13,11 @@ import { registerCandidateRoutes } from './candidateRoutes';
 import { consultantProposalKey } from '../../shared/consultantProposalKey';
 import type { BulkCompletion } from '../domain/measuredBulkClient';
 
+/** Provider calls that answer the candidate; the background analysis (28.10) is not one. */
+function replyCalls(mock: { mock: { calls: unknown[][] } }) {
+  return mock.mock.calls.filter((call) => (call[2] as { split?: string } | undefined)?.split !== 'analysis');
+}
+
 describe('Coach Stage Routes (B340)', () => {
   const closeHandlers: (() => Promise<unknown>)[] = [];
 
@@ -272,7 +277,7 @@ describe('Coach Stage Routes (B340)', () => {
     expect(replay.json().data).toEqual(original.json().data);
     const contextState = await app.inject({ method: 'GET', url: '/api/v1/coach/adaptation-context/' + key, headers });
     expect(contextState.json().data.stale).toBe(true);
-    expect(coachProvider.createTurn).toHaveBeenCalledTimes(1);
+    expect(replyCalls(coachProvider.createTurn)).toHaveLength(1);
   });
 
   it('B357 edits an existing task only after confirmation, keeps completion, and exports its receipt', async () => {
@@ -326,7 +331,7 @@ describe('Coach Stage Routes (B340)', () => {
       expect(response.json().data.quickReplies).toEqual(['Расскажите подробнее']);
       expect(response.json().data.message).toBe('Обсудим следующий шаг.');
     }
-    expect(coachProvider.createTurn).toHaveBeenCalledTimes(1);
+    expect(replyCalls(coachProvider.createTurn)).toHaveLength(1);
   });
 
   it('определяет фазу по stage без регулярок', async () => {
@@ -574,9 +579,9 @@ describe('Coach Stage Routes (B340)', () => {
     expect((await sendTurn(secondKey, secondMessageId, 'career', 'Какой результат стоит выделить?')).statusCode).toBe(200);
     const summaryCalls = coachProvider.createTurn.mock.calls.filter(([input]) => input.internalPurpose === 'consultant-summary');
     expect(summaryCalls).toHaveLength(1);
-    expect(coachProvider.createTurn).toHaveBeenCalledTimes(3);
+    expect(replyCalls(coachProvider.createTurn)).toHaveLength(3);
     // 28.10: the candidate gets the reply first; the closed conversation is summarized after it.
-    expect(coachProvider.createTurn.mock.calls.map(([input]) => input.internalPurpose ?? 'turn')).toEqual([
+    expect(replyCalls(coachProvider.createTurn).map(([input]) => (input as { internalPurpose?: string }).internalPurpose ?? 'turn')).toEqual([
       'turn',
       'turn',
       'consultant-summary',
@@ -591,11 +596,11 @@ describe('Coach Stage Routes (B340)', () => {
     expect(store.exportCandidate(candidate.id).consultantConversations).toHaveLength(1);
 
     expect((await sendTurn(thirdKey, thirdMessageId, 'career', 'Продолжим с учётом прежней беседы.')).statusCode).toBe(200);
-    const thirdInput = coachProvider.createTurn.mock.calls[3]?.[0];
+    const thirdInput = replyCalls(coachProvider.createTurn)[3]?.[0] as CoachTurnInput | undefined;
     expect(thirdInput?.knowledgeContext?.consultantHistory?.summaries).toEqual(
       expect.arrayContaining([expect.objectContaining({ summary: 'Ответ для фазы evidence' })]),
     );
-    expect(coachProvider.createTurn).toHaveBeenCalledTimes(4);
+    expect(replyCalls(coachProvider.createTurn)).toHaveLength(4);
 
     const append = await app.inject({
       method: 'POST',
@@ -607,7 +612,7 @@ describe('Coach Stage Routes (B340)', () => {
     expect(append.json().error.code).toBe('conversation_read_only');
 
     expect((await sendTurn(thirdKey, thirdMessageId, 'career', 'Продолжим с учётом прежней беседы.')).statusCode).toBe(200);
-    expect(coachProvider.createTurn).toHaveBeenCalledTimes(4);
+    expect(replyCalls(coachProvider.createTurn)).toHaveLength(4);
     const removed = await app.inject({
       method: 'DELETE',
       url: `/api/v1/candidate/consultant-history/${conversationId}`,

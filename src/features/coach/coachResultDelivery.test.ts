@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { receiveCoachResult } from './coachResultDelivery';
+import { receiveCoachResult, waitForCoachAnalysis } from './coachResultDelivery';
 import { sendCoachTurn } from './coachApi';
 
 const key = '11111111-1111-4111-8111-111111111111';
@@ -124,5 +124,20 @@ describe('coach result recovery', () => {
     vi.stubGlobal('fetch', fetchMock);
     await expect(sendCoachTurn({ content: 'Вопрос', idempotencyKey: key })).rejects.toMatchObject({ code: 'delivery_incomplete' });
     expect(fetchMock.mock.calls.filter(([, init]) => init.method === 'POST')).toHaveLength(1);
+  });
+});
+
+describe('фоновый разбор после ответа консультанта (28.10)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('ждёт, пока разбор перестанет быть pending, и отдаёт ход с предложениями', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(json({ message: 'Ответ', analysis: 'pending' }))
+        .mockResolvedValueOnce(json({ message: 'Ответ', analysis: 'ready', actionProposals: [{ kind: 'resume.revise' }] })),
+    );
+    const done = await waitForCoachAnalysis<{ analysis: string; actionProposals: unknown[] }>(key, { pollMs: 1 });
+    expect(done).toMatchObject({ analysis: 'ready', actionProposals: [{ kind: 'resume.revise' }] });
   });
 });

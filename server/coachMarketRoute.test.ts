@@ -195,8 +195,9 @@ describe('career coach market observations', () => {
     let providerCalls = 0;
     let searchCalls = 0;
     const provider: CoachProvider = {
-      async createTurn(input) {
-        providerCalls += 1;
+      async createTurn(input, _key, options) {
+        // The background analysis after the reply (28.10) is not a new generation.
+        if (options?.split !== 'analysis') providerCalls += 1;
         return successProvider.createTurn(input, randomUUID());
       },
     };

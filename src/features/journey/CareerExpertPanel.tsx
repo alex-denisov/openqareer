@@ -39,6 +39,7 @@ import {
   type CoachTurnSubject,
 } from '../coach/coachApi';
 import { applySkillQuizResult } from '../coach/careerCommandApi';
+import { waitForCoachAnalysis } from '../coach/coachResultDelivery';
 import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import { starterPromptsForStage } from './starterPrompts';
 import type { CareerJourney } from './careerJourneyEngine';
@@ -399,6 +400,18 @@ export function CareerExpertPanel({
   const latestAdaptationTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationTask && turn.result.adaptationContext);
   const adaptationResult = liveResult?.adaptationTask ? liveResult : latestAdaptationTurn?.result;
   const adaptationTurnKey = liveResult?.adaptationTask ? liveTurnIdempotencyKey : latestAdaptationTurn?.idempotencyKey;
+  // 28.10: the consultant answered first; the analysis with proposals joins this turn later.
+  useEffect(() => {
+    if (liveResult?.analysis !== 'pending' || !liveTurnIdempotencyKey) return;
+    let active = true;
+    const key = liveTurnIdempotencyKey;
+    void waitForCoachAnalysis<CoachResult>(key).then((full) => {
+      if (active && full) setLiveResult(full);
+    });
+    return () => {
+      active = false;
+    };
+  }, [liveResult?.analysis, liveTurnIdempotencyKey]);
   const showLiveMessage =
     liveResult &&
     !snapshot?.messages.some(
@@ -641,6 +654,11 @@ export function CareerExpertPanel({
               currentSubject={subject} />
           ) : null}
 
+              {liveResult?.analysis === 'pending' ? (
+                <p role="status" className="career-diary-note">
+                  Готовлю разбор и предложения по этому ответу…
+                </p>
+              ) : null}
               <div ref={historyEndRef} aria-hidden="true" />
             </div>
           ) : !loadingSession ? (

@@ -467,6 +467,12 @@ export interface CandidateStore {
     errorCode: string,
   ): void;
   getCoachTurn(candidateId: string, key: string): { status: StoredTurn['status']; result: CoachTurnResult | null } | null;
+  /** Rewrites a completed turn's result; `false` when the turn is not completed (28.10). */
+  updateCoachTurnResult?(
+    candidateId: string,
+    key: string,
+    update: (result: CoachTurnResult) => CoachTurnResult,
+  ): boolean;
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot;
   /** Minimal language facts from the candidate's latest stored LinkedIn import; never calls LinkedIn. */
   getLinkedInLanguageImport(candidateId: string): LinkedInLanguageImportSnapshot | null;

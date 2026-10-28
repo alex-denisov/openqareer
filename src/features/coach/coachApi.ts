@@ -197,6 +197,8 @@ interface StoredGermanyMarket {
 }
 
 export interface CoachResult {
+  /** 28.10: `pending` while the expert/strategist analysis is still being added to this turn. */
+  analysis?: 'pending' | 'ready' | 'failed';
   adaptationTask?: import('../../../shared/adaptationCoach').AdaptationTaskSuggestion | null;
   adaptationContext?: import('../../../shared/adaptationCoach').AdaptationContext;
   message: string;

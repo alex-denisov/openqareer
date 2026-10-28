@@ -16,7 +16,7 @@ import type {
   ResumeVersionUpdateResult,
   StoredResumeVersion,
 } from '../domain/resumeVersions';
-import type { CoachMessage, CoachTurnStage, CoachTurnSubject } from '../domain/coach';
+import type { CoachMessage, CoachTurnResult, CoachTurnStage, CoachTurnSubject } from '../domain/coach';
 import type {
   CandidateCredentials,
   CandidateIdentity,
@@ -137,6 +137,7 @@ import {
 } from './store/shared';
 import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from './sqliteBusyTimeout';
 import { resumeContextOf, withStoredTeamSizes } from './resumeTurnContext';
+import { updateStoredTurnResult } from './store/turnResultUpdate';
 
 export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentRetentionError };
 
@@ -364,6 +365,17 @@ export class SqliteCandidateStore implements CandidateStore {
   getCoachTurn(candidateId: string, key: string) {
     this.requireCandidate(candidateId);
     return this.conversations.getCoachTurn(candidateId, key);
+  }
+
+  updateCoachTurnResult(
+    candidateId: string,
+    key: string,
+    update: (result: CoachTurnResult) => CoachTurnResult,
+  ): boolean {
+    this.requireCandidate(candidateId);
+    const turn = this.conversations.getCoachTurn(candidateId, key);
+    const { database, sealedText } = this;
+    return updateStoredTurnResult({ database, sealedText, candidateId, key, turn, update });
   }
 
   startTurn(

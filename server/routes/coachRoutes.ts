@@ -30,6 +30,8 @@ import {
   buildSkillVerificationFact,
   createSkillVerificationProposal,
 } from '../../src/services/hhSkillQuizzes';
+import { runTurnAnalysis } from './coachTurnAnalysis';
+import { turnHasAnalysis } from '../orchestration/careerOrchestrator';
 
 const activeTurns = new WeakMap<RouteDeps, Set<string>>();
 
@@ -102,8 +104,12 @@ async function completeTurnWithProvider(
   input: Parameters<CoachProvider['createTurn']>[0],
 ) {
   const factsPending = listCandidateFacts(deps, candidateId, key, input);
+  // 28.10: in a three-role section the consultant answers first; the analysis follows.
+  const split = Boolean(deps.candidateStore.updateCoachTurnResult) && turnHasAnalysis(input);
   try {
-    const raw = decorateAdaptationResult(await deps.coachProvider.createTurn(input, key), input);
+    const turn = await deps.coachProvider.createTurn(input, key, split ? { split: 'reply' } : {});
+    const replied = split ? { ...turn, result: { ...turn.result, analysis: 'pending' as const } } : turn;
+    const raw = decorateAdaptationResult(replied, input);
     // Названный кандидатом порог зарплаты меняется только подтверждаемой карточкой (28.10).
     const generated = { ...raw, result: withSalaryFloorProposal(raw.result, input) };
     // Quick replies are proposed candidate answers, unlike the consultant's
@@ -224,6 +230,9 @@ async function generateTurn(
       ...input,
       marketObservations,
     });
+    if (output.result.analysis === 'pending') {
+      void runTurnAnalysis(deps, request, candidateId, key, { ...input, marketObservations });
+    }
     if (
       input.internalPurpose !== 'consultant-summary' &&
       output.result.actionProposals.length > 0
