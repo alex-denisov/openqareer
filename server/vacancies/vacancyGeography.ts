@@ -164,8 +164,13 @@ export function regionOfVacancy(place: VacancyPlace): PlaceRegion | undefined {
   const parts = location.split(/[,·|/;]|\s[-–—]\s/u).map((part) => part.trim()).filter(Boolean);
   // «Chicago, IL»: после города код штата, а не ISO-код Израиля (B546).
   if (parts.length > 1 && northAmericanCountryOf(parts.at(-1) ?? '')) return 'us';
+  // Workday пишет код страны первым: «US-CA-Menlo Park», «AU-Sydney» (28.10).
+  const workdayCode = /^([A-Z]{2})-\S/u.exec(location)?.[1];
+  if (workdayCode && ISO_REGION[workdayCode]) return ISO_REGION[workdayCode];
   for (const part of [...parts].reverse()) {
-    const byCountry = regionOfCountryName(part);
+    // «United States (Remote)»: пометка в скобках — не часть страны.
+    const byCountry =
+      regionOfCountryName(part) ?? regionOfCountryName(part.replace(/\([^)]*\)/gu, ''));
     if (byCountry) return byCountry;
   }
   const haystack = ` ${normalisePlace(location)} `;
