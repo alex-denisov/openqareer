@@ -1,3 +1,4 @@
+import { vacancyFitMark } from './vacancyFitModel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { useState, useEffect, useRef } from 'react';
@@ -119,6 +120,9 @@ function FitEvidenceTable({
 function withRequirements(next: VacancyFitView, before: VacancyFitView): VacancyFitView {
   return { ...before, ...next, requirements: next.requirements ?? before.requirements };
 }
+/** How often an opened vacancy re-reads a percent that is still counting. */
+const FIT_COUNTING_POLL_MS = 15_000;
+
 function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
   const mounted = useRef(true);
   useEffect(() => {
@@ -234,7 +238,16 @@ export function VacancyFitEvidence({
   readonly hideWhenNumber?: boolean;
 }) {
   const state = useFitRequest(vacancyId, initialView);
-  if (hideWhenNumber && fitHasNumber(state.view)) return null;
+  // 28.10 mockup: the fit block above already says «считаем» while the percent is counting;
+  // the worker answers within a minute, so the opened vacancy reads it again on its own.
+  const counting = hideWhenNumber && vacancyFitMark(state.view).kind === 'pending';
+  useEffect(() => {
+    if (!counting) return undefined;
+    const timer = window.setInterval(() => void state.load(false), FIT_COUNTING_POLL_MS);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one timer while counting
+  }, [vacancyId, counting]);
+  if (hideWhenNumber && (fitHasNumber(state.view) || counting)) return null;
   const compact = !showTable;
   return (
     <section

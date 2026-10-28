@@ -56,6 +56,21 @@ export function VacancyFitCell({ item }: { readonly item: MatchedVacancyItem }) 
   );
 }
 
+/** 28.10 mockup «Считаем»: the percent is counting; the row stays after counted ones. */
+function FitCountingBlock({ view }: { readonly view?: VacancyFitView }) {
+  return (
+    <section className="vacancy-fit-block" aria-label="Совпадение считается">
+      <FitNumber view={view} size="lg" />
+      <div className="vacancy-fit-block-text">
+        <h3>Совпадение считается</h3>
+        <p>
+          Процент появится в течение минуты. Пока он считается, вакансия стоит после посчитанных.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 /** First block of the expanded vacancy and the 390 push: the number and why it is that. */
 export function VacancyFitBlock({
   cluster,
@@ -67,6 +82,7 @@ export function VacancyFitBlock({
   const view = useLatestVacancyFitView(cluster.id, initialView);
   const startable = useFocusCheckStartable();
   const mark = vacancyFitMark(view);
+  if (mark.kind === 'pending') return <FitCountingBlock view={view} />;
   if (mark.kind !== 'number') return null;
   const sentence = vacancyFitSentence(view);
   const boost = vacancyFitBoost(view, startable === true);

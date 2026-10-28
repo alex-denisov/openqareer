@@ -121,10 +121,20 @@ describe('B422: компании «Хочу» в порядке подборки
       candidateCompanyWantsRepo: { list: () => [{ companyKey: candidateCompanyKey('Acme') }] },
     }) as unknown as RouteDeps;
 
-  it('«по соответствию»: вакансии отмеченной компании выше, внутри — порядок разбора', () => {
-    const pool = [withCompany('a', 'Other'), withCompany('b', 'Acme'), withCompany('c', 'Acme')];
-    const ordered = withWantedCompanyOrder(wantDeps({ a: 90, c: 50 }), 'want-a', 'fit')(pool);
-    expect(ordered.map((entry) => entry.cluster.id)).toEqual(['c', 'b', 'a']);
+  it('«по совпадению»: процент первым, «Хочу» только при равном проценте (28.10)', () => {
+    const pool = [
+      withCompany('a', 'Other'),
+      withCompany('b', 'Acme'),
+      withCompany('c', 'Acme'),
+      withCompany('d', 'Other'),
+      withCompany('e', 'Acme'),
+    ];
+    const ordered = withWantedCompanyOrder(
+      wantDeps({ a: 90, c: 50, d: 70, e: 70 }),
+      'want-a',
+      'fit',
+    )(pool);
+    expect(ordered.map((entry) => entry.cluster.id)).toEqual(['a', 'e', 'd', 'c', 'b']);
   });
 
   it('ключ кэша списка меняется вместе с отметками «Хочу»', () => {

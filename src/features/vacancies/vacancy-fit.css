@@ -262,14 +262,17 @@
 }
 .vacancies-screen-cell--fit {
   display: grid;
+  min-width: 0;
   justify-items: start;
   align-content: start;
   gap: var(--career-space-1);
 }
 .vacancy-fit-cap {
+  max-width: 100%;
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
-  white-space: nowrap;
+  /* «условие не совпадает» is wider than the 96px column: it wraps inside, never onto the star. */
+  overflow-wrap: anywhere;
 }
 .vacancy-fit-bar {
   display: flex;
@@ -362,6 +365,9 @@
   }
   .vacancies-screen-cell--fit .vacancy-fit-mark b {
     font-size: var(--career-text-sm);
+  }
+  .vacancies-screen-row-trigger .vacancy-fit-cap {
+    white-space: nowrap;
   }
   .vacancy-fit-block {
     grid-template-columns: auto minmax(0, 1fr);

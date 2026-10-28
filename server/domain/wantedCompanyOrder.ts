@@ -5,18 +5,21 @@ interface CompanyOrderItem {
 }
 
 /**
- * B422: «Хочу в эту компанию» учитывается подбором — вакансии отмеченных
- * компаний идут первыми. Порядок внутри обеих групп сохраняется.
+ * 28.10: порядок «по совпадению» ведёт процент; отметка «Хочу» поднимает вакансию
+ * только среди вакансий с тем же местом по `samePlace`. Сортировка устойчива.
  */
-export function wantedCompaniesFirst<T extends CompanyOrderItem>(
+export function wantedCompaniesBreakTies<T extends CompanyOrderItem>(
   items: readonly T[],
   wantedKeys: ReadonlySet<string>,
+  samePlace: (left: T, right: T) => number,
 ): T[] {
   if (wantedKeys.size === 0) return [...items];
-  const isWanted = (item: T) =>
-    Boolean(item.cluster.canonicalCompany) &&
-    wantedKeys.has(candidateCompanyKey(item.cluster.canonicalCompany!));
-  return [...items.filter(isWanted), ...items.filter((item) => !isWanted(item))];
+  const rank = (item: T) =>
+    item.cluster.canonicalCompany &&
+    wantedKeys.has(candidateCompanyKey(item.cluster.canonicalCompany))
+      ? 0
+      : 1;
+  return [...items].sort((left, right) => samePlace(left, right) || rank(left) - rank(right));
 }
 
 /** Ключи компаний «Хочу» кандидата; без хранилища — пусто. */

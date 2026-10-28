@@ -8,7 +8,6 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   page,
 }, testInfo) => {
   await mockSignedInCabinet(page, { vacancyTotal: 2 });
-  let queued = false;
   let completed = false;
   const methods: string[] = [];
   const sorts: string[] = [];
@@ -27,7 +26,7 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
             levelMatch: 'match',
             fitView:
               index === 0
-                ? { state: 'not_requested', requirements: [] }
+                ? { state: 'processing', requirements: [] }
                 : readyVacancyFit(item.cluster.id),
           },
         })),
@@ -38,7 +37,6 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     const method = route.request().method();
     methods.push(method);
     if (method === 'POST') {
-      queued = true;
       return route.fulfill({
         status: 202,
         json: { data: { state: 'processing', requirements: [] } },
@@ -46,12 +44,11 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     }
     return route.fulfill({
       json: {
-        data: completed
-          ? readyVacancyFit(vacancyId)
-          : { state: queued ? 'processing' : 'not_requested', requirements: [] },
+        data: completed ? readyVacancyFit(vacancyId) : { state: 'processing', requirements: [] },
       },
     });
   });
+  await page.clock.install();
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
   await expect(page.locator('.vacancies-screen')).toBeVisible();
@@ -61,14 +58,17 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     const card = page.locator('.vacancies-screen-card').filter({
       has: page.getByRole('heading', { name: base.data[0]!.cluster.canonicalTitle, exact: true }),
     });
-    if (!(await card.locator('.vacancy-fit-evidence').isVisible()))
+    if (!(await card.locator('.vacancy-fit-block').isVisible()))
       await card.locator('.vacancies-screen-row-trigger').click();
-    const evidence = card.getByRole('region', { name: 'Соответствие вашему профилю' });
-    await evidence.getByRole('button', { name: 'Рассчитать соответствие', exact: true }).click();
-    await expect(evidence.getByRole('status')).toContainText('Соответствие: расчёт в очереди');
-    await expect(evidence.locator('.vacancy-fit-percent')).toHaveCount(0);
+    // 28.10 mockup: the shown page is queued by the server; the opened vacancy says «считаем»
+    // instead of the old «расчёт в очереди / Обновить результат» block and reads again itself.
+    const counting = card.getByRole('region', { name: 'Совпадение считается' });
+    await expect(counting).toContainText('считаем');
+    await expect(card).not.toContainText('Обновить результат');
+    await expect(card).not.toContainText('Соответствие: расчёт в очереди');
     completed = true;
-    await evidence.getByRole('button', { name: 'Обновить результат' }).click();
+    await page.clock.fastForward(16_000);
+    const evidence = card.getByRole('region', { name: 'Соответствие вашему профилю' });
     // Mockup 4: the number lives in the row; the card drops its fit block once it is known.
     await expect(evidence).toHaveCount(0);
     // 28.10 mockup: the row's «Совпадение» column holds the coloured number, the company line none.
@@ -77,8 +77,8 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     ).toHaveAttribute('aria-label', /^Совпадение 50 %/u);
     await expect(card.locator('.vac-sub')).not.toContainText('соответствие');
     await expect(card).not.toContainText('fixture-fact-01');
-    // G5 item 9: the POST answer is the queued view, only «Обновить результат» reads again.
-    expect(methods).toEqual(['POST', 'GET']);
+    // The opened vacancy only reads; queueing is the server's job for the shown page.
+    expect(methods).not.toContain('POST');
   }
   const directory = join('docs/v1-release/tasks/evidence/B525', testInfo.project.name);
   await mkdir(directory, { recursive: true });
@@ -153,4 +153,36 @@ test('B522 admin audit shows actual spending controls and refreshes read-only', 
   await mkdir(dir, { recursive: true });
   await page.screenshot({ path: join(dir, 'admin-spend.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('28.10: «условие не совпадает» wraps inside the 96px column, never onto the star', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === 'mobile-390', 'the 96px column exists only on desktop');
+  await mockSignedInCabinet(page, { vacancyTotal: 2 });
+  const base = matchedVacancyPage(0, 2);
+  await page.route('**/api/v1/candidate/matched-vacancies*', (route) => {
+    const ready = readyVacancyFit(base.data[0]!.cluster.id);
+    const blocked = {
+      ...ready,
+      result: { ...ready.result!, reason: 'blocked_gate', coveragePercent: null },
+    };
+    return route.fulfill({
+      json: {
+        ...base,
+        data: base.data.map((item) => ({
+          ...item,
+          explanation: { ...item.explanation, fitView: blocked },
+        })),
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
+  const cell = page.locator('.vacancies-screen-row-trigger .vacancies-screen-cell--fit').first();
+  await expect(cell.locator('.vacancy-fit-cap')).toHaveText('условие не совпадает');
+  const box = (await cell.boundingBox())!;
+  const cap = (await cell.locator('.vacancy-fit-cap').boundingBox())!;
+  expect(cap.x + cap.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
 });

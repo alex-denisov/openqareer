@@ -4,6 +4,7 @@ import {
   compareFitOrder,
   explanationWithFitView,
   vacanciesAwaitingFit,
+  vacanciesToWarm,
 } from './matchedVacancyFit';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
@@ -131,6 +132,29 @@ describe('B524 background fit for the shown page', () => {
     expect(
       vacanciesAwaitingFit([withState('old', 'refreshing'), withState('done', 'ready')]),
     ).toEqual(['old']);
+  });
+  it('warms the top rows and the best uncounted rows below them (28.10, QA_CANDIDATE)', () => {
+    const counted = Array.from({ length: 25 }, (_, i) => item('c' + i, 60));
+    const unscored = (id: string) => {
+      const base = item(id, null);
+      return {
+        ...base,
+        explanation: { ...base.explanation, fitView: undefined },
+      } as MatchedVacancyItem;
+    };
+    const tail = [
+      withState('hh-empty', 'no_description'),
+      unscored('never-seen'),
+      withState('busy', 'processing'),
+      ...Array.from({ length: 30 }, (_, i) => unscored('t' + i)),
+    ];
+    const ids = vacanciesToWarm([...counted, ...tail], 20);
+    expect(ids.slice(0, 20)).toEqual(counted.slice(0, 20).map((entry) => entry.cluster.id));
+    expect(ids).toContain('hh-empty');
+    expect(ids).toContain('never-seen');
+    expect(ids).not.toContain('busy');
+    expect(ids).not.toContain('c22');
+    expect(ids).toHaveLength(40);
   });
   it('retries a calculation that failed on a provider outage', () => {
     expect(vacanciesAwaitingFit([withState('down', 'failed'), withState('done', 'ready')])).toEqual(

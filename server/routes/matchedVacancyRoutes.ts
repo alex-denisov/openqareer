@@ -36,6 +36,8 @@ import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
 import {
   requestFitForShownPage,
+  requestFitForVacancyIds,
+  vacanciesToWarm,
   withShownPageFitViews,
   withWantedCompanyOrder,
 } from './matchedVacancyFit';
@@ -238,7 +240,7 @@ function buildMatchedResponse(
     data,
     page,
     facets: filters.offset === 0 ? list.facets : undefined,
-    preloadIds: list.filtered.slice(0, 20).map((item) => item.cluster.id.replace(/^cluster-/u, '')),
+    warmIds: vacanciesToWarm(list.filtered),
     campaignWithHypotheses: list.campaignWithHypotheses,
     listCached,
     pageAndExplanationsMs,
@@ -273,20 +275,24 @@ function logMatchedTiming(
 
 function preloadTopMatchedDescriptions(
   engine: RouteDeps['multiSourceEngine'],
-  vacancyIds: readonly string[],
+  clusterIds: readonly string[],
   offset: number,
   request: FastifyRequest,
+  requestFit: (clusterIds: readonly string[]) => void,
 ): void {
-  if (offset !== 0) return;
-  if (typeof engine.preloadVacancyDescriptions !== 'function') return;
-  if (vacancyIds.length === 0) return;
+  if (offset !== 0 || clusterIds.length === 0) return;
+  // The fit is queued after the text is read: queued earlier it would see an empty description.
+  if (typeof engine.preloadVacancyDescriptions !== 'function') return requestFit(clusterIds);
+  const vacancyIds = clusterIds.map((id) => id.replace(/^cluster-/u, ''));
   void engine
-    .preloadVacancyDescriptions(vacancyIds, 20)
+    .preloadVacancyDescriptions(vacancyIds, vacancyIds.length)
     .then((summary) => {
+      requestFit(clusterIds);
       if (summary.loaded > 0) invalidateAllMatchedVacancies(engine);
       request.log.info({ event: 'hh-description-preload', ...summary }, 'hh-description-preload');
     })
     .catch(() => {
+      requestFit(clusterIds);
       // Keep provider details and vacancy URLs out of the log. Counts make an
       // unexpected preload failure visible without writing vacancy content.
       request.log.warn(
@@ -412,7 +418,8 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
 
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
   // ответ списка; размер транспортного ответа страницей остаётся прежним.
-  preloadTopMatchedDescriptions(multiSourceEngine, response.preloadIds, offset, request);
+  const requestFit = (ids: readonly string[]) => requestFitForVacancyIds(deps, candidate.id, ids);
+  preloadTopMatchedDescriptions(multiSourceEngine, response.warmIds, offset, request, requestFit);
   requestFitForShownPage(deps, candidate.id, response.data);
 
   logMatchedTiming(
