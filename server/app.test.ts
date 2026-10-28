@@ -136,18 +136,21 @@ describe('OpenQareer API boundary', () => {
     });
     expect(authorized.statusCode).toBe(200);
     expect(authorized.json().data).toMatchObject({
-      // Очередь называет модель, а не только провайдера: две её ступени могут
-      // жить за одним провайдером (B183).
-      personalDataRoute: {
-        provider: 'openai',
-        model: 'gpt-5.6-sol',
-        fallbackModels: [],
-      },
+      // Отчёт берёт цепочку у самой маршрутизации (28.10): без ключей в
+      // тестовой конфигурации ступеней нет, а названная цепочка видна.
+      personalDataRoute: { provider: null, model: null, fallbackModels: [] },
       syntheticDataRoute: {
-        provider: 'openrouter',
-        model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        provider: null,
+        model: null,
         fallbackModels: [],
         outputValidation: 'server-side-strict-schema',
+      },
+      modelChains: {
+        coach: [
+          'openai:gpt-5.6-luna',
+          'openrouter:deepseek/deepseek-v4.1-flash',
+          'openrouter:z-ai/glm-5.3-flash',
+        ],
       },
       qualityFloor: 'gpt-5.6-sol',
       promptRevision: 'career-v1.3-2026-10-28',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CoachTurnInput } from '../domain/coach';
+import { outputBudgetForRole } from './openAICoachProvider';
 import {
   NativeCoachProvider,
   type NativeProviderId,
@@ -316,5 +317,39 @@ describe('бюджет вывода Gemini под рассуждение (B183)'
     expect(body.generationConfig.maxOutputTokens).toBeGreaterThanOrEqual(
       COACH_ANSWER_TOKENS * 2,
     );
+  });
+});
+
+/**
+ * 28.10: транспорты NVIDIA, Gemini и Anthropic резали ответ на 2 400 токенах,
+ * а стратег просит 6 000. Бюджет считается той же функцией, что у OpenAI.
+ */
+describe('бюджет ответа по роли (28.10)', () => {
+  const strategist = { ...input, activeRole: 'career_strategist' as const };
+
+  it('Anthropic получает место под ответ стратега', async () => {
+    const bodies: Array<{ max_tokens: number }> = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify(responseFor('anthropic')), { status: 200 });
+    };
+    await new NativeCoachProvider({
+      provider: 'anthropic',
+      apiKey: 'secret-that-must-not-be-returned',
+      baseUrl: 'https://provider.invalid/v1',
+      model: 'claude-fable-5',
+      fetchImpl,
+    })
+      .createTurn(strategist, 'idempotency-key')
+      .catch(() => undefined);
+    expect(bodies[0].max_tokens).toBe(outputBudgetForRole('career_strategist'));
+    expect(bodies[0].max_tokens).toBeGreaterThan(2_400);
+  });
+
+  it('Gemini кладёт рассуждение поверх ответа роли', () => {
+    expect(geminiOutputBudget('high', 'career_strategist')).toBe(
+      outputBudgetForRole('career_strategist') * 4,
+    );
+    expect(geminiOutputBudget(undefined)).toBeGreaterThan(2_400);
   });
 });

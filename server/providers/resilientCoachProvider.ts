@@ -78,17 +78,22 @@ export class ResilientCoachProvider implements CoachProvider {
     let lastError: CoachProviderError | undefined;
 
     for (const route of this.routes) {
-      const coolingUntil = this.coolingUntil.get(routeKey(route)) ?? 0;
-      if (coolingUntil > this.now()) {
+      if (this.isCooling(route)) {
         trace.add(attemptOf(route, 'skipped', 'provider_cooldown'));
         continue;
       }
       if (executed >= this.maxAttempts) break;
+      const budgetMs = remainingBudget(options.deadlineAt, this.now());
+      if (budgetMs !== undefined && budgetMs < MIN_STAGE_BUDGET_MS)
+        return this.fail(trace, turnDeadlineError());
       executed += 1;
       const startedAt = this.now();
 
       try {
-        const output = await route.provider.createTurn(input, idempotencyKey);
+        const output = await withinBudget(
+          route.provider.createTurn(input, idempotencyKey),
+          budgetMs,
+        );
         if (options.accept && !options.accept(output.result)) {
           // The route works; only this step cannot use its answer, so it is not cooled.
           lastError = new CoachProviderError('provider_output_invalid', 502, true);
@@ -108,6 +113,8 @@ export class ResilientCoachProvider implements CoachProvider {
         if (!(error instanceof CoachProviderError)) throw error;
         lastError = error;
         trace.add(attemptOf(route, 'failed', error.code), startedAt);
+        // Ход исчерпал своё время — ступень тут ни при чём, её не остужаем.
+        if (error.diagnostic === TURN_DEADLINE) continue;
         // Неповторяемый отказ раньше обрывал всю цепочку. На проде это стоило
         // хода коуча: провайдер отвергал наш контракт вывода (`400`), а
         // следующий маршрут, который ответил бы, даже не пробовали (B183). Пул
@@ -117,6 +124,14 @@ export class ResilientCoachProvider implements CoachProvider {
       }
     }
 
+    return this.fail(trace, lastError);
+  }
+
+  private isCooling(route: ProviderRoute): boolean {
+    return (this.coolingUntil.get(routeKey(route)) ?? 0) > this.now();
+  }
+
+  private fail(trace: AttemptTrace, lastError: CoachProviderError | undefined): never {
     this.onAttempts?.(trace.timed());
     throw allRoutesFailed(lastError, trace.attempts);
   }
@@ -155,4 +170,37 @@ function allRoutesFailed(
     failure.role,
     attempts,
   );
+}
+
+/**
+ * Дедлайн хода (28.10): сводка прошлой беседы и три роли идут подряд, а клиент
+ * ждёт ответ 240 с. Ступень получает не больше остатка хода, а с остатком
+ * меньше минимума не начинается — ход завершается понятной ошибкой вовремя.
+ */
+const TURN_DEADLINE = 'turn_deadline' as const;
+const MIN_STAGE_BUDGET_MS = 10_000;
+
+function remainingBudget(deadlineAt: number | undefined, now: number): number | undefined {
+  return deadlineAt === undefined ? undefined : deadlineAt - now;
+}
+
+function turnDeadlineError(): CoachProviderError {
+  return new CoachProviderError('provider_timeout', 504, true, TURN_DEADLINE);
+}
+
+function withinBudget<T>(work: Promise<T>, budgetMs: number | undefined): Promise<T> {
+  if (budgetMs === undefined) return work;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(turnDeadlineError()), budgetMs);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }

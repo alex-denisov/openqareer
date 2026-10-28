@@ -11,6 +11,7 @@ import {
   type CoachProvider,
   type CoachProviderResult,
 } from './coachProvider';
+import { outputBudgetForRole } from './openAICoachProvider';
 import { PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 export type NativeProviderId = 'anthropic' | 'gemini' | 'cohere' | 'yandex';
@@ -41,8 +42,11 @@ interface NativeResponse {
   totalTokens: number;
 }
 
-/** Ответу коуча хватает этого; всё сверх — бюджет на рассуждение. */
-export const COACH_ANSWER_TOKENS = 2_400;
+/**
+ * Место под сам ответ — по роли, той же функцией, что у OpenAI и OpenRouter:
+ * плоские 2 400 токенов резали ответ стратега (6 000) на середине JSON (28.10).
+ */
+export const COACH_ANSWER_TOKENS = outputBudgetForRole(undefined);
 
 /**
  * У Gemini 3.x рассуждение тратит **тот же** бюджет вывода, что и ответ.
@@ -51,10 +55,14 @@ export const COACH_ANSWER_TOKENS = 2_400;
  * размышление и отдала обрывок, который не прошёл разбор. Поэтому уровень
  * рассуждения обязан идти вместе с местом под него (B183).
  */
-export function geminiOutputBudget(thinkingLevel?: 'low' | 'high'): number {
-  if (thinkingLevel === 'high') return COACH_ANSWER_TOKENS * 4;
-  if (thinkingLevel === 'low') return COACH_ANSWER_TOKENS * 2;
-  return COACH_ANSWER_TOKENS;
+export function geminiOutputBudget(
+  thinkingLevel?: 'low' | 'high',
+  role?: CoachTurnInput['activeRole'],
+): number {
+  const answer = outputBudgetForRole(role);
+  if (thinkingLevel === 'high') return answer * 4;
+  if (thinkingLevel === 'low') return answer * 2;
+  return answer;
 }
 
 export class NativeCoachProvider implements CoachProvider {
@@ -130,7 +138,7 @@ export class NativeCoachProvider implements CoachProvider {
       },
       {
         model: this.options.model,
-        max_tokens: 2_400,
+        max_tokens: outputBudgetForRole(input.activeRole),
         system: careerInstructionsForRole(input.activeRole, input.internalPurpose),
         messages: [{ role: 'user', content: serializeCoachInput(input) }],
       },
@@ -174,7 +182,7 @@ export class NativeCoachProvider implements CoachProvider {
           { role: 'user', parts: [{ text: serializeCoachInput(input) }] },
         ],
         generationConfig: {
-          maxOutputTokens: geminiOutputBudget(this.options.thinkingLevel),
+          maxOutputTokens: geminiOutputBudget(this.options.thinkingLevel, input.activeRole),
           responseMimeType: 'application/json',
           // Gemini отвергает ограничения длины и размера (B183): контракт
           // едет без них, а годность ответа всё равно решает zod.
@@ -230,7 +238,7 @@ export class NativeCoachProvider implements CoachProvider {
           { role: 'system', content: careerInstructionsForRole(input.activeRole, input.internalPurpose) },
           { role: 'user', content: serializeCoachInput(input) },
         ],
-        max_tokens: 2_400,
+        max_tokens: outputBudgetForRole(input.activeRole),
         response_format: { type: 'json_object' },
       },
     );
@@ -273,7 +281,7 @@ export class NativeCoachProvider implements CoachProvider {
         completionOptions: {
           stream: false,
           temperature: 0.1,
-          maxTokens: '2400',
+          maxTokens: String(outputBudgetForRole(input.activeRole)),
         },
         messages: [
           { role: 'system', text: careerInstructionsForRole(input.activeRole, input.internalPurpose) },

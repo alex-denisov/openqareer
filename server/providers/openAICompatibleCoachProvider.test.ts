@@ -1,4 +1,5 @@
 import type OpenAI from 'openai';
+import { outputBudgetForRole } from './openAICoachProvider';
 import {
   APIConnectionError,
   APIConnectionTimeoutError,
@@ -104,6 +105,21 @@ describe('OpenAI-compatible provider connectors', () => {
 
     expect(calls[0]).not.toHaveProperty('response_format');
     expect(calls[0]).toHaveProperty('reasoning_effort', 'high');
+    // Рассуждение и ответ делят один потолок: 2 400 резали ход (28.10).
+    expect(calls[0]).toHaveProperty('max_completion_tokens', outputBudgetForRole(input.activeRole, 'high'));
+  });
+
+  it('даёт стратегу место под его ответ, а не плоские 2 400 (28.10)', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const connector = connectorWith(async (body) => {
+      calls.push(body);
+      return compatibleResponse(JSON.stringify(output));
+    });
+
+    await connector.createTurn({ ...input, activeRole: 'career_strategist' }, 'idempotency-key');
+
+    expect(calls[0]).toHaveProperty('max_completion_tokens', outputBudgetForRole('career_strategist'));
+    expect(calls[0].max_completion_tokens).toBeGreaterThan(2_400);
   });
 
   it.each([

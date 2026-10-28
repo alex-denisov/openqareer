@@ -10,6 +10,10 @@ import {
   type VertexConfig,
 } from '../../providers/vertexAi';
 import { rulesParse } from './rulesParse';
+import { MODEL_CHAINS, resolveChain } from '../../providers/modelChains';
+import type { ProviderId } from '../../providers/modelRegistry';
+import { requestChatJson } from '../../providers/openRouterJson';
+import type { ProviderRoute } from '../../providers/providerQueue';
 
 export interface TitleModelInput {
   readonly titleKey: string;
@@ -105,19 +109,7 @@ export class VertexModelTitleParser implements ModelTitleParser {
     };
     const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('');
     if (!text) return [];
-    const allowedKeys = new Set(items.map((item) => item.titleKey));
-    const decoded = safeJson(text);
-    if (!Array.isArray(decoded)) return [];
-    return decoded.flatMap((value) => {
-      const parsed = responseItemSchema.safeParse(value);
-      if (!parsed.success || !allowedKeys.has(parsed.data.titleKey)) return [];
-      // Неизвестный или противоречащий функции roleId отбрасывается, разбор остаётся.
-      const { roleId, ...rest } = parsed.data;
-      const roleFunction = roleId ? ontology.rolesById.get(roleId)?.function : undefined;
-      const keepRole =
-        roleFunction !== undefined && rest.functions.includes(roleFunction as FunctionCode);
-      return [keepRole ? { ...rest, roleId } : rest];
-    });
+    return decodeTitleResults(safeJson(text), items);
   }
 
   private send(items: readonly TitleModelInput[], token: string): Promise<Response> {
@@ -137,6 +129,99 @@ export class VertexModelTitleParser implements ModelTitleParser {
       signal: AbortSignal.timeout(25_000),
     });
   }
+}
+
+/** Ответ модели — массив записей (Vertex) или `{ items: [...] }` (chat-completions). */
+function decodeTitleResults(
+  decoded: unknown,
+  items: readonly TitleModelInput[],
+): readonly TitleModelResult[] {
+  const list = Array.isArray(decoded) ? decoded : (decoded as { items?: unknown } | null)?.items;
+  if (!Array.isArray(list)) return [];
+  const allowedKeys = new Set(items.map((item) => item.titleKey));
+  return list.flatMap((value) => {
+    const parsed = responseItemSchema.safeParse(value);
+    if (!parsed.success || !allowedKeys.has(parsed.data.titleKey)) return [];
+    // Неизвестный или противоречащий функции roleId отбрасывается, разбор остаётся.
+    const { roleId, ...rest } = parsed.data;
+    const roleFunction = roleId ? ontology.rolesById.get(roleId)?.function : undefined;
+    const keepRole =
+      roleFunction !== undefined && rest.functions.includes(roleFunction as FunctionCode);
+    return [keepRole ? { ...rest, roleId } : rest];
+  });
+}
+
+/** Ступень цепочки разбора на chat-completions: тот же промпт, ответ — `{ items: [...] }`. */
+export class ChatModelTitleParser implements ModelTitleParser {
+  readonly model: string;
+
+  constructor(
+    private readonly route: ProviderRoute,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {
+    this.model = route.model;
+  }
+
+  async parse(items: readonly TitleModelInput[]): Promise<readonly TitleModelResult[]> {
+    if (items.length === 0) return [];
+    if (items.length > 40) throw new Error('title model batch exceeds 40 items');
+    const answer = await requestChatJson(
+      this.route,
+      {
+        system: `${SYSTEM_PROMPT}\nВерни JSON-объект {"items": [...]} с записями вида {titleKey, functions, levelRank, roleId?}.`,
+        user: JSON.stringify(items),
+        maxTokens: 4_096,
+        timeoutMs: 25_000,
+      },
+      this.fetchImpl,
+    );
+    return decodeTitleResults(answer, items);
+  }
+}
+
+/**
+ * Цепочка разбора названий (28.10): Vertex → deepseek-v4.1-flash → glm-5.3-flash.
+ * Пустой ответ на непустую пачку — отказ ступени, как и исключение.
+ */
+export class QueuedModelTitleParser implements ModelTitleParser {
+  constructor(readonly stages: readonly ModelTitleParser[]) {}
+
+  get model(): string {
+    return this.stages.map((stage) => stage.model).join(' → ');
+  }
+
+  async parse(items: readonly TitleModelInput[]): Promise<readonly TitleModelResult[]> {
+    let lastError: unknown;
+    for (const stage of this.stages) {
+      try {
+        const results = await stage.parse(items);
+        if (results.length > 0 || items.length === 0) return results;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError) throw lastError;
+    return [];
+  }
+}
+
+export function buildModelTitleParser(config: {
+  providerCredentials?: Partial<Record<ProviderId, string>>;
+  vertex?: VertexConfig;
+}): ModelTitleParser | undefined {
+  const stages = resolveChain(
+    MODEL_CHAINS.titleParsing,
+    config.providerCredentials ?? {},
+    config.vertex,
+  );
+  if (stages.length === 0) return undefined;
+  return new QueuedModelTitleParser(
+    stages.map((stage) =>
+      stage.kind === 'vertex'
+        ? new VertexModelTitleParser(stage.vertex)
+        : new ChatModelTitleParser(stage.route),
+    ),
+  );
 }
 
 export interface TitleModelStepReport {

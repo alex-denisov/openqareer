@@ -3,7 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VertexConfig } from '../../providers/vertexAi';
 import { MIGRATION_23, VACANCY_POOL_INDEX_TABLE } from '../../data/sqliteSchema';
 import { SemanticBackfill } from './semanticBackfill';
-import { TitleModelStep, VertexModelTitleParser, type ModelTitleParser } from './modelTitleParser';
+import {
+  buildModelTitleParser,
+  ChatModelTitleParser,
+  QueuedModelTitleParser,
+  TitleModelStep,
+  VertexModelTitleParser,
+  type ModelTitleParser,
+} from './modelTitleParser';
 
 const vertex: VertexConfig = {
   projectId: 'project-test',
@@ -212,5 +219,60 @@ describe('TitleModelStep (B267 S4)', () => {
 
     expect(first).toMatchObject({ batches: 1, callsToday: 1, dailyCapReached: true });
     expect(second).toMatchObject({ batches: 0, callsToday: 1, dailyCapReached: false });
+  });
+});
+
+describe('цепочка разбора названий (28.10)', () => {
+  const items = [{ titleKey: 'cto', sampleTitle: 'CTO' }];
+  const parsed = [{ titleKey: 'cto', functions: ['eng'], levelRank: 4 }] as const;
+
+  it('Vertex → deepseek-v4.1-flash → glm-5.3-flash', () => {
+    const parser = buildModelTitleParser({
+      providerCredentials: { openrouter: 'sk-or-test' },
+      vertex: {
+        projectId: 'p',
+        clientEmail: 'bot@p.iam.gserviceaccount.com',
+        privateKey: 'unused-in-this-test',
+        model: 'gemini-3.8-flash',
+        location: 'global',
+      },
+    }) as QueuedModelTitleParser;
+    expect(parser.stages.map((stage) => stage.model)).toEqual([
+      'gemini-3.8-flash',
+      'deepseek/deepseek-v4.1-flash',
+      'z-ai/glm-5.3-flash',
+    ]);
+  });
+
+  it('сбой и пустой ответ ведут к следующей ступени', async () => {
+    const third = vi.fn(async () => parsed as never);
+    const parser = new QueuedModelTitleParser([
+      { model: 'a', parse: async () => Promise.reject(new Error('429')) },
+      { model: 'b', parse: async () => [] },
+      { model: 'c', parse: third },
+    ]);
+    expect(await parser.parse(items)).toEqual(parsed);
+    expect(third).toHaveBeenCalledTimes(1);
+  });
+
+  it('ступень chat-completions читает { items } и отбрасывает чужие ключи', async () => {
+    const fetchImpl = vi.fn(async () =>
+      Response.json({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                items: [...parsed, { titleKey: 'alien', functions: ['eng'], levelRank: 0 }],
+              }),
+            },
+          },
+        ],
+      }),
+    );
+    const parser = new ChatModelTitleParser(
+      { provider: 'openrouter', apiKey: 'k', model: 'deepseek/deepseek-v4.1-flash' },
+      fetchImpl as unknown as typeof fetch,
+    );
+    expect(await parser.parse(items)).toEqual(parsed);
   });
 });

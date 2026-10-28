@@ -16,7 +16,7 @@ import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
-import { TitleModelStep, VertexModelTitleParser } from './vacancies/titleParse/modelTitleParser';
+import { buildModelTitleParser, TitleModelStep } from './vacancies/titleParse/modelTitleParser';
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
@@ -100,19 +100,20 @@ const linkedinPoolExecutor =
         notifyOwner: (message) => notifyOwner(config, message),
       })
     : undefined;
+// Разбор названий по цепочке (28.10): Vertex → deepseek-v4.1-flash → glm-5.3-flash.
+const titleModelParser = buildModelTitleParser({
+  providerCredentials: config.providerCredentials,
+  vertex: config.vertex,
+});
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
   titleParse: new SemanticBackfill(semanticDatabase),
-  ...(config.vertex
+  ...(titleModelParser
     ? {
-        titleModel: new TitleModelStep(
-          semanticDatabase,
-          new VertexModelTitleParser(config.vertex),
-          {
-            dailyCalls: readPositiveInteger(process.env.OPENQAREER_TITLE_MODEL_DAILY_CALLS, 2_000),
-          },
-        ),
+        titleModel: new TitleModelStep(semanticDatabase, titleModelParser, {
+          dailyCalls: readPositiveInteger(process.env.OPENQAREER_TITLE_MODEL_DAILY_CALLS, 2_000),
+        }),
       }
     : {}),
   ...(linkedinPoolExecutor ? { linkedinPoolExecutor } : {}),

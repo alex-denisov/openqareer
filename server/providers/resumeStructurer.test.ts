@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { LlmResumeStructurer, buildResumeStructurer } from './resumeStructurer';
+import { LlmResumeStructurer, QueuedResumeStructurer, buildResumeStructurer } from './resumeStructurer';
 import { HygienicResumeStructurer } from './hygienicResumeStructurer';
 
 function clientReturning(content: string | null) {
@@ -131,20 +131,50 @@ describe('LlmResumeStructurer', () => {
 
 describe('buildResumeStructurer', () => {
   it('stays undefined without a credential so the deterministic parser runs', () => {
-    expect(
-      buildResumeStructurer({ personalProvider: 'openai', providerCredentials: {} }),
-    ).toBeUndefined();
+    expect(buildResumeStructurer({ providerCredentials: {} })).toBeUndefined();
   });
 
-  it('builds a structurer when the personal provider has a credential', () => {
+  it('builds the paid chain luna → deepseek-v4.1-flash → glm-5.3-flash inside hygiene (28.10)', () => {
     // Собранный структуратор обязан быть в чистке: разобранное резюме кандидат
     // правит и уносит в отклики, и мимо чистки пути быть не должно (B210).
     const built = buildResumeStructurer({
-      personalProvider: 'openai',
-      model: 'gpt-5.6-sol',
-      providerCredentials: { openai: 'sk-test-key' },
+      providerCredentials: { openai: 'sk-test-key', openrouter: 'sk-or-test-key' },
     });
     expect(built).toBeInstanceOf(HygienicResumeStructurer);
-    expect((built as HygienicResumeStructurer).inner).toBeInstanceOf(LlmResumeStructurer);
+    const inner = (built as HygienicResumeStructurer).inner as QueuedResumeStructurer;
+    expect(inner).toBeInstanceOf(QueuedResumeStructurer);
+    expect(inner.stages.map((stage) => stage.provenance?.model)).toEqual([
+      'gpt-5.6-luna',
+      'deepseek/deepseek-v4.1-flash',
+      'z-ai/glm-5.3-flash',
+    ]);
+  });
+});
+
+describe('QueuedResumeStructurer', () => {
+  const stage = (model: string, answer: 'null' | 'throw' | 'ok') => ({
+    provenance: { model, promptRevision: 'r1' },
+    structure: vi.fn(async () => {
+      if (answer === 'throw') throw new Error('503');
+      return answer === 'ok' ? ({ fullName: model } as never) : null;
+    }),
+  });
+
+  it('moves to the next stage on silence or failure and names the one that answered', async () => {
+    const stages = [stage('a', 'throw'), stage('b', 'null'), stage('c', 'ok')];
+    const queued = new QueuedResumeStructurer(stages);
+    expect(await queued.structure('resume text')).toEqual({ fullName: 'c' });
+    expect(queued.provenance?.model).toBe('c');
+    for (const item of stages) expect(item.structure).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops at the first answer', async () => {
+    const stages = [stage('a', 'ok'), stage('b', 'ok')];
+    await new QueuedResumeStructurer(stages).structure('resume text');
+    expect(stages[1].structure).not.toHaveBeenCalled();
+  });
+
+  it('returns null when every stage is silent, so the rules parser runs', async () => {
+    expect(await new QueuedResumeStructurer([stage('a', 'null'), stage('b', 'throw')]).structure('x')).toBeNull();
   });
 });

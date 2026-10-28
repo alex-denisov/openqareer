@@ -405,3 +405,37 @@ function roleResult(role: CareerRole): CoachProviderResult {
     },
   };
 }
+
+describe('дедлайн хода доходит до каждой роли (28.10)', () => {
+  it('передаёт deadlineAt всем трём ролям, а accept — только последней', async () => {
+    const seen: Array<{ role: CareerRole; deadlineAt?: number; accept: boolean }> = [];
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          seen.push({
+            role: input.role,
+            deadlineAt: input.options?.deadlineAt,
+            accept: Boolean(input.options?.accept),
+          });
+          return roleResult(input.role);
+        },
+      },
+    });
+    await orchestrator.createTurn(
+      {
+        candidateReference: 'candidate-test-001',
+        dataClass: 'synthetic',
+        locale: 'ru-RU',
+        phase: 'resume',
+        messages: [{ id: 'message-1', role: 'user', content: 'Проверь резюме.' }],
+      },
+      '11111111-1111-4111-8111-111111111199',
+      { deadlineAt: 123_456, accept: () => true },
+    );
+    expect(seen).toEqual([
+      { role: 'career_expert', deadlineAt: 123_456, accept: false },
+      { role: 'career_strategist', deadlineAt: 123_456, accept: false },
+      { role: 'career_consultant', deadlineAt: 123_456, accept: true },
+    ]);
+  });
+});
