@@ -27,6 +27,8 @@ export interface CoachProviderFactoryOptions {
   folderId?: string;
   /** Тоннель Cloudflare: без него Gemini не строится вовсе (B183). */
   cloudflareGateway?: CloudflareGatewayConfig;
+  /** Потолок ступени очереди; без него — общий `PROVIDER_STAGE_TIMEOUT_MS`. */
+  timeoutMs?: number;
 }
 
 /**
@@ -49,6 +51,7 @@ function buildGeminiProvider(
     model,
     extraHeaders: cloudflareGatewayHeaders(options.cloudflareGateway),
     ...(thinkingLevel ? { thinkingLevel } : {}),
+    ...(options.timeoutMs ? { timeoutMs: options.timeoutMs } : {}),
   });
 }
 
@@ -63,18 +66,16 @@ export function buildCoachProvider(
     throw new Error(`model is not allowed for provider ${options.provider}`);
   }
   if (options.provider === 'openai') {
-    // Реестр уже проверил, что модель разрешена; отдельный список из одной
-    // строки здесь запрещал владельцу сменить модель без правки кода (B183).
-    return new OpenAICoachProvider({
-      apiKey: options.apiKey,
-      model: model as OpenAICoachModel,
-    });
+    // Реестр уже проверил модель; список из одной строки запрещал её сменить (B183).
+    const openAI = { apiKey: options.apiKey, timeoutMs: options.timeoutMs };
+    return new OpenAICoachProvider({ ...openAI, model: model as OpenAICoachModel });
   }
   if (options.provider === 'openrouter') {
     return new OpenRouterCoachProvider({
       apiKey: options.apiKey,
       model,
       structuredOutput: modelDefinition.structuredOutput,
+      timeoutMs: options.timeoutMs,
     });
   }
   if (isOpenAICompatibleProvider(options.provider)) {
@@ -88,6 +89,7 @@ export function buildCoachProvider(
         options.provider === 'groq' || options.provider === 'cerebras'
           ? 'high'
           : undefined,
+      timeoutMs: options.timeoutMs,
     });
   }
   if (options.provider === 'gemini') {
@@ -99,5 +101,6 @@ export function buildCoachProvider(
     baseUrl: definition.baseUrl,
     model,
     folderId: options.folderId,
+    timeoutMs: options.timeoutMs,
   });
 }

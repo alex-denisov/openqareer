@@ -1,11 +1,63 @@
+import { workFormatLabel } from '../../shared/vacancyWorkFormat';
+import type { VacancyCluster, VacancySalary } from '../domain/unifiedVacancy';
 import { buildAdaptationContext } from './adaptationCoach';
 import type { CoachTurnSubject } from '../domain/coach';
 import { candidateCompanyCoachContext } from './candidateCompanyRoutes';
 import type { RouteDeps } from './deps';
 
+/** stageContext у модели ограничен 10 000 символов; текст вакансии берёт остаток. */
+const STAGE_CONTEXT_MAX_CHARS = 10_000;
+const VACANCY_TEXT_MAX_CHARS = 6_000;
+
+function salaryLine(salary: VacancySalary | undefined): string | null {
+  if (!salary || (salary.from === undefined && salary.to === undefined)) return null;
+  const amount = (value: number) => value.toLocaleString('ru-RU').replace(/\s/gu, ' ');
+  const range = [salary.from, salary.to]
+    .filter((value): value is number => typeof value === 'number')
+    .map(amount)
+    .join('–');
+  const tax = salary.gross === undefined ? '' : salary.gross ? ' до вычета налогов' : ' на руки';
+  return `Зарплата: ${range}${salary.currency ? ` ${salary.currency}` : ''}${tax}`;
+}
+
+/** Условия вакансии: зарплата, формат и источник — то, о чём модель говорила «нет данных». */
+function conditionLines(
+  cluster: VacancyCluster | undefined,
+  full: { readonly salary?: VacancySalary; readonly url?: string } | undefined,
+): string[] {
+  const format = cluster?.workFormat ? workFormatLabel(cluster.workFormat) : undefined;
+  const url = cluster?.primaryUrl ?? full?.url;
+  return [
+    salaryLine(cluster?.salary ?? full?.salary),
+    format ? `Формат работы: ${format}` : null,
+    url ? `Источник: ${url}` : null,
+  ].filter((line): line is string => Boolean(line));
+}
+
 /**
- * Формирует краткий контекстный блок фактов о вакансии для модели.
- * Требования ограничены первыми 15.
+ * Полный текст вакансии тем же чтением, что и «Подробнее» (B266). Без него модель
+ * видела только название и навыки и отвечала «нет данных по вакансии» (28.10).
+ */
+async function vacancyText(
+  deps: RouteDeps,
+  vacancyId: string,
+  cluster: VacancyCluster | undefined,
+): Promise<string> {
+  const sourceId = vacancyId.replace(/^cluster-/u, '');
+  const loaded = await deps.multiSourceEngine
+    ?.loadVacancyDescription?.(sourceId)
+    .catch(() => undefined);
+  const full = loaded?.vacancy ?? deps.multiSourceEngine?.getVacancy?.(sourceId);
+  const texts = [full?.fullDescription, full?.description, cluster?.descriptionSummary]
+    .map((value) => value?.trim() ?? '')
+    .filter(Boolean);
+  const longest = texts.reduce((best, value) => (value.length > best.length ? value : best), '');
+  return longest.slice(0, VACANCY_TEXT_MAX_CHARS);
+}
+
+/**
+ * Формирует контекстный блок фактов о вакансии для модели: условия, источник и
+ * текст вакансии. Требования ограничены первыми 15.
  */
 async function buildVacancyContext(
   deps: RouteDeps,
@@ -43,14 +95,20 @@ async function buildVacancyContext(
     }
   }
 
-  const lines: string[] = [];
-  if (title) lines.push(`Вакансия: ${title}`);
-  if (company) lines.push(`Компания: ${company}`);
-  if (location) lines.push(`Локация: ${location}`);
+  const lines = [
+    title && `Вакансия: ${title}`,
+    company && `Компания: ${company}`,
+    location && `Локация: ${location}`,
+    ...conditionLines(cluster, full),
+  ].filter((line): line is string => Boolean(line));
   if (reqSkills.length > 0) lines.push(`Требования: ${reqSkills.join(', ')}`);
   if (matching.length > 0) lines.push(`Совпадения с профилем: ${matching.join(', ')}`);
   if (gaps.length > 0) lines.push(`Пробелы с профилем: ${gaps.join(', ')}`);
-  return lines.join('\n');
+  const facts = lines.join('\n');
+  const text = await vacancyText(deps, vacancyId, cluster);
+  if (!text) return facts;
+  const room = STAGE_CONTEXT_MAX_CHARS - facts.length - '\nТекст вакансии:\n'.length;
+  return `${facts}\nТекст вакансии:\n${text.slice(0, Math.max(0, room))}`;
 }
 
 /**

@@ -397,9 +397,9 @@ describe('candidate platform connections', () => {
         async nameRoles() {
           return {
             roles: [
-              { title: 'Accessibility Talent Solutions', reason: 'работал там', evidenceRefs: ['memory:1'] },
-              { title: 'Marketing Solutions', reason: 'вёл продукт', evidenceRefs: ['memory:2'] },
-              { title: 'Xray Technician', reason: 'семь лет в рентген-кабинете', evidenceRefs: ['memory:3'] },
+              { title: 'Accessibility Talent Solutions', reason: 'работал там', evidenceRefs: ['memory:1', 'memory:1b'] },
+              { title: 'Marketing Solutions', reason: 'вёл продукт', evidenceRefs: ['memory:2', 'memory:2b'] },
+              { title: 'Xray Technician', reason: 'семь лет в рентген-кабинете', evidenceRefs: ['memory:3', 'memory:3b'] },
             ],
             stage: 'test',
           };

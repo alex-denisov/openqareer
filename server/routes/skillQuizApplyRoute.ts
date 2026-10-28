@@ -6,8 +6,10 @@ import {
   createSkillVerificationProposal,
   evaluateSkillQuiz,
   getSkillQuizById,
+  quizCoversSkill,
+  type SkillQuiz,
 } from '../../src/services/hhSkillQuizzes';
-import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
+import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import type { CareerActionProposal } from '../domain/coach';
 import { ResumeRevisionConflictError } from '../orchestration/careerCommandDispatcher';
 import {
@@ -35,26 +37,46 @@ const applyBodySchema = z.object({
   answers: z.record(z.string(), z.number()),
 });
 
+/**
+ * The profile skill a quiz verdict belongs to. The panel sent the quiz title
+ * («Docker & Контейнеризация сервисов»), so on prod (27.10) the verdict became a
+ * 35th skill while the candidate's «Docker» stayed «Квиз не пройден».
+ */
+export function resolveQuizSkillName(
+  draft: ResumeDraft,
+  quiz: SkillQuiz,
+  requested: string,
+): string {
+  const skills = draft.skills ?? [];
+  const covered = skills.find((skill) => quizCoversSkill(quiz, skill.name));
+  if (covered) return covered.name;
+  const named = skills.find((skill) => skillKey(skill.name) === skillKey(requested));
+  if (named && named.name !== quiz.title) return named.name;
+  return quiz.skill;
+}
+
 function prepareCommand(
   deps: RouteDeps,
   candidateId: string,
   commandId: string,
   body: z.infer<typeof applyBodySchema>,
+  quiz: SkillQuiz,
 ) {
   const { candidateStore } = deps;
   const result = evaluateSkillQuiz(body.quizId, body.answers);
-  const fact = buildSkillVerificationFact(body.skillName, result);
   const draft = candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
-  const key = skillKey(body.skillName);
+  const skillName = resolveQuizSkillName(draft, quiz, body.skillName);
+  const fact = buildSkillVerificationFact(skillName, result);
+  const key = skillKey(skillName);
   const proposal = {
-    ...createSkillVerificationProposal(body.skillName, result),
+    ...createSkillVerificationProposal(skillName, result),
     evidenceRefs: [`quiz:${body.quizId}`],
   };
   const revision = {
     ...proposal.resumeRevision,
     experienceId: key,
     memoryId: null,
-    proposedText: serializeSkillState(skillStateAfterQuiz(draft, body.skillName, fact)),
+    proposedText: serializeSkillState(skillStateAfterQuiz(draft, skillName, fact)),
   };
   const executionTarget = bindResumeRevisionTarget(revision, currentSkillText(draft, key));
   const planner = new CareerCommandPlanner({ createId: () => commandId });
@@ -119,10 +141,11 @@ async function handleApplySkillQuiz(
       false,
     );
   }
-  if (!getSkillQuizById(body.quizId)) {
+  const quiz = getSkillQuizById(body.quizId);
+  if (!quiz) {
     return sendError(reply, request, 404, 'skill_quiz_not_found', 'Квиз не найден.', false);
   }
-  const { result, fact, command } = prepareCommand(deps, candidate.id, commandId, body);
+  const { result, fact, command } = prepareCommand(deps, candidate.id, commandId, body, quiz);
   approveCommand(candidateStore, candidate.id, command);
   try {
     const applied = await careerCommandDispatcher.dispatch(candidate.id, command.commandId);

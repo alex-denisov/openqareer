@@ -160,11 +160,13 @@ function withoutPeriod(text: string): string {
 
 /** Чем обоснована гипотеза: доводом консультанта или выборкой рынка (28.10). */
 function hypothesisNoteOf(proposed: ProposedRole, vacancyCount: number): string | undefined {
+  if (proposed.origin === 'market' && vacancyCount > 0) {
+    // Причина рыночной роли — совпавшие навыки кандидата (28.10), не довод консультанта.
+    const basis = proposed.reason?.trim() ? `; ${withoutPeriod(proposed.reason)}` : '';
+    return `Гипотеза по рынку: ${formatVacancyCount(vacancyCount)} с этим названием в функциях вашего опыта${basis}. Подходит ли она вам, пока не проверено.`;
+  }
   if (proposed.reason?.trim()) {
     return `Гипотеза консультанта: ${withoutPeriod(proposed.reason)}. Это вывод из профиля, пока не проверенный.`;
-  }
-  if (proposed.origin === 'market' && vacancyCount > 0) {
-    return `Гипотеза по рынку: ${formatVacancyCount(vacancyCount)} с этим названием в функциях вашего опыта. Подходит ли она вам, пока не проверено.`;
   }
   return undefined;
 }

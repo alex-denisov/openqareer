@@ -7,6 +7,11 @@ import {
 import { SkillsEditForm } from './ProfileSkillsSection';
 import type { ProfileMobileDataProps } from './profileMobileTypes';
 import type { ResumeSkillInput } from './resumeTypes';
+import {
+  SKILL_CONFIRMATION_HINT,
+  confirmedSkillsLine,
+  orderSkillsByVerification,
+} from './skillConfirmation';
 
 export function skillVerification(skill: ResumeSkillInput) {
   if (skill.status === 'подтверждён')
@@ -42,9 +47,14 @@ function DesktopSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
 
 function DesktopSkillList({ skills }: { readonly skills: readonly ResumeSkillInput[] }) {
   const [all, setAll] = useState(false);
-  const visible = all ? skills : skills.slice(0, 6);
+  const ordered = orderSkillsByVerification(skills);
+  const visible = all ? ordered : ordered.slice(0, 6);
   return (
     <>
+      <p className="career-profile-screen-quality-note">
+        {skills.length ? `${confirmedSkillsLine(skills)} ` : ''}
+        {SKILL_CONFIRMATION_HINT}
+      </p>
       <div className="profile-desktop-skill-grid">
         {visible.map((skill) => (
           <DesktopSkillRow key={skill.id} skill={skill} />

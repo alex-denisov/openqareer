@@ -14,6 +14,7 @@ import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
 import { ResilientCoachProvider } from './providers/resilientCoachProvider';
 import { StructuredStageCoachProvider } from './providers/structuredStageCoachProvider';
+import { queueStageTimeoutMs } from './providers/stageTimeout';
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import {
   namedQueueDepth,
@@ -87,13 +88,15 @@ const buildQueue = (
     head,
     fallbacks,
     credentials: config.providerCredentials ?? {},
-  }).map((route) => ({
+  }).map((route, index, routes) => ({
     id: route.provider,
     model: route.model,
     provider: buildCoachProvider({
       ...route,
       folderId: config.yandexFolderId,
       cloudflareGateway: config.cloudflareGateway,
+      // Последней ступени некому уступить ход: её не обрываем общим потолком.
+      timeoutMs: queueStageTimeoutMs(index, routes.length),
     }),
   }));
 

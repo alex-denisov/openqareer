@@ -11,6 +11,10 @@ export type QuizPlatform = 'hh.ru' | 'linkedin';
 export interface SkillQuiz {
   id: string;
   title: string;
+  /** Short profile skill name the quiz confirms: «Docker», not the quiz title. */
+  skill: string;
+  /** Other names of the same skill in a profile, compared without case or punctuation. */
+  skillAliases: string[];
   badgeTitle: string;
   category: string;
   platform: QuizPlatform;
@@ -50,6 +54,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
   {
     id: 'typescript',
     title: 'TypeScript: Верификация уровня Senior',
+    skill: 'TypeScript',
+    skillAliases: ['TS', 'TypeScript/JavaScript'],
     badgeTitle: 'Подтвержденный навык TypeScript (hh.ru)',
     category: 'Engineering / Frontend & Backend',
     platform: 'hh.ru',
@@ -112,6 +118,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
   {
     id: 'react',
     title: 'React 18 & Архитектура компонентов',
+    skill: 'React',
+    skillAliases: ['React.js', 'ReactJS', 'React 18'],
     badgeTitle: 'Подтвержденный навык React (hh.ru)',
     category: 'Engineering / Frontend',
     platform: 'hh.ru',
@@ -175,6 +183,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
   {
     id: 'nodejs',
     title: 'Node.js: Backend Architecture & Performance',
+    skill: 'Node.js',
+    skillAliases: ['NodeJS', 'Node'],
     badgeTitle: 'Подтвержденный навык Node.js (hh.ru)',
     category: 'Engineering / Backend',
     platform: 'hh.ru',
@@ -232,6 +242,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
   {
     id: 'qa-automation',
     title: 'QA Automation: Playwright & e2e Reliability',
+    skill: 'QA Automation',
+    skillAliases: ['Playwright', 'Автоматизация тестирования', 'Test Automation', 'E2E'],
     badgeTitle: 'Подтвержденный навык QA Automation (hh.ru)',
     category: 'Engineering / Quality Assurance',
     platform: 'hh.ru',
@@ -296,6 +308,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
   {
     id: 'sql',
     title: 'SQL & Database Design (PostgreSQL / Relational Data)',
+    skill: 'SQL',
+    skillAliases: ['PostgreSQL', 'Postgres', 'MySQL', 'Базы данных'],
     badgeTitle: 'Подтвержденный навык SQL (hh.ru)',
     category: 'Engineering / Databases',
     platform: 'hh.ru',
@@ -358,6 +372,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
   {
     id: 'python',
     title: 'Python: Core Architecture & Data Structures',
+    skill: 'Python',
+    skillAliases: ['Python 3'],
     badgeTitle: 'Подтвержденный навык Python (LinkedIn)',
     category: 'Engineering / Backend',
     platform: 'linkedin',
@@ -421,6 +437,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
   {
     id: 'docker',
     title: 'Docker & Контейнеризация сервисов',
+    skill: 'Docker',
+    skillAliases: ['Контейнеризация', 'Containers', 'Docker Compose'],
     badgeTitle: 'Подтвержденный навык Docker (LinkedIn)',
     category: 'Engineering / DevOps',
     platform: 'linkedin',
@@ -489,6 +507,19 @@ export function getAvailableSkillQuizzes(): SkillQuiz[] {
 
 export function getSkillQuizById(id: string): SkillQuiz | undefined {
   return QUIZ_CATALOG.find((q) => q.id === id);
+}
+
+function comparableSkill(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+/** Whether a profile skill is the one this quiz checks: «Docker», «node.js», «PostgreSQL». */
+export function quizCoversSkill(quiz: SkillQuiz, skillName: string): boolean {
+  const name = comparableSkill(skillName);
+  return [quiz.skill, ...quiz.skillAliases].some((alias) => comparableSkill(alias) === name);
 }
 
 export function evaluateSkillQuiz(

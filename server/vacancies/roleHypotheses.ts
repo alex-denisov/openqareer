@@ -48,12 +48,15 @@ export function buildRoleProposals(input: {
   readonly candidateSkills: readonly string[];
   /** Ответы на задания меняют порядок ролей, но не состав (B180, срез 3). */
   readonly preferences?: WorkPreferenceResult;
+  /** Ссылки на факты-места работы: опора роли, названной моделью (28.10). */
+  readonly workplaceRefs?: ReadonlySet<string>;
 }): ProposedRole[] {
   return proposeRoles({
     named: input.named,
     pool: observations(input.matched),
     candidateSkills: input.candidateSkills,
     roleKey: careerRoleKey,
+    ...(input.workplaceRefs ? { workplaceRefs: input.workplaceRefs } : {}),
     ...(input.preferences ? { preferences: input.preferences } : {}),
   });
 }

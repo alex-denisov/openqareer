@@ -31,4 +31,17 @@ describe('career super-prompt', () => {
     expect(compact).toContain('не округляй');
     expect(compact).toContain('Чего кандидат не знает, не превращай в факт');
   });
+
+  it('compares team size within one workplace only (28.10)', () => {
+    const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
+    expect(compact).toContain('resumeContext.experiences[].teamSize');
+    expect(compact).toContain('Разный размер команды на разных местах работы — не противоречие');
+  });
+
+  it('answers with an action instead of retelling the resume (28.10)', () => {
+    const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
+    expect(compact).toContain('Не пересказывай и не цитируй профиль кандидата');
+    expect(compact).toContain('не проси кандидата прислать её текст');
+    expect(CAREER_SUPER_PROMPT_REVISION).toBe('career-v1.3-2026-10-28');
+  });
 });

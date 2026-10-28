@@ -221,6 +221,11 @@ const resumeContextSchema = z
             id: z.string().min(1).max(80),
             title: z.string().nullable(),
             employer: z.string().nullable(),
+            startDate: z.string().nullable().optional(),
+            endDate: z.string().nullable().optional(),
+            current: z.boolean().optional(),
+            teamSize: z.number().int().positive().nullable().optional(),
+            descriptionMemoryId: z.string().min(1).max(80).nullable().optional(),
             bulletMemoryIds: z.array(z.string().min(1).max(80)).max(20),
           })
           .strict(),

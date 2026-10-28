@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { WORK_PREFERENCE_KEY_VERSION, type WorkPreferenceResult } from './workPreferences';
 import type { RoleObservation } from './poolRoleHypotheses';
-import { proposeRoles, type NamedRole } from './roleProposals';
+import { MIN_MARKET_ROLE_SKILL_MATCHES, proposeRoles, type NamedRole } from './roleProposals';
 
-function vacancy(title: string, skills: string[] = ['SQL'], source = 'hh'): RoleObservation {
+function vacancy(
+  title: string,
+  skills: string[] = ['SQL', 'Python'],
+  source = 'hh',
+): RoleObservation {
   return {
     canonicalTitle: title,
     firstObservedAt: '2026-08-20T08:00:00.000Z',
@@ -13,7 +17,7 @@ function vacancy(title: string, skills: string[] = ['SQL'], source = 'hh'): Role
 }
 
 function named(title: string, reason = 'девять лет вёл внутренние продукты'): NamedRole {
-  return { title, reason, evidenceRefs: ['document:resume'] };
+  return { title, reason, evidenceRefs: ['document:resume', 'memory:place'] };
 }
 
 describe('proposeRoles', () => {
@@ -21,7 +25,7 @@ describe('proposeRoles', () => {
     const roles = proposeRoles({
       named: [named('Head of Growth')],
       pool: [],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles).toHaveLength(1);
@@ -36,7 +40,7 @@ describe('proposeRoles', () => {
     const roles = proposeRoles({
       named: [named('Продакт-менеджер')],
       pool: Array.from({ length: 7 }, () => vacancy('Продакт-менеджер')),
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles[0].confirmation).toEqual({ state: 'too-few', sampleSize: 7 });
@@ -61,7 +65,7 @@ describe('proposeRoles', () => {
     const roles = proposeRoles({
       named: [named('Product Manager')],
       pool: Array.from({ length: 9 }, () => vacancy('Продакт-менеджер')),
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles).toHaveLength(1);
@@ -73,19 +77,19 @@ describe('proposeRoles', () => {
     const roles = proposeRoles({
       named: [named('Head of Growth')],
       pool: Array.from({ length: 9 }, () => vacancy('Аналитик данных')),
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles.map((role) => role.origin)).toEqual(['market', 'model']);
     expect(roles[0].title).toBe('Аналитик данных');
-    expect(roles[0].reason).toBeNull();
+    expect(roles[0].reason).toBe('совпадают ваши навыки: Python, SQL');
   });
 
   it('отбрасывает роль, которую модель не объяснила фактом резюме', () => {
     const roles = proposeRoles({
       named: [{ title: 'Космонавт', reason: '', evidenceRefs: [] }],
       pool: [],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles).toEqual([]);
@@ -99,12 +103,12 @@ describe('proposeRoles', () => {
     const first = proposeRoles({
       named: [named('Аналитик данных'), named('Продакт-менеджер'), named('Head of Growth')],
       pool,
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
     const second = proposeRoles({
       named: [named('Head of Growth'), named('Продакт-менеджер'), named('Аналитик данных')],
       pool,
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(second).toEqual(first);
@@ -124,7 +128,7 @@ describe('proposeRoles: что считается одной ролью', () => 
         ...Array.from({ length: 5 }, () => vacancy('Senior Product Manager')),
         ...Array.from({ length: 4 }, () => vacancy('Ведущий продакт-менеджер (удалённо)')),
       ],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles[0].confirmation).toMatchObject({ state: 'observed', sampleSize: 9 });
@@ -137,7 +141,7 @@ describe('proposeRoles: что считается одной ролью', () => 
         ...Array.from({ length: 9 }, () => vacancy('Менеджер по продукту')),
         ...Array.from({ length: 9 }, () => vacancy('Менеджер по закупкам')),
       ],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(roles.map((role) => sample(role))).toEqual([9, 9]);
@@ -150,9 +154,13 @@ function sample(role: { confirmation: { state: string; sampleSize?: number } }):
 
 describe('порядок ролей после заданий «Какие роли мне подходят» (B180 срез 3)', () => {
   const named = [
-    { title: 'Operations Manager', reason: 'вёл операции', evidenceRefs: ['memory:1'] },
-    { title: 'Data Analyst', reason: 'считал когорты', evidenceRefs: ['memory:2'] },
-    { title: 'Product Manager', reason: 'вёл продукты', evidenceRefs: ['memory:3'] },
+    {
+      title: 'Operations Manager',
+      reason: 'вёл операции',
+      evidenceRefs: ['memory:1', 'memory:1b'],
+    },
+    { title: 'Data Analyst', reason: 'считал когорты', evidenceRefs: ['memory:2', 'memory:2b'] },
+    { title: 'Product Manager', reason: 'вёл продукты', evidenceRefs: ['memory:3', 'memory:3b'] },
   ];
 
   const preferring = (family: 'ПП' | 'РР'): WorkPreferenceResult => ({
@@ -168,13 +176,13 @@ describe('порядок ролей после заданий «Какие ро�
     const flow = proposeRoles({
       named,
       pool: [],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       preferences: preferring('ПП'),
     });
     const numbers = proposeRoles({
       named,
       pool: [],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       preferences: preferring('РР'),
     });
 
@@ -192,9 +200,12 @@ describe('порядок ролей после заданий «Какие ро�
     };
 
     expect(
-      proposeRoles({ named, pool: [], candidateSkills: [], preferences: undecided }).map(
-        (role) => role.title,
-      ),
+      proposeRoles({
+        named,
+        pool: [],
+        candidateSkills: ['SQL', 'Python'],
+        preferences: undecided,
+      }).map((role) => role.title),
     ).toEqual(proposeRoles({ named, pool: [], candidateSkills: [] }).map((role) => role.title));
   });
 
@@ -207,7 +218,7 @@ describe('порядок ролей после заданий «Какие ро�
     const roles = proposeRoles({
       named,
       pool: [],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       preferences: excluded,
     });
 
@@ -234,7 +245,7 @@ describe('вилка роли по вакансиям с зарплатой (B44
     const [role] = proposeRoles({
       named: [named('Director of Engineering')],
       pool,
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
     expect(role.confirmation.state).toBe('observed');
     if (role.confirmation.state !== 'observed') return;
@@ -247,7 +258,7 @@ describe('вилка роли по вакансиям с зарплатой (B44
     const [role] = proposeRoles({
       named: [named('Director of Engineering')],
       pool,
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
     if (role.confirmation.state !== 'observed') throw new Error('expected observed');
     expect(role.confirmation.wage).toEqual({ sampleSize: 0 });
@@ -286,7 +297,7 @@ describe('proposeRoles: одна роль под разными названия
         ...many('Технический директор', 69),
         ...many('Технический директор (CTO)', 24),
       ],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       roleKey,
     });
 
@@ -305,7 +316,7 @@ describe('proposeRoles: одна роль под разными названия
     const roles = proposeRoles({
       named: [named('Chief Operating Officer')],
       pool: [...many('Операционный директор', 10), ...many('Операционный директор (COO)', 5)],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       roleKey,
     });
 
@@ -326,7 +337,7 @@ describe('proposeRoles: одна роль под разными названия
       pool: ['Analyst', 'Designer', 'Recruiter', 'Accountant', 'Lawyer', 'Teacher'].flatMap(
         (title) => many(title, 20),
       ),
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
 
     expect(
@@ -352,7 +363,7 @@ describe('proposeRoles: имя роли рынка (27.10)', () => {
         ...Array.from({ length: 6 }, () => vacancy(joined)),
         ...Array.from({ length: 4 }, () => vacancy('Производственный директор')),
       ],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       roleKey: () => 'manufacturing:top',
     });
     expect(roles[0]?.title).toBe('Производственный директор');
@@ -374,7 +385,7 @@ describe('proposeRoles: короткое имя при равной частот
     const roles = proposeRoles({
       named: [],
       pool: titles.map((title) => vacancy(title)),
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       roleKey: () => 'ai-ml:top',
     });
     expect(roles[0]?.title).toBe('VP of AI');
@@ -396,7 +407,7 @@ describe('proposeRoles: описание вакансии — не имя рол
         ].flatMap((title) => [vacancy(title)]),
         ...Array.from({ length: 2 }, () => vacancy('Director of AI')),
       ],
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
       roleKey: () => 'ai-ml:top',
     });
     expect(roles[0]?.title).toBe('Director of AI');
@@ -408,7 +419,7 @@ describe('proposeRoles: одно слово без функции — не ро�
     const roles = proposeRoles({
       named: [],
       pool: Array.from({ length: 12 }, () => vacancy('Директор')),
-      candidateSkills: [],
+      candidateSkills: ['SQL', 'Python'],
     });
     expect(roles).toEqual([]);
   });
@@ -424,7 +435,7 @@ describe('повторяющиеся требования большой рол�
       ...Array.from({ length: 60 }, (_, index) => vacancy('CTO', [`Навык ${index}`])),
       ...Array.from({ length: 40 }, () => vacancy('CTO', [])),
     ];
-    const roles = proposeRoles({ named: [], pool, candidateSkills: ['архитектура'] });
+    const roles = proposeRoles({ named: [], pool, candidateSkills: ['архитектура', 'kubernetes'] });
     const confirmation = roles[0].confirmation;
 
     expect(confirmation.state === 'observed' && confirmation.repeatedRequirements).toEqual([
@@ -433,6 +444,66 @@ describe('повторяющиеся требования большой рол�
     ]);
     expect(confirmation.state === 'observed' && confirmation.matchedRequirementNames).toEqual([
       'Архитектура',
+      'Kubernetes',
     ]);
+  });
+});
+
+describe('роль показывается только с основанием (28.10, «iOS разработчик» у PHP-руководителя)', () => {
+  const phpLead = ['PHP', 'Git', 'Docker', 'CI/CD', 'Agile', 'Atlassian Jira'];
+
+  it('рыночная группа без совпадения навыков ролью не становится', () => {
+    const roles = proposeRoles({
+      named: [],
+      pool: Array.from({ length: 12 }, () =>
+        vacancy('iOS разработчик', ['Swift', 'UIKit', 'Xcode']),
+      ),
+      candidateSkills: phpLead,
+    });
+    expect(roles.map((role) => role.title)).not.toContain('iOS разработчик');
+  });
+
+  it('одного общего навыка для рыночной роли мало, двух хватает, и причина называет их', () => {
+    const oneShared = proposeRoles({
+      named: [],
+      pool: Array.from({ length: 9 }, () => vacancy('iOS разработчик', ['Swift', 'Git'])),
+      candidateSkills: phpLead,
+    });
+    expect(oneShared).toHaveLength(0);
+
+    const twoShared = proposeRoles({
+      named: [],
+      pool: Array.from({ length: 9 }, () =>
+        vacancy('Backend-разработчик', ['PHP', 'Docker', 'Go']),
+      ),
+      candidateSkills: phpLead,
+    });
+    expect(MIN_MARKET_ROLE_SKILL_MATCHES).toBe(2);
+    expect(twoShared).toHaveLength(1);
+    expect(twoShared[0]).toMatchObject({
+      origin: 'market',
+      reason: 'совпадают ваши навыки: Docker, PHP',
+    });
+  });
+
+  it('роль модели по одной строке-факту не предлагается, по месту работы или двум фактам — да', () => {
+    const roles = proposeRoles({
+      named: [
+        { title: 'iOS разработчик', reason: 'упоминал Swift', evidenceRefs: ['memory:one-line'] },
+        {
+          title: 'Engineering Team Lead',
+          reason: 'руководил разработкой',
+          evidenceRefs: ['memory:place'],
+        },
+        { title: 'Head of CRM', reason: 'внедрял CRM', evidenceRefs: ['memory:a', 'memory:b'] },
+      ],
+      pool: [],
+      candidateSkills: phpLead,
+      workplaceRefs: new Set(['memory:place']),
+    });
+    expect(roles.map((role) => role.title)).toEqual(
+      expect.arrayContaining(['Engineering Team Lead', 'Head of CRM']),
+    );
+    expect(roles.map((role) => role.title)).not.toContain('iOS разработчик');
   });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { dropOrganisationTitles, roleNamingInstructions, roleNamingSchema } from './roleNaming';
+import {
+  ROLE_NAMING_PROMPT_VERSION,
+  dropOrganisationTitles,
+  roleNamingInstructions,
+  roleNamingSchema,
+} from './roleNaming';
 
 /**
  * PRB-039. Для профиля из LinkedIn модель назвала роли «Accessibility Talent
@@ -70,5 +75,14 @@ describe('уровень названных ролей (27.10)', () => {
     const text = roleNamingInstructions('ru');
     expect(text).toContain('самому высокому уровню');
     expect(text).toContain('Head of AI');
+  });
+});
+
+describe('роль держится на направлении опыта (28.10)', () => {
+  it('запрещает называть роль по одному упоминанию технологии и пересчитывает кэш', () => {
+    const text = roleNamingInstructions('ru');
+    expect(text).toContain('Не называй роль по одному упоминанию технологии или навыка');
+    expect(text).toContain('место работы или минимум два факта');
+    expect(ROLE_NAMING_PROMPT_VERSION).toBe(3);
   });
 });

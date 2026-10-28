@@ -57,6 +57,20 @@ export function readTargetLevel(
 // Ответы на задания меняют порядок ролей одного яруса и никогда — состав
 // (B180, срез 3). Прогон по прежней версии ключа в счёт не идёт: смена
 // формулировок меняет смысл сохранённых ответов.
+/** Факты-места работы: одной ссылки на такой факт роли модели хватает (28.10). */
+function workplaceMemoryRefs(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): Set<string> {
+  const experience = candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
+  return new Set(
+    experience
+      .flatMap((place) => [place.chronologyMemoryId, place.descriptionMemoryId])
+      .filter((id): id is string => Boolean(id))
+      .map((id) => (id.startsWith('memory:') ? id : `memory:${id}`)),
+  );
+}
+
 function currentWorkPreferences(candidateStore: RouteDeps['candidateStore'], candidateId: string) {
   const run = candidateStore.getWorkPreferenceRun(candidateId);
   return run && run.keyVersion === WORK_PREFERENCE_KEY_VERSION ? run.result : undefined;
@@ -182,12 +196,14 @@ export async function readRoleContext(
   );
 
   const preferences = currentWorkPreferences(candidateStore, candidateId);
+  const workplaceRefs = workplaceMemoryRefs(candidateStore, candidateId);
 
   return {
     proposals: buildRoleProposals({
       matched,
       named,
       candidateSkills: confirmedSkills,
+      workplaceRefs,
       ...(preferences ? { preferences } : {}),
     }),
     matched,

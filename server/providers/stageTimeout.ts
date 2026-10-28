@@ -21,3 +21,17 @@ export const PROVIDER_STAGE_TIMEOUT_MS = 50_000;
 
 /** Повторов внутри ступени нет: за повтор отвечает очередь. */
 export const PROVIDER_STAGE_MAX_RETRIES = 0;
+
+/**
+ * Потолок последней ступени очереди (28.10). Общий потолок нужен, чтобы
+ * медленная ступень уступила ход следующей; у последней следующей нет, и
+ * обрыв на 50-й секунде просто ронял ход. 25–27.10 так упали три хода из
+ * тринадцати по профилю: gpt-5.6-luna — единственная живая и последняя
+ * ступень. 80 секунд на каждую из трёх ролей укладываются в 240 секунд,
+ * которые клиент ждёт результат.
+ */
+export const LAST_PROVIDER_STAGE_TIMEOUT_MS = 80_000;
+
+export function queueStageTimeoutMs(index: number, total: number): number {
+  return index === total - 1 ? LAST_PROVIDER_STAGE_TIMEOUT_MS : PROVIDER_STAGE_TIMEOUT_MS;
+}

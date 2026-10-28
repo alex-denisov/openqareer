@@ -157,7 +157,7 @@ export function CareerExpertPanel({
   ): Promise<boolean> {
     if (skillQuizApplyInFlight.current) return false;
     const quiz = getSkillQuizById(res.quizId);
-    const skillName = quiz?.title.split(':')[0] ?? res.quizId;
+    const skillName = quiz?.skill ?? res.quizId;
     if (skillQuizApplyIdempotencyKey.current?.quizId !== res.quizId) {
       skillQuizApplyIdempotencyKey.current = { quizId: res.quizId, key: crypto.randomUUID() };
     }
