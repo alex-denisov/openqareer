@@ -102,6 +102,28 @@ describe('HhVacancyDescriptionLoader', () => {
     expect(transport).toHaveBeenCalledTimes(2);
   });
 
+  it('403 «employer restricted this vacancy» fails only that card, not the whole platform (prod 28.10)', async () => {
+    const forbidden =
+      '<template id="HH-Lux-InitialState">{&#34;i18n&#34;:{&#34;applicant.vacancyStatus.forbidden.reason&#34;:&#34;x&#34;},' +
+      '&#34;forbidden&#34;:true,&#34;errorPage&#34;:{&#34;isError&#34;:true}}</template>';
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 403, body: forbidden })
+      .mockResolvedValueOnce({ status: 200, body: page });
+    const loader = new HhVacancyDescriptionLoader({
+      transport,
+      sleep: vi.fn().mockResolvedValue(undefined),
+      now: () => 1_000,
+      failedCacheTtlMs: 5_000,
+      failedCacheJitterMs: 0,
+    });
+
+    await expect(loader.load('https://hh.ru/vacancy/9001')).resolves.toBeUndefined();
+    await expect(loader.load('https://hh.ru/vacancy/9002')).resolves.toMatchObject({
+      description: 'Полное описание роли\n\n- TypeScript',
+    });
+  });
+
   it('serializes concurrent detail reads and preserves the one-second minimum interval', async () => {
     let now = 0;
     const starts: number[] = [];

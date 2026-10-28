@@ -25,6 +25,12 @@ const BACKOFF: HhVacancyDetails = { blocked: 'backoff', skills: [] };
 
 // Статус самой вакансии в данных страницы. Текст «Вакансия в архиве» не годится:
 // он есть в словаре переводов каждой страницы hh и снимал живые вакансии (B312).
+/**
+ * 403 for one card: «Работодатель ограничил доступ». Not the i18n text (every page has it,
+ * B312) but the page state. It fails that card only; a bare 403 is still a platform refusal.
+ */
+const FORBIDDEN_VACANCY_MARKER =
+  /(?:&#34;|")forbidden(?:&#34;|"):true,(?:&#34;|")errorPage(?:&#34;|"):\{(?:&#34;|")isError(?:&#34;|"):true/u;
 const ARCHIVED_MARKER = /(?:&#34;|")status(?:&#34;|"):\{(?:&#34;|")archived(?:&#34;|"):true/u;
 
 export interface HhVacancyDescriptionLoaderOptions {
@@ -150,7 +156,8 @@ export class HhVacancyDescriptionLoader {
     let refused = false;
     try {
       const response = await this.options.transport(url);
-      refused = REFUSAL_STATUSES.has(response.status);
+      refused =
+        REFUSAL_STATUSES.has(response.status) && !FORBIDDEN_VACANCY_MARKER.test(response.body);
       if (response.status === 200) {
         const description = descriptionFromPage(response.body);
         const skills = skillsFromPage(response.body);
