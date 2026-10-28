@@ -39,7 +39,10 @@ describe('LandingPage (B569, mockup 01-home)', () => {
     const html = render();
     expect(html).toContain('Вы выбираете работу. <span>Резюме, поиск и отклики — на нас</span>');
     expect(html).toContain('Поиск работы с ИИ: openqareer соберёт сильное резюме');
-    expect(html).toMatch(/href="\/signup\?from=home" class="btn primary lg">Найти работу</u);
+    expect(html).toMatch(
+      /href="\/signup\?from=home" class="btn primary lg ps-guest">Найти работу</u,
+    );
+    expect(html).toMatch(/href="\/app" class="btn primary lg ps-member">Открыть кабинет</u);
     expect(html).toMatch(/class="btn lg" href="\/vacancies">Смотреть вакансии</u);
     expect(html).toContain('Скачать для');
     expect(html).toContain('/downloads/openqareer-macos.dmg');

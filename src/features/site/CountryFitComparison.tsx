@@ -196,13 +196,11 @@ function useStickyVisibility(): boolean {
 export function CountryFitSticky({
   payroll,
   currency,
-  signedIn,
   onContinue,
   storageError = false,
 }: {
   payroll?: PayrollResult;
   currency: string;
-  signedIn: boolean;
   onContinue: () => void;
   storageError?: boolean;
 }) {
@@ -220,13 +218,17 @@ export function CountryFitSticky({
         <small>Целевой net в месяц</small>
         <strong>{amount}</strong>
       </div>
+      {/* B577: both buttons are in the markup; CSS shows one by the mark on <html>. */}
       <button
         type="button"
-        className="ps-btn is-primary"
+        className="ps-btn is-primary ps-guest"
         onClick={onContinue}
-        disabled={!signedIn && !payroll}
+        disabled={!payroll}
       >
-        {signedIn ? 'В кабинет' : 'Продолжить'}
+        Продолжить
+      </button>
+      <button type="button" className="ps-btn is-primary ps-member" onClick={onContinue}>
+        В кабинет
       </button>
       {storageError && <p role="alert">Разрешите хранилище сайта и повторите переход.</p>}
     </aside>
