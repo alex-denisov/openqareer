@@ -55,7 +55,7 @@ describe('потолок фоновой обработки — месячный 
     expect(ledger.reserve(call, limits)).not.toBeNull();
     const status = ledger.status(limits);
     expect(status.spentUsd).toBeCloseTo(0.4001, 6);
-    expect(status.events.some((event: { kind: string }) => event.kind === 'cost_exceeds_reservation')).toBe(true);
+    expect(status.events.some((event) => event.kind === 'cost_exceeds_reservation')).toBe(true);
   });
 
   it('фон останавливает только фактический расход месяца у потолка', () => {
