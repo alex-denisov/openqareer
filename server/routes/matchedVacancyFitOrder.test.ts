@@ -37,7 +37,9 @@ function deps(scored: Record<string, number>): RouteDeps {
               requirements: [],
               result: {
                 status: 'assessed',
+                dataState: 'confirmed',
                 coveragePercent: scored[input.vacancyId],
+                coverage: { matched: 0, total: 12, unknown: 0 },
                 requiredCoverage: { percent: null },
                 assessments: [],
               },
