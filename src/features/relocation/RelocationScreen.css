@@ -343,6 +343,7 @@
   align-items: center;
   overflow-wrap: anywhere;
   color: var(--career-accent);
+  text-decoration: none;
 }
 
 .career-relocation-empty {
@@ -480,6 +481,7 @@
 .career-relocation-source-list a {
   color: var(--career-accent);
   overflow-wrap: anywhere;
+  text-decoration: none;
 }
 
 .career-relocation button:focus-visible,
