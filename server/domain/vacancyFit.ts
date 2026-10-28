@@ -1,3 +1,4 @@
+import { FIT_KEY_GATES, FIT_UNCONFIRMED_GATE_PENALTY, MIN_FIT_SKILL_REQUIREMENTS } from '../../shared/vacancyFitPercent';
 import { createHash } from 'node:crypto';
 import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
@@ -33,10 +34,10 @@ function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequiremen
  * Fewer skill requirements than this give no percent (B510-r): on prod 22.10 one condition
  * («Высшее образование») made «100 %, 1 из 1». 3 hides 29 % of model-labelled vacancies (155 of 540).
  */
-export const MIN_SKILL_REQUIREMENTS = 3;
+export const MIN_SKILL_REQUIREMENTS = MIN_FIT_SKILL_REQUIREMENTS;
 /** Unconfirmed key conditions lower the ceiling, so «100 %» needs a confirmed role, region and permit. */
-const KEY_GATES = ['role', 'region', 'workAuthorization'] as const;
-const UNCONFIRMED_GATE_PENALTY = 10;
+const KEY_GATES = FIT_KEY_GATES;
+const UNCONFIRMED_GATE_PENALTY = FIT_UNCONFIRMED_GATE_PENALTY;
 
 /** Experience and model skills count; conditions (education, language, format, permit) do not. */
 export function isSkillRequirement(requirement: VacancyRequirement): boolean {

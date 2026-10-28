@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { vacancyFitPercent } from '../../../shared/vacancyFitPercent';
 import {
   ArrowSquareOut,
   Briefcase,
@@ -272,6 +273,26 @@ const NO_CHIPS: ReturnType<typeof legacySkillChips> = { confirmed: [], unconfirm
 const legacyChips = (legacy: ReturnType<typeof extractVacancyRequirements>) =>
   legacySkillChips(legacy.skillMatching, legacy.skillMissing);
 
+function RequirementsHeading({
+  id,
+  counted,
+}: {
+  readonly id: string;
+  readonly counted: number | null;
+}) {
+  return (
+    <h3 id={id}>
+      Требования к навыкам
+      {counted === null ? null : (
+        <>
+          {' · '}
+          <span className="num">{counted}</span>
+        </>
+      )}
+    </h3>
+  );
+}
+
 export function VacancyScreenRequirementChips({
   cluster,
   explanation,
@@ -291,20 +312,20 @@ export function VacancyScreenRequirementChips({
     cluster.skills,
   );
   const chips = fromFit ?? (readingRequirements ? NO_CHIPS : legacyChips(legacy));
-  const skillMatching = chips.confirmed;
-  const skillMissing = chips.unconfirmed;
-  const hasRequirements = skillMatching.length + skillMissing.length > 0;
-
+  const hasRequirements = chips.confirmed.length + chips.unconfirmed.length > 0;
+  // 28.10 mockup: with a percent the card lists every requirement it counted, under one count.
+  const counted = vacancyFitPercent(fitView) === null ? null : fitView!.result!.coverage.total;
   return (
     <section
       className="vacancies-screen-requirements"
       aria-labelledby={`vacancy-requirements-${cluster.id}`}
     >
-      <h3 id={`vacancy-requirements-${cluster.id}`}>Требования к навыкам</h3>
+      <RequirementsHeading id={`vacancy-requirements-${cluster.id}`} counted={counted} />
       {hasRequirements ? (
         <VacancySkillChips
-          matching={skillMatching}
-          missing={skillMissing}
+          all={counted !== null}
+          matching={chips.confirmed}
+          missing={chips.unconfirmed}
           quotes={chips.quotes}
           cluster={cluster}
           onAddToProfile={onAddToProfile}
@@ -316,12 +337,17 @@ export function VacancyScreenRequirementChips({
       )}
       <p className="vacancies-screen-requirements-note">
         <RequirementConditions chips={chips} coverage={fitView?.result?.conditionCoverage} />
-        Из описания вакансии и тегов источника. «Подтверждено» — навык проверен квизом или проверкой
-        навыков.
+        {counted === null
+          ? 'Из описания вакансии и тегов источника. Зелёные подтверждаются профилем.'
+          : FIT_CHIPS_CAPTION}
       </p>
     </section>
   );
 }
+
+/** The caption under the full list of counted requirements (28.10 mockup, server data model). */
+export const FIT_CHIPS_CAPTION =
+  'Все требования из текста вакансии, по ним посчитан процент. Зелёные подтверждаются профилем, жёлтых в профиле не нашли.';
 
 /** Mockup 4 shows a short set of chips; the rest opens on «Ещё N». */
 const VISIBLE_SKILL_CHIPS = 6;
@@ -339,12 +365,15 @@ export function visibleSkillChips(
 }
 
 function VacancySkillChips({
+  all = false,
   matching: allMatching,
   missing: allMissing,
   quotes,
   cluster,
   onAddToProfile,
 }: {
+  /** Every counted requirement, unconfirmed first (28.10 mockup). */
+  readonly all?: boolean;
   readonly matching: readonly string[];
   readonly missing: readonly string[];
   readonly quotes?: Readonly<Record<string, string>>;
@@ -353,17 +382,11 @@ function VacancySkillChips({
 }) {
   const [expanded, setExpanded] = useState(false);
   const short = visibleSkillChips(allMatching, allMissing);
-  const { matching, missing } = expanded ? { matching: allMatching, missing: allMissing } : short;
+  const { matching, missing } =
+    expanded || all ? { matching: allMatching, missing: allMissing } : short;
   const hidden = allMatching.length + allMissing.length - matching.length - missing.length;
   return (
     <ul className="vacancies-screen-skill-chips">
-      {matching.map((skill) => (
-        <li className="vacancies-screen-skill-chip is-confirmed" key={`confirmed-${skill}`}>
-          <CheckCircle size={14} aria-hidden="true" />
-          <span className="career-sr-only">Подтверждено: </span>
-          <span title={quotes?.[skill]}>{skill}</span>
-        </li>
-      ))}
       {missing.map((skill) => (
         <MissingVacancySkillChip
           key={`unconfirmed-${skill}`}
@@ -372,6 +395,13 @@ function VacancySkillChips({
           cluster={cluster}
           onAddToProfile={onAddToProfile}
         />
+      ))}
+      {matching.map((skill) => (
+        <li className="vacancies-screen-skill-chip is-confirmed" key={`confirmed-${skill}`}>
+          <CheckCircle size={14} aria-hidden="true" />
+          <span className="career-sr-only">Есть в профиле: </span>
+          <span title={quotes?.[skill]}>{skill}</span>
+        </li>
       ))}
       {hidden > 0 ? (
         <li className="vacancies-screen-skill-more">
@@ -398,7 +428,7 @@ function MissingVacancySkillChip({
   const icon = (
     <>
       <Question size={14} aria-hidden="true" />
-      <span className="career-sr-only">Не проверено: </span>
+      <span className="career-sr-only">Нет в профиле: </span>
     </>
   );
   const label = <span title={quote}>{skill}</span>;

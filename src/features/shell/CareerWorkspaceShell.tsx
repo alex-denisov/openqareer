@@ -68,6 +68,7 @@ import { NotificationsBell } from '../notifications/NotificationsBell';
 import { NotificationsScreen } from '../notifications/NotificationsScreen';
 import { RoleSkillAssessmentScreen } from '../skills/RoleSkillAssessmentScreen';
 import type { SkillCheckFocus } from '../vacancies/VacancyQuizProposal';
+import { useVacancySkillCheckRequests } from '../vacancies/vacancyQuizOffer';
 import { requestVacancyFit } from '../vacancies/vacancyFitApi';
 import type { ProfileMobileScene } from '../resume/profileMobileNavigation';
 
@@ -360,6 +361,8 @@ export function CareerWorkspaceShell({
     },
     [activeView],
   );
+
+  useVacancySkillCheckRequests(openRoleSkillAssessment);
 
   const openSkillQuizBank = useCallback(() => {
     setRoleSkillAssessmentOpen(false);

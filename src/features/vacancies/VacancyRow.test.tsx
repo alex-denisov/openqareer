@@ -264,7 +264,7 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     expect(html).toContain('Соответствие вашему профилю');
   });
 
-  it('keeps the expanded card as mockup 4: six chips, «Ещё N», percent only in the row', () => {
+  it('lists every counted requirement, unconfirmed first, under the percent block (28.10)', () => {
     const base = item();
     const names = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'B1', 'B2', 'B3'];
     const withFit: MatchedVacancyItem = {
@@ -298,12 +298,13 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     };
     const html = render({ item: withFit, layout: 'screen', isSelected: true });
     const chips = html.match(/class="vacancies-screen-skill-chip /gu) ?? [];
-    expect(chips).toHaveLength(6);
-    expect(html).toMatch(/is-confirmed[^]*A3[^]*is-unconfirmed[^]*B1/u);
-    expect(html).not.toContain('>A4<');
-    expect(html).toContain('Ещё 4');
-    expect(html).toContain('соответствие 70');
-    expect(html).not.toContain('vacancy-fit-percent');
+    expect(chips).toHaveLength(10);
+    expect(html).toMatch(/is-unconfirmed[^]*B3[^]*is-confirmed[^]*A1/u);
+    expect(html).not.toContain('Ещё ');
+    expect(html).toMatch(/Требования к навыкам · <span class="num">10<\/span>/u);
+    expect(html).toMatch(/<h3>Совпадение 70(&nbsp;|\u00a0)%<\/h3>/u);
+    expect(html).toContain('7 из 10 требований вакансии есть в профиле.');
+    expect(html).not.toContain('соответствие 70');
   });
 
   it('says requirements are not parsed when nothing is known', () => {

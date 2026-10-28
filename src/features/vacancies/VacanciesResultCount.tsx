@@ -15,7 +15,10 @@ export function ResultCount({
   shown,
   onToggleView,
   viewMode,
+  byFit = false,
 }: {
+  /** 28.10 mockup: «148 вакансий · по совпадению» when the list is ordered by percent. */
+  readonly byFit?: boolean;
   readonly poolTotal?: number;
   readonly shown: number;
   readonly onToggleView: () => void;
@@ -28,7 +31,7 @@ export function ResultCount({
     <div className="vacancies-mobile-results-summary">
       <p className="list-hint" aria-live="polite" aria-label={ariaCount}>
         <span className="vacancy-facet-count">{countFormat.format(shown)}</span>{' '}
-        {vacancyNoun(shown)} по вашим условиям
+        {vacancyNoun(shown)} {byFit ? '· по совпадению' : 'по вашим условиям'}
       </p>
       <button type="button" className="vacancies-mobile-map-action" onClick={onToggleView}>
         {viewMode === 'list' ? <MapTrifold aria-hidden="true" /> : <List aria-hidden="true" />}

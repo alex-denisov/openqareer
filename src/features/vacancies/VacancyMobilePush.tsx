@@ -1,3 +1,4 @@
+import { VacancyFitBlock } from './VacancyFitMark';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { vacancyMoneySummary } from './VacancyMoneyCell';
 import type { VacancyRowProps } from './VacancyRow';
@@ -194,6 +195,9 @@ function JobPage({
         subtitle={[cluster.canonicalCompany, originLabel(props.item)].filter(Boolean).join(' · ')}
       />
       {props.notice}
+      <div className="vacancy-push-group vacancy-push-fit">
+        <VacancyFitBlock cluster={cluster} view={explanation.fitView} />
+      </div>
       <ConditionsGroup item={props.item} />
       <div className="vacancy-push-group vacancy-push-requirements">
         <VacancyScreenRequirementChips

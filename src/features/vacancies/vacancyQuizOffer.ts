@@ -106,3 +106,31 @@ export function useVacancyQuizOffer(): VacancyQuizOffer | null {
   }, []);
   return offer;
 }
+
+const SKILL_CHECK_EVENT = 'openqareer:vacancy-skill-check';
+
+/** What a skill check started from a vacancy covers. */
+export interface VacancySkillCheckRequest {
+  readonly vacancyId: string;
+  readonly roleTitle: string;
+  readonly skills: readonly string[];
+}
+
+/** «Поднять до N %» in the expanded vacancy starts the same check as the consultant's «Начать». */
+export function requestVacancySkillCheck(request: VacancySkillCheckRequest): void {
+  if (typeof window !== 'undefined')
+    window.dispatchEvent(new CustomEvent(SKILL_CHECK_EVENT, { detail: request }));
+}
+
+export function useVacancySkillCheckRequests(
+  onRequest: (request: VacancySkillCheckRequest) => void,
+): void {
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<VacancySkillCheckRequest>).detail;
+      if (detail?.vacancyId && Array.isArray(detail.skills)) onRequest(detail);
+    };
+    window.addEventListener(SKILL_CHECK_EVENT, listener);
+    return () => window.removeEventListener(SKILL_CHECK_EVENT, listener);
+  }, [onRequest]);
+}

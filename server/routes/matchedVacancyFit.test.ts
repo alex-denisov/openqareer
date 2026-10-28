@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { compactFitView, compareFitOrder, explanationWithFitView, vacanciesAwaitingFit } from './matchedVacancyFit';
+import {
+  compactFitView,
+  compareFitOrder,
+  explanationWithFitView,
+  vacanciesAwaitingFit,
+} from './matchedVacancyFit';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitResult } from '../../shared/vacancyFit';
@@ -7,9 +12,11 @@ import type { VacancyFitResult } from '../../shared/vacancyFit';
 function item(id: string, score: number | null, observed = '2026-10-01'): MatchedVacancyItem {
   const result = {
     status: 'assessed',
+    dataState: 'confirmed',
     coveragePercent: score,
+    coverage: { matched: 0, total: 12, unknown: 0 },
     requiredCoverage: { percent: null },
-  } as VacancyFitResult;
+  } as unknown as VacancyFitResult;
   return {
     cluster: {
       id,
@@ -49,6 +56,45 @@ describe('B525 whole-pool order before page slicing', () => {
     expect(page.items[0]?.cluster.id).toBe('149');
     expect(page.nextOffset).not.toBeNull();
   });
+  it('orders by the shown percent, not by mandatory coverage first (28.10 mockup)', () => {
+    const withRequired = (id: string, score: number, required: number) => {
+      const base = item(id, score);
+      const fitView = base.explanation.fitView!;
+      return {
+        ...base,
+        explanation: {
+          ...base.explanation,
+          fitView: {
+            ...fitView,
+            result: {
+              ...fitView.result!,
+              requiredCoverage: { matched: 0, total: 1, percent: required },
+            },
+          },
+        },
+      } as MatchedVacancyItem;
+    };
+    const all = [withRequired('a', 55, 100), withRequired('b', 92, 0)];
+    expect(all.sort(compareFitOrder).map((x) => x.cluster.id)).toEqual(['b', 'a']);
+  });
+  it('puts a percent from fewer than 3 requirements after counted rows', () => {
+    const few = item('few', 100);
+    const fitView = few.explanation.fitView!;
+    const fewRow = {
+      ...few,
+      explanation: {
+        ...few.explanation,
+        fitView: {
+          ...fitView,
+          result: { ...fitView.result!, coverage: { matched: 1, total: 1, unknown: 0 } },
+        },
+      },
+    } as MatchedVacancyItem;
+    expect([fewRow, item('low', 12)].sort(compareFitOrder).map((x) => x.cluster.id)).toEqual([
+      'low',
+      'few',
+    ]);
+  });
   it('switches the entire order to freshness', () => {
     const all = [item('fit', 90, '2026-09-01'), item('fresh', null, '2026-10-01')];
     expect(all.sort((a, b) => compareFitOrder(a, b, 'freshness'))[0]?.cluster.id).toBe('fresh');
@@ -87,9 +133,9 @@ describe('B524 background fit for the shown page', () => {
     ).toEqual(['old']);
   });
   it('retries a calculation that failed on a provider outage', () => {
-    expect(vacanciesAwaitingFit([withState('down', 'failed'), withState('done', 'ready')])).toEqual([
-      'down',
-    ]);
+    expect(vacanciesAwaitingFit([withState('down', 'failed'), withState('done', 'ready')])).toEqual(
+      ['down'],
+    );
   });
 });
 
@@ -98,8 +144,18 @@ describe('B525 list carries a fit summary, not the full evidence', () => {
     const view = {
       state: 'ready' as const,
       requirements: [{ id: 'r1', text: 'x'.repeat(2000) }],
-      result: { status: 'assessed', coveragePercent: 14, requiredCoverage: { percent: 0 },
-        assessments: [{ requirementId: 'r1', status: 'matched', evidence: [{ factId: 'f', quote: 'y'.repeat(2000) }] }] },
+      result: {
+        status: 'assessed',
+        coveragePercent: 14,
+        requiredCoverage: { percent: 0 },
+        assessments: [
+          {
+            requirementId: 'r1',
+            status: 'matched',
+            evidence: [{ factId: 'f', quote: 'y'.repeat(2000) }],
+          },
+        ],
+      },
     } as never;
     const compact = compactFitView(view);
     expect(compact.requirements).toEqual([]);
@@ -124,7 +180,9 @@ describe('строка и разбор считают требования од�
     };
     const explanation = explanationWithFitView(stale, fitView);
     expect(explanation.requirements).toEqual({ matched: 0, total: 10 });
-    expect(explanation.summary).toBe('Совпало 0 из 10 требований вакансии. Название совпадает с целевой ролью.');
+    expect(explanation.summary).toBe(
+      'Совпало 0 из 10 требований вакансии. Название совпадает с целевой ролью.',
+    );
     expect(explanation.fitView).toBe(fitView);
   });
 
@@ -133,7 +191,10 @@ describe('строка и разбор считают требования од�
     const fitView = { state: 'queued', requirements: [] } as unknown as NonNullable<
       MatchedVacancyItem['explanation']['fitView']
     >;
-    const explanation = explanationWithFitView({ ...base.explanation, requirements: { matched: 1, total: 2 } }, fitView);
+    const explanation = explanationWithFitView(
+      { ...base.explanation, requirements: { matched: 1, total: 2 } },
+      fitView,
+    );
     expect(explanation.requirements).toEqual({ matched: 1, total: 2 });
   });
 });
