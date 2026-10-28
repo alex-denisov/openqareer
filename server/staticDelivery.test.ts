@@ -182,7 +182,7 @@ describe('static release delivery', () => {
     });
     const landing = await app.inject({ method: 'GET', url: '/' });
     expect(landing.body).toContain(
-      '<link rel="modulepreload" crossorigin href="/assets/index-abc.js"><script defer src="/assets/oq-entry-loader-3.js" data-entry="/assets/index-abc.js">',
+      '<script defer src="/assets/oq-entry-loader-3.js" data-entry="/assets/index-abc.js">',
     );
     for (const url of ['/app', '/app/profile', '/reset-password']) {
       const response = await app.inject({ method: 'GET', url });

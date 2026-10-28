@@ -375,7 +375,7 @@ describe('page module hints (B574)', () => {
 
   it('preloads the page chunk and its own imports, not what the entry already loads', () => {
     const hints = pageModuleHints(manifest, ['landing', 'LandingPage']);
-    expect(hints.startsWith('<!--oq-page-hints-->')).toBe(true);
+    expect(hints.startsWith('<!--oq-page-hints--><template id="oq-page-hints">')).toBe(true);
     expect(hints.endsWith('<!--/oq-page-hints-->')).toBe(true);
     expect(hints.match(/rel="modulepreload"/gu)).toHaveLength(3);
     expect(hints).toContain('href="/assets/Icon.es-a.js"');

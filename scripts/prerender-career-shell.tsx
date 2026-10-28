@@ -518,9 +518,9 @@ export function pageStylesheets(manifest: Manifest | undefined, name: string): s
 }
 
 /**
- * B574: a public page's own chunk and its static imports, preloaded from the
- * head so the bundle mounts in one round of parallel requests instead of the
- * entry → page → icons chain. Shared chunks the entry already preloads are
+ * B574: a public page's own chunk and its static imports, preloaded together
+ * with the entry so the bundle mounts in one round of parallel requests
+ * instead of the entry → page → icons chain. Shared chunks the entry already preloads are
  * skipped. Wrapped in markers: index.html also answers /app, which drops them.
  */
 export function pageModuleHints(manifest: Manifest | undefined, names: readonly string[]): string {
@@ -556,7 +556,9 @@ export function pageModuleHints(manifest: Manifest | undefined, names: readonly 
       (file) => `<link rel="preload" as="style" crossorigin href="${path(file, 'css')}">`,
     ),
   ];
-  return `<!--oq-page-hints-->${links.join('')}<!--/oq-page-hints-->`;
+  // Inert until oq-entry-loader-3.js clones it after the first frame, so the
+  // preloads never share the line with the first paint's styles and fonts.
+  return `<!--oq-page-hints--><template id="oq-page-hints">${links.join('')}</template><!--/oq-page-hints-->`;
 }
 
 /** A page chunk's stylesheet plus the preloads of its modules (B574). */
