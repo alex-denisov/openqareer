@@ -24,7 +24,7 @@ const req = {
   prefix: 'p',
   input: 'v',
 };
-const DEEPSEEK = 'deepseek/deepseek-v4.1-flash';
+const HEAD = 'deepseek/deepseek-v4-flash';
 const GLM = 'z-ai/glm-5.3-flash';
 
 /** OpenRouter answers per model: a status, or 200 with `{"from": model}`. */
@@ -74,15 +74,15 @@ function setup(transport: ReturnType<typeof openRouter>, vertexAnswer?: () => Pr
   return { runtime, vertex, clock, events };
 }
 
-describe('цепочка массового канала (28.10)', () => {
-  it('OpenRouter-ступени цепочки — deepseek-v4.1-flash, затем glm-5.3-flash, с закреплёнными хостами', () => {
+describe('цепочка массового канала (B580, 29.10): Vertex последним', () => {
+  it('OpenRouter-ступени цепочки — deepseek-v4-flash, затем glm-5.3-flash, с закреплёнными хостами', () => {
     expect(bulkOpenRouterLanes()).toEqual([
       {
-        model: DEEPSEEK,
-        provider: 'deepinfra/fp8,baidu/fp8,morph/fp8',
+        model: HEAD,
+        provider: 'streamlake/fp8,deepinfra/fp8,gmicloud/fp8',
         quantization: 'fp8',
-        inputPerMillionUsd: 0.14,
-        outputPerMillionUsd: 0.42,
+        inputPerMillionUsd: 0.15,
+        outputPerMillionUsd: 0.3,
       },
       {
         model: GLM,
@@ -94,87 +94,74 @@ describe('цепочка массового канала (28.10)', () => {
     ]);
   });
 
-  it('Vertex — голова: ответил он, OpenRouter не зовётся', async () => {
+  it('deepseek-v4-flash — голова: ответил он, glm и Vertex не зовутся', async () => {
     const transport = openRouter({});
-    const { runtime } = setup(transport);
+    const { runtime, vertex } = setup(transport);
     const result = await runtime.client!.complete(req);
-    expect(result).toMatchObject({ provider: 'gemini', content: '{"from":"vertex"}' });
+    expect(result).toMatchObject({ model: HEAD, content: JSON.stringify({ from: HEAD }) });
     expect(result.fallbackReason).toBeUndefined();
-    expect(transport).not.toHaveBeenCalled();
+    expect(modelsCalled(transport)).toEqual([HEAD]);
+    expect(vertex.complete).not.toHaveBeenCalled();
   });
 
-  it('429 у Vertex ведёт к deepseek, Vertex остывает 10 минут и возвращается', async () => {
-    const transport = openRouter({});
-    let vertexStatus = 429;
-    const { runtime, vertex, clock, events } = setup(transport, async () => {
-      if (vertexStatus !== 200) throw new Error(`Bulk fallback status ${vertexStatus}`);
-      return '{"from":"vertex"}';
-    });
+  it('авария головы ведёт к glm, голова остывает 10 минут и возвращается', async () => {
+    const statuses: Record<string, number> = { [HEAD]: 503 };
+    const transport = openRouter(statuses);
+    const { runtime, clock, events } = setup(transport);
 
     const first = await runtime.client!.complete(req);
-    expect(first).toMatchObject({ model: DEEPSEEK, fallbackReason: 'vertex_429' });
-    expect(events).toContainEqual({ kind: 'fallback', reason: 'vertex_429' });
+    expect(first).toMatchObject({ model: GLM, fallbackReason: 'openrouter_503' });
+    expect(events).toContainEqual({ kind: 'fallback', reason: 'openrouter_503' });
+    const headCalls = modelsCalled(transport).filter((model) => model === HEAD).length;
 
     const second = await runtime.client!.complete(req);
-    expect(second).toMatchObject({ model: DEEPSEEK, fallbackReason: 'vertex_429' });
-    expect(vertex.complete).toHaveBeenCalledTimes(1);
+    expect(second).toMatchObject({ model: GLM, fallbackReason: 'openrouter_503' });
+    expect(modelsCalled(transport).filter((model) => model === HEAD)).toHaveLength(headCalls);
 
-    vertexStatus = 200;
+    statuses[HEAD] = 200;
     clock.now += 10 * 60_000 + 1;
     const back = await runtime.client!.complete(req);
-    expect(back.provider).toBe('gemini');
+    expect(back.model).toBe(HEAD);
     expect(back.fallbackReason).toBeUndefined();
     expect(runtime.status().heldUsd).toBe(0);
   });
 
-  it('Vertex и deepseek отказали (402) — отвечает glm-5.3-flash, владельцу сигнал о балансе', async () => {
-    const transport = openRouter({ [DEEPSEEK]: 402 });
-    const { runtime, events } = setup(transport, async () => {
-      throw new Error('Bulk fallback status 503');
-    });
+  it('обе OpenRouter-ступени отказали (402) — отвечает Vertex, владельцу сигнал о балансе', async () => {
+    const transport = openRouter({ [HEAD]: 402, [GLM]: 402 });
+    const { runtime, events } = setup(transport);
     const result = await runtime.client!.complete(req);
-    expect(result).toMatchObject({ model: GLM, fallbackReason: 'vertex_503' });
-    expect(modelsCalled(transport)).toEqual([DEEPSEEK, GLM]);
+    expect(result).toMatchObject({ provider: 'gemini', fallbackReason: 'openrouter_402' });
+    expect(modelsCalled(transport)).toEqual([HEAD, GLM]);
     expect(events).toContainEqual({ kind: 'balance_exhausted', reason: 'openrouter_402' });
     expect(runtime.status().heldUsd).toBe(0);
   });
 
-  it('негодный ответ Vertex ведёт к следующей ступени, но не остужает её', async () => {
-    const transport = openRouter({});
-    const { runtime, vertex } = setup(transport, async () => 'не JSON');
-    const result = await runtime.client!.complete(req);
-    expect(result).toMatchObject({ model: DEEPSEEK, fallbackReason: 'vertex_answer_rejected' });
-    await runtime.client!.complete(req);
-    expect(vertex.complete).toHaveBeenCalledTimes(2);
-  });
-
-  it('проверка вызывающего решает, годен ли ответ', async () => {
+  it('проверка вызывающего решает, годен ли ответ; негодный ответ не остужает ступень', async () => {
     const transport = openRouter({});
     const { runtime } = setup(transport);
     const result = await runtime.client!.complete({
       ...req,
       accept: (content) => content.includes(GLM),
     });
-    expect(result.model).toBe(GLM);
-    expect(modelsCalled(transport)).toEqual([DEEPSEEK, GLM]);
+    expect(result).toMatchObject({ model: GLM, fallbackReason: 'openrouter_answer_rejected' });
+    await runtime.client!.complete(req);
+    expect(modelsCalled(transport)).toEqual([HEAD, GLM, HEAD]);
   });
 
-  it('400 у deepseek — не авария: идём к glm, deepseek не остывает', async () => {
-    const transport = openRouter({ [DEEPSEEK]: 400 });
-    const { runtime } = setup(transport, async () => {
-      throw new Error('Bulk fallback status 503');
-    });
+  it('400 у головы — не авария: идём к glm, голова не остывает', async () => {
+    const transport = openRouter({ [HEAD]: 400 });
+    const { runtime } = setup(transport);
     expect((await runtime.client!.complete(req)).model).toBe(GLM);
     await runtime.client!.complete(req);
-    expect(modelsCalled(transport)).toEqual([DEEPSEEK, GLM, DEEPSEEK, GLM]);
+    expect(modelsCalled(transport)).toEqual([HEAD, GLM, HEAD, GLM]);
   });
 
   it('все ступени отказали — ошибка последней, удержания сняты', async () => {
-    const transport = openRouter({ [DEEPSEEK]: 500, [GLM]: 503 });
+    const transport = openRouter({ [HEAD]: 500, [GLM]: 503 });
     const { runtime } = setup(transport, async () => {
-      throw new DOMException('timed out', 'TimeoutError');
+      throw new Error('Bulk fallback status 503');
     });
-    await expect(runtime.client!.complete(req)).rejects.toThrow('Bulk provider status 503');
+    await expect(runtime.client!.complete(req)).rejects.toThrow('503');
     expect(runtime.status().heldUsd).toBe(0);
   });
 
@@ -184,11 +171,19 @@ describe('цепочка массового канала (28.10)', () => {
     runtime.ledger.reserve({ ...req, model: 'm', provider: 'p' }, {
       runUsd: 0.1,
       dayUsd: 0.1,
-      totalUsd: 0.1,
+      monthUsd: 0.1,
       perRequestUsd: 0.1,
     } as never);
     await expect(runtime.client!.complete(req)).rejects.toThrow('budget');
     expect(vertex.complete).not.toHaveBeenCalled();
     expect(transport).not.toHaveBeenCalled();
+  });
+});
+
+describe('месячный потолок в настройке (B580)', () => {
+  it('OPENQAREER_BULK_LLM_MONTH_USD — потолок месяца; без него берётся прежний TOTAL_USD', async () => {
+    const { readBulkLlmConfig } = await import('./bulkLlmConfig');
+    expect(readBulkLlmConfig({ ...env, OPENQAREER_BULK_LLM_MONTH_USD: '25' })?.monthUsd).toBe(25);
+    expect(readBulkLlmConfig(env)?.monthUsd).toBe(0.1);
   });
 });

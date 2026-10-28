@@ -180,7 +180,7 @@ export class ChatModelTitleParser implements ModelTitleParser {
 }
 
 /**
- * Цепочка разбора названий (28.10): Vertex → deepseek-v4.1-flash → glm-5.3-flash.
+ * Цепочка разбора названий (B580, 29.10): deepseek-v4-flash → glm-5.3-flash → Vertex.
  * Пустой ответ на непустую пачку — отказ ступени, как и исключение.
  */
 export class QueuedModelTitleParser implements ModelTitleParser {

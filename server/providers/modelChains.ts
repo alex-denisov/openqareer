@@ -18,6 +18,7 @@ export type ChainStage =
 const VERTEX = { provider: 'vertex' } as const;
 const LUNA = { provider: 'openai', model: 'gpt-5.6-luna' } as const;
 const DEEPSEEK_FLASH = { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash' } as const;
+const DEEPSEEK_V4_FLASH = { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash' } as const;
 const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as const;
 
 /**
@@ -26,8 +27,11 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * маршрутов нет ни в одной: за две недели они не завершили ни одного хода.
  *
  * Порядок ступеней — по замеру 28.10 на реальных входах хода консультанта:
- * gpt-5.6-luna 4/4, deepseek-v4.1-flash 3/4, glm-5.3-flash 4/4; Vertex первым
- * там, где он уже был головой, — его вызовы идут из бонусного кредита.
+ * gpt-5.6-luna 4/4, deepseek-v4.1-flash 3/4, glm-5.3-flash 4/4.
+ *
+ * B580 (решение владельца 29.10): Vertex — последняя ступень везде. Его вызов
+ * по каталогу $0,0066 против $0,0002 у deepseek-v4-flash, который с 19.10
+ * ведёт фон на проде; бонусный кредит Vertex конечен.
  */
 export const MODEL_CHAINS = {
   /** Ход консультанта, его роли, сводка беседы, тренажёр интервью, запас служебных шагов. */
@@ -35,14 +39,14 @@ export const MODEL_CHAINS = {
   /** Разбор резюме: только платные маршруты (решение владельца 28.10). */
   resumeParsing: [LUNA, DEEPSEEK_FLASH, GLM_FLASH],
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */
-  bulk: [VERTEX, DEEPSEEK_FLASH, GLM_FLASH],
-  /** Тексты, которые читает человек: дешёвые ступени первыми, luna — запас по качеству. */
-  roleNames: [VERTEX, DEEPSEEK_FLASH, LUNA],
-  coverLetters: [VERTEX, DEEPSEEK_FLASH, LUNA],
-  linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, LUNA],
-  /** Структурный JSON без текста для человека: две дешёвые модели после Vertex. */
-  campaignRoles: [VERTEX, DEEPSEEK_FLASH, GLM_FLASH],
-  titleParsing: [VERTEX, DEEPSEEK_FLASH, GLM_FLASH],
+  bulk: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
+  /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
+  roleNames: [DEEPSEEK_FLASH, LUNA, VERTEX],
+  coverLetters: [DEEPSEEK_FLASH, LUNA, VERTEX],
+  linkedinDrafts: [DEEPSEEK_FLASH, LUNA, VERTEX],
+  /** Структурный JSON без текста для человека: как фон. */
+  campaignRoles: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
+  titleParsing: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
 } as const satisfies Record<string, readonly ChainStage[]>;
 
 export type ModelMechanic = keyof typeof MODEL_CHAINS;

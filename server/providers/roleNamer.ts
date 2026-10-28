@@ -519,14 +519,14 @@ export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
 
 export interface RoleNamerConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
-  /** Gemini на Vertex — голова цепочки называния, когда настроен (решение владельца 25.09). */
+  /** Gemini на Vertex — последняя ступень цепочки называния, когда настроен (B580, 29.10). */
   readonly vertex?: VertexConfig;
   /** Хранилище названных ролей: без него кэш теряется при каждом деплое (B191). */
   readonly cacheStore?: RoleNamingCacheStore;
 }
 
 /**
- * Цепочка называния (28.10): Vertex → deepseek-v4.1-flash → gpt-5.6-luna.
+ * Цепочка называния (B580, 29.10): deepseek-v4.1-flash → gpt-5.6-luna → Vertex.
  * Gemini AI Studio с кредитом в 402 и бесплатные маршруты из неё ушли.
  */
 export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {

@@ -163,6 +163,16 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         structuredOutput: true,
       },
       {
+        // B580 (решение владельца 29.10): первая ступень фона, ролей кампании и
+        // разбора названий — модель, которая ведёт фон на проде с 19.10.
+        id: 'deepseek/deepseek-v4-flash',
+        releaseDate: '2026-07-31',
+        pinned: true,
+        ownerPinned: true,
+        lifecycle: 'production',
+        structuredOutput: true,
+      },
+      {
         // Решение владельца 28.10: вторая ступень консультанта и фоновой
         // обработки — сильнее и дешевле v4-flash ($0,14/$0,42 за 1M). Вышла
         // после отсечного рубежа, допуск даёт поимённое решение.

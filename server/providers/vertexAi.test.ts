@@ -90,12 +90,12 @@ describe('Vertex AI (B266, решение владельца 25.09)', () => {
     });
   });
 
-  it('цепочка письма ставит Vertex первым', () => {
+  it('цепочка письма ставит Vertex последним (B580)', () => {
     const writer = buildCoverLetterWriter({
       providerCredentials: { openrouter: 'o' },
       vertex: readVertexConfig({ OPENQAREER_VERTEX_SERVICE_ACCOUNT_B64: encoded }),
     }) as unknown as { descriptors: readonly string[] };
 
-    expect(writer.descriptors[0]).toBe('vertex:gemini-3.8-flash');
+    expect(writer.descriptors.at(-1)).toBe('vertex:gemini-3.8-flash');
   });
 });
