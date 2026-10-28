@@ -63,8 +63,12 @@ export class SqliteBulkLlmLedger {
       const day = new Date().toISOString().slice(0, 10);
       if (
         this.db
-          .prepare("SELECT 1 FROM bulk_llm_events WHERE kind='cost_exceeds_reservation' LIMIT 1")
-          .get()
+          // A charge above its hold stops the channel for the rest of the UTC day, not for good:
+          // one Vertex call at $0.0101 over a $0.01 hold stopped every fit for hours (28.10, B580).
+          .prepare(
+            "SELECT 1 FROM bulk_llm_events WHERE kind='cost_exceeds_reservation' AND created_at>=? LIMIT 1",
+          )
+          .get(`${day}T00:00:00.000Z`)
       )
         return null;
       if (

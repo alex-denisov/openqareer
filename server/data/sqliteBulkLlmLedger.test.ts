@@ -47,4 +47,15 @@ describe('потолок фоновой обработки — месячный 
     expect(status.remainingUsd).toBeCloseTo(0.75, 6);
     expect(status.limits?.monthUsd).toBe(1);
   });
+
+  it('стоимость выше резерва останавливает фон до конца суток UTC, а не навсегда (28.10)', () => {
+    const ledger = ledgerAt('2026-10-28T20:50:00.000Z');
+    const id = ledger.reserve(call, limits);
+    ledger.settle(id!, { cost: 0.5, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
+    expect(ledger.reserve(call, limits)).toBeNull();
+    vi.setSystemTime(Date.parse('2026-10-28T23:59:00.000Z'));
+    expect(ledger.reserve(call, limits)).toBeNull();
+    vi.setSystemTime(Date.parse('2026-10-29T00:01:00.000Z'));
+    expect(ledger.reserve(call, limits)).not.toBeNull();
+  });
 });
