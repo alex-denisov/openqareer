@@ -19,7 +19,7 @@ export function todayDiaryDecision(
 ): ReasonedCareerAction | null {
   const workplace = overview?.primaryWorkplace;
   if (!overview || !workplace || workplace.status !== 'active') return null;
-  const week = currentCareerDiaryWeek(overview.asOf, workplace.startDate);
+  const week = currentCareerDiaryWeek(overview.asOf, overview.platformStartedAt ?? null);
   if (latestReview?.weekStart === week.weekStart) return null;
   const atRisk = overview.summary.goalsAtRisk;
   return {

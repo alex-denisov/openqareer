@@ -31,7 +31,7 @@ const emptyDraft: CareerDiaryWeeklyReviewDraft = {
 
 export function CareerDiaryWeeklyReviews(props: CareerDiaryWeeklyReviewsProps) {
   const week = props.overview
-    ? currentCareerDiaryWeek(props.overview.asOf, props.overview.primaryWorkplace?.startDate ?? null)
+    ? currentCareerDiaryWeek(props.overview.asOf, props.overview.platformStartedAt ?? null)
     : null;
   const reviews = props.records.filter(isWeeklyReview);
   const currentReview = week ? reviews.find((review) => review.weekStart === week.weekStart) : undefined;

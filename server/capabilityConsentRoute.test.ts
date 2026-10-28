@@ -238,7 +238,7 @@ describe('capability consents API routes', () => {
     capabilityConsentStore.recordConsent({
       userId,
       capability: 'digital_footprint',
-      versionId: 'digital_footprint-v1.1',
+      versionId: 'digital_footprint-v1.2',
     });
     const repo = new SqliteCandidateReputationRepository({
       databasePath,
@@ -343,7 +343,7 @@ describe('capability consents API routes', () => {
     capabilityConsentStore.recordConsent({
       userId: user.principal.userId,
       capability: 'digital_footprint',
-      versionId: 'digital_footprint-v1.1',
+      versionId: 'digital_footprint-v1.2',
     });
 
     expect(capabilityConsentStore.listConsents(user.principal.userId)).toHaveLength(2);

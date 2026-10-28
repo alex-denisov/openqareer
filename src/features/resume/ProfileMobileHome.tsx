@@ -224,6 +224,7 @@ function mobileSourceDetail(
   if (source?.walk?.state === 'running')
     return `читаем разделы, ${walkReadCount(source.walk)} из ${source.walk.sections.length}`;
   if (!source) return 'Не импортировано';
+  if (!source.factCount) return 'Подключено';
   const kept = source.keptFactCount ?? source.factCount;
   return `${kept} из ${pluralRu(source.factCount, ['факта', 'фактов', 'фактов'])}`;
 }

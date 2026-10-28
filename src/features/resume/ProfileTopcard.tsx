@@ -509,10 +509,12 @@ function ProfileCompletenessSummary({
         max={100}
         aria-label={`Резюме собрано ${completeness.completedCount} из ${completeness.totalCount} блоков`}
       />
-      <p className="career-profile-screen-proposed-facts">
-        {factCountLabel(proposedFactCount)} {proposedFactCount === 1 ? 'ждёт' : 'ждут'}{' '}
-        подтверждения
-      </p>
+      {proposedFactCount > 0 ? (
+        <p className="career-profile-screen-proposed-facts">
+          {factCountLabel(proposedFactCount)} {proposedFactCount === 1 ? 'ждёт' : 'ждут'}{' '}
+          подтверждения
+        </p>
+      ) : null}
       {completeness.missingSections.length ? (
         <p>Не заполнено: {completeness.missingSections.join(', ').toLowerCase()}.</p>
       ) : null}

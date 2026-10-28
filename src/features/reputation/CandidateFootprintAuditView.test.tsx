@@ -35,7 +35,7 @@ function baseProps(
       wayback: true,
       exa: false,
     },
-    consent: { approved: false, granted: false, versionId: 'digital_footprint-v1.1' },
+    consent: { approved: false, granted: false, versionId: 'digital_footprint-v1.2' },
     audit: null,
     selectedQueryIds: new Set(['0123456789abcdef0123']),
     onRetry: vi.fn(),
@@ -128,7 +128,7 @@ describe('CandidateFootprintAuditSurface', () => {
     };
     const completedProps = baseProps({
       audit,
-      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
       ownershipConfirmed: true,
     });
     const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...completedProps} />);
@@ -147,7 +147,7 @@ describe('CandidateFootprintAuditSurface', () => {
   it('keeps sources without keys marked not connected after an audit skips them', async () => {
     const html = await renderAtStep(
       baseProps({
-        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
         ownershipConfirmed: true,
         audit: {
           id: 'audit-skipped-sources',
@@ -177,13 +177,12 @@ describe('CandidateFootprintAuditSurface', () => {
     const html = renderToStaticMarkup(
       <CandidateFootprintAuditSurface
         {...baseProps({
-          consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+          consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.2' },
         })}
       />,
     );
 
-    expect(html).toContain('Ссылка на фото из профиля не передаётся поисковику');
-    expect(html).toContain('Обратный поиск по изображению не выполняется.');
+    expect(html).toContain('По фото из профиля в интернете не ищем');
   });
 
   it('keeps a finding hidden earlier in the list with its review actions', () => {
@@ -237,7 +236,7 @@ describe('CandidateFootprintAuditSurface', () => {
   it('B375: отображает адаптеры метаданных и секретов (B368) со статусом в состоянии источников', async () => {
     const html = await renderAtStep(
       baseProps({
-        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
         ownershipConfirmed: true,
       }),
       '2 Сканирование',
@@ -279,7 +278,7 @@ describe('CandidateFootprintAuditSurface', () => {
     const html = await renderAtStep(
       {
         ...props,
-        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.2' },
         ownershipConfirmed: true,
       },
       '2 Сканирование',

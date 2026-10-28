@@ -43,7 +43,7 @@ describe('candidate footprint routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toMatchObject({
-      consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.2' },
       sourceAvailability: {
         sherlock: true,
         maigret: true,

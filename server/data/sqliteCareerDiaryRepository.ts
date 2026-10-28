@@ -700,6 +700,7 @@ export class SqliteCareerDiaryRepository {
     .find((workplace) => workplace.isPrimary && workplace.status === 'active') ?? null;
   return {
     asOf,
+    platformStartedAt: (this.database.prepare('SELECT created_at FROM candidates WHERE id = ?').get(candidateId) as { created_at: string } | undefined)?.created_at.slice(0, 10) ?? null,
     primaryWorkplace,
     summary: {
       goalsAchieved: goals.filter((goal) => goal.risk.status === 'achieved').length,

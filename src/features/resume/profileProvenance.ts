@@ -27,8 +27,10 @@ export function provenanceLabel(provenance: FactProvenance | undefined): string 
 export function sourceCountLabel(
   source: Pick<ImportedSourceSummary, 'factCount' | 'keptFactCount' | 'lastImportedAt'>,
 ): string {
-  const kept = source.keptFactCount ?? source.factCount;
   const date = importDateLabel(source.lastImportedAt);
+  // One import source per profile: the second platform only connects and brings no facts.
+  if (!source.factCount) return ['Подключено', date].filter(Boolean).join(' · ');
+  const kept = source.keptFactCount ?? source.factCount;
   return [`${kept} из ${source.factCount}`, date].filter(Boolean).join(' · ');
 }
 
