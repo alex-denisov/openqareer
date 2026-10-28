@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { CoachTurnStage, CoachTurnSubject } from '../../domain/coach';
+import type { CoachMessage, CoachTurnStage, CoachTurnSubject } from '../../domain/coach';
+import { dialogueOnly } from './messageKind';
 import type { MessageRow } from './shared';
 
 export interface StoredTurnStage {
@@ -67,6 +68,17 @@ export class StageMessageStore {
       )
       .get(candidateId, idempotencyKey) as StoredTurnStage | undefined;
     return row ?? null;
+  }
+
+  /**
+   * The consultant panel feed: service records (profile edits, imports,
+   * «Подключено: …») leave it; the unstaged snapshot (export) keeps every row.
+   */
+  dialogueOnly<T extends Pick<CoachMessage, 'id' | 'role'>>(candidateId: string, messages: T[]): T[] {
+    const rows = this.database
+      .prepare('SELECT user_message_id FROM turns WHERE candidate_id = ?')
+      .all(candidateId) as { user_message_id: string }[];
+    return dialogueOnly(messages, new Set(rows.map((row) => row.user_message_id)));
   }
 
   queryMessages(
