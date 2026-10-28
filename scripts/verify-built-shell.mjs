@@ -80,8 +80,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
       });
     },
   );
-  // B334: лендинг спрашивает, опубликована ли сборка для macOS.
-  await page.route('**/api/v1/desktop/macos', async (route) => {
+  // B334/B576: лендинг спрашивает версию опубликованной десктопной сборки.
+  await page.route('**/api/v1/desktop/*', async (route) => {
     await route.fulfill({ json: { data: { available: false } } });
   });
   // Unknown candidate reads remain unavailable in this isolated browser fixture;

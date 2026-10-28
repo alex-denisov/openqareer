@@ -1,0 +1,323 @@
+name: Desktop release
+
+# B576: every desktop client — macOS (universal) and Windows (x64) — is built
+# from the same commit with the same version and published to production in
+# one step, after that commit is live on the web. Installed apps update
+# themselves from /desktop/latest.json; the landing links always serve the
+# current installers, and no older version is kept on the host.
+on:
+  workflow_run:
+    workflows: ['Verify and deploy']
+    types: [completed]
+    branches: [main]
+  # A PR that touches the release path builds both clients but publishes nothing.
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/desktop-release.yml'
+      - 'src-tauri/**'
+      - 'scripts/build-update-manifest.mjs'
+      - 'deploy/openqareer-desktop-publish'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Release even if nothing the app bundles has changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: true
+
+env:
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || github.sha }}
+  # Everything the desktop bundle is built from; server-only changes ship no release.
+  APP_PATHS: >-
+    src shared src-tauri public index.html package.json package-lock.json
+    vite.config.ts tsconfig.json scripts/download-sing-box-sidecars.sh
+
+jobs:
+  plan:
+    name: Decide the release
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      version: ${{ steps.plan.outputs.version }}
+    steps:
+      - name: Check out the deployed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+
+      - name: Compare with the published release
+        id: plan
+        env:
+          FORCE: ${{ (inputs.force || github.event_name == 'pull_request') && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          base="$(node -p 'require("./src-tauri/tauri.conf.json").version.split(".").slice(0, 2).join(".")')"
+          version="$base.$GITHUB_RUN_NUMBER"
+          published="$(curl -fsS --max-time 15 https://openqareer.com/api/v1/desktop/release |
+            node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).data.commit||"")}catch{}})' || true)"
+          release=true
+          if [[ "$FORCE" != true && "$published" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$published^{commit}" 2>/dev/null; then
+            # shellcheck disable=SC2086
+            if git diff --quiet "$published" "$RELEASE_SHA" -- $APP_PATHS; then release=false; fi
+          fi
+          printf 'published=%s release=%s version=%s\n' "${published:-none}" "$release" "$version"
+          printf 'release=%s\nversion=%s\n' "$release" "$version" >> "$GITHUB_OUTPUT"
+
+  macos:
+    name: Build macOS (universal)
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - name: Check out the deployed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Use Rust for both Mac architectures
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Prepare the universal sing-box sidecar
+        run: |
+          set -euo pipefail
+          scripts/download-sing-box-sidecars.sh
+          lipo -create src-tauri/binaries/sing-box-aarch64-apple-darwin \
+            src-tauri/binaries/sing-box-x86_64-apple-darwin \
+            -output src-tauri/binaries/sing-box-universal-apple-darwin
+
+      - name: Build and sign the app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          OPENQAREER_COMMIT_SHA: ${{ env.RELEASE_SHA }}
+          VITE_OPENQAREER_RELEASE: ${{ env.RELEASE_SHA }}
+        run: |
+          set -euo pipefail
+          [[ -n "$TAURI_SIGNING_PRIVATE_KEY" ]] || { echo 'TAURI_SIGNING_PRIVATE_KEY secret is missing' >&2; exit 1; }
+          npx tauri build --target universal-apple-darwin --bundles app \
+            --config src-tauri/tauri.release.conf.json --config "{\"version\":\"$VERSION\"}"
+
+      - name: Package the disk image
+        run: |
+          set -euo pipefail
+          bundle=src-tauri/target/universal-apple-darwin/release/bundle/macos
+          app="$bundle/OpenQareer.app"
+          lipo -archs "$app/Contents/MacOS/openqareer-desktop" | grep -q arm64
+          lipo -archs "$app/Contents/MacOS/openqareer-desktop" | grep -q x86_64
+          mkdir -p out staging
+          ditto "$app" staging/OpenQareer.app
+          ln -s /Applications staging/Applications
+          name="OpenQareer-$VERSION-macos-universal"
+          hdiutil create -volname OpenQareer -srcfolder staging -format UDZO "out/$name.dmg"
+          hdiutil verify "out/$name.dmg"
+          cp "$bundle/OpenQareer.app.tar.gz" "out/$name.app.tar.gz"
+          cp "$bundle/OpenQareer.app.tar.gz.sig" "out/$name.app.tar.gz.sig"
+          ls -la out
+
+      - name: Smoke-start the app
+        run: |
+          set -euo pipefail
+          src-tauri/target/universal-apple-darwin/release/bundle/macos/OpenQareer.app/Contents/MacOS/openqareer-desktop &
+          pid=$!
+          sleep 20
+          kill -0 "$pid" || { echo 'app exited during the first 20 s' >&2; exit 1; }
+          kill "$pid"
+
+      - name: Keep the macOS build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-macos
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    name: Build Windows (x64)
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - name: Check out the deployed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Use stable Rust
+        run: rustup default stable
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      # Git Bash has curl and sha256sum; shasum (perl) and unzip may be absent,
+      # so thin shims stand in for the two calls the script makes.
+      - name: Download verified sing-box sidecars
+        shell: bash
+        run: |
+          shims="$(cygpath -u "$RUNNER_TEMP")/bin"
+          mkdir -p "$shims"
+          command -v shasum >/dev/null || printf '#!/usr/bin/env bash\nshift 2; exec sha256sum "$@"\n' > "$shims/shasum"
+          command -v unzip >/dev/null || printf '#!/usr/bin/env bash\nexec powershell -NoProfile -Command "Expand-Archive -Force -Path \\"$(cygpath -w "$2")\\" -DestinationPath \\"$(cygpath -w "$4")\\""\n' > "$shims/unzip"
+          chmod +x "$shims"/* 2>/dev/null || true
+          PATH="$shims:$PATH" scripts/download-sing-box-sidecars.sh
+
+      - name: Build frontend
+        env:
+          OPENQAREER_COMMIT_SHA: ${{ env.RELEASE_SHA }}
+          VITE_OPENQAREER_RELEASE: ${{ env.RELEASE_SHA }}
+        run: npm run build
+
+      # beforeBuildCommand is a POSIX chain for macOS; its steps already ran above.
+      - name: Build and sign the installer
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          OPENQAREER_COMMIT_SHA: ${{ env.RELEASE_SHA }}
+        run: |
+          set -euo pipefail
+          [[ -n "$TAURI_SIGNING_PRIVATE_KEY" ]] || { echo 'TAURI_SIGNING_PRIVATE_KEY secret is missing' >&2; exit 1; }
+          npx tauri build --bundles nsis --config src-tauri/tauri.release.conf.json \
+            --config "{\"version\":\"$VERSION\",\"build\":{\"beforeBuildCommand\":\"\"}}"
+          nsis=src-tauri/target/release/bundle/nsis
+          mkdir -p out
+          cp "$nsis/OpenQareer_${VERSION}_x64-setup.exe" "out/OpenQareer-$VERSION-windows-x64-setup.exe"
+          cp "$nsis/OpenQareer_${VERSION}_x64-setup.exe.sig" "out/OpenQareer-$VERSION-windows-x64-setup.exe.sig"
+          ls -la out
+
+      - name: Smoke-start the installed app
+        shell: pwsh
+        run: |
+          $installer = Get-Item "out/OpenQareer-$env:VERSION-windows-x64-setup.exe"
+          Start-Process -FilePath $installer.FullName -ArgumentList '/S' -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA/OpenQareer/*.exe" | Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          if (-not $exe) { throw 'installed executable not found' }
+          $version = (Get-Item $exe.FullName).VersionInfo.ProductVersion
+          if ($version -notlike "$env:VERSION*") { throw "installed version $version, expected $env:VERSION" }
+          $app = Start-Process -FilePath $exe.FullName -PassThru
+          Start-Sleep -Seconds 20
+          if ($app.HasExited) { throw "app exited with code $($app.ExitCode)" }
+          if (-not (Get-Process msedgewebview2 -ErrorAction SilentlyContinue)) { throw 'no WebView2 process: the window never rendered' }
+          Stop-Process -Id $app.Id -Force
+
+      - name: Keep the Windows build
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-windows
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to production
+    needs: [plan, macos, windows]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - name: Check out the deployed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Collect both builds
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Write the update feed and the release archive
+        id: archive
+        run: |
+          set -euo pipefail
+          mac="out/OpenQareer-$VERSION-macos-universal.app.tar.gz"
+          windows="out/OpenQareer-$VERSION-windows-x64-setup.exe"
+          node scripts/build-update-manifest.mjs --version "$VERSION" \
+            --artifact "darwin-aarch64=$mac" --artifact "darwin-x86_64=$mac" \
+            --artifact "windows-x86_64=$windows" --output out/latest.json
+          printf '{"version":"%s","commit":"%s"}\n' "$VERSION" "$RELEASE_SHA" > out/release.json
+          tar -czf "desktop-$VERSION.tar.gz" -C out .
+          tar -tzf "desktop-$VERSION.tar.gz"
+          printf 'checksum=%s\n' "$(sha256sum "desktop-$VERSION.tar.gz" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Configure pinned SSH host identity
+        env:
+          DEPLOY_KEY: ${{ secrets.OPENQAREER_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.OPENQAREER_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_KEY" > "$HOME/.ssh/openqareer_deploy"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/openqareer_deploy" "$HOME/.ssh/known_hosts"
+
+      - name: Upload and publish
+        env:
+          DEPLOY_HOST: ${{ vars.OPENQAREER_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.OPENQAREER_DEPLOY_USER }}
+          CHECKSUM: ${{ steps.archive.outputs.checksum }}
+        run: |
+          set -euo pipefail
+          ssh_options=(
+            -i "$HOME/.ssh/openqareer_deploy"
+            -o IdentitiesOnly=yes
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts"
+          )
+          scp -O "${ssh_options[@]}" "desktop-$VERSION.tar.gz" \
+            "$DEPLOY_USER@$DEPLOY_HOST:/srv/openqareer/incoming/desktop-$VERSION.tar.gz"
+          ssh "${ssh_options[@]}" "$DEPLOY_USER@$DEPLOY_HOST" \
+            /usr/local/bin/openqareer-desktop-publish "$VERSION" "$CHECKSUM"
+
+      - name: Verify the public release
+        run: |
+          set -euo pipefail
+          release="$(curl -fsS -H 'Cache-Control: no-cache' https://openqareer.com/api/v1/desktop/release)"
+          feed="$(curl -fsS -H 'Cache-Control: no-cache' https://openqareer.com/desktop/latest.json)"
+          printf '%s\n' "$release"
+          grep -q "\"version\":\"$VERSION\"" <<<"$release" || { echo 'landing does not report the new version' >&2; exit 1; }
+          grep -Eq "\"version\": *\"$VERSION\"" <<<"$feed" || { echo 'update feed does not offer the new version' >&2; exit 1; }
+          for path in /downloads/openqareer-macos.dmg /downloads/openqareer-windows.exe; do
+            curl -fsSI "https://openqareer.com$path" | grep -qi "filename=\"OpenQareer-$VERSION-" ||
+              { echo "$path does not serve $VERSION" >&2; exit 1; }
+          done

@@ -2,7 +2,7 @@ name: Desktop app for Windows
 
 # B576: nobody on the team runs Windows, so this runner is the only machine
 # that compiles, tests and packages the Windows build. The installer is kept as
-# an artifact; scripts/publish-desktop-exe.sh puts it on the production host.
+# an artifact for review; releases come from desktop-release.yml.
 on:
   pull_request:
     branches: [main]

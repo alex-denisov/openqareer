@@ -98,6 +98,52 @@ describe('desktop Windows download (B576)', () => {
   });
 });
 
+describe('one desktop release for every client (B576)', () => {
+  const COMMIT = 'a'.repeat(40);
+  const release = (fileName: string, version = '1.1.4') =>
+    JSON.stringify({ version, sha256: 'abc', fileName, commit: COMMIT });
+
+  it('serves conventionally named installers and reports one version for both', async () => {
+    const app = createApp({
+      'OpenQareer-1.1.4-macos-universal.dmg': Buffer.alloc(64, 1),
+      'OpenQareer-1.1.4-windows-x64-setup.exe': Buffer.alloc(32, 2),
+      'desktop-macos.json': release('OpenQareer-1.1.4-macos-universal.dmg'),
+      'desktop-windows.json': release('OpenQareer-1.1.4-windows-x64-setup.exe'),
+    });
+    const mac = await app.inject({ method: 'GET', url: '/downloads/openqareer-macos.dmg' });
+    expect(mac.statusCode).toBe(200);
+    expect(mac.headers['content-disposition']).toContain('OpenQareer-1.1.4-macos-universal.dmg');
+    const windows = await app.inject({ method: 'GET', url: '/downloads/openqareer-windows.exe' });
+    expect(windows.headers['content-disposition']).toContain('OpenQareer-1.1.4-windows-x64-setup.exe');
+
+    const info = await app.inject({ method: 'GET', url: '/api/v1/desktop/release' });
+    expect(info.headers['cache-control']).toBe('no-cache');
+    expect(info.json().data).toEqual({ available: true, version: '1.1.4', commit: COMMIT });
+    expect((await app.inject({ method: 'GET', url: '/api/v1/desktop/macos' })).json().data).toMatchObject({
+      architecture: 'universal', version: '1.1.4',
+    });
+  });
+
+  it('names no version while the two clients disagree or one is missing', async () => {
+    const split = createApp({
+      'OpenQareer-1.1.4-macos-universal.dmg': 'mac',
+      'OpenQareer-1.1.3-windows-x64-setup.exe': 'win',
+      'desktop-macos.json': release('OpenQareer-1.1.4-macos-universal.dmg'),
+      'desktop-windows.json': release('OpenQareer-1.1.3-windows-x64-setup.exe', '1.1.3'),
+    });
+    expect((await split.inject({ method: 'GET', url: '/api/v1/desktop/release' })).json().data).toEqual({
+      available: false,
+    });
+    const half = createApp({
+      'OpenQareer-1.1.4-macos-universal.dmg': 'mac',
+      'desktop-macos.json': release('OpenQareer-1.1.4-macos-universal.dmg'),
+    });
+    expect((await half.inject({ method: 'GET', url: '/api/v1/desktop/release' })).json().data).toEqual({
+      available: false,
+    });
+  });
+});
+
 describe('desktop updater feed', () => {
   function createFeed(files: Record<string, string>) {
     const root = mkdtempSync(join(tmpdir(), 'openqareer-desktop-feed-'));
@@ -124,6 +170,21 @@ describe('desktop updater feed', () => {
     expect(archive.headers['content-type']).toBe('application/gzip');
     expect(archive.body).toBe('archive');
     const signature = await app.inject({ method: 'GET', url: '/desktop/OpenQareer_1.0.1_aarch64.app.tar.gz.sig' });
+    expect(signature.body).toBe('sig');
+  });
+
+  it('serves the universal Mac archive and the Windows installer as updates (B576)', async () => {
+    const app = createFeed({
+      'OpenQareer-1.1.4-macos-universal.app.tar.gz': 'mac',
+      'OpenQareer-1.1.4-windows-x64-setup.exe': 'win',
+      'OpenQareer-1.1.4-windows-x64-setup.exe.sig': 'sig',
+    });
+    const mac = await app.inject({ method: 'GET', url: '/desktop/OpenQareer-1.1.4-macos-universal.app.tar.gz' });
+    expect(mac.headers['content-type']).toBe('application/gzip');
+    const windows = await app.inject({ method: 'GET', url: '/desktop/OpenQareer-1.1.4-windows-x64-setup.exe' });
+    expect(windows.statusCode).toBe(200);
+    expect(windows.headers['content-type']).toBe('application/vnd.microsoft.portable-executable');
+    const signature = await app.inject({ method: 'GET', url: '/desktop/OpenQareer-1.1.4-windows-x64-setup.exe.sig' });
     expect(signature.body).toBe('sig');
   });
 

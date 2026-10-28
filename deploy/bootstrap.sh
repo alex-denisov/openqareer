@@ -197,11 +197,11 @@ install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
   "$RELEASE_ROOT" "$RELEASE_ROOT/releases" "$RELEASE_ROOT/incoming"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
   /var/lib/openqareer
-# B334: desktop installer served by /downloads/openqareer-macos.dmg; lives
-# beside the database so the unit's ReadWritePaths already covers it.
+# B334/B576: desktop installers served by /downloads/openqareer-{macos.dmg,windows.exe};
+# they live beside the database so the unit's ReadWritePaths already covers them.
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
   /var/lib/openqareer/downloads
-# B359: signed updater feed served by /desktop/*; written by scripts/release-desktop.sh.
+# B359/B576: signed updater feed served by /desktop/*; written by openqareer-desktop-publish.
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
   /var/lib/openqareer/desktop
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
@@ -222,6 +222,8 @@ install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-activate" /usr/local/bin/openqareer-activate
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
+install -o root -g root -m 0755 \
+  "$SCRIPT_DIR/openqareer-desktop-publish" /usr/local/bin/openqareer-desktop-publish
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-env-set" /usr/local/bin/openqareer-env-set
 install -o root -g root -m 0755 \

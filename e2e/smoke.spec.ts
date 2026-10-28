@@ -3,8 +3,8 @@ import { expect, test } from '@playwright/test';
 import { saveFirstRunGoal } from './helpers/firstRunGoal';
 
 test.beforeEach(async ({ page }) => {
-  // B334: лендинг спрашивает, опубликована ли сборка для macOS.
-  await page.route('**/api/v1/desktop/macos', async (route) => {
+  // B334/B576: лендинг спрашивает версию опубликованной десктопной сборки.
+  await page.route('**/api/v1/desktop/*', async (route) => {
     await route.fulfill({ json: { data: { available: false } } });
   });
   await page.route('**/api/v1/auth/**', async (route) => {

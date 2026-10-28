@@ -21,7 +21,12 @@ import {
   landingFeed,
   type LandingStats,
 } from '../../../shared/landingStats';
-import { DESKTOP_DOWNLOAD_PATH, WINDOWS_DOWNLOAD_PATH } from './DesktopDownload';
+import {
+  AppVersionNote,
+  DESKTOP_DOWNLOAD_PATH,
+  WINDOWS_DOWNLOAD_PATH,
+  useDesktopRelease,
+} from './DesktopDownload';
 import { SiteLink } from './SiteLink';
 import { capturedLandingStats } from './embeddedLandingStats';
 import { preloadAuthPages } from './authPagesLoader';
@@ -135,13 +140,13 @@ function Count({ active, date }: { readonly active: string; readonly date: strin
   );
 }
 
-function Hero({
-  stats,
-  onNavigate,
-}: {
+interface HeroProps {
   readonly stats: LandingStats;
   readonly onNavigate: Navigate;
-}) {
+  readonly appVersion: string | null;
+}
+
+function Hero({ stats, onNavigate, appVersion }: HeroProps) {
   const c = counts(stats);
   const pool = landingFeed(stats);
   return (
@@ -163,6 +168,7 @@ function Hero({
           </div>
           <div className="app">
             <AppBadges />
+            <AppVersionNote version={appVersion} />
           </div>
           <Count active={c.active} date={c.date} />
         </div>
@@ -305,7 +311,13 @@ function Faq() {
   );
 }
 
-function End({ onNavigate }: { onNavigate: Navigate }) {
+function End({
+  onNavigate,
+  appVersion,
+}: {
+  onNavigate: Navigate;
+  appVersion: string | null;
+}) {
   return (
     <section className="scr end" aria-labelledby="end-heading">
       <div className="wrap">
@@ -321,6 +333,7 @@ function End({ onNavigate }: { onNavigate: Navigate }) {
           <div className="getapp" id="download">
             <AppBadges />
             <p>Больше функций доступно в приложении</p>
+            <AppVersionNote version={appVersion} />
           </div>
         </div>
       </div>
@@ -331,6 +344,7 @@ function End({ onNavigate }: { onNavigate: Navigate }) {
 export function LandingPage({ session, onNavigate, stats }: LandingPageProps) {
   const [current] = React.useState<LandingStats>(() => stats ?? readEmbeddedLandingStats());
   const signedIn = Boolean(session);
+  const appVersion = useDesktopRelease();
   React.useEffect(() => {
     document.title = LANDING_TITLE;
   }, []);
@@ -353,12 +367,12 @@ export function LandingPage({ session, onNavigate, stats }: LandingPageProps) {
         isAdmin={session?.role === 'admin'}
       />
       <main id="main" className="hm">
-        <Hero stats={current} onNavigate={onNavigate} />
+        <Hero stats={current} onNavigate={onNavigate} appVersion={appVersion} />
         <How onNavigate={onNavigate} />
         <Tools />
         <Tariffs />
         <Faq />
-        <End onNavigate={onNavigate} />
+        <End onNavigate={onNavigate} appVersion={appVersion} />
       </main>
       <PublicFooter onNavigate={onNavigate} onLanding signedIn={signedIn} />
     </div>

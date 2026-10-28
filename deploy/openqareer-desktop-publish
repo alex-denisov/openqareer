@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# B576: publishes one desktop release (macOS + Windows, one version) uploaded by
+# the "Desktop release" workflow. Runs as openqareer-deploy through
+# openqareer-ci-command. The archive must hold exactly the expected files; the
+# installers and their manifests go first, the updater feed's latest.json last,
+# and every file of any other version is removed afterwards.
+set -Eeuo pipefail
+
+readonly INCOMING=/srv/openqareer/incoming
+readonly DATA_ROOT=/var/lib/openqareer
+readonly DOWNLOADS="$DATA_ROOT/downloads"
+readonly FEED="$DATA_ROOT/desktop"
+readonly MAX_ARCHIVE_BYTES=419430400
+
+fail() {
+  printf 'openqareer-desktop-publish: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ "$(id -un)" == "openqareer-deploy" ]] || fail "must run as openqareer-deploy"
+
+version="${1:-}"
+expected_checksum="${2:-}"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "invalid version"
+[[ "$expected_checksum" =~ ^[0-9a-f]{64}$ ]] || fail "invalid checksum"
+
+exec 9>"$DATA_ROOT/.desktop-publish.lock"
+flock -n 9 || fail "another desktop publish is in progress"
+
+archive="$INCOMING/desktop-$version.tar.gz"
+[[ -f "$archive" && ! -L "$archive" ]] || fail "release archive is missing"
+archive_bytes="$(stat -c '%s' "$archive")"
+[[ "$archive_bytes" -le "$MAX_ARCHIVE_BYTES" ]] || fail "release archive exceeds 400 MiB"
+[[ "$(sha256sum "$archive" | awk '{print $1}')" == "$expected_checksum" ]] ||
+  fail "release archive checksum mismatch"
+
+mac_dmg="OpenQareer-$version-macos-universal.dmg"
+mac_update="OpenQareer-$version-macos-universal.app.tar.gz"
+windows_setup="OpenQareer-$version-windows-x64-setup.exe"
+expected_entries="$(printf '%s\n' latest.json release.json "$mac_dmg" "$mac_update" \
+  "$mac_update.sig" "$windows_setup" "$windows_setup.sig" | sort)"
+actual_entries="$(tar -tzf "$archive" | sed 's#^\./##' | grep -v '^$' | sort)"
+[[ "$actual_entries" == "$expected_entries" ]] || fail "release archive holds unexpected files"
+
+staging="$(mktemp -d "$DATA_ROOT/.desktop-$version.XXXXXX")"
+trap 'rm -rf -- "$staging"' EXIT
+tar -xzf "$archive" -C "$staging" --no-same-owner --no-same-permissions
+[[ -z "$(find "$staging" -mindepth 1 ! -type f -print -quit)" ]] ||
+  fail "release archive holds something other than regular files"
+for file in "$mac_dmg" "$mac_update" "$mac_update.sig" "$windows_setup" "$windows_setup.sig"; do
+  [[ -s "$staging/$file" ]] || fail "$file is empty"
+done
+grep -Eq "\"version\": *\"$version\"" "$staging/latest.json" || fail "latest.json names another version"
+grep -Eq "\"version\": *\"$version\"" "$staging/release.json" || fail "release.json names another version"
+commit="$(sed -nE 's/.*"commit": *"([0-9a-f]{40})".*/\1/p' "$staging/release.json" | head -1)"
+[[ -n "$commit" ]] || fail "release.json has no commit"
+
+install -d -m 0755 "$DOWNLOADS" "$FEED"
+place() {
+  install -m 0644 "$staging/$1" "$2/.$1.new"
+  mv -f "$2/.$1.new" "$2/$1"
+}
+write_manifest() {
+  local file="$1" name="$2" checksum
+  checksum="$(sha256sum "$DOWNLOADS/$name" | awk '{print $1}')"
+  printf '{"version":"%s","sha256":"%s","fileName":"%s","commit":"%s"}\n' \
+    "$version" "$checksum" "$name" "$commit" > "$DOWNLOADS/.$file.new"
+  chmod 0644 "$DOWNLOADS/.$file.new"
+  mv -f "$DOWNLOADS/.$file.new" "$DOWNLOADS/$file"
+}
+
+place "$mac_dmg" "$DOWNLOADS"
+place "$windows_setup" "$DOWNLOADS"
+write_manifest desktop-macos.json "$mac_dmg"
+write_manifest desktop-windows.json "$windows_setup"
+for file in "$mac_update" "$mac_update.sig" "$windows_setup" "$windows_setup.sig"; do
+  place "$file" "$FEED"
+done
+place latest.json "$FEED"
+
+# One version for every client: nothing of an older release is kept.
+find "$DOWNLOADS" -maxdepth 1 -type f -name 'OpenQareer*' \
+  ! -name "$mac_dmg" ! -name "$windows_setup" -delete
+find "$FEED" -maxdepth 1 -type f -name 'OpenQareer*' \
+  ! -name "$mac_update" ! -name "$mac_update.sig" \
+  ! -name "$windows_setup" ! -name "$windows_setup.sig" -delete
+rm -f -- "$archive"
+printf 'desktop release %s (%s) published\n' "$version" "$commit"

@@ -5,8 +5,10 @@ import type { FastifyInstance } from 'fastify';
 import type { RouteDeps } from './deps';
 
 /**
- * Файл и манифест кладут `scripts/publish-desktop-dmg.sh` (macOS) и
- * `scripts/publish-desktop-exe.sh` (Windows, B576); сервер их только читает.
+ * Файлы и манифесты кладёт `openqareer-desktop-publish` из пайплайна
+ * «Desktop release» (B576): один релиз — одна версия для macOS и Windows.
+ * Сервер их только читает. Старые имена `OpenQareer_<v>_<arch>` допустимы,
+ * пока первый релиз пайплайна их не заменил.
  */
 export type DesktopPlatform = 'macos' | 'windows';
 
@@ -21,14 +23,14 @@ interface DesktopPlatformFiles {
 const PLATFORM_FILES: Record<DesktopPlatform, DesktopPlatformFiles> = {
   macos: {
     manifest: 'desktop-macos.json',
-    pattern: /^OpenQareer_[0-9A-Za-z.+-]+_(aarch64|x64)\.dmg$/,
+    pattern: /^OpenQareer(?:_[0-9A-Za-z.+-]+_(aarch64|x64)|-\d+\.\d+\.\d+-macos-(universal))\.dmg$/,
     route: '/downloads/openqareer-macos.dmg',
     contentType: 'application/x-apple-diskimage',
     missing: 'Сборка для macOS пока не опубликована.',
   },
   windows: {
     manifest: 'desktop-windows.json',
-    pattern: /^OpenQareer_[0-9A-Za-z.+-]+_(x64)-setup\.exe$/,
+    pattern: /^OpenQareer(?:_[0-9A-Za-z.+-]+_(x64)|-\d+\.\d+\.\d+-windows-(x64))-setup\.exe$/,
     route: '/downloads/openqareer-windows.exe',
     contentType: 'application/vnd.microsoft.portable-executable',
     missing: 'Сборка для Windows пока не опубликована.',
@@ -42,11 +44,25 @@ export interface DesktopDownloadInfo {
   architecture: string;
   signed: false;
   fileName: string;
+  commit?: string;
 }
 
-/** B359: the updater feed; `scripts/release-desktop.sh` writes it, `latest.json` last. */
+export interface DesktopRelease {
+  version: string;
+  commit?: string;
+}
+
+/** B359/B576: the updater feed, written by the release pipeline with `latest.json` last. */
 const UPDATE_FILE_PATTERN =
-  /^(latest\.json|OpenQareer_[0-9A-Za-z.+-]+_(aarch64|x86_64)\.app\.tar\.gz(\.sig)?)$/;
+  /^(latest\.json|(OpenQareer_[0-9A-Za-z.+-]+_(aarch64|x86_64)\.app\.tar\.gz|OpenQareer-\d+\.\d+\.\d+-(macos-universal\.app\.tar\.gz|windows-x64-setup\.exe))(\.sig)?)$/;
+const COMMIT_PATTERN = /^[0-9a-f]{40}$/;
+
+function updateContentType(file: string): string {
+  if (file === 'latest.json') return 'application/json; charset=utf-8';
+  if (file.endsWith('.sig')) return 'text/plain; charset=utf-8';
+  if (file.endsWith('.exe')) return 'application/vnd.microsoft.portable-executable';
+  return 'application/gzip';
+}
 
 export function updatesDirectory(databasePath: string): string {
   return join(dirname(databasePath), 'desktop');
@@ -74,18 +90,34 @@ export async function readDesktopDownload(
     const path = join(directory, fileName);
     const file = await stat(path);
     if (!file.isFile() || file.size === 0) return null;
+    const commit =
+      typeof manifest.commit === 'string' && COMMIT_PATTERN.test(manifest.commit)
+        ? manifest.commit
+        : undefined;
     return {
       version: manifest.version,
       sizeBytes: file.size,
       sha256: manifest.sha256,
-      architecture: match[1],
+      architecture: match[1] ?? match[2] ?? '',
       signed: false,
       fileName,
+      ...(commit ? { commit } : {}),
       path,
     };
   } catch {
     return null;
   }
+}
+
+/** Одна версия на всех клиентов: пока macOS и Windows расходятся, версии нет. */
+export async function readDesktopRelease(directory: string): Promise<DesktopRelease | null> {
+  const [macos, windows] = await Promise.all([
+    readDesktopDownload(directory, 'macos'),
+    readDesktopDownload(directory, 'windows'),
+  ]);
+  if (!macos || !windows || macos.version !== windows.version) return null;
+  const commit = macos.commit && macos.commit === windows.commit ? macos.commit : undefined;
+  return { version: macos.version, ...(commit ? { commit } : {}) };
 }
 
 export function registerDesktopDownloadRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -100,6 +132,12 @@ export function registerDesktopDownloadRoutes(app: FastifyInstance, deps: RouteD
     });
   }
 
+  app.get('/api/v1/desktop/release', async (_request, reply) => {
+    const release = await readDesktopRelease(directory);
+    reply.header('Cache-Control', 'no-cache');
+    return { data: release ? { available: true, ...release } : { available: false } };
+  });
+
   const updates = updatesDirectory(deps.config.databasePath);
   app.get<{ Params: { file: string } }>('/desktop/:file', async (request, reply) => {
     const { file } = request.params;
@@ -113,13 +151,7 @@ export function registerDesktopDownloadRoutes(app: FastifyInstance, deps: RouteD
     return reply
       .header('Cache-Control', isManifest ? 'no-cache' : 'public, max-age=31536000, immutable')
       .header('Content-Length', String(info.size))
-      .type(
-        isManifest
-          ? 'application/json; charset=utf-8'
-          : file.endsWith('.sig')
-            ? 'text/plain; charset=utf-8'
-            : 'application/gzip',
-      )
+      .type(updateContentType(file))
       .send(createReadStream(join(updates, file)));
   });
 
