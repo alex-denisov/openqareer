@@ -38,6 +38,8 @@ export function selectProviderQueue(input: {
    * модель, `provider` — провайдера целиком, в том числе из хвоста неназванных.
    */
   excluded?: readonly ProviderQueueEntry[];
+  /** Ступени, которые встают в начало очереди в своём порядке (28.10: OpenAI первым). */
+  preferred?: readonly ProviderQueueEntry[];
 }): ProviderRoute[] {
   const excluded = input.excluded ?? [];
   const isExcluded = (provider: ProviderId, model: string) =>
@@ -48,7 +50,7 @@ export function selectProviderQueue(input: {
   ).map((provider) => ({ provider }));
 
   const seen = new Set<string>();
-  return [...named, ...remaining].flatMap((entry) => {
+  const routes = [...named, ...remaining].flatMap((entry) => {
     const apiKey = input.credentials[entry.provider];
     const eligible = allowedModels(entry.provider);
     const model = entry.model ?? eligible[0]?.id;
@@ -62,6 +64,23 @@ export function selectProviderQueue(input: {
     seen.add(key);
     return [{ provider: entry.provider, apiKey, model }];
   });
+  return preferFirst(routes, input.preferred ?? []);
+}
+
+function preferFirst(
+  routes: readonly ProviderRoute[],
+  preferred: readonly ProviderQueueEntry[],
+): ProviderRoute[] {
+  const rank = (route: ProviderRoute) => {
+    const index = preferred.findIndex(
+      (entry) => entry.provider === route.provider && (!entry.model || entry.model === route.model),
+    );
+    return index === -1 ? preferred.length : index;
+  };
+  return routes
+    .map((route, index) => ({ route, index }))
+    .sort((left, right) => rank(left.route) - rank(right.route) || left.index - right.index)
+    .map(({ route }) => route);
 }
 
 /**

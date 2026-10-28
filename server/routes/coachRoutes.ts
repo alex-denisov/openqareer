@@ -9,6 +9,7 @@ import { STAGE_TO_PHASE, type MarketObservation } from '../domain/coach';
 import { checkGeneratedTextFacts } from '../domain/generatedTextFactGate';
 import { selectCoachPhase } from '../orchestration/coachPhaseRouter';
 import { CoachProviderError, type CoachProvider } from '../providers/coachProvider';
+import { COACH_TURN_BUDGET_MS } from '../providers/stageTimeout';
 import type { CandidateStore } from '../data/candidateStore';
 import type { HhVacancySample } from '../connectors/hhVacancySearch';
 import type { RouteDeps } from './deps';
@@ -100,10 +101,12 @@ async function completeTurnWithProvider(
   candidateId: string,
   key: string,
   input: Parameters<CoachProvider['createTurn']>[0],
+  deadlineAt?: number,
 ) {
   const factsPending = listCandidateFacts(deps, candidateId, key, input);
   try {
-    const raw = decorateAdaptationResult(await deps.coachProvider.createTurn(input, key), input);
+    const turn = await deps.coachProvider.createTurn(input, key, deadlineAt ? { deadlineAt } : {});
+    const raw = decorateAdaptationResult(turn, input);
     // Названный кандидатом порог зарплаты меняется только подтверждаемой карточкой (28.10).
     const generated = { ...raw, result: withSalaryFloorProposal(raw.result, input) };
     // Quick replies are proposed candidate answers, unlike the consultant's
@@ -175,8 +178,10 @@ async function deliverTurn(
   active.add(operation);
   // 28.10: a closed conversation is summarized after the reply, never before it —
   // this turn's context is built at start and does not read the new summary.
-  const work = generateTurn(deps, request, candidateId, key, input, marketQuery).finally(() =>
-    active.delete(operation),
+  // Роли хода делят одно время: клиент ждёт 240 с (28.10).
+  const deadlineAt = Date.now() + COACH_TURN_BUDGET_MS;
+  const work = generateTurn(deps, request, candidateId, key, input, marketQuery, undefined, deadlineAt).finally(
+    () => active.delete(operation),
   );
   if ((request.query as { delivery?: string }).delivery === 'receipt') {
     // Failure is persisted by the worker; polling does not restart generation.
@@ -209,6 +214,7 @@ async function generateTurn(
   input: Omit<Parameters<CoachProvider['createTurn']>[0], 'marketObservations'>,
   marketQuery?: string,
   attemptedSummaries: ReadonlySet<string> = new Set(),
+  deadlineAt?: number,
 ) {
   let marketObservations: MarketObservation[] = [];
   if (input.phase === 'market' && marketQuery) {
@@ -220,10 +226,13 @@ async function generateTurn(
     marketObservations = fetched;
   }
   try {
-    const output = await completeTurnWithProvider(deps, candidateId, key, {
-      ...input,
-      marketObservations,
-    });
+    const output = await completeTurnWithProvider(
+      deps,
+      candidateId,
+      key,
+      { ...input, marketObservations },
+      deadlineAt,
+    );
     if (
       input.internalPurpose !== 'consultant-summary' &&
       output.result.actionProposals.length > 0

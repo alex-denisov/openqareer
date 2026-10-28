@@ -80,6 +80,7 @@ const configSchema = z.object({
   OPENQAREER_SYNTHETIC_AI_FALLBACK: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_PERSONAL_AI_FALLBACK: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_COACH_EXCLUDED_ROUTES: blankAsUnset(z.string().min(1).max(512)),
+  OPENQAREER_COACH_PREFERRED_ROUTES: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_STATIC_ROOT: z.string().min(1).optional(),
   OPENQAREER_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info']).default('info'),
   OPENQAREER_ADMIN_USERNAME: z
@@ -278,6 +279,8 @@ export interface ServerConfig {
   personalFallbacks?: readonly ProviderQueueEntry[];
   /** Ступени, убранные только из очереди консультанта (28.10). */
   coachExcludedRoutes?: readonly ProviderQueueEntry[];
+  /** Ступени, с которых начинается очередь консультанта (28.10: OpenAI первым). */
+  coachPreferredRoutes?: readonly ProviderQueueEntry[];
   providerCredentials?: Partial<Record<ProviderId, string>>;
   yandexFolderId?: string;
   staticRoot: string;
@@ -444,6 +447,10 @@ export function readServerConfig(
     syntheticFallbacks: parseProviderQueue(parsed.OPENQAREER_SYNTHETIC_AI_FALLBACK),
     personalFallbacks: parseProviderQueue(parsed.OPENQAREER_PERSONAL_AI_FALLBACK),
     coachExcludedRoutes: readCoachExcludedRoutes(parsed.OPENQAREER_COACH_EXCLUDED_ROUTES),
+    coachPreferredRoutes: readCoachRoutes(
+      parsed.OPENQAREER_COACH_PREFERRED_ROUTES,
+      DEFAULT_COACH_PREFERRED_ROUTES,
+    ),
     providerCredentials,
     yandexFolderId: environment.OPENQAREER_YANDEX_FOLDER_ID?.trim(),
     staticRoot: parsed.OPENQAREER_STATIC_ROOT ?? dirname(fileURLToPath(moduleUrl)),
@@ -501,9 +508,22 @@ export function readServerConfig(
 export const DEFAULT_COACH_EXCLUDED_ROUTES =
   'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,openrouter:openrouter/free,gemini,anthropic';
 
-function readCoachExcludedRoutes(value: string | undefined): readonly ProviderQueueEntry[] {
+/**
+ * Решение владельца 28.10 («Да, OpenAI первым»): после исключения бесплатных
+ * ступеней первой стала NVIDIA и дважды из восьми попыток упиралась в 50 с.
+ */
+export const DEFAULT_COACH_PREFERRED_ROUTES = 'openai';
+
+function readCoachRoutes(
+  value: string | undefined,
+  fallback: string,
+): readonly ProviderQueueEntry[] {
   if (value?.trim() === 'none') return [];
-  return parseProviderQueue(value ?? DEFAULT_COACH_EXCLUDED_ROUTES);
+  return parseProviderQueue(value ?? fallback);
+}
+
+function readCoachExcludedRoutes(value: string | undefined): readonly ProviderQueueEntry[] {
+  return readCoachRoutes(value, DEFAULT_COACH_EXCLUDED_ROUTES);
 }
 
 export function parseProviderQueue(value: string | undefined): readonly ProviderQueueEntry[] {

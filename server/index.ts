@@ -93,6 +93,7 @@ const buildQueue = (
     credentials: config.providerCredentials ?? {},
     // Только очередь консультанта: роли и письма читают свои очереди сами.
     excluded: config.coachExcludedRoutes ?? [],
+    preferred: config.coachPreferredRoutes ?? [],
   }).map((route, index, routes) => ({
     id: route.provider,
     model: route.model,
