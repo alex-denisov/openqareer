@@ -12,6 +12,9 @@ describe('team size the candidate names in one workplace text', () => {
     ['В подчинении 5 сотрудников.', 5],
     ['Grew and led a team of 9 IT engineers; managed IT budget.', 9],
     ['Coordination of L1, L2 and application support teams (20+ engineers).', 20],
+    ['Two technology divisions managing 250+ professionals.', 250],
+    ['Отдел из 15 специалистов и 3 подрядчиков.', 15],
+    ['Built a 40-person engineering org.', 40],
   ])('reads «%s» as %i people', (text, size) => {
     expect(teamSizeFromWorkplaceText(text)).toBe(size);
   });

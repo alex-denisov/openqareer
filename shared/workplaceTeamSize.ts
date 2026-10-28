@@ -6,11 +6,12 @@
  */
 const PEOPLE =
   '(?:человек\\p{L}*|чел\\.|сотрудник\\p{L}*|разработчик\\p{L}*|инженер\\p{L}*|специалист\\p{L}*|' +
-  'подчин[её]нн\\p{L}*|people|engineers?|developers?|employees|reports|staff|members)';
+  'подчин[её]нн\\p{L}*|people|professionals|specialists|engineers?|developers?|employees|reports|staff|members|FTEs?)';
 
 const PATTERNS = [
   new RegExp(`(?<![\\p{N}.,])(\\d{1,4})\\s*\\+?\\s*${PEOPLE}(?![\\p{L}])`, 'giu'),
   /\bteams?\s+of\s+(\d{1,4})\b/giu,
+  /\b(\d{1,4})-(?:person|people|member)\b/giu,
 ] as const;
 
 export function teamSizeFromWorkplaceText(text: string): number | null {
