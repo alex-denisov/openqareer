@@ -56,6 +56,13 @@ export interface PagingPlan {
   first(targetUrl: string, nowMs: number): PagedRequest;
   /** Следующая страница или `null`, когда площадка отдала всё. */
   next(previous: PagedRequest, payload: unknown): PagedRequest | null;
+  /**
+   * Опрос читает окно веера «роль × рынок», а не всю площадку: даже дочитав
+   * свои комбинации, он ничего не говорит про остальной веер, поэтому чтение
+   * всегда частичное и срез только дополняется. 27.10 без этого признака
+   * замена среза стёрла 169 577 вакансий Indeed.
+   */
+  readonly fanWindow?: true;
 }
 
 const WORKDAY_PAGE = 20;
@@ -475,6 +482,7 @@ function indeedRequest(state: IndeedState, cursor: string | null): PagedRequest 
 
 const indeed: PagingPlan = {
   pagesPerSync: INDEED_COMBOS_PER_SYNC * INDEED_PAGES_PER_COMBO,
+  fanWindow: true,
   delayMs: 800,
   first: (_targetUrl, nowMs) => {
     // Indeed читает только рынки со страной площадки: у России её нет (B218).

@@ -205,6 +205,29 @@ describe('multi-source fetcher: заголовки Indeed (B218)', () => {
     expect(captured?.get('indeed-api-key')).toBeTruthy();
     expect(captured?.get('user-agent')).toContain('Indeed App');
   });
+
+  // 27.10: опрос дочитал свои 30 комбинаций раньше потолка страниц, чтение
+  // ушло как полное, и замена среза стёрла 169 577 вакансий Indeed. Опрос —
+  // окно веера «роль × рынок», про остальной веер он ничего не говорит.
+  it('опрос веера всегда частичный, даже когда комбинации кончились до потолка страниц', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({ data: { jobSearch: { pageInfo: { nextCursor: '' }, results: [] } } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async () => {},
+      now: () => 0,
+    });
+
+    const reading = await fetcher(indeed);
+
+    expect(calls).toBeGreaterThan(0);
+    expect(reading).toMatchObject({ partial: true });
+  });
 });
 
 describe('multi-source fetcher: Bayt career site and Obscura stealth (B218)', () => {

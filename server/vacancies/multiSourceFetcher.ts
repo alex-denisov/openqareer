@@ -231,7 +231,7 @@ async function fetchPagedJsonApi(
     pagesRead += 1;
     request = plan.next(request, payload);
   }
-  return { vacancies, partial: request !== null };
+  return { vacancies, partial: plan.fanWindow === true || request !== null };
 }
 
 /** LinkedIn — гостевой список, свой HTML-разбор и вежливый темп (B218). */
