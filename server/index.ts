@@ -70,8 +70,8 @@ const authService = new AuthService({
     : {}),
 });
 await authService.seedAccounts(config.seedAccounts, candidateStore);
-// Цепочка консультанта названа в коде (решение владельца 28.10): OpenAI luna →
-// deepseek-v4.1-flash → glm-5.3-flash. Обоим классам данных — одна цепочка;
+// Цепочка консультанта названа в коде (B580, решение владельца 29.10):
+// deepseek-v4.1-flash-1017 → deepseek-v4.1-flash → luna. Обоим классам данных — одна цепочка;
 // очередь из `OPENQAREER_PERSONAL_AI_*` и `OPENQAREER_SYNTHETIC_AI_*` консультант не читает.
 const buildCoachQueue = (onAttempts: (attempts: readonly TimedRoutingAttempt[]) => void) =>
   buildCoachChainProvider({
