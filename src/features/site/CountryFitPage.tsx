@@ -296,6 +296,7 @@ function CountryFitHeader(props: CountryFitPageProps) {
       onLanding={false}
       signedIn={Boolean(props.signedIn)}
       isAdmin={props.isAdmin}
+      current="tools"
     />
   );
 }

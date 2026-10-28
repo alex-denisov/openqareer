@@ -47,6 +47,7 @@ import {
 import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
 import { SESSION_EXPIRED_TEXT } from './features/onboarding/firstRunSpecialState';
+import { rememberSignedIn } from './features/site/signedInFlag';
 
 const EXPIRED_SESSION_NOTICE = SESSION_EXPIRED_TEXT;
 
@@ -229,6 +230,8 @@ export default function App() {
     try {
       session = await getSession();
       if (!isCurrent()) return;
+      // B574: the public header learns the answer now, not after the workspace read.
+      rememberSignedIn(Boolean(session));
       if (session?.emailVerified === false) {
         setState({
           session,
@@ -309,6 +312,10 @@ export default function App() {
       .then(({ bindConnectorAccount }) => bindConnectorAccount(connectorAccount))
       .catch(() => false);
   }, [isDesktop, connectorAccount]);
+
+  useEffect(() => {
+    if (state.session !== undefined) rememberSignedIn(Boolean(state.session));
+  }, [state.session]);
 
   useEffect(() => {
     void resolveSession();

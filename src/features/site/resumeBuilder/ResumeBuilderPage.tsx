@@ -295,6 +295,7 @@ export function ResumeBuilderPage({
         onLanding={false}
         signedIn={signedIn}
         isAdmin={isAdmin}
+        current="tools"
       />
       <main id="main">
         <ToolCrumbs trail={[{ label: 'Конструктор резюме' }]} />

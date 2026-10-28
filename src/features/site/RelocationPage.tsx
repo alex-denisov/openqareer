@@ -329,6 +329,7 @@ export function RelocationPage({
         onLanding={false}
         signedIn={signedIn}
         isAdmin={isAdmin}
+        current="tools"
       />
       <main id="main" className="ym-hide-content">
         <Crumbs />

@@ -205,7 +205,7 @@ describe('B209: публичный каталог вакансий', () => {
   it('B574: печатает только чипы с вакансиями и сужает список по ?f=', async () => {
     const app = await appWithPool([
       ...Array.from({ length: 3 }, (_, index) => vacancy(index)),
-      vacancy(3, { isRemote: true, salary: { min: 150_000, max: 200_000, currency: 'RUB' } }),
+      vacancy(3, { isRemote: true, salary: { from: 150_000, to: 200_000, currency: 'RUB' } }),
       vacancy(4, { isRemote: true }),
     ]);
     const list = await app.inject({ method: 'GET', url: '/vacancies/berlin/frontend-developer' });

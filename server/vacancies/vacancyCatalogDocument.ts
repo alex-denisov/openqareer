@@ -102,6 +102,8 @@ function head(options: {
       ? `<link rel="next" href="${SITE_ORIGIN}${escapeHtml(options.nextPath)}">`
       : '',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
+    // B574: before the header paints; marks a signed-in visitor on <html>.
+    '<script src="/assets/oq-auth-1.js"></script>',
     `<meta property="og:type" content="${options.ogType ?? 'website'}">`,
     `<meta property="og:image" content="${ogImageUrl('vacancies')}">`,
     '<meta property="og:image:width" content="1200">',
@@ -118,7 +120,7 @@ function head(options: {
     `<link rel="stylesheet" href="${CATALOG_STYLESHEET_PATH}">`,
     jsonLdScript(options.jsonLd),
     '<script src="/assets/oq-analytics-3.js" defer></script>',
-    '<script src="/assets/oq-chrome-1.js" defer></script>',
+    '<script src="/assets/oq-chrome-2.js" defer></script>',
     '<script src="/assets/oq-vacancy-search-1.js" defer></script>',
   ]
     .filter(Boolean)
@@ -353,9 +355,10 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     ) +
     '<p class="cat-note">openqareer не кадровое агентство: вакансия собрана с открытого источника, ' +
     'отклик подаётся на сайте работодателя.</p>' +
+    // B574: the cabinet offer leads the column; «О вакансии» keeps one button.
     '</article><aside class="cat-side">' +
-    aboutBox(entry, employer) +
     CTA_BOX +
+    aboutBox(entry, employer) +
     '</aside></div></main>' +
     siteFooter();
 
