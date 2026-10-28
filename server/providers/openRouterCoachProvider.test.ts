@@ -7,7 +7,10 @@ import {
 } from 'openai/error';
 import { describe, expect, it } from 'vitest';
 import type { CoachTurnInput } from '../domain/coach';
-import { OpenRouterCoachProvider } from './openRouterCoachProvider';
+import {
+  OPENROUTER_APP_TITLE,
+  OpenRouterCoachProvider,
+} from './openRouterCoachProvider';
 
 const syntheticInput: CoachTurnInput = {
   candidateReference: 'candidate-test-001',
@@ -40,7 +43,7 @@ const validOutput = {
   actionProposals: [],
 };
 
-describe('OpenRouter synthetic coach provider', () => {
+describe('OpenRouter coach provider', () => {
   it('uses Ultra with a same-family ordered fallback and server validation', async () => {
     const calls: Array<{ body: Record<string, unknown>; options: unknown }> = [];
     const client = {
@@ -94,22 +97,30 @@ describe('OpenRouter synthetic coach provider', () => {
     });
   });
 
-  it('refuses to send personal data to the free route', async () => {
-    const provider = new OpenRouterCoachProvider({
-      apiKey: 'not-used-by-test',
-      client: {} as OpenAI,
-    });
+  // Решение владельца 28.10: персональные данные кандидатов можно отправлять в
+  // OpenRouter. Запрет B082 отказывал за 0,1 с, и ступени OpenRouter в очереди
+  // консультанта ни разу не завершили ход.
+  it('sends a personal turn to OpenRouter instead of refusing it', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const provider = routerWith(async (body) => {
+      calls.push(body);
+      return routerResponse(JSON.stringify(validOutput));
+    }, 'deepseek/deepseek-v4.1-flash');
 
-    await expect(
-      provider.createTurn(
-        { ...syntheticInput, dataClass: 'personal' },
-        'idempotency-key',
-      ),
-    ).rejects.toMatchObject({
-      code: 'provider_unavailable',
-      statusCode: 503,
-      retryable: false,
-    });
+    const output = await provider.createTurn(
+      { ...syntheticInput, dataClass: 'personal' },
+      'idempotency-personal',
+    );
+
+    expect(output.result).toEqual(validOutput);
+    expect(calls).toHaveLength(1);
+    expect(JSON.stringify(calls[0].messages)).toContain(
+      'Тестовый кандидат запускал продукт.',
+    );
+  });
+
+  it('names the app without calling every call a synthetic evaluation', () => {
+    expect(OPENROUTER_APP_TITLE).toBe('OpenQareer');
   });
 
   it.each([
