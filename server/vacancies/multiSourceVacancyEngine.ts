@@ -1116,6 +1116,9 @@ export class MultiSourceVacancyEngine {
       if (result.status === 'loaded') counts.loaded += 1;
       else if (result.status === 'failed') {
         counts.failed += 1;
+        // 28.10: one unreadable page used to stop every later warm-up for good; only a refusal
+        // or backoff from the platform stops the batch.
+        if (!result.blocked) continue;
         counts.skipped += selected.length - index - 1;
         break;
       } else counts.skipped += 1;

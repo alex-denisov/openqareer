@@ -137,7 +137,8 @@ describe('hh full-description on demand', () => {
     };
     pool.mergeSourceSlice(source.id, [cooVacancy]);
     const load = vi.fn().mockResolvedValue({
-      description: 'Ищем COO. Отвечать за P&L бизнеса, управление командой, бюджетирование, операционную эффективность, OKR и стратегическое планирование.',
+      description:
+        'Ищем COO. Отвечать за P&L бизнеса, управление командой, бюджетирование, операционную эффективность, OKR и стратегическое планирование.',
       skills: [],
     });
     const engine = new MultiSourceVacancyEngine({
@@ -185,6 +186,33 @@ describe('hh full-description on demand', () => {
 
     expect(pool.getVacancy(vacancy.id)).toBeUndefined();
     expect(pool.getVacancy(second.id)?.requiredSkills).toEqual(['Python']);
+  });
+
+  it('одна непрочитанная вакансия не останавливает пакет: стоп только при отказе hh (28.10)', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    const second = {
+      ...vacancy,
+      id: 'src-hh-search:9003',
+      fingerprint: 'src-hh-search:9003',
+      url: 'https://hh.ru/vacancy/9003',
+    };
+    pool.mergeSourceSlice(source.id, [vacancy, second]);
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ description: 'Полный текст', skills: ['Go'] });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source],
+      pool,
+      descriptionLoader: { load },
+    });
+
+    await expect(engine.preloadVacancyDescriptions([vacancy.id, second.id])).resolves.toEqual({
+      requested: 2,
+      loaded: 1,
+      skipped: 0,
+      failed: 1,
+    });
   });
 
   it('повторяет запись закешированной страницы после временной ошибки пула', async () => {
