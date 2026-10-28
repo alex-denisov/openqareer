@@ -247,6 +247,8 @@ function isSourcedFact<T>(
 function isValidEvidence(source: ComparisonEvidence): boolean {
   if (!source.title || !isValidDate(source.capturedAt)) return false;
   if (source.kind === 'candidate_profile') return true;
+  // The candidate's own matched pool is dated and sized, not a web page.
+  if (source.kind === 'vacancy_catalog') return Number(source.sampleSize) > 0;
   if (!source.url || !Number.isInteger(source.dataYear) || Number(source.dataYear) < 1)
     return false;
   try {
