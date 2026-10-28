@@ -11,6 +11,7 @@ import type { ParsedResume } from '../../src/features/workspace/resumeParser';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import { HygienicResumeStructurer } from './hygienicResumeStructurer';
 import { chainRoutes, MODEL_CHAINS } from './modelChains';
+import { assertOpenRouterModelForPersonalData, isOpenRouterBaseUrl, openRouterRouting } from './openRouterPrivacy';
 
 /** Enough for a long two-column CV; longer input is truncated, never guessed. */
 const MAX_SOURCE_CHARACTERS = 60_000;
@@ -87,6 +88,7 @@ export interface LlmResumeStructurerOptions {
  * candidates and career actions, none of which belong to reading a document.
  */
 export class LlmResumeStructurer implements ResumeStructurer {
+  private readonly openRouter: boolean;
   private readonly client: ChatCompletionClient;
   private readonly model: string;
   private readonly structuredOutput: boolean;
@@ -96,6 +98,8 @@ export class LlmResumeStructurer implements ResumeStructurer {
     this.model = options.model;
     this.provenance = { model: options.model, promptRevision: RESUME_STRUCTURING_PROMPT_REVISION };
     this.structuredOutput = options.structuredOutput ?? true;
+    // A resume is personal data: on OpenRouter it is never collected (28.10).
+    this.openRouter = isOpenRouterBaseUrl(options.baseUrl);
     this.client =
       options.client ??
       (new OpenAI({
@@ -110,6 +114,7 @@ export class LlmResumeStructurer implements ResumeStructurer {
     const source = sourceText.slice(0, MAX_SOURCE_CHARACTERS);
     if (source.trim().length < 40) return null;
     try {
+      if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
@@ -135,6 +140,7 @@ export class LlmResumeStructurer implements ResumeStructurer {
               },
             }
           : { response_format: { type: 'json_object' as const } }),
+        ...openRouterRouting({ personal: this.openRouter }),
       });
       const content = response.choices[0]?.message.content;
       if (!content) return null;

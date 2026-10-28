@@ -19,6 +19,11 @@ import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
 import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
+import {
+  assertOpenRouterModelForPersonalData,
+  isOpenRouterBaseUrl,
+  openRouterRouting,
+} from './openRouterPrivacy';
 
 /**
  * Замер 25.09 (B251/B267 S6, CJM4): письмо шло ~25,6 с при 40 фактах во
@@ -263,6 +268,7 @@ export interface LlmCoverLetterWriterOptions {
  * продублирован (`roleNamer.ts`).
  */
 export class LlmCoverLetterWriter implements CoverLetterWriter {
+  private readonly openRouter: boolean;
   private readonly client: ChatCompletionClient;
   private readonly apiKey: string;
   private readonly model: string;
@@ -280,6 +286,8 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
     this.stage = options.stage ?? options.model;
     this.structuredOutput = options.structuredOutput ?? false;
     this.requireParameters = options.requireParameters ?? false;
+    // A letter is built from the candidate's facts: on OpenRouter it is never collected (28.10).
+    this.openRouter = isOpenRouterBaseUrl(options.baseUrl);
     this.client =
       options.client ??
       (new OpenAI({
@@ -294,6 +302,7 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
     // Фактов нет — спрашивать модель не о чем, это не отказ провайдера.
     if (input.facts.length === 0) return {};
     try {
+      if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
@@ -304,9 +313,12 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
         ...(this.structuredOutput
           ? {
               response_format: { type: 'json_schema', json_schema: COVER_LETTER_JSON_SCHEMA },
-              ...(this.requireParameters ? { provider: { require_parameters: true } } : {}),
             }
           : {}),
+        ...openRouterRouting({
+          personal: this.openRouter,
+          requireParameters: this.structuredOutput && this.requireParameters,
+        }),
       });
       const choice = response.choices[0] as
         ((typeof response.choices)[number] & { finish_reason?: string | null }) | undefined;
