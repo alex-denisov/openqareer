@@ -373,6 +373,23 @@ describe('очередь моделей (B183)', () => {
     );
   });
 
+  it('исключённые из очереди консультанта ступени читаются той же строкой формата (28.10)', () => {
+    const config = readServerConfig(
+      {
+        ...validEnvironment,
+        OPENQAREER_COACH_EXCLUDED_ROUTES:
+          'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,openrouter:openrouter/free,gemini',
+      },
+      import.meta.url,
+    );
+    expect(config.coachExcludedRoutes).toEqual([
+      { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
+      { provider: 'openrouter', model: 'openrouter/free' },
+      { provider: 'gemini' },
+    ]);
+    expect(readServerConfig(validEnvironment, import.meta.url).coachExcludedRoutes).toEqual([]);
+  });
+
   it('опечатка в имени провайдера останавливает запуск, а не молча теряет маршрут', () => {
     expect(() =>
       readServerConfig(

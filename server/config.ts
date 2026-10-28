@@ -79,6 +79,7 @@ const configSchema = z.object({
   OPENQAREER_SYNTHETIC_AI_MODEL: z.string().min(1).optional(),
   OPENQAREER_SYNTHETIC_AI_FALLBACK: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_PERSONAL_AI_FALLBACK: blankAsUnset(z.string().min(1).max(512)),
+  OPENQAREER_COACH_EXCLUDED_ROUTES: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_STATIC_ROOT: z.string().min(1).optional(),
   OPENQAREER_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info']).default('info'),
   OPENQAREER_ADMIN_USERNAME: z
@@ -275,6 +276,8 @@ export interface ServerConfig {
   /** Названные владельцем запасные ступени очереди по порядку (B183). */
   syntheticFallbacks?: readonly ProviderQueueEntry[];
   personalFallbacks?: readonly ProviderQueueEntry[];
+  /** Ступени, убранные только из очереди консультанта (28.10). */
+  coachExcludedRoutes?: readonly ProviderQueueEntry[];
   providerCredentials?: Partial<Record<ProviderId, string>>;
   yandexFolderId?: string;
   staticRoot: string;
@@ -440,6 +443,7 @@ export function readServerConfig(
     syntheticModel: syntheticRoute.model,
     syntheticFallbacks: parseProviderQueue(parsed.OPENQAREER_SYNTHETIC_AI_FALLBACK),
     personalFallbacks: parseProviderQueue(parsed.OPENQAREER_PERSONAL_AI_FALLBACK),
+    coachExcludedRoutes: parseProviderQueue(parsed.OPENQAREER_COACH_EXCLUDED_ROUTES),
     providerCredentials,
     yandexFolderId: environment.OPENQAREER_YANDEX_FOLDER_ID?.trim(),
     staticRoot: parsed.OPENQAREER_STATIC_ROOT ?? dirname(fileURLToPath(moduleUrl)),
