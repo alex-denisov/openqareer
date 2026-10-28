@@ -111,7 +111,13 @@ export class SqliteBulkLlmLedger {
         .get(id) as { reserved: number; cost: number | null; model: string } | undefined;
       if (!row) throw new Error('Unknown reservation');
       if (row.cost !== null) return;
-      if (usage.cost > row.reserved) this.event(overrunKind(row.model));
+      if (usage.cost > row.reserved) {
+        this.event(overrunKind(row.model));
+        // The journal names the overrun at once; the admin spend page lists the event too.
+        console.warn(
+          JSON.stringify({ msg: 'bulk-llm-cost-exceeds-reservation', model: row.model, reserved: row.reserved, cost: usage.cost }),
+        );
+      }
       this.db
         .prepare(
           "UPDATE bulk_llm_spend SET cost=?,prompt_tokens=?,cached_tokens=?,completion_tokens=?,day=?,model=COALESCE(?,model),provider=COALESCE(?,provider),status='settled' WHERE id=? AND cost IS NULL",

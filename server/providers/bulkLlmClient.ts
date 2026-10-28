@@ -129,6 +129,12 @@ function parseUsage(body: unknown): BulkLlmUsage {
     cachedTokens: u.prompt_tokens_details?.cached_tokens ?? 0,
   };
 }
+/**
+ * A Vertex fit with a long profile cost $0.010127 on 28.10 (9 532 in, 1 787 out) against the $0.01
+ * per-request hold. The hold covers the largest realistic call: ~20K input and the 2 048 output cap.
+ */
+export const VERTEX_HOLD_USD = 0.03;
+
 export class BulkLlmClient {
   constructor(
     private readonly config: BulkLlmConfig,
@@ -332,6 +338,7 @@ export class BulkLlmClient {
     const id = this.ledger.reserve(
       { ...input, model: vertex.model, provider: vertex.provider },
       this.config,
+      Math.max(this.config.perRequestUsd, VERTEX_HOLD_USD),
     );
     if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     let answer: Awaited<ReturnType<BulkFallback['complete']>>;
