@@ -37,7 +37,9 @@ export const directHhTransport: HhSearchTransport = async (url) => {
       },
       signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS),
     });
-    return { status: response.status, body: response.ok ? await response.text() : '' };
+    // A 403 keeps its page: the vacancy state tells «employer restricted» from a refusal.
+    const keepBody = response.ok || response.status === 403;
+    return { status: response.status, body: keepBody ? await response.text() : '' };
   } catch {
     // Недоступность — это отказ, а не пустая страница: разбор обязан упасть.
     return { status: 0, body: '' };
