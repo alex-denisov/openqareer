@@ -203,7 +203,10 @@ function finishCompany(
           ? 'queued'
           : statuses.has('failed')
             ? 'failed'
-            : 'idle';
+            : // 28.10: поиск закончился и никого не нашёл — это «готово», а не «не искали».
+              statuses.has('ready')
+              ? 'ready'
+              : 'idle';
   const vacancies = Array.from(company.vacancies.values());
   return {
     key: company.key,
