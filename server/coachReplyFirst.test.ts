@@ -86,3 +86,20 @@ describe('ответ консультанта сразу, разбор фоно�
     expect(split.seen).toEqual([undefined]);
   });
 });
+
+describe('зависший разбор (28.10)', () => {
+  it('pending старше пяти минут читается как failed: процесс мог перезапуститься', async () => {
+    const { withStaleAnalysis, ANALYSIS_STALE_MS } = await import('./routes/coachTurnAnalysis');
+    const startedAt = '2026-10-28T20:00:00.000Z';
+    const base = { analysis: 'pending' as const, analysisStartedAt: startedAt };
+    const at = (ms: number) => Date.parse(startedAt) + ms;
+    expect(withStaleAnalysis(base, at(ANALYSIS_STALE_MS - 1)).analysis).toBe('pending');
+    expect(withStaleAnalysis(base, at(ANALYSIS_STALE_MS + 1)).analysis).toBe('failed');
+    expect(ANALYSIS_STALE_MS).toBe(5 * 60_000);
+    // A ready analysis or a turn without one stays as it is.
+    expect(
+      withStaleAnalysis({ analysis: 'ready' as const }, at(10 * ANALYSIS_STALE_MS)).analysis,
+    ).toBe('ready');
+    expect(withStaleAnalysis({}, at(10 * ANALYSIS_STALE_MS))).toEqual({});
+  });
+});

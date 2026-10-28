@@ -111,7 +111,8 @@ async function completeTurnWithProvider(
   try {
     const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}) };
     const turn = await deps.coachProvider.createTurn(input, key, options);
-    const replied = split ? { ...turn, result: { ...turn.result, analysis: 'pending' as const } } : turn;
+    const pending = { analysis: 'pending' as const, analysisStartedAt: new Date().toISOString() };
+    const replied = split ? { ...turn, result: { ...turn.result, ...pending } } : turn;
     const raw = decorateAdaptationResult(replied, input);
     // Названный кандидатом порог зарплаты меняется только подтверждаемой карточкой (28.10).
     const generated = { ...raw, result: withSalaryFloorProposal(raw.result, input) };

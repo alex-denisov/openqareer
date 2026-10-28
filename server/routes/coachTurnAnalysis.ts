@@ -73,3 +73,21 @@ export async function runTurnAnalysis(
     update(candidateId, key, (reply) => ({ ...reply, analysis: 'failed' }));
   }
 }
+
+/**
+ * The analysis runs inside the server process: a deploy or crash can drop it
+ * and leave the turn `pending` forever (CPO 28.10). A pending analysis older
+ * than five minutes is read as failed.
+ */
+export const ANALYSIS_STALE_MS = 5 * 60_000;
+
+export function withStaleAnalysis<T extends { analysis?: string; analysisStartedAt?: string }>(
+  result: T,
+  now: number = Date.now(),
+): T {
+  if (result.analysis !== 'pending' || !result.analysisStartedAt) return result;
+  const started = Date.parse(result.analysisStartedAt);
+  return Number.isNaN(started) || now - started <= ANALYSIS_STALE_MS
+    ? result
+    : { ...result, analysis: 'failed' };
+}
