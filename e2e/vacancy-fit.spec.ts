@@ -129,7 +129,7 @@ test('B522 admin audit shows actual spending controls and refreshes read-only', 
             heldUsd: 0.1,
             remainingUsd: 0.7,
             dayRemainingUsd: 0.4,
-            limits: { runUsd: 0.5, dayUsd: 1, totalUsd: 1, perRequestUsd: 0.1 },
+            limits: { runUsd: 0.5, dayUsd: 1, monthUsd: 1, perRequestUsd: 0.1 },
             events: [{ kind: 'budget_exceeded', created_at: '2026-10-18T12:00:00Z' }],
           },
         },
@@ -144,7 +144,7 @@ test('B522 admin audit shows actual spending controls and refreshes read-only', 
   await page.goto('/admin', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: /Журнал/ }).click();
   const spend = page.getByRole('region', { name: 'Расходы массовых расчётов' });
-  await expect(spend.getByText('Общий остаток')).toBeVisible();
+  await expect(spend.getByText('Остаток на месяц')).toBeVisible();
   await expect(spend.getByText(/Достигнут лимит расходов/)).toBeVisible();
   await spend.getByRole('button', { name: 'Обновить расходы' }).click();
   await expect.poll(() => reads).toBe(2);
