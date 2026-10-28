@@ -8,6 +8,7 @@ import {
   Globe,
   ListBullets,
   Target,
+  WindowsLogo,
 } from '@phosphor-icons/react';
 import type { AuthUser } from '../coach/coachApi';
 import {
@@ -20,7 +21,7 @@ import {
   landingFeed,
   type LandingStats,
 } from '../../../shared/landingStats';
-import { DESKTOP_DOWNLOAD_PATH } from './DesktopDownload';
+import { DESKTOP_DOWNLOAD_PATH, WINDOWS_DOWNLOAD_PATH } from './DesktopDownload';
 import { SiteLink } from './SiteLink';
 import { capturedLandingStats } from './embeddedLandingStats';
 import { preloadAuthPages } from './authPagesLoader';
@@ -90,14 +91,22 @@ function Cta({
   );
 }
 
-function MacBadge() {
+function AppBadges() {
   return (
-    <a className="macbadge" href={DESKTOP_DOWNLOAD_PATH} download>
-      <AppleLogo className="apl" weight="fill" aria-hidden="true" />
-      <span>
-        <small>Скачать для</small>macOS
-      </span>
-    </a>
+    <>
+      <a className="macbadge" href={DESKTOP_DOWNLOAD_PATH} download>
+        <AppleLogo className="apl" weight="fill" aria-hidden="true" />
+        <span>
+          <small>Скачать для</small>macOS
+        </span>
+      </a>
+      <a className="macbadge" href={WINDOWS_DOWNLOAD_PATH} download>
+        <WindowsLogo className="apl" weight="fill" aria-hidden="true" />
+        <span>
+          <small>Скачать для</small>Windows
+        </span>
+      </a>
+    </>
   );
 }
 
@@ -144,7 +153,7 @@ function Hero({
             </a>
           </div>
           <div className="app">
-            <MacBadge />
+            <AppBadges />
           </div>
           <Count active={c.active} date={c.date} />
         </div>
@@ -313,7 +322,7 @@ function End({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean
             </a>
           </div>
           <div className="getapp" id="download">
-            <MacBadge />
+            <AppBadges />
             <p>Больше функций доступно в приложении</p>
           </div>
         </div>

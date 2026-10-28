@@ -9,6 +9,7 @@ export interface DesktopDownloadInfo {
 }
 
 export const DESKTOP_DOWNLOAD_PATH = '/downloads/openqareer-macos.dmg';
+export const WINDOWS_DOWNLOAD_PATH = '/downloads/openqareer-windows.exe';
 
 export function formatMegabytes(sizeBytes: number): string {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} МБ`;

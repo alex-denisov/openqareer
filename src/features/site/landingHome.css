@@ -235,6 +235,9 @@ html:has(.hm) {
   margin-top: var(--s8);
 }
 .hm .hero .app {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
   margin-top: var(--s4);
 }
 .hm .count {
@@ -502,7 +505,7 @@ html:has(.hm) {
   line-height: 1.5;
 }
 
-/* macOS download badge */
+/* macOS and Windows download badges */
 .hm .macbadge {
   display: inline-flex;
   align-items: center;

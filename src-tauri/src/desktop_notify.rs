@@ -174,6 +174,7 @@ pub async fn request_desktop_notification_permission() -> Result<PermissionStatu
 
 #[tauri::command]
 pub async fn show_desktop_notification(
+    app: AppHandle,
     title: String,
     body: String,
     target: String,
@@ -182,13 +183,27 @@ pub async fn show_desktop_notification(
         .ok_or_else(|| "desktop_notification_target_invalid".to_string())?;
     #[cfg(target_os = "macos")]
     {
+        let _ = app;
         return tokio::task::spawn_blocking(move || show_macos_notification(title, body, target))
             .await
             .map_err(|_| "desktop_notification_show_failed".to_string())?;
     }
-    #[cfg(not(target_os = "macos"))]
+    // Windows toasts go through the notification plugin (B576). The plugin has
+    // no click callback on desktop, so the toast carries no target screen.
+    #[cfg(windows)]
     {
-        let _ = (title, body, target);
+        use tauri_plugin_notification::NotificationExt;
+        let _ = target;
+        app.notification()
+            .builder()
+            .title(title)
+            .body(body)
+            .show()
+            .map_err(|_| "desktop_notification_show_failed".to_string())
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = (app, title, body, target);
         Err("нативные уведомления недоступны на этой платформе".to_string())
     }
 }

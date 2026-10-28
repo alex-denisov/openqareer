@@ -57,6 +57,47 @@ describe('desktop macOS download', () => {
   });
 });
 
+describe('desktop Windows download (B576)', () => {
+  it('serves the published installer beside the macOS image', async () => {
+    const installer = Buffer.alloc(4096, 3);
+    const app = createApp({
+      'OpenQareer_1.0.9_x64-setup.exe': installer,
+      'desktop-windows.json': manifest('OpenQareer_1.0.9_x64-setup.exe'),
+    });
+    const info = await app.inject({ method: 'GET', url: '/api/v1/desktop/windows' });
+    expect(info.json().data).toMatchObject({
+      available: true,
+      version: '1.0.0',
+      sizeBytes: 4096,
+      architecture: 'x64',
+      signed: false,
+    });
+    const file = await app.inject({ method: 'GET', url: '/downloads/openqareer-windows.exe' });
+    expect(file.statusCode).toBe(200);
+    expect(file.headers['content-type']).toBe('application/vnd.microsoft.portable-executable');
+    expect(file.headers['content-disposition']).toContain('OpenQareer_1.0.9_x64-setup.exe');
+    expect(file.rawPayload.equals(installer)).toBe(true);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/desktop/macos' })).json().data.available,
+    ).toBe(false);
+  });
+
+  it('never serves a macOS image or a foreign file as the Windows installer', async () => {
+    const app = createApp({
+      'OpenQareer_1.0.0_x64.dmg': 'image',
+      'desktop-windows.json': manifest('OpenQareer_1.0.0_x64.dmg'),
+    });
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/v1/desktop/windows' })).json().data,
+    ).toEqual({
+      available: false,
+    });
+    const file = await app.inject({ method: 'GET', url: '/downloads/openqareer-windows.exe' });
+    expect(file.statusCode).toBe(404);
+    expect(file.body).toBe('Сборка для Windows пока не опубликована.');
+  });
+});
+
 describe('desktop updater feed', () => {
   function createFeed(files: Record<string, string>) {
     const root = mkdtempSync(join(tmpdir(), 'openqareer-desktop-feed-'));
