@@ -1,5 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
-import { directThenFallback, parseEgressResponse, readEgressConfig } from './hhSearchTransport';
+import {
+  directHhTransport,
+  directThenFallback,
+  parseEgressResponse,
+  readEgressConfig,
+} from './hhSearchTransport';
+
+describe('directHhTransport', () => {
+  it('keeps the body of a 403 so a per-vacancy restriction can be told from a refusal (prod 28.10)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('forbidden page', { status: 403 })),
+    );
+    try {
+      await expect(directHhTransport('https://hh.ru/vacancy/1')).resolves.toEqual({
+        status: 403,
+        body: 'forbidden page',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe('directThenFallback', () => {
   const forbidden = '{&#34;forbidden&#34;:true,&#34;errorPage&#34;:{&#34;isError&#34;:true}}';
