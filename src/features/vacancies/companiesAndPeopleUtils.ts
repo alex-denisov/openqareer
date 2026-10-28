@@ -3,6 +3,7 @@ import type {
   CandidateCompanySource,
 } from '../../../shared/candidateCompany';
 import type { ConnectionCirclePath, VacancyConnectionCircles } from './vacancyLetterApi';
+import { parseVacancyLocation } from '../../../shared/locationTree';
 import { pluralRu } from '../../../shared/pluralRu';
 import { dativeNameRu } from '../today/dativeNameRu';
 
@@ -34,14 +35,29 @@ function sourceLocationCountRu(place: string): string {
   return count ? pluralRu(Number(count[1]), ['локация', 'локации', 'локаций']) : place;
 }
 
-export function companyLocationLabel(location: string | null): string {
+const REMOTE_PLACE = /^(remote|удал[её]нно|anywhere|worldwide)$/iu;
+/** Workday: «US-CA-Menlo Park» → «Menlo Park, CA, US». */
+const CODED_PLACE = /^([A-Z]{2,3})-([A-Z]{2})-(.+)$/u;
+
+/** «Город, Страна» по-русски тем же словарём, что «Локации» в «Вакансиях» (28.10). */
+function placeLabelRu(place: string): string {
+  if (REMOTE_PLACE.test(place)) return 'Удалённо';
+  const coded = CODED_PLACE.exec(place);
+  const location = coded ? `${coded[3]}, ${coded[2]}, ${coded[1]}` : place;
+  const path = parseVacancyLocation({ location });
+  if (!path) return sourceLocationCountRu(place);
+  return path.city ? `${path.city}, ${path.country}` : path.country;
+}
+
+/** `null` — места нет, строку не выводят. */
+export function companyLocationLabel(location: string | null): string | null {
   const places = (location ?? '')
     .split(';')
     .map((place) => place.trim())
     .filter(Boolean);
-  if (places.length === 0) return 'Место неизвестно';
-  if (places.length === 1) return sourceLocationCountRu(places[0]);
-  return `${places[0]} и ещё ${places.length - 1}`;
+  if (places.length === 0) return null;
+  if (places.length === 1) return placeLabelRu(places[0]);
+  return `${placeLabelRu(places[0])} и ещё ${places.length - 1}`;
 }
 
 export function formatObservedDate(value: string | null): string {
