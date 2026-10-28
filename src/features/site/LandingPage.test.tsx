@@ -43,6 +43,8 @@ describe('LandingPage (B569, mockup 01-home)', () => {
     expect(html).toMatch(/class="btn lg" href="\/vacancies">Смотреть вакансии</u);
     expect(html).toContain('Скачать для');
     expect(html).toContain('/downloads/openqareer-macos.dmg');
+    expect(html).toContain('/downloads/openqareer-windows.exe');
+    expect(html.match(/class="macbadge"/gu)).toHaveLength(4);
   });
 
   it('has the six screens of the mockup and the tools anchor', () => {
@@ -118,7 +120,7 @@ describe('LandingPage (B569, mockup 01-home)', () => {
   it('publishes one organization graph with offers and no FAQPage', () => {
     const html = render();
     expect(html).toContain('"@type":"WebSite"');
-    expect(html).toContain('"operatingSystem":"Web, macOS"');
+    expect(html).toContain('"operatingSystem":"Web, macOS, Windows"');
     expect(html).toContain('"minPrice":150000');
     expect(html).not.toContain('"@type":"FAQPage"');
   });

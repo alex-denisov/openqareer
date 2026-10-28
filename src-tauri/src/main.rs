@@ -9,6 +9,8 @@ mod network_probe;
 mod session_token_store;
 mod sidecar_lifecycle;
 mod tunnel_manager;
+#[cfg(windows)]
+mod windows_print;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
@@ -211,7 +213,11 @@ async fn print_resume(app: AppHandle) -> Result<bool, String> {
             .await
             .map_err(|_| "print_resume: native print operation did not finish".to_string());
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        windows_print::print_resume(&app).await
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = app;
         Err("print_resume: native printing is unavailable on this platform".to_string())
@@ -251,7 +257,11 @@ async fn save_resume_pdf(app: AppHandle, path: String) -> Result<bool, String> {
             .await
             .map_err(|_| "save_resume_pdf: PDF operation did not finish".to_string());
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        windows_print::save_resume_pdf(&app, path).await
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = app;
         Err("save_resume_pdf: native PDF export is unavailable on this platform".to_string())

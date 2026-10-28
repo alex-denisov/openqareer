@@ -588,6 +588,25 @@ fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
     Ok((directory, identifier))
 }
 
+/// WebView2 refuses a second window on a data folder that is already open with
+/// other browser arguments, and only LinkedIn goes through the tunnel proxy. So
+/// on Windows each platform keeps its own folder inside the account's (B576);
+/// WebKit separates stores by identifier and keeps the shared folder.
+fn platform_data_directory(directory: PathBuf, platform: &str) -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        let directory = directory.join(platform);
+        create_private_directory(&directory)
+            .map_err(|_| "candidate_session_data_dir_create_failed".to_string())?;
+        Ok(directory)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = platform;
+        Ok(directory)
+    }
+}
+
 /// How long a freshly built window may take to appear in the manager before the
 /// report stops calling it opened. The window is created on the main thread
 /// while this command runs on a worker, so "build returned Ok" is not yet
@@ -740,7 +759,13 @@ pub async fn open_session_window(
             builder = builder.data_store_identifier(identifier);
         }
     } else {
-        let (data_directory, identifier) = match candidate_store(app) {
+        let store = candidate_store(app).and_then(|(directory, identifier)| {
+            Ok((
+                platform_data_directory(directory, &request.platform)?,
+                identifier,
+            ))
+        });
+        let (data_directory, identifier) = match store {
             Ok(store) => store,
             Err(reason) => {
                 return SessionWindowReport {
@@ -984,7 +1009,11 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
     let Some(url) = platform_root_url(platform).and_then(|raw| Url::parse(raw).ok()) else {
         return false;
     };
-    let Ok((data_directory, identifier)) = candidate_store(app) else {
+    let Ok((data_directory, identifier)) =
+        candidate_store(app).and_then(|(directory, identifier)| {
+            Ok((platform_data_directory(directory, platform)?, identifier))
+        })
+    else {
         return false;
     };
     let allowed = platform.to_string();
@@ -2523,6 +2552,23 @@ https://media.licdn.com/dms/image/c 800w";
         ] {
             assert!(!is_linkedin_cookie_domain(domain), "{domain}");
         }
+    }
+
+    #[test]
+    fn each_platform_gets_its_own_webview2_folder_only_on_windows() {
+        let root = std::env::temp_dir().join(format!("oq-platform-dir-{}", std::process::id()));
+        std::fs::create_dir_all(&root).expect("create account folder");
+        let linkedin = super::platform_data_directory(root.clone(), "linkedin").expect("linkedin");
+        let hh = super::platform_data_directory(root.clone(), "hh").expect("hh");
+        if cfg!(windows) {
+            assert_eq!(linkedin, root.join("linkedin"));
+            assert_eq!(hh, root.join("hh"));
+            assert!(linkedin.is_dir() && hh.is_dir());
+        } else {
+            assert_eq!(linkedin, root);
+            assert_eq!(hh, root);
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
