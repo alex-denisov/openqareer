@@ -12,9 +12,9 @@ import {
  * module every other Gemini stage uses; the answer goes back through the caller's own JSON schema.
  */
 export const BULK_FALLBACK_PROVIDER = 'gemini';
-/** Vertex list price of the flash tier per million tokens: an upper bound for the ledger. */
-const DEFAULT_INPUT_PER_MILLION_USD = 0.5;
-const DEFAULT_OUTPUT_PER_MILLION_USD = 3;
+/** Catalog price of gemini-3.8-flash per million tokens (28.10): what a call is booked at. */
+const DEFAULT_INPUT_PER_MILLION_USD = 0.825;
+const DEFAULT_OUTPUT_PER_MILLION_USD = 4.125;
 const REQUEST_TIMEOUT_MS = 60_000;
 const RETRIES_ON_429 = 2;
 

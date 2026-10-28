@@ -136,6 +136,21 @@ describe('цепочка массового канала (B580, 29.10): Vertex �
     expect(runtime.status().heldUsd).toBe(0);
   });
 
+  it('резерв Vertex — верхняя граница по его цене с запасом, а не плоские $0,06 (28.10)', async () => {
+    const transport = openRouter({ [HEAD]: 402, [GLM]: 402 });
+    const { runtime, vertex } = setup(transport);
+    // Dear enough that the bound is above the flat $0.06 hold of the test env.
+    Object.assign(vertex, { outputPerMillionUsd: 15 });
+    await runtime.client!.complete({ ...req, maxTokens: 4096 });
+    const row = runtime.ledger.db
+      .prepare("SELECT reserved FROM bulk_llm_spend WHERE provider='gemini'")
+      .get() as { reserved: number };
+    const bytes = Buffer.byteLength(req.prefix) + Buffer.byteLength(req.input) + 4096;
+    const bound = (bytes * vertex.inputPerMillionUsd + 4096 * vertex.outputPerMillionUsd) / 1e6;
+    expect(bound * 1.25).toBeGreaterThan(0.06);
+    expect(row.reserved).toBeCloseTo(bound * 1.25, 9);
+  });
+
   it('проверка вызывающего решает, годен ли ответ; негодный ответ не остужает ступень', async () => {
     const transport = openRouter({});
     const { runtime } = setup(transport);

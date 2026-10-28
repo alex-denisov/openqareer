@@ -47,6 +47,23 @@ describe('потолок фоновой обработки — месячный 
     expect(status.remainingUsd).toBeCloseTo(0.75, 6);
     expect(status.limits?.monthUsd).toBe(1);
   });
+
+  it('фактическая цена чуть выше резерва записывается, а следующий вызов проходит (28.10)', () => {
+    const ledger = ledgerAt('2026-10-28T20:50:00.000Z');
+    const id = ledger.reserve(call, limits);
+    ledger.settle(id!, { cost: 0.4001, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
+    expect(ledger.reserve(call, limits)).not.toBeNull();
+    const status = ledger.status(limits);
+    expect(status.spentUsd).toBeCloseTo(0.4001, 6);
+    expect(status.events.some((event) => String(event.kind).startsWith('cost_exceeds_reservation:'))).toBe(true);
+  });
+
+  it('фон останавливает только фактический расход месяца у потолка', () => {
+    const ledger = ledgerAt('2026-10-28T20:50:00.000Z');
+    const id = ledger.reserve(call, limits);
+    ledger.settle(id!, { cost: 0.9, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
+    expect(ledger.reserve(call, limits)).toBeNull();
+  });
 });
 
 describe('перерасход одной модели не останавливает весь фон (прод 28.10)', () => {
@@ -57,12 +74,12 @@ describe('перерасход одной модели не останавлив
   const roomy = { runUsd: 100, dayUsd: 100, monthUsd: 100, perRequestUsd: 0.01 } as BulkLlmConfig;
   const vertex = { ...call, model: 'gemini-3.8-flash', provider: 'gemini' };
 
-  it('после перерасхода Vertex закрыт только Vertex, deepseek работает', () => {
+  it('после перерасхода Vertex открыты и Vertex, и deepseek (B580: перерасход ничего не закрывает)', () => {
     dir = mkdtempSync(join(tmpdir(), 'bulk-ledger-'));
     const ledger = new SqliteBulkLlmLedger(join(dir, 'ledger.db'));
     const id = ledger.reserve(vertex, roomy);
     ledger.settle(id!, { cost: 0.010127, promptTokens: 9532, cachedTokens: 0, completionTokens: 1787 });
-    expect(ledger.reserve(vertex, roomy)).toBeNull();
+    expect(ledger.reserve(vertex, roomy)).not.toBeNull();
     expect(ledger.reserve(call, roomy)).not.toBeNull();
   });
 

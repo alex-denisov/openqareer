@@ -10,7 +10,7 @@ const STALE_HOLD_TTL_MS = 15 * 60_000;
 function monthStart(): string {
   return `${new Date().toISOString().slice(0, 7)}-01`;
 }
-/** The overrun mark names the model it closes; a bare legacy mark closes nothing. */
+/** The overrun mark names its model for the admin; no overrun mark closes anything (B580). */
 function overrunKind(model: string): string {
   return `cost_exceeds_reservation:${model}`;
 }
@@ -65,14 +65,10 @@ export class SqliteBulkLlmLedger {
     return runSqliteTransaction(this.db, () => {
       this.expireStaleHolds();
       const day = new Date().toISOString().slice(0, 10);
-      // A call dearer than its hold closes that model only: on 28.10 one Vertex fit at $0.010127
-      // closed the whole channel, and with it every percent, for good.
-      if (
-        this.db
-          .prepare('SELECT 1 FROM bulk_llm_events WHERE kind=? LIMIT 1')
-          .get(overrunKind(input.model))
-      )
-        return null;
+      // A charge above its hold is recorded at its real price and leaves an event for the admin;
+      // it no longer stops the channel. The caps below count real charges, so they still hold.
+      // A latch here stopped every fit for hours after one Vertex call at $0.0101 over a $0.01
+      // hold (28.10, B580).
       if (
         this.sum('(day>=? OR cost IS NULL)', monthStart()) + amount > config.monthUsd ||
         this.sum('run_id=?', input.runId) + amount > config.runUsd ||

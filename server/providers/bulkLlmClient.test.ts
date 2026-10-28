@@ -168,7 +168,7 @@ it('rejects an oversized request before transport', async () => {
   expect(calls).toBe(0);
   runtime.close();
 });
-it('an upstream cost above reservation records actual charge and stops later dispatches', async () => {
+it('an upstream cost above reservation records actual charge and keeps dispatching (B580)', async () => {
   let calls = 0;
   const opts = options((async () => {
     calls++;
@@ -178,10 +178,10 @@ it('an upstream cost above reservation records actual charge and stops later dis
   opts.env.OPENQAREER_BULK_LLM_DAY_USD = '1';
   opts.env.OPENQAREER_BULK_LLM_RUN_USD = '1';
   const runtime = createBulkLlmRuntime(opts);
-  await expect(runtime.client!.complete(req)).rejects.toThrow('Actual cost');
+  await expect(runtime.client!.complete(req)).resolves.toMatchObject({ content: '{}' });
   expect(runtime.status().spentUsd).toBe(0.07);
-  await expect(runtime.client!.complete(req)).rejects.toThrow('budget');
-  expect(calls).toBe(1);
+  await expect(runtime.client!.complete(req)).resolves.toMatchObject({ content: '{}' });
+  expect(calls).toBe(2);
   runtime.close();
 });
 it('routes through an ordered list of pinned providers so one price change or rate limit does not stop the work', async () => {

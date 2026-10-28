@@ -19,12 +19,12 @@ function usd(value: number) {
 const OVERRUN = 'cost_exceeds_reservation:';
 function eventLabel(kind: string): string {
   if (kind.startsWith(OVERRUN))
-    return `Стоимость выше резерва: модель ${kind.slice(OVERRUN.length)} остановлена`;
+    return `Стоимость выше резерва у ${kind.slice(OVERRUN.length)}: записана фактическая цена`;
   return EVENTS[kind] ?? 'Событие расчётов';
 }
 const EVENTS: Record<string, string> = {
   budget_exceeded: 'Достигнут лимит расходов',
-  cost_exceeds_reservation: 'Стоимость выше резерва: новые запросы остановлены',
+  cost_exceeds_reservation: 'Стоимость выше резерва: записана фактическая цена',
   completion_failed_or_unknown: 'Вызов завершился ошибкой или требует сверки стоимости',
   batch_submission_unknown: 'Нужно проверить приём пакетного запроса',
   batch_terminal_usage_unresolved: 'Пакет завершён без подтверждённой стоимости',
