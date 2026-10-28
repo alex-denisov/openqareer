@@ -495,10 +495,11 @@ export function readServerConfig(
  * убрать»): обе бесплатные модели OpenRouter за две недели не завершили ни
  * одного хода, Gemini отвечает 402, а каждый ход ждал их первыми. Значение по
  * умолчанию живёт в коде, чтобы правка дошла обычным выкатом; переменная его
- * переопределяет, `none` возвращает все ступени.
+ * переопределяет, `none` возвращает все ступени. Anthropic (28.10) — ключ лежит
+ * на проде для замеров, но в очередь консультанта сам не встаёт.
  */
 export const DEFAULT_COACH_EXCLUDED_ROUTES =
-  'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,openrouter:openrouter/free,gemini';
+  'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,openrouter:openrouter/free,gemini,anthropic';
 
 function readCoachExcludedRoutes(value: string | undefined): readonly ProviderQueueEntry[] {
   if (value?.trim() === 'none') return [];
