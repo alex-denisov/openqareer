@@ -16,7 +16,7 @@ import type {
   ResumeVersionUpdateResult,
   StoredResumeVersion,
 } from '../domain/resumeVersions';
-import type { CoachMessage, CoachTurnInput, CoachTurnStage } from '../domain/coach';
+import type { CoachMessage, CoachTurnInput, CoachTurnStage, CoachTurnSubject } from '../domain/coach';
 import type {
   CandidateCredentials,
   CandidateIdentity,
@@ -411,9 +411,9 @@ export class SqliteCandidateStore implements CandidateStore {
     };
   }
 
-  getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[] {
+  getMessages(candidateId: string, stage?: CoachTurnStage, subject?: CoachTurnSubject): CoachMessage[] {
     this.requireCandidate(candidateId);
-    return this.conversations.getMessages(candidateId, stage);
+    return this.conversations.getMessages(candidateId, stage, subject);
   }
 
   declare listConsultantConversations: CandidateStore['listConsultantConversations'];

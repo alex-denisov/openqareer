@@ -170,4 +170,34 @@ describe('conversationController stage feeds and rejections (B340 S1)', () => {
     expect(completedTurn?.result?.actionProposals).toHaveLength(1);
     expect(completedTurn?.result?.actionProposals[0].resumeRevision?.section).toBe('about');
   });
+
+  it('a company thread on «Компании и люди» neither shows nor feeds the vacancy thread (28.10)', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const vacancyKey = '51df5f57-df61-4ac2-98af-202610280001';
+    store.startTurn(candidate.id, vacancyKey, {
+      messageId: '51df5f57-df61-4ac2-98af-202610280002',
+      content: 'Почему Lone Wolf подходит?',
+      phase: 'market',
+      stage: 'vacancies',
+      subject: { kind: 'vacancy', id: 'lone-wolf' },
+    });
+    store.completeTurn(candidate.id, vacancyKey, mockOutput);
+
+    const companyKey = '51df5f57-df61-4ac2-98af-202610280003';
+    const companyTurn = store.startTurn(candidate.id, companyKey, {
+      messageId: '51df5f57-df61-4ac2-98af-202610280004',
+      content: 'С кого начать в Autodesk?',
+      phase: 'market',
+      stage: 'vacancies',
+      subject: { kind: 'company', id: 'autodesk' },
+    });
+    if (companyTurn.state !== 'ready') throw new Error('expected ready turn');
+    expect(companyTurn.input.messages.map((m) => m.content)).toEqual(['С кого начать в Autodesk?']);
+
+    const company = store.getMessages(candidate.id, 'vacancies', { kind: 'company', id: 'autodesk' });
+    expect(company.map((m) => m.content)).toEqual(['С кого начать в Autodesk?']);
+    const all = store.getMessages(candidate.id, 'vacancies');
+    expect(all.map((m) => m.content)).toContain('Почему Lone Wolf подходит?');
+  });
 });
