@@ -12,7 +12,10 @@ import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
 import { CoachProviderRoleAgent } from './orchestration/coachProviderRoleAgent';
-import { ResilientCoachProvider } from './providers/resilientCoachProvider';
+import {
+  ResilientCoachProvider,
+  type TimedRoutingAttempt,
+} from './providers/resilientCoachProvider';
 import { StructuredStageCoachProvider } from './providers/structuredStageCoachProvider';
 import { queueStageTimeoutMs } from './providers/stageTimeout';
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
@@ -88,6 +91,8 @@ const buildQueue = (
     head,
     fallbacks,
     credentials: config.providerCredentials ?? {},
+    // Только очередь консультанта: роли и письма читают свои очереди сами.
+    excluded: config.coachExcludedRoutes ?? [],
   }).map((route, index, routes) => ({
     id: route.provider,
     model: route.model,
@@ -105,7 +110,15 @@ const syntheticHead = {
   provider: syntheticProviderId,
   model: config.syntheticModel,
 };
+// Время каждой ступени хода — в журнал сервера: без него 140 с хода не
+// раскладывались по ступеням (28.10). Только провайдер, модель, статус и мс.
+const logRouteAttempts =
+  (dataClass: 'personal' | 'synthetic') => (attempts: readonly TimedRoutingAttempt[]) =>
+    process.stdout.write(
+      `${JSON.stringify({ level: 30, time: Date.now(), msg: 'coach-route-attempts', dataClass, attempts })}\n`,
+    );
 const personalDataProvider = new ResilientCoachProvider({
+  onAttempts: logRouteAttempts('personal'),
   routes: buildQueue(personalHead, config.personalFallbacks),
   maxAttempts: namedQueueDepth({
     head: personalHead,
@@ -113,6 +126,7 @@ const personalDataProvider = new ResilientCoachProvider({
   }),
 });
 const syntheticDataProvider = new ResilientCoachProvider({
+  onAttempts: logRouteAttempts('synthetic'),
   routes: buildQueue(syntheticHead, config.syntheticFallbacks),
   maxAttempts: namedQueueDepth({
     head: syntheticHead,

@@ -4,6 +4,7 @@ import {
   queueFallbackDescriptors,
   selectProviderQueue,
 } from './providerQueue';
+import { LAST_PROVIDER_STAGE_TIMEOUT_MS, queueStageTimeoutMs } from './stageTimeout';
 
 const credentials = {
   gemini: 'gemini-key-that-is-long-enough',
@@ -109,5 +110,54 @@ describe('глубина очереди (B183)', () => {
 
   it('без названных запасных ступеней всё равно оставляет место одному запасу', () => {
     expect(namedQueueDepth({ head: { provider: 'openai' } })).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * Решение владельца 28.10 («Да, убрать»): из очереди консультанта убраны три
+ * бесплатные ступени — за две недели ни одного завершённого хода, только
+ * `provider_unavailable`, а Gemini отвечает 402. Очереди ролей и писем не трогаются.
+ */
+describe('исключённые ступени очереди консультанта (28.10)', () => {
+  const prodCredentials = {
+    openrouter: 'openrouter-key-that-is-long-enough',
+    gemini: 'gemini-key-that-is-long-enough',
+    nvidia: 'nvidia-key-that-is-long-enough',
+    openai: 'openai-key-that-is-long-enough',
+  };
+  const head = { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' } as const;
+  const fallbacks = [
+    { provider: 'openrouter', model: 'openrouter/free' },
+    { provider: 'gemini', model: 'gemini-3.6-flash' },
+    { provider: 'nvidia', model: 'nvidia/nemotron-3-ultra-550b-a55b' },
+    { provider: 'openai', model: 'gpt-5.6-luna' },
+  ] as const;
+  const excluded = [
+    { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
+    { provider: 'openrouter', model: 'openrouter/free' },
+    { provider: 'gemini' },
+  ] as const;
+
+  it('оставляет NVIDIA → OpenAI и не возвращает исключённого провайдера хвостом очереди', () => {
+    const routes = selectProviderQueue({ head, fallbacks, credentials: prodCredentials, excluded });
+    expect(routes.map((route) => `${route.provider}:${route.model}`)).toEqual([
+      'nvidia:nvidia/nemotron-3-ultra-550b-a55b',
+      'openai:gpt-5.6-luna',
+    ]);
+    // OpenAI остаётся последней ступенью и получает её потолок.
+    expect(queueStageTimeoutMs(routes.length - 1, routes.length)).toBe(
+      LAST_PROVIDER_STAGE_TIMEOUT_MS,
+    );
+  });
+
+  it('без исключений очередь прежняя', () => {
+    const routes = selectProviderQueue({ head, fallbacks, credentials: prodCredentials });
+    expect(routes.map((route) => route.model)).toEqual([
+      'nvidia/nemotron-3-ultra-550b-a55b:free',
+      'openrouter/free',
+      'gemini-3.6-flash',
+      'nvidia/nemotron-3-ultra-550b-a55b',
+      'gpt-5.6-luna',
+    ]);
   });
 });

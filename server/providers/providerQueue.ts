@@ -33,7 +33,15 @@ export function selectProviderQueue(input: {
   head: ProviderQueueEntry;
   fallbacks?: readonly ProviderQueueEntry[];
   credentials: Partial<Record<ProviderId, string>>;
+  /**
+   * Ступени, которых в этой очереди нет (28.10): `provider:model` убирает одну
+   * модель, `provider` — провайдера целиком, в том числе из хвоста неназванных.
+   */
+  excluded?: readonly ProviderQueueEntry[];
 }): ProviderRoute[] {
+  const excluded = input.excluded ?? [];
+  const isExcluded = (provider: ProviderId, model: string) =>
+    excluded.some((entry) => entry.provider === provider && (!entry.model || entry.model === model));
   const named = [input.head, ...(input.fallbacks ?? [])];
   const remaining: ProviderQueueEntry[] = PROVIDER_IDS.filter(
     (provider) => !named.some((entry) => entry.provider === provider),
@@ -47,6 +55,7 @@ export function selectProviderQueue(input: {
     if (!apiKey || !model || !eligible.some((candidate) => candidate.id === model)) {
       return [];
     }
+    if (isExcluded(entry.provider, model)) return [];
     // Одна и та же модель дважды — это не запасной маршрут, а лишний вызов.
     const key = `${entry.provider}:${model}`;
     if (seen.has(key)) return [];

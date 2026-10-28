@@ -235,3 +235,35 @@ describe('две ступени одного провайдера (B183)', () =>
     ]);
   });
 });
+
+describe('время ступеней хода (28.10)', () => {
+  it('сообщает, сколько заняла каждая попытка, и при успехе, и при отказе', async () => {
+    let clock = 0;
+    const slowFail: CoachProvider = {
+      async createTurn() {
+        clock += 40_000;
+        throw new CoachProviderError('provider_unavailable', 503, true);
+      },
+    };
+    const answer: CoachProvider = {
+      async createTurn() {
+        clock += 30_000;
+        return result('openai');
+      },
+    };
+    const seen: Array<{ provider: string; status: string; elapsedMs: number }> = [];
+    const provider = new ResilientCoachProvider({
+      routes: [
+        { id: 'openrouter', model: 'openrouter/free', provider: slowFail },
+        { id: 'openai', model: 'gpt-5.6-luna', provider: answer },
+      ],
+      now: () => clock,
+      onAttempts: (attempts) => seen.push(...attempts),
+    });
+    await provider.createTurn(input, '99999999-9999-4999-8999-999999999999');
+    expect(seen).toEqual([
+      expect.objectContaining({ provider: 'openrouter', status: 'failed', elapsedMs: 40_000 }),
+      expect.objectContaining({ provider: 'openai', status: 'succeeded', elapsedMs: 30_000 }),
+    ]);
+  });
+});
