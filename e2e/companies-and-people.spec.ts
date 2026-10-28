@@ -129,7 +129,9 @@ test('pages 400 companies and opens a source-backed company detail', async ({ pa
 
   await page.getByRole('button', { name: 'Открыть компанию Вектор Банк' }).click();
   await expect(page.getByRole('heading', { name: 'Вектор Банк' })).toBeVisible();
-  await expect(page.getByText('Москва, Россия · Финансы · данные с hh.ru, 08.10.2026')).toBeVisible();
+  await expect(
+    page.getByText('Москва, Россия · Финансы · данные с hh.ru, 08.10.2026'),
+  ).toBeVisible();
   await expect(page.getByText(/Рекрутер Мария Орлова взят из объявления/u)).toBeVisible();
   const mobile = testInfo.project.name === 'mobile-390';
   await expect(
