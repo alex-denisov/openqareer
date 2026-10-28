@@ -336,11 +336,11 @@ async function writeToolPages(
   manifest?: Manifest,
 ): Promise<void> {
   await writeCountryFitPage(html, distDirectory);
-  await writeRelocationPage(html, distDirectory, pageStylesheets(manifest, 'relocationRoute'));
+  await writeRelocationPage(html, distDirectory, pageAssets(manifest, 'relocationRoute'));
   await writeSalaryCalculatorPage(
     html,
     distDirectory,
-    pageStylesheets(manifest, 'salaryCalculatorRoute'),
+    pageAssets(manifest, 'salaryCalculatorRoute'),
   );
 }
 
@@ -350,12 +350,8 @@ async function writeHelpPages(
   distDirectory: string,
   manifest?: Manifest,
 ): Promise<void> {
-  await writeResumeBuilderPage(
-    html,
-    distDirectory,
-    pageStylesheets(manifest, 'resumeBuilderRoute'),
-  );
-  const docStyles = pageStylesheets(manifest, 'publicDocsRoute');
+  await writeResumeBuilderPage(html, distDirectory, pageAssets(manifest, 'resumeBuilderRoute'));
+  const docStyles = pageAssets(manifest, 'publicDocsRoute');
   await writeFile(
     `${distDirectory}/faq.html`,
     deferEntryScript(withPageStyles(helpHead(html, HELP_PAGES[0]), docStyles)).replace(
@@ -521,6 +517,55 @@ export function pageStylesheets(manifest: Manifest | undefined, name: string): s
     .join('');
 }
 
+/**
+ * B574: a public page's own chunk and its static imports, preloaded together
+ * with the entry so the bundle mounts in one round of parallel requests
+ * instead of the entry → page → icons chain. Shared chunks the entry already preloads are
+ * skipped. Wrapped in markers: index.html also answers /app, which drops them.
+ */
+export function pageModuleHints(manifest: Manifest | undefined, names: readonly string[]): string {
+  if (!manifest) return '';
+  const entry = manifest['index.html'];
+  const dynamicImports = entry?.dynamicImports;
+  if (!Array.isArray(dynamicImports)) throw new Error('Missing entry build graph');
+  const skip = new Set<string>(['index.html', ...(entry.imports ?? [])]);
+  const scripts: string[] = [];
+  const styles: string[] = [];
+  const visit = (key: string) => {
+    if (skip.has(key)) return;
+    skip.add(key);
+    const chunk = manifest[key];
+    if (!chunk) throw new Error(`Missing emitted chunk: ${key}`);
+    scripts.push(chunk.file);
+    styles.push(...(chunk.css ?? []));
+    (chunk.imports ?? []).forEach(visit);
+  };
+  for (const name of names) {
+    const keys = dynamicImports.filter((key) => manifest[key]?.name === name);
+    if (keys.length !== 1) throw new Error(`Expected one emitted page chunk: ${name}`);
+    visit(keys[0]);
+  }
+  const path = (file: string, extension: 'js' | 'css') => {
+    if (!new RegExp(`^assets/[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.${extension}$`, 'u').test(file))
+      throw new Error('Invalid page preload path');
+    return escapeHtml(`/${file}`);
+  };
+  const links = [
+    ...scripts.map((file) => `<link rel="modulepreload" crossorigin href="${path(file, 'js')}">`),
+    ...[...new Set(styles)].map(
+      (file) => `<link rel="preload" as="style" crossorigin href="${path(file, 'css')}">`,
+    ),
+  ];
+  // Inert until oq-entry-loader-3.js clones it after the first frame, so the
+  // preloads never share the line with the first paint's styles and fonts.
+  return `<!--oq-page-hints--><template id="oq-page-hints">${links.join('')}</template><!--/oq-page-hints-->`;
+}
+
+/** A page chunk's stylesheet plus the preloads of its modules (B574). */
+function pageAssets(manifest: Manifest | undefined, name: string): string {
+  return pageStylesheets(manifest, name) + pageModuleHints(manifest, [name]);
+}
+
 function withPageStyles(html: string, styles: string): string {
   return styles ? html.replace('</head>', `${styles}</head>`) : html;
 }
@@ -649,6 +694,9 @@ async function writeServerTemplates(
   await applySeoHead(indexPath, distDirectory);
 }
 
+/** What App.tsx's loadLandingPage imports: the stylesheet chunk and the page. */
+const LANDING_CHUNKS = ['landing', 'LandingPage'] as const;
+
 export async function prerenderShells(
   indexPath: string,
   adminPath: string,
@@ -665,7 +713,7 @@ export async function prerenderShells(
 
   await writeFile(
     indexPath,
-    html.replace(
+    withPageStyles(html, pageModuleHints(manifest, LANDING_CHUNKS)).replace(
       EMPTY_ROOT,
       bootstrapRoot(
         renderToStaticMarkup(<LandingPage onNavigate={() => {}} stats={landingTokenStats()} />),

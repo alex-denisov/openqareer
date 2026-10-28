@@ -202,7 +202,18 @@ export function deferEntryScript(html: string): string {
     ENTRY_SCRIPT,
     // B574: until the bundle mounts, oq-chrome-2.js runs the header menus, so
     // the first tap on «Инструменты» or the phone menu is never lost.
-    '<script defer src="/assets/oq-entry-loader-2.js" data-entry="$1"></script>' +
+    '<script defer src="/assets/oq-entry-loader-3.js" data-entry="$1"></script>' +
       '<script defer src="/assets/oq-chrome-2.js"></script>',
   );
+}
+
+const PAGE_HINTS = /<!--oq-page-hints-->[\s\S]*?<!--\/oq-page-hints-->/u;
+
+/**
+ * B574: index.html answers the landing and every /app path. Its template of
+ * landing chunk preloads sits between markers and is dropped for the
+ * workspace, which would only waste the bytes.
+ */
+export function stripPageHints(html: string): string {
+  return html.replace(PAGE_HINTS, '');
 }

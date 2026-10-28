@@ -24,9 +24,22 @@ function TierCard({ tier }: { readonly tier: HomeTier }) {
           </li>
         ))}
       </ul>
-      <a className={tier.recommended ? 'btn primary' : 'btn'} href={tier.action.href}>
+      {/* Both variants are in the markup; html[data-oq-signed-in] picks one,
+          so the card never redraws when the session is known. */}
+      <a
+        className={`${tier.recommended ? 'btn primary' : 'btn'}${tier.memberAction ? ' ps-guest' : ''}`}
+        href={tier.action.href}
+      >
         {tier.action.label}
       </a>
+      {tier.memberAction ? (
+        <a
+          className={`${tier.recommended ? 'btn primary' : 'btn'} ps-member`}
+          href={tier.memberAction.href}
+        >
+          {tier.memberAction.label}
+        </a>
+      ) : null}
     </div>
   );
 }

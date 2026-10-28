@@ -178,18 +178,21 @@ describe('static release delivery', () => {
   it('defers the application bundle on the landing only', async () => {
     const app = await createStaticApp({
       indexHtml:
-        '<!doctype html><script type="module" crossorigin src="/assets/index-abc.js"></script><b>%%OQ_ACTIVE%%</b>',
+        '<!doctype html><script type="module" crossorigin src="/assets/index-abc.js"></script><!--oq-page-hints--><link rel="modulepreload" href="/assets/LandingPage-x.js"><!--/oq-page-hints--><b>%%OQ_ACTIVE%%</b>',
     });
     const landing = await app.inject({ method: 'GET', url: '/' });
     expect(landing.body).toContain(
-      '<script defer src="/assets/oq-entry-loader-2.js" data-entry="/assets/index-abc.js">',
+      '<script defer src="/assets/oq-entry-loader-3.js" data-entry="/assets/index-abc.js">',
     );
     for (const url of ['/app', '/app/profile', '/reset-password']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.body, url).toContain(
         '<script type="module" crossorigin src="/assets/index-abc.js">',
       );
+      // B574: the workspace never preloads the landing chunk.
+      expect(response.body, url).not.toContain('LandingPage-x.js');
     }
+    expect(landing.body).toContain('LandingPage-x.js');
   });
 
   it('answers /faq and /support with their own prerendered documents', async () => {

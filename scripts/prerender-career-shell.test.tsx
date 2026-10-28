@@ -11,6 +11,7 @@ import {
   buildSitemap,
   compactCountryFitDocument,
   pageHead,
+  pageModuleHints,
   pageStylesheets,
   prerenderShells,
   sitemapUrls,
@@ -27,8 +28,10 @@ const authManifest = {
       'relocation-key',
       'docs-key',
       'calc-key',
+      'landing-page-key',
     ],
   },
+  'landing-page-key': { name: 'LandingPage', file: 'assets/LandingPage.js' },
   'resume-key': {
     name: 'resumeBuilderRoute',
     file: 'assets/resume.js',
@@ -346,5 +349,47 @@ describe('Country Fit route document budget', () => {
     expect(compactCountryFitDocument('<span>два</span> <span>сценария</span>')).toBe(
       '<span>два</span> <span>сценария</span>',
     );
+  });
+});
+
+describe('page module hints (B574)', () => {
+  const manifest = {
+    'index.html': {
+      file: 'assets/index-a.js',
+      imports: ['_react.js'],
+      dynamicImports: ['src/landing.css', 'src/LandingPage.tsx'],
+    },
+    '_react.js': { file: 'assets/react-a.js' },
+    '_Icon.js': { file: 'assets/Icon.es-a.js', imports: ['_react.js'] },
+    'src/landing.css': {
+      name: 'landing',
+      file: 'assets/landing-a.js',
+      css: ['assets/landing-a.css'],
+    },
+    'src/LandingPage.tsx': {
+      name: 'LandingPage',
+      file: 'assets/LandingPage-a.js',
+      imports: ['_react.js', '_Icon.js'],
+    },
+  };
+
+  it('preloads the page chunk and its own imports, not what the entry already loads', () => {
+    const hints = pageModuleHints(manifest, ['landing', 'LandingPage']);
+    expect(hints.startsWith('<!--oq-page-hints--><template id="oq-page-hints">')).toBe(true);
+    expect(hints.endsWith('<!--/oq-page-hints-->')).toBe(true);
+    expect(hints.match(/rel="modulepreload"/gu)).toHaveLength(3);
+    expect(hints).toContain('href="/assets/Icon.es-a.js"');
+    expect(hints).not.toContain('react-a.js');
+    expect(hints).toContain(
+      '<link rel="preload" as="style" crossorigin href="/assets/landing-a.css">',
+    );
+  });
+
+  it('rejects unknown chunks and unsafe paths', () => {
+    expect(() => pageModuleHints(manifest, ['Missing'])).toThrow('Expected one emitted page chunk');
+    expect(() =>
+      pageModuleHints({ ...manifest, '_Icon.js': { file: 'assets/../x.js' } }, ['LandingPage']),
+    ).toThrow('Invalid page preload path');
+    expect(pageModuleHints(undefined, ['LandingPage'])).toBe('');
   });
 });

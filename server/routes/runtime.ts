@@ -4,7 +4,7 @@ import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { legalSlugFromPath } from '../../shared/legalRegistry';
-import { applyLandingStats, deferEntryScript } from '../../shared/landingStats';
+import { applyLandingStats, deferEntryScript, stripPageHints } from '../../shared/landingStats';
 import { getLandingStats } from '../landing/landingStatsCache';
 import { registerAeoRoutes } from '../seo/aeoRoutes';
 import { registerSalaryMarketRoutes } from './salaryMarketRoutes';
@@ -80,7 +80,9 @@ function sendEntryDocument(reply: FastifyReply, document: string, staticRoot: st
   // B535: only the landing defers the application bundle; deep links keep it.
   const path = url.split('?')[0] ?? '';
   const landing = path === '/' || path === '/index.html';
-  return reply.type('text/html; charset=utf-8').send(landing ? deferEntryScript(html) : html);
+  return reply
+    .type('text/html; charset=utf-8')
+    .send(landing ? deferEntryScript(html) : stripPageHints(html));
 }
 
 /**
@@ -429,8 +431,14 @@ export async function registerStaticDelivery(
       // Sitemaps are generated in the maintenance process. Exclude the index
       // and child directory so files left in `dist` cannot shadow live routes.
       globIgnore: [
-        'server.mjs', 'health', 'sitemap.xml', 'sitemaps/**',
-        'llms.txt', 'llms-full.txt', 'salary-market.html', ENTRY_DOCUMENT,
+        'server.mjs',
+        'health',
+        'sitemap.xml',
+        'sitemaps/**',
+        'llms.txt',
+        'llms-full.txt',
+        'salary-market.html',
+        ENTRY_DOCUMENT,
       ],
       etag: false,
       lastModified: false,
