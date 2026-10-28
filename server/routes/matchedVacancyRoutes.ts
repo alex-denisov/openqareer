@@ -1,3 +1,4 @@
+import { selectionToCount, sweepSelectionFit } from './fitSelectionSweep';
 import { attachMarketSalaryEstimates } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
@@ -240,7 +241,7 @@ function buildMatchedResponse(
     data,
     page,
     facets: filters.offset === 0 ? list.facets : undefined,
-    warmIds: vacanciesToWarm(list.filtered),
+    ...fitWorkIds(list.filtered, filters.offset),
     campaignWithHypotheses: list.campaignWithHypotheses,
     listCached,
     pageAndExplanationsMs,
@@ -270,6 +271,37 @@ function logMatchedTiming(
       enrichmentsMs: elapsedMs(requestStartedAt),
     },
     'matched-vacancies-timing',
+  );
+}
+
+/** Rows whose text and fit a list read starts: the top, the best uncounted, the whole selection. */
+function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number) {
+  return {
+    warmIds: vacanciesToWarm(items),
+    countIds: offset === 0 ? selectionToCount(items) : [],
+  };
+}
+
+/**
+ * Не задерживает ответ списка: верх и лучшие непосчитанные строки дочитываются сразу, вся
+ * подборка — фоном по релевантности (CPO 28.10), расчёт ставится после текста.
+ */
+function startFitWork(
+  deps: RouteDeps,
+  candidateId: string,
+  response: { readonly warmIds: readonly string[]; readonly countIds: readonly string[] },
+  offset: number,
+  request: FastifyRequest,
+): void {
+  const engine = deps.multiSourceEngine;
+  const requestFit = (ids: readonly string[]) => requestFitForVacancyIds(deps, candidateId, ids);
+  preloadTopMatchedDescriptions(engine, response.warmIds, offset, request, requestFit);
+  if (typeof engine.preloadVacancyDescriptions !== 'function') return;
+  void sweepSelectionFit(
+    candidateId,
+    response.countIds,
+    (ids) => engine.preloadVacancyDescriptions!(ids, ids.length),
+    requestFit,
   );
 }
 
@@ -416,10 +448,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
   const shown = withShownPageFitViews(deps, candidate.id, orderedPage.data);
   const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
 
-  // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
-  // ответ списка; размер транспортного ответа страницей остаётся прежним.
-  const requestFit = (ids: readonly string[]) => requestFitForVacancyIds(deps, candidate.id, ids);
-  preloadTopMatchedDescriptions(multiSourceEngine, response.warmIds, offset, request, requestFit);
+  startFitWork(deps, candidate.id, response, offset, request);
   requestFitForShownPage(deps, candidate.id, response.data);
 
   logMatchedTiming(

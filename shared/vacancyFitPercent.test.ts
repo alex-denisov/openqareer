@@ -4,6 +4,7 @@ import {
   compareFitPercent,
   vacancyFitCeiling,
   vacancyFitPercent,
+  vacancyFitStage,
   vacancyFitTier,
 } from './vacancyFitPercent';
 
@@ -84,22 +85,32 @@ describe('vacancyFitCeiling: 10 points off per unconfirmed role, region or work 
   });
 });
 
-describe('compareFitPercent: by percent, descending; without a percent after all counted', () => {
-  it('orders counted rows by percent and puts the rest last', () => {
+describe('compareFitPercent: the CPO order of 28.10 evening', () => {
+  it('40 %+ by percent, then counting rows, then counted below 40 %, then rows that cannot be counted', () => {
     const rows = [
-      { id: 'pending', v: view(null, 12, {}, 'processing') },
+      { id: 'blocked', v: view(null, 12, { status: 'blocked', reason: 'blocked_gate' }) },
       { id: 'low', v: view(31) },
+      { id: 'pending', v: view(null, 12, {}, 'processing') },
+      { id: 'unseen', v: undefined },
       { id: 'few', v: view(100, 1) },
       { id: 'high', v: view(92) },
-      { id: 'mid', v: view(55) },
+      { id: 'zero', v: view(0) },
+      { id: 'edge', v: view(40) },
+      { id: 'empty', v: { state: 'no_description', requirements: [] } as VacancyFitView },
     ];
     const sorted = [...rows].sort((a, b) => compareFitPercent(a.v, b.v));
-    expect(sorted.map((row) => row.id).slice(0, 3)).toEqual(['high', 'mid', 'low']);
-    expect(
-      sorted
-        .slice(3)
-        .map((row) => row.id)
-        .sort(),
-    ).toEqual(['few', 'pending']);
+    const ids = sorted.map((row) => row.id);
+    expect(ids.slice(0, 2)).toEqual(['high', 'edge']);
+    expect(ids.slice(2, 4).sort()).toEqual(['pending', 'unseen']);
+    expect(ids.slice(4, 6)).toEqual(['low', 'zero']);
+    expect(ids.slice(6).sort()).toEqual(['blocked', 'empty', 'few']);
+  });
+
+  it('names the same stage the row shows', () => {
+    expect(vacancyFitStage(view(92))).toBe('counted');
+    expect(vacancyFitStage(view(12))).toBe('counted_low');
+    expect(vacancyFitStage(undefined)).toBe('counting');
+    expect(vacancyFitStage(view(null, 12, {}, 'refreshing'))).toBe('counting');
+    expect(vacancyFitStage({ state: 'failed', requirements: [] })).toBe('none');
   });
 });

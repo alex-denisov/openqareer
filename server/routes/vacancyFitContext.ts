@@ -26,6 +26,16 @@ export function readVacancyFitTarget(deps: RouteDeps, vacancyId: string) {
   };
 }
 
+/**
+ * An explicit empty region list means «no region limit» (campaign-region-never-auto): it
+ * confirms nothing and blocks nothing. Before 28.10 it blocked every vacancy with a known
+ * region, so 520 of QA_CANDIDATE's 991 rows could never get a percent.
+ */
+export function regionGate(region: string | undefined, regions: { readonly value: readonly string[]; readonly origin: string }): VacancyFitGate {
+  if (!region || regions.origin === 'default' || regions.value.length === 0) return gate('unknown', 'География не подтверждена.');
+  return gate(regions.value.includes(region) ? 'matched' : 'blocked', 'Сверено с географией выбранной кампании.');
+}
+
 function roleGate(roles: readonly string[], title: string): VacancyFitGate {
   if (!roles.length) return gate('unknown', 'Целевая роль не подтверждена.');
   const normalized = title.toLocaleLowerCase();
@@ -67,9 +77,7 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
       level: level === 'match' ? gate('matched', 'Уровень совпадает с целевым.')
         : level === 'below' || level === 'above' ? gate('blocked', 'Уровень отличается от целевого.')
           : gate('unknown', 'Уровень роли или кандидата неизвестен.'),
-      region: region && campaign.regions.origin !== 'default'
-        ? gate(campaign.regions.value.includes(region) ? 'matched' : 'blocked', 'Сверено с географией выбранной кампании.')
-        : gate('unknown', 'География не подтверждена.'),
+      region: regionGate(region, campaign.regions),
       workFormat: campaign.remoteOnly
         ? gate(target.isRemote ? 'matched' : 'unknown', 'В кампании выбрана удалённая работа.')
         : gate('unknown', 'Допустимый формат работы нужно подтвердить.'),
