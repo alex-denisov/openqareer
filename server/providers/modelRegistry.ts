@@ -163,6 +163,26 @@ export const modelRegistry: Record<ProviderId, ProviderDefinition> = {
         structuredOutput: true,
       },
       {
+        // Решение владельца 28.10: вторая ступень консультанта и фоновой
+        // обработки — сильнее и дешевле v4-flash ($0,14/$0,42 за 1M). Вышла
+        // после отсечного рубежа, допуск даёт поимённое решение.
+        id: 'deepseek/deepseek-v4.1-flash',
+        releaseDate: '2026-09-10',
+        pinned: true,
+        ownerPinned: true,
+        lifecycle: 'production',
+        structuredOutput: true,
+      },
+      {
+        // Решение владельца 28.10: третья ступень консультанта (замер 4/4 хода).
+        id: 'z-ai/glm-5.3-flash',
+        releaseDate: '2026-08-26',
+        pinned: true,
+        ownerPinned: true,
+        lifecycle: 'production',
+        structuredOutput: true,
+      },
+      {
         id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
         releaseDate: '2026-06-04',
         pinned: true,

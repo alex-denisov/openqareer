@@ -79,8 +79,6 @@ const configSchema = z.object({
   OPENQAREER_SYNTHETIC_AI_MODEL: z.string().min(1).optional(),
   OPENQAREER_SYNTHETIC_AI_FALLBACK: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_PERSONAL_AI_FALLBACK: blankAsUnset(z.string().min(1).max(512)),
-  OPENQAREER_COACH_EXCLUDED_ROUTES: blankAsUnset(z.string().min(1).max(512)),
-  OPENQAREER_COACH_PREFERRED_ROUTES: blankAsUnset(z.string().min(1).max(512)),
   OPENQAREER_STATIC_ROOT: z.string().min(1).optional(),
   OPENQAREER_LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info']).default('info'),
   OPENQAREER_ADMIN_USERNAME: z
@@ -277,10 +275,6 @@ export interface ServerConfig {
   /** Названные владельцем запасные ступени очереди по порядку (B183). */
   syntheticFallbacks?: readonly ProviderQueueEntry[];
   personalFallbacks?: readonly ProviderQueueEntry[];
-  /** Ступени, убранные только из очереди консультанта (28.10). */
-  coachExcludedRoutes?: readonly ProviderQueueEntry[];
-  /** Ступени, с которых начинается очередь консультанта (28.10: OpenAI первым). */
-  coachPreferredRoutes?: readonly ProviderQueueEntry[];
   providerCredentials?: Partial<Record<ProviderId, string>>;
   yandexFolderId?: string;
   staticRoot: string;
@@ -446,11 +440,6 @@ export function readServerConfig(
     syntheticModel: syntheticRoute.model,
     syntheticFallbacks: parseProviderQueue(parsed.OPENQAREER_SYNTHETIC_AI_FALLBACK),
     personalFallbacks: parseProviderQueue(parsed.OPENQAREER_PERSONAL_AI_FALLBACK),
-    coachExcludedRoutes: readCoachExcludedRoutes(parsed.OPENQAREER_COACH_EXCLUDED_ROUTES),
-    coachPreferredRoutes: readCoachRoutes(
-      parsed.OPENQAREER_COACH_PREFERRED_ROUTES,
-      DEFAULT_COACH_PREFERRED_ROUTES,
-    ),
     providerCredentials,
     yandexFolderId: environment.OPENQAREER_YANDEX_FOLDER_ID?.trim(),
     staticRoot: parsed.OPENQAREER_STATIC_ROOT ?? dirname(fileURLToPath(moduleUrl)),
@@ -497,35 +486,6 @@ export function readServerConfig(
  * Одного провайдера можно назвать дважды с разными моделями: очередь состоит
  * из моделей (B183).
  */
-/**
- * Ступени, которых нет в очереди консультанта (решение владельца 28.10, «Да,
- * убрать»): обе бесплатные модели OpenRouter за две недели не завершили ни
- * одного хода, Gemini отвечает 402, а каждый ход ждал их первыми. Значение по
- * умолчанию живёт в коде, чтобы правка дошла обычным выкатом; переменная его
- * переопределяет, `none` возвращает все ступени. Anthropic (28.10) — ключ лежит
- * на проде для замеров, но в очередь консультанта сам не встаёт.
- */
-export const DEFAULT_COACH_EXCLUDED_ROUTES =
-  'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,openrouter:openrouter/free,gemini,anthropic';
-
-/**
- * Решение владельца 28.10 («Да, OpenAI первым»): после исключения бесплатных
- * ступеней первой стала NVIDIA и дважды из восьми попыток упиралась в 50 с.
- */
-export const DEFAULT_COACH_PREFERRED_ROUTES = 'openai';
-
-function readCoachRoutes(
-  value: string | undefined,
-  fallback: string,
-): readonly ProviderQueueEntry[] {
-  if (value?.trim() === 'none') return [];
-  return parseProviderQueue(value ?? fallback);
-}
-
-function readCoachExcludedRoutes(value: string | undefined): readonly ProviderQueueEntry[] {
-  return readCoachRoutes(value, DEFAULT_COACH_EXCLUDED_ROUTES);
-}
-
 export function parseProviderQueue(value: string | undefined): readonly ProviderQueueEntry[] {
   if (!value) return [];
   return value

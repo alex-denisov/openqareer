@@ -161,33 +161,3 @@ describe('исключённые ступени очереди консульт�
     ]);
   });
 });
-
-describe('OpenAI первым в очереди консультанта (28.10, «Да, OpenAI первым»)', () => {
-  it('ставит предпочтённую ступень вперёд, остальные сохраняют порядок', () => {
-    const routes = selectProviderQueue({
-      head: { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
-      fallbacks: [
-        { provider: 'openrouter', model: 'openrouter/free' },
-        { provider: 'gemini', model: 'gemini-3.6-flash' },
-        { provider: 'nvidia', model: 'nvidia/nemotron-3-ultra-550b-a55b' },
-        { provider: 'openai', model: 'gpt-5.6-luna' },
-      ],
-      credentials: {
-        openrouter: 'openrouter-key-that-is-long-enough',
-        gemini: 'gemini-key-that-is-long-enough',
-        nvidia: 'nvidia-key-that-is-long-enough',
-        openai: 'openai-key-that-is-long-enough',
-      },
-      excluded: [
-        { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
-        { provider: 'openrouter', model: 'openrouter/free' },
-        { provider: 'gemini' },
-      ],
-      preferred: [{ provider: 'openai' }],
-    });
-    expect(routes.map((route) => `${route.provider}:${route.model}`)).toEqual([
-      'openai:gpt-5.6-luna',
-      'nvidia:nvidia/nemotron-3-ultra-550b-a55b',
-    ]);
-  });
-});

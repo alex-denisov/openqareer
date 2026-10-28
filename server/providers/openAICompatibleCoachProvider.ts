@@ -18,6 +18,7 @@ import {
   type CoachProviderResult,
 } from './coachProvider';
 import type { ProviderId } from './modelRegistry';
+import { outputBudgetForRole } from './openAICoachProvider';
 import {
   PROVIDER_STAGE_MAX_RETRIES,
   PROVIDER_STAGE_TIMEOUT_MS,
@@ -80,7 +81,8 @@ export class OpenAICompatibleCoachProvider implements CoachProvider {
           { role: 'system', content: careerInstructionsForRole(input.activeRole, input.internalPurpose) },
           { role: 'user', content: serializeCoachInput(input) },
         ],
-        max_completion_tokens: 2_400,
+        // Место под ответ по роли и под рассуждение — как у OpenAI: 2 400 резали стратега (28.10).
+        max_completion_tokens: outputBudgetForRole(input.activeRole, this.reasoningEffort ?? 'medium'),
         ...(this.reasoningEffort
           ? { reasoning_effort: this.reasoningEffort }
           : {}),

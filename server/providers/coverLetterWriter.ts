@@ -1,3 +1,4 @@
+import { MODEL_CHAINS, resolveChain } from './modelChains';
 import { z } from 'zod';
 import OpenAI from 'openai';
 import {
@@ -14,14 +15,9 @@ import {
 import { rankPitchFacts, type PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
-import {
-  cloudflareGatewayHeaders,
-  geminiGatewayBaseUrl,
-  type CloudflareGatewayConfig,
-} from './cloudflareAiGateway';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
 import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
-import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
+import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 /**
@@ -325,15 +321,6 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
   }
 }
 
-/**
- * Письмо говорит на `chat/completions`, как и называние ролей: ступень с
- * другим транспортом (Gemini) сюда не идёт — звать её этим клиентом значило
- * бы получить отказ и выдать его за молчание модели.
- */
-function speaksChatCompletions(provider: ProviderId): boolean {
-  return provider === 'openai' || modelRegistry[provider].transport === 'openai-compatible-chat';
-}
-
 function writerForRoute(route: ProviderRoute): LlmCoverLetterWriter {
   const definition = modelRegistry[route.provider].models.find((item) => item.id === route.model);
   return new LlmCoverLetterWriter({
@@ -377,58 +364,29 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
 }
 
 export interface CoverLetterWriterConfig {
-  readonly personalProvider?: ProviderId;
-  readonly model?: string;
-  readonly fallbacks?: readonly ProviderQueueEntry[];
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
-  /** Без тоннеля Gemini с прод-хоста не доходит (B183) — ступень пропускается. */
-  readonly cloudflareGateway?: CloudflareGatewayConfig;
-  /** Gemini на Vertex — голова очереди, когда настроен (решение владельца 25.09). */
+  /** Gemini на Vertex — голова цепочки, когда настроен (решение владельца 25.09). */
   readonly vertex?: VertexConfig;
 }
 
+/**
+ * Цепочка письма (28.10): Vertex → deepseek-v4.1-flash → gpt-5.6-luna; шаблон
+ * остаётся запасом за ней. Gemini AI Studio (402) и бесплатные маршруты ушли.
+ */
 export function buildCoverLetterWriter(
   config: CoverLetterWriterConfig,
 ): CoverLetterWriter | undefined {
-  const provider: ProviderId = config.personalProvider ?? 'openai';
-  const gateway = config.cloudflareGateway;
-  const routes = selectProviderQueue({
-    head: { provider, ...(config.model ? { model: config.model } : {}) },
-    fallbacks: config.fallbacks,
-    credentials: config.providerCredentials ?? {},
-  }).filter(
-    (route) =>
-      speaksChatCompletions(route.provider) ||
-      (route.provider === 'gemini' && gateway !== undefined),
+  const stages = resolveChain(
+    MODEL_CHAINS.coverLetters,
+    config.providerCredentials ?? {},
+    config.vertex,
   );
-  // Gemini — голова, как у называния ролей: бесплатный nemotron писал письмо
-  // дольше срока в 25 с (замер 25.09).
-  const stages = [
-    ...routes.filter((route) => route.provider === 'gemini'),
-    ...routes.filter((route) => route.provider !== 'gemini'),
-  ];
-  const vertexStage = config.vertex ? [vertexCoverLetterWriter(config.vertex)] : [];
-  if (stages.length === 0 && vertexStage.length === 0) return undefined;
-
+  if (stages.length === 0) return undefined;
   return new QueuedCoverLetterWriter(
-    [
-      ...vertexStage,
-      ...stages.map((route) =>
-        route.provider === 'gemini' && gateway
-          ? new GeminiCoverLetterWriter({
-              apiKey: route.apiKey,
-              model: route.model,
-              stage: `${route.provider}:${route.model}`,
-              baseUrl: geminiGatewayBaseUrl(gateway),
-              extraHeaders: cloudflareGatewayHeaders(gateway),
-            })
-          : writerForRoute(route),
-      ),
-    ],
-    [
-      ...(config.vertex ? [`vertex:${config.vertex.model}`] : []),
-      ...stages.map((route) => `${route.provider}:${route.model}`),
-    ],
+    stages.map((stage) =>
+      stage.kind === 'vertex' ? vertexCoverLetterWriter(stage.vertex) : writerForRoute(stage.route),
+    ),
+    stages.map((stage) => stage.label),
   );
 }
 

@@ -1,5 +1,8 @@
 import type { CoachTurnInput } from '../domain/coach';
 import type { BulkCompletion } from '../domain/measuredBulkClient';
+import { BULK_FALLBACK_PROVIDER } from './bulkGeminiFallback';
+import { chainStageLabel, MODEL_CHAINS } from './modelChains';
+import type { ProviderId } from './modelRegistry';
 import {
   CoachProviderError,
   type CoachProvider,
@@ -93,7 +96,6 @@ export class StructuredStageCoachProvider implements CoachProvider {
     attempts: Attempt[],
   ): Promise<CoachProviderResult | null> {
     if (!this.bulk) return null;
-    const model = 'deepseek/deepseek-v4-flash';
     try {
       const response = await withTimeout(
         this.bulk.complete({
@@ -103,31 +105,39 @@ export class StructuredStageCoachProvider implements CoachProvider {
           prefix: INSTRUCTIONS,
           input: JSON.stringify(stageData(input)),
           maxTokens: 4096,
+          // The caller's check runs inside the bulk chain: an answer it rejects moves the step to
+          // the next stage of the chain before the coach queue is asked.
+          ...(options?.accept
+            ? {
+                accept: (content: string) =>
+                  options.accept!(bulkResult(input, content, '', idempotencyKey).result),
+              }
+            : {}),
         }),
         this.stageTimeoutMs,
       );
-      const output = bulkResult(input, response.content, response.model, idempotencyKey);
+      const provider = bulkProvider(response.provider);
+      const output = bulkResult(input, response.content, response.model, idempotencyKey, provider);
       if (options?.accept && !options.accept(output.result)) {
-        attempts.push({
-          provider: 'openrouter',
-          model: response.model,
-          status: 'failed',
-          code: 'provider_output_invalid',
-        });
+        attempts.push({ provider, model: response.model, status: 'failed', code: 'provider_output_invalid' });
         return null;
       }
-      const succeeded: Attempt = {
-        provider: 'openrouter',
-        model: response.model,
-        status: 'succeeded',
-      };
+      const succeeded: Attempt = { provider, model: response.model, status: 'succeeded' };
       return { ...output, routing: { fallbackUsed: false, attempts: [succeeded] } };
     } catch (error) {
       const code = error instanceof CoachProviderError ? error.code : 'provider_unavailable';
-      attempts.push({ provider: 'openrouter', model, status: 'failed', code });
+      attempts.push({ provider: 'openrouter', model: BULK_CHAIN_LABEL, status: 'failed', code });
       return null;
     }
   }
+}
+
+/** The bulk chain as one attempt in the step's provenance: its stages are journaled by the worker. */
+const BULK_CHAIN_LABEL = MODEL_CHAINS.bulk.map(chainStageLabel).join(' → ');
+
+/** The Vertex stage answers as `gemini`; every other bulk stage lives behind OpenRouter. */
+function bulkProvider(provider: string): ProviderId {
+  return provider === BULK_FALLBACK_PROVIDER ? 'gemini' : 'openrouter';
 }
 
 function stageData(input: CoachTurnInput) {
@@ -150,9 +160,10 @@ function bulkResult(
   content: string,
   model: string,
   responseId: string,
+  provider: ProviderId = 'openrouter',
 ): CoachProviderResult {
   return {
-    provider: 'openrouter',
+    provider,
     model,
     responseId,
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },

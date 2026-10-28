@@ -1,3 +1,4 @@
+import { MODEL_CHAINS, resolveChain } from './modelChains';
 import {
   retryOn429,
   VertexTokenProvider,
@@ -14,15 +15,10 @@ import {
   roleNamingSchema,
 } from '../domain/roleNaming';
 import type { RoleNameLanguage } from '../domain/roleNameLanguage';
-import {
-  cloudflareGatewayHeaders,
-  geminiGatewayBaseUrl,
-  type CloudflareGatewayConfig,
-} from './cloudflareAiGateway';
 import { geminiResponseSchema } from './geminiSchema';
 import type { NamedRole } from '../../shared/roleProposals';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
-import { selectProviderQueue, type ProviderQueueEntry, type ProviderRoute } from './providerQueue';
+import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
@@ -514,70 +510,33 @@ export function describeRoleNamerQueue(namer: RoleNamer | undefined): string[] {
 }
 
 export interface RoleNamerConfig {
-  readonly personalProvider?: ProviderId;
-  readonly model?: string;
-  readonly fallbacks?: readonly ProviderQueueEntry[];
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
-  /** Без тоннеля ступень Gemini не строится вовсе — как и у хода коуча. */
-  readonly cloudflareGateway?: CloudflareGatewayConfig;
-  /** Gemini на Vertex — голова очереди называния, когда настроен (решение владельца 25.09). */
+  /** Gemini на Vertex — голова цепочки называния, когда настроен (решение владельца 25.09). */
   readonly vertex?: VertexConfig;
   /** Хранилище названных ролей: без него кэш теряется при каждом деплое (B191). */
   readonly cacheStore?: RoleNamingCacheStore;
 }
 
 /**
- * Называние ролей говорит на `chat/completions`. Ступень с другим транспортом
- * (Gemini, Anthropic, Cohere, Yandex) пропускается: звать её этим клиентом
- * значило бы получить отказ и выдать его за молчание модели.
+ * Цепочка называния (28.10): Vertex → deepseek-v4.1-flash → gpt-5.6-luna.
+ * Gemini AI Studio с кредитом в 402 и бесплатные маршруты из неё ушли.
  */
-function speaksChatCompletions(provider: ProviderId): boolean {
-  return provider === 'openai' || modelRegistry[provider].transport === 'openai-compatible-chat';
-}
-
-/**
- * Порядок ступеней называния — не порядок очереди коуча.
- *
- * Решение владельца 2026-09-03: голова называния — Gemini (14.7 с против 59 с
- * у бесплатной головы коуча на настоящих фактах кандидата). Остальные ступени
- * сохраняют свой порядок и остаются запасом.
- */
-function roleNamingOrder<T extends { provider: ProviderId }>(routes: readonly T[]): T[] {
-  return [
-    ...routes.filter((route) => route.provider === 'gemini'),
-    ...routes.filter((route) => route.provider !== 'gemini'),
-  ];
-}
-
 export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
-  const provider: ProviderId = config.personalProvider ?? 'openai';
-  const stages = roleNamingOrder(
-    selectProviderQueue({
-      head: { provider, ...(config.model ? { model: config.model } : {}) },
-      fallbacks: config.fallbacks,
-      credentials: config.providerCredentials ?? {},
-    }).filter(
-      (route) =>
-        speaksChatCompletions(route.provider) ||
-        // Gemini говорит своим транспортом и только через тоннель. Без тоннеля
-        // ступень пропускается: прямой вызов с прод-хоста не доходит (B183).
-        (route.provider === 'gemini' && config.cloudflareGateway !== undefined),
-    ),
+  const stages = resolveChain(
+    MODEL_CHAINS.roleNames,
+    config.providerCredentials ?? {},
+    config.vertex,
   );
-  const vertexStages = config.vertex ? [vertexRoleNamer(config.vertex)] : [];
-  if (stages.length === 0 && vertexStages.length === 0) return undefined;
-
-  const gateway = config.cloudflareGateway;
+  if (stages.length === 0) return undefined;
   return new CachedRoleNamer(
     // Чистка стоит до хранилища: невидимая метка в названии роли не должна
     // пережить рестарт вместе с ним (B210, B191).
     new HygienicRoleNamer({
       inner: new QueuedRoleNamer(
-        [...vertexStages, ...stages.map((route) => routeRoleNamer(route, gateway))],
-        [
-          ...(config.vertex ? [`vertex:${config.vertex.model}`] : []),
-          ...stages.map((route) => `${route.provider}:${route.model}`),
-        ],
+        stages.map((stage) =>
+          stage.kind === 'vertex' ? vertexRoleNamer(stage.vertex) : routeRoleNamer(stage.route),
+        ),
+        stages.map((stage) => stage.label),
       ),
     }),
     { ...(config.cacheStore ? { store: config.cacheStore } : {}) },
@@ -597,20 +556,9 @@ function vertexRoleNamer(vertex: VertexConfig): RoleNamer {
   });
 }
 
-/** Ступень называния по маршруту очереди: Gemini — через тоннель, остальные — chat-completions. */
-function routeRoleNamer(
-  route: ProviderRoute,
-  gateway: CloudflareGatewayConfig | undefined,
-): RoleNamer {
-  return route.provider === 'gemini' && gateway
-    ? new GeminiRoleNamer({
-        apiKey: route.apiKey,
-        model: route.model,
-        stage: `${route.provider}:${route.model}`,
-        baseUrl: geminiGatewayBaseUrl(gateway),
-        extraHeaders: cloudflareGatewayHeaders(gateway),
-      })
-    : new LlmRoleNamer({
+/** Ступень называния по маршруту цепочки: все они говорят на chat-completions. */
+function routeRoleNamer(route: ProviderRoute): RoleNamer {
+  return new LlmRoleNamer({
         apiKey: route.apiKey,
         model: route.model,
         stage: `${route.provider}:${route.model}`,

@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { BulkLlmConfig } from './bulkLlmConfig';
+import type { BulkLlmConfig, BulkOpenRouterLane } from './bulkLlmConfig';
+import { MODEL_CHAINS } from './modelChains';
 import type { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import type { BulkFallback } from './bulkGeminiFallback';
 /** The ledger refused a reservation: a spend limit, not a provider or answer failure (B556). */
@@ -12,6 +13,11 @@ export interface BulkLlmInput {
   prefix: string;
   input: string;
   maxTokens?: number;
+  /**
+   * Whether an answer is usable; an unusable one moves the call to the next stage of the chain.
+   * Default: the answer is JSON (every bulk task asks for JSON).
+   */
+  accept?: (content: string) => boolean;
 }
 export interface BulkLlmUsage {
   cost: number;
@@ -24,30 +30,72 @@ export interface BulkLlmResult {
   model: string;
   provider: string;
   usage: BulkLlmUsage;
-  /** Set when the answer came from the reserve lane: why OpenRouter was skipped (`openrouter_402`). */
+  /** Set when the answer came from a later stage: why the head was skipped (`vertex_429`). */
   fallbackReason?: string;
 }
-/** A switch of the channel to the reserve lane, for the worker journal and the owner alert. */
+/** A switch of the channel to a later stage, for the worker journal and the owner alert. */
 export interface BulkLlmChannelEvent {
   kind: 'fallback' | 'balance_exhausted';
   reason: string;
 }
 export interface BulkLlmClientOptions {
-  fallback?: BulkFallback;
+  /** Gemini on Vertex: its place in the chain is the `vertex` stage of `MODEL_CHAINS.bulk`. */
+  vertex?: BulkFallback;
   now?: () => number;
   onEvent?: (event: BulkLlmChannelEvent) => void;
 }
-/** OpenRouter is probed again no more often than this after it failed (27.10 incident). */
+/** A stage that had an outage is probed again no more often than this (27.10 incident). */
 export const PRIMARY_RETRY_AFTER_MS = 10 * 60_000;
-/** Outages worth the reserve lane: no balance, rate limit after retries, server errors. */
+/** Outages worth cooling a stage for: no balance, rate limit after retries, server errors. */
 function isOutage(status: number): boolean {
   return status === 402 || status === 429 || status >= 500;
 }
-function transportReason(error: unknown): string {
+function transportReason(prefix: string, error: unknown): string {
   return error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
-    ? 'openrouter_timeout'
-    : 'openrouter_network';
+    ? `${prefix}_timeout`
+    : `${prefix}_network`;
 }
+/** A stage failure: `outage` cools the stage, any failure moves the call to the next stage. */
+class BulkStageError extends Error {
+  constructor(
+    readonly reason: string,
+    readonly outage: boolean,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+/** Money is uncertain or a cap is hit: the chain stops, no later stage is asked. */
+class BulkSpendError extends Error {}
+const ACTUAL_COST_EXCEEDED = 'Actual cost exceeded reservation';
+const UNKNOWN_USAGE = 'Unknown bulk usage; reservation retained';
+
+function isJsonAnswer(content: string): boolean {
+  const trimmed = content.trim();
+  const body = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu)?.[1] ?? trimmed;
+  try {
+    JSON.parse(body);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Vertex failures: an HTTP status from the reserve module, a transport error, or a bad answer. */
+function vertexStageError(error: unknown): BulkStageError {
+  const message = error instanceof Error ? error.message : 'vertex failure';
+  const status = Number(/status (\d{3})/u.exec(message)?.[1]);
+  if (Number.isFinite(status)) return new BulkStageError(`vertex_${status}`, isOutage(status), message);
+  const transport =
+    error instanceof Error && ['TimeoutError', 'AbortError', 'TypeError'].includes(error.name);
+  return transport
+    ? new BulkStageError(transportReason('vertex', error), true, message)
+    : new BulkStageError('vertex_invalid', false, message);
+}
+
+type BulkStage =
+  | { readonly kind: 'openrouter'; readonly id: string; readonly lane: BulkOpenRouterLane }
+  | { readonly kind: 'vertex'; readonly id: string; readonly vertex: BulkFallback };
 const usageSchema = z.object({
   usage: z.object({
     cost: z.number().finite().nonnegative(),
@@ -89,15 +137,27 @@ export class BulkLlmClient {
     private readonly delay: (ms: number) => Promise<void> = (ms) =>
       new Promise((r) => setTimeout(r, ms)),
     private readonly options: BulkLlmClientOptions = {},
-  ) {}
-  private primaryDown: { until: number; reason: string } | null = null;
+  ) {
+    this.stages = MODEL_CHAINS.bulk.flatMap((stage): BulkStage[] => {
+      if (stage.provider === 'vertex') {
+        const vertex = options.vertex;
+        return vertex ? [{ kind: 'vertex', id: 'vertex', vertex }] : [];
+      }
+      const lane = config.lanes.find((item) => item.model === stage.model);
+      return lane ? [{ kind: 'openrouter', id: lane.model, lane }] : [];
+    });
+  }
+  private readonly stages: readonly BulkStage[];
+  private readonly down = new Map<string, { until: number; reason: string }>();
   private now(): number {
     return (this.options.now ?? Date.now)();
   }
-  private get providers(): string[] {
-    return this.config.provider.split(',');
+  /** Stages of the chain in order, cooling ones left out; all of them when every one cools. */
+  private openStages(): readonly BulkStage[] {
+    const open = this.stages.filter((stage) => (this.down.get(stage.id)?.until ?? 0) <= this.now());
+    return open.length > 0 ? open : this.stages;
   }
-  private body(input: BulkLlmInput) {
+  private validate(input: BulkLlmInput): number {
     if (
       !['public', 'candidate'].includes(input.dataClass) ||
       !input.runId ||
@@ -109,15 +169,18 @@ export class BulkLlmClient {
     const maxTokens = input.maxTokens ?? 2048;
     if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 8192)
       throw new Error('Invalid maxTokens');
+    return maxTokens;
+  }
+  private body(input: BulkLlmInput, lane: BulkOpenRouterLane) {
+    const maxTokens = this.validate(input);
+    const providers = lane.provider.split(',');
     const inputUpperBound = Buffer.byteLength(input.prefix) + Buffer.byteLength(input.input) + 4096;
     const costUpperBound =
-      (inputUpperBound * this.config.inputPerMillionUsd +
-        maxTokens * this.config.outputPerMillionUsd) /
-      1e6;
+      (inputUpperBound * lane.inputPerMillionUsd + maxTokens * lane.outputPerMillionUsd) / 1e6;
     if (inputUpperBound > 2_000_000 || costUpperBound > this.config.perRequestUsd)
       throw new Error('Request exceeds reserved budget');
     return {
-      model: this.config.model,
+      model: lane.model,
       messages: [
         { role: 'system', content: input.prefix },
         { role: 'user', content: input.input },
@@ -127,15 +190,15 @@ export class BulkLlmClient {
       usage: { include: true },
       provider: {
         // Список закреплённых провайдеров по порядку: цена или лимит одного не останавливают работу.
-        order: this.providers,
-        only: this.providers,
-        allow_fallbacks: this.providers.length > 1,
+        order: providers,
+        only: providers,
+        allow_fallbacks: providers.length > 1,
         require_parameters: true,
         data_collection: 'deny',
-        quantizations: [this.config.quantization],
+        quantizations: [lane.quantization],
         max_price: {
-          prompt: this.config.inputPerMillionUsd,
-          completion: this.config.outputPerMillionUsd,
+          prompt: lane.inputPerMillionUsd,
+          completion: lane.outputPerMillionUsd,
         },
       },
     };
@@ -162,14 +225,55 @@ export class BulkLlmClient {
     }
     throw new Error('Unreachable');
   }
+  /**
+   * The bulk chain (`MODEL_CHAINS.bulk`, 28.10): Vertex → deepseek-v4.1-flash → glm-5.3-flash.
+   * A failed or unusable answer moves the call to the next stage; an outage also cools the stage
+   * for ten minutes. A spend cap or an uncertain charge stops the chain at once.
+   */
   async complete(input: BulkLlmInput): Promise<BulkLlmResult> {
-    const body = this.body(input);
-    if (this.options.fallback && this.primaryDown && this.now() < this.primaryDown.until)
-      return this.completeFallback(input, this.primaryDown.reason);
-    const id = this.ledger.reserve(
-      { ...input, model: this.config.model, provider: this.config.provider },
-      this.config,
-    );
+    this.validate(input);
+    if (this.stages.length === 0) throw new Error('Bulk chain has no stages');
+    const accept = input.accept ?? isJsonAnswer;
+    const stages = this.openStages();
+    let fallbackReason = stages[0] === this.stages[0] ? undefined : this.down.get(this.stages[0].id)?.reason;
+    let lastError: unknown;
+    for (const stage of stages) {
+      try {
+        const result = await this.completeStage(stage, input);
+        this.down.delete(stage.id);
+        if (!accept(result.content)) {
+          this.ledger.event(`answer_rejected_${stage.kind}`);
+          fallbackReason ??= `${stage.kind}_answer_rejected`;
+          lastError = new Error(`Bulk answer rejected (${stage.id})`);
+          continue;
+        }
+        return fallbackReason ? { ...result, fallbackReason } : result;
+      } catch (error) {
+        if (!(error instanceof BulkStageError)) throw error;
+        lastError = error;
+        fallbackReason ??= error.reason;
+        this.ledger.event(`fallback_${error.reason}`);
+        if (error.outage) this.cool(stage, error.reason);
+      }
+    }
+    throw lastError;
+  }
+  private cool(stage: BulkStage, reason: string) {
+    this.down.set(stage.id, { until: this.now() + PRIMARY_RETRY_AFTER_MS, reason });
+    this.options.onEvent?.({ kind: 'fallback', reason });
+    if (reason === 'openrouter_402') this.options.onEvent?.({ kind: 'balance_exhausted', reason });
+  }
+  private completeStage(stage: BulkStage, input: BulkLlmInput): Promise<BulkLlmResult> {
+    return stage.kind === 'vertex'
+      ? this.completeVertex(stage.vertex, input)
+      : this.completeOpenRouter(stage.lane, input);
+  }
+  private async completeOpenRouter(
+    lane: BulkOpenRouterLane,
+    input: BulkLlmInput,
+  ): Promise<BulkLlmResult> {
+    const body = this.body(input, lane);
+    const id = this.ledger.reserve({ ...input, model: lane.model, provider: lane.provider }, this.config);
     if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     let response: Response;
     try {
@@ -178,81 +282,82 @@ export class BulkLlmClient {
       // No answer came back: nothing was billed, so the hold is freed at once.
       this.ledger.release(id);
       this.ledger.event('completion_failed_or_unknown');
-      return this.failover(input, transportReason(error), error);
+      const reason = transportReason('openrouter', error);
+      throw new BulkStageError(reason, true, error instanceof Error ? error.message : reason);
     }
     if (!response.ok) {
       this.ledger.release(id);
       await response.body?.cancel();
-      const failure = new Error(`Bulk provider status ${response.status}`);
-      if (isOutage(response.status))
-        return this.failover(input, `openrouter_${response.status}`, failure);
-      this.ledger.event('completion_failed_or_unknown');
-      throw failure;
+      throw new BulkStageError(
+        `openrouter_${response.status}`,
+        isOutage(response.status),
+        `Bulk provider status ${response.status}`,
+      );
     }
-    return this.settlePrimary(id, response);
+    return this.settleOpenRouter(id, lane, response);
   }
-  private async settlePrimary(id: string, response: Response): Promise<BulkLlmResult> {
+  private async settleOpenRouter(
+    id: string,
+    lane: BulkOpenRouterLane,
+    response: Response,
+  ): Promise<BulkLlmResult> {
+    let result: unknown;
     try {
-      const result: unknown = await response.json();
+      result = await response.json();
       const usage = parseUsage(result);
       const actual = z
         .object({ model: z.string().optional(), provider: z.string().optional() })
         .parse(result);
       this.ledger.settle(id, usage, actual);
-      if (usage.cost > this.config.perRequestUsd)
-        throw new Error('Actual cost exceeded reservation');
-      const completion = completionSchema.parse(result);
-      const content = completion.choices[0]?.message.content;
-      if (typeof content !== 'string' || !content) throw new Error('Invalid bulk completion');
-      if (completion.model !== this.config.model) throw new Error('Unexpected bulk model');
-      this.primaryDown = null;
+      if (usage.cost > this.config.perRequestUsd) throw new BulkSpendError(ACTUAL_COST_EXCEEDED);
+      const completion = completionSchema.safeParse(result);
+      const content = completion.success ? completion.data.choices[0]?.message.content : undefined;
+      // OpenRouter may answer with a dated revision of the pinned model, never with another model.
+      if (!completion.success || !content || !completion.data.model.startsWith(lane.model))
+        throw new BulkStageError('openrouter_invalid', false, 'Invalid bulk completion');
       return {
         content,
-        model: completion.model,
-        provider: completion.provider ?? this.config.provider,
+        model: completion.data.model,
+        provider: completion.data.provider ?? lane.provider,
         usage,
       };
     } catch (error) {
       this.ledger.event('completion_failed_or_unknown');
-      throw error;
+      if (error instanceof BulkStageError || error instanceof BulkSpendError) throw error;
+      // The charge could not be read: the hold stays, and no later stage is asked.
+      throw new BulkSpendError(UNKNOWN_USAGE);
     }
   }
-  private failover(input: BulkLlmInput, reason: string, error: unknown): Promise<BulkLlmResult> {
-    const fallback = this.options.fallback;
-    if (!fallback) throw error;
-    this.ledger.event(`fallback_${reason}`);
-    this.primaryDown = { until: this.now() + PRIMARY_RETRY_AFTER_MS, reason };
-    this.options.onEvent?.({ kind: 'fallback', reason });
-    if (reason === 'openrouter_402') this.options.onEvent?.({ kind: 'balance_exhausted', reason });
-    return this.completeFallback(input, reason);
-  }
-  private async completeFallback(input: BulkLlmInput, reason: string): Promise<BulkLlmResult> {
-    const fallback = this.options.fallback!;
+  private async completeVertex(vertex: BulkFallback, input: BulkLlmInput): Promise<BulkLlmResult> {
     const id = this.ledger.reserve(
-      { ...input, model: fallback.model, provider: fallback.provider },
+      { ...input, model: vertex.model, provider: vertex.provider },
       this.config,
     );
     if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     let answer: Awaited<ReturnType<BulkFallback['complete']>>;
     try {
-      answer = await fallback.complete({
+      answer = await vertex.complete({
         prefix: input.prefix,
         input: input.input,
         maxTokens: input.maxTokens ?? 2048,
       });
     } catch (error) {
       this.ledger.release(id);
-      this.ledger.event('fallback_failed');
-      throw error;
+      throw vertexStageError(error);
     }
-    this.ledger.settle(id, answer.usage, { model: answer.model, provider: fallback.provider });
+    this.ledger.settle(id, answer.usage, { model: answer.model, provider: vertex.provider });
     return {
       content: answer.content,
       model: answer.model,
-      provider: fallback.provider,
+      provider: vertex.provider,
       usage: answer.usage,
-      fallbackReason: reason,
     };
+  }
+  /** Batches go to the first OpenRouter lane: only public inputs, no reserve lane. */
+  private get batchLane(): BulkOpenRouterLane {
+    const lane = this.config.lanes[0];
+    if (!lane) throw new Error('Bulk chain has no OpenRouter lane');
+    return lane;
   }
   async submitBatch(inputs: BulkLlmInput[]): Promise<{ reservationId: string; batchId: string }> {
     if (!this.config.batchEnabled) throw new Error('Batch endpoint eligibility not enabled');
@@ -262,19 +367,20 @@ export class BulkLlmClient {
       inputs.some((i) => i.dataClass !== 'public' || i.runId !== inputs[0].runId)
     )
       throw new Error('Batch requires public inputs from one run');
+    const lane = this.batchLane;
     const requests = inputs.map((input, index) => ({
       custom_id: String(index),
-      body: this.body(input),
+      body: this.body(input, lane),
     }));
     const id = this.ledger.reserve(
-      { ...inputs[0], model: this.config.model, provider: this.config.provider },
+      { ...inputs[0], model: lane.model, provider: lane.provider },
       this.config,
       inputs.length * this.config.perRequestUsd,
     );
     if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     try {
       const response = await this.request('/batches', {
-        model: this.config.model,
+        model: lane.model,
         endpoint: '/v1/chat/completions',
         provider: requests[0].body.provider,
         requests,

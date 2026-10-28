@@ -1,4 +1,4 @@
-import { cloudflareGatewayHeaders, geminiGatewayBaseUrl } from './cloudflareAiGateway';
+import { MODEL_CHAINS, resolveChain } from './modelChains';
 import { VertexTokenProvider, vertexPublisherBaseUrl, retryOn429 } from './vertexAi';
 import { geminiResponseSchema } from './geminiSchema';
 import {
@@ -6,7 +6,6 @@ import {
   type CoverLetterWriterConfig,
   type CoverLetterOutcome,
 } from './coverLetterWriter';
-import { selectProviderQueue } from './providerQueue';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import { PROVIDER_STAGE_TIMEOUT_MS, PROVIDER_STAGE_MAX_RETRIES } from './stageTimeout';
 import { trimIncompleteFinalSentence } from '../domain/vacancyPitchService';
@@ -186,50 +185,31 @@ export class GeminiLinkedinDraftWriter implements LinkedinDraftWriter {
     );
   }
 }
+/** Цепочка черновиков (28.10): Vertex → deepseek-v4.1-flash → gpt-5.6-luna. */
 export function buildLinkedinDraftWriter(config: CoverLetterWriterConfig): LinkedinDraftWriter {
-  const routes = selectProviderQueue({
-    head: { provider: config.personalProvider ?? 'openai', model: config.model },
-    fallbacks: config.fallbacks,
-    credentials: config.providerCredentials ?? {},
-  });
-  const stages: LinkedinDraftWriter[] = [];
-  if (config.vertex) {
-    const tokens = new VertexTokenProvider(config.vertex);
-    stages.push(
-      new GeminiLinkedinDraftWriter({
-        apiKey: '',
-        model: config.vertex.model,
-        baseUrl: vertexPublisherBaseUrl(config.vertex),
-        authHeaders: async () => ({ Authorization: `Bearer ${await tokens.token()}` }),
-      }),
-    );
-  }
-  for (const route of [
-    ...routes.filter((item) => item.provider === 'gemini'),
-    ...routes.filter((item) => item.provider !== 'gemini'),
-  ]) {
-    if (route.provider === 'gemini' && config.cloudflareGateway) {
-      stages.push(
-        new GeminiLinkedinDraftWriter({
-          apiKey: route.apiKey,
-          model: route.model,
-          baseUrl: geminiGatewayBaseUrl(config.cloudflareGateway),
-          extraHeaders: cloudflareGatewayHeaders(config.cloudflareGateway),
-        }),
-      );
-    } else if (
-      route.provider === 'openai' ||
-      modelRegistry[route.provider].transport === 'openai-compatible-chat'
-    ) {
-      stages.push(
-        new LlmLinkedinDraftWriter({
-          apiKey: route.apiKey,
-          model: route.model,
-          provider: route.provider,
-          baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-        }),
-      );
-    }
-  }
-  return new QueuedLinkedinDraftWriter(stages);
+  const stages = resolveChain(
+    MODEL_CHAINS.linkedinDrafts,
+    config.providerCredentials ?? {},
+    config.vertex,
+  );
+  return new QueuedLinkedinDraftWriter(
+    stages.map((stage) => {
+      if (stage.kind === 'vertex') {
+        const tokens = new VertexTokenProvider(stage.vertex);
+        return new GeminiLinkedinDraftWriter({
+          apiKey: '',
+          model: stage.vertex.model,
+          baseUrl: vertexPublisherBaseUrl(stage.vertex),
+          authHeaders: async () => ({ Authorization: `Bearer ${await tokens.token()}` }),
+        });
+      }
+      const { route } = stage;
+      return new LlmLinkedinDraftWriter({
+        apiKey: route.apiKey,
+        model: route.model,
+        provider: route.provider,
+        baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+      });
+    }),
+  );
 }

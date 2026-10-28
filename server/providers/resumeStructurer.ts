@@ -10,6 +10,7 @@ import {
 import type { ParsedResume } from '../../src/features/workspace/resumeParser';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import { HygienicResumeStructurer } from './hygienicResumeStructurer';
+import { chainRoutes, MODEL_CHAINS } from './modelChains';
 
 /** Enough for a long two-column CV; longer input is truncated, never guessed. */
 const MAX_SOURCE_CHARACTERS = 60_000;
@@ -173,38 +174,68 @@ function extractJsonObject(content: string): string | null {
 }
 
 export interface ResumeStructurerConfig {
-  personalProvider?: ProviderId;
-  model?: string;
   providerCredentials?: Partial<Record<ProviderId, string>>;
 }
 
 /**
- * A real resume is personal data, so it is routed to the **personal** provider
- * — the same one `PrivacyAwareCoachProvider` reserves for candidate content —
- * never to the synthetic pool.
+ * Потолок ступени: снаружи весь разбор ограничен `resumeStructuringBudgetMs`,
+ * и ступень, занявшая его целиком, не оставила бы запасным ни секунды.
+ */
+export const RESUME_STAGE_TIMEOUT_MS = 25_000;
+
+/**
+ * Ступени цепочки по порядку: молчание или сбой одной ведёт к следующей.
+ * Провенанс называет ступень, которая ответила последней.
+ */
+export class QueuedResumeStructurer implements ResumeStructurer {
+  private answered: ResumeStructurer | undefined;
+
+  constructor(readonly stages: readonly ResumeStructurer[]) {}
+
+  get provenance(): ResumeStructurer['provenance'] {
+    return (this.answered ?? this.stages[0])?.provenance;
+  }
+
+  async structure(sourceText: string): Promise<ParsedResume | null> {
+    for (const stage of this.stages) {
+      const parsed = await stage.structure(sourceText).catch(() => null);
+      if (parsed !== null) {
+        this.answered = stage;
+        return parsed;
+      }
+    }
+    return null;
+  }
+}
+
+/**
+ * Резюме — персональные данные; цепочка разбора только из платных маршрутов
+ * (решение владельца 28.10): бесплатный nemotron был её единственной ступенью.
  *
- * Returns `undefined` when no credential is configured, so a deployment without
+ * Returns `undefined` when no stage has a credential, so a deployment without
  * a provider key keeps working on the deterministic parser alone.
  */
 export function buildResumeStructurer(
   config: ResumeStructurerConfig,
 ): ResumeStructurer | undefined {
-  const provider: ProviderId = config.personalProvider ?? 'openai';
-  const apiKey = config.providerCredentials?.[provider];
-  if (!apiKey) return undefined;
-  const definition = modelRegistry[provider];
-  const model = config.model ?? definition.models[0]?.id;
-  if (!model) return undefined;
+  const routes = chainRoutes(MODEL_CHAINS.resumeParsing, config.providerCredentials ?? {});
+  if (routes.length === 0) return undefined;
   // Чистка стоит на самой сборке: разобранное резюме кандидат правит в
   // «Студии» и уносит в отклики, и пути мимо неё быть не должно (B210).
   return new HygienicResumeStructurer({
-    inner: new LlmResumeStructurer({
-      apiKey,
-      model,
-      baseUrl: provider === 'openai' ? undefined : definition.baseUrl,
-      structuredOutput:
-        definition.models.find((item) => item.id === model)?.structuredOutput ??
-        true,
-    }),
+    inner: new QueuedResumeStructurer(
+      routes.map(
+        (route) =>
+          new LlmResumeStructurer({
+            apiKey: route.apiKey,
+            model: route.model,
+            baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+            timeoutMs: RESUME_STAGE_TIMEOUT_MS,
+            structuredOutput:
+              modelRegistry[route.provider].models.find((item) => item.id === route.model)
+                ?.structuredOutput ?? true,
+          }),
+      ),
+    ),
   });
 }

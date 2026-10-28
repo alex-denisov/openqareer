@@ -94,13 +94,25 @@ async function askPart(bulk: BulkCompletion, part: string, runId: string) {
       prefix: PREFIX,
       input: part,
       maxTokens: 2_048,
+      accept: (content) => readAnswer(content) !== null,
     }),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('candidate_facts_timeout')), PART_TIMEOUT_MS).unref?.(),
     ),
   ]);
-  const json = response.content.replace(/^```(?:json)?\s*|\s*```$/gu, '');
-  return { facts: answerSchema.parse(JSON.parse(json)).facts, cost: response.usage.cost };
+  const answer = readAnswer(response.content);
+  if (!answer) throw new Error('candidate_facts_invalid');
+  return { facts: answer.facts, cost: response.usage.cost };
+}
+
+/** The facts the answer lists, or `null` when it is not the asked JSON (the chain then moves on). */
+function readAnswer(content: string) {
+  try {
+    const parsed = answerSchema.safeParse(JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/gu, '')));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

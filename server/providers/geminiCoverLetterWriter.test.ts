@@ -78,22 +78,14 @@ describe('GeminiCoverLetterWriter (B266)', () => {
     expect(outcome.failure?.detail).not.toContain('secret');
   });
 
-  it('очередь письма ставит Gemini первым, когда есть тоннель', () => {
+  it('цепочка письма: deepseek-v4.1-flash → luna, Gemini AI Studio (402) в ней нет (28.10)', () => {
     const writer = buildCoverLetterWriter({
-      personalProvider: 'openrouter',
-      providerCredentials: { openrouter: 'o', gemini: 'g' },
-      cloudflareGateway: { accountId: 'a', gatewayId: 'openqareer' },
+      providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' },
     }) as unknown as { descriptors: readonly string[] };
 
-    expect(writer.descriptors[0]).toMatch(/^gemini:/u);
-  });
-
-  it('без тоннеля Gemini в очередь письма не попадает', () => {
-    const writer = buildCoverLetterWriter({
-      personalProvider: 'openrouter',
-      providerCredentials: { openrouter: 'o', gemini: 'g' },
-    }) as unknown as { descriptors: readonly string[] };
-
-    expect(writer.descriptors.some((stage) => stage.startsWith('gemini:'))).toBe(false);
+    expect(writer.descriptors).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openai:gpt-5.6-luna',
+    ]);
   });
 });

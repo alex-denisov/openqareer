@@ -15,7 +15,7 @@ import { registerAdminPartnerRoutes } from './adminPartnerRoutes';
 import { toAdminSourceSchedule } from '../vacancies/adminSourceSchedule';
 import { buildAdminSourcePage } from '../vacancies/adminSourcePage';
 import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
-import { queueFallbackDescriptors } from '../providers/providerQueue';
+import { chainRoutes, chainStageLabel, MODEL_CHAINS } from '../providers/modelChains';
 import { describeRoleNamerQueue } from '../providers/roleNamer';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
 import { registerHhCrawlFilterRoutes } from './hhCrawlFilterRoutes';
@@ -262,38 +262,30 @@ async function toggleSource(deps: RouteDeps, request: FastifyRequest, reply: Fas
   };
 }
 
-function providerStatusData(deps: RouteDeps) {
-  const { config } = deps;
+/** Ход консультанта идёт по цепочке из кода (28.10): отчёт берёт её у самой маршрутизации. */
+function coachChainRoute(deps: RouteDeps) {
+  const [head, ...rest] = chainRoutes(MODEL_CHAINS.coach, deps.config.providerCredentials ?? {});
   return {
-    personalDataRoute: {
-      provider: config.personalProvider ?? 'openai',
-      model: config.model,
-      // У персонального класса данных теперь такая же очередь (решение
-      // владельца 2026-09-02), и отчёт обязан её показывать.
-      fallbackModels: queueFallbackDescriptors({
-        head: { provider: config.personalProvider ?? 'openai', model: config.model },
-        fallbacks: config.personalFallbacks,
-        credentials: config.providerCredentials ?? {},
-      }),
-    },
-    syntheticDataRoute: {
-      provider: config.syntheticProvider ?? 'openrouter',
-      model: config.syntheticModel ?? 'nvidia/nemotron-3-ultra-550b-a55b:free',
-      // Порядок берётся у самой маршрутизации, а не у каталога: иначе отчёт
-      // расходится с тем, что сервер делает на самом деле (B183).
-      fallbackModels: queueFallbackDescriptors({
-        head: {
-          provider: config.syntheticProvider ?? 'openrouter',
-          model: config.syntheticModel,
-        },
-        fallbacks: config.syntheticFallbacks,
-        credentials: config.providerCredentials ?? {},
-      }),
-      outputValidation: 'server-side-strict-schema',
-    },
+    provider: head?.provider ?? null,
+    model: head?.model ?? null,
+    fallbackModels: rest.map((route) => ({ provider: route.provider, model: route.model })),
+  };
+}
+
+function providerStatusData(deps: RouteDeps) {
+  return {
+    personalDataRoute: coachChainRoute(deps),
+    syntheticDataRoute: { ...coachChainRoute(deps), outputValidation: 'server-side-strict-schema' },
+    // Цепочки всех механик, как они названы в коде: без ключа ступень пропускается.
+    modelChains: Object.fromEntries(
+      Object.entries(MODEL_CHAINS).map(([mechanic, chain]) => [
+        mechanic,
+        chain.map(chainStageLabel),
+      ]),
+    ),
     qualityFloor: 'gpt-5.6-sol',
     promptRevision: CAREER_SUPER_PROMPT_REVISION,
-    providers: config.providerCatalogStatus ?? [],
+    providers: deps.config.providerCatalogStatus ?? [],
     // Очередь называния ролей и её последние отказы: без них молчание головы
     // очереди на проде недоказуемо — лог сервера снаружи не читается
     // (INC-035, B186).
