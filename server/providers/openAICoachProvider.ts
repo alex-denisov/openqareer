@@ -9,9 +9,9 @@ import {
 import {
   COACH_TURN_JSON_SCHEMA,
   coachProviderTurnResultSchema as coachTurnResultSchema,
-  serializeCoachInput,
   type CoachTurnInput,
 } from '../domain/coach';
+import { serializeCoachInput } from '../domain/coachInputSerialization';
 import { careerInstructionsForRole } from '../prompts/careerRolePrompts';
 import {
   CoachProviderError,

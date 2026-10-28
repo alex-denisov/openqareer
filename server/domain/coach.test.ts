@@ -4,8 +4,8 @@ import {
   careerActionProposalSchema,
   coachTurnInputSchema,
   coachTurnResultSchema,
-  serializeCoachInput,
 } from './coach';
+import { serializeCoachInput } from './coachInputSerialization';
 
 describe('career coach domain contract', () => {
   it('validates a bounded dialogue and serializes untrusted content as data', () => {
@@ -261,5 +261,83 @@ describe('career coach domain contract', () => {
       'endDate',
       'teamSize',
     ]);
+  });
+});
+
+describe('coach input cache prefix (B580)', () => {
+  const summary = {
+    ref: 'consultant-summary:s1',
+    stage: 'career' as const,
+    createdAt: '2026-10-28T10:00:00.000Z',
+    summary: 'Кандидат ищет роль руководителя платформы.',
+  };
+  const snippet = (content: string) => ({
+    ref: `consultant-message:${content.length}`,
+    stage: 'career' as const,
+    role: 'user' as const,
+    createdAt: '2026-10-28T10:01:00.000Z',
+    content,
+  });
+  const turn = (overrides: Record<string, unknown>) =>
+    coachTurnInputSchema.parse({
+      candidateReference: 'candidate-test-001',
+      dataClass: 'personal',
+      careerContext: {
+        roles: ['Head of Platform'],
+        locations: ['Москва'],
+        salaryFloorRubles: null,
+        formats: [],
+        relocation: false,
+      },
+      knowledgeContext: {
+        confirmedFacts: [],
+        documents: [],
+        openQuestions: [],
+        consultantHistory: { summaries: [summary], messageSnippets: [] },
+      },
+      ...overrides,
+    });
+
+  it('keeps the profile, summaries and instructions byte-identical between two turns', () => {
+    const first = serializeCoachInput(
+      turn({
+        phase: 'discovery',
+        messages: [{ id: 'm1', role: 'user', content: 'Какие роли мне подходят?' }],
+        knowledgeContext: {
+          confirmedFacts: [],
+          documents: [],
+          openQuestions: [],
+          consultantHistory: { summaries: [summary], messageSnippets: [snippet('роли')] },
+        },
+      }),
+    );
+    const second = serializeCoachInput(
+      turn({
+        phase: 'evidence',
+        marketObservations: [],
+        messages: [
+          { id: 'm1', role: 'user', content: 'Какие роли мне подходят?' },
+          { id: 'a1', role: 'assistant', content: 'Head of Platform и VP Engineering.' },
+          { id: 'm2', role: 'user', content: 'А что с зарплатой?' },
+        ],
+        knowledgeContext: {
+          confirmedFacts: [],
+          documents: [],
+          openQuestions: [],
+          consultantHistory: { summaries: [summary], messageSnippets: [snippet('зарплата вилка')] },
+        },
+      }),
+    );
+    const boundary = first.indexOf(',"phase":"discovery"');
+    const prefix = first.slice(0, boundary);
+
+    expect(boundary).toBeGreaterThan(0);
+    expect(second.startsWith(prefix)).toBe(true);
+    expect(prefix).toContain('Head of Platform');
+    expect(prefix).toContain(summary.summary);
+    expect(prefix).toContain('"outputContract"');
+    expect(prefix).not.toContain('Какие роли');
+    expect(prefix).not.toContain('"messageSnippets"');
+    expect(JSON.parse(second).pastMessageMatches).toEqual([snippet('зарплата вилка')]);
   });
 });

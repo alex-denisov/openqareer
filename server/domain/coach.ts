@@ -810,34 +810,3 @@ export const COACH_TURN_JSON_SCHEMA = {
   ],
   additionalProperties: false,
 } as const;
-
-export function serializeCoachInput(input: CoachTurnInput): string {
-  return JSON.stringify({
-    task:
-      input.internalPurpose === 'consultant-summary'
-        ? 'Summarize the closed candidate conversation'
-        : input.internalPurpose === 'structured-stage'
-          ? 'Do the stageContext task and return its JSON result as message'
-          : 'Continue the candidate discovery interview',
-    outputContract: COACH_TURN_JSON_SCHEMA,
-    dataClass: input.dataClass,
-    locale: input.locale,
-    phase: input.phase,
-    ...(input.internalPurpose ? { internalPurpose: input.internalPurpose } : {}),
-    ...(input.stageContext ? { stageContext: input.stageContext } : {}),
-    ...(input.rejectedProposals && input.rejectedProposals.length > 0
-      ? { rejectedProposals: input.rejectedProposals }
-      : {}),
-    ...(input.resumeContext ? { resumeContext: input.resumeContext } : {}),
-    ...(input.careerContext ? { careerContext: input.careerContext } : {}),
-    activeRole: input.activeRole ?? 'career_consultant',
-    priorRoleContributions: input.priorRoleContributions ?? [],
-    marketObservations: input.marketObservations ?? [],
-    knowledgeContext: input.knowledgeContext ?? {
-      confirmedFacts: [],
-      documents: [],
-      openQuestions: [],
-    },
-    conversation: input.messages,
-  });
-}
