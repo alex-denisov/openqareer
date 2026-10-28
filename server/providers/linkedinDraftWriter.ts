@@ -12,6 +12,11 @@ import { trimIncompleteFinalSentence } from '../domain/vacancyPitchService';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import type { ChatCompletionClient } from './roleNamer';
+import {
+  assertOpenRouterModelForPersonalData,
+  isOpenRouterBaseUrl,
+  openRouterRouting,
+} from './openRouterPrivacy';
 
 export interface LinkedinDraftWriteInput {
   readonly kind: 'post' | 'comment';
@@ -76,7 +81,10 @@ export class LlmLinkedinDraftWriter implements LinkedinDraftWriter {
       }) as unknown as ChatCompletionClient);
   }
   async writeDraft(input: LinkedinDraftWriteInput): Promise<{ text: string }> {
+    // A draft is built from the candidate's facts: on OpenRouter it is never collected (28.10).
+    const openRouter = isOpenRouterBaseUrl(this.options.baseUrl);
     try {
+      if (openRouter) assertOpenRouterModelForPersonalData(this.options.model);
       const response = await this.client.chat.completions.create({
         model: this.options.model,
         messages: [
@@ -87,6 +95,7 @@ export class LlmLinkedinDraftWriter implements LinkedinDraftWriter {
           ? { max_tokens: 1500 }
           : { max_completion_tokens: 1500 }),
         response_format: { type: 'json_schema', json_schema: LINKEDIN_DRAFT_JSON_SCHEMA },
+        ...openRouterRouting({ personal: openRouter }),
       });
       return parseText(response.choices[0]?.message.content ?? '', input);
     } catch (error) {

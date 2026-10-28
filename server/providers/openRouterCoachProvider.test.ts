@@ -119,6 +119,32 @@ describe('OpenRouter coach provider', () => {
     );
   });
 
+  // CPO 28.10: B082 was lifted on the condition that candidate data is never trained on.
+  it('asks providers not to collect a personal turn', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const provider = routerWith(async (body) => {
+      calls.push(body);
+      return routerResponse(JSON.stringify(validOutput));
+    }, 'deepseek/deepseek-v4.1-flash');
+    await provider.createTurn({ ...syntheticInput, dataClass: 'personal' }, 'idempotency-deny');
+    expect(calls[0]?.provider).toEqual({ data_collection: 'deny' });
+  });
+
+  it('never sends a personal turn to a free model or pool', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const provider = routerWith(async (body) => {
+      calls.push(body);
+      return routerResponse(JSON.stringify(validOutput));
+    }, 'nvidia/nemotron-3-ultra-550b-a55b:free');
+    await expect(
+      provider.createTurn({ ...syntheticInput, dataClass: 'personal' }, 'idempotency-free'),
+    ).rejects.toMatchObject({ code: 'provider_unavailable' });
+    expect(calls).toHaveLength(0);
+    // A synthetic turn still may use a free model.
+    await provider.createTurn(syntheticInput, 'idempotency-free-synthetic');
+    expect(calls).toHaveLength(1);
+  });
+
   it('names the app without calling every call a synthetic evaluation', () => {
     expect(OPENROUTER_APP_TITLE).toBe('OpenQareer');
   });

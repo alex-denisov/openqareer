@@ -23,6 +23,7 @@ import {
   PROVIDER_STAGE_TIMEOUT_MS,
 } from './stageTimeout';
 import { isMutableModelAlias } from './modelRegistry';
+import { isFreeOpenRouterModel, openRouterRouting } from './openRouterPrivacy';
 
 const OPENROUTER_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b:free';
 /**
@@ -69,6 +70,11 @@ export class OpenRouterCoachProvider implements CoachProvider {
     input: CoachTurnInput,
     idempotencyKey: string,
   ): Promise<CoachProviderResult> {
+    const personal = input.dataClass !== 'synthetic';
+    // Candidate data never reaches a free model or pool: their endpoints may train on it (28.10).
+    if (personal && isFreeOpenRouterModel(this.model)) {
+      throw new CoachProviderError('provider_unavailable', 503, false);
+    }
     try {
       const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
         model: this.model,
@@ -98,16 +104,15 @@ export class OpenRouterCoachProvider implements CoachProvider {
                   schema: COACH_TURN_JSON_SCHEMA,
                 },
               },
-              // `openrouter/free` — пул: без этого условия он вправе увести
-              // вызов к модели без схемы, и просьба о схеме молча пропадёт.
-              // Названной модели это условие ставить нельзя: выбирать не из
-              // чего, и OpenRouter отвечает `404 No endpoints found` за
-              // полсекунды (живая проверка 2026-09-03).
-              ...(isMutableModelAlias(this.model)
-                ? { provider: { require_parameters: true } }
-                : {}),
             }
           : {}),
+        // `openrouter/free` — пул: без `require_parameters` он вправе увести вызов
+        // к модели без схемы. Названной модели это условие ставить нельзя:
+        // OpenRouter отвечает `404 No endpoints found` (живая проверка 2026-09-03).
+        ...openRouterRouting({
+          personal,
+          requireParameters: this.structuredOutput && isMutableModelAlias(this.model),
+        }),
       };
       const response = await this.client.chat.completions.create(
         request,

@@ -20,6 +20,7 @@ import type { NamedRole } from '../../shared/roleProposals';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
+import { assertOpenRouterModelForPersonalData, isOpenRouterBaseUrl, openRouterRouting } from './openRouterPrivacy';
 
 /** Весь профиль в этот вызов не едет: роли называются по подтверждённым фактам. */
 const MAX_FACTS = 120;
@@ -149,6 +150,7 @@ export interface LlmRoleNamerOptions {
  * `resumeStructurer.ts`, и это тот же приём.
  */
 export class LlmRoleNamer implements RoleNamer {
+  private readonly openRouter: boolean;
   private readonly client: ChatCompletionClient;
   private readonly apiKey: string;
   private readonly model: string;
@@ -162,6 +164,8 @@ export class LlmRoleNamer implements RoleNamer {
     this.stage = options.stage ?? options.model;
     this.structuredOutput = options.structuredOutput ?? false;
     this.requireParameters = options.requireParameters ?? false;
+    // Roles are named from the candidate's facts: on OpenRouter they are never collected (28.10).
+    this.openRouter = isOpenRouterBaseUrl(options.baseUrl);
     this.client =
       options.client ??
       (new OpenAI({
@@ -179,6 +183,7 @@ export class LlmRoleNamer implements RoleNamer {
     // Спрашивать модель не о чем — это не отказ провайдера, а отсутствие входа.
     if (facts.length === 0) return { roles: [] };
     try {
+      if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
@@ -191,9 +196,12 @@ export class LlmRoleNamer implements RoleNamer {
         ...(this.structuredOutput
           ? {
               response_format: { type: 'json_schema', json_schema: ROLE_NAMING_JSON_SCHEMA },
-              ...(this.requireParameters ? { provider: { require_parameters: true } } : {}),
             }
           : {}),
+        ...openRouterRouting({
+          personal: this.openRouter,
+          requireParameters: this.structuredOutput && this.requireParameters,
+        }),
       });
       return named(parseRoles(response.choices[0]?.message?.content ?? null), this.stage);
     } catch (error) {
