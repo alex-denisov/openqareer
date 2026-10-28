@@ -45,8 +45,8 @@ describe('B569: public chrome has one link list', () => {
     expect(server).toContain('data-oq-consent-open');
   });
 
-  it('keeps routes that do not answer 200 out of the footer', () => {
-    expect(hrefs(catalogChromeFooter())).not.toContain('/vacancies/relocation');
+  it('links the relocation list from the footer once it answers 200 (B574)', () => {
+    expect(hrefs(catalogChromeFooter())).toContain('/vacancies/relocation');
   });
 
   it('marks the current section and shows the plan strip where the mockup does', () => {

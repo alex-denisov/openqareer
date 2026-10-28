@@ -196,6 +196,7 @@ function AfterSignup() {
 
 // «Вакансии с релокацией» returns with a live /vacancies/relocation (410 for now).
 const NEXT_LINKS = [
+  ['/vacancies/relocation', 'Вакансии с релокацией в открытом каталоге'],
   ['/salaries/germany', 'Зарплаты в Германии на руки'],
   ['/tools/resume', 'Резюме для работодателя за рубежом'],
   ['/tools/interview-questions', 'Вопросы на собеседовании'],

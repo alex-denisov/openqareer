@@ -33,16 +33,14 @@ export const MENU_ID = 'ps-menu';
 export const FOOTER_ABOUT =
   'Поиск работы с ИИ: резюме, вакансии со всего рынка и отклики в одном месте.';
 
-/**
- * `/vacancies/relocation` answers 410: its link joins the footer in the slice
- * that makes the route 200.
- */
+/** Footer columns of mockup `FOOTER`; every link answers 200 (B574 returned relocation). */
 export const PUBLIC_FOOTER_COLUMNS: readonly ChromeColumn[] = [
   {
     title: 'Поиск',
     links: [
       { label: 'Все вакансии', href: '/vacancies' },
       { label: 'Удалённая работа', href: '/vacancies/remote' },
+      { label: 'Вакансии с релокацией', href: '/vacancies/relocation' },
       { label: 'Тарифы', href: '/tariffs' },
     ],
   },
