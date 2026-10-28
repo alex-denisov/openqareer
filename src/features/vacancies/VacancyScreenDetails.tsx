@@ -323,7 +323,7 @@ export function VacancyScreenRequirementChips({
       <RequirementsHeading id={`vacancy-requirements-${cluster.id}`} counted={counted} />
       {hasRequirements ? (
         <VacancySkillChips
-          all={counted !== null}
+          all
           matching={chips.confirmed}
           missing={chips.unconfirmed}
           quotes={chips.quotes}

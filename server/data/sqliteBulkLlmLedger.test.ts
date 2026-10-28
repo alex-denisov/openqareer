@@ -48,3 +48,28 @@ describe('потолок фоновой обработки — месячный 
     expect(status.limits?.monthUsd).toBe(1);
   });
 });
+
+describe('перерасход одной модели не останавливает весь фон (прод 28.10)', () => {
+  let dir = '';
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+  const roomy = { runUsd: 100, dayUsd: 100, monthUsd: 100, perRequestUsd: 0.01 } as BulkLlmConfig;
+  const vertex = { ...call, model: 'gemini-3.8-flash', provider: 'gemini' };
+
+  it('после перерасхода Vertex закрыт только Vertex, deepseek работает', () => {
+    dir = mkdtempSync(join(tmpdir(), 'bulk-ledger-'));
+    const ledger = new SqliteBulkLlmLedger(join(dir, 'ledger.db'));
+    const id = ledger.reserve(vertex, roomy);
+    ledger.settle(id!, { cost: 0.010127, promptTokens: 9532, cachedTokens: 0, completionTokens: 1787 });
+    expect(ledger.reserve(vertex, roomy)).toBeNull();
+    expect(ledger.reserve(call, roomy)).not.toBeNull();
+  });
+
+  it('старая отметка без модели больше ничего не закрывает', () => {
+    dir = mkdtempSync(join(tmpdir(), 'bulk-ledger-'));
+    const ledger = new SqliteBulkLlmLedger(join(dir, 'ledger.db'));
+    ledger.event('cost_exceeds_reservation');
+    expect(ledger.reserve(call, roomy)).not.toBeNull();
+  });
+});

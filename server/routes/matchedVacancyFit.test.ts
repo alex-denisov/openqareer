@@ -222,3 +222,57 @@ describe('строка и разбор считают требования од�
     expect(explanation.requirements).toEqual({ matched: 1, total: 2 });
   });
 });
+
+describe('порядок CPO при фильтре и после обновления каталога (29.10)', () => {
+  function fresh(id: string, view?: MatchedVacancyItem['explanation']['fitView']) {
+    const base = item(id, null, '2026-10-29');
+    return { ...base, explanation: { ...base.explanation, fitView: view } } as MatchedVacancyItem;
+  }
+  const order = (rows: MatchedVacancyItem[]) =>
+    [...rows].sort(compareFitOrder).map((x) => x.cluster.id);
+
+  it('свежие строки без расчёта стоят ниже посчитанных на 40 %+ и выше посчитанных ниже 40 %', () => {
+    const rows = [
+      fresh('new-unseen'),
+      fresh('new-queued', { state: 'processing', requirements: [] }),
+      item('counted-80', 80),
+      item('counted-20', 20),
+      fresh('new-failed', { state: 'failed', requirements: [] }),
+      item('counted-45', 45),
+    ];
+    const ids = order(rows);
+    expect(ids.slice(0, 2)).toEqual(['counted-80', 'counted-45']);
+    // Among rows still counting the selection's relevance decides.
+    // A failed count is re-queued on show: it is still counting, never above 40 %+.
+    expect(new Set(ids.slice(2, 5))).toEqual(new Set(['new-queued', 'new-unseen', 'new-failed']));
+    expect(ids.slice(5)).toEqual(['counted-20']);
+  });
+
+  it('отфильтрованная подборка (одна локация) держит то же правило', () => {
+    const moscow = (row: MatchedVacancyItem) => ({
+      ...row,
+      cluster: { ...row.cluster, canonicalLocation: 'Москва' },
+    });
+    const all = [
+      moscow(fresh('m-new')),
+      item('spb-90', 90),
+      moscow(item('m-60', 60)),
+      moscow(fresh('m-failed', { state: 'failed', requirements: [] })),
+    ];
+    const filtered = all.filter((row) => row.cluster.canonicalLocation === 'Москва');
+    expect(order(filtered)[0]).toBe('m-60');
+    expect(order(filtered)).not.toContain('spb-90');
+  });
+
+  it('упавший пересчёт с прежним процентом остаётся среди посчитанных', () => {
+    const kept = item('refresh-failed', 70);
+    const refreshing = {
+      ...kept,
+      explanation: {
+        ...kept.explanation,
+        fitView: { ...kept.explanation.fitView!, state: 'refreshing' as const },
+      },
+    };
+    expect(order([fresh('new'), refreshing])).toEqual(['refresh-failed', 'new']);
+  });
+});

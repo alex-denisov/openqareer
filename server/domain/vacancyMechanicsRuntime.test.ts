@@ -102,6 +102,23 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.view(source).state).toBe('ready');
   });
 
+  it('a failed refresh keeps the previous percent on screen instead of «не посчитан» (prod 29.10)', async () => {
+    const runtime = setup();
+    const source = input();
+    runtime.enqueue(source);
+    await runtime.runNext(null);
+    const requirements = runtime.requirements.getLatest(source.vacancyId, vacancyDescriptionHash(source.description))!.requirements;
+    const resolved = { ...source, requirements };
+    const previous = { ...evaluateVacancyFit(resolved), algorithmVersion: LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS[0] };
+    runtime.database.exec('DELETE FROM vacancy_fit_cache; DELETE FROM vacancy_fit_queue');
+    runtime.fit.putCache(resolved, previous, undefined, LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS[0]);
+    runtime.enqueue(source);
+    runtime.database.exec("UPDATE vacancy_fit_queue SET status='failed', last_error='assessment_model_unavailable'");
+    const view = runtime.view(source);
+    expect(view.state).toBe('refreshing');
+    expect(view.result).toMatchObject({ vacancyId: source.vacancyId, reason: previous.reason });
+  });
+
   it('extracts the fit job\'s own requirements in the same step instead of deferring it (B510)', async () => {
     const runtime = setup();
     // The vacancy's requirements are already queued behind other work: the fit must not wait for them.

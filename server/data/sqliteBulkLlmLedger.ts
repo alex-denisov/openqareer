@@ -10,6 +10,10 @@ const STALE_HOLD_TTL_MS = 15 * 60_000;
 function monthStart(): string {
   return `${new Date().toISOString().slice(0, 7)}-01`;
 }
+/** The overrun mark names the model it closes; a bare legacy mark closes nothing. */
+function overrunKind(model: string): string {
+  return `cost_exceeds_reservation:${model}`;
+}
 export class SqliteBulkLlmLedger {
   readonly db: DatabaseSync;
   constructor(path: string) {
@@ -61,10 +65,12 @@ export class SqliteBulkLlmLedger {
     return runSqliteTransaction(this.db, () => {
       this.expireStaleHolds();
       const day = new Date().toISOString().slice(0, 10);
+      // A call dearer than its hold closes that model only: on 28.10 one Vertex fit at $0.010127
+      // closed the whole channel, and with it every percent, for good.
       if (
         this.db
-          .prepare("SELECT 1 FROM bulk_llm_events WHERE kind='cost_exceeds_reservation' LIMIT 1")
-          .get()
+          .prepare('SELECT 1 FROM bulk_llm_events WHERE kind=? LIMIT 1')
+          .get(overrunKind(input.model))
       )
         return null;
       if (
@@ -100,11 +106,12 @@ export class SqliteBulkLlmLedger {
     actual?: { model?: string; provider?: string },
   ) {
     runSqliteTransaction(this.db, () => {
-      const row = this.db.prepare('SELECT reserved,cost FROM bulk_llm_spend WHERE id=?').get(id) as
-        { reserved: number; cost: number | null } | undefined;
+      const row = this.db
+        .prepare('SELECT reserved,cost,model FROM bulk_llm_spend WHERE id=?')
+        .get(id) as { reserved: number; cost: number | null; model: string } | undefined;
       if (!row) throw new Error('Unknown reservation');
       if (row.cost !== null) return;
-      if (usage.cost > row.reserved) this.event('cost_exceeds_reservation');
+      if (usage.cost > row.reserved) this.event(overrunKind(row.model));
       this.db
         .prepare(
           "UPDATE bulk_llm_spend SET cost=?,prompt_tokens=?,cached_tokens=?,completion_tokens=?,day=?,model=COALESCE(?,model),provider=COALESCE(?,provider),status='settled' WHERE id=? AND cost IS NULL",
