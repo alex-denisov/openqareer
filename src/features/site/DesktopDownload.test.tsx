@@ -15,7 +15,7 @@ describe('desktop release on the landing (B576)', () => {
       '<p class="appver" aria-hidden="true"></p>',
     );
     expect(renderToStaticMarkup(<AppVersionNote version="1.1.4" />)).toBe(
-      '<p class="appver">Версия <span class="appver-num">1.1.4</span> · приложение обновляется само</p>',
+      '<p class="appver">Версия <span class="appver-num">1.1.4</span></p>',
     );
   });
 });
