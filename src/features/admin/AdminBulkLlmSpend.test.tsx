@@ -30,7 +30,7 @@ it('read-only admin section fetches actual limits, holds and budget stop event',
           heldUsd: 0.1,
           remainingUsd: 0.7,
           dayRemainingUsd: 0.4,
-          limits: { runUsd: 0.5, dayUsd: 1, totalUsd: 1, perRequestUsd: 0.1 },
+          limits: { runUsd: 0.5, dayUsd: 1, monthUsd: 1, perRequestUsd: 0.1 },
           events: [{ kind: 'budget_exceeded', created_at: '2026-10-18T12:00:00Z' }],
         },
       });
@@ -52,5 +52,5 @@ it('unavailable spend reports error instead of invented zero remaining', async (
   );
   const div = await mount();
   expect(div.querySelector('[role="alert"]')).not.toBeNull();
-  expect(div.textContent).not.toContain('Общий остаток');
+  expect(div.textContent).not.toContain('Остаток на месяц');
 });

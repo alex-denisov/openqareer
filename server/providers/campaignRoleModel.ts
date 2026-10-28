@@ -129,7 +129,7 @@ export class QueuedCampaignRoleModel implements CampaignRoleModel {
   }
 }
 
-/** Цепочка ролей кампании: Vertex → deepseek-v4.1-flash → glm-5.3-flash. */
+/** Цепочка ролей кампании (B580, 29.10): deepseek-v4-flash → glm-5.3-flash → Vertex. */
 export function buildCampaignRoleModel(config: {
   providerCredentials?: Partial<Record<ProviderId, string>>;
   vertex?: VertexConfig;

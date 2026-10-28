@@ -194,7 +194,7 @@ export class GeminiLinkedinDraftWriter implements LinkedinDraftWriter {
     );
   }
 }
-/** Цепочка черновиков (28.10): Vertex → deepseek-v4.1-flash → gpt-5.6-luna. */
+/** Цепочка черновиков (B580, 29.10): deepseek-v4.1-flash → gpt-5.6-luna → Vertex. */
 export function buildLinkedinDraftWriter(config: CoverLetterWriterConfig): LinkedinDraftWriter {
   const stages = resolveChain(
     MODEL_CHAINS.linkedinDrafts,

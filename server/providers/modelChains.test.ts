@@ -14,11 +14,11 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('фоновая обработка: Vertex → deepseek-v4.1-flash → glm-5.3-flash', () => {
+  it('фоновая обработка: deepseek-v4-flash → glm-5.3-flash → Vertex (B580: Vertex последним)', () => {
     expect(labels('bulk')).toEqual([
-      'vertex',
-      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4-flash',
       'openrouter:z-ai/glm-5.3-flash',
+      'vertex',
     ]);
   });
 
@@ -26,17 +26,17 @@ describe('цепочки моделей по механикам (28.10)', () => 
     expect(labels('resumeParsing')).toEqual(labels('coach'));
   });
 
-  it('тексты для человека: Vertex → deepseek-v4.1-flash → luna', () => {
+  it('тексты для человека: deepseek-v4.1-flash → luna → Vertex', () => {
     for (const mechanic of ['roleNames', 'coverLetters', 'linkedinDrafts'] as const) {
       expect(labels(mechanic)).toEqual([
-        'vertex',
         'openrouter:deepseek/deepseek-v4.1-flash',
         'openai:gpt-5.6-luna',
+        'vertex',
       ]);
     }
   });
 
-  it('структурный JSON: Vertex → deepseek-v4.1-flash → glm-5.3-flash', () => {
+  it('структурный JSON: как фон — deepseek-v4-flash → glm-5.3-flash → Vertex', () => {
     for (const mechanic of ['campaignRoles', 'titleParsing'] as const) {
       expect(labels(mechanic)).toEqual(labels('bulk'));
     }

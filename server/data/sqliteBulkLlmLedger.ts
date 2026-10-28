@@ -5,6 +5,11 @@ import type { BulkLlmConfig } from '../providers/bulkLlmConfig';
 
 /** Longer than one call's full retry window (3 x 60 s plus pauses), so a live call is never expired. */
 const STALE_HOLD_TTL_MS = 15 * 60_000;
+
+/** First day of the current UTC month: the month cap counts from here (B580). */
+function monthStart(): string {
+  return `${new Date().toISOString().slice(0, 7)}-01`;
+}
 export class SqliteBulkLlmLedger {
   readonly db: DatabaseSync;
   constructor(path: string) {
@@ -63,7 +68,7 @@ export class SqliteBulkLlmLedger {
       )
         return null;
       if (
-        this.sum('1=1') + amount > config.totalUsd ||
+        this.sum('(day>=? OR cost IS NULL)', monthStart()) + amount > config.monthUsd ||
         this.sum('run_id=?', input.runId) + amount > config.runUsd ||
         this.sum('(day=? OR cost IS NULL)', day) + amount > config.dayUsd
       ) {
@@ -133,9 +138,9 @@ export class SqliteBulkLlmLedger {
     this.expireStaleHolds();
     const row = this.db
       .prepare(
-        'SELECT COALESCE(SUM(cost),0) spent,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) held FROM bulk_llm_spend',
+        'SELECT COALESCE(SUM(CASE WHEN day>=? THEN cost ELSE 0 END),0) spent,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) held FROM bulk_llm_spend',
       )
-      .get() as { spent: number; held: number };
+      .get(monthStart()) as { spent: number; held: number };
     return {
       enabled: !!config,
       dayRemainingUsd: config
@@ -158,12 +163,12 @@ export class SqliteBulkLlmLedger {
         })),
       spentUsd: row.spent,
       heldUsd: row.held,
-      remainingUsd: config ? Math.max(0, config.totalUsd - row.spent - row.held) : 0,
+      remainingUsd: config ? Math.max(0, config.monthUsd - row.spent - row.held) : 0,
       limits: config
         ? {
             runUsd: config.runUsd,
             dayUsd: config.dayUsd,
-            totalUsd: config.totalUsd,
+            monthUsd: config.monthUsd,
             perRequestUsd: config.perRequestUsd,
           }
         : null,

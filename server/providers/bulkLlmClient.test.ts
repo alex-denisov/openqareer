@@ -32,7 +32,7 @@ const req = {
 };
 function response(cost: number) {
   return Response.json({
-    model: 'deepseek/deepseek-v4.1-flash',
+    model: 'deepseek/deepseek-v4-flash',
     provider: 'DeepInfra',
     choices: [{ message: { content: '{}' } }],
     usage: {
@@ -55,7 +55,7 @@ it('accounts actual cost and pins privacy, routing and reasoning', async () => {
   expect(result.usage.cost).toBe(0.013);
   expect(runtime.status().spentUsd).toBe(0.013);
   expect(body!.provider).toMatchObject({
-    only: ['deepinfra/fp8', 'baidu/fp8', 'morph/fp8'],
+    only: ['streamlake/fp8', 'deepinfra/fp8', 'gmicloud/fp8'],
     allow_fallbacks: true,
     data_collection: 'deny',
     quantizations: ['fp8'],
@@ -196,11 +196,11 @@ it('routes through an ordered list of pinned providers so one price change or ra
     }) as typeof fetch),
   );
   await runtime.client!.complete(req);
-  expect(body!.model).toBe('deepseek/deepseek-v4.1-flash');
+  expect(body!.model).toBe('deepseek/deepseek-v4-flash');
   expect(body!.provider).toMatchObject({
-    order: ['deepinfra/fp8', 'baidu/fp8', 'morph/fp8'],
+    order: ['streamlake/fp8', 'deepinfra/fp8', 'gmicloud/fp8'],
     allow_fallbacks: true,
-    max_price: { prompt: 0.14, completion: 0.42 },
+    max_price: { prompt: 0.15, completion: 0.3 },
   });
   runtime.close();
 });
@@ -222,10 +222,10 @@ it('expires a hold left by a call that never settled after the TTL at the deares
     expect(runtime.status().heldUsd).toBe(0);
     mode = 'ok';
     // A worker stopped mid-call leaves its hold behind: that one waits for the TTL.
-    runtime.ledger.reserve({ ...req, model: 'deepseek/deepseek-v4.1-flash', provider: 'p' }, {
+    runtime.ledger.reserve({ ...req, model: 'deepseek/deepseek-v4-flash', provider: 'p' }, {
       runUsd: 0.1,
       dayUsd: 0.1,
-      totalUsd: 0.1,
+      monthUsd: 0.1,
       perRequestUsd: 0.06,
     } as never);
     expect(runtime.status().heldUsd).toBe(0.06);

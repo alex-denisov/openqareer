@@ -226,7 +226,7 @@ export class BulkLlmClient {
     throw new Error('Unreachable');
   }
   /**
-   * The bulk chain (`MODEL_CHAINS.bulk`, 28.10): Vertex → deepseek-v4.1-flash → glm-5.3-flash.
+   * The bulk chain (`MODEL_CHAINS.bulk`, 29.10): deepseek-v4-flash → glm-5.3-flash → Vertex.
    * A failed or unusable answer moves the call to the next stage; an outage also cools the stage
    * for ten minutes. A spend cap or an uncertain charge stops the chain at once.
    */

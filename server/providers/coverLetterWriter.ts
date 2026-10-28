@@ -377,12 +377,12 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
 
 export interface CoverLetterWriterConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
-  /** Gemini на Vertex — голова цепочки, когда настроен (решение владельца 25.09). */
+  /** Gemini на Vertex — последняя ступень цепочки, когда настроен (B580, 29.10). */
   readonly vertex?: VertexConfig;
 }
 
 /**
- * Цепочка письма (28.10): Vertex → deepseek-v4.1-flash → gpt-5.6-luna; шаблон
+ * Цепочка письма (B580, 29.10): deepseek-v4.1-flash → gpt-5.6-luna → Vertex; шаблон
  * остаётся запасом за ней. Gemini AI Studio (402) и бесплатные маршруты ушли.
  */
 export function buildCoverLetterWriter(

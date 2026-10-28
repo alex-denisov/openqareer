@@ -16,6 +16,13 @@ export interface BulkOpenRouterLane {
  * reasoning and `max_tokens`, so `require_parameters` keeps the request on them.
  */
 export const BULK_LANE_PINS: Readonly<Record<string, Omit<BulkOpenRouterLane, 'model'>>> = {
+  // Хосты и потолок цены, с которыми фон работал на проде с 19.10 (B580).
+  'deepseek/deepseek-v4-flash': {
+    provider: 'streamlake/fp8,deepinfra/fp8,gmicloud/fp8',
+    quantization: 'fp8',
+    inputPerMillionUsd: 0.15,
+    outputPerMillionUsd: 0.3,
+  },
   'deepseek/deepseek-v4.1-flash': {
     provider: 'deepinfra/fp8,baidu/fp8,morph/fp8',
     quantization: 'fp8',
@@ -48,14 +55,16 @@ export interface BulkLlmConfig {
   runUsd: number;
   /** Cap of the whole channel per UTC day, across every run id. */
   dayUsd: number;
-  totalUsd: number;
+  /** Cap of the whole channel per UTC calendar month (B580: was a lifetime total until 29.10). */
+  monthUsd: number;
   perRequestUsd: number;
   batchEnabled: boolean;
 }
 /**
- * The env holds the switch and the spend caps. The chain (28.10: Vertex → deepseek-v4.1-flash →
- * glm-5.3-flash) is code: `OPENQAREER_BULK_LLM_MODEL`, `_PROVIDER`, `_QUANTIZATION` and the price
- * variables are no longer read.
+ * The env holds the switch and the spend caps. The chain (29.10: deepseek-v4-flash → glm-5.3-flash
+ * → Vertex) is code: `OPENQAREER_BULK_LLM_MODEL`, `_PROVIDER`, `_QUANTIZATION` and the price
+ * variables are no longer read. The month cap is `OPENQAREER_BULK_LLM_MONTH_USD`; a host that still
+ * has only `OPENQAREER_BULK_LLM_TOTAL_USD` gets that value as the month cap.
  */
 export function readBulkLlmConfig(env: NodeJS.ProcessEnv = process.env): BulkLlmConfig | null {
   if (env.OPENQAREER_BULK_LLM_ENABLED !== 'true') return null;
@@ -75,7 +84,11 @@ export function readBulkLlmConfig(env: NodeJS.ProcessEnv = process.env): BulkLlm
     lanes: bulkOpenRouterLanes(),
     runUsd: number('OPENQAREER_BULK_LLM_RUN_USD'),
     dayUsd: number('OPENQAREER_BULK_LLM_DAY_USD'),
-    totalUsd: number('OPENQAREER_BULK_LLM_TOTAL_USD'),
+    monthUsd: number(
+      env.OPENQAREER_BULK_LLM_MONTH_USD?.trim()
+        ? 'OPENQAREER_BULK_LLM_MONTH_USD'
+        : 'OPENQAREER_BULK_LLM_TOTAL_USD',
+    ),
     perRequestUsd: number('OPENQAREER_BULK_LLM_REQUEST_USD'),
     batchEnabled: env.OPENQAREER_BULK_LLM_BATCH_ENABLED === 'true',
   };

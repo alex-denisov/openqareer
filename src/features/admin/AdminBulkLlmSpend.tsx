@@ -6,7 +6,7 @@ interface SpendStatus {
   heldUsd: number;
   remainingUsd: number;
   dayRemainingUsd?: number;
-  limits: { runUsd: number; dayUsd: number; totalUsd: number; perRequestUsd: number } | null;
+  limits: { runUsd: number; dayUsd: number; monthUsd: number; perRequestUsd: number } | null;
   events: Array<{ kind: string; created_at: string }>;
 }
 function usd(value: number) {
@@ -52,7 +52,7 @@ function SpendNumbers({ data }: { readonly data: SpendStatus }) {
     <>
       <dl className="admin-register-toolbar">
         <div>
-          <dt>Потрачено</dt>
+          <dt>Потрачено за месяц</dt>
           <dd>{usd(data.spentUsd)}</dd>
         </div>
         <div>
@@ -60,7 +60,7 @@ function SpendNumbers({ data }: { readonly data: SpendStatus }) {
           <dd>{usd(data.heldUsd)}</dd>
         </div>
         <div>
-          <dt>Общий остаток</dt>
+          <dt>Остаток на месяц</dt>
           <dd>{data.limits ? usd(data.remainingUsd) : 'Лимит не настроен'}</dd>
         </div>
         <div>
@@ -74,8 +74,8 @@ function SpendNumbers({ data }: { readonly data: SpendStatus }) {
       </dl>
       {data.limits ? (
         <p>
-          Лимит запуска: {usd(data.limits.runUsd)} · Суток: {usd(data.limits.dayUsd)} · Общий:{' '}
-          {usd(data.limits.totalUsd)}
+          Лимит запуска: {usd(data.limits.runUsd)} · Суток: {usd(data.limits.dayUsd)} · Месяца:{' '}
+          {usd(data.limits.monthUsd)}
         </p>
       ) : null}
     </>

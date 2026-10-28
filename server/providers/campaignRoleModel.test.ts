@@ -18,17 +18,17 @@ const input = { facts: [], candidates: [] };
 const roles = Array.from({ length: 5 }, (_, index) => ({ id: `r${index}` }));
 
 describe('цепочка ролей кампании (28.10)', () => {
-  it('Vertex → deepseek-v4.1-flash → glm-5.3-flash', () => {
+  it('deepseek-v4-flash → glm-5.3-flash → Vertex (B580)', () => {
     const model = buildCampaignRoleModel({
       providerCredentials: { openrouter: 'sk-or-test', openai: 'sk-openai-test' },
       vertex,
     }) as QueuedCampaignRoleModel;
 
-    expect(model.stages[0]).toBeInstanceOf(VertexCampaignRoleModel);
+    expect(model.stages.at(-1)).toBeInstanceOf(VertexCampaignRoleModel);
     expect(model.stages.map((stage) => stage.name)).toEqual([
-      'gemini-3.8-flash',
-      'deepseek/deepseek-v4.1-flash',
+      'deepseek/deepseek-v4-flash',
       'z-ai/glm-5.3-flash',
+      'gemini-3.8-flash',
     ]);
   });
 

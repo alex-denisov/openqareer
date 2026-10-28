@@ -100,7 +100,7 @@ const linkedinPoolExecutor =
         notifyOwner: (message) => notifyOwner(config, message),
       })
     : undefined;
-// Разбор названий по цепочке (28.10): Vertex → deepseek-v4.1-flash → glm-5.3-flash.
+// Разбор названий по цепочке (B580, 29.10): deepseek-v4-flash → glm-5.3-flash → Vertex.
 const titleModelParser = buildModelTitleParser({
   providerCredentials: config.providerCredentials,
   vertex: config.vertex,
