@@ -202,6 +202,48 @@ describe('B209: публичный каталог вакансий', () => {
     expect(role.body).toContain('"@type":"ItemList"');
   });
 
+  it('B574: печатает только чипы с вакансиями и сужает список по ?f=', async () => {
+    const app = await appWithPool([
+      ...Array.from({ length: 3 }, (_, index) => vacancy(index)),
+      vacancy(3, { isRemote: true, salary: { min: 150_000, max: 200_000, currency: 'RUB' } }),
+      vacancy(4, { isRemote: true }),
+    ]);
+    const list = await app.inject({ method: 'GET', url: '/vacancies/berlin/frontend-developer' });
+    expect(list.body).toContain('href="/vacancies/berlin/frontend-developer?f=remote"');
+    expect(list.body).toContain('>Удалённо или гибрид</a>');
+    expect(list.body).not.toContain('>Без опыта</a>');
+
+    const remote = await app.inject({
+      method: 'GET',
+      url: '/vacancies/berlin/frontend-developer?f=remote',
+    });
+    expect(remote.statusCode).toBe(200);
+    expect(remote.body).toContain('aria-current="true">Удалённо или гибрид</a>');
+    expect(remote.body).toContain('noindex');
+    expect(remote.body.match(/class="lv-job"/gu)?.length).toBe(2);
+
+    const unknown = await app.inject({
+      method: 'GET',
+      url: '/vacancies/berlin/frontend-developer?f=no-experience',
+    });
+    expect(unknown.body.match(/class="lv-job"/gu)?.length).toBe(5);
+  });
+
+  it('B574: /vacancies/relocation — вакансии с релокацией, 410 без них', async () => {
+    const none = await appWithPool(Array.from({ length: 5 }, (_, index) => vacancy(index)));
+    expect((await none.inject({ method: 'GET', url: '/vacancies/relocation' })).statusCode).toBe(
+      410,
+    );
+    const app = await appWithPool([
+      ...Array.from({ length: 4 }, (_, index) => vacancy(index)),
+      vacancy(5, { description: 'Помогаем с релокацией в Белград. '.repeat(10) }),
+    ]);
+    const response = await app.inject({ method: 'GET', url: '/vacancies/relocation' });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('<h1>Вакансии с релокацией</h1>');
+    expect(response.body.match(/class="lv-job"/gu)?.length).toBe(1);
+  });
+
   it('печатает фильтры группами на корне каталога', async () => {
     const app = await appWithPool(Array.from({ length: 5 }, (_, index) => vacancy(index)));
     const response = await app.inject({ method: 'GET', url: '/vacancies' });

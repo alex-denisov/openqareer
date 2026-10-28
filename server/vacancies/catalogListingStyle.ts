@@ -29,6 +29,11 @@ export const LISTING_STYLE = `
 .lv-src{color:var(--ps-soft)}
 .lv-tags{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .lv-chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:8px;font-size:13px;font-weight:500;background:var(--ps-bg-2);color:var(--ps-soft);white-space:nowrap}
+.lv-vf{display:flex;flex-wrap:wrap;gap:6px;margin:24px 0 16px}
+.lv-chip.is-out{background:transparent;border:1px solid var(--ps-line-2);color:var(--ps-soft);transition:border-color .18s,color .18s,background-color .18s}
+.lv-chip.is-out:hover{border-color:var(--ps-blue);color:var(--ps-blue)}
+.lv-chip.is-out:focus-visible{outline:2px solid var(--ps-blue);outline-offset:2px}
+.lv-chip.is-out[aria-current]{background:var(--ps-blue-soft);border-color:var(--ps-blue);color:var(--ps-blue)}
 .lv-lock{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:16px 20px;border-top:1px solid var(--ps-line);background:var(--ps-blue-soft)}
 .lv-lock p{font-size:14px;color:var(--ps-soft)}
 .lv-lock b{color:var(--ps-ink)}
@@ -75,6 +80,8 @@ export const LISTING_STYLE = `
 @media (max-width:1080px){.lv-grid{grid-template-columns:minmax(0,1fr)}.lv-side{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}.lv-facets{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:760px){
 .lv-crumbs{padding-top:16px}
+.lv-vf{flex-wrap:nowrap;overflow-x:auto;margin-left:-16px;margin-right:-16px;padding:0 16px 4px;scrollbar-width:none}
+.lv-vf .lv-chip{flex:none}
 .lv-main{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
 .lv-hm{display:none!important}
 .lv-sec{padding:28px 0}

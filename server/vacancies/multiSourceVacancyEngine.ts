@@ -1,6 +1,8 @@
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
    are intentionally kept together so replacement, expiry and reclustering share
    one transaction boundary. */
+import type { ChipCounts } from './catalogChips';
+import type { CatalogChipQuery } from './vacancyPoolStore';
 import type { SalaryStats } from './catalogSalaryStats';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
@@ -806,6 +808,26 @@ export class MultiSourceVacancyEngine {
     role?: string;
   }): SalaryStats | undefined {
     return this.pool.getCatalogSalaryStats?.(query);
+  }
+
+  /** B574: chip counts of one list; maintenance writes them, the request reads one row. */
+  public getPublicCatalogChipCounts(listKey: string): ChipCounts {
+    if (typeof this.pool.getCatalogChipCounts !== 'function') return {};
+    if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
+    return this.pool.getCatalogChipCounts(listKey);
+  }
+
+  /** B574: one page of a chip list; undefined while the projection is not ready. */
+  public getPublicCatalogChipPage(query: CatalogChipQuery): CatalogEntriesPage | undefined {
+    if (typeof this.pool.loadCatalogChipPage !== 'function') return undefined;
+    if (
+      typeof this.pool.catalogProjectionReady === 'function' &&
+      !this.pool.catalogProjectionReady()
+    ) {
+      return undefined;
+    }
+    if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
+    return this.pool.loadCatalogChipPage(query);
   }
 
   public getPublicCatalogEntry(key: string): CatalogEntryRow | undefined {

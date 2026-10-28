@@ -15,6 +15,7 @@ import {
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
 import type {
+  CatalogChipQuery,
   CatalogTotalsRow,
   MergeSliceResult,
   StoredSourceState,
@@ -28,6 +29,7 @@ import {
   type CatalogEntryRow,
 } from './vacancyCatalogProjection';
 import { catalogListings } from './vacancyCatalogFacets';
+import { LISTING_CHIPS, RELOCATION_LIST_KEY, chipMatches, type ChipCounts } from './catalogChips';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
 import { isDetailTextSource } from './detailTextSources';
@@ -440,6 +442,62 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
               key: selected[selected.length - 1]!.key,
             },
           }
+        : {}),
+    };
+  }
+
+  /** B574: the chips of one list, decided in memory by the same rule as maintenance. */
+  private chipEntries(listKey: string, chip: CatalogChipQuery['chip']): CatalogEntryRow[] {
+    const now = Date.now();
+    return this.loadCatalogEntriesPage({ limit: 50_000 }).items.filter((entry) => {
+      const inList =
+        listKey === RELOCATION_LIST_KEY ||
+        entry.placeSlug === listKey ||
+        `${entry.placeSlug}|${entry.roleSlug}` === listKey;
+      return (
+        inList &&
+        chipMatches(
+          chip,
+          {
+            ...entry,
+            salaryLabel: entry.salaryLabel,
+            publishedMs: parseMs(entry.publishedAt) ?? 0,
+          },
+          now,
+        )
+      );
+    });
+  }
+
+  getCatalogChipCounts(listKey: string): ChipCounts {
+    const chips =
+      listKey === RELOCATION_LIST_KEY ? (['relocation'] as const) : LISTING_CHIPS.map((c) => c.id);
+    return Object.fromEntries(
+      chips
+        .map((chip) => [chip, this.chipEntries(listKey, chip).length] as const)
+        .filter(([, count]) => count > 0),
+    );
+  }
+
+  loadCatalogChipPage(query: CatalogChipQuery): CatalogEntriesPage {
+    const rows = this.chipEntries(query.listKey, query.chip);
+    const after = query.after;
+    const rest = after
+      ? rows.filter((entry) => {
+          const publishedMs = parseMs(entry.publishedAt) ?? 0;
+          return (
+            publishedMs < after.publishedMs ||
+            (publishedMs === after.publishedMs && entry.key > after.key)
+          );
+        })
+      : rows;
+    const selected = rest.slice(0, query.limit);
+    const last = selected.at(-1);
+    return {
+      items: selected,
+      total: rows.length,
+      ...(rest.length > query.limit && last
+        ? { nextCursor: { publishedMs: parseMs(last.publishedAt) ?? 0, key: last.key } }
         : {}),
     };
   }

@@ -5,6 +5,7 @@
  * pages, place/role listings, and the narrow set of indexable vacancy cards
  * (`catalogIndexing`). Deep catalog pages are not listed anywhere.
  */
+import { RELOCATION_PLACE } from '../vacancies/catalogChips';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { LEGAL_DOCS, LEGAL_PACK_PUBLISHED_AT, legalPath } from '../../shared/legalRegistry';
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
@@ -137,8 +138,14 @@ export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
     { path: '/tools/resume', lastmod: '2026-10-27' },
     ...interviewSitemapUrls(),
     { path: '/tools/relocation', lastmod: '2026-10-27' },
+    // B574: the calculator and the relocation list answer 200 since layer 1.
+    { path: '/tools/salary-calculator', lastmod: '2026-10-28' },
     ...LEGAL_DOCS.map((doc) => ({ path: legalPath(doc.slug), lastmod: LEGAL_PACK_PUBLISHED_AT })),
     { path: CATALOG_ROOT, ...(catalogLastmod ? { lastmod: catalogLastmod } : {}) },
+    {
+      path: `${CATALOG_ROOT}/${RELOCATION_PLACE}`,
+      ...(catalogLastmod ? { lastmod: catalogLastmod } : {}),
+    },
   ];
 }
 

@@ -16,6 +16,7 @@ import {
   computeCatalogSalaryStats,
   writeCatalogSalaryStats,
 } from '../vacancies/catalogSalaryStatsStore';
+import { computeCatalogChips, writeCatalogChips } from '../vacancies/catalogChipStore';
 import { computeLandingStats, readLandingStats, writeLandingStats } from './landingStatsJob';
 
 interface StatsLog {
@@ -41,6 +42,7 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
       writeLandingStats(database, stats, now);
       writeCatalogSources(database, computeCatalogSources(database), now);
       writeCatalogSalaryStats(database, computeCatalogSalaryStats(database), now);
+      writeCatalogChips(database, computeCatalogChips(database, now.getTime()), now);
       log.info(
         { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
         'landing-stats-written',

@@ -11,6 +11,7 @@
  * `JobPosting` получает только карточка из индексируемого набора
  * (`seo/catalogIndexing`).
  */
+import { RELOCATION_PLACE } from './catalogChips';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { PRIVATE_EMPLOYER, publicEmployerName } from '../../shared/privateEmployer';
 import { isCountryName } from '../../shared/placeNames';
@@ -411,6 +412,8 @@ export function buildVacancyDetail(
  * сорт выдумки, что и транслит. Тире читается одинаково для любого города.
  */
 function listingHeading(summary: ListingSummary): string {
+  // B574: the relocation list spans every place.
+  if (summary.place === RELOCATION_PLACE) return 'Вакансии с релокацией';
   const remote = summary.place === 'remote';
   if (summary.roleLabel) {
     return remote
