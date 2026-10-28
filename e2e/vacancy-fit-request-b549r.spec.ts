@@ -54,10 +54,10 @@ async function openFirst(page: Page, fit: VacancyFitView, onPost: () => void): P
   if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
 }
 
-test('B549-r 1440: «Рассчитать соответствие» posts once and shows «в очереди» at once', async ({
+test('B549-r 1440: an uncounted vacancy shows «считаем», the server queues it (28.10 mockup)', async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== 'desktop-1440', 'the 1440 row has the fit button');
+  test.skip(testInfo.project.name !== 'desktop-1440', 'the 1440 row is checked here');
   let posts = 0;
   const base = readyVacancyFit('cluster-0');
   const fit = {
@@ -77,9 +77,11 @@ test('B549-r 1440: «Рассчитать соответствие» posts once 
     detail.locator('.vacancies-screen-skill-chip', { hasText: 'Высшее образование' }),
   ).toHaveCount(0);
 
-  await detail.getByRole('button', { name: 'Рассчитать соответствие' }).click();
-  await expect(detail).toContainText('Соответствие: расчёт в очереди');
-  expect(posts).toBe(1);
+  await expect(detail.getByRole('region', { name: 'Совпадение считается' })).toContainText(
+    'считаем',
+  );
+  await expect(detail.getByRole('button', { name: 'Рассчитать соответствие' })).toHaveCount(0);
+  expect(posts).toBe(0);
   await expect(page.locator('.vacancies-screen-row-trigger').first()).toHaveAttribute(
     'aria-expanded',
     'true',

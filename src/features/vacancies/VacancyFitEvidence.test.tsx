@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import { VacancyFitSummary } from './VacancyFitSummary';
 import { VacancyFitEvidence } from './VacancyFitEvidence';
+import { VacancyFitBlock } from './VacancyFitMark';
 import { readyVacancyFit } from '../../../e2e/fixtures/vacancyFit';
 let root: Root | undefined;
 afterEach(async () => {
@@ -116,4 +117,28 @@ it('late read after leaving the vacancy cannot update a newly mounted session su
   await act(async () => resolveRead(Response.json({ data: readyVacancyFit('fit-1') })));
   expect(container.textContent).not.toContain('50%');
   expect(container.textContent).toContain('ещё не рассчитано');
+});
+
+it('28.10 mockup: while counting, the expanded vacancy shows «считаем», not the old queue block', async () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => Response.json({ data: { state: 'processing', requirements: [] } })),
+  );
+  const container = document.createElement('div');
+  document.body.append(container);
+  root = createRoot(container);
+  const view = { state: 'processing', requirements: [] } as const;
+  await act(async () =>
+    root!.render(
+      <>
+        <VacancyFitEvidence vacancyId="fit-c" initialView={view} hideWhenNumber showTable={false} />
+        <VacancyFitBlock cluster={{ id: 'fit-c', canonicalTitle: 'CTO' } as never} view={view} />
+      </>,
+    ),
+  );
+  const text = container.textContent ?? '';
+  expect(text).not.toMatch(/Расчёт в очереди|Обновить результат|Соответствие:/u);
+  expect(text).toContain('считаем');
+  expect(text).toContain('Совпадение считается');
 });

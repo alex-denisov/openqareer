@@ -6,7 +6,7 @@ import type { VacancyFitView } from '../../shared/vacancyFit';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
-import { wantedCompaniesFirst, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
+import { wantedCompaniesBreakTies, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 
 const FIT_ORDER_WINDOW_MS = 60_000;
 /** Столько точных разборов считается между уступками event loop при фоновом пересчёте. */
@@ -57,15 +57,15 @@ export function withVacancyFitOrder(
   };
 }
 
-/**
- * B422: в порядке «по соответствию» вакансии компаний «Хочу» идут первыми,
- * внутри групп — порядок разбора. Свежесть отметку не учитывает.
- */
 /** Порядок подборки и то, от чего он зависит помимо выдачи (ключ кэша списка). */
 export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[]) & {
   readonly cacheKey: string;
 };
 
+/**
+ * 28.10: «по совпадению» ведёт процент; вакансии компаний «Хочу» поднимаются только
+ * среди вакансий с тем же процентом (B422 стал вторым ключом). Свежесть отметку не учитывает.
+ */
 export function withWantedCompanyOrder(
   deps: RouteDeps,
   candidateId: string,
@@ -78,7 +78,9 @@ export function withWantedCompanyOrder(
   const cacheKey = [...wanted].sort().join(',');
   return Object.assign(
     (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
-      wantedCompaniesFirst(byFit(items), wanted),
+      wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
+        compareFitPercent(left.explanation.fitView, right.explanation.fitView),
+      ),
     { cacheKey },
   );
 }
@@ -231,6 +233,47 @@ export function vacanciesAwaitingFit(items: readonly MatchedVacancyItem[]): stri
       .slice(0, FIT_PAGE_LIMIT)
       .map((item) => item.cluster.id)
   );
+}
+
+const WARM_UNCOUNTED_LIMIT = 20;
+const WARM_STATES = new Set(['not_requested', 'failed', 'refreshing', 'no_description']);
+
+/**
+ * 28.10: строка без процента стоит после посчитанных, поэтому в первую страницу не попадает
+ * и полный текст (hh.ru) для неё не дочитывался — «нет описания» навсегда. Греются верх
+ * списка и лучшие непосчитанные строки ниже него: их текст и расчёт.
+ */
+export function vacanciesToWarm(
+  items: readonly MatchedVacancyItem[],
+  limit = WARM_UNCOUNTED_LIMIT,
+): string[] {
+  const top = items.slice(0, limit).map((item) => item.cluster.id);
+  const uncounted = items
+    .slice(limit)
+    .filter((item) => {
+      const state = item.explanation.fitView?.state;
+      return state === undefined || WARM_STATES.has(state);
+    })
+    .slice(0, limit)
+    .map((item) => item.cluster.id);
+  return [...top, ...uncounted];
+}
+
+/** Ставит расчёт для перечисленных вакансий, которым он ещё нужен (после дочитывания текста). */
+export function requestFitForVacancyIds(
+  deps: RouteDeps,
+  candidateId: string,
+  vacancyIds: readonly string[],
+): void {
+  const runtime = deps.vacancyMechanics;
+  if (!runtime) return;
+  const context = createVacancyFitContextReader(deps, candidateId);
+  for (const id of vacancyIds) {
+    const target = readVacancyFitTarget(deps, id);
+    if (!target) continue;
+    const input = context(target, []);
+    if (['not_requested', 'failed'].includes(runtime.view(input).state)) runtime.enqueue(input);
+  }
 }
 
 /**
