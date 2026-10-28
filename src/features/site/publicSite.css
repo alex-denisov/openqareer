@@ -5,6 +5,10 @@
  * CSP is `style-src 'self'`.
  */
 .ps {
+  /* B574: the public site is light; the app's :root is dark, and native
+     controls (the /tariffs consent checkbox) followed it and drew black. */
+  color-scheme: light;
+  accent-color: var(--ps-blue);
   /* B350: shared public geometry, mapped to KIT spacing and existing public controls. */
   --ps-space-1: 4px;
   --ps-space-2: 8px;

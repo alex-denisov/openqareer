@@ -90,8 +90,13 @@ test('keeps a new account outside the cabinet until the email code is confirmed'
   await page.waitForURL('**/verify-email');
   await expect(page.getByRole('heading', { name: 'Введите код из письма' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Код из письма' })).toBeVisible();
-  const logoLink = page.getByRole('link', { name: 'openqareer' });
-  await page.keyboard.press('Tab');
+  // B574: the site header frames the page; its logo is the first stop.
+  const logoLink = page.locator('.ps-top').getByRole('link', { name: 'openqareer — на главную' });
+  // The logo is reachable from the keyboard and shows its focus ring.
+  for (let step = 0; step < 40; step += 1) {
+    if (await logoLink.evaluate((element) => element === document.activeElement)) break;
+    await page.keyboard.press('Tab');
+  }
   await expect(logoLink).toBeFocused();
   await expect
     .poll(() => logoLink.evaluate((element) => getComputedStyle(element).outlineWidth))
@@ -105,7 +110,7 @@ test('keeps a new account outside the cabinet until the email code is confirmed'
     page.getByRole('button', { name: 'Подтвердить адрес' }),
     page.getByRole('button', { name: 'Отправить ещё раз' }),
     page.getByRole('button', { name: 'Изменить адрес' }),
-    page.getByRole('link', { name: 'openqareer' }),
+    logoLink,
   ];
   for (const target of targets) await expectMinimumHitArea(target);
   await page.screenshot({
