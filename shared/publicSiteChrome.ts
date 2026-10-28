@@ -94,7 +94,7 @@ export const PLAN_BAR = {
   href: '/tariffs',
 } as const;
 
-export const OPERATOR_LINE = 'ИП, ИНН 774315089677';
+export const OPERATOR_LINE = 'ИНН 774315089677';
 export const SUPPORT_CONTACT = 'support@openqareer.com';
 
 /** The nav section a public path belongs to, for `aria-current`. */

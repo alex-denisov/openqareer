@@ -35,7 +35,7 @@ export function AppVersionNote({ version }: { readonly version: string | null })
   if (!version) return <p className="appver" aria-hidden="true" />;
   return (
     <p className="appver">
-      Версия <span className="appver-num">{version}</span> · приложение обновляется само
+      Версия <span className="appver-num">{version}</span>
     </p>
   );
 }

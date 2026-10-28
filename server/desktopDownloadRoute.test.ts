@@ -22,6 +22,13 @@ function createApp(files: Record<string, string | Buffer>) {
   return app;
 }
 
+/** The stable address answers with a redirect to the versioned file name. */
+async function download(app: ReturnType<typeof createApp>, url: string) {
+  const first = await app.inject({ method: 'GET', url });
+  if (first.statusCode !== 302) return first;
+  return app.inject({ method: 'GET', url: String(first.headers.location) });
+}
+
 const manifest = (fileName: string) =>
   JSON.stringify({ version: '1.0.0', sha256: 'abc', fileName });
 
@@ -38,7 +45,7 @@ describe('desktop macOS download', () => {
     });
     expect(info.json().data.path).toBeUndefined();
 
-    const file = await app.inject({ method: 'GET', url: '/downloads/openqareer-macos.dmg' });
+    const file = await download(app, '/downloads/openqareer-macos.dmg');
     expect(file.statusCode).toBe(200);
     expect(file.headers['content-disposition']).toContain('OpenQareer_1.0.0_x64.dmg');
     expect(file.headers['content-length']).toBe('2048');
@@ -72,7 +79,7 @@ describe('desktop Windows download (B576)', () => {
       architecture: 'x64',
       signed: false,
     });
-    const file = await app.inject({ method: 'GET', url: '/downloads/openqareer-windows.exe' });
+    const file = await download(app, '/downloads/openqareer-windows.exe');
     expect(file.statusCode).toBe(200);
     expect(file.headers['content-type']).toBe('application/vnd.microsoft.portable-executable');
     expect(file.headers['content-disposition']).toContain('OpenQareer_1.0.9_x64-setup.exe');
@@ -92,7 +99,7 @@ describe('desktop Windows download (B576)', () => {
     ).toEqual({
       available: false,
     });
-    const file = await app.inject({ method: 'GET', url: '/downloads/openqareer-windows.exe' });
+    const file = await download(app, '/downloads/openqareer-windows.exe');
     expect(file.statusCode).toBe(404);
     expect(file.body).toBe('Сборка для Windows пока не опубликована.');
   });
@@ -110,11 +117,19 @@ describe('one desktop release for every client (B576)', () => {
       'desktop-macos.json': release('OpenQareer-1.1.4-macos-universal.dmg'),
       'desktop-windows.json': release('OpenQareer-1.1.4-windows-x64-setup.exe'),
     });
-    const mac = await app.inject({ method: 'GET', url: '/downloads/openqareer-macos.dmg' });
+    const mac = await download(app, '/downloads/openqareer-macos.dmg');
     expect(mac.statusCode).toBe(200);
     expect(mac.headers['content-disposition']).toContain('OpenQareer-1.1.4-macos-universal.dmg');
-    const windows = await app.inject({ method: 'GET', url: '/downloads/openqareer-windows.exe' });
+    const windows = await download(app, '/downloads/openqareer-windows.exe');
     expect(windows.headers['content-disposition']).toContain('OpenQareer-1.1.4-windows-x64-setup.exe');
+
+    const redirect = await app.inject({ method: 'GET', url: '/downloads/openqareer-macos.dmg' });
+    expect(redirect.statusCode).toBe(302);
+    expect(redirect.headers.location).toBe('/downloads/OpenQareer-1.1.4-macos-universal.dmg');
+    expect(redirect.headers['cache-control']).toBe('no-cache');
+    for (const name of ['desktop-macos.json', 'OpenQareer-1.1.3-macos-universal.dmg', '..%2Fopenqareer.db']) {
+      expect((await app.inject({ method: 'GET', url: `/downloads/${name}` })).statusCode).toBe(404);
+    }
 
     const info = await app.inject({ method: 'GET', url: '/api/v1/desktop/release' });
     expect(info.headers['cache-control']).toBe('no-cache');

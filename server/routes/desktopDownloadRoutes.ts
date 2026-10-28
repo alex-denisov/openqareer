@@ -155,6 +155,12 @@ export function registerDesktopDownloadRoutes(app: FastifyInstance, deps: RouteD
       .send(createReadStream(join(updates, file)));
   });
 
+  registerInstallerRoutes(app, directory);
+}
+
+function registerInstallerRoutes(app: FastifyInstance, directory: string): void {
+  // The stable address redirects to the versioned file name: Safari names a
+  // `download` link after its URL and ignores Content-Disposition.
   for (const [platform, files] of Object.entries(PLATFORM_FILES) as [
     DesktopPlatform,
     DesktopPlatformFiles,
@@ -166,10 +172,22 @@ export function registerDesktopDownloadRoutes(app: FastifyInstance, deps: RouteD
       }
       return reply
         .header('Cache-Control', 'no-cache')
-        .header('Content-Length', String(download.sizeBytes))
-        .header('Content-Disposition', `attachment; filename="${download.fileName}"`)
-        .type(files.contentType)
-        .send(createReadStream(download.path));
+        .redirect(`/downloads/${encodeURIComponent(download.fileName)}`, 302);
     });
   }
+
+  // Only the currently published installers are served; nothing else in the folder.
+  app.get<{ Params: { file: string } }>('/downloads/:file', async (request, reply) => {
+    for (const platform of Object.keys(PLATFORM_FILES) as DesktopPlatform[]) {
+      const download = await readDesktopDownload(directory, platform);
+      if (download?.fileName !== request.params.file) continue;
+      return reply
+        .header('Cache-Control', 'no-cache')
+        .header('Content-Length', String(download.sizeBytes))
+        .header('Content-Disposition', `attachment; filename="${download.fileName}"`)
+        .type(PLATFORM_FILES[platform].contentType)
+        .send(createReadStream(download.path));
+    }
+    return reply.code(404).type('text/plain; charset=utf-8').send('Файл не найден.');
+  });
 }
