@@ -542,6 +542,16 @@ html:has(.hm) {
   font-weight: 500;
   opacity: 0.8;
 }
+.hm .app .appver,
+.hm .getapp .appver {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--t-xs);
+  color: var(--soft);
+}
+.hm .appver-num {
+  font-variant-numeric: tabular-nums;
+}
 .hm .getapp {
   display: flex;
   flex-wrap: wrap;
@@ -721,6 +731,9 @@ html:has(.hm) {
 }
 .hm .end .getapp p {
   margin: 0;
+}
+.hm .end .getapp .appver {
+  text-align: center;
 }
 
 @media (max-height: 820px) and (min-width: 761px) {

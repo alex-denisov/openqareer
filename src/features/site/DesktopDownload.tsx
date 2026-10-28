@@ -1,72 +1,37 @@
 import React from 'react';
-import { AppleLogo, DownloadSimple } from '@phosphor-icons/react';
 
-export interface DesktopDownloadInfo {
-  version: string;
-  sizeBytes: number;
-  architecture: string;
-  signed: boolean;
-}
-
+/** Постоянные адреса: сервер всегда отдаёт по ним текущую сборку (B576). */
 export const DESKTOP_DOWNLOAD_PATH = '/downloads/openqareer-macos.dmg';
 export const WINDOWS_DOWNLOAD_PATH = '/downloads/openqareer-windows.exe';
+const RELEASE_PATH = '/api/v1/desktop/release';
+const VERSION_PATTERN = /^\d+\.\d+\.\d+$/u;
 
-export function formatMegabytes(sizeBytes: number): string {
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} МБ`;
+/** Версия есть, только когда сервер подтвердил одну сборку для macOS и Windows. */
+export function parseDesktopRelease(body: unknown): string | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const data = (body as { data?: { available?: unknown; version?: unknown } }).data;
+  if (data?.available !== true || typeof data.version !== 'string') return null;
+  return VERSION_PATTERN.test(data.version) ? data.version : null;
 }
 
-/** Показывает только то, что сервер подтвердил: нет файла — нет и кнопки. */
-export function useDesktopDownload(): DesktopDownloadInfo | null {
-  const [info, setInfo] = React.useState<DesktopDownloadInfo | null>(null);
+export function useDesktopRelease(): string | null {
+  const [version, setVersion] = React.useState<string | null>(null);
   React.useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/v1/desktop/macos', { signal: controller.signal })
+    fetch(RELEASE_PATH, { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
-      .then((body: { data?: Partial<DesktopDownloadInfo> & { available?: boolean } } | null) => {
-        const data = body?.data;
-        if (
-          data?.available === true &&
-          typeof data.version === 'string' &&
-          typeof data.sizeBytes === 'number' &&
-          typeof data.architecture === 'string'
-        ) {
-          setInfo({
-            version: data.version,
-            sizeBytes: data.sizeBytes,
-            architecture: data.architecture,
-            signed: data.signed === true,
-          });
-        }
-      })
+      .then((body: unknown) => setVersion(parseDesktopRelease(body)))
       .catch(() => undefined);
     return () => controller.abort();
   }, []);
-  return info;
+  return version;
 }
 
-export function DesktopDownload() {
-  const info = useDesktopDownload();
-  if (!info) return null;
-  const chip = info.architecture === 'aarch64' ? 'Apple Silicon' : 'Intel';
+export function AppVersionNote({ version }: { readonly version: string | null }) {
+  if (!version) return null;
   return (
-    <div className="site-download" data-testid="desktop-download">
-      <a className="site-btn is-secondary" href={DESKTOP_DOWNLOAD_PATH} download>
-        <AppleLogo size={18} weight="bold" aria-hidden="true" /> Скачать для macOS
-        <DownloadSimple size={18} weight="bold" aria-hidden="true" />
-      </a>
-      <span className="site-download-meta">
-        версия <span className="site-download-mono">{info.version}</span>
-        {' · '}
-        <span className="site-download-mono">{formatMegabytes(info.sizeBytes)}</span>
-        {' · '}
-        {chip}
-      </span>
-      {info.signed ? null : (
-        <span className="site-download-note">
-          Сборка пока без подписи Apple: при первом запуске откройте её через
-          контекстное меню «Открыть».
-        </span>
-      )}
-    </div>
+    <p className="appver">
+      Версия <span className="appver-num">{version}</span> · приложение обновляется само
+    </p>
   );
 }

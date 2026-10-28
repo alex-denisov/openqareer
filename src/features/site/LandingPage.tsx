@@ -21,7 +21,12 @@ import {
   landingFeed,
   type LandingStats,
 } from '../../../shared/landingStats';
-import { DESKTOP_DOWNLOAD_PATH, WINDOWS_DOWNLOAD_PATH } from './DesktopDownload';
+import {
+  AppVersionNote,
+  DESKTOP_DOWNLOAD_PATH,
+  WINDOWS_DOWNLOAD_PATH,
+  useDesktopRelease,
+} from './DesktopDownload';
 import { SiteLink } from './SiteLink';
 import { capturedLandingStats } from './embeddedLandingStats';
 import { preloadAuthPages } from './authPagesLoader';
@@ -118,15 +123,14 @@ function Count({ active, date }: { readonly active: string; readonly date: strin
   );
 }
 
-function Hero({
-  stats,
-  onNavigate,
-  signedIn,
-}: {
+interface HeroProps {
   readonly stats: LandingStats;
   readonly onNavigate: Navigate;
   readonly signedIn: boolean;
-}) {
+  readonly appVersion: string | null;
+}
+
+function Hero({ stats, onNavigate, signedIn, appVersion }: HeroProps) {
   const c = counts(stats);
   const pool = landingFeed(stats);
   return (
@@ -154,6 +158,7 @@ function Hero({
           </div>
           <div className="app">
             <AppBadges />
+            <AppVersionNote version={appVersion} />
           </div>
           <Count active={c.active} date={c.date} />
         </div>
@@ -302,7 +307,15 @@ function Faq() {
   );
 }
 
-function End({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean }) {
+function End({
+  onNavigate,
+  signedIn,
+  appVersion,
+}: {
+  onNavigate: Navigate;
+  signedIn: boolean;
+  appVersion: string | null;
+}) {
   return (
     <section className="scr end" aria-labelledby="end-heading">
       <div className="wrap">
@@ -324,6 +337,7 @@ function End({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean
           <div className="getapp" id="download">
             <AppBadges />
             <p>Больше функций доступно в приложении</p>
+            <AppVersionNote version={appVersion} />
           </div>
         </div>
       </div>
@@ -334,6 +348,7 @@ function End({ onNavigate, signedIn }: { onNavigate: Navigate; signedIn: boolean
 export function LandingPage({ session, onNavigate, stats }: LandingPageProps) {
   const [current] = React.useState<LandingStats>(() => stats ?? readEmbeddedLandingStats());
   const signedIn = Boolean(session);
+  const appVersion = useDesktopRelease();
   React.useEffect(() => {
     document.title = LANDING_TITLE;
   }, []);
@@ -356,12 +371,12 @@ export function LandingPage({ session, onNavigate, stats }: LandingPageProps) {
         isAdmin={session?.role === 'admin'}
       />
       <main id="main" className="hm">
-        <Hero stats={current} onNavigate={onNavigate} signedIn={signedIn} />
+        <Hero stats={current} onNavigate={onNavigate} signedIn={signedIn} appVersion={appVersion} />
         <How onNavigate={onNavigate} signedIn={signedIn} />
         <Tools />
         <Tariffs />
         <Faq />
-        <End onNavigate={onNavigate} signedIn={signedIn} />
+        <End onNavigate={onNavigate} signedIn={signedIn} appVersion={appVersion} />
       </main>
       <PublicFooter onNavigate={onNavigate} onLanding signedIn={signedIn} />
     </div>

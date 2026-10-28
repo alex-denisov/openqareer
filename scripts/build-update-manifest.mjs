@@ -7,7 +7,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_PATH = join(ROOT, 'src-tauri', 'tauri.conf.json');
 const OUTPUT_DEFAULT = join(ROOT, 'dist', 'desktop', 'latest.json');
-const PLATFORMS = ['darwin-aarch64', 'darwin-x86_64'];
+// B576: every client is fed from one release; a missing platform fails the build.
+const PLATFORMS = ['darwin-aarch64', 'darwin-x86_64', 'windows-x86_64'];
+const ARTIFACT_SUFFIX = {
+  'darwin-aarch64': '.app.tar.gz',
+  'darwin-x86_64': '.app.tar.gz',
+  'windows-x86_64': '-setup.exe',
+};
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u;
 const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
 
@@ -40,7 +46,7 @@ function validateManifestFields(input) {
 async function readArtifactSignature(artifactPath, platform) {
   const info = await stat(artifactPath).catch(() => null);
   if (!info?.isFile()) throw new Error(`Missing updater artifact for ${platform}.`);
-  if (!artifactPath.endsWith('.app.tar.gz')) throw new Error(`Unexpected updater artifact for ${platform}.`);
+  if (!artifactPath.endsWith(ARTIFACT_SUFFIX[platform])) throw new Error(`Unexpected updater artifact for ${platform}.`);
   const signature = await readFile(`${artifactPath}.sig`, 'utf8').catch(() => '');
   if (!signature.trim()) throw new Error(`Missing signature for ${platform}.`);
   return signature.trim();
@@ -102,7 +108,7 @@ function parseOptions(args) {
       const value = args[++index] ?? '';
       const separator = value.indexOf('=');
       const platform = value.slice(0, separator);
-      if (!PLATFORMS.includes(platform) || separator < 1) throw new Error('Use --artifact <darwin-platform>=<path>.');
+      if (!PLATFORMS.includes(platform) || separator < 1) throw new Error(`Use --artifact <${PLATFORMS.join('|')}>=<path>.`);
       if (options.artifacts[platform]) throw new Error(`Duplicate artifact for ${platform}.`);
       options.artifacts[platform] = resolve(ROOT, value.slice(separator + 1));
     } else if (option === '--version') options.version = args[++index] ?? '';
