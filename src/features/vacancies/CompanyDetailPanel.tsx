@@ -16,6 +16,7 @@ import type { VacancyLetterTarget } from './VacancyLetterScreen';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import {
   companyNextStepText,
+  companyInitial,
   companyLocationLabel,
   companySourceSummary,
   formatObservedDate,
@@ -46,7 +47,7 @@ interface CompanyDetailPanelProps {
 export function CompanyAvatar({ name }: { readonly name: string }) {
   return (
     <span className="companies-people-avatar" aria-hidden="true">
-      {name.trim().charAt(0).toLocaleUpperCase('ru-RU') || '·'}
+      {companyInitial(name)}
     </span>
   );
 }

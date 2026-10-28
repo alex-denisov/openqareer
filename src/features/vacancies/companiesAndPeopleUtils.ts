@@ -204,3 +204,9 @@ export function companyNextStepText(
   if (vacancy) return `Следующий шаг: откликнуться на ${vacancy.title}`;
   return '';
 }
+
+/** Буква аватара: первая буква или цифра, кавычки и знаки пропускаются («Уралхим» → У). */
+export function companyInitial(name: string): string {
+  const first = /[\p{L}\p{N}]/u.exec(name);
+  return first ? first[0].toLocaleUpperCase('ru-RU') : '·';
+}

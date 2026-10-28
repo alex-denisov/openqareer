@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  companyInitial,
   companyLocationLabel,
   companyNextStepText,
   companySourceSummary,
@@ -229,5 +230,16 @@ describe('companyNextStepText', () => {
     expect(companyNextStepText(today, { people: [igor] }, now)).toBe(
       'Следующий шаг: написать Igor Siusiukov, до 28.10.2026',
     );
+  });
+});
+
+describe('companyInitial', () => {
+  it('takes the first letter after quotes and signs (28.10)', () => {
+    expect(companyInitial('«Уралхим»')).toBe('У');
+    expect(companyInitial('ОХК «Уралхим»')).toBe('О');
+    expect(companyInitial('"Яндекс"')).toBe('Я');
+    expect(companyInitial('  @mail.ru')).toBe('M');
+    expect(companyInitial('1С')).toBe('1');
+    expect(companyInitial('«»')).toBe('·');
   });
 });
