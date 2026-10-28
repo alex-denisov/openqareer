@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { isForbiddenVacancyPage } from './hhVacancyDescription';
 import type { HhSearchTransport, HhSearchTransportResult } from './hhSearchFetcher';
 
 /**
@@ -120,10 +121,22 @@ export function buildEgressTransport(config: EgressTransportConfig): HhSearchTra
 export function buildHhPageFetcher(env: NodeJS.ProcessEnv = process.env): HhSearchTransport {
   const egress = readEgressConfig(env);
   if (!egress) return directHhTransport;
-  const fallback = buildEgressTransport(egress);
+  return directThenFallback(directHhTransport, buildEgressTransport(egress));
+}
+
+/**
+ * Direct first; the egress path only when the direct answer is not a page. A 403 that says
+ * the employer restricted this one vacancy is final: the egress answer would be a bare
+ * refusal that pauses every card (prod 28.10).
+ */
+export function directThenFallback(
+  direct: HhSearchTransport,
+  fallback: HhSearchTransport,
+): HhSearchTransport {
   return async (url) => {
-    const direct = await directHhTransport(url);
-    if (direct.status === 200 && direct.body) return direct;
+    const answer = await direct(url);
+    if (answer.status === 200 && answer.body) return answer;
+    if (isForbiddenVacancyPage(answer.body)) return answer;
     return fallback(url);
   };
 }

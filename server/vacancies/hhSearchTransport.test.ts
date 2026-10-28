@@ -1,5 +1,23 @@
-import { describe, expect, it } from 'vitest';
-import { parseEgressResponse, readEgressConfig } from './hhSearchTransport';
+import { describe, expect, it, vi } from 'vitest';
+import { directThenFallback, parseEgressResponse, readEgressConfig } from './hhSearchTransport';
+
+describe('directThenFallback', () => {
+  const forbidden = '{&#34;forbidden&#34;:true,&#34;errorPage&#34;:{&#34;isError&#34;:true}}';
+  it('keeps the direct 403 «employer restricted» page instead of the egress refusal (prod 28.10)', async () => {
+    const fallback = vi.fn(async () => ({ status: 403, body: '' }));
+    const fetch = directThenFallback(async () => ({ status: 403, body: forbidden }), fallback);
+    await expect(fetch('https://hh.ru/vacancy/1')).resolves.toEqual({
+      status: 403,
+      body: forbidden,
+    });
+    expect(fallback).not.toHaveBeenCalled();
+  });
+  it('a bare direct 403 still goes to the egress path', async () => {
+    const fallback = vi.fn(async () => ({ status: 200, body: 'page' }));
+    const fetch = directThenFallback(async () => ({ status: 403, body: '' }), fallback);
+    await expect(fetch('https://hh.ru/vacancy/1')).resolves.toEqual({ status: 200, body: 'page' });
+  });
+});
 
 describe('parseEgressResponse', () => {
   it('делит ответ коннектора на код и тело', () => {
