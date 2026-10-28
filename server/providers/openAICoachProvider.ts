@@ -40,6 +40,14 @@ export interface OpenAICoachProviderOptions {
  */
 const COACH_REASONING_EFFORT = 'high' as const;
 
+/**
+ * 28.10 (владелец): стратег — самая долгая роль хода (25–48 с), он рассуждает на
+ * `medium`. Потолок вывода остаётся от `high`: это предел, а не расход.
+ */
+function reasoningEffortForRole(role: CoachTurnInput['activeRole']): 'medium' | 'high' {
+  return role === 'career_strategist' ? 'medium' : COACH_REASONING_EFFORT;
+}
+
 export class OpenAICoachProvider implements CoachProvider {
   private readonly client: OpenAI;
   private readonly model: OpenAICoachProviderOptions['model'];
@@ -67,7 +75,7 @@ export class OpenAICoachProvider implements CoachProvider {
           instructions: careerInstructionsForRole(input.activeRole, input.internalPurpose),
           input: serializeCoachInput(input),
           reasoning: {
-            effort: COACH_REASONING_EFFORT,
+            effort: reasoningEffortForRole(input.activeRole),
             context: 'all_turns',
           },
           max_output_tokens: outputBudgetForRole(
