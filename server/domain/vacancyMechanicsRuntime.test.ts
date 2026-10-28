@@ -210,7 +210,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.view(source).state).not.toBe('ready');
   });
 
-  it('can cache a valid all-unknown assessment without inventing zero percent or a provider error', async () => {
+  it('a valid all-unknown answer is cached as 0 of N confirmed, without a provider error (owner, 28.10)', async () => {
     const runtime = setup(); const original = input();
     const source: VacancyFitInput = { ...original, gates: {
       role: { status: 'matched', reason: 'confirmed' }, level: { status: 'matched', reason: 'confirmed' },
@@ -219,7 +219,8 @@ describe('background vacancy mechanics with real SQLite', () => {
     const complete = vi.fn(async (request: BulkLlmInput) => ({ content: JSON.stringify({ assessments: [{ requirementId: JSON.parse(request.input).requirements[0].id, status: 'unknown', evidence: [] }] }) }));
     runtime.enqueue(source);
     await runtime.runNext(fitClient(complete));
-    expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { status: 'unknown', coveragePercent: null } });
+    expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { coverage: { matched: 0 } } });
+    expect(runtime.view(source).result?.reason).not.toBe('assessment_unavailable');
     expect(await runtime.runNext(fitClient(complete))).toBe(false);
     expect(complete).toHaveBeenCalledTimes(1);
   });
@@ -294,7 +295,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.view(source).state).toBe('processing');
     await runtime.runNext(client);
     expect(complete).toHaveBeenCalledTimes(4);
-    expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { coveragePercent: null, status: 'unknown' } });
+    expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { coverage: { matched: 0 } } });
     expect(await runtime.runNext(client)).toBe(false);
   });
 

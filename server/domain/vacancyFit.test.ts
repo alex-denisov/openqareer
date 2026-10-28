@@ -61,6 +61,19 @@ describe('verified vacancy fit coverage', () => {
     expect(result.coverage.matched).toBe(0);
     expect(result.assessments.every((a) => a.status !== 'unmatched')).toBe(true);
   });
+  it('a model answer that confirms nothing is 0 %, not «no percent» (owner, 28.10)', () => {
+    const unknown = fitInput().requirements.map((item) => ({ requirementId: item.id, status: 'unknown' as const, evidence: [] }));
+    const result = evaluateVacancyFit({ ...fitInput(), assessments: unknown });
+    expect(result.reason).toBe('assessed');
+    expect(result.coveragePercent).toBe(0);
+    expect(result.coverage).toEqual({ matched: 0, total: 3, unknown: 3 });
+    expect(result.dataState).toBe('partial');
+  });
+  it('without a model answer there is still no number', () => {
+    const result = evaluateVacancyFit({ ...fitInput(), assessments: undefined });
+    expect(result.reason).toBe('assessment_unavailable');
+    expect(result.coveragePercent).toBeNull();
+  });
   it('returns no number when every requirement remains unknown', () => {
     const result = evaluateVacancyFit({ ...fitInput(), assessments: [] }, '2026-10-18T10:00:00.000Z');
     expect(result.coveragePercent).toBeNull();
