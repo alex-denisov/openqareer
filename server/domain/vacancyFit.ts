@@ -94,6 +94,9 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     if (!claim || !['matched', 'unmatched'].includes(claim.status) || !Array.isArray(claim.evidence) || !claim.evidence.length || claim.evidence.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !factMap.get(entry.factId)?.statement.includes(entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
     return { requirementId: requirement.id, status: claim.status, evidence: claim.evidence.map(({ factId, quote }) => ({ factId, quote })) };
   });
+  // Owner 28.10: a model answer that confirms nothing is «0 из N», not «no percent». Without an
+  // answer (no claims at all) the requirements are not assessed yet.
+  const answered = (input.assessments?.length ?? 0) > 0;
   const blocked = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status === 'blocked');
   // Неподтверждённые ворота не прячут процент (почти у всех профилей регион, формат и право на работу
   // не подтверждены), а остаются в результате как «неизвестно» и снижают потолок процента.
@@ -102,7 +105,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const skills = assessments.filter((item) => skillIds.has(item.requirementId));
   const conditions = assessments.filter((item) => !skillIds.has(item.requirementId));
   const reason = blocked ? 'blocked_gate' : !requirements.length ? 'no_requirements' : skills.length < MIN_SKILL_REQUIREMENTS ? 'too_few_skills'
-    : !facts.length ? 'no_eligible_facts' : !skills.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
+    : !facts.length ? 'no_eligible_facts' : !answered && !skills.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
   const matchedIds = new Set(skills.filter((item) => item.status === 'matched').map((item) => item.requirementId));
   const required = requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor));
   const canScore = reason === 'assessed';
@@ -118,7 +121,8 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     coveragePercent: percent(matchedIds.size, skills.length),
     requiredCoverage: { matched: required.filter((item) => matchedIds.has(item.id)).length, total: required.length, percent: percent(required.filter((item) => matchedIds.has(item.id)).length, required.length) },
     coverage: count(skills), conditionCoverage: count(conditions),
-    assessments, reason,
+    // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
+    assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,
   };
 }
 
