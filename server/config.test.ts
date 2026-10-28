@@ -389,6 +389,7 @@ describe('очередь моделей (B183)', () => {
       { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
       { provider: 'openrouter', model: 'openrouter/free' },
       { provider: 'gemini' },
+      { provider: 'anthropic' },
     ]);
     expect(
       readServerConfig(
@@ -396,6 +397,15 @@ describe('очередь моделей (B183)', () => {
         import.meta.url,
       ).coachExcludedRoutes,
     ).toEqual([]);
+  });
+
+  it('ключ Anthropic на проде не добавляет его в очередь консультанта (28.10)', () => {
+    const config = readServerConfig(
+      { ...validEnvironment, OPENQAREER_ANTHROPIC_API_KEY: 'sk-ant-test-key-that-is-long-enough' },
+      import.meta.url,
+    );
+    expect(config.providerCredentials?.anthropic).toBeDefined();
+    expect(config.coachExcludedRoutes).toContainEqual({ provider: 'anthropic' });
   });
 
   it('опечатка в имени провайдера останавливает запуск, а не молча теряет маршрут', () => {
