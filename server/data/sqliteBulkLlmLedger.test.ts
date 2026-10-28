@@ -48,14 +48,20 @@ describe('потолок фоновой обработки — месячный 
     expect(status.limits?.monthUsd).toBe(1);
   });
 
-  it('стоимость выше резерва останавливает фон до конца суток UTC, а не навсегда (28.10)', () => {
+  it('фактическая цена чуть выше резерва записывается, а следующий вызов проходит (28.10)', () => {
     const ledger = ledgerAt('2026-10-28T20:50:00.000Z');
     const id = ledger.reserve(call, limits);
-    ledger.settle(id!, { cost: 0.5, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
-    expect(ledger.reserve(call, limits)).toBeNull();
-    vi.setSystemTime(Date.parse('2026-10-28T23:59:00.000Z'));
-    expect(ledger.reserve(call, limits)).toBeNull();
-    vi.setSystemTime(Date.parse('2026-10-29T00:01:00.000Z'));
+    ledger.settle(id!, { cost: 0.4001, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
     expect(ledger.reserve(call, limits)).not.toBeNull();
+    const status = ledger.status(limits);
+    expect(status.spentUsd).toBeCloseTo(0.4001, 6);
+    expect(status.events.some((event: { kind: string }) => event.kind === 'cost_exceeds_reservation')).toBe(true);
+  });
+
+  it('фон останавливает только фактический расход месяца у потолка', () => {
+    const ledger = ledgerAt('2026-10-28T20:50:00.000Z');
+    const id = ledger.reserve(call, limits);
+    ledger.settle(id!, { cost: 0.9, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
+    expect(ledger.reserve(call, limits)).toBeNull();
   });
 });

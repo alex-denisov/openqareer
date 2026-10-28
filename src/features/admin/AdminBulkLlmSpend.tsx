@@ -18,7 +18,7 @@ function usd(value: number) {
 }
 const EVENTS: Record<string, string> = {
   budget_exceeded: 'Достигнут лимит расходов',
-  cost_exceeds_reservation: 'Стоимость выше резерва: новые запросы остановлены до конца суток UTC',
+  cost_exceeds_reservation: 'Стоимость выше резерва: записана фактическая цена',
   completion_failed_or_unknown: 'Вызов завершился ошибкой или требует сверки стоимости',
   batch_submission_unknown: 'Нужно проверить приём пакетного запроса',
   batch_terminal_usage_unresolved: 'Пакет завершён без подтверждённой стоимости',

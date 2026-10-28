@@ -61,16 +61,10 @@ export class SqliteBulkLlmLedger {
     return runSqliteTransaction(this.db, () => {
       this.expireStaleHolds();
       const day = new Date().toISOString().slice(0, 10);
-      if (
-        this.db
-          // A charge above its hold stops the channel for the rest of the UTC day, not for good:
-          // one Vertex call at $0.0101 over a $0.01 hold stopped every fit for hours (28.10, B580).
-          .prepare(
-            "SELECT 1 FROM bulk_llm_events WHERE kind='cost_exceeds_reservation' AND created_at>=? LIMIT 1",
-          )
-          .get(`${day}T00:00:00.000Z`)
-      )
-        return null;
+      // A charge above its hold is recorded at its real price and leaves an event for the admin;
+      // it no longer stops the channel. The caps below count real charges, so they still hold.
+      // A latch here stopped every fit for hours after one Vertex call at $0.0101 over a $0.01
+      // hold (28.10, B580).
       if (
         this.sum('(day>=? OR cost IS NULL)', monthStart()) + amount > config.monthUsd ||
         this.sum('run_id=?', input.runId) + amount > config.runUsd ||

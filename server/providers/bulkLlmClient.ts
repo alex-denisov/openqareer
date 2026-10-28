@@ -4,6 +4,9 @@ import { MODEL_CHAINS } from './modelChains';
 import type { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import type { BulkFallback } from './bulkGeminiFallback';
 /** The ledger refused a reservation: a spend limit, not a provider or answer failure (B556). */
+/** Margin over the Vertex list-price bound for its hold (B580). */
+const VERTEX_HOLD_MARGIN = 1.25;
+
 export const BULK_BUDGET_EXCEEDED = 'Bulk budget exceeded';
 
 export interface BulkLlmInput {
@@ -67,7 +70,6 @@ class BulkStageError extends Error {
 }
 /** Money is uncertain or a cap is hit: the chain stops, no later stage is asked. */
 class BulkSpendError extends Error {}
-const ACTUAL_COST_EXCEEDED = 'Actual cost exceeded reservation';
 const UNKNOWN_USAGE = 'Unknown bulk usage; reservation retained';
 
 function isJsonAnswer(content: string): boolean {
@@ -308,8 +310,8 @@ export class BulkLlmClient {
       const actual = z
         .object({ model: z.string().optional(), provider: z.string().optional() })
         .parse(result);
+      // A charge above the hold is booked at its real price; the paid answer is kept (B580).
       this.ledger.settle(id, usage, actual);
-      if (usage.cost > this.config.perRequestUsd) throw new BulkSpendError(ACTUAL_COST_EXCEEDED);
       const completion = completionSchema.safeParse(result);
       const content = completion.success ? completion.data.choices[0]?.message.content : undefined;
       // OpenRouter may answer with a dated revision of the pinned model, never with another model.
@@ -329,9 +331,16 @@ export class BulkLlmClient {
     }
   }
   private async completeVertex(vertex: BulkFallback, input: BulkLlmInput): Promise<BulkLlmResult> {
+    const maxTokens = input.maxTokens ?? 2048;
+    // Vertex has no max_price: the hold is the call's upper bound at its list price with a
+    // margin, never below the flat hold (28.10: a $0.0101 call over a $0.01 hold, B580).
+    const inputUpperBound = Buffer.byteLength(input.prefix) + Buffer.byteLength(input.input) + 4096;
+    const upperBound =
+      (inputUpperBound * vertex.inputPerMillionUsd + maxTokens * vertex.outputPerMillionUsd) / 1e6;
     const id = this.ledger.reserve(
       { ...input, model: vertex.model, provider: vertex.provider },
       this.config,
+      Math.max(this.config.perRequestUsd, upperBound * VERTEX_HOLD_MARGIN),
     );
     if (!id) throw new Error(BULK_BUDGET_EXCEEDED);
     let answer: Awaited<ReturnType<BulkFallback['complete']>>;
@@ -339,7 +348,7 @@ export class BulkLlmClient {
       answer = await vertex.complete({
         prefix: input.prefix,
         input: input.input,
-        maxTokens: input.maxTokens ?? 2048,
+        maxTokens,
       });
     } catch (error) {
       this.ledger.release(id);
