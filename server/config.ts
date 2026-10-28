@@ -443,7 +443,7 @@ export function readServerConfig(
     syntheticModel: syntheticRoute.model,
     syntheticFallbacks: parseProviderQueue(parsed.OPENQAREER_SYNTHETIC_AI_FALLBACK),
     personalFallbacks: parseProviderQueue(parsed.OPENQAREER_PERSONAL_AI_FALLBACK),
-    coachExcludedRoutes: parseProviderQueue(parsed.OPENQAREER_COACH_EXCLUDED_ROUTES),
+    coachExcludedRoutes: readCoachExcludedRoutes(parsed.OPENQAREER_COACH_EXCLUDED_ROUTES),
     providerCredentials,
     yandexFolderId: environment.OPENQAREER_YANDEX_FOLDER_ID?.trim(),
     staticRoot: parsed.OPENQAREER_STATIC_ROOT ?? dirname(fileURLToPath(moduleUrl)),
@@ -490,6 +490,21 @@ export function readServerConfig(
  * Одного провайдера можно назвать дважды с разными моделями: очередь состоит
  * из моделей (B183).
  */
+/**
+ * Ступени, которых нет в очереди консультанта (решение владельца 28.10, «Да,
+ * убрать»): обе бесплатные модели OpenRouter за две недели не завершили ни
+ * одного хода, Gemini отвечает 402, а каждый ход ждал их первыми. Значение по
+ * умолчанию живёт в коде, чтобы правка дошла обычным выкатом; переменная его
+ * переопределяет, `none` возвращает все ступени.
+ */
+export const DEFAULT_COACH_EXCLUDED_ROUTES =
+  'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,openrouter:openrouter/free,gemini';
+
+function readCoachExcludedRoutes(value: string | undefined): readonly ProviderQueueEntry[] {
+  if (value?.trim() === 'none') return [];
+  return parseProviderQueue(value ?? DEFAULT_COACH_EXCLUDED_ROUTES);
+}
+
 export function parseProviderQueue(value: string | undefined): readonly ProviderQueueEntry[] {
   if (!value) return [];
   return value

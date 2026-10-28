@@ -373,21 +373,29 @@ describe('очередь моделей (B183)', () => {
     );
   });
 
-  it('исключённые из очереди консультанта ступени читаются той же строкой формата (28.10)', () => {
+  it('по умолчанию из очереди консультанта убраны три бесплатные ступени, переменная это переопределяет (28.10)', () => {
     const config = readServerConfig(
       {
         ...validEnvironment,
-        OPENQAREER_COACH_EXCLUDED_ROUTES:
-          'openrouter:nvidia/nemotron-3-ultra-550b-a55b:free,openrouter:openrouter/free,gemini',
+        OPENQAREER_COACH_EXCLUDED_ROUTES: 'gemini:gemini-3.6-flash',
       },
       import.meta.url,
     );
     expect(config.coachExcludedRoutes).toEqual([
+      { provider: 'gemini', model: 'gemini-3.6-flash' },
+    ]);
+    // Без переменной действует решение владельца: три бесплатные ступени убраны.
+    expect(readServerConfig(validEnvironment, import.meta.url).coachExcludedRoutes).toEqual([
       { provider: 'openrouter', model: 'nvidia/nemotron-3-ultra-550b-a55b:free' },
       { provider: 'openrouter', model: 'openrouter/free' },
       { provider: 'gemini' },
     ]);
-    expect(readServerConfig(validEnvironment, import.meta.url).coachExcludedRoutes).toEqual([]);
+    expect(
+      readServerConfig(
+        { ...validEnvironment, OPENQAREER_COACH_EXCLUDED_ROUTES: 'none' },
+        import.meta.url,
+      ).coachExcludedRoutes,
+    ).toEqual([]);
   });
 
   it('опечатка в имени провайдера останавливает запуск, а не молча теряет маршрут', () => {
