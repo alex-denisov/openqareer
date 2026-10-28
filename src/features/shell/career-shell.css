@@ -2858,6 +2858,18 @@
     background: var(--career-surface);
   }
 
+  /* Mockup topbar: the unread count is a 16 px pill at the bell's top-right corner. */
+  .career-desktop-topbar .career-notification-badge {
+    inset: 2px 0 auto auto;
+    min-width: var(--career-space-4);
+    height: var(--career-space-4);
+    padding-inline: var(--career-space-1);
+    border: 0;
+    border-radius: var(--career-space-2);
+    font-size: var(--career-text-aux);
+    line-height: 1;
+  }
+
   .career-desktop-topbar-hint {
     min-width: 0;
     margin-inline-start: auto;
@@ -13588,29 +13600,6 @@
 .career-vacancy-requirement-label {
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
-}
-
-.career-profile-screen-additional-facts {
-  display: grid;
-  gap: var(--career-space-2);
-  padding-block-start: var(--career-space-3);
-  border-block-start: var(--career-border-width) solid var(--career-line);
-}
-
-.career-profile-screen-additional-facts h3,
-.career-profile-screen-additional-facts ul {
-  margin: 0;
-}
-
-.career-profile-screen-additional-facts h3 {
-  font-size: var(--career-text-sm);
-}
-
-.career-profile-screen-additional-facts ul {
-  display: grid;
-  gap: var(--career-space-2);
-  padding-inline-start: var(--career-space-5);
-  color: var(--career-text-soft);
 }
 
 .career-profile-screen-region-picker {

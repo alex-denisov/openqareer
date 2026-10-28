@@ -21,7 +21,7 @@ import { useCandidateMediaSrc } from './candidateMediaSrc';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { ProfileExperienceSuggestions } from './ProfileExperienceSuggestions';
 import { PositionEditForm } from './ProfileExperienceEditor';
-import { monthOrder } from './experienceDate';
+import { displayMonth, monthOrder } from './experienceDate';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
 import { VacancyRequirementAssistant } from './VacancyRequirementAssistant';
 import { ProfileTeamSizeTag } from './ProfileTeamSizeTag';
@@ -78,15 +78,10 @@ type ExperiencePatchHandler = (
   patch: Partial<ResumeExperienceInput>,
 ) => Promise<boolean | void> | boolean | void;
 
-function displayExperienceMonth(value: string): string {
-  const month = /^(\d{4})-(\d{2})(?:-\d{2})?$/u.exec(value);
-  return month ? `${month[2]}.${month[1]}` : value;
-}
-
 export function periodLabel(entry: ResumeExperienceInput): string {
   if (!entry.startDate) return '';
-  const start = displayExperienceMonth(entry.startDate);
-  const end = entry.current ? 'по н. в.' : displayExperienceMonth(entry.endDate ?? '');
+  const start = displayMonth(entry.startDate);
+  const end = entry.current ? 'по н. в.' : displayMonth(entry.endDate ?? '');
   return end ? `${start} — ${end}` : start;
 }
 
@@ -432,7 +427,6 @@ export function ProfileExperienceSection({ ...props }: ProfileExperienceSectionP
 interface ExperienceComposer {
   readonly newEntry?: ResumeExperienceInput;
   readonly groups: readonly ReturnType<typeof groupExperienceByEmployer>[number][];
-  readonly additionalFacts: readonly CandidateMemory[];
   readonly addPosition: () => void;
   readonly clearNewEntry: () => void;
   readonly saveExperience: ExperiencePatchHandler;
@@ -451,7 +445,6 @@ function useExperienceComposer(
       (left, right) => startDateOrder(right.startDate) - startDateOrder(left.startDate),
     ),
   );
-  const additionalFacts = additionalExperienceFacts(draft, memory);
   const saveExperience: ExperiencePatchHandler = (entry, patch) => {
     const currentDraft = latestDraft.current;
     const exists = currentDraft.experience.some((current) => current.id === entry.id);
@@ -464,7 +457,6 @@ function useExperienceComposer(
   return {
     newEntry,
     groups,
-    additionalFacts,
     addPosition: () => {
       const empty = addExperience(latestDraft.current, `manual-${Date.now()}`);
       setNewEntry(empty.experience.at(-1));
@@ -562,7 +554,6 @@ function ExperienceSectionContent(props: ProfileExperienceSectionProps) {
         onSectionSave={onSectionSave}
         onUpdateExperience={composer.saveExperience}
         onManualExperienceFactAdded={onManualExperienceFactAdded}
-        additionalFacts={composer.additionalFacts}
         suggestions={props.suggestions}
         onAcceptSuggestion={props.onAcceptSuggestion}
         onDismissSuggestion={props.onDismissSuggestion}
@@ -579,7 +570,6 @@ interface ExperienceSectionListsProps {
   readonly saving?: boolean;
   readonly draft: ResumeDraft;
   readonly onSectionSave: (next: ResumeDraft) => Promise<boolean | void> | boolean | void;
-  readonly additionalFacts: readonly CandidateMemory[];
   readonly suggestions?: readonly InlineSuggestionItem[];
   readonly onUpdateExperience: ExperiencePatchHandler;
   readonly onManualExperienceFactAdded?: () => Promise<void> | void;
@@ -596,7 +586,6 @@ function ExperienceSectionLists(props: ExperienceSectionListsProps) {
     saving,
     draft,
     onSectionSave,
-    additionalFacts,
     suggestions,
     onUpdateExperience,
     onManualExperienceFactAdded,
@@ -624,30 +613,7 @@ function ExperienceSectionLists(props: ExperienceSectionListsProps) {
         onUpdateExperience={onUpdateExperience}
         onManualExperienceFactAdded={onManualExperienceFactAdded}
       />
-      <AdditionalExperienceFacts facts={additionalFacts} />
     </>
-  );
-}
-
-function additionalExperienceFacts(
-  draft: ResumeDraft,
-  memory: readonly CandidateMemory[],
-): readonly CandidateMemory[] {
-  const linkedMemoryIds = new Set(
-    [
-      ...draft.experience.flatMap((entry) => [
-        ...entry.bulletMemoryIds,
-        entry.descriptionMemoryId,
-        entry.chronologyMemoryId,
-      ]),
-      ...(draft.projects ?? []).map((entry) => entry.evidenceMemoryId),
-    ].filter((id): id is string => Boolean(id)),
-  );
-  return memory.filter(
-    (item) =>
-      item.status === 'confirmed' &&
-      item.domain === 'responsibility' &&
-      !linkedMemoryIds.has(item.id),
   );
 }
 
@@ -714,19 +680,5 @@ function VacancyRequirementSlot({
       onSuggestionPrepared={onSuggestionPrepared ?? (() => undefined)}
       onManualFactAdded={onManualFactAdded ?? (() => undefined)}
     />
-  );
-}
-
-function AdditionalExperienceFacts({ facts }: { readonly facts: readonly CandidateMemory[] }) {
-  if (!facts.length) return null;
-  return (
-    <div className="career-profile-screen-additional-facts">
-      <h3>Дополнительные факты опыта</h3>
-      <ul>
-        {facts.map((fact) => (
-          <li key={fact.id}>{fact.statement}</li>
-        ))}
-      </ul>
-    </div>
   );
 }

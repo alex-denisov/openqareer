@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { skillVerification } from './ProfileDesktopSkills';
-import { mobileSkillLabels } from './ProfileMobileSkills';
+import { mobileSkillLabels, skillSourceLabel } from './ProfileMobileSkills';
 
 const skill = (status?: string, source?: string) => ({ id: 's', name: 'Kafka', status, source });
 
@@ -20,6 +20,24 @@ describe('skill verification labels follow mockup 2', () => {
     expect(mobileSkillLabels(skill('awaiting_candidate_confirmation')).status).toBe('Без квиза');
     expect(mobileSkillLabels(skill(undefined, 'со слов кандидата')).origin).toBe(
       'со слов кандидата',
+    );
+  });
+
+  it('names the import a skill came from when the skill has no own source label', () => {
+    const labelOf = (id: string | undefined) =>
+      id === 'm1' ? 'из LinkedIn, 25.09' : 'источник неизвестен';
+    expect(skillSourceLabel({ ...skill(), evidenceMemoryId: 'm1' }, labelOf)).toBe(
+      'из LinkedIn, 25.09',
+    );
+    expect(skillSourceLabel({ ...skill(), evidenceMemoryId: 'gone' }, labelOf)).toBe(
+      'Источник не указан',
+    );
+    expect(skillSourceLabel(skill(), labelOf)).toBe('Источник не указан');
+    expect(skillSourceLabel({ ...skill(undefined, 'квиз'), evidenceMemoryId: 'm1' }, labelOf)).toBe(
+      'квиз',
+    );
+    expect(mobileSkillLabels({ ...skill(), evidenceMemoryId: 'm1' }, labelOf).origin).toBe(
+      'из LinkedIn, 25.09',
     );
   });
 });

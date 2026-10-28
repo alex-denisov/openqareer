@@ -32,6 +32,14 @@ export function profileRelocationSummaryLabel(status: ProfileRelocationSummarySt
   return 'Статус неизвестен';
 }
 
+/** Строка «Релокация» на 390: в макете «Включена», слово согласуется с «релокацией». */
+export function profileRelocationMobileLabel(status: ProfileRelocationSummaryStatus): string {
+  if (status === 'enabled') return 'Включена';
+  if (status === 'prepared') return 'Подготовлена';
+  if (status === 'not_enabled') return 'Не включена';
+  return profileRelocationSummaryLabel(status);
+}
+
 export function profileRelocationSummaryDetail(status: ProfileRelocationSummaryStatus): string {
   if (status === 'enabled') return 'Данные о переезде доступны только вам.';
   if (status === 'prepared') return 'Согласие ожидает проверки и пока не может быть принято.';

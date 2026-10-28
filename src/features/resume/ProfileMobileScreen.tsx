@@ -25,7 +25,7 @@ import {
 } from './ProfileMobileSections';
 import { ProfileMobileSkillAdd, ProfileMobileSkills } from './ProfileMobileSkills';
 import { profileResumeReviewIssueCount } from './ProfileReviewAndVersions';
-import { profileRelocationSummaryLabel } from './ProfileSideRail';
+import { profileRelocationMobileLabel } from './ProfileSideRail';
 import {
   profileMobileTitle,
   useProfileMobileNavigation,
@@ -227,7 +227,7 @@ export function ProfileMobileScreen(props: ProfileMobileScreenProps) {
     atsScore: ats.assessment?.total.score ?? null,
     reviewCount: profileResumeReviewIssueCount(props.view, props.draft),
     versionCount,
-    relocationLabel: profileRelocationSummaryLabel(props.relocationSummary ?? 'unknown'),
+    relocationLabel: profileRelocationMobileLabel(props.relocationSummary ?? 'unknown'),
   };
   return (
     <div

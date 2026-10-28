@@ -13,6 +13,7 @@ import {
   updateEducation,
   updateLanguage,
 } from './resumeStudioModel';
+import { displayMonth, displayYear } from './experienceDate';
 import { addProject, updateCourse, updateProject } from './profileEntryEditing';
 import { ProfileMobileGroup, ProfileMobileRow } from './ProfileMobileElements';
 import type { ProfileEntrySaveResult } from './profileEntrySave';
@@ -120,7 +121,7 @@ function MobileEducationRow({
       title={entry.institution || 'Учебное заведение не указано'}
       detail={[
         entry.qualification,
-        [entry.startDate, entry.endDate].filter(Boolean).join(' — '),
+        [displayYear(entry.startDate), displayYear(entry.endDate)].filter(Boolean).join(' — '),
         origin,
       ]
         .filter(Boolean)
@@ -133,7 +134,7 @@ function MobileEducationRow({
 /** «2022-01» → «01.2022», as on the 1440 project tile. */
 function projectPeriod(start?: string, end?: string): string {
   return [start, end]
-    .map((value) => value?.replace(/^(\d{4})-(\d{2})$/u, '$2.$1'))
+    .map((value) => value && displayMonth(value))
     .filter(Boolean)
     .join(' — ');
 }
