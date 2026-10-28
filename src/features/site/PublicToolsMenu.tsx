@@ -44,10 +44,10 @@ export function PublicToolsMenu({
   const { open, toggle, root, trigger } = useDismissible();
   const id = TOOLS_MENU_IDS[where];
   return (
-    <div className={`ps-tools is-${where}`} ref={root}>
+    <div className={`ps-tooldrop is-${where}`} ref={root}>
       <a
         ref={trigger}
-        className="ps-tools-trigger"
+        className="ps-tooldrop-trigger"
         href="/#tools"
         role="button"
         aria-expanded={open}
@@ -67,7 +67,7 @@ export function PublicToolsMenu({
         Инструменты
       </a>
       {open ? (
-        <div className="ps-tools-menu" id={id}>
+        <div className="ps-tooldrop-menu" id={id}>
           {PUBLIC_TOOLS.map((link) => (
             <a key={link.href} href={link.href}>
               {link.label}

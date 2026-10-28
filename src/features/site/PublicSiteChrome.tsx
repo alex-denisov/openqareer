@@ -140,7 +140,7 @@ function useMenu() {
   React.useEffect(() => {
     if (!open) return undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || document.querySelector('.ps-tools-menu:not([hidden])')) return;
+      if (event.key !== 'Escape' || document.querySelector('.ps-tooldrop-menu:not([hidden])')) return;
       setOpen(false);
       button.current?.focus();
     };

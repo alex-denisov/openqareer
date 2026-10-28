@@ -316,14 +316,14 @@ html[data-oq-signed-in] .ps-btn.ps-member {
   font-weight: 600;
 }
 /* «Инструменты»: a dropdown in the nav, a group in the phone menu. */
-.ps-tools {
+.ps-tooldrop {
   position: relative;
 }
-.ps-tools-trigger {
+.ps-tooldrop-trigger {
   gap: 6px;
   cursor: pointer;
 }
-.ps-tools-trigger::after {
+.ps-tooldrop-trigger::after {
   content: '';
   width: 6px;
   height: 6px;
@@ -333,10 +333,10 @@ html[data-oq-signed-in] .ps-btn.ps-member {
   transform: translateY(-2px) rotate(45deg);
   transition: transform 0.18s;
 }
-.ps-tools-trigger[aria-expanded='true']::after {
+.ps-tooldrop-trigger[aria-expanded='true']::after {
   transform: translateY(1px) rotate(225deg);
 }
-.ps-tools.is-nav .ps-tools-menu {
+.ps-tooldrop.is-nav .ps-tooldrop-menu {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -349,16 +349,16 @@ html[data-oq-signed-in] .ps-btn.ps-member {
   border-radius: 12px;
   box-shadow: 0 12px 32px oklch(20% 0.02 255 / 0.12);
 }
-.ps-tools.is-nav .ps-tools-menu a {
+.ps-tooldrop.is-nav .ps-tooldrop-menu a {
   color: var(--ps-ink);
 }
-.ps-tools-menu[hidden] {
+.ps-tooldrop-menu[hidden] {
   display: none !important;
 }
-.ps-tools.is-menu .ps-tools-trigger {
+.ps-tooldrop.is-menu .ps-tooldrop-trigger {
   justify-content: space-between;
 }
-.ps-tools.is-menu .ps-tools-menu {
+.ps-tooldrop.is-menu .ps-tooldrop-menu {
   display: flex;
   flex-direction: column;
   padding-left: 12px;

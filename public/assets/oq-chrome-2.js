@@ -15,15 +15,15 @@
   // The server prints the section links once; the phone menu gets a copy.
   var nav = document.querySelector('.ps-nav');
   var menu = document.getElementById('ps-menu');
-  if (nav && menu && !menu.querySelector('.ps-tools')) {
+  if (nav && menu && !menu.querySelector('.ps-tooldrop')) {
     menu.insertAdjacentHTML('afterbegin', nav.innerHTML.replace('is-nav', 'is-menu'));
   }
-  document.querySelectorAll('.ps-tools').forEach(function (box) {
+  document.querySelectorAll('.ps-tooldrop').forEach(function (box) {
     var trigger = box.querySelector('[data-ps-disclosure]');
-    if (!trigger || box.querySelector('.ps-tools-menu')) return;
+    if (!trigger || box.querySelector('.ps-tooldrop-menu')) return;
     var panel = document.createElement('div');
-    panel.className = 'ps-tools-menu';
-    panel.id = box.classList.contains('is-menu') ? 'ps-menu-tools' : 'ps-tools-menu';
+    panel.className = 'ps-tooldrop-menu';
+    panel.id = box.classList.contains('is-menu') ? 'ps-menu-tools' : 'ps-tooldrop-menu';
     panel.hidden = true;
     TOOLS.forEach(function (tool) {
       var link = document.createElement('a');

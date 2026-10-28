@@ -18,9 +18,9 @@ describe('B574: oq-chrome-2.js on server-rendered pages', () => {
 
   it('opens the tools list on click and closes it with Escape, focus back on the trigger', () => {
     const trigger = document.querySelector<HTMLAnchorElement>(
-      '.ps-tools.is-nav .ps-tools-trigger',
+      '.ps-tooldrop.is-nav .ps-tooldrop-trigger',
     )!;
-    const panel = document.getElementById('ps-tools-menu')!;
+    const panel = document.getElementById('ps-tooldrop-menu')!;
     expect(trigger.getAttribute('role')).toBe('button');
     expect(panel.hidden).toBe(true);
     trigger.click();
@@ -34,17 +34,17 @@ describe('B574: oq-chrome-2.js on server-rendered pages', () => {
 
   it('closes the list on a click outside and opens it with Space', () => {
     const trigger = document.querySelector<HTMLAnchorElement>(
-      '.ps-tools.is-nav .ps-tools-trigger',
+      '.ps-tooldrop.is-nav .ps-tooldrop-trigger',
     )!;
     trigger.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
-    expect(document.getElementById('ps-tools-menu')!.hidden).toBe(false);
+    expect(document.getElementById('ps-tooldrop-menu')!.hidden).toBe(false);
     document.body.click();
-    expect(document.getElementById('ps-tools-menu')!.hidden).toBe(true);
+    expect(document.getElementById('ps-tooldrop-menu')!.hidden).toBe(true);
   });
 
   it('gives the phone menu its own copy of the sections with a tools group', () => {
     const menu = document.getElementById('ps-menu')!;
-    const group = menu.querySelector('.ps-tools.is-menu .ps-tools-trigger') as HTMLAnchorElement;
+    const group = menu.querySelector('.ps-tooldrop.is-menu .ps-tooldrop-trigger') as HTMLAnchorElement;
     expect(group.getAttribute('aria-controls')).toBe('ps-menu-tools');
     expect(menu.querySelector('a[href="/tariffs"]')).not.toBeNull();
     group.click();

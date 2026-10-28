@@ -16,19 +16,19 @@ describe('B574: «Инструменты» dropdown', () => {
   });
   afterEach(() => act(() => root.unmount()));
 
-  const trigger = () => document.querySelector<HTMLAnchorElement>('.ps-tools-trigger')!;
+  const trigger = () => document.querySelector<HTMLAnchorElement>('.ps-tooldrop-trigger')!;
 
   it('draws the six tools on click and closes on Escape with focus on the trigger', () => {
     expect(trigger().getAttribute('href')).toBe('/#tools');
     expect(trigger().getAttribute('aria-current')).toBe('true');
-    expect(document.querySelector('.ps-tools-menu')).toBeNull();
+    expect(document.querySelector('.ps-tooldrop-menu')).toBeNull();
     act(() => trigger().click());
     expect(trigger().getAttribute('aria-expanded')).toBe('true');
-    expect(document.querySelectorAll('#ps-tools-menu a')).toHaveLength(6);
+    expect(document.querySelectorAll('#ps-tooldrop-menu a')).toHaveLength(6);
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     });
-    expect(document.querySelector('.ps-tools-menu')).toBeNull();
+    expect(document.querySelector('.ps-tooldrop-menu')).toBeNull();
     expect(document.activeElement).toBe(trigger());
   });
 
@@ -36,8 +36,8 @@ describe('B574: «Инструменты» dropdown', () => {
     act(() => {
       trigger().dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
     });
-    expect(document.querySelector('#ps-tools-menu')).not.toBeNull();
+    expect(document.querySelector('#ps-tooldrop-menu')).not.toBeNull();
     act(() => document.getElementById('outside')!.click());
-    expect(document.querySelector('#ps-tools-menu')).toBeNull();
+    expect(document.querySelector('#ps-tooldrop-menu')).toBeNull();
   });
 });

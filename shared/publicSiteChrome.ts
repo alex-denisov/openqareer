@@ -45,7 +45,7 @@ export const PUBLIC_TOOLS: readonly ChromeLink[] = [
   { label: 'В какую страну переехать', href: '/tools/relocation' },
 ];
 /** Desktop dropdown and the phone menu group each get their own list id. */
-export const TOOLS_MENU_IDS = { nav: 'ps-tools-menu', menu: 'ps-menu-tools' } as const;
+export const TOOLS_MENU_IDS = { nav: 'ps-tooldrop-menu', menu: 'ps-menu-tools' } as const;
 
 export const FOOTER_ABOUT =
   'Поиск работы с ИИ: резюме, вакансии со всего рынка и отклики в одном месте.';
@@ -122,7 +122,7 @@ function attrs(link: ChromeLink, current: boolean): string {
 /** The list itself is built by oq-chrome-2.js; without it the item stays a link. */
 function toolsDisclosureHtml(current: boolean): string {
   return (
-    '<div class="ps-tools is-nav"><a class="ps-tools-trigger" href="/#tools" aria-expanded="false" ' +
+    '<div class="ps-tooldrop is-nav"><a class="ps-tooldrop-trigger" href="/#tools" aria-expanded="false" ' +
     `data-ps-disclosure${current ? ' aria-current="true"' : ''}>Инструменты</a></div>`
   );
 }

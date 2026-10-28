@@ -54,7 +54,7 @@ describe('B569: public chrome has one link list', () => {
   it('B574: the logo leads home, «Инструменты» is a link to /#tools, both action pairs are printed', () => {
     const react = renderToStaticMarkup(React.createElement(PublicHeader, props));
     for (const html of [react, catalogChromeHeader()]) {
-      expect(html).toMatch(/class="ps-tools-trigger" href="\/#tools"/u);
+      expect(html).toMatch(/class="ps-tooldrop-trigger" href="\/#tools"/u);
       expect(html).toContain('aria-label="openqareer — на главную"');
       expect(html).toMatch(/class="ps-btn is-login ps-guest"[^>]*>Войти/u);
       expect(html).toMatch(/class="ps-btn is-cta ps-member"[^>]*>Открыть кабинет/u);
