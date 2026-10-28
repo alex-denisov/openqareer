@@ -100,6 +100,28 @@ describe('OpenRouter coach provider', () => {
   // Решение владельца 28.10: персональные данные кандидатов можно отправлять в
   // OpenRouter. Запрет B082 отказывал за 0,1 с, и ступени OpenRouter в очереди
   // консультанта ни разу не завершили ход.
+  it('sends the reasoning effort the route names, high by default (B580)', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const create = async (body: Record<string, unknown>) => {
+      calls.push(body);
+      return routerResponse(JSON.stringify(validOutput));
+    };
+    const client = { chat: { completions: { create } } } as unknown as OpenAI;
+    const low = new OpenRouterCoachProvider({
+      apiKey: 'not-used-by-test',
+      model: 'deepseek/deepseek-v4.1-flash-1017',
+      reasoningEffort: 'low',
+      client,
+    });
+    await low.createTurn({ ...syntheticInput, dataClass: 'personal' }, 'idempotency-low');
+    await routerWith(create, 'deepseek/deepseek-v4.1-flash').createTurn(
+      { ...syntheticInput, dataClass: 'personal' },
+      'idempotency-high',
+    );
+
+    expect(calls.map((body) => body.reasoning_effort)).toEqual(['low', 'high']);
+  });
+
   it('sends a personal turn to OpenRouter instead of refusing it', async () => {
     const calls: Record<string, unknown>[] = [];
     const provider = routerWith(async (body) => {

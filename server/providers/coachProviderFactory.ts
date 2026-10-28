@@ -75,6 +75,7 @@ export function buildCoachProvider(
       apiKey: options.apiKey,
       model,
       structuredOutput: modelDefinition.structuredOutput,
+      ...(modelDefinition.thinkingLevel ? { reasoningEffort: modelDefinition.thinkingLevel } : {}),
       timeoutMs: options.timeoutMs,
     });
   }

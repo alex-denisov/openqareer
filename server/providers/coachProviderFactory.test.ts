@@ -17,6 +17,13 @@ describe('coach provider factory', () => {
     }
   });
 
+  it('the paid consultant model reasons at low effort (B580 bench 29.10)', () => {
+    const model = allowedModels('openrouter').find(
+      (item) => item.id === 'deepseek/deepseek-v4.1-flash-1017',
+    );
+    expect(model?.thinkingLevel).toBe('low');
+  });
+
   it('fails closed when an unlisted model is requested', () => {
     expect(() =>
       buildCoachProvider({

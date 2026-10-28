@@ -6,11 +6,11 @@ import { isMutableModelAlias } from './modelRegistry';
 const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
 
 describe('цепочки моделей по механикам (28.10)', () => {
-  it('консультант: OpenAI luna → deepseek-v4.1-flash → glm-5.3-flash', () => {
+  it('консультант платных тарифов: deepseek-v4.1-flash-1017 → deepseek-v4.1-flash → luna (B580)', () => {
     expect(labels('coach')).toEqual([
-      'openai:gpt-5.6-luna',
+      'openrouter:deepseek/deepseek-v4.1-flash-1017',
       'openrouter:deepseek/deepseek-v4.1-flash',
-      'openrouter:z-ai/glm-5.3-flash',
+      'openai:gpt-5.6-luna',
     ]);
   });
 
@@ -22,8 +22,12 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('разбор резюме — только платные маршруты', () => {
-    expect(labels('resumeParsing')).toEqual(labels('coach'));
+  it('разбор резюме — только платные маршруты, luna первой', () => {
+    expect(labels('resumeParsing')).toEqual([
+      'openai:gpt-5.6-luna',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:z-ai/glm-5.3-flash',
+    ]);
   });
 
   it('тексты для человека: deepseek-v4.1-flash → luna → Vertex', () => {
@@ -87,7 +91,7 @@ describe('очередь консультанта по цепочке', () => {
   };
 
   it('отказ ступени ведёт к следующей по порядку цепочки', async () => {
-    const failing = new Set(['gpt-5.6-luna', 'deepseek/deepseek-v4.1-flash']);
+    const failing = new Set(['deepseek/deepseek-v4.1-flash-1017', 'deepseek/deepseek-v4.1-flash']);
     const timeouts: number[] = [];
     const provider = buildCoachChainProvider({
       credentials,
@@ -108,9 +112,9 @@ describe('очередь консультанта по цепочке', () => {
     const output = await provider.createTurn(input, '11111111-1111-4111-8111-111111111111');
 
     expect(output.routing?.attempts).toMatchObject([
-      { provider: 'openai', model: 'gpt-5.6-luna', status: 'failed' },
+      { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017', status: 'failed' },
       { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash', status: 'failed' },
-      { provider: 'openrouter', model: 'z-ai/glm-5.3-flash', status: 'succeeded' },
+      { provider: 'openai', model: 'gpt-5.6-luna', status: 'succeeded' },
     ]);
     // Последней ступени некому уступить ход — её потолок длиннее.
     expect(timeouts[2]).toBeGreaterThan(timeouts[0]);
@@ -130,7 +134,7 @@ describe('очередь консультанта по цепочке', () => {
 
     await provider.createTurn(input, '22222222-2222-4222-8222-222222222222');
 
-    expect(called).toEqual(['gpt-5.6-luna']);
+    expect(called).toEqual(['deepseek/deepseek-v4.1-flash-1017']);
   });
 });
 
