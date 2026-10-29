@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { CandidateCapability } from '../legal/capabilityConsents';
+import {
+  CAPABILITY_CONSENT_CURRENT_VERSION,
+  type CandidateCapability,
+} from '../legal/capabilityConsents';
 import { linkedInContactsConsentActive } from './linkedinContactsConsent';
 
 const record = (
@@ -10,7 +13,7 @@ const record = (
   ({
     id: grantedAt,
     capability,
-    versionId: 'linkedin_contacts-v1.0',
+    versionId: CAPABILITY_CONSENT_CURRENT_VERSION.linkedin_contacts,
     grantedAt,
     revokedAt,
   }) as const;
@@ -27,6 +30,11 @@ describe('linkedInContactsConsentActive (B561)', () => {
     ).toBe(false);
     expect(
       linkedInContactsConsentActive([record('2026-10-29T10:00:00Z', null, 'profile_activity')]),
+    ).toBe(false);
+    expect(
+      linkedInContactsConsentActive([
+        { ...record('2026-10-29T10:00:00Z', null), versionId: 'linkedin_contacts-v1.0' },
+      ]),
     ).toBe(false);
   });
 });

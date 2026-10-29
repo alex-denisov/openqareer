@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { VacancyConnectionCircles } from './vacancyLetterApi';
-import { pathCircleCards, pathSourceNote } from './vacancyPathCircles';
+import type {
+  ConnectionCircleResult as ConnectionCircle,
+  VacancyConnectionCircles,
+} from './vacancyLetterApi';
+import { pathCircleCards, pathSourceNote, withReferralSent } from './vacancyPathCircles';
 
 function person(id: string, fullName: string, roleTitle: string | null = null) {
   return { id, fullName, roleTitle, companyName: 'Вектор Банк' };
@@ -132,6 +135,63 @@ describe('pathCircleCards (B549)', () => {
         platformPaths: { paths: 0 },
       }),
     ).toMatchObject({ summary: 'Путей через знакомых не найдено.' });
+  });
+
+  it('asks for a referral through platform members and says how it goes (B561 slice 3)', () => {
+    const base = data();
+    const card = (platformReferral: NonNullable<ConnectionCircle['platformReferral']>) =>
+      pathCircleCards({
+        ...base,
+        circles: [
+          base.circles[0]!,
+          {
+            circle: 2,
+            state: 'none',
+            message: '',
+            paths: [],
+            platformPaths: { paths: 3 },
+            platformReferral,
+          },
+          base.circles[2]!,
+        ],
+      })[1];
+
+    expect(card({ status: 'none', introducers: [] })).toMatchObject({
+      summary: '3 пути через участников платформы.',
+      actionLabel: 'Попросить рекомендацию',
+      referralAction: 'ask',
+    });
+    expect(card({ status: 'pending', introducers: [] })).toMatchObject({
+      summary: '3 пути через участников платформы. Запрос отправлен, ждём ответа.',
+      referralAction: null,
+    });
+    expect(
+      card({
+        status: 'accepted',
+        introducers: [{ fullName: 'Ulla Member', headline: null, linkedinUrl: null, people: [] }],
+      }),
+    ).toMatchObject({
+      summary: '3 пути через участников платформы. Готовы рекомендовать: Ulla Member.',
+      referralAction: null,
+    });
+    expect(card({ status: 'answered', introducers: [] })).toMatchObject({
+      summary: '3 пути через участников платформы. Участники ответили, но помочь не смогут.',
+      referralAction: null,
+    });
+  });
+
+  it('shows a request just sent as pending without reloading the circles', () => {
+    const base = data();
+    const sent = withReferralSent({
+      ...base,
+      circles: [
+        base.circles[0]!,
+        { circle: 2, state: 'none', message: '', paths: [], platformPaths: { paths: 1 } },
+        base.circles[2]!,
+      ],
+    });
+    expect(sent.circles[1]!.platformReferral).toEqual({ status: 'pending', introducers: [] });
+    expect(sent.circles[0]).toBe(base.circles[0]);
   });
 
   it('is honest when a known circle has no contacts', () => {

@@ -165,6 +165,37 @@ export class SqliteNetworkIndexRepository {
     };
   }
 
+  /** Server side only: the other active members with a path into the company (slice 3). */
+  membersWithPathsInto(
+    companyKey: string,
+    excludeMemberId: string,
+    isActiveMember: (memberId: string) => boolean,
+  ): string[] {
+    if (!companyKey) return [];
+    const rows = this.database
+      .prepare(
+        `SELECT DISTINCT member_id FROM network_edges
+          WHERE company_key = ? AND member_id <> ? AND observed_at >= ? ORDER BY member_id`,
+      )
+      .all(
+        companyKey,
+        excludeMemberId,
+        new Date(Date.now() - NETWORK_EDGE_TTL_MS).toISOString(),
+      ) as unknown as Array<{ member_id: string }>;
+    return rows.map((row) => row.member_id).filter(isActiveMember);
+  }
+
+  /** The member's own people at the company, to read their names from the member's contacts. */
+  memberProfilesAt(memberId: string, companyKey: string): string[] {
+    const rows = this.database
+      .prepare(
+        `SELECT profile_url FROM network_edges
+          WHERE member_id = ? AND company_key = ? ORDER BY profile_url`,
+      )
+      .all(memberId, companyKey) as unknown as Array<{ profile_url: string }>;
+    return rows.map((row) => row.profile_url);
+  }
+
   /** A contact objected (consent text, item 4): the person goes for every member. */
   deletePerson(profileUrl: string): number {
     const canonical = canonicalLinkedInProfile(profileUrl);

@@ -44,6 +44,18 @@ export interface ConnectionCircleResult {
   readonly paths: readonly ConnectionCirclePath[];
   /** Circle 2 only (B561): paths through other platform members — a count, never names. */
   readonly platformPaths?: { readonly paths: number };
+  /** Circle 2 only (B561 slice 3): the referral request; names only once a member accepted. */
+  readonly platformReferral?: PlatformReferral;
+}
+
+export interface PlatformReferral {
+  readonly status: 'none' | 'pending' | 'accepted' | 'answered';
+  readonly introducers: ReadonlyArray<{
+    readonly fullName: string;
+    readonly headline: string | null;
+    readonly linkedinUrl: string | null;
+    readonly people: ReadonlyArray<{ readonly fullName: string }>;
+  }>;
 }
 
 export interface CandidateWorkplaceForLetter {

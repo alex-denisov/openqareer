@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import {
   CAPABILITY_CONSENTS_APPROVED,
+  CAPABILITY_CONSENT_CURRENT_VERSION,
   CAPABILITY_CONSENT_DOCUMENTS,
   CANDIDATE_CAPABILITIES,
   isCandidateCapability,
@@ -243,6 +244,12 @@ describe('SqliteCapabilityConsentStore', () => {
     db.prepare('INSERT INTO users (id, candidate_id) VALUES (?, ?)').run('usr-5', 'cand-5');
     const store = new SqliteCapabilityConsentStore(db);
     store.recordConsent({ userId: 'usr-5', capability: 'linkedin_contacts', versionId: 'v1' });
+    expect(store.hasActiveConsentForCandidate('cand-5', 'linkedin_contacts')).toBe(false);
+    store.recordConsent({
+      userId: 'usr-5',
+      capability: 'linkedin_contacts',
+      versionId: CAPABILITY_CONSENT_CURRENT_VERSION.linkedin_contacts,
+    });
 
     expect(store.hasActiveConsentForCandidate('cand-5', 'linkedin_contacts')).toBe(true);
     expect(store.hasActiveConsentForCandidate('usr-5', 'linkedin_contacts')).toBe(false);

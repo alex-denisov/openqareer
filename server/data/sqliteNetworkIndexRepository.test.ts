@@ -168,6 +168,23 @@ describe('SqliteNetworkIndexRepository', () => {
     expect(repository.personCount()).toBe(0);
   });
 
+  it('names, server side only, the other members with a path and their people at the company', () => {
+    const { repository } = createRepository();
+    repository.recordObservations('member-a', [
+      observation('jane-roe', 'Northwind Labs'),
+      observation('mary-major', 'Contoso'),
+    ]);
+    repository.recordObservations('member-c', [observation('john-doe', 'Contoso')]);
+    repository.recordObservations('candidate-b', [observation('john-doe', 'Northwind Labs')]);
+
+    expect(repository.membersWithPathsInto(NORTHWIND, 'candidate-b', everyone)).toEqual([
+      'member-a',
+    ]);
+    expect(repository.memberProfilesAt('member-a', NORTHWIND)).toEqual([
+      'https://www.linkedin.com/in/jane-roe/',
+    ]);
+  });
+
   it('ignores addresses that are not a LinkedIn person profile', () => {
     const { repository } = createRepository();
     repository.recordObservations('member-a', [
