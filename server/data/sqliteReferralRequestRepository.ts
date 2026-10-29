@@ -228,6 +228,14 @@ export class SqliteReferralRequestRepository {
          ON CONFLICT (member_id, requester_id) DO UPDATE SET created_at = excluded.created_at`,
       )
       .run(now, requestId, memberId);
+    // The asker's other open requests to this member close with the same answer.
+    this.database
+      .prepare(
+        `UPDATE network_referral_requests SET status = 'declined', answered_at = ?
+          WHERE member_id = ? AND status = 'pending'
+            AND requester_id = (SELECT requester_id FROM network_referral_requests WHERE id = ?)`,
+      )
+      .run(now, memberId, requestId);
   }
 
   /** Consent revoked: nothing the member was asked or agreed to stays visible. */

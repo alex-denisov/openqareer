@@ -103,6 +103,17 @@ describe('SqliteReferralRequestRepository (B561 slice 3)', () => {
     expect(repository.request('cand-other', ['member-a'], company, at)).toBe(1);
   });
 
+  it('a decline also closes the asker other pending requests to that member', () => {
+    const repository = createRepository();
+    repository.request('cand-b', ['member-a'], company, at);
+    repository.request('cand-b', ['member-a'], { ...company, companyKey: 'key-contoso' }, at);
+    const [first] = repository.listIncoming('member-a');
+
+    repository.answer(first!.id, 'member-a', 'declined', at);
+
+    expect(repository.listIncoming('member-a')).toEqual([]);
+  });
+
   it('forgets answered and withdrawn requests after 90 days', () => {
     const repository = createRepository();
     repository.request('cand-b', ['member-a'], company, '2026-06-01T10:00:00.000Z');

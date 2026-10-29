@@ -6,6 +6,7 @@ import { sendError, withDeps } from './helpers';
 import { connectionCandidate, findCandidateVacancy } from './candidateConnectionRoutes';
 import { memberSharesContacts } from './networkIndexFeed';
 import type { ReferralRequest } from '../data/sqliteReferralRequestRepository';
+import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { memberPeopleAt, platformReferralFor, readReferralProfile } from './referralRequestFeed';
 
 /** B561 slice 3: candidate B asks for a referral; member U1 sees it and answers. */
@@ -61,12 +62,21 @@ async function handleAskReferral(deps: RouteDeps, request: FastifyRequest, reply
       false,
     );
   }
+  return sendReferralAsk(deps, request, reply, candidate.id, vacancy);
+}
+
+/** Asks the members with a path; 409 when there are none or nothing could be sent. */
+function sendReferralAsk(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidateId: string,
+  vacancy: MatchedVacancyItem,
+) {
   const companyName = vacancy.cluster.canonicalCompany.trim();
   const companyKey = candidateCompanyKey(companyName);
-  const members = deps.networkIndexRepo!.membersWithPathsInto(
-    companyKey,
-    candidate.id,
-    (memberId) => memberSharesContacts(deps, memberId),
+  const members = deps.networkIndexRepo!.membersWithPathsInto(companyKey, candidateId, (memberId) =>
+    memberSharesContacts(deps, memberId),
   );
   if (members.length === 0) {
     return sendError(
@@ -78,17 +88,25 @@ async function handleAskReferral(deps: RouteDeps, request: FastifyRequest, reply
       false,
     );
   }
-  repository.request(
-    candidate.id,
+  deps.referralRequestRepo!.request(
+    candidateId,
     members,
     { companyKey, companyName, vacancyTitle: vacancy.cluster.canonicalTitle },
     new Date().toISOString(),
   );
-  const { status } = platformReferralFor(deps, candidate.id, companyName);
-  return {
-    data: { status: status === 'none' ? 'pending' : status },
-    meta: { requestId: request.id },
-  };
+  const { status } = platformReferralFor(deps, candidateId, companyName);
+  if (status === 'none') {
+    // Nothing was sent (caps or earlier declines): say so instead of «отправлено».
+    return sendError(
+      reply,
+      request,
+      409,
+      'referral_not_sent',
+      'Сейчас запрос отправить нельзя: участники не принимают новые запросы.',
+      false,
+    );
+  }
+  return { data: { status }, meta: { requestId: request.id } };
 }
 
 async function handleListIncoming(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
