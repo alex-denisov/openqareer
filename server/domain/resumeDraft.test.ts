@@ -298,3 +298,21 @@ describe('resumeDraftSchema — v2 extension for reading (B265 slice 1)', () => 
     expect(draft.certifications?.[0]?.url).toBe('https://www.credly.com/badges/abc123');
   });
 });
+
+describe('resumeDraftSchema — contact validation (block A p1)', () => {
+  const withContact = (contact: Record<string, unknown>) => ({
+    ...v2Draft(),
+    candidate: { contact: { links: [], ...contact } },
+  });
+  it('accepts a well-formed phone and rejects a broken one with a specific message', () => {
+    expect(() => resumeDraftSchema.parse(withContact({ phone: '+7 999 123-45-67' }))).not.toThrow();
+    const result = resumeDraftSchema.safeParse(withContact({ phone: '+7 999 12' }));
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.success ? '' : result.error.issues)).toContain('Телефон');
+  });
+  it('keeps the email check with its own message', () => {
+    const result = resumeDraftSchema.safeParse(withContact({ email: 'not-an-email' }));
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.success ? '' : result.error.issues)).toContain('Email');
+  });
+});

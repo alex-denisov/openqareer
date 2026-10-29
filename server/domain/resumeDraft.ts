@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  EMAIL_ERROR_TEXT,
+  PHONE_ERROR_TEXT,
+  getContactPhoneError,
+} from '../../shared/contactValidation';
 import { mergeLinkedInLanguageLevels } from '../../shared/linkedinProfileV2';
 
 export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
@@ -286,8 +291,13 @@ export const resumeDraftSchema = z
           .optional(),
         contact: z
           .object({
-            email: z.string().trim().email().max(320).optional(),
-            phone: z.string().trim().max(60).optional(),
+            email: z.string().trim().email(EMAIL_ERROR_TEXT).max(320).optional(),
+            phone: z
+              .string()
+              .trim()
+              .max(60)
+              .refine((value) => getContactPhoneError(value) === null, PHONE_ERROR_TEXT)
+              .optional(),
             telegram: z.string().trim().max(100).optional(),
             location: labelSchema.optional(),
             links: z.array(z.string().trim().max(500)).max(20).default([]),
