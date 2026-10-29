@@ -12,6 +12,7 @@ import {
   evaluateGeneratedQuiz,
 } from '../domain/generatedSkillQuiz';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
+import { repairLegacyQuizSkills } from '../domain/legacyQuizSkillRepair';
 import { conversationCoverage, isQuizCheckable } from '../domain/skillConfirmation';
 import { ResumeRevisionConflictError } from '../orchestration/careerCommandDispatcher';
 import { skillKey } from '../orchestration/skillRevision';
@@ -315,11 +316,37 @@ async function handleApply(deps: RouteDeps, request: FastifyRequest, reply: Fast
   }
 }
 
+const repairSchema = z.object({ apply: z.boolean().default(false) }).strict();
+
+/**
+ * Ремонт навыков старого банка квизов: без `apply` только показывает правки.
+ * Идемпотентен — повторный вызов ничего не меняет.
+ */
+async function handleRepairLegacy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const candidate = authenticateMutation(deps, request, reply);
+  if (!candidate) return undefined;
+  const { apply } = repairSchema.parse(request.body ?? {});
+  const stored = deps.candidateStore.getSnapshot(candidate.id).resume;
+  if (!stored) return reply.send({ data: { applied: false, changes: [] } });
+  const repair = repairLegacyQuizSkills(stored.draft);
+  const applied = apply && repair.changes.length > 0;
+  if (applied) {
+    deps.candidateStore.saveResumeDraft(candidate.id, repair.draft, stored.evidenceSnapshot);
+    request.log.info({ changes: repair.changes.length }, 'legacy_quiz_skills_repaired');
+  }
+  return reply.send({ data: { applied, changes: repair.changes } });
+}
+
 export function registerSkillConfirmationRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get(
     '/api/v1/candidate/skill-confirmations',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     withDeps(deps, handleConfirmations),
+  );
+  app.post(
+    '/api/v1/candidate/skill-quiz/repair-legacy',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    withDeps(deps, handleRepairLegacy),
   );
   app.post(
     '/api/v1/candidate/skill-quiz/generate',

@@ -154,3 +154,43 @@ describe('quiz built for a profile skill (block A, package 3)', () => {
     ]);
   });
 });
+
+describe('repair of skills the old quiz bank wrote (Blinov, 29.10)', () => {
+  const duplicate = {
+    id: 'skill-56567297',
+    name: 'Docker & Контейнеризация сервисов',
+    status: 'подтверждён',
+    source: 'Банк квизов LinkedIn',
+    verifiedAt: '2026-10-28',
+  };
+
+  it('previews the repair without writing, then applies it once', async () => {
+    const t = await setup([{ id: 'sk-hh', name: 'Docker' }, duplicate]);
+    const repair = (apply: boolean) =>
+      t.app.inject({
+        method: 'POST',
+        url: '/api/v1/candidate/skill-quiz/repair-legacy',
+        headers: { authorization: candidateAuthorization(t.app), origin },
+        payload: { apply },
+      });
+
+    const preview = await repair(false);
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().data).toEqual({
+      applied: false,
+      changes: [{ kind: 'merged', from: 'Docker & Контейнеризация сервисов', into: 'Docker' }],
+    });
+    expect(t.readSkills()).toHaveLength(2);
+
+    expect((await repair(true)).json().data.applied).toBe(true);
+    expect(t.readSkills()).toEqual([
+      expect.objectContaining({
+        id: 'sk-hh',
+        name: 'Docker',
+        status: 'подтверждён',
+        source: 'квиз openqareer',
+      }),
+    ]);
+    expect((await repair(true)).json().data).toEqual({ applied: false, changes: [] });
+  });
+});
