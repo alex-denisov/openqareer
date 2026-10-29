@@ -17,7 +17,9 @@ import {
   CoachProviderError,
   type CoachProvider,
   type CoachProviderResult,
+  type CoachTurnOptions,
 } from './coachProvider';
+import { collectedCompletion, streamChatCompletion } from './chatCompletionStream';
 import {
   PROVIDER_STAGE_MAX_RETRIES,
   PROVIDER_STAGE_TIMEOUT_MS,
@@ -51,8 +53,10 @@ export class OpenRouterCoachProvider implements CoachProvider {
   private readonly model: string;
   private readonly structuredOutput: boolean;
   private readonly reasoningEffort: 'low' | 'high';
+  private readonly timeoutMs: number;
 
   constructor(options: OpenRouterCoachProviderOptions) {
+    this.timeoutMs = options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS;
     this.model = options.model ?? OPENROUTER_MODEL;
     this.structuredOutput = options.structuredOutput ?? false;
     this.reasoningEffort = options.reasoningEffort ?? 'high';
@@ -61,7 +65,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
       new OpenAI({
         apiKey: options.apiKey,
         baseURL: 'https://openrouter.ai/api/v1',
-        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        timeout: this.timeoutMs,
         maxRetries: PROVIDER_STAGE_MAX_RETRIES,
         defaultHeaders: {
           'HTTP-Referer': 'https://openqareer.com',
@@ -73,6 +77,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
   async createTurn(
     input: CoachTurnInput,
     idempotencyKey: string,
+    options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
     const personal = input.dataClass !== 'synthetic';
     // Candidate data never reaches a free model or pool: their endpoints may train on it (28.10).
@@ -118,11 +123,16 @@ export class OpenRouterCoachProvider implements CoachProvider {
           requireParameters: this.structuredOutput && isMutableModelAlias(this.model),
         }),
       };
-      const response = await this.client.chat.completions.create(
-        request,
-        { idempotencyKey },
-      );
-      const content = response.choices[0]?.message.content;
+      // 29.10: a listener reads the reply as it is written; the result is the same either way.
+      const onMessageText = options?.onMessageText;
+      const response = onMessageText
+        ? await streamChatCompletion(this.client, request, {
+            idempotencyKey,
+            timeoutMs: this.timeoutMs,
+            onMessageText,
+          })
+        : collectedCompletion(await this.client.chat.completions.create(request, { idempotencyKey }));
+      const content = response.content;
       if (!content) {
         throw new CoachProviderError(
           'provider_output_invalid',

@@ -86,17 +86,22 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  // B446-g4: на 1440 порядок — в строке заголовков колонок, на 390 — строка в листе фильтров.
-  if (testInfo.project.name === 'mobile-390')
-    await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
-  const sortScope =
-    testInfo.project.name === 'mobile-390'
-      ? page.locator('.vacancies-mobile-sheet')
-      : page.locator('.vacancy-fit-bar');
-  await sortScope.getByLabel('Порядок вакансий').selectOption('freshness');
-  if (testInfo.project.name === 'mobile-390')
-    await page.locator('.vacancies-mobile-sheet-cta').click();
-  await expect.poll(() => sorts.includes('freshness')).toBe(true);
+  // Owner 29.10: no line above the list; at 1440 «Деньги» and «Совпадение» headers sort the
+  // whole selection on the server, at 390 there is no sort control at all.
+  await expect(page.locator('.vacancy-fit-bar')).toHaveCount(0);
+  await expect(page.getByText('Порядок', { exact: true })).toHaveCount(0);
+  if (testInfo.project.name === 'mobile-390') {
+    await expect(page.locator('.vacancies-sort-header').filter({ visible: true })).toHaveCount(0);
+    return;
+  }
+  const fitHeader = page.getByRole('columnheader', { name: 'Совпадение' });
+  await expect(fitHeader).toHaveAttribute('aria-sort', 'descending');
+  await page.getByRole('button', { name: 'Деньги' }).click();
+  await expect.poll(() => sorts.includes('money')).toBe(true);
+  await expect(page.getByRole('columnheader', { name: 'Деньги' })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  );
 });
 
 test('B522 admin audit shows actual spending controls and refreshes read-only', async ({
@@ -155,7 +160,7 @@ test('B522 admin audit shows actual spending controls and refreshes read-only', 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('28.10: «условие не совпадает» wraps inside the 96px column, never onto the star', async ({
+test('29.10: a caption without a percent wraps inside the 96px column, never onto the star', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile-390', 'the 96px column exists only on desktop');
@@ -181,7 +186,8 @@ test('28.10: «условие не совпадает» wraps inside the 96px co
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
   const cell = page.locator('.vacancies-screen-row-trigger .vacancies-screen-cell--fit').first();
-  await expect(cell.locator('.vacancy-fit-cap')).toHaveText('условие не совпадает');
+  // Owner 29.10: a row without a percent says only «мало требований» or «нет профиля».
+  await expect(cell.locator('.vacancy-fit-cap')).toHaveText('мало требований');
   const box = (await cell.boundingBox())!;
   const cap = (await cell.locator('.vacancy-fit-cap').boundingBox())!;
   expect(cap.x + cap.width).toBeLessThanOrEqual(box.x + box.width + 0.5);

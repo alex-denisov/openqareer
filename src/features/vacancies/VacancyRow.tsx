@@ -638,12 +638,6 @@ function VacancyScreenDetailGrid({ cluster, explanation, rowProps, rowState }: D
           explanation={explanation}
           onAddToProfile={rowProps.onAddToProfile}
         />
-        <VacancyFitEvidenceForItem
-          item={{ cluster, explanation }}
-          onAddToProfile={rowProps.onAddToProfile}
-          showTable={false}
-          hideWhenNumber
-        />
       </div>
       <VacancyScreenDescription cluster={cluster} onOpenFull={() => rowState.setInfoOpen(true)} />
     </div>

@@ -33,6 +33,8 @@ import {
   createSkillVerificationProposal,
 } from '../../src/services/hhSkillQuizzes';
 import { runTurnAnalysis } from './coachTurnAnalysis';
+import { turnStreamHub, turnStreamId } from './coachTurnStreamHub';
+import { registerCoachTurnStreamRoute } from './coachTurnStreamRoute';
 import { turnHasAnalysis } from '../orchestration/careerOrchestrator';
 
 const activeTurns = new WeakMap<RouteDeps, Set<string>>();
@@ -95,6 +97,7 @@ async function fetchMarketObservations(
     return marketObservationsFrom(sample);
   } catch {
     deps.candidateStore.failTurn(candidateId, idempotencyKey, 'market_source_unavailable');
+    turnStreamHub(deps).end(turnStreamId(candidateId, idempotencyKey));
     return 'unavailable';
   }
 }
@@ -110,7 +113,11 @@ async function completeTurnWithProvider(
   // 28.10: in a three-role section the consultant answers first; the analysis follows.
   const split = Boolean(deps.candidateStore.updateCoachTurnResult) && turnHasAnalysis(input);
   try {
-    const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}) };
+    // 29.10: the consultant's words reach the stream reader while they are written.
+    const stream = turnStreamHub(deps);
+    const streamId = turnStreamId(candidateId, key);
+    const onMessageText = (text: string) => stream.publish(streamId, text);
+    const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}), onMessageText };
     const turn = await deps.coachProvider.createTurn(input, key, options);
     const pending = { analysis: 'pending' as const, analysisStartedAt: new Date().toISOString() };
     const replied = split ? { ...turn, result: { ...turn.result, ...pending } } : turn;
@@ -130,6 +137,8 @@ async function completeTurnWithProvider(
       },
     } : generated;
     deps.candidateStore.completeTurn(candidateId, key, output);
+    // The reader gets the saved reply now, not after the fact extractor below.
+    stream.end(streamId);
     await proposeListedFacts(deps, candidateId, factsPending);
     return output;
   } catch (error) {
@@ -140,6 +149,7 @@ async function completeTurnWithProvider(
       key,
       error instanceof CoachProviderError ? error.code : 'internal_error',
     );
+    turnStreamHub(deps).end(turnStreamId(candidateId, key));
     throw error;
   }
 }
@@ -188,8 +198,13 @@ async function deliverTurn(
   // this turn's context is built at start and does not read the new summary.
   // Роли хода делят одно время: клиент ждёт 240 с (28.10).
   const deadlineAt = Date.now() + COACH_TURN_BUDGET_MS;
+  // The stream opens before the receipt is sent, so a reader never misses the turn's start.
+  turnStreamHub(deps).begin(turnStreamId(candidateId, key));
   const work = generateTurn(deps, request, candidateId, key, input, marketQuery, undefined, deadlineAt).finally(
-    () => active.delete(operation),
+    () => {
+      active.delete(operation);
+      turnStreamHub(deps).end(turnStreamId(candidateId, key));
+    },
   );
   if ((request.query as { delivery?: string }).delivery === 'receipt') {
     // Failure is persisted by the worker; polling does not restart generation.
@@ -445,6 +460,7 @@ const handleVerifySkillQuiz: Handler = async (deps, request, reply) => {
 
 export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   registerCoachResultRoute(app, deps);
+  registerCoachTurnStreamRoute(app, deps);
   registerAdaptationCoachRoutes(app, deps);
   registerRoleSkillAssessmentRoutes(app, deps);
   app.post(

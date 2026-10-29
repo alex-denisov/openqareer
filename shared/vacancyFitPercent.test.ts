@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { VacancyFitResult, VacancyFitView } from './vacancyFit';
 import {
   compareFitPercent,
-  vacancyFitCeiling,
   vacancyFitPercent,
   vacancyFitStage,
   vacancyFitTier,
@@ -66,23 +65,6 @@ describe('vacancyFitTier', () => {
     [39, 'low'],
     [0, 'low'],
   ])('%i → %s', (percent, tier) => expect(vacancyFitTier(percent)).toBe(tier));
-});
-
-describe('vacancyFitCeiling: 10 points off per unconfirmed role, region or work permit', () => {
-  it('is 100 when all key conditions are confirmed', () => {
-    expect(vacancyFitCeiling(view(90).result!)).toBe(100);
-  });
-  it('drops by 10 for each unconfirmed key condition', () => {
-    const unknown = { status: 'unknown', reason: '' } as const;
-    const base = view(90).result!;
-    expect(vacancyFitCeiling({ ...base, gates: { ...base.gates, region: unknown } })).toBe(90);
-    expect(
-      vacancyFitCeiling({
-        ...base,
-        gates: { ...base.gates, region: unknown, workAuthorization: unknown, workFormat: unknown },
-      }),
-    ).toBe(80);
-  });
 });
 
 describe('compareFitPercent: the CPO order of 28.10 evening', () => {

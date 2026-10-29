@@ -1,4 +1,4 @@
-import { sanitizeHiddenMarkersDeep } from '../../shared/textHygiene';
+import { sanitizeHiddenMarkersDeep, stripHiddenMarkers } from '../../shared/textHygiene';
 import type { CoachTurnInput } from '../domain/coach';
 import type { CoachProvider, CoachProviderResult, CoachTurnOptions } from './coachProvider';
 
@@ -26,8 +26,15 @@ export class HygienicCoachProvider implements CoachProvider {
     idempotencyKey: string,
     options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
-    const answer = await this.inner.createTurn(input, idempotencyKey, options);
+    const answer = await this.inner.createTurn(input, idempotencyKey, cleanStream(options));
     const result = sanitizeHiddenMarkersDeep(answer.result);
     return result === answer.result ? answer : { ...answer, result };
   }
+}
+
+/** The streamed reply reaches the candidate before the result does: it is cleaned the same way (29.10). */
+function cleanStream(options: CoachTurnOptions | undefined): CoachTurnOptions | undefined {
+  const sink = options?.onMessageText;
+  if (!sink) return options;
+  return { ...options, onMessageText: (text) => sink(stripHiddenMarkers(text)) };
 }

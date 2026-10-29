@@ -1,5 +1,11 @@
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
-import { compareFitPercent } from '../../shared/vacancyFitPercent';
+import {
+  compareFitDirected,
+  compareMoney,
+  DEFAULT_VACANCY_SORT,
+  type VacancySort,
+} from '../../shared/vacancySort';
+import { createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
 import type { RouteDeps } from './deps';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
@@ -33,8 +39,9 @@ const refreshingFitViews = new Set<string>();
 export function withVacancyFitOrder(
   deps: RouteDeps,
   candidateId: string,
-  sort: 'fit' | 'freshness' = 'fit',
+  sort: VacancySort = DEFAULT_VACANCY_SORT,
 ) {
+  const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
   const reader = createFitViewReader(deps, candidateId);
   const stamp = reader
     ? vacancyFitProfileStamp(
@@ -50,10 +57,10 @@ export function withVacancyFitOrder(
         ? reader.read(reader.scoredIds(items))
         : new Map<string, VacancyFitView>();
       fitViewsCache.write(key, views);
-      return orderByFit(items, views, sort);
+      return orderByFit(items, views, sort, money);
     }
     if (known.stale && reader) void refreshFitViews(key, reader, items);
-    return orderByFit(items, known.value, sort);
+    return orderByFit(items, known.value, sort, money);
   };
 }
 
@@ -64,22 +71,22 @@ export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVac
 
 /**
  * 28.10: «по совпадению» ведёт процент; вакансии компаний «Хочу» поднимаются только
- * среди вакансий с тем же процентом (B422 стал вторым ключом). Свежесть отметку не учитывает.
+ * среди вакансий с тем же процентом (B422 стал вторым ключом). «Деньги» отметку не учитывают.
  */
 export function withWantedCompanyOrder(
   deps: RouteDeps,
   candidateId: string,
-  sort: 'fit' | 'freshness' = 'fit',
+  sort: VacancySort = DEFAULT_VACANCY_SORT,
 ): MatchedOrder {
   const byFit = withVacancyFitOrder(deps, candidateId, sort);
-  if (sort !== 'fit') return Object.assign(byFit, { cacheKey: '' });
+  if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '' });
   const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
   // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
   const cacheKey = [...wanted].sort().join(',');
   return Object.assign(
     (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
       wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
-        compareFitPercent(left.explanation.fitView, right.explanation.fitView),
+        compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
       ),
     { cacheKey },
   );
@@ -151,7 +158,8 @@ async function refreshFitViews(
 function orderByFit(
   items: readonly MatchedVacancyItem[],
   views: FitViews,
-  sort: 'fit' | 'freshness',
+  sort: VacancySort,
+  money?: MoneyReader,
 ): MatchedVacancyItem[] {
   const decorated = items.map((item) => {
     const fitView = views.get(item.cluster.id);
@@ -159,7 +167,15 @@ function orderByFit(
       ? { ...item, explanation: explanationWithFitView(item.explanation, fitView) }
       : item;
   });
-  return decorated.sort((left, right) => compareFitOrder(left, right, sort));
+  if (sort.by !== 'money' || !money) {
+    return decorated.sort((left, right) => compareFitOrder(left, right, sort));
+  }
+  const amounts = new Map(decorated.map((item) => [item.cluster.id, money(item)]));
+  return decorated.sort(
+    (left, right) =>
+      compareMoney(amounts.get(left.cluster.id), amounts.get(right.cluster.id), sort.dir) ||
+      compareFitOrder(left, right),
+  );
 }
 
 /**
@@ -301,21 +317,14 @@ export function requestFitForShownPage(
   }
 }
 
+/** «Совпадение» in the chosen direction; rows that cannot be counted go last (29.10). */
 export function compareFitOrder(
   left: MatchedVacancyItem,
   right: MatchedVacancyItem,
-  sort: 'fit' | 'freshness' = 'fit',
+  sort: Pick<VacancySort, 'dir'> = DEFAULT_VACANCY_SORT,
 ): number {
-  if (sort === 'freshness') {
-    const time = (item: MatchedVacancyItem) => {
-      const timestamp = Date.parse(item.cluster.firstObservedAt);
-      return Number.isFinite(timestamp) ? timestamp : 0;
-    };
-    return time(right) - time(left) || compareMatchedVacancies(left, right);
-  }
-  // 28.10 mockup: the order the row's percent promises — descending; rows without one go last.
   return (
-    compareFitPercent(left.explanation.fitView, right.explanation.fitView) ||
+    compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir) ||
     compareMatchedVacancies(left, right)
   );
 }

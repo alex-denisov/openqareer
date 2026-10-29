@@ -1,5 +1,7 @@
+import type { VacancySort } from '../../../shared/vacancySort';
 export interface VacanciesScreenState {
-  readonly sort?: 'fit' | 'freshness';
+  /** Owner 29.10: set by a header click; absent means the server's saved sort. */
+  readonly sort?: VacancySort;
   readonly roles: readonly string[];
   readonly regions: readonly string[];
   readonly levels?: readonly string[];

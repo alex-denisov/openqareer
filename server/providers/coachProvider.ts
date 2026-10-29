@@ -48,6 +48,12 @@ export interface CoachTurnOptions {
   readonly split?: 'reply' | 'analysis';
   /** Момент (мс эпохи), к которому весь ход должен быть готов: клиент ждёт 240 с (28.10). */
   readonly deadlineAt?: number;
+  /**
+   * 29.10 (владелец): кандидат читает ответ консультанта по мере генерации.
+   * Ступень зовёт с текстом `message`, накопленным к этому моменту; пустая
+   * строка — сброс: ступень упала посреди потока, следующая начнёт заново.
+   */
+  readonly onMessageText?: (text: string) => void;
 }
 
 export interface CoachProvider {

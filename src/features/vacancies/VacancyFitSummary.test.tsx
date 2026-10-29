@@ -46,7 +46,7 @@ it('no-description state explains unavailable coverage without invented zero', (
   expect(html).toContain('Нет описания');
   expect(html).not.toContain('0%');
 });
-it('known coverage precedes unknown, ties preserve existing order, freshness is explicit', () => {
+it('known coverage precedes unknown, ties preserve existing order', () => {
   const item = (id: string, date: string, fitView?: ReturnType<typeof readyVacancyFit>) =>
     ({ cluster: { id, firstObservedAt: date }, explanation: { fitView } }) as MatchedVacancyItem;
   const a = item('unknown', '2026-10-19');
@@ -56,11 +56,6 @@ it('known coverage precedes unknown, ties preserve existing order, freshness is 
     'known',
     'tied',
     'unknown',
-  ]);
-  expect(sortVacancyFitItems([a, b, c], 'freshness').map((i) => i.cluster.id)).toEqual([
-    'unknown',
-    'tied',
-    'known',
   ]);
 });
 

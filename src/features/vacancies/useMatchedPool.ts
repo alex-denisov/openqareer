@@ -1,3 +1,4 @@
+import type { VacancySort } from '../../../shared/vacancySort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
@@ -9,6 +10,8 @@ import { collectMatchedPool, withDeadline } from './vacancyRead';
 export interface MatchedPool {
   readonly facets?: MatchedVacancyFacets;
   readonly initialFilters?: VacanciesScreenState;
+  /** The sort the server applied to this selection (saved per account, 29.10). */
+  readonly sort?: VacancySort;
   readonly setFilters?: (filters: VacanciesScreenState) => void;
   readonly matched: MatchedVacancyItem[];
   readonly total: number;
@@ -28,6 +31,7 @@ export interface MatchedPool {
 interface PoolReaderSetters {
   readonly setFacets: Dispatch<SetStateAction<MatchedVacancyFacets | undefined>>;
   readonly setInitialFilters: Dispatch<SetStateAction<VacanciesScreenState | undefined>>;
+  readonly setSort: Dispatch<SetStateAction<VacancySort | undefined>>;
   readonly setMatched: Dispatch<SetStateAction<MatchedVacancyItem[]>>;
   readonly setTotal: Dispatch<SetStateAction<number>>;
   readonly setPoolTotal: Dispatch<SetStateAction<number>>;
@@ -43,6 +47,7 @@ interface PoolReaderSetters {
 export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const [facets, setFacets] = useState<MatchedVacancyFacets>();
   const [initialFilters, setInitialFilters] = useState<VacanciesScreenState>();
+  const [sort, setSort] = useState<VacancySort>();
   const [filters, setFilterState] = useState<VacanciesScreenState>();
   const setFilters = useCallback((value: VacanciesScreenState) => {
     const hasServerFilters = hasMatchedPoolFilters(value);
@@ -64,11 +69,11 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const refresh = useCallback(() => setReadAttempt((attempt) => attempt + 1), []);
 
   useMatchedPoolReader(initialPool, readAttempt, filters, {
-    setFacets, setInitialFilters, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
+    setFacets, setInitialFilters, setSort, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
     setCampaign, setCandidateLevel, setFailureSourceLabel,
   });
   return initialPool ? { ...initialPool, setFilters } : {
-    facets, initialFilters, setFilters, matched, total, poolTotal, loading, failed, complete,
+    facets, initialFilters, sort, setFilters, matched, total, poolTotal, loading, failed, complete,
     campaign, candidateLevel, failureSourceLabel, refresh,
   };
 }
@@ -76,7 +81,7 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
 function hasMatchedPoolFilters(filters: VacanciesScreenState | undefined): boolean {
   return Boolean(
     filters &&
-      (filters.sort === 'freshness' ||
+      (filters.sort !== undefined ||
         filters.roles.length > 0 ||
         filters.regions.length > 0 ||
         (filters.levels?.length ?? 0) > 0 ||
@@ -96,6 +101,7 @@ function useMatchedPoolReader(
   const {
     setMatched,
     setInitialFilters,
+    setSort,
     setTotal,
     setPoolTotal,
     setLoading,
@@ -121,6 +127,7 @@ function useMatchedPoolReader(
     filters,
     setMatched,
     setInitialFilters,
+    setSort,
     setTotal,
     setPoolTotal,
     setLoading,
@@ -156,6 +163,7 @@ async function loadMatchedPool(
           if (offset === 0 && isActive()) {
             if (page.facets) setters.setFacets(page.facets);
             if (page.initialFilters) setters.setInitialFilters(page.initialFilters);
+            if (page.sort) setters.setSort(page.sort);
             if (page.campaign) setters.setCampaign(page.campaign);
             if (page.candidateLevel !== undefined) setters.setCandidateLevel(page.candidateLevel);
           }

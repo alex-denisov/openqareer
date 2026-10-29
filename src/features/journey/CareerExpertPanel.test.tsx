@@ -264,6 +264,18 @@ describe('ExpertWaitingRow', () => {
     expect(html).toContain('aria-busy="true"');
     expect(html).toMatch(/до полутора минут/u);
   });
+
+  it('shows the reply as it is written instead of the wait notice (29.10)', () => {
+    const html = renderToStaticMarkup(
+      <ExpertWaitingRow question="Как усилить позиционирование?" draft="Начните с цифр" />,
+    );
+
+    expect(html).toContain('Как усилить позиционирование?');
+    expect(html).toContain('Карьерный консультант');
+    expect(html).toContain('Начните с цифр');
+    expect(html).not.toMatch(/до полутора минут/u);
+    expect(html).toContain('aria-busy="true"');
+  });
 });
 
 describe('CareerActionProposalCard', () => {

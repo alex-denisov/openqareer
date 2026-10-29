@@ -315,11 +315,22 @@
   background: var(--career-success-soft);
 }
 
-.vacancies-screen-skill-chip.is-unconfirmed {
+.vacancies-screen-skill-chip.is-stated {
+  border-color: var(--career-warning);
+  color: var(--career-warning);
+  background: var(--career-warning-soft);
+}
+
+/* 29.10: нет в профиле — контур без заливки. */
+.vacancies-screen-skill-chip.is-missing {
+  border-color: var(--career-line-strong);
+  color: var(--career-text-dim);
+  background: transparent;
+}
+
+.vacancies-screen-skill-chip.is-missing:has(button) {
   border: 0;
   padding: 0;
-  color: var(--career-warning);
-  background: transparent;
 }
 
 .vacancies-screen-skill-chip button {
@@ -328,10 +339,10 @@
   gap: var(--career-space-1);
   max-inline-size: 100%;
   padding: var(--career-space-1) var(--career-space-2);
-  border: var(--career-border-width) solid var(--career-warning);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
   color: inherit;
-  background: var(--career-warning-soft);
+  background: transparent;
   font: inherit;
   font-size: var(--career-text-xs);
   text-align: start;

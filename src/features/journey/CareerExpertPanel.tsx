@@ -144,6 +144,10 @@ export function CareerExpertPanel({
   const [sending, setSending] = useState(false);
   const [decisionProposalCount, setDecisionProposalCount] = useState(0);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
+  // 29.10: the consultant's reply while it is written; the saved turn replaces it.
+  const [streamingReply, setStreamingReply] = useState<string>();
+  const replyStream = useRef<AbortController>();
+  useEffect(() => () => replyStream.current?.abort(), []);
   const [error, setError] = useState<string>();
   const [skillQuizOpen, setSkillQuizOpen] = useState(false);
   const lastSkillQuizBankRequest = useRef(0);
@@ -205,6 +209,8 @@ export function CareerExpertPanel({
     setError(undefined);
     setSending(false);
     setPendingQuestion(undefined);
+    setStreamingReply(undefined);
+    replyStream.current?.abort();
   }, [contextKey, initialPrompt]);
 
   const pendingOperation = useRef<{
@@ -361,6 +367,8 @@ export function CareerExpertPanel({
         };
       }
       const { idempotencyKey, messageId } = pendingOperation.current;
+      replyStream.current?.abort();
+      replyStream.current = new AbortController();
       const result = await sendCoachTurn({
         content: clean,
         marketQuery: query,
@@ -368,6 +376,10 @@ export function CareerExpertPanel({
         subject,
         idempotencyKey,
         messageId,
+        onMessageText: (text) => {
+          if (currentContext.current === operationContext) setStreamingReply(text);
+        },
+        streamSignal: replyStream.current.signal,
       });
       if (currentContext.current !== operationContext) return false;
       pendingOperation.current = undefined;
@@ -383,6 +395,7 @@ export function CareerExpertPanel({
       if (currentContext.current === operationContext) {
         setSending(false);
         setPendingQuestion(undefined);
+        setStreamingReply(undefined);
       }
     }
     if (!delivered) return false;
@@ -698,7 +711,7 @@ export function CareerExpertPanel({
             </div>
           ) : null}
           {subjectTitle && stage === 'diary' ? <p className="career-diary-note">Контекст: {subjectTitle}</p> : null}
-          {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
+          {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} draft={streamingReply} /> : null}
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
           ) : null}
@@ -890,7 +903,22 @@ export function ExpertStarterChips({
   );
 }
 /** Показываем ожидание, пока ответ консультанта не доставлен. */
-export function ExpertWaitingRow({ question }: { question: string }) {
+export function ExpertWaitingRow({ question, draft }: { question: string; draft?: string }) {
+  // 29.10: once the reply starts arriving, the candidate reads it instead of the wait notice.
+  if (draft) {
+    return (
+      <>
+        <article className="career-dialogue-turn is-user">
+          <span>Вы</span>
+          <p>{question}</p>
+        </article>
+        <article className="career-dialogue-turn is-assistant" aria-live="polite" aria-busy="true">
+          <span>Карьерный консультант</span>
+          <ConsultantMessage text={draft} />
+        </article>
+      </>
+    );
+  }
   return (
     <article className="career-dialogue-turn is-user" aria-live="polite" aria-busy="true">
       <span>Вы</span>

@@ -3,7 +3,6 @@ import type { VacancyFitResult, VacancyFitView } from '../../../shared/vacancyFi
 import { vacancyFitBoost, vacancyFitMark, vacancyFitSentence } from './vacancyFitModel';
 
 const matched = { status: 'matched', reason: '' } as const;
-const unknown = { status: 'unknown', reason: '' } as const;
 
 function req(id: string, label: string) {
   return {
@@ -89,47 +88,95 @@ describe('vacancyFitMark: the row cell', () => {
   });
 });
 
-describe('vacancyFitSentence: built from the server formula', () => {
-  it('counts requirements found in the profile and names the rest', () => {
-    const v = view(
-      { coveragePercent: 50, coverage: { matched: 2, total: 4, unknown: 0 } },
-      'ready',
-      ['Java', 'Kafka', 'Kubernetes', 'SQL'],
-      ['r0', 'r3'],
-    );
-    expect(vacancyFitSentence(v)).toBe(
-      '2 из 4 требований вакансии есть в профиле. Не нашли в профиле: Kafka, Kubernetes — они не засчитаны.',
+/** The mockup case: 10 of 12 checked, Kafka and Kubernetes stated without a check (29.10). */
+function mockupView(): VacancyFitView {
+  const labels = ['Kafka', 'Kubernetes', ...Array.from({ length: 10 }, (_, i) => `S${i}`)];
+  const base = view(
+    { coveragePercent: 92, coverage: { matched: 12, total: 12, unknown: 0, checked: 10 } },
+    'ready',
+    labels,
+    labels.map((_, i) => `r${i}`),
+  );
+  return {
+    ...base,
+    result: {
+      ...base.result!,
+      assessments: base.result!.assessments.map((item, i) =>
+        i < 2 ? item : { ...item, checked: true },
+      ),
+    },
+  };
+}
+
+describe('vacancyFitSentence: the 29.10 mockup text', () => {
+  it('counts checked requirements and names the stated ones as half', () => {
+    expect(vacancyFitSentence(mockupView())).toBe(
+      '10 из 12 требований вакансии есть в профиле и подтверждены. Ещё 2 указаны, но не проверены: Kafka, Kubernetes — они считаются наполовину.',
     );
   });
-  it('names unconfirmed key conditions and the ceiling they set', () => {
-    const v = view({
-      coveragePercent: 80,
-      coverage: { matched: 12, total: 12, unknown: 0 },
-      gates: { ...view().result!.gates, region: unknown, workAuthorization: unknown },
-    });
-    expect(vacancyFitSentence(v)).toBe(
-      '12 из 12 требований вакансии есть в профиле. Не подтверждены регион и право на работу: процент не выше 80 %.',
+  it('drops the second sentence when nothing is unchecked', () => {
+    const v = view(
+      { coveragePercent: 100, coverage: { matched: 1, total: 3, unknown: 0, checked: 1 } },
+      'ready',
+      ['A', 'B', 'C'],
     );
+    expect(vacancyFitSentence(v)).toBe('1 из 3 требований вакансии есть в профиле и подтверждены.');
   });
 });
 
-describe('vacancyFitBoost: the quiz button only with a real skill check and a real gain', () => {
-  const v = view(
-    { coveragePercent: 50, coverage: { matched: 2, total: 4, unknown: 0 } },
-    'ready',
-    ['Java', 'Kafka', 'Kubernetes', 'SQL'],
-    ['r0', 'r3'],
-  );
-  it('offers the percent the two unconfirmed skills would give', () => {
-    expect(vacancyFitBoost(v, true)).toEqual({
+describe('vacancyFitBoost: the quiz button whenever stated requirements are unchecked', () => {
+  it('offers the percent a quiz on the stated skills would give', () => {
+    expect(vacancyFitBoost(mockupView())).toEqual({
       label: 'Поднять до 100 %: квиз по Kafka и Kubernetes',
       skills: ['Kafka', 'Kubernetes'],
     });
   });
-  it('has no button when the skill check cannot start', () => {
-    expect(vacancyFitBoost(v, false)).toBeNull();
+  it('has no button when nothing stated is unchecked', () => {
+    expect(vacancyFitBoost(view({}, 'ready', ['Java'], []))).toBeNull();
   });
-  it('has no button when nothing is unconfirmed', () => {
-    expect(vacancyFitBoost(view({}, 'ready', ['Java'], ['r0']), true)).toBeNull();
+});
+
+describe('29.10 tails', () => {
+  it('uses the singular for one unchecked requirement', () => {
+    const v = view(
+      { coveragePercent: 90, coverage: { matched: 5, total: 5, unknown: 0, checked: 4 } },
+      'ready',
+      ['A', 'B', 'C', 'D', 'Опыт'],
+      ['r0', 'r1', 'r2', 'r3', 'r4'],
+    );
+    const marked = {
+      ...v,
+      result: {
+        ...v.result!,
+        assessments: v.result!.assessments.map((item, i) =>
+          i < 4 ? { ...item, checked: true } : item,
+        ),
+      },
+    };
+    expect(vacancyFitSentence(marked)).toBe(
+      '4 из 5 требований вакансии есть в профиле и подтверждены. Ещё 1 указан, но не проверен: Опыт — он считается наполовину.',
+    );
+  });
+  it('offers the quiz even when the unchecked requirement is experience', () => {
+    const v = view(
+      { coveragePercent: 90, coverage: { matched: 5, total: 5, unknown: 0, checked: 4 } },
+      'ready',
+      ['A', 'B', 'C', 'D', 'Опыт'],
+      ['r0', 'r1', 'r2', 'r3', 'r4'],
+    );
+    const requirements = v.requirements.map((item, i) =>
+      i === 4 ? { ...item, kind: 'experience', skill: false } : item,
+    ) as typeof v.requirements;
+    const marked = {
+      ...v,
+      requirements,
+      result: {
+        ...v.result!,
+        assessments: v.result!.assessments.map((item, i) =>
+          i < 4 ? { ...item, checked: true } : item,
+        ),
+      },
+    };
+    expect(vacancyFitBoost(marked)?.label).toBe('Поднять до 100 %: квиз по Опыт');
   });
 });

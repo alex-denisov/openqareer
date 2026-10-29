@@ -1,4 +1,3 @@
-import { receiveCoachResult } from './coachResultDelivery';
 import { shareInFlight } from './shareInFlight';
 import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 import type { CoachTurnStage, CoachTurnSubject } from '../../../server/domain/coach';
@@ -741,50 +740,7 @@ export async function deleteCandidateAccount(): Promise<void> {
   if (!response.ok) await throwApiError(response);
 }
 
-export async function sendCoachTurn(input: {
-  content: string;
-  marketQuery?: string;
-  idempotencyKey?: string;
-  messageId?: string;
-  stage?: CoachTurnStage;
-  subject?: CoachTurnSubject;
-  isService?: boolean;
-}): Promise<CoachResult> {
-  const key = input.idempotencyKey ?? crypto.randomUUID();
-  try {
-    const response = await apiFetch('/api/v1/coach/turn?delivery=receipt', {
-      signal: AbortSignal.timeout(20_000),
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-      body: JSON.stringify({
-        messageId: input.messageId ?? crypto.randomUUID(),
-        content: input.content,
-        marketQuery: input.marketQuery,
-        stage: input.stage,
-        subject: input.subject,
-        isService: input.isService,
-      }),
-    });
-    const data = await readDataObject<CoachResult & { status?: string }>(response);
-    // Older immutable releases return the complete result; preserve compatibility.
-    if (typeof data.message === 'string') return data;
-    if (data.status !== 'pending' && data.status !== 'completed') {
-      throw new CoachApiErrorClass(
-        'Сервис вернул ответ неожиданной формы.',
-        'malformed_response',
-        true,
-      );
-    }
-  } catch (error) {
-    if (
-      !(error instanceof CoachApiErrorClass) ||
-      !['network_error', 'malformed_response'].includes(error.code)
-    )
-      throw error;
-    // The POST may have succeeded: read the saved operation, never generate again.
-  }
-  return receiveCoachResult<CoachResult>(key);
-}
+export { sendCoachTurn } from './coachTurnApi';
 
 export async function rejectCoachProposal(input: {
   proposalKey: string;

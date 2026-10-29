@@ -26,7 +26,7 @@ function stillRunning(): CoachApiError {
  * Замер на проде 2026-09-05: результат приходил на 74-й и на 160-й секунде.
  * Потолок покрывает серверное обещание и оставляет запас на саму передачу.
  */
-const RESULT_WAIT_MS = 240_000;
+export const RESULT_WAIT_MS = 240_000;
 
 async function readWithDeadline<T>(url: string): Promise<{ pending: boolean; data?: T }> {
   const controller = new AbortController();
@@ -47,9 +47,9 @@ async function readWithDeadline<T>(url: string): Promise<{ pending: boolean; dat
 }
 
 /** Normal paths receive one full response. Only failed delivery uses bounded parts. */
-export async function receiveCoachResult<T extends object>(key: string): Promise<T> {
+export async function receiveCoachResult<T extends object>(key: string, waitMs = RESULT_WAIT_MS): Promise<T> {
   const url = `/api/v1/coach/turn/${encodeURIComponent(key)}/result`;
-  const deadline = Date.now() + RESULT_WAIT_MS;
+  const deadline = Date.now() + waitMs;
   let pending = false;
   while (Date.now() < deadline) {
     try {

@@ -101,3 +101,51 @@ function jsonResponse(data: unknown, status = 200) {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+describe('streamed coach turn (29.10)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const receipt = () =>
+    new Response(JSON.stringify({ data: { status: 'pending', idempotencyKey: 'k' } }), {
+      status: 202,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  const final = { message: 'Ответ.', phase: 'role', actionProposals: [] };
+
+  it('reads the stream after the receipt and returns its final result', async () => {
+    const stream = new Response(
+      `event: delta\ndata: {"text":"Отв"}\n\nevent: done\ndata: ${JSON.stringify({ data: final })}\n\n`,
+      { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+    );
+    const fetchMock = vi.fn().mockResolvedValueOnce(receipt()).mockResolvedValueOnce(stream);
+    vi.stubGlobal('fetch', fetchMock);
+    const seen: string[] = [];
+
+    const result = await sendCoachTurn({ content: 'Вопрос', onMessageText: (text) => seen.push(text) });
+
+    expect(result).toEqual(final);
+    expect(seen).toEqual(['Отв']);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back to the stored result when the stream is unavailable', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(receipt())
+      .mockResolvedValueOnce(new Response('{}', { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: final }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await sendCoachTurn({ content: 'Вопрос', onMessageText: () => undefined });
+
+    expect(result).toEqual(final);
+    expect(String(fetchMock.mock.calls[2][0])).toContain('/result');
+  });
+});
