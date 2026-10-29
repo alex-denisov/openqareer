@@ -8,6 +8,7 @@ import {
   ProgressTrack,
   SourceErrorState,
   RunSkillOverview,
+  SkillOverview,
   StartState,
   TooFewVacanciesState,
 } from './RoleSkillAssessmentStartViews';
@@ -286,3 +287,43 @@ const BASE_RUN = {
   modelError: null,
   lastRequest: null,
 } satisfies Partial<RoleSkillAssessmentRun>;
+
+describe('role requirements discussed with the consultant (block A, package 3)', () => {
+  const ready = (conversation: unknown) =>
+    ({
+      state: 'ready',
+      roleTitle: 'Product Manager',
+      roleVersion: 1,
+      sampleSize: 30,
+      evidenceObservedAt: '2026-10-25T09:00:00Z',
+      skills: [
+        { skillId: 'a', name: 'A/B testing', vacancyCount: 12, isKeySkill: true, sourceRefs: [] },
+        { skillId: 'b', name: 'SQL analytics', vacancyCount: 9, isKeySkill: false, sourceRefs: [] },
+      ],
+      cases: [],
+      conversation,
+    }) as Parameters<typeof SkillOverview>[0]['current'];
+
+  it('labels only the discussed requirement and shows its fact', () => {
+    const html = renderToStaticMarkup(
+      <SkillOverview
+        current={ready([
+          {
+            name: 'A/B testing',
+            state: 'discussed',
+            facts: [{ memoryId: 'm', statement: 'Запустил 40 экспериментов', sourceMessageIds: ['x'], at: 'z' }],
+          },
+          { name: 'SQL analytics', state: 'not_checked', facts: [] },
+        ])}
+      />,
+    );
+    expect(html.match(/Разобрано в беседе/g)).toHaveLength(1);
+    expect(html).toContain('Запустил 40 экспериментов');
+  });
+
+  it('shows no label when the answer carries no conversation data', () => {
+    expect(renderToStaticMarkup(<SkillOverview current={ready(undefined)} />)).not.toContain(
+      'Разобрано в беседе',
+    );
+  });
+});

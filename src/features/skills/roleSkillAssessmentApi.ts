@@ -4,6 +4,7 @@ import {
   readDataObject,
   throwApiError,
 } from '../coach/apiClient';
+import type { ConversationCoverage } from './skillConfirmationApi';
 import type { RoleSkillAssessmentRun } from '../../../server/domain/roleSkillAssessment';
 
 export type RoleSkillAssessmentCurrent =
@@ -37,6 +38,8 @@ export type RoleSkillAssessmentCurrent =
         }>;
       }>;
       cases: RoleSkillAssessmentRun['cases'][number]['assessmentCase'][];
+      /** Which requirements the candidate already discussed with the consultant. */
+      conversation?: ConversationCoverage[];
     }
   | { state: 'focus_insufficient'; roleTitle: string; skills: string[]; notes: string[] }
   | { state: 'role_changed'; run: RoleSkillAssessmentRun }
