@@ -214,7 +214,10 @@ export function ProfileMobileScreen(props: ProfileMobileScreenProps) {
     setLocalTab(tab);
     props.onTabChange?.(tab);
   };
-  const ats = useProfileAtsAssessment({ refreshKey: props.view?.savedAt?.updatedAt });
+  const ats = useProfileAtsAssessment({
+    onDemand: true,
+    refreshKey: props.view?.savedAt?.updatedAt,
+  });
   const versionCount = useVersionCount(props.candidateId);
   useMobileScene(props, navigation);
   useMobileVacancyRequirement(props.vacancyRequirement, navigation.open);

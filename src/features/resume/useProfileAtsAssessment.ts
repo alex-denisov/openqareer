@@ -21,10 +21,14 @@ export interface ProfileAtsAssessmentState {
   readonly loading: boolean;
   readonly error: string | null;
   readonly refresh: () => void;
+  /** On-demand mode only: the candidate has not asked for a calculation yet. */
+  readonly idle?: boolean;
 }
 
 export interface UseProfileAtsAssessmentOptions {
   readonly enabled?: boolean;
+  /** Opening the profile must not write (D2): calculate only after an explicit action. */
+  readonly onDemand?: boolean;
   readonly request?: ResumeAtsAssessmentRequest;
   readonly refreshKey?: string | null;
 }
@@ -77,15 +81,21 @@ function subscribeToVersionChanges(refresh: () => void): () => void {
 export function useProfileAtsAssessment(
   options: UseProfileAtsAssessmentOptions = {},
 ): ProfileAtsAssessmentState {
-  const { enabled = true, request, refreshKey = null } = options;
+  const { enabled: allowed = true, onDemand = false, request, refreshKey = null } = options;
   const requestKey = request === undefined ? null : JSON.stringify(request);
   const [assessment, setAssessment] = useState<ResumeAtsAssessment | null>(null);
   const [sourceVersion, setSourceVersion] = useState<ResumeVersionSummary | null>(null);
   const [roleBasis, setRoleBasis] = useState<string | null>(null);
-  const [loading, setLoading] = useState(enabled);
+  const [loading, setLoading] = useState(allowed && !onDemand);
   const [error, setError] = useState<string | null>(null);
   const [refreshSequence, setRefreshSequence] = useState(0);
-  const refresh = useCallback(() => setRefreshSequence((value) => value + 1), []);
+  const [requested, setRequested] = useState(!onDemand);
+  const enabled = allowed && requested;
+  const bump = useCallback(() => setRefreshSequence((value) => value + 1), []);
+  const refresh = useCallback(() => {
+    setRequested(true);
+    bump();
+  }, [bump]);
 
   useEffect(() => {
     if (!enabled) {
@@ -119,7 +129,15 @@ export function useProfileAtsAssessment(
     };
   }, [enabled, refreshKey, requestKey, refreshSequence]);
 
-  useEffect(() => subscribeToVersionChanges(refresh), [refresh]);
+  useEffect(() => subscribeToVersionChanges(bump), [bump]);
 
-  return { assessment, sourceVersion, roleBasis, loading, error, refresh };
+  return {
+    assessment,
+    sourceVersion,
+    roleBasis,
+    loading,
+    error,
+    refresh,
+    idle: allowed && !requested,
+  };
 }
