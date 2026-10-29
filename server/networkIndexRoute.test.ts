@@ -179,4 +179,16 @@ describe('platform members as 1st circle to each other (B561, owner 30.10)', () 
 
     expect(circle.platformMembers.members[0].linkedinUrl).toBe(profile('clara-claims'));
   });
+
+  it('drops the edges a deleted account left behind the next time anyone reads them', async () => {
+    const env = await createNetworkEnv();
+    const { member, candidate } = await sharedNetwork(env);
+    await importContacts(env.app, member.authorization, [jane]);
+    env.candidateStore.deleteCandidate(member.candidateId);
+
+    const { circle } = await secondCircle(env.app, candidate.authorization);
+
+    expect(circle.platformMembers).toEqual({ count: 0, members: [] });
+    expect(env.networkIndexRepo.personCount()).toBe(0);
+  });
 });

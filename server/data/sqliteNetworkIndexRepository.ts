@@ -250,10 +250,9 @@ export class SqliteNetworkIndexRepository {
     this.lastStaleSweepAt = now.getTime();
     const cutoff = new Date(now.getTime() - NETWORK_EDGE_TTL_MS).toISOString();
     this.transaction(() => {
-      const removed = this.database
-        .prepare('DELETE FROM network_edges WHERE observed_at < ?')
-        .run(cutoff).changes;
-      if (Number(removed) > 0) this.pruneOrphans();
+      this.database.prepare('DELETE FROM network_edges WHERE observed_at < ?').run(cutoff);
+      // Also people whose last edge went with a deleted account (foreign-key cascade).
+      this.pruneOrphans();
     });
   }
 

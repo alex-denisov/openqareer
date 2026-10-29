@@ -9,6 +9,7 @@ import {
   type PlatformMember,
   type PlatformMembers,
 } from '../domain/candidateCompanies';
+import { CandidateNotFoundError } from '../data/store/errors';
 import type { RouteDeps } from './deps';
 
 /**
@@ -45,8 +46,9 @@ function linkedinConnection(deps: NetworkDeps, candidateId: string): ConnectionL
     return connection
       ? { state: 'connected', sourceUrl: connection.receipt.sourceUrl }
       : { state: 'absent' };
-  } catch {
-    // A failed read is not "disconnected": nothing is removed on it.
+  } catch (error) {
+    // A deleted account is gone for good; any other failed read is not "disconnected".
+    if (error instanceof CandidateNotFoundError) return { state: 'absent' };
     return { state: 'unknown' };
   }
 }
@@ -201,7 +203,7 @@ function platformMember(
   if (!personName) return null;
   let candidate: { fullName?: string; contact?: { linkedinUrl?: string } } = {};
   try {
-    candidate = deps.candidateStore.getSnapshot(memberId).resume?.draft.candidate ?? {};
+    candidate = deps.candidateStore.getResumeCandidate(memberId) ?? {};
   } catch {
     candidate = {};
   }
