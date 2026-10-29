@@ -619,13 +619,13 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await expect(tabs.getByRole('tab', { name: /Навыки.*24/u })).toBeVisible();
     await expect(tabs.getByRole('tab', { name: 'Цифровой след' })).toBeVisible();
     await expect(
-      page.getByRole('progressbar', { name: 'Резюме собрано 10 из 11 блоков' }),
+      page.getByRole('progressbar', { name: 'Резюме собрано 6 из 6 блоков' }),
     ).toBeVisible();
     const profileHeader = page.locator('.career-profile-screen-topcard');
     await expect(profileHeader).toContainText('Марина Соколова');
     await expect(profileHeader).toContainText('VP of Engineering');
     await expect(profileHeader).toContainText('Берлин, Германия');
-    await expect(profileHeader.getByText(/Резюме собрано 10 из 11 блоков/u)).toBeVisible();
+    await expect(profileHeader.getByText(/Резюме собрано 6 из 6 блоков/u)).toBeVisible();
     // The fixture has no pending facts, and the line shows only when N > 0 (block A recheck).
     await expect(profileHeader.getByText(/(ждут|ждёт) подтверждения/u)).toHaveCount(0);
 
