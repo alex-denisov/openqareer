@@ -312,11 +312,9 @@ describe('GET /candidate/today', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json().data;
     expect(body.digest.newVacancies).toBe(2);
-    const newVacancyIds = body.queue
-      .filter((item: { kind: string }) => item.kind === 'new_vacancy')
-      .map((item: { clusterId?: string }) => item.clusterId);
-    expect(newVacancyIds).toHaveLength(2);
-    expect(newVacancyIds).not.toContain('cluster-3');
+    // A-C11: «Очередь дня» только со сроком или ожиданием ответа; вакансии живут в полосе «С …».
+    expect(body.queue.filter((item: { kind: string }) => item.kind === 'new_vacancy')).toEqual([]);
+    expect(body.sinceLastVisit.newVacanciesCount).toBe(2);
     expect(body.sinceLastVisit.items).toContain('2 новые вакансии по роли Инженер данных');
   });
 
@@ -349,7 +347,8 @@ describe('GET /candidate/today', () => {
     const body = response.json().data;
     expect(body.vacanciesPending).toBe(false);
     expect(body.digest.newVacancies).toBe(1);
-    expect(body.queue.some((item: { kind: string }) => item.kind === 'new_vacancy')).toBe(true);
+    expect(body.queue.some((item: { kind: string }) => item.kind === 'new_vacancy')).toBe(false);
+    expect(body.sinceLastVisit.items).toContain('1 новая вакансия по роли Инженер данных');
   });
 
   it('applies the explicit remote-only campaign choice to Vacancies and Today', async () => {
@@ -375,9 +374,8 @@ describe('GET /candidate/today', () => {
     });
     expect(today.statusCode).toBe(200);
     expect(today.json().data.digest.newVacancies).toBe(1);
-    expect(today.json().data.queue.map((item: { clusterId?: string }) => item.clusterId)).toEqual([
-      'cluster-2',
-    ]);
+    expect(today.json().data.queue).toEqual([]);
+    expect(today.json().data.sinceLastVisit.newVacanciesCount).toBe(1);
   });
 
   // The app maps every Zod validation failure to 422 (`runtime.ts`), the
@@ -394,8 +392,18 @@ describe('GET /candidate/today', () => {
   });
 
   it('returns five items first and the real remainder for the same queue revision', async () => {
-    const roleMatches = Array.from({ length: 12 }, () => 'target' as const);
-    const { app, authorization } = await createApp({ withMatchingEngine: true, roleMatches });
+    const { app, authorization, candidateStore, candidateId } = await createApp();
+    const dueIds = Array.from({ length: 12 }, (_, index) => {
+      const created = candidateStore.createApplication(candidateId, {
+        clusterId: `cluster-${index + 1}`,
+        stage: 'interview',
+      });
+      candidateStore.patchApplication(candidateId, created.id, {
+        expectedVersion: created.version,
+        followUpDueAt: '2026-01-01T00:00:00.000Z',
+      });
+      return created.id;
+    });
     const headers = { authorization };
     const first = await app.inject({
       url: `${TODAY_URL}?tz=Europe/Moscow`,
@@ -415,10 +423,10 @@ describe('GET /candidate/today', () => {
     expect(remaining.statusCode, remaining.body).toBe(200);
     expect(remaining.json().data.queue).toHaveLength(7);
     expect(
-      [...firstPage.queue, ...remaining.json().data.queue].map(
-        (item: { clusterId?: string }) => item.clusterId,
-      ),
-    ).toEqual(Array.from({ length: 12 }, (_, index) => `cluster-${index + 1}`));
+      [...firstPage.queue, ...remaining.json().data.queue]
+        .map((item: { applicationId?: string }) => item.applicationId)
+        .sort(),
+    ).toEqual([...dueIds].sort());
 
     const stale = await app.inject({
       url: `${TODAY_URL}?tz=Europe/Moscow&queueOffset=5&queueRevision=${'0'.repeat(64)}`,
