@@ -74,20 +74,30 @@ describe('mapProposedRoleToCareerRole (B445)', () => {
       acceptedTitle: null,
       offersDismissed: [],
     });
-    expect(role.status).toBe('skills_checked');
+    expect(role.status).toBe('hypothesis');
     expect(role.confirmedItems).toEqual([{ text: 'Платёжные системы', source: 'profile' }]);
     expect(role.missingItems.map((item) => item.text)).toEqual(['Kafka']);
     expect(role.requirementsNote).toBe('Сверка с требованиями 88 вакансий, 05.10.');
-    expect(role.nextAction.action).toBe('fill_with_consultant');
+    expect(role.nextAction.action).toBe('check_skills');
   });
 
-  it('роль открыта для поиска только по решению кандидата', () => {
+  it('роль открыта для поиска только по решению кандидата после проверки навыков', () => {
+    const role = mapProposedRoleToCareerRole(observed(), {
+      acceptedTitle: 'director of engineering',
+      offersDismissed: [],
+      checkedTitles: ['director of engineering'],
+    });
+    expect(role.status).toBe('open_for_search');
+    expect(role.nextAction.action).toBe('open_vacancies');
+  });
+
+  it('принятая без проверки роль остаётся гипотезой (29.10)', () => {
     const role = mapProposedRoleToCareerRole(observed(), {
       acceptedTitle: 'director of engineering',
       offersDismissed: [],
     });
-    expect(role.status).toBe('open_for_search');
-    expect(role.nextAction.action).toBe('open_vacancies');
+    expect(role.status).toBe('hypothesis');
+    expect(role.alreadyChosen).toBe(true);
   });
 
   it('завершённая проверка навыков роли переводит её в «Навыки проверены»', () => {

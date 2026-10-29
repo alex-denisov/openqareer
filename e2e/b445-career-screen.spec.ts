@@ -2,10 +2,28 @@ import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { CAREER_FIXTURE_PROPOSED_ROLES } from '../src/features/career-map/careerMockData';
 
-async function openCareer(page: Page): Promise<void> {
+async function markDirectorChecked(page: Page): Promise<void> {
+  // «Навыки проверены» only after a finished check (29.10): Director of Engineering has one.
+  await page.route('**/api/v1/candidate/role-skill-assessments/checked-roles', (route) =>
+    route.fulfill({
+      json: {
+        data: [
+          {
+            roleTitle: 'Director of Engineering',
+            completedAt: '2026-10-05T08:00:00.000Z',
+            confirmedSkills: ['Платёжные системы'],
+          },
+        ],
+      },
+    }),
+  );
+}
+
+async function openCareer(page: Page, { directorChecked = false } = {}): Promise<void> {
   await mockSignedInCabinet(page, {
     careerRoles: { roles: CAREER_FIXTURE_PROPOSED_ROLES, acceptedTitle: 'Head of Engineering' },
   });
+  if (directorChecked) await markDirectorChecked(page);
   await page.addInitScript(() => {
     window.localStorage.setItem('openqareer_session_token', 'synthetic-b445-session');
   });
@@ -22,7 +40,7 @@ test.describe('B445: «Карьера» по макету 3', () => {
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
-    await openCareer(page);
+    await openCareer(page, { directorChecked: true });
 
     await expect(
       page.getByRole('heading', { level: 2, name: 'Условия и география' }),
@@ -76,9 +94,8 @@ test.describe('B445: «Карьера» по макету 3', () => {
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
     await openCareer(page);
-    await role(page, 'Director of Engineering')
-      .getByRole('button', { name: 'Дозаполнить с консультантом' })
-      .click();
+    const director = role(page, 'Director of Engineering');
+    await director.getByRole('button', { name: 'Обсудить с консультантом' }).click();
     const offer = page.getByTestId('career-role-offer');
     await expect(offer).toContainText('Принять роль Director of Engineering');
     await expect(offer).toContainText('88 вакансий');
@@ -86,8 +103,9 @@ test.describe('B445: «Карьера» по макету 3', () => {
     // «Стратегия» хранит одну выбранную роль: предложение переходит к следующей.
     await expect(offer).not.toContainText('Director of Engineering');
     // CPO 26.10: ступени «Открыта для поиска» нет — подборка идёт по всем ролям.
+    // 29.10: принятая без проверки навыков роль остаётся гипотезой.
     await expect(
-      role(page, 'Director of Engineering').locator('summary').getByText('Навыки проверены'),
+      role(page, 'Director of Engineering').locator('summary').getByText('Гипотеза'),
     ).toBeVisible();
     await expect(page.getByText('Открыта для поиска')).toHaveCount(0);
   });

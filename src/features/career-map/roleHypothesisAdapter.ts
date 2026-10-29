@@ -61,12 +61,10 @@ function isChecked(proposed: ProposedRole, decisions: RoleDecisions): boolean {
 }
 
 function determineRoleStatus(proposed: ProposedRole, decisions: RoleDecisions): RoleStatus {
-  if (isAccepted(proposed, decisions)) return 'open_for_search';
-  if (isChecked(proposed, decisions)) return 'skills_checked';
-  const conf = proposed.confirmation;
-  return conf.state === 'observed' && conf.matchedRequirements > 0
-    ? 'skills_checked'
-    : 'hypothesis';
+  // «Навыки проверены» only after a finished skill check (29.10): a profile skill that
+  // matches the role's requirements, or an accepted offer, is not a check.
+  if (!isChecked(proposed, decisions)) return 'hypothesis';
+  return isAccepted(proposed, decisions) ? 'open_for_search' : 'skills_checked';
 }
 
 function determineNextAction(status: RoleStatus, vacancyCount: number): RoleNextAction {
