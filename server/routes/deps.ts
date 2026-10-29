@@ -66,6 +66,8 @@ export interface RouteDeps {
   /** Роли кандидатов — запросы к площадкам вакансий (27.10). */
   vacancyDemand?: import('../vacancies/vacancyDemandStore').VacancyDemandStore;
   searchVacancies: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
+  /** Тот же срез из собственного обхода hh, когда живой поиск закрыт (29.10). */
+  searchStoredVacancies?: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
   importProfile: (url: string) => Promise<ProfileUrlImportResult>;
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
