@@ -57,6 +57,14 @@ describe('conversationCoverage', () => {
       { provenance: { kind: 'import' as const, platform: 'linkedin' as const, at: '2026-10-23' } },
     ],
     ['a fact without a reply reference', { sourceMessageIds: [] }],
+    [
+      'a hypothetical answer, not a done fact',
+      { statement: 'Я бы руководил командой из 20 инженеров по-другому' },
+    ],
+    [
+      'a version number, not a scale',
+      { statement: 'Руководство командой по ITIL 4 и ISO 27001, сеть 5G' },
+    ],
     ['a hypothesis, not a fact', { kind: 'hypothesis' as const }],
   ])('leaves the requirement not checked for %s', (_label, overrides) => {
     const [coverage] = conversationCoverage(['Team Leadership'], [fact(overrides)]);

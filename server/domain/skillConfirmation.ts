@@ -39,7 +39,21 @@ function isConversationEvidence(memory: StoredMemory): boolean {
   const origin = memory.provenance?.kind;
   if (origin !== 'candidate' && origin !== 'consultant') return false;
   if (memory.sourceMessageIds.length === 0) return false;
-  return /\p{N}/u.test(memory.statement);
+  // «Я бы составил…» — гипотеза, а не сделанное (беседа в Antigravity, 29.10).
+  if (/(?<![\p{L}])бы(?![\p{L}])/iu.test(memory.statement)) return false;
+  return hasScale(memory.statement);
+}
+
+/**
+ * Число как масштаб: «45 инженеров», «3 года». Номер версии или стандарта —
+ * «ITIL 4», «ISO 27001», «5G» — масштабом не считается (проверка на беседе
+ * владельца 29.10: строка-список «ITIL 4, ITSM, Agile» засчитывалась).
+ */
+function hasScale(statement: string): boolean {
+  const withoutVersions = statement
+    .replace(/[A-Za-z][\w.+#-]*\s?\d+(?:\.\d+)*/g, ' ')
+    .replace(/\d+[A-Za-z]+/g, ' ');
+  return /\p{N}/u.test(withoutVersions);
 }
 
 function escapeRegExp(text: string): string {
