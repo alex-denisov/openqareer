@@ -739,7 +739,6 @@ test.describe('B441 Profile screen from mockup 2', () => {
                 source: null,
                 verifiedAt: null,
                 quizCheckable: true,
-                attemptsLeftToday: 2,
                 lastAttempt: null,
                 conversation: { name: 'Kafka', state: 'not_checked', facts: [] },
               },

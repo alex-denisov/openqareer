@@ -50,7 +50,6 @@ function skill(overrides: Partial<SkillConfirmation> = {}): SkillConfirmation {
     source: null,
     verifiedAt: null,
     quizCheckable: true,
-    attemptsLeftToday: 2,
     lastAttempt: null,
     conversation: { name: 'SQL', state: 'not_checked', facts: [] },
     ...overrides,
@@ -71,12 +70,6 @@ describe('SkillConfirmDialog', () => {
     expect(button(root, 'Пройти тест')).toBeUndefined();
     expect(root.textContent).toContain('тестом не проверить');
     expect(button(root, 'Разобрать в беседе')).toBeDefined();
-  });
-
-  it('says so when the daily attempts are used', () => {
-    const root = mount({ skills: [skill({ attemptsLeftToday: 0 })] });
-    expect(root.textContent).toContain('Две попытки за сутки использованы.');
-    expect(button(root, 'Пройти тест')).toBeUndefined();
   });
 
   it('shows the discussed fact with its date', () => {

@@ -57,11 +57,11 @@ describe('skill confirmation API', () => {
 
   it('turns a server error code into a human sentence, never the raw message', async () => {
     stubFetch(429, {
-      error: { code: 'skill_quiz_attempts_exhausted', message: 'RAW_SERVER_TEXT' },
+      error: { code: 'skill_quiz_busy', message: 'RAW_SERVER_TEXT' },
     });
     const error = await generateSkillQuiz({ skillName: 'SQL', level: 'junior' }).catch((e) => e);
     expect(error).toBeInstanceOf(CoachApiError);
-    expect(skillConfirmationErrorText(error)).toContain('Две попытки за сутки');
+    expect(skillConfirmationErrorText(error)).toContain('Тест уже собирается');
     expect(skillConfirmationErrorText(error)).not.toContain('RAW_SERVER_TEXT');
     expect(skillConfirmationErrorText(new Error('boom'))).not.toContain('boom');
   });

@@ -8,7 +8,11 @@ import { z } from 'zod';
 
 export const GENERATED_QUIZ_QUESTION_COUNT = 8;
 export const GENERATED_QUIZ_PASSING_PERCENT = 80;
-export const GENERATED_QUIZ_DAILY_ATTEMPTS = 2;
+/**
+ * Владелец 29.10: внутри продукта лимитов нет. Защита только от залпа — не
+ * больше одной генерации на кандидата за 10 с; новые вопросы на каждой попытке.
+ */
+export const SKILL_QUIZ_BURST_GUARD_MS = 10_000;
 /** Источник статуса в профиле: «Подтверждён · квиз openqareer, 29.10». */
 export const GENERATED_QUIZ_SOURCE = 'квиз openqareer';
 

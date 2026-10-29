@@ -62,8 +62,8 @@ interface AttemptRow {
 export interface SkillQuizAttemptRepository {
   create(candidateId: string, attempt: SkillQuizAttempt): void;
   get(candidateId: string, attemptId: string): SkillQuizAttempt | null;
-  /** Попытки навыка, начатые не раньше `since` — для лимита в сутки. */
-  countSince(candidateId: string, skillKey: string, since: string): number;
+  /** Попытки кандидата, начатые не раньше `since` — защита от залпа генераций. */
+  countSince(candidateId: string, since: string): number;
   /** Записывает результат один раз: повторная сдача той же попытки не проходит. */
   submit(candidateId: string, attempt: SkillQuizAttempt): boolean;
   markApplied(candidateId: string, attempt: SkillQuizAttempt): void;
@@ -104,13 +104,13 @@ export class SqliteSkillQuizAttemptRepository implements SkillQuizAttemptReposit
     return row ? this.fromRow(candidateId, row) : null;
   }
 
-  countSince(candidateId: string, skillKey: string, since: string): number {
+  countSince(candidateId: string, since: string): number {
     const row = this.database
       .prepare(
         `SELECT COUNT(*) AS count FROM skill_quiz_attempts
-         WHERE candidate_id = ? AND skill_key = ? AND created_at >= ?`,
+         WHERE candidate_id = ? AND created_at >= ?`,
       )
-      .get(candidateId, skillKey, since) as { count: number };
+      .get(candidateId, since) as { count: number };
     return row.count;
   }
 

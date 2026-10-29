@@ -5,8 +5,8 @@ import { createSkillVerificationProposal } from '../../src/services/hhSkillQuizz
 import type { QuizEvaluationResult } from '../../src/services/hhSkillQuizzes';
 import type { SkillQuizAttempt } from '../data/sqliteSkillQuizAttemptRepository';
 import {
-  GENERATED_QUIZ_DAILY_ATTEMPTS,
   GENERATED_QUIZ_PASSING_PERCENT,
+  SKILL_QUIZ_BURST_GUARD_MS,
   SKILL_QUIZ_LEVELS,
   clientQuestions,
   evaluateGeneratedQuiz,
@@ -32,7 +32,6 @@ import { approveSkillVerdictCommand, planSkillVerdictCommand } from './skillVerd
  * подтверждённым фактам беседы.
  */
 
-const DAY_MS = 24 * 60 * 60_000;
 const CONFIRMED = 'подтверждён';
 
 const generateSchema = z
@@ -53,10 +52,10 @@ function findProfileSkill(draft: ResumeDraft, name: string) {
   return (draft.skills ?? []).find((skill) => skillKey(skill.name) === skillKey(name));
 }
 
-function attemptsLeft(deps: RouteDeps, candidateId: string, key: string, now: Date): number {
-  const since = new Date(now.getTime() - DAY_MS).toISOString();
-  const used = deps.candidateStore.skillQuizAttempts?.countSince(candidateId, key, since) ?? 0;
-  return Math.max(0, GENERATED_QUIZ_DAILY_ATTEMPTS - used);
+/** Генерация уже идёт у этого кандидата: последняя попытка моложе 10 с. */
+function generationInFlight(deps: RouteDeps, candidateId: string, now: Date): boolean {
+  const since = new Date(now.getTime() - SKILL_QUIZ_BURST_GUARD_MS).toISOString();
+  return (deps.candidateStore.skillQuizAttempts?.countSince(candidateId, since) ?? 0) > 0;
 }
 
 function authenticate(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -85,7 +84,6 @@ async function handleConfirmations(deps: RouteDeps, request: FastifyRequest, rep
     snapshot.memory ?? [],
   );
   const attempts = deps.candidateStore.skillQuizAttempts?.list(candidate.id) ?? [];
-  const now = new Date();
   return reply.send({
     data: {
       passingScorePercent: GENERATED_QUIZ_PASSING_PERCENT,
@@ -99,7 +97,6 @@ async function handleConfirmations(deps: RouteDeps, request: FastifyRequest, rep
           source: skill.source ?? null,
           verifiedAt: skill.verifiedAt ?? null,
           quizCheckable: isQuizCheckable(skill.name),
-          attemptsLeftToday: attemptsLeft(deps, candidate.id, key, now),
           lastAttempt: last?.result
             ? {
                 at: last.submittedAt,
@@ -140,11 +137,11 @@ const REFUSALS = {
     message: 'Этот навык тестом не проверить. Разберите его в беседе с консультантом.',
     retryable: false,
   },
-  exhausted: {
+  busy: {
     status: 429,
-    code: 'skill_quiz_attempts_exhausted',
-    message: 'Две попытки за сутки использованы. Новый тест можно пройти завтра.',
-    retryable: false,
+    code: 'skill_quiz_busy',
+    message: 'Тест уже собирается. Подождите несколько секунд.',
+    retryable: true,
   },
   attemptNotFound: {
     status: 404,
@@ -199,9 +196,8 @@ function quizTarget(
   const skill = findProfileSkill(readDraft(deps, candidateId), skillName);
   if (!skill) return REFUSALS.notInProfile;
   if (!isQuizCheckable(skill.name)) return REFUSALS.notCheckable;
-  const key = skillKey(skill.name);
-  if (attemptsLeft(deps, candidateId, key, new Date()) === 0) return REFUSALS.exhausted;
-  return { name: skill.name, key };
+  if (generationInFlight(deps, candidateId, new Date())) return REFUSALS.busy;
+  return { name: skill.name, key: skillKey(skill.name) };
 }
 
 async function handleGenerate(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

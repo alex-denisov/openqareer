@@ -22,7 +22,6 @@ export interface SkillConfirmation {
   readonly source: string | null;
   readonly verifiedAt: string | null;
   readonly quizCheckable: boolean;
-  readonly attemptsLeftToday: number;
   readonly lastAttempt: {
     readonly at: string;
     readonly scorePercent: number;
@@ -75,7 +74,7 @@ export interface SkillQuizSubmitResult {
 const ERROR_TEXTS: Readonly<Record<string, string>> = {
   skill_quiz_not_checkable:
     'Этот навык тестом не проверить. Разберите его в беседе с консультантом.',
-  skill_quiz_attempts_exhausted: 'Две попытки за сутки использованы. Попробуйте завтра.',
+  skill_quiz_busy: 'Тест уже собирается. Подождите несколько секунд.',
   skill_quiz_unavailable: 'Не удалось собрать вопросы. Попробуйте ещё раз через минуту.',
   skill_not_in_profile: 'Этого навыка нет в профиле. Обновите страницу.',
   skill_already_confirmed: 'Навык уже подтверждён, результат не изменит его статус.',

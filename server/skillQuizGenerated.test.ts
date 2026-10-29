@@ -112,15 +112,24 @@ describe('quiz built for a profile skill (block A, package 3)', () => {
     expect(t.readSkills()[0]?.status).toBe('подтверждён');
   });
 
-  it('allows two attempts per skill a day', async () => {
-    const t = await setup([{ id: 'sk-1', name: 'Excel' }]);
-    await t.start();
-    await t.start();
+  it('has no daily ceiling: only a burst within 10 s waits', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-10-29T10:00:00Z'));
+      const t = await setup([{ id: 'sk-1', name: 'Excel' }]);
+      expect((await t.start()).statusCode).toBe(201);
 
-    const third = await t.start();
+      const burst = await t.start();
+      expect(burst.statusCode).toBe(429);
+      expect(burst.json().error.code).toBe('skill_quiz_busy');
 
-    expect(third.statusCode).toBe(429);
-    expect(third.json().error.code).toBe('skill_quiz_attempts_exhausted');
+      for (let attempt = 1; attempt <= 4; attempt += 1) {
+        vi.setSystemTime(new Date(Date.parse('2026-10-29T10:00:00Z') + attempt * 11_000));
+        expect((await t.start()).statusCode).toBe(201);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('builds no quiz for a skill outside the profile or a management skill', async () => {
@@ -146,7 +155,6 @@ describe('quiz built for a profile skill (block A, package 3)', () => {
       expect.objectContaining({
         name: 'Excel',
         quizCheckable: true,
-        attemptsLeftToday: 2,
         lastAttempt: null,
         conversation: { name: 'Excel', state: 'not_checked', facts: [] },
       }),

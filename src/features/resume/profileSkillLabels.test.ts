@@ -9,7 +9,6 @@ const confirmation = {
   source: null,
   verifiedAt: null,
   quizCheckable: true,
-  attemptsLeftToday: 2,
   lastAttempt: null,
   conversation: { name: 'Kafka', state: 'not_checked' as const, facts: [] },
 };

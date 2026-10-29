@@ -61,9 +61,6 @@ function QuizPath({
       </p>
     );
   }
-  if (skill.attemptsLeftToday <= 0) {
-    return <p className="skill-confirm-note">Две попытки за сутки использованы.</p>;
-  }
   if (!started) {
     return (
       <button type="button" className="career-primary-button" onClick={() => setStarted(true)}>
