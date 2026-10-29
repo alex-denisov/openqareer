@@ -1493,6 +1493,15 @@ fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
             max_duration: CONNECTIONS_SCROLL_MAX_DURATION,
             compact_connections: true,
         }
+    } else if path.contains("/overlay/") {
+        // A modal over the profile: its content is already in the dialog,
+        // and scrolling under it let LinkedIn close it mid-read (29.10).
+        LazyScrollBudget {
+            max_steps: 0,
+            quiet_readings: LAZY_SCROLL_QUIET_READINGS,
+            max_duration: LAZY_SCROLL_MAX_DURATION,
+            compact_connections: false,
+        }
     } else {
         LazyScrollBudget {
             max_steps: LAZY_SCROLL_MAX_STEPS,
@@ -2367,6 +2376,21 @@ mod tests {
         assert!(LAZY_SCROLL_SCRIPT.contains("scrollIntoView"));
         assert!(LAZY_SCROLL_SCRIPT.contains("com.linkedin.sdui.profile.skill("));
         assert!(LAZY_SCROLL_SCRIPT.contains("cards:cards+skills"));
+    }
+
+    #[test]
+    fn overlay_pages_are_read_without_scrolling() {
+        // The contact-info overlay is a modal: the profile behind it kept
+        // loading, so the walk scrolled 40 steps under it and the read came
+        // back from another page (live walk 29.10, «контакты» failed twice).
+        assert_eq!(
+            lazy_scroll_budget("/in/jane-doe/overlay/contact-info/").max_steps,
+            0
+        );
+        assert_eq!(
+            lazy_scroll_budget("/in/jane-doe/details/skills/").max_steps,
+            LAZY_SCROLL_MAX_STEPS
+        );
     }
 
     #[test]
