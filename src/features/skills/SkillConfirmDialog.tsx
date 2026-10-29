@@ -74,8 +74,45 @@ function QuizPath({
   return <SkillQuizFlow key={skill.name} skillName={skill.name} onApplied={onApplied} />;
 }
 
+function SkillConfirmBody(
+  props: SkillConfirmDialogProps & {
+    readonly skill: SkillConfirmDialogProps['skills'][number];
+    readonly onPick: (name: string) => void;
+  },
+) {
+  const { skills, skill, onClose, onDiscuss, onApplied } = props;
+  return (
+    <>
+      <label className="skill-confirm-pick">
+        <span>Навык</span>
+        <select value={skill.name} onChange={(event) => props.onPick(event.target.value)}>
+          {skills.map((item) => (
+            <option key={item.id} value={item.name}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <DiscussedNote skill={skill} />
+      <QuizPath key={skill.name} skill={skill} onApplied={onApplied} />
+      {onDiscuss ? (
+        <button
+          type="button"
+          className="career-secondary-button"
+          onClick={() => {
+            onClose();
+            onDiscuss(skill.name);
+          }}
+        >
+          Разобрать в беседе
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 export function SkillConfirmDialog(props: SkillConfirmDialogProps) {
-  const { skills, onClose, onDiscuss, onApplied } = props;
+  const { skills, onClose } = props;
   useEscapeLayer(onClose);
   const ref = useModalDialog();
   const [name, setName] = useState(props.initialSkillName ?? skills[0]?.name ?? '');
@@ -104,32 +141,7 @@ export function SkillConfirmDialog(props: SkillConfirmDialogProps) {
       <p>{SKILL_CONFIRM_EXPLANATION}</p>
       <p className="skill-confirm-disclaimer">{SKILL_CONFIRM_DISCLAIMER}</p>
       {skill ? (
-        <>
-          <label className="skill-confirm-pick">
-            <span>Навык</span>
-            <select value={skill.name} onChange={(event) => setName(event.target.value)}>
-              {skills.map((item) => (
-                <option key={item.id} value={item.name}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <DiscussedNote skill={skill} />
-          <QuizPath key={skill.name} skill={skill} onApplied={onApplied} />
-          {onDiscuss ? (
-            <button
-              type="button"
-              className="career-secondary-button"
-              onClick={() => {
-                onClose();
-                onDiscuss(skill.name);
-              }}
-            >
-              Разобрать в беседе
-            </button>
-          ) : null}
-        </>
+        <SkillConfirmBody {...props} skill={skill} onPick={setName} />
       ) : (
         <p className="skill-confirm-note">В профиле пока нет навыков для проверки.</p>
       )}

@@ -122,6 +122,26 @@ function ProfileMobileSkillActions(props: ProfileMobileDataProps & ProfileMobile
   );
 }
 
+function MobileSkillConfirm(
+  props: ProfileMobileDataProps &
+    ProfileMobileNavigationProps & {
+      readonly confirmations: ReturnType<typeof useSkillConfirmations>;
+    },
+) {
+  const { confirmations } = props;
+  return (
+    <SkillConfirmEntry
+      skills={confirmations.skills}
+      className="pm-cta"
+      onDiscuss={props.onDiscussSkill}
+      onApplied={() => {
+        confirmations.reload();
+        props.onRetry();
+      }}
+    />
+  );
+}
+
 export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobileNavigationProps) {
   const skills = orderSkillsByVerification(props.draft.skills ?? []);
   const [all, setAll] = useState(false);
@@ -157,15 +177,7 @@ export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobil
         )}
       </section>
       <ProfileMobileSkillActions {...props} />
-      <SkillConfirmEntry
-        skills={confirmations.skills}
-        className="pm-cta"
-        onDiscuss={props.onDiscussSkill}
-        onApplied={() => {
-          confirmations.reload();
-          props.onRetry();
-        }}
-      />
+      <MobileSkillConfirm confirmations={confirmations} {...props} />
       <p className="pm-foot">
         {skills.length ? `${confirmedSkillsLine(skills)} ` : ''}
         {SKILL_CONFIRMATION_HINT}

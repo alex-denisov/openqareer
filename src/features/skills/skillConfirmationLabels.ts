@@ -19,6 +19,17 @@ export function formatShortDate(value: string | null | undefined): string {
   return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 }
 
+type OpenConsultant = (stage: 'profile', section: undefined, title: string, prompt: string) => void;
+
+/** «Разобрать в беседе»: консультант профиля с готовым вопросом по навыку. */
+export function discussSkillWith(
+  open: OpenConsultant | undefined,
+): ((skillName: string) => void) | undefined {
+  return open
+    ? (skillName) => open('profile', undefined, skillName, discussSkillPrompt(skillName))
+    : undefined;
+}
+
 export function discussSkillPrompt(skillName: string): string {
   return `Помогите разобрать мой опыт с навыком «${skillName}»: задайте вопросы про реальные задачи и результаты с цифрами.`;
 }
