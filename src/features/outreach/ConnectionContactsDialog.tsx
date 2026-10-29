@@ -161,7 +161,9 @@ function ConnectionContactRow({
       <div className="career-connection-dialog__contact-copy">
         <strong>{contact.fullName}</strong>
         <span>
-          {contact.roleTitle || 'Роль не указана'} · {contact.companyName}
+          {[contact.roleTitle || 'Роль не указана', contact.companyName]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
         <span>{contact.relationship}</span>
       </div>

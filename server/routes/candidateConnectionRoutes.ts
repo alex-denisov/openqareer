@@ -64,7 +64,9 @@ const importedContactSchema = z
   .object({
     externalId: z.string().trim().min(1).max(200).optional(),
     fullName: z.string().trim().min(1).max(120),
-    companyName: z.string().trim().min(1).max(180),
+    // 29.10: most LinkedIn headlines name no company; such a person is still
+    // in the network and only stays out of the per-company counts.
+    companyName: z.string().trim().max(180).default(''),
     roleTitle: z.string().trim().max(160).default(''),
     linkedinUrl: linkedinUrlSchema.nullable().optional(),
     relationship: z.string().trim().max(180).default('Контакт из импортированного списка LinkedIn'),

@@ -49,26 +49,28 @@ export function companyFromHeadline(
   return { roleTitle: roleTitle.slice(0, 160), companyName: companyName.slice(0, 180) };
 }
 
-/** Only contacts with a current company can place a person in a circle. */
+/**
+ * Every connection is kept (owner, 29.10): a person whose headline names no
+ * company keeps the headline as the role and an empty company. People with a
+ * company come first, so a cap never drops the ones that place a circle.
+ */
 export function toConnectionImportContacts(
   connections: readonly LinkedInConnection[],
   limit: number,
 ): LinkedInConnectionImportContact[] {
-  return connections
-    .flatMap((connection) => {
-      const place = companyFromHeadline(connection.headline);
-      return place
-        ? [
-            {
-              fullName: connection.fullName.slice(0, 120),
-              companyName: place.companyName,
-              roleTitle: place.roleTitle,
-              linkedinUrl: connection.linkedinUrl,
-            },
-          ]
-        : [];
-    })
-    .slice(0, limit);
+  const contacts = connections.map((connection) => {
+    const place = companyFromHeadline(connection.headline);
+    return {
+      fullName: connection.fullName.slice(0, 120),
+      companyName: place?.companyName ?? '',
+      roleTitle: place ? place.roleTitle : connection.headline.slice(0, 160),
+      linkedinUrl: connection.linkedinUrl,
+    };
+  });
+  return [
+    ...contacts.filter((contact) => contact.companyName),
+    ...contacts.filter((contact) => !contact.companyName),
+  ].slice(0, limit);
 }
 
 function profileSlug(href: string | null): string | undefined {

@@ -64,6 +64,12 @@ export async function refreshLinkedInContacts(
     return { status: 'skipped', reason: 'recently_read' };
   }
   const outcome = await runRefresh(dependencies);
+  // A window held by the profile walk is not a failed read: spending the
+  // hour of backoff here skipped the read the import starts when it ends.
+  if (outcome.status === 'skipped' && outcome.detail === 'in_use') {
+    dependencies.log(outcome.reason, outcome.detail);
+    return outcome;
+  }
   const completed = outcome.status === 'uploading' || outcome.reason === 'no_contacts';
   const now = Date.now();
   throttle.markRead(completed ? now : now - CONTACTS_REFRESH_INTERVAL_MS + FAILURE_RETRY_MS);

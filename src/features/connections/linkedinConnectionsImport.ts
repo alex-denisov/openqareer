@@ -35,11 +35,11 @@ export interface LinkedInConnectionsImportDependencies {
 export type LinkedInConnectionsImportOutcome =
   | {
       readonly status: 'uploading';
-      /** Contacts with a company, sent to the server. */
+      /** Contacts sent to the server, with or without a company. */
       readonly count: number;
       /** People read from the page. */
       readonly parsed: number;
-      /** People with a company, before the per-import cap. */
+      /** Sent contacts whose headline names a company. */
       readonly withCompany: number;
     }
   | {
@@ -79,8 +79,7 @@ export async function importLinkedInConnectionsFromSession(
     return { status: 'skipped', reason: 'not_connections_page', detail: landedSection(page) };
   }
   const connections = extractLinkedInConnections(page.body);
-  const placed = toConnectionImportContacts(connections, Number.POSITIVE_INFINITY);
-  const contacts = placed.slice(0, MAX_IMPORTED_CONNECTIONS);
+  const contacts = toConnectionImportContacts(connections, MAX_IMPORTED_CONNECTIONS);
   if (contacts.length === 0) {
     await dependencies.saveCaptureDump?.(page.body).catch(() => undefined);
     return { status: 'skipped', reason: 'no_contacts', detail: String(connections.length) };
@@ -91,7 +90,7 @@ export async function importLinkedInConnectionsFromSession(
     status: 'uploading',
     count: contacts.length,
     parsed: connections.length,
-    withCompany: placed.length,
+    withCompany: contacts.filter((contact) => contact.companyName).length,
   };
 }
 

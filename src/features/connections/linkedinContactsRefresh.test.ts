@@ -90,6 +90,9 @@ describe('contacts-only LinkedIn refresh (B448)', () => {
     });
     expect(d.openOutOfSight).not.toHaveBeenCalled();
     expect(d.close).not.toHaveBeenCalled();
+    // 29.10: a skip while the profile walk held the window spent an hour of
+    // backoff, so the read right after the import was skipped as recent.
+    expect(d.throttle.markRead).not.toHaveBeenCalled();
   });
 
   it('brings the protected route up before the window and releases it after', async () => {

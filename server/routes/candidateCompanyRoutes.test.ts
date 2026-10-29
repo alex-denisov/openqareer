@@ -544,6 +544,29 @@ describe('B448 candidate connection circles', () => {
     expect(imported.json().data.importedCount).toBe(1_500);
   });
 
+  it('keeps a connection without a current company and counts it nowhere (29.10)', async () => {
+    const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
+    const imported = await importConnectionContacts(app, authorization, [
+      { fullName: 'Мария Орлова', companyName: 'Вектор Банк', roleTitle: 'CTO' },
+      { fullName: 'Олег Смирнов', companyName: '', roleTitle: 'Product leader | AI' },
+      { fullName: 'Анна Белова', roleTitle: 'Open to new roles' },
+    ]);
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().data.importedCount).toBe(3);
+    const listed = (await listConnectionContacts(app, authorization)).json().data;
+    expect(listed.total).toBe(3);
+    expect(listed.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fullName: 'Олег Смирнов', companyName: '' }),
+      ]),
+    );
+    const companies = (
+      await app.inject({ url: '/api/v1/candidate/companies', headers: { authorization } })
+    ).json().data;
+    expect(companies.items.map((item: { name: string }) => item.name)).toEqual(['Вектор Банк']);
+    expect(companies.items[0]).toMatchObject({ contactsCount: 1 });
+  });
+
   it('keeps missing connections unknown and makes an imported empty list distinct', async () => {
     const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
     const path = '/api/v1/candidate/vacancies/cluster-v1/connection-circles';

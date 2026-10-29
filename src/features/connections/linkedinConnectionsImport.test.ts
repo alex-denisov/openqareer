@@ -14,7 +14,7 @@ function throttle(last?: number) {
 }
 
 describe('LinkedIn connections import from the session (B448)', () => {
-  it('reads the connections page and uploads contacts with a company', async () => {
+  it('reads the connections page and uploads every contact', async () => {
     const readSessionPage = vi
       .fn()
       .mockResolvedValue({ ok: true, body, url: LINKEDIN_CONNECTIONS_URL });
@@ -27,7 +27,7 @@ describe('LinkedIn connections import from the session (B448)', () => {
     });
 
     expect(readSessionPage).toHaveBeenCalledWith(LINKEDIN_CONNECTIONS_URL);
-    expect(outcome).toEqual({ status: 'uploading', count: 3, parsed: 4, withCompany: 3 });
+    expect(outcome).toEqual({ status: 'uploading', count: 4, parsed: 4, withCompany: 3 });
     expect(upload).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ companyName: 'Север Тех' })]),
     );
