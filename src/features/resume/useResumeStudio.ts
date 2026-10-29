@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { apiErrorMessage } from '../coach/apiClient';
+import { profileFailureText } from './profileFailureText';
 import { getResumeStudio, saveResumeStudioDraft } from './resumeApi';
 import { draftOf, toSavePayload } from './resumeStudioModel';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
@@ -48,10 +48,7 @@ export function useResumeStudio(onSaved?: () => void, refreshKey?: number): Resu
         return true;
       } catch (reason) {
         setSaveError(
-          errorMessage(
-            reason,
-            'Не удалось сохранить резюме. Проверьте связь с сервером; введённый текст остался в форме.',
-          ),
+profileFailureText(reason, 'save')
         );
         return false;
       } finally {
@@ -91,10 +88,7 @@ function useResumeLoader(refreshKey?: number) {
       setDraft(draftOf(next));
     } catch (reason) {
       setError(
-        errorMessage(
-          reason,
-          'Не удалось загрузить профиль. Проверьте соединение и повторите запрос.',
-        ),
+profileFailureText(reason, 'load')
       );
     } finally {
       setLoading(false);
@@ -107,8 +101,4 @@ function useResumeLoader(refreshKey?: number) {
   }, [load, refreshKey]);
 
   return { view, draft, loading, error, setView, setDraft, setLoading, load };
-}
-
-function errorMessage(reason: unknown, fallback: string): string {
-  return apiErrorMessage(reason, fallback);
 }

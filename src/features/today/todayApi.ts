@@ -283,11 +283,15 @@ export async function selectTodayDecision(
   return selection;
 }
 
-export async function deferTodayAction(actionId: string, tz: string): Promise<TodayActionDeferral> {
+export async function deferTodayAction(
+  actionId: string,
+  tz: string,
+  resolution?: 'accepted' | 'dismissed',
+): Promise<TodayActionDeferral> {
   const response = await apiFetch('/api/v1/candidate/today/action-defer', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ actionId, tz }),
+    body: JSON.stringify(resolution ? { actionId, tz, resolution } : { actionId, tz }),
   });
   const deferral = await readData<TodayActionDeferral>(response);
   window.dispatchEvent(new Event(TODAY_DECISION_CHANGED));

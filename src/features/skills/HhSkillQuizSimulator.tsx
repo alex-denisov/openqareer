@@ -121,11 +121,11 @@ export function HhSkillQuizSimulator({
                 <Sparkle size={24} weight="fill" />
               </div>
               <h2 id="quiz-dialog-title" className="career-quiz-dialog-title">
-                Верификация навыков: hh.ru и LinkedIn
+                Проверка навыков
               </h2>
             </div>
             <p className="career-quiz-intro-text">
-              Подготовьтесь и пройдите официальные вопросы проверки навыков из банка тестов hh.ru и LinkedIn. Результат обновляет статус факта профиля честно и доказательно.
+              Подготовьтесь и пройдите короткие квизы по навыкам. Результат обновляет статус факта профиля честно и доказательно.
             </p>
 
             <div className="career-quiz-list">
@@ -139,7 +139,7 @@ export function HhSkillQuizSimulator({
                       {quiz.title}
                     </strong>
                     <span className="career-quiz-item-meta">
-                      {quiz.platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'} · {quiz.category} · {quiz.questions.length} вопросов · Порог {quiz.passingScorePercent}%
+                      {quiz.category} · {quiz.questions.length} вопросов · Порог {quiz.passingScorePercent}%
                     </span>
                   </div>
                   <button

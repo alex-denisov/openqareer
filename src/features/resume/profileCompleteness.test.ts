@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResumeDraft } from './resumeTypes';
-import { profileCompleteness } from './profileCompleteness';
+import { hasAchievements, profileCompleteness } from './profileCompleteness';
 
 const populatedDraft: ResumeDraft = {
   candidate: {
@@ -30,12 +30,31 @@ const populatedDraft: ResumeDraft = {
 };
 
 describe('profileCompleteness', () => {
-  it('counts the eleven visible resume blocks and names only the missing ones', () => {
+  it('counts only the six required blocks; optional ones are never a gap', () => {
     expect(profileCompleteness(populatedDraft)).toEqual({
-      completedCount: 10,
-      totalCount: 11,
-      missingSections: ['Курсы'],
+      completedCount: 6,
+      totalCount: 6,
+      missingSections: [],
     });
+    const bare: ResumeDraft = {
+      ...populatedDraft,
+      projects: [],
+      courses: [],
+      certifications: [],
+      recommendations: [],
+      achievements: [],
+    };
+    expect(profileCompleteness(bare).missingSections).toEqual([]);
+  });
+
+  it('treats achievements as present when workplace bullets exist', () => {
+    const noAchievements: ResumeDraft = { ...populatedDraft, achievements: [] };
+    expect(hasAchievements(noAchievements)).toBe(true);
+    const noBullets: ResumeDraft = {
+      ...noAchievements,
+      experience: [{ ...populatedDraft.experience[0]!, bulletMemoryIds: [] }],
+    };
+    expect(hasAchievements(noBullets)).toBe(false);
   });
 
   it('requires a way to contact the candidate rather than only a city', () => {
@@ -78,20 +97,8 @@ describe('profileCompleteness', () => {
 
     expect(profileCompleteness(emptyDraft)).toEqual({
       completedCount: 0,
-      totalCount: 11,
-      missingSections: [
-        'Имя',
-        'Контакты',
-        'Опыт',
-        'Образование',
-        'Проекты',
-        'Навыки',
-        'Языки',
-        'Курсы',
-        'Сертификаты',
-        'Рекомендации',
-        'Достижения',
-      ],
+      totalCount: 6,
+      missingSections: ['Имя', 'Контакты', 'Опыт', 'Образование', 'Навыки', 'Языки'],
     });
   });
 });

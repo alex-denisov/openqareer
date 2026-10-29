@@ -23,6 +23,11 @@ import {
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
 import { buildSemanticMatchQuery } from './semanticMatchQuery';
+import {
+  storedHhSampleByRole,
+  storedHhSampleByText,
+  type StoredHhSampleQuery,
+} from './storedHhSampleQuery';
 import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions';
 import { LEVEL_RANK } from './levelMatcher';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
@@ -734,6 +739,36 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       }
     }
     return results;
+  }
+
+  /**
+   * Свежие записи собственного обхода hh для роли — рыночный срез хода
+   * консультанта, когда api.hh.ru закрыт для анонимных запросов (29.10):
+   * сначала точные совпадения по тексту, остаток — той же функции и близкого
+   * уровня (так английская роль находит русские названия hh). Читается тем же
+   * дочерним процессом, что и подбор.
+   */
+  async queryStoredHhSampleAsync(
+    text: string,
+    limit: number,
+    nowMs?: number,
+  ): Promise<UnifiedVacancy[]> {
+    if (limit <= 0) return [];
+    const window = freshnessWindow(nowMs);
+    const byText = storedHhSampleByText(text, window, limit);
+    const exact = byText ? await this.readStoredSample(byText) : [];
+    if (exact.length >= limit) return exact;
+    const byRole = storedHhSampleByRole(text, window, limit);
+    const similar = byRole ? await this.readStoredSample(byRole) : [];
+    const seen = new Set(exact.map((item) => item.id));
+    return [...exact, ...similar.filter((item) => !seen.has(item.id))].slice(0, limit);
+  }
+
+  private async readStoredSample(query: StoredHhSampleQuery): Promise<UnifiedVacancy[]> {
+    if (this.databasePath === ':memory:') return this.readVacancies(query.sql, query.params);
+    const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
+    const rows = await reader.read(query.sql, query.params);
+    return rows.flatMap((row) => parseVacancy(row.payload) ?? []);
   }
 
   /** Запускает дочерний read-only процесс вне HTTP-обработчика (C44). */

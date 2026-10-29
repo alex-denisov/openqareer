@@ -1191,6 +1191,11 @@ export class MultiSourceVacancyEngine {
     return this.pool.hasVacancy(id);
   }
 
+  /** Свежие записи обхода hh по подстроке (29.10); хранилище без такого чтения даёт пустой срез. */
+  public async storedHhSample(text: string, limit: number): Promise<UnifiedVacancy[]> {
+    return (await this.pool.queryStoredHhSampleAsync?.(text, limit)) ?? [];
+  }
+
   public getVacancies(filter: VacancyQueryFilter = {}): VacancyQueryResult {
     const window = freshnessWindow();
     const counts = this.pool.countBySource(window);

@@ -80,6 +80,7 @@ import { currentVacancyFitProfileValidator } from './domain/vacancyFitProfileSta
 import { VacancyMechanicsRuntime } from './domain/vacancyMechanicsRuntime';
 import { registerVacancyFitRoutes } from './routes/vacancyFitRoutes';
 import { registerBulkLlmSpendRoutes } from './routes/bulkLlmSpendRoutes';
+import { storedHhVacancySample } from './vacancies/storedHhVacancySample';
 
 interface BuildAppOptions {
   bulkLlmRuntime?: RouteDeps['bulkLlmRuntime'];
@@ -91,6 +92,8 @@ interface BuildAppOptions {
   billingRepository?: SqliteBillingRepository;
   serveStatic?: boolean;
   searchVacancies?: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
+  /** Срез из собственного обхода hh; по умолчанию — пул движка вакансий (29.10). */
+  searchStoredVacancies?: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
   careerCommandExecutor?: ConnectorExecutor;
@@ -387,6 +390,10 @@ function createCandidateRepositories(options: BuildAppOptions) {
   };
 }
 
+function storedSampleOf(services: AppServices): RouteDeps['searchStoredVacancies'] {
+  return (input) => storedHhVacancySample(services.multiSourceEngine, input);
+}
+
 function assembleRouteDeps(
   options: BuildAppOptions,
   services: AppServices,
@@ -431,6 +438,7 @@ function assembleRouteDeps(
     roleNamingFailures: new RoleNamingFailureLog(),
 
     searchVacancies,
+    searchStoredVacancies: options.searchStoredVacancies ?? storedSampleOf(services),
     ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),

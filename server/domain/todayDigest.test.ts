@@ -85,7 +85,7 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
     expect(snapshot.digest.newVacanciesCaption).toBeNull();
   });
 
-  it('adds new vacancies to the queue with fit and caption on a hot cache', () => {
+  it('keeps new vacancies out of the queue and counts them for the strip on a hot cache', () => {
     const snapshot = buildTodaySnapshot({
       ...BASE_INPUT,
       applications: [],
@@ -96,9 +96,8 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
 
     expect(snapshot.digest.newVacancies).toBe(1);
     expect(snapshot.digest.closedVacancies).toBe(2);
-    const item = snapshot.queue.find((entry) => entry.kind === 'new_vacancy');
-    expect(item?.eyebrow).toBe('сегодня');
-    expect(item?.fit).toEqual({ role: 'target', level: 'unknown', geo: null });
+    expect(snapshot.queue.find((entry) => entry.kind === 'new_vacancy')).toBeUndefined();
+    expect(snapshot.sinceLastVisit.newVacanciesCount).toBe(1);
     expect(snapshot.digest.newVacanciesCaption).toEqual({
       campaignRole: 'DevOps Engineer',
       sourcesCount: 1,
@@ -328,30 +327,21 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
   });
 });
 
-describe('today queue from the shortlist (B266)', () => {
-  it('fills the queue with unreviewed shortlist vacancies when nothing is new', () => {
+describe('today queue excludes vacancies (A-C11)', () => {
+  it('never puts new or shortlist vacancies into the queue', () => {
     const shortlist = Array.from({ length: 12 }, (_, index) =>
       newVacancy({ clusterId: `cluster-${index}`, title: `Role ${index}` }),
     );
-    const applied = application({ clusterId: 'cluster-0' });
     const snapshot = buildTodaySnapshot({
       ...BASE_INPUT,
-      applications: [applied],
+      applications: [application({ clusterId: 'cluster-0' })],
       newVacancies: [newVacancy({ clusterId: 'cluster-1', title: 'Role 1' })],
       shortlist,
     });
-    const vacancyItems = snapshot.queue.filter(
-      (item) =>
-        item.kind !== 'candidate_turn' && item.kind !== 'follow_up' && item.kind !== 'interview',
-    );
-    expect(vacancyItems[0]).toMatchObject({ kind: 'new_vacancy', clusterId: 'cluster-1' });
-    const fromShortlist = vacancyItems
-      .filter((item) => item.kind === 'shortlist')
-      .map((item) => item.clusterId);
-    expect(fromShortlist).not.toContain('cluster-0');
-    expect(fromShortlist).not.toContain('cluster-1');
-    expect(fromShortlist).toHaveLength(10);
-    expect(snapshot.queue).toHaveLength(12);
+    expect(
+      snapshot.queue.filter((item) => item.kind === 'new_vacancy' || item.kind === 'shortlist'),
+    ).toEqual([]);
+    expect(snapshot.digest.newVacancies).toBe(1);
   });
 
   it('surfaces follow_up reminder for interview stage application when deadline is due (B393)', () => {

@@ -64,4 +64,49 @@ describe('vacancy context the consultant receives', () => {
     expect(context).toContain('Текст вакансии:\nxxx');
     expect(context!.length).toBeLessThanOrEqual(10_000);
   });
+
+  // 29.10 on prod: 5 of 12 matched vacancies (fresh Indeed records the maintenance
+  // worker had not clustered yet) answered 404 «Объект не найден» from the card.
+  it('opens a matched record that has no saved cluster yet by its record id', async () => {
+    const requested: string[] = [];
+    const context = await buildCoachSubjectContext(
+      depsWith({
+        getActiveCluster: () => undefined,
+        getPublicCatalogCluster: () => undefined,
+        getVacancy: (id: string) => {
+          requested.push(id);
+          return id === 'src-indeed:adac02290ebafa7b'
+            ? {
+                id,
+                title: 'Vice President, Engineering',
+                company: 'Northwind',
+                location: 'Remote',
+                url: 'https://www.indeed.com/viewjob?jk=adac02290ebafa7b',
+                requiredSkills: ['Kubernetes'],
+                description: 'Lead 8 engineering teams.',
+              }
+            : undefined;
+        },
+      }),
+      'candidate-1',
+      { kind: 'vacancy', id: 'cluster-src-indeed:adac02290ebafa7b' },
+    );
+    expect(requested).toContain('src-indeed:adac02290ebafa7b');
+    expect(context).toContain('Вакансия: Vice President, Engineering');
+    expect(context).toContain('Источник: https://www.indeed.com/viewjob?jk=adac02290ebafa7b');
+    expect(context).toContain('Текст вакансии:\nLead 8 engineering teams.');
+  });
+
+  it('still answers 404 for an id that is neither a cluster nor a record', async () => {
+    const context = await buildCoachSubjectContext(
+      depsWith({
+        getActiveCluster: () => undefined,
+        getPublicCatalogCluster: () => undefined,
+        getVacancy: () => undefined,
+      }),
+      'candidate-1',
+      { kind: 'vacancy', id: 'cluster-src-indeed:missing' },
+    );
+    expect(context).toBeNull();
+  });
 });

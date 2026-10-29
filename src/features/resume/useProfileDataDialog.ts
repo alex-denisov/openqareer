@@ -18,6 +18,12 @@ export function useProfileDataDialog(props: ProfileScreenSurfaceProps, desktop: 
   }>({ open: false });
   const open = useCallback((section?: ProfileDataSection) => setState({ open: true, section }), []);
   const close = useCallback(() => setState({ open: false }), []);
+  const [savedNotice, setSavedNotice] = useState(false);
+  const closeSaved = useCallback(() => {
+    setState({ open: false });
+    setSavedNotice(true);
+  }, []);
+  const dismissNotice = useCallback(() => setSavedNotice(false), []);
   const request = props.profileFocusRequest;
   const managedRequest = Boolean(request && DIALOG_TARGETS.includes(request.section));
   useEffect(() => {
@@ -25,5 +31,5 @@ export function useProfileDataDialog(props: ProfileScreenSurfaceProps, desktop: 
     if (DIALOG_TARGETS.includes(request.section)) open(request.section as ProfileDataSection);
     else close();
   }, [desktop, request, open, close]);
-  return { ...state, select: open, close, managedRequest };
+  return { ...state, select: open, close, closeSaved, savedNotice, dismissNotice, managedRequest };
 }

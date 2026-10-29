@@ -1,8 +1,10 @@
 import { useId, useState } from 'react';
 import { ArrowsClockwise, CheckCircle, LinkSimple } from '@phosphor-icons/react';
-import { disconnectConnection, type CandidateConnection } from '../coach/coachApi';
+import { disconnectConnection, type CandidateConnection, type ImportWalk } from '../coach/coachApi';
 import { ImportModalShell } from '../connections/ImportModalShell';
 import { PLATFORM_LABELS } from '../connections/platformLabels';
+import { linkedinStageLabel } from '../connections/linkedinImportProgress';
+import { walkReadCount } from './profileProvenance';
 import { importDateLabel } from './profileSourceLabels';
 
 export interface ProfileSourceDialogProps {
@@ -12,6 +14,8 @@ export interface ProfileSourceDialogProps {
   /** N: facts of the import still in the profile (B541). */
   readonly keptFactCount?: number;
   readonly importedAt?: string;
+  /** C6: the last walk of the source's sections. */
+  readonly walk?: ImportWalk;
   readonly isOpen: boolean;
   readonly onClose: () => void;
   /** «Импортировать заново» и «Подключить» ведут в настоящий мастер подключения. */
@@ -46,6 +50,7 @@ export function ProfileSourceDialog(props: ProfileSourceDialogProps) {
       <div className="career-modal-body profile-source-dialog career-token-scope">
         <SourceStatus connection={props.connection} disconnected={phase === 'disconnected'} />
         <p>{importSummary(props.factCount, props.importedAt, props.keptFactCount)}</p>
+        <WalkDetails walk={props.walk} onRetry={props.onOpenConnections} />
         <PhaseNotice phase={phase} />
       </div>
       <div className="career-modal-footer career-token-scope">
@@ -65,6 +70,38 @@ export function ProfileSourceDialog(props: ProfileSourceDialogProps) {
         </button>
       </div>
     </ImportModalShell>
+  );
+}
+
+/**
+ * C6: sections read / not read. The connector walks sections in order and stops
+ * on the first unanswered one, so it cannot reread a single section: «Повторить
+ * раздел» reruns the import of the whole source.
+ */
+function WalkDetails({
+  walk,
+  onRetry,
+}: {
+  readonly walk?: ImportWalk;
+  readonly onRetry: () => void;
+}) {
+  if (!walk || walk.state === 'running') return null;
+  const failed = walk.sections.filter((section) => section.status === 'failed');
+  return (
+    <>
+      <p>
+        Прочитано разделов: {walkReadCount(walk)} из {walk.sections.length}
+      </p>
+      {failed.map((section) => (
+        <p key={section.key} className="profile-source-dialog-unread">
+          <span>Раздел «{linkedinStageLabel(section.key)}» не прочитан</span>
+          <button type="button" className="career-quiet-button" onClick={onRetry}>
+            <ArrowsClockwise size={16} aria-hidden="true" />
+            Повторить раздел
+          </button>
+        </p>
+      ))}
+    </>
   );
 }
 

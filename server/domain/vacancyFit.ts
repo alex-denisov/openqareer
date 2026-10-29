@@ -13,6 +13,8 @@ export interface VacancyFitInput {
   readonly profileContextHash?: string;
   /** Отпечаток до B580: только для чтения старого кэша, в ключ не входит. */
   readonly legacyProfileContextHash?: string;
+  /** B580 stamp over every memory row: its results are read once and moved to the evidence-only key. */
+  readonly previousProfileContextHash?: string;
   readonly requirements: readonly VacancyRequirement[];
   readonly facts: readonly VacancyFitFact[];
   /** Authoritative rule/owner evidence gates, never model-generated probabilities. */
@@ -54,28 +56,38 @@ function normalizedSource(value: string): string {
  * (same rule as the pitch, B266): on prod 24.10 a LinkedIn import left all 64 of the owner's facts
  * proposed, and 787 vacancies read «no_eligible_facts». Facts said only in chat still need a confirm.
  */
-function isImportedEvidence(fact: VacancyFitFact): boolean {
+function isImportedEvidence(fact: ResumeEvidenceCandidate): boolean {
   return fact.status === 'proposed' && isImportedMemoryId(fact.id) && isResumeEvidenceEligible({ ...fact, status: 'confirmed' });
+}
+/** A memory row the percent may cite; hypotheses and open questions of the consultant are not. */
+export function isVacancyFitEvidence(fact: ResumeEvidenceCandidate): boolean {
+  return (isResumeEvidenceEligible(fact) || isImportedEvidence(fact)) && fact.sourceMessageIds.every((id) => id.trim().length > 0);
 }
 function eligibleFacts(input: VacancyFitInput): readonly VacancyFitFact[] {
   const counts = new Map<string, number>();
   for (const fact of input.facts) counts.set(fact.id, (counts.get(fact.id) ?? 0) + 1);
-  return input.facts.filter((fact) => fact.candidateId === input.candidateId && counts.get(fact.id) === 1 && (isResumeEvidenceEligible(fact) || isImportedEvidence(fact)) && fact.sourceMessageIds.every((id) => id.trim().length > 0));
+  return input.facts.filter((fact) => fact.candidateId === input.candidateId && counts.get(fact.id) === 1 && isVacancyFitEvidence(fact));
 }
+
+export type VacancyFitFactScope = 'evidence' | 'all';
 
 /** SHA hashes are transient; persistent tenant indexes are keyed HMACs in the store. */
 export function vacancyFitFingerprint(
   input: VacancyFitInput,
   algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION,
+  factScope: VacancyFitFactScope = 'evidence',
 ): { vacancyHash: string; profileHash: string; algorithmVersion: string } {
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  // B580-r: the consultant writes hypotheses and open questions every few seconds; keyed by them,
+  // every percent was reset (469 «profile_changed» jobs on prod 29.10). `all` reads older keys.
+  const facts = factScope === 'all' ? input.facts : eligibleFacts(input);
   const importedIds = input.facts.filter(isImportedEvidence).map((fact) => fact.id);
   const checkedIds = [...(input.checkedFactIds ?? [])].sort();
   return {
     vacancyHash: hash([input.vacancyId, input.description, input.requirements]),
     // B562: a profile whose evidence includes imported facts gets a new key, so its result cached
     // without them (and the completed queue row) is not reused; confirmed-only profiles keep theirs.
-    profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : []), ...(checkedIds.length ? [{ checkedEvidence: checkedIds }] : [])]),
+    profileHash: hash([input.candidateId, facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : []), ...(checkedIds.length ? [{ checkedEvidence: checkedIds }] : [])]),
     algorithmVersion,
   };
 }

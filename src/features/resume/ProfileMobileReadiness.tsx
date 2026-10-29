@@ -170,12 +170,17 @@ export function ProfileMobileAts(
     : props.onOpenExpert;
   return (
     <>
-      <ScoreGauge score={ats.assessment?.total.score ?? null} />
+      {ats.error || ats.idle ? null : <ScoreGauge score={ats.assessment?.total.score ?? null} />}
       {ats.roleBasis ? (
         <div className="pm-tip">
           <Info size="1em" aria-hidden="true" />
           <span>{ATS_ROLE_BASIS_NOTE}</span>
         </div>
+      ) : null}
+      {ats.idle ? (
+        <button type="button" className="pm-cta" onClick={ats.refresh}>
+          Рассчитать оценку ATS
+        </button>
       ) : null}
       {ats.loading ? (
         <p className="pm-note" role="status">

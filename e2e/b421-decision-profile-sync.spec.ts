@@ -43,8 +43,11 @@ test('syncs a legacy decision profile once after sign-in', async ({ page }) => {
     ),
   ).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    // On 390 the preferences panel lives on the «Контакты» page.
-    await page.getByRole('button', { name: 'Изменить основные данные профиля' }).click();
+    // On 390 the preferences panel lives on the «Релокация» page (contacts hold only contacts, A9).
+    await page
+      .locator('.career-profile-mobile')
+      .getByRole('button', { name: /^Релокация/u })
+      .click();
   }
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('openqareer.decision-profile.v1:synced')))

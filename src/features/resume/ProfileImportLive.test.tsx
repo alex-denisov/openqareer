@@ -46,7 +46,7 @@ describe('ProfileImportLive', () => {
         storedWalk={{
           platform: 'linkedin',
           state: 'running',
-          updatedAt: '2026-10-20T08:00:00.000Z',
+          updatedAt: new Date().toISOString(),
           sections,
         }}
       />,
@@ -66,6 +66,18 @@ describe('ProfileImportLive', () => {
         }}
       />,
     );
-    expect(done).toContain('LinkedIn: прочитано 3 из 7, 20.10');
+    // D3: a walk finished days ago is history, not a strip on the header.
+    expect(done).toBe('');
+    const justDone = renderToStaticMarkup(
+      <ProfileImportLive
+        storedWalk={{
+          platform: 'linkedin',
+          state: 'done',
+          updatedAt: new Date(Date.now() - 60_000).toISOString(),
+          sections,
+        }}
+      />,
+    );
+    expect(justDone).toContain('LinkedIn: прочитано 3 из 7');
   });
 });

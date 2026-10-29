@@ -3322,13 +3322,6 @@
   flex-wrap: wrap;
 }
 
-.career-today-funnel-basis {
-  margin-inline-start: auto;
-  color: var(--career-text-dim);
-  font-size: var(--career-text-xs);
-  font-variant-numeric: tabular-nums;
-}
-
 .career-today-funnel-list {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -8808,6 +8801,15 @@
 
 .profile-source-dialog p {
   margin: 0;
+}
+
+.profile-source-dialog .profile-source-dialog-unread {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
 }
 
 .profile-source-dialog-status {
@@ -17295,4 +17297,35 @@ button.chip {
 .career-session-gate:has(.career-today-skeleton) {
   max-width: none;
   padding-top: 0;
+}
+
+/* C5: platform marks on the profile source chips. Brand colours are tokens, not literals. */
+:root {
+  --career-brand-linkedin: #0a66c2;
+  --career-brand-hh: #d6001c;
+}
+.career-profile-screen-source-mark {
+  position: relative;
+  display: inline-flex;
+}
+.career-profile-screen-source-mark .career-platform-logo.is-linkedin rect {
+  fill: var(--career-brand-linkedin);
+}
+.career-profile-screen-source-mark .career-platform-logo.is-hh circle {
+  fill: var(--career-brand-hh);
+}
+.career-profile-screen-source-visual.is-off .career-platform-logo {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+.career-profile-screen-source-visual.is-off
+  .career-profile-screen-source-mark
+  > svg:not(.career-platform-logo) {
+  position: absolute;
+  inset-block-end: -3px;
+  inset-inline-end: -4px;
+  padding: 1px;
+  border-radius: 50%;
+  background: var(--career-surface-raised);
+  color: var(--career-text);
 }

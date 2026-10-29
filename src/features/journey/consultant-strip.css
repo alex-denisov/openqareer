@@ -57,6 +57,10 @@
 .consultant-history .consultant-history-row {
   padding: var(--career-space-2) var(--career-space-3);
   background: transparent;
+  /* A2: беседа в истории занимает одну строку: дата · раздел · вопрос. */
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--career-space-2);
 }
 .consultant-history-row {
   line-height: 1.5;
@@ -79,6 +83,9 @@
 }
 .consultant-history-row span {
   font-size: var(--career-text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 @media (min-width: 761px) {
   .consultant-mobile-stage-picker {
@@ -321,5 +328,54 @@
     .career-desktop-topbar
     > h1 {
     line-height: 1.25;
+  }
+}
+
+.consultant-history-row time,
+.consultant-history-row b {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  white-space: nowrap;
+}
+.consultant-history-row b {
+  color: var(--career-text-soft);
+  font-weight: 600;
+}
+
+/* A3: строка «Видит: …» и текущая беседа только на листе 390; A4: кнопка истории в шапке. */
+.consultant-visible-line {
+  display: none;
+}
+@media (max-width: 760px) {
+  .consultant-visible-line {
+    display: block;
+    margin: 0;
+    padding: var(--career-space-1) var(--career-space-4);
+    font-size: var(--career-text-xs);
+    color: var(--career-text-dim);
+  }
+  .career-expert-panel .career-dialogue-turn.is-earlier {
+    display: none;
+  }
+  /* mobile-shell.css hides the whole control group on 390; keep only the history button. */
+  .career-shell > .panel-col .career-expert-panel[data-mobile-expanded='true'] .career-expert-panel-controls {
+    display: flex;
+    align-items: center;
+    /* The sheet toggle is absolutely placed at the right edge. */
+    margin-inline-end: var(--career-target-min);
+  }
+  .career-expert-panel .career-expert-panel-controls > :not(.career-expert-history-button) {
+    display: none;
+  }
+  .career-expert-panel .career-expert-history-button {
+    display: inline-grid;
+  }
+  /* The line sits inside the feed: the panel grid has fixed rows for header and feed. */
+  .career-expert-conversation > .consultant-visible-line {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 1;
+    padding-block: var(--career-space-2);
+    background: var(--career-bg-elevated);
   }
 }

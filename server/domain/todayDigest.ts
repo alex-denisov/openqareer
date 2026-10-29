@@ -521,8 +521,6 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     queue: buildQueue(
       queueApplications,
       input.contacts ?? new Map(),
-      input.newVacancies,
-      shortlistToReview(input),
       input.pendingLinkedinPosts ?? [],
     ),
     followUps: buildFollowUps(input.applications),
@@ -531,17 +529,6 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     momentum: computeSearchMomentum(input.applications, now),
     funnel: computeTodayFunnel(input.applications, now),
   };
-}
-
-/** Лучшие по совпадению вакансии подборки, по которым ещё нет ни отклика, ни «новой». */
-function shortlistToReview(input: BuildTodaySnapshotInput): readonly TodayNewVacancy[] {
-  const taken = new Set<string>([
-    ...input.applications.flatMap((application) =>
-      application.clusterId ? [application.clusterId] : [],
-    ),
-    ...(input.newVacancies ?? []).map((vacancy) => vacancy.clusterId),
-  ]);
-  return (input.shortlist ?? []).filter((vacancy) => !taken.has(vacancy.clusterId));
 }
 
 function postQueueItem(post: TodayPendingPost): TodayQueueItem {
@@ -556,11 +543,13 @@ function postQueueItem(post: TodayPendingPost): TodayQueueItem {
   };
 }
 
+/**
+ * «Очередь дня» — только то, у чего есть срок или что ждёт ответа кандидата.
+ * Новые и подборочные вакансии сюда не попадают: они живут в полосе «С …» (A-C11).
+ */
 function buildQueue(
   waitingApplications: readonly ApplicationView[],
   contacts: ReadonlyMap<string, string>,
-  newVacancies: BuildTodaySnapshotInput['newVacancies'],
-  shortlist: readonly TodayNewVacancy[],
   pendingPosts: readonly TodayPendingPost[],
 ): TodayQueueItem[] {
   return [
@@ -578,28 +567,6 @@ function buildQueue(
       fit: null,
     })),
     ...pendingPosts.map(postQueueItem),
-    ...(newVacancies ?? []).map((vacancy) => ({
-      kind: 'new_vacancy' as const,
-      clusterId: vacancy.clusterId,
-      title: vacancy.title,
-      company: vacancy.company,
-      eyebrow: 'сегодня',
-      dueAt: null,
-      salary: vacancy.salary,
-      location: vacancy.location,
-      fit: vacancy.fit,
-    })),
-    ...shortlist.map((vacancy) => ({
-      kind: 'shortlist' as const,
-      clusterId: vacancy.clusterId,
-      title: vacancy.title,
-      company: vacancy.company,
-      eyebrow: 'в подборке, не разобрана',
-      dueAt: null,
-      salary: vacancy.salary,
-      location: vacancy.location,
-      fit: vacancy.fit,
-    })),
   ];
 }
 

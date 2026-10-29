@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { CandidateSnapshot, CandidateStore } from '../data/candidateStore';
-import type { VacancyFitInput } from './vacancyFit';
+import { isVacancyFitEvidence, type VacancyFitInput } from './vacancyFit';
 
 type ProfileReader = Pick<CandidateStore, 'getSnapshot' | 'getCandidateWorkspace'>;
 
@@ -11,6 +11,23 @@ type ProfileReader = Pick<CandidateStore, 'getSnapshot' | 'getCandidateWorkspace
  * 40 тысяч результатов из-за опечатки в «о себе».
  */
 export function vacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
+  return stampOf('b580-r', snapshot.memory.filter(isVacancyFitEvidence), snapshot, workspace);
+}
+
+/**
+ * The B580 stamp hashed every memory row, so each hypothesis or open question of the consultant
+ * reset all percents. Kept only to find results stored under it.
+ */
+export function previousVacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
+  return stampOf('b580', snapshot.memory, snapshot, workspace);
+}
+
+function stampOf(
+  tag: string,
+  memory: CandidateSnapshot['memory'],
+  snapshot: CandidateSnapshot,
+  workspace: ReturnType<ProfileReader['getCandidateWorkspace']>,
+): string {
   const draft = snapshot.resume?.draft;
   const compared = draft
     ? {
@@ -32,7 +49,7 @@ export function vacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: R
           : null,
       }
     : null;
-  return createHash('sha256').update(JSON.stringify(['b580', snapshot.memory, compared, conditions])).digest('hex');
+  return createHash('sha256').update(JSON.stringify([tag, memory, compared, conditions])).digest('hex');
 }
 
 /** Отпечаток до B580: по нему находится процент, посчитанный до смены формулы. */
@@ -58,8 +75,10 @@ export function currentVacancyFitProfileValidator(store: ProfileReader) {
     try {
       const current = store.getSnapshot(input.candidateId);
       if (current.candidate?.id !== input.candidateId) return false;
+      // Only what the percent cites: a hypothesis written while the model answered must not discard the paid result.
+      const evidence = (facts: readonly VacancyFitInput['facts'][number][]) => JSON.stringify(facts.filter(isVacancyFitEvidence));
       const facts = current.memory.map((fact) => ({ ...fact, candidateId: input.candidateId }));
-      if (JSON.stringify(facts) !== JSON.stringify(input.facts)) return false;
+      if (evidence(facts) !== evidence(input.facts)) return false;
       return vacancyFitProfileStamp(current, store.getCandidateWorkspace(input.candidateId)) === input.profileContextHash;
     } catch { return false; }
   };

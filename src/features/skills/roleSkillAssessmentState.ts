@@ -170,3 +170,12 @@ function resetCaseInputs(
     appealReason: '',
   };
 }
+
+/** Надпись над экраном проверки: «по вакансии» только при входе из вакансии (B5). */
+export function assessmentKicker(origin: {
+  readonly fromCareer: boolean;
+  readonly fromVacancy: boolean;
+}): string {
+  if (origin.fromCareer) return 'Карьера · проверка роли';
+  return origin.fromVacancy ? 'Профиль · проверка по вакансии' : 'Профиль · проверка по роли';
+}

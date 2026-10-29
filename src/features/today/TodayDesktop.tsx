@@ -37,8 +37,7 @@ import {
 } from './todayFormat';
 import {
   TODAY_FUNNEL_LOW_SAMPLE,
-  todayFunnelBasis,
-  todayFunnelHint,
+  todayFunnelInfo,
   todayFunnelStages,
   type TodayFunnelContext,
   type TodayFunnelStage,
@@ -56,6 +55,7 @@ interface TodayDesktopContentProps {
   readonly profileDraft?: ResumeDraft;
   readonly funnelContext?: TodayFunnelContext;
   readonly activeAction?: ReasonedCareerAction;
+  readonly decisionClosed?: boolean;
   readonly onAccept: () => void;
   readonly onDiscuss?: () => void;
   readonly onPostpone: () => void | Promise<void>;
@@ -108,6 +108,7 @@ export function TodayDesktopContent(props: TodayDesktopContentProps) {
 
 function TodayDecisionSection({
   activeAction,
+  decisionClosed,
   onAccept,
   onDiscuss,
   onPostpone,
@@ -119,6 +120,7 @@ function TodayDecisionSection({
   TodayDesktopContentProps,
   | 'snapshot'
   | 'activeAction'
+  | 'decisionClosed'
   | 'onAccept'
   | 'onDiscuss'
   | 'onPostpone'
@@ -130,7 +132,8 @@ function TodayDecisionSection({
     return (
       <TodayNextDecisionUnavailable
         onDiscuss={onDiscuss}
-        nothingToDecide={snapshot.queue.length === 0}
+        closed={decisionClosed}
+        nothingToDecide={snapshot.queue.length === 0 && !decisionClosed}
         onNavigate={onNavigate}
       />
     );
@@ -327,12 +330,17 @@ function TodayNothingToDecide({
 
 /** Текст макета 1 «Пусто: решения нет» — общий для 1440 и 390. */
 export const TODAY_NOTHING_TO_DECIDE = 'Сейчас нечего решать. Очередь пуста.';
+/** Решение дня принято или отложено: сервер помнит это до конца дня (C3). */
+export const TODAY_DECISION_CLOSED = 'Решение на сегодня закрыто';
+export const TODAY_DECISION_CLOSED_COPY = 'Новое решение появится завтра.';
 
 function TodayNextDecisionUnavailable({
   onDiscuss,
   nothingToDecide,
+  closed,
   onNavigate,
 }: {
+  readonly closed?: boolean;
   readonly onDiscuss?: () => void;
   readonly nothingToDecide: boolean;
   readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
@@ -342,9 +350,13 @@ function TodayNextDecisionUnavailable({
   return (
     <section className="career-today-next-decision" aria-label="Следующее решение">
       <p className="career-today-eyebrow">Следующее решение</p>
-      <h2 id="today-next-decision-title">Нет проверенного следующего шага</h2>
+      <h2 id="today-next-decision-title">
+        {closed ? TODAY_DECISION_CLOSED : 'Нет проверенного следующего шага'}
+      </h2>
       <p className="career-today-decision-empty-copy">
-        В текущих данных нет основания предложить конкретное действие.
+        {closed
+          ? TODAY_DECISION_CLOSED_COPY
+          : 'В текущих данных нет основания предложить конкретное действие.'}
       </p>
       {onDiscuss ? (
         <div className="career-today-decision-actions">
@@ -353,7 +365,9 @@ function TodayNextDecisionUnavailable({
           </button>
         </div>
       ) : null}
-      <p className="career-today-decision-sources">Источники: нет проверенных данных</p>
+      {closed ? null : (
+        <p className="career-today-decision-sources">Источники: нет проверенных данных</p>
+      )}
     </section>
   );
 }
@@ -645,15 +659,11 @@ function TodayFunnel({
     <section className="career-today-funnel" aria-label="Воронка за 30 дней">
       <header>
         <h2>Воронка за 30 дней</h2>
-        <CareerTooltip content={todayFunnelHint(stages, snapshot.momentum?.calculatedAt)}>
+        <CareerTooltip content={todayFunnelInfo(snapshot, stages)}>
           <button type="button" className="career-today-info-button" aria-label="Пояснение">
             <Info size="1em" aria-hidden="true" />
           </button>
         </CareerTooltip>
-        <span className="career-today-funnel-basis">
-          <Clock size="1em" aria-hidden="true" />
-          {todayFunnelBasis(snapshot, stages)}
-        </span>
       </header>
       <ol className="career-today-funnel-list">
         {stages.map((stage, index) => (

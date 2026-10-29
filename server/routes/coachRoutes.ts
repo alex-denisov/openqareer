@@ -86,19 +86,38 @@ function providerResponse(
   };
 }
 
+function failureReason(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error)).slice(0, 200);
+}
+
+/**
+ * 29.10: api.hh.ru закрыл анонимный поиск (403 для всех), и ход с выбранной
+ * ролью падал целиком. Теперь рынок — живой срез, затем собственный обход hh,
+ * затем ответ без рыночных наблюдений; каждая ступень, что не дала среза, видна в логе.
+ */
 async function fetchMarketObservations(
   deps: RouteDeps,
-  candidateId: string,
-  idempotencyKey: string,
+  request: FastifyRequest,
   marketQuery: string,
-): Promise<MarketObservation[] | 'unavailable'> {
+): Promise<MarketObservation[]> {
+  const input = { text: marketQuery, perPage: 12 };
   try {
-    const sample = await deps.searchVacancies({ text: marketQuery, perPage: 12 });
-    return marketObservationsFrom(sample);
-  } catch {
-    deps.candidateStore.failTurn(candidateId, idempotencyKey, 'market_source_unavailable');
-    turnStreamHub(deps).end(turnStreamId(candidateId, idempotencyKey));
-    return 'unavailable';
+    return marketObservationsFrom(await deps.searchVacancies(input));
+  } catch (error) {
+    request.log.warn(
+      { event: 'coach-market-live-sample-unavailable', reason: failureReason(error) },
+      'coach-market-sample',
+    );
+  }
+  if (!deps.searchStoredVacancies) return [];
+  try {
+    return marketObservationsFrom(await deps.searchStoredVacancies(input));
+  } catch (error) {
+    request.log.warn(
+      { event: 'coach-market-stored-sample-unavailable', reason: failureReason(error) },
+      'coach-market-sample',
+    );
+    return [];
   }
 }
 
@@ -216,17 +235,7 @@ async function deliverTurn(
     });
     return pending();
   }
-  const output = await work;
-  if (!output)
-    return sendError(
-      reply,
-      request,
-      502,
-      'market_source_unavailable',
-      'hh.ru не вернул свежую выборку. Повторите позже.',
-      true,
-    );
-  return providerResponse(request, output);
+  return providerResponse(request, await work);
 }
 
 async function generateTurn(
@@ -239,15 +248,10 @@ async function generateTurn(
   attemptedSummaries: ReadonlySet<string> = new Set(),
   deadlineAt?: number,
 ) {
-  let marketObservations: MarketObservation[] = [];
-  if (input.phase === 'market' && marketQuery) {
-    const fetched = await fetchMarketObservations(deps, candidateId, key, marketQuery);
-    if (fetched === 'unavailable') {
-      await generatePendingConversationSummaries(deps, request, candidateId, attemptedSummaries);
-      return null;
-    }
-    marketObservations = fetched;
-  }
+  const marketObservations =
+    input.phase === 'market' && marketQuery
+      ? await fetchMarketObservations(deps, request, marketQuery)
+      : [];
   try {
     const output = await completeTurnWithProvider(
       deps,

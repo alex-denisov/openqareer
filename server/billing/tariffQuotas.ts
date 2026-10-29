@@ -68,6 +68,16 @@ const PLAN_NAMES: Readonly<Record<QuotaPlanId, string>> = {
 /** Тестовые аккаунты работают без квот (B435), кроме аккаунта приёмки квот. */
 export const QUOTA_ENFORCED_TEST_USERNAMES: ReadonlySet<string> = new Set(['adenisov.test']);
 
+/**
+ * Без квот, хотя аккаунт не тестовый: демо-аккаунт приёмки макетов
+ * (OPENQAREER_QA_CANDIDATE_*) зарегистрирован обычным путём, а `is_test`
+ * ставит только сид при старте и заодно меняет пароль и проверку почты.
+ * Здесь `users.username`, не почта для входа.
+ */
+export const QUOTA_EXEMPT_USERNAMES: ReadonlySet<string> = new Set([
+  'qa-pilot-2026-09-07-b98b5f',
+]);
+
 export interface QuotaPeriod {
   readonly startedAt: string;
   readonly endsAt: string;
