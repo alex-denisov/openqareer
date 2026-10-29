@@ -117,9 +117,13 @@ function readEvidence(proposed: ProposedRole): RoleEvidence {
   };
 }
 
-function skillsConfirmedByCheck(title: string, decisions: RoleDecisions): readonly string[] {
+/** Проверка пройдена под любым названием роли: модель могла переименовать её позже (29.10). */
+function skillsConfirmedByCheck(
+  proposed: ProposedRole,
+  decisions: RoleDecisions,
+): readonly string[] {
   const entry = Object.entries(decisions.checkedSkills ?? {}).find(([checked]) =>
-    sameTitle(checked, title),
+    namesRole(proposed, checked),
   );
   return entry?.[1] ?? [];
 }
@@ -178,7 +182,7 @@ export function mapProposedRoleToCareerRole(
   const status = determineRoleStatus(proposed, decisions);
   const evidence = withCheckedSkills(
     readEvidence(proposed),
-    skillsConfirmedByCheck(proposed.title, decisions),
+    skillsConfirmedByCheck(proposed, decisions),
   );
   const { fork, note } = wageOf(proposed, evidence.vacancyCount);
 

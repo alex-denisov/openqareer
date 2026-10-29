@@ -163,6 +163,18 @@ async function nameCandidateRoles(
   return { language, named, namedBy: naming.stage ?? null };
 }
 
+/**
+ * Рынки для языка названий ролей. Пустой список регионов кампании — «без
+ * ограничения», а не «рынок неизвестен»: тогда язык решает регион из города
+ * профиля, иначе руководителю из Кирова модель называла роли по-английски (29.10).
+ */
+export function roleLanguageRegions(
+  campaign: Pick<ReturnType<typeof readCampaign>, 'regions' | 'suggestedRegions'>,
+): CandidateRegion[] {
+  const explicit = campaign.regions.value as CandidateRegion[];
+  return explicit.length > 0 ? explicit : [...(campaign.suggestedRegions ?? [])] as CandidateRegion[];
+}
+
 export async function readRoleContext(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -192,7 +204,7 @@ export async function readRoleContext(
     request,
     candidateId,
     targetRoles,
-    regions,
+    roleLanguageRegions(campaign),
   );
 
   const preferences = currentWorkPreferences(candidateStore, candidateId);
