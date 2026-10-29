@@ -31,6 +31,7 @@ import {
   scheduleLinkedInContactsRefresh,
   startLinkedInContactsRefresh,
 } from './linkedinContactsRefresh';
+import { startLinkedInCompanySearch } from './linkedinCompanySearch';
 import { AccountConnectionsSection } from '../account/AccountDesktopSections';
 import { AccountHhModal, AccountLinkedInModal } from '../account/AccountDialogs';
 import { MobileAccountConnections } from '../account/AccountMobileSections';
@@ -118,10 +119,14 @@ export function AccountConnectionsManager({
   const linkedinConnected = connections.some(
     (connection) => connection.platform === 'linkedin' && connection.status === 'connected',
   );
-  // B448: contacts only, at most once per 24 h, never the profile.
+  // B448: contacts only, at most once per 24 h, never the profile. B561: then
+  // the current companies, searched in the 1st circle on their own budget.
   useEffect(() => {
     if (!linkedinConnected) return undefined;
-    return scheduleLinkedInContactsRefresh(() => void startLinkedInContactsRefresh(true));
+    return scheduleLinkedInContactsRefresh(
+      () =>
+        void startLinkedInContactsRefresh(true).then(() => startLinkedInCompanySearch(true)),
+    );
   }, [linkedinConnected]);
 
   /**

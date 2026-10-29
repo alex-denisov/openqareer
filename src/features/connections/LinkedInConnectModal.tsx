@@ -36,6 +36,7 @@ import {
   type StructuredFallbackReason,
 } from './linkedinSessionPoll';
 import { startLinkedInContactsRefresh } from './linkedinContactsRefresh';
+import { startLinkedInCompanySearch } from './linkedinCompanySearch';
 import {
   endLinkedInProtectedRoute,
   ProtectedRouteError,
@@ -245,7 +246,7 @@ export function LinkedInConnectModal({
         );
         // B448: contacts are read afterwards, out of sight, so the import
         // never waits on the long connections walk.
-        void startLinkedInContactsRefresh(true);
+        void startLinkedInContactsRefresh(true).then(() => startLinkedInCompanySearch(true));
       },
     });
     return sessionFlow.current;

@@ -6,7 +6,7 @@
 //! the main window is declared in `tauri.conf.json`, so WKWebView/WebView2
 //! silently refuse the request and no window ever appears (B149).
 
-use crate::linkedin_read_guard::{is_detail_page, LinkedInReadGuardState};
+use crate::linkedin_read_guard::{is_detail_page, is_people_search_page, LinkedInReadGuardState};
 use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, remove_dir_all, symlink_metadata};
 use std::path::{Path, PathBuf};
@@ -671,6 +671,16 @@ pub async fn open_session_window(
             opened: false,
             label: label.to_string(),
             reason: Some("session_layout_invalid".to_string()),
+        };
+    }
+
+    // A search page loads only through `read_session_page`, which spends the
+    // search budget; opening or moving the window onto one would not (B561).
+    if search_page_entry_refused(&request.platform, url.path()) {
+        return SessionWindowReport {
+            opened: false,
+            label: label.to_string(),
+            reason: Some("search_page_needs_read".to_string()),
         };
     }
 
@@ -1709,17 +1719,26 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> LazyW
     walk
 }
 
+fn search_page_entry_refused(platform: &str, path: &str) -> bool {
+    platform == "linkedin" && is_people_search_page(path)
+}
+
 /// The candidate's LinkedIn session is paced here, not only in the web layer
-/// (B266 security WARN); see `linkedin_read_guard`.
+/// (B266 security WARN); see `linkedin_read_guard`. People search runs on its
+/// own budget with a jittered 20–40 s gap (B561).
 fn admit_linkedin_read(app: &AppHandle, path: &str) -> Result<Duration, String> {
     let state = app.state::<LinkedInReadGuardState>();
     let mut guard = state
         .0
         .lock()
         .map_err(|_| "linkedin_read_guard_unavailable".to_string())?;
-    guard
-        .admit(std::time::Instant::now(), is_detail_page(path))
-        .map_err(str::to_string)
+    let now = std::time::Instant::now();
+    let admitted = if is_people_search_page(path) {
+        guard.admit_search(now, Duration::from_millis(clock_seed() % 20_001))
+    } else {
+        guard.admit(now, is_detail_page(path))
+    };
+    admitted.map_err(str::to_string)
 }
 
 /// Spaces a sign-in window navigation without spending the read budget; a
@@ -2115,6 +2134,20 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_session_window_never_opens_on_a_people_search_page() {
+        assert!(search_page_entry_refused(
+            "linkedin",
+            "/search/results/people/"
+        ));
+        assert!(search_page_entry_refused(
+            "linkedin",
+            "/search/results/%70eople"
+        ));
+        assert!(!search_page_entry_refused("linkedin", "/feed/"));
+        assert!(!search_page_entry_refused("hh", "/search/results/people/"));
+    }
+
     #[test]
     fn error_codes_stop_at_the_first_non_code_character() {
         assert_eq!(first_code("eval_failed: boom"), "eval_failed");
