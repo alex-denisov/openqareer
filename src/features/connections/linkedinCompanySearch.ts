@@ -170,13 +170,14 @@ async function searchCompany(
   const people: LinkedInSearchPerson[] = [];
   let cards = 0;
   for (let page = 1; page <= MAX_PAGES_PER_COMPANY; page += 1) {
+    const wanted = linkedinPeopleSearchUrl(companyName, page);
     let result: SessionPageResult;
     try {
-      result = await dependencies.readSessionPage(linkedinPeopleSearchUrl(companyName, page));
+      result = await dependencies.readSessionPage(wanted);
     } catch (error) {
       return { people, pages: page - 1, cards, stop: errorCode(error) };
     }
-    const landed = landedSection(result);
+    const landed = landedSection(result, wanted);
     if (landed !== 'search') return { people, pages: page, cards, stop: landed };
     const read = extractLinkedInPeopleSearch(result.body ?? '');
     people.push(...read.people);
@@ -189,22 +190,29 @@ async function searchCompany(
 /**
  * `search` when the read stayed on people search with the 1st-circle filter,
  * else where it went, as a code. A dropped filter would let people outside
- * the candidate's network through (security review, 29.10).
+ * the candidate's network through (security review, 29.10); other keywords
+ * mean the window still shows the previous company's results.
  */
-function landedSection(page: SessionPageResult): string {
+function landedSection(page: SessionPageResult, wanted: string): string {
   if (!page.ok || !page.body) return 'empty';
   try {
     const url = new URL(page.url ?? '');
     if (url.hostname.endsWith('linkedin.com') && url.pathname.startsWith(SEARCH_PATH)) {
-      return url.searchParams.get('network') === FIRST_CIRCLE_FILTER
-        ? 'search'
-        : 'network_filter_lost';
+      if (url.searchParams.get('network') !== FIRST_CIRCLE_FILTER) return 'network_filter_lost';
+      return sameSearch(url, new URL(wanted)) ? 'search' : 'stale_page';
     }
     const segment = url.pathname.split('/').find(Boolean) ?? 'root';
     return /^[a-z0-9-]{1,40}$/u.test(segment) ? segment : 'other';
   } catch {
     return 'no_url';
   }
+}
+
+/** The page shows the asked company and page, not results left from the previous read. */
+function sameSearch(landed: URL, wanted: URL): boolean {
+  return ['keywords', 'page'].every(
+    (key) => (landed.searchParams.get(key) ?? '') === (wanted.searchParams.get(key) ?? ''),
+  );
 }
 
 const storageThrottle: DetailReadThrottle = {

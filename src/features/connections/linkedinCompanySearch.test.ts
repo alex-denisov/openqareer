@@ -38,7 +38,7 @@ function dependencies(
       read.push(url);
       return {
         ok: true,
-        url: searchUrl('Вектор'),
+        url,
         body: searchPage([card('anna-t', 'Анна', 'Вектор')]),
       };
     },
@@ -74,13 +74,32 @@ describe('searchLinkedInCompanies (B561)', () => {
     expect(marks.at(-1)! - Date.now()).toBeGreaterThan(47 * 60 * 60 * 1_000);
   });
 
+  it("stops when the window still shows another company's results", async () => {
+    const deps = dependencies({
+      loadPlan: async () => [
+        { companyKey: 'vektor', companyName: 'Вектор' },
+        { companyKey: 'arka', companyName: 'Арка' },
+      ],
+      readSessionPage: async () => ({
+        ok: true,
+        url: searchUrl('Вектор'),
+        body: searchPage([card('anna-t', 'Анна', 'Вектор')]),
+      }),
+    });
+
+    const outcome = await searchLinkedInCompanies(deps);
+
+    expect(outcome).toMatchObject({ status: 'stopped', reason: 'stale_page', companies: 1 });
+    expect(deps.reported.map((entry) => entry.companyName)).toEqual(['Вектор']);
+  });
+
   it('ends the run after three empty result pages in a row', async () => {
     const deps = dependencies({
       loadPlan: async () =>
         ['a', 'b', 'c', 'd'].map((key) => ({ companyKey: key, companyName: key })),
       readSessionPage: async (url) => {
         deps.read.push(url);
-        return { ok: true, url: searchUrl('a'), body: searchPage([]) };
+        return { ok: true, url, body: searchPage([]) };
       },
     });
 
@@ -124,7 +143,7 @@ describe('searchLinkedInCompanies (B561)', () => {
         deps.read.push(url);
         return {
           ok: true,
-          url: searchUrl('Вектор'),
+          url,
           body: searchPage(url.includes('page=2') ? [card('last', 'Последний', 'Вектор')] : full),
         };
       },

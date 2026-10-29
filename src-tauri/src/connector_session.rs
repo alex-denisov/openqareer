@@ -1939,9 +1939,23 @@ fn same_page(current: &str, wanted: &str) -> bool {
         (Ok(a), Ok(b)) => {
             a.host_str() == b.host_str()
                 && a.path().trim_end_matches('/') == b.path().trim_end_matches('/')
+                && (!is_people_search_page(b.path()) || same_search(&a, &b))
         }
         _ => false,
     }
+}
+
+/// On people search the query is the page: another company or page number
+/// must navigate, or the read returns the previous results (B561, 29.10).
+fn same_search(current: &Url, wanted: &Url) -> bool {
+    let param = |url: &Url, key: &str| {
+        url.query_pairs()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.into_owned())
+    };
+    ["keywords", "page"]
+        .iter()
+        .all(|key| param(current, key) == param(wanted, key))
 }
 
 /// The first path segment as a log code (`mynetwork`, `checkpoint`, `in`).
@@ -2218,6 +2232,23 @@ mod tests {
         assert!(!same_page(
             "https://www.linkedin.com/feed/",
             "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        ));
+    }
+
+    #[test]
+    fn another_company_or_page_of_people_search_is_another_page() {
+        let search = "https://www.linkedin.com/search/results/people/";
+        assert!(!same_page(
+            &format!("{search}?keywords=Autodesk&network=%5B%22F%22%5D"),
+            &format!("{search}?keywords=Submittable&network=%5B%22F%22%5D")
+        ));
+        assert!(!same_page(
+            &format!("{search}?keywords=Autodesk"),
+            &format!("{search}?keywords=Autodesk&page=2")
+        ));
+        assert!(same_page(
+            &format!("{search}?keywords=Autodesk&network=%5B%22F%22%5D&origin=FACETED_SEARCH"),
+            &format!("{search}?keywords=Autodesk&network=%5B%22F%22%5D")
         ));
     }
 
