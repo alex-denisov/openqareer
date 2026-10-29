@@ -8803,6 +8803,15 @@
   margin: 0;
 }
 
+.profile-source-dialog .profile-source-dialog-unread {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
+}
+
 .profile-source-dialog-status {
   display: flex;
   align-items: center;
@@ -17309,7 +17318,9 @@ button.chip {
   filter: grayscale(1);
   opacity: 0.55;
 }
-.career-profile-screen-source-visual.is-off .career-profile-screen-source-mark > svg:not(.career-platform-logo) {
+.career-profile-screen-source-visual.is-off
+  .career-profile-screen-source-mark
+  > svg:not(.career-platform-logo) {
   position: absolute;
   inset-block-end: -3px;
   inset-inline-end: -4px;

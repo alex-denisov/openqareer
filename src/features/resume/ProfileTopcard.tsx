@@ -23,7 +23,9 @@ import type {
   CandidateConnection,
   CandidateMemory,
   ImportedSourceSummary,
+  ImportWalk,
 } from '../coach/coachApi';
+import { isWalkCurrent } from './profileProvenance';
 import { PlatformLogo } from '../connections/PlatformLogo';
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
 import { factCountLabel } from './profileSourceLabels';
@@ -322,6 +324,7 @@ function SourceChip({
       factCount={count}
       keptFactCount={imported && 'keptFactCount' in imported ? imported.keptFactCount : undefined}
       importedAt={importedAtValue(imported, connection)}
+      walk={imported && 'walk' in imported ? imported.walk : undefined}
       onOpenConnections={onOpenConnections}
     >
       {contents}
@@ -359,6 +362,7 @@ function SourceChipButton(props: {
   readonly factCount?: number;
   readonly keptFactCount?: number;
   readonly importedAt?: string;
+  readonly walk?: ImportWalk;
   readonly onOpenConnections: () => void;
   readonly children: ReactNode;
 }) {
@@ -380,6 +384,7 @@ function SourceChipButton(props: {
         factCount={props.factCount}
         keptFactCount={props.keptFactCount}
         importedAt={props.importedAt}
+        walk={props.walk}
         isOpen={open}
         onClose={() => setOpen(false)}
         onOpenConnections={() => {
@@ -469,7 +474,7 @@ function ConnectionStatusChips({
           ),
         )}
         hasImports={hasImports}
-        hasWalk={sources.some((source) => 'walk' in source && Boolean(source.walk))}
+        hasWalk={sources.some((source) => 'walk' in source && isWalkCurrent(source.walk))}
         onOpenConnections={onOpenConnections}
       />
     </div>

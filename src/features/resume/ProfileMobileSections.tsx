@@ -1,4 +1,8 @@
 import { ArrowsClockwise, CheckCircle, Circle, MapTrifold } from '@phosphor-icons/react';
+import { linkedinStageLabel } from '../connections/linkedinImportProgress';
+import { PLATFORM_LABELS } from '../connections/platformLabels';
+import { importSummary } from './ProfileSourceDialog';
+import { walkReadCount } from './profileProvenance';
 import { ProfileMobileSources } from './ProfileMobileHome';
 import { ProfileMobileGroup, ProfileMobileRow } from './ProfileMobileElements';
 import {
@@ -19,6 +23,10 @@ export function ProfileMobileSourceDetails(props: ProfileMobileDataProps) {
         onSelect={props.onOpenConnections}
         showTitle={false}
       />
+      <ProfileMobileImportParams
+        importedSources={props.importedSources}
+        onRetry={props.onOpenConnections}
+      />
       <button
         type="button"
         className="pm-cta is-quiet"
@@ -28,6 +36,42 @@ export function ProfileMobileSourceDetails(props: ProfileMobileDataProps) {
         <ArrowsClockwise size="1em" aria-hidden="true" />
         Импортировать заново
       </button>
+    </>
+  );
+}
+
+/** C6, 390: import parameters and unread sections, the same facts as the desktop source window. */
+export function ProfileMobileImportParams({
+  importedSources,
+  onRetry,
+}: Pick<ProfileMobileDataProps, 'importedSources'> & { readonly onRetry?: () => void }) {
+  return (
+    <>
+      {(importedSources ?? []).map((source) => {
+        const walk = source.walk && source.walk.state === 'done' ? source.walk : undefined;
+        const failed = walk?.sections.filter((section) => section.status === 'failed') ?? [];
+        return (
+          <ProfileMobileGroup key={source.platform} title={PLATFORM_LABELS[source.platform]}>
+            <p className="pm-foot">
+              {importSummary(source.factCount, source.lastImportedAt, source.keptFactCount)}
+            </p>
+            {walk ? (
+              <p className="pm-foot">
+                Прочитано разделов: {walkReadCount(walk)} из {walk.sections.length}
+              </p>
+            ) : null}
+            {failed.map((section) => (
+              <ProfileMobileRow
+                key={section.key}
+                icon={ArrowsClockwise}
+                title={`Раздел «${linkedinStageLabel(section.key)}» не прочитан`}
+                detail="Повторить раздел"
+                onClick={onRetry}
+              />
+            ))}
+          </ProfileMobileGroup>
+        );
+      })}
     </>
   );
 }

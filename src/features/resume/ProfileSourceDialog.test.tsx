@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CandidateConnection } from '../coach/coachApi';
+import type { CandidateConnection, ImportWalk } from '../coach/coachApi';
 import { ProfileSourceDialog, importSummary } from './ProfileSourceDialog';
 
 const api = vi.hoisted(() => ({ disconnectConnection: vi.fn() }));
@@ -23,7 +23,7 @@ const connected: CandidateConnection = {
 const roots: Array<() => void> = [];
 afterEach(() => roots.splice(0).forEach((done) => done()));
 
-function render(onOpenConnections = vi.fn()) {
+function render(onOpenConnections = vi.fn(), walk?: ImportWalk) {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -36,6 +36,7 @@ function render(onOpenConnections = vi.fn()) {
         importedAt="2026-09-12T08:00:00.000Z"
         isOpen
         onClose={vi.fn()}
+        walk={walk}
         onOpenConnections={onOpenConnections}
       />,
     ),
@@ -99,5 +100,36 @@ describe('ProfileSourceDialog (макет 2 «Модальное окно: ис�
     expect(importSummary(21, '2026-10-07T08:00:00.000Z')).toBe(
       'Импортировано 21 из 21 факта, 07.10.',
     );
+  });
+
+  it('lists unread sections quietly and retries by rereading the source (C6)', () => {
+    const onOpenConnections = vi.fn();
+    const body = render(onOpenConnections, {
+      platform: 'linkedin',
+      state: 'done',
+      updatedAt: '2026-10-23T08:00:00.000Z',
+      sections: [
+        ...Array.from({ length: 7 }, (_, index) => ({
+          key: `k${index}`,
+          status: 'read' as const,
+        })),
+        { key: 'contactInfo', status: 'failed' },
+      ],
+    });
+    expect(body.textContent).toContain('Прочитано разделов: 7 из 8');
+    expect(body.textContent).toContain('Раздел «контакты» не прочитан');
+    act(() => button('Повторить раздел')?.click());
+    expect(onOpenConnections).toHaveBeenCalledOnce();
+  });
+
+  it('shows no unread line when every section was read', () => {
+    const body = render(vi.fn(), {
+      platform: 'linkedin',
+      state: 'done',
+      updatedAt: '2026-10-23T08:00:00.000Z',
+      sections: [{ key: 'experience', status: 'read' }],
+    });
+    expect(body.textContent).not.toContain('не прочитан');
+    expect(button('Повторить раздел')).toBeUndefined();
   });
 });
