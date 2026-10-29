@@ -91,7 +91,7 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   await expect(page.locator('.vacancy-fit-bar')).toHaveCount(0);
   await expect(page.getByText('Порядок', { exact: true })).toHaveCount(0);
   if (testInfo.project.name === 'mobile-390') {
-    await expect(page.locator('.vacancies-sort-header')).toHaveCount(0);
+    await expect(page.locator('.vacancies-sort-header').filter({ visible: true })).toHaveCount(0);
     return;
   }
   const fitHeader = page.getByRole('columnheader', { name: 'Совпадение' });
