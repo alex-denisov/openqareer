@@ -240,7 +240,7 @@ describe('CareerExpertPanel copy', () => {
     });
 
     expect(container.querySelector('.career-quiz-modal-card')).not.toBeNull();
-    expect(container.textContent).toContain('Верификация навыков: hh.ru и LinkedIn');
+    expect(container.textContent).toContain('Проверка навыков');
 
     await act(async () => root.unmount());
     container.remove();

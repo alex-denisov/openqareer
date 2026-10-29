@@ -774,7 +774,7 @@ test.describe('B441 Profile screen from mockup 2', () => {
     const quiz = expert.locator('.career-quiz-modal-card');
     await expect(quiz).toBeVisible();
     await expect(
-      quiz.getByRole('heading', { name: 'Верификация навыков: hh.ru и LinkedIn' }),
+      quiz.getByRole('heading', { name: 'Проверка навыков' }),
     ).toBeVisible();
     await quiz.getByRole('button', { name: 'Закрыть симулятор тестов' }).click();
     await expect(quiz).toHaveCount(0);

@@ -69,7 +69,7 @@ test.describe('B376 skill quiz dialogue & verification', () => {
 
       const modal = page.locator('.career-quiz-modal-card');
       await expect(modal).toBeVisible();
-      await expect(modal).toContainText('Верификация навыков: hh.ru и LinkedIn');
+      await expect(modal).toContainText('Проверка навыков');
 
       // Start TypeScript quiz
       const startBtn = modal
