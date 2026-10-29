@@ -184,24 +184,14 @@
   gap: var(--career-space-3);
   flex-wrap: nowrap;
 }
-.career-today-desktop .career-today-funnel-basis {
-  min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .career-today-desktop .career-today-funnel > header h2 {
-  flex: 1 0 auto;
+  flex: 0 0 auto;
   white-space: nowrap;
   font-weight: 600;
   line-height: 1.25;
 }
 .career-today-desktop .career-today-funnel-list {
   margin-block-start: 0;
-}
-.career-today-desktop .career-today-funnel-basis > svg {
-  margin-inline-end: var(--career-space-1);
-  vertical-align: -0.125em;
 }
 .career-today-desktop .career-today-funnel-list > li {
   display: grid;
