@@ -9,6 +9,7 @@ import type { StrategyConstraints } from '../../shared/careerStrategy';
 import type { RoleNamingStageFailure } from '../providers/roleNamer';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals } from '../vacancies/roleHypotheses';
+import { sameCareerRole } from '../vacancies/careerRoleKey';
 import { deriveCandidateTargetLevel } from '../vacancies/candidateLevel';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readCampaign } from './campaignContext';
@@ -172,7 +173,38 @@ export function roleLanguageRegions(
   campaign: Pick<ReturnType<typeof readCampaign>, 'regions' | 'suggestedRegions'>,
 ): CandidateRegion[] {
   const explicit = campaign.regions.value as CandidateRegion[];
-  return explicit.length > 0 ? explicit : [...(campaign.suggestedRegions ?? [])] as CandidateRegion[];
+  return explicit.length > 0
+    ? explicit
+    : ([...(campaign.suggestedRegions ?? [])] as CandidateRegion[]);
+}
+
+/**
+ * Проверка навыков хранится под названием роли на момент проверки. Модель
+ * может назвать ту же роль иначе («Операционный директор (COO)» →
+ * «Операционный директор»), и проверка терялась бы: её название становится
+ * синонимом роли той же функции и уровня (29.10).
+ */
+export function withCheckedRoleAliases(
+  proposals: readonly ProposedRole[],
+  checkedTitles: readonly string[],
+): ProposedRole[] {
+  return proposals.map((proposal) => {
+    const known = new Set(
+      [proposal.title, ...(proposal.aliases ?? [])].map((name) => name.trim().toLowerCase()),
+    );
+    const added = checkedTitles.filter(
+      (title) => !known.has(title.trim().toLowerCase()) && sameCareerRole(title, proposal.title),
+    );
+    return added.length
+      ? { ...proposal, aliases: [...(proposal.aliases ?? [proposal.title]), ...added] }
+      : proposal;
+  });
+}
+
+function completedCheckTitles(deps: RouteDeps, candidateId: string): string[] {
+  return (deps.candidateStore.roleSkillAssessments?.list(candidateId) ?? [])
+    .filter((run) => run.status === 'complete' && run.completedAt)
+    .map((run) => run.roleTitle);
 }
 
 export async function readRoleContext(
@@ -211,13 +243,16 @@ export async function readRoleContext(
   const workplaceRefs = workplaceMemoryRefs(candidateStore, candidateId);
 
   return {
-    proposals: buildRoleProposals({
-      matched,
-      named,
-      candidateSkills: confirmedSkills,
-      workplaceRefs,
-      ...(preferences ? { preferences } : {}),
-    }),
+    proposals: withCheckedRoleAliases(
+      buildRoleProposals({
+        matched,
+        named,
+        candidateSkills: confirmedSkills,
+        workplaceRefs,
+        ...(preferences ? { preferences } : {}),
+      }),
+      completedCheckTitles(deps, candidateId),
+    ),
     matched,
     poolSize: matched.length,
     namedBy,
