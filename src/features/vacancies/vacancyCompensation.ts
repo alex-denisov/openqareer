@@ -36,6 +36,10 @@ export function formatCompensationCompact(salary: Salary): string {
   if (!salary || (salary.from === undefined && salary.to === undefined)) {
     return 'не указана';
   }
+  // Himalayas отдаёт одну сумму как from = to: «€500–500 тыс.» читается как ошибка (29.10).
+  if (salary.from !== undefined && salary.from === salary.to) {
+    return withCurrency(thousandsAmount(salary.from), salary.currency);
+  }
   if (salary.from !== undefined && salary.to !== undefined) {
     return withCurrency(
       `${thousandsAmount(salary.from)}–${thousandsAmount(salary.to)}`,

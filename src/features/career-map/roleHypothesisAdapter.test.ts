@@ -117,6 +117,24 @@ describe('mapProposedRoleToCareerRole (B445)', () => {
     ]);
   });
 
+  it('проверка навыков, пройденная под другим названием роли, остаётся за ролью (29.10)', () => {
+    const role = mapProposedRoleToCareerRole(
+      {
+        ...observed(),
+        title: 'Chief Operating Officer',
+        aliases: ['Chief Operating Officer', 'Операционный директор (COO)'],
+      },
+      {
+        acceptedTitle: null,
+        offersDismissed: [],
+        checkedTitles: ['Операционный директор (COO)'],
+        checkedSkills: { 'Операционный директор (COO)': ['Управление рисками'] },
+      },
+    );
+    expect(role.status).toBe('skills_checked');
+    expect(role.confirmedItems).toContainEqual({ text: 'Управление рисками', source: 'check' });
+  });
+
   it('роль без вакансий — гипотеза без чисел и без даты', () => {
     const role = mapProposedRoleToCareerRole(
       { ...observed(), confirmation: { state: 'not-found' } },

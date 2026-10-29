@@ -11,7 +11,12 @@ type ProfileReader = Pick<CandidateStore, 'getSnapshot' | 'getCandidateWorkspace
  * 40 тысяч результатов из-за опечатки в «о себе».
  */
 export function vacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
-  return stampOf('b580-r', snapshot.memory.filter(isVacancyFitEvidence), snapshot, workspace);
+  return stampOf('b580-r2', snapshot.memory.filter(isVacancyFitEvidence), snapshot, workspace, false);
+}
+
+/** Отпечаток B580-r с названиями ролей: по нему находится процент, посчитанный до 29.10. */
+export function roleScopedVacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
+  return stampOf('b580-r', snapshot.memory.filter(isVacancyFitEvidence), snapshot, workspace, true);
 }
 
 /**
@@ -19,7 +24,7 @@ export function vacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: R
  * reset all percents. Kept only to find results stored under it.
  */
 export function previousVacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
-  return stampOf('b580', snapshot.memory, snapshot, workspace);
+  return stampOf('b580', snapshot.memory, snapshot, workspace, true);
 }
 
 function stampOf(
@@ -27,6 +32,7 @@ function stampOf(
   memory: CandidateSnapshot['memory'],
   snapshot: CandidateSnapshot,
   workspace: ReturnType<ProfileReader['getCandidateWorkspace']>,
+  withRoles: boolean,
 ): string {
   const draft = snapshot.resume?.draft;
   const compared = draft
@@ -45,7 +51,11 @@ function stampOf(
         regions: workspace.regions,
         targetDirection: workspace.targetDirection,
         campaign: campaign
-          ? { roles: campaign.roles, regions: campaign.regions, remoteOnly: campaign.remoteOnly ?? false, careerRoles: campaign.careerRoles ?? [] }
+          // Названия ролей в новом отпечатке нет: роль сверяют ворота role и level, а переименование
+          // ролей моделью пересчитывало все проценты (29.10: Киров 100 % → 25 %).
+          ? withRoles
+            ? { roles: campaign.roles, regions: campaign.regions, remoteOnly: campaign.remoteOnly ?? false, careerRoles: campaign.careerRoles ?? [] }
+            : { regions: campaign.regions, remoteOnly: campaign.remoteOnly ?? false }
           : null,
       }
     : null;

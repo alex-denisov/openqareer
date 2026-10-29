@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { currentVacancyFitProfileValidator, vacancyFitProfileStamp } from './vacancyFitProfileStamp';
+import {
+  currentVacancyFitProfileValidator,
+  roleScopedVacancyFitProfileStamp,
+  vacancyFitProfileStamp,
+} from './vacancyFitProfileStamp';
 
 const snapshot = { memory: [{ id: 'f1', statement: 'Built payments' }], resume: null } as never;
 function workspace(visit: string, roles = ['Head of Engineering']) {
@@ -13,10 +17,19 @@ describe('vacancyFitProfileStamp', () => {
     );
   });
 
-  it('changes when what the match depends on changes', () => {
-    expect(vacancyFitProfileStamp(snapshot, workspace('2026-10-20T01:00:00.000Z'))).not.toBe(
+  it('keeps the stamp when the roles are renamed: role and level gates check them (29.10)', () => {
+    expect(vacancyFitProfileStamp(snapshot, workspace('2026-10-20T01:00:00.000Z'))).toBe(
       vacancyFitProfileStamp(snapshot, workspace('2026-10-20T01:00:00.000Z', ['CTO'])),
     );
+    expect(roleScopedVacancyFitProfileStamp(snapshot, workspace('x'))).not.toBe(
+      roleScopedVacancyFitProfileStamp(snapshot, workspace('x', ['CTO'])),
+    );
+  });
+
+  it('changes when what the match depends on changes', () => {
+    const other = { memory: [{ id: 'f1', kind: 'fact', status: 'confirmed', statement: 'Built lending', sourceMessageIds: ['m1'], sensitive: false }], resume: null } as never;
+    const same = { memory: [{ id: 'f1', kind: 'fact', status: 'confirmed', statement: 'Built payments', sourceMessageIds: ['m1'], sensitive: false }], resume: null } as never;
+    expect(vacancyFitProfileStamp(same, workspace('x'))).not.toBe(vacancyFitProfileStamp(other, workspace('x')));
   });
 
   it('keeps the stamp when the consultant adds a hypothesis or an open question (B580-r)', () => {
@@ -123,9 +136,10 @@ describe('vacancyFitProfileStamp', () => {
       expect(
         stamp(candidate({ contact: { ...draft.candidate.contact, location: 'Берлин' } })),
       ).not.toBe(before);
+      // 29.10: renamed roles keep the stamp; the role and level gates compare them.
       expect(
         stamp(draft, { ...base, campaign: { ...base.campaign, roles: ['VP Engineering'] } }),
-      ).not.toBe(before);
+      ).toBe(before);
     });
   });
 });

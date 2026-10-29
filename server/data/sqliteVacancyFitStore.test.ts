@@ -165,6 +165,18 @@ describe('jobs queued by another release (B562-r)', () => {
     database.close();
   });
 
+  it('carries a result stored under the stamp with role names to the stamp without them (29.10)', () => {
+    const { database, store } = setup();
+    const old = { ...input(), profileContextHash: 'stamp-with-role-names' };
+    store.putCache(old, evaluateVacancyFit(old), now);
+    const current = { ...input(), profileContextHash: 'stamp-without-roles', roleScopedProfileContextHash: 'stamp-with-role-names' };
+
+    expect(store.getCache(current)?.coveragePercent).toBe(100);
+    expect(store.getCache({ ...current, roleScopedProfileContextHash: undefined })?.coveragePercent).toBe(100);
+    expect(store.getCache({ ...current, profileContextHash: 'renamed', roleScopedProfileContextHash: 'stamp-with-other-roles' })).toBeUndefined();
+    database.close();
+  });
+
   it('a consultant hypothesis or open question does not move the cache key (B580-r)', () => {
     const { database, store } = setup();
     const base = input();

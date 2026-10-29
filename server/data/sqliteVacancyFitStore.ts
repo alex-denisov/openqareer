@@ -92,9 +92,10 @@ export class SqliteVacancyFitStore {
     if (current) return current;
     // B580: the stamp formula changed; a result under an earlier stamp moves to the new key once,
     // instead of 42K model calls on deploy. Earlier keys hashed every memory row (B580-r).
-    const earlier = [input.previousProfileContextHash, input.legacyProfileContextHash]
-      .filter((stamp): stamp is string => Boolean(stamp))
-      .map((stamp) => this.readCache({ ...input, profileContextHash: stamp }, 'all'))
+    // 29.10: the B580-r stamp had role names in it and keyed evidence facts, like the current one.
+    const earlier = ([[input.roleScopedProfileContextHash, 'evidence'], [input.previousProfileContextHash, 'all'], [input.legacyProfileContextHash, 'all']] as const)
+      .filter((entry): entry is readonly [string, VacancyFitFactScope] => Boolean(entry[0]))
+      .map(([stamp, scope]) => this.readCache({ ...input, profileContextHash: stamp }, scope))
       .find(Boolean);
     if (!earlier) return undefined;
     this.putCache(input, earlier, earlier.calculatedAt);

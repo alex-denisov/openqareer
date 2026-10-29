@@ -18,6 +18,15 @@ describe('formatCompensationCompact (B446-g4: thousands, ₽ at the end)', () =>
     expect(formatCompensationCompact({ from: 150000, currency: 'rub' })).toBe('от 150 тыс. ₽');
   });
 
+  it('одинаковые границы — одна сумма, а не «500–500 тыс.» (29.10)', () => {
+    expect(formatCompensationCompact({ from: 500000, to: 500000, currency: 'EUR' })).toBe(
+      '€500 тыс.',
+    );
+    expect(formatCompensationCompact({ from: 500000, to: 500000, currency: 'RUR' })).toBe(
+      '500 тыс. ₽',
+    );
+  });
+
   it('formats an upper bound only', () => {
     expect(formatCompensationCompact({ to: 220000, currency: 'usd' })).toBe('до $220 тыс.');
   });

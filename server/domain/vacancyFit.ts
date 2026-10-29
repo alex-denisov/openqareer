@@ -15,6 +15,8 @@ export interface VacancyFitInput {
   readonly legacyProfileContextHash?: string;
   /** B580 stamp over every memory row: its results are read once and moved to the evidence-only key. */
   readonly previousProfileContextHash?: string;
+  /** Stamp with role names (before 29.10): its result moves to the current key once. */
+  readonly roleScopedProfileContextHash?: string;
   readonly requirements: readonly VacancyRequirement[];
   readonly facts: readonly VacancyFitFact[];
   /** Authoritative rule/owner evidence gates, never model-generated probabilities. */
