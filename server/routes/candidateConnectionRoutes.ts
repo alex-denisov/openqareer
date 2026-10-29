@@ -21,8 +21,12 @@ import { finishMatchedVacancies } from './matchedVacancyRoutes';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
-import { platformPathsInto, syncMemberNetwork } from './networkIndexFeed';
-import { platformReferralFor } from './referralRequestFeed';
+import {
+  CONNECTION_SCOPE_ID,
+  ensureMemberNetwork,
+  platformMembersAt,
+  syncMemberNetwork,
+} from './networkIndexFeed';
 import { wantedPoolVacancy } from './wantedPoolVacancy';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { CandidateSnapshot } from '../data/candidateStore';
@@ -34,7 +38,6 @@ import {
   unreachedImportedContacts,
 } from './connectionImportMerge';
 
-const CONNECTION_SCOPE_ID = '__b448_candidate_connections__';
 const CONNECTION_IMPORT_RECEIPT_ID = '__b448_linkedin_import_receipt__';
 // A whole LinkedIn network: run 9 read 1 888 connections, and circles need
 // every contact with a company (B448). 2 000 contacts are ~600 KB, inside
@@ -180,6 +183,7 @@ async function handleListConnectionContacts(
   if (!repository) return undefined;
   const query = contactListQuerySchema.parse(request.query ?? {});
   const records = connectionRecords(repository, candidate.id);
+  ensureMemberNetwork(deps, candidate.id, records, readConnectionMetadata, request.log);
   const contacts = records.flatMap((record) => toConnectionContactView(record) ?? []);
   const items = contacts.slice(query.offset, query.offset + query.limit);
   return {
@@ -466,6 +470,7 @@ async function connectionCirclesResponse(
   request: FastifyRequest,
 ) {
   const stored = connectionRecords(repository, candidateId);
+  ensureMemberNetwork(deps, candidateId, stored, readConnectionMetadata, request.log);
   const importReceipt = readImportReceipt(stored);
   const contacts = stored.flatMap((record) => toDomainConnection(record) ?? []);
   const recruiters = repository
@@ -484,8 +489,7 @@ async function connectionCirclesResponse(
     recruiters,
     contacts,
     linkedinContactsImported: importReceipt !== null,
-    platformPaths: platformPathsInto(deps, candidateId, matched.cluster.canonicalCompany).paths,
-    platformReferral: platformReferralFor(deps, candidateId, matched.cluster.canonicalCompany),
+    platformMembers: platformMembersAt(deps, candidateId, matched.cluster.canonicalCompany, request.log),
   });
   return {
     data: {

@@ -16,8 +16,6 @@ import {
   withDeps,
 } from './helpers';
 import { cancelFootprintRunForUser } from '../osint/candidateFootprintWorker';
-import { connectionRecords, readConnectionMetadata } from './candidateConnectionRoutes';
-import { forgetMemberNetwork, syncMemberNetwork } from './networkIndexFeed';
 
 const postConsentSchema = z.object({
   versionId: z.string().min(1),
@@ -60,24 +58,6 @@ function validateConsentSubmission(
     };
   }
   return { versionId: parsed.data.versionId };
-}
-
-/** B561: the candidate behind the session, whose LinkedIn contacts the consent covers. */
-function sessionCandidateId(deps: RouteDeps, request: FastifyRequest): string | null {
-  return authenticateSession(request, deps.authService, deps.config)?.candidate?.id ?? null;
-}
-
-/** Given: the contacts already read join the shared index at once. */
-function shareStoredContacts(deps: RouteDeps, request: FastifyRequest): void {
-  const candidateId = sessionCandidateId(deps, request);
-  if (!candidateId || !deps.recruiterContactsRepo) return;
-  syncMemberNetwork(
-    deps,
-    candidateId,
-    connectionRecords(deps.recruiterContactsRepo, candidateId),
-    readConnectionMetadata,
-    request.log,
-  );
 }
 
 /** Согласие даёт только вошедший пользователь: токен кандидата без строки в users не годится. */
@@ -188,7 +168,6 @@ async function handlePostConsent(
     capability,
     versionId: validation.versionId,
   });
-  if (capability === 'linkedin_contacts') shareStoredContacts(deps, request);
   return {
     data: { capability, granted: true, consent },
     meta: { requestId: request.id },
@@ -228,10 +207,6 @@ async function handleDeleteConsent(
     deps.candidateReputationRepo?.deleteFootprintAuditsByUserId(userId);
   }
   const consent = deps.capabilityConsentStore.revokeConsent(userId, capability);
-  if (capability === 'linkedin_contacts') {
-    const candidateId = sessionCandidateId(deps, request);
-    if (candidateId) forgetMemberNetwork(deps, candidateId);
-  }
   return {
     data: {
       capability,

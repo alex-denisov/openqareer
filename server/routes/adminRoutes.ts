@@ -1,4 +1,5 @@
 import { readPreparedSeoSources } from '../seo/preparedSeoSources';
+import { forgetMemberNetwork } from './networkIndexFeed';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
@@ -137,8 +138,7 @@ async function handleDeleteUser(deps: RouteDeps, request: FastifyRequest, reply:
     if (user?.candidateId) {
       cancelFootprintRunForCandidate(user.candidateId);
       deps.candidateReputationRepo?.deleteFootprintAuditsByCandidateId(user.candidateId);
-      deps.networkIndexRepo?.deleteMemberEdges(user.candidateId);
-      deps.referralRequestRepo?.deleteForCandidate(user.candidateId);
+      forgetMemberNetwork(deps, user.candidateId, request.log);
     }
     return { data: { success: true }, meta: { requestId: request.id } };
   } catch (err: unknown) {

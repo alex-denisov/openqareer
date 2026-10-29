@@ -1,13 +1,9 @@
 import { recordCandidateGoal, readSeoGoalSummary } from './seoGoalRepository';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type {
-  AssessmentId,
-  AssessmentResult,
-  AssessmentSubmission,
-} from '../domain/assessment';
+import type { AssessmentId, AssessmentResult, AssessmentSubmission } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
-import type { ResumeDraft } from '../domain/resumeDraft';
+import type { ResumeCandidateInput, ResumeDraft } from '../domain/resumeDraft';
 import type {
   ResumeVersionContent,
   ResumeVersionCreateResult,
@@ -408,6 +404,10 @@ export class SqliteCandidateStore implements CandidateStore {
 
   failTurn(candidateId: string, idempotencyKey: string, errorCode: string): void {
     this.conversations.failTurn(candidateId, idempotencyKey, errorCode);
+  }
+
+  getResumeCandidate(candidateId: string): ResumeCandidateInput | null {
+    return this.resumeRepository.get(candidateId)?.draft.candidate ?? null;
   }
 
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot {

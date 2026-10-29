@@ -7,7 +7,6 @@ import {
 } from '@phosphor-icons/react';
 import { registerEscapeLayer } from '../shell/escapeLayers';
 import type { CandidateConnection } from '../coach/coachApi';
-import { CAPABILITY_CONSENT_DOCUMENTS } from '../legal/capabilityConsents';
 
 interface DialogScrimProps {
   readonly children: ReactNode;
@@ -164,15 +163,6 @@ interface ConnectionModalProps {
    * `undefined` — still loading or unknown, so the line is left out.
    */
   readonly contacts?: LinkedInContactsSummary | null;
-  /** LinkedIn only: the «пути для других кандидатов» consent; absent until its state is read (B561). */
-  readonly contactsConsent?: LinkedInContactsConsentSwitch;
-}
-
-export interface LinkedInContactsConsentSwitch {
-  readonly granted: boolean;
-  readonly busy: boolean;
-  readonly error?: string | null;
-  readonly onToggle: () => void;
 }
 
 export interface LinkedInContactsSummary {
@@ -191,56 +181,6 @@ function ContactsLine({ contacts }: { readonly contacts?: LinkedInContactsSummar
   );
 }
 
-const contactsConsentText = CAPABILITY_CONSENT_DOCUMENTS.linkedin_contacts;
-
-/**
- * B561: the consent that lets other candidates see paths through this member's
- * contacts. Off, it shows the full consent text and asks to agree; on, it is a
- * switch that revokes at once.
- */
-function ContactsConsentSwitch({ consent }: { readonly consent?: LinkedInContactsConsentSwitch }) {
-  if (!consent) return null;
-  return (
-    <div className="career-account-rows">
-      {consent.granted ? (
-        <label className="career-account-row">
-          <span className="career-account-row-label">Пути для других кандидатов</span>
-          <input
-            type="checkbox"
-            checked
-            disabled={consent.busy}
-            onChange={consent.onToggle}
-            aria-label="Пути для других кандидатов через мои контакты"
-          />
-        </label>
-      ) : (
-        <>
-          <span className="career-account-row-label">Пути для других кандидатов</span>
-          <p className="career-account-row-desc">{contactsConsentText.title}</p>
-          <ul className="career-account-row-desc">
-            {contactsConsentText.items.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className="career-btn"
-            disabled={consent.busy}
-            onClick={consent.onToggle}
-          >
-            Согласиться и включить
-          </button>
-        </>
-      )}
-      {consent.error ? (
-        <p className="career-account-row-desc" role="alert">
-          {consent.error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
 const connectOnlyText = (platform: string) =>
   `Профиль собран из другой площадки, данные ${platform} в него не добавлялись. Площадка подключена для откликов и сведений о вакансиях.`;
 
@@ -254,7 +194,6 @@ function ConnectOnlyModal({
   onReimport,
   onReplaceProfile,
   contacts,
-  contactsConsent,
 }: Omit<ConnectionModalProps, 'connection' | 'connectOnly'> & {
   readonly platform: 'hh.ru' | 'LinkedIn';
   readonly titleId: string;
@@ -271,7 +210,6 @@ function ConnectOnlyModal({
         <p className="career-account-row-desc">{connectOnlyText(platform)}</p>
         <ContactsLine contacts={contacts} />
       </div>
-      <ContactsConsentSwitch consent={contactsConsent} />
       <div className="career-account-dialog-actions">
         <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
           Отключить
@@ -337,24 +275,14 @@ export function AccountLinkedInModal({
   connectOnly = false,
   onReplaceProfile,
   contacts,
-  contactsConsent,
 }: ConnectionModalProps) {
   if (connectOnly) {
-    const handlers = {
-      busy,
-      onClose,
-      onDisconnect,
-      onReimport,
-      onReplaceProfile,
-      contacts,
-      contactsConsent,
-    };
+    const handlers = { busy, onClose, onDisconnect, onReimport, onReplaceProfile, contacts };
     return <ConnectOnlyModal platform="LinkedIn" titleId="li-modal-title" {...handlers} />;
   }
   return (
     <AccountFormDialog title="LinkedIn" titleId="li-modal-title" onClose={onClose}>
       <LinkedInModalContent connection={connection} contacts={contacts} />
-      <ContactsConsentSwitch consent={contactsConsent} />
       <div className="career-account-dialog-actions">
         <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
           Отключить

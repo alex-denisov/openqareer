@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { forgetMemberNetwork } from './networkIndexFeed';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -136,15 +137,18 @@ async function handleDisconnect(deps: RouteDeps, request: FastifyRequest, reply:
   );
   if (!candidate) return;
   const platform = (request.params as { platform: string }).platform;
+  const connectionRemoved = deps.candidateStore.deleteNativeSourceConnection(
+    candidate.id,
+    platform as 'hh' | 'linkedin',
+  );
+  // B561: a member without LinkedIn connected is no longer anyone's path.
+  if (platform === 'linkedin') forgetMemberNetwork(deps, candidate.id, request.log);
   return {
     data: {
       platform,
       status: 'disconnected',
       accessMode: 'native_session_snapshot',
-      connectionRemoved: deps.candidateStore.deleteNativeSourceConnection(
-        candidate.id,
-        platform as 'hh' | 'linkedin',
-      ),
+      connectionRemoved,
       providerSession: 'not_managed',
       importedData: 'retained',
     },

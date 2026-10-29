@@ -1176,3 +1176,39 @@
 .vacancies-screen-requirements-conditions {
   display: block;
 }
+
+/* B561: platform members in circle 2 — name, LinkedIn link, a first message to copy. */
+.vacancy-platform-members {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.vacancy-platform-members ul {
+  display: grid;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vacancy-platform-members li {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.vacancy-platform-members a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-accent);
+  text-decoration: none;
+}
+
+.vacancy-platform-message {
+  padding: var(--career-space-2);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}

@@ -51,6 +51,7 @@ import type {
 } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type {
+  ResumeCandidateInput,
   ResumeDraft,
   ResumeFactRewriteRecord,
   ResumePendingFactRewrite,
@@ -482,6 +483,8 @@ export interface CandidateStore {
     update: (result: CoachTurnResult) => CoachTurnResult,
   ): boolean;
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot;
+  /** B561: only the resume's candidate block (name, contacts), without the whole snapshot. */
+  getResumeCandidate(candidateId: string): ResumeCandidateInput | null;
   /** Minimal language facts from the candidate's latest stored LinkedIn import; never calls LinkedIn. */
   getLinkedInLanguageImport(candidateId: string): LinkedInLanguageImportSnapshot | null;
   getMessages(
