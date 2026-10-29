@@ -19,6 +19,20 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
       careerRoles: { roles: CAREER_FIXTURE_PROPOSED_ROLES, acceptedTitle: 'Head of Engineering' },
     });
     await seedReadabilityWorkspace(page);
+    // 29.10: the button needs a finished skill check of the role.
+    await page.route('**/api/v1/candidate/role-skill-assessments/checked-roles', (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            {
+              roleTitle: 'Director of Engineering',
+              completedAt: '2026-10-05T08:00:00.000Z',
+              confirmedSkills: [],
+            },
+          ],
+        },
+      }),
+    );
 
     // 1440
     await page.setViewportSize({ width: 1440, height: 900 });

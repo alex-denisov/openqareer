@@ -24,7 +24,7 @@ function useOfferedRole() {
         checkedSkills: store.checkedSkills,
       }).find(
         (item) =>
-          item.status === 'skills_checked' &&
+          (item.status === 'skills_checked' || item.confirmedItems.length > 0) &&
           !item.alreadyChosen &&
           !item.offerDismissed &&
           !store.rejected.includes(item.id) &&

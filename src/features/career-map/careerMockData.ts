@@ -78,7 +78,11 @@ export const CAREER_FIXTURE_PROPOSED_ROLES: readonly ProposedRole[] = [
 
 export const DEFAULT_MOCK_ROLES: readonly CareerRoleModel[] = mapProposedRolesToCareerRoles(
   CAREER_FIXTURE_PROPOSED_ROLES,
-  { acceptedTitle: 'Head of Engineering', offersDismissed: [] },
+  {
+    acceptedTitle: 'Head of Engineering',
+    offersDismissed: [],
+    checkedTitles: ['Director of Engineering', 'Head of Engineering'],
+  },
 );
 
 export const DEFAULT_SEARCH_CONDITIONS: SearchConditionsDraft = {
