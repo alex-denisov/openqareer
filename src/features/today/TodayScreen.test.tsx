@@ -165,23 +165,46 @@ describe('TodayScreen (ACC-A-1)', () => {
     expect(html).toContain('Дополнить профиль');
   });
 
-  it('hides the current consultant action when the server snapshot says it is deferred', () => {
+  it('hides the current consultant action when the server snapshot says it is closed today', () => {
+    for (const resolution of [undefined, 'accepted', 'dismissed'] as const) {
+      const html = mobileTodayMarkup(
+        renderTodayScreen({
+          consultantAction: action,
+          snapshot: {
+            ...snapshot,
+            todayActionDeferral: {
+              actionId: todayActionId(action),
+              deferredThroughDate: '2026-10-17',
+              ...(resolution ? { resolution } : {}),
+            },
+          },
+        }),
+      );
+
+      expect(html).toContain('Решение на сегодня закрыто');
+      expect(html).not.toContain('Нет проверенного следующего шага');
+      expect(html).not.toContain('Подтвердите размер команды');
+      expect(html).not.toContain('Отложить до завтра');
+    }
+  });
+
+  it('shows the decision again when the server state belongs to another decision id', () => {
     const html = mobileTodayMarkup(
       renderTodayScreen({
         consultantAction: action,
         snapshot: {
           ...snapshot,
           todayActionDeferral: {
-            actionId: todayActionId(action),
+            actionId: 'f'.repeat(16),
             deferredThroughDate: '2026-10-17',
+            resolution: 'dismissed',
           },
         },
       }),
     );
 
-    expect(html).toContain('Нет проверенного следующего шага');
-    expect(html).not.toContain('Подтвердите размер команды');
-    expect(html).not.toContain('Отложить до завтра');
+    expect(html).toContain('Подтвердите размер команды');
+    expect(html).not.toContain('Решение на сегодня закрыто');
   });
 
   it('does not display a recruiter name as the company in a mobile queue row', () => {
@@ -293,8 +316,11 @@ describe('TodayScreen (ACC-A-1)', () => {
 
     expect(funnel).toContain('class="is-here"');
     expect(funnel).toContain('aria-current="step"');
-    expect(funnel).toContain('Откликов меньше 10 (n = 7): выводов о конверсии нет.');
-    expect(funnel).toMatch(/Данные на \d{2}\.\d{2} \d{2}:\d{2}\./u);
+    const footnote = funnel.slice(funnel.indexOf('class="pm-foot"'));
+    expect(footnote).not.toMatch(/n = 7|Данные на/u);
+    const section = html.slice(html.indexOf('aria-label="Воронка за 30 дней"'));
+    expect(section).toContain('role="tooltip"');
+    expect(section).toMatch(/n = 7 откликов, \d{2}\.\d{2} \d{2}:\d{2}/u);
     expect(funnel).toContain(
       'Нет проверенных данных по этапам: «Найдено», «В избранном», «Ответов», «Офферов».',
     );

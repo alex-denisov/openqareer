@@ -10,6 +10,9 @@ export const todayDecisionSelectionSchema = z
 
 export const todayActionIdSchema = z.string().regex(/^[a-f0-9]{16}$/u);
 
+/** Без поля — «отложено на сегодня»; accepted/dismissed — решение дня закрыто. */
+export const todayActionResolutionSchema = z.enum(['accepted', 'dismissed']);
+
 export const todayActionDeferralSchema = z
   .object({
     actionId: todayActionIdSchema,
@@ -20,6 +23,7 @@ export const todayActionDeferralSchema = z
         const parsed = new Date(`${date}T00:00:00.000Z`);
         return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
       }),
+    resolution: todayActionResolutionSchema.optional(),
   })
   .strict();
 
@@ -29,6 +33,7 @@ export const todayActionDeferralInputSchema = z
   .object({
     actionId: todayActionIdSchema,
     tz: z.string().trim().min(1).max(100).refine(isIanaTimeZone),
+    resolution: todayActionResolutionSchema.optional(),
   })
   .strict();
 
