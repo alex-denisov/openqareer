@@ -1,16 +1,14 @@
 /**
  * The one percent the vacancy row, the expanded vacancy and the order show (mockup
- * 4-vakansii-procent, 28.10). The server computes it in `server/domain/vacancyFit.ts`:
- * round(skill requirements with profile evidence / all skill requirements × 100), capped at
- * 100 − 10 per unconfirmed role, region or work permit.
+ * 4-vakansii-procent, 29.10). The server computes it in `server/domain/vacancyFit.ts`:
+ * round((checked + 0.5 × stated but unchecked) / all skill requirements × 100).
  */
-import type { VacancyFitResult, VacancyFitView } from './vacancyFit';
+import type { VacancyFitView } from './vacancyFit';
 
 /** Fewer skill requirements give no percent (B510-r): never «100 %» from 1 of 1. */
 export const MIN_FIT_SKILL_REQUIREMENTS = 3;
-/** Key conditions that lower the ceiling when unconfirmed; must match the server's KEY_GATES. */
-export const FIT_KEY_GATES = ['role', 'region', 'workAuthorization'] as const;
-export const FIT_UNCONFIRMED_GATE_PENALTY = 10;
+/** A requirement stated in the profile but not confirmed by a skill check (owner 29.10). */
+export const STATED_REQUIREMENT_CREDIT = 0.5;
 
 export type VacancyFitTier = 'hi' | 'good' | 'mid' | 'low';
 
@@ -30,11 +28,6 @@ export function vacancyFitTier(percent: number): VacancyFitTier {
   if (percent >= 60) return 'good';
   if (percent >= 40) return 'mid';
   return 'low';
-}
-
-export function vacancyFitCeiling(result: Pick<VacancyFitResult, 'gates'>): number {
-  const unconfirmed = FIT_KEY_GATES.filter((name) => result.gates?.[name]?.status !== 'matched');
-  return 100 - FIT_UNCONFIRMED_GATE_PENALTY * unconfirmed.length;
 }
 
 /**

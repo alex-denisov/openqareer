@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VACANCY_SORT_DIRECTIONS, VACANCY_SORT_KEYS } from '../../shared/vacancySort';
 import { CANDIDATE_REGIONS } from '../../src/features/workspace/candidateRegions';
 import { MATCHED_VACANCY_FACET_LEVELS } from '../../shared/matchedVacancyFacets';
 import { matchesLocationSelection } from '../../shared/locationTree';
@@ -26,7 +27,12 @@ export const matchedVacanciesQuerySchema = z.object({
   /** B446-r: ключи дерева «Локаций» — фильтр на сервере, чтобы число выдачи было одно. */
   place: repeated(z.string().min(1).max(200)),
   placeRemote: z.literal('1').optional(),
-  sort: z.enum(['fit', 'freshness']).optional(),
+  /** Owner 29.10: «Деньги» or «Совпадение» headers; an old client's «freshness» falls back to the saved sort. */
+  sort: z.preprocess(
+    (value) => (value === 'freshness' ? undefined : value),
+    z.enum(VACANCY_SORT_KEYS).optional(),
+  ),
+  dir: z.enum(VACANCY_SORT_DIRECTIONS).optional(),
 });
 export type MatchedVacancyFilters = z.infer<typeof matchedVacanciesQuerySchema>;
 

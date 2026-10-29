@@ -25,14 +25,17 @@ describe('fitRequirementChips', () => {
       requirements: [requirement('a', 'Kafka'), requirement('b', 'Go'), requirement('c', 'SQL')],
       result: {
         assessments: [
-          { requirementId: 'a', status: 'matched', evidence: [] },
+          { requirementId: 'a', status: 'matched', evidence: [], checked: true },
           { requirementId: 'b', status: 'unmatched', evidence: [] },
+          { requirementId: 'c', status: 'matched', evidence: [] },
         ],
       },
     } as unknown as VacancyFitView;
+    // Owner 29.10: green — checked, yellow — stated without a check, outline — missing.
     expect(fitRequirementChips(view)).toEqual({
       confirmed: ['Kafka'],
-      unconfirmed: ['Go', 'SQL'],
+      unconfirmed: ['Go'],
+      stated: ['SQL'],
       quotes: {},
     });
   });
@@ -55,6 +58,7 @@ describe('fitRequirementChips', () => {
     expect(fitRequirementChips(view)).toEqual({
       confirmed: [],
       unconfirmed: ['Kafka'],
+      stated: [],
       quotes: { Kafka: 'Strong Kafka skills in event-driven systems at scale' },
     });
   });
@@ -67,6 +71,7 @@ describe('fitRequirementChips', () => {
     expect(fitRequirementChips(view)).toEqual({
       confirmed: [],
       unconfirmed: ['Kafka'],
+      stated: [],
       quotes: {},
     });
   });

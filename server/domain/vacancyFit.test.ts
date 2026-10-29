@@ -12,6 +12,8 @@ export function fitInput(candidateId = 'candidate-a'): VacancyFitInput {
       { id: 's3', text: 'SQL', sourceQuote: 'SQL', origin: 'structural', importance: 'medium', kind: 'other', hard: false, stopFactor: false },
     ],
     facts: [{ id: 'f1', candidateId, kind: 'fact', status: 'confirmed', statement: 'I built TypeScript services on Node with SQL.', sourceMessageIds: ['m1'], sensitive: false }],
+    // f1 came from a skill check, so every requirement it confirms counts in full (owner 29.10).
+    checkedFactIds: ['f1'],
     gates: { role: { status: 'matched', reason: 'role checked' }, level: { status: 'matched', reason: 'level checked' }, region: { status: 'matched', reason: 'unrestricted' }, workAuthorization: { status: 'matched', reason: 'checked' }, workFormat: { status: 'matched', reason: 'checked' } },
     assessments: [
       { requirementId: 'r1', status: 'matched', evidence: [{ factId: 'f1', quote: 'TypeScript services' }] },
@@ -22,6 +24,32 @@ export function fitInput(candidateId = 'candidate-a'): VacancyFitInput {
 }
 
 describe('verified vacancy fit coverage', () => {
+  describe('half credit (owner 29.10)', () => {
+    const facts = (input: VacancyFitInput) => [...input.facts, { ...input.facts[0], id: 'f2', statement: 'Stated SQL in the profile.' }];
+    const assessments = [
+      { requirementId: 'r1', status: 'matched' as const, evidence: [{ factId: 'f1', quote: 'TypeScript services' }] },
+      { requirementId: 's2', status: 'matched' as const, evidence: [{ factId: 'f2', quote: 'SQL' }] },
+      { requirementId: 's3', status: 'unmatched' as const, evidence: [{ factId: 'f2', quote: 'SQL' }] },
+    ];
+    it('counts a checked requirement 1, a stated one 0.5 and a missing one 0', () => {
+      const input = fitInput();
+      const result = evaluateVacancyFit({ ...input, facts: facts(input), assessments });
+      expect(result.coveragePercent).toBe(50);
+      expect(result.coverage).toEqual({ matched: 2, total: 3, unknown: 0, checked: 1 });
+      expect(result.assessments.map((item) => item.checked ?? false)).toEqual([true, false, false]);
+    });
+    it('treats every requirement as unchecked without a skill check', () => {
+      const result = evaluateVacancyFit({ ...fitInput(), checkedFactIds: [] });
+      expect(result.coveragePercent).toBe(50);
+      expect(result.coverage.checked).toBe(0);
+    });
+    it('keeps the profile key unchanged without checked facts and changes it with them', () => {
+      const input = fitInput();
+      const plain = vacancyFitFingerprint({ ...input, checkedFactIds: [] });
+      expect(vacancyFitFingerprint({ ...input, checkedFactIds: undefined })).toEqual(plain);
+      expect(vacancyFitFingerprint(input).profileHash).not.toBe(plain.profileHash);
+    });
+  });
   it('reports equal evidence coverage separately from required coverage', () => {
     const input = fitInput();
     const result = evaluateVacancyFit(input);
@@ -43,8 +71,8 @@ describe('verified vacancy fit coverage', () => {
     const gates = { ...input.gates, region: { status: 'unknown' as const, reason: 'not chosen' }, workAuthorization: { status: 'unknown' as const, reason: 'not stated' } };
     const result = await assessVacancyFit({ ...input, gates, assessments: undefined }, assessor);
     expect(assessor.assess).toHaveBeenCalledTimes(1);
-    // Unconfirmed region and work permit lower the ceiling by 10 points each (B510-r).
-    expect(result.coveragePercent).toBe(80);
+    // Owner 29.10: unconfirmed gates no longer cap the percent.
+    expect(result.coveragePercent).toBe(100);
     expect(result.status).toBe('assessed');
     expect(result.dataState).toBe('partial');
     expect(result.gates.region.status).toBe('unknown');
@@ -66,7 +94,7 @@ describe('verified vacancy fit coverage', () => {
     const result = evaluateVacancyFit({ ...fitInput(), assessments: unknown });
     expect(result.reason).toBe('assessed');
     expect(result.coveragePercent).toBe(0);
-    expect(result.coverage).toEqual({ matched: 0, total: 3, unknown: 3 });
+    expect(result.coverage).toEqual({ matched: 0, total: 3, unknown: 3, checked: 0 });
     expect(result.dataState).toBe('partial');
   });
   it('without a model answer there is still no number', () => {
@@ -119,8 +147,8 @@ describe('verified vacancy fit coverage', () => {
 
     it('lists conditions apart and never counts them in the percent', () => {
       const result = evaluateVacancyFit(withEducation(fitInput()));
-      expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0 });
-      expect(result.conditionCoverage).toEqual({ matched: 1, total: 1, unknown: 0 });
+      expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0, checked: 3 });
+      expect(result.conditionCoverage).toEqual({ matched: 1, total: 1, unknown: 0, checked: 1 });
       expect(result.requiredCoverage.total).toBe(1);
     });
 
@@ -130,11 +158,11 @@ describe('verified vacancy fit coverage', () => {
       expect(isSkillRequirement({ ...education, kind: 'other', skill: undefined })).toBe(true);
     });
 
-    it('keeps 100 % only for a confirmed role, region and work permit', () => {
+    it('no longer caps the percent for an unconfirmed role, region or work permit', () => {
       const input = fitInput();
       const unknown = { status: 'unknown' as const, reason: 'not confirmed' };
       const result = evaluateVacancyFit({ ...input, gates: { ...input.gates, role: unknown, region: unknown, workAuthorization: unknown, workFormat: unknown } });
-      expect(result).toMatchObject({ coveragePercent: 70, dataState: 'partial', requiredCoverage: { percent: 70 } });
+      expect(result).toMatchObject({ coveragePercent: 100, dataState: 'partial', requiredCoverage: { percent: 100 } });
     });
   });
   it('does not score without eligible facts or requirements', async () => {
@@ -169,8 +197,9 @@ describe('imported profile facts as fit evidence (B562)', () => {
   });
 
   it('scores a vacancy against a proposed fact that came from a profile import', () => {
+    // Imported, not checked by a skill check: half credit (owner 29.10).
     const result = evaluateVacancyFit(withImported(fitInput()));
-    expect(result).toMatchObject({ reason: 'assessed', coveragePercent: 100 });
+    expect(result).toMatchObject({ reason: 'assessed', coveragePercent: 50 });
   });
   it('still refuses a proposed fact the candidate only said in chat', () => {
     const input = fitInput();
@@ -184,7 +213,7 @@ describe('imported profile facts as fit evidence (B562)', () => {
     }
   });
   it('a profile with imported evidence gets a new cache key, a confirmed-only profile keeps its key', () => {
-    const confirmed = fitInput();
+    const confirmed = { ...fitInput(), checkedFactIds: [] };
     const before = vacancyFitFingerprint(confirmed).profileHash;
     expect(vacancyFitFingerprint({ ...confirmed }).profileHash).toBe(before);
     const legacy = vacancyFitFingerprint(withImported(confirmed)).profileHash;
@@ -208,7 +237,7 @@ describe('requirement provenance on entity-encoded descriptions (B562-r)', () =>
       sourceQuote: quotes[index],
     }));
     const result = evaluateVacancyFit({ ...input, description, requirements });
-    expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0 });
+    expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0, checked: 3 });
     expect(result.coveragePercent).toBe(100);
   });
 });

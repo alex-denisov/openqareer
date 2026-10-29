@@ -1,8 +1,12 @@
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 
 export interface RequirementChips {
+  /** Green: confirmed by a skill check (owner 29.10). */
   readonly confirmed: readonly string[];
+  /** Outline: not in the profile. */
   readonly unconfirmed: readonly string[];
+  /** Yellow: stated in the profile but not checked; counts half. */
+  readonly stated?: readonly string[];
   /** Chip name → full requirement text for the tooltip (B510). */
   readonly quotes?: Readonly<Record<string, string>>;
   /** Conditions (education, language, format, work permit): listed apart, never as skill chips. */
@@ -30,18 +34,26 @@ export function isSkillRequirement(requirement: Requirement): boolean {
   return kind === 'experience' || (requirement.skill ?? (kind === undefined || kind === 'other'));
 }
 
-/** Chips for «Требования к навыкам» from the fit analysis (B523/B524): a
- *  requirement is confirmed only when a profile fact matched it. */
+/** Requirement id → matched by a skill check (true) or only stated in the profile (false). */
+export function matchedRequirements(
+  view: VacancyFitView | undefined,
+): ReadonlyMap<string, boolean> {
+  return new Map(
+    (view?.result?.assessments ?? [])
+      .filter((item) => item.status === 'matched')
+      .map((item) => [item.requirementId, item.checked === true]),
+  );
+}
+
+/** Chips for «Требования к навыкам» from the fit analysis (owner 29.10): green when a skill
+ *  check confirmed it, yellow when the profile states it unchecked, outline when it is missing. */
 export function fitRequirementChips(view: VacancyFitView | undefined): RequirementChips | null {
   if (!view || view.requirements.length === 0) return null;
-  const matched = new Set(
-    (view.result?.assessments ?? [])
-      .filter((item) => item.status === 'matched')
-      .map((item) => item.requirementId),
-  );
+  const matched = matchedRequirements(view);
   const seen = new Set<string>();
   const confirmed: string[] = [];
   const unconfirmed: string[] = [];
+  const stated: string[] = [];
   const quotes: Record<string, string> = {};
   const conditions: string[] = [];
   for (const requirement of view.requirements) {
@@ -54,10 +66,11 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
     const key = label?.toLocaleLowerCase('ru');
     if (!label || !key || seen.has(key)) continue;
     seen.add(key);
-    (matched.has(requirement.id) ? confirmed : unconfirmed).push(label);
+    const checked = matched.get(requirement.id);
+    (checked === undefined ? unconfirmed : checked ? confirmed : stated).push(label);
     if (requirement.text.trim() !== label) quotes[label] = requirement.text.trim();
   }
-  return { confirmed, unconfirmed, quotes, ...(conditions.length ? { conditions } : {}) };
+  return { confirmed, unconfirmed, stated, quotes, ...(conditions.length ? { conditions } : {}) };
 }
 
 const CONFIRMED_SKILL_PREFIX = 'Подтверждённый навык: ';

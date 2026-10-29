@@ -42,8 +42,6 @@ export interface MobileFilterSheetProps {
   readonly onReset: () => void;
   readonly onShow: () => void;
   readonly children: ReactNode;
-  /** B446-g4: на 390 порядок выбирается строкой «Порядок» в листе, а не над списком. */
-  readonly sortControl?: ReactNode;
 }
 
 function OverviewRows({
@@ -117,12 +115,6 @@ export function MobileFilterSheet(props: MobileFilterSheetProps) {
             <p className="vacancies-mobile-sheet-subtitle">{props.subtitle}</p>
           ) : null}
           <OverviewRows values={props.values} onSelectGroup={props.onSelectGroup} />
-          {props.sortControl ? (
-            <div className="vacancies-mobile-sort-row">
-              <span aria-hidden="true">Порядок</span>
-              {props.sortControl}
-            </div>
-          ) : null}
         </>
       )}
       <button type="button" className="vacancies-mobile-sheet-cta" onClick={props.onShow}>

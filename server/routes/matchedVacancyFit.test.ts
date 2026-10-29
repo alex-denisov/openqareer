@@ -49,11 +49,18 @@ function item(id: string, score: number | null, observed = '2026-10-01'): Matche
 describe('B525 whole-pool order before page slicing', () => {
   it('puts measured coverage before unknown and preserves a real zero', () => {
     const all = [item('unknown', null), item('zero', 0), item('high', 85)];
-    expect(all.sort(compareFitOrder).map((x) => x.cluster.id)).toEqual(['high', 'zero', 'unknown']);
+    expect(all.sort((a, b) => compareFitOrder(a, b)).map((x) => x.cluster.id)).toEqual([
+      'high',
+      'zero',
+      'unknown',
+    ]);
   });
   it('moves a later-page result into the first transport page', () => {
     const all = Array.from({ length: 150 }, (_, i) => item(String(i), i === 149 ? 90 : null));
-    const page = buildMatchedVacancyPage(all.sort(compareFitOrder), 0);
+    const page = buildMatchedVacancyPage(
+      all.sort((a, b) => compareFitOrder(a, b)),
+      0,
+    );
     expect(page.items[0]?.cluster.id).toBe('149');
     expect(page.nextOffset).not.toBeNull();
   });
@@ -76,7 +83,7 @@ describe('B525 whole-pool order before page slicing', () => {
       } as MatchedVacancyItem;
     };
     const all = [withRequired('a', 55, 100), withRequired('b', 92, 0)];
-    expect(all.sort(compareFitOrder).map((x) => x.cluster.id)).toEqual(['b', 'a']);
+    expect(all.sort((a, b) => compareFitOrder(a, b)).map((x) => x.cluster.id)).toEqual(['b', 'a']);
   });
   it('puts a percent from fewer than 3 requirements after counted rows', () => {
     const few = item('few', 100);
@@ -91,14 +98,14 @@ describe('B525 whole-pool order before page slicing', () => {
         },
       },
     } as MatchedVacancyItem;
-    expect([fewRow, item('low', 12)].sort(compareFitOrder).map((x) => x.cluster.id)).toEqual([
-      'low',
-      'few',
-    ]);
+    expect(
+      [fewRow, item('low', 12)].sort((a, b) => compareFitOrder(a, b)).map((x) => x.cluster.id),
+    ).toEqual(['low', 'few']);
   });
-  it('switches the entire order to freshness', () => {
-    const all = [item('fit', 90, '2026-09-01'), item('fresh', null, '2026-10-01')];
-    expect(all.sort((a, b) => compareFitOrder(a, b, 'freshness'))[0]?.cluster.id).toBe('fresh');
+  it('ascending puts the lowest counted percent first and keeps uncountable rows last', () => {
+    const all = [item('hi', 90), item('low', 20), item('unknown', null)];
+    const ascending = all.sort((a, b) => compareFitOrder(a, b, { dir: 'asc' }));
+    expect(ascending.map((x) => x.cluster.id)).toEqual(['low', 'hi', 'unknown']);
   });
 });
 
@@ -229,7 +236,7 @@ describe('порядок CPO при фильтре и после обновле�
     return { ...base, explanation: { ...base.explanation, fitView: view } } as MatchedVacancyItem;
   }
   const order = (rows: MatchedVacancyItem[]) =>
-    [...rows].sort(compareFitOrder).map((x) => x.cluster.id);
+    [...rows].sort((a, b) => compareFitOrder(a, b)).map((x) => x.cluster.id);
 
   it('свежие строки без расчёта стоят ниже посчитанных на 40 %+ и выше посчитанных ниже 40 %', () => {
     const rows = [

@@ -1,4 +1,4 @@
-import { FIT_KEY_GATES, FIT_UNCONFIRMED_GATE_PENALTY, MIN_FIT_SKILL_REQUIREMENTS } from '../../shared/vacancyFitPercent';
+import { MIN_FIT_SKILL_REQUIREMENTS, STATED_REQUIREMENT_CREDIT } from '../../shared/vacancyFitPercent';
 import { createHash } from 'node:crypto';
 import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
@@ -18,6 +18,8 @@ export interface VacancyFitInput {
   /** Authoritative rule/owner evidence gates, never model-generated probabilities. */
   readonly gates: VacancyFitGates;
   readonly assessments?: readonly VacancyFitRequirementAssessment[];
+  /** Facts a skill check wrote to the profile: a requirement they confirm counts in full (owner 29.10). */
+  readonly checkedFactIds?: readonly string[];
 }
 export interface VacancyFitAssessor {
   assess(input: { readonly requirements: readonly VacancyRequirement[]; readonly facts: readonly VacancyFitFact[] }): Promise<readonly VacancyFitRequirementAssessment[]>;
@@ -37,9 +39,6 @@ function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequiremen
  * («Высшее образование») made «100 %, 1 из 1». 3 hides 29 % of model-labelled vacancies (155 of 540).
  */
 export const MIN_SKILL_REQUIREMENTS = MIN_FIT_SKILL_REQUIREMENTS;
-/** Unconfirmed key conditions lower the ceiling, so «100 %» needs a confirmed role, region and permit. */
-const KEY_GATES = FIT_KEY_GATES;
-const UNCONFIRMED_GATE_PENALTY = FIT_UNCONFIRMED_GATE_PENALTY;
 
 /** Experience and model skills count; conditions (education, language, format, permit) do not. */
 export function isSkillRequirement(requirement: VacancyRequirement): boolean {
@@ -71,11 +70,12 @@ export function vacancyFitFingerprint(
 ): { vacancyHash: string; profileHash: string; algorithmVersion: string } {
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   const importedIds = input.facts.filter(isImportedEvidence).map((fact) => fact.id);
+  const checkedIds = [...(input.checkedFactIds ?? [])].sort();
   return {
     vacancyHash: hash([input.vacancyId, input.description, input.requirements]),
     // B562: a profile whose evidence includes imported facts gets a new key, so its result cached
     // without them (and the completed queue row) is not reused; confirmed-only profiles keep theirs.
-    profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : [])]),
+    profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : []), ...(checkedIds.length ? [{ checkedEvidence: checkedIds }] : [])]),
     algorithmVersion,
   };
 }
@@ -90,11 +90,13 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     return [name, invalidEvidence ? { status: 'unknown', reason: 'gate_evidence_unverified' } : gate];
   })) as unknown as VacancyFitGates;
   const requirements = sourcedRequirements(input);
+  const checkedIds = new Set(input.checkedFactIds ?? []);
   const assessments: VacancyFitRequirementAssessment[] = requirements.map((requirement) => {
     const claims = input.assessments?.filter((claim) => claim.requirementId === requirement.id) ?? [];
     const claim = claims.length === 1 ? claims[0] : undefined;
     if (!claim || !['matched', 'unmatched'].includes(claim.status) || !Array.isArray(claim.evidence) || !claim.evidence.length || claim.evidence.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !factMap.get(entry.factId)?.statement.includes(entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
-    return { requirementId: requirement.id, status: claim.status, evidence: claim.evidence.map(({ factId, quote }) => ({ factId, quote })) };
+    const evidence = claim.evidence.map(({ factId, quote }) => ({ factId, quote }));
+    return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status === 'matched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
   });
   // Owner 28.10: a model answer that confirms nothing is «0 из N», not «no percent». Without an
   // answer (no claims at all) the requirements are not assessed yet.
@@ -108,20 +110,21 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const conditions = assessments.filter((item) => !skillIds.has(item.requirementId));
   const reason = blocked ? 'blocked_gate' : !requirements.length ? 'no_requirements' : skills.length < MIN_SKILL_REQUIREMENTS ? 'too_few_skills'
     : !facts.length ? 'no_eligible_facts' : !answered && !skills.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
-  const matchedIds = new Set(skills.filter((item) => item.status === 'matched').map((item) => item.requirementId));
-  const required = requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor));
+  const required = new Set(requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor)).map((item) => item.id));
+  const requiredSkills = skills.filter((item) => required.has(item.requirementId));
   const canScore = reason === 'assessed';
-  const ceiling = 100 - UNCONFIRMED_GATE_PENALTY * KEY_GATES.filter((name) => gates[name].status !== 'matched').length;
-  const percent = (matched: number, total: number) => canScore && total ? Math.min(ceiling, Math.round(matched / total * 100)) : null;
+  // Owner 29.10: confirmed by a skill check 1, stated in the profile but unchecked 0.5, missing 0.
+  const credit = (item: VacancyFitRequirementAssessment) => item.status !== 'matched' ? 0 : item.checked ? 1 : STATED_REQUIREMENT_CREDIT;
+  const percent = (items: readonly VacancyFitRequirementAssessment[]) => canScore && items.length ? Math.round(items.reduce((sum, item) => sum + credit(item), 0) / items.length * 100) : null;
   const count = (items: readonly VacancyFitRequirementAssessment[]) => ({
-    matched: items.filter((item) => item.status === 'matched').length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length,
+    matched: items.filter((item) => item.status === 'matched').length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length,
   });
   return {
     candidateId: input.candidateId, vacancyId: input.vacancyId, algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
     status: blocked ? 'blocked' : canScore ? 'assessed' : 'unknown', gates,
     calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
-    coveragePercent: percent(matchedIds.size, skills.length),
-    requiredCoverage: { matched: required.filter((item) => matchedIds.has(item.id)).length, total: required.length, percent: percent(required.filter((item) => matchedIds.has(item.id)).length, required.length) },
+    coveragePercent: percent(skills),
+    requiredCoverage: { matched: requiredSkills.filter((item) => item.status === 'matched').length, total: requiredSkills.length, percent: percent(requiredSkills) },
     coverage: count(skills), conditionCoverage: count(conditions),
     // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
     assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,

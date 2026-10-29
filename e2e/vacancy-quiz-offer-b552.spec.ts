@@ -18,7 +18,7 @@ const requirement = (id: string, text: string, importance: 'critical' | 'high' |
   stopFactor: false,
 });
 
-/** Payments confirmed by a profile fact; Kafka and Kubernetes not confirmed. */
+/** Payments confirmed by a skill check (29.10: counts 1); Kafka and Kubernetes not confirmed. */
 const fitView = {
   state: 'ready',
   requirements: [
@@ -38,7 +38,7 @@ const fitView = {
     requiredCoverage: { matched: 1, total: 3, percent: 33 },
     coverage: { matched: 1, total: 3, unknown: 0 },
     assessments: [
-      { requirementId: 'r1', status: 'matched', evidence: [] },
+      { requirementId: 'r1', status: 'matched', evidence: [], checked: true },
       { requirementId: 'r2', status: 'unknown', evidence: [] },
       { requirementId: 'r3', status: 'unknown', evidence: [] },
     ],

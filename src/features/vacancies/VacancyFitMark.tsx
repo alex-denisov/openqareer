@@ -1,8 +1,6 @@
-import type { ReactNode } from 'react';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
-import { useFocusCheckStartable } from './VacancyQuizProposal';
 import { requestVacancySkillCheck } from './vacancyQuizOffer';
 import { vacancyFitBoost, vacancyFitMark, vacancyFitSentence } from './vacancyFitModel';
 
@@ -71,6 +69,37 @@ function FitCountingBlock({ view }: { readonly view?: VacancyFitView }) {
   );
 }
 
+const NONE_TEXT: Readonly<Record<string, { readonly title: string; readonly text: string }>> = {
+  'нет профиля': {
+    title: 'Нет профиля',
+    text: 'Без профиля процента нет. Загрузите резюме или подключите LinkedIn — проценты посчитаются для всей подборки.',
+  },
+  'мало требований': {
+    title: 'Мало требований',
+    text: 'В тексте вакансии меньше 3 требований: процент не считаем, чтобы не показать «100 %» по одному пункту. Строка идёт в конце.',
+  },
+};
+
+/** 29.10 mockup states «Мало требований» and «Нет профиля»; the old «Соответствие» block is gone. */
+function FitNoneBlock({
+  view,
+  caption,
+}: {
+  readonly view?: VacancyFitView;
+  readonly caption: string;
+}) {
+  const copy = NONE_TEXT[caption] ?? NONE_TEXT['мало требований'];
+  return (
+    <section className="vacancy-fit-block" aria-label={copy.title}>
+      <FitNumber view={view} size="lg" />
+      <div className="vacancy-fit-block-text">
+        <h3>{copy.title}</h3>
+        <p>{copy.text}</p>
+      </div>
+    </section>
+  );
+}
+
 /** First block of the expanded vacancy and the 390 push: the number and why it is that. */
 export function VacancyFitBlock({
   cluster,
@@ -80,12 +109,11 @@ export function VacancyFitBlock({
   readonly view?: VacancyFitView;
 }) {
   const view = useLatestVacancyFitView(cluster.id, initialView);
-  const startable = useFocusCheckStartable();
   const mark = vacancyFitMark(view);
   if (mark.kind === 'pending') return <FitCountingBlock view={view} />;
-  if (mark.kind !== 'number') return null;
+  if (mark.kind === 'none') return <FitNoneBlock view={view} caption={mark.caption} />;
   const sentence = vacancyFitSentence(view);
-  const boost = vacancyFitBoost(view, startable === true);
+  const boost = vacancyFitBoost(view);
   return (
     <section className="vacancy-fit-block" aria-label={`Совпадение ${mark.percent} %`}>
       <FitNumber view={view} size="lg" />
@@ -109,34 +137,5 @@ export function VacancyFitBlock({
         </button>
       ) : null}
     </section>
-  );
-}
-
-const LEGEND = [
-  ['hi', '80–100'],
-  ['good', '60–79'],
-  ['mid', '40–59'],
-  ['low', 'до 40'],
-] as const;
-
-/** The server formula in one line (server/domain/vacancyFit.ts). */
-export const FIT_FORMULA_TEXT =
-  'Процент — доля требований вакансии, которые подтверждаются вашим профилем. ' +
-  'Каждая неподтверждённая роль, регион или право на работу снижает потолок на 10 пунктов.';
-
-/** Above the column header: order, 4-dot legend and the formula (28.10 mockup). */
-export function VacancyFitBar({ children }: { readonly children?: ReactNode }) {
-  return (
-    <div className="vacancy-fit-bar">
-      {children}
-      <span className="vacancy-fit-legend" role="list" aria-label="Шкала совпадения">
-        {LEGEND.map(([tier, label]) => (
-          <span key={tier} role="listitem" className={`vacancy-fit-key is-${tier}`}>
-            {label}
-          </span>
-        ))}
-      </span>
-      <p className="vacancy-fit-how">{FIT_FORMULA_TEXT}</p>
-    </div>
   );
 }

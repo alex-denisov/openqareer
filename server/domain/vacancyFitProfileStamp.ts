@@ -38,7 +38,8 @@ export function vacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: R
 /** Отпечаток до B580: по нему находится процент, посчитанный до смены формулы. */
 export function legacyVacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
   // Отметки визита «Сегодня» меняются при каждом заходе и к соответствию не относятся.
-  const stable = workspace ? { ...workspace, lastVisitedAt: undefined, previousVisitedAt: undefined } : workspace;
+  // Сортировка «Вакансий» (29.10) тоже: иначе каждый клик по заголовку пересчитывал бы все проценты.
+  const stable = workspace ? { ...workspace, lastVisitedAt: undefined, previousVisitedAt: undefined, vacancySort: undefined } : workspace;
   return createHash('sha256').update(JSON.stringify([snapshot.memory, snapshot.resume?.draft ?? null, stable])).digest('hex');
 }
 

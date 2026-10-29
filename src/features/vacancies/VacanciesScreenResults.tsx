@@ -1,8 +1,8 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyRow } from './VacancyRow';
 import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
-import { VacancyFitSortControl } from './VacancyFitSort';
-import { VacancyFitBar } from './VacancyFitMark';
+import { VacancySortHeader } from './VacancyFitSort';
+import { DEFAULT_VACANCY_SORT } from '../../../shared/vacancySort';
 import { vacancyFitMark } from './vacancyFitModel';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
@@ -38,6 +38,26 @@ interface VacanciesMainBodyProps {
   readonly onOpenExpert?: () => void;
 }
 
+/** 29.10: «Деньги» and «Совпадение» sort the list; without a handler they stay plain. */
+function SortableHeaderCells({
+  sort = DEFAULT_VACANCY_SORT,
+  onSortChange,
+}: Pick<ListContentProps, 'sort' | 'onSortChange'>) {
+  if (!onSortChange)
+    return (
+      <>
+        <span role="columnheader">Деньги</span>
+        <span role="columnheader">Совпадение</span>
+      </>
+    );
+  return (
+    <>
+      <VacancySortHeader column="money" label="Деньги" sort={sort} onSort={onSortChange} />
+      <VacancySortHeader column="fit" label="Совпадение" sort={sort} onSort={onSortChange} />
+    </>
+  );
+}
+
 function VacanciesTableHeader({
   sort,
   onSortChange,
@@ -50,9 +70,6 @@ function VacanciesTableHeader({
   });
   return (
     <>
-      <VacancyFitBar>
-        {onSortChange ? <VacancyFitSortControl value={sort} onChange={onSortChange} /> : null}
-      </VacancyFitBar>
       {noProfile && onOpenResumeUpload ? (
         <div className="vacancy-fit-no-profile">
           <p>
@@ -63,13 +80,12 @@ function VacanciesTableHeader({
           </button>
         </div>
       ) : null}
-      <div className="vacancies-table-header" role="group" aria-label="Колонки списка вакансий">
-        <div className="vacancies-table-header-cells">
-          <span>Роль</span>
-          <span>Уровень</span>
-          <span>Гео</span>
-          <span>Деньги</span>
-          <span>Совпадение</span>
+      <div className="vacancies-table-header" role="table" aria-label="Колонки списка вакансий">
+        <div className="vacancies-table-header-cells" role="row">
+          <span role="columnheader">Роль</span>
+          <span role="columnheader">Уровень</span>
+          <span role="columnheader">Гео</span>
+          <SortableHeaderCells sort={sort} onSortChange={onSortChange} />
         </div>
         <span className="vacancies-table-header-actions" />
       </div>

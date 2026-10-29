@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 import type { RequirementImportance } from '../../../server/domain/vacancyRequirements';
-import { requirementChipLabel } from './vacancyRequirementChips';
+import { matchedRequirements, requirementChipLabel } from './vacancyRequirementChips';
 
 /** The consultant names at most two skills in one quiz offer (4-vakansii.html). */
 const OFFER_SKILL_LIMIT = 2;
@@ -20,18 +20,22 @@ function isQuizSkill(requirement: Requirement): boolean {
   return requirement.skill ?? requirement.kind === 'other';
 }
 
-/** Every unconfirmed skill requirement of the vacancy, most important first. */
+/**
+ * Every skill requirement a check has not confirmed: stated in the profile first (a quiz lifts
+ * them from half to full credit, owner 29.10), then missing ones; most important first.
+ */
 export function unconfirmedSkills(view: VacancyFitView | undefined): string[] {
   if (!view?.result) return [];
-  const matched = new Set(
-    view.result.assessments
-      .filter((item) => item.status === 'matched')
-      .map((item) => item.requirementId),
-  );
+  const matched = matchedRequirements(view);
+  const missing = (item: Requirement) => Number(!matched.has(item.id));
   const seen = new Set<string>();
   return [...view.requirements]
-    .filter((item) => !matched.has(item.id) && isQuizSkill(item))
-    .sort((left, right) => IMPORTANCE_ORDER[left.importance] - IMPORTANCE_ORDER[right.importance])
+    .filter((item) => matched.get(item.id) !== true && isQuizSkill(item))
+    .sort(
+      (left, right) =>
+        missing(left) - missing(right) ||
+        IMPORTANCE_ORDER[left.importance] - IMPORTANCE_ORDER[right.importance],
+    )
     .map((item) => requirementChipLabel(item) ?? '')
     .filter((text) => {
       const key = text.toLocaleLowerCase('ru');

@@ -11,7 +11,7 @@ import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS } from '../../shared/vacancyFit';
 function input(candidateId = 'candidate-secret-owner'): VacancyFitInput {
   return {
     candidateId, vacancyId: 'vacancy-public', description: 'Requirements\n- TypeScript required\n- Node services\n- SQL queries', requirements: [],
-    facts: [{ id: 'private-fact', candidateId, kind: 'fact', status: 'confirmed', sensitive: false, sourceMessageIds: ['private-message'], statement: 'PRIVATE_OWNER_STATEMENT TypeScript services' }],
+    facts: [{ id: 'private-fact', candidateId, kind: 'fact', status: 'confirmed', sensitive: false, sourceMessageIds: ['private-message'], statement: 'PRIVATE_OWNER_STATEMENT TypeScript services' }], checkedFactIds: ['private-fact'],
     gates: {
       role: { status: 'unknown', reason: 'role not confirmed' }, level: { status: 'unknown', reason: 'level unknown' },
       region: { status: 'unknown', reason: 'region unknown' }, workFormat: { status: 'unknown', reason: 'format unknown' }, workAuthorization: { status: 'unknown', reason: 'authorization unknown' },

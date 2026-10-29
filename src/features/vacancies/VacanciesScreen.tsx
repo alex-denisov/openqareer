@@ -1,4 +1,4 @@
-import type { VacancyFitSort } from './VacancyFitSort';
+import { effectiveVacancySort, vacancySortProps, type VacancySortProps } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCurrencyRates } from './useCurrencyRates';
@@ -61,6 +61,8 @@ export interface VacanciesPathIndicator {
 export interface VacanciesScreenProps {
   readonly facets?: MatchedVacancyFacets;
   readonly initialFilters?: VacanciesScreenState;
+  /** The sort the server applied: the account's saved choice (owner 29.10). */
+  readonly serverSort?: VacancySortProps['sort'];
   /** `false` — подборка прочитана не целиком: «Показано N из M · загружаем остальные». */
   readonly poolComplete?: boolean;
   readonly onFiltersChange?: (state: VacanciesScreenState) => void;
@@ -240,8 +242,9 @@ export interface ListContentProps {
   readonly poolComplete?: boolean;
   /** Дата каталога из сводки сервера; подвал 390 пишет её после счёта (B485). */
   readonly catalogObservedAt?: string;
-  readonly sort?: VacancyFitSort;
-  readonly onSortChange?: (sort: VacancyFitSort) => void;
+  /** The effective sort: the header click, else the server's saved one (29.10). */
+  readonly sort?: VacancySortProps['sort'];
+  readonly onSortChange?: VacancySortProps['onSortChange'];
   readonly onOpenResumeUpload?: () => void;
 }
 
@@ -456,8 +459,7 @@ function buildListProps(
     onLoadMore: board.loadMore,
     poolComplete: input.poolComplete,
     catalogObservedAt: input.facets?.catalogSummary?.observedAt,
-    sort: board.state.sort,
-    onSortChange: (sort) => board.setState((previous) => ({ ...previous, sort })),
+    ...vacancySortProps(board.state.sort, board.setState, input.serverSort),
     onOpenResumeUpload: () => input.pathIndicator?.onNavigate('profile'),
   };
 }
@@ -562,7 +564,7 @@ function VacanciesScreenContent({
           screenState.setViewMode((current) => (current === 'list' ? 'map' : 'list'))
         }
         viewMode={screenState.viewMode}
-        byFit={board.state.sort !== 'freshness'}
+        byFit={effectiveVacancySort(board.state.sort, input.serverSort).by === 'fit'}
       />
       <CompanySelectionFilterChip
         companyName={board.state.companyName}

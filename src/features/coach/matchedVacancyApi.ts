@@ -1,3 +1,4 @@
+import { isVacancySort, type VacancySort } from '../../../shared/vacancySort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import type { VacanciesScreenState } from '../vacancies/VacanciesScreenFilters';
 import type { MatchedVacancyItem } from './cabinetTypes';
@@ -79,6 +80,8 @@ export interface MatchedVacancyPage {
   readonly candidateLevel?: string | null;
   /** Начальные фильтры из источника подборки; отсутствуют — значит чистый экран. */
   readonly initialFilters?: VacanciesScreenState;
+  /** Owner 29.10: the header sort the server applied (the account's saved choice). */
+  readonly sort?: VacancySort;
 }
 
 /**
@@ -106,7 +109,7 @@ export async function getMatchedVacancyPage(
       pageOffsets?: unknown;
       campaign?: CampaignMetaView;
       candidateLevel?: string | null;
-      initialFilters?: VacanciesScreenState;
+      initialFilters?: VacanciesScreenState; sort?: VacancySort;
     };
   };
   if (!Array.isArray(envelope.data)) {
@@ -134,6 +137,7 @@ export async function getMatchedVacancyPage(
       ? { candidateLevel: envelope.meta.candidateLevel }
       : {}),
     ...(envelope.meta?.initialFilters ? { initialFilters: envelope.meta.initialFilters } : {}),
+    ...(isVacancySort(envelope.meta?.sort) ? { sort: envelope.meta.sort } : {}),
   };
 }
 
@@ -151,7 +155,10 @@ export function matchedVacancyQuery(offset: number, filters?: VacanciesScreenSta
   if (filters?.remoteOnly) query.set('remote', '1');
   for (const place of filters?.selectedLocations ?? []) query.append('place', place);
   if (filters?.locationRemote) query.set('placeRemote', '1');
-  if (filters?.sort) query.set('sort', filters.sort);
+  if (filters?.sort) {
+    query.set('sort', filters.sort.by);
+    query.set('dir', filters.sort.dir);
+  }
   return query.toString();
 }
 

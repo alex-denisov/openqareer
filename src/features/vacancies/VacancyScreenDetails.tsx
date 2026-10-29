@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { vacancyFitPercent } from '../../../shared/vacancyFitPercent';
 import {
   ArrowSquareOut,
@@ -6,6 +6,7 @@ import {
   ChatCircleText,
   Check,
   CheckCircle,
+  Circle,
   FileText,
   PaperPlaneTilt,
   Question,
@@ -17,9 +18,10 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
 import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
 import { publishVacancyFitRead, useLatestVacancyFitView } from './vacancyFitViewUpdates';
-import { readVacancyFit } from './vacancyFitApi';
+import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
 import { useVacancySummary } from './vacancyDetailApi';
 import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
+import { vacancyFitMark } from './vacancyFitModel';
 
 interface VacancyScreenDetailRowProps {
   readonly onOpenArchive?: () => void;
@@ -216,7 +218,49 @@ function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkil
       .catch(() => undefined);
     return () => controller.abort();
   }, [vacancyId, needsDetail]);
+  useCountingFitPoll(vacancyId, view);
+  useQueueOnOpen(vacancyId, view);
   return needsDetail;
+}
+
+/** B580: the Free sweep counts the first 300 rows; the rest are queued when the vacancy opens. */
+function useQueueOnOpen(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]) {
+  const uncountedOnOpen = view?.state === 'not_requested';
+  useEffect(() => {
+    if (!uncountedOnOpen) return;
+    const before = view;
+    void requestVacancyFit(vacancyId)
+      // The POST answer carries no requirements: keep the ones the row already read.
+      .then((next) =>
+        publishVacancyFitRead(vacancyId, {
+          ...before,
+          ...next,
+          requirements: next.requirements?.length ? next.requirements : before.requirements,
+        }),
+      )
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opened vacancy
+  }, [vacancyId]);
+}
+
+/** How often an opened vacancy re-reads a percent that is still counting. */
+const FIT_COUNTING_POLL_MS = 15_000;
+
+/**
+ * 28.10 mockup: the block says «считаем» and the worker answers within a minute, so the opened
+ * vacancy reads its percent again on its own (moved here with the old «Соответствие» block, 29.10).
+ */
+function useCountingFitPoll(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]) {
+  const counting = vacancyFitMark(view).kind === 'pending';
+  useEffect(() => {
+    if (!counting) return undefined;
+    const timer = window.setInterval(() => {
+      void readVacancyFit(vacancyId)
+        .then((next) => publishVacancyFitRead(vacancyId, next))
+        .catch(() => undefined);
+    }, FIT_COUNTING_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [vacancyId, counting]);
 }
 
 /** The expanded vacancy tells the consultant panel what a quiz could confirm (B552). */
@@ -293,6 +337,10 @@ function RequirementsHeading({
   );
 }
 
+function chipCount(chips: ReturnType<typeof legacySkillChips>): number {
+  return chips.confirmed.length + chips.unconfirmed.length + (chips.stated?.length ?? 0);
+}
+
 export function VacancyScreenRequirementChips({
   cluster,
   explanation,
@@ -312,7 +360,7 @@ export function VacancyScreenRequirementChips({
     cluster.skills,
   );
   const chips = fromFit ?? (readingRequirements ? NO_CHIPS : legacyChips(legacy));
-  const hasRequirements = chips.confirmed.length + chips.unconfirmed.length > 0;
+  const hasRequirements = chipCount(chips) > 0;
   // 28.10 mockup: with a percent the card lists every requirement it counted, under one count.
   const counted = vacancyFitPercent(fitView) === null ? null : fitView!.result!.coverage.total;
   return (
@@ -323,9 +371,9 @@ export function VacancyScreenRequirementChips({
       <RequirementsHeading id={`vacancy-requirements-${cluster.id}`} counted={counted} />
       {hasRequirements ? (
         <VacancySkillChips
-          all
           matching={chips.confirmed}
           missing={chips.unconfirmed}
+          stated={chips.stated}
           quotes={chips.quotes}
           cluster={cluster}
           onAddToProfile={onAddToProfile}
@@ -347,46 +395,36 @@ export function VacancyScreenRequirementChips({
 
 /** The caption under the full list of counted requirements (28.10 mockup, server data model). */
 export const FIT_CHIPS_CAPTION =
-  'Все требования из текста вакансии, по ним посчитан процент. Зелёные подтверждаются профилем, жёлтых в профиле не нашли.';
+  'Все требования из текста вакансии, по ним посчитан процент. Зелёные подтверждены проверкой навыков, жёлтые указаны в профиле без проверки.';
 
-/** Mockup 4 shows a short set of chips; the rest opens on «Ещё N». */
-const VISIBLE_SKILL_CHIPS = 6;
-
-/** Half confirmed, half to confirm; a short side gives its places to the other. */
-export function visibleSkillChips(
-  matching: readonly string[],
-  missing: readonly string[],
-  limit = VISIBLE_SKILL_CHIPS,
-): { readonly matching: readonly string[]; readonly missing: readonly string[] } {
-  const half = Math.ceil(limit / 2);
-  const missingCount = Math.min(missing.length, Math.max(limit - matching.length, limit - half));
-  const matchingCount = Math.min(matching.length, limit - missingCount);
-  return { matching: matching.slice(0, matchingCount), missing: missing.slice(0, missingCount) };
-}
-
+/**
+ * Every counted requirement, never «Ещё N» (owner 29.10): yellow — stated in the profile without
+ * a check, outline — missing, green — confirmed by a skill check.
+ */
 function VacancySkillChips({
-  all = false,
-  matching: allMatching,
-  missing: allMissing,
+  matching,
+  missing,
+  stated = [],
   quotes,
   cluster,
   onAddToProfile,
 }: {
-  /** Every counted requirement, unconfirmed first (28.10 mockup). */
-  readonly all?: boolean;
   readonly matching: readonly string[];
   readonly missing: readonly string[];
+  readonly stated?: readonly string[];
   readonly quotes?: Readonly<Record<string, string>>;
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const short = visibleSkillChips(allMatching, allMissing);
-  const { matching, missing } =
-    expanded || all ? { matching: allMatching, missing: allMissing } : short;
-  const hidden = allMatching.length + allMissing.length - matching.length - missing.length;
   return (
     <ul className="vacancies-screen-skill-chips">
+      {stated.map((skill) => (
+        <li className="vacancies-screen-skill-chip is-stated" key={`stated-${skill}`}>
+          <Question size={14} aria-hidden="true" />
+          <span className="career-sr-only">Указано в профиле, не проверено: </span>
+          <span title={quotes?.[skill]}>{skill}</span>
+        </li>
+      ))}
       {missing.map((skill) => (
         <MissingVacancySkillChip
           key={`unconfirmed-${skill}`}
@@ -399,17 +437,10 @@ function VacancySkillChips({
       {matching.map((skill) => (
         <li className="vacancies-screen-skill-chip is-confirmed" key={`confirmed-${skill}`}>
           <CheckCircle size={14} aria-hidden="true" />
-          <span className="career-sr-only">Есть в профиле: </span>
+          <span className="career-sr-only">Подтверждено проверкой: </span>
           <span title={quotes?.[skill]}>{skill}</span>
         </li>
       ))}
-      {hidden > 0 ? (
-        <li className="vacancies-screen-skill-more">
-          <button type="button" aria-expanded={false} onClick={() => setExpanded(true)}>
-            Ещё {hidden}
-          </button>
-        </li>
-      ) : null}
     </ul>
   );
 }
@@ -427,13 +458,13 @@ function MissingVacancySkillChip({
 }) {
   const icon = (
     <>
-      <Question size={14} aria-hidden="true" />
+      <Circle size={14} aria-hidden="true" />
       <span className="career-sr-only">Нет в профиле: </span>
     </>
   );
   const label = <span title={quote}>{skill}</span>;
   return (
-    <li className="vacancies-screen-skill-chip is-unconfirmed">
+    <li className="vacancies-screen-skill-chip is-missing">
       {onAddToProfile ? (
         <button
           type="button"

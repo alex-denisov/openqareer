@@ -488,6 +488,8 @@ div.vacancy-push-row {
 /* B510: навыки на 390 как .pm-chips макета 4 — капсула 16 px на surface, текст цвета тела,
    цветной только значок 14 px (зелёный — подтверждено, жёлтый — нет). */
 .vacancy-push-requirements .vacancies-screen-skill-chip.is-confirmed,
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-stated,
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-missing,
 .vacancy-push-requirements .vacancies-screen-skill-chip button {
   padding: 6px 12px;
   border: 0;
@@ -495,8 +497,13 @@ div.vacancy-push-row {
   color: var(--career-text);
   background: var(--career-surface);
 }
-.vacancy-push-requirements .vacancies-screen-skill-chip.is-unconfirmed {
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-stated {
   color: var(--career-text);
+}
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-missing {
+  color: var(--career-text-dim);
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--career-line-strong);
 }
 .vacancy-push-requirements .vacancies-screen-skill-chip svg {
   inline-size: 14px;
@@ -505,7 +512,7 @@ div.vacancy-push-row {
 .vacancy-push-requirements .vacancies-screen-skill-chip.is-confirmed svg {
   color: var(--career-success);
 }
-.vacancy-push-requirements .vacancies-screen-skill-chip.is-unconfirmed svg {
+.vacancy-push-requirements .vacancies-screen-skill-chip.is-stated svg {
   color: var(--career-warning);
 }
 
