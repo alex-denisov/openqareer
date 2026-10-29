@@ -8,6 +8,8 @@ import {
   factRewriteEdits,
   revertFactRewrite,
   rewriteSourceFacts,
+  arithmeticFails,
+  withBulletEdits,
   withStoredFactRewrites,
   type RewriteMemory,
 } from './experienceFactRewrite';
@@ -323,5 +325,92 @@ describe('review fixes (29.10)', () => {
     );
     const forged = { ...draft, factRewrites: stored.draft.factRewrites };
     expect(withStoredFactRewrites(forged, draft).factRewrites).toBeUndefined();
+  });
+});
+
+describe('owner fixes before «Принять» (29.10 evening)', () => {
+  const request = buildFactRewriteRequest(draft, memory);
+  const team = idStarting('cf8f74a6');
+  const added = idStarting('c79b4664');
+  const tickets = idStarting('7d2e7b0b');
+
+  it('rejects «с 4 до 11 инженеров, добавив 3» because 11 − 4 is not 3', () => {
+    const bad = 'Расширил команду второй линии с 4 до 11 инженеров, добавив 3 сотрудников.';
+    expect(arithmeticFails(bad)).toBe(true);
+    expect(arithmeticFails('Расширил команду с 4 до 11 инженеров, наняв 7 сотрудников.')).toBe(
+      false,
+    );
+    expect(arithmeticFails('Расширил команду с четырёх до одиннадцати, добавив трёх.')).toBe(true);
+    expect(arithmeticFails('Расширил команду с 4 до 11 инженеров.')).toBe(false);
+    const proposal = checkFactRewrite(
+      request,
+      { places: [{ experienceId: CLOUD, bullets: [{ text: bad, sourceFactIds: [team, added] }] }] },
+      'r-1',
+    );
+    expect(proposal.places).toEqual([]);
+  });
+
+  it('applies the candidate’s edits and removals, declining what no bullet uses any more', () => {
+    const proposal = checkFactRewrite(
+      request,
+      {
+        places: [
+          {
+            experienceId: CLOUD,
+            bullets: [
+              { text: 'Расширил команду с 4 до 11 инженеров.', sourceFactIds: [team] },
+              { text: 'Сократил число тикетов на 40%.', sourceFactIds: [tickets] },
+            ],
+          },
+        ],
+      },
+      'r-1',
+    );
+    const edited = withBulletEdits(proposal, {
+      [`${CLOUD}#0`]: 'Вырастил вторую линию поддержки с 4 до 11 инженеров.',
+      [`${CLOUD}#1`]: null,
+    });
+    expect(edited.places).toEqual([
+      {
+        experienceId: CLOUD,
+        bullets: [
+          { text: 'Вырастил вторую линию поддержки с 4 до 11 инженеров.', sourceFactIds: [team] },
+        ],
+      },
+    ]);
+    expect(edited.leftOutFactIds).toContain(tickets);
+    expect(() => withBulletEdits(proposal, { [`${CLOUD}#0`]: '   ' })).toThrow();
+    expect(() => withBulletEdits(proposal, { 'made-up#0': 'Текст пункта резюме.' })).toThrow();
+  });
+
+  it('keeps the stored pending proposal whatever a client save sends', () => {
+    const pending = {
+      digest: 'd-1',
+      proposal: checkFactRewrite(request, { places: [] }, 'r-1'),
+    };
+    const stored: ResumeDraft = { ...draft, factRewriteProposal: pending };
+    expect(withStoredFactRewrites(draft, stored).factRewriteProposal).toEqual(pending);
+    expect(
+      withStoredFactRewrites({ ...draft, factRewriteProposal: pending }, draft).factRewriteProposal,
+    ).toBeUndefined();
+    expect(resumeDraftSchema.safeParse(stored).success).toBe(true);
+  });
+
+  it('clears the pending proposal once it is accepted', () => {
+    const proposal = checkFactRewrite(
+      request,
+      {
+        places: [
+          {
+            experienceId: CLOUD,
+            bullets: [{ text: 'Сократил число тикетов на 40%.', sourceFactIds: [tickets] }],
+          },
+        ],
+      },
+      'r-1',
+    );
+    const pending: ResumeDraft = { ...draft, factRewriteProposal: { digest: 'd', proposal } };
+    const applied = applyFactRewrite(pending, proposal, () => 'b-1', '2026-10-29T12:00:00.000Z');
+    expect(applied.draft.factRewriteProposal).toBeUndefined();
   });
 });

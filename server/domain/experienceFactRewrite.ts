@@ -14,6 +14,7 @@ import {
   MAX_REWRITE_BULLETS,
   type ResumeDraft,
   type ResumeFactRewriteBullet,
+  type ResumeFactRewriteProposal,
   type ResumeFactRewriteRecord,
 } from './resumeDraft';
 
@@ -53,6 +54,8 @@ export interface RewriteFact {
 export interface FactRewriteRequest {
   readonly places: readonly RewritePlace[];
   readonly facts: readonly RewriteFact[];
+  /** Bullets of the previous answer the checks refused, with the reason: the model rewrites them. */
+  readonly corrections?: readonly string[];
 }
 
 export interface ProposedBullet {
@@ -65,13 +68,7 @@ export interface ProposedPlace {
   readonly bullets: readonly ProposedBullet[];
 }
 
-export interface FactRewriteProposal {
-  readonly id: string;
-  readonly places: readonly ProposedPlace[];
-  /** Facts no bullet uses: fragments, doubts, or facts that fit no workplace. */
-  readonly leftOutFactIds: readonly string[];
-  readonly sourceFactIds: readonly string[];
-}
+export type FactRewriteProposal = ResumeFactRewriteProposal;
 
 function linkedMemoryIds(draft: ResumeDraft): Set<string> {
   const lists = [
@@ -228,7 +225,10 @@ export const factRewriteModelOutputSchema = z.object({
 export type FactRewriteModelOutput = z.infer<typeof factRewriteModelOutputSchema>;
 
 export function factRewriteUserMessage(request: FactRewriteRequest): string {
-  return `<profile-and-facts>\n${JSON.stringify(request, null, 1)}\n</profile-and-facts>`;
+  const { corrections, ...input } = request;
+  const body = `<profile-and-facts>\n${JSON.stringify(input, null, 1)}\n</profile-and-facts>`;
+  if (!corrections?.length) return body;
+  return `${body}\n\nВ прошлом ответе эти пункты не прошли проверку: числа в них противоречат друг другу. Перепиши их так, чтобы всё сходилось, или убери лишнее число:\n${corrections.map((text) => `- ${text}`).join('\n')}`;
 }
 
 /** Number words a bullet may turn into digits («до одиннадцати» → «до 11»). */
@@ -241,6 +241,8 @@ const NUMBER_STEMS: ReadonlyArray<[stem: string, value: string]> = [
   ['пятьдесят', '50'],
   ['сто', '100'],
   ['дв', '2'],
+  ['тре', '3'],
+  ['три', '3'],
   ['тр', '3'],
   ['четыр', '4'],
   ['пят', '5'],
@@ -265,6 +267,29 @@ function numberWordsIn(text: string): string[] {
   return words.flatMap((word) =>
     NUMBER_STEMS.filter(([stem]) => word.startsWith(stem)).map(([, value]) => value),
   );
+}
+
+const GROWTH = /с\s+([\p{L}\d]+)\s+до\s+([\p{L}\d]+)/iu;
+const ADDED = /(?:добави|наня|пополни|приня)\p{L}*\s+(?:ещё\s+|еще\s+)?([\p{L}\d]+)/iu;
+
+function numberOf(token: string): number | undefined {
+  if (/^\d+$/u.test(token)) return Number(token);
+  const word = token.toLocaleLowerCase('ru-RU').replace(/ё/gu, 'е');
+  const stem = NUMBER_STEMS.find(([prefix]) => prefix.length > 2 && word.startsWith(prefix));
+  return stem ? Number(stem[1]) : undefined;
+}
+
+/**
+ * «с 4 до 11 инженеров, добавив 3» states three numbers that cannot all be
+ * true (owner, 29.10). A bullet that says how many were added must add up.
+ */
+export function arithmeticFails(text: string): boolean {
+  const growth = GROWTH.exec(text);
+  const added = ADDED.exec(text);
+  if (!growth || !added) return false;
+  const [from, to, plus] = [growth[1], growth[2], added[1]].map((token) => numberOf(token ?? ''));
+  if (from === undefined || to === undefined || plus === undefined) return false;
+  return to - from !== plus;
 }
 
 /** A bullet may only state numbers its own sources state (digits or words). */
@@ -298,7 +323,8 @@ function checkedBullet(
   // The model's text is the only thing that reaches the profile: a bullet
   // that copies a fragment word for word is the raw speech the owner refused.
   if (sources.some((source) => cleanBulletText(source) === text)) return null;
-  if (FIRST_PERSON.test(text) || !numbersAreSourced(text, sources)) return null;
+  if (FIRST_PERSON.test(text) || arithmeticFails(text)) return null;
+  if (!numbersAreSourced(text, sources)) return null;
   return { text, sourceFactIds };
 }
 
@@ -393,6 +419,7 @@ export function applyFactRewrite(
       declinedFactIds: [...alreadyDeclined, ...declined],
       // Only the latest rewrites keep their record; older ones are long accepted.
       factRewrites: [...(draft.factRewrites ?? []), record].slice(-MAX_FACT_REWRITES),
+      factRewriteProposal: undefined,
     },
     record,
     statements,
@@ -404,8 +431,57 @@ export function withStoredFactRewrites(
   incoming: ResumeDraft,
   stored: ResumeDraft | undefined,
 ): ResumeDraft {
-  const { factRewrites: _sent, ...rest } = incoming;
-  return stored?.factRewrites?.length ? { ...rest, factRewrites: stored.factRewrites } : rest;
+  const { factRewrites: _sent, factRewriteProposal: _pending, ...rest } = incoming;
+  return {
+    ...rest,
+    ...(stored?.factRewrites?.length ? { factRewrites: stored.factRewrites } : {}),
+    ...(stored?.factRewriteProposal ? { factRewriteProposal: stored.factRewriteProposal } : {}),
+  };
+}
+
+/** Key of one bullet in the candidate's edits: its place and position in the proposal. */
+export function bulletKey(experienceId: string, index: number): string {
+  return `${experienceId}#${index}`;
+}
+
+export class InvalidBulletEditError extends Error {}
+
+/** The candidate's «Изменить» (new text) and «Убрать» (null) applied to the proposal. */
+export function withBulletEdits(
+  proposal: FactRewriteProposal,
+  edits: Readonly<Record<string, string | null>>,
+): FactRewriteProposal {
+  const keys = new Set(
+    proposal.places.flatMap((place) =>
+      place.bullets.map((_, i) => bulletKey(place.experienceId, i)),
+    ),
+  );
+  for (const [key, text] of Object.entries(edits)) {
+    if (!keys.has(key)) throw new InvalidBulletEditError('unknown_bullet');
+    const clean = text === null ? null : cleanBulletText(text);
+    if (clean !== null && (clean.length < 2 || clean.length > MAX_BULLET_LENGTH)) {
+      throw new InvalidBulletEditError('bullet_length');
+    }
+  }
+  const places = proposal.places
+    .map((place) => ({
+      experienceId: place.experienceId,
+      bullets: place.bullets.flatMap((bullet, i) => {
+        const key = bulletKey(place.experienceId, i);
+        if (!(key in edits)) return [bullet];
+        const text = edits[key];
+        return text === null || text === undefined
+          ? []
+          : [{ ...bullet, text: cleanBulletText(text) }];
+      }),
+    }))
+    .filter((place) => place.bullets.length > 0);
+  const used = new Set(places.flatMap((place) => place.bullets.flatMap((b) => b.sourceFactIds)));
+  return {
+    ...proposal,
+    places,
+    leftOutFactIds: proposal.sourceFactIds.filter((factId) => !used.has(factId)),
+  };
 }
 
 /** Takes the rewrite's bullets out and offers the facts it declined again. */

@@ -25,6 +25,39 @@
   text-decoration: none;
 }
 
+.profile-fact-rewrite__bullet-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-1);
+  margin-inline-start: var(--career-space-2);
+  vertical-align: middle;
+}
+
+.profile-fact-rewrite__bullet-actions .career-btn {
+  font-size: var(--career-text-xs);
+}
+
+.profile-fact-rewrite__editor {
+  display: grid;
+  gap: var(--career-space-2);
+}
+
+.profile-fact-rewrite__editor textarea {
+  inline-size: 100%;
+  min-block-size: 4.5em;
+  padding: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text);
+  font: inherit;
+  resize: vertical;
+}
+
+.profile-fact-rewrite__editor .profile-fact-rewrite__bullet-actions {
+  margin-inline-start: 0;
+}
+
 .profile-fact-rewrite__note {
   display: flex;
   align-items: center;

@@ -12,6 +12,7 @@ import {
   requestFactRewrite,
   revertFactRewrite,
 } from './experienceFactRewriteApi';
+import { hasBulletsLeft, ProposalBullets, type BulletEdits } from './ProfileFactRewriteBullets';
 import type { ResumeDraft } from './resumeTypes';
 import './profileExperienceSuggestions.css';
 import './profileExperienceFacts.css';
@@ -101,10 +102,10 @@ function useRewriteActions(
   onStale?: () => void,
 ) {
   const actions = useBusyAction();
-  const accept = (current: FactRewriteProposal) =>
+  const accept = (current: FactRewriteProposal, edits: BulletEdits) =>
     void actions.run('accept', async () => {
       try {
-        await applyFactRewrite(current.id);
+        await applyFactRewrite(current.id, edits);
       } catch (reason) {
         // The places changed under the proposal: ask the consultant again.
         if (reason instanceof CoachApiError && reason.code === 'rewrite_stale') onStale?.();
@@ -126,48 +127,9 @@ function useRewriteActions(
   return { actions, accept, dismiss, revert };
 }
 
-function employerOf(draft: ResumeDraft, experienceId: string): string {
-  return (
-    draft.experience.find((entry) => entry.id === experienceId)?.employer || 'Компания не указана'
-  );
-}
-
 function leftOutNote(count: number): string | null {
   if (count === 0) return null;
   return `${pluralRu(count, ['факт', 'факта', 'фактов'])} из беседы консультант не взял: они уже есть в профиле, это обрывки речи или оговорки. В резюме они не попадут.`;
-}
-
-function ProposalBullets({
-  draft,
-  proposal,
-}: {
-  readonly draft: ResumeDraft;
-  readonly proposal: FactRewriteProposal;
-}) {
-  return (
-    <div className="profile-experience-suggestions__rows" role="list">
-      {proposal.places.map((place) => (
-        <div
-          key={place.experienceId}
-          className="pm-sg-r profile-experience-suggestions__row profile-fact-rewrite__place"
-          data-experience-id={place.experienceId}
-          role="listitem"
-        >
-          <span className="profile-experience-suggestions__employer">
-            {employerOf(draft, place.experienceId)}
-          </span>
-          <ul className="profile-fact-rewrite__bullets">
-            {place.bullets.map((bullet) => (
-              <li key={bullet.text}>
-                <span className="career-sr-only">Предлагается: </span>
-                <ins>{bullet.text}</ins>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function BlockHeader({ titleId }: { readonly titleId: string }) {
@@ -231,16 +193,28 @@ function ProposalBody({
   readonly draft: ResumeDraft;
   readonly proposal: FactRewriteProposal;
   readonly actions: ReturnType<typeof useBusyAction>;
-  readonly onAccept: () => void;
+  readonly onAccept: (edits: BulletEdits) => void;
   readonly onDismiss: () => void;
 }) {
+  const [edits, setEdits] = useState<BulletEdits>({});
   const note = leftOutNote(proposal.leftOutFactIds.length);
   return (
     <>
-      <ProposalBullets draft={draft} proposal={proposal} />
+      <ProposalBullets
+        draft={draft}
+        proposal={proposal}
+        edits={edits}
+        busy={Boolean(actions.busy)}
+        onChange={(key, text) => setEdits((current) => ({ ...current, [key]: text }))}
+      />
       {note ? <p className="profile-fact-rewrite__note">{note}</p> : null}
       <div className="pm-sg-a profile-experience-suggestions__actions">
-        <ActionButton kind="accept" busy={actions.busy} onClick={onAccept} />
+        <ActionButton
+          kind="accept"
+          busy={actions.busy}
+          disabled={!hasBulletsLeft(proposal, edits)}
+          onClick={() => onAccept(edits)}
+        />
         <ActionButton kind="dismiss" busy={actions.busy} onClick={onDismiss} />
         <p className="profile-experience-suggestions__pending-note">
           Пока вы не примете, в резюме ничего не изменится.
@@ -344,8 +318,7 @@ export function ExperienceFactRewrite({
   // A proposal without bullets offers nothing to accept: it is not shown at all.
   const proposal =
     state.status === 'ready' && state.proposal?.places.length ? state.proposal : null;
-  if (!sourceKey && !applied) return null;
-  if (sourceKey && state.status === 'ready' && !proposal && !applied) return null;
+  if (!applied && (!sourceKey || (state.status === 'ready' && !proposal))) return null;
 
   return (
     <section
@@ -361,10 +334,11 @@ export function ExperienceFactRewrite({
       {sourceKey ? <ProposalStatus state={state} onRetry={retry} /> : null}
       {proposal ? (
         <ProposalBody
+          key={proposal.id}
           draft={draft}
           proposal={proposal}
           actions={actions}
-          onAccept={() => accept(proposal)}
+          onAccept={(edits) => accept(proposal, edits)}
           onDismiss={() => dismiss(proposal)}
         />
       ) : null}

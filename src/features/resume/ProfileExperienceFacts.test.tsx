@@ -151,9 +151,37 @@ describe('consultant rewrite of conversation facts in «Опыт» (29.10)', () 
     const onSectionSave = vi.fn(() => true);
     const container = await render({ onRefresh, onSectionSave });
     await act(async () => button(container, 'Принять').click());
-    expect(apply).toHaveBeenCalledWith('proposal-1');
+    expect(apply).toHaveBeenCalledWith('proposal-1', {});
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(onSectionSave).not.toHaveBeenCalled();
+  });
+
+  it('lets the candidate edit or remove a bullet before «Принять» and sends that set', async () => {
+    const apply = vi.spyOn(api, 'applyFactRewrite').mockResolvedValue({
+      id: 'proposal-1',
+      appliedAt: '2026-10-29T12:00:00.000Z',
+      bullets: [],
+      declinedFactIds: [],
+    });
+    const container = await render();
+    const rosseti = container.querySelector('[data-experience-id="rosseti"]') as HTMLElement;
+    await act(async () => button(rosseti, 'Изменить').click());
+    const field = rosseti.querySelector('textarea')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+      setter.call(field, 'Вырастил выручку направления в 4 раза.');
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => button(rosseti, 'Готово').click());
+    expect(rosseti.textContent).toContain('Вырастил выручку направления в 4 раза.');
+    const fishance = container.querySelector('[data-experience-id="fishance"]') as HTMLElement;
+    await act(async () => button(fishance, 'Убрать').click());
+    expect(container.querySelector('[data-experience-id="fishance"]')).toBeNull();
+    await act(async () => button(container, 'Принять').click());
+    expect(apply).toHaveBeenCalledWith('proposal-1', {
+      'rosseti#0': 'Вырастил выручку направления в 4 раза.',
+      'fishance#0': null,
+    });
   });
 
   it('declines every source fact with «Отклонить», leaving memory as it is', async () => {

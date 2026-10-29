@@ -467,10 +467,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.vacancyRepository.list(candidateId);
   }
 
-  getVacancySubscription(
-    candidateId: string,
-    subscriptionId: string,
-  ): StoredVacancySubscription | null {
+  getVacancySubscription(candidateId: string, subscriptionId: string): StoredVacancySubscription | null {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.get(candidateId, subscriptionId);
   }
@@ -797,6 +794,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare reviewMemories: MemoryMethods['reviewMemories'];
   declare applyExperienceFactRewrite: MemoryMethods['applyExperienceFactRewrite'];
   declare revertExperienceFactRewrite: MemoryMethods['revertExperienceFactRewrite'];
+  declare saveFactRewriteProposal: MemoryMethods['saveFactRewriteProposal'];
 
   deleteCandidate(candidateId: string): boolean {
     const result = this.transaction(() => {

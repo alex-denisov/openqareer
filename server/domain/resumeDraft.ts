@@ -229,6 +229,28 @@ export interface ResumeDraft {
    * «Отменить правку» undoes and what marks those bullets as the consultant's.
    */
   readonly factRewrites?: readonly ResumeFactRewriteRecord[];
+  /**
+   * The consultant's proposal the candidate has seen and not decided on yet,
+   * kept by the digest of its input: a deploy or another tab shows the same
+   * words, and the model is asked again only when the facts or places change.
+   */
+  readonly factRewriteProposal?: ResumePendingFactRewrite;
+}
+
+export interface ResumeFactRewriteProposal {
+  readonly id: string;
+  readonly places: readonly {
+    readonly experienceId: string;
+    readonly bullets: readonly { readonly text: string; readonly sourceFactIds: readonly string[] }[];
+  }[];
+  /** Facts no bullet uses: fragments, doubts, or facts that fit no workplace. */
+  readonly leftOutFactIds: readonly string[];
+  readonly sourceFactIds: readonly string[];
+}
+
+export interface ResumePendingFactRewrite {
+  readonly digest: string;
+  readonly proposal: ResumeFactRewriteProposal;
 }
 
 export interface ResumeFactRewriteBullet {
@@ -283,6 +305,37 @@ const factRewriteRecordSchema = z
       )
       .max(MAX_REWRITE_BULLETS),
     declinedFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS),
+  })
+  .strict();
+const pendingFactRewriteSchema = z
+  .object({
+    digest: z.string().trim().min(1).max(128),
+    proposal: z
+      .object({
+        id: z.string().trim().min(1).max(80),
+        places: z
+          .array(
+            z
+              .object({
+                experienceId: z.string().trim().min(1).max(120),
+                bullets: z
+                  .array(
+                    z
+                      .object({
+                        text: z.string().trim().min(1).max(400),
+                        sourceFactIds: z.array(memoryIdSchema).min(1).max(MAX_DECLINED_FACTS),
+                      })
+                      .strict(),
+                  )
+                  .max(MAX_REWRITE_BULLETS),
+              })
+              .strict(),
+          )
+          .max(MAX_REWRITE_BULLETS),
+        leftOutFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS),
+        sourceFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS),
+      })
+      .strict(),
   })
   .strict();
 const chronologyDateSchema = z.string().trim().max(30);
@@ -567,6 +620,7 @@ export const resumeDraftSchema = z
       .optional(),
     declinedFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS).optional(),
     factRewrites: z.array(factRewriteRecordSchema).max(MAX_FACT_REWRITES).optional(),
+    factRewriteProposal: pendingFactRewriteSchema.optional(),
   })
   .strict()
   .transform((draft) => ({
