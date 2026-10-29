@@ -160,7 +160,7 @@ test('B522 admin audit shows actual spending controls and refreshes read-only', 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
-test('28.10: «условие не совпадает» wraps inside the 96px column, never onto the star', async ({
+test('29.10: a caption without a percent wraps inside the 96px column, never onto the star', async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name === 'mobile-390', 'the 96px column exists only on desktop');
@@ -186,7 +186,8 @@ test('28.10: «условие не совпадает» wraps inside the 96px co
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
   const cell = page.locator('.vacancies-screen-row-trigger .vacancies-screen-cell--fit').first();
-  await expect(cell.locator('.vacancy-fit-cap')).toHaveText('условие не совпадает');
+  // Owner 29.10: a row without a percent says only «мало требований» or «нет профиля».
+  await expect(cell.locator('.vacancy-fit-cap')).toHaveText('мало требований');
   const box = (await cell.boundingBox())!;
   const cap = (await cell.locator('.vacancy-fit-cap').boundingBox())!;
   expect(cap.x + cap.width).toBeLessThanOrEqual(box.x + box.width + 0.5);

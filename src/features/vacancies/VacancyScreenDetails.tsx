@@ -21,6 +21,7 @@ import { publishVacancyFitRead, useLatestVacancyFitView } from './vacancyFitView
 import { readVacancyFit } from './vacancyFitApi';
 import { useVacancySummary } from './vacancyDetailApi';
 import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
+import { vacancyFitMark } from './vacancyFitModel';
 
 interface VacancyScreenDetailRowProps {
   readonly onOpenArchive?: () => void;
@@ -217,7 +218,28 @@ function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkil
       .catch(() => undefined);
     return () => controller.abort();
   }, [vacancyId, needsDetail]);
+  useCountingFitPoll(vacancyId, view);
   return needsDetail;
+}
+
+/** How often an opened vacancy re-reads a percent that is still counting. */
+const FIT_COUNTING_POLL_MS = 15_000;
+
+/**
+ * 28.10 mockup: the block says «считаем» and the worker answers within a minute, so the opened
+ * vacancy reads its percent again on its own (moved here with the old «Соответствие» block, 29.10).
+ */
+function useCountingFitPoll(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]) {
+  const counting = vacancyFitMark(view).kind === 'pending';
+  useEffect(() => {
+    if (!counting) return undefined;
+    const timer = window.setInterval(() => {
+      void readVacancyFit(vacancyId)
+        .then((next) => publishVacancyFitRead(vacancyId, next))
+        .catch(() => undefined);
+    }, FIT_COUNTING_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [vacancyId, counting]);
 }
 
 /** The expanded vacancy tells the consultant panel what a quiz could confirm (B552). */
