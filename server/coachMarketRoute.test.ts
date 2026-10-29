@@ -73,6 +73,7 @@ async function createApp(
   searchVacancies: NonNullable<
     Parameters<typeof buildApp>[0]['searchVacancies']
   >,
+  extra: Pick<Parameters<typeof buildApp>[0], 'searchStoredVacancies' | 'logDestination'> = {},
 ) {
   const store = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -83,12 +84,14 @@ async function createApp(
     locale: 'ru-RU',
   });
   const app = await buildApp({
-    config,
+    // A test that reads the log needs its warnings; the others stay quiet.
+    config: extra.logDestination ? { ...config, logLevel: 'info' } : config,
     coachProvider: provider,
     candidateStore: store,
     authService: noSessions,
     serveStatic: false,
     searchVacancies,
+    ...extra,
   });
   apps.push(app);
   stores.push(store);
@@ -159,17 +162,28 @@ describe('career coach market observations', () => {
     ]);
   });
 
-  it('does not call the model when the market source is unavailable', async () => {
-    let providerCalls = 0;
+  it('answers from the stored hh crawl when the live sample is unavailable, and logs why', async () => {
+    let observedInput: Parameters<CoachProvider['createTurn']>[0] | undefined;
     const provider: CoachProvider = {
       async createTurn(input) {
-        providerCalls += 1;
+        observedInput = input;
         return successProvider.createTurn(input, randomUUID());
       },
     };
-    const { app, authorization } = await createApp(provider, async () => {
-      throw new Error('upstream payload must stay private');
-    });
+    const logs: Record<string, unknown>[] = [];
+    const { app, authorization } = await createApp(
+      provider,
+      async () => {
+        throw new Error('hh_vacancy_search_official_access_required');
+      },
+      {
+        searchStoredVacancies: async (input) => ({
+          ...sample(input.text),
+          items: [{ ...sample(input.text).items[0], id: '456', sourceUrl: 'https://hh.ru/vacancy/456' }],
+        }),
+        logDestination: { write: (line) => logs.push(JSON.parse(line) as Record<string, unknown>) },
+      },
+    );
 
     const response = await app.inject({
       method: 'POST',
@@ -182,13 +196,56 @@ describe('career coach market observations', () => {
       },
     });
 
-    expect(response.statusCode).toBe(502);
-    expect(response.json().error).toMatchObject({
-      code: 'market_source_unavailable',
-      retryable: true,
+    expect(response.statusCode).toBe(200);
+    expect(observedInput?.marketObservations).toEqual([
+      expect.objectContaining({ ref: 'market:hh:456', sourceUrl: 'https://hh.ru/vacancy/456' }),
+    ]);
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        event: 'coach-market-live-sample-unavailable',
+        reason: 'hh_vacancy_search_official_access_required',
+      }),
+    );
+  });
+
+  it('answers without market observations when no sample can be read', async () => {
+    let observedInput: Parameters<CoachProvider['createTurn']>[0] | undefined;
+    const provider: CoachProvider = {
+      async createTurn(input) {
+        observedInput = input;
+        return successProvider.createTurn(input, randomUUID());
+      },
+    };
+    const logs: Record<string, unknown>[] = [];
+    const { app, authorization } = await createApp(
+      provider,
+      async () => {
+        throw new Error('upstream payload must stay private');
+      },
+      {
+        searchStoredVacancies: async () => {
+          throw new Error('vacancy_match_timeout');
+        },
+        logDestination: { write: (line) => logs.push(JSON.parse(line) as Record<string, unknown>) },
+      },
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: requestHeaders(authorization),
+      payload: {
+        messageId: randomUUID(),
+        content: 'Проверь рынок вакансий для выбранной роли.',
+        marketQuery: 'руководитель продукта',
+      },
     });
-    expect(response.json().error.message).not.toContain('upstream payload');
-    expect(providerCalls).toBe(0);
+
+    expect(response.statusCode).toBe(200);
+    expect(observedInput?.marketObservations).toEqual([]);
+    expect(logs).toContainEqual(
+      expect.objectContaining({ event: 'coach-market-stored-sample-unavailable', reason: 'vacancy_match_timeout' }),
+    );
   });
 
   it('rejects a changed market query under the same idempotency key', async () => {

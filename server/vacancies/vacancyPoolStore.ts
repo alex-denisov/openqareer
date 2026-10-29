@@ -89,6 +89,8 @@ export interface VacancyPoolStore {
   /** Все source_id, включая записи, которых нет в текущем registry (B235). */
   countAllSourceSlices?(): ReadonlyMap<string, { total: number; active: number }>;
   queryVacancies(query: VacancyPoolQuery): VacancyPoolPage;
+  /** Свежие записи обхода hh по подстроке — рыночный срез консультанта (29.10). */
+  queryStoredHhSampleAsync?(text: string, limit: number, nowMs?: number): Promise<UnifiedVacancy[]>;
   loadSourceLinks(sourceId: string): VacancyLink[];
   /**
    * Подвыборка записей для подбора кандидату (B221 срез 2).
