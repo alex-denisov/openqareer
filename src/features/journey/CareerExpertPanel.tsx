@@ -44,6 +44,8 @@ import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import { starterPromptsForStage } from './starterPrompts';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
+import { ExpertHistoryRow, ExpertVisibleLine } from './expertSheetParts';
+import { latestExchange } from './expertSheetView';
 import { withoutStoredConditionChanges } from './careerChangeApply';
 import { ComposerModeSplit, type ComposerInputMode } from './ComposerModeSplit';
 import { CareerActionProposalList } from './CareerCommandActions';
@@ -408,6 +410,7 @@ export function CareerExpertPanel({
     return true;
   }
   const turns = consultantTurns(snapshot?.messages);
+  const currentTurnIds = new Set(latestExchange(turns).map((turn) => turn.id));
   const latestContextTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationContext);
   const contextResult = liveResult?.adaptationContext ? liveResult : latestContextTurn?.result;
   const contextTurnKey = liveResult?.adaptationContext ? liveTurnIdempotencyKey : latestContextTurn?.idempotencyKey;
@@ -552,6 +555,7 @@ export function CareerExpertPanel({
           </button>
         ) : null}
       </header>
+      <ExpertVisibleLine subjectKind={subject?.kind} hasMarketQuery={Boolean(marketQuery?.trim())} />
       <div
         className={`career-expert-conversation${historyOpen ? ' consultant-history-is-open' : ''}`}
       >
@@ -572,21 +576,14 @@ export function CareerExpertPanel({
               </>
             ) : historyItems.length ? (
               historyItems.map((item) => (
-                <button
-                  className="consultant-history-row"
-                  type="button"
+                <ExpertHistoryRow
                   key={item.id}
-                  aria-label={`Открыть беседу: ${item.summary ?? item.firstPhrase}`}
-                  onClick={() => void loadHistory(item.id)}
-                >
-                  <small>
-                    <time dateTime={item.lastMessageAt}>
-                      {formatHistoryMoment(item.lastMessageAt)}
-                    </time>
-                    <b>{STAGE_TITLE[item.stage]}</b>
-                  </small>
-                  <span>{item.summary ?? item.firstPhrase}</span>
-                </button>
+                  dateTime={item.lastMessageAt}
+                  dateLabel={formatHistoryMoment(item.lastMessageAt)}
+                  sectionTitle={STAGE_TITLE[item.stage]}
+                  firstPhrase={item.firstPhrase}
+                  onOpen={() => void loadHistory(item.id)}
+                />
               ))
             ) : (
               <p>Бесед пока нет.</p>
@@ -623,7 +620,10 @@ export function CareerExpertPanel({
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки истории с клавиатуры, включая Safari.
             <div className="career-dialogue-history" role="log" tabIndex={0} aria-label="История диалога">
               {turns.map((message) => (
-                <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
+                <article
+                  className={`career-dialogue-turn is-${message.role}${currentTurnIds.has(message.id) ? '' : ' is-earlier'}`}
+                  key={message.id}
+                >
                   <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
                   {message.role === 'assistant' ? (
                     <ConsultantMessage text={message.content} />

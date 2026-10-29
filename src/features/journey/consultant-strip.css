@@ -323,3 +323,45 @@
     line-height: 1.25;
   }
 }
+
+/* A2: беседа в истории занимает одну строку: дата · раздел · вопрос. */
+.consultant-history .consultant-history-row {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--career-space-2);
+}
+.consultant-history-row time,
+.consultant-history-row b {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  white-space: nowrap;
+}
+.consultant-history-row b {
+  color: var(--career-text-soft);
+  font-weight: 600;
+}
+.consultant-history-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A3: строка «Видит: …» и текущая беседа только на листе 390; A4: кнопка истории в шапке. */
+.consultant-visible-line {
+  display: none;
+}
+@media (max-width: 760px) {
+  .consultant-visible-line {
+    display: block;
+    margin: 0;
+    padding: var(--career-space-1) var(--career-space-4);
+    font-size: var(--career-text-xs);
+    color: var(--career-text-dim);
+  }
+  .career-expert-panel .career-dialogue-turn.is-earlier {
+    display: none;
+  }
+  .career-expert-panel .career-expert-history-button {
+    display: inline-grid;
+  }
+}
