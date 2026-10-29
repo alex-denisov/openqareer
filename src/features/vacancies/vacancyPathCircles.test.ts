@@ -96,6 +96,44 @@ describe('pathCircleCards (B549)', () => {
     });
   });
 
+  it('adds the paths through platform members to circle 2, as a count only (B561)', () => {
+    const base = data();
+    const own = base.circles[0]!.paths.map((path) => ({ ...path, circle: 2 as const }));
+    const withCircle2 = (circle2: VacancyConnectionCircles['circles'][number]) =>
+      pathCircleCards({ ...base, circles: [base.circles[0]!, circle2, base.circles[2]!] })[1];
+
+    expect(
+      withCircle2({
+        circle: 2,
+        state: 'available',
+        message: '',
+        paths: own,
+        platformPaths: { paths: 3 },
+      }),
+    ).toMatchObject({
+      summary: '2 пути через знакомых и 3 через участников платформы.',
+      actionLabel: 'Показать пути',
+    });
+    expect(
+      withCircle2({
+        circle: 2,
+        state: 'none',
+        message: '',
+        paths: [],
+        platformPaths: { paths: 1 },
+      }),
+    ).toMatchObject({ summary: '1 путь через участника платформы.' });
+    expect(
+      withCircle2({
+        circle: 2,
+        state: 'none',
+        message: '',
+        paths: [],
+        platformPaths: { paths: 0 },
+      }),
+    ).toMatchObject({ summary: 'Путей через знакомых не найдено.' });
+  });
+
   it('is honest when a known circle has no contacts', () => {
     const base = data();
     const cards = pathCircleCards({

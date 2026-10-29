@@ -16,12 +16,14 @@ describe('capabilityConsents draft text and flags', () => {
     expect(CAPABILITY_CONSENTS_APPROVED).toBe(true);
   });
 
-  it('defines 3 closed candidate capabilities', () => {
+  it('defines 4 closed candidate capabilities', () => {
     expect(CANDIDATE_CAPABILITIES).toEqual([
       'profile_activity',
       'digital_footprint',
       'actions_on_behalf',
+      'linkedin_contacts',
     ]);
+    expect(isCandidateCapability('linkedin_contacts')).toBe(true);
     expect(isCandidateCapability('profile_activity')).toBe(true);
     expect(isCandidateCapability('digital_footprint')).toBe(true);
     expect(isCandidateCapability('actions_on_behalf')).toBe(true);
@@ -233,5 +235,19 @@ describe('SqliteCapabilityConsentStore', () => {
     expect(store.listConsents('usr-1').map((record) => record.capability)).toEqual([
       'profile_activity',
     ]);
+  });
+
+  it('B561: активное согласие кандидата находится через его аккаунт', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('CREATE TABLE users (id TEXT PRIMARY KEY, candidate_id TEXT)');
+    db.prepare('INSERT INTO users (id, candidate_id) VALUES (?, ?)').run('usr-5', 'cand-5');
+    const store = new SqliteCapabilityConsentStore(db);
+    store.recordConsent({ userId: 'usr-5', capability: 'linkedin_contacts', versionId: 'v1' });
+
+    expect(store.hasActiveConsentForCandidate('cand-5', 'linkedin_contacts')).toBe(true);
+    expect(store.hasActiveConsentForCandidate('usr-5', 'linkedin_contacts')).toBe(false);
+    expect(store.hasActiveConsentForCandidate('cand-5', 'profile_activity')).toBe(false);
+    store.revokeConsent('usr-5', 'linkedin_contacts');
+    expect(store.hasActiveConsentForCandidate('cand-5', 'linkedin_contacts')).toBe(false);
   });
 });

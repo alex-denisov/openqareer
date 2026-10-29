@@ -102,6 +102,8 @@ export interface RouteDeps {
   searchConsentRepo?: import('../data/sqliteSearchConsentRepository').SqliteSearchConsentRepository;
   /** Журнал согласий кандидата на возможности профиля (B263). */
   capabilityConsentStore?: import('../auth/capabilityConsentStore').SqliteCapabilityConsentStore;
+  /** Shared index of LinkedIn people and member edges, fed only with consent (B561). */
+  networkIndexRepo?: import('../data/sqliteNetworkIndexRepository').SqliteNetworkIndexRepository;
   /** Candidate-scoped «Хочу в эту компанию» list and next step (B439). */
   candidateCompanyWantsRepo?: import('../data/sqliteCandidateCompanyWantsRepository').SqliteCandidateCompanyWantsRepository;
   /** Репозиторий квитанций, лимитов и kill-switch действий кандидата (B261). */

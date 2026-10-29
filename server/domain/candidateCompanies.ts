@@ -270,6 +270,8 @@ export interface ConnectionCircleResult {
   readonly state: ConnectionCircleState;
   readonly message: string;
   readonly paths: readonly ConnectionCirclePath[];
+  /** Circle 2 only (B561): paths through other platform members — a count, never names. */
+  readonly platformPaths?: { readonly paths: number };
 }
 
 export interface BuildConnectionCirclesInput {
@@ -280,6 +282,8 @@ export interface BuildConnectionCirclesInput {
   readonly contacts: readonly CandidateConnectionContact[];
   /** False means the candidate has not imported an exhaustive LinkedIn contact list. */
   readonly linkedinContactsImported: boolean;
+  /** Paths into the vacancy company through other consenting platform members (B561). */
+  readonly platformPaths?: number;
 }
 
 const CONNECTION_PATH_LIMIT = 100;
@@ -293,7 +297,10 @@ export function buildConnectionCircles(input: BuildConnectionCirclesInput): {
   return {
     circles: [
       resultForCircle(1, direct, input.linkedinContactsImported),
-      resultForCircle(2, introductions, input.linkedinContactsImported),
+      {
+        ...resultForCircle(2, introductions, input.linkedinContactsImported),
+        platformPaths: { paths: Math.max(0, Math.trunc(input.platformPaths ?? 0)) },
+      },
       { circle: 3, state: 'available', message: '', paths: cold.slice(0, CONNECTION_PATH_LIMIT) },
     ],
   };

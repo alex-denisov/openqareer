@@ -46,6 +46,7 @@ import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContact
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
+import { SqliteNetworkIndexRepository } from './data/sqliteNetworkIndexRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
 import { registerCandidateFootprintRoutes } from './routes/candidateFootprintRoutes';
 import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
@@ -119,6 +120,7 @@ interface BuildAppOptions {
   searchConsentRepo?: SqliteSearchConsentRepository;
   capabilityConsentStore?: SqliteCapabilityConsentStore;
   candidateCompanyWantsRepo?: SqliteCandidateCompanyWantsRepository;
+  networkIndexRepo?: SqliteNetworkIndexRepository;
   candidateActionRepository?: SqliteCandidateActionRepository;
   candidateActionExecutor?: CandidateActionExecutor;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
@@ -381,6 +383,9 @@ function createCandidateRepositories(options: BuildAppOptions) {
     capabilityConsentStore:
       options.capabilityConsentStore ??
       new SqliteCapabilityConsentStore({ databasePath: config.databasePath }),
+    networkIndexRepo:
+      options.networkIndexRepo ??
+      new SqliteNetworkIndexRepository({ databasePath: config.databasePath }),
     candidateCompanyWantsRepo:
       options.candidateCompanyWantsRepo ??
       new SqliteCandidateCompanyWantsRepository({
@@ -539,6 +544,15 @@ function attachMarketSalaryStore(
   return owned;
 }
 
+/** Repositories the app opened itself; ones passed in belong to the caller (tests). */
+function closeOwnedCandidateRepos(
+  options: Pick<BuildAppOptions, 'candidateCompanyWantsRepo' | 'networkIndexRepo'>,
+  deps: Pick<RouteDeps, 'candidateCompanyWantsRepo' | 'networkIndexRepo'>,
+): void {
+  if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
+  if (!options.networkIndexRepo) deps.networkIndexRepo?.close();
+}
+
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   const {
     config,
@@ -578,7 +592,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     services.titleParseStore.close();
     ownedMarketSalaryEstimates?.close();
     deps.capabilityConsentStore?.close();
-    if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
+    closeOwnedCandidateRepos(options, deps);
     if (!options.candidateDraftRepository) deps.candidateDraftRepository.close();
     if (!options.billingRepository && config.databasePath !== ':memory:') {
       deps.billingRepository?.close();

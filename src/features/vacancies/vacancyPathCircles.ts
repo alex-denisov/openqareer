@@ -39,6 +39,10 @@ function contactSummary(circle: 1 | 2, count: number, companyName: string): stri
   return `${pluralRu(count, ['путь', 'пути', 'путей'])} через знакомых.`;
 }
 
+function platformSummary(count: number): string {
+  return `${pluralRu(count, ['путь', 'пути', 'путей'])} через ${count === 1 ? 'участника' : 'участников'} платформы.`;
+}
+
 function warmCard(
   circle: 1 | 2,
   result: ConnectionCircleResult | undefined,
@@ -46,12 +50,22 @@ function warmCard(
 ): PathCircleCard {
   const base = { circle, label: `Круг ${circle}`, title: TITLES[circle], result };
   const count = result?.state === 'available' ? result.paths.length : 0;
+  const platform = circle === 2 ? (result?.platformPaths?.paths ?? 0) : 0;
   if (count > 0) {
+    const own = contactSummary(circle, count, companyName);
     return {
       ...base,
-      summary: contactSummary(circle, count, companyName),
+      summary: platform > 0 ? `${own.slice(0, -1)} и ${platform} через участников платформы.` : own,
       actionLabel: ACTIONS[circle],
       known: true,
+    };
+  }
+  if (platform > 0) {
+    return {
+      ...base,
+      summary: platformSummary(platform),
+      actionLabel: 'Добавить контакты',
+      known: false,
     };
   }
   const summary =

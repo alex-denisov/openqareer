@@ -186,6 +186,22 @@ describe('B448 connection circles', () => {
     expect(JSON.stringify(result)).not.toMatch(/probability|вероятност|процент/iu);
   });
 
+  it('gives circle 2 the count of paths through platform members, and only to circle 2 (B561)', () => {
+    const result = buildConnectionCircles(
+      connectionInput({ linkedinContactsImported: true, platformPaths: 3 }),
+    );
+
+    expect(result.circles.find((circle) => circle.circle === 2)?.platformPaths).toEqual({
+      paths: 3,
+    });
+    expect(result.circles.find((circle) => circle.circle === 1)?.platformPaths).toBeUndefined();
+    expect(
+      buildConnectionCircles(connectionInput({ linkedinContactsImported: true })).circles.find(
+        (circle) => circle.circle === 2,
+      )?.platformPaths,
+    ).toEqual({ paths: 0 });
+  });
+
   it('distinguishes unknown from an imported empty contact list', () => {
     const unknown = buildConnectionCircles(connectionInput({ linkedinContactsImported: false }));
     const emptyImport = buildConnectionCircles(connectionInput({ linkedinContactsImported: true }));

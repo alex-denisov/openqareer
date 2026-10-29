@@ -22,6 +22,7 @@ import { finishMatchedVacancies } from './matchedVacancyRoutes';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
+import { platformPathsInto, syncMemberNetwork } from './networkIndexFeed';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { CandidateSnapshot } from '../data/candidateStore';
 import {
@@ -328,7 +329,9 @@ async function handleImportLinkedInContacts(
       false,
     );
   }
-  return persistLinkedInImport(repository, candidate.id, manual, records, contacts, request, reply);
+  const response = persistLinkedInImport(repository, candidate.id, manual, records, contacts, request, reply);
+  syncMemberNetwork(deps, candidate.id, connectionRecords(repository, candidate.id), readConnectionMetadata, request.log);
+  return response;
 }
 
 function persistLinkedInImport(
@@ -497,6 +500,7 @@ async function connectionCirclesResponse(
     recruiters,
     contacts,
     linkedinContactsImported: importReceipt !== null,
+    platformPaths: platformPathsInto(deps, candidateId, matched.cluster.canonicalCompany).paths,
   });
   return {
     data: {
