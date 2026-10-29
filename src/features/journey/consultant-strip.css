@@ -361,7 +361,25 @@
   .career-expert-panel .career-dialogue-turn.is-earlier {
     display: none;
   }
+  /* mobile-shell.css hides the whole control group on 390; keep only the history button. */
+  .career-shell > .panel-col .career-expert-panel .career-expert-panel-controls {
+    display: flex;
+    align-items: center;
+    /* The sheet toggle is absolutely placed at the right edge. */
+    margin-inline-end: var(--career-target-min);
+  }
+  .career-expert-panel .career-expert-panel-controls > :not(.career-expert-history-button) {
+    display: none;
+  }
   .career-expert-panel .career-expert-history-button {
     display: inline-grid;
+  }
+  /* The line sits inside the feed: the panel grid has fixed rows for header and feed. */
+  .career-expert-conversation > .consultant-visible-line {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 1;
+    padding-block: var(--career-space-2);
+    background: var(--career-bg-elevated);
   }
 }

@@ -555,10 +555,13 @@ export function CareerExpertPanel({
           </button>
         ) : null}
       </header>
-      <ExpertVisibleLine subjectKind={subject?.kind} hasMarketQuery={Boolean(marketQuery?.trim())} />
       <div
         className={`career-expert-conversation${historyOpen ? ' consultant-history-is-open' : ''}`}
       >
+        <ExpertVisibleLine
+          subjectKind={subject?.kind}
+          hasMarketQuery={Boolean(marketQuery?.trim())}
+        />
         {historyOpen ? (
           <section
             className="consultant-history"
