@@ -27,6 +27,25 @@ describe('ProfileLanguagesSection', () => {
     ],
   };
 
+  it('шкала из шести делений A1…C2; родной — 6 из 6 с подписью «родной» (C8)', () => {
+    const draft: ResumeDraft = {
+      ...baseDraft,
+      languages: [
+        { id: 'a', name: 'English', cefr: 'C1' },
+        { id: 'b', name: 'Русский', cefr: 'C2', sourceLabel: 'Native or bilingual proficiency' },
+      ],
+    };
+    const html = renderToStaticMarkup(
+      <ProfileLanguagesSection draft={draft} onSectionSave={() => undefined} />,
+    );
+    const meters = html.split('career-profile-screen-lang-meter').slice(1);
+    expect(meters).toHaveLength(2);
+    expect(meters[0]!.match(/<span class="is-active"/g)).toHaveLength(5);
+    expect(meters[0]!.match(/<span class=""/g)).toHaveLength(1);
+    expect(meters[1]!.match(/<span class="is-active"/g)).toHaveLength(6);
+    expect(html).toContain('career-profile-screen-lang-level">родной');
+  });
+
   it('показывает уровень словом и шкалу из пяти делений без англоязычной приписки', () => {
     const html = renderToStaticMarkup(
       <ProfileLanguagesSection draft={baseDraft} onSectionSave={() => undefined} />,

@@ -40,15 +40,30 @@ export function languageName(name: string): string {
   return LANGUAGE_NAMES[name.trim().toLocaleLowerCase('en')] ?? name;
 }
 
-function LanguageMeter({ name, level }: { readonly name: string; readonly level: CefrLevel }) {
-  const activeCount = Math.min(CEFR_LEVELS.indexOf(level) + 1, 5);
+const NATIVE_SOURCE = /native|bilingual|родн/iu;
+
+/** Native or bilingual is the full scale, whatever CEFR letter the source attached. */
+function isNativeLanguage(entry: ResumeLanguageInput): boolean {
+  return NATIVE_SOURCE.test(entry.sourceLabel ?? '');
+}
+
+function LanguageMeter({
+  name,
+  level,
+  native = false,
+}: {
+  readonly name: string;
+  readonly level: CefrLevel;
+  readonly native?: boolean;
+}) {
+  const activeCount = native ? CEFR_LEVELS.length : CEFR_LEVELS.indexOf(level) + 1;
   return (
     <span
       className="career-profile-screen-lang-meter"
       role="img"
-      aria-label={`Уровень ${level}: ${CEFR_LABELS[level]}`}
+      aria-label={native ? 'Уровень: родной' : `Уровень ${level}: ${CEFR_LABELS[level]}`}
     >
-      {Array.from({ length: 5 }, (_, index) => (
+      {Array.from({ length: CEFR_LEVELS.length }, (_, index) => (
         <span
           key={`${name}-${index}`}
           className={index < activeCount ? 'is-active' : ''}
@@ -143,12 +158,18 @@ function LanguageRow({
           {languageName(entry.name || 'Язык не указан')}
         </div>
         <span className="career-profile-screen-lang-level">
-          {entry.cefr
-            ? `${CEFR_LABELS[entry.cefr]} (${entry.cefr})`
-            : entry.sourceLabel?.trim() === 'родной'
-              ? 'родной'
+          {isNativeLanguage(entry)
+            ? 'родной'
+            : entry.cefr
+              ? `${CEFR_LABELS[entry.cefr]} (${entry.cefr})`
               : 'Уровень не указан'}
-          {entry.cefr ? <LanguageMeter name={entry.name ?? ''} level={entry.cefr} /> : null}
+          {entry.cefr || isNativeLanguage(entry) ? (
+            <LanguageMeter
+              name={entry.name ?? ''}
+              level={entry.cefr ?? 'C2'}
+              native={isNativeLanguage(entry)}
+            />
+          ) : null}
         </span>
         <SectionPencilButton label="Изменить язык" onClick={() => setEditing(true)} />
         <SectionRemoveButton label="Удалить язык" onClick={onRemove} />
