@@ -567,6 +567,33 @@ describe('B448 candidate connection circles', () => {
     expect(companies.items[0]).toMatchObject({ contactsCount: 1 });
   });
 
+  it('keeps contacts a later partial read did not reach (29.10)', async () => {
+    const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
+    const person = (slug: string, fullName: string, companyName: string) => ({
+      fullName,
+      companyName,
+      roleTitle: 'Engineer',
+      linkedinUrl: `https://www.linkedin.com/in/${slug}/`,
+    });
+    await importConnectionContacts(app, authorization, [
+      person('anna-test', 'Анна', 'Вектор Банк'),
+      person('boris-test', 'Борис', 'Арка'),
+    ]);
+    // 29.10: the walk stopped at its 8-minute cap and returned a shorter list.
+    const second = await importConnectionContacts(app, authorization, [
+      person('boris-test', 'Борис', 'Север Тех'),
+      person('dina-test', 'Дина', ''),
+    ]);
+    expect(second.json().data.importedCount).toBe(3);
+    const listed = (await listConnectionContacts(app, authorization)).json().data;
+    expect(listed.total).toBe(3);
+    const byName = (name: string) =>
+      listed.items.find((item: { fullName: string }) => item.fullName === name);
+    expect(byName('Анна')).toMatchObject({ companyName: 'Вектор Банк' });
+    expect(byName('Борис')).toMatchObject({ companyName: 'Север Тех' });
+    expect(byName('Дина')).toBeDefined();
+  });
+
   it('keeps missing connections unknown and makes an imported empty list distinct', async () => {
     const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
     const path = '/api/v1/candidate/vacancies/cluster-v1/connection-circles';

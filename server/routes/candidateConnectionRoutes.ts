@@ -24,6 +24,7 @@ import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolC
 import { readTargetLevel } from './vacancyRoleContext';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { CandidateSnapshot } from '../data/candidateStore';
+import { stableJson, unreachedImportedContacts } from './connectionImportMerge';
 
 const CONNECTION_SCOPE_ID = '__b448_candidate_connections__';
 const CONNECTION_IMPORT_RECEIPT_ID = '__b448_linkedin_import_receipt__';
@@ -344,8 +345,20 @@ function persistLinkedInImport(
   const digest = digestImport(unique);
   const previous = readImportReceipt(existing);
   if (previous?.digest === digest) return connectionImportResponse(request, previous);
-  const receipt = { digest, importedAt: new Date().toISOString(), importedCount: unique.length };
-  storeImportedConnections(repository, candidateId, manual, unique, receipt);
+  const carried = unreachedImportedContacts(
+    existing,
+    unique.map((contact) => ({ url: contact.linkedinUrl, id: importedContactId(contact) })),
+    (record) => readConnectionMetadata(record)?.contactId,
+  ).slice(
+    0,
+    Math.max(0, MAX_CONNECTION_CONTACTS - manual.length - unique.length),
+  );
+  const receipt = {
+    digest,
+    importedAt: new Date().toISOString(),
+    importedCount: unique.length + carried.length,
+  };
+  storeImportedConnections(repository, candidateId, manual, unique, carried, receipt);
   return connectionImportResponse(request, receipt);
 }
 
@@ -354,10 +367,11 @@ function storeImportedConnections(
   candidateId: string,
   manual: readonly RecruiterContact[],
   contacts: readonly ImportedContactInput[],
+  carried: readonly RecruiterContact[],
   receipt: ImportReceipt,
 ): void {
   const usedIds = new Set(
-    manual.flatMap((record) => readConnectionMetadata(record)?.contactId ?? []),
+    [...manual, ...carried].flatMap((record) => readConnectionMetadata(record)?.contactId ?? []),
   );
   const imported = contacts.map((contact) =>
     toStoredConnectionContact(
@@ -369,7 +383,12 @@ function storeImportedConnections(
     ),
   );
   const storedReceipt = toStoredImportReceipt(candidateId, receipt);
-  saveConnectionRecords(repository, candidateId, [...manual, ...imported, storedReceipt]);
+  saveConnectionRecords(repository, candidateId, [
+    ...manual,
+    ...imported,
+    ...carried,
+    storedReceipt,
+  ]);
 }
 
 function connectionImportResponse(request: FastifyRequest, receipt: ImportReceipt) {
@@ -741,21 +760,6 @@ function digestImport(contacts: readonly ImportedContactInput[]): string {
   return createHash('sha256').update(stableJson(contacts)).digest('hex');
 }
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
-  if (typeof value === 'object' && value !== null) {
-    const record = value as Record<string, unknown>;
-    return (
-      '{' +
-      Object.keys(record)
-        .sort()
-        .map((key) => JSON.stringify(key) + ':' + stableJson(record[key]))
-        .join(',') +
-      '}'
-    );
-  }
-  return JSON.stringify(value) ?? 'null';
-}
 
 function sameManualContact(current: ConnectionContactView, input: ConnectionContactInput): boolean {
   return (

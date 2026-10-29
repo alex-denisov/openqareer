@@ -1469,9 +1469,10 @@ pub async fn inspect_session_page_for(
 const LAZY_SCROLL_MAX_STEPS: usize = 40;
 /// The connections list appends ~7 cards a step (run 5: 1 053 cards in 150
 /// steps); 450 steps let a network of ~3 000 finish, and the walk is also
-/// bounded in time (B448).
+/// bounded in time (B448). The time cap must let those steps run: on 29.10 a
+/// step took ~2.2 s and 8 minutes stopped a 1 888 network at 1 363.
 const CONNECTIONS_SCROLL_MAX_STEPS: usize = 450;
-const CONNECTIONS_SCROLL_MAX_DURATION: Duration = Duration::from_secs(8 * 60);
+const CONNECTIONS_SCROLL_MAX_DURATION: Duration = Duration::from_secs(18 * 60);
 const LAZY_SCROLL_MAX_DURATION: Duration = Duration::from_secs(3 * 60);
 /// The list loads its next chunk well after the scroll lands; four quiet
 /// readings ended run 4 after 7 steps (B448).
@@ -2156,7 +2157,8 @@ mod tests {
             (connections.max_steps, connections.quiet_readings),
             (450, 8)
         );
-        assert_eq!(connections.max_duration, Duration::from_secs(8 * 60));
+        // 29.10: at ~2.2 s a step the 8-minute cap stopped a 1 888 network at 1 363.
+        assert_eq!(connections.max_duration, Duration::from_secs(18 * 60));
         assert!(connections.compact_connections);
         let profile = lazy_scroll_budget("/in/someone/");
         assert_eq!((profile.max_steps, profile.quiet_readings), (40, 4));

@@ -87,7 +87,10 @@ export interface LinkedInConnectionImportReceipt {
   readonly importedCount: number;
 }
 
-/** Replaces the candidate's LinkedIn-sourced contacts; manual ones stay (B448). */
+/**
+ * Updates the candidate's LinkedIn-sourced contacts; people the list does not
+ * name are kept, since a capped read is shorter, not newer (29.10). Manual ones stay (B448).
+ */
 export async function importLinkedInConnectionContacts(
   contacts: readonly LinkedInConnectionImportContact[],
 ): Promise<LinkedInConnectionImportReceipt> {
