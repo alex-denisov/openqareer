@@ -17,8 +17,10 @@ import {
   CoachProviderError,
   type CoachProvider,
   type CoachProviderResult,
+  type CoachTurnOptions,
   type ProviderOutputDiagnostic,
 } from './coachProvider';
+import { streamResponse } from './responseStream';
 import {
   PROVIDER_STAGE_MAX_RETRIES,
   PROVIDER_STAGE_TIMEOUT_MS,
@@ -51,13 +53,15 @@ function reasoningEffortForRole(role: CoachTurnInput['activeRole']): 'medium' | 
 export class OpenAICoachProvider implements CoachProvider {
   private readonly client: OpenAI;
   private readonly model: OpenAICoachProviderOptions['model'];
+  private readonly timeoutMs: number;
 
   constructor(options: OpenAICoachProviderOptions) {
+    this.timeoutMs = options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS;
     this.client =
       options.client ??
       new OpenAI({
         apiKey: options.apiKey,
-        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        timeout: this.timeoutMs,
         maxRetries: PROVIDER_STAGE_MAX_RETRIES,
       });
     this.model = options.model;
@@ -66,34 +70,41 @@ export class OpenAICoachProvider implements CoachProvider {
   async createTurn(
     input: CoachTurnInput,
     idempotencyKey: string,
+    options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
     try {
-      const response = await this.client.responses.create(
-        {
-          model: this.model,
-          store: false,
-          instructions: careerInstructionsForRole(input.activeRole, input.internalPurpose),
-          input: serializeCoachInput(input),
-          reasoning: {
-            effort: reasoningEffortForRole(input.activeRole),
-            context: 'all_turns',
-          },
-          max_output_tokens: outputBudgetForRole(
-            input.activeRole,
-            COACH_REASONING_EFFORT,
-          ),
-          safety_identifier: hashCandidateReference(input.candidateReference),
-          text: {
-            format: {
-              type: 'json_schema',
-              name: 'career_coach_turn',
-              strict: true,
-              schema: COACH_TURN_JSON_SCHEMA,
-            },
+      const request: OpenAI.Responses.ResponseCreateParamsNonStreaming = {
+        model: this.model,
+        store: false,
+        instructions: careerInstructionsForRole(input.activeRole, input.internalPurpose),
+        input: serializeCoachInput(input),
+        reasoning: {
+          effort: reasoningEffortForRole(input.activeRole),
+          context: 'all_turns',
+        },
+        max_output_tokens: outputBudgetForRole(
+          input.activeRole,
+          COACH_REASONING_EFFORT,
+        ),
+        safety_identifier: hashCandidateReference(input.candidateReference),
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'career_coach_turn',
+            strict: true,
+            schema: COACH_TURN_JSON_SCHEMA,
           },
         },
-        { idempotencyKey },
-      );
+      };
+      // 29.10: a listener reads the reply as it is written; the checks below are the same.
+      const onMessageText = options?.onMessageText;
+      const response = onMessageText
+        ? await streamResponse(this.client, request, {
+            idempotencyKey,
+            timeoutMs: this.timeoutMs,
+            onMessageText,
+          })
+        : await this.client.responses.create(request, { idempotencyKey });
 
       if (response.status === 'incomplete') {
         throw invalidOutput(

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { CoachTurnInput } from '../domain/coach';
 import { CoachProviderError, type CoachProvider } from './coachProvider';
 import { ResilientCoachProvider } from './resilientCoachProvider';
@@ -306,5 +306,78 @@ describe('дедлайн хода (28.10)', () => {
     await expect(turn).rejects.toMatchObject({ code: 'provider_timeout' });
     expect(Date.now() - started).toBeLessThan(1_000);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('ResilientCoachProvider streamed message (29.10)', () => {
+  const streaming = (texts: string[], outcome: 'ok' | 'fail'): CoachProvider => ({
+    async createTurn(_input, _key, options) {
+      for (const text of texts) options?.onMessageText?.(text);
+      if (outcome === 'fail') throw new CoachProviderError('provider_unavailable', 503, true);
+      return result('openai');
+    },
+  });
+
+  it('passes the stage text through and resets it when the stage fails mid-stream', async () => {
+    const seen: string[] = [];
+    const provider = new ResilientCoachProvider({
+      routes: [
+        { id: 'openrouter', provider: streaming(['Пер', 'Перв'], 'fail') },
+        { id: 'openai', provider: streaming(['Вто'], 'ok') },
+      ],
+      now: () => 1_000,
+    });
+
+    await provider.createTurn(input, '12121212-1212-4212-8212-121212121212', {
+      onMessageText: (text) => seen.push(text),
+    });
+
+    expect(seen).toEqual(['Пер', 'Перв', '', 'Вто']);
+  });
+
+  it('does not reset when the failed stage emitted nothing', async () => {
+    const seen: string[] = [];
+    const provider = new ResilientCoachProvider({
+      routes: [
+        { id: 'openrouter', provider: streaming([], 'fail') },
+        { id: 'openai', provider: streaming(['Ответ'], 'ok') },
+      ],
+      now: () => 1_000,
+    });
+
+    await provider.createTurn(input, '13131313-1313-4313-8313-131313131313', {
+      onMessageText: (text) => seen.push(text),
+    });
+
+    expect(seen).toEqual(['Ответ']);
+  });
+
+  it('silences a stage the turn deadline abandoned', async () => {
+    const seen: string[] = [];
+    let late: ((text: string) => void) | undefined;
+    const slow: CoachProvider = {
+      createTurn(_input, _key, options) {
+        late = options?.onMessageText;
+        options?.onMessageText?.('Медл');
+        return new Promise(() => undefined);
+      },
+    };
+    vi.useFakeTimers();
+    const provider = new ResilientCoachProvider({
+      routes: [{ id: 'openrouter', provider: slow }],
+      now: () => 0,
+    });
+
+    const turn = provider.createTurn(input, '14141414-1414-4414-8414-141414141414', {
+      deadlineAt: 20_000,
+      onMessageText: (text) => seen.push(text),
+    });
+    const failed = expect(turn).rejects.toMatchObject({ code: 'provider_timeout' });
+    await vi.advanceTimersByTimeAsync(20_000);
+    await failed;
+    vi.useRealTimers();
+    late?.('Медленный');
+
+    expect(seen).toEqual(['Медл', '']);
   });
 });

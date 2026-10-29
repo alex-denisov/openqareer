@@ -143,6 +143,17 @@ function interceptCoach(page, app, candidate, state, retryManually) {
   const handler = async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    // 29.10: the reply stream is one more delivery fault here — a broken final event. The client
+    // must fall back to `/result` and recover it there, never generate again.
+    if (url.pathname.endsWith('/stream')) {
+      state.streams += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'event: delta\ndata: {"text":"Доставка"}\n\nevent: done\ndata: {"data":\n\n',
+      });
+      return;
+    }
     if (request.method() === 'POST') {
       state.posts += 1;
       state.keys.push(request.headers()['idempotency-key']);
@@ -167,6 +178,7 @@ function assertRecovery(state, expectedPosts) {
   if (
     state.generations !== 1 ||
     state.posts !== expectedPosts ||
+    state.streams !== expectedPosts ||
     new Set(state.keys).size !== 1 ||
     state.brokenFull !== expectedPosts ||
     state.brokenPart !== expectedPosts ||
@@ -178,7 +190,15 @@ function assertRecovery(state, expectedPosts) {
 
 /** Built client + real API/store, synthetic provider and deliberate delivery faults. */
 export async function verifyCoachDelivery(page, expert, viewport) {
-  const state = { generations: 0, posts: 0, keys: [], brokenFull: 0, brokenPart: 0, offsets: [] };
+  const state = {
+    generations: 0,
+    posts: 0,
+    streams: 0,
+    keys: [],
+    brokenFull: 0,
+    brokenPart: 0,
+    offsets: [],
+  };
   const retryManually = viewport.name === 'mobile';
   const expectedPosts = retryManually ? 2 : 1;
   const message =

@@ -53,3 +53,22 @@ describe('ответ модели доходит до кандидата без 
     expect(answer).toBe(clean);
   });
 });
+
+describe('потоковый текст ответа тоже без невидимых меток (29.10)', () => {
+  it('чистит каждый промежуточный текст и пропускает сброс', async () => {
+    const inner: CoachProvider = {
+      async createTurn(_input, _key, options) {
+        options?.onMessageText?.(`Ваш${ZWSP}`);
+        options?.onMessageText?.('');
+        return { result: { message: 'Ваш' } } as unknown as CoachProviderResult;
+      },
+    };
+    const seen: string[] = [];
+
+    await new HygienicCoachProvider({ inner }).createTurn(input, 'key-s', {
+      onMessageText: (text) => seen.push(text),
+    });
+
+    expect(seen).toEqual(['Ваш', '']);
+  });
+});
