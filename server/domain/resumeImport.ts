@@ -1,5 +1,6 @@
 import type { ParsedResume } from '../../src/features/workspace/resumeParser';
 import { mergeLinkedInLanguageLevels } from '../../shared/linkedinProfileV2';
+import { isNotASkill } from '../../shared/notASkill';
 import type { DOSSIER_DOMAINS } from './coach';
 import type { ResumeDraft } from './resumeDraft';
 
@@ -502,7 +503,7 @@ function hasWords(value: string | undefined): boolean {
 }
 
 function isPlausibleSkill(value: string): boolean {
-  return hasWords(value) && value.length <= 120;
+  return hasWords(value) && value.length <= 120 && !isNotASkill(value);
 }
 
 function planSkills(

@@ -190,6 +190,26 @@ describe('planResumeImport', () => {
     expect(plan.draft.languages).toEqual([]);
   });
 
+  it('never confirms the hh.ru driving and «Дополнительная информация» lines as skills, whichever reader sent them', () => {
+    // Blinov, 27.10: an import before the rules fix (#138) stored these four as skills.
+    const plan = planResumeImport(
+      resume({
+        skills: [
+          'PHP',
+          'Опыт вождения',
+          'Имеется собственный автомобиль',
+          'Права категории B',
+          'Дополнительная информация',
+          'Управление командой',
+        ],
+      }),
+      { idPrefix: 'imp1' },
+    );
+
+    expect(plan.draft.skills?.map((item) => item.name)).toEqual(['PHP', 'Управление командой']);
+    expect(plan.evidence.map((item) => item.statement)).not.toContain('Опыт вождения');
+  });
+
   it('knows a document with nothing but punctuation is not a resume', () => {
     expect(
       carriesProfileSubstance(
