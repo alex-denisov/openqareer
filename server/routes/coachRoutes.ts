@@ -17,11 +17,12 @@ import {
   authenticateCandidate,
   csrfError,
   hasSafeMutationOrigin,
-  requireCandidateLlmAccess,
+  candidatePlan,
   sendError,
   withDeps,
 } from './helpers';
 import { registerCoachResultRoute } from './coachResultRoute';
+import { requireTariffQuota } from './tariffQuotaGuard';
 import { recordNotificationFromSource } from './notificationRepositoryAccess';
 import { registerRoleSkillAssessmentRoutes } from './roleSkillAssessmentRoutes';
 import { coachTurnRequestSchema, coachProposalRejectRequestSchema } from './schemas';
@@ -354,7 +355,6 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  if (!requireCandidateLlmAccess(deps, request, reply, candidate.id)) return undefined;
 
   const parsedKey = z.string().uuid().safeParse(request.headers['idempotency-key']);
   if (!parsedKey.success) {
@@ -386,10 +386,12 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     stageContext = context;
   }
 
+  if (!requireTariffQuota(deps, request, reply, candidate.id, 'coach_turns', key)) return undefined;
   const adaptationContext = adaptationContextFromInput({ stageContext });
   if (adaptationContext) body.content = labelAdaptationMessage(deps, candidate.id, key, adaptationContext, body.content);
   const started = candidateStore.startTurn(candidate.id, key, { ...body, phase, stageContext });
   if (body.stage === 'diary' && started.state === 'ready') started.input.knowledgeContext = scopeAdaptationKnowledge(started.input.knowledgeContext, stageContext ?? '');
+  if (started.state === 'ready' && candidatePlan(deps, candidate.id) === 'free') started.input.modelTier = 'free';
   if (started.state === 'ready' && !body.subject) started.input.careerContext = readCareerContext(deps, request, candidate.id);
   // A chosen vacancy is the topic itself: its turn needs no live market sample (block C R5).
   const marketQuery = body.subject?.kind === 'vacancy' ? undefined : body.marketQuery;

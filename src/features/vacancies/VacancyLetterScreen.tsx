@@ -16,6 +16,7 @@ import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { CandidateWorkplaceForLetter, ConnectionCircleNumber } from './vacancyLetterApi';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
 import { CircleTabs, LetterCircleHeading } from './VacancyLetterCircles';
+import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import './vacancy-letter.css';
 
 type PitchTone = NonNullable<VacancyPitchPayload['tone']>;
@@ -147,6 +148,7 @@ function LetterDraftContent({
   return (
     <>
       <LetterEditor draft={state.draft} frozen={editorFrozen} onEdit={state.approval.reset} />
+      <TariffQuotaNote quota="applications" refreshKey={state.draft.loading} />
       {state.draft.pitch ? (
         <>
           <WorkplaceList

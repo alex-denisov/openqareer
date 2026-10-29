@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test';
+import { tariffQuotaSummary } from './tariffQuotaFixture';
 import { mockMapTiles } from './mapTiles';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
 import type { VacancyFitView } from '../../shared/vacancyFit';
@@ -1698,6 +1699,10 @@ export async function mockSignedInCabinet(
     }
     if (path.endsWith('/candidate/workspace')) {
       return route.fulfill({ json: { data: workspace } });
+    }
+    if (path === '/api/v1/candidate/billing/quotas' && route.request().method() === 'GET') {
+      const plan = currentInvoice?.status === 'paid' ? currentInvoice.planId : billingCurrentPlan;
+      return route.fulfill({ json: { data: tariffQuotaSummary(plan) } });
     }
     if (path === '/api/v1/candidate/billing' && route.request().method() === 'GET') {
       const currentPlan =

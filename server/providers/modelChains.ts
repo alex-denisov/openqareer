@@ -19,7 +19,10 @@ const VERTEX = { provider: 'vertex' } as const;
 const LUNA = { provider: 'openai', model: 'gpt-5.6-luna' } as const;
 const DEEPSEEK_FLASH = { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash' } as const;
 const DEEPSEEK_V4_FLASH = { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash' } as const;
-const DEEPSEEK_1017 = { provider: 'openrouter', model: 'deepseek/deepseek-v4.1-flash-1017' } as const;
+const DEEPSEEK_1017 = {
+  provider: 'openrouter',
+  model: 'deepseek/deepseek-v4.1-flash-1017',
+} as const;
 const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as const;
 
 /**
@@ -39,10 +42,11 @@ export const MODEL_CHAINS = {
    * Ход консультанта, его роли, сводка беседы, тренажёр интервью, запас служебных шагов.
    * B580 (решение владельца 29.10): платные тарифы — deepseek-v4.1-flash-1017 с запасной
    * deepseek-v4.1-flash; luna последней — обе первые ступени идут через OpenRouter, и его
-   * авария не должна оставить ход без ответа. Цепочка Free (glm-5.3-flash) появится вместе
-   * с квотами B579.
+   * авария не должна оставить ход без ответа.
    */
   coach: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
+  /** B579: 30 ходов Free в месяц — glm-5.3-flash (замер 28.10: 4/4 хода), запасная deepseek. */
+  coachFree: [GLM_FLASH, DEEPSEEK_FLASH],
   /** Разбор резюме: только платные маршруты (решение владельца 28.10). */
   resumeParsing: [LUNA, DEEPSEEK_FLASH, GLM_FLASH],
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */
@@ -109,21 +113,37 @@ export function resolveChain(
 /**
  * Очередь консультанта по его цепочке: каждая ступень получает свой потолок,
  * последняя — длинный (ей некому уступить ход), отказ ступени ведёт к следующей.
+ * Ход Free (`modelTier: 'free'`, B579) идёт по цепочке `coachFree`.
  */
 export function buildCoachChainProvider(options: {
   credentials: Partial<Record<ProviderId, string>>;
   buildStage: (route: ProviderRoute, timeoutMs: number) => CoachProvider;
   onAttempts?: ResilientCoachProviderOptions['onAttempts'];
   now?: () => number;
-}): ResilientCoachProvider {
-  const routes = chainRoutes(MODEL_CHAINS.coach, options.credentials);
+}): CoachProvider {
+  const paid = buildChainQueue(MODEL_CHAINS.coach, options);
+  // Без ключа OpenRouter у Free нет ступеней: ход идёт по платной цепочке, сервер стартует.
+  const free = chainRoutes(MODEL_CHAINS.coachFree, options.credentials).length
+    ? buildChainQueue(MODEL_CHAINS.coachFree, options)
+    : paid;
+  return {
+    createTurn: (input, idempotencyKey, turnOptions) =>
+      (input.modelTier === 'free' ? free : paid).createTurn(input, idempotencyKey, turnOptions),
+  };
+}
+
+function buildChainQueue(
+  chain: readonly ChainStage[],
+  options: Parameters<typeof buildCoachChainProvider>[0],
+): ResilientCoachProvider {
+  const routes = chainRoutes(chain, options.credentials);
   return new ResilientCoachProvider({
     routes: routes.map((route, index) => ({
       id: route.provider,
       model: route.model,
       provider: options.buildStage(route, queueStageTimeoutMs(index, routes.length)),
     })),
-    maxAttempts: MODEL_CHAINS.coach.length,
+    maxAttempts: chain.length,
     ...(options.onAttempts ? { onAttempts: options.onAttempts } : {}),
     ...(options.now ? { now: options.now } : {}),
   });

@@ -17,6 +17,7 @@ import { CoachProviderError } from '../providers/coachProvider';
 import type { CandidateIdentity, StoredMemory } from '../data/candidateStore';
 import type { ApplicationView } from '../domain/applicationDerivedFields';
 import type { RouteDeps } from './deps';
+import { requireTariffQuota } from './tariffQuotaGuard';
 import {
   authenticateSession,
   authenticateCandidate,
@@ -166,7 +167,9 @@ const handleStartSession: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const parsed = startSchema.safeParse(request.body);
   if (!parsed.success) return sendError(reply, request, 400, 'invalid_interview_start', 'Проверьте параметры тренировки.', false);
-  if (!hasPaidInterviewAccess(request, deps, candidate)) {
+  // B579: при включённом биллинге доступ решает месячная квота тренировок (Basic — 10).
+  const quotaDecides = deps.config.billingEnforcement === true && deps.billingRepository !== undefined;
+  if (!quotaDecides && !hasPaidInterviewAccess(request, deps, candidate)) {
     return sendError(reply, request, 402, 'paywall_required', 'Для мок-интервью нужен платный тариф.', false);
   }
 
@@ -187,6 +190,7 @@ const handleStartSession: Handler = async (deps, request, reply) => {
   const { snapshot, stories, verifiedSkills } = candidateStories(deps, candidate.id);
   const roleTitle = application?.vacancy?.title ?? parsed.data.roleTitle ?? snapshot.resume?.draft.targetRole;
   if (!roleTitle) return sendError(reply, request, 422, 'interview_role_required', 'Выберите роль для тренировки.', false);
+  if (!requireTariffQuota(deps, request, reply, candidate.id, 'interview_trainings', randomUUID())) return undefined;
   const saved = createAndPersistStartedSession(
     deps, candidate.id, current, parsed.data, application, roleTitle, stories, verifiedSkills,
   );

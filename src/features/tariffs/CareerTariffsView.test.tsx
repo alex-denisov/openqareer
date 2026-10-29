@@ -24,14 +24,17 @@ describe('CareerTariffsView (B442)', () => {
     expect(html).toContain('Профиль из LinkedIn и hh.ru, источник у каждого факта');
     expect(html).toContain('Резюме и письма под вакансии');
     expect(html).toContain('Отклики за вас каждый день по вашим правилам');
-    expect(html).toContain('Эксперт проверит резюме вручную до первых откликов');
+    expect(html).toContain('Самая сильная модель консультанта: 3 000 ходов в месяц');
+    expect(html).not.toContain('Эксперт проверит');
     expect(html).toContain('Скрытый рынок и рекрутеры');
 
     // The approved Free layout shows included and not included columns. Its
     // platform automation copy remains available when another tier is active.
     expect(html).toContain('Чего нет на этом тарифе');
     const htmlWithPaidTierActive = renderToStaticMarkup(<CareerTariffsView activeTierId="pro" />);
-    expect(htmlWithPaidTierActive).toContain('Читает источники и считает совпадение');
+    expect(htmlWithPaidTierActive).toContain(
+      'Считает процент совпадения для первых 300 вакансий подборки',
+    );
     expect(htmlWithPaidTierActive).toContain('Собирает подборку каждый день');
     expect(htmlWithPaidTierActive).toContain('Очередь на одобрение и журнал с квитанциями');
     expect(htmlWithPaidTierActive).toContain('Готовит справку о компании к каждым воротам');

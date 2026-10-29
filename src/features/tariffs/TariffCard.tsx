@@ -256,7 +256,7 @@ function TariffCardAutomationSection({ level }: { readonly level: TariffLevel })
 const MISSING_ON_FREE = [
   'Материалы под вакансию и тренировки интервью: с Basic',
   'Отправка откликов платформой: с Pro',
-  'Эксперт на резюме, интервью и оффер: с Max',
+  'Самая сильная модель консультанта: с Max',
 ] as const;
 
 const TIER_RANK: Record<TariffTierId, number> = {

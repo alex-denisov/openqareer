@@ -196,17 +196,6 @@ export function candidatePlan(
   return deps.billingRepository.getEffectivePlanForCandidate(candidateId, new Date().toISOString());
 }
 
-export function requireCandidateLlmAccess(
-  deps: Partial<Pick<RouteDeps, 'config' | 'billingRepository'>>,
-  request: FastifyRequest,
-  reply: FastifyReply,
-  candidateId: string,
-): boolean {
-  if (candidateHasLlmAccess(deps, candidateId)) return true;
-  sendError(reply, request, 402, 'paid_plan_required', 'Для этой ИИ-операции нужен платный тариф.', false);
-  return false;
-}
-
 export function requireVerifiedEmail(
   request: FastifyRequest,
   reply: FastifyReply,

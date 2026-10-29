@@ -33,6 +33,7 @@ import {
   SessionError,
   SourcePanel,
 } from './MockInterviewSupport';
+import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import './mock-interview.css';
 import './mock-interview-flow.css';
 
@@ -193,6 +194,7 @@ function SetupScreen({ flow, props }: { readonly flow: Flow; readonly props: Moc
             Позже
           </button>
         </div>
+        <TariffQuotaNote quota="interview_trainings" refreshKey={flow.session?.id} />
         {flow.error ? <InlineError error={flow.error.message} /> : null}
       </main>
       <SourcePanel

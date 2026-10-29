@@ -51,6 +51,7 @@ import { ConsultantMessage } from './ConsultantMessage';
 import { VoiceInput } from '../coach/VoiceInput';
 import type { VoiceInputState } from '../coach/voiceInputMachine';
 import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
+import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import { getSkillQuizById, type QuizEvaluationResult } from '../../services/hhSkillQuizzes';
 export {
   STAGE_TITLE,
@@ -828,6 +829,9 @@ export function CareerExpertPanel({
             />
           </div>
         </form>
+      ) : null}
+      {user && !loadingSession && !historicalConversation ? (
+        <TariffQuotaNote quota="coach_turns" refreshKey={sending} />
       ) : null}
       {error ? (
         <p className="career-expert-error" role="alert">

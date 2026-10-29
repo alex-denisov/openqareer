@@ -330,6 +330,7 @@ export type StartedTurn =
         knowledgeContext: NonNullable<CoachTurnInput['knowledgeContext']>;
         resumeContext?: CoachTurnInput['resumeContext'];
         careerContext?: CoachTurnInput['careerContext'];
+        modelTier?: CoachTurnInput['modelTier'];
         stageContext?: string;
         rejectedProposals?: string[];
       };

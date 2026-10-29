@@ -14,6 +14,13 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
+  it('консультант Free: glm-5.3-flash с запасной deepseek-v4.1-flash (B579)', () => {
+    expect(labels('coachFree')).toEqual([
+      'openrouter:z-ai/glm-5.3-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+    ]);
+  });
+
   it('фоновая обработка: deepseek-v4-flash → glm-5.3-flash → Vertex (B580: Vertex последним)', () => {
     expect(labels('bulk')).toEqual([
       'openrouter:deepseek/deepseek-v4-flash',
@@ -135,6 +142,44 @@ describe('очередь консультанта по цепочке', () => {
     await provider.createTurn(input, '22222222-2222-4222-8222-222222222222');
 
     expect(called).toEqual(['deepseek/deepseek-v4.1-flash-1017']);
+  });
+
+  it('ход Free идёт по цепочке Free, платный — по платной (B579)', async () => {
+    const called: string[] = [];
+    const provider = buildCoachChainProvider({
+      credentials,
+      buildStage: (route) => ({
+        async createTurn() {
+          called.push(route.model);
+          return turnFrom(route.model);
+        },
+      }),
+    });
+
+    await provider.createTurn(
+      { ...input, modelTier: 'free' },
+      '33333333-3333-4333-8333-333333333333',
+    );
+    await provider.createTurn(input, '44444444-4444-4444-8444-444444444444');
+
+    expect(called).toEqual(['z-ai/glm-5.3-flash', 'deepseek/deepseek-v4.1-flash-1017']);
+  });
+
+  it('без ключа OpenRouter ход Free идёт по платной цепочке, а не роняет запуск (B579)', async () => {
+    const called: string[] = [];
+    const provider = buildCoachChainProvider({
+      credentials: { openai: credentials.openai },
+      buildStage: (route) => ({
+        async createTurn() {
+          called.push(route.model);
+          return turnFrom(route.model);
+        },
+      }),
+    });
+
+    await provider.createTurn({ ...input, modelTier: 'free' }, '55555555-5555-4555-8555-555555555555');
+
+    expect(called).toEqual(['gpt-5.6-luna']);
   });
 });
 
