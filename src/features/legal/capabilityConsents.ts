@@ -6,6 +6,7 @@
  * - profile_activity: фоновая активность в подключённом профиле
  * - digital_footprint: аудит открытого профессионального следа
  * - actions_on_behalf: действия от имени кандидата (отклики и поднятие резюме)
+ * - linkedin_contacts: контакты LinkedIn как пути в компании для других кандидатов (B561)
  *
  * Тексты согласий утверждены владельцем 19.10.2026.
  */
@@ -16,6 +17,7 @@ export const CANDIDATE_CAPABILITIES = [
   'profile_activity',
   'digital_footprint',
   'actions_on_behalf',
+  'linkedin_contacts',
 ] as const;
 
 export type CandidateCapability = (typeof CANDIDATE_CAPABILITIES)[number];
@@ -28,6 +30,7 @@ export const CAPABILITY_CONSENT_CURRENT_VERSION: Record<CandidateCapability, str
   profile_activity: 'profile_activity-v1.0',
   digital_footprint: 'digital_footprint-v1.2',
   actions_on_behalf: 'actions_on_behalf-v1.0',
+  linkedin_contacts: 'linkedin_contacts-v1.0',
 };
 
 export interface CapabilityConsentDocument {
@@ -71,6 +74,18 @@ export const CAPABILITY_CONSENT_DOCUMENTS: Record<CandidateCapability, Capabilit
         'Ни один отклик не направляется работодателю автоматически без вашего предварительного выбора вакансии и одобрения текста.',
         'Платформа действует строго в рамках предоставленных полномочий и фиксирует каждое совершённое действие в журнале событий.',
         'Вы можете в любой момент отозвать согласие, что немедленно прекратит любые действия платформы от вашего имени.',
+      ],
+    },
+    linkedin_contacts: {
+      capability: 'linkedin_contacts',
+      versionId: 'linkedin_contacts-v1.0',
+      title: 'Контакты LinkedIn — пути в компании для других кандидатов',
+      items: [
+        'В общий указатель платформы попадают адреса профилей ваших контактов первого круга, их текущая компания и должность. Данные хранятся, пока действует согласие, и обновляются при каждой проверке; связь, не подтверждённая 90 дней, удаляется.',
+        'Другие кандидаты видят только число путей в компанию через участников платформы. Ваше имя, имена и адреса профилей ваших контактов им не показываются.',
+        'Платформа не пишет вашим контактам и ничего не публикует от вашего имени.',
+        'Ваши контакты не давали согласия сами. Они вправе возразить, и тогда мы удалим их данные из указателя.',
+        'Отзыв согласия сразу удаляет ваши связи из общего указателя.',
       ],
     },
   };

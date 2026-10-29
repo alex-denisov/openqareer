@@ -42,6 +42,8 @@ export interface ConnectionCircleResult {
   readonly state: ConnectionCircleState;
   readonly message: string;
   readonly paths: readonly ConnectionCirclePath[];
+  /** Circle 2 only (B561): paths through other platform members — a count, never names. */
+  readonly platformPaths?: { readonly paths: number };
 }
 
 export interface CandidateWorkplaceForLetter {

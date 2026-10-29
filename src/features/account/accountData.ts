@@ -142,9 +142,10 @@ export const DEFAULT_ACCOUNT_CONSENTS: readonly AccountConsent[] = [
     id: 'cons-linkedin-contacts',
     index: 4,
     title: 'Контакты LinkedIn',
-    description: 'Использование контактов для маршрутов к компаниям',
+    description:
+      'Ваши контакты — пути в компании для других кандидатов; они видят только число путей',
     date: '',
-    consequences: 'Маршруты к компаниям перестанут использовать контакты.',
+    consequences: 'Ваши связи будут удалены из общего указателя путей.',
   },
   {
     id: 'cons-linkedin-feed',

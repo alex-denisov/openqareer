@@ -255,6 +255,7 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   cancelFootprintRunForCandidate(candidate.id);
   deps.capabilityConsentStore?.deleteForCandidate(candidate.id);
+  deps.networkIndexRepo?.deleteMemberEdges(candidate.id);
   notificationRepositoryFor(deps).deleteByCandidate(candidate.id);
   candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);

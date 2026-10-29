@@ -19,6 +19,7 @@ import {
   type ImportedContactInput,
 } from './candidateConnectionRoutes';
 import { profileKey } from './connectionImportMerge';
+import { recordSearchedNetwork } from './networkIndexFeed';
 
 /**
  * B561: the desktop searches the candidate's 1st circle by company name and
@@ -132,6 +133,7 @@ async function handleSearchReport(deps: RouteDeps, request: FastifyRequest, repl
     saveConnectionRecords(repository, candidate.id, merged.records);
   }
   writeSearchLog(repository, candidate.id, candidateCompanyKey(report.companyName), now);
+  recordSearchedNetwork(deps, candidate.id, report.people, now);
   return {
     data: { updated: merged.updated, added: merged.added },
     meta: { requestId: request.id },
