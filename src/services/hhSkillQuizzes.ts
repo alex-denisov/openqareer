@@ -548,7 +548,7 @@ export function evaluateSkillQuiz(
 
   const scorePercent = Math.round((correctCount / quiz.questions.length) * 100);
   const passed = scorePercent >= quiz.passingScorePercent;
-  const source = quiz.platform === 'linkedin' ? 'Банк квизов LinkedIn' : 'Банк квизов hh.ru';
+  const source = 'квиз openqareer';
   const verifiedAt = new Date().toISOString().slice(0, 10);
 
   return {
