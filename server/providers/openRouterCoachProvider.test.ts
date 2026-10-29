@@ -379,3 +379,37 @@ describe('OpenRouter structured output', () => {
     expect(calls[0]?.provider).toBeUndefined();
   });
 });
+
+describe('OpenRouter usage (B580)', () => {
+  it('reports cached prompt tokens and the billed cost of the turn', async () => {
+    const client = {
+      chat: {
+        completions: {
+          create: async () => ({
+            id: 'response-cached',
+            model: 'deepseek/deepseek-v4.1-flash-1017',
+            choices: [{ message: { content: JSON.stringify(validOutput) } }],
+            usage: {
+              prompt_tokens: 9_000,
+              completion_tokens: 700,
+              total_tokens: 9_700,
+              cost: 0.0042,
+              prompt_tokens_details: { cached_tokens: 8_192 },
+            },
+          }),
+        },
+      },
+    } as unknown as OpenAI;
+    const provider = new OpenRouterCoachProvider({ apiKey: 'k', model: 'deepseek/deepseek-v4.1-flash-1017', client });
+
+    const output = await provider.createTurn(syntheticInput, 'key-cached');
+
+    expect(output.usage).toEqual({
+      inputTokens: 9_000,
+      outputTokens: 700,
+      totalTokens: 9_700,
+      cachedInputTokens: 8_192,
+      costUsd: 0.0042,
+    });
+  });
+});

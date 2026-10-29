@@ -252,15 +252,21 @@ describe('время ступеней хода (28.10)', () => {
       },
     };
     const seen: Array<{ provider: string; status: string; elapsedMs: number }> = [];
+    const usages: unknown[] = [];
     const provider = new ResilientCoachProvider({
       routes: [
         { id: 'openrouter', model: 'openrouter/free', provider: slowFail },
         { id: 'openai', model: 'gpt-5.6-luna', provider: answer },
       ],
       now: () => clock,
-      onAttempts: (attempts) => seen.push(...attempts),
+      onAttempts: (attempts, usage) => {
+        seen.push(...attempts);
+        usages.push(usage);
+      },
     });
     await provider.createTurn(input, '99999999-9999-4999-8999-999999999999');
+    // Токены ответившей ступени — в тот же журнал: по ним видно кэш и вход хода (B580).
+    expect(usages).toEqual([result('openai').usage]);
     expect(seen).toEqual([
       expect.objectContaining({ provider: 'openrouter', status: 'failed', elapsedMs: 40_000 }),
       expect.objectContaining({ provider: 'openai', status: 'succeeded', elapsedMs: 30_000 }),

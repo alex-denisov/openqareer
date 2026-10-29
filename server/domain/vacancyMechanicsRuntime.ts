@@ -3,7 +3,7 @@ import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sql
 import { DatabaseSync } from 'node:sqlite';
 import type { VacancyFitFailure, VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
-import { SqliteVacancyFitStore } from '../data/sqliteVacancyFitStore';
+import { SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
@@ -17,6 +17,8 @@ import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacanc
 const FIT_DEPENDENCY_PRIORITY = 2;
 /** A vacancy a candidate is looking at gets model labels before the background tail (B510). */
 export const SHOWN_PAGE_PRIORITY = 1.5;
+/** Below a fit the candidate asked for (1), above the maintenance backlog (0). */
+const BACKGROUND_REQUIREMENTS_PRIORITY = 0.5;
 
 /** Error classes of a failed fit job as the row names them; anything else is a plain «не завершился». */
 const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
@@ -104,13 +106,14 @@ export class VacancyMechanicsRuntime {
     };
   }
   cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
-  enqueue(input: VacancyFitInput) {
+  /** `backgroundRank` (B580): the selection sweep queues below every page the candidate looks at. */
+  enqueue(input: VacancyFitInput, options: FitEnqueueOptions = {}) {
     const requirementInput = { vacancyId: input.vacancyId, description: input.description };
     // This method is reached only by an explicit authenticated POST, never by the worker retry loop.
     this.requirements.retryFailed(requirementInput);
-    this.requirements.enqueue(requirementInput, { titleStrategyPriority: 1 });
-    this.fit.retryFailed(input);
-    return this.fit.enqueue(input);
+    this.requirements.enqueue(requirementInput, { titleStrategyPriority: options.backgroundRank === undefined ? 1 : BACKGROUND_REQUIREMENTS_PRIORITY });
+    this.fit.retryFailed(input, undefined, options);
+    return this.fit.enqueue(input, undefined, options);
   }
   /** Worker start: one requeue of model failures recorded under an older parser revision (B522). */
   requeueAfterParserUpgrade(): { requirements: number; fit: number; labels: number } {

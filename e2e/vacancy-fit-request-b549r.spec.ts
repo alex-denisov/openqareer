@@ -81,7 +81,8 @@ test('B549-r 1440: an uncounted vacancy shows «считаем», the server que
     'считаем',
   );
   await expect(detail.getByRole('button', { name: 'Рассчитать соответствие' })).toHaveCount(0);
-  expect(posts).toBe(0);
+  // B580: the opened card queues its own percent — on Free the sweep stops at 300 rows.
+  await expect.poll(() => posts).toBe(1);
   await expect(page.locator('.vacancies-screen-row-trigger').first()).toHaveAttribute(
     'aria-expanded',
     'true',

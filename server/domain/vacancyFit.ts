@@ -11,6 +11,8 @@ export interface VacancyFitInput {
   readonly vacancyId: string;
   readonly description: string;
   readonly profileContextHash?: string;
+  /** Отпечаток до B580: только для чтения старого кэша, в ключ не входит. */
+  readonly legacyProfileContextHash?: string;
   readonly requirements: readonly VacancyRequirement[];
   readonly facts: readonly VacancyFitFact[];
   /** Authoritative rule/owner evidence gates, never model-generated probabilities. */

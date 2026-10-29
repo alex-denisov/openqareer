@@ -4,6 +4,7 @@ import {
   type CoachProvider,
   type CoachProviderResult,
   type CoachTurnOptions,
+  type ProviderUsage,
 } from './coachProvider';
 import type { ProviderId } from './modelRegistry';
 
@@ -43,7 +44,7 @@ export interface ResilientCoachProviderOptions {
   cooldownMs?: number;
   now?: () => number;
   /** Сколько заняла каждая ступень: без этого время хода не раскладывалось по ступеням. */
-  onAttempts?: (attempts: readonly TimedRoutingAttempt[]) => void;
+  onAttempts?: (attempts: readonly TimedRoutingAttempt[], usage?: ProviderUsage) => void;
 }
 
 export class ResilientCoachProvider implements CoachProvider {
@@ -101,7 +102,7 @@ export class ResilientCoachProvider implements CoachProvider {
           continue;
         }
         trace.add(attemptOf(route, 'succeeded'), startedAt);
-        this.onAttempts?.(trace.timed());
+        this.onAttempts?.(trace.timed(), output.usage);
         return {
           ...output,
           routing: {
