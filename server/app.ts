@@ -47,6 +47,7 @@ import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReput
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
 import { SqliteNetworkIndexRepository } from './data/sqliteNetworkIndexRepository';
+import { SqliteReferralRequestRepository } from './data/sqliteReferralRequestRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
 import { registerCandidateFootprintRoutes } from './routes/candidateFootprintRoutes';
 import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
@@ -121,6 +122,7 @@ interface BuildAppOptions {
   capabilityConsentStore?: SqliteCapabilityConsentStore;
   candidateCompanyWantsRepo?: SqliteCandidateCompanyWantsRepository;
   networkIndexRepo?: SqliteNetworkIndexRepository;
+  referralRequestRepo?: SqliteReferralRequestRepository;
   candidateActionRepository?: SqliteCandidateActionRepository;
   candidateActionExecutor?: CandidateActionExecutor;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
@@ -386,6 +388,9 @@ function createCandidateRepositories(options: BuildAppOptions) {
     networkIndexRepo:
       options.networkIndexRepo ??
       new SqliteNetworkIndexRepository({ databasePath: config.databasePath }),
+    referralRequestRepo:
+      options.referralRequestRepo ??
+      new SqliteReferralRequestRepository({ databasePath: config.databasePath }),
     candidateCompanyWantsRepo:
       options.candidateCompanyWantsRepo ??
       new SqliteCandidateCompanyWantsRepository({
@@ -546,11 +551,15 @@ function attachMarketSalaryStore(
 
 /** Repositories the app opened itself; ones passed in belong to the caller (tests). */
 function closeOwnedCandidateRepos(
-  options: Pick<BuildAppOptions, 'candidateCompanyWantsRepo' | 'networkIndexRepo'>,
-  deps: Pick<RouteDeps, 'candidateCompanyWantsRepo' | 'networkIndexRepo'>,
+  options: Pick<
+    BuildAppOptions,
+    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'referralRequestRepo'
+  >,
+  deps: Pick<RouteDeps, 'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'referralRequestRepo'>,
 ): void {
   if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
   if (!options.networkIndexRepo) deps.networkIndexRepo?.close();
+  if (!options.referralRequestRepo) deps.referralRequestRepo?.close();
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   type CandidateCapability,
+  CAPABILITY_CONSENT_CURRENT_VERSION,
   isCandidateCapability,
 } from '../../src/features/legal/capabilityConsents';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
@@ -130,7 +131,10 @@ export function getActiveCapabilityConsent(
   return row ? mapRow(row) : null;
 }
 
-/** B561: whether the account behind a candidate holds the consent (bearer-only candidates cannot grant). */
+/**
+ * B561: whether the account behind a candidate holds the consent to the current text
+ * (bearer-only candidates cannot grant). A consent to an earlier text no longer counts.
+ */
 export function hasActiveCapabilityConsentForCandidate(
   database: DatabaseSync,
   candidateId: string,
@@ -145,9 +149,9 @@ export function hasActiveCapabilityConsentForCandidate(
     .prepare(
       `SELECT 1 FROM candidate_capability_consents
         WHERE user_id IN (SELECT id FROM users WHERE candidate_id = ?)
-          AND capability = ? AND revoked_at IS NULL LIMIT 1`,
+          AND capability = ? AND version_id = ? AND revoked_at IS NULL LIMIT 1`,
     )
-    .get(candidateId, capability);
+    .get(candidateId, capability, CAPABILITY_CONSENT_CURRENT_VERSION[capability]);
   return row !== undefined;
 }
 

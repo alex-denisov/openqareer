@@ -3,7 +3,13 @@ import type { ReactNode } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CompanyPathActions } from './VacancyCompanyPathPanel';
 import type { ConnectionCirclePath, VacancyConnectionCircles } from './vacancyLetterApi';
-import { pathCircleCards, pathSourceNote, type PathCircleCard } from './vacancyPathCircles';
+import {
+  pathCircleCards,
+  pathSourceNote,
+  withReferralSent,
+  type PathCircleCard,
+} from './vacancyPathCircles';
+import { useReferralAsk } from './CircleReferral';
 import type { VacancyPathCirclesState } from './useVacancyPathCircles';
 import { PushCircleOneDraft } from './VacancyPushCircleOne';
 import { PushRecruiterGroup } from './VacancyPushRecruiter';
@@ -124,16 +130,25 @@ export function PushPathPage({
   readonly actions: CompanyPathActions;
   readonly onOpenCircle: (page: CirclePage) => void;
 }) {
+  const referral = useReferralAsk(data.vacancyId);
+  const shown = referral.sent ? withReferralSent(data) : data;
+  const openFor = (card: PathCircleCard) => {
+    if (card.known) return () => onOpenCircle(`c${card.circle}`);
+    // Only platform paths: the card asks for a referral (B561 slice 3).
+    if (card.referralAction === 'ask') return referral.busy ? undefined : referral.ask;
+    return actions.onShowPaths;
+  };
   return (
     <>
       <PushHero title="Как откликнуться" subtitle={`${data.companyName} · три круга связей`} />
-      {pathCircleCards(data).map((card) => (
-        <CircleLink
-          key={card.circle}
-          card={card}
-          onOpen={card.known ? () => onOpenCircle(`c${card.circle}`) : actions.onShowPaths}
-        />
+      {pathCircleCards(shown).map((card) => (
+        <CircleLink key={card.circle} card={card} onOpen={openFor(card)} />
       ))}
+      {referral.error ? (
+        <p className="vacancy-push-foot" role="alert">
+          {referral.error}
+        </p>
+      ) : null}
       <p className="vacancy-push-foot">{pathSourceNote(data)} Шанс ответа не показываем.</p>
     </>
   );

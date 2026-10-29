@@ -138,6 +138,7 @@ async function handleDeleteUser(deps: RouteDeps, request: FastifyRequest, reply:
       cancelFootprintRunForCandidate(user.candidateId);
       deps.candidateReputationRepo?.deleteFootprintAuditsByCandidateId(user.candidateId);
       deps.networkIndexRepo?.deleteMemberEdges(user.candidateId);
+      deps.referralRequestRepo?.deleteForCandidate(user.candidateId);
     }
     return { data: { success: true }, meta: { requestId: request.id } };
   } catch (err: unknown) {

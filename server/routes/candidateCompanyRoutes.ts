@@ -27,6 +27,7 @@ import {
   registerCandidateConnectionRoutes,
 } from './candidateConnectionRoutes';
 import { registerConnectionSearchRoutes } from './connectionSearchRoutes';
+import { registerReferralRequestRoutes } from './referralRequestRoutes';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -741,4 +742,5 @@ export function registerCandidateCompanyRoutes(app: FastifyInstance, deps: Route
   );
   registerCandidateConnectionRoutes(app, deps);
   registerConnectionSearchRoutes(app, deps);
+  registerReferralRequestRoutes(app, deps);
 }

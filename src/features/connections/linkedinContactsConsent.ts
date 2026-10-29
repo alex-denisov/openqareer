@@ -18,13 +18,18 @@ export interface LinkedInContactsConsentState {
 export function linkedInContactsConsentActive(
   records: readonly Pick<
     AccountCapabilityConsentRecord,
-    'capability' | 'grantedAt' | 'revokedAt'
+    'capability' | 'versionId' | 'grantedAt' | 'revokedAt'
   >[],
 ): boolean {
   const latest = records
     .filter((record) => record.capability === 'linkedin_contacts')
     .sort((left, right) => right.grantedAt.localeCompare(left.grantedAt))[0];
-  return latest !== undefined && latest.revokedAt === null;
+  // A consent to an earlier text is asked again: the server no longer counts it.
+  return (
+    latest !== undefined &&
+    latest.revokedAt === null &&
+    latest.versionId === CAPABILITY_CONSENT_CURRENT_VERSION.linkedin_contacts
+  );
 }
 
 /**

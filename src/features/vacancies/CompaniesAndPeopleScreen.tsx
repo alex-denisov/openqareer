@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { IncomingReferralRequests } from '../referrals/IncomingReferralRequests';
 import { PushConsultantContext } from '../shell/PushConsultantButton';
 import { Warning } from '@phosphor-icons/react';
 import type {
@@ -542,6 +543,7 @@ function CompaniesAndPeopleView({
         onOpenFilters={() => setFilterSheetOpen(true)}
       />
       <CompanyDirectorySummary page={page} />
+      <IncomingReferralRequests />
       <CompanyActionErrors model={model} />
       <CompanyResults
         model={model}

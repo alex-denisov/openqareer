@@ -272,6 +272,23 @@ export interface ConnectionCircleResult {
   readonly paths: readonly ConnectionCirclePath[];
   /** Circle 2 only (B561): paths through other platform members — a count, never names. */
   readonly platformPaths?: { readonly paths: number };
+  /** Circle 2 only (B561 slice 3): the candidate's referral request; names only once accepted. */
+  readonly platformReferral?: PlatformReferralView;
+}
+
+export type PlatformReferralStatus = 'none' | 'pending' | 'accepted' | 'answered';
+
+export interface PlatformReferralIntroducer {
+  readonly fullName: string;
+  readonly headline: string | null;
+  readonly linkedinUrl: string | null;
+  /** Names only: the consent text promises no more about the member's contacts. */
+  readonly people: ReadonlyArray<{ readonly fullName: string }>;
+}
+
+export interface PlatformReferralView {
+  readonly status: PlatformReferralStatus;
+  readonly introducers: readonly PlatformReferralIntroducer[];
 }
 
 export interface BuildConnectionCirclesInput {
@@ -284,6 +301,7 @@ export interface BuildConnectionCirclesInput {
   readonly linkedinContactsImported: boolean;
   /** Paths into the vacancy company through other consenting platform members (B561). */
   readonly platformPaths?: number;
+  readonly platformReferral?: PlatformReferralView;
 }
 
 const CONNECTION_PATH_LIMIT = 100;
@@ -300,6 +318,7 @@ export function buildConnectionCircles(input: BuildConnectionCirclesInput): {
       {
         ...resultForCircle(2, introductions, input.linkedinContactsImported),
         platformPaths: { paths: Math.max(0, Math.trunc(input.platformPaths ?? 0)) },
+        platformReferral: input.platformReferral ?? { status: 'none', introducers: [] },
       },
       { circle: 3, state: 'available', message: '', paths: cold.slice(0, CONNECTION_PATH_LIMIT) },
     ],

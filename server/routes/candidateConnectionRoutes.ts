@@ -1,4 +1,3 @@
-import { companyMatchName } from '../vacancies/vacancyDeduplicator';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -23,6 +22,8 @@ import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
 import { platformPathsInto, syncMemberNetwork } from './networkIndexFeed';
+import { platformReferralFor } from './referralRequestFeed';
+import { wantedPoolVacancy } from './wantedPoolVacancy';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { CandidateSnapshot } from '../data/candidateStore';
 import {
@@ -434,10 +435,7 @@ async function handleGetConnectionCircles(
     .min(1)
     .max(200)
     .parse((request.params as { vacancyId: string }).vacancyId);
-  const matched =
-    (await readCandidateMatchedVacancies(deps, candidate.id)).find(
-      (item) => item.cluster.id === vacancyId,
-    ) ?? wantedPoolVacancy(deps, candidate.id, vacancyId);
+  const matched = await findCandidateVacancy(deps, candidate.id, vacancyId);
   if (!matched)
     return sendError(
       reply,
@@ -450,28 +448,14 @@ async function handleGetConnectionCircles(
   return connectionCirclesResponse(deps, repository, candidate.id, matched, request);
 }
 
-/**
- * The company screen lists a wanted company's vacancies from the pool when none is in the
- * selection; their circles are read under the wanted name so people land on that company.
- */
-function wantedPoolVacancy(
+/** A vacancy of the candidate's selection, or of a wanted company's pool list. */
+export async function findCandidateVacancy(
   deps: RouteDeps,
   candidateId: string,
   vacancyId: string,
-): MatchedVacancyItem | undefined {
-  const engine = deps.multiSourceEngine as Partial<
-    Pick<RouteDeps['multiSourceEngine'], 'getStoredCluster'>
-  >;
-  const cluster = engine.getStoredCluster?.(vacancyId);
-  if (!cluster || cluster.status !== 'active') return undefined;
-  const name = companyMatchName(cluster.canonicalCompany);
-  const want = (deps.candidateCompanyWantsRepo?.list(candidateId) ?? []).find(
-    (item) => companyMatchName(item.companyName) === name,
-  );
-  if (!name || !want) return undefined;
-  return {
-    cluster: { ...cluster, canonicalCompany: want.companyName },
-  } as unknown as MatchedVacancyItem;
+): Promise<MatchedVacancyItem | undefined> {
+  const matched = await readCandidateMatchedVacancies(deps, candidateId);
+  return matched.find((item) => item.cluster.id === vacancyId) ?? wantedPoolVacancy(deps, candidateId, vacancyId);
 }
 
 async function connectionCirclesResponse(
@@ -501,6 +485,7 @@ async function connectionCirclesResponse(
     contacts,
     linkedinContactsImported: importReceipt !== null,
     platformPaths: platformPathsInto(deps, candidateId, matched.cluster.canonicalCompany).paths,
+    platformReferral: platformReferralFor(deps, candidateId, matched.cluster.canonicalCompany),
   });
   return {
     data: {

@@ -9,7 +9,10 @@ import type { RouteDeps } from './deps';
  * Every write happens only while the member's `linkedin_contacts` consent is active;
  * every read re-checks the consent of the members it counts.
  */
-type NetworkDeps = Pick<RouteDeps, 'networkIndexRepo' | 'capabilityConsentStore'>;
+type NetworkDeps = Pick<
+  RouteDeps,
+  'networkIndexRepo' | 'capabilityConsentStore' | 'referralRequestRepo'
+>;
 
 interface StoredConnectionPlace {
   readonly companySource?: 'headline' | 'search';
@@ -85,8 +88,10 @@ export function recordSearchedNetwork(
   );
 }
 
+/** Consent revoked: the edges go, and so does every request the member was asked. */
 export function forgetMemberNetwork(deps: NetworkDeps, candidateId: string): void {
   deps.networkIndexRepo?.deleteMemberEdges(candidateId);
+  deps.referralRequestRepo?.withdrawForMember(candidateId, new Date().toISOString());
 }
 
 /** Circle 2: how many paths into the company go through other consenting members. */

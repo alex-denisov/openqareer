@@ -10,7 +10,13 @@ import {
 import { CareerTooltip } from '../shell/CareerTooltip';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
-import { pathCircleCards, pathSourceNote, type PathCircleCard } from './vacancyPathCircles';
+import {
+  pathCircleCards,
+  pathSourceNote,
+  withReferralSent,
+  type PathCircleCard,
+} from './vacancyPathCircles';
+import { CircleReferralDetails, useReferralAsk, type ReferralAskState } from './CircleReferral';
 import { useVacancyPathCircles } from './useVacancyPathCircles';
 
 export interface CompanyPathActions {
@@ -76,13 +82,17 @@ export function circleAction(
 function CircleCard({
   card,
   actions,
+  referral,
 }: {
   readonly card: PathCircleCard;
   readonly actions: CompanyPathActions;
+  readonly referral: ReferralAskState;
 }) {
   const Icon = ICONS[card.circle];
   const ActionIcon = card.known ? ACTION_ICONS[card.circle] : Path;
-  const onClick = circleAction(card, actions);
+  // Only platform paths: the card's own action is the referral request (B561 slice 3).
+  const asksByAction = !card.known && card.referralAction === 'ask';
+  const onClick = asksByAction ? referral.ask : circleAction(card, actions);
   return (
     <li className="vacancy-path-circle">
       <span className={`vacancy-path-circle-tag${card.circle === 3 ? ' is-dim' : ''}`}>
@@ -92,10 +102,18 @@ function CircleCard({
       <b>{card.title}</b>
       <p>{card.summary}</p>
       {onClick ? (
-        <button type="button" className="vac-sm" onClick={onClick}>
+        <button
+          type="button"
+          className="vac-sm"
+          disabled={asksByAction && referral.busy}
+          onClick={onClick}
+        >
           <ActionIcon size={15} aria-hidden="true" />
           {card.actionLabel}
         </button>
+      ) : null}
+      {card.circle === 2 ? (
+        <CircleReferralDetails card={card} referral={referral} showAskButton={!asksByAction} />
       ) : null}
     </li>
   );
@@ -143,6 +161,7 @@ export function VacancyCompanyPathPanel({
   readonly actions: CompanyPathActions;
 }) {
   const state = useVacancyPathCircles(vacancyId, true);
+  const referral = useReferralAsk(vacancyId);
   const headingId = `${id}-heading`;
   return (
     <section id={id} className="vacancy-path-panel" aria-labelledby={headingId}>
@@ -163,9 +182,11 @@ export function VacancyCompanyPathPanel({
       <PathPanelStatus state={state} onPrepareLetter={actions.onPrepareLetter} />
       {state.status === 'ready' ? (
         <ul className="vacancy-path-circles">
-          {pathCircleCards(state.data).map((card) => (
-            <CircleCard key={card.circle} card={card} actions={actions} />
-          ))}
+          {pathCircleCards(referral.sent ? withReferralSent(state.data) : state.data).map(
+            (card) => (
+              <CircleCard key={card.circle} card={card} actions={actions} referral={referral} />
+            ),
+          )}
         </ul>
       ) : null}
     </section>
