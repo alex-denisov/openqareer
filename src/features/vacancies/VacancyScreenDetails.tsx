@@ -13,10 +13,16 @@ import {
   Target,
 } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import type { VacancyFitView } from '../../../shared/vacancyFit';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
-import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
+import {
+  conditionCoverageWithGeo,
+  fitRequirementChips,
+  legacySkillChips,
+} from './vacancyRequirementChips';
+import { vacancyGeoFit } from './VacancyScreenRowCells';
 import { publishVacancyFitRead, useLatestVacancyFitView } from './vacancyFitViewUpdates';
 import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
 import { useVacancySummary } from './vacancyDetailApi';
@@ -341,6 +347,16 @@ function chipCount(chips: ReturnType<typeof legacySkillChips>): number {
   return chips.confirmed.length + chips.unconfirmed.length + (chips.stated?.length ?? 0);
 }
 
+/** Condition coverage where the vacancy's own city counts when «Гео» matches (29.10). */
+function geoCover(
+  fitView: VacancyFitView | undefined,
+  cluster: MatchedVacancyItem['cluster'],
+  explanation: MatchedVacancyItem['explanation'],
+) {
+  const geoMatched = vacancyGeoFit({ explanation }).state === 'yes';
+  return conditionCoverageWithGeo(fitView, { geoMatched, location: cluster.canonicalLocation });
+}
+
 export function VacancyScreenRequirementChips({
   cluster,
   explanation,
@@ -384,7 +400,7 @@ export function VacancyScreenRequirementChips({
         </p>
       )}
       <p className="vacancies-screen-requirements-note">
-        <RequirementConditions chips={chips} coverage={fitView?.result?.conditionCoverage} />
+        <RequirementConditions chips={chips} coverage={geoCover(fitView, cluster, explanation)} />
         {counted === null
           ? 'Из описания вакансии и тегов источника. Зелёные подтверждаются профилем.'
           : FIT_CHIPS_CAPTION}

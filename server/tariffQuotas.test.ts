@@ -10,6 +10,7 @@ import { AuthService } from './auth/authService';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { CoachProvider } from './providers/coachProvider';
 import { successProvider } from './appTestHarness';
+import { SqliteBillingRepository } from './billing/sqliteBillingRepository';
 import { calendarMonthPeriod, upgradePlanFor } from './billing/tariffQuotas';
 
 const resources: Array<{ close: () => Promise<void> }> = [];
@@ -218,6 +219,20 @@ describe('квоты тарифов (B579)', { timeout: 20_000 }, () => {
     withDatabase(demo.databasePath, (database) => {
       expect(database.prepare('SELECT is_test FROM users').get()).toEqual({ is_test: 0 });
     });
+  });
+
+  it('демо-аккаунт приёмки макетов получает ответы модели: роли на «Карьере» называет модель', async () => {
+    const demo = await createQuotaApp('qa-pilot-2026-09-07-b98b5f');
+    const regular = await createQuotaApp();
+    const candidateOf = (databasePath: string) =>
+      withDatabase(databasePath, (database) =>
+        (database.prepare('SELECT candidate_id FROM users').get() as { candidate_id: string }).candidate_id,
+      );
+    const now = new Date().toISOString();
+    expect(new SqliteBillingRepository({ databasePath: demo.databasePath })
+      .canCandidateUseLlm(candidateOf(demo.databasePath), now)).toBe(true);
+    expect(new SqliteBillingRepository({ databasePath: regular.databasePath })
+      .canCandidateUseLlm(candidateOf(regular.databasePath), now)).toBe(false);
   });
 
   it('Free не открывает тренировку интервью: 402 quota_exhausted с тарифом Basic', async () => {

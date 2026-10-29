@@ -72,9 +72,27 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
     setFacets, setInitialFilters, setSort, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
     setCampaign, setCandidateLevel, setFailureSourceLabel,
   });
-  return initialPool ? { ...initialPool, setFilters } : {
+  if (initialPool) return { ...initialPool, setFilters };
+  return withCabinetHeader({
     facets, initialFilters, sort, setFilters, matched, total, poolTotal, loading, failed, complete,
     campaign, candidateLevel, failureSourceLabel, refresh,
+  }, provided);
+}
+
+/**
+ * Своё чтение ещё без первой страницы: шапка остаётся общей подборкой кабинета,
+ * а не «0 вакансий, каталог неизвестен» на время пересортировки (29.10).
+ */
+function withCabinetHeader(local: MatchedPool, provided: MatchedPool | undefined): MatchedPool {
+  if (local.facets || !provided) return local;
+  return {
+    ...local,
+    facets: provided.facets,
+    total: local.total || provided.total,
+    poolTotal: local.poolTotal || provided.poolTotal,
+    campaign: local.campaign ?? provided.campaign,
+    candidateLevel:
+      local.candidateLevel === undefined ? provided.candidateLevel : local.candidateLevel,
   };
 }
 
@@ -140,14 +158,11 @@ function useMatchedPoolReader(
 }
 
 function resetPoolRead(setters: PoolReaderSetters): void {
+  // Счётчики, кампания и уровень — прежние до ответа: меняется только список (29.10).
   setters.setMatched([]);
-  setters.setTotal(0);
-  setters.setPoolTotal(0);
   setters.setLoading(true);
   setters.setFailed(false);
   setters.setComplete(false);
-  setters.setCampaign(undefined);
-  setters.setCandidateLevel(undefined);
   setters.setFailureSourceLabel(undefined);
 }
 

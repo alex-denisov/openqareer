@@ -103,3 +103,32 @@ export function legacySkillChips(
     .filter(isChipText);
   return { confirmed, unconfirmed: missingPoints.filter(isChipText) };
 }
+
+/** Stem of a city name: «Киров» matches «в Кирове», «Moscow» matches «in Moscow». */
+function cityStem(location: string): string | undefined {
+  const city = location.split(/[,(·]/u)[0]?.trim().toLocaleLowerCase('ru');
+  if (!city || city.length < 3) return undefined;
+  return city.length > 5 ? city.slice(0, city.length - 1) : city;
+}
+
+/**
+ * «Условия · подтверждено N из M» (29.10): a location condition naming the vacancy's own city is
+ * confirmed when the row's «Гео» says it matches; the model cannot cite a profile fact for it.
+ */
+export function conditionCoverageWithGeo(
+  view: VacancyFitView | undefined,
+  geo: { readonly geoMatched: boolean; readonly location?: string },
+): { readonly matched: number; readonly total: number } | undefined {
+  const coverage = view?.result?.conditionCoverage;
+  if (!coverage) return undefined;
+  const stem = geo.geoMatched && geo.location ? cityStem(geo.location) : undefined;
+  if (!stem) return { matched: coverage.matched, total: coverage.total };
+  const matched = matchedRequirements(view);
+  const byGeo = (view?.requirements ?? []).filter(
+    (requirement) =>
+      !isSkillRequirement(requirement) &&
+      !matched.has(requirement.id) &&
+      `${requirement.label ?? ''} ${requirement.text}`.toLocaleLowerCase('ru').includes(stem),
+  ).length;
+  return { matched: Math.min(coverage.total, coverage.matched + byGeo), total: coverage.total };
+}
