@@ -1,27 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchTariffQuotas, type TariffQuotaSummary } from './tariffQuotaApi';
 
 /**
- * Один запрос квот на все места, где они видны; смена `refreshKey` после
- * первого показа перечитывает остаток (ход завершён, тренировка начата).
+ * Остаток читается заново при каждом показе и при смене `refreshKey` (ход
+ * завершён, тренировка начата); одновременные показы делят один запрос.
  */
-let shared: Promise<TariffQuotaSummary | null> | null = null;
+let inFlight: Promise<TariffQuotaSummary | null> | null = null;
 
-function loadShared(force: boolean): Promise<TariffQuotaSummary | null> {
-  if (!shared || force) {
-    shared = fetchTariffQuotas().catch(() => null);
-  }
-  return shared;
+function loadQuotas(): Promise<TariffQuotaSummary | null> {
+  inFlight ??= fetchTariffQuotas()
+    .catch(() => null)
+    .finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
 }
 
 export function useTariffQuotas(refreshKey?: unknown): TariffQuotaSummary | null {
   const [summary, setSummary] = useState<TariffQuotaSummary | null>(null);
-  const mounted = useRef(false);
   useEffect(() => {
     let active = true;
-    const force = mounted.current;
-    mounted.current = true;
-    void loadShared(force).then((next) => {
+    void loadQuotas().then((next) => {
       if (active) setSummary(next);
     });
     return () => {

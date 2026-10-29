@@ -224,6 +224,18 @@ function consumeInTransaction(
   };
 }
 
+/** Возвращает единицу, если работа не состоялась (модель не ответила). */
+export function releaseQuotaUnit(
+  database: DatabaseSync,
+  candidateId: string,
+  key: QuotaKey,
+  unitKey: string,
+): void {
+  database
+    .prepare('DELETE FROM billing_quota_events WHERE candidate_id = ? AND quota_key = ? AND unit_key = ?')
+    .run(candidateId, key, unitKey);
+}
+
 function insertQuotaEvent(
   database: DatabaseSync,
   candidateId: string,

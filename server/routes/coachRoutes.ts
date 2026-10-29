@@ -354,7 +354,6 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   }
   const key = parsedKey.data;
   const body = coachTurnRequestSchema.parse(request.body);
-  if (!requireTariffQuota(deps, request, reply, candidate.id, 'coach_turns', key)) return undefined;
   if (body.subject?.kind === 'adaptation' && body.content.length > 7000) return sendError(reply, request, 400, 'adaptation_message_too_long', 'Сократите вопрос до 7000 символов.', false);
   if (body.subject?.kind === 'adaptation' && body.stage !== 'diary') {
     return sendError(reply, request, 400, 'adaptation_stage_required', 'Откройте обсуждение из карьерного дневника.', false);
@@ -372,6 +371,7 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     stageContext = context;
   }
 
+  if (!requireTariffQuota(deps, request, reply, candidate.id, 'coach_turns', key)) return undefined;
   const adaptationContext = adaptationContextFromInput({ stageContext });
   if (adaptationContext) body.content = labelAdaptationMessage(deps, candidate.id, key, adaptationContext, body.content);
   const started = candidateStore.startTurn(candidate.id, key, { ...body, phase, stageContext });

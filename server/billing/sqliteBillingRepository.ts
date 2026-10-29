@@ -5,7 +5,7 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { BILLING_PLANS } from './billingPlans';
 import type { PaidPlanId } from './robokassaGateway';
 import {
-  QUOTA_ENFORCED_TEST_USERNAMES, calendarMonthPeriod, consumeQuotaUnit, readQuotaSummary,
+  QUOTA_ENFORCED_TEST_USERNAMES, calendarMonthPeriod, consumeQuotaUnit, readQuotaSummary, releaseQuotaUnit,
   type QuotaConsumeResult, type QuotaKey, type QuotaSummary,
 } from './tariffQuotas';
 
@@ -192,6 +192,10 @@ export class SqliteBillingRepository {
   /** B579: списание до вызова модели; повтор той же единицы не списывается. */
   consumeQuota(candidateId: string, key: QuotaKey, unitKey: string, now: string): QuotaConsumeResult {
     return consumeQuotaUnit(this.database, candidateId, this.quotaAccount(candidateId, now), key, unitKey, now);
+  }
+
+  releaseQuota(candidateId: string, key: QuotaKey, unitKey: string): void {
+    releaseQuotaUnit(this.database, candidateId, key, unitKey);
   }
 
   private quotaAccount(candidateId: string, now: string) {

@@ -164,6 +164,23 @@ describe('очередь консультанта по цепочке', () => {
 
     expect(called).toEqual(['z-ai/glm-5.3-flash', 'deepseek/deepseek-v4.1-flash-1017']);
   });
+
+  it('без ключа OpenRouter ход Free идёт по платной цепочке, а не роняет запуск (B579)', async () => {
+    const called: string[] = [];
+    const provider = buildCoachChainProvider({
+      credentials: { openai: credentials.openai },
+      buildStage: (route) => ({
+        async createTurn() {
+          called.push(route.model);
+          return turnFrom(route.model);
+        },
+      }),
+    });
+
+    await provider.createTurn({ ...input, modelTier: 'free' }, '55555555-5555-4555-8555-555555555555');
+
+    expect(called).toEqual(['gpt-5.6-luna']);
+  });
 });
 
 function turnFrom(model: string) {

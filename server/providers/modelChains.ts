@@ -122,7 +122,10 @@ export function buildCoachChainProvider(options: {
   now?: () => number;
 }): CoachProvider {
   const paid = buildChainQueue(MODEL_CHAINS.coach, options);
-  const free = buildChainQueue(MODEL_CHAINS.coachFree, options);
+  // Без ключа OpenRouter у Free нет ступеней: ход идёт по платной цепочке, сервер стартует.
+  const free = chainRoutes(MODEL_CHAINS.coachFree, options.credentials).length
+    ? buildChainQueue(MODEL_CHAINS.coachFree, options)
+    : paid;
   return {
     createTurn: (input, idempotencyKey, turnOptions) =>
       (input.modelTier === 'free' ? free : paid).createTurn(input, idempotencyKey, turnOptions),

@@ -44,3 +44,14 @@ export function requireTariffQuota(
   );
   return false;
 }
+
+/** Возвращает единицу квоты, если модель не дала результат. */
+export function releaseTariffQuota(
+  deps: Partial<Pick<RouteDeps, 'config' | 'billingRepository'>>,
+  candidateId: string,
+  key: QuotaKey,
+  unitKey: string,
+): void {
+  if (deps.config?.billingEnforcement !== true || !deps.billingRepository) return;
+  deps.billingRepository.releaseQuota(candidateId, key, unitKey);
+}
