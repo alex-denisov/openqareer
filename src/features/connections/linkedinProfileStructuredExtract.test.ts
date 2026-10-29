@@ -302,6 +302,17 @@ describe('parseContactInfo (B265)', () => {
     expect(JSON.stringify(contact)).not.toContain('March 3');
   });
 
+  it('reads the live overlay structure as the desktop read returns it (29.10)', () => {
+    const live = parseContactInfo(fixture('contact-info-live.html'));
+    expect(live).toEqual({
+      linkedinUrl: 'https://www.linkedin.com/in/ivan-testov-test/',
+      telegram: 'https://t.me/ivan_testov_test',
+      links: [],
+      phone: '+7 900 111-22-33',
+      email: 'ivan.testov@example.com',
+    });
+  });
+
   it('reads the sanitized overlay with Russian labels and another row shape (29.10)', () => {
     const ru = parseContactInfo(fixture('contact-info-ru-sanitized.html'));
     expect(ru.email).toBe('maria.orlova@example.com');
