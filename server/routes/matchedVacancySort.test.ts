@@ -39,4 +39,12 @@ describe('per-account vacancy sort (owner 29.10)', () => {
     expect(resolveVacancySort(deps, 'c', { sort: 'money' })).toEqual({ by: 'money', dir: 'desc' });
     expect(save).not.toHaveBeenCalled();
   });
+  it('saves only from the first page: later pages of an abandoned read never overwrite the choice', () => {
+    const { deps, save } = store({ regions: [], vacancySort: { by: 'fit', dir: 'desc' } });
+    expect(resolveVacancySort(deps, 'c', { sort: 'money', dir: 'desc', offset: 40 })).toEqual({
+      by: 'money',
+      dir: 'desc',
+    });
+    expect(save).not.toHaveBeenCalled();
+  });
 });

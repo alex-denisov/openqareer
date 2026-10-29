@@ -12,13 +12,16 @@ import type { RouteDeps } from './deps';
 export function resolveVacancySort(
   deps: Pick<RouteDeps, 'candidateStore'>,
   candidateId: string,
-  filters: Pick<MatchedVacancyFilters, 'sort' | 'dir'>,
+  filters: Pick<MatchedVacancyFilters, 'sort' | 'dir'> & { readonly offset?: number },
 ): VacancySort {
   const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
   const saved = workspace?.vacancySort ?? DEFAULT_VACANCY_SORT;
   if (!filters.sort) return saved;
   const chosen: VacancySort = { by: filters.sort, dir: filters.dir ?? 'desc' };
-  if (workspace && (chosen.by !== saved.by || chosen.dir !== saved.dir)) {
+  // Only the first page is a choice: later pages of a read the candidate already left would
+  // overwrite the header they clicked next (prod 29.10).
+  const firstPage = (filters.offset ?? 0) === 0;
+  if (workspace && firstPage && (chosen.by !== saved.by || chosen.dir !== saved.dir)) {
     deps.candidateStore.saveCandidateWorkspace(candidateId, { ...workspace, vacancySort: chosen });
   }
   return chosen;

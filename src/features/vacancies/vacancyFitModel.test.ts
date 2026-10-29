@@ -135,3 +135,48 @@ describe('vacancyFitBoost: the quiz button whenever stated requirements are unch
     expect(vacancyFitBoost(view({}, 'ready', ['Java'], []))).toBeNull();
   });
 });
+
+describe('29.10 tails', () => {
+  it('uses the singular for one unchecked requirement', () => {
+    const v = view(
+      { coveragePercent: 90, coverage: { matched: 5, total: 5, unknown: 0, checked: 4 } },
+      'ready',
+      ['A', 'B', 'C', 'D', 'Опыт'],
+      ['r0', 'r1', 'r2', 'r3', 'r4'],
+    );
+    const marked = {
+      ...v,
+      result: {
+        ...v.result!,
+        assessments: v.result!.assessments.map((item, i) =>
+          i < 4 ? { ...item, checked: true } : item,
+        ),
+      },
+    };
+    expect(vacancyFitSentence(marked)).toBe(
+      '4 из 5 требований вакансии есть в профиле и подтверждены. Ещё 1 указан, но не проверен: Опыт — он считается наполовину.',
+    );
+  });
+  it('offers the quiz even when the unchecked requirement is experience', () => {
+    const v = view(
+      { coveragePercent: 90, coverage: { matched: 5, total: 5, unknown: 0, checked: 4 } },
+      'ready',
+      ['A', 'B', 'C', 'D', 'Опыт'],
+      ['r0', 'r1', 'r2', 'r3', 'r4'],
+    );
+    const requirements = v.requirements.map((item, i) =>
+      i === 4 ? { ...item, kind: 'experience', skill: false } : item,
+    ) as typeof v.requirements;
+    const marked = {
+      ...v,
+      requirements,
+      result: {
+        ...v.result!,
+        assessments: v.result!.assessments.map((item, i) =>
+          i < 4 ? { ...item, checked: true } : item,
+        ),
+      },
+    };
+    expect(vacancyFitBoost(marked)?.label).toBe('Поднять до 100 %: квиз по Опыт');
+  });
+});
