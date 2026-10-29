@@ -14,7 +14,7 @@ function vacancy(overrides: Partial<UnifiedVacancy> & { observedAt?: string }): 
     requiredSkills: [],
     url: 'https://hh.ru/vacancy/101',
     provenance: {
-      sourceType: 'html_scraper',
+      sourceType: 'hh',
       sourceId: 'src-hh-search',
       sourceUrl: 'https://hh.ru/vacancy/101',
       observedAt,

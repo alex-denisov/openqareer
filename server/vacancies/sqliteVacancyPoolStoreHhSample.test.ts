@@ -31,7 +31,7 @@ function vacancy(sourceId: string, id: string, title: string, publishedAt: strin
     requiredSkills: [],
     url: `https://hh.ru/vacancy/${id}`,
     provenance: {
-      sourceType: 'html_scraper',
+      sourceType: 'hh',
       sourceId,
       sourceUrl: `https://hh.ru/vacancy/${id}`,
       observedAt: '2026-10-28T09:00:00.000Z',
