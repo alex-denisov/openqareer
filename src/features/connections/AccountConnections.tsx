@@ -35,6 +35,7 @@ import { AccountConnectionsSection } from '../account/AccountDesktopSections';
 import { AccountHhModal, AccountLinkedInModal } from '../account/AccountDialogs';
 import { MobileAccountConnections } from '../account/AccountMobileSections';
 import { ProfileReplaceOffer } from './ProfileReplaceOffer';
+import { useLinkedInContactsSummary } from './linkedinContactsSummary';
 
 interface ReplaceOffer {
   readonly platform: 'hh' | 'linkedin';
@@ -81,6 +82,7 @@ export function AccountConnectionsManager({
   const [notice, setNotice] = useState<string>();
   const [importPlatform, setImportPlatform] = useState<ConnectionPlatform>();
   const [managePlatform, setManagePlatform] = useState<ConnectionPlatform>();
+  const linkedinContacts = useLinkedInContactsSummary(managePlatform === 'linkedin');
   const [replaceOffer, setReplaceOffer] = useState<ReplaceOffer>();
   // «Заменить профиль данными с …» from the manage dialog: the next sign-in replaces.
   const [replaceIntent, setReplaceIntent] = useState<'hh' | 'linkedin'>();
@@ -328,6 +330,7 @@ export function AccountConnectionsManager({
           connection={managedConnection}
           busy={busyPlatform === 'linkedin'}
           connectOnly={connectedOnly(managedConnection, connections)}
+          contacts={linkedinContacts}
           onReplaceProfile={canSignIn ? () => replaceFromManage('linkedin') : undefined}
           onClose={() => setManagePlatform(undefined)}
           onDisconnect={() => {

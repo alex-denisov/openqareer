@@ -212,11 +212,9 @@ test.describe('B443: Account screen in the signed-in shell', () => {
     await account.getByRole('button', { name: 'Управлять' }).first().click();
     const linkedinDialog = page.getByRole('dialog', { name: 'LinkedIn' });
     await expect(linkedinDialog.getByText('Импортировано 12 фактов')).toBeVisible();
-    await expect(
-      linkedinDialog.getByRole('checkbox', {
-        name: 'Использовать контакты для маршрутов к компаниям',
-      }),
-    ).toBeDisabled();
+    // 29.10: the dead checkbox gave way to what the contacts read brought in.
+    await expect(linkedinDialog.getByText('Контакты ещё не прочитаны')).toBeVisible();
+    await expect(linkedinDialog.getByRole('checkbox')).toHaveCount(1);
     await captureAtContentHeight(page, 'account-desktop-1440-manage-linkedin.png');
     await linkedinDialog.getByRole('button', { name: 'Закрыть' }).click();
     await account.getByRole('button', { name: 'Управлять' }).nth(1).click();

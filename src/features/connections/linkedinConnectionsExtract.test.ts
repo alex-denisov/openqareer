@@ -42,9 +42,10 @@ describe('LinkedIn 1st-degree connections extract (B448)', () => {
     expect(companyFromHeadline('Product enthusiast')).toBeNull();
   });
 
-  it('keeps only contacts with a company and caps the batch', () => {
-    const contacts = toConnectionImportContacts(extractLinkedInConnections(fixture), 2);
-    expect(contacts).toEqual([
+  it('keeps every contact, people with a company first, and caps the batch', () => {
+    const contacts = toConnectionImportContacts(extractLinkedInConnections(fixture), 10);
+    expect(contacts).toHaveLength(4);
+    expect(contacts.slice(0, 2)).toEqual([
       {
         fullName: 'Ирина Котова',
         companyName: 'Север Тех',
@@ -58,6 +59,10 @@ describe('LinkedIn 1st-degree connections extract (B448)', () => {
         linkedinUrl: 'https://www.linkedin.com/in/petr-volkov-test/',
       },
     ]);
+    const withoutCompany = contacts.at(-1);
+    expect(withoutCompany?.companyName).toBe('');
+    expect(withoutCompany?.roleTitle).not.toBe('');
+    expect(toConnectionImportContacts(extractLinkedInConnections(fixture), 2)).toHaveLength(2);
   });
 
   it('returns nothing for a page without profile links', () => {

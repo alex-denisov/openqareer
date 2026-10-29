@@ -158,6 +158,27 @@ interface ConnectionModalProps {
   readonly connectOnly?: boolean;
   /** Sign in again and replace the profile with this platform's data. */
   readonly onReplaceProfile?: () => void;
+  /**
+   * LinkedIn only: the last contacts read (B448). `null` — not read yet,
+   * `undefined` — still loading or unknown, so the line is left out.
+   */
+  readonly contacts?: LinkedInContactsSummary | null;
+}
+
+export interface LinkedInContactsSummary {
+  readonly importedCount: number;
+  readonly importedAt: string;
+}
+
+function ContactsLine({ contacts }: { readonly contacts?: LinkedInContactsSummary | null }) {
+  if (contacts === undefined) return null;
+  return (
+    <p className="career-account-row-desc">
+      {contacts
+        ? `Контакты: ${contacts.importedCount.toLocaleString('ru-RU')} · обновлены ${connectionDate(contacts.importedAt)}`
+        : 'Контакты ещё не прочитаны'}
+    </p>
+  );
 }
 
 const connectOnlyText = (platform: string) =>
@@ -172,46 +193,40 @@ function ConnectOnlyModal({
   onDisconnect,
   onReimport,
   onReplaceProfile,
+  contacts,
 }: Omit<ConnectionModalProps, 'connection' | 'connectOnly'> & {
   readonly platform: 'hh.ru' | 'LinkedIn';
   readonly titleId: string;
 }) {
   return (
-    <DialogScrim onClose={onClose}>
-      <div className="career-account-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <div className="career-account-card-header">
-          <h3 id={titleId} className="career-account-card-title">{platform}</h3>
-          <button type="button" className="career-btn is-ghost is-icon" onClick={onClose} aria-label="Закрыть">
-            <X size={18} aria-hidden="true" />
-          </button>
+    <AccountFormDialog title={platform} titleId={titleId} onClose={onClose}>
+      <div className="career-account-rows">
+        <div className="career-account-card-title-wrap">
+          <span className="career-account-tag is-ok">
+            <CheckCircle size={14} weight="fill" aria-hidden="true" />
+            Подключено без импорта
+          </span>
         </div>
-        <div className="career-account-rows">
-          <div className="career-account-card-title-wrap">
-            <span className="career-account-tag is-ok">
-              <CheckCircle size={14} weight="fill" aria-hidden="true" />
-              Подключено без импорта
-            </span>
-          </div>
-          <p className="career-account-row-desc">{connectOnlyText(platform)}</p>
-        </div>
-        <div className="career-account-dialog-actions">
-          <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
-            Отключить
-          </button>
-          {onReplaceProfile ? (
-            <button type="button" className="career-btn" disabled={busy} onClick={onReplaceProfile}>
-              Заменить профиль данными с {platform}
-            </button>
-          ) : null}
-          {onReimport ? (
-            <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
-              <ArrowsClockwise size={16} aria-hidden="true" />
-              Подключить заново
-            </button>
-          ) : null}
-        </div>
+        <p className="career-account-row-desc">{connectOnlyText(platform)}</p>
+        <ContactsLine contacts={contacts} />
       </div>
-    </DialogScrim>
+      <div className="career-account-dialog-actions">
+        <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
+          Отключить
+        </button>
+        {onReplaceProfile ? (
+          <button type="button" className="career-btn" disabled={busy} onClick={onReplaceProfile}>
+            Заменить профиль данными с {platform}
+          </button>
+        ) : null}
+        {onReimport ? (
+          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
+            <ArrowsClockwise size={16} aria-hidden="true" />
+            Подключить заново
+          </button>
+        ) : null}
+      </div>
+    </AccountFormDialog>
   );
 }
 
@@ -223,8 +238,10 @@ function connectionDate(value: string): string {
 
 function LinkedInModalContent({
   connection,
+  contacts,
 }: {
   readonly connection: Extract<CandidateConnection, { status: 'connected' }>;
+  readonly contacts?: LinkedInContactsSummary | null;
 }) {
   return (
     <div className="career-account-rows">
@@ -240,12 +257,7 @@ function LinkedInModalContent({
       <p className="career-account-row-desc">
         Импортировано {connection.factCount} фактов · {connectionDate(connection.lastImportedAt)}.
       </p>
-      <label className="career-account-row" aria-disabled="true">
-        <span className="career-account-row-label">
-          Использовать контакты для маршрутов к компаниям
-        </span>
-        <input type="checkbox" disabled aria-label="Использовать контакты для маршрутов к компаниям" />
-      </label>
+      <ContactsLine contacts={contacts} />
       <label className="career-account-row" aria-disabled="true">
         <span className="career-account-row-label">Готовить черновики постов</span>
         <input type="checkbox" disabled aria-label="Готовить черновики постов" />
@@ -262,46 +274,27 @@ export function AccountLinkedInModal({
   onReimport,
   connectOnly = false,
   onReplaceProfile,
+  contacts,
 }: ConnectionModalProps) {
   if (connectOnly) {
-    const handlers = { busy, onClose, onDisconnect, onReimport, onReplaceProfile };
+    const handlers = { busy, onClose, onDisconnect, onReimport, onReplaceProfile, contacts };
     return <ConnectOnlyModal platform="LinkedIn" titleId="li-modal-title" {...handlers} />;
   }
   return (
-    <DialogScrim onClose={onClose}>
-      <div
-        className="career-account-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="li-modal-title"
-      >
-        <div className="career-account-card-header">
-          <h3 id="li-modal-title" className="career-account-card-title">
-            LinkedIn
-          </h3>
-          <button
-            type="button"
-            className="career-btn is-ghost is-icon"
-            onClick={onClose}
-            aria-label="Закрыть"
-          >
-            <X size={18} aria-hidden="true" />
+    <AccountFormDialog title="LinkedIn" titleId="li-modal-title" onClose={onClose}>
+      <LinkedInModalContent connection={connection} contacts={contacts} />
+      <div className="career-account-dialog-actions">
+        <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
+          Отключить
+        </button>
+        {onReimport ? (
+          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
+            <ArrowsClockwise size={16} aria-hidden="true" />
+            Импортировать заново
           </button>
-        </div>
-        <LinkedInModalContent connection={connection} />
-        <div className="career-account-dialog-actions">
-          <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
-            Отключить
-          </button>
-          {onReimport ? (
-            <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
-              <ArrowsClockwise size={16} aria-hidden="true" />
-              Импортировать заново
-            </button>
-          ) : null}
-        </div>
+        ) : null}
       </div>
-    </DialogScrim>
+    </AccountFormDialog>
   );
 }
 

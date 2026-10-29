@@ -75,4 +75,30 @@ describe('connection manage dialogs for a connect-only platform (24.10)', () => 
       expect(html).not.toContain('Заменить профиль');
     }
   });
+
+  it('says how many LinkedIn contacts were read instead of a dead checkbox (29.10)', () => {
+    const linkedin = { ...connection, platform: 'linkedin' as const, factCount: 59 };
+    const read = renderToStaticMarkup(
+      <AccountLinkedInModal
+        {...handlers}
+        connection={linkedin}
+        contacts={{ importedCount: 1888, importedAt: '2026-10-29T14:00:00.000Z' }}
+      />,
+    );
+    expect(read).toContain('Контакты: 1\u00a0888 · обновлены 29.10');
+    expect(read).not.toContain('Использовать контакты для маршрутов к компаниям');
+    const connectOnly = renderToStaticMarkup(
+      <AccountLinkedInModal
+        {...handlers}
+        connection={linkedin}
+        connectOnly
+        contacts={{ importedCount: 3, importedAt: '2026-10-29T14:00:00.000Z' }}
+      />,
+    );
+    expect(connectOnly).toContain('Контакты: 3 · обновлены 29.10');
+    const notYet = renderToStaticMarkup(
+      <AccountLinkedInModal {...handlers} connection={linkedin} contacts={null} />,
+    );
+    expect(notYet).toContain('Контакты ещё не прочитаны');
+  });
 });
