@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { apiErrorMessage } from '../coach/apiClient';
+import { profileFailureText } from './profileFailureText';
 
 export type ProfileEntrySaveResult = boolean | void | Promise<boolean | void>;
 
@@ -25,9 +25,7 @@ export function useProfileEntrySave<Patch>(
       }
       return true;
     } catch (reason) {
-      setError(
-        apiErrorMessage(reason, 'Не сохранилось: нет связи с сервером. Текст остался в поле.'),
-      );
+      setError(profileFailureText(reason, 'save'));
       return false;
     } finally {
       setBusy(false);

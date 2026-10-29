@@ -33,13 +33,21 @@ interface DataDialogProps extends ProfileMobileDataProps {
   readonly section?: ProfileDataSection;
   readonly onSelect: (section?: ProfileDataSection) => void;
   readonly onClose: () => void;
+  /** Contacts saved: the whole dialog closes and the screen says «Сохранено». */
+  readonly onContactsSaved?: () => void;
 }
 
 function ProfileDataSectionView(props: DataDialogProps) {
   switch (props.section) {
     case 'name':
     case 'contacts':
-      return <ProfileMobileContacts {...props} back={() => props.onSelect(undefined)} />;
+      return (
+        <ProfileMobileContacts
+          {...props}
+          back={() => props.onSelect(undefined)}
+          onSaved={props.onContactsSaved ?? props.onClose}
+        />
+      );
     case 'about':
       return (
         <ProfileAboutSection
@@ -115,6 +123,11 @@ function useDialogFocus(props: DataDialogProps) {
   return ref;
 }
 
+/** The name entry opens the same contacts form, so it carries the same title (A9). */
+function dialogSectionTitleKey(section: ProfileDataSection): ProfileDataSection {
+  return section === 'name' ? 'contacts' : section;
+}
+
 function ProfileDataDialogHeader(props: DataDialogProps) {
   return (
     <header className="profile-data-dialog-header">
@@ -129,7 +142,9 @@ function ProfileDataDialogHeader(props: DataDialogProps) {
         </button>
       ) : null}
       <h2 id="profile-data-dialog-title">
-        {props.section ? PROFILE_DATA_SECTIONS[props.section] : 'Данные профиля'}
+        {props.section
+          ? PROFILE_DATA_SECTIONS[dialogSectionTitleKey(props.section)]
+          : 'Данные профиля'}
       </h2>
       <button
         type="button"

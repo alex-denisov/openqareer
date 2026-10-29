@@ -37,6 +37,7 @@ import type { ProfileFocusRequest, ProfileMobileScene } from './profileMobileNav
 import { ProfileEmptyStart } from './ProfileEmptyStart';
 import { ProfileMobileScreen } from './ProfileMobileScreen';
 import { ProfileDataDialog } from './ProfileDataDialog';
+import { ProfileSavedToast } from './ProfileSavedToast';
 import { ProfileDesktopSkills } from './ProfileDesktopSkills';
 import { useProfileDataDialog } from './useProfileDataDialog';
 import { ProfileRefreshNotice } from './ProfileRefreshNotice';
@@ -247,15 +248,21 @@ function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
   const draftIsEmpty = isDraftEmpty(draft, memory);
   if (!desktopProfileLayout)
     return <ProfileMobileScreen {...props} draft={draft} isDraftEmpty={draftIsEmpty} />;
-  const dialog = dataDialog.open ? (
-    <ProfileDataDialog
-      {...props}
-      draft={draft}
-      section={dataDialog.section}
-      onSelect={dataDialog.select}
-      onClose={dataDialog.close}
-    />
-  ) : null;
+  const dialog = (
+    <>
+      {dataDialog.open ? (
+        <ProfileDataDialog
+          {...props}
+          draft={draft}
+          section={dataDialog.section}
+          onSelect={dataDialog.select}
+          onClose={dataDialog.close}
+          onContactsSaved={dataDialog.closeSaved}
+        />
+      ) : null}
+      <ProfileSavedToast visible={dataDialog.savedNotice} onDismiss={dataDialog.dismissNotice} />
+    </>
+  );
   if (draftIsEmpty) {
     return (
       <div className="career-profile-screen-view">

@@ -7,7 +7,6 @@ import {
   type ProfileRelocationSummaryStatus,
 } from './ProfileSideRail';
 import { TopcardEditForm } from './ProfileTopcard';
-import { WorkPreferencesRailPanel } from './ProfileSideRail';
 import { patchTopcard } from './profileEditing';
 import { useProfileEntrySave } from './profileEntrySave';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
@@ -66,30 +65,29 @@ export function ProfileMobileRelocation(props: ProfileMobileDataProps) {
 }
 
 export function ProfileMobileContacts(
-  props: ProfileMobileDataProps & Pick<ProfileMobileNavigationProps, 'back'>,
+  props: ProfileMobileDataProps &
+    Pick<ProfileMobileNavigationProps, 'back'> & {
+      /** After a successful save: the dialog closes whole instead of going back to its menu. */
+      readonly onSaved?: () => void;
+    },
 ) {
   const submit = useProfileEntrySave(
     async (patch: Parameters<typeof patchTopcard>[1]) => {
       const result = await props.onSectionSave(patchTopcard(props.draft, patch));
-      if (result !== false) props.back();
+      if (result === false) return result;
+      if (props.onSaved) props.onSaved();
+      else props.back();
       return result;
     },
     () => undefined,
   );
   return (
-    <>
-      <TopcardEditForm
-        draft={props.draft}
-        saving={props.saving || submit.busy}
-        onSave={submit.save}
-        onCancel={props.back}
-      />
-      <WorkPreferencesRailPanel />
-      {submit.error ? (
-        <p className="career-resume-error" role="alert">
-          {submit.error}
-        </p>
-      ) : null}
-    </>
+    <TopcardEditForm
+      draft={props.draft}
+      saving={props.saving || submit.busy}
+      error={submit.error}
+      onSave={submit.save}
+      onCancel={props.back}
+    />
   );
 }

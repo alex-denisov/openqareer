@@ -29,6 +29,11 @@ import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLa
 import { connectionStatusLabel, factCountLabel, importDateLabel } from './profileSourceLabels';
 import { ProfileSourceDialog } from './ProfileSourceDialog';
 import { ProfileImportFailureNote } from './ProfileImportFailureNote';
+import {
+  formatPhoneInput,
+  getContactEmailError,
+  getContactPhoneError,
+} from '../../../shared/contactValidation';
 
 interface ProfileTopcardProps {
   readonly draft: ResumeDraft;
@@ -140,6 +145,7 @@ export function TopcardEditForm({
   onSave,
   onCancel,
   saving,
+  error,
 }: {
   readonly draft: ResumeDraft;
   readonly onSave: (
@@ -147,12 +153,22 @@ export function TopcardEditForm({
   ) => Promise<boolean | void> | boolean | void;
   readonly onCancel: () => void;
   readonly saving?: boolean;
+  /** Save failure shown inside the form, in plain Russian (A8). */
+  readonly error?: string;
 }) {
   const [fullName, setFullName] = useState(draft.candidate.fullName ?? '');
   const [headline, setHeadline] = useState(draft.candidate.headline ?? '');
   const [location, setLocation] = useState(draft.candidate.contact?.location ?? '');
   const [email, setEmail] = useState(draft.candidate.contact?.email ?? '');
   const [phone, setPhone] = useState(draft.candidate.contact?.phone ?? '');
+  const [touched, setTouched] = useState(false);
+  const emailError = touched ? getContactEmailError(email) : null;
+  const phoneError = touched ? getContactPhoneError(phone) : null;
+  const submit = () => {
+    setTouched(true);
+    if (getContactEmailError(email) || getContactPhoneError(phone)) return;
+    void onSave({ fullName, headline, location, email, phone });
+  };
   return (
     <div className="career-profile-screen-edit-body">
       <div className="career-profile-screen-field-grid">
@@ -182,23 +198,40 @@ export function TopcardEditForm({
         </label>
         <label className="career-profile-screen-field">
           <span>Email</span>
-          <input name="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+          <input
+            name="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            aria-invalid={emailError ? true : undefined}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          {emailError ? <small role="alert">{emailError}</small> : null}
         </label>
         <label className="career-profile-screen-field">
           <span>Телефон</span>
-          <input name="phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <input
+            name="phone"
+            type="tel"
+            autoComplete="tel"
+            inputMode="tel"
+            value={phone}
+            aria-invalid={phoneError ? true : undefined}
+            onChange={(event) => setPhone(formatPhoneInput(event.target.value))}
+          />
+          {phoneError ? <small role="alert">{phoneError}</small> : null}
         </label>
       </div>
+      {error ? (
+        <p className="career-resume-error" role="alert">
+          {error}
+        </p>
+      ) : null}
       <div className="career-profile-screen-edit-actions">
         <button type="button" className="career-quiet-button" onClick={onCancel}>
           Отменить
         </button>
-        <button
-          type="button"
-          className="career-primary-button"
-          disabled={saving}
-          onClick={() => void onSave({ fullName, headline, location, email, phone })}
-        >
+        <button type="button" className="career-primary-button" disabled={saving} onClick={submit}>
           {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
