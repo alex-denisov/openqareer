@@ -41,8 +41,12 @@ function vacancy(sourceId: string, id: string, title: string, publishedAt: strin
   } as UnifiedVacancy;
 }
 
-/** A real file store whose out-of-process reader is replaced by a same-file read-only connection. */
 function openStore(): SqliteVacancyPoolStore {
+  return openStoreWithPath().store;
+}
+
+/** A real file store whose out-of-process reader is replaced by a same-file read-only connection. */
+function openStoreWithPath(): { store: SqliteVacancyPoolStore; path: string } {
   const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-hh-sample-'));
   directories.push(directory);
   const path = join(directory, 'pool.db');
@@ -60,10 +64,67 @@ function openStore(): SqliteVacancyPoolStore {
     },
   });
   stores.push(store);
-  return store;
+  return { store, path };
+}
+
+/** What the maintenance worker writes for a parsed title (B267 S2). */
+function classify(
+  path: string,
+  rows: Array<[id: string, functionCode: string, levelRank: number, publishedAt: string]>,
+): void {
+  const writer = new DatabaseSync(path);
+  const insert = writer.prepare(
+    `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
+     VALUES (?, ?, ?, ?, ?, 0)`,
+  );
+  for (const [id, code, level, publishedAt] of rows)
+    insert.run(`${HH_SEARCH_SOURCE_ID}:${id}`, code, level, id, Date.parse(publishedAt));
+  writer.close();
 }
 
 describe('SqliteVacancyPoolStore · stored hh market sample (29.10)', () => {
+  it('finds Russian hh titles for an English role by its function and level', async () => {
+    const { store, path } = openStoreWithPath();
+    store.replaceSourceSlice(HH_SEARCH_SOURCE_ID, [
+      vacancy(HH_SEARCH_SOURCE_ID, '501', 'Технический директор', '2026-10-27T10:00:00.000Z'),
+      vacancy(HH_SEARCH_SOURCE_ID, '502', 'ИТ-директор', '2026-10-26T10:00:00.000Z'),
+      vacancy(HH_SEARCH_SOURCE_ID, '503', 'Инженер-программист', '2026-10-28T10:00:00.000Z'),
+      vacancy(HH_SEARCH_SOURCE_ID, '504', 'Директор по продукту', '2026-10-28T10:00:00.000Z'),
+    ]);
+    classify(path, [
+      ['501', 'eng-mgmt', 4, '2026-10-27T10:00:00.000Z'],
+      ['502', 'eng-mgmt', 3, '2026-10-26T10:00:00.000Z'],
+      ['503', 'eng-mgmt', 0, '2026-10-28T10:00:00.000Z'],
+      ['504', 'product', 4, '2026-10-28T10:00:00.000Z'],
+    ]);
+
+    const found = await store.queryStoredHhSampleAsync('VP of Technology', 12, NOW_MS);
+
+    expect(found.map((item) => item.id)).toEqual([
+      `${HH_SEARCH_SOURCE_ID}:501`,
+      `${HH_SEARCH_SOURCE_ID}:502`,
+    ]);
+  });
+
+  it('puts exact text matches first and fills the rest by function and level', async () => {
+    const { store, path } = openStoreWithPath();
+    store.replaceSourceSlice(HH_SEARCH_SOURCE_ID, [
+      vacancy(HH_SEARCH_SOURCE_ID, '601', 'Agile Coach', '2026-10-20T10:00:00.000Z'),
+      vacancy(HH_SEARCH_SOURCE_ID, '602', 'Руководитель проектов', '2026-10-28T10:00:00.000Z'),
+    ]);
+    classify(path, [
+      ['601', 'project-mgmt', 1, '2026-10-20T10:00:00.000Z'],
+      ['602', 'project-mgmt', 1, '2026-10-28T10:00:00.000Z'],
+    ]);
+
+    const found = await store.queryStoredHhSampleAsync('Agile coach', 12, NOW_MS);
+
+    expect(found.map((item) => item.id)).toEqual([
+      `${HH_SEARCH_SOURCE_ID}:601`,
+      `${HH_SEARCH_SOURCE_ID}:602`,
+    ]);
+  });
+
   it('returns the newest stored hh records whose text holds the query', async () => {
     const store = openStore();
     store.replaceSourceSlice(HH_SEARCH_SOURCE_ID, [

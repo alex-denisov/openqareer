@@ -23,6 +23,11 @@ import {
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
 import { buildSemanticMatchQuery } from './semanticMatchQuery';
+import {
+  storedHhSampleByRole,
+  storedHhSampleByText,
+  type StoredHhSampleQuery,
+} from './storedHhSampleQuery';
 import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions';
 import { LEVEL_RANK } from './levelMatcher';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
@@ -737,37 +742,32 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   /**
-   * Свежие записи собственного обхода hh по подстроке — рыночный срез хода
-   * консультанта, когда api.hh.ru закрыт для анонимных запросов (29.10).
-   * Читается тем же дочерним процессом, что и подбор: на проде ~700 тыс.
-   * записей hh, запрос без совпадений обходит окно целиком (~1,2 с).
+   * Свежие записи собственного обхода hh для роли — рыночный срез хода
+   * консультанта, когда api.hh.ru закрыт для анонимных запросов (29.10):
+   * сначала точные совпадения по тексту, остаток — той же функции и близкого
+   * уровня (так английская роль находит русские названия hh). Читается тем же
+   * дочерним процессом, что и подбор.
    */
   async queryStoredHhSampleAsync(
     text: string,
     limit: number,
     nowMs?: number,
   ): Promise<UnifiedVacancy[]> {
-    const needle = normalizeQuery(text);
-    if (needle === undefined || limit <= 0) return [];
+    if (limit <= 0) return [];
     const window = freshnessWindow(nowMs);
-    const sql = `WITH selected AS MATERIALIZED (
-        SELECT i.id, i.published_ms FROM vacancy_pool_index i
-          INDEXED BY vacancy_pool_index_source_fresh
-        WHERE i.source_id = ? AND ${FRESH} AND instr(i.search_text, ?) > 0
-        ORDER BY i.published_ms DESC LIMIT ?
-      ) SELECT p.payload AS payload FROM selected s
-        JOIN vacancy_pool p ON p.id = s.id
-        ORDER BY s.published_ms DESC, s.id ASC`;
-    const params: SQLInputValue[] = [
-      HH_SEARCH_SOURCE_ID,
-      window.fromMs,
-      window.toMs,
-      needle,
-      limit,
-    ];
-    if (this.databasePath === ':memory:') return this.readVacancies(sql, params);
+    const byText = storedHhSampleByText(text, window, limit);
+    const exact = byText ? await this.readStoredSample(byText) : [];
+    if (exact.length >= limit) return exact;
+    const byRole = storedHhSampleByRole(text, window, limit);
+    const similar = byRole ? await this.readStoredSample(byRole) : [];
+    const seen = new Set(exact.map((item) => item.id));
+    return [...exact, ...similar.filter((item) => !seen.has(item.id))].slice(0, limit);
+  }
+
+  private async readStoredSample(query: StoredHhSampleQuery): Promise<UnifiedVacancy[]> {
+    if (this.databasePath === ':memory:') return this.readVacancies(query.sql, query.params);
     const reader = (this.matchReader ??= new VacancyMatchReader(this.databasePath));
-    const rows = await reader.read(sql, params);
+    const rows = await reader.read(query.sql, query.params);
     return rows.flatMap((row) => parseVacancy(row.payload) ?? []);
   }
 
