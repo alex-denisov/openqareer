@@ -680,8 +680,10 @@ test.describe('B441 Profile screen from mockup 2', () => {
     for (const category of ['Структура', 'Ключевые слова', 'Даты', 'Формат']) {
       await expect(ats.getByText(category, { exact: false })).toBeVisible();
     }
-    await expect(page.getByRole('button', { name: /LinkedIn.*9 из 9.*12\.09/u })).toBeVisible();
-    await expect(page.getByRole('button', { name: /hh\.ru.*8 из 8.*07\.10/u })).toBeVisible();
+    // Chips carry the brand mark and «Подключено», no counts or dates (walk 29.10, C5).
+    await expect(page.getByRole('button', { name: /LinkedIn.*Подключено/u })).toBeVisible();
+    await expect(page.getByRole('button', { name: /hh\.ru.*Подключено/u })).toBeVisible();
+    await expect(page.getByRole('button', { name: /12\.09|07\.10/u })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /JSON/u })).toHaveCount(0);
     await expect(page.getByText('Full professional proficiency')).toHaveCount(0);
     await captureS10Profile(page, `profile-${page.viewportSize()?.width ?? 'unknown'}`);
@@ -693,7 +695,7 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await expect(page.getByLabel('Требования вакансии')).toBeVisible();
     await captureB441View(page, b441Screenshot(`${testInfo.project.name}-ats-editor`));
 
-    const sourceButton = page.getByRole('button', { name: /LinkedIn.*9 из 9/u });
+    const sourceButton = page.getByRole('button', { name: /LinkedIn.*Подключено/u });
     await sourceButton.click();
     if (testInfo.project.name !== 'mobile-390') {
       // Mockup 2 «Модальное окно: источник»: the chip opens the source dialog first.
@@ -773,9 +775,7 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await expect(expert).toBeVisible();
     const quiz = expert.locator('.career-quiz-modal-card');
     await expect(quiz).toBeVisible();
-    await expect(
-      quiz.getByRole('heading', { name: 'Проверка навыков' }),
-    ).toBeVisible();
+    await expect(quiz.getByRole('heading', { name: 'Проверка навыков' })).toBeVisible();
     await quiz.getByRole('button', { name: 'Закрыть симулятор тестов' }).click();
     await expect(quiz).toHaveCount(0);
     if (isMobile) {
@@ -1694,9 +1694,7 @@ test.describe('B265 Profile screen', () => {
     const recommendationsBeforeRejectedDelete = [...(savedDraft.recommendations ?? [])];
     failNextResumeSave = true;
     await recommendation.getByRole('button', { name: 'Удалить рекомендацию', exact: true }).click();
-    await expect(
-      page.getByRole('alert').filter({ hasText: 'Сохранение временно недоступно.' }),
-    ).toBeVisible();
+    await expect(page.getByRole('alert').filter({ hasText: /^Не сохранилось/u })).toBeVisible();
     await expect(recommendation).toBeVisible();
     await expect(recommendation).toContainText('Обновлённая проверяемая рекомендация.');
     await expect
@@ -1877,11 +1875,11 @@ test.describe('B265 Profile screen', () => {
     await openProfile(page);
     await expect(page.locator('.career-profile-screen-otw')).toHaveCount(0);
     if (testInfo.project.name === 'mobile-390') {
+      // Contacts hold only contacts (walk 29.10, A9); preferences live on the relocation page.
       const mobileProfile = page.locator('.career-profile-mobile');
-      await page
-        .getByRole('button', { name: 'Изменить основные данные профиля', exact: true })
-        .click();
-      await expect(mobileProfile).toHaveAttribute('data-mobile-profile-page', 'contacts');
+      await mobileProfile.getByRole('button', { name: /^Релокация/u }).click();
+      await expect(mobileProfile).toHaveAttribute('data-mobile-profile-page', 'reloc');
+      await openProfilePreferences(page);
     } else {
       await openProfilePreferences(page);
     }

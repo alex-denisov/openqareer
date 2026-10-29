@@ -9,6 +9,7 @@ import {
   profileRelocationSummaryDetail,
   profileRelocationSummaryLabel,
   type ProfileRelocationSummaryStatus,
+  WorkPreferencesRailPanel,
 } from './ProfileSideRail';
 import { TopcardEditForm } from './ProfileTopcard';
 import { patchTopcard } from './profileEditing';
@@ -104,6 +105,10 @@ export function ProfileMobileRelocation(props: ProfileMobileDataProps) {
       <p className="pm-foot">
         Документы, гражданство и сроки хранятся в разделе «Страны и релокация».
       </p>
+      <details className="career-profile-screen-relocation-prefs">
+        <summary>Ограничения и предпочтения для подбора</summary>
+        <WorkPreferencesRailPanel />
+      </details>
     </>
   );
 }
