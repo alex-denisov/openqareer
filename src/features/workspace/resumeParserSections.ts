@@ -1,3 +1,4 @@
+import { isNotASkill } from '../../../shared/notASkill';
 import type { CefrLevel } from '../resume/resumeTypes';
 import {
   CEFR_MAP,
@@ -12,10 +13,6 @@ import type {
   ParsedResumeTest,
 } from './resumeParserTypes';
 
-/** hh.ru's second «Навыки» block is about driving, and its footer heading is no skill. */
-const NOT_A_SKILL =
-  /^(?:опыт вождения|имеется собственный автомобиль|права категории|дополнительная информация)/iu;
-
 export function extractSkills(text: string): string[] {
   const lookahead = sectionLookahead('Ключевые навыки');
   const regex = new RegExp(
@@ -27,7 +24,7 @@ export function extractSkills(text: string): string[] {
   const items = raw
     .split(/[\n,;•·]+/u)
     .map((s) => s.trim())
-    .filter((s) => s.length >= 2 && s.length <= 80 && !NOT_A_SKILL.test(s));
+    .filter((s) => s.length >= 2 && s.length <= 80 && !isNotASkill(s));
   return [...new Set(items)].slice(0, 50);
 }
 
