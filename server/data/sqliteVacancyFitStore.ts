@@ -33,6 +33,21 @@ const VERIFIED_FIELDS = ['gates', 'assessments', 'status', 'dataState', 'coverag
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
 
 /** Candidate facts/results are encrypted; all tenant correlation indexes use keyed HMAC. */
+/** `backgroundRank` — position in the background sweep; absent for work a candidate is looking at. */
+export interface FitEnqueueOptions { readonly backgroundRank?: number }
+
+/**
+ * The sweep yields to every page request (B580): the queue claims the newest `requested_at` first,
+ * so background rows get a stamp in 2000 that only their relevance rank orders — the most relevant
+ * rows of every candidate go first, and a later sweep chunk never jumps a visible page.
+ */
+const BACKGROUND_BASE_MS = Date.UTC(2000, 0, 1) + 1_000_000_000;
+
+function requestedAtFor(now: string, options: FitEnqueueOptions): string {
+  if (options.backgroundRank === undefined) return now;
+  return new Date(BACKGROUND_BASE_MS - Math.max(0, Math.floor(options.backgroundRank))).toISOString();
+}
+
 export class SqliteVacancyFitStore {
   constructor(private readonly database: DatabaseSync, private readonly sealedText: SealedText) {
     database.exec(`CREATE TABLE IF NOT EXISTS vacancy_fit_cache (
@@ -73,6 +88,17 @@ export class SqliteVacancyFitStore {
   }
 
   getCache(input: VacancyFitInput): VacancyFitResult | undefined {
+    const current = this.readCache(input);
+    if (current || !input.legacyProfileContextHash) return current;
+    // B580: the stamp formula changed; a result under the old stamp moves to the new key once,
+    // instead of 42K model calls on deploy.
+    const legacy = this.readCache({ ...input, profileContextHash: input.legacyProfileContextHash });
+    if (!legacy) return undefined;
+    this.putCache(input, legacy, legacy.calculatedAt);
+    return legacy;
+  }
+
+  private readCache(input: VacancyFitInput): VacancyFitResult | undefined {
     const key = this.cacheKey(input);
     const row = this.database.prepare('SELECT result_cipher FROM vacancy_fit_cache WHERE cache_key = ? AND candidate_key = ?').get(key, this.candidateKey(input.candidateId)) as { result_cipher: string } | undefined;
     if (!row) return undefined;
@@ -129,20 +155,22 @@ export class SqliteVacancyFitStore {
    * Input hash changes naturally enqueue a new job; identical work is idempotent across processes.
    * A repeated request (the candidate opened the page again) moves a waiting job to the front.
    */
-  enqueue(input: VacancyFitInput, now = new Date().toISOString()): { key: string; status: string } {
+  enqueue(input: VacancyFitInput, now = new Date().toISOString(), options: FitEnqueueOptions = {}): { key: string; status: string } {
     const key = this.cacheKey(input);
+    const requestedAt = requestedAtFor(now, options);
     this.database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,requested_at,created_at,updated_at)
       VALUES(?,?,?,'pending',?,?,?) ON CONFLICT(cache_key) DO UPDATE SET requested_at=excluded.requested_at WHERE status='pending'`)
-      .run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(input), key), now, now, now);
+      .run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, now);
     const row = this.database.prepare('SELECT status FROM vacancy_fit_queue WHERE cache_key=?').get(key) as { status: string };
     return { key, status: row.status };
   }
 
-  retryFailed(input: VacancyFitInput, now = new Date().toISOString()): void {
+  retryFailed(input: VacancyFitInput, now = new Date().toISOString(), options: FitEnqueueOptions = {}): void {
     const key = this.cacheKey(input);
+    const requestedAt = requestedAtFor(now, options);
     this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',input_cipher=?,attempts=0,defers=0,last_error=NULL,
       lease_token=NULL,lease_until=NULL,requested_at=?,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'`)
-      .run(this.sealedText.seal(JSON.stringify(input), key), now, now, key, this.candidateKey(input.candidateId));
+      .run(this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, key, this.candidateKey(input.candidateId));
   }
 
   /**

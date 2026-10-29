@@ -260,20 +260,26 @@ export function vacanciesToWarm(
 }
 
 /** Ставит расчёт для перечисленных вакансий, которым он ещё нужен (после дочитывания текста). */
+/** `backgroundRank` — the first row's place in the selection sweep; absent for rows on screen. */
 export function requestFitForVacancyIds(
   deps: RouteDeps,
   candidateId: string,
   vacancyIds: readonly string[],
+  backgroundRank?: number,
 ): void {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
   const context = createVacancyFitContextReader(deps, candidateId);
-  for (const id of vacancyIds) {
+  vacancyIds.forEach((id, index) => {
     const target = readVacancyFitTarget(deps, id);
-    if (!target) continue;
+    if (!target) return;
     const input = context(target, []);
-    if (['not_requested', 'failed'].includes(runtime.view(input).state)) runtime.enqueue(input);
-  }
+    if (!['not_requested', 'failed'].includes(runtime.view(input).state)) return;
+    runtime.enqueue(
+      input,
+      backgroundRank === undefined ? {} : { backgroundRank: backgroundRank + index },
+    );
+  });
 }
 
 /**

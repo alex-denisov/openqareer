@@ -170,6 +170,12 @@ function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
     if (needsDetail) void load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opened vacancy
   }, [vacancyId, needsDetail]);
+  // B580: обход подборки на Free считает первые 300; остальные — когда кандидат открыл вакансию.
+  const uncountedOnOpen = initialView?.state === 'not_requested';
+  useEffect(() => {
+    if (uncountedOnOpen) void load(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opened vacancy
+  }, [vacancyId, uncountedOnOpen]);
   return { view, busy, error, load };
 }
 /** B446-g4: в карточке экрана пересчёт готового результата скрыт; кнопка — для
