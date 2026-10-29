@@ -174,6 +174,8 @@ export interface ProfileScreenSurfaceProps {
   readonly onOpenSkillQuizBank?: () => void;
   readonly onOpenRoleSkillAssessment?: () => void;
   readonly onSuggestAboutWithConsultant?: () => void;
+  /** Opens the consultant with a question about one skill. */
+  readonly onDiscussSkill?: (skillName: string) => void;
   readonly onCollectExperienceFact?: (
     target: Extract<ProfileFocusRequest, { readonly section: 'experience' }>,
   ) => void;
@@ -471,6 +473,8 @@ interface ProfileScreenViewProps {
   readonly onOpenSkillQuizBank?: () => void;
   readonly onOpenRoleSkillAssessment?: () => void;
   readonly onSuggestAboutWithConsultant?: () => void;
+  /** Opens the consultant with a question about one skill. */
+  readonly onDiscussSkill?: (skillName: string) => void;
   readonly onCollectExperienceFact?: (
     target: Extract<ProfileFocusRequest, { readonly section: 'experience' }>,
   ) => void;
@@ -788,6 +792,7 @@ function ProfileScreenSurfaceWithController({
       onOpenSkillQuizBank={props.onOpenSkillQuizBank}
       onOpenRoleSkillAssessment={props.onOpenRoleSkillAssessment}
       onSuggestAboutWithConsultant={props.onSuggestAboutWithConsultant}
+      onDiscussSkill={props.onDiscussSkill}
       onCollectExperienceFact={props.onCollectExperienceFact}
       onOpenRelocation={props.onOpenRelocation}
       relocationSummary={relocationSummary}

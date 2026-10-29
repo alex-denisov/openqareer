@@ -1,18 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
-import {
-  CheckCircle,
-  Circle,
-  ListChecks,
-  Plus,
-  Target,
-  Question,
-  CaretRight,
-} from '@phosphor-icons/react';
+import { CheckCircle, Circle, Plus, Target, Question, CaretRight } from '@phosphor-icons/react';
 import { addSkill } from './resumeStudioModel';
 import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './ProfileMobileElements';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
 import { useProvenanceLabelOf } from './ProfileProvenanceChip';
+import { SkillConfirmEntry } from './SkillConfirmEntry';
+import { skillStatusLabel } from './skillStatusLabel';
+import { useSkillConfirmations } from './useSkillConfirmations';
+import type { SkillConfirmation } from '../skills/skillConfirmationApi';
 import { provenanceLabel } from './profileProvenance';
 import type { ResumeSkillInput } from './resumeTypes';
 import {
@@ -21,7 +17,7 @@ import {
   orderSkillsByVerification,
 } from './skillConfirmation';
 
-// Mockup 2 (390): «Подтверждён», «Не проверен» or «Без квиза»; an unknown status code is never
+// Mockup 2 (390): «Подтверждён», «Разобрано в беседе», «Квиз не пройден» or «Без квиза»; an unknown status code is never
 // shown as is. The source and its date read as one phrase: «из LinkedIn, 12.09».
 const UNKNOWN_SOURCE = 'Источник не указан';
 
@@ -39,10 +35,13 @@ export function skillSourceLabel(
 export function mobileSkillLabels(
   skill: ResumeSkillInput,
   labelOf?: (memoryId: string | undefined) => string,
+  confirmation?: SkillConfirmation,
 ) {
-  const verified = skill.status === 'подтверждён';
-  const rejected = skill.status === 'не подтверждён';
-  const status = verified ? 'Подтверждён' : rejected ? 'Не проверен' : 'Без квиза';
+  const label = skillStatusLabel(skill, confirmation);
+  // The 390 row of mockup 2 says «Подтверждён»; 1440 says «Подтверждено».
+  const status = label === 'Подтверждено' ? 'Подтверждён' : label;
+  const verified = label === 'Подтверждено' || label === 'Разобрано в беседе';
+  const rejected = label === 'Квиз не пройден';
   const source = skillSourceLabel(skill, labelOf);
   const date = profileMobileDate(skill.verifiedAt);
   return {
@@ -55,10 +54,17 @@ export function mobileSkillLabels(
   };
 }
 
-function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
+function MobileSkillRow({
+  skill,
+  confirmation,
+}: {
+  readonly skill: ResumeSkillInput;
+  readonly confirmation?: SkillConfirmation;
+}) {
   const { verified, rejected, status, source, date, origin } = mobileSkillLabels(
     skill,
     useProvenanceLabelOf(),
+    confirmation,
   );
   const Icon = verified ? CheckCircle : rejected ? Question : Circle;
   return (
@@ -116,17 +122,42 @@ function ProfileMobileSkillActions(props: ProfileMobileDataProps & ProfileMobile
   );
 }
 
+function MobileSkillConfirm(
+  props: ProfileMobileDataProps &
+    ProfileMobileNavigationProps & {
+      readonly confirmations: ReturnType<typeof useSkillConfirmations>;
+    },
+) {
+  const { confirmations } = props;
+  return (
+    <SkillConfirmEntry
+      skills={confirmations.skills}
+      className="pm-cta"
+      onDiscuss={props.onDiscussSkill}
+      onApplied={() => {
+        confirmations.reload();
+        props.onRetry();
+      }}
+    />
+  );
+}
+
 export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobileNavigationProps) {
   const skills = orderSkillsByVerification(props.draft.skills ?? []);
   const [all, setAll] = useState(false);
   const visible = all ? skills : skills.slice(0, 5);
+  const confirmations = useSkillConfirmations(props.candidateId);
   return (
     <>
       <section className="pm-group">
         <h3 className="pm-cap">{pluralRu(skills.length, ['навык', 'навыка', 'навыков'])}</h3>
         <div className="pm-list profile-mobile-skills-list" aria-label="Все навыки профиля">
           {visible.map((skill) => (
-            <MobileSkillRow key={skill.id} skill={skill} />
+            <MobileSkillRow
+              key={skill.id}
+              skill={skill}
+              confirmation={confirmations.confirmationOf(skill.name)}
+            />
           ))}
         </div>
         {skills.length > 5 ? (
@@ -146,15 +177,7 @@ export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobil
         )}
       </section>
       <ProfileMobileSkillActions {...props} />
-      <button
-        className="pm-cta"
-        type="button"
-        disabled={!props.onOpenSkillQuizBank}
-        onClick={props.onOpenSkillQuizBank}
-      >
-        <ListChecks size="1em" aria-hidden="true" />
-        Пройти квиз по навыкам
-      </button>
+      <MobileSkillConfirm confirmations={confirmations} {...props} />
       <p className="pm-foot">
         {skills.length ? `${confirmedSkillsLine(skills)} ` : ''}
         {SKILL_CONFIRMATION_HINT}

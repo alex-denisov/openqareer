@@ -62,6 +62,11 @@ export const MODEL_CHAINS = {
   roleNames: [DEEPSEEK_FLASH, LUNA, VERTEX],
   coverLetters: [DEEPSEEK_FLASH, LUNA, VERTEX],
   linkedinDrafts: [DEEPSEEK_FLASH, LUNA, VERTEX],
+  /**
+   * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому
+   * цепочка консультанта, а не фон. Vertex нет: ступени только chat-completions.
+   */
+  skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Структурный JSON без текста для человека: как фон. */
   campaignRoles: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
   titleParsing: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],

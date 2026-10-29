@@ -53,6 +53,10 @@ describe('цепочки моделей по механикам (28.10)', () => 
     }
   });
 
+  it('квиз по навыку профиля идёт по цепочке консультанта (блок A, пакет 3)', () => {
+    expect(labels('skillQuizzes')).toEqual(labels('coach'));
+  });
+
   it.each(Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>)(
     '%s: не меньше двух ступеней, без бесплатных, мёртвых и дорогих маршрутов',
     (mechanic) => {

@@ -1,8 +1,8 @@
 import type { ResumeSkillInput } from './resumeTypes';
 
-/** One line on where a skill gets confirmed: the quiz flow, in its own button labels. */
+/** One line on where a skill gets confirmed: the two paths of «Подтвердить навык». */
 export const SKILL_CONFIRMATION_HINT =
-  'Навык подтверждается квизом: «Пройти квиз» → ответы → «Принять результат».';
+  'Навык можно подтвердить двумя путями: коротким тестом или разбором опыта в беседе с консультантом.';
 
 function rank(skill: ResumeSkillInput): number {
   if (skill.status === 'подтверждён') return 0;

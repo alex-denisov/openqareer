@@ -258,7 +258,7 @@ describe('ProfileScreenSurface — states', () => {
       <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="skills" />,
     );
     expect(skillsWithoutQuizHandler).toContain('id="profile-panel-skills"');
-    expect(skillsWithoutQuizHandler).not.toContain('Пройти квиз по навыкам');
+    expect(skillsWithoutQuizHandler).not.toContain('Пройти квиз');
     expect(skillsWithoutQuizHandler).not.toContain('sec-experience');
 
     const skillsWithQuizHandler = renderToStaticMarkup(
@@ -269,8 +269,9 @@ describe('ProfileScreenSurface — states', () => {
         onOpenSkillQuizBank={() => undefined}
       />,
     );
-    expect(skillsWithQuizHandler).toContain('Пройти квиз');
-    expect(skillsWithQuizHandler).not.toMatch(/disabled=""[^>]*>[^<]*Пройти квиз/u);
+    // One entry «Подтвердить навык»; it stays disabled until the confirmations are read.
+    expect(skillsWithQuizHandler).toContain('Подтвердить навык');
+    expect(skillsWithQuizHandler).not.toContain('Пройти квиз');
     expect(profileHtml).toContain('career-profile-screen-ats-card');
     expect(profileHtml).toContain('aria-label="Оценка ATS неизвестна"');
     expect(profileHtml).toContain('из 100');

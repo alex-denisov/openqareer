@@ -24,7 +24,7 @@ export const MANAGEMENT_SKILLS_DICTIONARY: readonly ManagementSkillDefinition[] 
   {
     canonical: 'Управление командой',
     synonyms: ['управление командой', 'руководство командой', 'руководство коллективом', 'управление коллективом', 'team management', 'people management', 'командное лидерство', 'руководство людьми', 'руководство отделом', 'управление людьми', 'управление персоналом', 'Team Leadership', 'Cross-functional Team Leadership', 'Cross-functional Leadership', 'Executive Leadership', 'Leadership', 'лидерство', 'построение команды', 'масштабирование команды'],
-    textPatterns: ['(?:управлен\\S*|руководств\\S*)\\s+(?:команд\\S*|коллектив\\S*|людьми|персонал\\S*|отдел\\S*)', 'team\\s+management', 'people\\s+management', '(?:cross-functional\\s+)?team\\s+leadership', 'executive\\s+leadership', 'построен\\S*\\s+команд\\S*', 'масштабирован\\S*\\s+команд\\S*', 'лидерств\\S*'],
+    textPatterns: ['(?:управл\\S*|руковод\\S*)\\s+(?:команд\\S*|коллектив\\S*|людьми|персонал\\S*|отдел\\S*)', 'team\\s+management', 'people\\s+management', '(?:cross-functional\\s+)?team\\s+leadership', 'executive\\s+leadership', 'построен\\S*\\s+команд\\S*', 'масштабирован\\S*\\s+команд\\S*', 'лидерств\\S*'],
   },
   {
     canonical: 'Бюджетирование',

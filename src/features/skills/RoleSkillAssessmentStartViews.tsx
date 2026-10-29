@@ -362,22 +362,35 @@ export function SkillOverview({
 }: {
   current: Extract<RoleSkillAssessmentCurrent, { state: 'ready' }>;
 }) {
+  const discussed = new Map(
+    (current.conversation ?? [])
+      .filter((item) => item.state === 'discussed' && item.facts.length > 0)
+      .map((item) => [item.name.trim().toLowerCase(), item.facts[0]]),
+  );
   return (
     <section className="career-role-assessment-card career-role-assessment-skill-overview">
       <h2>Что проверяем</h2>
       <ul>
-        {current.skills.map((skill) => (
-          <li key={skill.skillId}>
-            <Circle size={15} aria-hidden="true" />
-            <div>
-              <strong>{skill.name}</strong>
-              <span>
-                {skill.isKeySkill ? 'Ключевой навык' : 'По требованиям роли'} · {skill.vacancyCount}{' '}
-                вакансий
-              </span>
-            </div>
-          </li>
-        ))}
+        {current.skills.map((skill) => {
+          const fact = discussed.get(skill.name.trim().toLowerCase());
+          return (
+            <li key={skill.skillId}>
+              <Circle size={15} aria-hidden="true" />
+              <div>
+                <strong>{skill.name}</strong>
+                <span>
+                  {skill.isKeySkill ? 'Ключевой навык' : 'По требованиям роли'} ·{' '}
+                  {skill.vacancyCount} вакансий
+                </span>
+                {fact ? (
+                  <span className="career-role-assessment-discussed">
+                    <b>Разобрано в беседе</b>: {fact.statement}
+                  </span>
+                ) : null}
+              </div>
+            </li>
+          );
+        })}
       </ul>
       <p className="career-role-assessment-source">
         <Clock size={14} aria-hidden="true" /> Сверка с требованиями {current.sampleSize} свежих

@@ -7,6 +7,7 @@ import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
+import { buildSkillQuizModel } from './providers/skillQuizModel';
 import { buildCoverLetterWriter } from './providers/coverLetterWriter';
 import { buildExperienceFactRewriter } from './providers/experienceFactRewriter';
 import { BudgetedCoachProvider } from './providers/budgetedCoachProvider';
@@ -232,6 +233,7 @@ const app = await buildApp({
     providerCredentials: config.providerCredentials,
     vertex: config.vertex,
   }),
+  skillQuizModel: buildSkillQuizModel({ providerCredentials: config.providerCredentials }),
   // Письмо пишет модель по своей цепочке, шаблон остаётся запасом (B266, пункт 7).
   coverLetterWriter: buildCoverLetterWriter({
     providerCredentials: config.providerCredentials,

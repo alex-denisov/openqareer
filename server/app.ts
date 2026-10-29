@@ -107,6 +107,8 @@ interface BuildAppOptions {
   experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
+  /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
+  skillQuizModel?: RouteDeps['skillQuizModel'];
   coverLetterWriter?: CoverLetterWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
@@ -507,10 +509,11 @@ function createCandidateDraftDeps(
   options: BuildAppOptions,
 ): Pick<
   CandidateDraftRouteDeps,
-  'candidateDraftRepository' | 'linkedinDraftWriter' | 'experienceFactRewriter'
+  'candidateDraftRepository' | 'linkedinDraftWriter' | 'skillQuizModel' | 'experienceFactRewriter'
 > {
   const { config } = options;
   return {
+    skillQuizModel: options.skillQuizModel,
     experienceFactRewriter: options.experienceFactRewriter,
     candidateDraftRepository:
       options.candidateDraftRepository ??

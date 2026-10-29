@@ -7,6 +7,7 @@ import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionReposito
 import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
 import { SqliteRoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
+import { SqliteSkillQuizAttemptRepository } from './sqliteSkillQuizAttemptRepository';
 import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
@@ -26,6 +27,7 @@ export function createProfileRepositories(
     decisionProfileRepo: new SqliteDecisionProfileRepository(database, sealedText),
     relocationQuestionnaireRepo: new SqliteRelocationQuestionnaireRepository(database, sealedText),
     roleSkillAssessments: new SqliteRoleSkillAssessmentRepository(database, sealedText),
+    skillQuizAttempts: new SqliteSkillQuizAttemptRepository(database, sealedText),
     starStoriesRepo: new SqliteStarStoriesRepository(database, sealedText),
     interviewSimulatorRepo: new SqliteInterviewSimulatorRepository(database, sealedText),
   };

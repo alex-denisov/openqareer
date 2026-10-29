@@ -777,3 +777,7 @@
     flex-wrap: wrap;
   }
 }
+
+.career-role-assessment-discussed b {
+  color: var(--career-success);
+}
