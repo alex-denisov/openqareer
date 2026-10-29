@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react';
 import { ProfileImportLive } from './ProfileImportLive';
-import { sourceCountLabel } from './profileProvenance';
 import { useLinkedInImportProgress } from '../connections/linkedinImportProgress';
 import {
   ArrowClockwise,
@@ -25,8 +24,9 @@ import type {
   CandidateMemory,
   ImportedSourceSummary,
 } from '../coach/coachApi';
+import { PlatformLogo } from '../connections/PlatformLogo';
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
-import { connectionStatusLabel, factCountLabel, importDateLabel } from './profileSourceLabels';
+import { factCountLabel } from './profileSourceLabels';
 import { ProfileSourceDialog } from './ProfileSourceDialog';
 import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 import {
@@ -299,10 +299,16 @@ function SourceChip({
 }) {
   const count =
     imported?.factCount ?? (connection?.status === 'connected' ? connection.factCount : undefined);
-  const detail = sourceChipDetail(imported, connection, count);
+  const isConnected = isPlatformConnected(imported, connection);
+  const detail = isConnected ? 'Подключено' : 'Не подключено';
   const contents = (
-    <span className="career-profile-screen-source-visual">
-      {platform === 'linkedin' ? <LinkedinLogo size={14} aria-hidden="true" /> : null}
+    <span
+      className={`career-profile-screen-source-visual ${isConnected ? 'is-connected' : 'is-off'}`}
+    >
+      <span className="career-profile-screen-source-mark">
+        <PlatformLogo platform={platform} size={16} />
+        {isConnected ? null : <Plus size={10} weight="bold" aria-hidden="true" />}
+      </span>
       <span className="career-profile-screen-source-name">{PLATFORM_LABELS[platform]}</span>
       <span className="career-profile-screen-source-detail">{detail}</span>
     </span>
@@ -325,16 +331,14 @@ function SourceChip({
   );
 }
 
-/** Макет 2: «LinkedIn 9 из 9 · 12.09» — kept facts of the import against everything it brought. */
-function sourceChipDetail(
+/** C5: the chip says only «Подключено» — dates and counts live in the source window. */
+function isPlatformConnected(
   imported: ImportedSourceSummary | ImportedSource | undefined,
   connection: CandidateConnection | undefined,
-  count: number | undefined,
-): string {
-  if (imported && 'lastImportedAt' in imported) return sourceCountLabel(imported);
-  if (count === undefined) return connectionStatusLabel(connection?.status);
-  const date = importDateLabel(importedAtValue(imported, connection));
-  return [`${count} из ${count}`, date].filter(Boolean).join(' · ');
+): boolean {
+  return (
+    Boolean(imported) || connection?.status === 'connected' || connection?.status === 'imported'
+  );
 }
 
 function importedAtValue(
@@ -388,10 +392,13 @@ function SourceChipButton(props: {
 }
 
 function ProfileSourceActions({
+  allConnected,
   hasImports,
   hasWalk,
   onOpenConnections,
 }: {
+  /** C12: «+ Источник» has nothing to add once every platform is connected. */
+  readonly allConnected: boolean;
   readonly hasImports: boolean;
   /** The walk band carries its own «Импортировать заново» (макет 2). */
   readonly hasWalk: boolean;
@@ -401,14 +408,16 @@ function ProfileSourceActions({
   if (!onOpenConnections) return null;
   return (
     <>
-      <button
-        className="career-profile-screen-source-add"
-        type="button"
-        onClick={onOpenConnections}
-      >
-        <Plus size={16} aria-hidden="true" />
-        Источник
-      </button>
+      {allConnected ? null : (
+        <button
+          className="career-profile-screen-source-add"
+          type="button"
+          onClick={onOpenConnections}
+        >
+          <Plus size={16} aria-hidden="true" />
+          Источник
+        </button>
+      )}
       {hasImports && !importRunning ? (
         <button
           className="career-quiet-button career-profile-screen-import-again"
@@ -453,6 +462,12 @@ function ConnectionStatusChips({
         );
       })}
       <ProfileSourceActions
+        allConnected={CONNECTION_PLATFORMS.every((platform) =>
+          isPlatformConnected(
+            sources.find((entry) => entry.platform === platform),
+            connections?.find((entry) => entry.platform === platform),
+          ),
+        )}
         hasImports={hasImports}
         hasWalk={sources.some((source) => 'walk' in source && Boolean(source.walk))}
         onOpenConnections={onOpenConnections}
