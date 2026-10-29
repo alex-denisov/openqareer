@@ -20,10 +20,7 @@ import { SectionHead } from './ProfileSectionHead';
 import { useCandidateMediaSrc } from './candidateMediaSrc';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { ProfileExperienceSuggestions } from './ProfileExperienceSuggestions';
-import {
-  ProfileExperiencePendingFacts,
-  useExperienceFactProposals,
-} from './ProfileExperienceFacts';
+import { ExperienceFactRewrite } from './ProfileExperienceFacts';
 import { PositionEditForm } from './ProfileExperienceEditor';
 import { displayMonth, monthOrder } from './experienceDate';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
@@ -365,30 +362,23 @@ export function ExperienceSuggestionsList(
     | 'onAcceptSuggestion'
     | 'onDismissSuggestion'
     | 'onRevertSuggestion'
+    | 'onManualExperienceFactAdded'
   >,
 ) {
-  const facts = useExperienceFactProposals({
-    draft: props.draft,
-    memory: props.memory ?? NO_MEMORY,
-    suggestions: props.suggestions ?? [],
-    onSectionSave: props.onSectionSave,
-    onAcceptSuggestion: props.onAcceptSuggestion,
-    onDismissSuggestion: props.onDismissSuggestion,
-  });
   return (
     <>
       <ProfileExperienceSuggestions
-        {...props}
-        suggestions={facts.suggestions}
-        onAcceptGroup={facts.hasFacts || props.onAcceptSuggestion ? facts.acceptGroup : undefined}
-        onDismissGroup={
-          facts.hasFacts || props.onDismissSuggestion ? facts.dismissGroup : undefined
-        }
-      />
-      <ProfileExperiencePendingFacts
         draft={props.draft}
-        pending={facts.pending}
+        suggestions={props.suggestions}
+        onAcceptSuggestion={props.onAcceptSuggestion}
+        onDismissSuggestion={props.onDismissSuggestion}
+        onRevertSuggestion={props.onRevertSuggestion}
+      />
+      <ExperienceFactRewrite
+        draft={props.draft}
+        memory={props.memory ?? NO_MEMORY}
         onSectionSave={props.onSectionSave}
+        onProfileChanged={props.onManualExperienceFactAdded}
       />
     </>
   );
@@ -634,6 +624,7 @@ function ExperienceSectionLists(props: ExperienceSectionListsProps) {
         onAcceptSuggestion={onAcceptSuggestion}
         onDismissSuggestion={onDismissSuggestion}
         onRevertSuggestion={onRevertSuggestion}
+        onManualExperienceFactAdded={onManualExperienceFactAdded}
       />
       <ExperienceGroupsList
         candidateId={candidateId}

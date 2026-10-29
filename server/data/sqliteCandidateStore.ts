@@ -66,6 +66,7 @@ import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
 import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import type { SqliteRoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
+import { factRewriteEdits } from '../domain/experienceFactRewrite';
 import {
   createMemoryMethods,
   openCandidateDatabase,
@@ -413,14 +414,15 @@ export class SqliteCandidateStore implements CandidateStore {
     const candidate = this.requireCandidate(candidateId);
     const parts = this.conversations.snapshotParts(candidateId, stage);
     const native = this.sourceConnections.list(candidateId);
-    const edits = this.profileRevisionRepo.listRevisions(candidateId);
+    const resume = this.resumeRepository.get(candidateId);
+    const edits = [...this.profileRevisionRepo.listRevisions(candidateId), ...factRewriteEdits(resume?.draft)];
     return {
       candidate,
       ...parts,
       ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
-      resume: withStoredTeamSizes(this.resumeRepository.get(candidateId), parts.memory),
+      resume: withStoredTeamSizes(resume, parts.memory),
       documents: this.documentRepository.list(candidateId),
       vacancySubscriptions: this.vacancyRepository.list(candidateId),
     };
@@ -787,16 +789,14 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.sourceConnections.delete(candidateId, platform);
   }
 
-  changeMemory(
-    candidateId: string,
-    memoryId: string,
-    change: MemoryChange,
-  ): StoredMemory | null {
+  changeMemory(candidateId: string, memoryId: string, change: MemoryChange): StoredMemory | null {
     return this.conversations.changeMemory(candidateId, memoryId, change);
   }
 
   declare addManualExperienceFact: MemoryMethods['addManualExperienceFact'];
   declare reviewMemories: MemoryMethods['reviewMemories'];
+  declare applyExperienceFactRewrite: MemoryMethods['applyExperienceFactRewrite'];
+  declare revertExperienceFactRewrite: MemoryMethods['revertExperienceFactRewrite'];
 
   deleteCandidate(candidateId: string): boolean {
     const result = this.transaction(() => {

@@ -1,0 +1,1932 @@
+{
+ "experience": [
+  {
+   "id": "imp6324433e42-exp-1",
+   "employer": "OptiLab AI",
+   "title": "Independent AI Consultant & Solutions Architect",
+   "startDate": "Nov 2025",
+   "endDate": null,
+   "current": true,
+   "bulletMemoryIds": [
+    "impe12a7b15ff-resp-1-1",
+    "impe12a7b15ff-resp-1-2",
+    "impe12a7b15ff-resp-1-3",
+    "impe12a7b15ff-resp-1-4"
+   ]
+  },
+  {
+   "id": "imp6324433e42-exp-2",
+   "employer": "Enterprise Energy IT Services",
+   "title": "VP of Technology & IT Operations",
+   "startDate": "Apr 2023",
+   "endDate": "Oct 2025",
+   "current": false,
+   "bulletMemoryIds": [
+    "impe12a7b15ff-resp-2-1",
+    "impe12a7b15ff-resp-2-2",
+    "impe12a7b15ff-resp-2-3",
+    "impe12a7b15ff-resp-2-4",
+    "impe12a7b15ff-resp-2-5"
+   ]
+  },
+  {
+   "id": "imp6324433e42-exp-3",
+   "employer": "Enterprise Public Cloud Platform (IaaS / PaaS)",
+   "title": "Head of Technical Support and Internal Services",
+   "startDate": "Mar 2020",
+   "endDate": "Apr 2023",
+   "current": false,
+   "bulletMemoryIds": [
+    "impe12a7b15ff-resp-3-1",
+    "impe12a7b15ff-resp-3-2",
+    "impe12a7b15ff-resp-3-3",
+    "impe12a7b15ff-resp-3-4",
+    "impe12a7b15ff-resp-3-5"
+   ]
+  },
+  {
+   "id": "imp6324433e42-exp-4",
+   "employer": "Fishance Berhad",
+   "title": "Co-Founder & COO (Chief Operating Officer)",
+   "startDate": "Jul 2016",
+   "endDate": "Oct 2019",
+   "current": false,
+   "bulletMemoryIds": [
+    "impe12a7b15ff-resp-4-1",
+    "impe12a7b15ff-resp-4-2",
+    "impe12a7b15ff-resp-4-3",
+    "impe12a7b15ff-resp-4-4",
+    "impe12a7b15ff-resp-4-5"
+   ]
+  },
+  {
+   "id": "imp6324433e42-exp-5",
+   "employer": "Corporate University of a Top-Tier Financial Institution",
+   "title": "IT Lead (Acting Head of IT)",
+   "startDate": "Dec 2012",
+   "endDate": "Jul 2016",
+   "current": false,
+   "bulletMemoryIds": [
+    "impe12a7b15ff-resp-5-1",
+    "impe12a7b15ff-resp-5-2",
+    "impe12a7b15ff-resp-5-3",
+    "impe12a7b15ff-resp-5-4",
+    "impe12a7b15ff-resp-5-5"
+   ]
+  },
+  {
+   "id": "imp6324433e42-exp-6",
+   "employer": "Kaspersky",
+   "title": "Premium Support Lead",
+   "startDate": "Dec 2010",
+   "endDate": "Dec 2012",
+   "current": false,
+   "bulletMemoryIds": [
+    "impe12a7b15ff-resp-6-1",
+    "impe12a7b15ff-resp-6-2",
+    "impe12a7b15ff-resp-6-3"
+   ]
+  }
+ ],
+ "memory": [
+  {
+   "id": "impe12a7b15ff-resp-1-1",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Founded an independent AI & Tech advisory practice focused on enterprise process automation and multi-agent system deployment.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-1-2",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Architected multi-agent AI pipelines (n8n, ComfyUI, LLM agents) for automated document processing, intelligent support workflows, and content automation.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-1-3",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Designed, built, and launched eterapy.com - an end-to-end AI-driven SaaS platform featuring web, mobile, Telegram Mini App, and automated payment gateways using cutting-edge AI engineering tools.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-1-4",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Pausing active client work to pursue a senior leadership role (VP of Tech / COO) where AI and automation capabilities can be applied at organizational scale.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-2-1",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Brought in to execute a strategic turnaround of two technology divisions managing 250+ professionals and a broad portfolio of IT products, cloud solutions, and managed services for heavy industry holdings.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-2-2",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Rebuilt leadership, organizational structure, and ITIL 4-based processes (Incident, Problem, Release, Knowledge, Availability, Service Catalog) across both divisions.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-2-3",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Grew combined revenue 4x and improved operating margin from near-zero to ~40% by consolidating fragmented service contracts into unified long-term agreements.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-2-4",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Achieved 99.5–100% SLA compliance across all commercial enterprise services (previously chronic underperformance).",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-2-5",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Built DevOps function from scratch; deployed unified monitoring across all infrastructure services (Zabbix).",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-3-1",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Led technical operations and support for a premier public cloud platform (IaaS/PaaS/DBaaS) serving thousands of enterprise B2B customers.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-3-2",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Drove CSAT from 23% to 68%, SLA compliance from 50% to 92%, and FCR from 5% to 83% — while reducing inbound ticket volume by 40% through self-service portal and AI-powered search.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-3-3",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Built proprietary cloud tooling from scratch: statuspage, self-service knowledge base, and automated bot-based support workflows integrated into the platform.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-3-4",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Modernized the full support stack - migrating to Atlassian Jira Service Management and unifying L1/L2 support, partner integrations, and product development in a single instance.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-3-5",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Developed a paid managed services go-to-market (GTM) strategy with full pricing model - approved by executive C-suite leadership.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-4-1",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Scaled business from $73K seed investment to $50M+ annual revenue - company successfully exited via acquisition.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-4-2",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Owned full C-suite operational scope: Human Resources & Talent Acquisition, Legal & Compliance, Supply Chain & Procurement, Inventory Management, Facilities, and Fleet & Marine Operations.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-4-3",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Oversaw land acquisition, construction, and launch of 14 offshore production facilities and a headquarters building.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-4-4",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Built entire technology infrastructure from scratch: ERP (Microsoft Dynamics AX), IoT environmental monitoring systems, transport tracking, distributed data infrastructure, and cross-site network connectivity including radio relay towers.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-4-5",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Led multinational team across 10+ nationalities including Malaysia, Australia, China, India, and US.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-5-1",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Joined as the sole IT specialist and built the entire IT function from scratch for one of the world's top-ranked corporate universities - a 37,000 m² campus serving up to 600 simultaneous learners across 38 state-of-the-art classrooms, supporting training for 250,000+ employees.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-5-2",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Built IT infrastructure from zero: domain environment, VoIP telephony, server virtualization, ERP systems, end-user devices, and full network infrastructure.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-5-3",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Led technical commissioning and launch of the new campus - coordinating contractors and managing full organizational relocation.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-5-4",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Managed multimedia and AV infrastructure across 38 classrooms - supporting high-profile international events attended by ministers and heads of state.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-5-5",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Grew and led a team of 9 IT engineers; managed IT budget growing from ~$650K to ~$4M as the organization scaled.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-6-1",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Delivered premium IT support to C-suite executives, board members, and international investors across 45 global office locations - maintaining 100% on-time resolution across ~200 weekly requests with zero escalations.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-6-2",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Reduced incident resolution time by 40% through structured coordination of L1, L2, and application support teams (20+ engineers).",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "impe12a7b15ff-resp-6-3",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Promoted from IT Support Specialist to Premium Support Lead within two years.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "resume-import:4a9487867d0b97a7176c14511a93c198a5fbcf6187888d1e6e1cc2b166e943af",
+    "resume-import:1fff2efcecc12eefe7095de6a57d46f3ca68e3ce609c751b86eb235f72dc7b6f"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-09-25T04:29:01.508Z",
+   "provenance": {
+    "kind": "import",
+    "platform": "linkedin",
+    "at": "2026-09-25T04:29:01.508Z"
+   }
+  },
+  {
+   "id": "08503084-8587-462f-815c-1f2dc469521c",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Я смог собрать сервисы Россети Цифра в несколько пакетов: фронтовые сервисы, инфраструктурные ИТ-сервисы и продукты, созданные на базе Россети Цифра.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "34337c17-f1bc-47c1-ba99-c3d7e11314e7",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Затраты на команды, перешедшие под моё управление, перешли в мой P&L.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": true,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "a9dc79e2-b92a-469d-ac09-530e83efd081",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Затраты на подрядчиков входили в расчёт P&L.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": true,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "b3c6a0e2-4263-41ed-a40a-a95b9966144a",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Примерно 30 человек прошли через меня с моим утверждением; остальные решения принимали мои подчинённые либо команды переходили целыми группами из других подразделений.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "c09a58f9-244c-47c2-9c8e-c1bb16f06062",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Для новых сервисов использовались существующие команды без найма новых сотрудников.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "d2f2fa70-765a-4e01-b311-91ac92a96d8e",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Когда я только пришел в Россети Цифра, выручка направления составляла порядка 230 миллионов рублей в год.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": true,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "d84f5844-b410-4bd6-94d5-4e52a117c4bc",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Мы наняли дополнительных продуктовых менеджеров и поменяли роль человека на роль CPO для ускорения обсуждения технических заданий, продуктов и контрактования с заказчиками.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "ef4c247e-a02f-4481-a702-bc508b5e1b09",
+   "kind": "fact",
+   "domain": "skill",
+   "statement": "Для контроля качества отслеживались SLA, доступность, РТО, РПО, отсутствие жалоб и своевременное выполнение тикетов.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "f0f8bd51-e2a6-45d5-b4e7-ef4743a6ea4d",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "В начале команда, скорее всего, составляла около 160 человек, а затем стала около 250 человек.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "f4bbc397-1fc2-490a-9ece-0de6a8b9026d",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Три пакета суммарно давали порядка двух миллиардов рублей выручки в год.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "99fead40-fb43-4412-800e-e584b5d0c2ab"
+   ],
+   "sensitive": true,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T22:01:48.234Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T22:01:48.234Z"
+   }
+  },
+  {
+   "id": "028daa59-e8b2-4e09-b60c-9e71d717a39b",
+   "kind": "fact",
+   "domain": "skill",
+   "statement": "Мы внедряли IoT и ERP.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "02e3720d-c0c9-4f54-8823-600802339e5d",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "Цифра 80% по time-to-market была выдумана, и я не могу её обосновать.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "0e23bf43-5d63-4e17-b320-a4197c5ca4c1",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "SLA составлял 99,5–100% в соответствии с контрактом; были некоторые несущественные просадки.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "532e4117-f61a-434d-a4b7-e18f613f63ee",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Должность правильная: директор по поддержке программных решений технологических систем.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "5784e6b7-16dd-4dc7-b2d6-3849950118c0",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "Я не знаю LongGraph и LongChain.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "58550e01-03f2-43a0-af89-7bddcecfa22d",
+   "kind": "fact",
+   "domain": "skill",
+   "statement": "Я умею работать с MCP и создавать MCP, понимаю их суть, знаю, как сделать LLM Gateway на примере e-терапии и проектировал такую архитектуру; при этом мне сложно сказать, насколько хорошо я понимаю экономику инференса.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "7d2e7b0b-8510-4aad-bed5-a6c3245b58ed",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Тикетов стало на 40% меньше.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "7de07f92-96f5-4a73-8375-24f1f78d91e4",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "В компании было больше 10 национальностей.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "889c89b7-e9ac-45c3-9040-70edccdce47e",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "По-моему, было 18 инженеров на первой и второй линиях, два инженера автоматизации и два разработчика; два разработчика участвовали в проектной деятельности направления, а не были постоянными сотрудниками.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "896fdea2-353c-4163-9430-82be1ab49f46",
+   "kind": "fact",
+   "domain": "skill",
+   "statement": "У меня инженерный бакалавриат и AWS Cloud Practitioner; в резюме также указан CSM, но я не помню контекст и не могу ручаться за достоверность этих данных.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "a4c94a09-512e-4bc7-b110-d4f33ba9bfd9",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Чистая маржа составляла 40%; 80% не было.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": true,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "c4a1d6a2-95f1-4560-8c0d-12217a0bb79b",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Я не строил функцию DevOps с нуля, но привил практику DevOps всем подразделениям, участвовавшим в обслуживании; нанял команду из своего прошлого коллектива в ВКТех, которая понимала управление стабильностью и выкатками.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "d73936df-5183-4618-a6e8-37a486db26ab",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Рост выручки был четырёхкратным.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "b037b802-644a-449c-a25e-712bdf39c0a9"
+   ],
+   "sensitive": true,
+   "status": "confirmed",
+   "createdAt": "2026-10-25T23:14:08.158Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-25T23:14:08.158Z"
+   }
+  },
+  {
+   "id": "09f697f4-bdfc-410d-bd0e-aca5deed8092",
+   "kind": "fact",
+   "domain": "other",
+   "statement": "CSM, наверное, это были какие-то курсы, но тут я не могу ручаться за достоверность данных",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "22f03050-3238-4f38-af8b-bb0819ee7b90",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "Честно скажу, уже не помню, сколько было инженеров.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "29df572c-3c8b-4f38-9770-2fb7c179b401",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Команда знает, что такое DevOps, обучалась на факультете DevOps.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "3a268643-87f9-41cf-a2c2-47ff1cc613cb",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Были некоторые просадки, но они несущественные, раздача была держать в этом пределе, и мы эту задачу очень часто выполняли.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "49ad3de3-650c-4ec9-bcce-202f8aa84e25",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "По-моему, честно говоря, это было 18 инженеров, которые были на первой плюс второй линии.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "4fdd2989-45e1-4bc4-b08a-c2f8e92174fe",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "Очень сложно сказать по поводу 80% time to market, учитывая, что для такого показателя должны быть какие-то исторические данные, поэтому эта цифра была выдумана",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "59d84338-be1f-413c-b0db-3e0b6dc84c34",
+   "kind": "fact",
+   "domain": "other",
+   "statement": "10 плюс национальности",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "5be65886-a484-4297-a9bd-f215ba329605",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Fishance: годовая выручка выросла до $50M+, компания продана (выход через поглощение).",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "corrected",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "625e587c-1086-4d22-a37d-b72eaf7ea304",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "мы в процессе работы понижали объем тикетов за счет ботов, поисковиков, центров помощи, автоматизированных ответов",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "80fcd78e-4eda-43fd-976a-30c812b5a18b",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "80% такого не было, так что переходим к следующему пункту.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "8782ff1c-982a-451c-ac47-f47e9437ea52",
+   "kind": "fact",
+   "domain": "skill",
+   "statement": "я умею работать с MCP, создавать MCP, понимаю, в чем их суть, возможно, не очень глубоко на структурном коде",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "9ebb5b6b-cf21-44f9-8198-4f59adcb9c2f",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Не с нуля построил функцию DevOps, но привил саму практику DevOps для всех подразделений, которые участвовали в обслуживании.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "a1b9aa4c-de49-4f29-8535-60e44a747d0e",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Я руководил этой инфраструктурой, пришел туда специалистом поддержки, в конце руководил и этой инфраструктурой, и поддержкой",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "c7a70128-a5cc-4ac2-a562-7d60772fac92",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Я действительно был операционным директором на словах, но на бумаге я был проектным руководителем",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "eb266399-3b55-4aa0-b94e-962d995f570c",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Россети ITL4, да, внедрял вместе со всеми процессами, это был очень большой сложный путь.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "ee10c109-f80c-4218-8e25-0d67e1e5e1fa",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "256 человек – это примерная цифра, но точно было 254 из последнего фото, так что 250 плюс – это вполне точная цифра.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "f319ccc8-c535-4b1b-9751-8932fd0e60db",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "SLA 99.5-100% в соответствии с контрактом, который мы исполняли.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "c0cbef07-9066-4607-ab15-a1055eefe082"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:10:29.730Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:10:29.730Z"
+   }
+  },
+  {
+   "id": "15707cf5-7ed7-4be0-948d-d1d7ed7bba9a",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Дополнительно когда перестали теряться тикеты и когда они стали полноценно заводиться со всей необходимой информацией",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "1913badf-b0a6-4be2-b746-f9edb0c60bb6",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "обучал команду Которая была изначально После какого-то промежутка времени При невозможности обучения людей Я менял И команду, естественно, расширял",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "7956359f-9f07-47c4-b3e4-5581527436bb",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Индекс удовлетворенности заметно вырос когда мы переформатировали объем ответов клиенту и качество ответов",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "7961bcb2-e01c-4643-997a-a747df8ddfb9",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Стало семь",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "818e582d-aad8-42e1-b45e-24df26f259ca",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Дополнительную информацию мы дозапрашивали у клиента по минимуму пытаясь самостоятельно ее выяснить",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "87d52f43-0b63-472a-8ad9-e32140e57891",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "какое из измерений дало главный вклад Наверное, это SLA. И индекс удовлетворенности",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "90fd3b91-7db8-4233-bfff-62a46503e1d7",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Остальные 11 инженеров второй линии менялись не часто, всего на моей памяти ушло два человека",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "9214ad11-6617-45e3-a468-7cfde14998ad",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "следил за нагрузкой очень пристально Чтобы инженеры, а учитывая, что они все были удаленно Трудились над задачами Максимально плотно",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "a432e26b-d36b-4c37-9e5b-0214c180d965",
+   "kind": "fact",
+   "domain": "outcome",
+   "statement": "Максимальный цесат был уже тогда когда мы поняли что какую точнее информацию для каждого тикета нам нужно получать с клиента для того чтобы выполнить его запрос с первого с первой итерации",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "c79b4664-641e-47d2-8c48-562637e4cb7d",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "А добавилось за весь период было всего три",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "cf8f74a6-8473-4b11-bfe6-054f9a1f8449",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Команда расширилась с четырех до одиннадцати",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "da875536-f88b-49a6-8f3b-54a00944052b",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "следил за персональной нагрузкой каждого сотрудника, сколько задач он мог выполнить, какого объема и какого типа",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "f62ca099-05ba-4248-9a8b-6641bf20aeed",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "у меня был круглосуточный режим, который мы внедрили через полгода после того, как я пришел",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "fa20e8f5-f20d-40be-b650-e21b64377c82",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Из семи сменились",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "ed359869-9f9a-410e-8712-047b38c6ebde"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:12:23.283Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:12:23.283Z"
+   }
+  },
+  {
+   "id": "10336769-5320-4588-a54f-97497574dcb6",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "Затем через 6 месяцев я заменил Начальника департамента поддержки технологических систем, потому что он не умел управлять людьми и бюджетом и все его проекты оказались убыточными.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "2593b9a0-3a83-428f-835a-b79bcca0d7b2",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "Service Owner участвовали в полном цикле процесса сборки сервиса и продажи его клиенту",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "5150a2cd-3aeb-4a7f-9eb5-a690a3c45677",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "им приходилось разбираться с техническим стеком сервиса, контролировать найм людей, считать рентабельность сервиса",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "51f78492-0e67-45dc-b7ac-7d1fcccefdee",
+   "kind": "fact",
+   "domain": "gap",
+   "statement": "Я заменил CPO (Начальника департамента поддержки программных решений), который больше говорил чем делал и который мешал заключать контакты с клиентами и факапил много процессов.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "5b0775b7-6f6d-4359-aa37-07e7a367e7e8",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "включая вычитку/написание технических заданий, переговоры с заказчиками, контроль финансовых, операционных и бизнес-показателей внутри своих сервисов",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "7fc29885-60e4-4e78-8235-32938b9ccedf",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "она покрывала потребности 3й линии поддержки (всего было 4 линии, 4ая была 'разработчики' для собственных продуктов и 'внешние подрядчики/вендоры' для принятых на поддержку сервисов)",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "8bc0483e-2976-4522-8c3f-7a2601af69d7",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Я создал функцию Service Owner",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "8c91ff06-d029-4a7d-9980-5289794cd4a7",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "участвовать в организации и проведении торгов на площадках, заключать контракты, следить за жизненным циклом контрактов, обновлять/менять/дополнять/расширять их",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "8d156c32-caba-421c-9f1b-ed5a4e3e39ef",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Итого я был Директором по поддержке программных решений и технологических систем.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "8ffdf12b-c4f9-4ab2-8636-bddc766ab9d5",
+   "kind": "fact",
+   "domain": "preference",
+   "statement": "Самый трудный кейс - это сборка/компоновка больших контрактов для заказчика",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "9947ad3d-693b-4942-99f4-61815a31e082",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Еще в моем прямом руководстве (вне структуры департаментов) был отдел качества (в нем были сервис-менеджеры).",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "b88b1839-6b74-40a9-b950-45c3f3db39d3",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Прямых подчиненных было несколько. Это были руководители подразделений, то есть двух департаментов.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "b8d5c42a-60d3-4090-bc4b-8176ee13b328",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "А также 'владельцы сервисов', роль которую я создал аналогичную с Service Owner.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "bad75be5-0b29-436c-9c01-77351d29602c",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Второй начальник департамента поддержки программных решений (как CPO или директора по продукту).",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "bcb9826d-1437-48a4-8b9d-6e1e482904d3",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Блок второй рост сети.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "cddc19a1-933e-4cb9-9ccb-27306ab4c36c",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Отдел оптимизации ИТ-процессов (который занимался ИТ-процессами с 'менеджерами процессов').",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "ce72f162-ba24-4a78-b997-81a93fc1f2e3",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Первый начальник департамента поддержки технологических систем (читай ИТ-инфраструктуры) который по сути как ИТ-директор.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "cee2fb11-5a93-4d3b-b3f5-380a6a23a054",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Итого рост был с 3 до 7 человек.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "d8fe5fd8-99b5-47d4-a015-53a3e37999b8",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Всего было 9 прямых подчиненных (2 начальника департамента, 5 service owner, руководитель отдела качества, руководитель отдела оптимизации ит-процессов).",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "dcb7c548-a592-4fab-82b2-aecff58adae0",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "они следили за стабильностью работы сервисов, миграциями, требованиями, обновлениями, выкатками, пайплайном сборки, могли диагностировать проблемы с инфраструктурой и нагрузкой",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "ed0eec6e-a0a6-4d62-8eb2-7798d8b1d348",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "В первой линии ВКТех было три человека всего, когда я пришел.",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "f480f365-5f34-4c8b-bfbd-cc5e32da2633",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "Я внедрил полноценную команду devops",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "f71a2fc7-874f-4a48-a675-463628b5236e",
+   "kind": "fact",
+   "domain": "responsibility",
+   "statement": "они принимали также новые сервисы на поддержку (которые не мы создавали)",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7f143a20-eee5-4c0c-84db-b1cfe079693b"
+   ],
+   "sensitive": false,
+   "status": "confirmed",
+   "createdAt": "2026-10-26T00:14:23.410Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T00:14:23.410Z"
+   }
+  },
+  {
+   "id": "2d6a4ba1-b4a7-49d9-8dba-263118fb1ae5",
+   "kind": "fact",
+   "domain": "role-evidence",
+   "statement": "я руковожу IT и разработкой",
+   "confidence": "candidate-reported",
+   "sourceMessageIds": [
+    "7d50f2ff-8a64-42c4-90da-ffb77b3d1704"
+   ],
+   "sensitive": false,
+   "status": "proposed",
+   "createdAt": "2026-10-26T02:02:00.885Z",
+   "provenance": {
+    "kind": "candidate",
+    "at": "2026-10-26T02:02:00.885Z"
+   }
+  }
+ ]
+}

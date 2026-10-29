@@ -240,9 +240,12 @@ export function keepFilledSections(
         ...withSkills,
         experience: keepCandidateBullets(withSkills.experience, existing.experience),
       };
-  return existing.declinedFactIds?.length
-    ? { ...withFacts, declinedFactIds: existing.declinedFactIds }
-    : withFacts;
+  // The candidate's decisions on conversation facts are not LinkedIn's to undo.
+  return {
+    ...withFacts,
+    ...(existing.declinedFactIds?.length ? { declinedFactIds: existing.declinedFactIds } : {}),
+    ...(existing.factRewrites?.length ? { factRewrites: existing.factRewrites } : {}),
+  };
 }
 
 function placeKey(entry: ResumeDraft['experience'][number]): string {

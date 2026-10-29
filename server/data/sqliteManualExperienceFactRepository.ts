@@ -29,6 +29,40 @@ export class SqliteManualExperienceFactRepository {
     return this.record(memoryId, messageId, clean, now);
   }
 
+  /**
+   * A bullet the consultant wrote from the candidate's own facts: it points at
+   * their messages, so it adds no message of its own to the conversation.
+   */
+  addDerived(
+    candidateId: string,
+    memoryId: string,
+    statement: string,
+    sourceMessageIds: readonly string[],
+  ): StoredMemory {
+    const clean = statement.trim();
+    if (!clean || this.find(candidateId, memoryId)) throw new CandidateStoreConflictError();
+    const conversationId = this.conversationId(candidateId);
+    const now = new Date().toISOString();
+    this.database
+      .prepare(
+        `INSERT INTO memory
+          (id, candidate_id, conversation_id, kind, domain, statement_cipher,
+           confidence, source_message_ids, sensitive, status, created_at, updated_at)
+         VALUES (?, ?, ?, 'fact', 'responsibility', ?, 'candidate-confirmed', ?, 0, 'confirmed', ?, ?)`,
+      )
+      .run(
+        memoryId,
+        candidateId,
+        conversationId,
+        this.sealedText.seal(clean, memoryAssociatedData(candidateId, memoryId)),
+        JSON.stringify(sourceMessageIds),
+        now,
+        now,
+      );
+    this.touchConversation(conversationId, now);
+    return { ...this.record(memoryId, '', clean, now), sourceMessageIds: [...sourceMessageIds] };
+  }
+
   private find(candidateId: string, memoryId: string): StoredMemory | null {
     const row = this.database
       .prepare(

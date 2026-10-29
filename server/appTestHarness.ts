@@ -91,6 +91,7 @@ export async function createApp(
       | 'recruiterContactsRepo'
       | 'searchConsentRepo'
       | 'skillQuizModel'
+      | 'experienceFactRewriter'
     >
   > = {},
 ) {

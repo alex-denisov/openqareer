@@ -104,6 +104,7 @@ interface BuildAppOptions {
   runtimeMemory?: RouteDeps['runtimeMemory'];
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
+  experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
@@ -508,11 +509,12 @@ function createCandidateDraftDeps(
   options: BuildAppOptions,
 ): Pick<
   CandidateDraftRouteDeps,
-  'candidateDraftRepository' | 'linkedinDraftWriter' | 'skillQuizModel'
+  'candidateDraftRepository' | 'linkedinDraftWriter' | 'skillQuizModel' | 'experienceFactRewriter'
 > {
   const { config } = options;
   return {
     skillQuizModel: options.skillQuizModel,
+    experienceFactRewriter: options.experienceFactRewriter,
     candidateDraftRepository:
       options.candidateDraftRepository ??
       new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),

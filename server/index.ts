@@ -9,6 +9,7 @@ import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
 import { buildCoverLetterWriter } from './providers/coverLetterWriter';
+import { buildExperienceFactRewriter } from './providers/experienceFactRewriter';
 import { BudgetedCoachProvider } from './providers/budgetedCoachProvider';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
@@ -212,6 +213,14 @@ const app = await buildApp({
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
     providerCredentials: config.providerCredentials,
+  }),
+  // Пункты резюме из фактов беседы; в журнал — только модель и причина отказа.
+  experienceFactRewriter: buildExperienceFactRewriter({
+    providerCredentials: config.providerCredentials,
+    onStageFailure: (model, error) =>
+      process.stdout.write(
+        `${JSON.stringify({ level: 40, time: Date.now(), msg: 'experience-fact-rewrite-stage-failed', model, reason: error instanceof Error ? error.message.slice(0, 200) : 'unknown' })}\n`,
+      ),
   }),
   roleNamer: buildRoleNamer({
     providerCredentials: config.providerCredentials,

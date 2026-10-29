@@ -370,6 +370,20 @@ describe('keepFilledSections — facts the candidate put into workplaces (C10)',
     education: [],
     languages: [],
     declinedFactIds: ['fact-declined'],
+    factRewrites: [
+      {
+        id: 'rewrite-1',
+        appliedAt: '2026-10-29T12:00:00.000Z',
+        bullets: [
+          {
+            memoryId: '0f8c2a52-3a1e-4d39-9c47-1b2a6d6f0a11',
+            experienceId: 'impbbbbbbbbbb-exp-2',
+            sourceFactIds: ['fact-source'],
+          },
+        ],
+        declinedFactIds: ['fact-declined'],
+      },
+    ],
     experience: [
       {
         id: 'impbbbbbbbbbb-exp-2',
@@ -414,6 +428,12 @@ describe('keepFilledSections — facts the candidate put into workplaces (C10)',
     const merged = keepFilledSections(incoming, existing);
     expect(merged.experience[0].bulletMemoryIds).not.toContain('impbbbbbbbbbb-exp-2-b1');
     expect(merged.declinedFactIds).toEqual(['fact-declined']);
+  });
+
+  it('keeps the consultant rewrites, so their bullets stay the consultant’s and can be undone', () => {
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.experience[0].bulletMemoryIds).toContain('0f8c2a52-3a1e-4d39-9c47-1b2a6d6f0a11');
+    expect(merged.factRewrites?.map((rewrite) => rewrite.id)).toEqual(['rewrite-1']);
   });
 });
 describe('keepFilledSections (B266)', () => {

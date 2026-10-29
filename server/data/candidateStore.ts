@@ -50,7 +50,8 @@ import type {
   AssessmentSubmission,
 } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
-import type { ResumeDraft } from '../domain/resumeDraft';
+import type { ResumeDraft, ResumeFactRewriteRecord } from '../domain/resumeDraft';
+import type { FactRewriteProposal } from '../domain/experienceFactRewrite';
 import type {
   RelocationConsentState,
   RelocationQuestionnaire,
@@ -524,6 +525,13 @@ export interface CandidateStore {
     memoryId: string,
     change: MemoryChange,
   ): StoredMemory | null;
+  /** The consultant's rewrite of conversation facts, accepted by the candidate in one step. */
+  applyExperienceFactRewrite(
+    candidateId: string,
+    proposal: FactRewriteProposal,
+    isCurrent: (snapshot: CandidateSnapshot) => boolean,
+  ): ResumeFactRewriteRecord;
+  revertExperienceFactRewrite(candidateId: string, rewriteId: string): boolean;
   /**
    * One candidate decision over a whole imported batch. An import can state
    * dozens of facts, and reviewing them one request at a time is not a review
