@@ -1,3 +1,4 @@
+import { pluralWordRu } from '../../../shared/pluralRu';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 import {
   STATED_REQUIREMENT_CREDIT,
@@ -56,7 +57,11 @@ export function vacancyFitSentence(view: VacancyFitView | undefined): string | n
   const stated = chips?.stated ?? [];
   const first = `${checked} из ${total} требований вакансии есть в профиле и подтверждены.`;
   if (stated.length === 0) return first;
-  return `${first} Ещё ${stated.length} указаны, но не проверены: ${stated.join(', ')} — они считаются наполовину.`;
+  const tail =
+    pluralWordRu(stated.length, ['one', 'many', 'many']) === 'one'
+      ? 'указан, но не проверен: NAMES — он считается наполовину.'
+      : 'указаны, но не проверены: NAMES — они считаются наполовину.';
+  return `${first} Ещё ${stated.length} ${tail.replace('NAMES', stated.join(', '))}`;
 }
 
 export interface VacancyFitBoost {
@@ -69,8 +74,9 @@ export function vacancyFitBoost(view: VacancyFitView | undefined): VacancyFitBoo
   const percent = vacancyFitPercent(view);
   const stated = fitRequirementChips(view)?.stated ?? [];
   if (percent === null || stated.length === 0) return null;
-  const skills = quizOfferSkills(view).filter((skill) => stated.includes(skill));
-  if (skills.length === 0) return null;
+  // The quiz names the stated skills; experience the quiz does not pick still gets the button.
+  const quizzable = quizOfferSkills(view).filter((skill) => stated.includes(skill));
+  const skills = quizzable.length > 0 ? quizzable : stated.slice(0, 2);
   const { matched, total } = view!.result!.coverage;
   const checked = view!.result!.coverage.checked ?? 0;
   const halves = matched - checked - skills.length;
