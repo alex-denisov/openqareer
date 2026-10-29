@@ -358,7 +358,7 @@
     display: none;
   }
   /* mobile-shell.css hides the whole control group on 390; keep only the history button. */
-  .career-shell > .panel-col .career-expert-panel .career-expert-panel-controls {
+  .career-shell > .panel-col .career-expert-panel[data-mobile-expanded='true'] .career-expert-panel-controls {
     display: flex;
     align-items: center;
     /* The sheet toggle is absolutely placed at the right edge. */
