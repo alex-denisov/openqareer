@@ -24,14 +24,20 @@ import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolC
 import { readTargetLevel } from './vacancyRoleContext';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { CandidateSnapshot } from '../data/candidateStore';
-import { stableJson, unreachedImportedContacts } from './connectionImportMerge';
+import {
+  isLinkedInProfileUrl,
+  keptCompanyPlace,
+  priorCompanyPlaces,
+  stableJson,
+  unreachedImportedContacts,
+} from './connectionImportMerge';
 
 const CONNECTION_SCOPE_ID = '__b448_candidate_connections__';
 const CONNECTION_IMPORT_RECEIPT_ID = '__b448_linkedin_import_receipt__';
 // A whole LinkedIn network: run 9 read 1 888 connections, and circles need
 // every contact with a company (B448). 2 000 contacts are ~600 KB, inside
 // the import route's 1 MB body limit.
-const MAX_CONNECTION_CONTACTS = 2_500;
+export const MAX_CONNECTION_CONTACTS = 2_500;
 const MAX_IMPORTED_CONNECTIONS = 2_000;
 
 const workplaceSchema = z
@@ -42,7 +48,7 @@ const workplaceSchema = z
   })
   .strict();
 
-const linkedinUrlSchema = z
+export const linkedinUrlSchema = z
   .string()
   .trim()
   .url()
@@ -101,6 +107,9 @@ const connectionMetadataSchema = z
     strength: z.enum(['strong', 'weak', 'unknown']),
     workplaces: z.array(workplaceSchema).max(10),
     knowsRecruiterIds: z.array(z.string().trim().min(1).max(120)).max(50),
+    // B561: where the company came from; a searched company outlives headline imports.
+    companySource: z.enum(['headline', 'search']).optional(),
+    companyObservedAt: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
 const importReceiptSchema = z
@@ -117,12 +126,12 @@ const storedReceiptSchema = z
   })
   .passthrough();
 
-type ConnectionContactInput = z.infer<typeof connectionContactSchema>;
-type ImportedContactInput = z.infer<typeof importedContactSchema>;
+export type ConnectionContactInput = z.infer<typeof connectionContactSchema>;
+export type ImportedContactInput = z.infer<typeof importedContactSchema>;
 type ConnectionSource = 'manual' | 'linkedin_import';
-type ConnectionMetadata = z.infer<typeof connectionMetadataSchema>;
+export type ConnectionMetadata = z.infer<typeof connectionMetadataSchema>;
 type ImportReceipt = z.infer<typeof importReceiptSchema>;
-type ConnectionRepository = NonNullable<RouteDeps['recruiterContactsRepo']>;
+export type ConnectionRepository = NonNullable<RouteDeps['recruiterContactsRepo']>;
 
 interface ConnectionContactView extends ConnectionMetadata {
   readonly id: string;
@@ -358,7 +367,7 @@ function persistLinkedInImport(
     importedAt: new Date().toISOString(),
     importedCount: unique.length + carried.length,
   };
-  storeImportedConnections(repository, candidateId, manual, unique, carried, receipt);
+  storeImportedConnections(repository, candidateId, manual, unique, carried, receipt, existing);
   return connectionImportResponse(request, receipt);
 }
 
@@ -369,19 +378,24 @@ function storeImportedConnections(
   contacts: readonly ImportedContactInput[],
   carried: readonly RecruiterContact[],
   receipt: ImportReceipt,
+  existing: readonly RecruiterContact[],
 ): void {
+  const priorPlaceOf = priorCompanyPlaces(existing, readConnectionMetadata);
   const usedIds = new Set(
     [...manual, ...carried].flatMap((record) => readConnectionMetadata(record)?.contactId ?? []),
   );
-  const imported = contacts.map((contact) =>
-    toStoredConnectionContact(
+  const imported = contacts.map((contact) => {
+    const place = keptCompanyPlace(contact, priorPlaceOf(contact.linkedinUrl));
+    return toStoredConnectionContact(
       candidateId,
       allocateImportedContactId(contact, usedIds),
-      toConnectionContactInput(contact),
+      { ...toConnectionContactInput(contact), ...place.names },
       'linkedin_import',
       receipt.importedAt,
-    ),
-  );
+      receipt.importedAt,
+      place.origin,
+    );
+  });
   const storedReceipt = toStoredImportReceipt(candidateId, receipt);
   saveConnectionRecords(repository, candidateId, [
     ...manual,
@@ -503,7 +517,7 @@ async function connectionCirclesResponse(
   };
 }
 
-async function readCandidateMatchedVacancies(
+export async function readCandidateMatchedVacancies(
   deps: RouteDeps,
   candidateId: string,
 ): Promise<MatchedVacancyItem[]> {
@@ -572,14 +586,14 @@ function toDomainConnection(contact: RecruiterContact): CandidateConnectionConta
   };
 }
 
-function connectionRecords(
+export function connectionRecords(
   repository: ConnectionRepository,
   candidateId: string,
 ): RecruiterContact[] {
   return repository.getContactsByVacancyId(candidateId, CONNECTION_SCOPE_ID);
 }
 
-function saveConnectionRecords(
+export function saveConnectionRecords(
   repository: ConnectionRepository,
   candidateId: string,
   records: RecruiterContact[],
@@ -609,11 +623,11 @@ function toConnectionContactView(contact: RecruiterContact): ConnectionContactVi
   };
 }
 
-function readConnectionMetadata(contact: RecruiterContact): ConnectionMetadata | null {
+export function readConnectionMetadata(contact: RecruiterContact): ConnectionMetadata | null {
   return storedReceiptSchema.safeParse(contact.sourceReceipt).data?.connection ?? null;
 }
 
-function readImportReceipt(records: readonly RecruiterContact[]): ImportReceipt | null {
+export function readImportReceipt(records: readonly RecruiterContact[]): ImportReceipt | null {
   const receipt = records.find(
     (record) => record.sourceType === 'candidate_connection_import_receipt',
   );
@@ -637,13 +651,14 @@ function connectionContactCount(records: readonly RecruiterContact[]): number {
   return records.filter((record) => readConnectionMetadata(record) !== null).length;
 }
 
-function toStoredConnectionContact(
+export function toStoredConnectionContact(
   candidateId: string,
   contactId: string,
   input: ConnectionContactInput,
   source: ConnectionSource,
   now: string,
   createdAt = now,
+  origin: Pick<ConnectionMetadata, 'companySource' | 'companyObservedAt'> = {},
 ): RecruiterContact {
   const connection: ConnectionMetadata = {
     contactId,
@@ -652,6 +667,7 @@ function toStoredConnectionContact(
     strength: input.strength,
     workplaces: input.workplaces,
     knowsRecruiterIds: input.knowsRecruiterIds,
+    ...origin,
   };
   const sourceReceipt = {
     receiptId: 'b448-connection:' + connectionStorageId(candidateId, source + ':' + contactId),
@@ -728,7 +744,7 @@ function toConnectionContactInput(contact: ImportedContactInput): ConnectionCont
   };
 }
 
-function importedContactId(contact: ImportedContactInput): string {
+export function importedContactId(contact: ImportedContactInput): string {
   const identity =
     contact.externalId ??
     contact.linkedinUrl ??
@@ -776,7 +792,7 @@ function sameManualContact(current: ConnectionContactView, input: ConnectionCont
   );
 }
 
-function connectionCandidate(
+export function connectionCandidate(
   deps: RouteDeps,
   request: FastifyRequest,
   reply: FastifyReply,
@@ -789,7 +805,7 @@ function connectionCandidate(
   return authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
 }
 
-function connectionRepository(
+export function connectionRepository(
   deps: RouteDeps,
   request: FastifyRequest,
   reply: FastifyReply,
@@ -804,19 +820,6 @@ function connectionRepository(
     true,
   );
   return null;
-}
-
-function isLinkedInProfileUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      ['linkedin.com', 'www.linkedin.com'].includes(url.hostname.toLocaleLowerCase('und')) &&
-      /^\/in\//u.test(url.pathname)
-    );
-  } catch {
-    return false;
-  }
 }
 
 /**

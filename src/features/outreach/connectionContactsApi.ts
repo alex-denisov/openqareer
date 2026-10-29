@@ -101,3 +101,38 @@ export async function importLinkedInConnectionContacts(
   });
   return readData<LinkedInConnectionImportReceipt>(response);
 }
+
+export interface LinkedInCompanySearchTarget {
+  readonly companyKey: string;
+  readonly companyName: string;
+}
+
+/** B561: companies to search in the 1st circle, wanted first, each once per 14 days. */
+export async function loadLinkedInCompanySearchPlan(): Promise<
+  readonly LinkedInCompanySearchTarget[]
+> {
+  const response = await apiFetch('/api/v1/candidate/connection-contacts/linkedin-search-plan', {
+    method: 'GET',
+  });
+  return (await readData<{ companies: LinkedInCompanySearchTarget[] }>(response)).companies;
+}
+
+export interface LinkedInSearchedPerson {
+  readonly fullName: string;
+  readonly linkedinUrl: string;
+  readonly roleTitle: string;
+  readonly companyName: string;
+}
+
+/** B561: people read from one company search; the server gives them their current company. */
+export async function reportLinkedInCompanySearch(
+  companyName: string,
+  people: readonly LinkedInSearchedPerson[],
+): Promise<{ readonly updated: number; readonly added: number }> {
+  const response = await apiFetch('/api/v1/candidate/connection-contacts/linkedin-search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ companyName, people: people.slice(0, 50) }),
+  });
+  return readData<{ updated: number; added: number }>(response);
+}

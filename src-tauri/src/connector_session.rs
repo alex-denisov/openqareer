@@ -6,7 +6,7 @@
 //! the main window is declared in `tauri.conf.json`, so WKWebView/WebView2
 //! silently refuse the request and no window ever appears (B149).
 
-use crate::linkedin_read_guard::{is_detail_page, LinkedInReadGuardState};
+use crate::linkedin_read_guard::{is_detail_page, is_people_search_page, LinkedInReadGuardState};
 use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, remove_dir_all, symlink_metadata};
 use std::path::{Path, PathBuf};
@@ -1710,16 +1710,21 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> LazyW
 }
 
 /// The candidate's LinkedIn session is paced here, not only in the web layer
-/// (B266 security WARN); see `linkedin_read_guard`.
+/// (B266 security WARN); see `linkedin_read_guard`. People search runs on its
+/// own budget with a jittered 20–40 s gap (B561).
 fn admit_linkedin_read(app: &AppHandle, path: &str) -> Result<Duration, String> {
     let state = app.state::<LinkedInReadGuardState>();
     let mut guard = state
         .0
         .lock()
         .map_err(|_| "linkedin_read_guard_unavailable".to_string())?;
-    guard
-        .admit(std::time::Instant::now(), is_detail_page(path))
-        .map_err(str::to_string)
+    let now = std::time::Instant::now();
+    let admitted = if is_people_search_page(path) {
+        guard.admit_search(now, Duration::from_millis(clock_seed() % 20_001))
+    } else {
+        guard.admit(now, is_detail_page(path))
+    };
+    admitted.map_err(str::to_string)
 }
 
 /// Spaces a sign-in window navigation without spending the read budget; a
