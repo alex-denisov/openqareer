@@ -8,6 +8,7 @@ import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildCoverLetterWriter } from './providers/coverLetterWriter';
+import { BudgetedCoachProvider } from './providers/budgetedCoachProvider';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
 import { PrivacyAwareCoachProvider } from './providers/privacyAwareCoachProvider';
 import { CareerOrchestrator } from './orchestration/careerOrchestrator';
@@ -109,9 +110,12 @@ const routedProvider = new HygienicCoachProvider({
   // стоит там, где сходятся все ступени очереди моделей (B210).
   inner: new StructuredStageCoachProvider({
     bulk: bulkLlmRuntime.client,
-    fallback: new PrivacyAwareCoachProvider({
-      personalDataProvider,
-      syntheticDataProvider,
+    // Структурные шаги идут мимо бюджета: им нужен весь контекст.
+    fallback: new BudgetedCoachProvider({
+      inner: new PrivacyAwareCoachProvider({
+        personalDataProvider,
+        syntheticDataProvider,
+      }),
     }),
   }),
 });
