@@ -18,7 +18,7 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
 import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
 import { publishVacancyFitRead, useLatestVacancyFitView } from './vacancyFitViewUpdates';
-import { readVacancyFit } from './vacancyFitApi';
+import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
 import { useVacancySummary } from './vacancyDetailApi';
 import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
 import { vacancyFitMark } from './vacancyFitModel';
@@ -219,7 +219,28 @@ function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkil
     return () => controller.abort();
   }, [vacancyId, needsDetail]);
   useCountingFitPoll(vacancyId, view);
+  useQueueOnOpen(vacancyId, view);
   return needsDetail;
+}
+
+/** B580: the Free sweep counts the first 300 rows; the rest are queued when the vacancy opens. */
+function useQueueOnOpen(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]) {
+  const uncountedOnOpen = view?.state === 'not_requested';
+  useEffect(() => {
+    if (!uncountedOnOpen) return;
+    const before = view;
+    void requestVacancyFit(vacancyId)
+      // The POST answer carries no requirements: keep the ones the row already read.
+      .then((next) =>
+        publishVacancyFitRead(vacancyId, {
+          ...before,
+          ...next,
+          requirements: next.requirements?.length ? next.requirements : before.requirements,
+        }),
+      )
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opened vacancy
+  }, [vacancyId]);
 }
 
 /** How often an opened vacancy re-reads a percent that is still counting. */
