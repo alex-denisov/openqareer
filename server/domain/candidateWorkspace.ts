@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VACANCY_SORT_DIRECTIONS, VACANCY_SORT_KEYS } from '../../shared/vacancySort';
 import {
   todayActionDeferralSchema,
   todayDecisionSelectionSchema,
@@ -56,6 +57,11 @@ export const candidateWorkspaceSchema = z
     previousVisitedAt: z.string().datetime().optional(),
     /** B542: «Скрыть уведомление» у полосы изменений «Сегодня»; вернётся с более новым событием. */
     todayChangesDismissedAt: z.string().datetime().optional(),
+    /** Owner 29.10: the «Вакансии» header sort the candidate chose last; not part of the fit stamp. */
+    vacancySort: z
+      .object({ by: z.enum(VACANCY_SORT_KEYS), dir: z.enum(VACANCY_SORT_DIRECTIONS) })
+      .strict()
+      .optional(),
     /**
      * The candidate's own explicit choice of what the matcher searches for —
      * "кампания" (B247). Absent means the candidate has not chosen yet, and

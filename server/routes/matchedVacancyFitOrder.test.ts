@@ -53,7 +53,10 @@ describe('pool fit order', () => {
   it('reads full fit evidence only for vacancies that have a stored result', () => {
     targetReads.length = 0;
     const pool = Array.from({ length: 500 }, (_, index) => item('v' + index));
-    const ordered = withVacancyFitOrder(deps({ v400: 90, v7: 40 }), 'order-a', 'fit')(pool);
+    const ordered = withVacancyFitOrder(deps({ v400: 90, v7: 40 }), 'order-a', {
+      by: 'fit',
+      dir: 'desc',
+    })(pool);
     expect(ordered.slice(0, 2).map((entry) => entry.cluster.id)).toEqual(['v400', 'v7']);
     expect(targetReads.sort()).toEqual(['v400', 'v7']);
   });
@@ -72,7 +75,9 @@ describe('pool fit order', () => {
       const scored: Record<string, number> = { a: 10, b: 90 };
       const pool = [item('a'), item('b')];
       const ids = () =>
-        withVacancyFitOrder(deps(scored), 'order-swr', 'fit')(pool).map((e) => e.cluster.id);
+        withVacancyFitOrder(deps(scored), 'order-swr', { by: 'fit', dir: 'desc' })(pool).map(
+          (e) => e.cluster.id,
+        );
       expect(ids()).toEqual(['b', 'a']);
       scored.a = 95;
       expect(ids()).toEqual(['b', 'a']);
@@ -102,7 +107,7 @@ describe('B562: a stored result under an older profile key is computed again', (
     withVacancyFitOrder(
       { ...base, vacancyMechanics: runtime } as unknown as RouteDeps,
       'order-stale',
-      'fit',
+      { by: 'fit', dir: 'desc' },
     )(['fresh', ...stale].map(item));
     expect(enqueue).toHaveBeenCalledTimes(STALE_REFIT_LIMIT);
     expect(enqueue.mock.calls.map(([input]) => input.vacancyId)).not.toContain('fresh');
@@ -129,24 +134,33 @@ describe('B422: компании «Хочу» в порядке подборки
       withCompany('d', 'Other'),
       withCompany('e', 'Acme'),
     ];
-    const ordered = withWantedCompanyOrder(
-      wantDeps({ a: 90, c: 50, d: 70, e: 70 }),
-      'want-a',
-      'fit',
-    )(pool);
+    const ordered = withWantedCompanyOrder(wantDeps({ a: 90, c: 50, d: 70, e: 70 }), 'want-a', {
+      by: 'fit',
+      dir: 'desc',
+    })(pool);
     expect(ordered.map((entry) => entry.cluster.id)).toEqual(['a', 'e', 'd', 'c', 'b']);
   });
 
   it('ключ кэша списка меняется вместе с отметками «Хочу»', () => {
-    const none = withWantedCompanyOrder(deps({}), 'want-c', 'fit').cacheKey;
-    const marked = withWantedCompanyOrder(wantDeps({}), 'want-c', 'fit').cacheKey;
+    const none = withWantedCompanyOrder(deps({}), 'want-c', { by: 'fit', dir: 'desc' }).cacheKey;
+    const marked = withWantedCompanyOrder(wantDeps({}), 'want-c', {
+      by: 'fit',
+      dir: 'desc',
+    }).cacheKey;
     expect(none).toBe('');
     expect(marked).toBe(candidateCompanyKey('Acme'));
   });
 
-  it('«по свежести» отметку не учитывает', () => {
-    const pool = [withCompany('a', 'Other'), withCompany('b', 'Acme')];
-    const ordered = withWantedCompanyOrder(wantDeps({}), 'want-b', 'freshness')(pool);
-    expect(ordered[0]?.cluster.id).toBe('a');
+  it('«Деньги» отметку не учитывают и ставят вакансии без денег последними', () => {
+    const pool = [withCompany('a', 'Other'), withCompany('b', 'Acme')].map((row, index) => ({
+      ...row,
+      cluster: {
+        ...row.cluster,
+        salary: index === 0 ? { from: 300_000, currency: 'RUB' } : undefined,
+      },
+    }));
+    const order = withWantedCompanyOrder(wantDeps({}), 'want-b', { by: 'money', dir: 'asc' });
+    expect(order.cacheKey).toBe('');
+    expect(order(pool).map((row) => row.cluster.id)).toEqual(['a', 'b']);
   });
 });

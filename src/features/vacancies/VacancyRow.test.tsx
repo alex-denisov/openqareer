@@ -251,7 +251,7 @@ describe('VacancyRow screen detail requirements (B549)', () => {
           ],
           result: {
             gates: {},
-            assessments: [{ requirementId: 'r1', status: 'matched', evidence: [] }],
+            assessments: [{ requirementId: 'r1', status: 'matched', evidence: [], checked: true }],
           },
         } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>,
       },
@@ -259,9 +259,10 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     const html = render({ item: withFit, layout: 'screen', isSelected: true });
     expect(html).toContain('Требования к навыкам');
     expect(html).toMatch(/is-confirmed[^]*Kafka/u);
-    expect(html).toMatch(/is-unconfirmed[^]*Kubernetes/u);
+    expect(html).toMatch(/is-missing[^]*Kubernetes/u);
     expect(html).not.toContain('vacancy-fit-table');
-    expect(html).toContain('Соответствие вашему профилю');
+    // Owner 29.10: the old «Соответствие» block never shows on «Вакансии».
+    expect(html).not.toContain('Соответствие вашему профилю');
   });
 
   it('lists every counted requirement, unconfirmed first, under the percent block (28.10)', () => {
@@ -291,7 +292,12 @@ describe('VacancyRow screen detail requirements (B549)', () => {
             gates: {},
             assessments: names
               .filter((name) => name.startsWith('A'))
-              .map((name) => ({ requirementId: name, status: 'matched', evidence: [] })),
+              .map((name) => ({
+                requirementId: name,
+                status: 'matched',
+                evidence: [],
+                checked: true,
+              })),
           },
         } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>,
       },
@@ -299,11 +305,11 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     const html = render({ item: withFit, layout: 'screen', isSelected: true });
     const chips = html.match(/class="vacancies-screen-skill-chip /gu) ?? [];
     expect(chips).toHaveLength(10);
-    expect(html).toMatch(/is-unconfirmed[^]*B3[^]*is-confirmed[^]*A1/u);
+    expect(html).toMatch(/is-missing[^]*B3[^]*is-confirmed[^]*A1/u);
     expect(html).not.toContain('Ещё ');
     expect(html).toMatch(/Требования к навыкам · <span class="num">10<\/span>/u);
     expect(html).toMatch(/<h3>Совпадение 70(&nbsp;|\u00a0)%<\/h3>/u);
-    expect(html).toContain('7 из 10 требований вакансии есть в профиле.');
+    expect(html).toContain('7 из 10 требований вакансии есть в профиле и подтверждены.');
     expect(html).not.toContain('соответствие 70');
   });
 

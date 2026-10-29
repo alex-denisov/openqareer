@@ -384,3 +384,34 @@
     justify-self: start;
   }
 }
+
+/* 29.10: «Деньги» и «Совпадение» — кнопки сортировки в шапке колонок (1440). */
+.vacancies-sort-header {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  min-block-size: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.vacancies-sort-header svg {
+  color: var(--career-text-dim);
+  opacity: 0.6;
+}
+.vacancies-sort-header.is-active svg {
+  color: var(--career-accent);
+  opacity: 1;
+}
+.vacancies-sort-header:hover {
+  color: var(--career-text);
+}
+.vacancies-sort-header:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+  border-radius: var(--career-radius-sm);
+}

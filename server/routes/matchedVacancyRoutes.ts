@@ -1,3 +1,5 @@
+import { readSortedFilters } from './matchedVacancySort';
+import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
 import { selectionToCount, sweepSelectionFit } from './fitSelectionSweep';
 import { attachMarketSalaryEstimates } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -19,7 +21,6 @@ import {
 import type { MatchedVacancySourceDefinition } from '../vacancies/matchedVacancyFacets';
 import {
   filterMatchedVacancies,
-  matchedVacanciesQuerySchema,
   type MatchedVacancyFilters,
 } from '../vacancies/matchedVacancyFilters';
 import { dropForeignRemote, markGeography } from '../vacancies/vacancyGeography';
@@ -383,11 +384,13 @@ function matchedVacancyResponse(
   response: ReturnType<typeof buildMatchedResponse>,
   requestId: string,
   targetLevel: ReturnType<typeof readTargetLevel>,
+  sort: VacancySort = DEFAULT_VACANCY_SORT,
 ) {
   return {
     data: response.data,
     meta: {
       requestId,
+      sort,
       total: response.page.total,
       offset: response.page.offset,
       nextOffset: response.page.nextOffset,
@@ -416,7 +419,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
   observedMatchEngines.add(multiSourceEngine);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const filters = matchedVacanciesQuerySchema.parse(request.query);
+  const { filters, sort } = readSortedFilters(deps, candidate.id, request.query);
   const { offset } = filters;
   const sourceRegistry = matchedVacancySourceRegistry(multiSourceEngine.getSources?.() ?? []);
   const knownSourceIds = sourceRegistry.map(({ id }) => id);
@@ -443,7 +446,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     titleParseStore,
     filters,
     sourceRegistry,
-    withWantedCompanyOrder(deps, candidate.id, filters.sort ?? 'fit'),
+    withWantedCompanyOrder(deps, candidate.id, sort),
   );
   const shown = withShownPageFitViews(deps, candidate.id, orderedPage.data);
   const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
@@ -461,7 +464,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     requestStartedAt,
   );
 
-  return matchedVacancyResponse(response, request.id, targetLevel);
+  return matchedVacancyResponse(response, request.id, targetLevel, sort);
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {

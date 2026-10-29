@@ -58,6 +58,7 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const profileContextHash = vacancyFitProfileStamp(snapshot, deps.candidateStore.getCandidateWorkspace(candidateId));
   const facts = snapshot.memory.map((fact) => ({ ...fact, candidateId }));
+  const checkedFactIds = skillCheckFactIds(deps, candidateId);
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const targetLevel = readTargetLevel(deps.candidateStore, candidateId, campaign.roles.value);
   return (target: NonNullable<ReturnType<typeof readVacancyFitTarget>>, requirements: readonly VacancyRequirement[]): VacancyFitInput => {
@@ -71,7 +72,7 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
     ['имею право на работу в ', 'я имею право на работу в ', 'i have work authorization in ', 'i have the right to work in ']
       .some((prefix) => [prefix + location, prefix + location + '.'].includes(fact.statement.toLocaleLowerCase().trim())));
   return {
-    candidateId, profileContextHash, vacancyId: target.vacancyId, description: target.description, requirements, facts,
+    candidateId, profileContextHash, vacancyId: target.vacancyId, description: target.description, requirements, facts, checkedFactIds,
     gates: {
       role: roleGate(campaign.roles.value, target.title),
       level: level === 'match' ? gate('matched', 'Уровень совпадает с целевым.')
@@ -87,4 +88,10 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
     },
   };
   };
+}
+
+/** Facts a skill check wrote to the profile and the candidate kept (accepted, not rolled back). */
+export function skillCheckFactIds(deps: RouteDeps, candidateId: string): readonly string[] {
+  const runs = deps.candidateStore.roleSkillAssessments?.list(candidateId) ?? [];
+  return runs.flatMap((run) => run.profileChange?.acceptedAt && !run.profileChange.revertedAt ? run.profileChange.memoryIds : []);
 }

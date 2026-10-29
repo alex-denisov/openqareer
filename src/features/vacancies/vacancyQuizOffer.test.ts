@@ -37,7 +37,11 @@ function view(matched: readonly string[]): VacancyFitView {
       requirement('r5', 'Terraform', 'low'),
     ],
     result: {
-      assessments: matched.map((requirementId) => ({ requirementId, status: 'matched' })),
+      assessments: matched.map((requirementId) => ({
+        requirementId,
+        status: 'matched',
+        checked: true,
+      })),
     },
   } as unknown as VacancyFitView;
 }
@@ -97,5 +101,22 @@ describe('quizOfferTitle phrases (G5 W3/R1)', () => {
     expect(quizOfferTitle(['Управление командой', 'AI'])).toBe(
       'Пройти квиз по навыкам: Управление командой и AI',
     );
+  });
+});
+
+describe('quizOfferSkills after half credit (owner 29.10)', () => {
+  it('names stated but unchecked skills before missing ones', () => {
+    const stated = view(['r1']);
+    const withStated = {
+      ...stated,
+      result: {
+        ...stated.result!,
+        assessments: [
+          ...stated.result!.assessments,
+          { requirementId: 'r5', status: 'matched', evidence: [] },
+        ],
+      },
+    } as VacancyFitView;
+    expect(quizOfferSkills(withStated)).toEqual(['Terraform', 'Kafka']);
   });
 });
