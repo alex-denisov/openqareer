@@ -9,6 +9,7 @@ import {
   TEAM_SIZE_TEXT_PATTERN,
   type ExperienceRevisionField,
 } from '../../shared/experienceRevisionField';
+import { MAX_BULLETS_PER_PLACE } from './resumeDraft';
 
 const COACH_PHASES = [
   'discovery',
@@ -226,7 +227,7 @@ const resumeContextSchema = z
             current: z.boolean().optional(),
             teamSize: z.number().int().positive().nullable().optional(),
             descriptionMemoryId: z.string().min(1).max(80).nullable().optional(),
-            bulletMemoryIds: z.array(z.string().min(1).max(80)).max(20),
+            bulletMemoryIds: z.array(z.string().min(1).max(80)).max(MAX_BULLETS_PER_PLACE),
           })
           .strict(),
       )

@@ -23,7 +23,8 @@ import {
   parseCoursesSection,
   parseProjectsSection,
   parseRecommendationsSection,
-  parseSkillsSection,
+  parseSkillsPage,
+  type ParsedSkills,
 } from './linkedinCredentialExtract';
 import {
   decodeSafetyGoUrl,
@@ -320,6 +321,12 @@ function assembleRawSections(
   contact: ReturnType<typeof parseContactInfo>,
 ): LinkedInProfileV2 {
   const base = emptyLinkedInProfileV2();
+  const noSkills: ParsedSkills = { skills: [], assessed: [] };
+  const skills = section(
+    'skills',
+    () => (pages.skills ? parseSkillsPage(pages.skills) : noSkills),
+    noSkills,
+  );
   return {
     ...base,
     fullName: topCard.fullName,
@@ -335,7 +342,8 @@ function assembleRawSections(
       [],
     ),
     projects: section('projects', () => (pages.projects ? parseProjectsSection(pages.projects) : []), []),
-    skills: section('skills', () => (pages.skills ? parseSkillsSection(pages.skills) : []), []),
+    skills: skills.skills,
+    skillAssessments: skills.assessed,
     recommendations: section(
       'recommendations',
       () => (pages.recommendations ? parseRecommendationsSection(pages.recommendations) : []),

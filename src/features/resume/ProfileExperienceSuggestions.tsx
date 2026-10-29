@@ -12,7 +12,12 @@ export interface ProfileExperienceSuggestionsProps {
   readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  /** Takes the whole pending list at once, so many facts are one save instead of one each (C10). */
+  readonly onAcceptGroup?: GroupHandler;
+  readonly onDismissGroup?: GroupHandler;
 }
+
+type GroupHandler = (suggestions: readonly InlineSuggestionItem[]) => Promise<void> | void;
 
 interface ExperienceSuggestionGroup {
   readonly key: string;
@@ -79,22 +84,37 @@ async function runSequentially(
   }
 }
 
+async function runGroup(
+  suggestions: readonly InlineSuggestionItem[],
+  groupHandler: GroupHandler,
+): Promise<SequentialResult> {
+  try {
+    await groupHandler(suggestions);
+    return { ok: true };
+  } catch (reason) {
+    return { ok: false, reason };
+  }
+}
+
 async function performGroupAction(options: {
   readonly action: GroupAction;
   readonly suggestions: readonly InlineSuggestionItem[];
   readonly handler?: ActionHandler;
+  readonly groupHandler?: GroupHandler;
   readonly lock: ActionLock;
   readonly setBusyAction: (action: GroupAction | null) => void;
   readonly setError: (error: string | null) => void;
 }) {
-  const { action, suggestions, handler, lock, setBusyAction, setError } = options;
-  if (!handler || !suggestions.length || lock.current) return;
+  const { action, suggestions, handler, groupHandler, lock, setBusyAction, setError } = options;
+  if ((!handler && !groupHandler) || !suggestions.length || lock.current) return;
 
   lock.current = true;
   setBusyAction(action);
   setError(null);
   try {
-    const result = await runSequentially(suggestions, handler);
+    const result = groupHandler
+      ? await runGroup(suggestions, groupHandler)
+      : await runSequentially(suggestions, handler as ActionHandler);
     if (!result.ok) {
       setError(
         actionError(
@@ -139,6 +159,7 @@ function useSuggestionActionState(
   onAcceptSuggestion?: ActionHandler,
   onDismissSuggestion?: ActionHandler,
   onRevertSuggestion?: ActionHandler,
+  groupHandlers: { readonly accept?: GroupHandler; readonly dismiss?: GroupHandler } = {},
 ): SuggestionActionState {
   const lock = useRef(false);
   const [busyAction, setBusyAction] = useState<GroupAction | null>(null);
@@ -150,6 +171,7 @@ function useSuggestionActionState(
       action,
       suggestions,
       handler: action === 'accept' ? onAcceptSuggestion : onDismissSuggestion,
+      groupHandler: action === 'accept' ? groupHandlers.accept : groupHandlers.dismiss,
       lock,
       setBusyAction,
       setError,
@@ -343,13 +365,13 @@ function GroupActionButton({
 
 function SuggestionActions({
   actions,
-  onAccept,
-  onDismiss,
+  canAccept,
+  canDismiss,
   hasApplied,
 }: {
   readonly actions: SuggestionActionState;
-  readonly onAccept?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
-  readonly onDismiss?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly canAccept: boolean;
+  readonly canDismiss: boolean;
   readonly hasApplied: boolean;
 }) {
   return (
@@ -358,14 +380,14 @@ function SuggestionActions({
         action="accept"
         busyAction={actions.busyAction}
         isBusy={actions.isBusy}
-        disabled={!onAccept}
+        disabled={!canAccept}
         onClick={() => void actions.handleGroupAction('accept')}
       />
       <GroupActionButton
         action="dismiss"
         busyAction={actions.busyAction}
         isBusy={actions.isBusy}
-        disabled={!onDismiss}
+        disabled={!canDismiss}
         onClick={() => void actions.handleGroupAction('dismiss')}
       />
       <p className="profile-experience-suggestions__pending-note">
@@ -391,6 +413,8 @@ export function ProfileExperienceSuggestions({
   onAcceptSuggestion,
   onDismissSuggestion,
   onRevertSuggestion,
+  onAcceptGroup,
+  onDismissGroup,
 }: ProfileExperienceSuggestionsProps) {
   const titleId = useId();
   const experienceSuggestions = suggestions.filter((item) => item.section === 'experience');
@@ -401,6 +425,7 @@ export function ProfileExperienceSuggestions({
     onAcceptSuggestion,
     onDismissSuggestion,
     onRevertSuggestion,
+    { accept: onAcceptGroup, dismiss: onDismissGroup },
   );
 
   if (!experienceSuggestions.length) return null;
@@ -418,8 +443,8 @@ export function ProfileExperienceSuggestions({
       {pendingSuggestions.length ? (
         <SuggestionActions
           actions={actions}
-          onAccept={onAcceptSuggestion}
-          onDismiss={onDismissSuggestion}
+          canAccept={Boolean(onAcceptGroup ?? onAcceptSuggestion)}
+          canDismiss={Boolean(onDismissGroup ?? onDismissSuggestion)}
           hasApplied={experienceSuggestions.some((item) => item.applied)}
         />
       ) : null}

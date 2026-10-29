@@ -308,6 +308,8 @@ export const linkedinProfileV2Schema = z
       .default({ links: [] }),
     experience: z.array(experienceSchema).max(50).default([]),
     skills: z.array(caption).max(100).default([]),
+    /** Skill names marked «Passed LinkedIn Skill Assessment»; absent from older .app builds (C13). */
+    skillAssessments: z.array(caption).max(100).optional(),
     education: z.array(educationSchema).max(30).default([]),
     courses: z.array(courseSchema).max(50).default([]),
     tests: z.array(testSchema).max(50).default([]),

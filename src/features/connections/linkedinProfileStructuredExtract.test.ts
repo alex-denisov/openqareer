@@ -9,6 +9,7 @@ import {
   parseCoursesSection,
   parseProjectsSection,
   parseRecommendationsSection,
+  parseSkillAssessments,
   parseSkillsSection,
 } from './linkedinCredentialExtract';
 import {
@@ -142,6 +143,27 @@ describe('parseSkillsSection (B265)', () => {
     const skills = parseSkillsSection(fixture('skills.html'));
     expect(skills.length).toBeGreaterThanOrEqual(40);
     expect(skills).toContain('Turn Around Management');
+  });
+
+  it('reads all 44 skills of the page, past the first chunk of ten (C13)', () => {
+    const skills = parseSkillsSection(fixture('skills.html'));
+    expect(skills).toHaveLength(44);
+    expect(new Set(skills).size).toBe(44);
+  });
+});
+
+describe('parseSkillAssessments (C13)', () => {
+  it('names only the skills marked «Passed LinkedIn Skill Assessment»', () => {
+    expect(parseSkillAssessments(fixture('skills.html'))).toEqual([
+      'IT Operations',
+      'Amazon Web Services (AWS)',
+      'Agile Methodologies',
+      'Linux',
+    ]);
+  });
+
+  it('finds none on a page without the mark', () => {
+    expect(parseSkillAssessments(fixture('profile.html'))).toEqual([]);
   });
 });
 
@@ -303,6 +325,14 @@ describe('extractStructuredLinkedInProfile (B265)', () => {
     expect(profile.achievements).toHaveLength(1);
     expect(profile.contact.linkedinUrl).toContain('jordanrivers');
     expect((profile as Record<string, unknown>).birthday).toBeUndefined();
+    expect(profile.skills).toHaveLength(44);
+    expect(profile.skillAssessments).toEqual([
+      'IT Operations',
+      'Amazon Web Services (AWS)',
+      'Agile Methodologies',
+      'Linux',
+    ]);
+    expect(linkedinProfileV2Schema.safeParse(profile).success).toBe(true);
   });
 
   it('tags a stable extractorVersion', () => {

@@ -148,6 +148,8 @@ export interface ParsedResume {
   contact: ParsedResumeContact;
   experience: ParsedResumeExperience[];
   skills: string[];
+  /** v2: names from `skills` that LinkedIn marks «Passed LinkedIn Skill Assessment» (C13). */
+  skillAssessments?: string[];
   education: ParsedResumeEducation[];
   courses: ParsedResumeCourse[];
   tests: ParsedResumeTest[];

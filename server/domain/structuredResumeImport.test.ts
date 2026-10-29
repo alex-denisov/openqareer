@@ -262,6 +262,160 @@ describe('collectMediaRequests / attachResumeMedia', () => {
   });
 });
 
+describe('planStructuredResumeImport — LinkedIn Skill Assessment (C13)', () => {
+  it('marks an assessed skill confirmed with its LinkedIn source, the rest stay unverified', () => {
+    const profile = baseProfile({
+      skills: ['IT Operations', 'Executive Leadership', 'Linux'],
+      skillAssessments: ['IT Operations', 'Linux'],
+    });
+    const plan = planStructuredResumeImport(profile, { idPrefix: 'impaaaaaaaaaa' });
+    expect(plan.draft.skills).toEqual([
+      expect.objectContaining({
+        name: 'IT Operations',
+        status: 'подтверждён',
+        source: 'LinkedIn Skill Assessment',
+      }),
+      expect.not.objectContaining({ status: expect.anything() }),
+      expect.objectContaining({ name: 'Linux', status: 'подтверждён' }),
+    ]);
+  });
+
+  it('imports all 44 skills, not a preview of ten', () => {
+    const skills = Array.from({ length: 44 }, (_, index) => `Skill ${index + 1}`);
+    const plan = planStructuredResumeImport(baseProfile({ skills }), { idPrefix: 'impaaaaaaaaaa' });
+    expect(plan.draft.skills).toHaveLength(44);
+  });
+});
+
+describe('keepFilledSections — skills and About the candidate already has (C13, C7)', () => {
+  const existing = {
+    candidate: { about: 'Typed by the candidate', aboutMemoryId: 'impbbbbbbbbbb-about' },
+    experience: [],
+    education: [],
+    languages: [],
+    skills: [
+      {
+        id: 'impbbbbbbbbbb-skill-1',
+        name: 'Executive Leadership',
+        evidenceMemoryId: 'impbbbbbbbbbb-skill-1',
+      },
+      { id: 'impbbbbbbbbbb-skill-2', name: 'Dropped From LinkedIn' },
+      {
+        id: 'skill-56567297',
+        name: 'Docker',
+        status: 'подтверждён',
+        source: 'квиз',
+        verifiedAt: '2026-10-28',
+      },
+      {
+        id: 'impbbbbbbbbbb-skill-3',
+        name: 'Kafka',
+        status: 'подтверждён',
+        source: 'квиз',
+        verifiedAt: '2026-10-20',
+      },
+    ],
+  } as never;
+  const incoming = {
+    candidate: {},
+    experience: [],
+    education: [],
+    languages: [],
+    skills: [
+      { id: 'impcccccccccc-skill-1', name: 'Executive Leadership' },
+      { id: 'impcccccccccc-skill-2', name: 'kafka' },
+      {
+        id: 'impcccccccccc-skill-3',
+        name: 'Linux',
+        status: 'подтверждён',
+        source: 'LinkedIn Skill Assessment',
+      },
+    ],
+  } as never;
+
+  it('keeps a skill the candidate added or confirmed outside LinkedIn', () => {
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.skills?.map((skill) => skill.name)).toEqual([
+      'Executive Leadership',
+      'kafka',
+      'Linux',
+      'Docker',
+    ]);
+  });
+
+  it('keeps a quiz verdict on a skill the re-import brings again without one', () => {
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.skills?.find((skill) => skill.name === 'kafka')).toMatchObject({
+      status: 'подтверждён',
+      source: 'квиз',
+      verifiedAt: '2026-10-20',
+    });
+  });
+
+  it('keeps the About text when the re-import did not read one', () => {
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.candidate.about).toBe('Typed by the candidate');
+    expect(merged.candidate.aboutMemoryId).toBe('impbbbbbbbbbb-about');
+  });
+
+  it('takes a freshly read About over the old one', () => {
+    const fresh = { ...(incoming as object), candidate: { about: 'From LinkedIn' } } as never;
+    expect(keepFilledSections(fresh, existing).candidate.about).toBe('From LinkedIn');
+  });
+});
+
+describe('keepFilledSections — facts the candidate put into workplaces (C10)', () => {
+  const existing = {
+    candidate: {},
+    education: [],
+    languages: [],
+    declinedFactIds: ['fact-declined'],
+    experience: [
+      {
+        id: 'impbbbbbbbbbb-exp-2',
+        chronologyMemoryId: 'impbbbbbbbbbb-exp-2',
+        employer: 'Enterprise Energy IT Services',
+        startDate: 'Apr 2023',
+        bulletMemoryIds: ['impbbbbbbbbbb-exp-2-b1', '0f8c2a52-3a1e-4d39-9c47-1b2a6d6f0a11'],
+      },
+      {
+        id: 'impbbbbbbbbbb-exp-9',
+        chronologyMemoryId: 'impbbbbbbbbbb-exp-9',
+        employer: 'Gone From LinkedIn',
+        startDate: 'Jan 2001',
+        bulletMemoryIds: ['5d1c0b6e-7a0f-4f7d-8a3b-9e2f1c4d5b66'],
+      },
+    ],
+  } as never;
+  const incoming = {
+    candidate: {},
+    education: [],
+    languages: [],
+    experience: [
+      {
+        id: 'impcccccccccc-exp-2',
+        chronologyMemoryId: 'impcccccccccc-exp-2',
+        employer: 'enterprise energy it services',
+        startDate: 'Apr 2023',
+        bulletMemoryIds: ['impcccccccccc-exp-2-b1'],
+      },
+    ],
+  } as never;
+
+  it('keeps the accepted conversation facts on the same workplace after a re-import', () => {
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.experience[0].bulletMemoryIds).toEqual([
+      'impcccccccccc-exp-2-b1',
+      '0f8c2a52-3a1e-4d39-9c47-1b2a6d6f0a11',
+    ]);
+  });
+
+  it('drops the old import bullets and keeps the declined list', () => {
+    const merged = keepFilledSections(incoming, existing);
+    expect(merged.experience[0].bulletMemoryIds).not.toContain('impbbbbbbbbbb-exp-2-b1');
+    expect(merged.declinedFactIds).toEqual(['fact-declined']);
+  });
+});
 describe('keepFilledSections (B266)', () => {
   const existing = {
     candidate: {},

@@ -89,18 +89,45 @@ export function parseProjectsSection(html: string): ParsedResumeProject[] {
     .filter((project): project is ParsedResumeProject => Boolean(project));
 }
 
-/** Reads the flat skill list from a `skills.html`-shaped snapshot (all 44, not the profile preview). */
-export function parseSkillsSection(html: string): string[] {
+const SKILL_ID_PATTERN = /^com\.linkedin\.sdui\.profile\.skill\([^)]*\)$/u;
+const SKILL_ASSESSMENT_MARK = 'Passed LinkedIn Skill Assessment';
+
+/** One node per skill; its first `<p>` is the name, later ones the role and badges. */
+function skillNodesOf(html: string): Element[] {
   const doc = parseFragment(html);
   // jsdom's CSS engine rejects `^=` selectors whose value contains "(", so
   // this filters `[id]` nodes in JS instead of using an attribute selector.
-  const skillIdPattern = /^com\.linkedin\.sdui\.profile\.skill\([^)]*\)$/u;
-  const skillNodes = Array.from(doc.querySelectorAll('[id]')).filter((node) =>
-    skillIdPattern.test(node.getAttribute('id') ?? ''),
+  return Array.from(doc.querySelectorAll('[id]')).filter((node) =>
+    SKILL_ID_PATTERN.test(node.getAttribute('id') ?? ''),
   );
-  return skillNodes
-    .map((node) => textOf(node.querySelector('p')))
-    .filter((name): name is string => Boolean(name));
+}
+
+export interface ParsedSkills {
+  readonly skills: string[];
+  /** Skills whose row carries the «Passed LinkedIn Skill Assessment» badge (C13). */
+  readonly assessed: string[];
+}
+
+/** One pass over a `skills.html`-shaped snapshot: all 44 names and their badges. */
+export function parseSkillsPage(html: string): ParsedSkills {
+  const rows = skillNodesOf(html).flatMap((node) => {
+    const name = textOf(node.querySelector('p'));
+    return name ? [{ name, assessed: paragraphsOf(node).includes(SKILL_ASSESSMENT_MARK) }] : [];
+  });
+  return {
+    skills: rows.map((row) => row.name),
+    assessed: rows.filter((row) => row.assessed).map((row) => row.name),
+  };
+}
+
+/** Reads the flat skill list from a `skills.html`-shaped snapshot (all 44, not the profile preview). */
+export function parseSkillsSection(html: string): string[] {
+  return parseSkillsPage(html).skills;
+}
+
+/** Names the skills whose row carries the «Passed LinkedIn Skill Assessment» badge (C13). */
+export function parseSkillAssessments(html: string): string[] {
+  return parseSkillsPage(html).assessed;
 }
 
 function readOneRecommendation(item: Element): ParsedResumeRecommendation | undefined {

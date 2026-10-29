@@ -505,11 +505,15 @@ function isPlausibleSkill(value: string): boolean {
   return hasWords(value) && value.length <= 120;
 }
 
+/** The source a skill confirmed by LinkedIn's own quiz carries in the draft (C13). */
+export const LINKEDIN_SKILL_ASSESSMENT_SOURCE = 'LinkedIn Skill Assessment';
+
 function planSkills(
   parsed: ParsedResume,
   prefix: string,
   evidence: ResumeImportEvidence[],
 ): ResumeDraft['skills'] {
+  const assessed = new Set((parsed.skillAssessments ?? []).map(normalizeResumeImportValue));
   return parsed.skills
     .map((skill) => skill.trim())
     .filter((skill) => skill.length > 0 && isPlausibleSkill(skill))
@@ -521,6 +525,9 @@ function planSkills(
         id: memoryId,
         evidenceMemoryId: memoryId,
         name: clamp(skill, MAX_LABEL) ?? '',
+        ...(assessed.has(normalizeResumeImportValue(skill))
+          ? { status: 'подтверждён', source: LINKEDIN_SKILL_ASSESSMENT_SOURCE }
+          : {}),
       };
     });
 }
