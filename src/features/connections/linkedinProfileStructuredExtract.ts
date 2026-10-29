@@ -153,7 +153,22 @@ function languagePairs(lines: readonly string[]): ParsedResumeLanguage[] {
 }
 
 
-const CONTACT_LABELS = new Set(['Your profile', 'Website', 'Phone', 'Email']);
+type ContactField = 'profile' | 'website' | 'phone' | 'email' | 'other';
+
+// EN and RU interface labels (29.10: the overlay was only ever read in English).
+const CONTACT_FIELD_LABELS: readonly (readonly [ContactField, RegExp])[] = [
+  ['profile', /^(your profile|.+'s profile|ваш профиль|профиль(\s.*)?)$/iu],
+  ['website', /^(websites?|веб-сайты?|сайты?)$/iu],
+  ['phone', /^(phones?|телефоны?)$/iu],
+  ['email', /^(e-?mail|эл\. адрес|электронная почта|адрес электронной почты)$/iu],
+  [
+    'other',
+    /^(birthday|день рождения|address|адрес|im|instant messengers?|connected|связь установлена|contact info|контактная информация|контактные данные)$/iu,
+  ],
+];
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+const LINKEDIN_PROFILE = /^(?:https?:\/\/)?(?:[a-z]+\.)?linkedin\.com(\/in\/[^/?#\s]+)\/?$/iu;
+const BARE_SITE = /^(?:https?:\/\/)?[\w-]+(\.[\w-]+)+(\/\S*)?$/u;
 
 interface ContactInfo {
   email?: string;
@@ -163,26 +178,75 @@ interface ContactInfo {
   links: string[];
 }
 
-/** Contact info overlay, per the "Досъём" anatomy in B264 (dialog → lazy-column → rows). */
-export function parseContactInfo(html: string): ContactInfo {
-  const doc = parseFragment(html);
-  const rows = Array.from(doc.querySelectorAll('[data-testid="lazy-column"] > div[componentkey]'));
-  const result: ContactInfo = { links: [] };
-  for (const row of rows) {
-    const [label] = paragraphsOf(row);
-    if (!label || !CONTACT_LABELS.has(label)) continue;
-    const href = row.querySelector('a')?.getAttribute('href') ?? undefined;
-    if (label === 'Your profile') result.linkedinUrl = href;
-    if (label === 'Website' && href) {
-      const decoded = decodeSafetyGoUrl(href);
-      if (!decoded) continue;
-      if (/(^|\.)t\.me$/u.test(new URL(decoded).hostname)) result.telegram = decoded;
-      else result.links = [...result.links, decoded];
-    }
-    if (label === 'Phone') result.phone = paragraphsOf(row).slice(1).join(' ');
-    if (label === 'Email') result.email = paragraphsOf(row)[1];
+interface ContactLine {
+  readonly text: string;
+  readonly href?: string;
+}
+
+/** Leaf texts in document order; a link counts as one line with its href. */
+function contactLines(root: Element): ContactLine[] {
+  return Array.from(root.querySelectorAll('*'))
+    .filter((node) => node.matches('a') || (node.children.length === 0 && !node.closest('a')))
+    .flatMap((node) => {
+      const text = textOf(node);
+      if (!text) return [];
+      return [{ text, href: node.getAttribute('href') ?? undefined }];
+    });
+}
+
+function contactField(text: string): ContactField | undefined {
+  return CONTACT_FIELD_LABELS.find(([, label]) => label.test(text))?.[0];
+}
+
+function profileUrl(line: ContactLine): string | undefined {
+  try {
+    const path = line.href
+      ? new URL(line.href, 'https://www.linkedin.com').pathname
+      : LINKEDIN_PROFILE.exec(line.text)?.[1];
+    const slug = path && /^\/in\/([^/]+)\/?$/u.exec(path)?.[1];
+    return slug ? `https://www.linkedin.com/in/${slug}/` : undefined;
+  } catch {
+    return undefined;
   }
-  return result;
+}
+
+function websiteUrl(line: ContactLine): string | undefined {
+  if (line.href) return decodeSafetyGoUrl(line.href);
+  if (!BARE_SITE.test(line.text)) return undefined;
+  return /^https?:\/\//u.test(line.text) ? line.text : `https://${line.text}`;
+}
+
+/**
+ * The contact-info overlay, read by its row labels in document order (B264,
+ * 29.10): the DOM shape and the interface language both vary, the labels and
+ * the order "label, then its values" do not. Birthday and unknown rows are
+ * never read.
+ */
+export function parseContactInfo(html: string): ContactInfo {
+  const lines = contactLines(parseFragment(html).body);
+  let field: ContactField = 'other';
+  let result: ContactInfo = { links: [] };
+  const phone: string[] = [];
+  for (const line of lines) {
+    const label = line.href ? undefined : contactField(line.text);
+    if (label) {
+      field = label;
+      continue;
+    }
+    if (field === 'profile')
+      result = { ...result, linkedinUrl: result.linkedinUrl ?? profileUrl(line) };
+    if (field === 'email' && EMAIL.test(line.text))
+      result = { ...result, email: result.email ?? line.text };
+    if (field === 'phone') phone.push(line.text);
+    if (field === 'website') result = withWebsite(result, websiteUrl(line));
+  }
+  return phone.length > 0 ? { ...result, phone: phone.join(' ') } : result;
+}
+
+function withWebsite(result: ContactInfo, url: string | undefined): ContactInfo {
+  if (!url) return result;
+  if (/(^|\.)t\.me$/u.test(new URL(url).hostname)) return { ...result, telegram: url };
+  return result.links.includes(url) ? result : { ...result, links: [...result.links, url] };
 }
 
 const WORKPLACE_LABELS: Readonly<Record<string, ParsedWorkplaceType>> = {

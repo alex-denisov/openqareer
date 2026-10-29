@@ -47,7 +47,8 @@ export function mediaSourceUrl(src: string | null | undefined): string | undefin
 /** Decodes LinkedIn's `linkedin.com/safety/go/?url=<encoded>` redirector. */
 export function decodeSafetyGoUrl(href: string): string | undefined {
   try {
-    const url = new URL(href);
+    // The desktop read keeps LinkedIn links as relative paths (`/safety/go/?url=…`).
+    const url = new URL(href, 'https://www.linkedin.com');
     const isSafetyGo = /(^|\.)linkedin\.com$/u.test(url.hostname) && url.pathname.includes('/safety/go');
     const target = url.searchParams.get('url');
     // `searchParams.get` already decodes once; decoding again would unwrap a

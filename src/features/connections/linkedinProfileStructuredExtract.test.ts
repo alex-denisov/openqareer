@@ -301,6 +301,16 @@ describe('parseContactInfo (B265)', () => {
   it('never extracts Birthday into any output field', () => {
     expect(JSON.stringify(contact)).not.toContain('March 3');
   });
+
+  it('reads the sanitized overlay with Russian labels and another row shape (29.10)', () => {
+    const ru = parseContactInfo(fixture('contact-info-ru-sanitized.html'));
+    expect(ru.email).toBe('maria.orlova@example.com');
+    expect(ru.phone).toContain('+7 900 000-00-00');
+    expect(ru.telegram).toBe('https://t.me/maria_orlova_test');
+    expect(ru.links).toEqual(['https://orlova.example']);
+    expect(ru.linkedinUrl).toBe('https://www.linkedin.com/in/maria-orlova-test/');
+    expect(JSON.stringify(ru)).not.toContain('марта');
+  });
 });
 
 describe('extractStructuredLinkedInProfile (B265)', () => {

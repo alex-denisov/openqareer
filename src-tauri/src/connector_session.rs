@@ -1400,7 +1400,9 @@ if(/^\\/resume\\/[A-Za-z0-9_-]+$/u.test(parsed.pathname)){node.setAttribute('hre
     };
     format!(
         "(function(){{try{{\
-const source=(location.pathname.indexOf('/overlay/')>=0&&document.querySelector('[role=dialog],dialog'))||document.querySelector('main')||document.body||document.documentElement;\
+const visibleText=function(node){{return (typeof node.innerText==='string'?node.innerText:node.textContent||'').trim().length;}};\
+const overlay=location.pathname.indexOf('/overlay/')>=0?Array.from(document.querySelectorAll('[role=dialog],dialog')).reduce(function(best,node){{return !best||visibleText(node)>visibleText(best)?node:best;}},null):null;\
+const source=(overlay&&visibleText(overlay)>0&&overlay)||document.querySelector('main')||document.body||document.documentElement;\
 const root=source.cloneNode(true);\
 root.querySelectorAll('script,style,noscript,iframe,object,embed,input,textarea,select,meta,link').forEach(function(node){{node.remove();}});\
 root.querySelectorAll('*').forEach(function(node){{\
@@ -2485,6 +2487,16 @@ https://media.licdn.com/dms/image/c 800w";
         assert!(script.contains("com.linkedin.sdui.profile."));
         assert!(script.contains("componentkey"));
         assert!(script.contains("media.licdn.com/dms/image/"));
+    }
+
+    #[test]
+    fn overlay_read_takes_the_dialog_with_the_most_visible_text() {
+        // B264: ad dialogs («Ad Options») sit in every profile DOM; the first
+        // dialog on the page is not the contact-info overlay (29.10).
+        let script = page_sanitize_script("linkedin");
+        assert!(!script.contains("document.querySelector('[role=dialog],dialog')"));
+        assert!(script.contains("querySelectorAll('[role=dialog],dialog')"));
+        assert!(script.contains("innerText"));
     }
 
     #[test]
