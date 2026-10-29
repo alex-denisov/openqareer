@@ -41,14 +41,14 @@ describe('SqliteNetworkIndexRepository', () => {
     ]);
     repository.recordObservations('member-b', [observation('jane-roe', 'Northwind Labs')]);
 
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-x', everyone)).toEqual({
-      paths: 2,
-      members: 2,
-    });
+    expect(repository.membersWithPathsInto(NORTHWIND, 'candidate-x', everyone)).toEqual([
+      'member-a',
+      'member-b',
+    ]);
     expect(repository.personCount()).toBe(1);
   });
 
-  it('counts paths of other members only and never the candidate own edges', () => {
+  it('names each other member once, never the candidate own edges', () => {
     const { repository } = createRepository();
     repository.recordObservations('member-a', [
       observation('jane-roe', 'Northwind Labs'),
@@ -57,14 +57,10 @@ describe('SqliteNetworkIndexRepository', () => {
     ]);
     repository.recordObservations('candidate-b', [observation('john-doe', 'Northwind Labs')]);
 
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-b', everyone)).toEqual({
-      paths: 2,
-      members: 1,
-    });
-    expect(repository.countPlatformPaths(CONTOSO, 'member-a', everyone)).toEqual({
-      paths: 0,
-      members: 0,
-    });
+    expect(repository.membersWithPathsInto(NORTHWIND, 'candidate-b', everyone)).toEqual([
+      'member-a',
+    ]);
+    expect(repository.membersWithPathsInto(CONTOSO, 'member-a', everyone)).toEqual([]);
   });
 
   it('keeps each member own reading of a person, so no member can move another member path', () => {
@@ -75,22 +71,24 @@ describe('SqliteNetworkIndexRepository', () => {
       observation('jane-roe', 'Contoso', { source: 'search' }),
     ]);
 
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-b', everyone).paths).toBe(1);
-    expect(repository.countPlatformPaths(CONTOSO, 'member-probe', everyone).paths).toBe(0);
+    expect(repository.membersWithPathsInto(NORTHWIND, 'candidate-b', everyone)).toEqual([
+      'member-a',
+    ]);
+    expect(repository.membersWithPathsInto(CONTOSO, 'member-probe', everyone)).toEqual([]);
   });
 
-  it('leaves out members whose consent is no longer active', () => {
+  it('leaves out members no longer connected to LinkedIn and drops their edges', () => {
     const { repository } = createRepository();
     repository.recordObservations('member-a', [observation('jane-roe', 'Northwind Labs')]);
     repository.recordObservations('member-c', [observation('john-doe', 'Northwind Labs')]);
 
-    const counted = repository.countPlatformPaths(
+    const members = repository.membersWithPathsInto(
       NORTHWIND,
       'candidate-b',
       (memberId) => memberId === 'member-c',
     );
 
-    expect(counted).toEqual({ paths: 1, members: 1 });
+    expect(members).toEqual(['member-c']);
     expect(repository.personCount()).toBe(1);
   });
 
@@ -104,8 +102,8 @@ describe('SqliteNetworkIndexRepository', () => {
       observation('john-doe', '', { observedAt: '2026-10-30T10:00:00.000Z' }),
     ]);
 
-    expect(repository.countPlatformPaths(CONTOSO, 'candidate-b', everyone).paths).toBe(1);
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-b', everyone).paths).toBe(0);
+    expect(repository.membersWithPathsInto(CONTOSO, 'candidate-b', everyone)).toHaveLength(1);
+    expect(repository.membersWithPathsInto(NORTHWIND, 'candidate-b', everyone)).toEqual([]);
   });
 
   it('replaces a member edges with a full list and drops people nobody links to', () => {
@@ -117,11 +115,11 @@ describe('SqliteNetworkIndexRepository', () => {
 
     repository.replaceMemberEdges('member-a', [observation('jane-roe', 'Northwind Labs')]);
 
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-b', everyone).paths).toBe(1);
+    expect(repository.memberProfilesAt('member-a', NORTHWIND)).toHaveLength(1);
     expect(repository.personCount()).toBe(1);
   });
 
-  it('removes every edge of a member on revoke and the people only that member knew', () => {
+  it('removes every edge of a member on disconnect and the people only that member knew', () => {
     const { repository } = createRepository();
     repository.recordObservations('member-a', [
       observation('jane-roe', 'Northwind Labs'),
@@ -131,14 +129,13 @@ describe('SqliteNetworkIndexRepository', () => {
 
     expect(repository.deleteMemberEdges('member-a')).toBe(2);
 
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-b', everyone)).toEqual({
-      paths: 1,
-      members: 1,
-    });
+    expect(repository.membersWithPathsInto(NORTHWIND, 'candidate-b', everyone)).toEqual([
+      'member-c',
+    ]);
     expect(repository.personCount()).toBe(1);
   });
 
-  it('stops counting and drops an edge nobody confirmed for 90 days', () => {
+  it('stops naming and drops an edge nobody confirmed for 90 days', () => {
     const { repository } = createRepository();
     repository.recordObservations('member-a', [
       observation('jane-roe', 'Northwind Labs', { observedAt: '2026-07-01T10:00:00.000Z' }),
@@ -146,7 +143,9 @@ describe('SqliteNetworkIndexRepository', () => {
     repository.recordObservations('member-c', [observation('john-doe', 'Northwind Labs')]);
     const now = new Date('2026-10-29T12:00:00.000Z');
 
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-b', everyone, now).paths).toBe(1);
+    expect(repository.membersWithPathsInto(NORTHWIND, 'candidate-b', everyone, now)).toEqual([
+      'member-c',
+    ]);
     expect(repository.personCount()).toBe(1);
   });
 
@@ -154,17 +153,6 @@ describe('SqliteNetworkIndexRepository', () => {
     const { repository } = createRepository();
     repository.recordObservations('member-a', [observation('jane-roe', '')]);
 
-    expect(repository.personCount()).toBe(0);
-  });
-
-  it('forgets a person for every member when that person objects', () => {
-    const { repository } = createRepository();
-    repository.recordObservations('member-a', [observation('jane-roe', 'Northwind Labs')]);
-    repository.recordObservations('member-c', [observation('Jane-Roe', 'Northwind Labs')]);
-
-    expect(repository.deletePerson('https://ru.linkedin.com/in/jane-roe')).toBe(2);
-
-    expect(repository.countPlatformPaths(NORTHWIND, 'candidate-b', everyone).paths).toBe(0);
     expect(repository.personCount()).toBe(0);
   });
 

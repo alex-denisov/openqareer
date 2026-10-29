@@ -17,7 +17,6 @@ import type { AccountConsent } from './accountTypes';
 const CONSENT_CAPABILITIES: Readonly<Record<string, CandidateCapability | undefined>> = {
   'cons-auto-applies': 'actions_on_behalf',
   'cons-footprint': 'digital_footprint',
-  'cons-linkedin-contacts': 'linkedin_contacts',
   'cons-profile-data': 'profile_activity',
 };
 

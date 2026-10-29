@@ -186,20 +186,24 @@ describe('B448 connection circles', () => {
     expect(JSON.stringify(result)).not.toMatch(/probability|вероятност|процент/iu);
   });
 
-  it('gives circle 2 the count of paths through platform members, and only to circle 2 (B561)', () => {
+  it('gives circle 2, and only circle 2, the platform members (B561)', () => {
+    const platformMembers = {
+      count: 1,
+      members: [{ fullName: 'Ulla Member', linkedinUrl: null, personName: 'Jane Roe' }],
+    };
     const result = buildConnectionCircles(
-      connectionInput({ linkedinContactsImported: true, platformPaths: 3 }),
+      connectionInput({ linkedinContactsImported: true, platformMembers }),
     );
 
-    expect(result.circles.find((circle) => circle.circle === 2)?.platformPaths).toEqual({
-      paths: 3,
-    });
-    expect(result.circles.find((circle) => circle.circle === 1)?.platformPaths).toBeUndefined();
+    expect(result.circles.find((circle) => circle.circle === 2)?.platformMembers).toEqual(
+      platformMembers,
+    );
+    expect(result.circles.find((circle) => circle.circle === 1)?.platformMembers).toBeUndefined();
     expect(
       buildConnectionCircles(connectionInput({ linkedinContactsImported: true })).circles.find(
         (circle) => circle.circle === 2,
-      )?.platformPaths,
-    ).toEqual({ paths: 0 });
+      )?.platformMembers,
+    ).toEqual({ count: 0, members: [] });
   });
 
   it('distinguishes unknown from an imported empty contact list', () => {

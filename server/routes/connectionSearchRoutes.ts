@@ -133,7 +133,7 @@ async function handleSearchReport(deps: RouteDeps, request: FastifyRequest, repl
     saveConnectionRecords(repository, candidate.id, merged.records);
   }
   writeSearchLog(repository, candidate.id, candidateCompanyKey(report.companyName), now);
-  recordSearchedNetwork(deps, candidate.id, report.people, now);
+  recordSearchedNetwork(deps, candidate.id, report.people, now, request.log);
   return {
     data: { updated: merged.updated, added: merged.added },
     meta: { requestId: request.id },

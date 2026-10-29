@@ -270,25 +270,21 @@ export interface ConnectionCircleResult {
   readonly state: ConnectionCircleState;
   readonly message: string;
   readonly paths: readonly ConnectionCirclePath[];
-  /** Circle 2 only (B561): paths through other platform members — a count, never names. */
-  readonly platformPaths?: { readonly paths: number };
-  /** Circle 2 only (B561 slice 3): the candidate's referral request; names only once accepted. */
-  readonly platformReferral?: PlatformReferralView;
+  /** Circle 2 only (B561): other platform members who know someone at the company now. */
+  readonly platformMembers?: PlatformMembers;
 }
 
-export type PlatformReferralStatus = 'none' | 'pending' | 'accepted' | 'answered';
-
-export interface PlatformReferralIntroducer {
+/** A platform member with a person at the company; contact happens on LinkedIn only. */
+export interface PlatformMember {
   readonly fullName: string;
-  readonly headline: string | null;
   readonly linkedinUrl: string | null;
-  /** Names only: the consent text promises no more about the member's contacts. */
-  readonly people: ReadonlyArray<{ readonly fullName: string }>;
+  readonly personName: string;
 }
 
-export interface PlatformReferralView {
-  readonly status: PlatformReferralStatus;
-  readonly introducers: readonly PlatformReferralIntroducer[];
+export interface PlatformMembers {
+  /** Distinct members, one per member however many people they know there. */
+  readonly count: number;
+  readonly members: readonly PlatformMember[];
 }
 
 export interface BuildConnectionCirclesInput {
@@ -299,9 +295,8 @@ export interface BuildConnectionCirclesInput {
   readonly contacts: readonly CandidateConnectionContact[];
   /** False means the candidate has not imported an exhaustive LinkedIn contact list. */
   readonly linkedinContactsImported: boolean;
-  /** Paths into the vacancy company through other consenting platform members (B561). */
-  readonly platformPaths?: number;
-  readonly platformReferral?: PlatformReferralView;
+  /** Other platform members who know someone at the vacancy company (B561). */
+  readonly platformMembers?: PlatformMembers;
 }
 
 const CONNECTION_PATH_LIMIT = 100;
@@ -317,8 +312,7 @@ export function buildConnectionCircles(input: BuildConnectionCirclesInput): {
       resultForCircle(1, direct, input.linkedinContactsImported),
       {
         ...resultForCircle(2, introductions, input.linkedinContactsImported),
-        platformPaths: { paths: Math.max(0, Math.trunc(input.platformPaths ?? 0)) },
-        platformReferral: input.platformReferral ?? { status: 'none', introducers: [] },
+        platformMembers: input.platformMembers ?? { count: 0, members: [] },
       },
       { circle: 3, state: 'available', message: '', paths: cold.slice(0, CONNECTION_PATH_LIMIT) },
     ],

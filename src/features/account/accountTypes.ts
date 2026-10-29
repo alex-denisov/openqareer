@@ -43,7 +43,7 @@ export interface AccountConsent {
   readonly description: string;
   readonly date: string;
   readonly consequences: string;
-  readonly capability?: import('../legal/capabilityConsents').CandidateCapability;
+  readonly capability?: 'profile_activity' | 'digital_footprint' | 'actions_on_behalf';
   readonly status?: 'granted' | 'not-granted' | 'unknown';
   readonly grantable?: boolean;
   readonly revokeable?: boolean;

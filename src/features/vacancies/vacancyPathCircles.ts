@@ -2,6 +2,7 @@ import { pluralRu } from '../../../shared/pluralRu';
 import type {
   ConnectionCircleNumber,
   ConnectionCircleResult,
+  PlatformMember,
   VacancyConnectionCircles,
 } from './vacancyLetterApi';
 
@@ -16,8 +17,6 @@ export interface PathCircleCard {
   /** false: contacts are unknown or absent, the action acquires them. */
   readonly known: boolean;
   readonly result?: ConnectionCircleResult;
-  /** Circle 2 (B561 slice 3): «ask» offers «Попросить рекомендацию» through platform members. */
-  readonly referralAction?: 'ask' | null;
 }
 
 const TITLES: Record<ConnectionCircleNumber, string> = {
@@ -41,26 +40,14 @@ function contactSummary(circle: 1 | 2, count: number, companyName: string): stri
   return `${pluralRu(count, ['путь', 'пути', 'путей'])} через знакомых.`;
 }
 
-function platformSummary(count: number): string {
-  return `${pluralRu(count, ['путь', 'пути', 'путей'])} через ${count === 1 ? 'участника' : 'участников'} платформы.`;
+function membersPhrase(count: number, companyName: string): string {
+  const who = pluralRu(count, ['участник', 'участника', 'участников']);
+  return `${who} платформы ${count === 1 ? 'знает' : 'знают'} людей в ${companyName}.`;
 }
 
-const REFERRAL_ASK = 'Попросить рекомендацию';
-
-/** The referral request state, said after the platform path count. */
-function referralNote(result: ConnectionCircleResult | undefined): string {
-  const referral = result?.platformReferral;
-  if (referral?.status === 'pending') return ' Запрос отправлен, ждём ответа.';
-  if (referral?.status === 'accepted') {
-    const names = referral.introducers.map((item) => item.fullName).join(', ');
-    return ` Готовы рекомендовать: ${names}.`;
-  }
-  if (referral?.status === 'answered') return ' Участники ответили, но помочь не смогут.';
-  return '';
-}
-
-function referralAction(result: ConnectionCircleResult | undefined): 'ask' | null {
-  return (result?.platformReferral?.status ?? 'none') === 'none' ? 'ask' : null;
+/** B561: the first LinkedIn message to a platform member, naming the company and the person. */
+export function platformMemberMessage(member: PlatformMember, companyName: string): string {
+  return `Привет! Я тоже пользуюсь OpenQareer и хотел спросить про ${companyName}: вижу, у тебя в контактах ${member.personName}. Познакомишь или подскажешь, как лучше написать?`;
 }
 
 function warmCard(
@@ -70,28 +57,22 @@ function warmCard(
 ): PathCircleCard {
   const base = { circle, label: `Круг ${circle}`, title: TITLES[circle], result };
   const count = result?.state === 'available' ? result.paths.length : 0;
-  const platform = circle === 2 ? (result?.platformPaths?.paths ?? 0) : 0;
+  const members = circle === 2 ? (result?.platformMembers?.count ?? 0) : 0;
   if (count > 0) {
     const own = contactSummary(circle, count, companyName);
     return {
       ...base,
-      summary:
-        platform > 0
-          ? `${own.slice(0, -1)} и ${platform} через участников платформы.${referralNote(result)}`
-          : own,
+      summary: members > 0 ? `${own.slice(0, -1)} и ${membersPhrase(members, companyName)}` : own,
       actionLabel: ACTIONS[circle],
       known: true,
-      referralAction: platform > 0 ? referralAction(result) : null,
     };
   }
-  if (platform > 0) {
-    const action = referralAction(result);
+  if (members > 0) {
     return {
       ...base,
-      summary: platformSummary(platform) + referralNote(result),
-      actionLabel: action ? REFERRAL_ASK : 'Добавить контакты',
-      known: false,
-      referralAction: action,
+      summary: membersPhrase(members, companyName),
+      actionLabel: ACTIONS[circle],
+      known: true,
     };
   }
   const summary =
@@ -101,18 +82,6 @@ function warmCard(
         : 'Путей через знакомых не найдено.'
       : UNKNOWN;
   return { ...base, summary, actionLabel: 'Добавить контакты', known: false };
-}
-
-/** A referral request just sent: circle 2 reads as pending until the next load. */
-export function withReferralSent(data: VacancyConnectionCircles): VacancyConnectionCircles {
-  return {
-    ...data,
-    circles: data.circles.map((circle) =>
-      circle.circle === 2
-        ? { ...circle, platformReferral: { status: 'pending', introducers: [] } }
-        : circle,
-    ),
-  };
 }
 
 export function pathCircleCards(data: VacancyConnectionCircles): readonly PathCircleCard[] {

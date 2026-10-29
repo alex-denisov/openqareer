@@ -42,20 +42,20 @@ export interface ConnectionCircleResult {
   readonly state: ConnectionCircleState;
   readonly message: string;
   readonly paths: readonly ConnectionCirclePath[];
-  /** Circle 2 only (B561): paths through other platform members — a count, never names. */
-  readonly platformPaths?: { readonly paths: number };
-  /** Circle 2 only (B561 slice 3): the referral request; names only once a member accepted. */
-  readonly platformReferral?: PlatformReferral;
+  /** Circle 2 only (B561): other platform members who know someone at the company now. */
+  readonly platformMembers?: PlatformMembers;
 }
 
-export interface PlatformReferral {
-  readonly status: 'none' | 'pending' | 'accepted' | 'answered';
-  readonly introducers: ReadonlyArray<{
-    readonly fullName: string;
-    readonly headline: string | null;
-    readonly linkedinUrl: string | null;
-    readonly people: ReadonlyArray<{ readonly fullName: string }>;
-  }>;
+/** A platform member with a person at the company; contact happens on LinkedIn only. */
+export interface PlatformMember {
+  readonly fullName: string;
+  readonly linkedinUrl: string | null;
+  readonly personName: string;
+}
+
+export interface PlatformMembers {
+  readonly count: number;
+  readonly members: readonly PlatformMember[];
 }
 
 export interface CandidateWorkplaceForLetter {

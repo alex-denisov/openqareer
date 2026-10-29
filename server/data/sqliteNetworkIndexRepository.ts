@@ -9,9 +9,9 @@ import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
  * A person is keyed by the canonical profile address (whose slug often carries the
  * name); no name field is kept. An edge says which member has the person in the
  * 1st circle and holds that member's own reading of the company key and role, so
- * one member can never move another member's path (security review 29.10). Only
- * members with the `linkedin_contacts` consent feed it, and other candidates read
- * counts from it, never rows.
+ * one member can never move another member's path (security review 29.10). Members
+ * with LinkedIn connected feed it (owner 30.10: platform members are 1st circle to
+ * each other); other candidates see the members, never these rows.
  */
 export type NetworkSource = 'search' | 'connections';
 
@@ -21,11 +21,6 @@ export interface NetworkObservation {
   readonly roleTitle: string;
   readonly source: NetworkSource;
   readonly observedAt: string;
-}
-
-export interface PlatformPathCount {
-  readonly paths: number;
-  readonly members: number;
 }
 
 interface EdgeRow {
@@ -103,6 +98,9 @@ export class SqliteNetworkIndexRepository {
       CREATE INDEX IF NOT EXISTS idx_network_edges_profile ON network_edges(profile_url);
       CREATE INDEX IF NOT EXISTS idx_network_edges_company ON network_edges(company_key, member_id);
       CREATE INDEX IF NOT EXISTS idx_network_edges_observed ON network_edges(observed_at);
+      -- Owner 30.10: no referral requests in the app; their tables from slice 3 go.
+      DROP TABLE IF EXISTS network_referral_blocks;
+      DROP TABLE IF EXISTS network_referral_requests;
     `);
   }
 
@@ -122,7 +120,7 @@ export class SqliteNetworkIndexRepository {
     });
   }
 
-  /** Consent revoked: every edge of the member goes, and people nobody else knows. */
+  /** LinkedIn disconnected or account deleted: every edge goes, and people nobody else knows. */
   deleteMemberEdges(memberId: string): number {
     let removed = 0;
     this.transaction(() => {
@@ -136,53 +134,60 @@ export class SqliteNetworkIndexRepository {
   }
 
   /**
-   * Paths into a company through other members: one per member and person at it.
-   * The candidate's own edges never count; `isActiveMember` re-checks consent, and
-   * a member found without it loses the edges a missed revoke left behind.
+   * The other members who know someone at the company now — each member once, however
+   * many people they know there. The candidate's own edges never count. A member found
+   * without LinkedIn connected loses the edges a missed disconnect left behind.
    */
-  countPlatformPaths(
-    companyKey: string,
-    excludeMemberId: string,
-    isActiveMember: (memberId: string) => boolean,
-    now: Date = new Date(),
-  ): PlatformPathCount {
-    if (!companyKey) return { paths: 0, members: 0 };
-    this.dropStaleEdges(now);
-    const rows = this.database
-      .prepare(
-        `SELECT member_id, COUNT(*) AS paths FROM network_edges
-          WHERE company_key = ? AND member_id <> ?
-          GROUP BY member_id`,
-      )
-      .all(companyKey, excludeMemberId) as unknown as Array<{ member_id: string; paths: number }>;
-    const active = rows.filter((row) => isActiveMember(row.member_id));
-    for (const row of rows) {
-      if (!active.includes(row)) this.deleteMemberEdges(row.member_id);
-    }
-    return {
-      paths: active.reduce((sum, row) => sum + Number(row.paths), 0),
-      members: active.length,
-    };
-  }
-
-  /** Server side only: the other active members with a path into the company (slice 3). */
   membersWithPathsInto(
     companyKey: string,
     excludeMemberId: string,
     isActiveMember: (memberId: string) => boolean,
+    now: Date = new Date(),
+    limit = 1_000,
   ): string[] {
     if (!companyKey) return [];
+    this.dropStaleEdges(now);
     const rows = this.database
       .prepare(
         `SELECT DISTINCT member_id FROM network_edges
-          WHERE company_key = ? AND member_id <> ? AND observed_at >= ? ORDER BY member_id`,
+          WHERE company_key = ? AND member_id <> ? AND observed_at >= ?
+          ORDER BY member_id LIMIT ?`,
       )
       .all(
         companyKey,
         excludeMemberId,
-        new Date(Date.now() - NETWORK_EDGE_TTL_MS).toISOString(),
+        new Date(now.getTime() - NETWORK_EDGE_TTL_MS).toISOString(),
+        limit,
       ) as unknown as Array<{ member_id: string }>;
-    return rows.map((row) => row.member_id).filter(isActiveMember);
+    const members = rows.map((row) => row.member_id);
+    const active = members.filter(isActiveMember);
+    for (const memberId of members) {
+      if (!active.includes(memberId)) this.deleteMemberEdges(memberId);
+    }
+    return active;
+  }
+
+  /** Distinct other members with a current edge into the company, counted in SQL. */
+  memberCountInto(companyKey: string, excludeMemberId: string, now: Date = new Date()): number {
+    if (!companyKey) return 0;
+    const row = this.database
+      .prepare(
+        `SELECT COUNT(DISTINCT member_id) AS total FROM network_edges
+          WHERE company_key = ? AND member_id <> ? AND observed_at >= ?`,
+      )
+      .get(
+        companyKey,
+        excludeMemberId,
+        new Date(now.getTime() - NETWORK_EDGE_TTL_MS).toISOString(),
+      ) as { total: number };
+    return Number(row.total);
+  }
+
+  memberEdgeCount(memberId: string): number {
+    const row = this.database
+      .prepare('SELECT COUNT(*) AS total FROM network_edges WHERE member_id = ?')
+      .get(memberId) as { total: number };
+    return Number(row.total);
   }
 
   /** The member's own people at the company, to read their names from the member's contacts. */
@@ -194,21 +199,6 @@ export class SqliteNetworkIndexRepository {
       )
       .all(memberId, companyKey) as unknown as Array<{ profile_url: string }>;
     return rows.map((row) => row.profile_url);
-  }
-
-  /** A contact objected (consent text, item 4): the person goes for every member. */
-  deletePerson(profileUrl: string): number {
-    const canonical = canonicalLinkedInProfile(profileUrl);
-    if (!canonical) return 0;
-    let removed = 0;
-    this.transaction(() => {
-      removed = Number(
-        this.database.prepare('DELETE FROM network_edges WHERE profile_url = ?').run(canonical)
-          .changes,
-      );
-      this.database.prepare('DELETE FROM network_people WHERE profile_url = ?').run(canonical);
-    });
-    return removed;
   }
 
   personCount(): number {

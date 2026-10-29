@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type {
-  ConnectionCircleResult as ConnectionCircle,
-  VacancyConnectionCircles,
-} from './vacancyLetterApi';
-import { pathCircleCards, pathSourceNote, withReferralSent } from './vacancyPathCircles';
+import type { VacancyConnectionCircles } from './vacancyLetterApi';
+import { pathCircleCards, pathSourceNote, platformMemberMessage } from './vacancyPathCircles';
 
 function person(id: string, fullName: string, roleTitle: string | null = null) {
   return { id, fullName, roleTitle, companyName: 'Вектор Банк' };
@@ -99,9 +96,10 @@ describe('pathCircleCards (B549)', () => {
     });
   });
 
-  it('adds the paths through platform members to circle 2, as a count only (B561)', () => {
+  it('adds the platform members who know people at the company to circle 2 (B561)', () => {
     const base = data();
     const own = base.circles[0]!.paths.map((path) => ({ ...path, circle: 2 as const }));
+    const member = { fullName: 'Ulla Member', linkedinUrl: null, personName: 'Jane Roe' };
     const withCircle2 = (circle2: VacancyConnectionCircles['circles'][number]) =>
       pathCircleCards({ ...base, circles: [base.circles[0]!, circle2, base.circles[2]!] })[1];
 
@@ -111,10 +109,10 @@ describe('pathCircleCards (B549)', () => {
         state: 'available',
         message: '',
         paths: own,
-        platformPaths: { paths: 3 },
+        platformMembers: { count: 3, members: [member] },
       }),
     ).toMatchObject({
-      summary: '2 пути через знакомых и 3 через участников платформы.',
+      summary: '2 пути через знакомых и 3 участника платформы знают людей в Вектор Банк.',
       actionLabel: 'Показать пути',
     });
     expect(
@@ -123,75 +121,29 @@ describe('pathCircleCards (B549)', () => {
         state: 'none',
         message: '',
         paths: [],
-        platformPaths: { paths: 1 },
+        platformMembers: { count: 1, members: [member] },
       }),
-    ).toMatchObject({ summary: '1 путь через участника платформы.' });
+    ).toMatchObject({ summary: '1 участник платформы знает людей в Вектор Банк.', known: true });
     expect(
       withCircle2({
         circle: 2,
         state: 'none',
         message: '',
         paths: [],
-        platformPaths: { paths: 0 },
+        platformMembers: { count: 0, members: [] },
       }),
     ).toMatchObject({ summary: 'Путей через знакомых не найдено.' });
   });
 
-  it('asks for a referral through platform members and says how it goes (B561 slice 3)', () => {
-    const base = data();
-    const card = (platformReferral: NonNullable<ConnectionCircle['platformReferral']>) =>
-      pathCircleCards({
-        ...base,
-        circles: [
-          base.circles[0]!,
-          {
-            circle: 2,
-            state: 'none',
-            message: '',
-            paths: [],
-            platformPaths: { paths: 3 },
-            platformReferral,
-          },
-          base.circles[2]!,
-        ],
-      })[1];
-
-    expect(card({ status: 'none', introducers: [] })).toMatchObject({
-      summary: '3 пути через участников платформы.',
-      actionLabel: 'Попросить рекомендацию',
-      referralAction: 'ask',
-    });
-    expect(card({ status: 'pending', introducers: [] })).toMatchObject({
-      summary: '3 пути через участников платформы. Запрос отправлен, ждём ответа.',
-      referralAction: null,
-    });
+  it('writes the first LinkedIn message to a platform member (B561)', () => {
     expect(
-      card({
-        status: 'accepted',
-        introducers: [{ fullName: 'Ulla Member', headline: null, linkedinUrl: null, people: [] }],
-      }),
-    ).toMatchObject({
-      summary: '3 пути через участников платформы. Готовы рекомендовать: Ulla Member.',
-      referralAction: null,
-    });
-    expect(card({ status: 'answered', introducers: [] })).toMatchObject({
-      summary: '3 пути через участников платформы. Участники ответили, но помочь не смогут.',
-      referralAction: null,
-    });
-  });
-
-  it('shows a request just sent as pending without reloading the circles', () => {
-    const base = data();
-    const sent = withReferralSent({
-      ...base,
-      circles: [
-        base.circles[0]!,
-        { circle: 2, state: 'none', message: '', paths: [], platformPaths: { paths: 1 } },
-        base.circles[2]!,
-      ],
-    });
-    expect(sent.circles[1]!.platformReferral).toEqual({ status: 'pending', introducers: [] });
-    expect(sent.circles[0]).toBe(base.circles[0]);
+      platformMemberMessage(
+        { fullName: 'Ulla Member', linkedinUrl: null, personName: 'Jane Roe' },
+        'Вектор Банк',
+      ),
+    ).toBe(
+      'Привет! Я тоже пользуюсь OpenQareer и хотел спросить про Вектор Банк: вижу, у тебя в контактах Jane Roe. Познакомишь или подскажешь, как лучше написать?',
+    );
   });
 
   it('is honest when a known circle has no contacts', () => {

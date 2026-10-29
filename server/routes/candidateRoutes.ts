@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { forgetMemberNetwork } from './networkIndexFeed';
 import { connectNativeOnly, resolveNativeImportMode, type NativeImportMode } from './nativeImportMode';
 import { materializeManualResumeEvidence } from './manualResumeEvidence';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -255,8 +256,7 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   cancelFootprintRunForCandidate(candidate.id);
   deps.capabilityConsentStore?.deleteForCandidate(candidate.id);
-  deps.networkIndexRepo?.deleteMemberEdges(candidate.id);
-  deps.referralRequestRepo?.deleteForCandidate(candidate.id);
+  forgetMemberNetwork(deps, candidate.id, request.log);
   notificationRepositoryFor(deps).deleteByCandidate(candidate.id);
   candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);

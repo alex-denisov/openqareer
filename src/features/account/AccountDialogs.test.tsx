@@ -101,36 +101,4 @@ describe('connection manage dialogs for a connect-only platform (24.10)', () => 
     );
     expect(notYet).toContain('Контакты ещё не прочитаны');
   });
-
-  it('gives the LinkedIn contacts consent a working switch (B561)', () => {
-    const linkedin = { ...connection, platform: 'linkedin' as const, factCount: 59 };
-    const consent = (granted: boolean, busy = false) =>
-      renderToStaticMarkup(
-        <AccountLinkedInModal
-          {...handlers}
-          connection={linkedin}
-          contacts={null}
-          contactsConsent={{ granted, busy, onToggle: vi.fn() }}
-        />,
-      );
-    const off = consent(false);
-    expect(off).toContain('Пути для других кандидатов');
-    expect(off).toContain('Другие кандидаты видят только число путей');
-    expect(off).toContain('Согласиться и включить');
-    expect(off).not.toMatch(/<input[^>]*type="checkbox"(?![^>]*disabled)[^>]*>/u);
-    const on = consent(true);
-    expect(on).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""(?![^>]*disabled)[^>]*>/u);
-    expect(on).not.toContain('Согласиться и включить');
-    expect(consent(true, true)).toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""[^>]*>/u);
-    const connectOnly = renderToStaticMarkup(
-      <AccountLinkedInModal
-        {...handlers}
-        connection={linkedin}
-        connectOnly
-        contacts={null}
-        contactsConsent={{ granted: false, busy: false, onToggle: vi.fn() }}
-      />,
-    );
-    expect(connectOnly).toContain('Пути для других кандидатов');
-  });
 });

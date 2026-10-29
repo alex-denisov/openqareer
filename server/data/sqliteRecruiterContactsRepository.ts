@@ -290,6 +290,30 @@ export class SqliteRecruiterContactsRepository {
     return rows.map(toContact);
   }
 
+  /**
+   * B561: the name of one LinkedIn connection by profile slug — only that column, so a
+   * circles read never loads anyone's e-mail or phone.
+   */
+  findConnectionNameBySlug(candidateId: string, scopeId: string, slug: string): string | null {
+    const escaped = slug.toLowerCase().replace(/[\\%_]/gu, (char) => '\\' + char);
+    const row = this.database
+      .prepare(
+        `SELECT full_name FROM recruiter_contacts
+          WHERE candidate_id = ? AND vacancy_id = ? AND source_type = 'candidate_linkedin_connection'
+            AND (lower(linkedin_url) LIKE ? ESCAPE '\\' OR lower(linkedin_url) LIKE ? ESCAPE '\\'
+              OR lower(linkedin_url) LIKE ? ESCAPE '\\')
+          LIMIT 1`,
+      )
+      .get(
+        candidateId,
+        scopeId,
+        `%linkedin.com/in/${escaped}`,
+        `%linkedin.com/in/${escaped}/%`,
+        `%linkedin.com/in/${escaped}?%`,
+      ) as { full_name: string } | undefined;
+    return row?.full_name ?? null;
+  }
+
   listContactsByCandidateId(candidateId: string): RecruiterContact[] {
     const rows = this.database.prepare(`
       SELECT id, candidate_id, vacancy_id, company_name, full_name, role_title,

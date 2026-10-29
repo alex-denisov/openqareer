@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import {
   type CandidateCapability,
-  CAPABILITY_CONSENT_CURRENT_VERSION,
   isCandidateCapability,
 } from '../../src/features/legal/capabilityConsents';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
@@ -131,30 +130,6 @@ export function getActiveCapabilityConsent(
   return row ? mapRow(row) : null;
 }
 
-/**
- * B561: whether the account behind a candidate holds the consent to the current text
- * (bearer-only candidates cannot grant). A consent to an earlier text no longer counts.
- */
-export function hasActiveCapabilityConsentForCandidate(
-  database: DatabaseSync,
-  candidateId: string,
-  capability: CandidateCapability,
-): boolean {
-  ensureCapabilityConsentsSchema(database);
-  const hasUsers =
-    database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'").get() !==
-    undefined;
-  if (!hasUsers) return false;
-  const row = database
-    .prepare(
-      `SELECT 1 FROM candidate_capability_consents
-        WHERE user_id IN (SELECT id FROM users WHERE candidate_id = ?)
-          AND capability = ? AND version_id = ? AND revoked_at IS NULL LIMIT 1`,
-    )
-    .get(candidateId, capability, CAPABILITY_CONSENT_CURRENT_VERSION[capability]);
-  return row !== undefined;
-}
-
 export function listCapabilityConsents(
   database: DatabaseSync,
   userId: string,
@@ -270,10 +245,6 @@ export class SqliteCapabilityConsentStore {
 
   getActiveConsent(userId: string, capability: CandidateCapability): CapabilityConsentRecord | null {
     return getActiveCapabilityConsent(this.database, userId, capability);
-  }
-
-  hasActiveConsentForCandidate(candidateId: string, capability: CandidateCapability): boolean {
-    return hasActiveCapabilityConsentForCandidate(this.database, candidateId, capability);
   }
 
   listConsents(userId: string, capability?: CandidateCapability): readonly CapabilityConsentRecord[] {

@@ -3,11 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { afterEach, expect } from 'vitest';
-import { CAPABILITY_CONSENT_CURRENT_VERSION } from '../src/features/legal/capabilityConsents';
 import { buildApp } from './app';
 import { config as baseConfig, successProvider } from './appTestHarness';
 import { AuthService } from './auth/authService';
-import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { SqliteNetworkIndexRepository } from './data/sqliteNetworkIndexRepository';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
@@ -82,7 +80,6 @@ export async function createNetworkEnv() {
     encryptionKey: baseConfig.dataEncryptionKey,
   });
   const authService = new AuthService({ databasePath, candidateStore });
-  const capabilityConsentStore = new SqliteCapabilityConsentStore({ databasePath });
   const recruiterContactsRepo = new SqliteRecruiterContactsRepository({ databasePath });
   const networkIndexRepo = new SqliteNetworkIndexRepository({ databasePath });
   const engine = {
@@ -94,7 +91,6 @@ export async function createNetworkEnv() {
     coachProvider: successProvider,
     candidateStore,
     authService,
-    capabilityConsentStore,
     recruiterContactsRepo,
     networkIndexRepo,
     multiSourceVacancyEngine: engine,
@@ -129,18 +125,25 @@ export async function registerMember(
   };
 }
 
-export const grantContactsConsent = (app: FastifyInstance, authorization: string) =>
-  app.inject({
-    method: 'POST',
-    url: '/api/v1/me/consents/linkedin_contacts',
-    headers: { authorization, origin },
-    payload: { versionId: CAPABILITY_CONSENT_CURRENT_VERSION.linkedin_contacts },
-  });
+/** B561: a member with LinkedIn connected, as the desktop sign-in leaves it. */
+export function connectLinkedIn(env: NetworkEnv, candidateId: string, slug: string): void {
+  env.candidateStore.connectNativeSourceOnly(
+    candidateId,
+    {
+      platform: 'linkedin',
+      accessMode: 'native_session_snapshot',
+      sourceUrl: profile(slug),
+      capturedAt: '2026-10-30T08:00:00.000Z',
+      importDigest: 'b'.repeat(64),
+    },
+    'LinkedIn',
+  );
+}
 
-export const revokeContactsConsent = (app: FastifyInstance, authorization: string) =>
+export const disconnectLinkedIn = (app: FastifyInstance, authorization: string) =>
   app.inject({
     method: 'DELETE',
-    url: '/api/v1/me/consents/linkedin_contacts',
+    url: '/api/v1/candidate/connections/linkedin',
     headers: { authorization, origin },
   });
 
