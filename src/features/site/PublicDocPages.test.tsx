@@ -44,7 +44,8 @@ describe('/tariffs page', () => {
     ['Free', 'Basic', 'Pro', 'Max', 'Executive'].forEach((name) => expect(html).toContain(name));
     expect(html).toContain('Рекомендуем');
     expect(html).toContain('pg-btn is-primary" href="/signup?plan=pro&amp;from=tariffs"');
-    expect(html).toContain('Эксперт проверит резюме вручную до первых откликов');
+    expect(html).toContain('Консультант на самой сильной модели: 3 000 ходов в месяц');
+    expect(html).not.toContain('Эксперт проверит');
     expect(html).toContain('/signup?from=tariffs-doubt');
   });
 

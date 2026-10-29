@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react';
 import type { InterviewQuestionView, InterviewSessionView } from './interviewSimulatorApi';
 import type { StarStoriesSnapshot } from '../../../shared/starStories';
+import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import type { MockInterviewScreen } from './mockInterviewControllerTypes';
 
 interface SupportFlow {
@@ -102,6 +103,7 @@ export function PaywallScreen({ onBack }: { readonly onBack: () => void }) {
         <WarningCircle aria-hidden="true" className="career-mock-state-icon" />
         <h2>Мок-интервью недоступно на текущем тарифе</h2>
         <p>Тренировка не началась. Вернитесь к подготовке, чтобы выбрать другой следующий шаг.</p>
+        <TariffQuotaNote quota="interview_trainings" />
         <button type="button" className="career-btn career-btn-primary" onClick={onBack}>К подготовке</button>
       </div>
     </div>

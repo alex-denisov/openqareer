@@ -11,11 +11,11 @@ import {
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
 import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { RouteDeps } from './deps';
+import { requireTariffQuota } from './tariffQuotaGuard';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
   authenticateCandidate,
-  candidateHasLlmAccess,
   csrfError,
   hasSafeMutationOrigin,
   sendError,
@@ -119,7 +119,7 @@ async function writeCoverLetterBody(
   contextMs: number,
 ): Promise<{ body?: string; stage?: string; factCheck?: GeneratedTextFactCheck }> {
   const { coverLetterWriter } = deps;
-  if (!coverLetterWriter || !candidateHasLlmAccess(deps, candidateId)) return {};
+  if (!coverLetterWriter) return {};
   const writing = coverLetterWriter.writeCoverLetter({
     facts: toUsableCoverLetterFacts(facts),
     vacancy: {
@@ -285,6 +285,8 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   if (!vacancy.title) {
     return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   }
+  // B579: письмо к вакансии — единица квоты откликов; повтор к той же вакансии бесплатен.
+  if (!requireTariffQuota(deps, request, reply, candidate.id, 'applications', vacancyId)) return undefined;
   const result = await writeVacancyPitch(deps, request, candidate.id, body, {
     ...vacancy,
     title: vacancy.title,

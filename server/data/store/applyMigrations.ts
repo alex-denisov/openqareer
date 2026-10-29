@@ -43,6 +43,7 @@ import { PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION } from '../profileRevisionS
 import { MIGRATION_40 } from '../consultantHistorySchema';
 import { MIGRATION_BILLING } from '../../billing/billingSchema';
 import { MIGRATION_PRO_TRIAL } from '../../billing/proTrialSchema';
+import { MIGRATION_TARIFF_QUOTAS } from '../../billing/tariffQuotaSchema';
 import { MIGRATION_41 as MIGRATION_EXECUTIVE_REQUEST } from '../executiveRequestSchema';
 import { MIGRATION_47 as MIGRATION_ROLE_SKILL_ASSESSMENT } from '../roleSkillAssessmentSchema';
 import { MIGRATION_48 as MIGRATION_STAR_STORIES } from '../starStoriesSchema';
@@ -102,6 +103,7 @@ export const MIGRATIONS = [
   MIGRATION_DIARY_COACH_STAGE,
   MIGRATION_ADAPTATION_APPLICATIONS,
   SEO_GOAL_MIGRATION,
+  MIGRATION_TARIFF_QUOTAS,
 ] as const;
 
 export function applyMigrations(

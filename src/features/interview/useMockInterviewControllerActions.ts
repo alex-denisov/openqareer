@@ -29,7 +29,7 @@ export function useMockInterviewSetupActions(options: SetupActionOptions) {
       options.setDraft('');
       options.setScreen(options.mode === 'voice' ? 'voice' : 'question');
     } else {
-      options.setScreen(result.error?.code === 'paywall_required' ? 'paywall' : 'setup');
+      options.setScreen(isTariffLimit(result.error?.code) ? 'paywall' : 'setup');
     }
     return result;
   }, [options]);
@@ -181,4 +181,9 @@ function questionTypesForScope(scope: MockInterviewQuestionScope): readonly Inte
   if (scope === 'behavioral') return ['behavioral'];
   if (scope === 'system_design') return ['system_design'];
   return ['behavioral', 'system_design'];
+}
+
+/** B579: исчерпанная квота тренировок ведёт на тот же экран тарифа, что и Free. */
+function isTariffLimit(code: string | undefined): boolean {
+  return code === 'paywall_required' || code === 'quota_exhausted';
 }

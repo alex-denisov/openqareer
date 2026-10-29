@@ -4,6 +4,10 @@ import { randomUUID } from 'node:crypto';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { BILLING_PLANS } from './billingPlans';
 import type { PaidPlanId } from './robokassaGateway';
+import {
+  QUOTA_ENFORCED_TEST_USERNAMES, calendarMonthPeriod, consumeQuotaUnit, readQuotaSummary,
+  type QuotaConsumeResult, type QuotaKey, type QuotaSummary,
+} from './tariffQuotas';
 
 export interface BillingInvoice {
   invoiceId: number;
@@ -178,6 +182,31 @@ export class SqliteBillingRepository {
   getEffectivePlanForCandidate(candidateId: string, now: string): 'free' | 'basic' | 'pro' | 'max' {
     const user = this.database.prepare('SELECT id FROM users WHERE candidate_id = ?').get(candidateId) as { id: string } | undefined;
     return user ? this.getEffectivePlan(user.id, now) : 'free';
+  }
+
+  /** B579: остаток квот за текущий период; кандидат без аккаунта считается Free. */
+  getQuotaSummary(candidateId: string, now: string): QuotaSummary {
+    return readQuotaSummary(this.database, candidateId, this.quotaAccount(candidateId, now));
+  }
+
+  /** B579: списание до вызова модели; повтор той же единицы не списывается. */
+  consumeQuota(candidateId: string, key: QuotaKey, unitKey: string, now: string): QuotaConsumeResult {
+    return consumeQuotaUnit(this.database, candidateId, this.quotaAccount(candidateId, now), key, unitKey, now);
+  }
+
+  private quotaAccount(candidateId: string, now: string) {
+    const user = this.database.prepare(
+      'SELECT id, username, is_test FROM users WHERE candidate_id = ?',
+    ).get(candidateId) as { id: string; username: string; is_test: number } | undefined;
+    if (!user) return { plan: 'free' as const, unlimited: false, period: calendarMonthPeriod(now) };
+    const subscription = this.getSubscription(user.id, now);
+    return {
+      plan: this.getEffectivePlan(user.id, now),
+      unlimited: user.is_test === 1 && !QUOTA_ENFORCED_TEST_USERNAMES.has(user.username),
+      period: subscription
+        ? { startedAt: subscription.currentPeriodStartedAt, endsAt: subscription.currentPeriodEndsAt }
+        : calendarMonthPeriod(now),
+    };
   }
 
   getProTrial(userId: string, now: string): ProTrialState {

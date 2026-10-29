@@ -11,6 +11,7 @@ import {
   Sparkle,
   TrendUp,
 } from '@phosphor-icons/react';
+import { TariffQuotaPanel } from './TariffQuotaPanel';
 import {
   COMPARISON_STEPS,
   TARIFF_LEVELS,
@@ -87,6 +88,8 @@ function MobileHomeView({
           автопродление.
         </p>
       </div>
+
+      <TariffQuotaPanel />
 
       {billingPanel}
 

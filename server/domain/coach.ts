@@ -356,6 +356,8 @@ export const coachTurnInputSchema = z.object({
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
   internalPurpose: z.enum(['consultant-summary', 'structured-stage']).optional(),
+  /** B579: ход на Free идёт по цепочке `coachFree` (glm-5.3-flash). */
+  modelTier: z.enum(['free']).optional(),
   resumeContext: resumeContextSchema.optional(),
   /** Текущие роли и условия «Карьеры»: консультант предлагает их изменить (26.10). */
   careerContext: z

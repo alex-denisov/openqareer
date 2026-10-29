@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { collectDraftFacts } from '../candidate/draftFacts';
 import type { CandidateDraft, CandidateDraftStatus, SqliteCandidateDraftRepository } from '../candidate/sqliteCandidateDraftRepository';
@@ -10,6 +10,7 @@ import type { LinkedinDraftWriter } from '../providers/linkedinDraftWriter';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, authenticateSession, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
 import { recordNotificationFromSource } from './notificationRepositoryAccess';
+import { requireTariffQuota } from './tariffQuotaGuard';
 
 export type CandidateDraftRouteDeps = RouteDeps & {
   readonly candidateDraftRepository: SqliteCandidateDraftRepository;
@@ -409,6 +410,7 @@ async function generate(
   const localDate = formatLocalDate(new Date(), account.timezone);
   if (deps.candidateDraftRepository.countForDay(candidate.id, localDate, input.kind) >= limit)
     return routeError(reply, request, 429, 'draft_daily_limit', `На сегодня черновиков больше нет: лимит ${limit} в день`);
+  if (!requireTariffQuota(deps, request, reply, candidate.id, 'linkedin_drafts', randomUUID())) return reply;
   const text = await writeCandidateDraft(deps, request, candidate, input, account.headline);
   if (!text) return routeError(reply, request, 503, 'draft_writer_unavailable', 'Не получилось подготовить черновик. Попробуйте позже.');
   return persistDraft(deps, request, reply, candidate, input, text, localDate);

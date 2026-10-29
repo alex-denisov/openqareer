@@ -6,6 +6,7 @@ import { TariffCard } from './TariffCard';
 import { TariffComparisonTable } from './TariffComparisonTable';
 import { TariffMobileView } from './TariffMobileView';
 import { PaywallModal } from './PaywallModal';
+import { TariffQuotaPanel } from './TariffQuotaPanel';
 import type { TariffUpgradeContext } from './TariffUpgradeFlow';
 
 if (typeof document !== 'undefined') {
@@ -137,6 +138,7 @@ function TariffsDesktopView(props: TariffsViewFrameProps) {
     <div className="career-tariffs-desktop">
       <div className="career-tariffs-panel">
         <TariffsDesktopHeader onToggleCompare={props.onCompare} />
+        <TariffQuotaPanel />
         <div className="career-tariffs-ladder">
           {TARIFF_LEVELS.map((level) => (
             <TariffCard

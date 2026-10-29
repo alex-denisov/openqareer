@@ -7,6 +7,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { PaywallModal } from '../tariffs/PaywallModal';
+import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import {
   createDraft,
   dismissDraftTopic,
@@ -240,7 +241,10 @@ async function createDraftFromInput(
 }
 
 function handleGenerationError(setState: DraftCardSetter, error: unknown) {
-  if (error instanceof DraftApiError && error.status === 402)
+  // B579: исчерпанная квота месяца — текст сервера с тарифом, где её больше, а не окно оплаты.
+  if (error instanceof DraftApiError && error.code === 'quota_exhausted')
+    patchDraftCard(setState, { error: error.message });
+  else if (error instanceof DraftApiError && error.status === 402)
     patchDraftCard(setState, { paywall: true });
   else
     patchDraftCard(setState, {
@@ -495,6 +499,7 @@ function LinkedinDraftCardView({
       <DraftCardHeader id={id} controller={controller} expanded={expanded} />
       <DraftSafetyMessages controller={controller} />
       <DraftForm id={id} controller={controller} expanded={expanded} />
+      <TariffQuotaNote quota="linkedin_drafts" refreshKey={controller.drafts.length} />
       <DraftCardMessages controller={controller} />
       {expanded ? (
         <>

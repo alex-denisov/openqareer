@@ -3871,6 +3871,76 @@
   font-size: var(--career-text-xs);
 }
 
+/* B579: остаток месячной квоты тарифа там, где она тратится. */
+.career-quota-note {
+  margin: 0;
+  padding: var(--career-space-1) var(--career-space-4) var(--career-space-2);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.career-quota-note.is-exhausted {
+  color: var(--career-warning);
+}
+
+.career-quota-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+}
+
+.career-quota-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+}
+
+.career-quota-title {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.career-quota-reset {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-quota-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: var(--career-space-2) var(--career-space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-quota-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+  font-size: var(--career-text-xs);
+}
+
+.career-quota-label {
+  color: var(--career-text-soft);
+}
+
+.career-quota-value {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.career-quota-row.is-exhausted .career-quota-value {
+  color: var(--career-warning);
+}
+
 .career-plan-layout {
   display: grid;
   grid-template-columns: minmax(280px, 1fr) minmax(0, 1.38fr);

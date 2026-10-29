@@ -68,6 +68,7 @@ import { registerCandidateCompanyRoutes } from './routes/candidateCompanyRoutes'
 import type { RobokassaGateway } from './billing/robokassaGateway';
 import { SqliteBillingRepository } from './billing/sqliteBillingRepository';
 import { registerBillingRoutes } from './billing/billingRoutes';
+import { registerQuotaRoutes } from './billing/quotaRoutes';
 import { installRateLimitPolicy } from './routes/rateLimitPolicy';
 import { authenticateSession } from './routes/helpers';
 import { createRobokassaGateway } from './billing/robokassaProtocol';
@@ -332,6 +333,7 @@ async function registerApiRoutes(
   registerCandidateActionRoutes(app, deps);
   registerCandidateDraftRoutes(app, deps);
   registerBillingRoutes(app, deps);
+  registerQuotaRoutes(app, deps);
 }
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */

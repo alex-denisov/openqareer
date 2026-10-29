@@ -36,6 +36,7 @@ export class DraftApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -50,6 +51,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       throw new DraftApiError(
         response.status,
         error instanceof Error ? error.message : 'Не удалось завершить действие',
+        error instanceof Error && 'code' in error && typeof error.code === 'string'
+          ? error.code
+          : undefined,
       );
     }
   }
