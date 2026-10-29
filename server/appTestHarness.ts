@@ -90,6 +90,7 @@ export async function createApp(
       | 'candidateCompanyWantsRepo'
       | 'recruiterContactsRepo'
       | 'searchConsentRepo'
+      | 'skillQuizModel'
     >
   > = {},
 ) {

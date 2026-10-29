@@ -19,6 +19,7 @@ import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
 import { readCampaign } from './campaignContext';
+import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
 import {
   createRoleRequirementReader,
@@ -196,21 +197,23 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const { role: requested } = currentQuerySchema.parse(request.query ?? {});
   const role = resolveAssessedRole(deps, candidate.id, requested);
   const latest = latestRunFor(deps, candidate.id, role);
+  const send = (data: Record<string, unknown>) =>
+    reply.send({ data: withConversation(deps, candidate.id, data) });
   if (latest) {
-    if (!role) return reply.send({ data: { state: 'role_changed', run: latest } });
+    if (!role) return send({ state: 'role_changed', run: latest });
     if (latest.roleVersion !== role.version || latest.roleTitle !== role.title) {
-      return reply.send({ data: { state: 'role_changed', run: latest } });
+      return send({ state: 'role_changed', run: latest });
     }
-    if (latest.status !== 'complete') return reply.send({ data: { state: 'run', run: latest } });
+    if (latest.status !== 'complete') return send({ state: 'run', run: latest });
     const stale = Boolean(
       latest.completedAt &&
       isRoleSkillAssessmentStale(latest.completedAt, new Date().toISOString()),
     );
-    return reply.send({ data: { state: 'result', run: latest, stale } });
+    return send({ state: 'result', run: latest, stale });
   }
 
   const context = await readAssessmentContext(deps, candidate.id, role);
-  return reply.send({ data: context });
+  return send(context);
 }
 
 /** Роли с завершённой проверкой: «Карьера» ставит им статус «Навыки проверены» (B445). */

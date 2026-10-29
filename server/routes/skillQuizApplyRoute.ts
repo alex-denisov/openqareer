@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -10,18 +9,9 @@ import {
   type SkillQuiz,
 } from '../../src/services/hhSkillQuizzes';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
-import type { CareerActionProposal } from '../domain/coach';
 import { ResumeRevisionConflictError } from '../orchestration/careerCommandDispatcher';
-import {
-  CareerCommandPlanner,
-  bindResumeRevisionTarget,
-} from '../orchestration/careerCommandPlanner';
-import {
-  currentSkillText,
-  serializeSkillState,
-  skillKey,
-  skillStateAfterQuiz,
-} from '../orchestration/skillRevision';
+import { skillKey } from '../orchestration/skillRevision';
+import { approveSkillVerdictCommand, planSkillVerdictCommand } from './skillVerdictCommand';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -62,57 +52,16 @@ function prepareCommand(
   body: z.infer<typeof applyBodySchema>,
   quiz: SkillQuiz,
 ) {
-  const { candidateStore } = deps;
   const result = evaluateSkillQuiz(body.quizId, body.answers);
-  const draft = candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
+  const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
   const skillName = resolveQuizSkillName(draft, quiz, body.skillName);
   const fact = buildSkillVerificationFact(skillName, result);
-  const key = skillKey(skillName);
-  const proposal = {
-    ...createSkillVerificationProposal(skillName, result),
-    evidenceRefs: [`quiz:${body.quizId}`],
-  };
-  const revision = {
-    ...proposal.resumeRevision,
-    experienceId: key,
-    memoryId: null,
-    proposedText: serializeSkillState(skillStateAfterQuiz(draft, skillName, fact)),
-  };
-  const executionTarget = bindResumeRevisionTarget(revision, currentSkillText(draft, key));
-  const planner = new CareerCommandPlanner({ createId: () => commandId });
-  const command = candidateStore.saveCareerCommand(
-    planner.materialize({
-      principal: { candidateId: candidateId },
-      proposal: { ...proposal, resumeRevision: revision } as CareerActionProposal,
-      availableEvidenceRefs: new Set([`quiz:${body.quizId}`]),
-      strategyDecisionId: `skill-quiz:${body.quizId}`,
-      modelInvocationIds: [],
-      idempotencyKey: commandId,
-      approval: null,
-      executionTarget,
-    }),
-  );
-  return { result, fact, command };
-}
-
-function approveCommand(
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-  command: { readonly commandId: string; readonly capability: CareerActionProposal['kind'] },
-): void {
-  const consumedAt = new Date();
-  candidateStore.approveCareerCommand({
-    candidateId: candidateId,
-    commandId: command.commandId,
-    approval: {
-      id: randomUUID(),
-      candidateId: candidateId,
-      commandId: command.commandId,
-      capability: command.capability,
-      expiresAt: new Date(consumedAt.getTime() + 5 * 60_000).toISOString(),
-    },
-    consumedAt: consumedAt.toISOString(),
+  const command = planSkillVerdictCommand(deps, candidateId, commandId, draft, {
+    ...fact,
+    evidenceRef: `quiz:${body.quizId}`,
+    proposal: createSkillVerificationProposal(skillName, result),
   });
+  return { result, fact, command };
 }
 
 /**
@@ -146,7 +95,7 @@ async function handleApplySkillQuiz(
     return sendError(reply, request, 404, 'skill_quiz_not_found', 'Квиз не найден.', false);
   }
   const { result, fact, command } = prepareCommand(deps, candidate.id, commandId, body, quiz);
-  approveCommand(candidateStore, candidate.id, command);
+  approveSkillVerdictCommand(candidateStore, candidate.id, command);
   try {
     const applied = await careerCommandDispatcher.dispatch(candidate.id, command.commandId);
     return reply.code(201).send({
