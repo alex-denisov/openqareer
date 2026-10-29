@@ -1,5 +1,5 @@
 import type { RouteDeps } from './deps';
-import { legacyVacancyFitProfileStamp, vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
+import { legacyVacancyFitProfileStamp, previousVacancyFitProfileStamp, vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readCampaign } from './campaignContext';
 import { readTargetLevel } from './vacancyRoleContext';
 import { evaluateLevelMatch } from '../vacancies/levelMatcher';
@@ -58,6 +58,7 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
   const profileContextHash = vacancyFitProfileStamp(snapshot, workspace);
+  const previousProfileContextHash = previousVacancyFitProfileStamp(snapshot, workspace);
   const legacyProfileContextHash = legacyVacancyFitProfileStamp(snapshot, workspace);
   const facts = snapshot.memory.map((fact) => ({ ...fact, candidateId }));
   const checkedFactIds = skillCheckFactIds(deps, candidateId);
@@ -74,7 +75,7 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
     ['имею право на работу в ', 'я имею право на работу в ', 'i have work authorization in ', 'i have the right to work in ']
       .some((prefix) => [prefix + location, prefix + location + '.'].includes(fact.statement.toLocaleLowerCase().trim())));
   return {
-    candidateId, profileContextHash, legacyProfileContextHash, vacancyId: target.vacancyId, description: target.description, requirements, facts, checkedFactIds,
+    candidateId, profileContextHash, previousProfileContextHash, legacyProfileContextHash, vacancyId: target.vacancyId, description: target.description, requirements, facts, checkedFactIds,
     gates: {
       role: roleGate(campaign.roles.value, target.title),
       level: level === 'match' ? gate('matched', 'Уровень совпадает с целевым.')

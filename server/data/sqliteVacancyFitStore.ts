@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
-import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitInput } from '../domain/vacancyFit';
+import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
 import { SealedText } from './sealedText';
 import { addLateColumns } from './sqliteLateColumn';
 import { MECHANICS_REQUEUE_REVISION } from './sqliteVacancyRequirementsStore';
@@ -69,8 +69,8 @@ export class SqliteVacancyFitStore {
   private candidateKey(candidateId: string): string {
     return this.sealedText.indexToken('vacancy-fit-candidate', candidateId);
   }
-  cacheKey(input: VacancyFitInput, algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION): string {
-    const fingerprint = vacancyFitFingerprint(input, algorithmVersion);
+  cacheKey(input: VacancyFitInput, algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION, factScope: VacancyFitFactScope = 'evidence'): string {
+    const fingerprint = vacancyFitFingerprint(input, algorithmVersion, factScope);
     return this.sealedText.indexToken(`vacancy-fit:${input.candidateId}`, JSON.stringify(fingerprint));
   }
 
@@ -89,17 +89,20 @@ export class SqliteVacancyFitStore {
 
   getCache(input: VacancyFitInput): VacancyFitResult | undefined {
     const current = this.readCache(input);
-    if (current || !input.legacyProfileContextHash) return current;
-    // B580: the stamp formula changed; a result under the old stamp moves to the new key once,
-    // instead of 42K model calls on deploy.
-    const legacy = this.readCache({ ...input, profileContextHash: input.legacyProfileContextHash });
-    if (!legacy) return undefined;
-    this.putCache(input, legacy, legacy.calculatedAt);
-    return legacy;
+    if (current) return current;
+    // B580: the stamp formula changed; a result under an earlier stamp moves to the new key once,
+    // instead of 42K model calls on deploy. Earlier keys hashed every memory row (B580-r).
+    const earlier = [input.previousProfileContextHash, input.legacyProfileContextHash]
+      .filter((stamp): stamp is string => Boolean(stamp))
+      .map((stamp) => this.readCache({ ...input, profileContextHash: stamp }, 'all'))
+      .find(Boolean);
+    if (!earlier) return undefined;
+    this.putCache(input, earlier, earlier.calculatedAt);
+    return earlier;
   }
 
-  private readCache(input: VacancyFitInput): VacancyFitResult | undefined {
-    const key = this.cacheKey(input);
+  private readCache(input: VacancyFitInput, factScope: VacancyFitFactScope = 'evidence'): VacancyFitResult | undefined {
+    const key = this.cacheKey(input, VACANCY_FIT_ALGORITHM_VERSION, factScope);
     const row = this.database.prepare('SELECT result_cipher FROM vacancy_fit_cache WHERE cache_key = ? AND candidate_key = ?').get(key, this.candidateKey(input.candidateId)) as { result_cipher: string } | undefined;
     if (!row) return undefined;
     try {

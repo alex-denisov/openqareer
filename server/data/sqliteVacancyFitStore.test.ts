@@ -165,6 +165,32 @@ describe('jobs queued by another release (B562-r)', () => {
     database.close();
   });
 
+  it('a consultant hypothesis or open question does not move the cache key (B580-r)', () => {
+    const { database, store } = setup();
+    const base = input();
+    const hypothesis = { id: 'h1', candidateId: 'candidate-a', kind: 'hypothesis', status: 'proposed' as const, statement: 'Может подойти роль CTO', sourceMessageIds: ['m2'], sensitive: false };
+    expect(store.cacheKey({ ...base, facts: [...base.facts, hypothesis] })).toBe(store.cacheKey(base));
+    expect(store.cacheKey({ ...base, facts: [{ ...base.facts[0], statement: 'PRIVATE Go services' }] })).not.toBe(store.cacheKey(base));
+    database.close();
+  });
+
+  it('carries a result keyed by every fact under the previous stamp to the evidence-only key (B580-r)', () => {
+    const { database, store } = setup();
+    const hypothesis = { id: 'h1', candidateId: 'candidate-a', kind: 'hypothesis', status: 'proposed' as const, statement: 'Может подойти роль CTO', sourceMessageIds: ['m2'], sensitive: false };
+    const withHypothesis = { ...input(), facts: [...input().facts, hypothesis] };
+    const old = { ...withHypothesis, profileContextHash: 'stamp-of-all-memory' };
+    // A row the B580 release wrote: its key hashed every memory row, the hypothesis included.
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const oldKey = store.cacheKey(old, undefined, 'all');
+    database.prepare('INSERT INTO vacancy_fit_cache(cache_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)')
+      .run(oldKey, sealed.indexToken('vacancy-fit-candidate', 'candidate-a'), sealed.seal(JSON.stringify(evaluateVacancyFit(old)), oldKey), now);
+    const current = { ...withHypothesis, profileContextHash: 'stamp-of-evidence', previousProfileContextHash: 'stamp-of-all-memory' };
+
+    expect(store.getCache(current)?.coveragePercent).toBe(100);
+    expect(store.getCache({ ...current, previousProfileContextHash: undefined })?.coveragePercent).toBe(100);
+    database.close();
+  });
+
   it('B580: the visible page is claimed before the background sweep, the sweep in relevance order', () => {
     const { database, store } = setup();
     const at = (vacancyId: string) => ({ ...input(), vacancyId });
