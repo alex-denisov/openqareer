@@ -89,13 +89,13 @@ export class ResilientCoachProvider implements CoachProvider {
         return this.fail(trace, turnDeadlineError());
       executed += 1;
       const startedAt = this.now();
+      const stream = new StageStream(options.onMessageText);
 
       try {
-        const output = await withinBudget(
-          route.provider.createTurn(input, idempotencyKey),
-          budgetMs,
-        );
+        const work = route.provider.createTurn(input, idempotencyKey, stream.options());
+        const output = await withinBudget(stream.watch(work), budgetMs);
         if (options.accept && !options.accept(output.result)) {
+          stream.reset();
           // The route works; only this step cannot use its answer, so it is not cooled.
           lastError = new CoachProviderError('provider_output_invalid', 502, true);
           trace.add(attemptOf(route, 'failed', 'provider_output_invalid'), startedAt);
@@ -111,6 +111,7 @@ export class ResilientCoachProvider implements CoachProvider {
           },
         };
       } catch (error) {
+        stream.reset();
         if (!(error instanceof CoachProviderError)) throw error;
         lastError = error;
         trace.add(attemptOf(route, 'failed', error.code), startedAt);
@@ -135,6 +136,43 @@ export class ResilientCoachProvider implements CoachProvider {
   private fail(trace: AttemptTrace, lastError: CoachProviderError | undefined): never {
     this.onAttempts?.(trace.timed());
     throw allRoutesFailed(lastError, trace.attempts);
+  }
+}
+
+/**
+ * Текст `message` одной ступени (29.10). Брошенная ступень (дедлайн хода) ещё
+ * может звать — её голос глушится; упавшая посреди потока сбрасывает текст,
+ * чтобы следующая ступень писала с чистого листа.
+ */
+class StageStream {
+  private open = true;
+  private emitted = false;
+
+  constructor(private readonly sink: ((text: string) => void) | undefined) {}
+
+  options(): CoachTurnOptions | undefined {
+    if (!this.sink) return undefined;
+    return {
+      onMessageText: (text) => {
+        if (!this.open) return;
+        this.emitted = this.emitted || text.length > 0;
+        this.sink?.(text);
+      },
+    };
+  }
+
+  /** The stage is done speaking once its answer settles. */
+  watch<T>(work: Promise<T>): Promise<T> {
+    return work.finally(() => {
+      this.open = false;
+    });
+  }
+
+  reset(): void {
+    this.open = false;
+    if (!this.emitted) return;
+    this.emitted = false;
+    this.sink?.('');
   }
 }
 
