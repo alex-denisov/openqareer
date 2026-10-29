@@ -110,4 +110,32 @@ describe('B338 изолированное чтение фильтров', () => 
     expect(pool.loading).toBe(false);
     await act(async () => root.unmount());
   });
+
+  it('пересортировка не сбрасывает шапку: счётчики и сводка каталога — прежние до ответа', async () => {
+    const first = deferred();
+    const second = deferred();
+    vi.mocked(getMatchedVacancyPage)
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+    let pool!: MatchedPool;
+    function Reader() {
+      pool = useMatchedPool(initial);
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () => root.render(<Reader />));
+    const byMoney = { ...selected, regions: [], sort: { by: 'money', dir: 'desc' } } as const;
+    await act(async () => pool.setFilters?.(byMoney));
+    expect(pool.loading).toBe(true);
+    expect(pool.total).toBe(9);
+    expect(pool.poolTotal).toBe(9);
+    expect(pool.facets?.total).toBe(9);
+    await act(async () => first.resolve(page(5)));
+    expect(pool.total).toBe(5);
+    await act(async () => pool.setFilters?.({ ...byMoney, sort: { by: 'fit', dir: 'desc' } }));
+    expect(pool.loading).toBe(true);
+    expect(pool.total).toBe(5);
+    await act(async () => second.resolve(page(5)));
+    await act(async () => root.unmount());
+  });
 });

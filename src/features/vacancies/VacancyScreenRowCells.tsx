@@ -100,7 +100,7 @@ export interface VacancyGeoFit {
 }
 
 /** Отметка колонки «Гео»: город, формат и страна удалёнки (CPO 26.10). */
-export function vacancyGeoFit(item: MatchedVacancyItem): VacancyGeoFit {
+export function vacancyGeoFit(item: Pick<MatchedVacancyItem, 'explanation'>): VacancyGeoFit {
   if (item.explanation.outsideGeography) return { state: 'no', label: 'другой город' };
   if (formatGateBlocked(item)) return { state: 'no', label: 'формат не подходит' };
   if (item.explanation.remoteCountry === 'other') return { state: 'no', label: 'другая страна' };
@@ -136,7 +136,7 @@ export function vacancyGeoLabel(item: MatchedVacancyItem): string {
   return `${place}, ${format}`;
 }
 
-function formatGateBlocked(item: MatchedVacancyItem): boolean {
+function formatGateBlocked(item: Pick<MatchedVacancyItem, 'explanation'>): boolean {
   return item.explanation.fitView?.result?.gates?.workFormat?.status === 'blocked';
 }
 

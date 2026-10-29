@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
-import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
+import {
+  conditionCoverageWithGeo,
+  fitRequirementChips,
+  legacySkillChips,
+} from './vacancyRequirementChips';
 
 function requirement(id: string, text: string) {
   return {
@@ -119,5 +123,56 @@ describe('fitRequirementChips conditions (G5 item 9)', () => {
     } as never);
     expect(chips?.unconfirmed).toEqual(['Kafka']);
     expect(chips?.conditions).toEqual(['Высшее образование']);
+  });
+});
+
+describe('conditionCoverageWithGeo', () => {
+  const kirov = {
+    ...requirement('loc', 'Работа в Кирове'),
+    kind: 'other',
+    skill: false,
+    label: 'Работа в Кирове',
+  } as VacancyFitView['requirements'][number];
+  const view = (status: 'unknown' | 'matched') =>
+    ({
+      state: 'ready',
+      requirements: [kirov],
+      result: {
+        assessments: [{ requirementId: 'loc', status, evidence: [] }],
+        conditionCoverage: { matched: status === 'matched' ? 1 : 0, total: 1, unknown: 1 },
+      },
+    }) as unknown as VacancyFitView;
+
+  it('город условия совпал по «Гео» — условие подтверждено', () => {
+    expect(
+      conditionCoverageWithGeo(view('unknown'), { geoMatched: true, location: 'Киров' }),
+    ).toEqual({
+      matched: 1,
+      total: 1,
+    });
+  });
+
+  it('без совпадения «Гео» или в другом городе — как посчитал сервер', () => {
+    expect(
+      conditionCoverageWithGeo(view('unknown'), { geoMatched: false, location: 'Киров' }),
+    ).toEqual({
+      matched: 0,
+      total: 1,
+    });
+    expect(
+      conditionCoverageWithGeo(view('unknown'), { geoMatched: true, location: 'Пермь' }),
+    ).toEqual({
+      matched: 0,
+      total: 1,
+    });
+  });
+
+  it('уже подтверждённое сервером не считается дважды', () => {
+    expect(
+      conditionCoverageWithGeo(view('matched'), { geoMatched: true, location: 'Киров' }),
+    ).toEqual({
+      matched: 1,
+      total: 1,
+    });
   });
 });

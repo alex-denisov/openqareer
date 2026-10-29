@@ -252,7 +252,10 @@ export class SqliteBillingRepository {
   }
 
   canCandidateUseLlm(candidateId: string, now: string): boolean {
-    const trialUser = this.database.prepare('SELECT id FROM users WHERE candidate_id = ?').get(candidateId) as { id: string } | undefined;
+    const trialUser = this.database.prepare('SELECT id, username FROM users WHERE candidate_id = ?').get(candidateId) as { id: string; username: string } | undefined;
+    // Демо-аккаунт приёмки макетов показывает экраны платного кандидата: без
+    // модели «Карьера» у него пуста — роли называет только она (29.10).
+    if (trialUser && QUOTA_EXEMPT_USERNAMES.has(trialUser.username)) return true;
     if (trialUser && hasActiveProTrial(this.database, trialUser.id, now)) return true;
     const row = this.database.prepare(
       `SELECT users.subscription_tier, users.subscription_status,
