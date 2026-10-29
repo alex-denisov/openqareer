@@ -18,6 +18,7 @@ import type { CandidateIdentity } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
+import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import {
   createRoleRequirementReader,
@@ -48,7 +49,11 @@ const startSchema = z
   .strict();
 const currentQuerySchema = z.object({ role: roleSchema.optional() });
 
-/** Роль проверки: нажатая на «Карьере» или, без неё, роль «Стратегии» (B445). */
+/**
+ * Роль проверки: нажатая на «Карьере», без неё роль «Стратегии» (B445), а без
+ * «Стратегии» первая роль подбора вакансий (блок A, пакет 3): кандидат с ролью
+ * подбора не упирается в «Сначала выберите роль».
+ */
 interface AssessedRole {
   readonly title: string;
   readonly version: number;
@@ -68,10 +73,15 @@ function resolveAssessedRole(
   const strategyRole = strategy
     ? { title: strategy.current.role.title, version: strategy.current.version, fromStrategy: true }
     : null;
-  if (!requested) return strategyRole;
+  if (!requested) return strategyRole ?? campaignRole(deps, candidateId);
   if (strategyRole && sameRoleTitle(strategyRole.title, requested)) return strategyRole;
   // Роль не из «Стратегии»: выбор «Стратегии» не меняется, у роли своя первая версия.
   return { title: requested, version: 1, fromStrategy: false };
+}
+
+function campaignRole(deps: RouteDeps, candidateId: string): AssessedRole | null {
+  const title = readCampaign(deps.candidateStore, candidateId).roles.value[0];
+  return title ? { title, version: 1, fromStrategy: false } : null;
 }
 
 function latestRunFor(deps: RouteDeps, candidateId: string, role: AssessedRole | null) {
