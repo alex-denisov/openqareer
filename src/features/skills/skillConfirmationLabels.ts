@@ -19,6 +19,6 @@ export function formatShortDate(value: string | null | undefined): string {
   return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 }
 
-export function discussPrompt(skillName: string): string {
+export function discussSkillPrompt(skillName: string): string {
   return `Помогите разобрать мой опыт с навыком «${skillName}»: задайте вопросы про реальные задачи и результаты с цифрами.`;
 }

@@ -1,4 +1,5 @@
 import { useTodayDiaryDecision } from '../today/useTodayDiaryDecision';
+import { discussSkillPrompt } from '../skills/skillConfirmationLabels';
 import { useCareerDiaryAccess } from '../shell/careerDiaryAccess';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -614,6 +615,12 @@ function CabinetSection({
                   'Обо мне',
                   profileConsultantPrompt('Обо мне', true),
                 )
+            : undefined
+        }
+        onDiscussSkill={
+          onOpenExpert
+            ? (skillName) =>
+                onOpenExpert('profile', undefined, skillName, discussSkillPrompt(skillName))
             : undefined
         }
         onFillQuestionnaire={

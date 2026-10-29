@@ -61,7 +61,7 @@ describe('profile skills show where a skill gets confirmed', () => {
   it('says in one line how a skill is confirmed', () => {
     const container = render([{ id: 's-1', name: 'Docker' }]);
     expect(container.textContent).toContain(
-      'Навык подтверждается квизом: «Пройти квиз» → ответы → «Принять результат».',
+      'Навык можно подтвердить двумя путями: коротким тестом или разбором опыта в беседе с консультантом.',
     );
   });
 });
