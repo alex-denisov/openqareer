@@ -1,4 +1,5 @@
 import { useTodayDiaryDecision } from '../today/useTodayDiaryDecision';
+import { discussSkillWith } from '../skills/skillConfirmationLabels';
 import { useCareerDiaryAccess } from '../shell/careerDiaryAccess';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -616,6 +617,7 @@ function CabinetSection({
                 )
             : undefined
         }
+        onDiscussSkill={discussSkillWith(onOpenExpert)}
         onFillQuestionnaire={
           onOpenExpert
             ? (sectionTitle) =>

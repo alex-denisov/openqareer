@@ -724,6 +724,29 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await page.setViewportSize(
       isMobile ? { width: 390, height: 844 } : { width: 1440, height: 900 },
     );
+    await page.route('**/api/v1/candidate/skill-confirmations', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            passingScorePercent: 80,
+            skills: [
+              {
+                id: 'sk-1',
+                name: 'Kafka',
+                status: null,
+                source: null,
+                verifiedAt: null,
+                quizCheckable: true,
+                lastAttempt: null,
+                conversation: { name: 'Kafka', state: 'not_checked', facts: [] },
+              },
+            ],
+          },
+        }),
+      }),
+    );
     await openProfile(page);
 
     const tabs = page.getByRole('tablist', { name: 'Профиль' });
@@ -762,34 +785,21 @@ test.describe('B441 Profile screen from mockup 2', () => {
       await expect(page.getByRole('textbox', { name: 'Новый навык', exact: true })).toBeVisible();
       await page.getByRole('button', { name: 'Отменить', exact: true }).click();
     }
-    const quizButton = page.getByRole('button', {
-      name: isMobile ? 'Пройти квиз по навыкам' : 'Пройти квиз',
-      exact: true,
-    });
-    await expect(quizButton).toBeVisible();
+    const confirmButton = page
+      .getByRole('button', { name: 'Подтвердить навык', exact: true })
+      .first();
+    await expect(confirmButton).toBeEnabled();
+    await expect(page.getByRole('button', { name: /^Пройти квиз/u })).toHaveCount(0);
     await expect(page.locator('#sec-about')).toHaveCount(0);
     await captureB441View(page, b441Screenshot(`${testInfo.project.name}-skills-tab`));
 
-    await quizButton.click();
-    const expert = page.locator('.career-expert-panel');
-    await expect(expert).toBeVisible();
-    const quiz = expert.locator('.career-quiz-modal-card');
-    await expect(quiz).toBeVisible();
-    await expect(quiz.getByRole('heading', { name: 'Проверка навыков' })).toBeVisible();
-    await quiz.getByRole('button', { name: 'Закрыть симулятор тестов' }).click();
-    await expect(quiz).toHaveCount(0);
-    if (isMobile) {
-      await expert
-        .getByRole('button', { name: 'Развернуть или свернуть консультанта' })
-        .last()
-        .click();
-    } else {
-      await expert
-        .getByRole('button', {
-          name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
-        })
-        .click();
-
+    await confirmButton.click();
+    const confirmDialog = page.getByRole('dialog', { name: 'Подтвердить навык' });
+    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toContainText('Проверка openqareer, не сертификат');
+    await confirmDialog.getByRole('button', { name: 'Закрыть' }).click();
+    await expect(confirmDialog).toHaveCount(0);
+    if (!isMobile) {
       const assessmentCard = page.locator('.profile-desktop-assessment');
       await expect(assessmentCard.getByRole('heading', { name: 'Проверка навыков' })).toBeVisible();
       const startAssessment = assessmentCard.getByRole('button', { name: 'Начать', exact: true });

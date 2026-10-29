@@ -148,6 +148,7 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly starStoriesRepo: SqliteStarStoriesRepository;
   readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
   readonly roleSkillAssessments: SqliteRoleSkillAssessmentRepository;
+  readonly skillQuizAttempts: import('./sqliteSkillQuizAttemptRepository').SqliteSkillQuizAttemptRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   readonly careerDiaryRepo: SqliteCareerDiaryRepository;
@@ -205,6 +206,7 @@ export class SqliteCandidateStore implements CandidateStore {
       decisionProfileRepo: this.decisionProfileRepo,
       relocationQuestionnaireRepo: this.relocationQuestionnaireRepo,
       roleSkillAssessments: this.roleSkillAssessments,
+      skillQuizAttempts: this.skillQuizAttempts,
       starStoriesRepo: this.starStoriesRepo,
       interviewSimulatorRepo: this.interviewSimulatorRepo,
     } = createProfileRepositories(this.database, this.sealedText, (operation) =>

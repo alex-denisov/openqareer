@@ -75,6 +75,7 @@ export interface RouteDeps {
   roleNamer?: RoleNamer;
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */
   campaignRoleModel?: import('../vacancies/campaignRoleSet').CampaignRoleModel;
+  skillQuizModel?: import('../providers/skillQuizModel').SkillQuizModel;
   /** Сопроводительное письмо пишет модель, шаблон — запас (B266, пункт 7). */
   coverLetterWriter?: CoverLetterWriter;
   /** Кеш разбора названий вакансий: модельный результат приоритетнее правил (B267 S6). */

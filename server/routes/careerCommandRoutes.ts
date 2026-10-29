@@ -24,6 +24,7 @@ import {
   withDeps,
 } from './helpers';
 import { registerSkillQuizApplyRoute } from './skillQuizApplyRoute';
+import { registerSkillConfirmationRoutes } from './skillConfirmationRoutes';
 import { careerCommandParamsSchema, careerCommandRequestSchema } from './schemas';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -347,6 +348,7 @@ export async function registerCareerCommandRoutes(
   deps: RouteDeps,
 ): Promise<void> {
   registerSkillQuizApplyRoute(app, deps);
+  registerSkillConfirmationRoutes(app, deps);
   app.get('/api/v1/candidate/career-commands', withDeps(deps, handleListCommands));
   app.post(
     '/api/v1/candidate/career-commands',

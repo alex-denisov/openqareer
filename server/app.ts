@@ -106,6 +106,8 @@ interface BuildAppOptions {
   resumeStructurer?: ResumeStructurer;
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
+  /** Вопросы квиза по навыку профиля (блок A, пакет 3); нет ключей — квиза нет. */
+  skillQuizModel?: RouteDeps['skillQuizModel'];
   coverLetterWriter?: CoverLetterWriter;
   linkedinDraftWriter?: LinkedinDraftWriter;
   candidateDraftRepository?: SqliteCandidateDraftRepository;
@@ -504,9 +506,13 @@ function registerBillingRenewalScheduler(
 
 function createCandidateDraftDeps(
   options: BuildAppOptions,
-): Pick<CandidateDraftRouteDeps, 'candidateDraftRepository' | 'linkedinDraftWriter'> {
+): Pick<
+  CandidateDraftRouteDeps,
+  'candidateDraftRepository' | 'linkedinDraftWriter' | 'skillQuizModel'
+> {
   const { config } = options;
   return {
+    skillQuizModel: options.skillQuizModel,
     candidateDraftRepository:
       options.candidateDraftRepository ??
       new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),

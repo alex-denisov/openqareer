@@ -18,6 +18,8 @@ import type { CandidateIdentity } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
+import { readCampaign } from './campaignContext';
+import { withConversation } from './roleSkillAssessmentConversation';
 import type { RouteDeps } from './deps';
 import {
   createRoleRequirementReader,
@@ -48,7 +50,11 @@ const startSchema = z
   .strict();
 const currentQuerySchema = z.object({ role: roleSchema.optional() });
 
-/** Роль проверки: нажатая на «Карьере» или, без неё, роль «Стратегии» (B445). */
+/**
+ * Роль проверки: нажатая на «Карьере», без неё роль «Стратегии» (B445), а без
+ * «Стратегии» первая роль подбора вакансий (блок A, пакет 3): кандидат с ролью
+ * подбора не упирается в «Сначала выберите роль».
+ */
 interface AssessedRole {
   readonly title: string;
   readonly version: number;
@@ -68,10 +74,15 @@ function resolveAssessedRole(
   const strategyRole = strategy
     ? { title: strategy.current.role.title, version: strategy.current.version, fromStrategy: true }
     : null;
-  if (!requested) return strategyRole;
+  if (!requested) return strategyRole ?? campaignRole(deps, candidateId);
   if (strategyRole && sameRoleTitle(strategyRole.title, requested)) return strategyRole;
   // Роль не из «Стратегии»: выбор «Стратегии» не меняется, у роли своя первая версия.
   return { title: requested, version: 1, fromStrategy: false };
+}
+
+function campaignRole(deps: RouteDeps, candidateId: string): AssessedRole | null {
+  const title = readCampaign(deps.candidateStore, candidateId).roles.value[0];
+  return title ? { title, version: 1, fromStrategy: false } : null;
 }
 
 function latestRunFor(deps: RouteDeps, candidateId: string, role: AssessedRole | null) {
@@ -186,21 +197,23 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const { role: requested } = currentQuerySchema.parse(request.query ?? {});
   const role = resolveAssessedRole(deps, candidate.id, requested);
   const latest = latestRunFor(deps, candidate.id, role);
+  const send = (data: Record<string, unknown>) =>
+    reply.send({ data: withConversation(deps, candidate.id, data) });
   if (latest) {
-    if (!role) return reply.send({ data: { state: 'role_changed', run: latest } });
+    if (!role) return send({ state: 'role_changed', run: latest });
     if (latest.roleVersion !== role.version || latest.roleTitle !== role.title) {
-      return reply.send({ data: { state: 'role_changed', run: latest } });
+      return send({ state: 'role_changed', run: latest });
     }
-    if (latest.status !== 'complete') return reply.send({ data: { state: 'run', run: latest } });
+    if (latest.status !== 'complete') return send({ state: 'run', run: latest });
     const stale = Boolean(
       latest.completedAt &&
       isRoleSkillAssessmentStale(latest.completedAt, new Date().toISOString()),
     );
-    return reply.send({ data: { state: 'result', run: latest, stale } });
+    return send({ state: 'result', run: latest, stale });
   }
 
   const context = await readAssessmentContext(deps, candidate.id, role);
-  return reply.send({ data: context });
+  return send(context);
 }
 
 /** Роли с завершённой проверкой: «Карьера» ставит им статус «Навыки проверены» (B445). */

@@ -433,6 +433,8 @@ export interface CandidateStore {
   readonly starStoriesRepo: SqliteStarStoriesRepository;
   readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
   readonly roleSkillAssessments: RoleSkillAssessmentRepository;
+  /** Попытки квиза по навыку профиля (блок A, пакет 3); вопросы запечатаны. */
+  readonly skillQuizAttempts?: import('./sqliteSkillQuizAttemptRepository').SkillQuizAttemptRepository;
   /** Трек внутренней рекомендации на отклик (B389), контакт запечатан. */
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   /** Вектор перехода кандидата (B383), гипотеза. */

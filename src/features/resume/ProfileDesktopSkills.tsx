@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle, Circle, Link, ListChecks, Question } from '@phosphor-icons/react';
+import { CheckCircle, Circle, Link, Question } from '@phosphor-icons/react';
 import {
   getCurrentRoleSkillAssessment,
   type RoleSkillAssessmentCurrent,
 } from '../skills/roleSkillAssessmentApi';
 import { skillSourceLabel } from './ProfileMobileSkills';
 import { useProvenanceLabelOf } from './ProfileProvenanceChip';
+import { SkillConfirmEntry } from './SkillConfirmEntry';
+import { skillStatusLabel } from './skillStatusLabel';
+import { useSkillConfirmations } from './useSkillConfirmations';
+import type { SkillConfirmation } from '../skills/skillConfirmationApi';
 import { SkillsEditForm } from './ProfileSkillsSection';
 import type { ProfileMobileDataProps } from './profileMobileTypes';
 import type { ResumeSkillInput } from './resumeTypes';
@@ -15,18 +19,24 @@ import {
   orderSkillsByVerification,
 } from './skillConfirmation';
 
-export function skillVerification(skill: ResumeSkillInput) {
-  if (skill.status === 'подтверждён')
-    return { label: 'Подтверждено', tone: 'is-ok', Icon: CheckCircle };
-  if (skill.status === 'не подтверждён')
-    return { label: 'Не подтверждено', tone: 'is-warn', Icon: Question };
-  // B3 (CPO 29.10): no quiz was started for a skill without a verdict, so it reads «Без квиза»
-  // like the 390 row; an unknown status code is never shown as is.
-  return { label: 'Без квиза', tone: 'is-dim', Icon: Circle };
+export function skillVerification(skill: ResumeSkillInput, confirmation?: SkillConfirmation) {
+  // Mockup 2 (1440): «Подтверждено», «Разобрано в беседе», «Квиз не пройден» (only after a failed
+  // attempt) or «Без квиза»; an unknown status code is never shown as is.
+  const label = skillStatusLabel(skill, confirmation);
+  if (label === 'Подтверждено') return { label, tone: 'is-ok', Icon: CheckCircle };
+  if (label === 'Разобрано в беседе') return { label, tone: 'is-ok', Icon: CheckCircle };
+  if (label === 'Квиз не пройден') return { label, tone: 'is-warn', Icon: Question };
+  return { label, tone: 'is-dim', Icon: Circle };
 }
 
-function DesktopSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
-  const status = skillVerification(skill);
+function DesktopSkillRow({
+  skill,
+  confirmation,
+}: {
+  readonly skill: ResumeSkillInput;
+  readonly confirmation?: SkillConfirmation;
+}) {
+  const status = skillVerification(skill, confirmation);
   const labelOf = useProvenanceLabelOf();
   const date = skill.verifiedAt ? new Date(skill.verifiedAt) : null;
   const stamp =
@@ -48,7 +58,13 @@ function DesktopSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
   );
 }
 
-function DesktopSkillList({ skills }: { readonly skills: readonly ResumeSkillInput[] }) {
+function DesktopSkillList({
+  skills,
+  confirmationOf,
+}: {
+  readonly skills: readonly ResumeSkillInput[];
+  readonly confirmationOf: (name: string) => SkillConfirmation | undefined;
+}) {
   const [all, setAll] = useState(false);
   const ordered = orderSkillsByVerification(skills);
   const visible = all ? ordered : ordered.slice(0, 6);
@@ -60,7 +76,7 @@ function DesktopSkillList({ skills }: { readonly skills: readonly ResumeSkillInp
       </p>
       <div className="profile-desktop-skill-grid">
         {visible.map((skill) => (
-          <DesktopSkillRow key={skill.id} skill={skill} />
+          <DesktopSkillRow key={skill.id} skill={skill} confirmation={confirmationOf(skill.name)} />
         ))}
       </div>
       {skills.length ? (
@@ -84,6 +100,7 @@ function DesktopSkillList({ skills }: { readonly skills: readonly ResumeSkillInp
 function DesktopSkillsCard(props: ProfileMobileDataProps) {
   const [editing, setEditing] = useState(false);
   const skills = props.draft.skills ?? [];
+  const confirmations = useSkillConfirmations(props.candidateId);
   return (
     <section
       className="career-profile-screen-panel profile-desktop-skills"
@@ -100,15 +117,15 @@ function DesktopSkillsCard(props: ProfileMobileDataProps) {
         >
           {skills.length}
         </button>
-        <button
-          type="button"
+        <SkillConfirmEntry
+          skills={confirmations.skills}
           className="career-primary-button"
-          disabled={!props.onOpenSkillQuizBank}
-          onClick={props.onOpenSkillQuizBank}
-        >
-          <ListChecks size="1em" aria-hidden="true" />
-          Пройти квиз
-        </button>
+          onDiscuss={props.onDiscussSkill}
+          onApplied={() => {
+            confirmations.reload();
+            props.onRetry();
+          }}
+        />
       </div>
       {editing ? (
         <SkillsEditForm
@@ -122,7 +139,7 @@ function DesktopSkillsCard(props: ProfileMobileDataProps) {
           }}
         />
       ) : (
-        <DesktopSkillList skills={skills} />
+        <DesktopSkillList skills={skills} confirmationOf={confirmations.confirmationOf} />
       )}
     </section>
   );
