@@ -115,10 +115,9 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
   });
 
   it('hides «+ Источник» once every source is connected (C12)', () => {
-    const all = (['linkedin', 'hh'] as const).map((platform) => ({
-      ...connections[0]!,
+    const all: CandidateConnection[] = (['linkedin', 'hh'] as const).map((platform) => ({
+      ...(connections[0] as Extract<CandidateConnection, { status: 'connected' }>),
       platform,
-      status: 'connected' as const,
     }));
     const html = renderToStaticMarkup(
       <ProfileTopcard

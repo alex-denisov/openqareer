@@ -125,6 +125,22 @@ export function LanguageEditForm({
   );
 }
 
+function LanguageLevel({ entry }: { readonly entry: ResumeLanguageInput }) {
+  const native = isNativeLanguage(entry);
+  return (
+    <span className="career-profile-screen-lang-level">
+      {native
+        ? 'родной'
+        : entry.cefr
+          ? `${CEFR_LABELS[entry.cefr]} (${entry.cefr})`
+          : 'Уровень не указан'}
+      {entry.cefr || native ? (
+        <LanguageMeter name={entry.name ?? ''} level={entry.cefr ?? 'C2'} native={native} />
+      ) : null}
+    </span>
+  );
+}
+
 function LanguageRow({
   entry,
   saving,
@@ -157,20 +173,7 @@ function LanguageRow({
         <div className="career-profile-screen-lang-name">
           {languageName(entry.name || 'Язык не указан')}
         </div>
-        <span className="career-profile-screen-lang-level">
-          {isNativeLanguage(entry)
-            ? 'родной'
-            : entry.cefr
-              ? `${CEFR_LABELS[entry.cefr]} (${entry.cefr})`
-              : 'Уровень не указан'}
-          {entry.cefr || isNativeLanguage(entry) ? (
-            <LanguageMeter
-              name={entry.name ?? ''}
-              level={entry.cefr ?? 'C2'}
-              native={isNativeLanguage(entry)}
-            />
-          ) : null}
-        </span>
+        <LanguageLevel entry={entry} />
         <SectionPencilButton label="Изменить язык" onClick={() => setEditing(true)} />
         <SectionRemoveButton label="Удалить язык" onClick={onRemove} />
       </div>

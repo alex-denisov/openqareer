@@ -75,21 +75,25 @@ function ProfileDataSectionView(props: DataDialogProps) {
     case 'achievements':
       return <ProfileAchievementsSection {...props} />;
     default:
-      return (
-        <div className="profile-data-dialog-menu">
-          {Object.entries(PROFILE_DATA_SECTIONS).map(([section, label]) => (
-            <button
-              type="button"
-              className="career-quiet-button"
-              key={section}
-              onClick={() => props.onSelect(section as ProfileDataSection)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      );
+      return <ProfileDataMenu onSelect={props.onSelect} />;
   }
+}
+
+function ProfileDataMenu(props: Pick<DataDialogProps, 'onSelect'>) {
+  return (
+    <div className="profile-data-dialog-menu">
+      {Object.entries(PROFILE_DATA_SECTIONS).map(([section, label]) => (
+        <button
+          type="button"
+          className="career-quiet-button"
+          key={section}
+          onClick={() => props.onSelect(section as ProfileDataSection)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function useDialogFocus(props: DataDialogProps) {

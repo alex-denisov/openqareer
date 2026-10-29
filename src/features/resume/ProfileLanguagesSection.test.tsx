@@ -31,8 +31,14 @@ describe('ProfileLanguagesSection', () => {
     const draft: ResumeDraft = {
       ...baseDraft,
       languages: [
-        { id: 'a', name: 'English', cefr: 'C1' },
-        { id: 'b', name: 'Русский', cefr: 'C2', sourceLabel: 'Native or bilingual proficiency' },
+        { id: 'a', name: 'English', cefr: 'C1', evidenceMemoryId: 'm-a' },
+        {
+          id: 'b',
+          name: 'Русский',
+          cefr: 'C2',
+          sourceLabel: 'Native or bilingual proficiency',
+          evidenceMemoryId: 'm-b',
+        },
       ],
     };
     const html = renderToStaticMarkup(

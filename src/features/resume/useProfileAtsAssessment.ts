@@ -78,6 +78,43 @@ function subscribeToVersionChanges(refresh: () => void): () => void {
   return () => window.removeEventListener(RESUME_VERSION_COLLECTION_CHANGED_EVENT, handleChange);
 }
 
+interface AssessmentLoadSetters {
+  readonly setAssessment: (value: ResumeAtsAssessment | null) => void;
+  readonly setSourceVersion: (value: ResumeVersionSummary | null) => void;
+  readonly setRoleBasis: (value: string | null) => void;
+  readonly setLoading: (value: boolean) => void;
+  readonly setError: (value: string | null) => void;
+}
+
+/** Starts one assessment request; the returned cleanup aborts it. */
+function startAssessmentLoad(requestKey: string | null, set: AssessmentLoadSetters): () => void {
+  const controller = new AbortController();
+  let active = true;
+  set.setLoading(true);
+  set.setAssessment(null);
+  set.setSourceVersion(null);
+  set.setRoleBasis(null);
+  set.setError(null);
+  void loadProfileAssessment(requestKey, controller.signal)
+    .then((result) => {
+      if (!active) return;
+      set.setAssessment(result.assessment);
+      set.setSourceVersion(result.sourceVersion);
+      set.setRoleBasis(result.roleBasis);
+    })
+    .catch((reason: unknown) => {
+      if (!active || controller.signal.aborted) return;
+      set.setError(apiErrorMessage(reason, 'Не удалось обновить оценку ATS.'));
+    })
+    .finally(() => {
+      if (active) set.setLoading(false);
+    });
+  return () => {
+    active = false;
+    controller.abort();
+  };
+}
+
 export function useProfileAtsAssessment(
   options: UseProfileAtsAssessmentOptions = {},
 ): ProfileAtsAssessmentState {
@@ -102,31 +139,13 @@ export function useProfileAtsAssessment(
       setLoading(false);
       return;
     }
-    const controller = new AbortController();
-    let active = true;
-    setLoading(true);
-    setAssessment(null);
-    setSourceVersion(null);
-    setRoleBasis(null);
-    setError(null);
-    void loadProfileAssessment(requestKey, controller.signal)
-      .then((result) => {
-        if (!active) return;
-        setAssessment(result.assessment);
-        setSourceVersion(result.sourceVersion);
-        setRoleBasis(result.roleBasis);
-      })
-      .catch((reason: unknown) => {
-        if (!active || controller.signal.aborted) return;
-        setError(apiErrorMessage(reason, 'Не удалось обновить оценку ATS.'));
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-      controller.abort();
-    };
+    return startAssessmentLoad(requestKey, {
+      setAssessment,
+      setSourceVersion,
+      setRoleBasis,
+      setLoading,
+      setError,
+    });
   }, [enabled, refreshKey, requestKey, refreshSequence]);
 
   useEffect(() => subscribeToVersionChanges(bump), [bump]);
