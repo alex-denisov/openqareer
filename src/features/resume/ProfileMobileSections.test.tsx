@@ -114,9 +114,8 @@ describe('separate mobile profile sections', () => {
         ats={{ assessment: null, sourceVersion: null, loading: false, error: 'Нет связи', refresh }}
       />,
     );
-    expect(container.querySelector('[role="img"]')?.getAttribute('aria-label')).toBe(
-      'Оценка ATS неизвестна',
-    );
+    // D4: a failed assessment hides the scale; only the error line and retry stay.
+    expect(container.querySelector('[role="img"]')).toBeNull();
     expect(container.querySelector('.profile-mobile-gauge-value')).toBeNull();
     expect(container.querySelectorAll('.pm-cat.is-unknown')).toHaveLength(4);
     act(() => button(container, 'Повторить').click());

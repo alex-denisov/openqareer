@@ -1,4 +1,4 @@
-import { CalendarBlank, EnvelopeSimple, GraduationCap, Plus } from '@phosphor-icons/react';
+import { CalendarBlank, EnvelopeSimple, Plus } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import { profileCompleteness } from '../resume/profileCompleteness';
@@ -47,26 +47,15 @@ function profileProgressActions(draft: ResumeDraft): readonly TodayProfileProgre
     }
     if (section === 'Образование')
       return { label: 'Добавить образование', section, focus: { section: 'education' } };
-    if (section === 'Проекты')
-      return { label: 'Добавить проекты', section, focus: { section: 'projects' } };
     if (section === 'Навыки')
       return { label: 'Добавить навыки', section, focus: { section: 'skills' } };
-    if (section === 'Языки')
-      return { label: 'Добавить языки', section, focus: { section: 'languages' } };
-    if (section === 'Курсы')
-      return { label: 'Добавить курсы', section, focus: { section: 'courses' } };
-    if (section === 'Сертификаты')
-      return { label: 'Добавить сертификаты', section, focus: { section: 'certifications' } };
-    if (section === 'Рекомендации')
-      return { label: 'Добавить рекомендации', section, focus: { section: 'recommendations' } };
-    return { label: 'Добавить достижения', section, focus: { section: 'achievements' } };
+    return { label: 'Добавить языки', section, focus: { section: 'languages' } };
   });
 }
 
 function ProfileActionIcon({ section }: { readonly section: string }) {
   if (section === 'Контакты') return <EnvelopeSimple size={16} aria-hidden="true" />;
   if (section === 'Опыт') return <CalendarBlank size={16} aria-hidden="true" />;
-  if (section === 'Курсы') return <GraduationCap size={16} aria-hidden="true" />;
   return <Plus size={16} aria-hidden="true" />;
 }
 

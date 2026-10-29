@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  EMAIL_ERROR_TEXT,
+  PHONE_ERROR_TEXT,
+  getContactPhoneError,
+} from '../../shared/contactValidation';
 import { mergeLinkedInLanguageLevels } from '../../shared/linkedinProfileV2';
 
 export type CefrLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
@@ -213,7 +218,16 @@ export interface ResumeDraft {
   readonly achievements?: readonly ResumeAchievementInput[];
   /** v2: proposed from a native source, not applied until the candidate acts. */
   readonly sourceSuggestions?: ResumeSourceSuggestionsInput;
+  /**
+   * Conversation facts the candidate declined to put into a workplace (C10).
+   * The facts stay in memory; this only stops offering them again.
+   */
+  readonly declinedFactIds?: readonly string[];
 }
+
+/** Bullets one workplace may list: imported ones plus the candidate's own facts (C10). */
+export const MAX_BULLETS_PER_PLACE = 80;
+const MAX_DECLINED_FACTS = 1_000;
 
 export const EMPTY_RESUME_DRAFT: ResumeDraft = {
   candidate: {},
@@ -286,8 +300,13 @@ export const resumeDraftSchema = z
           .optional(),
         contact: z
           .object({
-            email: z.string().trim().email().max(320).optional(),
-            phone: z.string().trim().max(60).optional(),
+            email: z.string().trim().email(EMAIL_ERROR_TEXT).max(320).optional(),
+            phone: z
+              .string()
+              .trim()
+              .max(60)
+              .refine((value) => getContactPhoneError(value) === null, PHONE_ERROR_TEXT)
+              .optional(),
             telegram: z.string().trim().max(100).optional(),
             location: labelSchema.optional(),
             links: z.array(z.string().trim().max(500)).max(20).default([]),
@@ -311,7 +330,8 @@ export const resumeDraftSchema = z
             startDate: chronologyDateSchema.optional(),
             endDate: chronologyDateSchema.optional(),
             current: z.boolean(),
-            bulletMemoryIds: z.array(memoryIdSchema).max(20),
+            // 80: conversation facts join the imported bullets of one place (C10).
+            bulletMemoryIds: z.array(memoryIdSchema).max(MAX_BULLETS_PER_PLACE),
             descriptionMemoryId: memoryIdSchema.optional(),
             employmentType: labelSchema.optional(),
             workplaceType: workplaceTypeSchema.optional(),
@@ -505,6 +525,7 @@ export const resumeDraftSchema = z
       })
       .strict()
       .optional(),
+    declinedFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS).optional(),
   })
   .strict()
   .transform((draft) => ({

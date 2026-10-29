@@ -2,6 +2,7 @@ import { parseResumeContent, type ParsedResume } from '../workspace/resumeParser
 import { extractLinkedInProfile } from './linkedinProfileExtract';
 import {
   extractStructuredLinkedInProfileTolerant,
+  parseAboutSection,
   type TolerantExtraction,
   LI_SDUI_EXTRACTOR_VERSION,
   type LinkedInProfilePages,
@@ -9,7 +10,7 @@ import {
 import { hasStructuredSubstance, validLinkedInProfileWithDrops } from './linkedinProfileSanitize';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
-import type { LinkedInImportProgressEvent } from './linkedinImportProgress';
+import type { LinkedInImportProgressEvent, LinkedInImportStageKey } from './linkedinImportProgress';
 import { captureSignedInPage } from './sessionCapture';
 import {
   sessionWaitingNotice,
@@ -296,6 +297,30 @@ export function missingProfileCards(profileHtml: string): string[] {
   ).map((card) => `missing:${card}`);
 }
 
+/** Cards LinkedIn renders below About: seen without About, the profile simply has none. */
+const CARDS_BELOW_ABOUT = ['ExperienceTopLevelSection', 'EducationTopLevelSection'] as const;
+
+function hasProfileCard(profileHtml: string, card: string): boolean {
+  return new RegExp(
+    `componentkey="com\\.linkedin\\.sdui\\.profile\\.card\\.[^"]*${card}"`,
+    'u',
+  ).test(profileHtml);
+}
+
+/**
+ * About has no details page; it is read off the main profile. Listing it in
+ * the walk makes a miss visible (C7): the 23.10 import lost the summary and
+ * only the server log said `missing:About`. An About card whose text the
+ * parser cannot find, or a page that never rendered the cards below it, is a
+ * failed read; a rendered profile without the card has no About to read.
+ */
+export function aboutStageStatus(profileHtml: string): 'read' | 'failed' {
+  if (hasProfileCard(profileHtml, 'About')) {
+    return parseAboutSection(profileHtml) ? 'read' : 'failed';
+  }
+  return CARDS_BELOW_ABOUT.some((card) => hasProfileCard(profileHtml, card)) ? 'read' : 'failed';
+}
+
 async function readLinkedDetailPages(
   dependencies: LinkedInSessionImportFlowDependencies,
   page: { readonly body: string; readonly url: string },
@@ -304,15 +329,17 @@ async function readLinkedDetailPages(
   const last = throttle.lastReadAt();
   const now = Date.now();
   if (last !== undefined && now - last < DETAIL_READ_INTERVAL_MS) return {};
-  const keys = detailPagesToRead();
+  const details = detailPagesToRead();
+  const keys: LinkedInImportStageKey[] = ['about', ...details];
   throttle.markRead(now);
   const pause = dependencies.pauseBetweenDetailReads ?? humanPause;
   const base = page.url.endsWith('/') ? page.url : `${page.url}/`;
   const report = dependencies.onDetailProgress ?? (() => {});
   let read: Partial<Record<DetailPageKey, string>> = {};
   report({ type: 'start', keys });
+  report({ type: aboutStageStatus(page.body), key: 'about' });
   try {
-    for (const key of keys) {
+    for (const key of details) {
       await pause();
       const detail = await dependencies
         .readSessionPage(new URL(DETAIL_PAGE_PATHS[key], base).toString())

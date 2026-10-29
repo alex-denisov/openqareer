@@ -19,6 +19,8 @@ export interface ProfileAtsAssessmentProps {
   readonly refreshKey?: string | null;
   readonly desktopLayout?: boolean;
   readonly enabled?: boolean;
+  /** The block calculates only after the candidate asks (D2). */
+  readonly onDemand?: boolean;
   readonly id?: string;
 }
 
@@ -252,9 +254,11 @@ function useAtsCardState(props: ProfileAtsAssessmentProps) {
     request,
     refreshKey,
     enabled,
+    onDemand,
   } = props;
   const internal = useProfileAtsAssessment({
     enabled: enabled ?? suppliedAssessment === undefined,
+    onDemand,
     request,
     refreshKey,
   });
@@ -270,7 +274,8 @@ function useAtsCardState(props: ProfileAtsAssessmentProps) {
     : score === null
       ? 'Оценка ATS неизвестна'
       : `Оценка ATS ${score} из 100`;
-  return { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel };
+  const idle = suppliedAssessment === undefined && Boolean(internal.idle);
+  return { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel, idle };
 }
 
 /** Макет 2 «ATS: нет избранных вакансий». */
@@ -285,7 +290,7 @@ export function AtsRoleBasisNote() {
 
 export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
   const { id = 'sec-ats', desktopLayout = false } = props;
-  const { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel } =
+  const { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel, idle } =
     useAtsCardState(props);
   return (
     <section
@@ -299,17 +304,24 @@ export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
         assessment={assessment}
         sourceVersion={sourceVersion}
       />
-      <div className="career-profile-screen-ats-score">
-        <strong
-          className="career-profile-screen-ats-value"
-          aria-live="polite"
-          aria-label={ariaLabel}
-        >
-          {loading ? '…' : (score ?? '—')}
-        </strong>
-        <span className="career-profile-screen-ats-unit">из 100</span>
-        {roleBasis ? <span className="career-profile-screen-tag">по роли</span> : null}
-      </div>
+      {idle ? (
+        <button type="button" className="career-secondary-button career-btn-sm" onClick={refresh}>
+          Рассчитать оценку ATS
+        </button>
+      ) : null}
+      {error || idle ? null : (
+        <div className="career-profile-screen-ats-score">
+          <strong
+            className="career-profile-screen-ats-value"
+            aria-live="polite"
+            aria-label={ariaLabel}
+          >
+            {loading ? '…' : (score ?? '—')}
+          </strong>
+          <span className="career-profile-screen-ats-unit">из 100</span>
+          {roleBasis ? <span className="career-profile-screen-tag">по роли</span> : null}
+        </div>
+      )}
       {roleBasis ? <AtsRoleBasisNote /> : null}
       <AtsRetryError error={error} onRefresh={refresh} loading={loading} />
       <AtsDimensions assessment={assessment} desktopLayout={desktopLayout} />

@@ -104,9 +104,31 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
       />,
     );
     expect(html).toContain('hh.ru');
-    expect(html).toContain('3 из 3 · 01.01');
+    expect(html).not.toContain('3 из 3');
+    expect(html).not.toContain('01.01');
+    expect(html).toContain('Подключено');
     expect(html).toContain('LinkedIn');
     expect(html).toContain('Не подключено');
+    expect(html).toContain('is-connected');
+    expect(html).toContain('is-off');
+    expect(html).toContain('Источник</button>');
+  });
+
+  it('hides «+ Источник» once every source is connected (C12)', () => {
+    const all: CandidateConnection[] = (['linkedin', 'hh'] as const).map((platform) => ({
+      ...(connections[0] as Extract<CandidateConnection, { status: 'connected' }>),
+      platform,
+    }));
+    const html = renderToStaticMarkup(
+      <ProfileTopcard
+        draft={draft}
+        onDraftChange={() => {}}
+        reader={null}
+        connections={all}
+        onOpenConnections={() => {}}
+      />,
+    );
+    expect(html).not.toContain('career-profile-screen-source-add');
   });
 
   it('renders the 64px avatar size, not the old 96px one', () => {

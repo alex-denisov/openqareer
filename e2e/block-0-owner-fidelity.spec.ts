@@ -121,10 +121,10 @@ test('queue discussion and mobile history have real controls', async ({ page }, 
     for (const track of await page.locator('.career-today-funnel-track').all())
       expect((await track.boundingBox())!.height).toBe(4);
   } else {
-    // Макет 1 на 390: лист консультанта без истории бесед (решение CPO 20.10, блок 0).
+    // Лист 390: кнопка истории бесед в шапке (решение CPO 29.10, A4, заменяет решение 20.10).
     await page.getByRole('button', { name: 'Консультант: открыть', exact: true }).click();
     await expect(panel).toHaveAttribute('data-mobile-expanded', 'true');
-    await expect(panel.getByRole('button', { name: 'История бесед', exact: true })).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: 'История бесед', exact: true })).toBeVisible();
     await expect(
       panel.getByRole('button', { name: 'Развернуть или свернуть консультанта', exact: true }),
     ).toBeVisible();

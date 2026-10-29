@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createLinkedInSessionImportFlow,
+  aboutStageStatus,
   missingProfileCards,
   detailPagesToRead,
   linkedinWaitingNotice,
@@ -212,6 +213,63 @@ describe('LinkedIn session import flow', () => {
           .join(''),
       ),
     ).toEqual([]);
+  });
+
+  describe('«обо мне» stage of the walk (C7)', () => {
+    const card = (name: string, inner = '') =>
+      `<div componentkey="com.linkedin.sdui.profile.card.refX${name}">${inner}</div>`;
+
+    it('is read when the About card gave its text', () => {
+      expect(aboutStageStatus(readFixture('profile.html') + readFixture('about.html'))).toBe(
+        'read',
+      );
+    });
+
+    it('fails when the About card is there but its text is not where the parser looks', () => {
+      expect(
+        aboutStageStatus(card('About', '<p>I build teams</p>') + card('EducationTopLevelSection')),
+      ).toBe('failed');
+    });
+
+    it('fails when the page never rendered the cards below About', () => {
+      expect(aboutStageStatus('<main><h1>Alexey Test</h1></main>')).toBe('failed');
+    });
+
+    it('is read when the profile has no About but its lower cards rendered', () => {
+      expect(
+        aboutStageStatus(card('ExperienceTopLevelSection') + card('EducationTopLevelSection')),
+      ).toBe('read');
+    });
+  });
+
+  it('walks «обо мне» first and goes on to the detail pages when it fails', async () => {
+    const events: { type: string; key?: string; keys?: string[] }[] = [];
+    const profileUrl = 'https://www.linkedin.com/in/alexey-test/';
+    await createLinkedInSessionImportFlow({
+      inspectCurrentPage: async () => ({
+        ready: true,
+        url: 'https://www.linkedin.com/feed/',
+        signedInApplicant: true,
+        login: false,
+        otp: false,
+        captcha: false,
+      }),
+      readSessionPage: async () => ({
+        ok: true,
+        url: profileUrl,
+        body: '<main><h1>Alexey Test</h1><section>Product Director\nExample GmbH\n2022 — настоящее время</section></main>',
+      }),
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
+      onDetailProgress: (event) => events.push(event as never),
+      onAuthenticated: vi.fn(),
+      onProviderDataCaptured: vi.fn(),
+      onReady: vi.fn(),
+    }).run();
+
+    expect(events[0]?.keys?.[0]).toBe('about');
+    expect(events[1]).toEqual({ type: 'failed', key: 'about' });
+    expect(events).toContainEqual({ type: 'failed', key: 'experience' });
   });
 
   it('attaches a structured profile when the detail-page fixtures carry real sections', async () => {

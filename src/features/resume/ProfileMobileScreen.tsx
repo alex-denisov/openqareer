@@ -206,15 +206,22 @@ function useMobileVacancyRequirement(
   }, [request, open]);
 }
 
-export function ProfileMobileScreen(props: ProfileMobileScreenProps) {
-  const navigation = useProfileMobileNavigation();
+function useMobileTab(props: ProfileMobileScreenProps) {
   const [localTab, setLocalTab] = useState<ProfileTab>('resume');
-  const activeTab = props.tab ?? localTab;
   const onTab = (tab: ProfileTab) => {
     setLocalTab(tab);
     props.onTabChange?.(tab);
   };
-  const ats = useProfileAtsAssessment({ refreshKey: props.view?.savedAt?.updatedAt });
+  return { activeTab: props.tab ?? localTab, onTab, setLocalTab };
+}
+
+export function ProfileMobileScreen(props: ProfileMobileScreenProps) {
+  const navigation = useProfileMobileNavigation();
+  const { activeTab, onTab, setLocalTab } = useMobileTab(props);
+  const ats = useProfileAtsAssessment({
+    onDemand: true,
+    refreshKey: props.view?.savedAt?.updatedAt,
+  });
   const versionCount = useVersionCount(props.candidateId);
   useMobileScene(props, navigation);
   useMobileVacancyRequirement(props.vacancyRequirement, navigation.open);

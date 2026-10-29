@@ -84,6 +84,7 @@ function registerTodayActionDeferralRoute(app: FastifyInstance, deps: RouteDeps)
       const deferral = {
         actionId: body.actionId,
         deferredThroughDate: candidateCalendarDate(new Date(), body.tz),
+        ...(body.resolution ? { resolution: body.resolution } : {}),
       };
       deps.candidateStore.saveCandidateWorkspace(candidate.id, {
         ...workspace,

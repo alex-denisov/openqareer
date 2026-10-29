@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { vacancyFitProfileStamp } from './vacancyFitProfileStamp';
+import { currentVacancyFitProfileValidator, vacancyFitProfileStamp } from './vacancyFitProfileStamp';
 
 const snapshot = { memory: [{ id: 'f1', statement: 'Built payments' }], resume: null } as never;
 function workspace(visit: string, roles = ['Head of Engineering']) {
@@ -17,6 +17,35 @@ describe('vacancyFitProfileStamp', () => {
     expect(vacancyFitProfileStamp(snapshot, workspace('2026-10-20T01:00:00.000Z'))).not.toBe(
       vacancyFitProfileStamp(snapshot, workspace('2026-10-20T01:00:00.000Z', ['CTO'])),
     );
+  });
+
+  it('keeps the stamp when the consultant adds a hypothesis or an open question (B580-r)', () => {
+    const fact = { id: 'f1', kind: 'fact', status: 'confirmed', statement: 'Built payments', sourceMessageIds: ['m1'], sensitive: false };
+    const hypothesis = { id: 'h1', kind: 'hypothesis', status: 'proposed', statement: 'Может подойти роль CTO', sourceMessageIds: ['m2'], sensitive: false };
+    const question = { id: 'q1', kind: 'open-question', status: 'proposed', statement: 'Готов ли к переезду?', sourceMessageIds: ['m2'], sensitive: false };
+    const at = (memory: object[]) => vacancyFitProfileStamp({ memory, resume: null } as never, workspace('x'));
+    expect(at([fact, hypothesis, question])).toBe(at([fact]));
+    expect(at([{ ...fact, statement: 'Built lending' }])).not.toBe(at([fact]));
+  });
+
+  it('keeps a paid result when a hypothesis appears while the model answers, not when a fact is revoked (B580-r)', () => {
+    const fact = { id: 'f1', kind: 'fact', status: 'confirmed', statement: 'Built payments', sourceMessageIds: ['m1'], sensitive: false };
+    const hypothesis = { id: 'h1', kind: 'hypothesis', status: 'proposed', statement: 'Может подойти роль CTO', sourceMessageIds: ['m2'], sensitive: false };
+    let memory: object[] = [fact];
+    const reader = {
+      getSnapshot: () => ({ candidate: { id: 'c1' }, memory, resume: null }),
+      getCandidateWorkspace: () => workspace('x'),
+    } as never;
+    const input = {
+      candidateId: 'c1',
+      facts: [{ ...fact, candidateId: 'c1' }],
+      profileContextHash: vacancyFitProfileStamp({ memory: [fact], resume: null } as never, workspace('x')),
+    } as never;
+    const validate = currentVacancyFitProfileValidator(reader);
+    memory = [fact, hypothesis];
+    expect(validate(input)).toBe(true);
+    memory = [{ ...fact, status: 'deleted' }, hypothesis];
+    expect(validate(input)).toBe(false);
   });
 
   describe('only what the percent compares (B580)', () => {

@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from 'react';
 
-/** The detail pages the LinkedIn walk reads, named the way the candidate knows them. */
+/** The sections the LinkedIn walk reads, named the way the candidate knows them. */
 const STAGE_LABELS = {
+  // Read off the main profile, not a detail page: listed so a missed card is seen (C7).
+  about: 'обо мне',
   experience: 'места работы',
   education: 'образование',
   skills: 'навыки',

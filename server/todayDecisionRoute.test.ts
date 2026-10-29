@@ -147,6 +147,43 @@ describe('candidate-owned Today decision', () => {
     });
   });
 
+  it('stores an accepted decision per action id and date, and shows it again on another day', async () => {
+    const { app, store, owner, headers } = await setup();
+    const actionId = 'b'.repeat(16);
+    const response = await app.inject({
+      method: 'POST',
+      url: DEFER_URL,
+      headers,
+      payload: { actionId, tz: 'Europe/Moscow', resolution: 'accepted' },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }).format(new Date());
+    expect(store.getCandidateWorkspace(owner.id)?.todayActionDeferral).toEqual({
+      actionId,
+      deferredThroughDate: date,
+      resolution: 'accepted',
+    });
+    const same = await app.inject({ url: '/api/v1/candidate/today?tz=Europe/Moscow', headers });
+    expect(same.json().data.todayActionDeferral).toEqual({
+      actionId,
+      deferredThroughDate: date,
+      resolution: 'accepted',
+    });
+    store.saveCandidateWorkspace(owner.id, {
+      ...store.getCandidateWorkspace(owner.id)!,
+      todayActionDeferral: { actionId, deferredThroughDate: '2020-01-01', resolution: 'dismissed' },
+    });
+    const next = await app.inject({ url: '/api/v1/candidate/today?tz=Europe/Moscow', headers });
+    expect(next.json().data.todayActionDeferral).toBeUndefined();
+    const bad = await app.inject({
+      method: 'POST',
+      url: DEFER_URL,
+      headers,
+      payload: { actionId, tz: 'Europe/Moscow', resolution: 'nope' },
+    });
+    expect(bad.statusCode).toBe(422);
+  });
+
   it('requires authentication, safe origin and a valid timezone for deferral', async () => {
     const { app, headers } = await setup();
     const payload = { actionId: 'a'.repeat(16), tz: 'Europe/Moscow' };

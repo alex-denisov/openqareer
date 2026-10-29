@@ -67,7 +67,12 @@ async function buildVacancyContext(
   const cluster =
     deps.multiSourceEngine?.getActiveCluster?.(vacancyId) ??
     deps.multiSourceEngine?.getPublicCatalogCluster?.(vacancyId);
-  const full = !cluster ? deps.multiSourceEngine?.getVacancy?.(vacancyId) : undefined;
+  // Подборка отдаёт ещё не сведённую запись как `cluster-<id записи>` (29.10: свежие
+  // записи Indeed до прохода сведения давали 404 из карточки вакансии).
+  const full = !cluster
+    ? (deps.multiSourceEngine?.getVacancy?.(vacancyId) ??
+      deps.multiSourceEngine?.getVacancy?.(vacancyId.replace(/^cluster-/u, '')))
+    : undefined;
   if (!cluster && !full) return null;
 
   const title = cluster?.canonicalTitle ?? full?.title;

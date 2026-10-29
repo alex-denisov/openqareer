@@ -20,9 +20,9 @@ export function skillVerification(skill: ResumeSkillInput) {
     return { label: 'Подтверждено', tone: 'is-ok', Icon: CheckCircle };
   if (skill.status === 'не подтверждён')
     return { label: 'Не подтверждено', tone: 'is-warn', Icon: Question };
-  // Mockup 2 (1440): a skill without a quiz verdict reads «Квиз не пройден»; an unknown status
-  // code is never shown as is.
-  return { label: 'Квиз не пройден', tone: 'is-dim', Icon: Circle };
+  // B3 (CPO 29.10): no quiz was started for a skill without a verdict, so it reads «Без квиза»
+  // like the 390 row; an unknown status code is never shown as is.
+  return { label: 'Без квиза', tone: 'is-dim', Icon: Circle };
 }
 
 function DesktopSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {

@@ -1522,15 +1522,23 @@ fn clock_seed() -> u64 {
 // Four quiet readings (~3.6 s): through the tunnel LinkedIn's lower cards
 // (Languages) arrive well after the scroll lands (B266, live walk 3).
 const LAZY_SCROLL_QUIET_READINGS: usize = 4;
+// The skills page grows in chunks of ten inside its own scroll container, which
+// neither `window` nor `main` scrolling reached: the 23.10 walk read ten of 44
+// skills (C13). The last row is brought into view, which scrolls every
+// ancestor, and skill rows count like connection cards, so a new chunk resets
+// the quiet readings even when the page height does not change.
 const LAZY_SCROLL_SCRIPT: &str = "(function(){try{\
 var step=Math.max(600,window.innerHeight);\
 var box=document.querySelector('main');\
 window.scrollBy(0,step);if(box){box.scrollTop+=step;}\
+var rows=document.querySelectorAll('[componentkey^=\"com.linkedin.sdui.profile.skill(\"]:not([componentkey$=\"-divider\"])');\
+var skills=rows.length;\
+if(skills){rows[skills-1].scrollIntoView({block:'end'});}\
 var root=document.scrollingElement||document.documentElement;\
 var height=Math.max(root.scrollHeight,box?box.scrollHeight:0);\
 var bottom=Math.max(window.scrollY+window.innerHeight,box?box.scrollTop+box.clientHeight:0);\
 var cards=document.querySelectorAll('[componentkey^=\"ConnectionCard_\"]').length;\
-return {height:height,atEnd:bottom>=height-4,cards:cards};\
+return {height:height,atEnd:bottom>=height-4,cards:cards+skills};\
 }catch(e){return {height:0,atEnd:true,cards:0};}})()";
 
 #[derive(Debug, Deserialize)]
@@ -1538,7 +1546,7 @@ return {height:height,atEnd:bottom>=height-4,cards:cards};\
 struct LazyScrollState {
     height: f64,
     at_end: bool,
-    /// Connection cards on the page; 0 on every other page.
+    /// Connection cards plus skill rows on the page; 0 on every other page.
     #[serde(default)]
     cards: u32,
 }
@@ -2351,6 +2359,14 @@ mod tests {
         quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0, 0);
         assert_eq!(quiet, LAZY_SCROLL_QUIET_READINGS);
         const { assert!(LAZY_SCROLL_QUIET_READINGS >= 4) };
+    }
+
+    #[test]
+    fn lazy_scroll_brings_the_last_skill_row_into_view_and_counts_skill_rows() {
+        // C13: the live skills page stopped at LinkedIn's first chunk of ten.
+        assert!(LAZY_SCROLL_SCRIPT.contains("scrollIntoView"));
+        assert!(LAZY_SCROLL_SCRIPT.contains("com.linkedin.sdui.profile.skill("));
+        assert!(LAZY_SCROLL_SCRIPT.contains("cards:cards+skills"));
     }
 
     #[test]

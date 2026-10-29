@@ -4,6 +4,7 @@ import {
   linkedinStageLabel,
   useLinkedInImportFailure,
 } from '../connections/linkedinImportProgress';
+import { isWalkCurrent } from './profileProvenance';
 
 /**
  * Макет 2 «Ошибка импорта». Обход LinkedIn останавливается на первом
@@ -20,7 +21,9 @@ export function ProfileImportFailureNote({
   /** B541: the walk the server kept, so the note survives a reload. */
   readonly storedWalk?: ImportWalk;
 }) {
-  const failed = storedWalk?.sections.find((section) => section.status === 'failed');
+  const failed = (isWalkCurrent(storedWalk) ? storedWalk : undefined)?.sections.find(
+    (section) => section.status === 'failed',
+  );
   const failure =
     useLinkedInImportFailure() ?? (failed ? { label: linkedinStageLabel(failed.key) } : null);
   if (!failure) return null;
@@ -28,7 +31,10 @@ export function ProfileImportFailureNote({
     <div className={`profile-import-failure is-${variant}`}>
       <p role="alert">
         <WarningCircle size={16} aria-hidden="true" />
-        <span>LinkedIn: раздел «{failure.label}» не прочитан, сайт не ответил. Остальные разделы сохранены.</span>
+        <span>
+          LinkedIn: раздел «{failure.label}» не прочитан, сайт не ответил. Остальные разделы
+          сохранены.
+        </span>
       </p>
       {onReimport ? (
         <button type="button" className="career-quiet-button" onClick={onReimport}>

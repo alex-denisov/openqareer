@@ -165,6 +165,9 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   const expertPanel = page.locator('.career-expert-panel');
+  // While the session loads, the panel shows its skeleton and is visible even on 390;
+  // decide whether to open it only once it has settled.
+  await expect(expertPanel.locator('.career-expert-composer-skeleton')).toHaveCount(0);
   if ((page.viewportSize()?.width ?? 1440) >= 1280) {
     await expect(expertPanel).toBeVisible();
   } else if (!(await expertPanel.isVisible())) {

@@ -284,7 +284,7 @@
 .career-profile-screen-lang-meter {
   display: grid;
   width: calc(var(--career-space-8) * 3);
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--career-space-1);
 }
 

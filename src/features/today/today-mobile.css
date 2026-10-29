@@ -225,6 +225,13 @@
     min-inline-size: 0;
   }
 
+  .career-today-mobile .tm-cap-row {
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-1);
+    min-inline-size: 0;
+  }
+
   .career-today-mobile .pm-cap {
     min-block-size: var(--career-space-4);
     margin: 0;

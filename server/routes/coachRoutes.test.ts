@@ -555,7 +555,7 @@ describe('Coach Stage Routes (B340)', () => {
     expect(body.result.passed).toBe(true);
     expect(body.result.status).toBe('подтверждён');
     expect(body.fact.status).toBe('подтверждён');
-    expect(body.fact.source).toContain('hh.ru');
+    expect(body.fact.source).toBe('квиз openqareer');
     expect(body.proposal.kind).toBe('resume.revise');
     expect(body.proposal.resumeRevision.section).toBe('skills');
   });
