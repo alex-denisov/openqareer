@@ -37,6 +37,7 @@ import type { ProfileFocusRequest, ProfileMobileScene } from './profileMobileNav
 import { ProfileEmptyStart } from './ProfileEmptyStart';
 import { ProfileMobileScreen } from './ProfileMobileScreen';
 import { ProfileDataDialog } from './ProfileDataDialog';
+import { hasAchievements } from './profileCompleteness';
 import { ProfileSavedToast } from './ProfileSavedToast';
 import { ProfileDesktopSkills } from './ProfileDesktopSkills';
 import { useProfileDataDialog } from './useProfileDataDialog';
@@ -120,7 +121,7 @@ function isDraftEmpty(draft: ResumeDraft, memory: readonly CandidateMemory[]): b
     (draft.recommendations?.length ?? 0) > 0 ||
     (draft.certifications?.length ?? 0) > 0 ||
     (draft.projects?.length ?? 0) > 0 ||
-    (draft.achievements?.length ?? 0) > 0;
+    hasAchievements(draft);
   const hasConfirmedProfileMemory = memory.some(
     (item) =>
       item.status === 'confirmed' &&

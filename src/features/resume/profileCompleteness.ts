@@ -2,10 +2,16 @@ import type { ResumeDraft } from './resumeTypes';
 
 export interface ProfileCompleteness {
   readonly completedCount: number;
-  readonly totalCount: 11;
+  readonly totalCount: number;
   readonly missingSections: readonly string[];
 }
 
+/**
+ * Only REQUIRED blocks count (walk 29.10, C1/C9): Имя, Контакты, Опыт,
+ * Образование, Навыки, Языки. Проекты, Курсы, Сертификаты, Рекомендации and
+ * Достижения are optional — a person without them is not behind, so they are
+ * never a gap: not in the percent, not in «Сегодня», not in «собрано N из M».
+ */
 const PROFILE_BLOCKS: readonly {
   readonly label: string;
   readonly hasValue: (draft: ResumeDraft) => boolean;
@@ -31,13 +37,8 @@ const PROFILE_BLOCKS: readonly {
       ),
   },
   { label: 'Образование', hasValue: (draft) => draft.education.length > 0 },
-  { label: 'Проекты', hasValue: (draft) => Boolean(draft.projects?.length) },
   { label: 'Навыки', hasValue: (draft) => Boolean(draft.skills?.length) },
   { label: 'Языки', hasValue: (draft) => draft.languages.length > 0 },
-  { label: 'Курсы', hasValue: (draft) => Boolean(draft.courses?.length) },
-  { label: 'Сертификаты', hasValue: (draft) => Boolean(draft.certifications?.length) },
-  { label: 'Рекомендации', hasValue: (draft) => Boolean(draft.recommendations?.length) },
-  { label: 'Достижения', hasValue: (draft) => Boolean(draft.achievements?.length) },
 ];
 
 export function profileCompleteness(draft: ResumeDraft): ProfileCompleteness {
@@ -46,7 +47,15 @@ export function profileCompleteness(draft: ResumeDraft): ProfileCompleteness {
   );
   return {
     completedCount: PROFILE_BLOCKS.length - missingSections.length,
-    totalCount: PROFILE_BLOCKS.length as ProfileCompleteness['totalCount'],
+    totalCount: PROFILE_BLOCKS.length,
     missingSections,
   };
+}
+
+/** Achievements are present when listed, or when workplace bullet points carry them. */
+export function hasAchievements(draft: ResumeDraft): boolean {
+  return (
+    Boolean(draft.achievements?.length) ||
+    draft.experience.some((entry) => entry.bulletMemoryIds.length > 0)
+  );
 }
