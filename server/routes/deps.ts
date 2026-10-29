@@ -71,6 +71,8 @@ export interface RouteDeps {
   importProfile: (url: string) => Promise<ProfileUrlImportResult>;
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
+  /** Пункты резюме из фактов беседы (29.10); без ключа блок консультанта не появляется. */
+  experienceFactRewriter?: import('../providers/experienceFactRewriter').ExperienceFactRewriter;
   /** Роли называет модель по фактам кандидата (B180, срез 1в). */
   roleNamer?: RoleNamer;
   /** Выбирает id авторолей только из переданной онтологии (B267 S5). */

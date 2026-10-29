@@ -15,8 +15,6 @@ export interface InlineSuggestionItem {
   readonly turnIdempotencyKey?: string;
   readonly proposalIndex?: number;
   readonly applied?: boolean;
-  /** A conversation fact proposed for `experienceId`; accepting puts this id into its bullets (C10). */
-  readonly factMemoryId?: string;
 }
 
 export interface InlineConsultantSuggestionProps {

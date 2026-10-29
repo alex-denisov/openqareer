@@ -104,6 +104,7 @@ interface BuildAppOptions {
   runtimeMemory?: RouteDeps['runtimeMemory'];
   /** Absent when no provider credential is configured; the rules parser runs alone. */
   resumeStructurer?: ResumeStructurer;
+  experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   coverLetterWriter?: CoverLetterWriter;
@@ -504,9 +505,13 @@ function registerBillingRenewalScheduler(
 
 function createCandidateDraftDeps(
   options: BuildAppOptions,
-): Pick<CandidateDraftRouteDeps, 'candidateDraftRepository' | 'linkedinDraftWriter'> {
+): Pick<
+  CandidateDraftRouteDeps,
+  'candidateDraftRepository' | 'linkedinDraftWriter' | 'experienceFactRewriter'
+> {
   const { config } = options;
   return {
+    experienceFactRewriter: options.experienceFactRewriter,
     candidateDraftRepository:
       options.candidateDraftRepository ??
       new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),

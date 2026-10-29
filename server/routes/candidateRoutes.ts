@@ -29,6 +29,8 @@ import { preferStructuredResume } from '../domain/resumeStructuring';
 import { structureWithinBudget } from '../providers/resumeStructurer';
 import { handleImportStructuredResume } from './structuredResumeImportRoute';
 import { registerCandidateExperienceFactRoutes } from './candidateExperienceFactRoutes';
+import { registerExperienceFactRewriteRoutes } from './experienceFactRewriteRoutes';
+import { withStoredFactRewrites } from '../domain/experienceFactRewrite';
 import { registerCandidateConsultantHistoryRoutes } from './candidateConsultantHistoryRoutes';
 import { registerCandidateMediaRoutes } from './candidateMediaRoutes';
 import { registerCandidateDocumentRoutes } from './candidateDocumentRoutes';
@@ -571,10 +573,11 @@ const handlePutResume: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const draft = resumeDraftSchema.parse(request.body);
+  const parsed = resumeDraftSchema.parse(request.body);
   const saveResult = candidateStore.transaction(() => {
     const snapshot = candidateStore.getSnapshot(candidate.id);
     const storedDraft = snapshot.resume?.draft;
+    const draft = withStoredFactRewrites(parsed, storedDraft);
     // A stored v2 draft carries fields a pre-B265 client has never heard of.
     // Refuse it before any evidence materialization so stale clients cannot
     // silently erase fields or cause otherwise unrelated facts to be confirmed.
@@ -714,6 +717,7 @@ export async function registerCandidateRoutes(
   await registerCandidateLifecycle(app, deps);
   await registerCandidateConsultantHistoryRoutes(app, deps);
   await registerCandidateExperienceFactRoutes(app, deps);
+  await registerExperienceFactRewriteRoutes(app, deps);
   await registerResumeEndpoints(app, deps);
   await registerCandidateResumeVersionRoutes(app, deps);
   registerCandidateDocumentRoutes(app, deps);

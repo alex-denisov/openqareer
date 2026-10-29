@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FactRewriteProposal } from '../../../server/domain/experienceFactRewrite';
 import { EMPTY_RESUME_DRAFT } from '../../../server/domain/resumeDraft';
+import { CoachApiError } from '../coach/apiClient';
 import type { CandidateMemory } from '../coach/coachApi';
+import * as api from './experienceFactRewriteApi';
 import { ExperienceSuggestionsList } from './ProfileExperienceSection';
 import type { ResumeDraft } from './resumeTypes';
 
@@ -51,18 +54,41 @@ const memory = [
   fact('f-loose', 'Тикетов стало на 40% меньше.'),
 ];
 
-function saveMock(result: boolean = true) {
-  return vi.fn<(next: ResumeDraft) => boolean>(() => result);
-}
+const proposal: FactRewriteProposal = {
+  id: 'proposal-1',
+  places: [
+    {
+      experienceId: 'rosseti',
+      bullets: [{ text: 'Увеличил выручку направления в 4 раза.', sourceFactIds: ['f-rosseti'] }],
+    },
+    {
+      experienceId: 'fishance',
+      bullets: [
+        {
+          text: 'Вывел компанию на выручку $50M+ и довёл до продажи.',
+          sourceFactIds: ['f-fishance'],
+        },
+      ],
+    },
+  ],
+  leftOutFactIds: ['f-loose'],
+  sourceFactIds: ['f-rosseti', 'f-fishance', 'f-loose'],
+};
 
 const disposers: Array<() => void> = [];
-afterEach(() => disposers.splice(0).forEach((dispose) => dispose()));
+afterEach(() => {
+  disposers.splice(0).forEach((dispose) => dispose());
+  vi.restoreAllMocks();
+});
+beforeEach(() => {
+  vi.spyOn(api, 'requestFactRewrite').mockResolvedValue(proposal);
+});
 
-function mount(node: ReactNode): HTMLElement {
+async function mount(node: ReactNode): Promise<HTMLElement> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
-  act(() => root.render(node));
+  await act(async () => root.render(node));
   disposers.push(() => {
     act(() => root.unmount());
     container.remove();
@@ -70,122 +96,138 @@ function mount(node: ReactNode): HTMLElement {
   return container;
 }
 
-function render(onSectionSave: (next: ResumeDraft) => Promise<boolean | void> | boolean | void) {
+function render(
+  options: {
+    readonly draft?: ResumeDraft;
+    readonly onSectionSave?: (next: ResumeDraft) => boolean;
+    readonly onRefresh?: () => void;
+  } = {},
+) {
   return mount(
     <ExperienceSuggestionsList
-      draft={draft}
+      draft={options.draft ?? draft}
       memory={memory}
       suggestions={[]}
-      onSectionSave={onSectionSave}
+      onSectionSave={options.onSectionSave ?? vi.fn(() => true)}
+      onManualExperienceFactAdded={options.onRefresh}
     />,
   );
 }
 
-function buttonIn(root: Element, label: string): HTMLButtonElement {
-  const found = [...root.querySelectorAll('button')].find(
-    (node) => node.textContent?.trim() === label,
+function button(container: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('button')].find((item) =>
+    item.textContent?.includes(label),
   );
-  expect(found, label).toBeDefined();
-  return found as HTMLButtonElement;
+  if (!found) throw new Error(`no button «${label}»`);
+  return found;
 }
 
-async function click(target: HTMLButtonElement) {
-  await act(async () => {
-    target.click();
-    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
-  });
-}
-
-function consultantBlock(container: HTMLElement): Element {
-  const block = container.querySelector('.profile-experience-suggestions');
-  expect(block).not.toBeNull();
-  return block as Element;
-}
-
-function pendingBlock(container: HTMLElement): Element {
-  const block = container.querySelector('[data-testid="pending-experience-facts"]');
-  expect(block).not.toBeNull();
-  return block as Element;
-}
-
-describe('conversation facts in «Опыт» (C10)', () => {
-  it('offers each matched fact under its employer as a consultant proposal', () => {
-    const container = render(vi.fn());
-    const block = consultantBlock(container);
-    expect(block.querySelector('[data-suggestion-id="fact:f-rosseti"]')?.textContent).toContain(
-      'Россети Цифра',
-    );
-    expect(block.querySelector('[data-suggestion-id="fact:f-rosseti"] ins')?.textContent).toBe(
-      'В Россети Цифра выручка выросла вчетверо.',
-    );
-    expect(block.querySelector('[data-suggestion-id="fact:f-fishance"]')?.textContent).toContain(
-      'Fishance Berhad',
-    );
-  });
-
-  it('«Принять» writes every proposed fact into its workplace with one save', async () => {
-    const save = saveMock();
-    const container = render(save);
-    await click(buttonIn(consultantBlock(container), 'Принять'));
-    expect(save).toHaveBeenCalledTimes(1);
-    const next = save.mock.calls[0][0];
-    expect(next.experience.find((entry) => entry.id === 'rosseti')?.bulletMemoryIds).toEqual([
-      'imported-1',
-      'f-rosseti',
+describe('consultant rewrite of conversation facts in «Опыт» (29.10)', () => {
+  it('shows the consultant’s bullets by employer and never the candidate’s raw words', async () => {
+    const container = await render();
+    const block = container.querySelector('[data-testid="experience-fact-rewrite"]')!;
+    expect(block.textContent).toContain('Консультант переписал рассказанное вами в пункты «Опыта»');
+    const places = [...block.querySelectorAll('[data-experience-id]')];
+    expect(places.map((place) => place.getAttribute('data-experience-id'))).toEqual([
+      'rosseti',
+      'fishance',
     ]);
-    expect(next.experience.find((entry) => entry.id === 'fishance')?.bulletMemoryIds).toEqual([
-      'f-fishance',
-    ]);
+    expect(places[0]!.textContent).toContain('Россети Цифра');
+    expect(places[0]!.textContent).toContain('Увеличил выручку направления в 4 раза.');
+    for (const item of memory) expect(container.textContent).not.toContain(item.statement);
+    expect(block.textContent).toContain('1 факт из беседы консультант не взял');
+    expect(container.querySelector('select')).toBeNull();
+    expect(api.requestFactRewrite).toHaveBeenCalledTimes(1);
   });
 
-  it('«Отклонить» records the declined facts and leaves the workplaces alone', async () => {
-    const save = saveMock();
-    const container = render(save);
-    await click(buttonIn(consultantBlock(container), 'Отклонить'));
-    const next = save.mock.calls[0][0];
-    expect(next.declinedFactIds).toEqual(['f-rosseti', 'f-fishance']);
-    expect(next.experience).toEqual(draft.experience);
-  });
-
-  it('says so when the save did not go through', async () => {
-    const container = render(saveMock(false));
-    await click(buttonIn(consultantBlock(container), 'Принять'));
-    expect(consultantBlock(container).querySelector('[role="alert"]')?.textContent).toContain(
-      'Не сохранилось',
-    );
-  });
-
-  it('lists a fact no workplace was found for as waiting, with its source', () => {
-    const container = render(vi.fn());
-    const block = pendingBlock(container);
-    expect(block.textContent).toContain('1 факт ждёт подтверждения');
-    expect(block.textContent).toContain('Тикетов стало на 40% меньше.');
-    expect(block.textContent).toContain('со слов кандидата');
-  });
-
-  it('adds a waiting fact to the workplace the candidate picks', async () => {
-    const save = saveMock();
-    const container = render(save);
-    const block = pendingBlock(container);
-    const add = buttonIn(block, 'Добавить');
-    expect(add.disabled).toBe(true);
-    const select = block.querySelector('select') as HTMLSelectElement;
-    await act(async () => {
-      select.value = 'rosseti';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+  it('applies everything with one «Принять» and re-reads the profile', async () => {
+    const apply = vi.spyOn(api, 'applyFactRewrite').mockResolvedValue({
+      id: 'proposal-1',
+      appliedAt: '2026-10-29T12:00:00.000Z',
+      bullets: [],
+      declinedFactIds: ['f-loose'],
     });
-    await click(buttonIn(block, 'Добавить'));
-    const next = save.mock.calls[0][0];
-    expect(next.experience.find((entry) => entry.id === 'rosseti')?.bulletMemoryIds).toEqual([
-      'imported-1',
+    const onRefresh = vi.fn();
+    const onSectionSave = vi.fn(() => true);
+    const container = await render({ onRefresh, onSectionSave });
+    await act(async () => button(container, 'Принять').click());
+    expect(apply).toHaveBeenCalledWith('proposal-1');
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(onSectionSave).not.toHaveBeenCalled();
+  });
+
+  it('declines every source fact with «Отклонить», leaving memory as it is', async () => {
+    const onSectionSave = vi.fn((_next: ResumeDraft) => true);
+    const container = await render({ onSectionSave });
+    await act(async () => button(container, 'Отклонить').click());
+    expect(onSectionSave.mock.calls[0]![0].declinedFactIds).toEqual([
+      'f-rosseti',
+      'f-fishance',
       'f-loose',
     ]);
+    expect(onSectionSave.mock.calls[0]![0].experience).toEqual(draft.experience);
   });
 
-  it('declines a waiting fact on its own', async () => {
-    const save = saveMock();
-    const container = render(save);
-    await click(buttonIn(pendingBlock(container), 'Отклонить'));
-    expect(save.mock.calls[0][0].declinedFactIds).toEqual(['f-loose']);
+  it('asks the consultant again when the proposal went stale', async () => {
+    vi.spyOn(api, 'applyFactRewrite').mockRejectedValue(
+      new CoachApiError('Факты или места работы изменились.', 'rewrite_stale', true),
+    );
+    const container = await render();
+    await act(async () => button(container, 'Принять').click());
+    expect(api.requestFactRewrite).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers «Отменить правку» for a fresh rewrite and undoes it', async () => {
+    vi.spyOn(api, 'requestFactRewrite').mockResolvedValue(null);
+    const revert = vi.spyOn(api, 'revertFactRewrite').mockResolvedValue();
+    const onRefresh = vi.fn();
+    const applied: ResumeDraft = {
+      ...draft,
+      declinedFactIds: ['f-rosseti', 'f-fishance', 'f-loose'],
+      factRewrites: [
+        {
+          id: 'rewrite-1',
+          appliedAt: new Date().toISOString(),
+          bullets: [],
+          declinedFactIds: ['f-loose'],
+        },
+      ],
+    };
+    const container = await render({ draft: applied, onRefresh });
+    expect(api.requestFactRewrite).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Пункты консультанта добавлены в «Опыт».');
+    await act(async () => button(container, 'Отменить правку').click());
+    expect(revert).toHaveBeenCalledWith('rewrite-1');
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('says the consultant failed and retries on request', async () => {
+    const request = vi
+      .spyOn(api, 'requestFactRewrite')
+      .mockRejectedValueOnce(new Error('Консультант не успел подготовить формулировки.'))
+      .mockResolvedValueOnce(proposal);
+    const container = await render();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('не успел');
+    await act(async () => button(container, 'Повторить').click());
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Увеличил выручку направления в 4 раза.');
+  });
+
+  it('shows no block for a proposal without bullets, so nothing can be declined blindly', async () => {
+    vi.spyOn(api, 'requestFactRewrite').mockResolvedValue({
+      ...proposal,
+      places: [],
+      leftOutFactIds: proposal.sourceFactIds,
+    });
+    const container = await render();
+    expect(container.querySelector('[data-testid="experience-fact-rewrite"]')).toBeNull();
+  });
+
+  it('shows nothing when every conversation fact is already handled', async () => {
+    const container = await render({
+      draft: { ...draft, declinedFactIds: ['f-rosseti', 'f-fishance', 'f-loose'] },
+    });
+    expect(container.querySelector('[data-testid="experience-fact-rewrite"]')).toBeNull();
+    expect(api.requestFactRewrite).not.toHaveBeenCalled();
   });
 });

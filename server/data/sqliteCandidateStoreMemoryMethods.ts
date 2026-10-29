@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -8,6 +9,12 @@ import type { CandidateSnapshot, StoredMemory } from './candidateStore';
 import { CandidateStoreConflictError } from './store/errors';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import type { ConversationController } from './store/conversationController';
+import {
+  applyFactRewrite,
+  revertFactRewrite,
+  type FactRewriteProposal,
+} from '../domain/experienceFactRewrite';
+import type { ResumeFactRewriteRecord } from '../domain/resumeDraft';
 
 /** What the dossier-review methods need from `SqliteCandidateStore` (kept out of it for the 800-line gate). */
 export interface MemoryMethodDeps {
@@ -90,6 +97,57 @@ function reviewMemories(
   });
 }
 
+/**
+ * Writes the accepted rewrite in one transaction: a new fact per bullet,
+ * linked to its source facts' messages, appended to its place. The proposal
+ * must still match the facts on offer, so a stale screen applies nothing.
+ */
+function applyExperienceFactRewrite(
+  deps: MemoryMethodDeps,
+  candidateId: string,
+  proposal: FactRewriteProposal,
+  isCurrent: (snapshot: CandidateSnapshot) => boolean,
+): ResumeFactRewriteRecord {
+  deps.requireCandidate(candidateId);
+  return deps.transaction(() => {
+    const snapshot = deps.getSnapshot(candidateId);
+    const draft = snapshot.resume?.draft;
+    if (!draft || !isCurrent(snapshot)) throw new CandidateStoreConflictError();
+    const applied = applyFactRewrite(draft, proposal, () => randomUUID(), new Date().toISOString());
+    const messagesOf = new Map(snapshot.memory.map((item) => [item.id, item.sourceMessageIds]));
+    const repository = new SqliteManualExperienceFactRepository(deps.database, deps.sealedText);
+    for (const bullet of applied.statements) {
+      const messages = [...new Set(bullet.sourceFactIds.flatMap((id) => messagesOf.get(id) ?? []))];
+      repository.addDerived(candidateId, bullet.memoryId, bullet.text, messages);
+    }
+    deps.saveResumeDraft(candidateId, applied.draft, snapshot.resume?.evidenceSnapshot ?? []);
+    return applied.record;
+  });
+}
+
+/** «Отменить правку»: the bullets leave the places and memory, the left-out facts return. */
+function revertExperienceFactRewrite(
+  deps: MemoryMethodDeps,
+  candidateId: string,
+  rewriteId: string,
+): boolean {
+  deps.requireCandidate(candidateId);
+  return deps.transaction(() => {
+    const snapshot = deps.getSnapshot(candidateId);
+    const draft = snapshot.resume?.draft;
+    const reverted = draft ? revertFactRewrite(draft, rewriteId) : null;
+    if (!reverted) return false;
+    const present = new Set(snapshot.memory.map((item) => item.id));
+    for (const memoryId of reverted.bulletMemoryIds) {
+      if (present.has(memoryId)) {
+        deps.conversations.changeMemory(candidateId, memoryId, { action: 'delete' });
+      }
+    }
+    deps.saveResumeDraft(candidateId, reverted.draft, snapshot.resume?.evidenceSnapshot ?? []);
+    return true;
+  });
+}
+
 export function createMemoryMethods(deps: MemoryMethodDeps) {
   return {
     addManualExperienceFact: (
@@ -98,6 +156,14 @@ export function createMemoryMethods(deps: MemoryMethodDeps) {
       statement: string,
       experienceId?: string,
     ): StoredMemory => addManualExperienceFact(deps, candidateId, memoryId, statement, experienceId),
+    applyExperienceFactRewrite: (
+      candidateId: string,
+      proposal: FactRewriteProposal,
+      isCurrent: (snapshot: CandidateSnapshot) => boolean,
+    ): ResumeFactRewriteRecord =>
+      applyExperienceFactRewrite(deps, candidateId, proposal, isCurrent),
+    revertExperienceFactRewrite: (candidateId: string, rewriteId: string): boolean =>
+      revertExperienceFactRewrite(deps, candidateId, rewriteId),
     reviewMemories: (
       candidateId: string,
       memoryIds: readonly string[],

@@ -223,11 +223,33 @@ export interface ResumeDraft {
    * The facts stay in memory; this only stops offering them again.
    */
   readonly declinedFactIds?: readonly string[];
+  /**
+   * Accepted consultant rewrites of conversation facts into workplace bullets.
+   * Each bullet is a new fact that keeps its source facts; the record is what
+   * «Отменить правку» undoes and what marks those bullets as the consultant's.
+   */
+  readonly factRewrites?: readonly ResumeFactRewriteRecord[];
+}
+
+export interface ResumeFactRewriteBullet {
+  readonly memoryId: string;
+  readonly experienceId: string;
+  readonly sourceFactIds: readonly string[];
+}
+
+export interface ResumeFactRewriteRecord {
+  readonly id: string;
+  readonly appliedAt: string;
+  readonly bullets: readonly ResumeFactRewriteBullet[];
+  /** Facts this rewrite left out and declined: undoing it offers them again. */
+  readonly declinedFactIds: readonly string[];
 }
 
 /** Bullets one workplace may list: imported ones plus the candidate's own facts (C10). */
 export const MAX_BULLETS_PER_PLACE = 80;
 const MAX_DECLINED_FACTS = 1_000;
+export const MAX_FACT_REWRITES = 50;
+export const MAX_REWRITE_BULLETS = 200;
 
 export const EMPTY_RESUME_DRAFT: ResumeDraft = {
   candidate: {},
@@ -245,6 +267,24 @@ const entryIdSchema = z
   .trim()
   .regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$/u);
 const memoryIdSchema = z.string().trim().min(1).max(80);
+const factRewriteRecordSchema = z
+  .object({
+    id: z.string().trim().min(1).max(80),
+    appliedAt: z.string().trim().min(1).max(40),
+    bullets: z
+      .array(
+        z
+          .object({
+            memoryId: memoryIdSchema,
+            experienceId: z.string().trim().min(1).max(120),
+            sourceFactIds: z.array(memoryIdSchema).min(1).max(MAX_DECLINED_FACTS),
+          })
+          .strict(),
+      )
+      .max(MAX_REWRITE_BULLETS),
+    declinedFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS),
+  })
+  .strict();
 const chronologyDateSchema = z.string().trim().max(30);
 const labelSchema = z.string().trim().max(300);
 
@@ -526,6 +566,7 @@ export const resumeDraftSchema = z
       .strict()
       .optional(),
     declinedFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS).optional(),
+    factRewrites: z.array(factRewriteRecordSchema).max(MAX_FACT_REWRITES).optional(),
   })
   .strict()
   .transform((draft) => ({

@@ -1,267 +1,377 @@
-import { useId, useMemo, useState } from 'react';
-import { Check, Question, X } from '@phosphor-icons/react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { ArrowsClockwise, Check, CheckCircle, Sparkle, Spinner, X } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
+import {
+  rewriteSourceFacts,
+  type FactRewriteProposal,
+} from '../../../server/domain/experienceFactRewrite';
+import { CoachApiError } from '../coach/apiClient';
 import type { CandidateMemory } from '../coach/coachApi';
 import {
-  acceptFactPlacements,
-  declineFacts,
-  placeExperienceFacts,
-} from './experienceFactPlacement';
-import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
-import { provenanceLabel } from './profileProvenance';
+  applyFactRewrite,
+  requestFactRewrite,
+  revertFactRewrite,
+} from './experienceFactRewriteApi';
 import type { ResumeDraft } from './resumeTypes';
+import './profileExperienceSuggestions.css';
 import './profileExperienceFacts.css';
 
 type SectionSave = (next: ResumeDraft) => Promise<boolean | void> | boolean | void;
-type SuggestionHandler = (suggestion: InlineSuggestionItem) => Promise<void> | void;
+type Refresh = () => Promise<void> | void;
 
 const NOT_SAVED = 'Не сохранилось: нет связи с сервером. Попробуйте ещё раз.';
-const FACT_PREFIX = 'fact:';
-const PENDING_PREVIEW = 5;
+/** How long the accepted rewrite keeps its «Отменить правку» in the block. */
+const UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-async function saveOrThrow(save: SectionSave, next: ResumeDraft): Promise<void> {
-  if ((await save(next)) === false) throw new Error(NOT_SAVED);
+function messageOf(reason: unknown): string {
+  return reason instanceof Error && reason.message ? reason.message : NOT_SAVED;
 }
 
-async function eachCommand(items: readonly InlineSuggestionItem[], handler?: SuggestionHandler) {
-  if (!handler) return;
-  for (const item of items) await handler(item);
-}
-
-export interface ExperienceFactProposals {
-  readonly suggestions: readonly InlineSuggestionItem[];
-  readonly pending: readonly CandidateMemory[];
-  /** Whether any fact is proposed, so the group buttons are live even without commands. */
-  readonly hasFacts: boolean;
-  readonly acceptGroup: (items: readonly InlineSuggestionItem[]) => Promise<void>;
-  readonly dismissGroup: (items: readonly InlineSuggestionItem[]) => Promise<void>;
-}
-
-function splitFacts(items: readonly InlineSuggestionItem[]) {
+/** Records the candidate's «Отклонить»: the facts stay in memory, they are only not offered again. */
+export function declineFacts(draft: ResumeDraft, factIds: readonly string[]): ResumeDraft {
   return {
-    facts: items.filter((item) => item.factMemoryId),
-    commands: items.filter((item) => !item.factMemoryId),
+    ...draft,
+    declinedFactIds: [...new Set([...(draft.declinedFactIds ?? []), ...factIds])],
   };
 }
 
-/** One draft write for all facts; the consultant's own proposals still go one by one. */
-function factGroupHandlers(
-  draft: ResumeDraft,
-  onSectionSave: SectionSave,
-  commands: { readonly accept?: SuggestionHandler; readonly dismiss?: SuggestionHandler },
-): Pick<ExperienceFactProposals, 'acceptGroup' | 'dismissGroup'> {
-  return {
-    acceptGroup: async (items) => {
-      const split = splitFacts(items);
-      await eachCommand(split.commands, commands.accept);
-      if (split.facts.length === 0) return;
-      const placements = split.facts.map((item) => ({
-        experienceId: item.experienceId ?? '',
-        factId: item.factMemoryId ?? '',
-      }));
-      await saveOrThrow(onSectionSave, acceptFactPlacements(draft, placements));
-    },
-    dismissGroup: async (items) => {
-      const split = splitFacts(items);
-      await eachCommand(split.commands, commands.dismiss);
-      if (split.facts.length === 0) return;
-      const ids = split.facts.map((item) => item.factMemoryId ?? '');
-      await saveOrThrow(onSectionSave, declineFacts(draft, ids));
-    },
-  };
+/** The last accepted rewrite, while its undo is still offered. */
+function recentRewrite(draft: ResumeDraft, now: number) {
+  const last = draft.factRewrites?.at(-1);
+  return last && now - Date.parse(last.appliedAt) < UNDO_WINDOW_MS ? last : undefined;
 }
 
-/**
- * Conversation facts join the consultant's «Опыт» proposals (mockup 2): one
- * row per fact under its employer, accepted or declined with the rest.
- */
-export function useExperienceFactProposals(options: {
-  readonly draft: ResumeDraft;
-  readonly memory: readonly CandidateMemory[];
-  readonly suggestions: readonly InlineSuggestionItem[];
-  readonly onSectionSave: SectionSave;
-  readonly onAcceptSuggestion?: SuggestionHandler;
-  readonly onDismissSuggestion?: SuggestionHandler;
-}): ExperienceFactProposals {
-  const { draft, memory, onSectionSave } = options;
-  const placement = useMemo(() => placeExperienceFacts(draft, memory), [draft, memory]);
-  const factSuggestions = placement.proposals.map(
-    ({ experienceId, fact }): InlineSuggestionItem => ({
-      id: `${FACT_PREFIX}${fact.id}`,
-      section: 'experience',
-      experienceId,
-      proposedText: fact.statement,
-      factMemoryId: fact.id,
-    }),
-  );
-  return {
-    suggestions: [...options.suggestions, ...factSuggestions],
-    pending: placement.pending,
-    hasFacts: factSuggestions.length > 0,
-    ...factGroupHandlers(draft, onSectionSave, {
-      accept: options.onAcceptSuggestion,
-      dismiss: options.onDismissSuggestion,
-    }),
-  };
+type ProposalState =
+  | { readonly status: 'idle' | 'loading' }
+  | { readonly status: 'ready'; readonly proposal: FactRewriteProposal | null }
+  | { readonly status: 'failed'; readonly error: string };
+
+/** Changes when the facts on offer or the places do: then the consultant is asked again. */
+function useSourceKey(draft: ResumeDraft, memory: readonly CandidateMemory[]): string {
+  return useMemo(() => {
+    const ids = rewriteSourceFacts(draft, memory).map((fact) => fact.id);
+    const places = draft.experience.map((entry) => entry.id);
+    return ids.length && places.length ? [...ids, '|', ...places].join(',') : '';
+  }, [draft, memory]);
 }
 
-function placeLabel(entry: ResumeDraft['experience'][number]): string {
-  const period = [entry.startDate, entry.current ? 'по н. в.' : entry.endDate]
-    .filter(Boolean)
-    .join(' — ');
-  return [entry.employer || 'Компания не указана', period].filter(Boolean).join(' · ');
+/** Asks the consultant once per set of facts on offer; the server keeps the answer. */
+function useRewriteProposal(sourceKey: string) {
+  const [state, setState] = useState<ProposalState>({ status: 'idle' });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!sourceKey) {
+      setState({ status: 'ready', proposal: null });
+      return undefined;
+    }
+    let live = true;
+    setState({ status: 'loading' });
+    requestFactRewrite()
+      .then((proposal) => live && setState({ status: 'ready', proposal }))
+      .catch((reason: unknown) => live && setState({ status: 'failed', error: messageOf(reason) }));
+    return () => {
+      live = false;
+    };
+  }, [sourceKey, attempt]);
+  return { state, retry: useCallback(() => setAttempt((value) => value + 1), []) };
 }
 
-function useDraftSave(onSectionSave: SectionSave) {
-  const [busy, setBusy] = useState(false);
+function useBusyAction() {
+  const [busy, setBusy] = useState<'accept' | 'dismiss' | 'revert' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const run = async (next: ResumeDraft) => {
-    setBusy(true);
+  const run = async (action: 'accept' | 'dismiss' | 'revert', work: () => Promise<void>) => {
+    setBusy(action);
     setError(null);
     try {
-      await saveOrThrow(onSectionSave, next);
+      await work();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : NOT_SAVED);
+      setError(messageOf(reason));
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
   return { busy, error, run };
 }
 
-function PlaceSelect({
+/** «Принять» and «Отменить правку» change the profile on the server; «Отклонить» is a draft save. */
+function useRewriteActions(
+  draft: ResumeDraft,
+  onSectionSave: SectionSave,
+  onProfileChanged?: Refresh,
+  onStale?: () => void,
+) {
+  const actions = useBusyAction();
+  const accept = (current: FactRewriteProposal) =>
+    void actions.run('accept', async () => {
+      try {
+        await applyFactRewrite(current.id);
+      } catch (reason) {
+        // The places changed under the proposal: ask the consultant again.
+        if (reason instanceof CoachApiError && reason.code === 'rewrite_stale') onStale?.();
+        throw reason;
+      }
+      await onProfileChanged?.();
+    });
+  const dismiss = (current: FactRewriteProposal) =>
+    void actions.run('dismiss', async () => {
+      if ((await onSectionSave(declineFacts(draft, current.sourceFactIds))) === false) {
+        throw new Error(NOT_SAVED);
+      }
+    });
+  const revert = (rewriteId: string) =>
+    void actions.run('revert', async () => {
+      await revertFactRewrite(rewriteId);
+      await onProfileChanged?.();
+    });
+  return { actions, accept, dismiss, revert };
+}
+
+function employerOf(draft: ResumeDraft, experienceId: string): string {
+  return (
+    draft.experience.find((entry) => entry.id === experienceId)?.employer || 'Компания не указана'
+  );
+}
+
+function leftOutNote(count: number): string | null {
+  if (count === 0) return null;
+  return `${pluralRu(count, ['факт', 'факта', 'фактов'])} из беседы консультант не взял: они уже есть в профиле, это обрывки речи или оговорки. В резюме они не попадут.`;
+}
+
+function ProposalBullets({
   draft,
-  value,
-  disabled,
-  onChange,
+  proposal,
 }: {
   readonly draft: ResumeDraft;
-  readonly value: string;
-  readonly disabled: boolean;
-  readonly onChange: (experienceId: string) => void;
+  readonly proposal: FactRewriteProposal;
 }) {
-  const selectId = useId();
+  return (
+    <div className="profile-experience-suggestions__rows" role="list">
+      {proposal.places.map((place) => (
+        <div
+          key={place.experienceId}
+          className="pm-sg-r profile-experience-suggestions__row profile-fact-rewrite__place"
+          data-experience-id={place.experienceId}
+          role="listitem"
+        >
+          <span className="profile-experience-suggestions__employer">
+            {employerOf(draft, place.experienceId)}
+          </span>
+          <ul className="profile-fact-rewrite__bullets">
+            {place.bullets.map((bullet) => (
+              <li key={bullet.text}>
+                <span className="career-sr-only">Предлагается: </span>
+                <ins>{bullet.text}</ins>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BlockHeader({ titleId }: { readonly titleId: string }) {
+  return (
+    <header className="pm-sg-h profile-experience-suggestions__header">
+      <Sparkle size={16} weight="regular" aria-hidden="true" />
+      <b id={titleId}>
+        <span className="profile-experience-suggestions__mobile-title">Пункты из беседы</span>
+        <span className="profile-experience-suggestions__desktop-title">
+          Консультант переписал рассказанное вами в пункты «Опыта»
+        </span>
+      </b>
+      <span className="profile-experience-suggestions__source">Предложено консультантом</span>
+    </header>
+  );
+}
+
+function ActionButton({
+  kind,
+  busy,
+  disabled,
+  onClick,
+}: {
+  readonly kind: 'accept' | 'dismiss';
+  readonly busy: string | null;
+  readonly disabled?: boolean;
+  readonly onClick: () => void;
+}) {
+  const accept = kind === 'accept';
+  const active = busy === kind;
+  const Icon = accept ? Check : X;
+  return (
+    <button
+      type="button"
+      className={
+        accept
+          ? 'career-btn career-inline-ok is-sm pm-cta is-inline profile-experience-suggestions__accept'
+          : 'career-btn is-sm pm-text profile-experience-suggestions__dismiss'
+      }
+      disabled={Boolean(busy) || disabled}
+      aria-busy={active || undefined}
+      onClick={onClick}
+    >
+      {active ? (
+        <Spinner size={16} weight="regular" aria-hidden="true" />
+      ) : (
+        <Icon size={16} weight="regular" aria-hidden="true" />
+      )}
+      {active ? (accept ? 'Применяем…' : 'Отклоняем…') : accept ? 'Принять' : 'Отклонить'}
+    </button>
+  );
+}
+
+function ProposalBody({
+  draft,
+  proposal,
+  actions,
+  onAccept,
+  onDismiss,
+}: {
+  readonly draft: ResumeDraft;
+  readonly proposal: FactRewriteProposal;
+  readonly actions: ReturnType<typeof useBusyAction>;
+  readonly onAccept: () => void;
+  readonly onDismiss: () => void;
+}) {
+  const note = leftOutNote(proposal.leftOutFactIds.length);
   return (
     <>
-      <label className="career-sr-only" htmlFor={selectId}>
-        Место работы для факта
-      </label>
-      <select
-        id={selectId}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">Выберите место работы</option>
-        {draft.experience.map((entry) => (
-          <option key={entry.id} value={entry.id}>
-            {placeLabel(entry)}
-          </option>
-        ))}
-      </select>
+      <ProposalBullets draft={draft} proposal={proposal} />
+      {note ? <p className="profile-fact-rewrite__note">{note}</p> : null}
+      <div className="pm-sg-a profile-experience-suggestions__actions">
+        <ActionButton kind="accept" busy={actions.busy} onClick={onAccept} />
+        <ActionButton kind="dismiss" busy={actions.busy} onClick={onDismiss} />
+        <p className="profile-experience-suggestions__pending-note">
+          Пока вы не примете, в резюме ничего не изменится.
+        </p>
+      </div>
     </>
   );
 }
 
-function PendingFactRow({
-  fact,
-  draft,
-  onSectionSave,
+function AppliedState({
+  busy,
+  onRevert,
 }: {
-  readonly fact: CandidateMemory;
-  readonly draft: ResumeDraft;
-  readonly onSectionSave: SectionSave;
+  readonly busy: boolean;
+  readonly onRevert: () => void;
 }) {
-  const [experienceId, setExperienceId] = useState('');
-  const { busy, error, run } = useDraftSave(onSectionSave);
   return (
-    <li className="profile-pending-fact" data-fact-id={fact.id}>
-      <p className="profile-pending-fact__text">{fact.statement}</p>
-      <span className="profile-pending-fact__source">{provenanceLabel(fact.provenance)}</span>
-      <div className="profile-pending-fact__actions">
-        <PlaceSelect
-          draft={draft}
-          value={experienceId}
-          disabled={busy}
-          onChange={setExperienceId}
-        />
-        <button
-          type="button"
-          className="career-btn is-sm pm-cta is-inline"
-          disabled={busy || !experienceId}
-          onClick={() => void run(acceptFactPlacements(draft, [{ experienceId, factId: fact.id }]))}
-        >
-          <Check size={16} aria-hidden="true" />
-          Добавить
-        </button>
-        <button
-          type="button"
-          className="career-btn is-sm pm-text"
-          disabled={busy}
-          onClick={() => void run(declineFacts(draft, [fact.id]))}
-        >
-          <X size={16} aria-hidden="true" />
-          Отклонить
-        </button>
-      </div>
-      {error ? (
-        <p className="career-command-error" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </li>
+    <div className="profile-experience-suggestions__row-state" data-testid="fact-rewrite-applied">
+      <span role="status">
+        <CheckCircle size={16} weight="regular" aria-hidden="true" />
+        Пункты консультанта добавлены в «Опыт».
+      </span>
+      <button
+        type="button"
+        className="career-btn is-sm pm-text profile-experience-suggestions__revert"
+        disabled={busy}
+        aria-busy={busy || undefined}
+        onClick={onRevert}
+      >
+        {busy ? (
+          <Spinner size={16} weight="regular" aria-hidden="true" />
+        ) : (
+          <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
+        )}
+        {busy ? 'Отменяем…' : 'Отменить правку'}
+      </button>
+    </div>
   );
 }
 
-function pendingTitle(count: number): string {
-  const verb = count % 10 === 1 && count % 100 !== 11 ? 'ждёт' : 'ждут';
-  return `${pluralRu(count, ['факт', 'факта', 'фактов'])} ${verb} подтверждения`;
+function ProposalStatus({
+  state,
+  onRetry,
+}: {
+  readonly state: ProposalState;
+  readonly onRetry: () => void;
+}) {
+  if (state.status === 'loading') {
+    return (
+      <p className="profile-fact-rewrite__note" role="status">
+        <Spinner size={16} weight="regular" aria-hidden="true" />
+        Консультант переписывает рассказанное вами в пункты резюме…
+      </p>
+    );
+  }
+  if (state.status !== 'failed') return null;
+  return (
+    <div className="profile-fact-rewrite__failed">
+      <p className="career-command-error" role="alert">
+        {state.error}
+      </p>
+      <button type="button" className="career-btn is-sm pm-text" onClick={onRetry}>
+        <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
+        Повторить
+      </button>
+    </div>
+  );
+}
+
+export interface ExperienceFactRewriteProps {
+  readonly draft: ResumeDraft;
+  readonly memory: readonly CandidateMemory[];
+  readonly onSectionSave: SectionSave;
+  /** Re-reads the profile after the server changed it (accept, undo). */
+  readonly onProfileChanged?: Refresh;
+  readonly now?: () => number;
 }
 
 /**
- * Facts from the conversation no workplace could be found for (C10): the
- * candidate picks the place or declines. Nothing enters the resume unasked.
+ * What the candidate told the consultant reaches «Опыт» only as the
+ * consultant's bullets (owner, 29.10): one block, one «Принять» for all
+ * places. The candidate's own words stay in memory and are never shown here.
  */
-export function ProfileExperiencePendingFacts({
+export function ExperienceFactRewrite({
   draft,
-  pending,
+  memory,
   onSectionSave,
-}: {
-  readonly draft: ResumeDraft;
-  readonly pending: readonly CandidateMemory[];
-  readonly onSectionSave: SectionSave;
-}) {
+  onProfileChanged,
+  now = Date.now,
+}: ExperienceFactRewriteProps) {
   const titleId = useId();
-  const [all, setAll] = useState(false);
-  if (pending.length === 0 || draft.experience.length === 0) return null;
-  const visible = all ? pending : pending.slice(0, PENDING_PREVIEW);
+  const sourceKey = useSourceKey(draft, memory);
+  const { state, retry } = useRewriteProposal(sourceKey);
+  const { actions, accept, dismiss, revert } = useRewriteActions(
+    draft,
+    onSectionSave,
+    onProfileChanged,
+    retry,
+  );
+  const applied = recentRewrite(draft, now());
+  // A proposal without bullets offers nothing to accept: it is not shown at all.
+  const proposal =
+    state.status === 'ready' && state.proposal?.places.length ? state.proposal : null;
+  if (!sourceKey && !applied) return null;
+  if (sourceKey && state.status === 'ready' && !proposal && !applied) return null;
+
   return (
     <section
-      className="profile-pending-facts"
+      className="career-consultant-suggestion pm-suggest profile-experience-suggestions profile-fact-rewrite"
       aria-labelledby={titleId}
-      data-testid="pending-experience-facts"
+      aria-busy={Boolean(actions.busy) || state.status === 'loading' || undefined}
+      data-testid="experience-fact-rewrite"
     >
-      <header className="profile-pending-facts__header">
-        <Question size={16} aria-hidden="true" />
-        <b id={titleId}>{pendingTitle(pending.length)}</b>
-      </header>
-      <p className="profile-pending-facts__note">
-        Из беседы с консультантом. Выберите место работы, и факт войдёт в него.
-      </p>
-      <ul className="profile-pending-facts__list">
-        {visible.map((fact) => (
-          <PendingFactRow key={fact.id} fact={fact} draft={draft} onSectionSave={onSectionSave} />
-        ))}
-      </ul>
-      {pending.length > PENDING_PREVIEW ? (
-        <button
-          type="button"
-          className="profile-skill-disclosure"
-          aria-expanded={all}
-          onClick={() => setAll((current) => !current)}
-        >
-          {all ? 'Свернуть' : `Показать все ${pending.length}`}
-        </button>
+      <BlockHeader titleId={titleId} />
+      {applied ? (
+        <AppliedState busy={actions.busy === 'revert'} onRevert={() => revert(applied.id)} />
+      ) : null}
+      {sourceKey ? <ProposalStatus state={state} onRetry={retry} /> : null}
+      {proposal ? (
+        <ProposalBody
+          draft={draft}
+          proposal={proposal}
+          actions={actions}
+          onAccept={() => accept(proposal)}
+          onDismiss={() => dismiss(proposal)}
+        />
+      ) : null}
+      {actions.error ? (
+        <p className="career-command-error profile-experience-suggestions__error" role="alert">
+          {actions.error}
+        </p>
       ) : null}
     </section>
   );

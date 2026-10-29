@@ -1,63 +1,73 @@
-/* C10: conversation facts no workplace was found for, inside «Опыт». */
-.profile-pending-facts {
-  display: grid;
-  gap: var(--career-space-2);
-  margin-block: var(--career-space-3);
-  padding: var(--career-space-3) var(--career-space-4);
-  border: var(--career-border-width) solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface);
-  color: var(--career-text);
-}
-
-.profile-pending-facts__header {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-2);
-  font-size: var(--career-text-sm);
-}
-
-.profile-pending-facts__header > svg {
-  flex: none;
-  color: var(--career-text-soft);
-}
-
-.profile-pending-facts__note,
-.profile-pending-fact__source {
-  margin: 0;
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-}
-
-.profile-pending-facts__list {
-  display: grid;
-  gap: var(--career-space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.profile-pending-fact {
+/* The consultant's bullets from the conversation, inside «Опыт» (29.10). */
+.profile-fact-rewrite__place {
   display: grid;
   gap: var(--career-space-1);
   min-inline-size: 0;
 }
 
-.profile-pending-fact__text {
+.profile-fact-rewrite__place .profile-experience-suggestions__employer {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.profile-fact-rewrite__bullets {
+  display: grid;
+  gap: var(--career-space-1);
   margin: 0;
+  padding-inline-start: var(--career-space-4);
+  color: var(--career-text);
   font-size: var(--career-text-sm);
   overflow-wrap: anywhere;
 }
 
-.profile-pending-fact__actions {
+.profile-fact-rewrite__bullets ins {
+  text-decoration: none;
+}
+
+.profile-fact-rewrite__note {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.profile-fact-rewrite__note > svg {
+  flex: none;
+}
+
+.profile-fact-rewrite__failed {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--career-space-2);
 }
 
-.profile-pending-fact__actions select {
-  flex: 1 1 14rem;
-  min-inline-size: 0;
-  max-inline-size: 100%;
+.profile-fact-rewrite__failed > .career-command-error {
+  margin: 0;
+}
+
+.profile-fact-rewrite > .profile-experience-suggestions__row-state {
+  display: flex;
+  grid-column: auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-success);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.profile-fact-rewrite > .profile-experience-suggestions__row-state > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+}
+
+@media (min-width: 761px) {
+  .profile-fact-rewrite__place.profile-experience-suggestions__row {
+    font-size: var(--career-text-sm);
+  }
 }
