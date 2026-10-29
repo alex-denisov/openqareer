@@ -10,9 +10,15 @@ export async function requestFactRewrite(): Promise<FactRewriteProposal | null> 
   return (await readDataObject<{ proposal: FactRewriteProposal | null }>(response)).proposal;
 }
 
-export async function applyFactRewrite(proposalId: string): Promise<ResumeFactRewriteRecord> {
+/** Applies the proposal with the candidate's edits: bullet key → new text, or null to remove. */
+export async function applyFactRewrite(
+  proposalId: string,
+  edits: Readonly<Record<string, string | null>> = {},
+): Promise<ResumeFactRewriteRecord> {
   const response = await apiFetch(`${BASE}/${encodeURIComponent(proposalId)}/apply`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ edits }),
   });
   return (await readDataObject<{ rewrite: ResumeFactRewriteRecord }>(response)).rewrite;
 }

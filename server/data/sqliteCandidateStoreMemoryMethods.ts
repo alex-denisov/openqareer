@@ -14,7 +14,7 @@ import {
   revertFactRewrite,
   type FactRewriteProposal,
 } from '../domain/experienceFactRewrite';
-import type { ResumeFactRewriteRecord } from '../domain/resumeDraft';
+import type { ResumeFactRewriteRecord, ResumePendingFactRewrite } from '../domain/resumeDraft';
 
 /** What the dossier-review methods need from `SqliteCandidateStore` (kept out of it for the 800-line gate). */
 export interface MemoryMethodDeps {
@@ -125,6 +125,27 @@ function applyExperienceFactRewrite(
   });
 }
 
+/** Keeps the proposal the candidate is shown, unless its facts changed while the model worked. */
+function saveFactRewriteProposal(
+  deps: MemoryMethodDeps,
+  candidateId: string,
+  pending: ResumePendingFactRewrite,
+  isCurrent: (snapshot: CandidateSnapshot) => boolean,
+): boolean {
+  deps.requireCandidate(candidateId);
+  return deps.transaction(() => {
+    const snapshot = deps.getSnapshot(candidateId);
+    const draft = snapshot.resume?.draft;
+    if (!draft || !isCurrent(snapshot)) return false;
+    deps.saveResumeDraft(
+      candidateId,
+      { ...draft, factRewriteProposal: pending },
+      snapshot.resume?.evidenceSnapshot ?? [],
+    );
+    return true;
+  });
+}
+
 /** «Отменить правку»: the bullets leave the places and memory, the left-out facts return. */
 function revertExperienceFactRewrite(
   deps: MemoryMethodDeps,
@@ -162,6 +183,11 @@ export function createMemoryMethods(deps: MemoryMethodDeps) {
       isCurrent: (snapshot: CandidateSnapshot) => boolean,
     ): ResumeFactRewriteRecord =>
       applyExperienceFactRewrite(deps, candidateId, proposal, isCurrent),
+    saveFactRewriteProposal: (
+      candidateId: string,
+      pending: ResumePendingFactRewrite,
+      isCurrent: (snapshot: CandidateSnapshot) => boolean,
+    ): boolean => saveFactRewriteProposal(deps, candidateId, pending, isCurrent),
     revertExperienceFactRewrite: (candidateId: string, rewriteId: string): boolean =>
       revertExperienceFactRewrite(deps, candidateId, rewriteId),
     reviewMemories: (

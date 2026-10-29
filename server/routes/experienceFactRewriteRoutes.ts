@@ -4,12 +4,17 @@ import { z } from 'zod';
 import type { CandidateSnapshot } from '../data/candidateStore';
 import { CandidateStoreConflictError } from '../data/store/errors';
 import {
+  arithmeticFails,
   buildFactRewriteRequest,
   checkFactRewrite,
+  InvalidBulletEditError,
+  withBulletEdits,
+  type FactRewriteModelOutput,
   type FactRewriteProposal,
   type FactRewriteRequest,
 } from '../domain/experienceFactRewrite';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
+import type { ExperienceFactRewriter } from '../providers/experienceFactRewriter';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -21,18 +26,6 @@ import {
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
-interface CachedProposal {
-  readonly digest: string;
-  readonly proposal: FactRewriteProposal;
-}
-
-/**
- * One proposal per candidate, kept while its facts and places stay the same:
- * opening «Опыт» again must not call the model again. A restart only costs
- * one more call; the proposal is not the candidate's data until accepted.
- */
-const MAX_CACHED_CANDIDATES = 500;
-
 function requestDigest(request: FactRewriteRequest): string {
   return createHash('sha256').update(JSON.stringify(request)).digest('hex');
 }
@@ -41,47 +34,43 @@ function rewriteRequestOf(snapshot: CandidateSnapshot): FactRewriteRequest {
   return buildFactRewriteRequest(snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT, snapshot.memory);
 }
 
-class ProposalCache {
-  private readonly proposals = new Map<string, CachedProposal>();
-  private readonly running = new Map<string, Promise<CachedProposal | null>>();
+function digestOf(snapshot: CandidateSnapshot): string {
+  return requestDigest(rewriteRequestOf(snapshot));
+}
 
-  get(candidateId: string, digest: string): CachedProposal | undefined {
-    const cached = this.proposals.get(candidateId);
-    return cached?.digest === digest ? cached : undefined;
-  }
+/**
+ * Two tabs opening «Опыт» at once share one model call. The proposal itself
+ * lives on the draft (owner, 29.10): a deploy must not change the words the
+ * candidate has already read.
+ */
+class RunningRewrites {
+  private readonly running = new Map<string, Promise<FactRewriteProposal | null>>();
 
-  byId(candidateId: string, proposalId: string): CachedProposal | undefined {
-    const cached = this.proposals.get(candidateId);
-    return cached?.proposal.id === proposalId ? cached : undefined;
-  }
-
-  forget(candidateId: string): void {
-    this.proposals.delete(candidateId);
-  }
-
-  /** Two tabs opening «Опыт» at once share one model call. */
-  async produce(
-    candidateId: string,
-    digest: string,
-    make: () => Promise<FactRewriteProposal | null>,
-  ): Promise<CachedProposal | null> {
-    const key = `${candidateId}:${digest}`;
+  produce(key: string, make: () => Promise<FactRewriteProposal | null>) {
     const pending = this.running.get(key);
     if (pending) return pending;
-    const job = make()
-      .then((proposal) => (proposal ? this.store(candidateId, { digest, proposal }) : null))
-      .finally(() => this.running.delete(key));
+    const job = make().finally(() => this.running.delete(key));
     this.running.set(key, job);
     return job;
   }
+}
 
-  private store(candidateId: string, cached: CachedProposal): CachedProposal {
-    this.proposals.delete(candidateId);
-    this.proposals.set(candidateId, cached);
-    const oldest = this.proposals.keys().next().value;
-    if (this.proposals.size > MAX_CACHED_CANDIDATES && oldest) this.proposals.delete(oldest);
-    return cached;
-  }
+function failingArithmetic(output: FactRewriteModelOutput): string[] {
+  return output.places.flatMap((place) =>
+    place.bullets.map((bullet) => bullet.text).filter(arithmeticFails),
+  );
+}
+
+/** A bullet whose numbers contradict each other goes back to the model once. */
+async function makeProposal(
+  rewriter: ExperienceFactRewriter,
+  request: FactRewriteRequest,
+): Promise<FactRewriteProposal | null> {
+  const first = await rewriter.rewrite(request);
+  if (!first) return null;
+  const corrections = failingArithmetic(first);
+  const second = corrections.length ? await rewriter.rewrite({ ...request, corrections }) : null;
+  return checkFactRewrite(request, second ?? first, randomUUID());
 }
 
 function signedInCandidate(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -92,15 +81,22 @@ function signedInCandidate(deps: RouteDeps, request: FastifyRequest, reply: Fast
   return authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
 }
 
-function proposeHandler(cache: ProposalCache): Handler {
+function reply200<T>(request: FastifyRequest, data: T) {
+  return { data, meta: { requestId: request.id } };
+}
+
+function proposeHandler(running: RunningRewrites): Handler {
   return async (deps, request, reply) => {
     const candidate = signedInCandidate(deps, request, reply);
     if (!candidate) return undefined;
-    const rewriteRequest = rewriteRequestOf(deps.candidateStore.getSnapshot(candidate.id));
+    const snapshot = deps.candidateStore.getSnapshot(candidate.id);
+    const rewriteRequest = rewriteRequestOf(snapshot);
     if (rewriteRequest.facts.length === 0 || rewriteRequest.places.length === 0) {
-      return { data: { proposal: null }, meta: { requestId: request.id } };
+      return reply200(request, { proposal: null });
     }
     const digest = requestDigest(rewriteRequest);
+    const stored = snapshot.resume?.draft.factRewriteProposal;
+    if (stored?.digest === digest) return reply200(request, { proposal: stored.proposal });
     const rewriter = deps.experienceFactRewriter;
     if (!rewriter) {
       return sendError(
@@ -112,13 +108,10 @@ function proposeHandler(cache: ProposalCache): Handler {
         true,
       );
     }
-    const cached =
-      cache.get(candidate.id, digest) ??
-      (await cache.produce(candidate.id, digest, async () => {
-        const output = await rewriter.rewrite(rewriteRequest);
-        return output ? checkFactRewrite(rewriteRequest, output, randomUUID()) : null;
-      }));
-    if (!cached) {
+    const proposal = await running.produce(`${candidate.id}:${digest}`, () =>
+      makeProposal(rewriter, rewriteRequest),
+    );
+    if (!proposal) {
       request.log.warn({ facts: rewriteRequest.facts.length }, 'experience_fact_rewrite_failed');
       return sendError(
         reply,
@@ -129,11 +122,20 @@ function proposeHandler(cache: ProposalCache): Handler {
         true,
       );
     }
-    return { data: { proposal: cached.proposal }, meta: { requestId: request.id } };
+    deps.candidateStore.saveFactRewriteProposal(
+      candidate.id,
+      { digest, proposal },
+      (latest) => digestOf(latest) === digest,
+    );
+    return reply200(request, { proposal });
   };
 }
 
 const idParams = z.object({ id: z.string().trim().min(1).max(80) });
+const applyBody = z
+  .object({ edits: z.record(z.string().max(160), z.string().max(400).nullable()).optional() })
+  .strict()
+  .optional();
 
 function staleError(request: FastifyRequest, reply: FastifyReply) {
   return sendError(
@@ -146,27 +148,53 @@ function staleError(request: FastifyRequest, reply: FastifyReply) {
   );
 }
 
-function applyHandler(cache: ProposalCache): Handler {
-  return async (deps, request, reply) => {
-    const candidate = signedInCandidate(deps, request, reply);
-    if (!candidate) return undefined;
-    const { id } = idParams.parse(request.params);
-    const cached = cache.byId(candidate.id, id);
-    if (!cached) return staleError(request, reply);
-    try {
-      const rewrite = deps.candidateStore.applyExperienceFactRewrite(
-        candidate.id,
-        cached.proposal,
-        (snapshot) => requestDigest(rewriteRequestOf(snapshot)) === cached.digest,
-      );
-      cache.forget(candidate.id);
-      return { data: { rewrite }, meta: { requestId: request.id } };
-    } catch (error) {
-      if (!(error instanceof CandidateStoreConflictError)) throw error;
-      return staleError(request, reply);
-    }
-  };
+function editError(request: FastifyRequest, reply: FastifyReply) {
+  return sendError(
+    reply,
+    request,
+    400,
+    'rewrite_edit_invalid',
+    'Пункт пустой или слишком длинный, либо все пункты убраны. Поправьте и примите снова.',
+    false,
+  );
 }
+
+/** The stored proposal with the candidate's edits; `null` when the edits leave nothing valid. */
+function editedProposal(
+  proposal: FactRewriteProposal,
+  edits: Readonly<Record<string, string | null>>,
+): FactRewriteProposal | null {
+  try {
+    const edited = withBulletEdits(proposal, edits);
+    return edited.places.length ? edited : null;
+  } catch (error) {
+    if (error instanceof InvalidBulletEditError) return null;
+    throw error;
+  }
+}
+
+const handleApply: Handler = async (deps, request, reply) => {
+  const candidate = signedInCandidate(deps, request, reply);
+  if (!candidate) return undefined;
+  const { id } = idParams.parse(request.params);
+  const body = applyBody.safeParse(request.body ?? undefined);
+  if (!body.success) return editError(request, reply);
+  const pending = deps.candidateStore.getSnapshot(candidate.id).resume?.draft.factRewriteProposal;
+  if (pending?.proposal.id !== id) return staleError(request, reply);
+  const proposal = editedProposal(pending.proposal, body.data?.edits ?? {});
+  if (!proposal) return editError(request, reply);
+  try {
+    const rewrite = deps.candidateStore.applyExperienceFactRewrite(
+      candidate.id,
+      proposal,
+      (snapshot) => digestOf(snapshot) === pending.digest,
+    );
+    return reply200(request, { rewrite });
+  } catch (error) {
+    if (!(error instanceof CandidateStoreConflictError)) throw error;
+    return staleError(request, reply);
+  }
+};
 
 const handleRevert: Handler = async (deps, request, reply) => {
   const candidate = signedInCandidate(deps, request, reply);
@@ -175,18 +203,15 @@ const handleRevert: Handler = async (deps, request, reply) => {
   if (!deps.candidateStore.revertExperienceFactRewrite(candidate.id, id)) {
     return sendError(reply, request, 404, 'rewrite_not_found', 'Эта правка уже отменена.', false);
   }
-  return { data: { reverted: true }, meta: { requestId: request.id } };
+  return reply200(request, { reverted: true });
 };
 
 export async function registerExperienceFactRewriteRoutes(
   app: FastifyInstance,
   deps: RouteDeps,
 ): Promise<void> {
-  const cache = new ProposalCache();
-  app.post('/api/v1/candidate/experience-fact-rewrite', withDeps(deps, proposeHandler(cache)));
-  app.post(
-    '/api/v1/candidate/experience-fact-rewrite/:id/apply',
-    withDeps(deps, applyHandler(cache)),
-  );
+  const running = new RunningRewrites();
+  app.post('/api/v1/candidate/experience-fact-rewrite', withDeps(deps, proposeHandler(running)));
+  app.post('/api/v1/candidate/experience-fact-rewrite/:id/apply', withDeps(deps, handleApply));
   app.post('/api/v1/candidate/experience-fact-rewrite/:id/revert', withDeps(deps, handleRevert));
 }

@@ -153,4 +153,90 @@ describe('consultant rewrite of conversation facts (29.10)', () => {
       (await failing.app.inject({ method: 'POST', url, headers: failing.headers })).statusCode,
     ).toBe(502);
   });
+
+  it('keeps the proposal on the server draft, so a client save or restart shows the same words', async () => {
+    const rewriter = rewriterAnswering();
+    const { app, headers, candidateId, store } = await candidateWithFacts(rewriter);
+    const url = '/api/v1/candidate/experience-fact-rewrite';
+    const proposal = (await app.inject({ method: 'POST', url, headers })).json().data.proposal;
+    const stored = store.getSnapshot(candidateId).resume!.draft.factRewriteProposal;
+    expect(stored?.proposal.id).toBe(proposal.id);
+    const { factRewriteProposal: _dropped, ...clientDraft } =
+      store.getSnapshot(candidateId).resume!.draft;
+    const saved = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/resume',
+      headers,
+      payload: clientDraft,
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(store.getSnapshot(candidateId).resume!.draft.factRewriteProposal?.proposal.id).toBe(
+      proposal.id,
+    );
+    const again = await app.inject({ method: 'POST', url, headers });
+    expect(again.json().data.proposal).toEqual(proposal);
+    expect(rewriter.calls).toHaveLength(1);
+  });
+
+  it('asks the model again when a bullet’s arithmetic does not add up', async () => {
+    const calls: FactRewriteRequest[] = [];
+    const rewriter: ExperienceFactRewriter = {
+      rewrite: async (request) => {
+        calls.push(request);
+        const [team, load] = request.facts;
+        const text =
+          calls.length === 1
+            ? 'Расширил команду поддержки с 4 до 11 инженеров, добавив 3 сотрудников.'
+            : 'Расширил команду поддержки с 4 до 11 инженеров, следя за нагрузкой каждого.';
+        return {
+          places: [
+            { experienceId: CLOUD, bullets: [{ text, sourceFactIds: [team!.id, load!.id] }] },
+          ],
+        };
+      },
+    };
+    const { app, headers } = await candidateWithFacts(rewriter);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/experience-fact-rewrite',
+      headers,
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.corrections?.[0]).toContain('добавив 3');
+    expect(response.json().data.proposal.places[0].bullets[0].text).toContain('следя за нагрузкой');
+  });
+
+  it('applies the edited set the candidate accepted', async () => {
+    const { app, headers, candidateId, store, facts } =
+      await candidateWithFacts(rewriterAnswering());
+    const url = '/api/v1/candidate/experience-fact-rewrite';
+    const proposal = (await app.inject({ method: 'POST', url, headers })).json().data.proposal;
+    const applied = await app.inject({
+      method: 'POST',
+      url: `${url}/${proposal.id}/apply`,
+      headers,
+      payload: {
+        edits: { [`${CLOUD}#0`]: 'Вырастил вторую линию поддержки с 4 до 11 инженеров.' },
+      },
+    });
+    expect(applied.statusCode).toBe(200);
+    const snapshot = store.getSnapshot(candidateId);
+    const place = snapshot.resume!.draft.experience[0]!;
+    expect(snapshot.memory.find((item) => item.id === place.bulletMemoryIds[0])?.statement).toBe(
+      'Вырастил вторую линию поддержки с 4 до 11 инженеров.',
+    );
+    expect(snapshot.resume!.draft.factRewriteProposal).toBeUndefined();
+    const removedAll = await candidateWithFacts(rewriterAnswering());
+    const second = (
+      await removedAll.app.inject({ method: 'POST', url, headers: removedAll.headers })
+    ).json().data.proposal;
+    const refused = await removedAll.app.inject({
+      method: 'POST',
+      url: `${url}/${second.id}/apply`,
+      headers: removedAll.headers,
+      payload: { edits: { [`${CLOUD}#0`]: null } },
+    });
+    expect(refused.statusCode).toBe(400);
+    expect(facts).toHaveLength(3);
+  });
 });
