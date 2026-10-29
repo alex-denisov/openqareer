@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X } from '@phosphor-icons/react';
+import { CaretDown, X } from '@phosphor-icons/react';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import type { SkillConfirmation } from './skillConfirmationApi';
 import {
@@ -85,28 +85,37 @@ function SkillConfirmBody(
     <>
       <label className="skill-confirm-pick">
         <span>Навык</span>
-        <select value={skill.name} onChange={(event) => props.onPick(event.target.value)}>
-          {skills.map((item) => (
-            <option key={item.id} value={item.name}>
-              {item.name}
-            </option>
-          ))}
-        </select>
+        <div className="career-responses-select-wrap">
+          <select
+            className="career-responses-select"
+            value={skill.name}
+            onChange={(event) => props.onPick(event.target.value)}
+          >
+            {skills.map((item) => (
+              <option key={item.id} value={item.name}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <CaretDown size={14} className="career-responses-select-caret" aria-hidden="true" />
+        </div>
       </label>
       <DiscussedNote skill={skill} />
-      <QuizPath key={skill.name} skill={skill} onApplied={onApplied} />
-      {onDiscuss ? (
-        <button
-          type="button"
-          className="career-secondary-button"
-          onClick={() => {
-            onClose();
-            onDiscuss(skill.name);
-          }}
-        >
-          Разобрать в беседе
-        </button>
-      ) : null}
+      <div className="skill-confirm-paths">
+        <QuizPath key={skill.name} skill={skill} onApplied={onApplied} />
+        {onDiscuss ? (
+          <button
+            type="button"
+            className="career-secondary-button"
+            onClick={() => {
+              onClose();
+              onDiscuss(skill.name);
+            }}
+          >
+            Разобрать в беседе
+          </button>
+        ) : null}
+      </div>
     </>
   );
 }
@@ -115,7 +124,11 @@ export function SkillConfirmDialog(props: SkillConfirmDialogProps) {
   const { skills, onClose } = props;
   useEscapeLayer(onClose);
   const ref = useModalDialog();
-  const [name, setName] = useState(props.initialSkillName ?? skills[0]?.name ?? '');
+  const [name, setName] = useState(
+    props.initialSkillName ??
+      (skills.find((item) => item.status !== 'подтверждён') ?? skills[0])?.name ??
+      '',
+  );
   const skill = skills.find((item) => item.name === name) ?? skills[0];
   return (
     <dialog

@@ -28,7 +28,8 @@
   margin-block-start: var(--career-space-4);
 }
 .skill-confirm-dialog p {
-  margin: 0;
+  margin-inline: 0;
+  margin-block-end: 0;
   font-size: var(--career-text-sm);
 }
 .skill-confirm-header {
@@ -52,11 +53,15 @@
   font-size: var(--career-text-xs);
   color: var(--career-text-dim);
 }
-.skill-confirm-pick select {
-  min-block-size: var(--career-control-min);
-  max-inline-size: 100%;
-  font: inherit;
-  font-size: var(--career-text-sm);
+.skill-confirm-paths {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+.skill-confirm-paths > p,
+.skill-confirm-paths > .skill-confirm-flow {
+  flex-basis: 100%;
 }
 .skill-confirm-discussed {
   display: grid;
