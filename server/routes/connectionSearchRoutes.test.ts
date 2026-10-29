@@ -137,6 +137,18 @@ describe('LinkedIn company search (B561)', () => {
     expect(names[2]).toBe('Вектор Банк');
   });
 
+  it('never plans a private employer or a person named as employer', async () => {
+    const { app, authorization } = await setup([
+      matchedVacancy('v1', 'Частный работодатель'),
+      matchedVacancy('v2', 'Иванов Пётр Сергеевич'),
+      matchedVacancy('v3', 'Арка'),
+    ]);
+
+    const plan = await readPlan(app, authorization);
+
+    expect(plan.map((company) => company.companyName)).toEqual(['Арка']);
+  });
+
   it('leaves a searched company out of the plan for 14 days', async () => {
     const { app, authorization } = await setup([
       matchedVacancy('v1', 'Вектор Банк'),

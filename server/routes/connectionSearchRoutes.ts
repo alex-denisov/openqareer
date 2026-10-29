@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RecruiterContact, RecruiterSourceReceipt } from '../../shared/recruiterContact';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
+import { PRIVATE_EMPLOYER, publicEmployerName } from '../../shared/privateEmployer';
 import type { RouteDeps } from './deps';
 import { withDeps } from './helpers';
 import {
@@ -107,6 +108,8 @@ function plannedCompanies(
   const planned: Array<{ companyKey: string; companyName: string }> = [];
   for (const raw of names) {
     const companyName = raw.trim();
+    // A private person hiring is no company to search for (29.10 first run).
+    if (publicEmployerName(companyName) === PRIVATE_EMPLOYER) continue;
     const companyKey = companyName ? candidateCompanyKey(companyName) : '';
     if (!companyKey || seen.has(companyKey)) continue;
     seen.add(companyKey);
