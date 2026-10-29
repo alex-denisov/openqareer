@@ -1,4 +1,4 @@
-import { selectionToCount, sweepSelectionFit } from './fitSelectionSweep';
+import { selectionFitLimit, selectionToCount, sweepSelectionFit } from './fitSelectionSweep';
 import { attachMarketSalaryEstimates } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
@@ -43,7 +43,7 @@ import {
   withWantedCompanyOrder,
 } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
-import { authenticateCandidate, withDeps } from './helpers';
+import { authenticateCandidate, candidatePlan, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -198,6 +198,14 @@ function computeMatchedList(
   };
 }
 
+interface MatchedResponseOptions {
+  readonly decorate?: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[];
+  readonly catalogTotals?: () => CatalogTotals | undefined;
+  /** B580: how many rows by relevance the background sweep counts (Free: 300). */
+  readonly fitLimit?: number;
+}
+const keepOrder = (items: readonly MatchedVacancyItem[]) => [...items];
+
 function buildMatchedResponse(
   snapshot: readonly MatchedVacancyItem[],
   targetRoles: string[],
@@ -208,9 +216,9 @@ function buildMatchedResponse(
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
-  decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
-  catalogTotals?: () => CatalogTotals | undefined,
+  options: MatchedResponseOptions = {},
 ) {
+  const { decorate = keepOrder, catalogTotals, fitLimit = Number.POSITIVE_INFINITY } = options;
   const pageAndExplanationsStartedAt = performance.now();
   let listCached = true;
   const list = matchedListCache.read(
@@ -241,7 +249,7 @@ function buildMatchedResponse(
     data,
     page,
     facets: filters.offset === 0 ? list.facets : undefined,
-    ...fitWorkIds(list.filtered, filters.offset),
+    ...fitWorkIds(list.filtered, filters.offset, fitLimit),
     campaignWithHypotheses: list.campaignWithHypotheses,
     listCached,
     pageAndExplanationsMs,
@@ -275,10 +283,10 @@ function logMatchedTiming(
 }
 
 /** Rows whose text and fit a list read starts: the top, the best uncounted, the whole selection. */
-function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number) {
+function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLimit: number) {
   return {
     warmIds: vacanciesToWarm(items),
-    countIds: offset === 0 ? selectionToCount(items) : [],
+    countIds: offset === 0 ? selectionToCount(items, fitLimit) : [],
   };
 }
 
@@ -289,10 +297,16 @@ function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number) {
 function startFitWork(
   deps: RouteDeps,
   candidateId: string,
-  response: { readonly warmIds: readonly string[]; readonly countIds: readonly string[] },
-  offset: number,
+  response: {
+    readonly data: readonly MatchedVacancyItem[];
+    readonly warmIds: readonly string[];
+    readonly countIds: readonly string[];
+  },
+  { offset, fitLimit }: { readonly offset: number; readonly fitLimit: number },
   request: FastifyRequest,
 ): void {
+  // B580: on Free a page past the first 300 rows is counted card by card, when opened.
+  requestFitForShownPage(deps, candidateId, response.data.slice(0, Math.max(0, fitLimit - offset)));
   const engine = deps.multiSourceEngine;
   const requestFit = (ids: readonly string[]) => requestFitForVacancyIds(deps, candidateId, ids);
   preloadTopMatchedDescriptions(engine, response.warmIds, offset, request, requestFit);
@@ -301,7 +315,8 @@ function startFitWork(
     candidateId,
     response.countIds,
     (ids) => engine.preloadVacancyDescriptions!(ids, ids.length),
-    requestFit,
+    // The sweep queues below the shown page: after an edit, paid plans see the visible rows first.
+    (ids, rank) => requestFitForVacancyIds(deps, candidateId, ids, rank),
   );
 }
 
@@ -352,6 +367,7 @@ async function readMatchedPage(
   filters: MatchedVacancyFilters,
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
   decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
+  fitLimit = Number.POSITIVE_INFINITY,
 ) {
   const startedAt = performance.now();
   const snapshot = await readMatchedSnapshot(
@@ -372,8 +388,13 @@ async function readMatchedPage(
       titleParseStore,
       filters,
       sourceRegistry,
-      decorate,
-      typeof engine.getCatalogTotals === 'function' ? () => engine.getCatalogTotals() : undefined,
+      {
+        decorate,
+        fitLimit,
+        ...(typeof engine.getCatalogTotals === 'function'
+          ? { catalogTotals: () => engine.getCatalogTotals!() }
+          : {}),
+      },
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
   };
@@ -432,6 +453,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
   }
 
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
+  const fitLimit = selectionFitLimit(candidatePlan(deps, candidate.id));
   const { response: orderedPage, semanticQueryAndSqlMs } = await readMatchedPage(
     multiSourceEngine,
     candidateStore,
@@ -444,12 +466,12 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     filters,
     sourceRegistry,
     withWantedCompanyOrder(deps, candidate.id, filters.sort ?? 'fit'),
+    fitLimit,
   );
   const shown = withShownPageFitViews(deps, candidate.id, orderedPage.data);
   const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
 
-  startFitWork(deps, candidate.id, response, offset, request);
-  requestFitForShownPage(deps, candidate.id, response.data);
+  startFitWork(deps, candidate.id, response, { offset, fitLimit }, request);
 
   logMatchedTiming(
     request,

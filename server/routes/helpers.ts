@@ -187,6 +187,15 @@ export function candidateHasLlmAccess(
   return deps.billingRepository?.canCandidateUseLlm(candidateId, new Date().toISOString()) ?? false;
 }
 
+/** Without billing enforcement every candidate gets the paid behaviour, as with LLM access. */
+export function candidatePlan(
+  deps: Partial<Pick<RouteDeps, 'config' | 'billingRepository'>>,
+  candidateId: string,
+): 'free' | 'basic' | 'pro' | 'max' {
+  if (deps.config?.billingEnforcement !== true || !deps.billingRepository) return 'pro';
+  return deps.billingRepository.getEffectivePlanForCandidate(candidateId, new Date().toISOString());
+}
+
 export function requireCandidateLlmAccess(
   deps: Partial<Pick<RouteDeps, 'config' | 'billingRepository'>>,
   request: FastifyRequest,

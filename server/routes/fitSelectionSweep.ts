@@ -11,14 +11,26 @@ const SWEEP_WINDOW_MS = 10 * 60_000;
  * relevance first, until every row with text has a percent. Rows still counting keep the
  * selection's relevance order (shared compareFitPercent leaves their order to the caller).
  */
-export function selectionToCount(items: readonly MatchedVacancyItem[]): string[] {
+/** B580: Free counts the 300 most relevant rows; the rest are counted when a card is opened. */
+export const FREE_SELECTION_FIT_LIMIT = 300;
+
+export function selectionFitLimit(plan: 'free' | 'basic' | 'pro' | 'max'): number {
+  return plan === 'free' ? FREE_SELECTION_FIT_LIMIT : Number.POSITIVE_INFINITY;
+}
+
+export function selectionToCount(
+  items: readonly MatchedVacancyItem[],
+  limit = Number.POSITIVE_INFINITY,
+): string[] {
   return items
+    .slice(0, limit)
     .filter((item) => vacancyFitStage(item.explanation.fitView) === 'counting')
     .map((item) => item.cluster.id);
 }
 
 type Preload = (vacancyIds: readonly string[]) => Promise<unknown>;
-type RequestFit = (clusterIds: readonly string[]) => void;
+/** `rank` is the chunk's first place in the selection: the queue keeps relevance order (B580). */
+type RequestFit = (clusterIds: readonly string[], rank: number) => void;
 
 export function createSelectionFitSweep({
   chunk = SWEEP_CHUNK,
@@ -40,7 +52,7 @@ export function createSelectionFitSweep({
       // The fit is queued after the text is read: queued earlier it would see no description.
       await preload(ids.map((id) => id.replace(/^cluster-/u, ''))).catch(() => undefined);
       try {
-        requestFit(ids);
+        requestFit(ids, start);
       } catch {
         // One failed queue write leaves the next chunks to this sweep and the rest to the next.
       }

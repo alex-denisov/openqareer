@@ -174,6 +174,12 @@ export class SqliteBillingRepository {
       ?? (hasActiveProTrial(this.database, userId, now) ? 'pro' : 'free');
   }
 
+  /** The plan of the account that owns a candidate; no account reads as Free. */
+  getEffectivePlanForCandidate(candidateId: string, now: string): 'free' | 'basic' | 'pro' | 'max' {
+    const user = this.database.prepare('SELECT id FROM users WHERE candidate_id = ?').get(candidateId) as { id: string } | undefined;
+    return user ? this.getEffectivePlan(user.id, now) : 'free';
+  }
+
   getProTrial(userId: string, now: string): ProTrialState {
     const paid = this.getSubscription(userId, now) !== null || this.getLegacyPaidPlan(userId, now) !== null;
     return readProTrial(this.database, userId, now, paid);

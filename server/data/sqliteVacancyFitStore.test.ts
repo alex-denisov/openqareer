@@ -152,4 +152,29 @@ describe('jobs queued by another release (B562-r)', () => {
     expect(database.prepare("SELECT status FROM vacancy_fit_queue WHERE cache_key='k'").get()).toEqual({ status: 'failed' });
     database.close();
   });
+
+  it('carries a result stored under the profile stamp of an earlier release to the new stamp (B580)', () => {
+    const { database, store } = setup();
+    const old = { ...input(), profileContextHash: 'stamp-with-about-text' };
+    store.putCache(old, evaluateVacancyFit(old), now);
+    const current = { ...input(), profileContextHash: 'stamp-of-compared-fields', legacyProfileContextHash: 'stamp-with-about-text' };
+
+    expect(store.getCache(current)?.coveragePercent).toBe(100);
+    expect(store.getCache({ ...current, legacyProfileContextHash: undefined })?.coveragePercent).toBe(100);
+    expect(store.getCache({ ...current, legacyProfileContextHash: 'other-profile', profileContextHash: 'new' })).toBeUndefined();
+    database.close();
+  });
+
+  it('B580: the visible page is claimed before the background sweep, the sweep in relevance order', () => {
+    const { database, store } = setup();
+    const at = (vacancyId: string) => ({ ...input(), vacancyId });
+    store.enqueue(at('visible'), now);
+    store.enqueue(at('sweep-1'), '2026-10-18T10:00:01.000Z', { backgroundRank: 0 });
+    store.enqueue(at('sweep-2'), '2026-10-18T10:00:02.000Z', { backgroundRank: 1 });
+
+    const order = [1, 2, 3].map(() => store.claim({ now: '2026-10-18T10:00:03.000Z' })?.input.vacancyId);
+
+    expect(order).toEqual(['visible', 'sweep-1', 'sweep-2']);
+    database.close();
+  });
 });

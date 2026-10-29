@@ -142,3 +142,17 @@ it('28.10 mockup: while counting, the expanded vacancy shows «считаем»,
   expect(text).toContain('считаем');
   expect(text).toContain('Совпадение считается');
 });
+
+it('B580: an opened vacancy the sweep left uncounted queues its percent by itself', async () => {
+  const methods: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      methods.push(init?.method ?? 'GET');
+      return Response.json({ data: { state: 'processing', requirements: [] } }, { status: 202 });
+    }),
+  );
+  const container = await mount({ state: 'not_requested', requirements: [] } as never);
+  expect(methods).toEqual(['POST']);
+  expect(container.textContent).not.toContain('Рассчитать соответствие');
+});
