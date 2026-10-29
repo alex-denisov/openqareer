@@ -26,7 +26,9 @@ import { profileKey } from './connectionImportMerge';
  * companies to search (wanted first, then vacancy companies, each at most
  * once per 14 days) and gives the found people their company.
  */
-const SEARCH_LOG_SCOPE_ID = '__b561_linkedin_company_search_log__';
+// v2: the first desktop run (29.10) re-read one company's page for seven
+// others and logged them as searched; a fresh log plans them again.
+const SEARCH_LOG_SCOPE_ID = '__b561_linkedin_company_search_log_v2__';
 const SEARCH_LOG_RECORD_ID = 'b561-linkedin-company-search-log';
 const SEARCH_REPEAT_MS = 14 * 24 * 60 * 60 * 1_000;
 const MAX_PLANNED_COMPANIES = 10;
