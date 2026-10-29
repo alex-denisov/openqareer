@@ -1,11 +1,7 @@
 import { recordCandidateGoal, readSeoGoalSummary } from './seoGoalRepository';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type {
-  AssessmentId,
-  AssessmentResult,
-  AssessmentSubmission,
-} from '../domain/assessment';
+import type { AssessmentId, AssessmentResult, AssessmentSubmission } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeCandidateInput, ResumeDraft } from '../domain/resumeDraft';
 import type {
