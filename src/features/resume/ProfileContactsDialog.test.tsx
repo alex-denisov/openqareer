@@ -17,7 +17,11 @@ beforeAll(() => {
 const cleanup: Array<() => void> = [];
 afterEach(() => cleanup.splice(0).forEach((dispose) => dispose()));
 
-function setup(section: ProfileDataSection, onSectionSave = vi.fn(async () => true)) {
+function setup(
+  section: ProfileDataSection,
+  onSectionSave = vi.fn(async () => true),
+  phone?: string,
+) {
   const onClose = vi.fn();
   const onSelect = vi.fn();
   const onContactsSaved = vi.fn();
@@ -30,7 +34,12 @@ function setup(section: ProfileDataSection, onSectionSave = vi.fn(async () => tr
     onRetry: vi.fn(),
     onDraftChange: vi.fn(),
     onSectionSave,
-    draft: { candidate: { fullName: 'Тест' }, experience: [], education: [], languages: [] },
+    draft: {
+      candidate: { fullName: 'Тест', ...(phone ? { contact: { phone } } : {}) },
+      experience: [],
+      education: [],
+      languages: [],
+    },
     section,
     onSelect,
     onClose,
@@ -93,5 +102,11 @@ describe('contacts dialog (block A p1: A7-A9, C2)', () => {
     await clickSave(container);
     expect(onSectionSave).not.toHaveBeenCalled();
     expect(container.textContent).toContain('Телефон:');
+  });
+
+  it('shows a stored phone already formatted (C1)', () => {
+    const { container } = setup('contacts', undefined, '+79651936059');
+    const phone = container.querySelector<HTMLInputElement>('input[name="phone"]')!;
+    expect(phone.value).toBe('+7 965 193-60-59');
   });
 });

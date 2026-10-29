@@ -162,7 +162,7 @@ export function TopcardEditForm({
   const [headline, setHeadline] = useState(draft.candidate.headline ?? '');
   const [location, setLocation] = useState(draft.candidate.contact?.location ?? '');
   const [email, setEmail] = useState(draft.candidate.contact?.email ?? '');
-  const [phone, setPhone] = useState(draft.candidate.contact?.phone ?? '');
+  const [phone, setPhone] = useState(() => formatPhoneInput(draft.candidate.contact?.phone ?? ''));
   const [touched, setTouched] = useState(false);
   const emailError = touched ? getContactEmailError(email) : null;
   const phoneError = touched ? getContactPhoneError(phone) : null;
