@@ -218,7 +218,16 @@ export interface ResumeDraft {
   readonly achievements?: readonly ResumeAchievementInput[];
   /** v2: proposed from a native source, not applied until the candidate acts. */
   readonly sourceSuggestions?: ResumeSourceSuggestionsInput;
+  /**
+   * Conversation facts the candidate declined to put into a workplace (C10).
+   * The facts stay in memory; this only stops offering them again.
+   */
+  readonly declinedFactIds?: readonly string[];
 }
+
+/** Bullets one workplace may list: imported ones plus the candidate's own facts (C10). */
+export const MAX_BULLETS_PER_PLACE = 80;
+const MAX_DECLINED_FACTS = 1_000;
 
 export const EMPTY_RESUME_DRAFT: ResumeDraft = {
   candidate: {},
@@ -321,7 +330,8 @@ export const resumeDraftSchema = z
             startDate: chronologyDateSchema.optional(),
             endDate: chronologyDateSchema.optional(),
             current: z.boolean(),
-            bulletMemoryIds: z.array(memoryIdSchema).max(20),
+            // 80: conversation facts join the imported bullets of one place (C10).
+            bulletMemoryIds: z.array(memoryIdSchema).max(MAX_BULLETS_PER_PLACE),
             descriptionMemoryId: memoryIdSchema.optional(),
             employmentType: labelSchema.optional(),
             workplaceType: workplaceTypeSchema.optional(),
@@ -515,6 +525,7 @@ export const resumeDraftSchema = z
       })
       .strict()
       .optional(),
+    declinedFactIds: z.array(memoryIdSchema).max(MAX_DECLINED_FACTS).optional(),
   })
   .strict()
   .transform((draft) => ({

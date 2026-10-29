@@ -8,10 +8,9 @@ describe('skill verification labels follow mockup 2', () => {
   it('1440 names the three states and never shows a raw status code', () => {
     expect(skillVerification(skill('подтверждён')).label).toBe('Подтверждено');
     expect(skillVerification(skill('не подтверждён')).label).toBe('Не подтверждено');
-    expect(skillVerification(skill()).label).toBe('Квиз не пройден');
-    expect(skillVerification(skill('awaiting_candidate_confirmation')).label).toBe(
-      'Квиз не пройден',
-    );
+    // B3: no quiz was ever started for such a skill, so it is «Без квиза», not a failed quiz.
+    expect(skillVerification(skill()).label).toBe('Без квиза');
+    expect(skillVerification(skill('awaiting_candidate_confirmation')).label).toBe('Без квиза');
   });
 
   it('390 reads «status · source, date» with its own wording', () => {

@@ -1,0 +1,63 @@
+/* C10: conversation facts no workplace was found for, inside «Опыт». */
+.profile-pending-facts {
+  display: grid;
+  gap: var(--career-space-2);
+  margin-block: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text);
+}
+
+.profile-pending-facts__header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  font-size: var(--career-text-sm);
+}
+
+.profile-pending-facts__header > svg {
+  flex: none;
+  color: var(--career-text-soft);
+}
+
+.profile-pending-facts__note,
+.profile-pending-fact__source {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.profile-pending-facts__list {
+  display: grid;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-pending-fact {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.profile-pending-fact__text {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.profile-pending-fact__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.profile-pending-fact__actions select {
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}

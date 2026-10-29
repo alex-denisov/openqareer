@@ -1,8 +1,8 @@
 import type { ParsedResume } from '../../src/features/workspace/resumeParser';
 import type { LinkedInProfileV2 } from '../../shared/linkedinProfileV2';
 import type { DownloadedMedia } from './candidateMedia';
-import type { ResumeDraft } from './resumeDraft';
-import { planResumeImport, type ResumeImportPlan } from './resumeImport';
+import { MAX_BULLETS_PER_PLACE, type ResumeDraft } from './resumeDraft';
+import { isImportedMemoryId, planResumeImport, type ResumeImportPlan } from './resumeImport';
 
 /**
  * Adapts the wire contract into the shape `planResumeImport` already knows
@@ -73,6 +73,9 @@ export function linkedinProfileV2ToParsedResume(profile: LinkedInProfileV2): Par
     },
     experience: toParsedExperience(profile.experience),
     skills: [...profile.skills],
+    ...(profile.skillAssessments?.length
+      ? { skillAssessments: [...profile.skillAssessments] }
+      : {}),
     education: toParsedEducation(profile.education),
     courses: profile.courses.map((course) => ({ ...course })),
     tests: profile.tests.map((test) => ({ ...test })),
@@ -199,7 +202,10 @@ const STRUCTURED_LIST_SECTIONS = [
  * means "not read", not "deleted": the candidate's existing entries stay
  * (B266) instead of the re-import wiping a filled profile.
  */
-export function keepFilledSections(incoming: ResumeDraft, existing: ResumeDraft | undefined): ResumeDraft {
+export function keepFilledSections(
+  incoming: ResumeDraft,
+  existing: ResumeDraft | undefined,
+): ResumeDraft {
   if (!existing) return incoming;
   // The target role is the candidate's choice and drives the campaign; an
   // import never clears it (B266: a re-import emptied it and the shortlist
@@ -214,8 +220,104 @@ export function keepFilledSections(incoming: ResumeDraft, existing: ResumeDraft 
     oldPhoto && !withRole.candidate?.photoMediaId
       ? { ...withRole, candidate: { ...withRole.candidate, photoMediaId: oldPhoto } }
       : withRole;
+  const withAbout = keepAbout(withPhoto, existing);
   const kept = STRUCTURED_LIST_SECTIONS.filter(
     (section) => (incoming[section]?.length ?? 0) === 0 && (existing[section]?.length ?? 0) > 0,
   );
-  return kept.reduce<ResumeDraft>((draft, section) => ({ ...draft, [section]: existing[section] }), withPhoto);
+  const withSections = kept.reduce<ResumeDraft>(
+    (draft, section) => ({ ...draft, [section]: existing[section] }),
+    withAbout,
+  );
+  const withSkills = kept.includes('skills')
+    ? withSections
+    : {
+        ...withSections,
+        skills: mergeReimportedSkills(incoming.skills ?? [], existing.skills ?? []),
+      };
+  const withFacts = kept.includes('experience')
+    ? withSkills
+    : {
+        ...withSkills,
+        experience: keepCandidateBullets(withSkills.experience, existing.experience),
+      };
+  return existing.declinedFactIds?.length
+    ? { ...withFacts, declinedFactIds: existing.declinedFactIds }
+    : withFacts;
+}
+
+function placeKey(entry: ResumeDraft['experience'][number]): string {
+  return [entry.employer ?? '', entry.startDate ?? '']
+    .map((part) => part.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase())
+    .join('\u0000');
+}
+
+/**
+ * A re-import replaces the imported bullets of each place, but the facts the
+ * candidate accepted into it (C10) are not LinkedIn's to remove: they follow
+ * the place, found by employer and start date. A place LinkedIn no longer has
+ * leaves its facts unplaced, so they are offered again rather than lost.
+ */
+function keepCandidateBullets(
+  incoming: ResumeDraft['experience'],
+  existing: ResumeDraft['experience'],
+): ResumeDraft['experience'] {
+  const ownByPlace = new Map(
+    existing.map((entry) => [
+      placeKey(entry),
+      (entry.bulletMemoryIds ?? []).filter((id) => !isImportedMemoryId(id)),
+    ]),
+  );
+  return incoming.map((entry) => {
+    const imported = entry.bulletMemoryIds ?? [];
+    const own = (ownByPlace.get(placeKey(entry)) ?? []).filter((id) => !imported.includes(id));
+    return own.length === 0
+      ? entry
+      : { ...entry, bulletMemoryIds: [...imported, ...own].slice(0, MAX_BULLETS_PER_PLACE) };
+  });
+}
+
+/** A walk that did not see the About card is not a deleted summary (C7). */
+function keepAbout(draft: ResumeDraft, existing: ResumeDraft): ResumeDraft {
+  const oldAbout = existing.candidate?.about;
+  if (!oldAbout || draft.candidate?.about) return draft;
+  const aboutMemoryId = existing.candidate.aboutMemoryId;
+  return {
+    ...draft,
+    candidate: { ...draft.candidate, about: oldAbout, ...(aboutMemoryId ? { aboutMemoryId } : {}) },
+  };
+}
+
+type DraftSkill = NonNullable<ResumeDraft['skills']>[number];
+const IMPORTED_SKILL_ID = /^imp[0-9a-f]{10}-skill-\d+$/u;
+
+function skillKey(name: string): string {
+  return name.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase();
+}
+
+/**
+ * The re-imported list replaces the imported one, but what the candidate did
+ * outside LinkedIn stays (C13): a skill added by hand or by a quiz, and a
+ * quiz verdict on a skill LinkedIn sends again without one.
+ */
+export function mergeReimportedSkills(
+  incoming: readonly DraftSkill[],
+  existing: readonly DraftSkill[],
+): DraftSkill[] {
+  const existingByKey = new Map(existing.map((skill) => [skillKey(skill.name), skill]));
+  const merged = incoming.map((skill) => {
+    const before = existingByKey.get(skillKey(skill.name));
+    if (skill.status || !before?.status) return skill;
+    const { status, source, verifiedAt } = before;
+    return {
+      ...skill,
+      status,
+      ...(source ? { source } : {}),
+      ...(verifiedAt ? { verifiedAt } : {}),
+    };
+  });
+  const incomingKeys = new Set(incoming.map((skill) => skillKey(skill.name)));
+  const candidateOwned = existing.filter(
+    (skill) => !IMPORTED_SKILL_ID.test(skill.id) && !incomingKeys.has(skillKey(skill.name)),
+  );
+  return [...merged, ...candidateOwned];
 }
