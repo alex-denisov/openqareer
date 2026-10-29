@@ -5,7 +5,7 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { BILLING_PLANS } from './billingPlans';
 import type { PaidPlanId } from './robokassaGateway';
 import {
-  QUOTA_ENFORCED_TEST_USERNAMES, calendarMonthPeriod, consumeQuotaUnit, readQuotaSummary, releaseQuotaUnit,
+  QUOTA_ENFORCED_TEST_USERNAMES, QUOTA_EXEMPT_USERNAMES, calendarMonthPeriod, consumeQuotaUnit, readQuotaSummary, releaseQuotaUnit,
   type QuotaConsumeResult, type QuotaKey, type QuotaSummary,
 } from './tariffQuotas';
 
@@ -206,7 +206,8 @@ export class SqliteBillingRepository {
     const subscription = this.getSubscription(user.id, now);
     return {
       plan: this.getEffectivePlan(user.id, now),
-      unlimited: user.is_test === 1 && !QUOTA_ENFORCED_TEST_USERNAMES.has(user.username),
+      unlimited: (user.is_test === 1 && !QUOTA_ENFORCED_TEST_USERNAMES.has(user.username))
+        || QUOTA_EXEMPT_USERNAMES.has(user.username),
       period: subscription
         ? { startedAt: subscription.currentPeriodStartedAt, endsAt: subscription.currentPeriodEndsAt }
         : calendarMonthPeriod(now),

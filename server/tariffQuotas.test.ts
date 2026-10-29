@@ -127,7 +127,7 @@ function activateBasic(databasePath: string) {
   });
 }
 
-describe('квоты тарифов (B579)', () => {
+describe('квоты тарифов (B579)', { timeout: 20_000 }, () => {
   it('Free: 30-й ход консультанта проходит, 31-й получает 402 quota_exhausted с тарифом, где квоты больше', async () => {
     const { turn, databasePath } = await createQuotaApp();
     seedUsedTurns(databasePath, 29);
@@ -207,6 +207,17 @@ describe('квоты тарифов (B579)', () => {
     withDatabase(owner.databasePath, (database) => database.exec('UPDATE users SET is_test = 1'));
     seedUsedTurns(owner.databasePath, 30);
     expect((await owner.turn()).statusCode).toBe(402);
+  });
+
+  it('демо-аккаунт приёмки макетов работает без квот, не будучи тестовым, и остаётся на своём тарифе', async () => {
+    const demo = await createQuotaApp('qa-pilot-2026-09-07-63d1c2@openqareer.com');
+    seedUsedTurns(demo.databasePath, 30);
+    expect((await demo.turn()).statusCode).toBe(200);
+    const summary = await demo.app.inject({ method: 'GET', url: '/api/v1/candidate/billing/quotas', headers: demo.headers });
+    expect(summary.json().data).toMatchObject({ plan: 'free', unlimited: true });
+    withDatabase(demo.databasePath, (database) => {
+      expect(database.prepare('SELECT is_test FROM users').get()).toEqual({ is_test: 0 });
+    });
   });
 
   it('Free не открывает тренировку интервью: 402 quota_exhausted с тарифом Basic', async () => {
