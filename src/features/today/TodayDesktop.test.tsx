@@ -179,12 +179,18 @@ describe('Today funnel values', () => {
     expect(root.querySelector('#today-queue')?.getAttribute('aria-busy')).toBe('true');
     expect(root.querySelector('#today-queue')?.textContent).toContain('Загружаем очередь дня');
   });
-  it('keeps the approved desktop caption short; the low-sample note lives on mobile', () => {
+  it('moves "n = …, date" into the info tooltip next to the funnel title', () => {
     const element = funnel();
-    expect(element.querySelector('.career-today-funnel-low-sample')).toBeNull();
-    expect(element.querySelector('.career-today-funnel-basis')?.textContent).toMatch(
-      /^n = 7 откликов, \d{2}\.\d{2} \d{2}:\d{2}$/u,
+    expect(element.querySelector('.career-today-funnel-basis')).toBeNull();
+    const header = element.querySelector('header')!;
+    const button = header.querySelector('button[aria-label="Пояснение"]');
+    expect(button).not.toBeNull();
+    expect(header.querySelector('[role="tooltip"]')?.textContent).toMatch(
+      /n = 7 откликов, \d{2}\.\d{2} \d{2}:\d{2}/u,
     );
+    expect(
+      header.textContent?.replace(header.querySelector('[role="tooltip"]')!.textContent!, ''),
+    ).not.toMatch(/n = /u);
   });
 
   it('draws all six approved stages from their verified sources', () => {

@@ -45,7 +45,7 @@ describe('hhSkillQuizzes bank & evaluation (B376 / US-01.3)', () => {
     expect(result.passed).toBe(true);
     expect(result.scorePercent).toBe(100);
     expect(result.status).toBe('подтверждён');
-    expect(result.source).toContain('hh.ru');
+    expect(result.source).toBe('квиз openqareer');
     expect(result.verifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}/);
 
     const fact = buildSkillVerificationFact('TypeScript', result);

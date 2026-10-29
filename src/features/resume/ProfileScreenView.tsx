@@ -37,6 +37,8 @@ import type { ProfileFocusRequest, ProfileMobileScene } from './profileMobileNav
 import { ProfileEmptyStart } from './ProfileEmptyStart';
 import { ProfileMobileScreen } from './ProfileMobileScreen';
 import { ProfileDataDialog } from './ProfileDataDialog';
+import { hasAchievements } from './profileCompleteness';
+import { ProfileSavedToast } from './ProfileSavedToast';
 import { ProfileDesktopSkills } from './ProfileDesktopSkills';
 import { useProfileDataDialog } from './useProfileDataDialog';
 import { ProfileRefreshNotice } from './ProfileRefreshNotice';
@@ -119,7 +121,7 @@ function isDraftEmpty(draft: ResumeDraft, memory: readonly CandidateMemory[]): b
     (draft.recommendations?.length ?? 0) > 0 ||
     (draft.certifications?.length ?? 0) > 0 ||
     (draft.projects?.length ?? 0) > 0 ||
-    (draft.achievements?.length ?? 0) > 0;
+    hasAchievements(draft);
   const hasConfirmedProfileMemory = memory.some(
     (item) =>
       item.status === 'confirmed' &&
@@ -247,15 +249,21 @@ function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
   const draftIsEmpty = isDraftEmpty(draft, memory);
   if (!desktopProfileLayout)
     return <ProfileMobileScreen {...props} draft={draft} isDraftEmpty={draftIsEmpty} />;
-  const dialog = dataDialog.open ? (
-    <ProfileDataDialog
-      {...props}
-      draft={draft}
-      section={dataDialog.section}
-      onSelect={dataDialog.select}
-      onClose={dataDialog.close}
-    />
-  ) : null;
+  const dialog = (
+    <>
+      {dataDialog.open ? (
+        <ProfileDataDialog
+          {...props}
+          draft={draft}
+          section={dataDialog.section}
+          onSelect={dataDialog.select}
+          onClose={dataDialog.close}
+          onContactsSaved={dataDialog.closeSaved}
+        />
+      ) : null}
+      <ProfileSavedToast visible={dataDialog.savedNotice} onDismiss={dataDialog.dismissNotice} />
+    </>
+  );
   if (draftIsEmpty) {
     return (
       <div className="career-profile-screen-view">

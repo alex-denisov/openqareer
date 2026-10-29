@@ -56,7 +56,7 @@ describe('ProfileImportFailureNote (макет 2 «Ошибка импорта»
           storedWalk={{
             platform: 'linkedin',
             state: 'done',
-            updatedAt: '2026-10-20T08:00:00.000Z',
+            updatedAt: new Date(Date.now() - 60_000).toISOString(),
             sections: [
               { key: 'experience', status: 'read' },
               { key: 'languages', status: 'failed' },
@@ -68,6 +68,28 @@ describe('ProfileImportFailureNote (макет 2 «Ошибка импорта»
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
       'LinkedIn: раздел «языки» не прочитан, сайт не ответил. Остальные разделы сохранены.',
     );
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('hides the note once the walk finished long ago (D3)', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <ProfileImportFailureNote
+          variant="desktop"
+          storedWalk={{
+            platform: 'linkedin',
+            state: 'done',
+            updatedAt: '2026-10-20T08:00:00.000Z',
+            sections: [{ key: 'languages', status: 'failed' }],
+          }}
+        />,
+      ),
+    );
+    expect(container.textContent).toBe('');
     act(() => root.unmount());
     container.remove();
   });

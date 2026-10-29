@@ -4,12 +4,13 @@ import { HhSkillQuizSimulator } from './HhSkillQuizSimulator';
 import { getSkillQuizById } from '../../services/hhSkillQuizzes';
 
 describe('HhSkillQuizSimulator (B376 / US-01.3)', () => {
-  it('renders skill quiz catalog with tests from hh.ru and LinkedIn', () => {
+  it('renders skill quiz catalog without claiming hh.ru or LinkedIn questions (B2)', () => {
     const html = renderToStaticMarkup(<HhSkillQuizSimulator onClose={() => undefined} />);
 
-    expect(html).toContain('Верификация навыков');
-    expect(html).toContain('hh.ru');
-    expect(html).toContain('LinkedIn');
+    expect(html).toContain('Проверка навыков');
+    expect(html).not.toContain('hh.ru');
+    expect(html).not.toContain('LinkedIn');
+    expect(html).not.toContain('официальн');
     expect(html).toContain('TypeScript');
     expect(html).toContain('React');
     expect(html).toContain('Node.js');
@@ -39,7 +40,7 @@ describe('HhSkillQuizSimulator (B376 / US-01.3)', () => {
           passed: false,
           status: 'не подтверждён',
           statusLabel: 'не подтверждено',
-          source: 'Банк квизов hh.ru',
+          source: 'квиз openqareer',
           verifiedAt: '2026-10-05',
           verifiedBadgeAwarded: false,
           review: [],
@@ -65,7 +66,7 @@ describe('HhSkillQuizSimulator (B376 / US-01.3)', () => {
           passed: true,
           status: 'подтверждён',
           statusLabel: 'подтверждён',
-          source: 'Банк квизов hh.ru',
+          source: 'квиз openqareer',
           verifiedAt: '2026-10-05',
           verifiedBadgeAwarded: true,
           review: [],

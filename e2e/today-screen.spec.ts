@@ -643,7 +643,9 @@ test.describe('B251 today screen', () => {
 
     const decision = page.getByRole('region', { name: 'Следующее решение' });
     await decision.getByRole('button', { name: 'Отложить до завтра' }).click();
-    await expect(decision).toContainText('Нет проверенного следующего шага');
+    // A closed decision says so; the «no step» stub is only for a day with no decision (walk 29.10, C3).
+    await expect(decision).toContainText('Решение на сегодня закрыто');
+    await expect(decision).not.toContainText('Нет проверенного следующего шага');
     await expect(decision.locator('.tm-main')).toHaveCount(0);
     await expect(decision.getByRole('button', { name: 'Отложить до завтра' })).toHaveCount(0);
     await captureAccA1Today(page, '390-deferred');

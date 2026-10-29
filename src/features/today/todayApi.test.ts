@@ -83,6 +83,23 @@ describe('todayApi', () => {
     );
   });
 
+  it('sends an accepted or dismissed resolution to the server', async () => {
+    const actionId = 'c'.repeat(16);
+    const deferral = { actionId, deferredThroughDate: '2026-10-29', resolution: 'dismissed' };
+    const fetchSpy = vi
+      .spyOn(apiClient, 'apiFetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: deferral }), { status: 200 }));
+    vi.stubGlobal('window', { dispatchEvent: vi.fn() });
+
+    expect(await deferTodayAction(actionId, 'UTC', 'dismissed')).toEqual(deferral);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      '/api/v1/candidate/today/action-defer',
+      expect.objectContaining({
+        body: JSON.stringify({ actionId, tz: 'UTC', resolution: 'dismissed' }),
+      }),
+    );
+  });
+
   it('fetches the remaining queue for the server-issued revision', async () => {
     const page = {
       queue: [],

@@ -553,7 +553,7 @@ export function ProfileReviewAndVersions(props: ProfileReviewAndVersionsProps) {
           onTabChange={onTabChange}
           desktopLayout={desktopLayout}
         />
-        <ProfileAtsAssessment desktopLayout={desktopLayout} enabled={Boolean(view)} />
+        <ProfileAtsAssessment desktopLayout={desktopLayout} enabled={Boolean(view)} onDemand />
       </div>
       {!desktopLayout && view ? (
         <ProfileResumeVersions draft={draft} memory={memory} view={view} />

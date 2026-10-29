@@ -43,6 +43,7 @@ import {
   initialRoleSkillAssessmentState,
   roleSkillAssessmentReducer,
   type RoleSkillAssessmentUiState,
+  assessmentKicker,
 } from './roleSkillAssessmentState';
 import './role-skill-assessment.css';
 import './role-skill-assessment-flow.css';
@@ -91,7 +92,9 @@ export function RoleSkillAssessmentScreen(props: RoleSkillAssessmentScreenProps)
 
   return (
     <section className="career-role-assessment" data-testid="role-skill-assessment">
-      <AssessmentHeader {...{ state, run, actions, onClose }} fromCareer={Boolean(roleTitle)} />
+      <AssessmentHeader {...{ state, run, actions, onClose }} fromCareer={Boolean(roleTitle)}
+        fromVacancy={Boolean(focus)}
+      />
       {focus ? <SkillCheckFocusNote focus={focus} run={run} /> : null}
       <AssessmentProgress state={state} run={run} />
       <AssessmentBody
@@ -197,6 +200,7 @@ function AssessmentHeader({
   actions,
   onClose,
   fromCareer,
+  fromVacancy,
 }: {
   state: RoleSkillAssessmentUiState;
   run: ReturnType<typeof getAssessmentRun>;
@@ -204,6 +208,7 @@ function AssessmentHeader({
   onClose: () => void;
   /** Проверка открыта с «Карьеры»: «Назад» ведёт туда, а не в профиль (B445). */
   fromCareer: boolean;
+  fromVacancy: boolean;
 }) {
   const details = getAssessmentHeaderDetails(state, run, fromCareer);
   const back = () => handleAssessmentHeaderBack(actions, onClose, details.backTarget);
@@ -219,7 +224,7 @@ function AssessmentHeader({
       </button>
       <div>
         <p className="career-role-assessment-kicker">
-          {fromCareer ? 'Карьера · проверка роли' : 'Профиль · проверка по вакансии'}
+          {assessmentKicker({ fromCareer, fromVacancy })}
         </p>
         <h1>{details.title}</h1>
         <p className="career-role-assessment-subtitle">{details.subtitle}</p>

@@ -86,22 +86,24 @@ export function todayFunnelFootnote(
 ): string {
   const found = stageValue(stages, 'found');
   const offers = stageValue(stages, 'offers');
-  const applied = stageValue(stages, 'applied');
-  const date = funnelDateTime(snapshot.momentum?.calculatedAt);
   const unknown = stages.filter((stage) => stage.value === 'unknown').map((stage) => stage.label);
   return [
     found === 'unknown' ? undefined : `Найдено в каталоге: ${found}.`,
     offers === 'unknown' ? undefined : `Офферов пока ${offers}.`,
-    applied !== 'unknown' && applied < LOW_SAMPLE
-      ? `Откликов меньше ${LOW_SAMPLE} (n = ${applied}): выводов о конверсии нет.`
-      : undefined,
     unknown.length
       ? `Нет проверенных данных по ${unknown.length === 1 ? 'этапу' : 'этапам'}: ${unknown.map((label) => `«${label}»`).join(', ')}.`
       : undefined,
-    date ? `Данные на ${date}.` : undefined,
   ]
     .filter(Boolean)
     .join(' ');
+}
+
+/** Содержимое ⓘ у «Воронка за 30 дней»: на чём построена воронка и можно ли ей верить. */
+export function todayFunnelInfo(
+  snapshot: Pick<TodaySnapshot, 'momentum' | 'funnel'>,
+  stages: readonly TodayFunnelStage[],
+): string {
+  return `${todayFunnelBasis(snapshot, stages)}. ${todayFunnelHint(stages, snapshot.momentum?.calculatedAt)}`;
 }
 
 /** Подсказка «Пояснение» у «Воронка за 30 дней» на 1440, дословно по макету 1. */

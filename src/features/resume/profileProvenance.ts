@@ -48,6 +48,23 @@ export function walkReadCount(walk: ImportWalk): number {
   return walk.sections.filter((section) => section.status === 'read').length;
 }
 
+/** How long a finished walk keeps its strip and failure note on the profile header. */
+const FINISHED_WALK_VISIBLE_MS = 10 * 60 * 1000;
+/** A walk the server still calls «running» after this long is dead, not live. */
+const RUNNING_WALK_STALE_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * D3: the header strip and red note belong to an import that is running or has
+ * just finished in this session. A walk that ended earlier is history; it
+ * lives in the source window only.
+ */
+export function isWalkCurrent(walk: ImportWalk | undefined, now = Date.now()): walk is ImportWalk {
+  if (!walk) return false;
+  const age = now - Date.parse(walk.updatedAt);
+  if (Number.isNaN(age)) return false;
+  return walk.state === 'running' ? age < RUNNING_WALK_STALE_MS : age < FINISHED_WALK_VISIBLE_MS;
+}
+
 /** «LinkedIn: читаем разделы, 3 из 7» during the walk, «LinkedIn: прочитано 3 из 7, 20.10» after. */
 export function walkHeadline(walk: ImportWalk): string {
   const label = PLATFORM_LABELS[walk.platform];

@@ -12,7 +12,7 @@ import {
   useLinkedInImportProgress,
   type LinkedInImportProgressView,
 } from '../connections/linkedinImportProgress';
-import { walkHeadline, walkReadCount } from './profileProvenance';
+import { isWalkCurrent, walkHeadline, walkReadCount } from './profileProvenance';
 
 interface WalkBandView {
   readonly headline: string;
@@ -36,7 +36,11 @@ export function ProfileImportLive({
   storedWalk,
 }: { readonly onReimport?: () => void; readonly storedWalk?: ImportWalk } = {}) {
   const live = linkedinImportProgressView(useLinkedInImportProgress());
-  const view = live ? liveBand(live) : storedWalk ? storedBand(storedWalk) : null;
+  const view = live
+    ? liveBand(live)
+    : isWalkCurrent(storedWalk)
+      ? storedBand(storedWalk as ImportWalk)
+      : null;
   return view ? <WalkBand view={view} onReimport={onReimport} /> : null;
 }
 
