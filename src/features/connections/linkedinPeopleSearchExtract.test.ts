@@ -18,6 +18,7 @@ function card(input: {
   readonly headline: string;
   readonly snippet?: string;
   readonly mutual?: readonly string[];
+  readonly degree?: string;
 }): string {
   const snippet =
     input.snippet === undefined
@@ -28,7 +29,7 @@ function card(input: {
     .join('');
   return `<div class="ajrlr8"><div><div><a componentkey="c1" href="/in/${input.slug}/">
 <div componentkey="c1"><div><figure></figure><div>
-<p componentkey="p1"><a href="/in/${input.slug}/">${input.name}</a><span><span> • 1st</span></span></p>
+<p componentkey="p1"><a href="/in/${input.slug}/">${input.name}</a><span><span> • ${input.degree ?? '1st'}</span></span></p>
 <div><p><span>${input.headline}</span></p></div>
 <div><p><span>Москва, Россия</span></p></div></div>
 <div><div componentkey="SearchResultsACoAAFAKE1"><div><div componentkey="m1"><div><a componentkey="m2"><span><span>Message</span></span></a></div></div></div></div></div></div>
@@ -117,6 +118,29 @@ describe('extractLinkedInPeopleSearch (B561)', () => {
     expect(people.map((person) => [person.fullName, person.linkedinUrl])).toEqual([
       ['Глеб Образцов', 'https://www.linkedin.com/in/gleb-test-7/'],
       ['Зоя Макетова', 'https://www.linkedin.com/in/zoya-test-8/'],
+    ]);
+  });
+
+  it('takes only people marked as 1st-degree connections', () => {
+    const html = page([
+      card({
+        slug: 'second-test-9',
+        name: 'Второй Круг',
+        headline: 'PM',
+        degree: '2nd',
+        snippet: 'Current: PM at<span> </span><span><strong>Вектор</strong></span>',
+      }),
+      card({
+        slug: 'ru-test-10',
+        name: 'Первый Круг',
+        headline: 'PM',
+        degree: '1-й',
+        snippet: 'Current: PM at<span> </span><span><strong>Вектор</strong></span>',
+      }),
+    ]);
+
+    expect(extractLinkedInPeopleSearch(html).people.map((person) => person.fullName)).toEqual([
+      'Первый Круг',
     ]);
   });
 

@@ -25,6 +25,9 @@ const PROFILE_PATH = /^\/in\/([^/?#]+)\/?$/u;
 const CURRENT_LINE = /^Current:\s*(.+)$/u;
 // "Role at Company"; the last separator wins, company names rarely hold " at ".
 const AT_SEPARATOR = /\s+at\s+/gu;
+// The degree mark beside the name: only the candidate's own connections count,
+// even if LinkedIn ever drops the `network` filter (security review, 29.10).
+const FIRST_DEGREE = /•\s*(?:1st|1-й)/u;
 
 export function linkedinPeopleSearchUrl(companyName: string, page: number): string {
   const query = new URLSearchParams({ keywords: companyName, network: '["F"]' });
@@ -48,6 +51,7 @@ export function extractLinkedInPeopleSearch(html: string): LinkedInPeopleSearchP
 function personOf(snippet: Element): LinkedInSearchPerson | undefined {
   const place = currentPlace(textOf(snippet) ?? '');
   const nameLink = nameLinkOf(snippet);
+  if (!FIRST_DEGREE.test(textOf(nameLink?.closest('p')) ?? '')) return undefined;
   const slug = profileSlug(nameLink?.getAttribute('href'));
   const fullName = textOf(nameLink)?.slice(0, 120);
   if (!place || !slug || !fullName) return undefined;

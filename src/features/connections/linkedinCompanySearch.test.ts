@@ -7,12 +7,12 @@ import {
 
 /** A fictional result card in the sanitized shape (see the extractor test). */
 function card(slug: string, name: string, company: string): string {
-  return `<div><a href="/in/${slug}/"><div><p componentkey="p1"><a href="/in/${slug}/">${name}</a></p></div>
+  return `<div><a href="/in/${slug}/"><div><p componentkey="p1"><a href="/in/${slug}/">${name}</a><span> • 1st</span></p></div>
 <div componentkey="SearchResultssnippet_X"><div><p><span>Current: Engineer at<span> </span><span><strong>${company}</strong></span></span></p></div></div></a></div>`;
 }
 const searchPage = (cards: readonly string[]) => `<main>${cards.join('')}</main>`;
 const searchUrl = (company: string) =>
-  `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company)}`;
+  `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(company)}&network=%5B%22F%22%5D`;
 
 function dependencies(
   overrides: Partial<LinkedInCompanySearchDependencies> = {},
@@ -50,6 +50,47 @@ function dependencies(
 }
 
 describe('searchLinkedInCompanies (B561)', () => {
+  it('opens the window on the feed, so every search page loads through the read', async () => {
+    const openOutOfSight = vi.fn(async (_url: string) => true);
+    await searchLinkedInCompanies(dependencies({ openOutOfSight }));
+    expect(openOutOfSight).toHaveBeenCalledWith('https://www.linkedin.com/feed/');
+  });
+
+  it('stops and backs off three days when the 1st-circle filter is gone', async () => {
+    const marks: number[] = [];
+    const deps = dependencies({
+      throttle: { lastReadAt: () => undefined, markRead: (at) => marks.push(at) },
+      readSessionPage: async () => ({
+        ok: true,
+        url: 'https://www.linkedin.com/search/results/people/?keywords=Vektor',
+        body: searchPage([card('anna-t', 'Анна', 'Вектор')]),
+      }),
+    });
+
+    const outcome = await searchLinkedInCompanies(deps);
+
+    expect(outcome).toMatchObject({ status: 'stopped', reason: 'network_filter_lost' });
+    expect(deps.reported).toEqual([]);
+    expect(marks.at(-1)! - Date.now()).toBeGreaterThan(47 * 60 * 60 * 1_000);
+  });
+
+  it('ends the run after three empty result pages in a row', async () => {
+    const deps = dependencies({
+      loadPlan: async () =>
+        ['a', 'b', 'c', 'd'].map((key) => ({ companyKey: key, companyName: key })),
+      readSessionPage: async (url) => {
+        deps.read.push(url);
+        return { ok: true, url: searchUrl('a'), body: searchPage([]) };
+      },
+    });
+
+    const outcome = await searchLinkedInCompanies(deps);
+
+    expect(outcome).toMatchObject({ status: 'stopped', reason: 'empty_pages', companies: 3 });
+    expect(deps.read).toHaveLength(3);
+    expect(deps.reported.map((entry) => entry.companyName)).toEqual(['a', 'b', 'c']);
+  });
+
   it('searches each planned company and reports the people it read', async () => {
     const deps = dependencies({
       loadPlan: async () => [
@@ -121,7 +162,9 @@ describe('searchLinkedInCompanies (B561)', () => {
   });
 
   it('stops without reporting when LinkedIn redirects to a checkpoint', async () => {
+    const marks: number[] = [];
     const deps = dependencies({
+      throttle: { lastReadAt: () => undefined, markRead: (at) => marks.push(at) },
       readSessionPage: async () => ({
         ok: true,
         url: 'https://www.linkedin.com/checkpoint/challenge/',
@@ -133,6 +176,7 @@ describe('searchLinkedInCompanies (B561)', () => {
 
     expect(outcome).toMatchObject({ status: 'stopped', reason: 'checkpoint' });
     expect(deps.reported).toEqual([]);
+    expect(marks.at(-1)! - Date.now()).toBeGreaterThan(47 * 60 * 60 * 1_000);
   });
 
   it('opens no window when nothing is planned or the read ran recently', async () => {

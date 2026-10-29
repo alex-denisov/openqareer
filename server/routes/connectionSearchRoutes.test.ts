@@ -241,6 +241,34 @@ describe('LinkedIn company search (B561)', () => {
     });
   });
 
+  it('plans nothing while the search is switched off on the server', async () => {
+    const { app, authorization } = await setup([matchedVacancy('v1', 'Вектор Банк')]);
+    process.env.LINKEDIN_COMPANY_SEARCH_DISABLED = '1';
+    try {
+      expect(await readPlan(app, authorization)).toEqual([]);
+    } finally {
+      delete process.env.LINKEDIN_COMPANY_SEARCH_DISABLED;
+    }
+  });
+
+  it('stores a found profile under its plain address and matches it later', async () => {
+    const { app, authorization } = await setup([matchedVacancy('v1', 'Вектор Банк')]);
+    await importContacts(app, authorization, [
+      { fullName: 'Анна Тестова', roleTitle: 'Product', linkedinUrl: profile('anna-t') },
+    ]);
+
+    const response = await sendSearch(app, authorization, 'Вектор Банк', [
+      {
+        fullName: 'Анна Тестова',
+        linkedinUrl: 'https://linkedin.com/in/Anna-T?miniProfileUrn=x#top',
+        roleTitle: 'Head of Product',
+        companyName: 'Вектор Банк',
+      },
+    ]);
+
+    expect(response.json().data).toEqual({ updated: 1, added: 0 });
+  });
+
   it('refuses a search report that names a profile outside LinkedIn', async () => {
     const { app, authorization } = await setup([]);
     const foreignProfile = await sendSearch(app, authorization, 'Арка', [

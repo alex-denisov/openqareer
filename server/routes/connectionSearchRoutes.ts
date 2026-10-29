@@ -36,7 +36,7 @@ const MAX_PEOPLE_PER_REPORT = 50;
 const searchedPersonSchema = z
   .object({
     fullName: z.string().trim().min(1).max(120),
-    linkedinUrl: linkedinUrlSchema,
+    linkedinUrl: linkedinUrlSchema.transform(plainProfileUrl),
     roleTitle: z.string().trim().max(160).default(''),
     companyName: z.string().trim().min(1).max(180),
   })
@@ -50,6 +50,17 @@ const searchReportSchema = z
 const searchLogSchema = z.record(z.string().max(200), z.string().datetime({ offset: true }));
 
 type SearchedPerson = z.infer<typeof searchedPersonSchema>;
+
+/** `https://www.linkedin.com/in/<slug>/`, without query, fragment or host variants. */
+function plainProfileUrl(url: string): string {
+  const slug = new URL(url).pathname.split('/').filter(Boolean)[1] ?? '';
+  return `https://www.linkedin.com/in/${slug}/`;
+}
+
+/** Operator switch: the plan comes back empty, so no desktop searches (security review). */
+function searchSwitchedOff(): boolean {
+  return process.env.LINKEDIN_COMPANY_SEARCH_DISABLED === '1';
+}
 
 export function registerConnectionSearchRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get(
@@ -69,6 +80,7 @@ async function handleSearchPlan(deps: RouteDeps, request: FastifyRequest, reply:
   if (!candidate) return undefined;
   const repository = connectionRepository(deps, request, reply);
   if (!repository) return undefined;
+  if (searchSwitchedOff()) return { data: { companies: [] }, meta: { requestId: request.id } };
   const wanted = (deps.candidateCompanyWantsRepo?.list(candidate.id) ?? []).map(
     (want) => want.companyName,
   );

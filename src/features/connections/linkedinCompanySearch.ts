@@ -34,7 +34,8 @@ export interface LinkedInCompanySearchDependencies {
   readonly throttle?: DetailReadThrottle;
   readonly isSessionOpen: () => Promise<boolean>;
   readonly prepareRoute: () => Promise<{ readonly release: () => Promise<void> }>;
-  readonly openOutOfSight: (firstUrl: string) => Promise<boolean>;
+  /** Opens the window on `entryUrl`; search pages load only through the read. */
+  readonly openOutOfSight: (entryUrl: string) => Promise<boolean>;
   readonly close: () => Promise<unknown>;
   readonly log: (event: string, detail?: string) => void;
   readonly loadPlan: () => Promise<readonly LinkedInCompanySearchTarget[]>;
@@ -65,10 +66,16 @@ export type LinkedInCompanySearchOutcome =
       readonly detail?: string;
     };
 
-const SEARCH_RUN_INTERVAL_MS = 12 * 60 * 60 * 1_000;
+/** One run a day: ≤ 8 companies keeps the average near 10 pages (security review). */
+const SEARCH_RUN_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+/** After a block, a lost filter or a refused budget the next run waits 3 days. */
+const SEARCH_BACKOFF_MS = 72 * 60 * 60 * 1_000;
 const SEARCH_RUN_STORAGE_KEY = 'openqareer.linkedin.lastCompanySearchAt.v1';
-/** Within the desktop's 20 searches a day: two runs of up to 8 companies. */
 const MAX_COMPANIES_PER_RUN = 8;
+/** Empty pages in a row look like a soft block as much as like no contacts. */
+const MAX_EMPTY_PAGES_IN_ROW = 3;
+const ENTRY_URL = 'https://www.linkedin.com/feed/';
+const FIRST_CIRCLE_FILTER = '["F"]';
 const MAX_PAGES_PER_COMPANY = 2;
 /** LinkedIn shows ten people a page; a shorter page is the last one. */
 const FULL_PAGE_CARDS = 10;
@@ -108,12 +115,15 @@ export async function searchLinkedInCompanies(
     return { status: 'skipped', reason: 'route_unavailable', detail: errorCode(error) };
   }
   try {
-    const firstUrl = linkedinPeopleSearchUrl(plan[0]!.companyName, 1);
-    const opened = await dependencies.openOutOfSight(firstUrl).catch(() => false);
+    const opened = await dependencies.openOutOfSight(ENTRY_URL).catch(() => false);
     if (!opened) return { status: 'skipped', reason: 'window_unavailable', detail: 'open_failed' };
     throttle.markRead(Date.now());
     try {
-      return await searchPlannedCompanies(dependencies, plan);
+      const outcome = await searchPlannedCompanies(dependencies, plan);
+      if (outcome.status === 'stopped' && outcome.reason !== 'empty_pages') {
+        throttle.markRead(Date.now() - SEARCH_RUN_INTERVAL_MS + SEARCH_BACKOFF_MS);
+      }
+      return outcome;
     } finally {
       await dependencies.close().catch(() => undefined);
     }
@@ -127,6 +137,7 @@ async function searchPlannedCompanies(
   plan: readonly LinkedInCompanySearchTarget[],
 ): Promise<LinkedInCompanySearchOutcome> {
   let totals: RunTotals = { companies: 0, pages: 0, found: 0 };
+  let emptyInRow = 0;
   for (const company of plan) {
     const result = await searchCompany(dependencies, company.companyName);
     totals = { ...totals, pages: totals.pages + result.pages };
@@ -141,6 +152,11 @@ async function searchPlannedCompanies(
       companies: totals.companies + 1,
       found: totals.found + result.people.length,
     };
+    emptyInRow = result.cards === 0 ? emptyInRow + 1 : 0;
+    if (emptyInRow >= MAX_EMPTY_PAGES_IN_ROW) {
+      dependencies.log('stopped', 'empty_pages');
+      return { status: 'stopped', reason: 'empty_pages', ...totals };
+    }
   }
   dependencies.log('companies', String(totals.companies));
   dependencies.log('found', String(totals.found));
@@ -150,31 +166,39 @@ async function searchPlannedCompanies(
 async function searchCompany(
   dependencies: LinkedInCompanySearchDependencies,
   companyName: string,
-): Promise<{ people: LinkedInSearchPerson[]; pages: number; stop?: string }> {
+): Promise<{ people: LinkedInSearchPerson[]; pages: number; cards: number; stop?: string }> {
   const people: LinkedInSearchPerson[] = [];
+  let cards = 0;
   for (let page = 1; page <= MAX_PAGES_PER_COMPANY; page += 1) {
     let result: SessionPageResult;
     try {
       result = await dependencies.readSessionPage(linkedinPeopleSearchUrl(companyName, page));
     } catch (error) {
-      return { people, pages: page - 1, stop: errorCode(error) };
+      return { people, pages: page - 1, cards, stop: errorCode(error) };
     }
     const landed = landedSection(result);
-    if (landed !== 'search') return { people, pages: page, stop: landed };
+    if (landed !== 'search') return { people, pages: page, cards, stop: landed };
     const read = extractLinkedInPeopleSearch(result.body ?? '');
     people.push(...read.people);
-    if (read.cards < FULL_PAGE_CARDS) return { people, pages: page };
+    cards += read.cards;
+    if (read.cards < FULL_PAGE_CARDS) return { people, pages: page, cards };
   }
-  return { people, pages: MAX_PAGES_PER_COMPANY };
+  return { people, pages: MAX_PAGES_PER_COMPANY, cards };
 }
 
-/** `search` when the read stayed on people search, else where it went, as a code. */
+/**
+ * `search` when the read stayed on people search with the 1st-circle filter,
+ * else where it went, as a code. A dropped filter would let people outside
+ * the candidate's network through (security review, 29.10).
+ */
 function landedSection(page: SessionPageResult): string {
   if (!page.ok || !page.body) return 'empty';
   try {
     const url = new URL(page.url ?? '');
     if (url.hostname.endsWith('linkedin.com') && url.pathname.startsWith(SEARCH_PATH)) {
-      return 'search';
+      return url.searchParams.get('network') === FIRST_CIRCLE_FILTER
+        ? 'search'
+        : 'network_filter_lost';
     }
     const segment = url.pathname.split('/').find(Boolean) ?? 'root';
     return /^[a-z0-9-]{1,40}$/u.test(segment) ? segment : 'other';
@@ -229,9 +253,9 @@ export function startLinkedInCompanySearch(
         release: () => (route.tunnelActive ? endLinkedInProtectedRoute() : Promise.resolve()),
       };
     },
-    openOutOfSight: async (firstUrl) =>
+    openOutOfSight: async (entryUrl) =>
       (
-        await openConnectorSession('linkedin', firstUrl, {
+        await openConnectorSession('linkedin', entryUrl, {
           x: window.innerWidth + OUT_OF_SIGHT_GAP_PX,
           y: 0,
           width: OUT_OF_SIGHT_WIDTH_PX,

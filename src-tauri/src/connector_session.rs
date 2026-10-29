@@ -674,6 +674,16 @@ pub async fn open_session_window(
         };
     }
 
+    // A search page loads only through `read_session_page`, which spends the
+    // search budget; opening or moving the window onto one would not (B561).
+    if search_page_entry_refused(&request.platform, url.path()) {
+        return SessionWindowReport {
+            opened: false,
+            label: label.to_string(),
+            reason: Some("search_page_needs_read".to_string()),
+        };
+    }
+
     if let Some(existing) = app.get_webview(&label) {
         if !existing.url().is_ok_and(|current| current == url) {
             if request.platform == "linkedin" && request.session_key.is_none() {
@@ -1709,6 +1719,10 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> LazyW
     walk
 }
 
+fn search_page_entry_refused(platform: &str, path: &str) -> bool {
+    platform == "linkedin" && is_people_search_page(path)
+}
+
 /// The candidate's LinkedIn session is paced here, not only in the web layer
 /// (B266 security WARN); see `linkedin_read_guard`. People search runs on its
 /// own budget with a jittered 20–40 s gap (B561).
@@ -2120,6 +2134,20 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_session_window_never_opens_on_a_people_search_page() {
+        assert!(search_page_entry_refused(
+            "linkedin",
+            "/search/results/people/"
+        ));
+        assert!(search_page_entry_refused(
+            "linkedin",
+            "/search/results/%70eople"
+        ));
+        assert!(!search_page_entry_refused("linkedin", "/feed/"));
+        assert!(!search_page_entry_refused("hh", "/search/results/people/"));
+    }
+
     #[test]
     fn error_codes_stop_at_the_first_non_code_character() {
         assert_eq!(first_code("eval_failed: boom"), "eval_failed");
