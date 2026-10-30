@@ -404,9 +404,22 @@
   .career-profile-screen-view .career-profile-screen-import-live-list {
     column-gap: var(--career-space-2);
   }
+  /* Подвкладки липнут под липкой шапкой кабинета (её min-height), а не под краем окна:
+     на 0 они уходили под шапку целиком, при переносе была видна только вторая строка. */
+  .career-profile-screen-view {
+    --profile-topbar-size: calc(var(--career-target-min) + var(--career-space-5));
+    --profile-anchor-nav-size: calc(
+      var(--career-target-min) + var(--career-space-1) * 2 + var(--career-border-width)
+    );
+  }
+  .career-profile-screen-view .career-profile-screen-section {
+    scroll-margin-top: calc(
+      var(--profile-topbar-size) + var(--profile-anchor-nav-size) + var(--career-space-3)
+    );
+  }
   .career-profile-screen-view .career-profile-screen-anchor-nav {
     position: sticky;
-    inset-block-start: 0;
+    inset-block-start: var(--profile-topbar-size);
     z-index: 5;
     display: flex;
     gap: var(--career-space-1);
@@ -657,6 +670,13 @@
     .career-profile-screen-view .career-profile-screen-anchor-nav {
       flex-wrap: wrap;
       overflow-x: visible;
+    }
+    /* Две строки подвкладок: заголовок раздела встаёт под обеими. */
+    .career-profile-screen-view .career-profile-screen-section {
+      scroll-margin-top: calc(
+        var(--profile-topbar-size) + var(--profile-anchor-nav-size) + var(--career-target-min) +
+          var(--career-space-1) + var(--career-space-3)
+      );
     }
   }
 }
