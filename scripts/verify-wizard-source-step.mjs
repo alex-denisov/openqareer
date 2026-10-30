@@ -21,12 +21,23 @@ const CONNECTIONS = [
   { platform: 'hh', available: true, status: 'disconnected', capabilities: ['resume_read'] },
 ];
 
+/**
+ * A saved goal lives in sessionStorage until the wizard ends (block A 30.10):
+ * a reload in the same tab resumes at «Источник», so the goal step is passed only once.
+ */
+async function passGoalStep(page) {
+  await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
+  if (!(await page.evaluate(() => sessionStorage.getItem('openqareer.firstRun.goal')))) {
+    await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
+    await page.getByTestId('save-goal-btn').click();
+  }
+  await page.getByTestId('source-opt-linkedin').waitFor({ timeout: 10_000 });
+}
+
 async function verifySourceActions(page, viewport, baseUrl) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded' });
-  await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
-  await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
-  await page.getByTestId('save-goal-btn').click();
+  await passGoalStep(page);
   for (const source of ['linkedin', 'hh', 'file', 'talk']) {
     if ((await page.getByTestId(`source-opt-${source}`).count()) !== 1) {
       throw new Error(`${viewport.name}: missing source option ${source}`);
@@ -50,9 +61,7 @@ async function verifySourceActions(page, viewport, baseUrl) {
 
 async function verifyUploadMenu(page, viewport, baseUrl) {
   await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded' });
-  await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
-  await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
-  await page.getByTestId('save-goal-btn').click();
+  await passGoalStep(page);
   if (viewport.width > 760) {
     // B538: on 1440 «Файл резюме → Загрузить» opens the system file picker at once, without the 390 menu.
     const chooser = page.waitForEvent('filechooser', { timeout: 10_000 });
@@ -118,9 +127,7 @@ async function run() {
       });
       await stubWizardApi(page);
       await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded' });
-      await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
-      await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
-      await page.getByTestId('save-goal-btn').click();
+      await passGoalStep(page);
       await verifySourceActions(page, viewport, baseUrl);
       await verifyUploadMenu(page, viewport, baseUrl);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
