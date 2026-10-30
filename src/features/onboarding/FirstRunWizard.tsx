@@ -15,6 +15,7 @@ import { fileStaleLabel } from './firstRunSpecialState';
 import { useLongWait } from './useLongWait';
 import { FirstRunContextCard, FirstRunGoalCard, FirstRunSourceCard } from './FirstRunSteps';
 import { useFirstRunWizardState } from './useFirstRunWizardState';
+import { clearSessionGoal, saveSessionGoal } from './firstRunStorage';
 import { useResumeIngestion } from '../journey/useResumeIngestion';
 import type { IngestedResume, ResumeIngestionState } from '../journey/useResumeIngestion';
 
@@ -63,6 +64,7 @@ function WizardGoalCard({ state }: { readonly state: ReturnType<typeof useFirstR
         state.setStep('goal');
       }}
       onSaveEdit={() => {
+        saveSessionGoal(state.data.goal);
         state.setIsGoalEditing(false);
         state.setStep('source');
       }}
@@ -195,7 +197,10 @@ function WizardMainCards({
           cityPicker={<WizardCityPicker state={state} isMobile={isMobile} />}
           onFormatChange={state.handleFormatChange}
           onRelocationToggle={state.handleRelocationToggle}
-          onSubmit={() => onComplete?.(state.data, ingestionResult)}
+          onSubmit={() => {
+            clearSessionGoal();
+            onComplete?.(state.data, ingestionResult);
+          }}
         />
       ) : null}
     </>

@@ -13619,6 +13619,8 @@
 
 .career-profile-screen-field {
   display: grid;
+  /* Ошибка у соседнего поля удлиняет строку сетки: подпись и поле не растягиваются. */
+  align-content: start;
   gap: 4px;
 }
 
@@ -14076,6 +14078,13 @@
 
 .career-profile-screen-tile-meta {
   color: var(--career-text-dim);
+  font-size: var(--career-text-aux);
+}
+
+/* Описание проекта — своей строкой под компанией, не через запятую с ней. */
+.profile-project-identity .profile-project-description {
+  margin-block-start: var(--career-space-1);
+  color: var(--career-text-soft);
   font-size: var(--career-text-aux);
 }
 

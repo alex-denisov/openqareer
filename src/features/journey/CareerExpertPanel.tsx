@@ -834,7 +834,7 @@ export function CareerExpertPanel({
         </form>
       ) : null}
       {user && !loadingSession && !historicalConversation ? (
-        <TariffQuotaNote quota="coach_turns" refreshKey={sending} />
+        <TariffQuotaNote quota="coach_turns" refreshKey={sending} onlyWhenLow />
       ) : null}
       {error ? (
         <p className="career-expert-error" role="alert">

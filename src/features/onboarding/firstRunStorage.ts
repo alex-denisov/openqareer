@@ -15,14 +15,45 @@ export { CITY_DIRECTORY, DEFAULT_FIRST_RUN_DATA, POPULAR_CITIES, type FirstRunCi
 
 export function initialFirstRunData(): FirstRunData {
   const scenario = readCountryFitScenario();
-  if (!scenario) return DEFAULT_FIRST_RUN_DATA;
+  const goal = readSessionGoal();
+  const data = goal ? { ...DEFAULT_FIRST_RUN_DATA, goal } : DEFAULT_FIRST_RUN_DATA;
+  if (!scenario) return data;
   return {
-    ...DEFAULT_FIRST_RUN_DATA,
+    ...data,
     context: {
-      ...DEFAULT_FIRST_RUN_DATA.context,
+      ...data.context,
       countryFitScenario: scenario,
     },
   };
+}
+
+/** Цель шага 1 живёт в sessionStorage до конца мастера: перезагрузка её не теряет (блок A, 30.10). */
+const FIRST_RUN_GOAL_KEY = 'openqareer.firstRun.goal';
+
+export function readSessionGoal(): string {
+  try {
+    return sessionStorage.getItem(FIRST_RUN_GOAL_KEY)?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveSessionGoal(goal: string): void {
+  const value = goal.trim();
+  try {
+    if (value) sessionStorage.setItem(FIRST_RUN_GOAL_KEY, value);
+    else sessionStorage.removeItem(FIRST_RUN_GOAL_KEY);
+  } catch {
+    // Без sessionStorage (приватное окно) цель живёт только до перезагрузки.
+  }
+}
+
+export function clearSessionGoal(): void {
+  try {
+    sessionStorage.removeItem(FIRST_RUN_GOAL_KEY);
+  } catch {
+    // Нечего чистить.
+  }
 }
 
 export function filterCities(

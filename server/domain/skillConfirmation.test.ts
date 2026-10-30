@@ -90,4 +90,32 @@ describe('isQuizCheckable', () => {
       expect(isQuizCheckable(skill)).toBe(false);
     },
   );
+
+  // Блок A 30.10: шесть навыков владельца, которых словарь не знал.
+  it.each([
+    'Turn Around Management',
+    'Executive Management',
+    'IT Management',
+    'International Business',
+    'Start-ups',
+    'Service Delivery Excellence',
+    'Руководство командой разработки',
+    'Управление проектами',
+    'Лидерство',
+  ])('offers no quiz for %s by the management rule', (skill) => {
+    expect(isQuizCheckable(skill)).toBe(false);
+  });
+
+  it.each([
+    'IT Service Management',
+    'ITSM',
+    'IT Infrastructure Management',
+    'Identity and Access Management',
+    'Business Intelligence',
+    'Amazon Web Services (AWS)',
+    'Continuous Integration and Continuous Delivery (CI/CD)',
+    'Управление базами данных PostgreSQL',
+  ])('keeps the quiz for the technical skill %s', (skill) => {
+    expect(isQuizCheckable(skill)).toBe(true);
+  });
 });

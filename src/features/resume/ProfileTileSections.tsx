@@ -292,9 +292,12 @@ function ProjectTile({ entry, saving, onSave, onRemove }: ProjectTileProps) {
       <div className="career-profile-screen-tile-head">
         <div className="profile-project-identity">
           <b>{entry.name || 'Название не указано'}</b>
-          <p className="career-profile-screen-tile-meta">
-            {[entry.description, entry.employer].filter(Boolean).join(', ')}
-          </p>
+          {entry.employer ? (
+            <p className="career-profile-screen-tile-meta">{entry.employer}</p>
+          ) : null}
+          {entry.description ? (
+            <p className="profile-project-description">{entry.description}</p>
+          ) : null}
         </div>
         <span className="profile-project-period">
           {[
