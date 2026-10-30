@@ -20,6 +20,11 @@ export interface ProfileSourceDialogProps {
   readonly onClose: () => void;
   /** «Импортировать заново» и «Подключить» ведут в настоящий мастер подключения. */
   readonly onOpenConnections: () => void;
+  /**
+   * Starts the import right here, out of sight (owner, 30.10); without it
+   * «Импортировать заново» and «Повторить раздел» lead to the connections.
+   */
+  readonly onReimport?: () => void;
 }
 
 type Phase = 'idle' | 'confirm' | 'busy' | 'disconnected' | 'failed';
@@ -30,6 +35,7 @@ export function ProfileSourceDialog(props: ProfileSourceDialogProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const label = PLATFORM_LABELS[props.platform];
   const connected = props.connection?.status === 'connected' && phase !== 'disconnected';
+  const reimport = reimportAction(props);
   const disconnect = async () => {
     setPhase('busy');
     try {
@@ -50,7 +56,7 @@ export function ProfileSourceDialog(props: ProfileSourceDialogProps) {
       <div className="career-modal-body profile-source-dialog career-token-scope">
         <SourceStatus connection={props.connection} disconnected={phase === 'disconnected'} />
         <p>{importSummary(props.factCount, props.importedAt, props.keptFactCount)}</p>
-        <WalkDetails walk={props.walk} onRetry={props.onOpenConnections} />
+        <WalkDetails walk={props.walk} onRetry={reimport} />
         <PhaseNotice phase={phase} />
       </div>
       <div className="career-modal-footer career-token-scope">
@@ -62,15 +68,30 @@ export function ProfileSourceDialog(props: ProfileSourceDialogProps) {
             onConfirm={disconnect}
           />
         ) : null}
-        <button type="button" className="career-quiet-button" onClick={props.onOpenConnections}>
+        <button
+          type="button"
+          className="career-quiet-button"
+          onClick={connected ? reimport : props.onOpenConnections}
+        >
           <ArrowsClockwise size={16} aria-hidden="true" />
-          {connected || props.connection?.status === 'imported'
-            ? 'Импортировать заново'
-            : 'Подключить'}
+          {sourceActionLabel(connected, props.connection)}
         </button>
       </div>
     </ImportModalShell>
   );
+}
+
+function sourceActionLabel(connected: boolean, connection?: CandidateConnection): string {
+  return connected || connection?.status === 'imported' ? 'Импортировать заново' : 'Подключить';
+}
+
+function reimportAction(props: ProfileSourceDialogProps): () => void {
+  const { onReimport } = props;
+  if (!onReimport) return props.onOpenConnections;
+  return () => {
+    props.onClose();
+    onReimport();
+  };
 }
 
 /**

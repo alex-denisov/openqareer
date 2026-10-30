@@ -30,6 +30,7 @@ import { PlatformLogo } from '../connections/PlatformLogo';
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
 import { factCountLabel } from './profileSourceLabels';
 import { ProfileSourceDialog } from './ProfileSourceDialog';
+import { linkedinReimportAction } from '../connections/linkedinReimport';
 import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 import {
   formatPhoneInput,
@@ -387,6 +388,11 @@ function SourceChipButton(props: {
         walk={props.walk}
         isOpen={open}
         onClose={() => setOpen(false)}
+        onReimport={
+          props.platform === 'linkedin' && props.connection
+            ? linkedinReimportAction([props.connection], undefined)
+            : undefined
+        }
         onOpenConnections={() => {
           setOpen(false);
           props.onOpenConnections();
@@ -766,12 +772,12 @@ function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
       ) : null}
       <ProfileCoverageDetails draft={props.draft} />
       <ProfileImportLive
-        onReimport={props.onOpenConnections}
+        onReimport={linkedinReimportAction(props.connections, props.onOpenConnections)}
         storedWalk={props.importedSources?.find((source) => source.walk)?.walk}
       />
       <ProfileImportFailureNote
         variant="desktop"
-        onReimport={props.onOpenConnections}
+        onReimport={linkedinReimportAction(props.connections, props.onOpenConnections)}
         storedWalk={props.importedSources?.find((source) => source.walk)?.walk}
       />
     </div>

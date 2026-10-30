@@ -129,6 +129,7 @@ export async function openConnectorSession(
   platform: ConnectionPlatform,
   url: string,
   layout?: SessionLayout,
+  options: { readonly background?: boolean } = {},
 ): Promise<SessionOpenResult> {
   if (typeof window === 'undefined') {
     return { opened: false, reason: 'no_window_environment' };
@@ -136,7 +137,7 @@ export async function openConnectorSession(
   if (!isAllowedConnectorUrl(platform, url)) return { opened: false, reason: 'url_not_allowed' };
 
   if (isTauriEnvironment()) {
-    return openConnectorSessionInDesktop(platform, url, layout);
+    return openConnectorSessionInDesktop(platform, url, layout, undefined, options.background);
   }
 
   const sessions = windowsForCurrentBrowser();
@@ -196,11 +197,20 @@ async function openConnectorSessionInDesktop(
   url: string,
   layout?: SessionLayout,
   sessionKey?: ManagedSessionKey,
+  background = false,
 ): Promise<SessionOpenResult> {
   try {
     const report = await invokeDesktopCommand<DesktopSessionWindowReport>(
       'open_connector_session',
-      { request: { platform, url, layout, ...(sessionKey ? { sessionKey } : {}) } },
+      {
+        request: {
+          platform,
+          url,
+          layout,
+          ...(sessionKey ? { sessionKey } : {}),
+          ...(background ? { background } : {}),
+        },
+      },
     );
     if (!report) return { opened: false, reason: 'desktop_bridge_unavailable' };
     return report.opened
@@ -299,6 +309,20 @@ export async function resizeConnectorSession(
     layout,
     ...(sessionKey ? { sessionKey } : {}),
   });
+}
+
+/**
+ * Moves the candidate window out of sight again and gives the main window back
+ * its focus; the window stays shown so its read script keeps running (B157).
+ */
+export async function parkConnectorSession(
+  platform: ConnectionPlatform,
+  layout: SessionLayout,
+): Promise<boolean> {
+  if (!isTauriEnvironment()) return false;
+  return (
+    (await invokeDesktopCommand<boolean>('park_connector_session', { platform, layout })) === true
+  );
 }
 
 /** Explains, honestly, why no sign-in window is on screen. */
