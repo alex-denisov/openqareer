@@ -23,7 +23,7 @@ const connected: CandidateConnection = {
 const roots: Array<() => void> = [];
 afterEach(() => roots.splice(0).forEach((done) => done()));
 
-function render(onOpenConnections = vi.fn(), walk?: ImportWalk) {
+function render(onOpenConnections = vi.fn(), walk?: ImportWalk, onReimport?: () => void) {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
@@ -38,6 +38,7 @@ function render(onOpenConnections = vi.fn(), walk?: ImportWalk) {
         onClose={vi.fn()}
         walk={walk}
         onOpenConnections={onOpenConnections}
+        onReimport={onReimport}
       />,
     ),
   );
@@ -120,6 +121,25 @@ describe('ProfileSourceDialog (макет 2 «Модальное окно: ис�
     expect(body.textContent).toContain('Раздел «контакты» не прочитан');
     act(() => button('Повторить раздел')?.click());
     expect(onOpenConnections).toHaveBeenCalledOnce();
+  });
+
+  it('starts the background import at once when it can (owner, 30.10)', () => {
+    const onOpenConnections = vi.fn();
+    const onReimport = vi.fn();
+    render(
+      onOpenConnections,
+      {
+        platform: 'linkedin',
+        state: 'done',
+        updatedAt: '2026-10-23T08:00:00.000Z',
+        sections: [{ key: 'skills', status: 'failed' }],
+      },
+      onReimport,
+    );
+    act(() => button('Повторить раздел')?.click());
+    act(() => button('Импортировать заново')?.click());
+    expect(onReimport).toHaveBeenCalledTimes(2);
+    expect(onOpenConnections).not.toHaveBeenCalled();
   });
 
   it('shows no unread line when every section was read', () => {

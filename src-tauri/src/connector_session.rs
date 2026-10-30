@@ -56,6 +56,10 @@ pub struct SessionWindowRequest {
     pub url: String,
     pub layout: Option<SessionLayout>,
     pub session_key: Option<String>,
+    /// A background read: the window opens where it was placed without taking
+    /// focus, so an out-of-sight import never pulls the candidate away.
+    #[serde(default)]
+    pub background: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -697,12 +701,14 @@ pub async fn open_session_window(
             request.session_key.as_deref(),
             layout.clone(),
         );
-        if let Some(window) = app.get_webview_window(&label) {
-            let _ = window.show();
-            let _ = window.set_focus();
-        } else {
-            let _ = existing.show();
-            let _ = existing.set_focus();
+        if !request.background {
+            if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.show();
+                let _ = window.set_focus();
+            } else {
+                let _ = existing.show();
+                let _ = existing.set_focus();
+            }
         }
         return SessionWindowReport {
             opened: true,
@@ -740,6 +746,7 @@ pub async fn open_session_window(
         .title(format!("OpenQareer · {}", platform_name(&request.platform)))
         .position(screen_layout.x, screen_layout.y)
         .inner_size(screen_layout.width, screen_layout.height)
+        .focused(!request.background)
         .on_navigation(move |next_url| allow_session_navigation(&platform, next_url));
     let (decorations, resizable, skip_taskbar) =
         session_window_chrome(request.session_key.is_some());
@@ -1041,6 +1048,17 @@ async fn open_hidden_session_window(app: &AppHandle, platform: &str, label: &str
     }
     let built = builder.build();
     built.is_ok() && await_registered_window(app, label).await
+}
+
+/// Moves the candidate window back out of sight once a person is no longer
+/// needed in it, and hands focus back to the main window: the window stays
+/// shown, since a hidden WKWebView stops running the read script (B157).
+pub fn park_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {
+    let moved = resize_session_window(app, platform, layout);
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.set_focus();
+    }
+    moved
 }
 
 pub fn resize_session_window(app: &AppHandle, platform: &str, layout: SessionLayout) -> bool {

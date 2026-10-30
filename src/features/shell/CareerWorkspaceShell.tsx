@@ -6,6 +6,7 @@ import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachA
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import '../journey/consultant-strip.css';
 import './mockup-shell.css';
+import { LinkedInImportStatus } from '../connections/LinkedInImportStatus';
 import './mobile-shell.css';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
 import {
@@ -413,6 +414,7 @@ export function CareerWorkspaceShell({
     openAccount('notif');
   }, [openAccount]);
   const openConnections = useCallback(() => openAccount('connections'), [openAccount]);
+  const bumpCabinetRevision = useCallback(() => setCabinetRevision((revision) => revision + 1), []);
   const resetForAccount = useCallback(
     (nextSession: AuthUser | null) => {
       setActiveView('today');
@@ -904,6 +906,7 @@ export function CareerWorkspaceShell({
             />
           </aside>
         ) : null}
+        <LinkedInImportStatus onSaved={bumpCabinetRevision} />
       </div>
     </CareerDiaryAccessProvider>
   );

@@ -17,8 +17,8 @@ use connector_session::{
     bind_candidate_account, clear_linkedin_pool_profile, close_managed_session_window,
     close_orphaned_session_windows, close_session_window, inspect_session_page,
     inspect_session_page_for, is_managed_session_window_open, is_session_window_open,
-    open_session_window, read_linkedin_pool_session_cookies, read_session_page,
-    reset_session_window, resize_session_window, resize_session_window_for,
+    open_session_window, park_session_window, read_linkedin_pool_session_cookies,
+    read_session_page, reset_session_window, resize_session_window, resize_session_window_for,
     should_route_through_tunnel, show_session_window, CandidateSessionAccount, PoolSessionCookie,
     SessionInspectionReport, SessionLayout, SessionPageReport, SessionWindowReport,
     SessionWindowRequest,
@@ -373,6 +373,11 @@ fn resize_connector_session(
     }
 }
 
+#[tauri::command]
+fn park_connector_session(app: AppHandle, platform: String, layout: SessionLayout) -> bool {
+    park_session_window(&app, &platform, layout)
+}
+
 /// Reads a page inside the candidate's own signed-in session window.
 #[tauri::command]
 async fn read_connector_session_page(
@@ -517,6 +522,7 @@ fn main() {
             close_connector_session,
             reset_connector_session,
             resize_connector_session,
+            park_connector_session,
             read_connector_session_page,
             save_connector_capture_dump,
             log_connector_diagnostic,

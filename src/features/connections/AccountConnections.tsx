@@ -32,6 +32,12 @@ import {
   startLinkedInContactsRefresh,
 } from './linkedinContactsRefresh';
 import { startLinkedInCompanySearch } from './linkedinCompanySearch';
+import {
+  canImportLinkedInInBackground,
+  LINKEDIN_BACKGROUND_NOTICE,
+  startLinkedInBackgroundImport,
+  type LinkedInReadyCapture,
+} from './linkedinBackgroundImport';
 import { AccountConnectionsSection } from '../account/AccountDesktopSections';
 import { AccountHhModal, AccountLinkedInModal } from '../account/AccountDialogs';
 import { MobileAccountConnections } from '../account/AccountMobileSections';
@@ -162,40 +168,33 @@ export function AccountConnectionsManager({
 
   async function handleLinkedInSessionImport(
     parsed: ParsedResume,
-    sourceUrl: string,
+    rawUrl: string,
     structured?: LinkedInStructuredCapture,
     structuredFallback?: StructuredFallbackReason,
   ) {
+    await saveLinkedInCapture(
+      { status: 'ready', parsed, rawUrl, structured, structuredFallback },
+      replaceIntent === 'linkedin',
+    );
+  }
+
+  /** Saves one LinkedIn capture and returns what the candidate is told. */
+  async function saveLinkedInCapture(
+    capture: LinkedInReadyCapture,
+    replaceProfile: boolean,
+  ): Promise<string> {
     setBusyPlatform('linkedin');
     setNotice(undefined);
     setReplaceOffer(undefined);
     try {
-      const capturedAt = new Date().toISOString();
-      const persist = (importMode?: NativeImportMode) =>
-        structured
-          ? persistStructuredLinkedInImport({
-              profile: structured.profile,
-              extractorVersion: structured.extractorVersion,
-              ...(structured.droppedFields ? { droppedFields: structured.droppedFields } : {}),
-              sourceUrl,
-              capturedAt,
-              ...(importMode ? { importMode } : {}),
-            })
-          : persistNativeSessionImport({
-              platform: 'linkedin',
-              parsed,
-              ...(structuredFallback ? { structuredFallback } : {}),
-              sourceUrl,
-              capturedAt,
-              ...(importMode ? { importMode } : {}),
-            });
-      const replace = () => persist('replace_profile');
-      if (replaceIntent === 'linkedin') {
+      const replace = () => persistLinkedInCapture(capture, 'replace_profile');
+      if (replaceProfile) {
         setReplaceIntent(undefined);
-        await handleReplaceProfile({ platform: 'linkedin', replace });
-        return;
+        const replaced = await handleReplaceProfile({ platform: 'linkedin', replace });
+        if (!replaced) throw new Error('linkedin_replace_failed');
+        return replaced;
       }
-      settleImport('linkedin', await persist(), replace);
+      return settleImport('linkedin', await persistLinkedInCapture(capture), replace);
     } catch (error) {
       setNotice(nativeSessionImportError('linkedin', error));
       throw error;
@@ -204,25 +203,43 @@ export function AccountConnectionsManager({
     }
   }
 
+  /**
+   * «Импортировать заново» reads LinkedIn out of sight in the desktop app
+   * (owner, 30.10): the window shows up only if LinkedIn needs a person.
+   */
+  function reimportLinkedIn(replaceProfile: boolean) {
+    setManagePlatform(undefined);
+    if (!canImportLinkedInInBackground()) {
+      if (replaceProfile) setReplaceIntent('linkedin');
+      setImportPlatform('linkedin');
+      return;
+    }
+    setNotice(LINKEDIN_BACKGROUND_NOTICE);
+    void startLinkedInBackgroundImport((capture) => saveLinkedInCapture(capture, replaceProfile));
+  }
+
   /** One import source per profile (23.10.2026): a second platform only connects. */
   function settleImport(
     platform: 'hh' | 'linkedin',
     persisted: PersistedNativeImport,
     replace: () => Promise<PersistedNativeImport>,
-  ) {
+  ): string {
     publishConnections(persisted.connections);
+    const message = nativeImportNotice(platform, persisted);
+    setNotice(message);
     if (persisted.connectOnly) {
-      setNotice(`${PLATFORM_LABELS[platform]} подключён. Профиль не изменился.`);
       setReplaceOffer({ platform, replace });
-      return;
+      return message;
     }
-    setNotice(
-      `Из ${PLATFORM_LABELS[platform]} сохранено ${factNoun(persisted.connection.factCount)}.`,
-    );
     onDataChanged?.();
+    return message;
   }
 
   function replaceFromManage(platform: 'hh' | 'linkedin') {
+    if (platform === 'linkedin') {
+      reimportLinkedIn(true);
+      return;
+    }
     setManagePlatform(undefined);
     setReplaceIntent(platform);
     setImportPlatform(platform);
@@ -233,18 +250,20 @@ export function AccountConnectionsManager({
     setReplaceIntent(undefined);
   }
 
-  async function handleReplaceProfile(offer: ReplaceOffer) {
+  /** The saved notice, or `undefined` when the replace failed and said so. */
+  async function handleReplaceProfile(offer: ReplaceOffer): Promise<string | undefined> {
     setBusyPlatform(offer.platform);
     try {
       const persisted = await offer.replace();
       setReplaceOffer(undefined);
       publishConnections(persisted.connections);
-      setNotice(
-        `Профиль заменён данными с ${PLATFORM_LABELS[offer.platform]}: ${factNoun(persisted.connection.factCount)}.`,
-      );
+      const message = `Профиль заменён данными с ${PLATFORM_LABELS[offer.platform]}: ${factNoun(persisted.connection.factCount)}.`;
+      setNotice(message);
       onDataChanged?.();
+      return message;
     } catch (error) {
       setNotice(nativeSessionImportError(offer.platform, error));
+      return undefined;
     } finally {
       setBusyPlatform(undefined);
     }
@@ -342,14 +361,7 @@ export function AccountConnectionsManager({
             setManagePlatform(undefined);
             void handleDisconnect('linkedin');
           }}
-          onReimport={
-            canSignIn
-              ? () => {
-                  setManagePlatform(undefined);
-                  setImportPlatform('linkedin');
-                }
-              : undefined
-          }
+          onReimport={canSignIn ? () => reimportLinkedIn(false) : undefined}
         />
       ) : null}
       {managedConnection?.platform === 'hh' && managedConnection.status === 'connected' ? (
@@ -573,6 +585,42 @@ function nativeSessionImportError(
     return 'Вы вышли из OpenQareer. Войдите снова и повторите подключение площадки.';
   }
   return `Данные с ${PLATFORM_LABELS[platform]} прочитаны, но сохранить не удалось. Повторите подключение.`;
+}
+
+/** What the candidate is told once a native import is saved. */
+export function nativeImportNotice(
+  platform: 'hh' | 'linkedin',
+  persisted: PersistedNativeImport,
+): string {
+  if (persisted.connectOnly) return `${PLATFORM_LABELS[platform]} подключён. Профиль не изменился.`;
+  return `Из ${PLATFORM_LABELS[platform]} сохранено ${factNoun(persisted.connection.factCount)}.`;
+}
+
+/** Saves a LinkedIn capture: the structured profile when it was read, else the text. */
+export function persistLinkedInCapture(
+  capture: LinkedInReadyCapture,
+  importMode?: NativeImportMode,
+): Promise<PersistedNativeImport> {
+  const capturedAt = new Date().toISOString();
+  const { structured } = capture;
+  if (structured) {
+    return persistStructuredLinkedInImport({
+      profile: structured.profile,
+      extractorVersion: structured.extractorVersion,
+      ...(structured.droppedFields ? { droppedFields: structured.droppedFields } : {}),
+      sourceUrl: capture.rawUrl,
+      capturedAt,
+      ...(importMode ? { importMode } : {}),
+    });
+  }
+  return persistNativeSessionImport({
+    platform: 'linkedin',
+    parsed: capture.parsed,
+    ...(capture.structuredFallback ? { structuredFallback: capture.structuredFallback } : {}),
+    sourceUrl: capture.rawUrl,
+    capturedAt,
+    ...(importMode ? { importMode } : {}),
+  });
 }
 
 function factNoun(count: number): string {
