@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { TariffQuotaList } from './TariffQuotaPanel';
-import { quotaNoteText } from './TariffQuotaNote';
+import { isQuotaLow, quotaNoteText } from './TariffQuotaNote';
 import type { TariffQuotaSummary } from './tariffQuotaApi';
 
 const freeSummary: TariffQuotaSummary = {
@@ -74,5 +74,13 @@ describe('остаток квот тарифа (B579)', () => {
     expect(quotaNoteText(coach!)).toBe(
       'Ходы консультанта: квота месяца исчерпана. Больше — на тарифе Basic.',
     );
+  });
+
+  it('у консультанта строка видна, только когда осталось не больше 10 % (блок A, 30.10)', () => {
+    const coach = freeSummary.quotas[2]!;
+    expect(isQuotaLow({ ...coach, limit: 3000, used: 34, remaining: 2966 })).toBe(false);
+    expect(isQuotaLow({ ...coach, limit: 30, used: 26, remaining: 4 })).toBe(false);
+    expect(isQuotaLow({ ...coach, limit: 30, used: 27, remaining: 3 })).toBe(true);
+    expect(isQuotaLow(coach)).toBe(true);
   });
 });

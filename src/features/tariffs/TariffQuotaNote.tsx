@@ -10,19 +10,28 @@ export interface TariffQuotaNoteProps {
   readonly quota: TariffQuotaKey;
   /** Меняется после траты квоты — строка перечитывает остаток. */
   readonly refreshKey?: unknown;
+  /** Показывать только при остатке не больше 10 % (консультант, блок A 30.10). */
+  readonly onlyWhenLow?: boolean;
 }
 
+const LOW_QUOTA_SHARE = 0.1;
+
 /** B579: остаток квоты там, где она тратится. Без квот (тестовый аккаунт) — ничего. */
-export function TariffQuotaNote({ quota, refreshKey }: TariffQuotaNoteProps) {
+export function TariffQuotaNote({ quota, refreshKey, onlyWhenLow }: TariffQuotaNoteProps) {
   const summary = useTariffQuotas(refreshKey);
   const status =
     summary && !summary.unlimited ? summary.quotas.find((item) => item.key === quota) : undefined;
   if (!status || status.limit === 0) return null;
+  if (onlyWhenLow && !isQuotaLow(status)) return null;
   return (
     <p className={`career-quota-note${status.remaining === 0 ? ' is-exhausted' : ''}`}>
       {quotaNoteText(status)}
     </p>
   );
+}
+
+export function isQuotaLow(status: TariffQuotaStatus): boolean {
+  return status.remaining <= status.limit * LOW_QUOTA_SHARE;
 }
 
 export function quotaNoteText(status: TariffQuotaStatus): string {

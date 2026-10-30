@@ -101,5 +101,23 @@ export function conversationCoverage(
 export function isQuizCheckable(skillName: string): boolean {
   if (!skillName.trim()) return false;
   if (MANAGEMENT_CANONICALS.has(canonicalizeSkill(skillName))) return false;
+  if (isManagementByRule(skillName)) return false;
   return extractManagementSkillsFromText(skillName).length === 0;
+}
+
+/**
+ * Правило поверх словаря (блок A, 30.10): словарь не знал «Turn Around
+ * Management», «IT Management», «Start-ups». Руководство людьми, проектом или
+ * бизнесом — только беседа. Технические фреймворки со словом «management»
+ * (ITSM, IAM, управление базами данных) остаются с квизом.
+ */
+const MANAGEMENT_WORDS =
+  /\b(management|manager|leadership|leader|executive|business|start-?ups?|turn\s?around)\b|руковод|управлени|лидерств|бизнес|стартап/iu;
+const SERVICE_DELIVERY = /\bservice\s+delivery\b/iu;
+const TECHNICAL_MANAGEMENT =
+  /\b(service|infrastructure|identity|access|configuration|data|database|content|cloud|network|incident|release|version|memory|state|package|dependency|secrets?|key|log)\s+(and\s+access\s+)?management\b|\bbusiness\s+intelligence\b|баз(ами|ы)\s+данных|инфраструктур/iu;
+
+function isManagementByRule(skillName: string): boolean {
+  if (TECHNICAL_MANAGEMENT.test(skillName)) return false;
+  return MANAGEMENT_WORDS.test(skillName) || SERVICE_DELIVERY.test(skillName);
 }

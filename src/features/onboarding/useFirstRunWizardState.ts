@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ResumeIngestionState } from '../journey/useResumeIngestion';
 import {
   initialFirstRunData,
+  readSessionGoal,
   restoreSourceStep,
   selectCity,
   setGoal,
@@ -88,7 +89,10 @@ function useFirstRunFileUpload(setData: React.Dispatch<React.SetStateAction<Firs
 }
 
 export function useFirstRunWizardState(initialStep: FirstRunStep = 'source') {
-  const [step, setStep] = useState<FirstRunStep>(initialStep);
+  // Цель уже сохранена в этой вкладке: после перезагрузки мастер продолжает с шага 2.
+  const [step, setStep] = useState<FirstRunStep>(() =>
+    initialStep === 'goal' && readSessionGoal() ? 'source' : initialStep,
+  );
   const [data, setData] = useState<FirstRunData>(initialFirstRunData);
   const dialogs = useFirstRunDialogState();
   const upload = useFirstRunFileUpload(setData);
