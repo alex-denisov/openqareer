@@ -3,6 +3,7 @@ import { extractLinkedInProfile } from './linkedinProfileExtract';
 import {
   extractStructuredLinkedInProfileTolerant,
   parseAboutSection,
+  parseContactInfo,
   type TolerantExtraction,
   LI_SDUI_EXTRACTOR_VERSION,
   type LinkedInProfilePages,
@@ -350,6 +351,10 @@ async function readLinkedDetailPages(
         report({ type: 'failed', key });
         break;
       }
+      if (key === 'contactInfo' && !contactOverlayRendered(detail.body)) {
+        report({ type: 'failed', key });
+        break;
+      }
       if (detail.body.length <= MAX_DETAIL_PAGE_BYTES) read = { ...read, [key]: detail.body };
       report({ type: 'read', key });
     }
@@ -357,6 +362,15 @@ async function readLinkedDetailPages(
     report({ type: 'end' });
   }
   return read;
+}
+
+/**
+ * Every contact overlay carries the "Your profile" row. A snapshot without it
+ * is the profile behind a dialog LinkedIn had not drawn yet: the 30.10 import
+ * reported such a page as read and saved no email or phone (B561).
+ */
+function contactOverlayRendered(body: string): boolean {
+  return parseContactInfo(body).linkedinUrl !== undefined;
 }
 
 function landedOn(rawUrl: string | undefined, sectionPath: string): boolean {

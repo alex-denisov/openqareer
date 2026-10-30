@@ -272,6 +272,57 @@ describe('LinkedIn session import flow', () => {
     expect(events).toContainEqual({ type: 'failed', key: 'experience' });
   });
 
+  describe('contact-info overlay read (B561)', () => {
+    const walkContactInfo = async (contactBody: string) => {
+      const events: { type: string; key?: string }[] = [];
+      const result = await createLinkedInSessionImportFlow({
+        inspectCurrentPage: async () => ({
+          ready: true,
+          url: 'https://www.linkedin.com/feed/',
+          signedInApplicant: true,
+          login: false,
+          otp: false,
+          captcha: false,
+        }),
+        readSessionPage: async (url: string) => {
+          const path = new URL(url).pathname;
+          if (path === '/in/me/') {
+            return {
+              ok: true,
+              url: 'https://www.linkedin.com/in/jordanrivers-99a1b2/',
+              body: readFixture('profile.html'),
+            };
+          }
+          const body = path.endsWith('overlay/contact-info/') ? contactBody : '<main></main>';
+          return { ok: true, url: `https://www.linkedin.com${path}`, body };
+        },
+        pauseBetweenDetailReads: async () => {},
+        detailReadThrottle: freshThrottle(),
+        onDetailProgress: (event) => events.push(event as never),
+        onAuthenticated: vi.fn(),
+        onProviderDataCaptured: vi.fn(),
+        onReady: vi.fn(),
+      }).run();
+      return { events, result };
+    };
+
+    it('is failed, not read, when the snapshot holds the profile instead of the dialog', async () => {
+      // 30.10: the overlay was captured before LinkedIn drew it; the stage said
+      // «read» and the profile got no email or phone.
+      const { events } = await walkContactInfo(`<main>${readFixture('profile.html')}</main>`);
+      expect(events).toContainEqual({ type: 'failed', key: 'contactInfo' });
+      expect(events).not.toContainEqual({ type: 'read', key: 'contactInfo' });
+    });
+
+    it('is read and carries email and phone when the dialog rendered', async () => {
+      const { events, result } = await walkContactInfo(readFixture('contact-info-live.html'));
+      expect(events).toContainEqual({ type: 'read', key: 'contactInfo' });
+      if (result.status !== 'ready') throw new Error('import did not finish');
+      expect(JSON.stringify(result.structured?.profile)).toContain('ivan.testov@example.com');
+      expect(JSON.stringify(result.structured?.profile)).toContain('+7 900 111-22-33');
+    });
+  });
+
   it('attaches a structured profile when the detail-page fixtures carry real sections', async () => {
     const pageBySuffix: [suffix: string, body: string][] = [
       ['details/experience/', readFixture('experience.html')],

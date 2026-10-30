@@ -1429,8 +1429,10 @@ if(/^\\/resume\\/[A-Za-z0-9_-]+$/u.test(parsed.pathname)){node.setAttribute('hre
     format!(
         "(function(){{try{{\
 const visibleText=function(node){{return (typeof node.innerText==='string'?node.innerText:node.textContent||'').trim().length;}};\
-const overlay=location.pathname.indexOf('/overlay/')>=0?Array.from(document.querySelectorAll('[role=dialog],dialog')).reduce(function(best,node){{return !best||visibleText(node)>visibleText(best)?node:best;}},null):null;\
-const source=(overlay&&visibleText(overlay)>0&&overlay)||document.querySelector('main')||document.body||document.documentElement;\
+const onOverlay=location.pathname.indexOf('/overlay/')>=0;\
+const overlay=onOverlay?Array.from(document.querySelectorAll('[role=dialog],dialog')).reduce(function(best,node){{return !best||visibleText(node)>visibleText(best)?node:best;}},null):null;\
+const source=onOverlay?(overlay&&visibleText(overlay)>0?overlay:null):(document.querySelector('main')||document.body||document.documentElement);\
+if(!source){{return '';}}\
 const root=source.cloneNode(true);\
 root.querySelectorAll('script,style,noscript,iframe,object,embed,input,textarea,select,meta,link').forEach(function(node){{node.remove();}});\
 root.querySelectorAll('*').forEach(function(node){{\
@@ -1838,6 +1840,10 @@ pub async fn read_session_page(
         tokio::time::sleep(PAGE_POLL_INTERVAL).await;
     }
 
+    if request.platform == "linkedin" && url_is_overlay(&requested_url) {
+        await_overlay_rendered(app, request, &window).await?;
+    }
+
     if request.platform == "linkedin" {
         let started = std::time::Instant::now();
         let walk = load_lazy_sections(&window, scroll_budget).await;
@@ -1899,6 +1905,41 @@ pub async fn read_session_page(
         url: final_url,
         body,
     })
+}
+
+/// Reads `true` once the contact-info dialog shows its profile row (B561).
+const CONTACT_OVERLAY_READY_SCRIPT: &str = include_str!("contact_overlay_ready.js");
+/// LinkedIn opens the overlay a beat after the profile behind it; the 30.10
+/// import read the page in 2 s and captured the profile instead of the dialog.
+const OVERLAY_RENDER_TIMEOUT: Duration = Duration::from_secs(15);
+
+fn url_is_overlay(raw: &str) -> bool {
+    Url::parse(raw).is_ok_and(|url| url.path().contains("/overlay/"))
+}
+
+/// Waits for the overlay dialog to draw its rows. A dialog that never
+/// renders is a failed read (`overlay_not_rendered`), so the import shows the
+/// contacts stage as failed instead of saving an empty overlay as read.
+async fn await_overlay_rendered(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    window: &Webview,
+) -> Result<(), String> {
+    let started = std::time::Instant::now();
+    loop {
+        if let Ok(raw) = eval_json(window, CONTACT_OVERLAY_READY_SCRIPT).await {
+            if raw.trim() == "true" {
+                let millis = started.elapsed().as_millis().to_string();
+                read_diagnostic(app, request, "overlay_ms", Some(&millis));
+                return Ok(());
+            }
+        }
+        if started.elapsed() >= OVERLAY_RENDER_TIMEOUT {
+            read_diagnostic(app, request, "overlay_not_rendered", None);
+            return Err("overlay_not_rendered".to_string());
+        }
+        tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+    }
 }
 
 const SANITIZE_ATTEMPTS: usize = 3;
@@ -2581,6 +2622,35 @@ https://media.licdn.com/dms/image/c 800w";
         assert!(!script.contains("document.querySelector('[role=dialog],dialog')"));
         assert!(script.contains("querySelectorAll('[role=dialog],dialog')"));
         assert!(script.contains("innerText"));
+    }
+
+    #[test]
+    fn an_overlay_without_its_dialog_is_read_as_empty_not_as_the_profile() {
+        // B561: the 30.10 import fell back to <main> and saved the profile
+        // behind the overlay as the contact info.
+        let script = page_sanitize_script("linkedin");
+        assert!(script
+            .contains("const source=onOverlay?(overlay&&visibleText(overlay)>0?overlay:null)"));
+        assert!(script.contains("if(!source){return '';}"));
+    }
+
+    #[test]
+    fn only_overlay_paths_wait_for_the_dialog() {
+        assert!(url_is_overlay(
+            "https://www.linkedin.com/in/jane-doe/overlay/contact-info/"
+        ));
+        assert!(!url_is_overlay(
+            "https://www.linkedin.com/in/jane-doe/details/skills/"
+        ));
+        assert!(!url_is_overlay(
+            "https://www.linkedin.com/in/jane-doe/?q=/overlay/"
+        ));
+        assert!(!url_is_overlay("not a url"));
+    }
+
+    #[test]
+    fn the_overlay_readiness_script_runs_unwrapped() {
+        assert!(CONTACT_OVERLAY_READY_SCRIPT.trim_end().ends_with("})();"));
     }
 
     #[test]
