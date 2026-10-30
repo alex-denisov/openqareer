@@ -384,6 +384,13 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     expect(replay.statusCode).toBe(200);
     expect(replay.json().meta.idempotentReplay).toBe(true);
     expect(store.getSnapshot(candidateId).memory).toHaveLength(memoryAfterFirst);
+    // A reimport of an unchanged profile still answers with the connection,
+    // or the desktop reports a save that did happen as failed (30.10).
+    expect(replay.json().data.connection).toMatchObject({
+      platform: 'linkedin',
+      status: 'connected',
+      accessMode: 'native_session_snapshot',
+    });
   });
 
   it('never writes work preferences from an openToWork suggestion', async () => {

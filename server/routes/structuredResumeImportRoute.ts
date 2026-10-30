@@ -118,11 +118,17 @@ function structuredImportShortcut(
 ) {
   const replay = candidateStore.findNativeSourceConnectionByDigest(candidateId, 'linkedin', importDigest);
   if (replay && !(mode === 'replace_profile' && replay.receipt.factCount === 0)) {
-    const data = { resume: resumeStudioView(candidateStore, candidateId), factCount: replay.receipt.factCount };
+    // The replay carries the connection like a first import: without it a
+    // reimport of an unchanged profile read as a failed save (30.10).
+    const data = {
+      resume: resumeStudioView(candidateStore, candidateId),
+      factCount: replay.receipt.factCount,
+      connection: nativeSourceConnectionView(replay),
+    };
     // A repeated connect-only answer keeps saying so, or the client reads «0 facts imported».
     const connectOnly = mode === 'connect_only' && replay.receipt.factCount === 0;
     return {
-      data: connectOnly ? { ...data, connectOnly: true as const, connection: nativeSourceConnectionView(replay) } : data,
+      data: connectOnly ? { ...data, connectOnly: true as const } : data,
       meta: { idempotentReplay: true },
     };
   }
