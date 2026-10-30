@@ -1283,6 +1283,48 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await expect(experience).toBeVisible();
   });
 
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1280, height: 806 },
+  ]) {
+    test(`${viewport.width}: the pinned section nav stays below the topbar and clears the heading`, async ({
+      page,
+    }, testInfo) => {
+      test.skip(
+        testInfo.project.name !== 'desktop-1440',
+        'This verifies the desktop shell layout.',
+      );
+      await page.setViewportSize(viewport);
+      await stubSession(page);
+      await openProfile(page);
+      const nav = page.getByRole('navigation', { name: 'Разделы профиля' });
+      await nav.getByRole('link', { name: 'Опыт', exact: true }).click();
+      await expect(page.locator('#sec-experience')).toBeInViewport();
+
+      // Block A 30.10: the nav stuck at top 0 under the 64 px topbar, so its links were hidden.
+      const layout = await page.evaluate(() => {
+        const topbar = document.querySelector('.career-desktop-topbar')!.getBoundingClientRect();
+        const navBox = document.querySelector('.career-profile-screen-anchor-nav')!;
+        const links = [...navBox.querySelectorAll('a')].map((link) => {
+          const box = link.getBoundingClientRect();
+          const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+          return link.contains(hit);
+        });
+        const heading = document.querySelector('#sec-experience-title')!.getBoundingClientRect();
+        return {
+          topbarBottom: topbar.bottom,
+          navTop: navBox.getBoundingClientRect().top,
+          navBottom: navBox.getBoundingClientRect().bottom,
+          headingTop: heading.top,
+          linksVisible: links,
+        };
+      });
+      expect(layout.navTop).toBeGreaterThanOrEqual(layout.topbarBottom - 1);
+      expect(layout.linksVisible.every(Boolean)).toBe(true);
+      expect(layout.headingTop).toBeGreaterThanOrEqual(layout.navBottom);
+    });
+  }
+
   test('900×900 keeps the consultant below Profile content and non-modal', async ({
     page,
   }, testInfo) => {
