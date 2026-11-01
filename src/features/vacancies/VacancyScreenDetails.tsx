@@ -463,7 +463,7 @@ function VacancySkillChips({
 }) {
   // 02.11: states are text, not colour only — each group is named and counted; missing first (29.10).
   return (
-    <div className="vacancies-screen-chip-groups">
+    <ul className="vacancies-screen-skill-chips">
       <ChipGroup title="Нет в профиле" count={missing.length}>
         {missing.map((skill) => (
           <MissingVacancySkillChip
@@ -484,7 +484,7 @@ function VacancySkillChips({
         ))}
       </ChipGroup>
       <MetChipGroup matching={matching} stated={stated} quotes={quotes} />
-    </div>
+    </ul>
   );
 }
 
@@ -524,13 +524,14 @@ function ChipGroup({
   readonly children: ReactNode;
 }) {
   if (count === 0) return null;
+  // One list keeps every chip findable as before; the title is a full-width row of it.
   return (
-    <div className="vacancies-screen-chip-group">
-      <p className="vacancies-screen-chip-group-title">
+    <>
+      <li className="vacancies-screen-chip-group-title">
         {title} · <span className="num">{count}</span>
-      </p>
-      <ul className="vacancies-screen-skill-chips">{children}</ul>
-    </div>
+      </li>
+      {children}
+    </>
   );
 }
 
