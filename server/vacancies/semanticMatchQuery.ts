@@ -1,6 +1,7 @@
 import type { SQLInputValue } from 'node:sqlite';
 import type { FunctionCode } from '../../shared/roleTaxonomy';
 import type { FreshnessWindow } from './vacancyPoolQuery';
+import type { MatchGeography } from './matchGeography';
 
 /**
  * Смысловой подбор (B267 S3, план §5): равенство по индексу
@@ -12,6 +13,10 @@ export interface SemanticMatchQueryInput {
   readonly functionCodes: readonly FunctionCode[];
   /** `null` — кандидат без известного уровня, окно уровня не сужает подбор. */
   readonly levelRank: number | null;
+  /** Нижняя граница окна уровня; без неё — ступень ниже `levelRank`. */
+  readonly levelFloorRank?: number | null;
+  /** Города и удалёнка кампании: предел чтения не тратится на чужие города. */
+  readonly geography?: MatchGeography;
   readonly window: FreshnessWindow;
   readonly preferRemote: boolean;
   readonly limit: number;
@@ -33,6 +38,7 @@ const ALIVE = 'i.expired = 0';
 function buildFunctionBranch(
   levelFilter: string,
   excludedFunctionFilter: string,
+  geographyFilter: string,
   isTargetFunction: boolean,
 ): string {
   return `SELECT * FROM (
@@ -40,11 +46,39 @@ function buildFunctionBranch(
       ${isTargetFunction ? 1 : 0} AS target
     FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
     JOIN vacancy_pool_index i ON i.id = s.id
-    WHERE s.function_code = ? ${levelFilter} ${excludedFunctionFilter}
+    WHERE s.function_code = ? ${levelFilter} ${excludedFunctionFilter} ${geographyFilter}
       AND s.published_ms BETWEEN ? AND ? AND ${ALIVE} AND i.is_active = 1
     ORDER BY s.published_ms DESC
     LIMIT ?
   )`;
+}
+
+/**
+ * Аудит 01.11: 3 000 самых новых строк по всей географии вытесняли Москву —
+ * из 487 руководящих вакансий города в подборку попадали 29. Место читается
+ * из проекции сведения той же строки; `lower()` SQLite знает только латиницу,
+ * поэтому кириллица сравнивается в написаниях, которые дал вызывающий.
+ */
+function buildGeographyFilter(geography: MatchGeography | undefined): {
+  sql: string;
+  params: string[];
+} {
+  if (!geography || geography.cityNames.length === 0) return { sql: '', params: [] };
+  const location = `coalesce((SELECT json_extract(c.cluster_json, '$.location')
+        FROM vacancy_cluster_input c WHERE c.id = s.id), '')`;
+  const names = cityNameVariants(geography.cityNames);
+  const places = names.map(() => `instr(${location}, ?) > 0`);
+  const remote = geography.remote ? ['i.is_remote = 1'] : [];
+  return { sql: `AND (${[...remote, ...places].join(' OR ')})`, params: names };
+}
+
+function cityNameVariants(names: readonly string[]): string[] {
+  const variants = names.flatMap((name) => {
+    const lower = name.toLocaleLowerCase('ru-RU');
+    const capital = lower.charAt(0).toLocaleUpperCase('ru-RU') + lower.slice(1);
+    return [name, lower, capital, lower.toLocaleUpperCase('ru-RU')];
+  });
+  return Array.from(new Set(variants.filter((name) => name.trim().length > 0)));
 }
 
 function buildExcludedTitleFilter(excludedFunctions: readonly ('sales' | 'marketing')[]): string {
@@ -88,12 +122,22 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   // не исчезает до того, как кандидат сможет его прочитать.
   const levelFilter =
     input.levelRank === null ? '' : 'AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL)';
+  const levelFloor = Math.min(
+    input.levelFloorRank ?? input.levelRank ?? 0,
+    (input.levelRank ?? 0) - 1,
+  );
   const excludedFunctions = excludedFunctionCodesFor(input.functionCodes);
   const excludedFunctionFilter = buildExcludedFunctionFilter(excludedFunctions);
+  const geography = buildGeographyFilter(input.geography);
   const queryFunctionCodes = queryFunctionCodesFor(input.functionCodes);
   const branches = queryFunctionCodes
     .map((code) =>
-      buildFunctionBranch(levelFilter, excludedFunctionFilter, input.functionCodes.includes(code)),
+      buildFunctionBranch(
+        levelFilter,
+        excludedFunctionFilter,
+        geography.sql,
+        input.functionCodes.includes(code),
+      ),
     )
     .join('\nUNION ALL\n');
   const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';
@@ -111,8 +155,9 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   const params: SQLInputValue[] = [];
   for (const code of queryFunctionCodes) {
     params.push(code);
-    if (input.levelRank !== null) params.push(input.levelRank - 1, input.levelRank + 1);
+    if (input.levelRank !== null) params.push(levelFloor, input.levelRank + 1);
     params.push(...excludedFunctions);
+    params.push(...geography.params);
     params.push(input.window.fromMs, input.window.toMs, input.limit);
   }
   params.push(input.limit);

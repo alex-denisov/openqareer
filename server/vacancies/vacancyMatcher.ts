@@ -4,6 +4,7 @@ import type { FunctionCode } from '../../shared/roleTaxonomy';
 import { normalizeTextForComparison } from './vacancyFingerprint';
 import { evaluateLevelMatch, LEVEL_RANK, type SeniorityLevel } from './levelMatcher';
 import { rulesParse } from './titleParse/rulesParse';
+import type { MatchGeography } from './matchGeography';
 import { canonicalizeSkill } from '../connectors/managementSkillsDictionary';
 
 /**
@@ -34,6 +35,8 @@ export interface CandidateMatchProfile {
    * одна роль не свелась к известной функции).
    */
   semanticRoleFunctions?: readonly FunctionCode[];
+  /** Города и удалёнка «Карьеры» — фильтр подбора до предела чтения (аудит 01.11). */
+  matchGeography?: MatchGeography;
 }
 
 interface MatchingFactPoint {
@@ -133,11 +136,24 @@ const TECH_FUNCTIONS: ReadonlySet<FunctionCode> = new Set([
   'product',
 ]);
 
-function isNonTechNoise(functions: readonly FunctionCode[]): boolean {
+/**
+ * «Эксплуатация» даёт it-ops и зданию, и ресторану: такая функция техническая,
+ * только если название само говорит про ИТ (аудит 01.11).
+ */
+const IT_TITLE_MARKER =
+  /(?<!\p{L})(?:it|ит|ikt|ict|информацион\p{L}*|цифров\p{L}*|digital|software|tech\p{L}*|технолог\p{L}*|систем\p{L}*|инфраструктур\p{L}*|data|ai|ии)(?!\p{L})/iu;
+
+function isNonTechNoise(functions: readonly FunctionCode[], title: string): boolean {
   const hasNonTechSector = functions.some((code) => NON_TECH_SECTOR_FUNCTIONS.has(code));
-  const hasTechFunction = functions.some((code) => TECH_FUNCTIONS.has(code));
+  const hasTechFunction = functions.some(
+    (code) => TECH_FUNCTIONS.has(code) && (code !== 'it-ops' || IT_TITLE_MARKER.test(title)),
+  );
   return hasNonTechSector && !hasTechFunction;
 }
+
+/** Анкеты, опросы и кадровые резервы площадок — не вакансии (аудит 01.11). */
+const NOT_A_VACANCY_TITLE =
+  /\b(?:expression of interest|study participant|research participant|talent (?:pool|community|network))\b/iu;
 
 function determineRoleMatchPoints(
   parsedLevelRank: number | null,
@@ -178,6 +194,24 @@ const SPECIALIST_FUNCTIONS: readonly FunctionCode[] = [
 /** Revenue Operations и RevOps — продажи, а не ops от роли COO (28.10). */
 const REVENUE_TITLE = /\b(?:revenue|revops)\b/iu;
 
+const ASSISTANT_TITLE = /(?<!\p{L})(?:assistant|ассистент\p{L}*|помощник\p{L}*)(?!\p{L})/iu;
+
+/**
+ * Аудит 01.11: «Call Center Assistant Operations Manager» в подборке
+ * директора. Уровень разбора правилами здесь не судья (SQL отобрал по уровню
+ * модели), а ассистент руководителем уровня VP+ не бывает.
+ */
+function isAssistantForExecutive(
+  targetLevel: SeniorityLevel | undefined,
+  vacancyTitle: string,
+): boolean {
+  return (
+    targetLevel !== undefined &&
+    LEVEL_RANK[targetLevel] >= LEVEL_RANK.vp &&
+    ASSISTANT_TITLE.test(vacancyTitle)
+  );
+}
+
 export function evaluateSemanticRole(
   roleFunctions: readonly FunctionCode[],
   targetLevel: SeniorityLevel | undefined,
@@ -194,7 +228,11 @@ export function evaluateSemanticRole(
     ) ||
     (!roleFunctions.includes('sales') && REVENUE_TITLE.test(vacancyTitle));
 
-  if (containsOtherSpecialistFunction || isNonTechNoise(parsed.functions)) {
+  if (
+    containsOtherSpecialistFunction ||
+    isNonTechNoise(parsed.functions, vacancyTitle) ||
+    NOT_A_VACANCY_TITLE.test(vacancyTitle)
+  ) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
@@ -213,6 +251,10 @@ export function evaluateSemanticRole(
   // Смежной продуктовой роли нет (CPO 26.10): продукт — только из ролей кандидата.
   const hasTargetFunction = parsed.functions.some((code) => roleFunctions.includes(code));
   if (!hasTargetFunction) {
+    return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
+  }
+
+  if (isAssistantForExecutive(targetLevel, vacancyTitle)) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 

@@ -1,4 +1,5 @@
 import type { FunctionCode } from '../../../shared/roleTaxonomy';
+import { LEVEL_RANK, type SeniorityLevel } from '../levelMatcher';
 import { rulesParse } from './rulesParse';
 
 /**
@@ -16,4 +17,20 @@ export function candidateRoleFunctionCodes(targetRoles: readonly string[]): Func
     }
   }
   return [...codes];
+}
+
+/**
+ * Нижняя граница уровня подбора: ступень ниже целевой, но не выше самой
+ * младшей роли кампании. «Head of AI» в кампании C-level — роль уровня Head,
+ * и окно ±1 от C-level её отсекало (аудит 01.11). `null` — уровень неизвестен.
+ */
+export function campaignLevelFloor(
+  targetRoles: readonly string[],
+  targetLevel: SeniorityLevel | undefined,
+): number | null {
+  if (!targetLevel) return null;
+  const roleRanks = targetRoles
+    .map((role) => rulesParse(role).levelRank)
+    .filter((rank): rank is number => rank !== null);
+  return Math.min(LEVEL_RANK[targetLevel] - 1, ...roleRanks);
 }

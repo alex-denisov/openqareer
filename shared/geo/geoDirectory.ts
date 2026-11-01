@@ -42,6 +42,7 @@ interface GeoIndex {
   readonly countryLabels: readonly string[];
   readonly citiesByName: ReadonlyMap<string, readonly GeoCity[]>;
   readonly cities: readonly GeoCity[];
+  readonly namesByCity: ReadonlyMap<GeoCity, readonly string[]>;
 }
 
 export const HOME_COUNTRY_LABEL = 'Россия';
@@ -62,6 +63,7 @@ function buildIndex(data: GeoDirectoryData): GeoIndex {
   }
   const cities: GeoCity[] = [];
   const citiesByName = new Map<string, GeoCity[]>();
+  const namesByCity = new Map<GeoCity, string[]>();
   for (const [label, iso, admin1, population, ...aliases] of data.cities) {
     const country = countryByIso.get(String(iso));
     if (!country) continue;
@@ -72,6 +74,7 @@ function buildIndex(data: GeoDirectoryData): GeoIndex {
       population: Number(population),
     };
     cities.push(city);
+    namesByCity.set(city, [...new Set([city.label, ...aliases.map(String)])]);
     for (const name of new Set([lower(city.label), ...aliases.map(String)])) {
       citiesByName.set(name, [...(citiesByName.get(name) ?? []), city]);
     }
@@ -81,6 +84,7 @@ function buildIndex(data: GeoDirectoryData): GeoIndex {
     countryLabels: [...new Set(countryByIso.values())],
     citiesByName,
     cities,
+    namesByCity,
   };
 }
 
@@ -123,6 +127,12 @@ export function geoCity(name: string | undefined, country?: string): GeoCity | u
   const scoped = country ? found.filter((city) => city.country === country) : found;
   if (country && scoped.length === 0) return undefined;
   return scoped.reduce((best, city) => (city.population > best.population ? city : best));
+}
+
+/** Все написания города («Москва», «moscow»); пусто, если город не узнан. */
+export function geoCityNames(name: string | undefined, country?: string): string[] {
+  const city = geoCity(name, country);
+  return city ? [...(index?.namesByCity.get(city) ?? [])] : [];
 }
 
 function cityValue(city: GeoCity): string {

@@ -1,4 +1,5 @@
 import type { FastifyRequest } from 'fastify';
+import { matchGeographyOf } from '../vacancies/matchGeography';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
 import { resolveRoleNameLanguage, type RoleNameLanguage } from '../domain/roleNameLanguage';
 import { dropOrganisationTitles } from '../domain/roleNaming';
@@ -228,9 +229,9 @@ export async function readRoleContext(
     confirmedSkills,
     targetRoles,
     targetLevel,
+    matchGeographyOf(campaign.careerGeography),
   );
 
-  const regions = campaign.regions.value as CandidateRegion[];
   const { language, named, namedBy } = await nameCandidateRoles(
     deps,
     request,
@@ -259,7 +260,7 @@ export async function readRoleContext(
     language,
     confirmedSkills,
     constraints: {
-      regions,
+      regions: campaign.regions.value as CandidateRegion[],
       // Дословно то, что кандидат написал; код это не разбирает и не толкует.
       note: readConstraintNote(candidateStore, candidateId),
     },

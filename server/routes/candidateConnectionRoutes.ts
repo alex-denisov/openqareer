@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { matchGeographyOf } from '../vacancies/matchGeography';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RecruiterContact, RecruiterSourceReceipt } from '../../shared/recruiterContact';
@@ -525,6 +526,7 @@ export async function readCandidateMatchedVacancies(
     confirmedSkills,
     roles,
     level,
+    matchGeographyOf(campaign.careerGeography),
   );
   return finishMatchedVacancies(snapshot, roles, campaign, deps.candidateStore, candidateId);
 }

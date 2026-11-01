@@ -3,6 +3,7 @@ import type { RouteDeps } from '../routes/deps';
 import type { deriveCandidateTargetLevel } from './candidateLevel';
 import { MatchedPoolSnapshots } from './matchedPoolSnapshot';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
+import { matchGeographyKey, type MatchGeography } from './matchGeography';
 
 /** Подтверждённые навыки кандидата — то, по чему вообще можно сопоставлять. */
 export function readMatchProfile(
@@ -48,8 +49,10 @@ export function matchedSnapshotKey(
   confirmedSkills: readonly string[],
   targetRoles: readonly string[],
   targetLevel: ReturnType<typeof deriveCandidateTargetLevel>,
+  geography?: MatchGeography,
 ): string {
-  return `${matchProfileKey(confirmedSkills, targetRoles)}:${targetLevel ?? ''}`;
+  const base = `${matchProfileKey(confirmedSkills, targetRoles)}:${targetLevel ?? ''}`;
+  return geography ? `${base}:${matchGeographyKey(geography)}` : base;
 }
 
 /**
@@ -72,10 +75,14 @@ export function peekMatchedVacancies(
   confirmedSkills: string[],
   targetRoles: string[],
   targetLevel: ReturnType<typeof deriveCandidateTargetLevel>,
+  geography?: MatchGeography,
 ): MatchedVacancyItem[] | undefined {
   const snapshots = matchedPoolSnapshots.get(engine);
   if (!snapshots) return undefined;
-  return snapshots.peek(candidateId, matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel));
+  return snapshots.peek(
+    candidateId,
+    matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel, geography),
+  );
 }
 
 /** Кампания сохранена — снимок прежней кампании не должен пережить запись. */
@@ -97,6 +104,7 @@ export function readMatchedSnapshot(
   confirmedSkills: string[],
   targetRoles: string[],
   targetLevel: ReturnType<typeof deriveCandidateTargetLevel>,
+  geography?: MatchGeography,
 ): Promise<MatchedVacancyItem[]> {
   let snapshots = matchedPoolSnapshots.get(engine);
   if (!snapshots) {
@@ -105,7 +113,7 @@ export function readMatchedSnapshot(
   }
   return snapshots.readAsync(
     candidateId,
-    matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel),
+    matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel, geography),
     () =>
       engine.getMatchedVacanciesAsync({
         candidateId,
@@ -114,6 +122,7 @@ export function readMatchedSnapshot(
         confirmedFacts: confirmedSkills,
         preferredRemote: true,
         ...(targetLevel ? { targetLevel } : {}),
+        ...(geography ? { matchGeography: geography } : {}),
       }),
   );
 }

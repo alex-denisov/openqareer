@@ -1,4 +1,5 @@
 import type { CandidateStore } from '../data/candidateStore';
+import { matchGeographyOf } from './matchGeography';
 import type { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { readCampaign } from '../routes/campaignContext';
 import { readTargetLevel } from '../routes/vacancyRoleContext';
@@ -105,6 +106,7 @@ export class MatchedPoolPrecompute {
       confirmedSkills,
       targetRoles,
       targetLevel,
+      matchGeographyOf(campaign.careerGeography),
     );
   }
 }

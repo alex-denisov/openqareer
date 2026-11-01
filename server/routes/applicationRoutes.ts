@@ -1,4 +1,5 @@
 import { currentTodayDecision, isTodayActionDeferred } from '../../shared/todayDecision';
+import { matchGeographyOf } from '../vacancies/matchGeography';
 import { buildTodayTeamSizeDecision } from '../domain/todayTeamSizeDecision';
 import { registerTodayDecisionRoutes } from './todayDecisionRoutes';
 import { readApplicationContacts, registerTodayChangesRoutes } from './todayChangesRoutes';
@@ -313,6 +314,7 @@ async function readTodayMatchedVacancies(
           confirmedSkills,
           targetRoles,
           targetLevel,
+          matchGeographyOf(campaign.careerGeography),
         );
   return {
     matched: matched.filter((item) => !campaign.remoteOnly || item.cluster.isRemote),
