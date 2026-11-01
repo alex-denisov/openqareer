@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { ArrowsClockwise, CheckCircle, Spinner } from '@phosphor-icons/react';
 import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
+import type { ProfileItemOperation, ProfileItemSection } from '../../../shared/profileItemRevision';
 
 export interface InlineSuggestionItem {
   readonly id: string;
-  readonly section: 'headline' | 'about' | 'experience';
+  readonly section: 'headline' | 'about' | 'experience' | ProfileItemSection;
   readonly experienceId?: string;
   readonly field?: ExperienceRevisionField;
+  /** List sections (01.11): the item and what happens to it. */
+  readonly itemId?: string;
+  readonly operation?: ProfileItemOperation;
   readonly title?: string;
   readonly rationale?: string;
   readonly currentText?: string;
@@ -25,16 +29,35 @@ export interface InlineConsultantSuggestionProps {
   readonly loading?: boolean;
 }
 
+/** A removal states what goes away; an addition has nothing to compare with. */
+export const REMOVE_ITEM_NOTE = 'Удалить из профиля';
+
 function SuggestionComparison({
   currentText,
   proposedText,
+  operation,
 }: {
   readonly currentText?: string;
   readonly proposedText: string;
+  readonly operation?: ProfileItemOperation;
 }) {
+  if (operation === 'remove') {
+    return (
+      <div className="career-consultant-suggestion-comparison">
+        <div className="career-consultant-suggestion-col is-current">
+          <span className="career-consultant-suggestion-col-label">Сейчас</span>
+          <p className="career-consultant-suggestion-text">{currentText || proposedText}</p>
+        </div>
+        <div className="career-consultant-suggestion-col is-proposed">
+          <span className="career-consultant-suggestion-col-label">Станет</span>
+          <p className="career-consultant-suggestion-text">{REMOVE_ITEM_NOTE}</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="career-consultant-suggestion-comparison">
-      {currentText !== undefined ? (
+      {currentText !== undefined && operation !== 'add' ? (
         <div className="career-consultant-suggestion-col is-current">
           <span className="career-consultant-suggestion-col-label">Сейчас</span>
           <p className="career-consultant-suggestion-text">{currentText || 'Раздел пока пуст.'}</p>
@@ -229,6 +252,7 @@ export function InlineConsultantSuggestion({
       <SuggestionComparison
         currentText={suggestion.currentText}
         proposedText={suggestion.proposedText}
+        operation={suggestion.operation}
       />
       {applied ? (
         <AppliedActions busy={busy} onRevert={onRevert ? handleRevert : undefined} />

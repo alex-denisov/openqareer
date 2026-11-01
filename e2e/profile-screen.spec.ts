@@ -2556,3 +2556,79 @@ test.describe('B265 Profile screen', () => {
     await expect(print).toBeHidden();
   });
 });
+
+test.describe('Consultant proposals in every profile section (01.11)', () => {
+  const itemCommand = (
+    commandId: string,
+    objective: string,
+    executionTarget: Record<string, unknown>,
+  ) => ({
+    commandId,
+    candidateId: CANDIDATE.candidateId,
+    turnIdempotencyKey: `turn-${commandId}`,
+    capability: 'resume.revise',
+    status: 'awaiting_approval',
+    proposal: { objective, evidenceRefs: ['memory:mem-edu-1'] },
+    executionTarget: { targetType: 'resume_block', ...executionTarget },
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+  });
+  const commands = [
+    itemCommand('cmd-item-edu', 'Квалификация в формулировке вакансий платформенной инженерии', {
+      section: 'education',
+      itemId: 'edu-1',
+      operation: 'update',
+      itemField: 'qualification',
+      currentText: 'MSc Computer Science',
+      proposedText: 'MSc Computer Science, распределённые системы',
+    }),
+    itemCommand('cmd-item-proj', 'Результат проекта виден в одной строке', {
+      section: 'projects',
+      itemId: 'project-1',
+      operation: 'update',
+      itemField: 'description',
+      currentText:
+        'Перенос платёжного ядра на Kubernetes с нулевым простоем для 40 млн транзакций в сутки.',
+      proposedText: 'Перенёс платёжное ядро на Kubernetes без простоя: 40 млн транзакций в сутки.',
+    }),
+  ];
+
+  test('education and projects show the consultant card inside the section', async ({
+    page,
+  }, testInfo) => {
+    await stubSession(page);
+    await page.route('**/api/v1/candidate/career-commands', (route) =>
+      route.fulfill({ json: { data: commands } }),
+    );
+    await openProfile(page);
+    const mobile = testInfo.project.name === 'mobile-390';
+    const width = mobile ? 390 : 1440;
+    for (const [label, route, commandId, sectionId] of [
+      ['Образование', 'edu', 'cmd-item-edu', 'sec-education'],
+      ['Проекты', 'proj', 'cmd-item-proj', 'sec-projects'],
+    ] as const) {
+      if (mobile) {
+        await page
+          .locator('.career-profile-mobile .pm-row')
+          .filter({ has: page.getByText(label, { exact: true }) })
+          .first()
+          .click();
+        await expect(page.locator('.career-profile-mobile')).toHaveAttribute(
+          'data-mobile-profile-page',
+          route,
+        );
+      }
+      const card = mobile
+        ? page.locator(`[data-testid="consultant-suggestion-${commandId}"]`)
+        : page.locator(`#${sectionId} [data-testid="consultant-suggestion-${commandId}"]`);
+      await expect(card).toBeVisible();
+      await expect(card.getByRole('button', { name: 'Принять', exact: true })).toBeEnabled();
+      await card.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: `output/playwright/item-suggestions/${route}-${width}.png`,
+        animations: 'disabled',
+      });
+      if (mobile) await page.getByRole('button', { name: 'Назад', exact: true }).click();
+    }
+  });
+});

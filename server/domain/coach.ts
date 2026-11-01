@@ -4,11 +4,15 @@ import {
   adaptationContextSchema,
 } from '../../shared/adaptationCoach';
 import { z } from 'zod';
-import {
-  EXPERIENCE_REVISION_FIELDS,
-  TEAM_SIZE_TEXT_PATTERN,
-  type ExperienceRevisionField,
-} from '../../shared/experienceRevisionField';
+import { PROFILE_ITEM_SECTIONS } from '../../shared/profileItemRevision';
+import { RESUME_REVISION_JSON_SCHEMA, resumeRevisionProposalSchema } from './resumeRevisionSchema';
+
+export {
+  RESUME_REVISION_JSON_SCHEMA,
+  experienceRevisionTextIsValid,
+  resumeExperienceDateTextSchema,
+  resumeRevisionProposalSchema,
+} from './resumeRevisionSchema';
 import { MAX_BULLETS_PER_PLACE } from './resumeDraft';
 
 const COACH_PHASES = [
@@ -118,70 +122,6 @@ function careerChangeIssue(kind: string, change: CareerChange | null | undefined
   return otherFields.every((value) => value === null) ? null : 'role changes carry only roleTitle';
 }
 
-export const resumeExperienceDateTextSchema = z.union([
-  z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/),
-  z.string().date(),
-]);
-
-/** Dates are canonical ISO months or days; a team size is a whole number of people. */
-export function experienceRevisionTextIsValid(
-  field: ExperienceRevisionField,
-  proposedText: string,
-): boolean {
-  return field === 'teamSize'
-    ? TEAM_SIZE_TEXT_PATTERN.test(proposedText)
-    : resumeExperienceDateTextSchema.safeParse(proposedText).success;
-}
-
-export const resumeRevisionProposalSchema = z
-  .object({
-    section: z.enum(['headline', 'about', 'experience', 'skills']),
-    experienceId: z.string().min(1).max(80).nullable(),
-    memoryId: z.string().min(1).max(80).nullable(),
-    field: z.enum(EXPERIENCE_REVISION_FIELDS).nullable().optional(),
-    proposedText: z.string().trim().min(1).max(10_000),
-  })
-  .strict()
-  .superRefine((target, context) => {
-    const keyed = target.section === 'experience' || target.section === 'skills';
-    if (keyed && !target.experienceId) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'experience and skill revisions need an entry key',
-      });
-    }
-    if (!keyed && target.experienceId) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'only experience revisions have an entry id',
-      });
-    }
-    if (target.section !== 'experience' && target.memoryId) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'only experience revisions can target a fact',
-      });
-    }
-    if (target.field && target.section !== 'experience') {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'only experience revisions can target a date field',
-      });
-    }
-    if (target.field && target.memoryId) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'experience date revisions cannot target a bullet fact',
-      });
-    }
-    if (target.field && !experienceRevisionTextIsValid(target.field, target.proposedText)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'experience date revisions need a canonical ISO month or date',
-      });
-    }
-  });
-
 export const careerActionProposalSchema = z
   .object({
     kind: z.enum(CAREER_ACTION_KINDS),
@@ -211,6 +151,10 @@ export const careerActionProposalSchema = z
     }
   });
 
+/** Bounds of the list-section items the consultant reads. */
+export const PROFILE_ITEM_CONTEXT_MAX = 120;
+export const PROFILE_ITEM_CONTEXT_TEXT_MAX = 800;
+
 const resumeContextSchema = z
   .object({
     headline: z.string().nullable(),
@@ -232,6 +176,19 @@ const resumeContextSchema = z
           .strict(),
       )
       .max(50),
+    // Every other editable list section, item by item, for item revisions (01.11).
+    profileItems: z
+      .array(
+        z
+          .object({
+            section: z.enum(PROFILE_ITEM_SECTIONS),
+            id: z.string().min(1).max(80),
+            fields: z.record(z.string(), z.string().max(PROFILE_ITEM_CONTEXT_TEXT_MAX)),
+          })
+          .strict(),
+      )
+      .max(PROFILE_ITEM_CONTEXT_MAX)
+      .optional(),
   })
   .strict();
 
@@ -700,32 +657,7 @@ export const COACH_TURN_JSON_SCHEMA = {
             type: 'string',
             enum: ['read_only', 'candidate_data_write', 'external_side_effect'],
           },
-          resumeRevision: {
-            anyOf: [
-              {
-                type: 'object',
-                properties: {
-                  section: { type: 'string', enum: ['headline', 'about', 'experience'] },
-                  experienceId: {
-                    anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }],
-                  },
-                  memoryId: {
-                    anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }],
-                  },
-                  field: {
-                    anyOf: [
-                      { type: 'string', enum: [...EXPERIENCE_REVISION_FIELDS] },
-                      { type: 'null' },
-                    ],
-                  },
-                  proposedText: { type: 'string', minLength: 1, maxLength: 10_000 },
-                },
-                required: ['section', 'experienceId', 'memoryId', 'field', 'proposedText'],
-                additionalProperties: false,
-              },
-              { type: 'null' },
-            ],
-          },
+          resumeRevision: RESUME_REVISION_JSON_SCHEMA,
           careerChange: {
             anyOf: [
               {

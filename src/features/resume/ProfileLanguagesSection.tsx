@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
 import { addLanguage, removeLanguage, updateLanguage } from './resumeStudioModel';
@@ -13,6 +14,8 @@ import type { CefrLevel, ResumeDraft, ResumeLanguageInput } from './resumeTypes'
 
 interface SectionProps {
   readonly draft: ResumeDraft;
+  /** Consultant proposals for this section, shown under its head (01.11). */
+  readonly consultant?: ReactNode;
   readonly saving?: boolean;
   readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
 }
@@ -184,7 +187,12 @@ function LanguageRow({
   );
 }
 
-export function ProfileLanguagesSection({ draft, saving, onSectionSave }: SectionProps) {
+export function ProfileLanguagesSection({
+  draft,
+  saving,
+  onSectionSave,
+  consultant,
+}: SectionProps) {
   const [newEntry, setNewEntry] = useState<ResumeLanguageInput>();
   const addItem = () =>
     setNewEntry(addLanguage(draft, `manual-${crypto.randomUUID()}`).languages.at(-1));
@@ -200,6 +208,7 @@ export function ProfileLanguagesSection({ draft, saving, onSectionSave }: Sectio
         count={draft.languages.length ? String(draft.languages.length) : undefined}
         action={<SectionAddButton label="Добавить язык" onClick={addItem} />}
       />
+      {consultant}
       {newEntry ? (
         <LanguageEditForm
           entry={newEntry}
@@ -215,21 +224,26 @@ export function ProfileLanguagesSection({ draft, saving, onSectionSave }: Sectio
           }}
         />
       ) : null}
-      {!draft.languages.length ? (
-        <p className="career-profile-screen-empty-note">Языки ещё не добавлены.</p>
-      ) : (
-        <div className="career-profile-language-grid">
-          {draft.languages.map((entry) => (
-            <LanguageRow
-              key={entry.id}
-              entry={entry}
-              saving={saving}
-              onSave={(patch) => onSectionSave(updateLanguage(draft, entry.id, patch))}
-              onRemove={() => onSectionSave(removeLanguage(draft, entry.id))}
-            />
-          ))}
-        </div>
-      )}
+      <LanguageList draft={draft} saving={saving} onSectionSave={onSectionSave} />
     </section>
+  );
+}
+
+function LanguageList({ draft, saving, onSectionSave }: SectionProps) {
+  if (!draft.languages.length) {
+    return <p className="career-profile-screen-empty-note">Языки ещё не добавлены.</p>;
+  }
+  return (
+    <div className="career-profile-language-grid">
+      {draft.languages.map((entry) => (
+        <LanguageRow
+          key={entry.id}
+          entry={entry}
+          saving={saving}
+          onSave={(patch) => onSectionSave(updateLanguage(draft, entry.id, patch))}
+          onRemove={() => onSectionSave(removeLanguage(draft, entry.id))}
+        />
+      ))}
+    </div>
   );
 }

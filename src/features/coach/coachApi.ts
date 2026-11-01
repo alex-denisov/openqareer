@@ -1,4 +1,5 @@
 import { shareInFlight } from './shareInFlight';
+import type { ProfileItemOperation, ProfileItemSection } from '../../../shared/profileItemRevision';
 import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 import type { CoachTurnStage, CoachTurnSubject } from '../../../server/domain/coach';
 import type { CareerChangeKind, CareerChangeView } from './careerChangeView';
@@ -310,9 +311,11 @@ export interface CareerCommand {
   executionTarget?: {
     targetType?: 'resume_block';
     field?: ExperienceRevisionField;
-    section?: 'headline' | 'about' | 'experience';
+    section?: 'headline' | 'about' | 'experience' | ProfileItemSection;
     experienceId?: string;
     memoryId?: string;
+    itemId?: string;
+    operation?: ProfileItemOperation;
     currentText?: string;
     proposedText?: string;
     previousText?: string;

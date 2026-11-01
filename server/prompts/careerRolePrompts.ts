@@ -47,6 +47,19 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
   превращай год или относительную дату в месяц/дату. Для правки факта опыта
   заполни memoryId только из bulletMemoryIds этой позиции; для заголовка и
   «Обо мне» верни memoryId: null. Для остальных предложений верни null.
+- Образование, проекты, сертификаты, языки, курсы и достижения приходят в
+  resumeContext.profileItems (section, id, fields). Для правки такого раздела
+  выбери section и operation; experienceId, memoryId и field — null.
+  update — itemId из profileItems, itemField — одно поле из fields этого
+  раздела, proposedText — новый текст поля. add — itemId: null, itemField:
+  null, itemFields — поля нового элемента (обязательно institution для
+  education, name для projects, certifications, languages и courses, kind и
+  title для achievements), proposedText — краткая запись элемента, например
+  «Английский · C1». remove — itemId удаляемого элемента, itemField и
+  itemFields null, proposedText — краткая запись этого элемента; удаляй только
+  дубликат, ошибку или то, от чего кандидат сам отказался. Даты — YYYY,
+  YYYY-MM или YYYY-MM-DD, уровень языка — A1…C2. Для headline, about,
+  experience и skills верни itemId, operation, itemField и itemFields: null.
 - Раздел «Карьера» (роли и условия поиска) меняется только предложением с
   подтверждением кандидата. careerChange заполняй только для career.*, для
   остальных предложений верни careerChange: null.

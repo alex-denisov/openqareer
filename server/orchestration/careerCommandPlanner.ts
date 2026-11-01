@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { EXPERIENCE_REVISION_FIELDS } from '../../shared/experienceRevisionField';
+import { PROFILE_ITEM_OPERATIONS, PROFILE_ITEM_SECTIONS } from '../../shared/profileItemRevision';
+import { profileItemRevisionIssue } from '../domain/profileItemRevision';
 import {
   careerActionProposalSchema,
   experienceRevisionTextIsValid,
@@ -27,16 +29,25 @@ export type HhApplicationExecutionTarget = z.infer<typeof hhApplicationExecution
 export const resumeReviseExecutionTargetSchema = z
   .object({
     targetType: z.literal('resume_block').optional(),
-    section: z.enum(['headline', 'about', 'experience', 'skills']),
+    section: z.enum(['headline', 'about', 'experience', 'skills', ...PROFILE_ITEM_SECTIONS]),
     experienceId: z.string().optional(),
     memoryId: z.string().optional(),
     field: z.enum(EXPERIENCE_REVISION_FIELDS).optional(),
+    itemId: z.string().min(1).max(80).optional(),
+    operation: z.enum(PROFILE_ITEM_OPERATIONS).optional(),
+    itemField: z.string().min(1).max(40).optional(),
+    itemFields: z
+      .array(z.object({ field: z.string().min(1).max(40), text: z.string().max(5_000) }).strict())
+      .max(12)
+      .optional(),
     currentText: z.string().max(10_000),
     proposedText: z.string().min(1).max(10_000),
     previousText: z.string().optional(),
   })
   .strict()
   .superRefine((target, context) => {
+    const itemIssue = profileItemRevisionIssue(target);
+    if (itemIssue) context.addIssue({ code: z.ZodIssueCode.custom, message: itemIssue });
     const keyed = target.section === 'experience' || target.section === 'skills';
     if (keyed && !target.experienceId) {
       context.addIssue({
@@ -88,6 +99,10 @@ export function bindResumeRevisionTarget(
     experienceId: proposal.experienceId ?? undefined,
     memoryId: proposal.memoryId ?? undefined,
     field: proposal.field ?? undefined,
+    itemId: proposal.itemId ?? undefined,
+    operation: proposal.operation ?? undefined,
+    itemField: proposal.itemField ?? undefined,
+    itemFields: proposal.itemFields ?? undefined,
     currentText,
   });
 }

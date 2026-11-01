@@ -26,6 +26,8 @@ function commandToSuggestion(command: CareerCommand): InlineSuggestionItem | nul
     section: target.section,
     experienceId: target.experienceId,
     field: target.field,
+    itemId: target.itemId,
+    operation: target.operation,
     title: sourceFromDiary
       ? 'Предложение из карьерного дневника'
       : 'Предложение карьерного консультанта',
