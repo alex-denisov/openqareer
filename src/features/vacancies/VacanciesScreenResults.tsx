@@ -6,6 +6,7 @@ import { DEFAULT_VACANCY_SORT } from '../../../shared/vacancySort';
 import { vacancyFitMark } from './vacancyFitModel';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
+import { useLoadMoreOnScroll } from './useLoadMoreOnScroll';
 import type { SavedCardRenderer } from './SavedVacanciesPanel';
 import { catalogSnapshotLabel } from './VacanciesScreenSummary';
 import {
@@ -138,6 +139,7 @@ const pageCount = new Intl.NumberFormat('ru-RU');
 
 function VacanciesListContent(props: ListContentProps) {
   const catalogDate = catalogSnapshotLabel(props.catalogObservedAt);
+  const loadMoreSentinel = useLoadMoreOnScroll(Boolean(props.hasMore), props.onLoadMore);
   return (
     <div className="vacancies-list-container">
       <VacanciesTableHeader
@@ -151,6 +153,7 @@ function VacanciesListContent(props: ListContentProps) {
           <VacancyScreenRow key={item.cluster.id} item={item} props={props} />
         ))}
       </ul>
+      <div ref={loadMoreSentinel} aria-hidden="true" />
       <footer className="vacancies-screen-footer" aria-label="Навигация по подборке вакансий">
         <p className="vacancies-screen-page-count" aria-live="polite">
           {/* B446-g4: показанные из выдачи с условиями; догрузка пула — отдельной пометкой. */}

@@ -87,7 +87,8 @@ export class VacancyMechanicsRuntime {
     const result = current ?? previous;
     const state = !input.description.trim()
       ? 'no_description'
-      : extracted?.status === 'no_requirements'
+      // 01.11: an older extractor's «none» is not the verdict while the model still reads the text.
+      : extracted?.status === 'no_requirements' && extracted.extractorVersion === VACANCY_REQUIREMENTS_EXTRACTOR_VERSION
         ? 'no_requirements'
         : current
           ? 'ready'

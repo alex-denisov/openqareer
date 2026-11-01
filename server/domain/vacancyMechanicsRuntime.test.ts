@@ -149,6 +149,13 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(order).toEqual([{ id: 'vacancy-legacy', priority: 1.5 }, { id: 'vacancy-background', priority: 0.1 }]);
   });
 
+  it('an old rules verdict «no requirements» is still counting while the model reads the text (01.11)', async () => {
+    const runtime = setup(); const source = { ...input(), vacancyId: 'vacancy-icebery', description: 'Руководитель клиентского сервиса. Развиваем команду поддержки.' };
+    runtime.requirements.enqueue({ vacancyId: source.vacancyId, description: source.description, extractorVersion: 'rules-1' });
+    await runtime.requirements.runNext('w', async (job) => ({ ...extractVacancyRequirements(job), extractorVersion: 'rules-1' }));
+    expect(runtime.view(source).state).not.toBe('no_requirements');
+  });
+
   it('isolates candidate caches and invalidates after profile or description changes', async () => {
     const runtime = setup(); const source = input(); runtime.enqueue(source); await runtime.runNext(null);
     expect(runtime.view(input('another-candidate')).result).toBeUndefined();
