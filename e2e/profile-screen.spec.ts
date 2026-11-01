@@ -1580,7 +1580,8 @@ test.describe('B265 Profile screen', () => {
     await expect(
       page.locator('#sec-experience .career-profile-screen-position').first(),
     ).toBeVisible();
-    await expect(page.locator('.career-profile-screen-lang-source').first()).toBeVisible();
+    // Provenance is kept in data and History, not printed on blocks (owner, 02.11).
+    await expect(page.locator('#sec-languages')).not.toContainText('из LinkedIn');
     const languages = page.locator('#sec-languages .career-profile-screen-lang-item');
     await expect(languages).toHaveCount(DRAFT.languages.length);
     await expect(languages.nth(0)).toContainText('Английский');
