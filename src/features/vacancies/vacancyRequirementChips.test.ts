@@ -60,6 +60,16 @@ describe('fitRequirementChips', () => {
     expect(chips.unconfirmed[2].length).toBeLessThanOrEqual(41);
   });
 
+  it('while no requirement has a short name yet, shows no sentence chips (B510 pending state)', () => {
+    const long = 'Системное мышление и умение выстраивать процессы на уровне всей компании';
+    const view = {
+      state: 'ready',
+      requirements: [requirement('a', long), requirement('b', `${long} и команды`)],
+      result: { assessments: [] },
+    } as unknown as VacancyFitView;
+    expect(fitRequirementChips(view)?.unconfirmed).toEqual([]);
+  });
+
   it('keeps partial matches apart from stated ones, so the card can tell them apart (02.11)', () => {
     const view = {
       state: 'ready',

@@ -38,10 +38,16 @@ const shortened = (text: string): string =>
  * 02.11: every counted requirement gets a chip, so «9 из 9» lists nine. A requirement without a
  * short name shows its shortened text; a repeated name falls back to the text, then a number.
  */
-function uniqueChipLabel(requirement: Requirement, seen: ReadonlySet<string>): string {
+function uniqueChipLabel(
+  requirement: Requirement,
+  seen: ReadonlySet<string>,
+  named: boolean,
+): string | undefined {
   const free = (text: string) => !seen.has(text.toLocaleLowerCase('ru'));
   const label = requirementChipLabel(requirement);
   if (label && free(label)) return label;
+  // Names not served yet: the card says they are on the way rather than show sentences (B510).
+  if (!named) return undefined;
   const text = shortened(requirement.text.trim());
   if (free(text)) return text;
   let index = 2;
@@ -72,6 +78,9 @@ export function matchedRequirements(
 export function fitRequirementChips(view: VacancyFitView | undefined): RequirementChips | null {
   if (!view || view.requirements.length === 0) return null;
   const matched = matchedRequirements(view);
+  const named = view.requirements.some(
+    (item) => isSkillRequirement(item) && requirementChipLabel(item),
+  );
   const seen = new Set<string>();
   const confirmed: string[] = [];
   const unconfirmed: string[] = [];
@@ -90,7 +99,8 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
       if (condition && !conditions.includes(condition)) conditions.push(condition);
       continue;
     }
-    const label = uniqueChipLabel(requirement, seen);
+    const label = uniqueChipLabel(requirement, seen, named);
+    if (!label) continue;
     seen.add(label.toLocaleLowerCase('ru'));
     const checked = matched.get(requirement.id);
     if (partialIds.has(requirement.id)) partial.push(label);
