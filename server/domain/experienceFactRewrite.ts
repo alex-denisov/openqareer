@@ -17,8 +17,9 @@ import {
   type ResumeFactRewriteProposal,
   type ResumeFactRewriteRecord,
 } from './resumeDraft';
+import { placeLanguages, textLanguage, type ProfileLanguage } from './profileLanguage';
 
-export const EXPERIENCE_FACT_REWRITE_PROMPT_REVISION = 'experience-fact-rewrite-2026-10-29c';
+export const EXPERIENCE_FACT_REWRITE_PROMPT_REVISION = 'experience-fact-rewrite-2026-11-01';
 
 /** The memory fields this step reads; both the server and the client records have them. */
 export interface RewriteMemory {
@@ -43,6 +44,8 @@ export interface RewritePlace {
   readonly title: string;
   readonly period: string;
   readonly existingBullets: readonly string[];
+  /** The profile's language for this place: its bullets are written in it (owner, 01.11). */
+  readonly language: ProfileLanguage;
 }
 
 export interface RewriteFact {
@@ -146,6 +149,7 @@ export function buildFactRewriteRequest(
   memory: readonly RewriteMemory[],
 ): FactRewriteRequest {
   const statements = new Map(memory.map((item) => [item.id, item.statement]));
+  const languages = placeLanguages(draft, statements);
   return {
     places: draft.experience.map((entry) => ({
       experienceId: entry.id,
@@ -153,6 +157,7 @@ export function buildFactRewriteRequest(
       title: entry.title ?? '',
       period: periodOf(entry),
       existingBullets: entry.bulletMemoryIds.map((id) => statements.get(id) ?? '').filter(Boolean),
+      language: languages.get(entry.id) ?? 'ru',
     })),
     facts: rewriteSourceFacts(draft, memory)
       .slice(0, MAX_FACTS_PER_REQUEST)
@@ -163,10 +168,10 @@ export function buildFactRewriteRequest(
 export const EXPERIENCE_FACT_REWRITE_INSTRUCTIONS = `Ты карьерный консультант. Кандидат рассказал о своём опыте в беседе; ниже его места работы из профиля и факты из беседы. Факты — это дословные обрывки речи. Перепиши их в пункты резюме для блока «Опыт».
 
 Правила:
-1. Пиши по-русски, в стиле достижений: одно предложение, начинается с глагола прошедшего времени совершенного вида («Сократил…», «Построил…», «Вырастил…»). Без «я», «мы», «наверное», «по-моему», «скорее всего».
+1. Пиши на языке профиля — он указан у каждого места в поле language: "en" — по-английски, "ru" — по-русски. Факты из беседы могут быть на другом языке: переводи их, сохраняя смысл. Стиль достижений: одно предложение, начинается с глагола прошедшего времени («Сократил…», «Построил…», «Вырастил…»; по-английски «Reduced…», «Built…», «Grew…»). Без «я», «мы», «наверное», «по-моему», «скорее всего» (по-английски без I, we, my, our).
 2. Числа, проценты, суммы, названия компаний, продуктов и технологий бери только из фактов и пиши их цифрами, как в факте. Ничего не придумывай и не округляй.
 3. Каждый содержательный факт должен войти хотя бы в один пункт. Результаты с числами — выручка, маржа, рост команды, SLA, снижение числа обращений, продажа компании — самое ценное, их не отбрасывай никогда. Связанные факты одного места объединяй в один пункт: «Команда расширилась с четырёх до одиннадцати» и «следил за нагрузкой каждого» — части одной истории. В sourceFactIds пункта перечисли все факты, из которых он собран.
-4. Если в факте есть оговорка («не с нуля», «скорее всего», «были несущественные просадки»), возьми из него твёрдую часть и напиши её без оговорки, не преувеличивая: «Не с нуля построил DevOps, но привил практику всем подразделениям» → «Внедрил практику DevOps во всех подразделениях обслуживания».
+4. Если в факте есть оговорка («не с нуля», «скорее всего», «были несущественные просадки»), возьми из него твёрдую часть и напиши её без оговорки, не преувеличивая: «Не с нуля построил DevOps, но привил практику всем подразделениям» → «Внедрил практику DevOps во всех подразделениях обслуживания». Не приписывай кандидату больше, чем в фактах: команды, перешедшие из других подразделений, — не «вырастил команду»; обязанности его подчинённых — не его личные; «по-моему 18» — «около 18».
 5. В droppedFactIds клади только факты, в которых нет ничего для резюме: обрывки без смысла сами по себе («Стало семь», «Из семи сменились», «Блок второй рост сети»), сомнения целиком («не помню контекст»), споры о названии должности, мнения. Факт, который уже вошёл в пункт, не клади никуда больше.
 6. Место работы выбирай по названию компании, продукту, отрасли, периоду, должности и уже имеющимся пунктам. В профиле компании могут называться нейтрально («Enterprise Energy IT Services», «Enterprise Public Cloud Platform»), а кандидат называет их по имени («Россети Цифра», «ВКТех»): сопоставь по отрасли и смыслу. Факты подряд обычно относятся к одному месту. Если место нельзя выбрать уверенно, положи id факта в unmatchedFactIds, а не в droppedFactIds.
 7. existingBullets — пункты, которые уже есть в профиле. Они нужны, чтобы понять место и не повторяться; содержание и числа из них в новые пункты не переноси. Факт, который уже сказан в existingBullets своего места, положи в droppedFactIds.
@@ -269,8 +274,10 @@ function numberWordsIn(text: string): string[] {
   );
 }
 
-const GROWTH = /с\s+([\p{L}\d]+)\s+до\s+([\p{L}\d]+)/iu;
-const ADDED = /(?:добави|наня|пополни|приня)\p{L}*\s+(?:ещё\s+|еще\s+)?([\p{L}\d]+)/iu;
+const GROWTH =
+  /(?:с\s+([\p{L}\d]+)\s+до\s+([\p{L}\d]+))|(?:from\s+(?:about\s+)?(\d+)\s+to\s+(?:about\s+)?(\d+))/iu;
+const ADDED =
+  /(?:(?:добави|наня|пополни|приня)\p{L}*\s+(?:ещё\s+|еще\s+)?([\p{L}\d]+))|(?:(?:adding|added|hiring|hired)\s+(\d+))/iu;
 
 function numberOf(token: string): number | undefined {
   if (/^\d+$/u.test(token)) return Number(token);
@@ -287,7 +294,11 @@ export function arithmeticFails(text: string): boolean {
   const growth = GROWTH.exec(text);
   const added = ADDED.exec(text);
   if (!growth || !added) return false;
-  const [from, to, plus] = [growth[1], growth[2], added[1]].map((token) => numberOf(token ?? ''));
+  const [from, to, plus] = [
+    growth[1] ?? growth[3],
+    growth[2] ?? growth[4],
+    added[1] ?? added[2],
+  ].map((token) => numberOf(token ?? ''));
   if (from === undefined || to === undefined || plus === undefined) return false;
   return to - from !== plus;
 }
@@ -302,6 +313,8 @@ function numbersAreSourced(text: string, sources: readonly string[]): boolean {
 /** A resume bullet speaks without a subject: «я», «мы», «мой P&L» are the candidate's speech. */
 const FIRST_PERSON =
   /(?:^|[^\p{L}])(?:я|мы|мой|моя|моё|мое|мои|моего|моей|моих|мне|меня|наш|наша|наше|наши|нашей|наших|нам|нас)(?=$|[^\p{L}])/iu;
+/** Case-sensitive: «US» and «IT» are not pronouns. */
+const FIRST_PERSON_EN = /(?:^|[^\p{L}])(?:I|[Ww]e|[Mm]y|[Oo]ur|[Mm]e)(?=$|[^\p{L}])/u;
 
 function cleanBulletText(text: string): string {
   const flat = text
@@ -311,9 +324,15 @@ function cleanBulletText(text: string): string {
   return flat && !/[.!?…]$/u.test(flat) ? `${flat}.` : flat;
 }
 
-function checkedBullet(
-  bullet: FactRewriteModelOutput['places'][number]['bullets'][number],
+/**
+ * A bullet that may reach the profile: cites known facts, has a sane length,
+ * is no verbatim fragment, speaks without a subject, states only sourced
+ * numbers and is written in the place's language.
+ */
+export function checkedBullet(
+  bullet: { readonly text: string; readonly sourceFactIds: readonly string[] },
   statements: ReadonlyMap<string, string>,
+  language: ProfileLanguage,
 ): ProposedBullet | null {
   const sourceFactIds = [...new Set(bullet.sourceFactIds)].filter((id) => statements.has(id));
   const text = cleanBulletText(bullet.text);
@@ -323,8 +342,10 @@ function checkedBullet(
   // The model's text is the only thing that reaches the profile: a bullet
   // that copies a fragment word for word is the raw speech the owner refused.
   if (sources.some((source) => cleanBulletText(source) === text)) return null;
-  if (FIRST_PERSON.test(text) || arithmeticFails(text)) return null;
+  if (FIRST_PERSON.test(text) || FIRST_PERSON_EN.test(text) || arithmeticFails(text)) return null;
   if (!numbersAreSourced(text, sources)) return null;
+  const written = textLanguage(text);
+  if (written && written !== language) return null;
   return { text, sourceFactIds };
 }
 
@@ -340,11 +361,13 @@ export function checkFactRewrite(
 ): FactRewriteProposal {
   const statements = new Map(request.facts.map((fact) => [fact.id, fact.statement]));
   const order = request.places.map((place) => place.experienceId);
+  const languages = new Map(request.places.map((place) => [place.experienceId, place.language]));
   const byPlace = new Map<string, ProposedBullet[]>();
   for (const place of output.places) {
-    if (!order.includes(place.experienceId)) continue;
+    const language = languages.get(place.experienceId);
+    if (!language) continue;
     const checked = place.bullets
-      .map((bullet) => checkedBullet(bullet, statements))
+      .map((bullet) => checkedBullet(bullet, statements, language))
       .filter((bullet): bullet is ProposedBullet => bullet !== null);
     const merged = [...(byPlace.get(place.experienceId) ?? []), ...checked];
     byPlace.set(place.experienceId, merged.slice(0, MAX_BULLETS_PER_REWRITE_PLACE));

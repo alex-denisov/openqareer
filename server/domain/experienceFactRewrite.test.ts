@@ -11,6 +11,7 @@ import {
   arithmeticFails,
   withBulletEdits,
   withStoredFactRewrites,
+  type FactRewriteRequest,
   type RewriteMemory,
 } from './experienceFactRewrite';
 import { resumeDraftSchema, type ResumeDraft } from './resumeDraft';
@@ -29,6 +30,11 @@ const draft: ResumeDraft = {
 
 const ENERGY = 'imp6324433e42-exp-2';
 const CLOUD = 'imp6324433e42-exp-3';
+/** The owner's profile is English; checks about wording below run on Russian places. */
+const russianPlaces = (request: FactRewriteRequest): FactRewriteRequest => ({
+  ...request,
+  places: request.places.map((place) => ({ ...place, language: 'ru' as const })),
+});
 const statementOf = (id: string) => memory.find((item) => item.id === id)?.statement ?? '';
 const idStarting = (prefix: string) => memory.find((item) => item.id.startsWith(prefix))!.id;
 
@@ -94,6 +100,12 @@ describe('buildFactRewriteRequest', () => {
     expect(request.facts.map((fact) => fact.statement)).toContain('Стало семь');
   });
 
+  it('writes an English profile in English, whatever language the facts are in', () => {
+    const request = buildFactRewriteRequest(draft, memory);
+    expect(request.places.every((place) => place.language === 'en')).toBe(true);
+    expect(EXPERIENCE_FACT_REWRITE_INSTRUCTIONS).toContain('language');
+  });
+
   it('tells the model to drop fragments and never invent numbers', () => {
     expect(EXPERIENCE_FACT_REWRITE_INSTRUCTIONS).toContain('Стало семь');
     expect(EXPERIENCE_FACT_REWRITE_INSTRUCTIONS).toContain('Ничего не придумывай');
@@ -102,7 +114,9 @@ describe('buildFactRewriteRequest', () => {
 });
 
 describe('checkFactRewrite', () => {
-  const request = buildFactRewriteRequest(draft, memory);
+  // These checks are about numbers and wording; the places are Russian here.
+  const english = buildFactRewriteRequest(draft, memory);
+  const request = russianPlaces(english);
   const team = idStarting('cf8f74a6');
   const load = idStarting('da875536');
   const tickets = idStarting('7d2e7b0b');
@@ -191,6 +205,31 @@ describe('checkFactRewrite', () => {
     expect(proposal.places).toEqual([]);
   });
 
+  it('keeps an English bullet for an English place and refuses a Russian one', () => {
+    const proposal = checkFactRewrite(
+      english,
+      {
+        places: [
+          {
+            experienceId: CLOUD,
+            bullets: [
+              {
+                text: 'Grew the support team from 4 to 11 engineers, tracking the workload of each.',
+                sourceFactIds: [team, load],
+              },
+              { text: 'Сократил число тикетов на 40%.', sourceFactIds: [tickets] },
+              { text: 'We cut the number of tickets by 40%.', sourceFactIds: [tickets] },
+            ],
+          },
+        ],
+      },
+      'r-1',
+    );
+    expect(proposal.places[0]!.bullets.map((bullet) => bullet.text)).toEqual([
+      'Grew the support team from 4 to 11 engineers, tracking the workload of each.',
+    ]);
+  });
+
   it('refuses a bullet that copies the candidate’s words verbatim', () => {
     const proposal = checkFactRewrite(
       request,
@@ -209,7 +248,7 @@ describe('checkFactRewrite', () => {
 });
 
 describe('applyFactRewrite and revertFactRewrite', () => {
-  const request = buildFactRewriteRequest(draft, memory);
+  const request = russianPlaces(buildFactRewriteRequest(draft, memory));
   const tickets = idStarting('7d2e7b0b');
   const revenue = idStarting('d73936df');
   const proposal = checkFactRewrite(
@@ -266,7 +305,7 @@ describe('applyFactRewrite and revertFactRewrite', () => {
 });
 
 describe('review fixes (29.10)', () => {
-  const request = buildFactRewriteRequest(draft, memory);
+  const request = russianPlaces(buildFactRewriteRequest(draft, memory));
   const tickets = idStarting('7d2e7b0b');
   const proposal = checkFactRewrite(
     request,
@@ -329,7 +368,7 @@ describe('review fixes (29.10)', () => {
 });
 
 describe('owner fixes before «Принять» (29.10 evening)', () => {
-  const request = buildFactRewriteRequest(draft, memory);
+  const request = russianPlaces(buildFactRewriteRequest(draft, memory));
   const team = idStarting('cf8f74a6');
   const added = idStarting('c79b4664');
   const tickets = idStarting('7d2e7b0b');
