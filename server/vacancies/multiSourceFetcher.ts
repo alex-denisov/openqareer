@@ -220,7 +220,17 @@ async function fetchPagedJsonApi(
     // Джиттер паузы: ровный такт выглядит роботом; ±25 % ломает регулярность,
     // не ускоряя опрос заметно (B218 security-review).
     if (pagesRead > 0) await sleep(jitter(plan.delayMs, now));
-    const { payload, observedAt } = await fetchJsonPayload(request, fetchStealth);
+    let fetchedPage: Awaited<ReturnType<typeof fetchJsonPayload>>;
+    try {
+      fetchedPage = await fetchJsonPayload(request, fetchStealth);
+    } catch (err) {
+      // Сбой на первой странице — ошибка источника. Дальше он обрывает только
+      // окно: прочитанное уходит частичным чтением, а не выбрасывается
+      // целиком (Indeed 31.10: 46 опросов подряд «fetch failed»).
+      if (pagesRead === 0) throw err;
+      return { vacancies, partial: true };
+    }
+    const { payload, observedAt } = fetchedPage;
     vacancies.push(
       ...normalizeJsonSource(source.id, payload, {
         observedAt,
