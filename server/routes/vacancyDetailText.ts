@@ -31,7 +31,8 @@ export async function loadDetailText(
   clearTimeout(timer);
   const waiting =
     vacancyId.startsWith('src-hh-search:') &&
-    (!loaded || (loaded.status === 'failed' && loaded.blocked !== 'refused'));
+    (!loaded ||
+      (loaded.status === 'failed' && loaded.blocked !== 'refused' && !loaded.restricted));
   if (!waiting) return loaded!;
   engine.requestHhTextPriority?.([vacancyId], OPENED_CARD_RANK);
   return { ...(loaded ?? {}), unavailable: true, status: 'failed', pending: true };

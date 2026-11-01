@@ -51,4 +51,18 @@ describe('loadDetailText (02.11: card open reads text first, never waits behind 
     );
     await expect(loadDetailText(engine, 'src-indeed:3', 50)).resolves.not.toHaveProperty('pending');
   });
+
+  it('a first «доступ ограничен» is not pending: the card says the employer hid the text', async () => {
+    const engine = {
+      loadVacancyDescription: vi.fn(async () => ({
+        unavailable: true,
+        status: 'failed' as const,
+        restricted: true,
+      })),
+      requestHhTextPriority: vi.fn(),
+    };
+    const result = await loadDetailText(engine, 'src-hh-search:4', 50);
+    expect(result).not.toHaveProperty('pending');
+    expect(result.restricted).toBe(true);
+  });
 });

@@ -46,3 +46,8 @@ it('02.11: while the server still reads the hh text the card says «загруж
   const detail = { id: 'c', description: '', truncated: true, skills: [], responsibilities: [], pending: true };
   expect(vacancySummaryText('', { status: 'ready', detail })).toEqual({ loading: true });
 });
+
+it('02.11: text the employer hid is said, not «нет описания»', () => {
+  const detail = { id: 'c', description: '', truncated: true, skills: [], responsibilities: [], textHidden: true };
+  expect(vacancySummaryText('', { status: 'ready', detail })).toEqual({ hidden: true });
+});
