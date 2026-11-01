@@ -21,6 +21,8 @@ export function readVacancyFitTarget(deps: RouteDeps, vacancyId: string) {
   return {
     vacancyId, title: vacancy?.title ?? cluster!.canonicalTitle,
     description: vacancy?.fullDescription ?? vacancy?.description ?? cluster?.descriptionSummary ?? '',
+    // An hh search row carries only a snippet until the loader reads the vacancy page (02.11).
+    fullText: Boolean(vacancy?.fullDescription?.trim()),
     location: vacancy?.location ?? cluster?.canonicalLocation,
     country: undefined as string | undefined,
     isRemote: vacancy?.isRemote ?? cluster?.isRemote ?? false,

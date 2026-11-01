@@ -33,8 +33,8 @@ describe('vacancy sort (owner 29.10)', () => {
       dir: 'desc',
     });
   });
-  it('descending keeps the CPO order: 40 %+, counting, below 40 %, uncountable', () => {
-    expect(order('desc')).toEqual(['hi', 'mid', 'counting', 'low', 'none']);
+  it('descending: counted by percent, counting, uncountable (02.11)', () => {
+    expect(order('desc')).toEqual(['hi', 'mid', 'low', 'counting', 'none']);
   });
   it('ascending reverses only the counted rows; uncountable stay last', () => {
     expect(order('asc')).toEqual(['low', 'mid', 'hi', 'counting', 'none']);

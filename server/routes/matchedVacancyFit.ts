@@ -151,7 +151,10 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
           runtime.enqueue(input);
           requeued += 1;
         }
-        views.set(id, compactFitView(textStillLoading(id, target.description, view)));
+        views.set(
+          id,
+          compactFitView(textStillLoading(id, target.description, view, target.fullText)),
+        );
       }
       return views;
     },
@@ -163,15 +166,19 @@ const HH_CLUSTER_PREFIX = 'cluster-src-hh-search:';
 /**
  * 01.11: an hh row whose text the background loader has not read yet is still counting, not
  * «мало требований»: the search page carries no text, so «no description» is not its verdict.
+ * 02.11 АЙСБЕРРИ: neither is «no requirements» read from the search snippet before the full text.
  */
 export function textStillLoading(
   clusterId: string,
   description: string,
   view: VacancyFitView,
+  fullText = Boolean(description?.trim()),
 ): VacancyFitView {
-  if (view.state !== 'no_description' || !clusterId.startsWith(HH_CLUSTER_PREFIX)) return view;
-  if (description?.trim()) return view;
-  return { ...view, state: 'not_requested' };
+  if (!clusterId.startsWith(HH_CLUSTER_PREFIX)) return view;
+  const loading =
+    (view.state === 'no_description' && !description?.trim()) ||
+    (view.state === 'no_requirements' && !fullText);
+  return loading ? { ...view, state: 'not_requested' } : view;
 }
 
 async function refreshFitViews(
@@ -238,7 +245,9 @@ export function withShownPageFitViews(
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
     const view = runtime.view(context(target, []));
-    const fitView = compactFitView(textStillLoading(item.cluster.id, target.description, view));
+    const fitView = compactFitView(
+      textStillLoading(item.cluster.id, target.description, view, target.fullText),
+    );
     return { ...item, explanation: explanationWithFitView(item.explanation, fitView) };
   });
 }

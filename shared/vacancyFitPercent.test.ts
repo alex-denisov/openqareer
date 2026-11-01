@@ -67,8 +67,8 @@ describe('vacancyFitTier', () => {
   ])('%i → %s', (percent, tier) => expect(vacancyFitTier(percent)).toBe(tier));
 });
 
-describe('compareFitPercent: the CPO order of 28.10 evening', () => {
-  it('40 %+ by percent, then counting rows, then counted below 40 %, then rows that cannot be counted', () => {
+describe('compareFitPercent: the CPO order of 02.11', () => {
+  it('every counted row by percent, then counting rows, then rows that cannot be counted', () => {
     const rows = [
       { id: 'blocked', v: view(null, 12, { status: 'blocked', reason: 'blocked_gate' }) },
       { id: 'low', v: view(31) },
@@ -83,8 +83,8 @@ describe('compareFitPercent: the CPO order of 28.10 evening', () => {
     const sorted = [...rows].sort((a, b) => compareFitPercent(a.v, b.v));
     const ids = sorted.map((row) => row.id);
     expect(ids.slice(0, 2)).toEqual(['high', 'edge']);
-    expect(ids.slice(2, 4).sort()).toEqual(['pending', 'unseen']);
-    expect(ids.slice(4, 6)).toEqual(['low', 'zero']);
+    expect(ids.slice(2, 4)).toEqual(['low', 'zero']);
+    expect(ids.slice(4, 6).sort()).toEqual(['pending', 'unseen']);
     expect(ids.slice(6).sort()).toEqual(['blocked', 'empty', 'few']);
   });
 
