@@ -1,5 +1,6 @@
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import {
+  absorbCluster,
   ClusterIndex,
   createClusterFromVacancy,
   isDuplicatePrepared,
@@ -26,6 +27,8 @@ export interface KeyedClusterStore {
 export interface KeyedClusterResult {
   readonly updated: number;
   readonly created: number;
+  /** Сколько кластеров-двойников по тексту влито в старшие (01.11). */
+  readonly absorbed?: number;
   /** Сколько кандидатов хранилище отдало партии — для журнала и замеров. */
   readonly candidates: number;
 }
@@ -60,6 +63,7 @@ class KeyedSession {
   private readonly loaded = new Map<number, VacancyCluster>();
   private readonly updated = new Set<number>();
   private readonly created: VacancyCluster[] = [];
+  private readonly absorbed = new Set<number>();
   private readonly candidates: number;
 
   constructor(
@@ -81,6 +85,7 @@ class KeyedSession {
       this.loaded.set(created, cluster);
       this.created.push(cluster);
       for (const member of memberKeysOf(vacancy)) this.byMember.set(member, created);
+      this.absorbTextTwins(created);
       return;
     }
     const cluster = this.clusterAt(position);
@@ -91,17 +96,52 @@ class KeyedSession {
     this.index.add(position, representative);
     for (const member of memberKeysOf(vacancy)) this.byMember.set(member, position);
     if (!this.created.includes(cluster)) this.updated.add(position);
+    this.absorbTextTwins(position);
+  }
+
+  /**
+   * Кластеры с тем же текстовым отпечатком сливаются в старший (01.11): у
+   * повторного наблюдения запись идёт в свой кластер по членству, и без этого
+   * шага дочитанный текст hh никогда не встретил бы двойника.
+   */
+  private absorbTextTwins(position: number): void {
+    const textKey = this.prepared[position]!.textKey;
+    if (!textKey) return;
+    const twins = this.index
+      .candidates(this.prepared[position]!)
+      .filter((other) => !this.absorbed.has(other) && this.prepared[other]!.textKey === textKey);
+    if (twins.length < 2) return;
+    const [target, ...rest] = twins;
+    const kept = this.clusterAt(target!);
+    if (!kept) return;
+    for (const other of rest) {
+      const twin = this.clusterAt(other);
+      if (!twin) continue;
+      absorbCluster(kept, twin);
+      this.absorbed.add(other);
+      this.updated.delete(other);
+      for (const [member, at] of this.byMember)
+        if (at === other) this.byMember.set(member, target!);
+    }
+    const representative = prepareCluster(kept);
+    this.prepared[target!] = representative;
+    this.index.add(target!, representative);
+    if (!this.created.includes(kept)) this.updated.add(target!);
   }
 
   flush(): KeyedClusterResult {
+    const gone = new Set(Array.from(this.absorbed, (position) => this.clusterIds[position]!));
     const affected = [
       ...Array.from(this.updated, (position) => this.loaded.get(position)!),
-      ...this.created,
+      ...this.created.filter((cluster) => !gone.has(cluster.id)),
     ];
     if (affected.length > 0) this.store.saveClusters(affected);
+    const createdIds = new Set(this.created.map((cluster) => cluster.id));
+    for (const id of gone) if (!createdIds.has(id)) this.store.deleteCluster(id);
     return {
       updated: this.updated.size,
-      created: this.created.length,
+      created: this.created.length - Array.from(gone).filter((id) => createdIds.has(id)).length,
+      absorbed: gone.size,
       candidates: this.candidates,
     };
   }
@@ -123,7 +163,10 @@ class KeyedSession {
     const candidate = prepareVacancy(vacancy);
     return this.index
       .candidates(candidate)
-      .find((position) => isDuplicatePrepared(candidate, this.prepared[position]!));
+      .find(
+        (position) =>
+          !this.absorbed.has(position) && isDuplicatePrepared(candidate, this.prepared[position]!),
+      );
   }
 
   /** JSON кластера читается один раз и только для совпавшего. */

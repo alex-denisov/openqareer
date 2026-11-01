@@ -1,5 +1,5 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { extractAtsLink } from './vacancyDeduplicator';
+import { extractAtsLink, vacancyTextKey } from './vacancyDeduplicator';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 
 /**
@@ -88,6 +88,7 @@ export function clusterProjectionOf(vacancy: UnifiedVacancy): UnifiedVacancy {
   const summary = description.slice(0, CLUSTER_SUMMARY_CHARS);
   const atsLink = extractAtsLink(description);
   const skills = Array.isArray(vacancy.requiredSkills) ? vacancy.requiredSkills : [];
+  const textKey = vacancyTextKey(vacancy);
   return {
     id: vacancy.id,
     fingerprint: vacancy.fingerprint,
@@ -103,6 +104,7 @@ export function clusterProjectionOf(vacancy: UnifiedVacancy): UnifiedVacancy {
     provenance: vacancy.provenance,
     publishedAt: vacancy.publishedAt,
     status: vacancy.status,
+    ...(textKey ? { textKey } : {}),
   };
 }
 

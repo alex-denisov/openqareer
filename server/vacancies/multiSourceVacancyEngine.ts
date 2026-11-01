@@ -41,7 +41,13 @@ import {
 } from './sourceHealthVerdict';
 import { matchCandidateWithVacancy, type CandidateMatchProfile } from './vacancyMatcher';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
-import { freshnessWindow, isWithin, parseMs, MAX_VACANCY_AGE_DAYS } from './vacancyPoolQuery';
+import {
+  freshnessWindow,
+  isWithin,
+  parseMs,
+  MAX_VACANCY_AGE_DAYS,
+  clusterProjectionOf,
+} from './vacancyPoolQuery';
 import type { VacancyLink, VacancyPoolStore } from './vacancyPoolStore';
 import {
   clusterBatchByKeys,
@@ -1030,7 +1036,21 @@ export class MultiSourceVacancyEngine {
         loadVacancyDescription: (id) => this.loadVacancyDescription(id),
       },
     });
+    this.runClusterTextStep();
     return this.hhCatalogText.step();
+  }
+
+  /**
+   * Сводит записи, у которых дочитан полный текст, с двойниками по тексту
+   * (01.11): одна партия соседей по ключам, без чтения всех кластеров. Только
+   * в режиме `keyed` — это процесс обслуживания.
+   */
+  public runClusterTextStep(limit = 200): number {
+    if (this.reclusterMode.mode !== 'keyed' || !this.pool.nextClusterTextBatch) return 0;
+    const batch = this.pool.nextClusterTextBatch(limit);
+    if (batch.length === 0) return 0;
+    clusterBatchByKeys(this.keyedStore(), batch.map(clusterProjectionOf));
+    return batch.length;
   }
 
   /**

@@ -5,6 +5,7 @@ import type {
   VacancyProvenance,
   VacancySalary,
 } from '../domain/unifiedVacancy';
+import { createHash } from 'node:crypto';
 import { normalizeTextForComparison } from './vacancyFingerprint';
 
 const ATS_URL_REGEX =
@@ -95,6 +96,27 @@ export function companyNameTokens(company: string): string[] {
 }
 
 /**
+ * Короче этого общий текст не доказывает одну вакансию: «полный день, офис»
+ * повторяется у сотен работодателей.
+ */
+export const MIN_TEXT_KEY_CHARS = 400;
+
+/**
+ * Отпечаток «название + полный текст» (01.11). Одна вакансия COO на hh стояла
+ * в подборке двумя карточками: два написания работодателя («Лавка Радости» и
+ * «ЛАВКА СЧАСТЬЯ») расходились по токенам, хотя название и текст в 1909 знаков
+ * совпадали дословно. Работодатель не участвует в отпечатке намеренно.
+ */
+export function vacancyTextKey(vacancy: UnifiedVacancy): string | undefined {
+  if (vacancy.textKey) return vacancy.textKey;
+  const text = normalizeTextForComparison(vacancy.fullDescription ?? vacancy.description ?? '');
+  if (text.length < MIN_TEXT_KEY_CHARS) return undefined;
+  const title = normalizeTextForComparison(vacancy.title ?? '');
+  if (!title) return undefined;
+  return createHash('sha256').update(`${title}\n${text}`).digest('hex').slice(0, 32);
+}
+
+/**
  * Вакансия, разобранная один раз.
  *
  * Сведение сравнивает каждую вакансию с каждым уже собранным кластером, и до
@@ -107,6 +129,8 @@ export function companyNameTokens(company: string): string[] {
  */
 export interface PreparedVacancy {
   readonly fingerprint: string;
+  /** `vacancyTextKey`: одно название и один полный текст — одна вакансия при любом работодателе. */
+  readonly textKey?: string | null;
   readonly url: string;
   readonly atsLink: string | null;
   readonly company: string;
@@ -119,6 +143,7 @@ export function prepareVacancy(vacancy: UnifiedVacancy): PreparedVacancy {
   const company = cleanCompanyName(vacancy.company);
   return {
     fingerprint: vacancy.fingerprint,
+    textKey: vacancyTextKey(vacancy) ?? null,
     url: normalizeUrl(vacancy.url),
     atsLink: extractAtsLink(vacancy.url) || extractAtsLink(vacancy.description),
     company,
@@ -132,6 +157,7 @@ export function isDuplicatePrepared(a: PreparedVacancy, b: PreparedVacancy): boo
   if (a.fingerprint === b.fingerprint) return true;
   if (a.url && b.url && a.url === b.url) return true;
   if (a.atsLink && b.atsLink && a.atsLink === b.atsLink) return true;
+  if (a.textKey && b.textKey && a.textKey === b.textKey) return true;
 
   if (!a.company || !b.company) return false;
 
@@ -221,6 +247,11 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
     cluster.employerIsPerson = true;
   }
 
+  if (!cluster.textKey) {
+    const textKey = vacancyTextKey(vacancy);
+    if (textKey) cluster.textKey = textKey;
+  }
+
   if (existingSourceIndex === -1) {
     cluster.sources.push(vacancy.provenance);
   } else {
@@ -246,7 +277,34 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
   }
 }
 
+/**
+ * Вливает кластер-двойник в старший (01.11): текст hh дочитывается после
+ * сведения, и две уже записанные карточки узнают друг друга только тогда.
+ */
+export function absorbCluster(target: VacancyCluster, twin: VacancyCluster): void {
+  for (const source of twin.sources) {
+    const known = target.sources.some(
+      (existing) =>
+        existing.sourceId === source.sourceId &&
+        (existing.externalId && source.externalId
+          ? existing.externalId === source.externalId
+          : existing.sourceUrl === source.sourceUrl),
+    );
+    if (known) continue;
+    target.sources.push(source);
+    target.vacanciesCount += 1;
+  }
+  target.skills = Array.from(new Set([...target.skills, ...twin.skills]));
+  if (twin.salary && prefersIncomingSalary(target.salary, twin.salary)) target.salary = twin.salary;
+  if (!target.textKey && twin.textKey) target.textKey = twin.textKey;
+  if (new Date(twin.firstObservedAt) < new Date(target.firstObservedAt)) {
+    target.firstObservedAt = twin.firstObservedAt;
+  }
+  if (new Date(twin.lastSeenAt) > new Date(target.lastSeenAt)) target.lastSeenAt = twin.lastSeenAt;
+}
+
 export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluster {
+  const textKey = vacancyTextKey(vacancy);
   return {
     id: `cluster-${vacancy.id}`,
     canonicalTitle: vacancy.title,
@@ -256,6 +314,7 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     isRemote: Boolean(vacancy.isRemote),
     salary: vacancy.salary,
     descriptionSummary: (vacancy.description ?? '').slice(0, 300),
+    ...(textKey ? { textKey } : {}),
     skills: [...vacancy.requiredSkills],
     primaryUrl: vacancy.url,
     sources: [vacancy.provenance],
@@ -288,6 +347,7 @@ export class ClusterIndex {
   private readonly byFingerprint = new Map<string, number>();
   private readonly byUrl = new Map<string, number[]>();
   private readonly byAtsLink = new Map<string, number[]>();
+  private readonly byTextKey = new Map<string, number[]>();
   private readonly byCompanyToken = new Map<string, number[]>();
   private readonly byTitleToken = new Map<string, number[]>();
   private readonly representatives: PreparedVacancy[] = [];
@@ -299,6 +359,7 @@ export class ClusterIndex {
     this.byFingerprint.set(prepared.fingerprint, index);
     if (prepared.url) push(this.byUrl, prepared.url, index);
     if (prepared.atsLink) push(this.byAtsLink, prepared.atsLink, index);
+    if (prepared.textKey) push(this.byTextKey, prepared.textKey, index);
     for (const token of prepared.companyTokens) push(this.byCompanyToken, token, index);
     for (const token of prepared.roleTitleTokens) push(this.byTitleToken, token, index);
   }
@@ -309,6 +370,7 @@ export class ClusterIndex {
     }
     this.removeFromBucket(this.byUrl, prepared.url, index);
     if (prepared.atsLink) this.removeFromBucket(this.byAtsLink, prepared.atsLink, index);
+    if (prepared.textKey) this.removeFromBucket(this.byTextKey, prepared.textKey, index);
     for (const token of prepared.companyTokens)
       this.removeFromBucket(this.byCompanyToken, token, index);
     for (const token of prepared.roleTitleTokens)
@@ -332,6 +394,9 @@ export class ClusterIndex {
     for (const index of this.byUrl.get(prepared.url) ?? []) found.add(index);
     if (prepared.atsLink) {
       for (const index of this.byAtsLink.get(prepared.atsLink) ?? []) found.add(index);
+    }
+    if (prepared.textKey) {
+      for (const index of this.byTextKey.get(prepared.textKey) ?? []) found.add(index);
     }
     for (const index of this.sameCompanyAndTitle(prepared)) found.add(index);
     return Array.from(found).sort((a, b) => a - b);
@@ -443,6 +508,7 @@ export function prepareCluster(cluster: VacancyCluster): PreparedVacancy {
   const company = cleanCompanyName(cluster.canonicalCompany);
   return {
     fingerprint: cluster.id,
+    textKey: cluster.textKey ?? null,
     url: normalizeUrl(cluster.primaryUrl),
     atsLink: extractAtsLink(cluster.primaryUrl) || extractAtsLink(cluster.descriptionSummary),
     company,
@@ -611,7 +677,7 @@ export function calculateSourceAuthenticity(
  * снятии с площадки: `externalId` и `sourceUrl` каждого источника.
  */
 export type ClusterKeyKind =
-  'fingerprint' | 'url' | 'ats' | 'company_token' | 'title_token' | 'member';
+  'fingerprint' | 'url' | 'ats' | 'text' | 'company_token' | 'title_token' | 'member';
 
 export interface ClusterKey {
   readonly kind: ClusterKeyKind;
@@ -623,6 +689,7 @@ export function clusterKeys(cluster: VacancyCluster): ClusterKey[] {
   const keys: ClusterKey[] = [{ kind: 'fingerprint', key: prepared.fingerprint }];
   if (prepared.url) keys.push({ kind: 'url', key: prepared.url });
   if (prepared.atsLink) keys.push({ kind: 'ats', key: prepared.atsLink });
+  if (prepared.textKey) keys.push({ kind: 'text', key: prepared.textKey });
   for (const token of prepared.companyTokens) keys.push({ kind: 'company_token', key: token });
   for (const token of prepared.roleTitleTokens) keys.push({ kind: 'title_token', key: token });
   // Членство — только по источникам: основатель тоже лежит в `sources`, а
@@ -652,6 +719,7 @@ export function vacancyClusterLookup(vacancy: UnifiedVacancy): VacancyClusterLoo
   const direct: ClusterKey[] = [{ kind: 'fingerprint', key: prepared.fingerprint }];
   if (prepared.url) direct.push({ kind: 'url', key: prepared.url });
   if (prepared.atsLink) direct.push({ kind: 'ats', key: prepared.atsLink });
+  if (prepared.textKey) direct.push({ kind: 'text', key: prepared.textKey });
   for (const member of memberKeysOf(vacancy)) direct.push({ kind: 'member', key: member });
   return {
     direct,
@@ -691,6 +759,7 @@ interface SerializedRepresentative {
   readonly f: string;
   readonly u: string;
   readonly a: string | null;
+  readonly x?: string;
   readonly c: string;
   readonly t: string;
   readonly ct: readonly string[];
@@ -709,6 +778,7 @@ export function serializeRepresentative(cluster: VacancyCluster): string {
     f: prepared.fingerprint,
     u: prepared.url,
     a: prepared.atsLink,
+    ...(prepared.textKey ? { x: prepared.textKey } : {}),
     c: prepared.company,
     t: prepared.normalizedTitle,
     ct: Array.from(prepared.companyTokens),
@@ -731,6 +801,7 @@ export function parseRepresentative(
         fingerprint: raw.f,
         url: raw.u ?? '',
         atsLink: raw.a ?? null,
+        textKey: raw.x ?? null,
         company: raw.c ?? '',
         normalizedTitle: raw.t ?? '',
         companyTokens: new Set(raw.ct ?? []),
