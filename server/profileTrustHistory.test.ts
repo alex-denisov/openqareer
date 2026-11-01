@@ -250,3 +250,39 @@ describe('«История изменений» профиля', () => {
     expect(second.entries[0].appliedText).toBe('Lead 0');
   });
 });
+
+describe('История показывает правки консультанта до релиза журнала', () => {
+  function forgetLog(ctx: Setup): void {
+    const { database } = ctx.store as unknown as {
+      database: { prepare(sql: string): { run(...args: unknown[]): unknown } };
+    };
+    database.prepare('DELETE FROM profile_change_log WHERE candidate_id = ?').run(ctx.candidateId);
+  }
+
+  it('lists an accepted profile_revisions edit that has no log entry, and «Вернуть» reverts it', async () => {
+    const ctx = await setup();
+    await acceptProposal(ctx);
+    forgetLog(ctx);
+
+    const page = await history(ctx);
+    expect(page.total).toBe(1);
+    const [entry] = page.entries;
+    expect(entry).toMatchObject({
+      actor: 'consultant',
+      section: 'experience',
+      previousText: 'Ускорил релизы.',
+      appliedText: 'Сократил время релиза с недели до дня.',
+      revertedAt: null,
+    });
+
+    const reverted = await revertChange(ctx, entry.id);
+    expect(reverted.statusCode).toBe(200);
+    expect((await history(ctx)).entries[0].revertedAt).toEqual(expect.any(String));
+  });
+
+  it('does not list a revision twice when the log already has it', async () => {
+    const ctx = await setup();
+    await acceptProposal(ctx);
+    expect((await history(ctx)).total).toBe(1);
+  });
+});

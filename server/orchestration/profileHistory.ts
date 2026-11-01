@@ -10,12 +10,14 @@ import {
   describeProfileValue,
   withProfileValue,
 } from '../domain/profileChangeDiff';
+import type { ProfileRevisionRecord } from '../data/sqliteProfileRevisionRepository';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { buildResumeStudioProjection } from '../domain/resumeStudio';
 import { experienceFactIds } from './careerCommandDispatcher';
 
 export const PROFILE_HISTORY_PAGE_SIZE = 20;
 const CANDIDATE_CONFIRMED = 'candidate-confirmed';
+const LEGACY_PREFIX = 'revision:';
 
 export class ProfileChangeNotFoundError extends Error {
   constructor() {
@@ -61,28 +63,68 @@ export function listProfileHistory(
   candidateId: string,
   page: number,
 ): ProfileHistoryPage {
-  const { entries, total } = store.profileChangeLog.list(
-    candidateId,
-    page,
-    PROFILE_HISTORY_PAGE_SIZE,
-  );
+  const legacy = legacyRevisionItems(store, candidateId);
+  const window = (page + 1) * PROFILE_HISTORY_PAGE_SIZE;
+  const { entries, total } = store.profileChangeLog.list(candidateId, 0, window);
+  const merged = [...entries.map(toHistoryItem), ...legacy]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(page * PROFILE_HISTORY_PAGE_SIZE, window);
   return {
-    entries: entries.map((entry) => ({
-      id: entry.id,
-      actor: entry.actor,
-      section: entry.section,
-      kind: entry.kind,
-      itemId: entry.itemId,
-      label: entry.label,
-      previousText: describeProfileValue(entry.previous),
-      appliedText: describeProfileValue(entry.applied),
-      createdAt: entry.createdAt,
-      revertedAt: entry.revertedAt,
-    })),
-    total,
+    entries: merged,
+    total: total + legacy.length,
     page,
     pageSize: PROFILE_HISTORY_PAGE_SIZE,
   };
+}
+
+function toHistoryItem(entry: ProfileChangeEntry): ProfileHistoryItem {
+  return {
+    id: entry.id,
+    actor: entry.actor,
+    section: entry.section,
+    kind: entry.kind,
+    itemId: entry.itemId,
+    label: entry.label,
+    previousText: describeProfileValue(entry.previous),
+    appliedText: describeProfileValue(entry.applied),
+    createdAt: entry.createdAt,
+    revertedAt: entry.revertedAt,
+  };
+}
+
+/**
+ * Consultant edits accepted before profile_change_log existed live only in
+ * profile_revisions. They join the history read-only; «Вернуть» uses the command revert.
+ */
+function legacyRevisions(store: CandidateStore, candidateId: string): ProfileRevisionRecord[] {
+  return store.profileRevisionRepo
+    .listRevisions(candidateId)
+    .filter((revision) => !store.profileChangeLog.getByCommandId(candidateId, revision.commandId));
+}
+
+function legacyRevisionItems(store: CandidateStore, candidateId: string): ProfileHistoryItem[] {
+  const revisions = legacyRevisions(store, candidateId);
+  if (revisions.length === 0) return [];
+  const experience = store.getSnapshot(candidateId).resume?.draft.experience ?? [];
+  return revisions.map((revision) => {
+    const place = experience.find((item) => item.id === revision.experienceId);
+    const label =
+      revision.section === 'experience'
+        ? [place?.title, place?.employer].filter(Boolean).join(' · ')
+        : (revision.experienceId ?? '');
+    return {
+      id: `${LEGACY_PREFIX}${revision.id}`,
+      actor: 'consultant',
+      section: revision.section,
+      kind: 'value',
+      itemId: revision.experienceId ?? null,
+      label,
+      previousText: revision.previousText,
+      appliedText: revision.appliedText,
+      createdAt: revision.createdAt,
+      revertedAt: revision.revertedAt ?? null,
+    };
+  });
 }
 
 /**
@@ -133,6 +175,14 @@ export async function revertProfileChange(
   changeId: string,
   revertCommand: (commandId: string) => Promise<unknown>,
 ): Promise<void> {
+  if (changeId.startsWith(LEGACY_PREFIX)) {
+    const revisionId = changeId.slice(LEGACY_PREFIX.length);
+    const revision = legacyRevisions(store, candidateId).find((item) => item.id === revisionId);
+    if (!revision) throw new ProfileChangeNotFoundError();
+    if (revision.revertedAt) throw new ProfileChangeAlreadyRevertedError();
+    await revertCommand(revision.commandId);
+    return;
+  }
   const entry = store.profileChangeLog.get(candidateId, changeId);
   if (!entry) throw new ProfileChangeNotFoundError();
   if (entry.revertedAt) throw new ProfileChangeAlreadyRevertedError();
