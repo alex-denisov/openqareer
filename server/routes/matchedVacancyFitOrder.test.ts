@@ -69,6 +69,19 @@ describe('pool fit order', () => {
     ]);
   });
 
+  it('an hh row whose text is not read yet says «считаем» on the shown page too (АЙСБЕРРИ, 01.11)', () => {
+    const hh = 'cluster-src-hh-search:138272249';
+    const noText = {
+      ...deps({}),
+      vacancyMechanics: {
+        cachedVacancyIds: () => new Set<string>(),
+        view: () => ({ state: 'no_description', requirements: [] }),
+      },
+    } as unknown as RouteDeps;
+    const [row] = withShownPageFitViews(noText, 'order-hh', [item(hh)]);
+    expect(row?.explanation.fitView?.state).toBe('not_requested');
+  });
+
   it('serves the previous order past the window and refreshes it in the background (PRB-040)', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {

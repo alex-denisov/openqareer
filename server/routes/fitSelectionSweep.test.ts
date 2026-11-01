@@ -43,6 +43,11 @@ describe('whole-selection fit sweep (CPO 28.10 evening)', () => {
     expect(selectionToCount(items)).toEqual(['b', 'd', 'f']);
   });
 
+  it('takes a row showing the previous version percent: only a recount replaces it (prod 9b1d00b4)', () => {
+    const items = [row('a', 'ready', 80), row('old', 'refreshing', 100)];
+    expect(selectionToCount(items)).toEqual(['old']);
+  });
+
   it('reads text then queues the fit chunk by chunk, once per candidate per window', async () => {
     const preload = vi.fn(async () => undefined);
     const requestFit = vi.fn();

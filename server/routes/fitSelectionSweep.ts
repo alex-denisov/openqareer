@@ -22,10 +22,18 @@ export function selectionToCount(
   items: readonly MatchedVacancyItem[],
   limit = Number.POSITIVE_INFINITY,
 ): string[] {
-  return items
-    .slice(0, limit)
-    .filter((item) => vacancyFitStage(item.explanation.fitView) === 'counting')
-    .map((item) => item.cluster.id);
+  return (
+    items
+      .slice(0, limit)
+      // Prod 9b1d00b4: a `refreshing` row shows the previous version's percent and ranks as counted,
+      // so the sweep skipped it and only an opened card recounted it.
+      .filter(
+        (item) =>
+          vacancyFitStage(item.explanation.fitView) === 'counting' ||
+          item.explanation.fitView?.state === 'refreshing',
+      )
+      .map((item) => item.cluster.id)
+  );
 }
 
 /** Cheap order-sensitive digest of the ids still to count: the gate only compares it. */
