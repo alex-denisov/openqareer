@@ -295,3 +295,63 @@ describe('textStillLoading (01.11)', () => {
     expect(textStillLoading('cluster-src-indeed:1', '', view)).toBe(view);
   });
 });
+
+describe('списки карточки берутся из разбора, когда он готов (01.11)', () => {
+  const requirement = (id: string, text: string) => ({ id, text }) as never;
+  const view = {
+    state: 'ready',
+    requirements: [
+      requirement('r1', 'Управление P&L'),
+      requirement('r2', 'Бюджетирование'),
+      requirement('r3', 'Опыт SAP'),
+      requirement('r4', 'Английский C1'),
+    ],
+    result: {
+      status: 'assessed',
+      coveragePercent: 63,
+      coverage: { matched: 2, total: 4, unknown: 1, partial: 1 },
+      assessments: [
+        { requirementId: 'r1', status: 'matched', evidence: [{ factId: 'f', quote: 'P&L' }] },
+        { requirementId: 'r2', status: 'matched', evidence: [{ factId: 'f', quote: 'бюджет' }] },
+        { requirementId: 'r3', status: 'partial', evidence: [{ factId: 'f', quote: 'ERP' }] },
+        { requirementId: 'r4', status: 'unknown', evidence: [] },
+      ],
+    },
+  } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>;
+
+  it('совпало, частично и не хватает — по вердиктам разбора, а не по старому подбору', () => {
+    const base = item('v1', null);
+    const stale = {
+      ...base.explanation,
+      matchingPoints: ['TypeScript'],
+      missingPoints: ['Управление P&L', 'Бюджетирование'],
+    };
+    const explanation = explanationWithFitView(stale, compactFitView(view));
+    expect(explanation.matchingPoints).toEqual(['Управление P&L', 'Бюджетирование']);
+    expect(explanation.partialPoints).toEqual(['Опыт SAP']);
+    expect(explanation.missingPoints).toEqual(['Английский C1']);
+    expect(explanation.pointsSource).toBe('fit');
+  });
+
+  it('сжатый список сохраняет текст и вердикт требования без цитат', () => {
+    const compact = compactFitView(view);
+    expect(compact.points).toEqual([
+      { text: 'Управление P&L', status: 'matched' },
+      { text: 'Бюджетирование', status: 'matched' },
+      { text: 'Опыт SAP', status: 'partial' },
+      { text: 'Английский C1', status: 'unknown' },
+    ]);
+    expect(compact.result?.assessments).toEqual([]);
+  });
+
+  it('без результата разбора старые списки помечены как предварительные', () => {
+    const base = item('v2', null);
+    const pending = { state: 'processing', requirements: [] } as unknown as typeof view;
+    const explanation = explanationWithFitView(
+      { ...base.explanation, missingPoints: ['Бюджетирование'] },
+      compactFitView(pending),
+    );
+    expect(explanation.missingPoints).toEqual(['Бюджетирование']);
+    expect(explanation.pointsSource).toBe('preliminary');
+  });
+});

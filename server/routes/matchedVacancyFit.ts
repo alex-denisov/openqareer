@@ -225,11 +225,12 @@ export function explanationWithFitView(
   explanation: Explanation,
   fitView: VacancyFitView,
 ): Explanation {
+  const withPoints = explanationWithFitPoints(explanation, fitView);
   const coverage = fitView.result?.coverage;
-  if (!coverage || coverage.total === 0) return { ...explanation, fitView };
+  if (!coverage || coverage.total === 0) return { ...withPoints, fitView };
   const sentence = `Совпало ${coverage.matched} из ${coverage.total} требований вакансии.`;
   return {
-    ...explanation,
+    ...withPoints,
     fitView,
     requirements: { matched: coverage.matched, total: coverage.total },
     summary: COVERAGE_SENTENCE.test(explanation.summary)
@@ -239,6 +240,31 @@ export function explanationWithFitView(
 }
 
 const FIT_PAGE_LIMIT = 20;
+const MAX_FIT_POINTS = 24;
+const MAX_FIT_POINT_CHARS = 120;
+
+/**
+ * 01.11: with a fit result the card's lists are its verdicts, so a 100 % card never lists
+ * «Не хватает» items from the older term matcher; without one the old lists are preliminary.
+ */
+function explanationWithFitPoints(explanation: Explanation, fitView: VacancyFitView): Explanation {
+  const points = fitView.points;
+  if (!fitView.result || !points?.length) return { ...explanation, pointsSource: 'preliminary' };
+  const texts = (statuses: readonly string[]) =>
+    points.filter((point) => statuses.includes(point.status)).map((point) => point.text);
+  const matchingPoints = texts(['matched']);
+  const missingPoints = texts(['unmatched', 'unknown']);
+  return {
+    ...explanation,
+    matchingPoints,
+    partialPoints: texts(['partial']),
+    missingPoints,
+    matchingFacts: matchingPoints.map((text) => ({ text })),
+    matchingCount: matchingPoints.length,
+    missingCount: missingPoints.length,
+    pointsSource: 'fit',
+  };
+}
 
 /**
  * Страница списка режется по байтам: полный разбор (тексты требований, цитаты
@@ -246,9 +272,18 @@ const FIT_PAGE_LIMIT = 20;
  * только сводка; раскрытая карточка читает полный разбор сама.
  */
 export function compactFitView(view: VacancyFitView): VacancyFitView {
+  const text = new Map(view.requirements.map((item) => [item.id, item.text]));
+  const points = (view.result?.assessments ?? [])
+    .filter((item) => text.has(item.requirementId))
+    .slice(0, MAX_FIT_POINTS)
+    .map((item) => ({
+      text: (text.get(item.requirementId) ?? '').slice(0, MAX_FIT_POINT_CHARS),
+      status: item.status,
+    }));
   return {
     ...view,
     requirements: [],
+    ...(points.length ? { points } : {}),
     ...(view.result ? { result: { ...view.result, assessments: [] } } : {}),
   };
 }

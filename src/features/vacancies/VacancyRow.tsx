@@ -538,7 +538,10 @@ function DetailRequirementsSection({
     explanation.missingPoints,
     cluster.skills,
   );
-  const total = skillMatching.length + skillMissing.length;
+  const partial = explanation.partialPoints ?? [];
+  const matching = [...skillMatching, ...partial.map((point) => `${point} — частично`)];
+  const total = matching.length + skillMissing.length;
+  const preliminary = explanation.pointsSource === 'preliminary';
   return (
     <>
       {vacancyLevel ? (
@@ -550,10 +553,11 @@ function DetailRequirementsSection({
         {total > 0
           ? `Требования вакансии: ${skillMatching.length} из ${total} подтверждены фактами профиля`
           : 'Требования вакансии не указаны в явном виде'}
+        {preliminary && total > 0 ? ' · предварительно, разбор ещё считается' : ''}
       </p>
       <VacancyDetailGrid
         cluster={cluster}
-        matchingPoints={skillMatching}
+        matchingPoints={matching}
         missingPoints={skillMissing}
         onAddToProfile={onAddToProfile}
       />

@@ -15,17 +15,36 @@ export interface VacancyFitView {
   readonly result?: VacancyFitResult;
   /** Why a `failed` job stopped, from its error class; the row names it instead of «try again». */
   readonly failure?: VacancyFitFailure;
+  /** List payload only: requirement text and verdict, no quotes, so the card lists match the percent. */
+  readonly points?: readonly VacancyFitPoint[];
+}
+export interface VacancyFitPoint {
+  readonly text: string;
+  readonly status: VacancyFitRequirementAssessment['status'];
 }
 export type VacancyFitFailure =
   'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'other';
 /** 01.11: the whole profile is evidence; met counts 1 stated or checked, partial 0.5. */
 export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-5';
 /** Shown while the current version is calculated, so a version bump never hides a known percent. */
-export const LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS: readonly string[] = ['evidence-coverage-4', 'evidence-coverage-3', 'evidence-coverage-2'];
-export const VACANCY_FIT_GATE_NAMES = ['role', 'level', 'region', 'workAuthorization', 'workFormat'] as const;
-export type VacancyFitGateName = typeof VACANCY_FIT_GATE_NAMES[number];
+export const LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS: readonly string[] = [
+  'evidence-coverage-4',
+  'evidence-coverage-3',
+  'evidence-coverage-2',
+];
+export const VACANCY_FIT_GATE_NAMES = [
+  'role',
+  'level',
+  'region',
+  'workAuthorization',
+  'workFormat',
+] as const;
+export type VacancyFitGateName = (typeof VACANCY_FIT_GATE_NAMES)[number];
 export type VacancyFitGateStatus = 'matched' | 'blocked' | 'unknown';
-export interface VacancyFitEvidence { readonly factId: string; readonly quote: string }
+export interface VacancyFitEvidence {
+  readonly factId: string;
+  readonly quote: string;
+}
 export interface VacancyFitGate {
   readonly status: VacancyFitGateStatus;
   readonly reason: string;
@@ -49,11 +68,34 @@ export interface VacancyFitResult {
   readonly dataState: 'confirmed' | 'partial' | 'unknown';
   readonly gates: VacancyFitGates;
   readonly coveragePercent: number | null;
-  readonly requiredCoverage: { readonly matched: number; readonly total: number; readonly percent: number | null };
+  readonly requiredCoverage: {
+    readonly matched: number;
+    readonly total: number;
+    readonly percent: number | null;
+  };
   /** Skill requirements only (B510-r): conditions such as education or language never make the percent. */
-  readonly coverage: { readonly matched: number; readonly total: number; readonly unknown: number; readonly checked?: number; readonly partial?: number };
+  readonly coverage: {
+    readonly matched: number;
+    readonly total: number;
+    readonly unknown: number;
+    readonly checked?: number;
+    readonly partial?: number;
+  };
   /** Conditions (education, language, licence, format, work permit), listed apart from the percent. */
-  readonly conditionCoverage?: { readonly matched: number; readonly total: number; readonly unknown: number; readonly checked?: number; readonly partial?: number };
+  readonly conditionCoverage?: {
+    readonly matched: number;
+    readonly total: number;
+    readonly unknown: number;
+    readonly checked?: number;
+    readonly partial?: number;
+  };
   readonly assessments: readonly VacancyFitRequirementAssessment[];
-  readonly reason: 'assessed' | 'blocked_gate' | 'unknown_gate' | 'no_requirements' | 'no_eligible_facts' | 'assessment_unavailable' | 'too_few_skills';
+  readonly reason:
+    | 'assessed'
+    | 'blocked_gate'
+    | 'unknown_gate'
+    | 'no_requirements'
+    | 'no_eligible_facts'
+    | 'assessment_unavailable'
+    | 'too_few_skills';
 }
