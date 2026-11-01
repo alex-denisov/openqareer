@@ -64,9 +64,24 @@ jobs:
         run: |
           set -euo pipefail
           base="$(node -p 'require("./src-tauri/tauri.conf.json").version.split(".").slice(0, 2).join(".")')"
-          version="$base.$GITHUB_RUN_NUMBER"
-          published="$(curl -fsS --max-time 15 https://openqareer.com/api/v1/desktop/release |
-            node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).data.commit||"")}catch{}})' || true)"
+          release_json="$(curl -fsS --max-time 15 https://openqareer.com/api/v1/desktop/release || true)"
+          read_release() {
+            node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).data[process.argv[1]]||""))}catch{}})' "$1" <<<"$release_json"
+          }
+          published="$(read_release commit)"
+          published_version="$(read_release version)"
+          # The patch number counts real releases: the published one plus one, never
+          # the workflow run number (skipped and cancelled runs used to eat numbers).
+          if [[ "$published_version" =~ ^${base//./\\.}\.([0-9]+)$ ]]; then
+            version="$base.$((BASH_REMATCH[1] + 1))"
+          elif [[ "$published_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
+            [[ "$(printf '%s\n' "$published_version" "$base.0" | sort -V | tail -1)" == "$base.0" ]]; then
+            # tauri.conf.json moved to a newer major.minor: its patch starts at zero.
+            version="$base.0"
+          else
+            echo "cannot derive the next version from published '${published_version:-none}' and base $base" >&2
+            exit 1
+          fi
           release=true
           if [[ "$FORCE" != true && "$published" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "$published^{commit}" 2>/dev/null; then
             # shellcheck disable=SC2086
