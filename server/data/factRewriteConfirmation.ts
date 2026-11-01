@@ -59,6 +59,35 @@ export function describeAcceptedBullets(bulletTexts: readonly string[]): string 
     : 'Место подтверждено вами';
 }
 
+export interface RewriteHistoryText {
+  readonly appliedText: string;
+  readonly details: readonly string[];
+}
+
+const ACCEPTED_BULLETS = /^Пункты консультанта: «(.*)»\. Место подтверждено вами$/s;
+
+/** Bullet texts back out of a logged `describeAcceptedBullets` value. */
+export function acceptedBulletsOf(applied: string): string[] {
+  const match = ACCEPTED_BULLETS.exec(applied);
+  return match ? match[1]!.split('»; «') : [];
+}
+
+/**
+ * The history reads «Место работы подтверждено: <компания>, <роль>»; the bullets
+ * go to `details`, shown behind «Показать изменения». `label` is «роль · компания; …».
+ */
+export function rewriteHistoryText(label: string, bullets: readonly string[]): RewriteHistoryText {
+  const places = label
+    .split('; ')
+    .map((place) => place.split(' · ').reverse().join(', '))
+    .filter(Boolean)
+    .join('; ');
+  return {
+    appliedText: places ? `Место работы подтверждено: ${places}` : 'Место работы подтверждено',
+    details: bullets,
+  };
+}
+
 /** Undoing a rewrite gives the place back the trust it had before the accept. */
 export function restoreRewrittenPlaces(
   log: SqliteProfileChangeLogRepository,

@@ -26,6 +26,7 @@
 .profile-history__meta,
 .profile-history__target,
 .profile-history__change,
+.profile-history__details,
 .profile-history__error {
   grid-column: 1;
   margin: 0;
@@ -81,6 +82,27 @@
   text-decoration: none;
 }
 
+.profile-history__details {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.profile-history__details summary {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
+  color: var(--career-accent);
+  cursor: pointer;
+}
+
+.profile-history__details ul {
+  display: grid;
+  gap: var(--career-space-1);
+  margin: 0;
+  padding-inline-start: var(--career-space-4);
+}
+
 .profile-history__error {
   color: var(--career-danger, var(--career-text));
   font-size: var(--career-text-xs);
@@ -88,7 +110,7 @@
 
 .profile-history__revert {
   grid-column: 2;
-  grid-row: 1 / span 3;
+  grid-row: 1 / span 4;
   align-self: center;
   min-block-size: 44px;
 }

@@ -1,8 +1,5 @@
 import type { CandidateStore, CandidateSnapshot } from '../data/candidateStore';
-import {
-  describeAcceptedBullets,
-  FACT_REWRITE_COMMAND_PREFIX,
-} from '../data/factRewriteConfirmation';
+import { FACT_REWRITE_COMMAND_PREFIX, rewriteHistoryText } from '../data/factRewriteConfirmation';
 import type { ProfileHistoryItem } from './profileHistory';
 
 /** History id of a consultant rewrite accepted before the change log existed. */
@@ -28,17 +25,18 @@ export function legacyRewriteItems(
       const placeIds = new Set(record.bullets.map((bullet) => bullet.experienceId));
       const places = draft.experience.filter((entry) => placeIds.has(entry.id));
       const texts = record.bullets.flatMap((bullet) => statements.get(bullet.memoryId) ?? []);
+      const label = places
+        .map((entry) => [entry.title, entry.employer].filter(Boolean).join(' · '))
+        .join('; ');
       return {
         id: `${LEGACY_REWRITE_PREFIX}${record.id}`,
         actor: 'consultant',
         section: 'experience',
         kind: 'confirmation',
         itemId: places.length === 1 ? places[0]!.id : null,
-        label: places
-          .map((entry) => [entry.title, entry.employer].filter(Boolean).join(' · '))
-          .join('; '),
+        label,
         previousText: '',
-        appliedText: describeAcceptedBullets(texts),
+        ...rewriteHistoryText(label, texts),
         createdAt: record.appliedAt,
         revertedAt: null,
       };

@@ -11,6 +11,7 @@ export interface ProfileHistoryItem {
   readonly label: string;
   readonly previousText: string;
   readonly appliedText: string;
+  readonly details?: readonly string[];
   readonly createdAt: string;
   readonly revertedAt: string | null;
 }
