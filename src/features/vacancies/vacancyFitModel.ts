@@ -1,7 +1,5 @@
-import { pluralWordRu } from '../../../shared/pluralRu';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 import {
-  STATED_REQUIREMENT_CREDIT,
   vacancyFitPercent,
   vacancyFitStage,
   vacancyFitTier,
@@ -46,22 +44,17 @@ export function vacancyFitMark(view: VacancyFitView | undefined): VacancyFitMark
 }
 
 /**
- * «X из Y требований вакансии есть в профиле и подтверждены. Ещё Z указаны, но не проверены:
- * A, B — они считаются наполовину.» (mockup 4-vakansii-procent-sort, owner 29.10)
+ * «X из Y требований вакансии есть в профиле. Не проверены квизом: A, B.» Since 01.11 a stated
+ * requirement counts in full; the check is a label, not a multiplier.
  */
 export function vacancyFitSentence(view: VacancyFitView | undefined): string | null {
   if (vacancyFitPercent(view) === null) return null;
-  const { total } = view!.result!.coverage;
-  const chips = fitRequirementChips(view);
-  const checked = view!.result!.coverage.checked ?? chips?.confirmed.length ?? 0;
-  const stated = chips?.stated ?? [];
-  const first = `${checked} из ${total} требований вакансии есть в профиле и подтверждены.`;
-  if (stated.length === 0) return first;
-  const tail =
-    pluralWordRu(stated.length, ['one', 'many', 'many']) === 'one'
-      ? 'указан, но не проверен: NAMES — он считается наполовину.'
-      : 'указаны, но не проверены: NAMES — они считаются наполовину.';
-  return `${first} Ещё ${stated.length} ${tail.replace('NAMES', stated.join(', '))}`;
+  const { total, matched, partial = 0 } = view!.result!.coverage;
+  const stated = fitRequirementChips(view)?.stated ?? [];
+  const parts = [`${matched} из ${total} требований вакансии есть в профиле.`];
+  if (partial > 0) parts.push(`Ещё ${partial} — частично, они считаются наполовину.`);
+  if (stated.length > 0) parts.push(`Не проверены квизом: ${stated.join(', ')}.`);
+  return parts.join(' ');
 }
 
 export interface VacancyFitBoost {
@@ -69,7 +62,7 @@ export interface VacancyFitBoost {
   readonly skills: readonly string[];
 }
 
-/** «Поднять до N %: квиз по A и B» whenever requirements stated in the profile are unchecked. */
+/** «Подтвердить квизом: A и B» whenever requirements stated in the profile are unchecked (01.11: the percent stays). */
 export function vacancyFitBoost(view: VacancyFitView | undefined): VacancyFitBoost | null {
   const percent = vacancyFitPercent(view);
   const stated = fitRequirementChips(view)?.stated ?? [];
@@ -77,13 +70,6 @@ export function vacancyFitBoost(view: VacancyFitView | undefined): VacancyFitBoo
   // The quiz names the stated skills; experience the quiz does not pick still gets the button.
   const quizzable = quizOfferSkills(view).filter((skill) => stated.includes(skill));
   const skills = quizzable.length > 0 ? quizzable : stated.slice(0, 2);
-  const { matched, total } = view!.result!.coverage;
-  const checked = view!.result!.coverage.checked ?? 0;
-  const halves = matched - checked - skills.length;
-  const target = Math.round(
-    ((checked + skills.length + halves * STATED_REQUIREMENT_CREDIT) / total) * 100,
-  );
-  if (target <= percent) return null;
   const quiz = quizOfferTitle(skills).replace(/^Пройти к/u, 'к');
-  return { label: `Поднять до ${target} %: ${quiz}`, skills };
+  return { label: `Подтвердить навыки: ${quiz}`, skills };
 }

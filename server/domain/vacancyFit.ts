@@ -1,11 +1,16 @@
-import { MIN_FIT_SKILL_REQUIREMENTS, STATED_REQUIREMENT_CREDIT } from '../../shared/vacancyFitPercent';
+import { MIN_FIT_SKILL_REQUIREMENTS, PARTIAL_REQUIREMENT_CREDIT } from '../../shared/vacancyFitPercent';
 import { createHash } from 'node:crypto';
 import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
 import { isImportedMemoryId } from './resumeImport';
+import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
 
-export interface VacancyFitFact extends ResumeEvidenceCandidate { readonly candidateId: string }
+export interface VacancyFitFact extends ResumeEvidenceCandidate {
+  readonly candidateId: string;
+  /** `memory`: a dossier row; `profile`: a section of the resume draft (skills, about, projects…). */
+  readonly evidenceSource?: 'memory' | 'profile';
+}
 export interface VacancyFitInput {
   readonly candidateId: string;
   readonly vacancyId: string;
@@ -94,13 +99,18 @@ export function vacancyFitFingerprint(
   };
 }
 
+/** The model sees privacy-cleaned statements, so its quotes are checked against the same text (01.11). */
+function quotes(fact: VacancyFitFact | undefined, quote: string): boolean {
+  return !!fact && (fact.statement.includes(quote) || minimizeModelText(fact.statement).includes(quote));
+}
+
 /** Validates model claims against exact candidate-owned source text. Missing facts are unknown. */
 export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toISOString()): VacancyFitResult {
   const facts = eligibleFacts(input);
   const factMap = new Map(facts.map((fact) => [fact.id, fact]));
   const gates = Object.fromEntries(VACANCY_FIT_GATE_NAMES.map((name) => {
     const gate = input.gates[name];
-    const invalidEvidence = gate.evidence?.some((entry) => !entry.quote.trim() || !factMap.get(entry.factId)?.statement.includes(entry.quote));
+    const invalidEvidence = gate.evidence?.some((entry) => !entry.quote.trim() || !quotes(factMap.get(entry.factId), entry.quote));
     return [name, invalidEvidence ? { status: 'unknown', reason: 'gate_evidence_unverified' } : gate];
   })) as unknown as VacancyFitGates;
   const requirements = sourcedRequirements(input);
@@ -108,9 +118,9 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const assessments: VacancyFitRequirementAssessment[] = requirements.map((requirement) => {
     const claims = input.assessments?.filter((claim) => claim.requirementId === requirement.id) ?? [];
     const claim = claims.length === 1 ? claims[0] : undefined;
-    if (!claim || !['matched', 'unmatched'].includes(claim.status) || !Array.isArray(claim.evidence) || !claim.evidence.length || claim.evidence.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !factMap.get(entry.factId)?.statement.includes(entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
+    if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !Array.isArray(claim.evidence) || !claim.evidence.length || claim.evidence.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !quotes(factMap.get(entry.factId), entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
     const evidence = claim.evidence.map(({ factId, quote }) => ({ factId, quote }));
-    return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status === 'matched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
+    return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status !== 'unmatched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
   });
   // Owner 28.10: a model answer that confirms nothing is «0 из N», not «no percent». Without an
   // answer (no claims at all) the requirements are not assessed yet.
@@ -127,11 +137,11 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const required = new Set(requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor)).map((item) => item.id));
   const requiredSkills = skills.filter((item) => required.has(item.requirementId));
   const canScore = reason === 'assessed';
-  // Owner 29.10: confirmed by a skill check 1, stated in the profile but unchecked 0.5, missing 0.
-  const credit = (item: VacancyFitRequirementAssessment) => item.status !== 'matched' ? 0 : item.checked ? 1 : STATED_REQUIREMENT_CREDIT;
+  // 01.11: met 1 whether stated or checked by a skill check (`checked` is a label), partial 0.5, else 0.
+  const credit = (item: VacancyFitRequirementAssessment) => item.status === 'matched' ? 1 : item.status === 'partial' ? PARTIAL_REQUIREMENT_CREDIT : 0;
   const percent = (items: readonly VacancyFitRequirementAssessment[]) => canScore && items.length ? Math.round(items.reduce((sum, item) => sum + credit(item), 0) / items.length * 100) : null;
   const count = (items: readonly VacancyFitRequirementAssessment[]) => ({
-    matched: items.filter((item) => item.status === 'matched').length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length,
+    matched: items.filter((item) => item.status === 'matched').length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial').length,
   });
   return {
     candidateId: input.candidateId, vacancyId: input.vacancyId, algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,

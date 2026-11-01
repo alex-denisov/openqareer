@@ -382,4 +382,29 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.requeueAfterParserUpgrade().requirements).toBe(1);
     expect(runtime.requeueAfterParserUpgrade().requirements).toBe(0);
   });
+
+  it('a budget refusal in the fit call pauses the job without burning attempts (01.11)', async () => {
+    const runtime = setup(); const source = input();
+    const client = fitClient(async () => { throw new Error(BULK_BUDGET_EXCEEDED); });
+    runtime.enqueue(source);
+    for (let step = 0; step < 4; step += 1) await runtime.runNext(client);
+    const job = runtime.database.prepare('SELECT status,attempts,last_error FROM vacancy_fit_queue').get();
+    expect(job).toMatchObject({ status: 'pending', attempts: 0, last_error: 'assessment_budget_paused' });
+    expect(runtime.takeStats()).toMatchObject({ budgetPaused: 1, failed: 0 });
+  });
+
+  it('after a profile edit keeps the last percent on screen as «refreshing» (01.11)', async () => {
+    const runtime = setup(); const source = input();
+    const client = fitClient(async (request) => {
+      const ids = (JSON.parse(request.input) as { requirements: { id: string }[] }).requirements.map((item) => item.id);
+      return { content: JSON.stringify({ assessments: ids.map((requirementId) => ({ requirementId, status: 'matched', evidence: [{ factId: 'private-fact', quote: 'TypeScript' }] })) }) };
+    });
+    runtime.enqueue(source);
+    await runtime.runNext(client);
+    expect(runtime.view(source).state).toBe('ready');
+    const edited = { ...source, facts: [{ ...source.facts[0], statement: 'PRIVATE_OWNER_STATEMENT Go services' }] };
+    const view = runtime.view(edited);
+    expect(view.state).toBe('refreshing');
+    expect(view.result?.coveragePercent).toBe(100);
+  });
 });

@@ -18,10 +18,10 @@ export interface VacancyFitView {
 }
 export type VacancyFitFailure =
   'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'other';
-/** Owner 29.10: half credit for requirements stated in the profile but not confirmed by a skill check. */
-export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-4';
+/** 01.11: the whole profile is evidence; met counts 1 stated or checked, partial 0.5. */
+export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-5';
 /** Shown while the current version is calculated, so a version bump never hides a known percent. */
-export const LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS: readonly string[] = ['evidence-coverage-3', 'evidence-coverage-2'];
+export const LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS: readonly string[] = ['evidence-coverage-4', 'evidence-coverage-3', 'evidence-coverage-2'];
 export const VACANCY_FIT_GATE_NAMES = ['role', 'level', 'region', 'workAuthorization', 'workFormat'] as const;
 export type VacancyFitGateName = typeof VACANCY_FIT_GATE_NAMES[number];
 export type VacancyFitGateStatus = 'matched' | 'blocked' | 'unknown';
@@ -34,9 +34,10 @@ export interface VacancyFitGate {
 export type VacancyFitGates = Readonly<Record<VacancyFitGateName, VacancyFitGate>>;
 export interface VacancyFitRequirementAssessment {
   readonly requirementId: string;
-  readonly status: 'matched' | 'unmatched' | 'unknown';
+  /** `partial`: the evidence covers part of the requirement (01.11), counted half. */
+  readonly status: 'matched' | 'partial' | 'unmatched' | 'unknown';
   readonly evidence: readonly VacancyFitEvidence[];
-  /** Matched by a fact a skill check wrote: counts 1; a matched requirement without it counts 0.5. */
+  /** Verification label only (01.11): matched by a fact a skill check wrote. It no longer changes the credit. */
   readonly checked?: boolean;
 }
 export interface VacancyFitResult {
@@ -50,9 +51,9 @@ export interface VacancyFitResult {
   readonly coveragePercent: number | null;
   readonly requiredCoverage: { readonly matched: number; readonly total: number; readonly percent: number | null };
   /** Skill requirements only (B510-r): conditions such as education or language never make the percent. */
-  readonly coverage: { readonly matched: number; readonly total: number; readonly unknown: number; readonly checked?: number };
+  readonly coverage: { readonly matched: number; readonly total: number; readonly unknown: number; readonly checked?: number; readonly partial?: number };
   /** Conditions (education, language, licence, format, work permit), listed apart from the percent. */
-  readonly conditionCoverage?: { readonly matched: number; readonly total: number; readonly unknown: number; readonly checked?: number };
+  readonly conditionCoverage?: { readonly matched: number; readonly total: number; readonly unknown: number; readonly checked?: number; readonly partial?: number };
   readonly assessments: readonly VacancyFitRequirementAssessment[];
   readonly reason: 'assessed' | 'blocked_gate' | 'unknown_gate' | 'no_requirements' | 'no_eligible_facts' | 'assessment_unavailable' | 'too_few_skills';
 }

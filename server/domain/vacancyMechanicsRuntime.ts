@@ -30,6 +30,8 @@ const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
 };
 interface AssessmentOutcome {
   staleProfile: boolean;
+  /** The spend budget refused the call: the job waits for the next UTC day, no attempt is spent. */
+  budgetPaused: boolean;
   returned: boolean;
   invalid: boolean;
 }
@@ -134,6 +136,8 @@ export class VacancyMechanicsRuntime {
     // Work a candidate waits for first: shown-page labels, then a queued fit; the background
     // tail of requirements only when no fit is waiting (before, every fit paid one tail call).
     const shown = await this.extractNextRequirements(client, runId, workerId, SHOWN_PAGE_PRIORITY);
+    // B556 for the fit call too (01.11): no fit job is claimed for a call the budget would refuse.
+    if (client && Date.now() < this.budgetPausedUntil) return shown;
     const job = this.fit.claim({ leaseMs: 300000 });
     if (!job) return shown || (await this.extractNextRequirements(client, runId, workerId));
     const extracted = shown;
@@ -160,7 +164,10 @@ export class VacancyMechanicsRuntime {
       const resolved = { ...job.input, requirements: requirements.requirements };
       const { assessor, outcome } = this.trackedAssessor(client, runId, resolved);
       const result = await assessVacancyFit(resolved, assessor);
-      if (client && result.reason === 'assessment_unavailable' && !outcome.returned) {
+      if (outcome.budgetPaused) {
+        this.pauseForBudget();
+        this.fit.pause(job, new Date(this.budgetPausedUntil).toISOString(), 'assessment_budget_paused');
+      } else if (client && result.reason === 'assessment_unavailable' && !outcome.returned) {
         this.settleFailure(
           job,
           assessmentFailure(outcome),
@@ -179,7 +186,7 @@ export class VacancyMechanicsRuntime {
     runId: string,
     resolved: VacancyFitInput,
   ) {
-    const outcome: AssessmentOutcome = { staleProfile: false, returned: false, invalid: false };
+    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, returned: false, invalid: false };
     const base = client ? createVacancyFitAssessor(client, runId) : undefined;
     const assessor = base
       ? {
@@ -193,6 +200,10 @@ export class VacancyMechanicsRuntime {
               outcome.returned = true;
               return assessments;
             } catch (error) {
+              if (error instanceof Error && error.message === BULK_BUDGET_EXCEEDED) {
+                outcome.budgetPaused = true;
+                throw error;
+              }
               // The model answered, but not with the assessment shape: not an outage.
               outcome.invalid =
                 error instanceof SyntaxError ||
@@ -216,9 +227,7 @@ export class VacancyMechanicsRuntime {
           input: minimizeModelText(description), maxTokens: 4096,
         }).catch((error: unknown) => {
           if (!(error instanceof Error) || error.message !== BULK_BUDGET_EXCEEDED) throw error;
-          const now = new Date();
-          this.budgetPausedUntil = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-          this.stats.budgetPaused += 1;
+          this.pauseForBudget();
           throw new VacancyRequirementsPausedError(this.budgetPausedUntil);
         })).content } : undefined, (issue) => {
           this.stats.modelIssues = { ...this.stats.modelIssues, [issue]: (this.stats.modelIssues[issue] ?? 0) + 1 };
@@ -229,6 +238,13 @@ export class VacancyMechanicsRuntime {
     }, Date.now(), minPriority);
     if (extracted) this.stats.requirementsDone += 1;
     return Boolean(extracted);
+  }
+
+  /** Until the next UTC day: the day's run is spent (B556). */
+  private pauseForBudget(): void {
+    const now = new Date();
+    this.budgetPausedUntil = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    this.stats.budgetPaused += 1;
   }
 
   private settleFailure(job: Parameters<SqliteVacancyFitStore['fail']>[0], reason: string, retry: boolean): void {

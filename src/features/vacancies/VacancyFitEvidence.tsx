@@ -17,7 +17,7 @@ const ORIGIN = {
   structural: 'Из раздела требований',
   inferred: 'Требует уточнения',
 };
-const STATUS = { matched: 'Подтверждено', unmatched: 'Не подтверждено', unknown: 'Не проверено' };
+const STATUS = { matched: 'Подтверждено', partial: 'Частично', unmatched: 'Не подтверждено', unknown: 'Не проверено' };
 const GATES = {
   role: 'Роль',
   level: 'Уровень',
