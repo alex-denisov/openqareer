@@ -508,10 +508,12 @@ function sheetSubtitle(
   if (!facets) return undefined;
   const format = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
   const summary = facets.catalogSummary;
+  // 01.11: the same filtered selection as the header, never the pre-filter snapshot count.
+  const selected = summary?.selectionTotal ?? facets.total;
   const pool =
     summary?.catalogTotal !== undefined
-      ? `${format(summary.roleLevelMatches)} из ${format(summary.catalogTotal)} вакансий каталога подходят по роли и уровню.`
-      : `${format(facets.total)} вакансий в подборке по роли и уровню.`;
+      ? `${format(selected)} вакансий подходят по роли и уровню · в каталоге ${format(summary.catalogTotal)}.`
+      : `${format(selected)} вакансий в подборке по роли и уровню.`;
   return resultCount === undefined ? pool : `${pool} С вашими условиями — ${format(resultCount)}.`;
 }
 

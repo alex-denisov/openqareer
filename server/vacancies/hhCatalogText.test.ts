@@ -280,4 +280,44 @@ describe('MultiSourceVacancyEngine.runHhCatalogTextStep', () => {
     expect(pool.getVacancy(card.id)?.fullDescription).toContain('Python');
     expect(await engine.runHhCatalogTextStep()).toMatchObject({ requested: 0 });
   });
+
+  it('01.11: candidate selections go before the catalog; done or failed rows leave the queue', async () => {
+    const queue = ['p1', 'p2'];
+    const dropped: string[] = [];
+    const loaded: string[] = [];
+    const engine: HhCatalogTextEngine = {
+      hhTextReady: () => true,
+      peekPriority: () => queue.filter((id) => !dropped.includes(id)),
+      dropPriority: (ids) => dropped.push(...ids),
+      loadHhTextCandidates: () => ({ ids: ['catalog'] }),
+      loadVacancyDescription: async (id) => {
+        loaded.push(id);
+        return id === 'p2'
+          ? { status: 'failed', unavailable: true }
+          : { status: 'loaded', unavailable: false };
+      },
+    };
+    const backfill = new HhCatalogTextBackfill({ engine, perTick: 5 });
+    expect(await backfill.step()).toMatchObject({ requested: 2, loaded: 1, failed: 1 });
+    expect(dropped).toEqual(['p1', 'p2']);
+    await backfill.step();
+    expect(loaded).toEqual(['p1', 'p2', 'catalog']);
+  });
+});
+
+describe('hh text priority queue (01.11)', () => {
+  it.each([
+    ['sqlite', () => openSqlite()],
+    ['memory', () => new MemoryVacancyPoolStore()],
+  ] as const)('%s: selection order, best rank wins, rows with text or expired leave', (_, open) => {
+    const store = open();
+    const [a, b, c, d] = [hh(1, 1), hh(2, 1), hh(3, 1, 'Текст'), hh(4, 1)];
+    store.mergeSourceSlice(HH, [a, b, c, d]);
+    store.requestHhTextPriority([b.id, a.id, c.id, 'src-other:9'], 10);
+    store.requestHhTextPriority([d.id, a.id], 0);
+    store.markExpired([d.id], new Date().toISOString());
+    expect(store.peekHhTextPriority(10)).toEqual([a.id, b.id]);
+    store.dropHhTextPriority([a.id]);
+    expect(store.peekHhTextPriority(10)).toEqual([b.id]);
+  });
 });

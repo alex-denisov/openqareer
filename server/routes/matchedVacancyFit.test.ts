@@ -4,11 +4,12 @@ import {
   compareFitOrder,
   explanationWithFitView,
   vacanciesAwaitingFit,
+  textStillLoading,
   vacanciesToWarm,
 } from './matchedVacancyFit';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
-import type { VacancyFitResult } from '../../shared/vacancyFit';
+import type { VacancyFitResult, VacancyFitView } from '../../shared/vacancyFit';
 
 function item(id: string, score: number | null, observed = '2026-10-01'): MatchedVacancyItem {
   const result = {
@@ -281,5 +282,16 @@ describe('порядок CPO при фильтре и после обновле�
       },
     };
     expect(order([fresh('new'), refreshing])).toEqual(['refresh-failed', 'new']);
+  });
+});
+
+describe('textStillLoading (01.11)', () => {
+  const view = { state: 'no_description', requirements: [] } as unknown as VacancyFitView;
+  it('an hh row whose text is not read yet is still counting, never «мало требований»', () => {
+    expect(textStillLoading('cluster-src-hh-search:1', '', view).state).toBe('not_requested');
+  });
+  it('keeps the verdict once text exists or for other sources', () => {
+    expect(textStillLoading('cluster-src-hh-search:1', 'Текст', view)).toBe(view);
+    expect(textStillLoading('cluster-src-indeed:1', '', view)).toBe(view);
   });
 });

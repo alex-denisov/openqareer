@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
-import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
+import { expireClusterSources, MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { createClusterFromVacancy } from './vacancyDeduplicator';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { matchCandidateWithVacancy } from './vacancyMatcher';
@@ -217,7 +217,8 @@ describe('hh full-description on demand', () => {
 
   it('повторяет запись закешированной страницы после временной ошибки пула', async () => {
     const pool = new MemoryVacancyPoolStore();
-    const existing = { ...vacancy, fullDescription: 'Описание из поиска' };
+    // 01.11: stored full text counts as read; the search snippet lives in `description`.
+    const existing = { ...vacancy, description: 'Описание из поиска' };
     pool.mergeSourceSlice(source.id, [existing]);
     const originalMerge = pool.mergeSourceSlice.bind(pool);
     let failFirstWrite = true;
@@ -320,5 +321,38 @@ describe('hh full-description on demand', () => {
     ).resolves.toEqual({ requested: 2, loaded: 0, skipped: 1, failed: 1 });
     expect(transport).toHaveBeenCalledTimes(1);
     expect(transport).toHaveBeenCalledWith(vacancy.url);
+  });
+
+  it('01.11: stored text without skills is cached after a restart, not fetched again', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    pool.mergeSourceSlice(source.id, [
+      { ...vacancy, description: '', fullDescription: 'Текст без навыков', requiredSkills: [] },
+    ]);
+    const load = vi.fn();
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source],
+      pool,
+      descriptionLoader: { load },
+    });
+    await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
+      status: 'cached',
+    });
+    expect(load).not.toHaveBeenCalled();
+  });
+});
+
+describe('expireClusterSources (01.11)', () => {
+  it('a repeated expiry of the same vacancy does not decrement the cluster twice', () => {
+    const base = createClusterFromVacancy(vacancy);
+    const other = { ...vacancy.provenance, sourceUrl: 'https://hh.ru/vacancy/9002' };
+    const cluster = { ...base, sources: [vacancy.provenance, other], vacanciesCount: 2 };
+    const gone = new Set([vacancy.provenance.sourceUrl]);
+    const once = expireClusterSources(cluster, gone);
+    expect(once).toMatchObject({ vacanciesCount: 1, status: 'active' });
+    expect(expireClusterSources(once, gone)).toBe(once);
+    expect(cluster.vacanciesCount).toBe(2);
+    expect(expireClusterSources(once, new Set([other.sourceUrl]))).toMatchObject({
+      status: 'archived',
+    });
   });
 });

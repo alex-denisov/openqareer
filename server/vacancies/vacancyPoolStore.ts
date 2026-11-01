@@ -218,6 +218,11 @@ export interface VacancyPoolStore {
     removed: number;
     passFinished: boolean;
   };
+  /** Подборка кандидата в голову очереди текста hh, по месту в подборке (01.11). */
+  requestHhTextPriority?(vacancyIds: readonly string[], baseRank?: number, nowMs?: number): void;
+  /** Голова очереди подборок: hh-записи, которым ещё нужен текст. */
+  peekHhTextPriority?(limit: number): string[];
+  dropHhTextPriority?(vacancyIds: readonly string[]): void;
   /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
   loadHhTextCandidates?(
     cursor: string | undefined,

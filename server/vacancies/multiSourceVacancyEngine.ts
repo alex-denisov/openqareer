@@ -1003,6 +1003,8 @@ export class MultiSourceVacancyEngine {
           );
         },
         loadHhTextCandidates: (cursor, limit) => pool.loadHhTextCandidates!(cursor, limit),
+        peekPriority: (limit) => pool.peekHhTextPriority?.(limit) ?? [],
+        dropPriority: (ids) => pool.dropHhTextPriority?.(ids),
         loadVacancyDescription: (id) => this.loadVacancyDescription(id),
       },
     });
@@ -1091,7 +1093,8 @@ export class MultiSourceVacancyEngine {
     }
     if (
       this.persistedDescriptionIds.has(id) ||
-      (existing.fullDescription?.trim() && (existing.requiredSkills?.length ?? 0) > 0)
+      // 01.11: дочитанный текст без навыков — тоже готов; иначе он запрашивался каждый раз.
+      existing.fullDescription?.trim()
     ) {
       return Promise.resolve({ vacancy: existing, unavailable: false, status: 'cached' });
     }
@@ -1101,6 +1104,14 @@ export class MultiSourceVacancyEngine {
     this.descriptionLoads.set(id, load);
     void load.finally(() => this.descriptionLoads.delete(id));
     return load;
+  }
+
+  /**
+   * 01.11: строки подборки в голову очереди текста hh воркера обслуживания; сеть здесь
+   * не трогается. Ошибку записи видит вызывающий.
+   */
+  public requestHhTextPriority(ids: readonly string[], baseRank = 0): void {
+    this.pool.requestHhTextPriority?.(ids, baseRank);
   }
 
   /** Первые карточки подбора греются последовательно, не создавая веер запросов. */
@@ -1585,25 +1596,13 @@ export class MultiSourceVacancyEngine {
     }
     const goneSet = new Set(goneVacancyIds);
     let clustersChanged = false;
-    for (const cluster of this.clusters) {
-      const match =
-        goneSet.has(cluster.id.replace(/^cluster-/, '')) ||
-        cluster.sources.some(
-          (s) =>
-            (s.externalId && goneSet.has(s.externalId)) ||
-            (s.sourceUrl && goneSet.has(s.sourceUrl)),
-        );
-      if (!match) continue;
-      if (cluster.vacanciesCount <= 1) {
-        cluster.status = 'archived';
-        this.pool.upsertCluster(cluster);
-        clustersChanged = true;
-      } else {
-        cluster.vacanciesCount -= 1;
-        this.pool.upsertCluster(cluster);
-        clustersChanged = true;
-      }
-    }
+    this.clusters = this.clusters.map((cluster) => {
+      const next = expireClusterSources(cluster, goneSet);
+      if (next === cluster) return cluster;
+      this.pool.upsertCluster(next);
+      clustersChanged = true;
+      return next;
+    });
     if (clustersChanged) {
       this.clusterBuilder = new IncrementalClusterBuilder(this.clusters);
     }
@@ -1970,4 +1969,27 @@ export class MultiSourceVacancyEngine {
       };
     }
   }
+}
+
+/**
+ * Кластер после ухода вакансий (01.11): снятый не трогается повторно, ушедший источник
+ * убирается, поэтому повторная весть о той же вакансии не вычитает её второй раз.
+ */
+export function expireClusterSources(
+  cluster: VacancyCluster,
+  goneSet: ReadonlySet<string>,
+): VacancyCluster {
+  if (cluster.status === 'archived') return cluster;
+  const isGone = (s: VacancyCluster['sources'][number]) =>
+    Boolean(
+      (s.externalId && goneSet.has(s.externalId)) || (s.sourceUrl && goneSet.has(s.sourceUrl)),
+    );
+  const byId = goneSet.has(cluster.id.replace(/^cluster-/, ''));
+  const remaining = cluster.sources.filter((s) => !isGone(s));
+  const gone = cluster.sources.length - remaining.length;
+  if (gone === 0 && !byId) return cluster;
+  const count = cluster.vacanciesCount - Math.max(1, gone);
+  return count <= 0
+    ? { ...cluster, status: 'archived' }
+    : { ...cluster, vacanciesCount: count, sources: remaining };
 }

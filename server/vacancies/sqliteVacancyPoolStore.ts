@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
+import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { normalizeSalaryLabel } from './catalogCopy';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -333,6 +334,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE);
+    this.database.exec(HH_TEXT_PRIORITY_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
@@ -1628,6 +1630,66 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   catalogProjectionReady(): boolean {
     return this.catalogBackfillComplete || this.pendingCatalogEntries() === 0;
+  }
+
+  /**
+   * Подборка кандидата в голову очереди текста hh (01.11): `rank` — место в подборке.
+   * Строка, уже стоящая в очереди, берёт лучшее из мест.
+   */
+  requestHhTextPriority(
+    vacancyIds: readonly string[],
+    baseRank = 0,
+    nowMs: number = Date.now(),
+  ): void {
+    const ids = vacancyIds
+      .filter((id) => id.startsWith(`${HH_SEARCH_SOURCE_ID}:`))
+      .slice(0, HH_TEXT_PRIORITY_MAX_IDS);
+    if (ids.length === 0) return;
+    const insert = this.database.prepare(
+      `INSERT INTO hh_text_priority (vacancy_id, rank, requested_ms) VALUES (?, ?, ?)
+       ON CONFLICT(vacancy_id) DO UPDATE SET rank = min(rank, excluded.rank),
+         requested_ms = excluded.requested_ms`,
+    );
+    this.inTransaction(() => ids.forEach((id, index) => insert.run(id, baseRank + index, nowMs)));
+  }
+
+  /**
+   * Голова очереди подборок: живые hh-записи без текста. Строки, которым текст уже
+   * не нужен (дочитан, снят, удалён из пула), уходят из очереди тут же.
+   */
+  peekHhTextPriority(limit: number): string[] {
+    const want = Math.max(1, Math.min(Math.trunc(limit), 100));
+    const rows = this.database
+      .prepare(
+        `SELECT q.vacancy_id AS id,
+                CASE WHEN p.id IS NOT NULL AND p.expired_at IS NULL AND
+                  length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0
+                THEN 1 ELSE 0 END AS need
+           FROM hh_text_priority q
+           LEFT JOIN vacancy_pool p ON p.id = q.vacancy_id
+          ORDER BY q.rank ASC, q.requested_ms DESC
+          LIMIT ?`,
+      )
+      .all(want * 4) as Array<{ id: string; need: number }>;
+    const done = rows.filter((row) => row.need !== 1).map((row) => row.id);
+    if (done.length > 0) this.dropHhTextPriority(done);
+    return rows
+      .filter((row) => row.need === 1)
+      .slice(0, want)
+      .map((row) => row.id);
+  }
+
+  dropHhTextPriority(vacancyIds: readonly string[]): void {
+    const remove = this.database.prepare('DELETE FROM hh_text_priority WHERE vacancy_id = ?');
+    for (const id of vacancyIds) remove.run(id);
+  }
+
+  /** Сколько строк подборок ещё ждут текст: для оценки времени догона. */
+  countHhTextPriority(): number {
+    const row = this.database.prepare('SELECT count(*) AS n FROM hh_text_priority').get() as {
+      n: number;
+    };
+    return row.n;
   }
 
   /**

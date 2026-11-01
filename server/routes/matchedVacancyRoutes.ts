@@ -1,6 +1,13 @@
+import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
+import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readSortedFilters } from './matchedVacancySort';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
-import { selectionFitLimit, selectionToCount, sweepSelectionFit } from './fitSelectionSweep';
+import {
+  selectionFitLimit,
+  selectionStamp,
+  selectionToCount,
+  sweepSelectionFit,
+} from './fitSelectionSweep';
 import { attachMarketSalaryEstimates } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
@@ -190,6 +197,11 @@ function computeMatchedList(
   const catalogSummary = matchedCatalogSummary(
     catalogTotals?.(),
     roleLevelMatchCount(hypothesisSnapshot, targetRoles),
+    {
+      selectionTotal: filtered.length,
+      fitCounted: filtered.filter((item) => vacancyFitPercent(item.explanation.fitView) !== null)
+        .length,
+    },
   );
   return {
     filtered,
@@ -288,6 +300,7 @@ function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLim
   return {
     warmIds: vacanciesToWarm(items),
     countIds: offset === 0 ? selectionToCount(items, fitLimit) : [],
+    selectionKey: selectionStamp(items.map((item) => item.cluster.id)),
   };
 }
 
@@ -302,6 +315,7 @@ function startFitWork(
     readonly data: readonly MatchedVacancyItem[];
     readonly warmIds: readonly string[];
     readonly countIds: readonly string[];
+    readonly selectionKey: string;
   },
   { offset, fitLimit }: { readonly offset: number; readonly fitLimit: number },
   request: FastifyRequest,
@@ -311,13 +325,23 @@ function startFitWork(
   const engine = deps.multiSourceEngine;
   const requestFit = (ids: readonly string[]) => requestFitForVacancyIds(deps, candidateId, ids);
   preloadTopMatchedDescriptions(engine, response.warmIds, offset, request, requestFit);
-  if (typeof engine.preloadVacancyDescriptions !== 'function') return;
+  if (typeof engine.requestHhTextPriority !== 'function') return;
   void sweepSelectionFit(
     candidateId,
     response.countIds,
-    (ids) => engine.preloadVacancyDescriptions!(ids, ids.length),
+    // 01.11: hh text for the whole selection is read by the maintenance worker, rows in
+    // selection order; the HTTP path only writes the queue (the shown page warms above).
+    (ids, rank) => engine.requestHhTextPriority!(ids, rank),
     // The sweep queues below the shown page: after an edit, paid plans see the visible rows first.
     (ids, rank) => requestFitForVacancyIds(deps, candidateId, ids, rank),
+    `${vacancyFitStampOf(deps, candidateId)}|${response.selectionKey}`,
+  );
+}
+
+function vacancyFitStampOf(deps: RouteDeps, candidateId: string): string {
+  return vacancyFitProfileStamp(
+    deps.candidateStore.getSnapshot(candidateId),
+    deps.candidateStore.getCandidateWorkspace(candidateId),
   );
 }
 

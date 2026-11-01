@@ -50,7 +50,10 @@ describe('whole-selection fit sweep (CPO 28.10 evening)', () => {
     const sweep = createSelectionFitSweep({ chunk: 2, windowMs: 1_000, now: () => now });
     const ids = ['cluster-x1', 'cluster-x2', 'cluster-x3'];
     await sweep('cand', ids, preload, requestFit);
-    expect(preload.mock.calls).toEqual([[['x1', 'x2']], [['x3']]]);
+    expect(preload.mock.calls).toEqual([
+      [['x1', 'x2'], 0],
+      [['x3'], 2],
+    ]);
     expect(requestFit.mock.calls).toEqual([
       [['cluster-x1', 'cluster-x2'], 0],
       [['cluster-x3'], 2],
@@ -83,5 +86,26 @@ describe('whole-selection fit sweep (CPO 28.10 evening)', () => {
     expect(ids.at(-1)).toBe('r299');
     expect(ids).not.toContain('r5');
     expect(selectionToCount(items, selectionFitLimit('pro'))).toHaveLength(449);
+  });
+
+  it('01.11: a new selection or profile key restarts at once and stops the older sweep', async () => {
+    const preload = vi.fn(async () => undefined);
+    const requestFit = vi.fn();
+    const sweep = createSelectionFitSweep({ chunk: 1, windowMs: 60_000, now: () => 0 });
+    await sweep('cand', ['cluster-a'], preload, requestFit, 'k1');
+    await sweep('cand', ['cluster-a'], preload, requestFit, 'k1');
+    expect(requestFit).toHaveBeenCalledTimes(1);
+    await sweep('cand', ['cluster-a', 'cluster-b'], preload, requestFit, 'k2');
+    expect(requestFit).toHaveBeenCalledTimes(3);
+
+    let release: () => void = () => undefined;
+    const slow = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const older = sweep('cand', ['cluster-x', 'cluster-y'], slow, requestFit, 'k3');
+    await sweep('cand', ['cluster-z'], preload, requestFit, 'k4');
+    release();
+    await older;
+    const queued = requestFit.mock.calls.map(([ids]) => ids[0]);
+    expect(queued).toContain('cluster-z');
+    expect(queued).not.toContain('cluster-y');
   });
 });

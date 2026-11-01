@@ -124,6 +124,8 @@ describe('VacanciesScreen (B250)', () => {
         sources: [],
         catalogSummary: {
           roleLevelMatches: 214,
+          selectionTotal: 61,
+          fitCounted: 40,
           catalogTotal: 1_620,
           observedAt: '2026-10-07T06:12:00.000Z',
         },
@@ -132,8 +134,10 @@ describe('VacanciesScreen (B250)', () => {
 
     expect(html).toContain('vacancies-search-summary');
     expect(html).toContain('vacancies-summary-count');
-    expect(html).toContain('214');
-    expect(html).toMatch(/1\s?620/u);
+    // 01.11: the big number is the filtered selection, not the pre-filter snapshot (214).
+    expect(html).not.toContain('214');
+    expect(html).toMatch(/процент посчитан для 40 из 61/u);
+    expect(html).toMatch(/в каталоге 1\s?620/u);
     expect(html).toContain('Показано');
     expect(html).toContain('vacancies-summary-reset');
     // B485: дата каталога по Москве без запятой, как в макете, в сводке и в подвале 390.

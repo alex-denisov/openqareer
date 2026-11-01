@@ -28,29 +28,55 @@ export function selectionToCount(
     .map((item) => item.cluster.id);
 }
 
-type Preload = (vacancyIds: readonly string[]) => Promise<unknown>;
+/** Cheap order-sensitive digest of the ids still to count: the gate only compares it. */
+export function selectionStamp(clusterIds: readonly string[]): string {
+  let hash = 0;
+  for (const id of clusterIds) {
+    for (let index = 0; index < id.length; index += 1) {
+      hash = (Math.imul(hash, 31) + id.charCodeAt(index)) | 0;
+    }
+  }
+  return `${clusterIds.length}:${hash >>> 0}`;
+}
+
+/** `rank` — the chunk's first place in the selection. */
+type Preload = (vacancyIds: readonly string[], rank: number) => Promise<unknown> | unknown;
 /** `rank` is the chunk's first place in the selection: the queue keeps relevance order (B580). */
 type RequestFit = (clusterIds: readonly string[], rank: number) => void;
 
+/**
+ * 01.11: one sweep per candidate and selection key (profile stamp + the whole filtered
+ * selection) per window. A new key starts at once and stops the older sweep; the same key
+ * inside the window does not start another.
+ */
 export function createSelectionFitSweep({
   chunk = SWEEP_CHUNK,
   windowMs = SWEEP_WINDOW_MS,
   now = Date.now,
 }: { chunk?: number; windowMs?: number; now?: () => number } = {}) {
-  const startedAt = new Map<string, number>();
+  const started = new Map<string, { readonly at: number; readonly key: string }>();
   return async function sweep(
     candidateId: string,
     clusterIds: readonly string[],
     preload: Preload,
     requestFit: RequestFit,
+    selectionKey = '',
   ): Promise<void> {
-    const last = startedAt.get(candidateId);
-    if (last !== undefined && now() - last < windowMs) return;
-    startedAt.set(candidateId, now());
+    const last = started.get(candidateId);
+    if (last !== undefined && last.key === selectionKey && now() - last.at < windowMs) return;
+    const mine = { at: now(), key: selectionKey };
+    started.set(candidateId, mine);
     for (let start = 0; start < clusterIds.length; start += chunk) {
+      if (started.get(candidateId) !== mine) return;
       const ids = clusterIds.slice(start, start + chunk);
-      // The fit is queued after the text is read: queued earlier it would see no description.
-      await preload(ids.map((id) => id.replace(/^cluster-/u, ''))).catch(() => undefined);
+      try {
+        await preload(
+          ids.map((id) => id.replace(/^cluster-/u, '')),
+          start,
+        );
+      } catch {
+        // A failed text request leaves the row to the background loader.
+      }
       try {
         requestFit(ids, start);
       } catch {
