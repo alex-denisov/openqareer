@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { CandidateSnapshot } from '../data/candidateStore';
 import { CandidateStoreConflictError } from '../data/store/errors';
+import { applyBulletTranslation, pendingTranslation } from '../domain/experienceBulletLanguage';
 import {
   arithmeticFails,
   buildFactRewriteRequest,
@@ -13,7 +14,7 @@ import {
   type FactRewriteProposal,
   type FactRewriteRequest,
 } from '../domain/experienceFactRewrite';
-import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
+import { EMPTY_RESUME_DRAFT, type ResumePendingFactRewrite } from '../domain/resumeDraft';
 import type { ExperienceFactRewriter } from '../providers/experienceFactRewriter';
 import type { RouteDeps } from './deps';
 import {
@@ -26,8 +27,16 @@ import {
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
+/**
+ * The language of a place is not part of the digest: it is derived from the
+ * profile text that already is, and a proposal kept before 01.11 must still
+ * match so it is translated rather than written anew.
+ */
 function requestDigest(request: FactRewriteRequest): string {
-  return createHash('sha256').update(JSON.stringify(request)).digest('hex');
+  const places = request.places.map(({ language: _language, ...place }) => place);
+  return createHash('sha256')
+    .update(JSON.stringify({ ...request, places }))
+    .digest('hex');
 }
 
 function rewriteRequestOf(snapshot: CandidateSnapshot): FactRewriteRequest {
@@ -73,6 +82,49 @@ async function makeProposal(
   return checkFactRewrite(request, second ?? first, randomUUID());
 }
 
+interface KeptProposal {
+  readonly candidateId: string;
+  readonly pending: ResumePendingFactRewrite;
+  readonly request: FactRewriteRequest;
+}
+
+/**
+ * The kept proposal; one in a language other than the profile's is translated
+ * once and kept again under the same digest. On failure the candidate still
+ * sees it, and the next opening tries again.
+ */
+async function keptProposal(
+  deps: RouteDeps,
+  running: RunningRewrites,
+  { candidateId, pending, request }: KeptProposal,
+  httpRequest: FastifyRequest,
+): Promise<FactRewriteProposal> {
+  const { digest, proposal } = pending;
+  const translation = pendingTranslation(proposal, request);
+  const rewriter = deps.experienceFactRewriter;
+  if (!translation || !rewriter?.translate) return proposal;
+  const translated = await running.produce(`${candidateId}:${digest}:${proposal.id}`, async () => {
+    const output = await rewriter.translate?.(translation);
+    return output ? applyBulletTranslation(proposal, translation, output, randomUUID()) : null;
+  });
+  if (!translated) {
+    httpRequest.log.warn(
+      { bullets: translation.bullets.length },
+      'experience_fact_rewrite_translation_failed',
+    );
+    return proposal;
+  }
+  deps.candidateStore.saveFactRewriteProposal(
+    candidateId,
+    { digest, proposal: translated },
+    (latest) =>
+      digestOf(latest) === digest &&
+      latest.resume?.draft.factRewriteProposal?.proposal.id === proposal.id,
+  );
+  httpRequest.log.info({ proposalId: translated.id }, 'experience_fact_rewrite_translated');
+  return translated;
+}
+
 function signedInCandidate(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) {
     csrfError(request, reply);
@@ -96,8 +148,11 @@ function proposeHandler(running: RunningRewrites): Handler {
     }
     const digest = requestDigest(rewriteRequest);
     const stored = snapshot.resume?.draft.factRewriteProposal;
-    if (stored?.digest === digest) return reply200(request, { proposal: stored.proposal });
     const rewriter = deps.experienceFactRewriter;
+    if (stored?.digest === digest) {
+      const kept = { candidateId: candidate.id, pending: stored, request: rewriteRequest };
+      return reply200(request, { proposal: await keptProposal(deps, running, kept, request) });
+    }
     if (!rewriter) {
       return sendError(
         reply,

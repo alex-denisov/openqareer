@@ -1,4 +1,13 @@
 import OpenAI from 'openai';
+import type { z } from 'zod';
+import {
+  BULLET_TRANSLATION_INSTRUCTIONS,
+  BULLET_TRANSLATION_JSON_SCHEMA,
+  bulletTranslationOutputSchema,
+  bulletTranslationUserMessage,
+  type BulletTranslationOutput,
+  type BulletTranslationRequest,
+} from '../domain/experienceBulletLanguage';
 import {
   EXPERIENCE_FACT_REWRITE_INSTRUCTIONS,
   EXPERIENCE_FACT_REWRITE_JSON_SCHEMA,
@@ -23,6 +32,8 @@ export const FACT_REWRITE_STAGE_TIMEOUT_MS = 90_000;
 export interface ExperienceFactRewriter {
   /** Returns `null` when no stage produced a valid answer. */
   rewrite(request: FactRewriteRequest): Promise<FactRewriteModelOutput | null>;
+  /** Translates waiting bullets into their profile's language; `null` when no stage could. */
+  translate?(request: BulletTranslationRequest): Promise<BulletTranslationOutput | null>;
   readonly provenance?: Readonly<{ model: string; promptRevision: string }>;
 }
 
@@ -62,12 +73,38 @@ export class LlmExperienceFactRewriter implements ExperienceFactRewriter {
 
   async rewrite(request: FactRewriteRequest): Promise<FactRewriteModelOutput | null> {
     if (request.facts.length === 0 || request.places.length === 0) return null;
+    const content = await this.complete(
+      EXPERIENCE_FACT_REWRITE_INSTRUCTIONS,
+      factRewriteUserMessage(request),
+      'experience_fact_rewrite',
+      EXPERIENCE_FACT_REWRITE_JSON_SCHEMA,
+    );
+    return readModelOutput(content);
+  }
+
+  async translate(request: BulletTranslationRequest): Promise<BulletTranslationOutput | null> {
+    if (request.bullets.length === 0) return null;
+    const content = await this.complete(
+      BULLET_TRANSLATION_INSTRUCTIONS,
+      bulletTranslationUserMessage(request),
+      'experience_bullet_translation',
+      BULLET_TRANSLATION_JSON_SCHEMA,
+    );
+    return readJsonAnswer(content, bulletTranslationOutputSchema);
+  }
+
+  private async complete(
+    system: string,
+    user: string,
+    name: string,
+    schema: object,
+  ): Promise<string> {
     if (this.openRouter) assertOpenRouterModelForPersonalData(this.options.model);
     const response = await this.client.chat.completions.create({
       model: this.options.model,
       messages: [
-        { role: 'system', content: EXPERIENCE_FACT_REWRITE_INSTRUCTIONS },
-        { role: 'user', content: factRewriteUserMessage(request) },
+        { role: 'system', content: system },
+        { role: 'user', content: user },
       ],
       // Reasoning and the answer share this cap: 65 facts need room for both.
       max_completion_tokens: 16_000,
@@ -76,9 +113,9 @@ export class LlmExperienceFactRewriter implements ExperienceFactRewriter {
             response_format: {
               type: 'json_schema' as const,
               json_schema: {
-                name: 'experience_fact_rewrite',
+                name,
                 strict: true,
-                schema: EXPERIENCE_FACT_REWRITE_JSON_SCHEMA as unknown as Record<string, unknown>,
+                schema: schema as unknown as Record<string, unknown>,
               },
             },
           }
@@ -88,18 +125,20 @@ export class LlmExperienceFactRewriter implements ExperienceFactRewriter {
       // answer (glm 29.10: 4 535 of 6 000 thinking, then 12 bullets).
       ...(this.openRouter ? { reasoning: { max_tokens: 6_000 } } : {}),
     });
-    return readModelOutput(response.choices[0]?.message.content ?? '');
+    return response.choices[0]?.message.content ?? '';
   }
 }
 
 export function readModelOutput(content: string): FactRewriteModelOutput | null {
+  return readJsonAnswer(content, factRewriteModelOutputSchema);
+}
+
+function readJsonAnswer<T>(content: string, schema: z.ZodType<T>): T | null {
   const first = content.indexOf('{');
   const last = content.lastIndexOf('}');
   if (first < 0 || last <= first) return null;
   try {
-    const parsed = factRewriteModelOutputSchema.safeParse(
-      JSON.parse(content.slice(first, last + 1)),
-    );
+    const parsed = schema.safeParse(JSON.parse(content.slice(first, last + 1)));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
@@ -128,6 +167,20 @@ export class QueuedExperienceFactRewriter implements ExperienceFactRewriter {
           this.answered = stage;
           return output;
         }
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
+      } catch (error) {
+        this.onStageFailure(stage.provenance?.model ?? 'unknown', error);
+      }
+    }
+    return null;
+  }
+
+  async translate(request: BulletTranslationRequest): Promise<BulletTranslationOutput | null> {
+    for (const stage of this.stages) {
+      if (!stage.translate) continue;
+      try {
+        const output = await stage.translate(request);
+        if (output && output.bullets.length > 0) return output;
         this.onStageFailure(stage.provenance?.model ?? 'unknown', new Error('invalid_answer'));
       } catch (error) {
         this.onStageFailure(stage.provenance?.model ?? 'unknown', error);

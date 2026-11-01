@@ -15,6 +15,7 @@ const request: FactRewriteRequest = {
       title: 'Head',
       period: '2020 — 2023',
       existingBullets: [],
+      language: 'ru',
     },
   ],
   facts: [{ id: 'f-1', domain: 'outcome', statement: 'Тикетов стало на 40% меньше.' }],
@@ -43,6 +44,23 @@ describe('LlmExperienceFactRewriter', () => {
     const sent = create.mock.calls[0]![0];
     expect(sent.response_format.json_schema.strict).toBe(true);
     expect(sent.messages[0].content).toContain('пункты резюме');
+    expect(sent.messages[1].content).toContain('Тикетов стало на 40% меньше.');
+  });
+
+  it('translates waiting bullets with the translation instructions and strict JSON', async () => {
+    const translated = { bullets: [{ key: 'exp-1#0', text: 'Cut tickets by 40%.' }] };
+    const { create, client } = clientAnswering(JSON.stringify(translated));
+    const rewriter = new LlmExperienceFactRewriter({ apiKey: 'k', model: 'gpt-5.6-luna', client });
+    const bullet = {
+      key: 'exp-1#0',
+      language: 'en' as const,
+      text: 'Сократил тикеты на 40%.',
+      facts: ['Тикетов стало на 40% меньше.'],
+    };
+    await expect(rewriter.translate({ bullets: [bullet] })).resolves.toEqual(translated);
+    const sent = create.mock.calls[0]![0];
+    expect(sent.response_format.json_schema.name).toBe('experience_bullet_translation');
+    expect(sent.messages[0].content).toContain('Не усиливай');
     expect(sent.messages[1].content).toContain('Тикетов стало на 40% меньше.');
   });
 

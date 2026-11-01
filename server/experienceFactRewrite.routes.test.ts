@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { candidateAuthorization, createApp, stores } from './appTestHarness';
+import type { BulletTranslationRequest } from './domain/experienceBulletLanguage';
 import type { FactRewriteRequest } from './domain/experienceFactRewrite';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from './domain/resumeDraft';
 import type { ExperienceFactRewriter } from './providers/experienceFactRewriter';
@@ -34,7 +35,10 @@ function rewriterAnswering(): ExperienceFactRewriter & { calls: FactRewriteReque
   };
 }
 
-async function candidateWithFacts(rewriter?: ExperienceFactRewriter) {
+async function candidateWithFacts(
+  rewriter?: ExperienceFactRewriter,
+  title = 'Руководитель технической поддержки',
+) {
   const app = await createApp(undefined, undefined, undefined, {
     ...(rewriter ? { experienceFactRewriter: rewriter } : {}),
   });
@@ -52,7 +56,7 @@ async function candidateWithFacts(rewriter?: ExperienceFactRewriter) {
       {
         id: CLOUD,
         chronologyMemoryId: 'chronology-cloud',
-        title: 'Head of Technical Support',
+        title,
         employer: 'Enterprise Public Cloud Platform',
         startDate: '2020-03',
         endDate: '2023-04',
@@ -238,5 +242,66 @@ describe('consultant rewrite of conversation facts (29.10)', () => {
     });
     expect(refused.statusCode).toBe(400);
     expect(facts).toHaveLength(3);
+  });
+
+  it('translates a waiting Russian proposal into the English profile’s language, keeping its facts', async () => {
+    const english = 'Grew the support team from 4 to 11 engineers, tracking the workload of each.';
+    const rewrites: FactRewriteRequest[] = [];
+    const translations: BulletTranslationRequest[] = [];
+    const rewriter: ExperienceFactRewriter = {
+      rewrite: async (request) => {
+        rewrites.push(request);
+        const [team, load] = request.facts;
+        return {
+          places: [
+            {
+              experienceId: CLOUD,
+              bullets: [{ text: english, sourceFactIds: [team!.id, load!.id] }],
+            },
+          ],
+        };
+      },
+      translate: async (request) => {
+        translations.push(request);
+        return { bullets: request.bullets.map((bullet) => ({ key: bullet.key, text: english })) };
+      },
+    };
+    const { app, headers, candidateId, store } = await candidateWithFacts(
+      rewriter,
+      'Head of Technical Support',
+    );
+    const url = '/api/v1/candidate/experience-fact-rewrite';
+    await app.inject({ method: 'POST', url, headers });
+    // What the code before 01.11 left waiting: the same proposal, in Russian.
+    const { digest, proposal: fresh } =
+      store.getSnapshot(candidateId).resume!.draft.factRewriteProposal!;
+    const russian = {
+      ...fresh,
+      places: fresh.places.map((place) => ({
+        ...place,
+        bullets: place.bullets.map((bullet) => ({
+          ...bullet,
+          text: 'Расширил команду поддержки с 4 до 11 инженеров, следя за нагрузкой каждого.',
+        })),
+      })),
+    };
+    store.saveFactRewriteProposal(candidateId, { digest, proposal: russian }, () => true);
+    const response = await app.inject({ method: 'POST', url, headers });
+    const proposal = response.json().data.proposal;
+    expect(rewrites).toHaveLength(1);
+    expect(translations[0]!.bullets.map((bullet) => bullet.language)).toEqual(['en']);
+    expect(proposal.id).not.toBe(russian.id);
+    expect(proposal.places[0].bullets).toEqual([
+      {
+        text: english,
+        sourceFactIds: russian.places[0]!.bullets[0]!.sourceFactIds,
+      },
+    ]);
+    const stored = store.getSnapshot(candidateId).resume!.draft.factRewriteProposal!;
+    expect(stored.digest).toBe(digest);
+    expect(stored.proposal).toEqual(proposal);
+    const again = await app.inject({ method: 'POST', url, headers });
+    expect(again.json().data.proposal).toEqual(proposal);
+    expect(translations).toHaveLength(1);
   });
 });
