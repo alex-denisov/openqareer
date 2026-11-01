@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { vacancyFitPercent } from '../../../shared/vacancyFitPercent';
 import {
   ArrowSquareOut,
@@ -28,6 +28,7 @@ import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
 import { useVacancySummary } from './vacancyDetailApi';
 import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
 import { vacancyFitMark } from './vacancyFitModel';
+import { VacancyFitVerdicts } from './VacancyFitVerdicts';
 
 interface VacancyScreenDetailRowProps {
   readonly onOpenArchive?: () => void;
@@ -320,6 +321,11 @@ function requirementsStatusText(reading: boolean, fromFit: boolean): string {
 // G5 W2: while the fit's requirements load, legacy matcher points (sentences such as «Функция
 // роли и уровень совпадают…») must not flash as chips.
 const NO_CHIPS: ReturnType<typeof legacySkillChips> = { confirmed: [], unconfirmed: [] };
+const legacyOf = (
+  explanation: MatchedVacancyItem['explanation'],
+  cluster: MatchedVacancyItem['cluster'],
+) =>
+  extractVacancyRequirements(explanation.matchingPoints, explanation.missingPoints, cluster.skills);
 const legacyChips = (legacy: ReturnType<typeof extractVacancyRequirements>) =>
   legacySkillChips(legacy.skillMatching, legacy.skillMissing);
 
@@ -344,7 +350,12 @@ function RequirementsHeading({
 }
 
 function chipCount(chips: ReturnType<typeof legacySkillChips>): number {
-  return chips.confirmed.length + chips.unconfirmed.length + (chips.stated?.length ?? 0);
+  return (
+    chips.confirmed.length +
+    chips.unconfirmed.length +
+    (chips.stated?.length ?? 0) +
+    (chips.partial?.length ?? 0)
+  );
 }
 
 /** Condition coverage where the vacancy's own city counts when «Гео» matches (29.10). */
@@ -370,12 +381,8 @@ export function VacancyScreenRequirementChips({
   const readingRequirements = useFitDetail(cluster.id, fitView);
   const fromFit = fitRequirementChips(fitView);
   usePublishQuizOffer(cluster, fitView);
-  const legacy = extractVacancyRequirements(
-    explanation.matchingPoints,
-    explanation.missingPoints,
-    cluster.skills,
-  );
-  const chips = fromFit ?? (readingRequirements ? NO_CHIPS : legacyChips(legacy));
+  const chips =
+    fromFit ?? (readingRequirements ? NO_CHIPS : legacyChips(legacyOf(explanation, cluster)));
   const hasRequirements = chipCount(chips) > 0;
   // 28.10 mockup: with a percent the card lists every requirement it counted, under one count.
   const counted = vacancyFitPercent(fitView) === null ? null : fitView!.result!.coverage.total;
@@ -390,6 +397,7 @@ export function VacancyScreenRequirementChips({
           matching={chips.confirmed}
           missing={chips.unconfirmed}
           stated={chips.stated}
+          partial={chips.partial}
           quotes={chips.quotes}
           cluster={cluster}
           onAddToProfile={onAddToProfile}
@@ -399,19 +407,38 @@ export function VacancyScreenRequirementChips({
           {requirementsStatusText(readingRequirements, Boolean(fromFit))}
         </p>
       )}
-      <p className="vacancies-screen-requirements-note">
-        <RequirementConditions chips={chips} coverage={geoCover(fitView, cluster, explanation)} />
-        {counted === null
-          ? 'Из описания вакансии и тегов источника. Зелёные подтверждаются профилем.'
-          : FIT_CHIPS_CAPTION}
-      </p>
+      <RequirementsNote
+        chips={chips}
+        coverage={geoCover(fitView, cluster, explanation)}
+        counted={counted}
+      />
+      <VacancyFitVerdicts view={fitView} />
     </section>
+  );
+}
+
+function RequirementsNote({
+  chips,
+  coverage,
+  counted,
+}: {
+  readonly chips: { readonly conditions?: readonly string[] };
+  readonly coverage?: { readonly matched: number; readonly total: number };
+  readonly counted: number | null;
+}) {
+  return (
+    <p className="vacancies-screen-requirements-note">
+      <RequirementConditions chips={chips} coverage={coverage} />
+      {counted === null
+        ? 'Из описания вакансии и тегов источника. Зелёные подтверждаются профилем.'
+        : FIT_CHIPS_CAPTION}
+    </p>
   );
 }
 
 /** The caption under the full list of counted requirements (28.10 mockup, server data model). */
 export const FIT_CHIPS_CAPTION =
-  'Все требования из текста вакансии, по ним посчитан процент. Зелёные подтверждены проверкой навыков, жёлтые указаны в профиле без проверки.';
+  'Все требования из текста вакансии, по ним посчитан процент: есть в профиле — целиком, частично — наполовину.';
 
 /**
  * Every counted requirement, never «Ещё N» (owner 29.10): yellow — stated in the profile without
@@ -421,6 +448,7 @@ function VacancySkillChips({
   matching,
   missing,
   stated = [],
+  partial = [],
   quotes,
   cluster,
   onAddToProfile,
@@ -428,36 +456,81 @@ function VacancySkillChips({
   readonly matching: readonly string[];
   readonly missing: readonly string[];
   readonly stated?: readonly string[];
+  readonly partial?: readonly string[];
   readonly quotes?: Readonly<Record<string, string>>;
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
+  // 02.11: states are text, not colour only — each group is named and counted; missing first (29.10).
   return (
-    <ul className="vacancies-screen-skill-chips">
-      {stated.map((skill) => (
-        <li className="vacancies-screen-skill-chip is-stated" key={`stated-${skill}`}>
-          <Question size={14} aria-hidden="true" />
-          <span className="career-sr-only">Указано в профиле, не проверено: </span>
-          <span title={quotes?.[skill]}>{skill}</span>
-        </li>
-      ))}
-      {missing.map((skill) => (
-        <MissingVacancySkillChip
-          key={`unconfirmed-${skill}`}
-          skill={skill}
-          quote={quotes?.[skill]}
-          cluster={cluster}
-          onAddToProfile={onAddToProfile}
-        />
-      ))}
-      {matching.map((skill) => (
-        <li className="vacancies-screen-skill-chip is-confirmed" key={`confirmed-${skill}`}>
+    <div className="vacancies-screen-chip-groups">
+      <ChipGroup title="Нет в профиле" count={missing.length}>
+        {missing.map((skill) => (
+          <MissingVacancySkillChip
+            key={`unconfirmed-${skill}`}
+            skill={skill}
+            quote={quotes?.[skill]}
+            cluster={cluster}
+            onAddToProfile={onAddToProfile}
+          />
+        ))}
+      </ChipGroup>
+      <ChipGroup title="Частично" count={partial.length}>
+        {partial.map((skill) => (
+          <li className="vacancies-screen-skill-chip is-stated" key={`partial-${skill}`}>
+            <Question size={14} aria-hidden="true" />
+            <span title={quotes?.[skill]}>{skill}</span>
+          </li>
+        ))}
+      </ChipGroup>
+      <MetChipGroup matching={matching} stated={stated} quotes={quotes} />
+    </div>
+  );
+}
+
+/** «Есть в профиле»: stated and checked alike count in full; a check is a tag (01.11). */
+function MetChipGroup({
+  matching,
+  stated,
+  quotes,
+}: {
+  readonly matching: readonly string[];
+  readonly stated: readonly string[];
+  readonly quotes?: Readonly<Record<string, string>>;
+}) {
+  const met = [...matching, ...stated];
+  return (
+    <ChipGroup title="Есть в профиле" count={met.length}>
+      {met.map((skill) => (
+        <li className="vacancies-screen-skill-chip is-confirmed" key={`met-${skill}`}>
           <CheckCircle size={14} aria-hidden="true" />
-          <span className="career-sr-only">Подтверждено проверкой: </span>
           <span title={quotes?.[skill]}>{skill}</span>
+          {matching.includes(skill) ? (
+            <span className="vacancies-screen-chip-tag">проверено</span>
+          ) : null}
         </li>
       ))}
-    </ul>
+    </ChipGroup>
+  );
+}
+
+function ChipGroup({
+  title,
+  count,
+  children,
+}: {
+  readonly title: string;
+  readonly count: number;
+  readonly children: ReactNode;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="vacancies-screen-chip-group">
+      <p className="vacancies-screen-chip-group-title">
+        {title} · <span className="num">{count}</span>
+      </p>
+      <ul className="vacancies-screen-skill-chips">{children}</ul>
+    </div>
   );
 }
 

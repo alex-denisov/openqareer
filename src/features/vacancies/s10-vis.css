@@ -1212,3 +1212,20 @@
   border-radius: var(--career-radius-sm);
   background: var(--career-surface);
 }
+
+/* 02.11: met / partial / missing are named groups, not colour only. */
+.vacancies-screen-chip-groups {
+  display: grid;
+  gap: var(--career-space-3);
+  inline-size: 100%;
+}
+.vacancies-screen-chip-group-title {
+  margin: 0 0 var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+.vacancies-screen-chip-tag {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
