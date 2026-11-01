@@ -23,6 +23,7 @@ import {
   Translate,
   UserCircle,
   CaretRight,
+  ClockCounterClockwise,
 } from '@phosphor-icons/react';
 import { useCandidateMediaSrc } from './candidateMediaSrc';
 import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './ProfileMobileElements';
@@ -299,6 +300,12 @@ function ProfileMobileReadiness(props: HomeProps) {
         detail="Мастер-резюме и снимки"
         value={props.versionCount ?? '—'}
         onClick={() => props.open({ page: 'docs' })}
+      />
+      <ProfileMobileRow
+        icon={ClockCounterClockwise}
+        title="История изменений"
+        detail="Кто, когда и что поменял"
+        onClick={() => props.open({ page: 'history' })}
       />
     </ProfileMobileGroup>
   );

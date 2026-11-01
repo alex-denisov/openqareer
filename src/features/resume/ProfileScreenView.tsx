@@ -32,6 +32,7 @@ import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
 import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
 import { ProfileResumeVersions, ProfileReviewAndVersions } from './ProfileReviewAndVersions';
+import { ProfileHistorySection } from './ProfileHistory';
 import { getRelocationQuestionnaire } from '../relocation/relocationApi';
 import type { ProfileFocusRequest, ProfileMobileScene } from './profileMobileNavigation';
 import { ProfileEmptyStart } from './ProfileEmptyStart';
@@ -455,6 +456,7 @@ function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
             {desktopProfileLayout ? (
               <ProfileResumeVersions draft={draft} memory={memory} view={props.view} />
             ) : null}
+            <ProfileHistorySection onChanged={props.onManualExperienceFactAdded} />
           </div>
         </div>
       )}

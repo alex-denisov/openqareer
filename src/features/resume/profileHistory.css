@@ -1,0 +1,120 @@
+.profile-history {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.profile-history__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-history__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--career-space-1) var(--career-space-3);
+  padding-block: var(--career-space-3);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+}
+
+.profile-history__row:last-child {
+  border-block-end: 0;
+}
+
+.profile-history__meta,
+.profile-history__target,
+.profile-history__change,
+.profile-history__error {
+  grid-column: 1;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.profile-history__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.profile-history__actor {
+  color: var(--career-text);
+  font-weight: 600;
+}
+
+.profile-history__actor.is-consultant {
+  color: var(--career-accent);
+}
+
+.profile-history__reverted {
+  padding-inline: var(--career-space-2);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-muted, var(--career-line));
+  color: var(--career-text-soft);
+}
+
+.profile-history__target {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.profile-history__change {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.profile-history__change del {
+  color: var(--career-text-soft);
+}
+
+.profile-history__change ins {
+  text-decoration: none;
+}
+
+.profile-history__error {
+  color: var(--career-danger, var(--career-text));
+  font-size: var(--career-text-xs);
+}
+
+.profile-history__revert {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  min-block-size: 44px;
+}
+
+.profile-history__more {
+  justify-self: start;
+  min-block-size: 44px;
+}
+
+.profile-history__empty {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-2);
+  padding-block: var(--career-space-3);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.profile-history__empty p {
+  margin: 0;
+}
+
+@media (max-width: 767px) {
+  .profile-history__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile-history__revert {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+}

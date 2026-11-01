@@ -1,4 +1,9 @@
 import { useRef, useState } from 'react';
+import {
+  ConfirmExperienceButton,
+  experienceConfirmation,
+  experienceConfirmationLabel,
+} from './ExperienceConfirmation';
 import { useFactProvenance } from './ProfileProvenanceChip';
 import { provenanceSourceValue } from './profileProvenance';
 import { Briefcase, PencilSimple, Plus, Question } from '@phosphor-icons/react';
@@ -74,17 +79,13 @@ function TeamSizeWarnline({ draft }: { readonly draft: ExperienceProps['draft'] 
 function MobileExperienceFacts({
   entry,
   memory,
+  onConfirmed,
 }: {
   readonly entry: ResumeExperienceInput;
   readonly memory: ProfileMobileDataProps['memory'];
+  readonly onConfirmed?: () => Promise<void> | void;
 }) {
-  const linked = entry.bulletMemoryIds.flatMap((id) => memory.filter((fact) => fact.id === id));
-  const confirmed =
-    linked.length > 0 &&
-    linked.length === entry.bulletMemoryIds.length &&
-    linked.every(
-      (fact) => fact.status === 'confirmed' && fact.confidence === 'candidate-confirmed',
-    );
+  const confirmation = experienceConfirmation(entry, memory);
   const workplace =
     entry.workplaceType === 'on_site'
       ? 'офис'
@@ -101,7 +102,16 @@ function MobileExperienceFacts({
       </ProfileMobileKeyValue>
       <ProfileMobileKeyValue label="Источник">{source}</ProfileMobileKeyValue>
       <ProfileMobileKeyValue label="Подтверждено">
-        {confirmed ? 'вами' : 'не подтверждено вами'}
+        {confirmation.confirmed ? (
+          experienceConfirmationLabel(confirmation).replace('Подтверждено вами', 'вами')
+        ) : (
+          <>
+            не подтверждено вами
+            {entry.bulletMemoryIds.length > 0 ? (
+              <ConfirmExperienceButton experienceId={entry.id} onConfirmed={onConfirmed} />
+            ) : null}
+          </>
+        )}
       </ProfileMobileKeyValue>
       <ProfileMobileKeyValue label="Размер команды">
         {entry.teamSize ? (
@@ -125,7 +135,11 @@ export function ProfileMobileExperienceDetail(props: ExperienceProps) {
         <p>{entry.title || 'Должность не указана'}</p>
         <p className="num">{periodLabel(entry)}</p>
       </div>
-      <MobileExperienceFacts entry={entry} memory={props.memory} />
+      <MobileExperienceFacts
+        entry={entry}
+        memory={props.memory}
+        onConfirmed={props.onManualExperienceFactAdded}
+      />
       {bullets.length ? (
         <ProfileMobileGroup title="Достижения">
           {bullets.map((bullet, index) => (

@@ -1,0 +1,127 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CoachApiError } from '../coach/apiClient';
+import type { CandidateMemory } from '../coach/coachApi';
+import { experienceConfirmation, experienceConfirmationLabel } from './ExperienceConfirmation';
+import { ProfileHistoryList } from './ProfileHistory';
+import type { ProfileHistoryItem } from './profileHistoryApi';
+
+const api = vi.hoisted(() => ({
+  getProfileHistory: vi.fn(),
+  revertProfileHistoryEntry: vi.fn(),
+  confirmProfileExperience: vi.fn(),
+}));
+vi.mock('./profileHistoryApi', () => api);
+
+const cleanup: Array<() => void> = [];
+afterEach(() => {
+  cleanup.splice(0).forEach((dispose) => dispose());
+  vi.clearAllMocks();
+});
+
+const entry: ProfileHistoryItem = {
+  id: 'change-1',
+  actor: 'consultant',
+  section: 'experience',
+  kind: 'value',
+  itemId: 'exp-1',
+  label: 'Lead · Acme',
+  previousText: 'Ускорил релизы.',
+  appliedText: 'Сократил время релиза с недели до дня.',
+  createdAt: '2026-11-01T09:30:00.000Z',
+  revertedAt: null,
+};
+
+async function render() {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => root.render(<ProfileHistoryList />));
+  cleanup.push(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+  return container;
+}
+
+describe('ProfileHistoryList', () => {
+  it('shows the empty state when nothing changed yet', async () => {
+    api.getProfileHistory.mockResolvedValue({ entries: [], total: 0, page: 0, pageSize: 20 });
+    const container = await render();
+    expect(container.textContent).toContain('Изменений пока нет');
+  });
+
+  it('shows who, where and «было → стало», and loads the next page of 20', async () => {
+    api.getProfileHistory.mockResolvedValueOnce({
+      entries: [entry],
+      total: 21,
+      page: 0,
+      pageSize: 20,
+    });
+    api.getProfileHistory.mockResolvedValueOnce({
+      entries: [{ ...entry, id: 'change-2', actor: 'candidate' }],
+      total: 21,
+      page: 1,
+      pageSize: 20,
+    });
+    const container = await render();
+    expect(container.textContent).toContain('Консультант');
+    expect(container.textContent).toContain('Опыт · Lead · Acme');
+    expect(container.querySelector('del')?.textContent).toBe('Ускорил релизы.');
+    const more = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Показать ещё'),
+    );
+    await act(async () => more?.click());
+    expect(api.getProfileHistory).toHaveBeenLastCalledWith(1, undefined);
+    expect(container.querySelectorAll('[data-testid="profile-history-row"]')).toHaveLength(2);
+  });
+
+  it('says why «Вернуть» was refused when the value changed since', async () => {
+    api.getProfileHistory.mockResolvedValue({ entries: [entry], total: 1, page: 0, pageSize: 20 });
+    api.revertProfileHistoryEntry.mockRejectedValue(
+      new CoachApiError('С тех пор это место изменилось.', 'profile_change_conflict', false),
+    );
+    const container = await render();
+    const revert = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Вернуть'),
+    );
+    await act(async () => revert?.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('изменилось');
+  });
+});
+
+describe('experience confirmation label', () => {
+  const fact = (id: string, extra: Partial<CandidateMemory> = {}): CandidateMemory => ({
+    id,
+    kind: 'fact',
+    domain: 'outcome',
+    statement: id,
+    confidence: 'candidate-confirmed',
+    sourceMessageIds: [],
+    sensitive: false,
+    status: 'confirmed',
+    ...extra,
+  });
+  const place = {
+    id: 'exp-1',
+    chronologyMemoryId: 'chrono',
+    current: false,
+    bulletMemoryIds: ['a', 'b'],
+  };
+
+  it('reads «Подтверждено вами · с консультантом DD.MM» after an accept', () => {
+    const memory = [fact('a', { consultantConfirmedAt: '2026-11-01T09:30:00.000Z' }), fact('b')];
+    expect(experienceConfirmationLabel(experienceConfirmation(place, memory))).toBe(
+      'Подтверждено вами · с консультантом 01.11',
+    );
+  });
+
+  it('stays unconfirmed while any bullet is only reported', () => {
+    const memory = [fact('a'), fact('b', { confidence: 'candidate-reported' })];
+    expect(experienceConfirmationLabel(experienceConfirmation(place, memory))).toBe(
+      'Не подтверждено вами',
+    );
+  });
+});

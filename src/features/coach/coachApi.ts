@@ -118,6 +118,8 @@ export interface CandidateMemory {
   createdAt?: string;
   updatedAt?: string;
   provenance?: FactProvenance;
+  /** When the candidate confirmed it by accepting a consultant edit. */
+  consultantConfirmedAt?: string;
 }
 
 interface ProductCaseSubmission {
