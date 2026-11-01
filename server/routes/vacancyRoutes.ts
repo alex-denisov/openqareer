@@ -1,3 +1,4 @@
+import { loadDetailText } from './vacancyDetailText';
 import { registerResumeBuilderRoutes } from './resumeBuilderRoutes';
 import { summarizeRoleSample } from './roleSampleSummary';
 import { catalogSourceView } from '../../shared/catalogSources';
@@ -594,7 +595,7 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
   const sourceId = clusterId.startsWith('cluster-')
     ? clusterId.slice('cluster-'.length)
     : clusterId;
-  const loaded = await multiSourceEngine.loadVacancyDescription(sourceId);
+  const loaded = await loadDetailText(multiSourceEngine, sourceId);
   const full = loaded.vacancy ?? multiSourceEngine.getVacancy?.(sourceId);
   if (!cluster && !full) {
     if (multiSourceEngine.isKnownVacancyGone(clusterId)) {
@@ -618,6 +619,12 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
       summary: cluster?.descriptionSummary?.trim() ?? '',
       truncated,
       ...(loaded.unavailable ? { unavailable: true } : {}),
+      // 02.11: the worker reads this card next; the card shows «загружаем» and asks again.
+      ...(loaded.pending && !description ? { pending: true } : {}),
+      // 02.11: hh answered «работодатель ограничил доступ»; the card says so.
+      ...((loaded.restricted || full?.descriptionHidden) && !full?.fullDescription?.trim()
+        ? { textHidden: true }
+        : {}),
       skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),
       responsibilities: full?.responsibilities ?? [],
     },

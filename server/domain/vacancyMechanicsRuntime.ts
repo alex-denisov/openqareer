@@ -1,7 +1,7 @@
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sqliteBusyTimeout';
 import { DatabaseSync } from 'node:sqlite';
-import type { VacancyFitFailure, VacancyFitView } from '../../shared/vacancyFit';
+import type { VacancyFitFailure, VacancyFitResult, VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
@@ -41,6 +41,12 @@ function assessmentFailure(outcome: AssessmentOutcome): string {
     : outcome.invalid
       ? 'assessment_model_invalid'
       : 'assessment_model_unavailable';
+}
+/** Every requirement of the current extraction has a verdict in the result (none known: nothing to check). */
+function assessesAll(result: VacancyFitResult, requirements: readonly { readonly id: string }[] | undefined): boolean {
+  if (!requirements?.length || result.status !== 'assessed') return true;
+  const assessed = new Set(result.assessments.map((item) => item.requirementId));
+  return requirements.every((item) => assessed.has(item.id));
 }
 function fitFailure(lastError: string | null | undefined): VacancyFitFailure {
   return (lastError && FIT_FAILURES[lastError]) || 'other';
@@ -84,15 +90,17 @@ export class VacancyMechanicsRuntime {
     // B562-r: a version bump keeps the known percent on screen until the new result is ready.
     // A failed refresh keeps it too (29.10): «не посчитан» over a known percent broke the order.
     const previous = current ? undefined : this.fit.getPreviousCache(resolved);
-    const result = current ?? previous;
+    // 02.11 owner: a result that has no verdict for a requirement read from the current text is not
+    // shown — its percent was 100 % while the card listed the new requirements as «нет в профиле».
+    const result = [current, previous].find((item) => item && assessesAll(item, extracted?.requirements));
     const state = !input.description.trim()
       ? 'no_description'
       // 01.11: an older extractor's «none» is not the verdict while the model still reads the text.
       : extracted?.status === 'no_requirements' && extracted.extractorVersion === VACANCY_REQUIREMENTS_EXTRACTOR_VERSION
         ? 'no_requirements'
-        : current
+        : result && result === current
           ? 'ready'
-          : previous
+          : result
             ? 'refreshing'
             : queued === 'failed'
               ? 'failed'

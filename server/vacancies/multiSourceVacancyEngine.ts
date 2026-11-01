@@ -1242,7 +1242,7 @@ export class MultiSourceVacancyEngine {
     }
     return hidden
       ? { vacancy: updated, unavailable: true, status: 'skipped', restricted: true }
-      : { vacancy: updated, unavailable: true, status: 'failed' };
+      : { vacancy: updated, unavailable: true, status: 'failed', restricted: true };
   }
 
   private async loadAndStoreVacancyDescription(
