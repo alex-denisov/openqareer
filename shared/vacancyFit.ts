@@ -24,8 +24,8 @@ export interface VacancyFitPoint {
 }
 export type VacancyFitFailure =
   'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'other';
-/** 01.11: the whole profile is evidence; met counts 1 stated or checked, partial 0.5. */
-export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-5';
+/** 02.11: tag-only evidence partial, a quote backs ≤ 2 requirements, contradicted conditions block the row. */
+export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-6';
 /** Shown while the current version is calculated, so a version bump never hides a known percent. */
 export const LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS: readonly string[] = [
   'evidence-coverage-4',
@@ -59,6 +59,7 @@ export interface VacancyFitRequirementAssessment {
   /** Verification label only (01.11): matched by a fact a skill check wrote. It no longer changes the credit. */
   readonly checked?: boolean;
 }
+export interface VacancyFitConditionBlock { readonly requirementId: string; readonly text: string; readonly quote: string }
 export interface VacancyFitResult {
   readonly candidateId: string;
   readonly vacancyId: string;
@@ -90,6 +91,8 @@ export interface VacancyFitResult {
     readonly partial?: number;
   };
   readonly assessments: readonly VacancyFitRequirementAssessment[];
+  /** 02.11: work authorisation or country-restricted remote a quoted profile fact contradicts. */
+  readonly conditionBlocks?: readonly VacancyFitConditionBlock[];
   readonly reason:
     | 'assessed'
     | 'blocked_gate'

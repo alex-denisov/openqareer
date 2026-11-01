@@ -83,3 +83,20 @@ export function vacancyFitConfidenceHint(view: VacancyFitView | undefined): stri
   if (total >= FIT_CONFIDENT_REQUIREMENTS) return null;
   return `Посчитано всего по ${total} требованиям из текста вакансии — процент приблизительный.`;
 }
+
+export interface VacancyFitConditionFlag {
+  readonly short: string;
+  readonly text: string;
+}
+
+/** 02.11: a condition a profile fact contradicts; the percent stays a skill-coverage number. */
+export function vacancyFitConditionBlock(
+  view: VacancyFitView | undefined,
+): VacancyFitConditionFlag | null {
+  const blocks = view?.result?.conditionBlocks ?? [];
+  if (blocks.length === 0) return null;
+  const short = 'Не подходит по условиям';
+  const conditions = blocks.map((block) => block.text).join('; ');
+  const quotes = blocks.map((block) => `«${block.quote}»`).join(', ');
+  return { short, text: `${short}: ${conditions}. В профиле: ${quotes}.` };
+}

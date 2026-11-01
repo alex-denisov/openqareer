@@ -44,6 +44,32 @@ describe('fitRequirementChips', () => {
     });
   });
 
+  it('lists every counted skill requirement, so the count and the chips agree (02.11)', () => {
+    const long = 'Системное мышление и умение выстраивать процессы на уровне всей компании';
+    const view = {
+      state: 'ready',
+      requirements: [
+        { ...requirement('a', 'Kafka streams'), label: 'Kafka', skill: true },
+        { ...requirement('b', 'Kafka Connect'), label: 'Kafka', skill: true },
+        { ...requirement('c', long), skill: true },
+      ],
+      result: { assessments: [] },
+    } as unknown as VacancyFitView;
+    const chips = fitRequirementChips(view)!;
+    expect(chips.unconfirmed).toHaveLength(3);
+    expect(chips.unconfirmed[2].length).toBeLessThanOrEqual(41);
+  });
+
+  it('while no requirement has a short name yet, shows no sentence chips (B510 pending state)', () => {
+    const long = 'Системное мышление и умение выстраивать процессы на уровне всей компании';
+    const view = {
+      state: 'ready',
+      requirements: [requirement('a', long), requirement('b', `${long} и команды`)],
+      result: { assessments: [] },
+    } as unknown as VacancyFitView;
+    expect(fitRequirementChips(view)?.unconfirmed).toEqual([]);
+  });
+
   it('keeps partial matches apart from stated ones, so the card can tell them apart (02.11)', () => {
     const view = {
       state: 'ready',
@@ -75,22 +101,27 @@ describe('fitRequirementChips', () => {
     } as unknown as VacancyFitView;
     expect(fitRequirementChips(view)).toEqual({
       confirmed: [],
-      unconfirmed: ['Kafka'],
+      // 02.11: the unnamed sentence is counted, so it shows shortened, the full text in the tooltip.
+      unconfirmed: ['Kafka', 'Proven track record as a senior enginee…'],
       stated: [],
-      quotes: { Kafka: 'Strong Kafka skills in event-driven systems at scale' },
+      quotes: {
+        Kafka: 'Strong Kafka skills in event-driven systems at scale',
+        'Proven track record as a senior enginee…': long,
+      },
     });
   });
 
-  it('drops duplicate requirement texts', () => {
+  // 02.11: both are counted by the percent, so both are listed (was: duplicate dropped).
+  it('keeps a repeated requirement text as its own chip', () => {
     const view: VacancyFitView = {
       state: 'ready',
       requirements: [requirement('a', 'Kafka'), requirement('b', 'kafka')],
     };
     expect(fitRequirementChips(view)).toEqual({
       confirmed: [],
-      unconfirmed: ['Kafka'],
+      unconfirmed: ['Kafka', 'kafka · 2'],
       stated: [],
-      quotes: {},
+      quotes: { 'kafka · 2': 'kafka' },
     });
   });
 });

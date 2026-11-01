@@ -7,6 +7,8 @@ import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { evaluateVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { extractVacancyRequirements, vacancyDescriptionHash } from './vacancyRequirements';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS } from '../../shared/vacancyFit';
+/** 02.11: one quote backs at most two requirements, so the fake model cites a distinct one each. */
+const DISTINCT_QUOTES = ['services', 'ervices', 'rvices'];
 
 function input(candidateId = 'candidate-secret-owner'): VacancyFitInput {
   return {
@@ -195,7 +197,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     } };
     const complete = vi.fn(async (request: BulkLlmInput) => {
       const { requirements } = JSON.parse(request.input) as { requirements: { id: string }[] };
-      return { content: JSON.stringify({ assessments: requirements.map(({ id }) => ({ requirementId: id, status: 'matched', evidence: [{ factId: 'private-fact', quote: 'TypeScript services' }] })) }) };
+      return { content: JSON.stringify({ assessments: requirements.map(({ id }, i) => ({ requirementId: id, status: 'matched', evidence: [{ factId: 'private-fact', quote: DISTINCT_QUOTES[i % 3] }] })) }) };
     });
     const client = fitClient(complete);
     runtime.enqueue(source);
@@ -404,7 +406,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     const runtime = setup(); const source = input();
     const client = fitClient(async (request) => {
       const ids = (JSON.parse(request.input) as { requirements: { id: string }[] }).requirements.map((item) => item.id);
-      return { content: JSON.stringify({ assessments: ids.map((requirementId) => ({ requirementId, status: 'matched', evidence: [{ factId: 'private-fact', quote: 'TypeScript' }] })) }) };
+      return { content: JSON.stringify({ assessments: ids.map((requirementId, i) => ({ requirementId, status: 'matched', evidence: [{ factId: 'private-fact', quote: DISTINCT_QUOTES[i % 3] }] })) }) };
     });
     runtime.enqueue(source);
     await runtime.runNext(client);

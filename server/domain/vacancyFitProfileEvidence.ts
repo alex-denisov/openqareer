@@ -6,8 +6,12 @@ import { isVacancyFitEvidence, type VacancyFitFact } from './vacancyFit';
 /** Profile sections sent besides dossier facts; the model call stays bounded (01.11). */
 export const MAX_PROFILE_EVIDENCE_FACTS = 120;
 export const MAX_PROFILE_EVIDENCE_CHARS = 600;
+/** A place carries its description and bullets (02.11: P&L lived there and was never sent). */
+export const MAX_EXPERIENCE_EVIDENCE_CHARS = 1500;
 
 type Section =
+  | 'location'
+  | 'achievement'
   | 'headline'
   | 'about'
   | 'experience'
@@ -18,8 +22,8 @@ type Section =
   | 'language';
 type EvidenceSnapshot = Pick<CandidateSnapshot, 'memory' | 'resume'>;
 
-const clean = (text: string): string =>
-  minimizeModelText(text).replace(/\s+/gu, ' ').trim().slice(0, MAX_PROFILE_EVIDENCE_CHARS).trim();
+const clean = (text: string, limit = MAX_PROFILE_EVIDENCE_CHARS): string =>
+  minimizeModelText(text).replace(/\s+/gu, ' ').trim().slice(0, limit).trim();
 const joined = (parts: readonly (string | number | undefined | null)[], separator = ', '): string =>
   parts
     .map((part) => (part === undefined || part === null ? '' : String(part).trim()))
@@ -32,7 +36,10 @@ function profileFact(
   itemId: string | undefined,
   text: string,
 ): VacancyFitFact | null {
-  const statement = clean(text);
+  const statement = clean(
+    text,
+    section === 'experience' ? MAX_EXPERIENCE_EVIDENCE_CHARS : undefined,
+  );
   if (!statement) return null;
   const id = itemId ? `profile:${section}:${itemId}` : `profile:${section}`;
   // The resume draft is the candidate's own entry: confirmed by authorship, cited by its section.
@@ -55,15 +62,29 @@ const period = (start?: string, end?: string, current?: boolean): string =>
 const skillsOf = (skills?: readonly string[]): string | undefined =>
   skills?.length ? `навыки: ${skills.join(', ')}` : undefined;
 
+/** Memory text by id, whatever its status: the resume draft points at it as the candidate's own entry. */
+type MemoryText = (id: string | undefined) => string | undefined;
+
 /** Places and projects: what the candidate did, where and with which skills. */
-function workSections(draft: ResumeDraft): readonly SectionText[] {
+function workSections(draft: ResumeDraft, text: MemoryText): readonly SectionText[] {
   return [
     ...draft.experience.map((item): SectionText => {
       const role = joined([item.title, item.employer], ' — ');
       const team = item.teamSize ? `команда ${item.teamSize}` : undefined;
       const when = period(item.startDate, item.endDate, item.current);
-      return ['experience', item.id, joined([role, when, team, skillsOf(item.skills)], '; ')];
+      // What was done comes before the tags, so the length bound cuts tags, not P&L (02.11).
+      const done = [text(item.descriptionMemoryId), ...(item.bulletMemoryIds ?? []).map(text)];
+      return [
+        'experience',
+        item.id,
+        joined([role, when, team, ...done, skillsOf(item.skills)], '; '),
+      ];
     }),
+    ...(draft.achievements ?? []).map((item): SectionText => [
+      'achievement',
+      item.id,
+      joined([item.title, item.role, item.issuer, item.date, item.description], '; '),
+    ]),
     ...(draft.projects ?? []).map((item): SectionText => [
       'project',
       item.id,
@@ -100,8 +121,11 @@ function credentialSections(draft: ResumeDraft): readonly SectionText[] {
   ];
 }
 
-function draftSections(draft: ResumeDraft): readonly SectionText[] {
+function draftSections(draft: ResumeDraft, text: MemoryText): readonly SectionText[] {
+  const location = draft.candidate.contact?.location;
   return [
+    // Conditions (work authorisation, country-restricted remote) are judged against where they live.
+    ['location', undefined, location ? `Местоположение: ${location}` : ''],
     ['headline', undefined, draft.candidate.headline ?? ''],
     ['about', undefined, draft.candidate.about ?? ''],
     ...(draft.skills ?? []).map((item): SectionText => [
@@ -109,7 +133,7 @@ function draftSections(draft: ResumeDraft): readonly SectionText[] {
       item.id,
       joined([item.name, item.level], ' — '),
     ]),
-    ...workSections(draft),
+    ...workSections(draft, text),
     ...credentialSections(draft),
   ];
 }
@@ -133,7 +157,9 @@ export function vacancyFitEvidenceFacts(
     }));
   const draft = snapshot.resume?.draft;
   const seen = new Set<string>();
-  const profile = (draft ? draftSections(draft) : [])
+  const byId = new Map(snapshot.memory.map((fact) => [fact.id, fact.statement]));
+  const text: MemoryText = (id) => (id ? byId.get(id) : undefined);
+  const profile = (draft ? draftSections(draft, text) : [])
     .map(([section, itemId, text]) => profileFact(candidateId, section, itemId, text))
     .filter((fact): fact is VacancyFitFact => {
       if (!fact || seen.has(fact.id)) return false;

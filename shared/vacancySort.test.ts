@@ -53,3 +53,21 @@ describe('vacancy sort (owner 29.10)', () => {
     ]);
   });
 });
+
+describe('a contradicted condition ranks the row after unblocked ones (02.11)', () => {
+  const blocked = (percent: number): VacancyFitView => {
+    const view = counted(percent);
+    return {
+      ...view,
+      result: {
+        ...view.result!,
+        conditionBlocks: [{ requirementId: 'c', text: 'US only', quote: 'Vilnius' }],
+      },
+    };
+  };
+  it('a blocked 100 % sorts after an unblocked 20 % in both directions', () => {
+    for (const dir of ['desc', 'asc'] as const) {
+      expect(compareFitDirected(blocked(100), counted(20), dir)).toBeGreaterThan(0);
+    }
+  });
+});
