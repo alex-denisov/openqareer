@@ -5,6 +5,7 @@ import {
   explanationWithFitView,
   vacanciesAwaitingFit,
   textStillLoading,
+  viewsLandedSince,
   vacanciesToWarm,
 } from './matchedVacancyFit';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
@@ -353,5 +354,20 @@ describe('списки карточки берутся из разбора, ко
     );
     expect(explanation.missingPoints).toEqual(['Бюджетирование']);
     expect(explanation.pointsSource).toBe('preliminary');
+  });
+});
+
+describe('процент, пришедший после снимка порядка (01.11, прод 589377dc)', () => {
+  const counted = item('a', 83).explanation.fitView!;
+  const known = new Map<string, VacancyFitView>([
+    ['a', counted],
+    ['b', { state: 'processing', requirements: [] }],
+  ]);
+  it('перечитывает строки без процента в снимке и строки, которых в снимке нет', () => {
+    expect(viewsLandedSince(known, ['a', 'b', 'c'])).toEqual(['b', 'c']);
+  });
+  it('не трогает посчитанные строки и держит предел одного чтения', () => {
+    expect(viewsLandedSince(known, ['a'])).toEqual([]);
+    expect(viewsLandedSince(new Map(), ['x', 'y', 'z'], 2)).toEqual(['x', 'y']);
   });
 });

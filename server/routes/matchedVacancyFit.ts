@@ -9,6 +9,7 @@ import { createMoneyReader, type MoneyReader } from './matchedVacancyMoney';
 import type { RouteDeps } from './deps';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
+import { vacancyFitStage } from '../../shared/vacancyFitPercent';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
@@ -60,7 +61,11 @@ export function withVacancyFitOrder(
       return orderByFit(items, views, sort, money);
     }
     if (known.stale && reader) void refreshFitViews(key, reader, items);
-    return orderByFit(items, known.value, sort, money);
+    const landed = reader ? viewsLandedSince(known.value, reader.scoredIds(items)) : [];
+    if (landed.length === 0) return orderByFit(items, known.value, sort, money);
+    const patched = new Map([...known.value, ...reader!.read(landed)]);
+    fitViewsCache.write(key, patched);
+    return orderByFit(items, patched, sort, money);
   };
 }
 
@@ -82,7 +87,9 @@ export function withWantedCompanyOrder(
   if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '' });
   const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
   // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
-  const cacheKey = [...wanted].sort().join(',');
+  // 01.11: a result that landed must reach the ordered list too, not wait out the list window.
+  const scored = deps.vacancyMechanics?.cachedVacancyIds(candidateId).size ?? 0;
+  const cacheKey = [...wanted].sort().join(',') + (scored > 0 ? `|${scored}` : '');
   return Object.assign(
     (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
       wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
@@ -90,6 +97,27 @@ export function withWantedCompanyOrder(
       ),
     { cacheKey },
   );
+}
+
+/** Rows read on one list request when their percent landed after the order snapshot. */
+export const LANDED_FIT_READ_LIMIT = 200;
+
+/**
+ * 01.11 (prod 589377dc): the order came from a snapshot up to a window old, so percents the sweep
+ * counted meanwhile showed on the page but did not move the row. Rows with a stored result that
+ * the snapshot has not counted yet are read again at once.
+ */
+export function viewsLandedSince(
+  known: FitViews,
+  scoredIds: readonly string[],
+  limit = LANDED_FIT_READ_LIMIT,
+): string[] {
+  return scoredIds
+    .filter((id) => {
+      const view = known.get(id);
+      return !view || vacancyFitStage(view) === 'counting';
+    })
+    .slice(0, limit);
 }
 
 interface FitViewReader {
