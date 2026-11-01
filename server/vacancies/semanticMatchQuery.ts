@@ -25,6 +25,13 @@ export interface SemanticMatchQueryInput {
 const ALIVE = 'i.expired = 0';
 
 /**
+ * Свежесть — по дате пула: дата смыслового индекса могла остаться от первой
+ * публикации (аудит 01.11). Индекс читается с запасом в 30 дней — так ветка
+ * остаётся диапазоном по `vacancy_semantic_match`; на проде 0.9 с вместо 0.5.
+ */
+const STALE_SEMANTIC_DATE_SLACK_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
  * Одна ветка на код функции (план §5 п.3): у массовой функции (`eng` ≈ 30 %
  * пула) `IN (...)` + `GROUP BY` по всем кодам сразу сортировал сотни тысяч
  * совпавших строк одним temp b-tree (замер до правки — 957–1542 мс на 750
@@ -47,7 +54,8 @@ function buildFunctionBranch(
     FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
     JOIN vacancy_pool_index i ON i.id = s.id
     WHERE s.function_code = ? ${levelFilter} ${excludedFunctionFilter} ${geographyFilter}
-      AND s.published_ms BETWEEN ? AND ? AND ${ALIVE} AND i.is_active = 1
+      AND s.published_ms BETWEEN ? AND ? AND i.published_ms BETWEEN ? AND ?
+      AND ${ALIVE} AND i.is_active = 1
     ORDER BY s.published_ms DESC
     LIMIT ?
   )`;
@@ -158,6 +166,7 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
     if (input.levelRank !== null) params.push(levelFloor, input.levelRank + 1);
     params.push(...excludedFunctions);
     params.push(...geography.params);
+    params.push(input.window.fromMs - STALE_SEMANTIC_DATE_SLACK_MS, input.window.toMs);
     params.push(input.window.fromMs, input.window.toMs, input.limit);
   }
   params.push(input.limit);

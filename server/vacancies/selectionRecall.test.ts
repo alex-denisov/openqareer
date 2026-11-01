@@ -69,7 +69,7 @@ function poolWith(cards: readonly CardInput[]) {
     backfill.step(100);
   };
   load(cards);
-  return { store, load };
+  return { store, load, database };
 }
 
 const nowMs = Date.parse('2026-11-01T10:00:00.000Z');
@@ -158,5 +158,30 @@ describe('подбор: география и уровень до предела
     expect(store.queryMatchCandidates(executive, { nowMs, limit: 50 }).map((v) => v.id)).toEqual([
       'coo',
     ]);
+  });
+
+  it('строка смыслового индекса с датой первой публикации не выпадает из окна', () => {
+    const { store, database } = poolWith([
+      { id: 'coo', title: 'Chief Operating Officer', publishedAt: '2026-10-29T10:00:00.000Z' },
+    ]);
+    // Строки, записанные до синхронизации дат при записи (прод 01.11: 383 тыс.).
+    database
+      .prepare('UPDATE vacancy_semantic SET published_ms = ? WHERE id = ?')
+      .run(Date.parse('2026-09-20T10:00:00.000Z'), 'coo');
+
+    expect(store.queryMatchCandidates(executive, { nowMs, limit: 50 }).map((v) => v.id)).toEqual([
+      'coo',
+    ]);
+  });
+
+  it('вакансия старше окна по дате пула в подбор не входит', () => {
+    const { store, database } = poolWith([
+      { id: 'old', title: 'Chief Operating Officer', publishedAt: '2026-09-20T10:00:00.000Z' },
+    ]);
+    database
+      .prepare('UPDATE vacancy_semantic SET published_ms = ? WHERE id = ?')
+      .run(Date.parse('2026-10-29T10:00:00.000Z'), 'old');
+
+    expect(store.queryMatchCandidates(executive, { nowMs, limit: 50 })).toHaveLength(0);
   });
 });
