@@ -1516,6 +1516,9 @@ struct LazyScrollBudget {
     /// Return only name, headline and profile path per card: the sanitized
     /// page of 1 000+ cards broke the body limit in run 5 (B448).
     compact_connections: bool,
+    /// Collect the skill rows at every step: the skills list recycles the
+    /// rows it scrolled past, and the read after the walk saw ten of 44 (B591).
+    collect_skills: bool,
 }
 
 fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
@@ -1525,6 +1528,7 @@ fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
             quiet_readings: CONNECTIONS_QUIET_READINGS,
             max_duration: CONNECTIONS_SCROLL_MAX_DURATION,
             compact_connections: true,
+            collect_skills: false,
         }
     } else if path.contains("/overlay/") {
         // A modal over the profile: its content is already in the dialog,
@@ -1534,6 +1538,7 @@ fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
             quiet_readings: LAZY_SCROLL_QUIET_READINGS,
             max_duration: LAZY_SCROLL_MAX_DURATION,
             compact_connections: false,
+            collect_skills: false,
         }
     } else {
         LazyScrollBudget {
@@ -1541,6 +1546,7 @@ fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
             quiet_readings: LAZY_SCROLL_QUIET_READINGS,
             max_duration: LAZY_SCROLL_MAX_DURATION,
             compact_connections: false,
+            collect_skills: path.contains("/details/skills"),
         }
     }
 }
@@ -1701,9 +1707,14 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> LazyW
             break;
         };
         walk.cards_per_step.push(state.cards);
-        if budget.compact_connections {
+        if budget.compact_connections || budget.collect_skills {
             // Before the list recycles the rows that just scrolled past.
-            let batch = eval_json(window, connections_collect_call())
+            let script = if budget.collect_skills {
+                SKILLS_COLLECT_SCRIPT
+            } else {
+                connections_collect_call()
+            };
+            let batch = eval_json(window, script)
                 .await
                 .and_then(|json| {
                     serde_json::from_str::<String>(&json)
@@ -1866,6 +1877,19 @@ pub async fn read_session_page(
         }
         let steps = walk.cards_per_step.len().to_string();
         read_diagnostic(app, request, "scrolled", Some(&steps));
+        if scroll_budget.collect_skills {
+            let collected = walk.collected.len().to_string();
+            read_diagnostic(app, request, "skills_collected", Some(&collected));
+            if let Some(body) = walk.collected.render() {
+                let body = validate_page_body(body)?;
+                read_diagnostic(app, request, "read", Some("details"));
+                return Ok(SessionPageReport {
+                    ok: true,
+                    url: requested_url,
+                    body,
+                });
+            }
+        }
         // The cards were read on the connections list, even if the window
         // has since moved; report them as that page (B448, run 7).
         if let Some(body) = walk.collected.render() {
@@ -1964,6 +1988,9 @@ async fn sanitized_page_json(
     }
     Err(last_error)
 }
+
+/// Reads the skill rows showing text now; see the script's own header (B591).
+const SKILLS_COLLECT_SCRIPT: &str = include_str!("skills_collect.js");
 
 /// Reads the connection cards showing text now; see the script's own header.
 const CONNECTIONS_COLLECT_SCRIPT: &str = include_str!("connections_collect.js");
@@ -2269,6 +2296,17 @@ mod tests {
         let profile = lazy_scroll_budget("/in/someone/");
         assert_eq!((profile.max_steps, profile.quiet_readings), (40, 4));
         assert!(!profile.compact_connections);
+        assert!(!profile.collect_skills);
+        assert!(!connections.collect_skills);
+    }
+
+    #[test]
+    fn the_skills_page_collects_rows_at_every_step() {
+        let skills = lazy_scroll_budget("/in/someone/details/skills/");
+        assert!(skills.collect_skills);
+        assert!(!skills.compact_connections);
+        assert!(SKILLS_COLLECT_SCRIPT.trim_end().ends_with("})();"));
+        assert!(SKILLS_COLLECT_SCRIPT.contains("com.linkedin.sdui.profile.skill("));
     }
 
     #[test]

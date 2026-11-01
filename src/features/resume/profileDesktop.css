@@ -680,3 +680,23 @@
     }
   }
 }
+
+/* «Проверка навыков» (B591): спрос роли — навык, доля вакансий, есть ли в профиле. */
+.profile-desktop-demand-list {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.profile-desktop-demand-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--career-space-3);
+  font-size: var(--career-text-sm);
+}
+.profile-desktop-demand-list b {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
