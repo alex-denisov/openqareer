@@ -888,7 +888,14 @@
   }
   .vacancies-screen-row-trigger,
   .vacancies-table-header-cells {
-    grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.5fr) 96px;
+    /* 01.11 (.app at 900 px): level, geo and money never get narrower than «не совпадает»
+       or the «оценка рынка» chip; the header shares the track sizes — the role column gives way first, so «совпадает» never breaks mid-word. */
+    grid-template-columns:
+      minmax(8rem, 2.2fr) minmax(6rem, 1fr) minmax(6.5rem, 1.2fr)
+      minmax(8rem, 1.5fr) 96px;
+  }
+  .vacancies-screen-row-trigger .vacancies-screen-cell:not(.vacancies-screen-cell--role) {
+    overflow-wrap: normal;
   }
   .vacancies-screen-row-trigger {
     align-items: start;
@@ -908,6 +915,18 @@
   }
   .vacancies-table-header-actions {
     inline-size: calc(var(--career-target-min) * 3 + var(--career-space-4) * 2);
+  }
+}
+
+/* 01.11: a 900 px .app window leaves the row ~600 px — a tighter gap and percent column keep
+   every column at its minimum without breaking words. */
+@media (min-width: 761px) and (max-width: 1199px) {
+  .vacancies-screen-row-trigger,
+  .vacancies-table-header-cells {
+    gap: var(--career-space-3);
+    grid-template-columns:
+      minmax(8rem, 2.2fr) minmax(6rem, 1fr) minmax(6.5rem, 1.2fr)
+      minmax(8rem, 1.5fr) 80px;
   }
 }
 
