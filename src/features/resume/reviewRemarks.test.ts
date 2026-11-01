@@ -11,7 +11,7 @@ describe('reviewRemarks', () => {
       issues: [
         { code: 'missing-role-end-date', message: 'Нет даты окончания.' },
         { code: 'missing-role-claims', message: 'Нет результатов в цифрах.' },
-      ] as ReviewBlock['issues'],
+      ] as unknown as ReviewBlock['issues'],
       extraRemarks: ['Размер команды неизвестен в 2 местах.'],
     };
     expect(reviewRemarks(block)).toEqual([
