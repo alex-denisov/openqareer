@@ -62,12 +62,21 @@ export class SqliteVacancyFitStore {
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS vacancy_fit_queue_claim ON vacancy_fit_queue(status,lease_until,created_at);
-    CREATE INDEX IF NOT EXISTS vacancy_fit_queue_candidate ON vacancy_fit_queue(candidate_key);`);
+    CREATE INDEX IF NOT EXISTS vacancy_fit_queue_candidate ON vacancy_fit_queue(candidate_key);
+    CREATE TABLE IF NOT EXISTS vacancy_fit_latest (
+      latest_key TEXT PRIMARY KEY, candidate_key TEXT NOT NULL,
+      result_cipher TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS vacancy_fit_latest_candidate ON vacancy_fit_latest(candidate_key);`);
     addLateColumns(database, 'vacancy_fit_queue', LATE_COLUMNS);
   }
 
   private candidateKey(candidateId: string): string {
     return this.sealedText.indexToken('vacancy-fit-candidate', candidateId);
+  }
+  /** One row per vacancy and candidate, whatever the profile: the percent shown while a new one is counted. */
+  private latestKey(candidateId: string, vacancyId: string): string {
+    return this.sealedText.indexToken(`vacancy-fit-latest:${candidateId}`, vacancyId);
   }
   cacheKey(input: VacancyFitInput, algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION, factScope: VacancyFitFactScope = 'evidence'): string {
     const fingerprint = vacancyFitFingerprint(input, algorithmVersion, factScope);
@@ -145,7 +154,24 @@ export class SqliteVacancyFitStore {
         return this.validateResult(input, JSON.parse(this.sealedText.open(row.result_cipher, key)) as VacancyFitResult, ['gates'], version);
       } catch { /* an unreadable older row gives no percent */ }
     }
-    return undefined;
+    return this.getLatest(input);
+  }
+
+  /**
+   * The last result for this vacancy under any profile (01.11): after a profile edit the row says
+   * «пересчитывается» with it instead of «не посчитан». Its evidence is checked against the current
+   * profile when it still holds; otherwise the stored numbers are shown as they were computed.
+   */
+  private getLatest(input: VacancyFitInput): VacancyFitResult | undefined {
+    const key = this.latestKey(input.candidateId, input.vacancyId);
+    const row = this.database.prepare('SELECT result_cipher FROM vacancy_fit_latest WHERE latest_key = ? AND candidate_key = ?').get(key, this.candidateKey(input.candidateId)) as { result_cipher: string } | undefined;
+    if (!row) return undefined;
+    try {
+      const stored = JSON.parse(this.sealedText.open(row.result_cipher, key)) as VacancyFitResult;
+      if (stored.candidateId !== input.candidateId || stored.vacancyId !== input.vacancyId || !Number.isFinite(Date.parse(stored.calculatedAt))) return undefined;
+      const rechecked = evaluateVacancyFit({ ...input, assessments: stored.assessments }, stored.calculatedAt);
+      return rechecked.status === 'assessed' && (rechecked.coveragePercent ?? 0) >= (stored.coveragePercent ?? 0) ? rechecked : stored;
+    } catch { return undefined; }
   }
 
   putCache(input: VacancyFitInput, result: VacancyFitResult, now = new Date().toISOString(), algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION): void {
@@ -153,6 +179,10 @@ export class SqliteVacancyFitStore {
     const key = this.cacheKey(input, algorithmVersion);
     this.database.prepare(`INSERT INTO vacancy_fit_cache(cache_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)
       ON CONFLICT(cache_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), key), now);
+    if (result.status !== 'assessed') return;
+    const latest = this.latestKey(input.candidateId, input.vacancyId);
+    this.database.prepare(`INSERT INTO vacancy_fit_latest(latest_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)
+      ON CONFLICT(latest_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at WHERE excluded.updated_at>=vacancy_fit_latest.updated_at`).run(latest, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), latest), now);
   }
 
   /**
@@ -249,6 +279,13 @@ export class SqliteVacancyFitStore {
     return update.status === 'failed' ? 'failed' : 'deferred';
   }
 
+  /** A budget refusal (01.11): the job waits until `until`, keeps its attempts and defers. */
+  pause(job: VacancyFitJob, until: string, reason: string, now = new Date().toISOString()): boolean {
+    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),last_error=?,updated_at=?
+      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(until, reason, now, job.key, job.leaseToken, now);
+    return Number(update.changes) === 1;
+  }
+
   /** A retried job waits 30 s, 60 s, 120 s… before the next model call; the reason is an error class only. */
   fail(job: VacancyFitJob, options: { retry?: boolean; now?: string; reason?: string } = {}): boolean {
     const now = options.now ?? new Date().toISOString();
@@ -276,6 +313,7 @@ export class SqliteVacancyFitStore {
     try {
       this.database.prepare('DELETE FROM vacancy_fit_cache WHERE candidate_key=?').run(key);
       this.database.prepare('DELETE FROM vacancy_fit_queue WHERE candidate_key=?').run(key);
+      this.database.prepare('DELETE FROM vacancy_fit_latest WHERE candidate_key=?').run(key);
       this.database.exec('COMMIT');
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }

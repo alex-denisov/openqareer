@@ -1,17 +1,21 @@
 import { createHash } from 'node:crypto';
 import type { CandidateSnapshot, CandidateStore } from '../data/candidateStore';
 import { isVacancyFitEvidence, type VacancyFitInput } from './vacancyFit';
+import { vacancyFitEvidenceFacts } from './vacancyFitProfileEvidence';
 
 type ProfileReader = Pick<CandidateStore, 'getSnapshot' | 'getCandidateWorkspace'>;
 
 /**
- * Только то, что процент сверяет с требованиями (B580): факты, должности,
- * опыт, навыки, языки, город и условия кампании. Правка «о себе», контактов,
- * фото или текста о ситуации процент не сбрасывает — модель не пересчитывает
- * 40 тысяч результатов из-за опечатки в «о себе».
+ * Только то, что модель получает как доказательства (01.11): факты досье и разделы профиля из
+ * vacancyFitEvidenceFacts, плюс город и условия кампании. Контакты, фото, гипотезы консультанта
+ * процент не сбрасывают; правка «о себе» сбрасывает, потому что «о себе» теперь цитируется,
+ * а прежний процент остаётся на экране как «пересчитывается».
  */
 export function vacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
-  return stampOf('b580-r2', snapshot.memory.filter(isVacancyFitEvidence), snapshot, workspace, false);
+  const evidence = vacancyFitEvidenceFacts(snapshot.candidate?.id ?? '', snapshot).map(({ candidateId: _candidate, ...fact }) => fact);
+  const city = snapshot.resume?.draft?.candidate.contact?.location ?? null;
+  const targetRole = snapshot.resume?.draft?.targetRole ?? null;
+  return createHash('sha256').update(JSON.stringify(['b600', evidence, { city, targetRole }, conditionsOf(workspace, false)])).digest('hex');
 }
 
 /** Отпечаток B580-r с названиями ролей: по нему находится процент, посчитанный до 29.10. */
@@ -45,8 +49,12 @@ function stampOf(
         languages: draft.languages,
       }
     : null;
+  return createHash('sha256').update(JSON.stringify([tag, memory, compared, conditionsOf(workspace, withRoles)])).digest('hex');
+}
+
+function conditionsOf(workspace: ReturnType<ProfileReader['getCandidateWorkspace']>, withRoles: boolean) {
   const campaign = workspace?.campaign;
-  const conditions = workspace
+  return workspace
     ? {
         regions: workspace.regions,
         targetDirection: workspace.targetDirection,
@@ -59,7 +67,6 @@ function stampOf(
           : null,
       }
     : null;
-  return createHash('sha256').update(JSON.stringify([tag, memory, compared, conditions])).digest('hex');
 }
 
 /** Отпечаток до B580: по нему находится процент, посчитанный до смены формулы. */
@@ -86,9 +93,7 @@ export function currentVacancyFitProfileValidator(store: ProfileReader) {
       const current = store.getSnapshot(input.candidateId);
       if (current.candidate?.id !== input.candidateId) return false;
       // Only what the percent cites: a hypothesis written while the model answered must not discard the paid result.
-      const evidence = (facts: readonly VacancyFitInput['facts'][number][]) => JSON.stringify(facts.filter(isVacancyFitEvidence));
-      const facts = current.memory.map((fact) => ({ ...fact, candidateId: input.candidateId }));
-      if (evidence(facts) !== evidence(input.facts)) return false;
+      if (JSON.stringify(vacancyFitEvidenceFacts(input.candidateId, current)) !== JSON.stringify(input.facts)) return false;
       return vacancyFitProfileStamp(current, store.getCandidateWorkspace(input.candidateId)) === input.profileContextHash;
     } catch { return false; }
   };

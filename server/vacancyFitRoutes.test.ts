@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { vacancyFitEvidenceFacts } from './domain/vacancyFitProfileEvidence';
 import type { VacancyCluster } from './domain/unifiedVacancy';
 import { VacancyMechanicsRuntime } from './domain/vacancyMechanicsRuntime';
 import { currentVacancyFitProfileStamp, currentVacancyFitProfileValidator } from './domain/vacancyFitProfileStamp';
@@ -103,7 +104,7 @@ describe('candidate vacancy fit HTTP boundary', () => {
     const source: VacancyFitInput = {
       candidateId, vacancyId: cluster.id, description: cluster.descriptionSummary!, requirements: [],
       profileContextHash: currentVacancyFitProfileStamp(candidates, candidateId)!,
-      facts: candidates.getSnapshot(candidateId).memory.map((fact) => ({ ...fact, candidateId })),
+      facts: vacancyFitEvidenceFacts(candidateId, candidates.getSnapshot(candidateId)),
       gates: {
         role: { status: 'matched', reason: 'confirmed' }, level: { status: 'matched', reason: 'confirmed' },
         region: { status: 'matched', reason: 'confirmed' }, workFormat: { status: 'matched', reason: 'confirmed' }, workAuthorization: { status: 'matched', reason: 'confirmed' },

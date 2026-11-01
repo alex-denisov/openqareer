@@ -24,23 +24,23 @@ export function fitInput(candidateId = 'candidate-a'): VacancyFitInput {
 }
 
 describe('verified vacancy fit coverage', () => {
-  describe('half credit (owner 29.10)', () => {
+  describe('checked is a label, not a multiplier (01.11; was half credit 29.10)', () => {
     const facts = (input: VacancyFitInput) => [...input.facts, { ...input.facts[0], id: 'f2', statement: 'Stated SQL in the profile.' }];
     const assessments = [
       { requirementId: 'r1', status: 'matched' as const, evidence: [{ factId: 'f1', quote: 'TypeScript services' }] },
       { requirementId: 's2', status: 'matched' as const, evidence: [{ factId: 'f2', quote: 'SQL' }] },
       { requirementId: 's3', status: 'unmatched' as const, evidence: [{ factId: 'f2', quote: 'SQL' }] },
     ];
-    it('counts a checked requirement 1, a stated one 0.5 and a missing one 0', () => {
+    it('counts a checked and a stated requirement 1 each and a missing one 0', () => {
       const input = fitInput();
       const result = evaluateVacancyFit({ ...input, facts: facts(input), assessments });
-      expect(result.coveragePercent).toBe(50);
-      expect(result.coverage).toEqual({ matched: 2, total: 3, unknown: 0, checked: 1 });
+      expect(result.coveragePercent).toBe(67);
+      expect(result.coverage).toEqual({ matched: 2, total: 3, unknown: 0, checked: 1, partial: 0 });
       expect(result.assessments.map((item) => item.checked ?? false)).toEqual([true, false, false]);
     });
-    it('treats every requirement as unchecked without a skill check', () => {
+    it('treats every requirement as unchecked without a skill check, at full credit', () => {
       const result = evaluateVacancyFit({ ...fitInput(), checkedFactIds: [] });
-      expect(result.coveragePercent).toBe(50);
+      expect(result.coveragePercent).toBe(100);
       expect(result.coverage.checked).toBe(0);
     });
     it('keeps the profile key unchanged without checked facts and changes it with them', () => {
@@ -94,7 +94,7 @@ describe('verified vacancy fit coverage', () => {
     const result = evaluateVacancyFit({ ...fitInput(), assessments: unknown });
     expect(result.reason).toBe('assessed');
     expect(result.coveragePercent).toBe(0);
-    expect(result.coverage).toEqual({ matched: 0, total: 3, unknown: 3, checked: 0 });
+    expect(result.coverage).toEqual({ matched: 0, total: 3, unknown: 3, checked: 0, partial: 0 });
     expect(result.dataState).toBe('partial');
   });
   it('without a model answer there is still no number', () => {
@@ -147,8 +147,8 @@ describe('verified vacancy fit coverage', () => {
 
     it('lists conditions apart and never counts them in the percent', () => {
       const result = evaluateVacancyFit(withEducation(fitInput()));
-      expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0, checked: 3 });
-      expect(result.conditionCoverage).toEqual({ matched: 1, total: 1, unknown: 0, checked: 1 });
+      expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0, checked: 3, partial: 0 });
+      expect(result.conditionCoverage).toEqual({ matched: 1, total: 1, unknown: 0, checked: 1, partial: 0 });
       expect(result.requiredCoverage.total).toBe(1);
     });
 
@@ -197,9 +197,9 @@ describe('imported profile facts as fit evidence (B562)', () => {
   });
 
   it('scores a vacancy against a proposed fact that came from a profile import', () => {
-    // Imported, not checked by a skill check: half credit (owner 29.10).
+    // Imported, not checked by a skill check: full credit since 01.11.
     const result = evaluateVacancyFit(withImported(fitInput()));
-    expect(result).toMatchObject({ reason: 'assessed', coveragePercent: 50 });
+    expect(result).toMatchObject({ reason: 'assessed', coveragePercent: 100 });
   });
   it('still refuses a proposed fact the candidate only said in chat', () => {
     const input = fitInput();
@@ -237,7 +237,7 @@ describe('requirement provenance on entity-encoded descriptions (B562-r)', () =>
       sourceQuote: quotes[index],
     }));
     const result = evaluateVacancyFit({ ...input, description, requirements });
-    expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0, checked: 3 });
+    expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0, checked: 3, partial: 0 });
     expect(result.coveragePercent).toBe(100);
   });
 });

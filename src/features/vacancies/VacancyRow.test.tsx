@@ -309,7 +309,7 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     expect(html).not.toContain('Ещё ');
     expect(html).toMatch(/Требования к навыкам · <span class="num">10<\/span>/u);
     expect(html).toMatch(/<h3>Совпадение 70(&nbsp;|\u00a0)%<\/h3>/u);
-    expect(html).toContain('7 из 10 требований вакансии есть в профиле и подтверждены.');
+    expect(html).toContain('7 из 10 требований вакансии есть в профиле.');
     expect(html).not.toContain('соответствие 70');
   });
 

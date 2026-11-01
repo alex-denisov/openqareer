@@ -40,8 +40,9 @@ export function matchedRequirements(
 ): ReadonlyMap<string, boolean> {
   return new Map(
     (view?.result?.assessments ?? [])
-      .filter((item) => item.status === 'matched')
-      .map((item) => [item.requirementId, item.checked === true]),
+      .filter((item) => item.status === 'matched' || item.status === 'partial')
+      // A partial match is never «confirmed» green, even when a checked fact backs the part.
+      .map((item) => [item.requirementId, item.status === 'matched' && item.checked === true]),
   );
 }
 

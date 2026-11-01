@@ -1,14 +1,14 @@
 /**
  * The one percent the vacancy row, the expanded vacancy and the order show (mockup
  * 4-vakansii-procent, 29.10). The server computes it in `server/domain/vacancyFit.ts`:
- * round((checked + 0.5 × stated but unchecked) / all skill requirements × 100).
+ * round((met + 0.5 × partially met) / all skill requirements × 100); stated or checked alike (01.11).
  */
 import type { VacancyFitView } from './vacancyFit';
 
 /** Fewer skill requirements give no percent (B510-r): never «100 %» from 1 of 1. */
 export const MIN_FIT_SKILL_REQUIREMENTS = 3;
-/** A requirement stated in the profile but not confirmed by a skill check (owner 29.10). */
-export const STATED_REQUIREMENT_CREDIT = 0.5;
+/** A requirement the profile covers only in part (01.11). A met one counts 1, checked or not. */
+export const PARTIAL_REQUIREMENT_CREDIT = 0.5;
 
 export type VacancyFitTier = 'hi' | 'good' | 'mid' | 'low';
 

@@ -6,6 +6,7 @@ import { evaluateLevelMatch } from '../vacancies/levelMatcher';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import { regionOfVacancy } from '../vacancies/vacancyGeography';
 import { isResumeEvidenceEligible } from '../domain/resumeEvidenceEligibility';
+import { vacancyFitEvidenceFacts } from '../domain/vacancyFitProfileEvidence';
 import type { VacancyFitInput } from '../domain/vacancyFit';
 import type { VacancyFitGate } from '../../shared/vacancyFit';
 import type { VacancyRequirement } from '../domain/vacancyRequirements';
@@ -61,7 +62,8 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
   const previousProfileContextHash = previousVacancyFitProfileStamp(snapshot, workspace);
   const roleScopedProfileContextHash = roleScopedVacancyFitProfileStamp(snapshot, workspace);
   const legacyProfileContextHash = legacyVacancyFitProfileStamp(snapshot, workspace);
-  const facts = snapshot.memory.map((fact) => ({ ...fact, candidateId }));
+  // 01.11: the whole profile, privacy-cleaned, as the model sees it — not only dossier rows.
+  const facts = vacancyFitEvidenceFacts(candidateId, snapshot);
   const checkedFactIds = skillCheckFactIds(deps, candidateId);
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const targetLevel = readTargetLevel(deps.candidateStore, candidateId, campaign.roles.value);

@@ -4,6 +4,7 @@ import {
   roleScopedVacancyFitProfileStamp,
   vacancyFitProfileStamp,
 } from './vacancyFitProfileStamp';
+import { vacancyFitEvidenceFacts } from './vacancyFitProfileEvidence';
 
 const snapshot = { memory: [{ id: 'f1', statement: 'Built payments' }], resume: null } as never;
 function workspace(visit: string, roles = ['Head of Engineering']) {
@@ -51,7 +52,7 @@ describe('vacancyFitProfileStamp', () => {
     } as never;
     const input = {
       candidateId: 'c1',
-      facts: [{ ...fact, candidateId: 'c1' }],
+      facts: vacancyFitEvidenceFacts('c1', { memory: [fact], resume: null } as never),
       profileContextHash: vacancyFitProfileStamp({ memory: [fact], resume: null } as never, workspace('x')),
     } as never;
     const validate = currentVacancyFitProfileValidator(reader);
@@ -97,11 +98,13 @@ describe('vacancyFitProfileStamp', () => {
       candidate: { ...draft.candidate, ...patch },
     });
 
-    it('keeps the stamp when «о себе», contacts, photo or the situation text change', () => {
+    it('keeps the stamp when contacts, photo or the situation text change', () => {
       const before = stamp(draft);
+      // 01.11: «о себе» is cited as evidence now, so its edit is a new stamp; the old percent stays as «пересчитывается».
       expect(
         stamp(candidate({ about: 'Новый текст', aboutOrigin: { kind: 'candidate', at: 'x' } })),
-      ).toBe(before);
+      ).not.toBe(before);
+      expect(stamp(candidate({ aboutOrigin: { kind: 'consultant', at: 'y' } }))).toBe(before);
       expect(
         stamp(
           candidate({

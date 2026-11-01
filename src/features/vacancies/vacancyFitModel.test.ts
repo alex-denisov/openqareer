@@ -109,9 +109,9 @@ function mockupView(): VacancyFitView {
 }
 
 describe('vacancyFitSentence: the 29.10 mockup text', () => {
-  it('counts checked requirements and names the stated ones as half', () => {
+  it('counts every requirement in the profile and names the unchecked ones as a label (01.11)', () => {
     expect(vacancyFitSentence(mockupView())).toBe(
-      '10 из 12 требований вакансии есть в профиле и подтверждены. Ещё 2 указаны, но не проверены: Kafka, Kubernetes — они считаются наполовину.',
+      '12 из 12 требований вакансии есть в профиле. Не проверены квизом: Kafka, Kubernetes.',
     );
   });
   it('drops the second sentence when nothing is unchecked', () => {
@@ -120,14 +120,14 @@ describe('vacancyFitSentence: the 29.10 mockup text', () => {
       'ready',
       ['A', 'B', 'C'],
     );
-    expect(vacancyFitSentence(v)).toBe('1 из 3 требований вакансии есть в профиле и подтверждены.');
+    expect(vacancyFitSentence(v)).toBe('1 из 3 требований вакансии есть в профиле.');
   });
 });
 
 describe('vacancyFitBoost: the quiz button whenever stated requirements are unchecked', () => {
-  it('offers the percent a quiz on the stated skills would give', () => {
+  it('offers a quiz on the stated skills as a check, not a percent raise (01.11)', () => {
     expect(vacancyFitBoost(mockupView())).toEqual({
-      label: 'Поднять до 100 %: квиз по Kafka и Kubernetes',
+      label: 'Подтвердить навыки: квиз по Kafka и Kubernetes',
       skills: ['Kafka', 'Kubernetes'],
     });
   });
@@ -137,7 +137,7 @@ describe('vacancyFitBoost: the quiz button whenever stated requirements are unch
 });
 
 describe('29.10 tails', () => {
-  it('uses the singular for one unchecked requirement', () => {
+  it('names one unchecked requirement', () => {
     const v = view(
       { coveragePercent: 90, coverage: { matched: 5, total: 5, unknown: 0, checked: 4 } },
       'ready',
@@ -154,7 +154,7 @@ describe('29.10 tails', () => {
       },
     };
     expect(vacancyFitSentence(marked)).toBe(
-      '4 из 5 требований вакансии есть в профиле и подтверждены. Ещё 1 указан, но не проверен: Опыт — он считается наполовину.',
+      '5 из 5 требований вакансии есть в профиле. Не проверены квизом: Опыт.',
     );
   });
   it('offers the quiz even when the unchecked requirement is experience', () => {
@@ -177,6 +177,6 @@ describe('29.10 tails', () => {
         ),
       },
     };
-    expect(vacancyFitBoost(marked)?.label).toBe('Поднять до 100 %: квиз по Опыт');
+    expect(vacancyFitBoost(marked)?.label).toBe('Подтвердить навыки: квиз по Опыт');
   });
 });
