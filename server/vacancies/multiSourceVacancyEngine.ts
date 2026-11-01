@@ -1421,9 +1421,7 @@ export class MultiSourceVacancyEngine {
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
-    const replaceRefused = readingPartial
-      ? undefined
-      : this.replaceRefusal(source.id, freshFetched.length);
+    const replaceRefused = this.replaceRefusal(source.id, freshFetched.length, readingPartial);
     const partial = readingPartial || replaceRefused !== undefined;
     const changedExistingMembership =
       partial && hasChangedExistingMembership(this.pool, freshFetched);
@@ -1479,7 +1477,12 @@ export class MultiSourceVacancyEngine {
     return { kept: freshFetched.length, ...(replaceRefused ? { replaceRefused } : {}) };
   }
 
-  private replaceRefusal(sourceId: string, fetched: number): ReplaceRefusal | undefined {
+  private replaceRefusal(
+    sourceId: string,
+    fetched: number,
+    readingPartial: boolean,
+  ): ReplaceRefusal | undefined {
+    if (readingPartial) return undefined;
     const existing = this.pool.countSourceSlice(sourceId).total;
     return refusesSliceReplace(existing, fetched) ? { existing, fetched } : undefined;
   }
