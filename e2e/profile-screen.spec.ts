@@ -821,7 +821,10 @@ test.describe('B441 Profile screen from mockup 2', () => {
     if (!isMobile) {
       const assessmentCard = page.locator('.profile-desktop-assessment');
       await expect(assessmentCard.getByRole('heading', { name: 'Проверка навыков' })).toBeVisible();
-      const startAssessment = assessmentCard.getByRole('button', { name: 'Проверить навыки', exact: true });
+      const startAssessment = assessmentCard.getByRole('button', {
+        name: 'Проверить навыки',
+        exact: true,
+      });
       await expect(assessmentCard).toContainText('24 вакансии');
       await expect(assessmentCard).toContainText('нет в профиле');
       await expect(startAssessment).toBeEnabled();

@@ -18,8 +18,24 @@ async function openAssessment(page: Page, width: number): Promise<void> {
   await openSkillCheckFromProfile(page, width);
 }
 
+const ROLE_SKILL_DEMAND = {
+  state: 'ready',
+  roles: [
+    {
+      roleTitle: 'VP of Engineering',
+      sampleSize: 24,
+      observedAt: '2026-10-30T09:00:00.000Z',
+      skills: [{ name: 'Kubernetes', vacancies: 15, inProfile: false }],
+    },
+  ],
+};
+
 // The approved mockups open the check from the skills tab, not from a consultant card.
 async function openSkillCheckFromProfile(page: Page, width: number): Promise<void> {
+  // B591: the desktop card shows role demand and is hidden without it.
+  await page.route('**/api/v1/candidate/role-skill-demand', (route) =>
+    route.fulfill({ json: { data: ROLE_SKILL_DEMAND } }),
+  );
   await page.getByRole('tab', { name: /^Навыки/u }).click();
   if (width <= 760) {
     await page
@@ -29,7 +45,7 @@ async function openSkillCheckFromProfile(page: Page, width: number): Promise<voi
   } else {
     await page
       .locator('.profile-desktop-assessment')
-      .getByRole('button', { name: /^(Начать|Продолжить|Открыть результат)$/u })
+      .getByRole('button', { name: 'Проверить навыки', exact: true })
       .click();
   }
   await expect(page.getByTestId('role-skill-assessment')).toBeVisible();

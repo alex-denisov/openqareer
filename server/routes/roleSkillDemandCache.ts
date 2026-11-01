@@ -4,7 +4,8 @@
  * request never waits for it: it gets the last result (refreshed in the
  * background once older than the TTL) or `pending` while the first one runs.
  */
-export type CachedRead<T> = { readonly state: 'pending' } | { readonly state: 'ready'; readonly value: T };
+export type CachedRead<T> =
+  { readonly state: 'pending' } | { readonly state: 'ready'; readonly value: T };
 
 interface Entry<T> {
   readonly key: string;
@@ -46,7 +47,10 @@ export class RoleSkillDemandCache<T> {
           }
         },
         (error: unknown) => {
-          console.warn('role skill demand compute failed', error instanceof Error ? error.message : error);
+          console.warn(
+            'role skill demand compute failed',
+            error instanceof Error ? error.message : error,
+          );
         },
       )
       .finally(() => {

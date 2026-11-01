@@ -23,12 +23,20 @@ const vacancy = (
 
 describe('buildRoleSkillDemand', () => {
   const sample = Array.from({ length: 10 }, (_, i) =>
-    vacancy(`v${i}`, i < 8 ? ['Kubernetes', 'AWS', ...(i < 3 ? ['Go'] : [])] : ['AWS'], `2026-10-2${i % 9}T00:00:00.000Z`),
+    vacancy(
+      `v${i}`,
+      i < 8 ? ['Kubernetes', 'AWS', ...(i < 3 ? ['Go'] : [])] : ['AWS'],
+      `2026-10-2${i % 9}T00:00:00.000Z`,
+    ),
   );
 
   it('ranks skills by how many vacancies require them and marks profile presence', () => {
     const demand = buildRoleSkillDemand('CTO', 'cto', sample, ['aws', 'Python'], 5);
-    expect(demand).toMatchObject({ roleTitle: 'CTO', sampleSize: 10, observedAt: '2026-10-28T00:00:00.000Z' });
+    expect(demand).toMatchObject({
+      roleTitle: 'CTO',
+      sampleSize: 10,
+      observedAt: '2026-10-28T00:00:00.000Z',
+    });
     expect(demand?.skills).toEqual([
       { name: 'AWS', vacancies: 10, inProfile: true },
       { name: 'Kubernetes', vacancies: 8, inProfile: false },
@@ -59,8 +67,13 @@ describe('buildRoleSkillDemand', () => {
 
   it('keeps only the top skills', () => {
     const wide = Array.from({ length: 6 }, (_, i) =>
-      vacancy(`w${i}`, Array.from({ length: 20 }, (_, j) => `S${j}`)),
+      vacancy(
+        `w${i}`,
+        Array.from({ length: 20 }, (_, j) => `S${j}`),
+      ),
     );
-    expect(buildRoleSkillDemand('CTO', 'cto', wide, [], 5)?.skills).toHaveLength(ROLE_SKILL_DEMAND_TOP);
+    expect(buildRoleSkillDemand('CTO', 'cto', wide, [], 5)?.skills).toHaveLength(
+      ROLE_SKILL_DEMAND_TOP,
+    );
   });
 });
