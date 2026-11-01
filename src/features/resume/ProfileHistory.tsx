@@ -30,7 +30,7 @@ const SECTION_LABEL: Readonly<Record<string, string>> = {
   achievements: 'Достижения',
 };
 
-const EMPTY_VALUE = 'пусто';
+const EMPTY_VALUE = '—';
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', {
@@ -97,6 +97,22 @@ function useRevertEntry(entryId: string, onReverted: () => void) {
   return { busy, error, revert };
 }
 
+/** One side of «было → стало»; an empty side reads «было: —» and is never struck through. */
+function ChangeSide({
+  tag: Tag,
+  side,
+  text,
+}: {
+  readonly tag: 'del' | 'ins';
+  readonly side: string;
+  readonly text: string;
+}) {
+  if (!text) {
+    return <span className="profile-history__absent">{`${side}: ${EMPTY_VALUE}`}</span>;
+  }
+  return <Tag aria-label={`${side}: ${text}`}>{text}</Tag>;
+}
+
 function HistoryRow({
   entry,
   onReverted,
@@ -120,13 +136,9 @@ function HistoryRow({
         {entry.label ? <span> · {entry.label}</span> : null}
       </p>
       <p className="profile-history__change">
-        <del aria-label={`было: ${entry.previousText || EMPTY_VALUE}`}>
-          {entry.previousText || EMPTY_VALUE}
-        </del>
+        <ChangeSide tag="del" side="было" text={entry.previousText} />
         <span aria-hidden="true"> → </span>
-        <ins aria-label={`стало: ${entry.appliedText || EMPTY_VALUE}`}>
-          {entry.appliedText || EMPTY_VALUE}
-        </ins>
+        <ChangeSide tag="ins" side="стало" text={entry.appliedText} />
       </p>
       {error ? (
         <p className="profile-history__error" role="alert">

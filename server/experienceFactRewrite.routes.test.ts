@@ -305,3 +305,76 @@ describe('consultant rewrite of conversation facts (29.10)', () => {
     expect(translations).toHaveLength(1);
   });
 });
+
+describe('accepting consultant bullets confirms the workplace (01.11)', () => {
+  const trusted = { status: 'confirmed', confidence: 'candidate-confirmed' };
+
+  async function acceptedRewrite() {
+    const ctx = await candidateWithFacts(rewriterAnswering());
+    ctx.store.importResumeEvidence(ctx.candidateId, {
+      sourceLabel: 'LinkedIn',
+      entries: [
+        { memoryId: 'chronology-cloud', domain: 'role-evidence', statement: 'Cloud · 2020–2023' },
+      ],
+    });
+    const url = '/api/v1/candidate/experience-fact-rewrite';
+    const proposal = (await ctx.app.inject({ method: 'POST', url, headers: ctx.headers })).json()
+      .data.proposal;
+    const applied = await ctx.app.inject({
+      method: 'POST',
+      url: `${url}/${proposal.id}/apply`,
+      headers: ctx.headers,
+    });
+    expect(applied.statusCode).toBe(200);
+    return { ...ctx, url, rewriteId: applied.json().data.rewrite.id as string };
+  }
+
+  const chronology = (ctx: Awaited<ReturnType<typeof acceptedRewrite>>) =>
+    ctx.store.getSnapshot(ctx.candidateId).memory.find((item) => item.id === 'chronology-cloud');
+
+  it('marks every fact of the place candidate-confirmed with the consultant date', async () => {
+    const ctx = await acceptedRewrite();
+    expect(chronology(ctx)).toMatchObject({
+      ...trusted,
+      consultantConfirmedAt: expect.any(String),
+    });
+  });
+
+  it('undoing the rewrite restores the previous trust of the place', async () => {
+    const ctx = await acceptedRewrite();
+    const reverted = await ctx.app.inject({
+      method: 'POST',
+      url: `${ctx.url}/${ctx.rewriteId}/revert`,
+      headers: ctx.headers,
+    });
+    expect(reverted.statusCode).toBe(200);
+    expect(chronology(ctx)).not.toMatchObject(trusted);
+    expect(chronology(ctx)?.consultantConfirmedAt).toBeUndefined();
+  });
+
+  it('reads a place accepted before the change log as confirmed, without writing', async () => {
+    const ctx = await acceptedRewrite();
+    const { database } = ctx.store as unknown as {
+      database: { prepare(sql: string): { run(...args: unknown[]): unknown } };
+    };
+    database.prepare('DELETE FROM profile_change_log WHERE candidate_id = ?').run(ctx.candidateId);
+    database
+      .prepare(
+        `UPDATE memory SET status = 'proposed', confidence = 'candidate-reported'
+         WHERE candidate_id = ? AND id = 'chronology-cloud'`,
+      )
+      .run(ctx.candidateId);
+
+    expect(chronology(ctx)).toMatchObject({
+      ...trusted,
+      consultantConfirmedAt: expect.any(String),
+    });
+    const reverted = await ctx.app.inject({
+      method: 'POST',
+      url: `${ctx.url}/${ctx.rewriteId}/revert`,
+      headers: ctx.headers,
+    });
+    expect(reverted.statusCode).toBe(200);
+    expect(chronology(ctx)).toMatchObject({ status: 'proposed', confidence: 'candidate-reported' });
+  });
+});

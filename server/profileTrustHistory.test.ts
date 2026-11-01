@@ -286,3 +286,32 @@ describe('История показывает правки консультан�
     expect((await history(ctx)).total).toBe(1);
   });
 });
+
+describe('История пишет навыки по-русски, без JSON (01.11)', () => {
+  it('shows a legacy skill revision as «Навык ITIL — подтверждён проверкой», было «»', async () => {
+    const ctx = await setup();
+    ctx.store.profileRevisionRepo.recordRevision({
+      id: randomUUID(),
+      candidateId: ctx.candidateId,
+      commandId: randomUUID(),
+      section: 'skills',
+      experienceId: 'itil',
+      previousText: 'null',
+      appliedText: JSON.stringify({
+        name: 'ITIL',
+        status: 'подтверждён',
+        source: 'квиз openqareer',
+        verifiedAt: '2026-10-28T13:06:00.000Z',
+      }),
+      createdAt: '2026-10-28T13:06:00.000Z',
+    });
+
+    const [entry] = (await history(ctx)).entries;
+    expect(entry).toMatchObject({
+      section: 'skills',
+      label: 'ITIL',
+      previousText: '',
+      appliedText: 'Навык ITIL — подтверждён проверкой',
+    });
+  });
+});

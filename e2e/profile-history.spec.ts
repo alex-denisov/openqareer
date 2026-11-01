@@ -106,6 +106,18 @@ const HISTORY: ProfileHistoryItem[] = [
     revertedAt: null,
   },
   {
+    id: 'h4',
+    actor: 'consultant',
+    section: 'skills',
+    kind: 'value',
+    itemId: 'itil',
+    label: 'ITIL',
+    previousText: '',
+    appliedText: 'Навык ITIL — подтверждён проверкой',
+    createdAt: '2026-10-31T13:06:00.000Z',
+    revertedAt: null,
+  },
+  {
     id: 'h2',
     actor: 'candidate',
     section: 'headline',
@@ -239,9 +251,12 @@ test('1440: accepted place reads «Подтверждено вами · с ко�
 
   const history = page.locator('#sec-history');
   await history.scrollIntoViewIfNeeded();
-  await expect(history.getByTestId('profile-history-row')).toHaveCount(3);
-  await expect(history.getByText('Консультант')).toBeVisible();
-  await expect(history.getByRole('button', { name: 'Вернуть' })).toHaveCount(2);
+  await expect(history.getByTestId('profile-history-row')).toHaveCount(4);
+  await expect(history.getByText('Консультант').first()).toBeVisible();
+  await expect(history.getByRole('button', { name: 'Вернуть' })).toHaveCount(3);
+  await expect(history.getByText('Навык ITIL — подтверждён проверкой')).toBeVisible();
+  await expect(history.getByText('было: —').first()).toBeVisible();
+  await expect(history.getByText(/null|\{/)).toHaveCount(0);
   await history.screenshot({ path: join(EVIDENCE_DIR, 'history-1440.png') });
 });
 
@@ -255,7 +270,7 @@ test('390: «История изменений» opens from the profile home', a
     'data-mobile-profile-page',
     'history',
   );
-  await expect(page.getByTestId('profile-history-row')).toHaveCount(3);
+  await expect(page.getByTestId('profile-history-row')).toHaveCount(4);
   await noHorizontalScroll(page);
   const revert = page.getByRole('button', { name: 'Вернуть' }).first();
   expect((await revert.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);

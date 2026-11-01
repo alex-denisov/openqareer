@@ -63,7 +63,7 @@ import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
 import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import type { SqliteRoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
-import { factRewriteEdits } from '../domain/experienceFactRewrite';
+import { consultantEditsAndTrust } from './legacyConsultantAccepts';
 import {
   createMemoryMethods,
   openCandidateDatabase,
@@ -234,7 +234,7 @@ export class SqliteCandidateStore implements CandidateStore {
       createMemoryMethods({
         database: this.database,
         sealedText: this.sealedText,
-        conversations: this.conversations,
+        conversations: this.conversations, profileChangeLog: this.profileChangeLog,
         requireCandidate: (candidateId) => this.requireCandidate(candidateId),
         transaction: (operation) => this.transaction(operation),
         getSnapshot: this.getSnapshot.bind(this),
@@ -418,11 +418,11 @@ export class SqliteCandidateStore implements CandidateStore {
     const parts = this.conversations.snapshotParts(candidateId, stage);
     const native = this.sourceConnections.list(candidateId);
     const resume = this.resumeRepository.get(candidateId);
-    const edits = [...this.profileRevisionRepo.listRevisions(candidateId), ...factRewriteEdits(resume?.draft)];
+    const { edits, trust } = consultantEditsAndTrust(this.profileRevisionRepo, this.profileChangeLog, candidateId, resume?.draft);
     return {
       candidate,
       ...parts,
-      ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits, this.profileChangeLog.consultantConfirmations(candidateId)),
+      ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits, trust),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: withStoredTeamSizes(resume, parts.memory),
