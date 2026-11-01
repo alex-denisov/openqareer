@@ -205,11 +205,14 @@ function removeReplacedResumeFacts(
   evidence: ImportedResumeEvidence,
 ): void {
   if (replaced) {
+    // A merged re-import keeps edited roles with their old facts; those stay.
+    const keptByDraft = draftMemoryIds(input.draft);
     dependencies.conversations.purgeReplacedImportedFacts(
       candidateId,
       replaced.receipt.sourceMessageId,
       replaced.receipt.memoryIds.filter(
-        (memoryId) => !prepared.conflictingMemoryIds.has(memoryId),
+        (memoryId) =>
+          !prepared.conflictingMemoryIds.has(memoryId) && !keptByDraft.has(memoryId),
       ),
     );
     return;
@@ -442,6 +445,26 @@ function canMergeImportedFact(
     (sourceMessageId !== undefined && retainedMessageIds.includes(sourceMessageId)) ||
     retainedMessageIds.length < MAX_MEMORY_SOURCE_MESSAGES
   );
+}
+
+function draftMemoryIds(draft: ResumeImportCommit['draft']): ReadonlySet<string> {
+  const entryIds = [
+    ...(draft.skills ?? []),
+    ...draft.education,
+    ...(draft.courses ?? []),
+    ...(draft.tests ?? []),
+    ...(draft.recommendations ?? []),
+    ...draft.languages,
+    ...(draft.certifications ?? []),
+    ...(draft.projects ?? []),
+    ...(draft.achievements ?? []),
+  ].map((entry) => entry.evidenceMemoryId);
+  const roleIds = draft.experience.flatMap((role) => [
+    role.chronologyMemoryId,
+    role.descriptionMemoryId,
+    ...role.bulletMemoryIds,
+  ]);
+  return new Set([...entryIds, ...roleIds].filter((id): id is string => Boolean(id)));
 }
 
 function referencedMediaIds(draft: ResumeImportCommit['draft']): string[] {

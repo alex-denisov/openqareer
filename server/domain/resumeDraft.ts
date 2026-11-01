@@ -115,6 +115,16 @@ export interface ResumeSourceSuggestionsInput {
     readonly locations: readonly string[];
     readonly workplaceTypes: readonly WorkplaceType[];
   };
+  /** «Обновить из LinkedIn»: a re-imported value that differs from an edited field. */
+  readonly profileUpdates?: readonly ResumeProfileUpdateInput[];
+}
+
+export interface ResumeProfileUpdateInput {
+  readonly platform: 'linkedin' | 'hh';
+  readonly section: 'headline' | 'about' | 'experience';
+  readonly entryId?: string;
+  readonly field: 'headline' | 'about' | 'title';
+  readonly proposedText: string;
 }
 
 export interface ResumeSkillInput {
@@ -614,6 +624,20 @@ export const resumeDraftSchema = z
             workplaceTypes: z.array(workplaceTypeSchema).max(3),
           })
           .strict()
+          .optional(),
+        profileUpdates: z
+          .array(
+            z
+              .object({
+                platform: z.enum(['linkedin', 'hh']),
+                section: z.enum(['headline', 'about', 'experience']),
+                entryId: entryIdSchema.optional(),
+                field: z.enum(['headline', 'about', 'title']),
+                proposedText: longTextSchema,
+              })
+              .strict(),
+          )
+          .max(100)
           .optional(),
       })
       .strict()
