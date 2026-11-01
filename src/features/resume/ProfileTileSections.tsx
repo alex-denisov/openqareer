@@ -19,6 +19,7 @@ import {
 import { displayMonth } from './experienceDate';
 import { SectionHead } from './ProfileSectionHead';
 import type { ResumeCertificationInput, ResumeDraft, ResumeProjectInput } from './resumeTypes';
+import { withoutSeeMoreMarker } from '../../../shared/seeMoreMarker';
 
 interface SectionProps {
   readonly draft: ResumeDraft;
@@ -305,7 +306,7 @@ function ProjectTile({ entry, saving, onSave, onRemove }: ProjectTileProps) {
             <p className="career-profile-screen-tile-meta">{entry.employer}</p>
           ) : null}
           {entry.description ? (
-            <p className="profile-project-description">{entry.description}</p>
+            <p className="profile-project-description">{withoutSeeMoreMarker(entry.description)}</p>
           ) : null}
         </div>
         <span className="profile-project-period">

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   CareerCommandPlanner,
@@ -36,6 +37,7 @@ const handleListCommands: Handler = async (
 ) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  preparePendingResumeRevisions(candidateStore, candidate.id);
   const rawCommands =
     careerCommandDispatcher?.list(candidate.id) ?? candidateStore.listCareerCommands(candidate.id);
   const rejections = candidateStore.getConsultantRejections(candidate.id);
@@ -226,6 +228,64 @@ async function createCommand(
     data: command,
     meta: { requestId: request.id },
   });
+}
+
+// Recent turns whose profile proposals wait in the Profile sections (01.11).
+const PENDING_REVISION_TURNS = 10;
+
+function revisionKey(turnKey: string, revision: StoredProposal['resumeRevision']): string {
+  return JSON.stringify([
+    turnKey,
+    revision?.section,
+    revision?.itemId ?? null,
+    revision?.proposedText,
+  ]);
+}
+
+/**
+ * A consultant proposal for the profile becomes a pending command on its own,
+ * so it shows in its section without a click in the chat; «Принять» still
+ * applies it. Stale, rejected or already prepared proposals are skipped.
+ */
+function preparePendingResumeRevisions(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+): void {
+  const snapshot = candidateStore.getSnapshot(candidateId);
+  const prepared = new Set(
+    candidateStore
+      .listCareerCommands(candidateId)
+      .filter((command) => command.capability === 'resume.revise')
+      .map((command) =>
+        revisionKey(command.provenance.strategyDecisionId, command.proposal.resumeRevision),
+      ),
+  );
+  const turns = snapshot.turns
+    .filter((turn) => turn.status === 'completed' && turn.result)
+    .slice(-PENDING_REVISION_TURNS);
+  for (const turn of turns) {
+    for (const proposal of turn.result?.actionProposals ?? []) {
+      if (proposal.kind !== 'resume.revise' || !proposal.resumeRevision) continue;
+      const key = revisionKey(turn.idempotencyKey, proposal.resumeRevision);
+      if (prepared.has(key) || isProposalRejected(candidateStore, candidateId, proposal)) continue;
+      try {
+        const target = resolveExecutionTarget(snapshot, proposal, null);
+        if (!target.ok) continue;
+        saveCommandForProposal({
+          candidateStore,
+          candidateId,
+          snapshot,
+          turn,
+          proposal,
+          idempotencyKey: randomUUID(),
+          executionTarget: target.executionTarget,
+        });
+        prepared.add(key);
+      } catch {
+        // A stale or refused proposal stays in the chat only; the list still loads.
+      }
+    }
+  }
 }
 
 const handleCreateCommand: Handler = async (deps, request, reply) => {
