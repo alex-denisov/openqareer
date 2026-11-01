@@ -6,6 +6,7 @@ import {
   selectionFitLimit,
   selectionStamp,
   selectionToCount,
+  selectionToRead,
   sweepSelectionFit,
 } from './fitSelectionSweep';
 import { attachMarketSalaryEstimates } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
@@ -300,6 +301,7 @@ function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLim
   return {
     warmIds: vacanciesToWarm(items),
     countIds: offset === 0 ? selectionToCount(items, fitLimit) : [],
+    readIds: offset === 0 ? selectionToRead(items) : [],
     selectionKey: selectionStamp(items.map((item) => item.cluster.id)),
   };
 }
@@ -315,6 +317,7 @@ function startFitWork(
     readonly data: readonly MatchedVacancyItem[];
     readonly warmIds: readonly string[];
     readonly countIds: readonly string[];
+    readonly readIds: readonly string[];
     readonly selectionKey: string;
   },
   { offset, fitLimit }: { readonly offset: number; readonly fitLimit: number },
@@ -335,6 +338,7 @@ function startFitWork(
     // The sweep queues below the shown page: after an edit, paid plans see the visible rows first.
     (ids, rank) => requestFitForVacancyIds(deps, candidateId, ids, rank),
     `${vacancyFitStampOf(deps, candidateId)}|${response.selectionKey}`,
+    response.readIds,
   );
 }
 
