@@ -132,6 +132,51 @@ export function withProfileValue(
   return { ...draft, [section]: nextItems } as ResumeDraft;
 }
 
+const ABSENT_VALUES = new Set(['', 'null']);
+const QUIZ_SOURCE = /квиз|quiz/i;
+
+function parsedItem(value: string): Record<string, unknown> | null {
+  if (!value.startsWith('{')) return null;
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+const textField = (item: Record<string, unknown>, key: string): string =>
+  typeof item[key] === 'string' ? (item[key] as string).trim() : '';
+
+/** «Навык ITIL — подтверждён проверкой»: a skill read as a sentence, never as JSON. */
+function describeSkill(item: Record<string, unknown>): string {
+  const name = textField(item, 'name');
+  const status = textField(item, 'status');
+  const source = textField(item, 'source');
+  const level = textField(item, 'level');
+  const sourceText = QUIZ_SOURCE.test(source) ? 'проверкой' : source ? `(${source})` : '';
+  const state = [status, status ? sourceText : ''].filter(Boolean).join(' ');
+  const details = [state, level ? `уровень ${level}` : ''].filter(Boolean).join(', ');
+  return details ? `Навык ${name} — ${details}` : `Навык ${name}`;
+}
+
+/** The text a history row shows for one side of a change; '' when there was nothing. */
+export function describeSectionValue(section: string, value: string): string {
+  if (ABSENT_VALUES.has(value.trim())) return '';
+  const item = parsedItem(value);
+  if (item && section === 'skills' && textField(item, 'name')) return describeSkill(item);
+  return describeProfileValue(value);
+}
+
+/** The display name of a list item from either side of a change, else the fallback. */
+export function displayNameOf(previous: string, applied: string, fallback: string): string {
+  for (const value of [applied, previous]) {
+    const item = parsedItem(value);
+    const name = item ? textField(item, 'name') : '';
+    if (name) return name;
+  }
+  return fallback;
+}
+
 /** Readable text of a logged value: list items are summarised, text stays as is. */
 export function describeProfileValue(value: string): string {
   if (!value.startsWith('{')) return value;

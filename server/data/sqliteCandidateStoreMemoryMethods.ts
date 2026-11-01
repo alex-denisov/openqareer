@@ -15,12 +15,15 @@ import {
   type FactRewriteProposal,
 } from '../domain/experienceFactRewrite';
 import type { ResumeFactRewriteRecord, ResumePendingFactRewrite } from '../domain/resumeDraft';
+import { confirmRewrittenPlaces, restoreRewrittenPlaces } from './factRewriteConfirmation';
+import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 
 /** What the dossier-review methods need from `SqliteCandidateStore` (kept out of it for the 800-line gate). */
 export interface MemoryMethodDeps {
   readonly database: DatabaseSync;
   readonly sealedText: SealedText;
   readonly conversations: ConversationController;
+  readonly profileChangeLog: SqliteProfileChangeLogRepository;
   readonly requireCandidate: (candidateId: string) => unknown;
   readonly transaction: <T>(operation: () => T) => T;
   readonly getSnapshot: (candidateId: string) => CandidateSnapshot;
@@ -121,6 +124,7 @@ function applyExperienceFactRewrite(
       repository.addDerived(candidateId, bullet.memoryId, bullet.text, messages);
     }
     deps.saveResumeDraft(candidateId, applied.draft, snapshot.resume?.evidenceSnapshot ?? []);
+    confirmRewrittenPlaces(deps.profileChangeLog, candidateId, applied.draft, applied.record);
     return applied.record;
   });
 }
@@ -158,6 +162,7 @@ function revertExperienceFactRewrite(
     const draft = snapshot.resume?.draft;
     const reverted = draft ? revertFactRewrite(draft, rewriteId) : null;
     if (!reverted) return false;
+    restoreRewrittenPlaces(deps.profileChangeLog, candidateId, rewriteId);
     const present = new Set(snapshot.memory.map((item) => item.id));
     for (const memoryId of reverted.bulletMemoryIds) {
       if (present.has(memoryId)) {

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { CandidateStore } from '../data/candidateStore';
+import { FACT_REWRITE_COMMAND_PREFIX } from '../data/factRewriteConfirmation';
 import type {
   FactTrustState,
   ProfileChangeActor,
@@ -7,7 +8,8 @@ import type {
 } from '../data/sqliteProfileChangeLogRepository';
 import {
   currentProfileValue,
-  describeProfileValue,
+  describeSectionValue,
+  displayNameOf,
   withProfileValue,
 } from '../domain/profileChangeDiff';
 import type { ProfileRevisionRecord } from '../data/sqliteProfileRevisionRepository';
@@ -84,9 +86,12 @@ function toHistoryItem(entry: ProfileChangeEntry): ProfileHistoryItem {
     section: entry.section,
     kind: entry.kind,
     itemId: entry.itemId,
-    label: entry.label,
-    previousText: describeProfileValue(entry.previous),
-    appliedText: describeProfileValue(entry.applied),
+    label:
+      entry.section === 'skills'
+        ? displayNameOf(entry.previous, entry.applied, entry.label)
+        : entry.label,
+    previousText: describeSectionValue(entry.section, entry.previous),
+    appliedText: describeSectionValue(entry.section, entry.applied),
     createdAt: entry.createdAt,
     revertedAt: entry.revertedAt,
   };
@@ -111,7 +116,7 @@ function legacyRevisionItems(store: CandidateStore, candidateId: string): Profil
     const label =
       revision.section === 'experience'
         ? [place?.title, place?.employer].filter(Boolean).join(' · ')
-        : (revision.experienceId ?? '');
+        : displayNameOf(revision.previousText, revision.appliedText, revision.experienceId ?? '');
     return {
       id: `${LEGACY_PREFIX}${revision.id}`,
       actor: 'consultant',
@@ -119,8 +124,8 @@ function legacyRevisionItems(store: CandidateStore, candidateId: string): Profil
       kind: 'value',
       itemId: revision.experienceId ?? null,
       label,
-      previousText: revision.previousText,
-      appliedText: revision.appliedText,
+      previousText: describeSectionValue(revision.section, revision.previousText),
+      appliedText: describeSectionValue(revision.section, revision.appliedText),
       createdAt: revision.createdAt,
       revertedAt: revision.revertedAt ?? null,
     };
@@ -186,6 +191,13 @@ export async function revertProfileChange(
   const entry = store.profileChangeLog.get(candidateId, changeId);
   if (!entry) throw new ProfileChangeNotFoundError();
   if (entry.revertedAt) throw new ProfileChangeAlreadyRevertedError();
+  if (entry.commandId?.startsWith(FACT_REWRITE_COMMAND_PREFIX)) {
+    const rewriteId = entry.commandId.slice(FACT_REWRITE_COMMAND_PREFIX.length);
+    if (!store.revertExperienceFactRewrite(candidateId, rewriteId)) {
+      throw new ProfileChangeAlreadyRevertedError();
+    }
+    return;
+  }
   if (entry.commandId) {
     await revertCommand(entry.commandId);
     return;

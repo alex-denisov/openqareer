@@ -176,6 +176,17 @@ export class SqliteProfileChangeLogRepository {
     }
   }
 
+  /** Command ids that already have a history entry. */
+  commandIds(candidateId: string): Set<string> {
+    const rows = this.database
+      .prepare(
+        `SELECT command_id FROM profile_change_log
+         WHERE candidate_id = ? AND command_id IS NOT NULL`,
+      )
+      .all(candidateId) as unknown as { command_id: string }[];
+    return new Set(rows.map((row) => row.command_id));
+  }
+
   /** Facts the candidate confirmed together with the consultant, with the latest date. */
   consultantConfirmations(candidateId: string): Map<string, string> {
     const rows = this.database

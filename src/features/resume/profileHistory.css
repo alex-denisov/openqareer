@@ -69,6 +69,10 @@
   overflow-wrap: anywhere;
 }
 
+.profile-history__absent {
+  color: var(--career-text-soft);
+}
+
 .profile-history__change del {
   color: var(--career-text-soft);
 }

@@ -1,3 +1,4 @@
+import type { ConsultantTrust } from '../legacyConsultantAccepts';
 import type { DatabaseSync } from 'node:sqlite';
 import type { StoredNativeSourceConnection } from '../candidateStore';
 import { withConsultantConfirmations, withImportProvenance } from '../snapshotProvenance';
@@ -110,7 +111,7 @@ export class ImportSourceStore {
     parts: Parameters<typeof withImportProvenance>[0],
     native: readonly StoredNativeSourceConnection[],
     consultantEdits: Parameters<typeof withImportProvenance>[1]['consultantEdits'] = [],
-    consultantConfirmations: ReadonlyMap<string, string> = new Map(),
+    trust: ConsultantTrust = { confirmations: new Map(), legacy: new Map() },
   ): ReturnType<typeof withImportProvenance> {
     const result = withImportProvenance(parts, {
       consultantEdits,
@@ -120,7 +121,7 @@ export class ImportSourceStore {
     });
     return {
       ...result,
-      memory: withConsultantConfirmations(result.memory, consultantConfirmations),
+      memory: withConsultantConfirmations(result.memory, trust.confirmations, trust.legacy),
     };
   }
 

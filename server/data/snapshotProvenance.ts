@@ -53,15 +53,27 @@ export function withImportProvenance(
   };
 }
 
-/** Marks facts the candidate confirmed by accepting a consultant edit that is still in place. */
+/**
+ * Marks facts the candidate confirmed by accepting a consultant edit that is
+ * still in place; facts of a place accepted before the change log read as confirmed.
+ */
 export function withConsultantConfirmations(
   memory: StoredMemory[],
   confirmations: ReadonlyMap<string, string>,
+  legacy: ReadonlyMap<string, string> = new Map(),
 ): StoredMemory[] {
   return memory.map((entry) => {
     const at = confirmations.get(entry.id);
-    return at && entry.confidence === 'candidate-confirmed'
-      ? { ...entry, consultantConfirmedAt: at }
-      : entry;
+    if (at && entry.confidence === 'candidate-confirmed') {
+      return { ...entry, consultantConfirmedAt: at };
+    }
+    const legacyAt = legacy.get(entry.id);
+    if (!legacyAt || (entry.status !== 'proposed' && entry.status !== 'confirmed')) return entry;
+    return {
+      ...entry,
+      status: 'confirmed',
+      confidence: 'candidate-confirmed',
+      consultantConfirmedAt: legacyAt,
+    };
   });
 }
