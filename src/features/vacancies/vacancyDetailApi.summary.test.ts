@@ -41,3 +41,8 @@ it('убирает ссылки markdown из выжимки, оставляя �
     }),
   ).toEqual({ text: 'See our values and .' });
 });
+
+it('02.11: while the server still reads the hh text the card says «загружаем», not «нет описания»', () => {
+  const detail = { id: 'c', description: '', truncated: true, skills: [], responsibilities: [], pending: true };
+  expect(vacancySummaryText('', { status: 'ready', detail })).toEqual({ loading: true });
+});
