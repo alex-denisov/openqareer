@@ -399,3 +399,20 @@ describe('02.11: role rows first, position survives a restart, hidden text and g
     expect(store.archiveExpiredHhClusters(100)).toBe(0);
   });
 });
+
+describe('02.11: the loader fills every tick (303 requests an hour against a 1/s budget)', () => {
+  it('one call finds role rows far apart in a large pool', () => {
+    const store = openSqlite();
+    const filler = Array.from({ length: 4_500 }, (_, index) => ({
+      ...hh(10_000 + index, 2),
+      title: `Бариста ${index}`,
+    }));
+    const near = { ...hh(1, 1), title: 'Операционный директор' };
+    const far = { ...hh(2, 3), title: 'Операционный директор' };
+    store.mergeSourceSlice(HH, [near, ...filler, far]);
+    expect(store.loadHhTextCandidates(undefined, 10, ['операционный директор']).ids).toEqual([
+      near.id,
+      far.id,
+    ]);
+  });
+});
