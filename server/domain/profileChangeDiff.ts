@@ -1,0 +1,144 @@
+import type { ResumeDraft } from './resumeDraft';
+
+/**
+ * Generic «было → стало» for the profile history. A text section stores its
+ * text; a list section stores each item as canonical JSON keyed by the item id
+ * ('' when the item did not exist), so any list section added to the draft is
+ * logged and reverted the same way.
+ */
+export const TEXT_SECTIONS = ['headline', 'about'] as const;
+export const LIST_SECTIONS = [
+  'experience',
+  'education',
+  'projects',
+  'certifications',
+  'languages',
+  'skills',
+  'courses',
+] as const;
+
+type TextSection = (typeof TEXT_SECTIONS)[number];
+type ListSection = (typeof LIST_SECTIONS)[number];
+type ListItem = { readonly id: string } & Record<string, unknown>;
+
+export interface ProfileValueChange {
+  readonly section: string;
+  readonly itemId: string | null;
+  readonly label: string;
+  readonly previous: string;
+  readonly applied: string;
+}
+
+const LABEL_KEYS = ['title', 'name', 'institution', 'qualification', 'employer'] as const;
+const SUMMARY_KEYS = [
+  'title',
+  'employer',
+  'name',
+  'institution',
+  'qualification',
+  'issuer',
+  'cefr',
+  'level',
+  'description',
+] as const;
+
+const isTextSection = (section: string): section is TextSection =>
+  (TEXT_SECTIONS as readonly string[]).includes(section);
+const isListSection = (section: string): section is ListSection =>
+  (LIST_SECTIONS as readonly string[]).includes(section);
+
+function listOf(draft: ResumeDraft, section: ListSection): readonly ListItem[] {
+  return ((draft as unknown as Record<string, unknown>)[section] ?? []) as readonly ListItem[];
+}
+
+function canonical(item: ListItem | undefined): string {
+  if (!item) return '';
+  const sorted = Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)));
+  return JSON.stringify(sorted);
+}
+
+function itemLabel(item: ListItem): string {
+  const parts = LABEL_KEYS.map((key) => item[key]).filter(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+  return parts.slice(0, 2).join(' · ');
+}
+
+function textOf(draft: ResumeDraft, section: TextSection): string {
+  return draft.candidate[section] ?? '';
+}
+
+/** Every changed text field and list item between two drafts. */
+export function diffProfileDrafts(
+  previous: ResumeDraft | undefined,
+  next: ResumeDraft,
+): ProfileValueChange[] {
+  const before = previous ?? {
+    ...next,
+    candidate: {},
+    experience: [],
+    education: [],
+    languages: [],
+  };
+  const texts = TEXT_SECTIONS.flatMap((section) => {
+    const [was, now] = [textOf(before as ResumeDraft, section), textOf(next, section)];
+    return was === now ? [] : [{ section, itemId: null, label: '', previous: was, applied: now }];
+  });
+  const lists = LIST_SECTIONS.flatMap((section) => {
+    const oldItems = new Map(listOf(before as ResumeDraft, section).map((item) => [item.id, item]));
+    const newItems = new Map(listOf(next, section).map((item) => [item.id, item]));
+    const ids = [...new Set([...oldItems.keys(), ...newItems.keys()])];
+    return ids.flatMap((id) => {
+      const [was, now] = [canonical(oldItems.get(id)), canonical(newItems.get(id))];
+      if (was === now) return [];
+      const label = itemLabel((newItems.get(id) ?? oldItems.get(id)) as ListItem);
+      return [{ section, itemId: id, label, previous: was, applied: now }];
+    });
+  });
+  return [...texts, ...lists];
+}
+
+/** The value a history entry compares against; null when the section is unknown. */
+export function currentProfileValue(
+  draft: ResumeDraft,
+  section: string,
+  itemId: string | null,
+): string | null {
+  if (isTextSection(section)) return textOf(draft, section);
+  if (!isListSection(section) || !itemId) return null;
+  return canonical(listOf(draft, section).find((item) => item.id === itemId));
+}
+
+/** Writes a logged value back; '' removes a list item, a missing one is appended. */
+export function withProfileValue(
+  draft: ResumeDraft,
+  section: string,
+  itemId: string | null,
+  value: string,
+): ResumeDraft {
+  if (isTextSection(section)) {
+    return { ...draft, candidate: { ...draft.candidate, [section]: value } };
+  }
+  if (!isListSection(section) || !itemId) throw new Error('profile_change_section_unknown');
+  const items = listOf(draft, section);
+  const restored = value ? (JSON.parse(value) as ListItem) : null;
+  const exists = items.some((item) => item.id === itemId);
+  const replaced = items.flatMap((item) =>
+    item.id !== itemId ? [item] : restored ? [restored] : [],
+  );
+  const nextItems = exists || !restored ? replaced : [...items, restored];
+  return { ...draft, [section]: nextItems } as ResumeDraft;
+}
+
+/** Readable text of a logged value: list items are summarised, text stays as is. */
+export function describeProfileValue(value: string): string {
+  if (!value.startsWith('{')) return value;
+  try {
+    const item = JSON.parse(value) as Record<string, unknown>;
+    return SUMMARY_KEYS.map((key) => item[key])
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .join(' · ');
+  } catch {
+    return value;
+  }
+}

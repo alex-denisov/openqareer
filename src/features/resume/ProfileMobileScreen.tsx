@@ -43,6 +43,7 @@ import { ProfileMobileAts } from './ProfileMobileReadiness';
 import { ProfileMobileReview } from './ProfileMobileReview';
 import { ProfileMobileAbout } from './ProfileMobileAbout';
 import { ProfileMobileVersions } from './ProfileMobileVersions';
+import { ProfileHistoryList } from './ProfileHistory';
 import { ProfileRefreshNotice } from './ProfileRefreshNotice';
 import './profileMobile.css';
 
@@ -125,6 +126,8 @@ function MobileProfileDetail(props: DetailProps) {
       return <ProfileMobileReview {...props} />;
     case 'docs':
       return <ProfileMobileVersions {...props} />;
+    case 'history':
+      return <ProfileHistoryList onChanged={props.onManualExperienceFactAdded} />;
     case 'src':
       return <ProfileMobileSourceDetails {...props} />;
     case 'reloc':

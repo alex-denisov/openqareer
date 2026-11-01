@@ -18,6 +18,7 @@ export type ProfileMobilePage =
   | 'lang'
   | 'reloc'
   | 'docs'
+  | 'history'
   | 'src'
   | 'skilladd'
   | 'contacts'
@@ -79,6 +80,7 @@ const PAGE_TITLES: Readonly<Record<ProfileMobilePage, string>> = {
   lang: 'Языки',
   reloc: 'Релокация',
   docs: 'Версии под вакансии',
+  history: 'История изменений',
   src: 'Источники',
   skilladd: 'Новый навык',
   contacts: 'Контакты',

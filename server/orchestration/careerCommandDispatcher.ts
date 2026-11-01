@@ -15,6 +15,7 @@ import {
   type ConnectorExecutor,
 } from '../connectors/connectorHarness';
 import type { ProfileRevisionRecord } from '../data/sqliteProfileRevisionRepository';
+import type { FactTrustState } from '../data/sqliteProfileChangeLogRepository';
 import type { CareerActionProposal } from '../domain/coach';
 import { CareerCommandNotFoundError } from '../data/sqliteCareerCommandRepository';
 import { currentSkillText, writeSkillState } from './skillRevision';
@@ -173,7 +174,7 @@ export class CareerCommandDispatcher {
     if (previousText === null || previousText !== target.currentText) {
       throw new ResumeRevisionConflictError();
     }
-    const chronologyLinks = this.applyResumeRevision(
+    const { chronologyLinks, factStates } = this.applyResumeRevision(
       candidateId,
       command,
       target,
@@ -189,6 +190,19 @@ export class CareerCommandDispatcher {
       finishedAt,
       chronologyLinks,
     );
+    this.store.profileChangeLog.record({
+      id: randomUUID(),
+      candidateId,
+      actor: 'consultant',
+      section: target.section,
+      itemId: target.memoryId ?? target.experienceId ?? null,
+      label: changeLabel(snapshot.resume?.draft, target),
+      previous: previousText,
+      applied: target.proposedText,
+      commandId: command.commandId,
+      factStates,
+      createdAt: finishedAt,
+    });
     return this.finishProfileRevision(candidateId, command, action, finishedAt);
   }
 
@@ -212,7 +226,10 @@ export class CareerCommandDispatcher {
     target: ResumeReviseExecutionTarget,
     currentDraft: ResumeDraft,
     snapshot: CandidateSnapshot,
-  ): ExperienceChronologyRevisionLinks | undefined {
+  ): { chronologyLinks?: ExperienceChronologyRevisionLinks; factStates: FactTrustState[] } {
+    const refs = command.proposal.evidenceRefs;
+    const factIdsBefore = acceptedFactIds(snapshot, refs, target.experienceId ?? null);
+    const factStates = this.store.profileChangeLog.readFactStates(candidateId, factIdsBefore);
     let chronologyLinks: ExperienceChronologyRevisionLinks | undefined;
     if (target.field) {
       chronologyLinks = applyExperienceDateRevision(this.store, candidateId, currentDraft, target);
@@ -229,10 +246,13 @@ export class CareerCommandDispatcher {
         snapshot.resume?.evidenceSnapshot ?? [],
       );
     }
-    const evidenceSnapshot =
-      target.memoryId || target.field ? this.store.getSnapshot(candidateId) : snapshot;
-    this.confirmEvidenceFacts(candidateId, evidenceSnapshot, command.proposal.evidenceRefs);
-    return chronologyLinks;
+    const factIdsAfter = acceptedFactIds(
+      this.store.getSnapshot(candidateId),
+      refs,
+      target.experienceId ?? null,
+    );
+    this.confirmByCandidate(candidateId, factIdsAfter);
+    return { chronologyLinks, factStates };
   }
 
   private finishProfileRevision(
@@ -276,18 +296,18 @@ export class CareerCommandDispatcher {
     });
   }
 
-  private confirmEvidenceFacts(
-    candidateId: string,
-    snapshot: ReturnType<CandidateStore['getSnapshot']>,
-    evidenceRefs: readonly string[],
-  ): void {
-    const memoryIds = new Set(snapshot.memory.map((item) => item.id));
-    const memoryRefsToConfirm = evidenceRefs
-      .map((ref) => (ref.startsWith('memory:') ? ref.slice('memory:'.length) : ref))
-      .filter((ref) => memoryIds.has(ref));
-    if (memoryRefsToConfirm.length > 0) {
-      this.store.reviewMemories(candidateId, memoryRefsToConfirm, 'confirm');
-    }
+  /**
+   * «Принять» is the candidate's confirmation (owner, 01.11): the proposal's
+   * evidence and every fact of the edited workplace become candidate-confirmed.
+   * The trust they had before is kept on the change-log entry for revert.
+   */
+  private confirmByCandidate(candidateId: string, memoryIds: readonly string[]): void {
+    const states = this.store.profileChangeLog.readFactStates(candidateId, memoryIds);
+    this.store.profileChangeLog.writeFactStates(
+      candidateId,
+      states.map((state) => ({ ...state, status: 'confirmed', confidence: CANDIDATE_CONFIRMED })),
+      this.now().toISOString(),
+    );
   }
 
   private restoreProfileRevision(
@@ -304,11 +324,6 @@ export class CareerCommandDispatcher {
         statement: revision.previousText,
       });
       if (!reverted) throw new ResumeRevisionConflictError();
-      this.confirmEvidenceFacts(
-        candidateId,
-        this.store.getSnapshot(candidateId),
-        command.proposal.evidenceRefs,
-      );
       return;
     }
     if (target.field) {
@@ -370,7 +385,14 @@ export class CareerCommandDispatcher {
         }
       }
       this.restoreProfileRevision(candidateId, command, revision, target, currentDraft, snapshot);
-      this.store.profileRevisionRepo.markReverted(candidateId, commandId, this.now().toISOString());
+      const revertedAt = this.now().toISOString();
+      this.store.profileRevisionRepo.markReverted(candidateId, commandId, revertedAt);
+      const change = this.store.profileChangeLog.getByCommandId(candidateId, commandId);
+      if (change) {
+        // Restores the trust the accept replaced; the text was restored above.
+        this.store.profileChangeLog.writeFactStates(candidateId, change.factStates, revertedAt);
+        this.store.profileChangeLog.markReverted(candidateId, change.id, revertedAt);
+      }
       return command;
     });
   }
@@ -386,6 +408,38 @@ export class CareerCommandDispatcher {
 }
 
 type ExperienceEntry = ResumeDraft['experience'][number];
+
+const CANDIDATE_CONFIRMED = 'candidate-confirmed';
+
+/** Every fact that makes up a workplace: chronology, description and bullets. */
+export function experienceFactIds(entry: ExperienceEntry): string[] {
+  return [
+    entry.chronologyMemoryId,
+    ...(entry.descriptionMemoryId ? [entry.descriptionMemoryId] : []),
+    ...entry.bulletMemoryIds,
+  ];
+}
+
+function acceptedFactIds(
+  snapshot: CandidateSnapshot,
+  evidenceRefs: readonly string[],
+  experienceId: string | null,
+): string[] {
+  const entry = experienceId
+    ? snapshot.resume?.draft.experience.find((item) => item.id === experienceId)
+    : undefined;
+  const refs = evidenceRefs.map((ref) =>
+    ref.startsWith('memory:') ? ref.slice('memory:'.length) : ref,
+  );
+  return [...refs, ...(entry ? experienceFactIds(entry) : [])];
+}
+
+/** «Руководитель продукта · Ozon» for a workplace edit, empty for headline/about. */
+function changeLabel(draft: ResumeDraft | undefined, target: ResumeReviseExecutionTarget): string {
+  if (target.section !== 'experience' || !target.experienceId) return target.experienceId ?? '';
+  const entry = draft?.experience.find((item) => item.id === target.experienceId);
+  return [entry?.title, entry?.employer].filter(Boolean).join(' · ');
+}
 
 /** Writes a revision's text into the field; an empty team size means unknown again. */
 function withExperienceFieldText(

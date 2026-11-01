@@ -26,6 +26,11 @@ import { displayMonth, monthOrder } from './experienceDate';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
 import { VacancyRequirementAssistant } from './VacancyRequirementAssistant';
 import { ProfileTeamSizeTag } from './ProfileTeamSizeTag';
+import {
+  ConfirmExperienceButton,
+  experienceConfirmation,
+  experienceConfirmationLabel,
+} from './ExperienceConfirmation';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
 
 export interface ProfileExperienceSectionProps {
@@ -121,12 +126,14 @@ function PositionSummary({
   memory,
   onEdit,
   onRemove,
+  onConfirmed,
 }: {
   readonly entry: ResumeExperienceInput;
   readonly bullets: readonly string[];
   readonly memory: readonly CandidateMemory[];
   readonly onEdit: () => void;
   readonly onRemove: () => void;
+  readonly onConfirmed?: () => Promise<void> | void;
 }) {
   return (
     <div className="career-profile-screen-position" data-experience-id={entry.id}>
@@ -145,7 +152,7 @@ function PositionSummary({
         />
         <SectionRemoveButton label="Удалить должность" onClick={onRemove} />
       </div>
-      <PositionEvidenceBadge entry={entry} memory={memory} />
+      <PositionEvidenceBadge entry={entry} memory={memory} onConfirmed={onConfirmed} />
       <PositionDetails
         entry={entry}
         bullets={bullets}
@@ -182,20 +189,14 @@ function PositionPlace({ entry }: { readonly entry: ResumeExperienceInput }) {
 function PositionEvidenceBadge({
   entry,
   memory,
+  onConfirmed,
 }: {
   readonly entry: ResumeExperienceInput;
   readonly memory: readonly CandidateMemory[];
+  readonly onConfirmed?: () => Promise<void> | void;
 }) {
-  const linkedFacts = entry.bulletMemoryIds.flatMap((id) => {
-    const fact = memory.find((item) => item.id === id);
-    return fact ? [fact] : [];
-  });
-  const confirmedByCandidate =
-    linkedFacts.length > 0 &&
-    linkedFacts.length === entry.bulletMemoryIds.length &&
-    linkedFacts.every(
-      (fact) => fact.status === 'confirmed' && fact.confidence === 'candidate-confirmed',
-    );
+  const confirmation = experienceConfirmation(entry, memory);
+  const label = experienceConfirmationLabel(confirmation);
   return (
     <div className="career-profile-screen-position-tags">
       {entry.current ? (
@@ -207,17 +208,20 @@ function PositionEvidenceBadge({
         <span className="career-profile-screen-tag">{entry.employmentType}</span>
       ) : null}
       <span
-        className={`career-profile-screen-tag${confirmedByCandidate ? ' is-verified' : ''}`}
+        className={`career-profile-screen-tag${confirmation.confirmed ? ' is-verified' : ''}`}
         title="Работодатель не проверяется; подтверждение относится к фактам профиля."
-        aria-label={`${confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}. Работодатель не проверяется.`}
+        aria-label={`${label}. Работодатель не проверяется.`}
       >
-        {confirmedByCandidate ? (
+        {confirmation.confirmed ? (
           <CheckCircle size={14} aria-hidden="true" />
         ) : (
           <Circle size={14} aria-hidden="true" />
         )}
-        {confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}
+        {label}
       </span>
+      {!confirmation.confirmed && entry.bulletMemoryIds.length > 0 ? (
+        <ConfirmExperienceButton experienceId={entry.id} onConfirmed={onConfirmed} />
+      ) : null}
       <ProfileTeamSizeTag teamSize={entry.teamSize} />
     </div>
   );
@@ -298,6 +302,7 @@ function PositionRow({
       memory={memory}
       onEdit={() => setEditing(true)}
       onRemove={onRemove}
+      onConfirmed={onManualExperienceFactAdded}
     />
   );
 }

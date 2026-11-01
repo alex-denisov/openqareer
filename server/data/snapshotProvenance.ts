@@ -52,3 +52,16 @@ export function withImportProvenance(
     }),
   };
 }
+
+/** Marks facts the candidate confirmed by accepting a consultant edit that is still in place. */
+export function withConsultantConfirmations(
+  memory: StoredMemory[],
+  confirmations: ReadonlyMap<string, string>,
+): StoredMemory[] {
+  return memory.map((entry) => {
+    const at = confirmations.get(entry.id);
+    return at && entry.confidence === 'candidate-confirmed'
+      ? { ...entry, consultantConfirmedAt: at }
+      : entry;
+  });
+}

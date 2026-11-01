@@ -2365,6 +2365,9 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    if (path.endsWith('/candidate/profile/history')) {
+      return route.fulfill({ json: { data: { entries: [], total: 0, page: 0, pageSize: 20 } } });
+    }
     if (path.endsWith('/candidate/resume/ats-assessment')) {
       return route.fulfill({ json: { data: { assessment: null } } });
     }

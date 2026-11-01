@@ -50,6 +50,7 @@ import type {
   StoredCandidateMedia,
 } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 import { createProfileRepositories } from './sqliteCandidateStoreProfileRepositories';
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
@@ -141,6 +142,7 @@ export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentR
 export class SqliteCandidateStore implements CandidateStore {
   readonly notificationRepository: SqliteNotificationRepository;
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
+  readonly profileChangeLog: SqliteProfileChangeLogRepository;
   readonly starPrepRepo: SqliteStarPrepRepository;
   readonly starStoriesRepo: SqliteStarStoriesRepository;
   readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
@@ -196,6 +198,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.notificationRepository = new SqliteNotificationRepository(this.database, this.sealedText);
     ({
       profileRevisionRepo: this.profileRevisionRepo,
+      profileChangeLog: this.profileChangeLog,
       starPrepRepo: this.starPrepRepo,
       referralTrackRepo: this.referralTrackRepo,
       careerVectorRepo: this.careerVectorRepo,
@@ -419,7 +422,7 @@ export class SqliteCandidateStore implements CandidateStore {
     return {
       candidate,
       ...parts,
-      ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits),
+      ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits, this.profileChangeLog.consultantConfirmations(candidateId)),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: withStoredTeamSizes(resume, parts.memory),
@@ -760,8 +763,8 @@ export class SqliteCandidateStore implements CandidateStore {
 
   private importDeps() {
     const { database, conversations, sourceConnections } = this;
-    const { resumeRepository, candidateMediaRepository } = this;
-    return { database, conversations, sourceConnections, resumeRepository, candidateMediaRepository };
+    const { resumeRepository, candidateMediaRepository, profileChangeLog } = this;
+    return { database, conversations, sourceConnections, resumeRepository, candidateMediaRepository, profileChangeLog };
   }
 
   listNativeSourceConnections(candidateId: string): StoredNativeSourceConnection[] {

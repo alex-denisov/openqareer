@@ -64,6 +64,7 @@ import type {
 import type { DownloadedMedia } from '../domain/candidateMedia';
 import type { StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
 import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
@@ -241,6 +242,8 @@ export interface StoredMemory extends MemoryCandidate {
   id: string;
   /** Set on snapshot reads only: where the fact came from (B541). */
   provenance?: FactProvenance;
+  /** Set on snapshot reads only: when the candidate confirmed it by accepting a consultant edit. */
+  consultantConfirmedAt?: string;
   status: 'proposed' | 'confirmed' | 'corrected';
   createdAt: string;
   updatedAt: string;
@@ -433,6 +436,8 @@ export interface CandidateStore {
   readonly notificationRepository?: SqliteNotificationRepository;
   /** Candidate-scoped, encrypted profile revision journal on the same SQLite connection. */
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
+  /** «История изменений»: every profile change by any actor, with revert data. */
+  readonly profileChangeLog: SqliteProfileChangeLogRepository;
   /** Подготовка STAR на отклик (B392), запечатанный текст кандидата. */
   readonly starPrepRepo: SqliteStarPrepRepository;
   /** Повторно используемые STAR-истории кандидата (B466), текст запечатан. */

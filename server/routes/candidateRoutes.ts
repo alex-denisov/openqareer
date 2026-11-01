@@ -31,6 +31,7 @@ import { structureWithinBudget } from '../providers/resumeStructurer';
 import { handleImportStructuredResume } from './structuredResumeImportRoute';
 import { registerCandidateExperienceFactRoutes } from './candidateExperienceFactRoutes';
 import { registerExperienceFactRewriteRoutes } from './experienceFactRewriteRoutes';
+import { registerProfileHistoryRoutes } from './profileHistoryRoutes';
 import { withStoredFactRewrites } from '../domain/experienceFactRewrite';
 import { registerCandidateConsultantHistoryRoutes } from './candidateConsultantHistoryRoutes';
 import { registerCandidateMediaRoutes } from './candidateMediaRoutes';
@@ -597,6 +598,7 @@ const handlePutResume: Handler = async (deps, request, reply) => {
     const evidence = candidateStore.getSnapshot(candidate.id).memory;
     const projection = buildResumeStudioProjection({ ...boundDraft, evidence });
     candidateStore.saveResumeDraft(candidate.id, boundDraft, projection.evidenceSnapshot);
+    candidateStore.profileChangeLog.recordDraftChanges(candidate.id, storedDraft, boundDraft, 'candidate');
     return { outdated: false } as const;
   });
 
@@ -720,6 +722,7 @@ export async function registerCandidateRoutes(
   await registerCandidateConsultantHistoryRoutes(app, deps);
   await registerCandidateExperienceFactRoutes(app, deps);
   await registerExperienceFactRewriteRoutes(app, deps);
+  await registerProfileHistoryRoutes(app, deps);
   await registerResumeEndpoints(app, deps);
   await registerCandidateResumeVersionRoutes(app, deps);
   registerCandidateDocumentRoutes(app, deps);

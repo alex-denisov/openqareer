@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 import { buildResumeStudioProjection } from '../domain/resumeStudio';
 import type {
   CommittedResumeImport,
@@ -24,6 +25,7 @@ interface ResumeImportDependencies {
   readonly sourceConnections: SourceConnectionController;
   readonly resumeRepository: SqliteResumeRepository;
   readonly candidateMediaRepository: SqliteCandidateMediaRepository;
+  readonly profileChangeLog: SqliteProfileChangeLogRepository;
 }
 
 interface PreparedResumeImport {
@@ -241,12 +243,14 @@ function saveResumeImportDraft(
   if (input.media?.length) {
     dependencies.candidateMediaRepository.saveMany(candidateId, input.media);
   }
+  const previous = dependencies.resumeRepository.get(candidateId)?.draft;
   const resume = dependencies.resumeRepository.save(
     candidateId,
     draft,
     projection.evidenceSnapshot,
     input.reader,
   );
+  dependencies.profileChangeLog.recordDraftChanges(candidateId, previous, draft, 'import');
   dependencies.candidateMediaRepository.pruneUnreferenced(
     candidateId,
     referencedMediaIds(draft),
