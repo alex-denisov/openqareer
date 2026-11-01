@@ -115,7 +115,7 @@ export function viewsLandedSince(
   return scoredIds
     .filter((id) => {
       const view = known.get(id);
-      return !view || vacancyFitStage(view) === 'counting';
+      return !view || view.state === 'refreshing' || vacancyFitStage(view) === 'counting';
     })
     .slice(0, limit);
 }
@@ -170,7 +170,7 @@ export function textStillLoading(
   view: VacancyFitView,
 ): VacancyFitView {
   if (view.state !== 'no_description' || !clusterId.startsWith(HH_CLUSTER_PREFIX)) return view;
-  if (description.trim()) return view;
+  if (description?.trim()) return view;
   return { ...view, state: 'not_requested' };
 }
 
@@ -237,7 +237,8 @@ export function withShownPageFitViews(
   return items.map((item) => {
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
-    const fitView = compactFitView(runtime.view(context(target, [])));
+    const view = runtime.view(context(target, []));
+    const fitView = compactFitView(textStillLoading(item.cluster.id, target.description, view));
     return { ...item, explanation: explanationWithFitView(item.explanation, fitView) };
   });
 }

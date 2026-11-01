@@ -366,6 +366,10 @@ describe('процент, пришедший после снимка поряд�
   it('перечитывает строки без процента в снимке и строки, которых в снимке нет', () => {
     expect(viewsLandedSince(known, ['a', 'b', 'c'])).toEqual(['b', 'c']);
   });
+  it('перечитывает строку с процентом прежней версии: пересчёт мог уже прийти (прод 9b1d00b4)', () => {
+    const carried = new Map<string, VacancyFitView>([['old', { ...counted, state: 'refreshing' }]]);
+    expect(viewsLandedSince(carried, ['old'])).toEqual(['old']);
+  });
   it('не трогает посчитанные строки и держит предел одного чтения', () => {
     expect(viewsLandedSince(known, ['a'])).toEqual([]);
     expect(viewsLandedSince(new Map(), ['x', 'y', 'z'], 2)).toEqual(['x', 'y']);
