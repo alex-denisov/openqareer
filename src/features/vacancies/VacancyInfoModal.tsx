@@ -79,7 +79,8 @@ function VacancyDescription({
   readonly detail: VacancyDetailState;
   readonly summary: string;
 }) {
-  if (detail.status === 'loading' || detail.status === 'idle') {
+  const pending = detail.status === 'ready' && detail.detail.pending && !detail.detail.description;
+  if (detail.status === 'loading' || detail.status === 'idle' || pending) {
     return <p className="vacancies-info-description is-empty">Загружаем описание…</p>;
   }
   const text = detail.status === 'ready' ? detail.detail.description : decodeVacancyText(summary);

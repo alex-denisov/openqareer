@@ -10,6 +10,8 @@ export interface VacancyDetailText {
   readonly responsibilities: readonly string[];
   /** Выжимка кластера: страница подборки её обрезает ради веса (B446-g4). */
   readonly summary?: string;
+  /** 02.11: the server is still reading the hh text; the card asks again shortly. */
+  readonly pending?: boolean;
 }
 
 /** Full vacancy text for «Подробнее»; the matched list carries none (B266). */
@@ -31,17 +33,32 @@ export type VacancyDetailState =
   | { readonly status: 'idle' | 'loading' | 'failed' }
   | { readonly status: 'ready'; readonly detail: VacancyDetailText };
 
+const DETAIL_PENDING_DELAY_MS = 3_000;
+const DETAIL_PENDING_RETRIES = 20;
+
 export function useVacancyDetail(clusterId: string, enabled: boolean): VacancyDetailState {
   const [state, setState] = useState<VacancyDetailState>({ status: 'idle' });
   useEffect(() => {
     if (!enabled) return undefined;
     let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     setState({ status: 'loading' });
-    fetchVacancyDetail(clusterId)
-      .then((detail) => alive && setState({ status: 'ready', detail }))
-      .catch(() => alive && setState({ status: 'failed' }));
+    const read = (attempt: number) => {
+      fetchVacancyDetail(clusterId)
+        .then((detail) => {
+          if (!alive) return;
+          setState({ status: 'ready', detail });
+          // 02.11: the worker reads an opened card first, usually within seconds.
+          if (detail.pending && attempt < DETAIL_PENDING_RETRIES) {
+            timer = setTimeout(() => read(attempt + 1), DETAIL_PENDING_DELAY_MS);
+          }
+        })
+        .catch(() => alive && setState({ status: 'failed' }));
+    };
+    read(0);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [clusterId, enabled]);
   return state;
@@ -74,6 +91,7 @@ export function vacancySummaryText(
   if (fromPage) return { text: fromPage };
   if (detail.status === 'loading' || detail.status === 'idle') return { loading: true };
   if (detail.status !== 'ready') return {};
+  if (detail.detail.pending && !detail.detail.description.trim()) return { loading: true };
   const summary = withoutMarkdownLinks(detail.detail.summary ?? '');
   if (summary) return { text: summary };
   const opening = openingOfDescription(withoutMarkdownLinks(detail.detail.description));
