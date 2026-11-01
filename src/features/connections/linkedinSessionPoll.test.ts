@@ -273,7 +273,7 @@ describe('LinkedIn session import flow', () => {
   });
 
   describe('contact-info overlay read (B561)', () => {
-    const walkContactInfo = async (contactBody: string) => {
+    const walkContactInfo = async (contactBody: string, settledOverlayPath?: string) => {
       const events: { type: string; key?: string }[] = [];
       const result = await createLinkedInSessionImportFlow({
         inspectCurrentPage: async () => ({
@@ -293,8 +293,10 @@ describe('LinkedIn session import flow', () => {
               body: readFixture('profile.html'),
             };
           }
-          const body = path.endsWith('overlay/contact-info/') ? contactBody : '<main></main>';
-          return { ok: true, url: `https://www.linkedin.com${path}`, body };
+          const overlay = path.endsWith('overlay/contact-info/');
+          const body = overlay ? contactBody : '<main></main>';
+          const finalPath = overlay && settledOverlayPath ? settledOverlayPath : path;
+          return { ok: true, url: `https://www.linkedin.com${finalPath}`, body };
         },
         pauseBetweenDetailReads: async () => {},
         detailReadThrottle: freshThrottle(),
@@ -320,6 +322,18 @@ describe('LinkedIn session import flow', () => {
       if (result.status !== 'ready') throw new Error('import did not finish');
       expect(JSON.stringify(result.structured?.profile)).toContain('ivan.testov@example.com');
       expect(JSON.stringify(result.structured?.profile)).toContain('+7 900 111-22-33');
+    });
+
+    it('is read when LinkedIn drops the trailing slash once the dialog opens (01.11)', async () => {
+      // The read now waits for the dialog, and by then LinkedIn has rewritten
+      // the address to /overlay/contact-info without the slash.
+      const { events, result } = await walkContactInfo(
+        readFixture('contact-info-live.html'),
+        '/in/jordanrivers-99a1b2/overlay/contact-info',
+      );
+      expect(events).toContainEqual({ type: 'read', key: 'contactInfo' });
+      if (result.status !== 'ready') throw new Error('import did not finish');
+      expect(JSON.stringify(result.structured?.profile)).toContain('ivan.testov@example.com');
     });
   });
 

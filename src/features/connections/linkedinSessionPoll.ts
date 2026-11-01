@@ -375,7 +375,10 @@ function contactOverlayRendered(body: string): boolean {
 
 function landedOn(rawUrl: string | undefined, sectionPath: string): boolean {
   if (!rawUrl || !isAllowedLinkedInUrl(rawUrl)) return false;
-  return new URL(rawUrl).pathname.includes(`/${sectionPath}`);
+  // LinkedIn rewrites /overlay/contact-info/ to /overlay/contact-info once the
+  // dialog opens (B561, 01.11): the trailing slash is optional, the segment is not.
+  const path = `${new URL(rawUrl).pathname.replace(/\/+$/u, '')}/`;
+  return path.includes(`/${sectionPath.replace(/\/+$/u, '')}/`);
 }
 
 function isOwnProfileUrl(rawUrl?: string): rawUrl is string {
