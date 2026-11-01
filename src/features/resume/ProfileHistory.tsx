@@ -113,6 +113,35 @@ function ChangeSide({
   return <Tag aria-label={`${side}: ${text}`}>{text}</Tag>;
 }
 
+/** «было → стало»; with no previous value only the new one is shown. */
+function ChangeLine({ entry }: { readonly entry: ProfileHistoryItem }) {
+  if (!entry.previousText) {
+    return <p className="profile-history__change">{entry.appliedText}</p>;
+  }
+  return (
+    <p className="profile-history__change">
+      <ChangeSide tag="del" side="было" text={entry.previousText} />
+      <span aria-hidden="true"> → </span>
+      <ChangeSide tag="ins" side="стало" text={entry.appliedText} />
+    </p>
+  );
+}
+
+/** Changed bullets, collapsed behind «Показать изменения». */
+function ChangeDetails({ details }: { readonly details?: readonly string[] }) {
+  if (!details?.length) return null;
+  return (
+    <details className="profile-history__details">
+      <summary>Показать изменения</summary>
+      <ul>
+        {details.map((text, index) => (
+          <li key={index}>{text}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function HistoryRow({
   entry,
   onReverted,
@@ -135,11 +164,8 @@ function HistoryRow({
         {section}
         {entry.label ? <span> · {entry.label}</span> : null}
       </p>
-      <p className="profile-history__change">
-        <ChangeSide tag="del" side="было" text={entry.previousText} />
-        <span aria-hidden="true"> → </span>
-        <ChangeSide tag="ins" side="стало" text={entry.appliedText} />
-      </p>
+      <ChangeLine entry={entry} />
+      <ChangeDetails details={entry.details} />
       {error ? (
         <p className="profile-history__error" role="alert">
           {error}

@@ -255,7 +255,7 @@ test('1440: accepted place reads «Подтверждено вами · с ко�
   await expect(history.getByText('Консультант').first()).toBeVisible();
   await expect(history.getByRole('button', { name: 'Вернуть' })).toHaveCount(3);
   await expect(history.getByText('Навык ITIL — подтверждён проверкой')).toBeVisible();
-  await expect(history.getByText('было: —').first()).toBeVisible();
+  await expect(history.getByText('было: —')).toHaveCount(0);
   await expect(history.getByText(/null|\{/)).toHaveCount(0);
   await history.screenshot({ path: join(EVIDENCE_DIR, 'history-1440.png') });
 });

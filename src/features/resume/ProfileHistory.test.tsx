@@ -92,6 +92,33 @@ describe('ProfileHistoryList', () => {
   });
 });
 
+describe('ProfileHistoryList confirmation entries', () => {
+  it('reads a short summary, keeps bullets behind «Показать изменения», no «было: —»', async () => {
+    api.getProfileHistory.mockResolvedValue({
+      entries: [
+        {
+          ...entry,
+          kind: 'confirmation',
+          previousText: '',
+          appliedText: 'Место работы подтверждено: Acme, Lead',
+          details: ['Сократил время релиза.', 'Вырастил команду.'],
+        },
+      ],
+      total: 1,
+      page: 0,
+      pageSize: 20,
+    });
+    const container = await render();
+    const row = container.querySelector('[data-testid="profile-history-row"]')!;
+    expect(row.textContent).toContain('Место работы подтверждено: Acme, Lead');
+    expect(row.textContent).not.toContain('было');
+    const disclosure = row.querySelector('details')!;
+    expect(disclosure.open).toBe(false);
+    expect(disclosure.querySelector('summary')!.textContent).toBe('Показать изменения');
+    expect(disclosure.querySelectorAll('li')).toHaveLength(2);
+  });
+});
+
 describe('experience confirmation label', () => {
   const fact = (id: string, extra: Partial<CandidateMemory> = {}): CandidateMemory => ({
     id,

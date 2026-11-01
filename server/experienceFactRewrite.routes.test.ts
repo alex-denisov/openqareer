@@ -390,7 +390,9 @@ describe('accepting consultant bullets confirms the workplace (01.11)', () => {
         id: string;
         actor: string;
         section: string;
+        previousText: string;
         appliedText: string;
+        details?: string[];
         revertedAt: string | null;
       }[];
     };
@@ -407,7 +409,9 @@ describe('accepting consultant bullets confirms the workplace (01.11)', () => {
     expect(page.total).toBe(1);
     const [entry] = page.entries;
     expect(entry).toMatchObject({ actor: 'consultant', section: 'experience', revertedAt: null });
-    expect(entry!.appliedText).toContain('Расширил команду поддержки');
+    expect(entry!.appliedText).toMatch(/^Место работы подтверждено: /);
+    expect(entry!.previousText).toBe('');
+    expect(entry!.details!.join(' ')).toContain('Расширил команду поддержки');
 
     const reverted = await ctx.app.inject({
       method: 'POST',
@@ -423,6 +427,9 @@ describe('accepting consultant bullets confirms the workplace (01.11)', () => {
     const ctx = await acceptedRewrite();
     const page = await historyOf(ctx);
     expect(page.total).toBe(1);
-    expect(page.entries[0]!.appliedText).toContain('Расширил команду поддержки');
+    const [logged] = page.entries;
+    expect(logged!.appliedText).toMatch(/^Место работы подтверждено: [^«]+$/);
+    expect(logged!.previousText).toBe('');
+    expect(logged!.details!.join(' ')).toContain('Расширил команду поддержки');
   });
 });

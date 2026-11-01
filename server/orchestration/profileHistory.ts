@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { CandidateStore } from '../data/candidateStore';
-import { FACT_REWRITE_COMMAND_PREFIX } from '../data/factRewriteConfirmation';
+import {
+  acceptedBulletsOf,
+  FACT_REWRITE_COMMAND_PREFIX,
+  rewriteHistoryText,
+} from '../data/factRewriteConfirmation';
 import type {
   FactTrustState,
   ProfileChangeActor,
@@ -50,6 +54,8 @@ export interface ProfileHistoryItem {
   readonly label: string;
   readonly previousText: string;
   readonly appliedText: string;
+  /** Changed bullets, shown collapsed behind «Показать изменения». */
+  readonly details?: readonly string[];
   readonly createdAt: string;
   readonly revertedAt: string | null;
 }
@@ -83,6 +89,16 @@ export function listProfileHistory(
   };
 }
 
+function describeEntry(entry: ProfileChangeEntry) {
+  if (entry.commandId?.startsWith(FACT_REWRITE_COMMAND_PREFIX)) {
+    return {
+      previousText: '',
+      ...rewriteHistoryText(entry.label, acceptedBulletsOf(entry.applied)),
+    };
+  }
+  return describeSectionChange(entry.section, entry.previous, entry.applied);
+}
+
 function toHistoryItem(entry: ProfileChangeEntry): ProfileHistoryItem {
   return {
     id: entry.id,
@@ -94,7 +110,7 @@ function toHistoryItem(entry: ProfileChangeEntry): ProfileHistoryItem {
       entry.section === 'skills'
         ? displayNameOf(entry.previous, entry.applied, entry.label)
         : entry.label,
-    ...describeSectionChange(entry.section, entry.previous, entry.applied),
+    ...describeEntry(entry),
     createdAt: entry.createdAt,
     revertedAt: entry.revertedAt,
   };
