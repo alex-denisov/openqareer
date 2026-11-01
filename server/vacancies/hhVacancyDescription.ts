@@ -17,6 +17,8 @@ export interface HhVacancyDetails {
    * `backoff` — загрузчик выжидает после такого отказа и запроса не делал.
    */
   readonly blocked?: 'refused' | 'backoff';
+  /** 02.11: «работодатель ограничил доступ» — текста этой карточке не будет, это не сбой. */
+  readonly restricted?: boolean;
 }
 
 /** Ответы, которыми hh отказывает нам, а не одной карточке. */
@@ -157,10 +159,12 @@ export class HhVacancyDescriptionLoader {
 
     let details: HhVacancyDetails | undefined;
     let refused = false;
+    let restricted = false;
     try {
       const response = await this.options.transport(url);
       refused =
         REFUSAL_STATUSES.has(response.status) && !FORBIDDEN_VACANCY_MARKER.test(response.body);
+      restricted = response.status === 403 && FORBIDDEN_VACANCY_MARKER.test(response.body);
       // 01.11: hh отвечает 404 на удалённую вакансию — это статус ответа, не текст страницы.
       if (response.status === 404) details = { archived: true, skills: [] };
       else if (response.status === 200) {
@@ -186,6 +190,8 @@ export class HhVacancyDescriptionLoader {
       // (404, страница без описания, сеть) остальных не держит (прод 21.10).
       if (refused) this.retryAfter = Math.max(this.retryAfter, retryAt);
     }
-    return refused ? { blocked: 'refused', skills: [] } : undefined;
+    if (refused) return { blocked: 'refused', skills: [] };
+    // Не кешируется как ответ: повтор через отступ решает, скрыт ли текст насовсем.
+    return restricted ? { restricted: true, skills: [] } : undefined;
   }
 }

@@ -305,6 +305,22 @@ describe('textStillLoading (01.11)', () => {
   });
 });
 
+describe('text hidden by the employer (02.11)', () => {
+  it('an hh row whose text the employer hid says so instead of «считаем»', () => {
+    const view = { state: 'no_description', requirements: [] } as unknown as VacancyFitView;
+    expect(textStillLoading('cluster-src-hh-search:1', '', view, false, true)).toEqual({
+      ...view,
+      state: 'no_description',
+      textHidden: true,
+    });
+    const snippet = { state: 'no_requirements', requirements: [] } as unknown as VacancyFitView;
+    expect(textStillLoading('cluster-src-hh-search:1', 'Сниппет', snippet, false, true)).toMatchObject({
+      state: 'no_description',
+      textHidden: true,
+    });
+  });
+});
+
 describe('списки карточки берутся из разбора, когда он готов (01.11)', () => {
   const requirement = (id: string, text: string) => ({ id, text }) as never;
   const view = {

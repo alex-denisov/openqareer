@@ -341,6 +341,27 @@ describe('hh full-description on demand', () => {
   });
 });
 
+describe('employer-restricted hh text (02.11)', () => {
+  it('the second «доступ ограничен» marks the text hidden and the row stops being asked', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    pool.mergeSourceSlice(source.id, [vacancy]);
+    const load = vi.fn().mockResolvedValue({ restricted: true, skills: [] });
+    const engine = new MultiSourceVacancyEngine({ sources: [source], pool, descriptionLoader: { load } });
+
+    await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
+      status: 'failed',
+    });
+    expect(pool.getVacancy(vacancy.id)?.descriptionHidden).toBeUndefined();
+    await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
+      status: 'skipped',
+      restricted: true,
+    });
+    expect(pool.getVacancy(vacancy.id)?.descriptionHidden).toBe(true);
+    await engine.loadVacancyDescription(vacancy.id);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe('expireClusterSources (01.11)', () => {
   it('a repeated expiry of the same vacancy does not decrement the cluster twice', () => {
     const base = createClusterFromVacancy(vacancy);

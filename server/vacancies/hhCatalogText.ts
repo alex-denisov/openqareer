@@ -31,12 +31,15 @@ export interface HhCatalogTextEngine {
     cursor: string | undefined,
     limit: number,
   ): { ids: string[]; cursor?: string };
+  /** Позиция обхода с прошлого запуска воркера и её запись (02.11). */
+  loadSavedCursor?(): string | undefined;
+  saveCursor?(cursor: string | undefined): void;
   /** Голова очереди подборок кандидатов (01.11): идёт раньше каталога. */
   peekPriority?(limit: number): string[];
   dropPriority?(ids: readonly string[]): void;
   loadVacancyDescription(
     id: string,
-  ): Promise<Pick<VacancyDescriptionLoadResult, 'status' | 'unavailable' | 'blocked'>>;
+  ): Promise<Pick<VacancyDescriptionLoadResult, 'status' | 'unavailable' | 'blocked' | 'restricted'>>;
 }
 
 export interface HhCatalogTextReport {
@@ -45,6 +48,8 @@ export interface HhCatalogTextReport {
   /** Работодатель снял вакансию — запись ушла в архив. */
   readonly retired: number;
   readonly failed: number;
+  /** Работодатель скрыл текст: строка ушла из очередей (02.11). */
+  readonly hidden?: number;
   /** Тик оборван признаком блокировки площадки. */
   readonly blocked?: boolean;
 }
@@ -63,6 +68,7 @@ export class HhCatalogTextBackfill {
   private readonly now: () => number;
   private readonly attempts = new Map<string, HhTextAttempts>();
   private cursor: string | undefined;
+  private cursorRead = false;
   private running = false;
 
   constructor(options: { engine: HhCatalogTextEngine; perTick?: number; now?: () => number }) {
@@ -107,34 +113,49 @@ export class HhCatalogTextBackfill {
       .filter((id) => !this.waiting(id))
       .slice(0, this.perTick);
     if (priority.length > 0) return this.loadIds(priority, true);
+    if (!this.cursorRead) {
+      // 02.11: the worker restarts ~22 times a day; each start walked from the newest row again.
+      this.cursor = this.engine.loadSavedCursor?.();
+      this.cursorRead = true;
+    }
     const page = this.engine.loadHhTextCandidates(this.cursor, this.perTick);
     const report = await this.loadIds(page.ids, false);
     // Страница пройдена — дальше; конец прохода начинает с самых свежих карточек.
-    if (!report.blocked) this.cursor = page.cursor;
+    if (!report.blocked) {
+      this.cursor = page.cursor;
+      this.engine.saveCursor?.(page.cursor);
+    }
     return report;
   }
 
   private async loadIds(ids: readonly string[], priority: boolean): Promise<HhCatalogTextReport> {
     const tally = { requested: 0, loaded: 0, retired: 0, failed: 0 };
+    let hidden = 0;
+    const report = (extra: { blocked?: true } = {}): HhCatalogTextReport => ({
+      ...tally,
+      ...(hidden > 0 ? { hidden } : {}),
+      ...extra,
+    });
     for (const id of ids) {
       if (this.waiting(id)) continue;
       const result = await this.engine.loadVacancyDescription(id);
       // Пауза загрузчика: запроса не было, запись не виновата — повторить её.
-      if (result.blocked === 'backoff') return { ...tally, blocked: true };
+      if (result.blocked === 'backoff') return report({ blocked: true });
       tally.requested += 1;
       if (result.status === 'failed') {
         tally.failed += 1;
         this.markFailed(id);
         // Неудачная строка подборки уходит в общий обход с отступом и не держит голову очереди.
         if (priority) this.engine.dropPriority?.([id]);
-        if (result.blocked === 'refused') return { ...tally, blocked: true };
+        if (result.blocked === 'refused') return report({ blocked: true });
         continue;
       }
       this.attempts.delete(id);
       if (priority) this.engine.dropPriority?.([id]);
       if (result.status === 'loaded') tally.loaded += 1;
+      else if (result.restricted) hidden += 1;
       else if (result.unavailable) tally.retired += 1;
     }
-    return tally;
+    return report();
   }
 }
