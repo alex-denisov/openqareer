@@ -1,10 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { forgetMemberNetwork } from './networkIndexFeed';
-import {
-  connectNativeOnly,
-  resolveNativeImportMode,
-  type NativeImportMode,
-} from './nativeImportMode';
+import { connectNativeOnly, resolveNativeImportMode, type NativeImportMode } from './nativeImportMode';
 import { materializeManualResumeEvidence } from './manualResumeEvidence';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -14,11 +10,7 @@ import {
   buildSnapshotHead,
   buildTurnPage,
 } from '../data/candidateSnapshotPage';
-import {
-  handleCompleteWorkspace,
-  handleGetWorkspace,
-  handlePutWorkspace,
-} from './workspaceHandlers';
+import { handleCompleteWorkspace, handleGetWorkspace, handlePutWorkspace } from './workspaceHandlers';
 import { evaluateProductCase, productCaseSubmissionSchema } from '../domain/assessment';
 import { coachTurnStageSchema } from '../domain/coach';
 import { evaluateGermanyMarket, germanyMarketSubmissionSchema } from '../domain/germanyMarket';
@@ -387,12 +379,7 @@ async function importResumeIntoDossier(
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const mode = body.sourceReceipt
-    ? resolveNativeImportMode(
-        candidateStore,
-        candidate.id,
-        body.sourceReceipt.platform,
-        body.importMode,
-      )
+    ? resolveNativeImportMode(candidateStore, candidate.id, body.sourceReceipt.platform, body.importMode)
     : 'profile';
   const early = nativeImportShortcut(candidateStore, candidate.id, body, mode);
   if (early) return { data: early.data, meta: { requestId: request.id, ...early.meta } };
@@ -411,10 +398,7 @@ async function importResumeIntoDossier(
   const commit = resumeImportCommit(candidate.id, body, plan, read.reader);
   const committed =
     mode === 'replace_profile' && commit.sourceReceipt
-      ? candidateStore.replaceProfileWithImport(candidate.id, {
-          ...commit,
-          sourceReceipt: commit.sourceReceipt,
-        })
+      ? candidateStore.replaceProfileWithImport(candidate.id, { ...commit, sourceReceipt: commit.sourceReceipt })
       : candidateStore.commitResumeImport(candidate.id, commit);
   const digest = resumeDocumentDigest(candidate.id, body.source, body.text);
   recordImportCompletedNotification(deps, request, candidate.id, 'resume_import', digest);
@@ -614,12 +598,7 @@ const handlePutResume: Handler = async (deps, request, reply) => {
     const evidence = candidateStore.getSnapshot(candidate.id).memory;
     const projection = buildResumeStudioProjection({ ...boundDraft, evidence });
     candidateStore.saveResumeDraft(candidate.id, boundDraft, projection.evidenceSnapshot);
-    candidateStore.profileChangeLog.recordDraftChanges(
-      candidate.id,
-      storedDraft,
-      boundDraft,
-      'candidate',
-    );
+    candidateStore.profileChangeLog.recordDraftChanges(candidate.id, storedDraft, boundDraft, 'candidate');
     return { outdated: false } as const;
   });
 
@@ -678,14 +657,10 @@ async function registerCandidateLifecycle(app: FastifyInstance, deps: RouteDeps)
     },
     withDeps(deps, handlePutWorkspace),
   );
-  app.post(
-    '/api/v1/candidate/workspace/complete',
-    {
-      bodyLimit: 4 * 1_024 * 1_024,
-      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
-    },
-    withDeps(deps, handleCompleteWorkspace),
-  );
+  app.post('/api/v1/candidate/workspace/complete', {
+    bodyLimit: 4 * 1_024 * 1_024,
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, withDeps(deps, handleCompleteWorkspace));
   app.patch('/api/v1/candidate/memory/:memoryId', withDeps(deps, handleChangeMemory));
   app.post(
     '/api/v1/candidate/memory/review',

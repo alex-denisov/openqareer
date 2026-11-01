@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { StoredNativeSourceConnection } from '../candidateStore';
-import { withImportProvenance } from '../snapshotProvenance';
+import { withConsultantConfirmations, withImportProvenance } from '../snapshotProvenance';
 import type {
   ImportPlatform,
   ImportWalk,
@@ -110,13 +110,18 @@ export class ImportSourceStore {
     parts: Parameters<typeof withImportProvenance>[0],
     native: readonly StoredNativeSourceConnection[],
     consultantEdits: Parameters<typeof withImportProvenance>[1]['consultantEdits'] = [],
+    consultantConfirmations: ReadonlyMap<string, string> = new Map(),
   ): ReturnType<typeof withImportProvenance> {
-    return withImportProvenance(parts, {
+    const result = withImportProvenance(parts, {
       consultantEdits,
       native,
       recorded: this.list(candidateId),
       walks: this.listWalks(candidateId),
     });
+    return {
+      ...result,
+      memory: withConsultantConfirmations(result.memory, consultantConfirmations),
+    };
   }
 
   listWalks(candidateId: string): ImportWalk[] {

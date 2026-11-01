@@ -419,18 +419,10 @@ export class SqliteCandidateStore implements CandidateStore {
     const native = this.sourceConnections.list(candidateId);
     const resume = this.resumeRepository.get(candidateId);
     const edits = [...this.profileRevisionRepo.listRevisions(candidateId), ...factRewriteEdits(resume?.draft)];
-    const withSources = this.conversations.importSources.withProvenance(
-      candidateId,
-      parts,
-      native,
-      edits,
-    );
-    const confirmations = this.profileChangeLog.consultantConfirmations(candidateId);
     return {
       candidate,
       ...parts,
-      ...withSources,
-      memory: withConsultantConfirmations(withSources.memory, confirmations),
+      ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits, this.profileChangeLog.consultantConfirmations(candidateId)),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: withStoredTeamSizes(resume, parts.memory),
@@ -766,17 +758,13 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   private commitNewResumeImport(candidateId: string, input: ResumeImportCommit) {
-    const before = this.resumeRepository.get(candidateId)?.draft;
-    const committed = commitResumeImportWithDedupe(this.importDeps(), candidateId, input);
-    const after = this.resumeRepository.get(candidateId)?.draft;
-    if (after) this.profileChangeLog.recordDraftChanges(candidateId, before, after, 'import');
-    return committed;
+    return commitResumeImportWithDedupe(this.importDeps(), candidateId, input);
   }
 
   private importDeps() {
     const { database, conversations, sourceConnections } = this;
-    const { resumeRepository, candidateMediaRepository } = this;
-    return { database, conversations, sourceConnections, resumeRepository, candidateMediaRepository };
+    const { resumeRepository, candidateMediaRepository, profileChangeLog } = this;
+    return { database, conversations, sourceConnections, resumeRepository, candidateMediaRepository, profileChangeLog };
   }
 
   listNativeSourceConnections(candidateId: string): StoredNativeSourceConnection[] {
@@ -891,17 +879,4 @@ function referencedMediaIds(draft: ResumeDraft): string[] {
     draft.candidate.photoMediaId,
     ...draft.experience.map((role) => role.employerLogoMediaId),
   ].filter((value): value is string => Boolean(value));
-}
-
-/** Marks facts the candidate confirmed by accepting a consultant edit that is still in place. */
-function withConsultantConfirmations(
-  memory: StoredMemory[],
-  confirmations: ReadonlyMap<string, string>,
-): StoredMemory[] {
-  return memory.map((entry) => {
-    const at = confirmations.get(entry.id);
-    return at && entry.confidence === 'candidate-confirmed'
-      ? { ...entry, consultantConfirmedAt: at }
-      : entry;
-  });
 }
