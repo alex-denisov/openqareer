@@ -123,6 +123,31 @@ function button(container: HTMLElement, label: string): HTMLButtonElement {
 }
 
 describe('consultant rewrite of conversation facts in «Опыт» (29.10)', () => {
+  it('shows the proposal the server changed while «Опыт» stayed open, once the window is back', async () => {
+    const translated: FactRewriteProposal = {
+      ...proposal,
+      id: 'proposal-2',
+      places: [
+        {
+          experienceId: 'rosseti',
+          bullets: [{ text: 'Grew the area’s revenue 4x.', sourceFactIds: ['f-rosseti'] }],
+        },
+      ],
+    };
+    const request = vi
+      .spyOn(api, 'requestFactRewrite')
+      .mockResolvedValueOnce(proposal)
+      .mockResolvedValue(translated);
+    const container = await render();
+    expect(container.textContent).toContain('Увеличил выручку направления в 4 раза.');
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Grew the area’s revenue 4x.');
+    expect(container.textContent).not.toContain('Увеличил выручку направления в 4 раза.');
+  });
+
   it('shows the consultant’s bullets by employer and never the candidate’s raw words', async () => {
     const container = await render();
     const block = container.querySelector('[data-testid="experience-fact-rewrite"]')!;

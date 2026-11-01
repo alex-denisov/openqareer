@@ -74,7 +74,47 @@ function useRewriteProposal(sourceKey: string) {
       live = false;
     };
   }, [sourceKey, attempt]);
+  useServerChanges(sourceKey, state, setState);
   return { state, retry: useCallback(() => setAttempt((value) => value + 1), []) };
+}
+
+/**
+ * The server may change a kept proposal while «Опыт» stays open (01.11: it
+ * translated the owner's bullets into the profile's language, and the .app
+ * went on showing the Russian ones). When the window is back, the proposal is
+ * read again quietly; a new one replaces what is shown, a failed read keeps it.
+ */
+function useServerChanges(
+  sourceKey: string,
+  state: ProposalState,
+  setState: (next: ProposalState) => void,
+) {
+  const shownId = state.status === 'ready' ? (state.proposal?.id ?? null) : undefined;
+  useEffect(() => {
+    if (!sourceKey || shownId === undefined) return undefined;
+    let live = true;
+    let reading = false;
+    const reread = () => {
+      if (reading || document.visibilityState === 'hidden') return;
+      reading = true;
+      requestFactRewrite()
+        .then((proposal) => {
+          if (live && (proposal?.id ?? null) !== shownId) setState({ status: 'ready', proposal });
+        })
+        // The shown proposal stays; «Принять» on a stale one answers rewrite_stale and asks again.
+        .catch(() => undefined)
+        .finally(() => {
+          reading = false;
+        });
+    };
+    window.addEventListener('focus', reread);
+    document.addEventListener('visibilitychange', reread);
+    return () => {
+      live = false;
+      window.removeEventListener('focus', reread);
+      document.removeEventListener('visibilitychange', reread);
+    };
+  }, [sourceKey, shownId, setState]);
 }
 
 function useBusyAction() {
