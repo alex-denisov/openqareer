@@ -79,6 +79,8 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     }),
     ...(options.recluster ? { recluster: options.recluster } : {}),
+    // 02.11: the same demand table that leads LinkedIn and Indeed polls leads the hh text queue.
+    hhRoleTerms: currentFanDemand,
   });
   return {
     engine,

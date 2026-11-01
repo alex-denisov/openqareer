@@ -21,7 +21,10 @@ export type VacancyFitMark =
   | { readonly kind: 'none'; readonly caption: string; readonly ariaLabel: string };
 
 /** Owner 29.10: a row without a percent says only «мало требований» or «нет профиля». */
-function noneCaption(view: VacancyFitView | undefined): 'нет профиля' | 'мало требований' {
+function noneCaption(
+  view: VacancyFitView | undefined,
+): 'нет профиля' | 'мало требований' | 'текст скрыт' {
+  if (view?.textHidden) return 'текст скрыт';
   return view?.result?.reason === 'no_eligible_facts' ? 'нет профиля' : 'мало требований';
 }
 

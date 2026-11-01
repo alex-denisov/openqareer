@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
+import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { normalizeSalaryLabel } from './catalogCopy';
@@ -1731,9 +1732,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const rows = this.database
       .prepare(
         `SELECT q.vacancy_id AS id,
-                CASE WHEN p.id IS NOT NULL AND p.expired_at IS NULL AND
-                  length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0
-                THEN 1 ELSE 0 END AS need
+                CASE WHEN p.id IS NOT NULL AND ${HH_NEEDS_TEXT} THEN 1 ELSE 0 END AS need
            FROM hh_text_priority q
            LEFT JOIN vacancy_pool p ON p.id = q.vacancy_id
           ORDER BY q.rank ASC, q.requested_ms DESC
@@ -1753,6 +1752,49 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     for (const id of vacancyIds) remove.run(id);
   }
 
+  /** Позиция обхода текста hh (02.11): воркер перезапускается ~22 раза в сутки и шёл заново. */
+  loadHhTextCursor(): string | undefined {
+    const row = this.database
+      .prepare('SELECT cursor FROM hh_text_state WHERE id = 1')
+      .get() as { cursor: string | null } | undefined;
+    return row?.cursor ?? undefined;
+  }
+
+  saveHhTextCursor(cursor: string | undefined): void {
+    this.database
+      .prepare(
+        `INSERT INTO hh_text_state (id, cursor) VALUES (1, ?)
+         ON CONFLICT(id) DO UPDATE SET cursor = excluded.cursor`,
+      )
+      .run(cursor ?? null);
+  }
+
+  /**
+   * Снятая hh-запись снимает и свой кластер (02.11: 75 строк ролей владельца были сняты в
+   * пуле, а кластер оставался активным). Источник 13K снятых строк, партия за вызов.
+   */
+  archiveExpiredHhClusters(limit: number): number {
+    const rows = this.database
+      .prepare(
+        `SELECT c.id AS id FROM vacancy_pool_index i
+           JOIN vacancy_clusters c ON c.id = 'cluster-' || i.id
+          WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 1
+            AND coalesce(json_extract(c.cluster_json, '$.status'), 'active') = 'active'
+          LIMIT ?`,
+      )
+      .all(Math.max(1, Math.trunc(limit))) as Array<{ id: string }>;
+    let archived = 0;
+    for (const row of rows) {
+      const cluster = this.getCluster(row.id);
+      if (!cluster) continue;
+      const next = expireClusterSources(cluster, new Set([row.id.replace(/^cluster-/u, '')]));
+      if (next === cluster) continue;
+      this.upsertCluster(next);
+      if (next.status === 'archived') archived += 1;
+    }
+    return archived;
+  }
+
   /** Сколько строк подборок ещё ждут текст: для оценки времени догона. */
   countHhTextPriority(): number {
     const row = this.database.prepare('SELECT count(*) AS n FROM hh_text_priority').get() as {
@@ -1767,8 +1809,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * в обходе; `undefined` — проход закончен. За вызов просматривается не больше
    * `HH_TEXT_SCAN_LIMIT` строк, чтобы тик не стал полным чтением пула.
    */
-  loadHhTextCandidates(cursor: string | undefined, limit: number): HhTextCandidates {
-    const position = parseHhTextCursor(cursor);
+  loadHhTextCandidates(
+    cursor: string | undefined,
+    limit: number,
+    roleTerms: readonly string[] = [],
+  ): HhTextCandidates {
+    const terms = roleTerms.map((term) => term.trim().toLocaleLowerCase('ru')).filter(Boolean);
+    const parsed = parseHhTextCursor(cursor);
+    // Без ролей кандидатов фаза ролей пуста: обход сразу идёт по каталогу.
+    const position: HhTextPosition =
+      parsed.phase === 'role' && terms.length === 0 ? nextHhTextPhase(parsed)! : parsed;
     const want = Math.max(1, Math.min(Math.trunc(limit), 100));
     const ids: string[] = [];
     let scanned = 0;
@@ -1776,28 +1826,54 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     while (at && ids.length < want && scanned < HH_TEXT_SCAN_LIMIT) {
       const rows = this.hhTextPage(at, HH_TEXT_PAGE);
       if (rows.length === 0) {
-        at =
-          at.phase === 'catalog'
-            ? { phase: 'pool', ms: Number.MAX_SAFE_INTEGER, key: '' }
-            : undefined;
+        at = nextHhTextPhase(at);
         continue;
       }
       for (const row of rows) {
         scanned += 1;
+        const matches =
+          at.phase !== 'role' || terms.some((term) => (row.title ?? '').toLocaleLowerCase('ru').includes(term));
         at = { phase: at.phase, ms: row.ms, key: row.key };
-        if (row.need === 1) ids.push(row.id);
+        if (row.need === 1 && matches) ids.push(row.id);
         if (ids.length >= want) break;
       }
     }
     return { ids, ...(at ? { cursor: formatHhTextCursor(at) } : {}) };
   }
 
+  /** 02.11: the role phase walks the same index newest first and carries the title. */
+  private hhTextRolePage(
+    at: HhTextPosition,
+    size: number,
+  ): Array<{ id: string; ms: number; key: string; need: number; title: string }> {
+    const needsText = HH_NEEDS_TEXT;
+      return this.database
+        .prepare(
+          `SELECT i.id AS id, i.published_ms AS ms, i.id AS key,
+                  CASE WHEN ${needsText} THEN 1 ELSE 0 END AS need,
+                  coalesce(json_extract(p.payload, '$.title'), '') AS title
+             FROM vacancy_pool_index i
+             JOIN vacancy_pool p ON p.id = i.id
+            WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 0
+              AND (i.published_ms < ? OR (i.published_ms = ? AND i.id > ?))
+            ORDER BY i.published_ms DESC, i.id ASC
+            LIMIT ?`,
+        )
+        .all(at.ms, at.ms, at.key, size) as Array<{
+        id: string;
+        ms: number;
+        key: string;
+        need: number;
+        title: string;
+      }>;
+  }
+
   private hhTextPage(
     at: HhTextPosition,
     size: number,
-  ): Array<{ id: string; ms: number; key: string; need: number }> {
-    const needsText = `p.expired_at IS NULL AND
-      length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0`;
+  ): Array<{ id: string; ms: number; key: string; need: number; title?: string }> {
+    const needsText = HH_NEEDS_TEXT;
+    if (at.phase === 'role') return this.hhTextRolePage(at, size);
     if (at.phase === 'catalog') {
       return this.database
         .prepare(
@@ -2727,7 +2803,8 @@ export interface HhTextCandidates {
 }
 
 interface HhTextPosition {
-  readonly phase: 'catalog' | 'pool';
+  /** 02.11: rows of candidates' roles, then the public catalog, then the rest of the pool. */
+  readonly phase: 'role' | 'catalog' | 'pool';
   readonly ms: number;
   readonly key: string;
 }
@@ -2735,13 +2812,26 @@ interface HhTextPosition {
 const HH_TEXT_PAGE = 200;
 const HH_TEXT_SCAN_LIMIT = 2_000;
 
+/** Живая hh-запись, которой нужен текст: не снята, текста нет, работодатель его не скрыл. */
+const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
+      length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0 AND
+      coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
+const HH_TEXT_PHASES = ['role', 'catalog', 'pool'] as const;
+
+function nextHhTextPhase(at: HhTextPosition): HhTextPosition | undefined {
+  const phase = HH_TEXT_PHASES[HH_TEXT_PHASES.indexOf(at.phase) + 1];
+  return phase ? { phase, ms: Number.MAX_SAFE_INTEGER, key: '' } : undefined;
+}
+
 function parseHhTextCursor(cursor: string | undefined): HhTextPosition {
-  const start: HhTextPosition = { phase: 'catalog', ms: Number.MAX_SAFE_INTEGER, key: '' };
+  const start: HhTextPosition = { phase: 'role', ms: Number.MAX_SAFE_INTEGER, key: '' };
   if (!cursor) return start;
   const [phase, ms, ...key] = cursor.split('|');
   const parsedMs = Number(ms);
-  if ((phase !== 'catalog' && phase !== 'pool') || !Number.isFinite(parsedMs)) return start;
-  return { phase, ms: parsedMs, key: key.join('|') };
+  if (!HH_TEXT_PHASES.includes(phase as HhTextPosition['phase']) || !Number.isFinite(parsedMs)) {
+    return start;
+  }
+  return { phase: phase as HhTextPosition['phase'], ms: parsedMs, key: key.join('|') };
 }
 
 function formatHhTextCursor(at: HhTextPosition): string {

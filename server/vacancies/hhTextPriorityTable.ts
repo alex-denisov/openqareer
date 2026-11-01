@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS hh_text_priority (
   requested_ms INTEGER NOT NULL
 ) STRICT;
 CREATE INDEX IF NOT EXISTS hh_text_priority_order ON hh_text_priority (rank, requested_ms DESC);
+CREATE TABLE IF NOT EXISTS hh_text_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  cursor TEXT
+) STRICT;
 `;
 
 /** Строк одной подборки за запись: больше, чем у самого широкого тарифа в приоритете. */

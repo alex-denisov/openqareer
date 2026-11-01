@@ -229,7 +229,13 @@ export interface VacancyPoolStore {
   loadHhTextCandidates?(
     cursor: string | undefined,
     limit: number,
+    roleTerms?: readonly string[],
   ): { ids: string[]; cursor?: string };
+  /** Позиция обхода текста hh между перезапусками воркера (02.11). */
+  loadHhTextCursor?(): string | undefined;
+  saveHhTextCursor?(cursor: string | undefined): void;
+  /** Снятые hh-записи снимают свой кластер; возвращает, сколько снято (02.11). */
+  archiveExpiredHhClusters?(limit: number): number;
   /** Живые записи площадки без дочитанного текста, новые первыми (Workday, B535). */
   loadVacanciesWithoutFullText?(
     sourceId: string,

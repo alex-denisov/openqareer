@@ -321,3 +321,81 @@ describe('hh text priority queue (01.11)', () => {
     expect(store.peekHhTextPriority(10)).toEqual([b.id]);
   });
 });
+
+describe('02.11: role rows first, position survives a restart, hidden text and gone clusters', () => {
+  const titled = (n: number, daysAgo: number, title: string): UnifiedVacancy => ({
+    ...hh(n, daysAgo),
+    title,
+  });
+
+  it('walks live rows whose title matches a candidate role before the catalog and the pool', () => {
+    const store = openSqlite();
+    const roleOld = titled(1, 20, 'Операционный директор');
+    const roleNew = titled(2, 3, 'Директор по логистике (Казань)');
+    const other = titled(3, 0, 'Бариста');
+    const catalog = titled(4, 1, 'Курьер');
+    store.mergeSourceSlice(HH, [roleOld, roleNew, other, catalog]);
+    store.saveClusters([catalog].map(clusterOf));
+    const terms = ['операционный директор', 'директор по логистике'];
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const batch = store.loadHhTextCandidates(cursor, 1, terms);
+      seen.push(...batch.ids);
+      cursor = batch.cursor;
+      if (!cursor) break;
+    }
+    // Unread role rows come round again in the pool phase; on prod they are read or waiting.
+    expect(seen.slice(0, 4)).toEqual([roleNew.id, roleOld.id, catalog.id, other.id]);
+  });
+
+  it('keeps the walk position in the database for the next worker', () => {
+    const store = openSqlite();
+    expect(store.loadHhTextCursor()).toBeUndefined();
+    store.saveHhTextCursor('pool|5|k');
+    expect(store.loadHhTextCursor()).toBe('pool|5|k');
+    store.saveHhTextCursor(undefined);
+    expect(store.loadHhTextCursor()).toBeUndefined();
+  });
+
+  it('the backfill starts from the saved position and saves the next one', async () => {
+    const saved: Array<string | undefined> = [];
+    const asked: Array<string | undefined> = [];
+    const engine: HhCatalogTextEngine = {
+      hhTextReady: () => true,
+      loadHhTextCandidates: (cursor) => {
+        asked.push(cursor);
+        return { ids: ['a'], cursor: 'next' };
+      },
+      loadSavedCursor: () => 'saved',
+      saveCursor: (cursor) => saved.push(cursor),
+      loadVacancyDescription: async () => ({ status: 'loaded', unavailable: false }),
+    };
+    await new HhCatalogTextBackfill({ engine }).step();
+    expect(asked).toEqual(['saved']);
+    expect(saved).toEqual(['next']);
+  });
+
+  it('a row whose text the employer hid leaves every queue', () => {
+    const store = openSqlite();
+    const hidden = { ...hh(1, 1), descriptionHidden: true } as UnifiedVacancy;
+    const open = hh(2, 2);
+    store.mergeSourceSlice(HH, [hidden, open]);
+    store.requestHhTextPriority([hidden.id, open.id]);
+    expect(store.peekHhTextPriority(10)).toEqual([open.id]);
+    expect(store.loadHhTextCandidates(undefined, 10).ids).toEqual([open.id]);
+  });
+
+  it('archives the cluster of an expired hh row', () => {
+    const store = openSqlite();
+    const gone = hh(1, 1);
+    const live = hh(2, 1);
+    store.mergeSourceSlice(HH, [gone, live]);
+    store.saveClusters([gone, live].map(clusterOf));
+    store.markExpired([gone.id], new Date().toISOString());
+    expect(store.archiveExpiredHhClusters(100)).toBe(1);
+    expect(store.getCluster(`cluster-${gone.id}`)?.status).toBe('archived');
+    expect(store.getCluster(`cluster-${live.id}`)?.status).toBe('active');
+    expect(store.archiveExpiredHhClusters(100)).toBe(0);
+  });
+});

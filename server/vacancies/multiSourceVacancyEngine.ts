@@ -63,6 +63,7 @@ import type { CatalogListingSummary } from './vacancyCatalogFacets';
 
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
+import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import type { CatalogTotals } from './matchedCatalogSummary';
 import {
@@ -102,6 +103,8 @@ export interface VacancyDescriptionLoaded {
   readonly archived?: boolean;
   /** Площадка отказала нам (`refused`) или загрузчик выжидает после отказа (`backoff`). */
   readonly blocked?: 'refused' | 'backoff';
+  /** Работодатель ограничил доступ к карточке (02.11). */
+  readonly restricted?: boolean;
 }
 
 /** Читает полный текст только когда кандидат дошёл до конкретной вакансии. */
@@ -117,6 +120,8 @@ export interface VacancyDescriptionLoadResult {
   readonly status: 'loaded' | 'cached' | 'skipped' | 'failed';
   /** Отказ — признак блокировки площадки, а не сбой одной карточки (B535). */
   readonly blocked?: 'refused' | 'backoff';
+  /** Текст скрыт работодателем насовсем: строка ушла из очередей текста (02.11). */
+  readonly restricted?: boolean;
 }
 
 export interface VacancyDescriptionPreloadSummary {
@@ -397,6 +402,7 @@ export class MultiSourceVacancyEngine {
    */
   private readonly linkProbe?: LinkProbe;
   private readonly descriptionLoader?: VacancyDescriptionLoader;
+  private readonly hhRoleTermsReader?: () => readonly string[];
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
   private readonly workdayDetailFetch?: WorkdayDetailFetch;
   private workdayDescriptions?: WorkdayDescriptionBackfill;
@@ -412,6 +418,8 @@ export class MultiSourceVacancyEngine {
     linkProbe?: LinkProbe;
     descriptionLoader?: VacancyDescriptionLoader;
     recluster?: ReclusterMode;
+    /** Роли кандидатов для очереди текста hh (02.11); без них очередь — каталог и пул. */
+    hhRoleTerms?: () => readonly string[];
     workdayDetailFetch?: WorkdayDetailFetch;
   }) {
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
@@ -426,6 +434,7 @@ export class MultiSourceVacancyEngine {
     this.robots = options?.robots;
     this.linkProbe = options?.linkProbe;
     this.descriptionLoader = options?.descriptionLoader;
+    this.hhRoleTermsReader = options?.hhRoleTerms;
     this.workdayDetailFetch = options?.workdayDetailFetch;
     // Source state is a small bounded registry, unlike the vacancy/cluster
     // pool. Load it immediately so the HTTP admin surface can show a durable
@@ -1030,13 +1039,18 @@ export class MultiSourceVacancyEngine {
             this.rights.get(HH_SEARCH_SOURCE_ID) === 'live'
           );
         },
-        loadHhTextCandidates: (cursor, limit) => pool.loadHhTextCandidates!(cursor, limit),
+        // 02.11: rows whose title matches a candidate's role go before the catalog and the pool.
+        loadHhTextCandidates: (cursor, limit) =>
+          pool.loadHhTextCandidates!(cursor, limit, this.hhRoleTerms()),
+        loadSavedCursor: () => pool.loadHhTextCursor?.(),
+        saveCursor: (cursor) => pool.saveHhTextCursor?.(cursor),
         peekPriority: (limit) => pool.peekHhTextPriority?.(limit) ?? [],
         dropPriority: (ids) => pool.dropHhTextPriority?.(ids),
         loadVacancyDescription: (id) => this.loadVacancyDescription(id),
       },
     });
     this.runClusterTextStep();
+    pool.archiveExpiredHhClusters?.(EXPIRED_CLUSTER_BATCH);
     return this.hhCatalogText.step();
   }
 
@@ -1140,6 +1154,14 @@ export class MultiSourceVacancyEngine {
     ) {
       return Promise.resolve({ vacancy: existing, unavailable: false, status: 'cached' });
     }
+    if (existing.descriptionHidden) {
+      return Promise.resolve({
+        vacancy: existing,
+        unavailable: true,
+        status: 'skipped',
+        restricted: true,
+      });
+    }
     const pending = this.descriptionLoads.get(id);
     if (pending) return pending;
     const load = this.loadAndStoreVacancyDescription(existing);
@@ -1152,6 +1174,16 @@ export class MultiSourceVacancyEngine {
    * 01.11: строки подборки в голову очереди текста hh воркера обслуживания; сеть здесь
    * не трогается. Ошибку записи видит вызывающий.
    */
+  /** Роли кандидатов (таблица спроса, 02.11) — для очереди текста hh по названию. */
+  private hhRoleTerms(): readonly string[] {
+    try {
+      return this.hhRoleTermsReader?.() ?? [];
+    } catch {
+      // Роли — ускорение очереди, не условие: без них обход идёт по каталогу и пулу.
+      return [];
+    }
+  }
+
   public requestHhTextPriority(ids: readonly string[], baseRank = 0): void {
     this.pool.requestHhTextPriority?.(ids, baseRank);
   }
@@ -1191,6 +1223,28 @@ export class MultiSourceVacancyEngine {
     return { vacancy, unavailable: true, status: 'skipped' };
   }
 
+  /**
+   * 02.11: hh answered «работодатель ограничил доступ». The first answer may be a passing state
+   * and is retried after the backfill's delay; the second marks the text hidden for good.
+   */
+  private noteHiddenText(vacancy: UnifiedVacancy): VacancyDescriptionLoadResult {
+    const seen = (vacancy.descriptionHiddenSeen ?? 0) + 1;
+    const hidden = seen >= HIDDEN_TEXT_ANSWERS;
+    const updated: UnifiedVacancy = {
+      ...vacancy,
+      descriptionHiddenSeen: seen,
+      ...(hidden ? { descriptionHidden: true } : {}),
+    };
+    try {
+      this.pool.mergeSourceSlice(vacancy.provenance.sourceId, [updated]);
+    } catch {
+      return { vacancy, unavailable: true, status: 'failed' };
+    }
+    return hidden
+      ? { vacancy: updated, unavailable: true, status: 'skipped', restricted: true }
+      : { vacancy: updated, unavailable: true, status: 'failed' };
+  }
+
   private async loadAndStoreVacancyDescription(
     vacancy: UnifiedVacancy,
   ): Promise<VacancyDescriptionLoadResult> {
@@ -1205,6 +1259,7 @@ export class MultiSourceVacancyEngine {
       return { vacancy, unavailable: true, status: 'failed', blocked: loaded.blocked };
     }
     if (typeof loaded === 'object' && loaded.archived) return this.retireArchivedVacancy(vacancy);
+    if (typeof loaded === 'object' && loaded.restricted) return this.noteHiddenText(vacancy);
 
     const fullDescription = typeof loaded === 'string' ? loaded : loaded.description;
     const loadedSkills =
@@ -2037,25 +2092,10 @@ export class MultiSourceVacancyEngine {
   }
 }
 
-/**
- * Кластер после ухода вакансий (01.11): снятый не трогается повторно, ушедший источник
- * убирается, поэтому повторная весть о той же вакансии не вычитает её второй раз.
- */
-export function expireClusterSources(
-  cluster: VacancyCluster,
-  goneSet: ReadonlySet<string>,
-): VacancyCluster {
-  if (cluster.status === 'archived') return cluster;
-  const isGone = (s: VacancyCluster['sources'][number]) =>
-    Boolean(
-      (s.externalId && goneSet.has(s.externalId)) || (s.sourceUrl && goneSet.has(s.sourceUrl)),
-    );
-  const byId = goneSet.has(cluster.id.replace(/^cluster-/, ''));
-  const remaining = cluster.sources.filter((s) => !isGone(s));
-  const gone = cluster.sources.length - remaining.length;
-  if (gone === 0 && !byId) return cluster;
-  const count = cluster.vacanciesCount - Math.max(1, gone);
-  return count <= 0
-    ? { ...cluster, status: 'archived' }
-    : { ...cluster, vacanciesCount: count, sources: remaining };
-}
+export { expireClusterSources } from './clusterExpiry';
+
+/** После стольких ответов «доступ ограничен» текст считается скрытым работодателем. */
+const HIDDEN_TEXT_ANSWERS = 2;
+
+/** Кластеров снятых hh-записей за такт: точечные записи, не обход всех кластеров. */
+const EXPIRED_CLUSTER_BATCH = 50;

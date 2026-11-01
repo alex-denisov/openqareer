@@ -69,6 +69,13 @@ export interface UnifiedVacancy {
   aboutCompany?: string;
   contactInfo?: string;
   fullDescription?: string;
+  /**
+   * 02.11: hh answered «работодатель ограничил доступ» twice — the text is not coming, the row
+   * leaves the text queues and the list says so instead of «считаем».
+   */
+  descriptionHidden?: boolean;
+  /** Сколько раз hh ответил «доступ ограничен»: на втором ответе текст считается скрытым. */
+  descriptionHiddenSeen?: number;
   /** Отпечаток «название + полный текст» (01.11): проекция сведения несёт его вместо текста. */
   textKey?: string;
   postType?: 'vacancy' | 'candidate_resume' | 'ad' | 'digest';

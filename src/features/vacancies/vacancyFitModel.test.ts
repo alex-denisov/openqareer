@@ -228,3 +228,10 @@ describe('vacancyFitConditionBlock: a contradicted condition named next to the p
     expect(vacancyFitConditionBlock(mockupView())).toBeNull();
   });
 });
+
+describe('text hidden by the employer (02.11)', () => {
+  it('says «текст скрыт», not «мало требований»', () => {
+    const view = { state: 'no_description', requirements: [], textHidden: true } as VacancyFitView;
+    expect(vacancyFitMark(view)).toMatchObject({ kind: 'none', caption: 'текст скрыт' });
+  });
+});

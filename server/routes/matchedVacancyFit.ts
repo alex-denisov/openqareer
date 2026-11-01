@@ -156,7 +156,7 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
         views.set(
           id,
           compactFitView(
-            geoBlocks(target, textStillLoading(id, target.description, view, target.fullText)),
+            geoBlocks(target, textStillLoading(id, target.description, view, target.fullText, target.textHidden)),
           ),
         );
       }
@@ -177,8 +177,14 @@ export function textStillLoading(
   description: string,
   view: VacancyFitView,
   fullText = Boolean(description?.trim()),
+  textHidden = false,
 ): VacancyFitView {
   if (!clusterId.startsWith(HH_CLUSTER_PREFIX)) return view;
+  // 02.11: the employer hid the text, so «считаем» would never end.
+  if (textHidden && !fullText) {
+    const { result: _snippetResult, ...rest } = view;
+    return { ...rest, state: 'no_description', textHidden: true };
+  }
   const loading =
     (view.state === 'no_description' && !description?.trim()) ||
     (view.state === 'no_requirements' && !fullText);
@@ -253,7 +259,13 @@ export function withShownPageFitViews(
     const fitView = compactFitView(
       geoBlocks(
         target,
-        textStillLoading(item.cluster.id, target.description, view, target.fullText),
+        textStillLoading(
+          item.cluster.id,
+          target.description,
+          view,
+          target.fullText,
+          target.textHidden,
+        ),
       ),
     );
     return { ...item, explanation: explanationWithFitView(item.explanation, fitView) };

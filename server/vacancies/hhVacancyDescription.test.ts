@@ -118,7 +118,11 @@ describe('HhVacancyDescriptionLoader', () => {
       failedCacheJitterMs: 0,
     });
 
-    await expect(loader.load('https://hh.ru/vacancy/9001')).resolves.toBeUndefined();
+    // 02.11: said apart from a failure, so the engine can stop asking after the second answer.
+    await expect(loader.load('https://hh.ru/vacancy/9001')).resolves.toEqual({
+      restricted: true,
+      skills: [],
+    });
     await expect(loader.load('https://hh.ru/vacancy/9002')).resolves.toMatchObject({
       description: 'Полное описание роли\n\n- TypeScript',
     });

@@ -15,6 +15,8 @@ export interface VacancyFitView {
   readonly result?: VacancyFitResult;
   /** Why a `failed` job stopped, from its error class; the row names it instead of «try again». */
   readonly failure?: VacancyFitFailure;
+  /** 02.11: hh answered «работодатель ограничил доступ» twice; no text, so no percent. */
+  readonly textHidden?: true;
   /** List payload only: requirement text and verdict, no quotes, so the card lists match the percent. */
   readonly points?: readonly VacancyFitPoint[];
 }
