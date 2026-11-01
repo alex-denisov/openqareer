@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
+import { matchedVacancyPage } from './fixtures/readabilityWorkspace';
+import { readyVacancyFit } from './fixtures/vacancyFit';
 
 /**
  * B232 — читаемость кабинета как гейт, а не как разовый аудит.
@@ -987,4 +989,71 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-responses-board')).toBeHidden();
     await page.screenshot({ path: 'output/playwright/B337/responses-list-390.png' });
   });
+});
+
+/** Two long skills the profile states but no quiz has checked (owner run 3, 01.11). */
+function statedLongSkillsFit(vacancyId: string) {
+  const ready = readyVacancyFit(vacancyId);
+  const skill = (id: string, text: string) => ({
+    ...ready.requirements[0]!,
+    id,
+    text,
+    label: text,
+    kind: 'other' as const,
+    skill: true,
+  });
+  return {
+    ...ready,
+    requirements: [skill('r-ops', 'Operational excellence'), skill('r-bd', 'Business development')],
+    result: {
+      ...ready.result!,
+      assessments: [
+        { requirementId: 'r-ops', status: 'matched' as const, evidence: [] },
+        { requirementId: 'r-bd', status: 'matched' as const, evidence: [] },
+      ],
+    },
+  };
+}
+
+test('01.11: the vacancy quiz button stays on one line at 1440, 1176 and 390', async ({
+  page,
+}, info) => {
+  await mockSignedInCabinet(page, { vacancyTotal: 2 });
+  const base = matchedVacancyPage(0, 2);
+  await page.route('**/api/v1/candidate/matched-vacancies*', (route) =>
+    route.fulfill({
+      json: {
+        ...base,
+        data: base.data.map((item) => ({
+          ...item,
+          explanation: { ...item.explanation, fitView: statedLongSkillsFit(item.cluster.id) },
+        })),
+      },
+    }),
+  );
+  const mobile = info.project.name === 'mobile-390';
+  const widths = mobile ? [390] : [1440, 1176];
+  await page.setViewportSize({ width: widths[0]!, height: 900 });
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
+  await expect(page.locator('.vacancies-screen-row-trigger').first()).toBeVisible();
+  const button = page.locator('.vacancy-fit-boost').filter({ visible: true }).first();
+  if (!(await button.isVisible()))
+    await page.locator('.vacancies-screen-row-trigger').first().click();
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(button).toHaveText('Проверить навыки');
+    const lines = await button.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const tops = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+      return tops.size;
+    });
+    expect(lines, `${width}px`).toBe(1);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await button.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `output/playwright/quiz-button/after-${width}.png` });
+  }
 });
