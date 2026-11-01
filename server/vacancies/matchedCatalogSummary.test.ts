@@ -99,3 +99,16 @@ describe('сводка каталога (B485)', () => {
     });
   });
 });
+
+describe('matchedCatalogSummary selection tally (01.11)', () => {
+  it('carries the filtered selection and its rows with a percent next to the catalog size', () => {
+    expect(
+      matchedCatalogSummary({ clusters: 476_000 }, 951, { selectionTotal: 146, fitCounted: 90 }),
+    ).toEqual({
+      roleLevelMatches: 951,
+      catalogTotal: 476_000,
+      selectionTotal: 146,
+      fitCounted: 90,
+    });
+  });
+});

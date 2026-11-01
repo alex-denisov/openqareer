@@ -535,6 +535,39 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return 0;
   }
 
+  private hhTextPriority = new Map<string, number>();
+
+  /** Как в базе: подборка кандидата в голову очереди текста hh (01.11). */
+  requestHhTextPriority(vacancyIds: readonly string[], baseRank = 0): void {
+    const next = new Map(this.hhTextPriority);
+    vacancyIds
+      .filter((id) => id.startsWith(`${HH_SEARCH_SOURCE_ID}:`))
+      .forEach((id, index) => {
+        const rank = baseRank + index;
+        next.set(id, Math.min(next.get(id) ?? rank, rank));
+      });
+    this.hhTextPriority = next;
+  }
+
+  peekHhTextPriority(limit: number): string[] {
+    const ordered = [...this.hhTextPriority.entries()].sort((a, b) => a[1] - b[1]);
+    const needs = (id: string) => {
+      const row = this.rows.get(id);
+      return Boolean(row && row.expiredAt === undefined && !row.vacancy.fullDescription?.trim());
+    };
+    this.dropHhTextPriority(ordered.filter(([id]) => !needs(id)).map(([id]) => id));
+    return ordered
+      .filter(([id]) => needs(id))
+      .slice(0, Math.max(1, Math.trunc(limit)))
+      .map(([id]) => id);
+  }
+
+  dropHhTextPriority(vacancyIds: readonly string[]): void {
+    const next = new Map(this.hhTextPriority);
+    vacancyIds.forEach((id) => next.delete(id));
+    this.hhTextPriority = next;
+  }
+
   /** Как в базе, без каталога: живые hh-записи без текста, свежие первыми (B535). */
   loadHhTextCandidates(
     cursor: string | undefined,

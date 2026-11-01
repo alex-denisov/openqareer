@@ -57,19 +57,32 @@ async function createPagingApp(
   const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
   // Без подтверждённого профиля подбора нет вовсе (B161): целевую роль даёт
   // черновик резюме — самый короткий честный путь к непустому подбору.
-  if (!unconfirmed) candidateStore.saveResumeDraft(
-    candidate.id,
-    { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
-    [],
-  );
+  if (!unconfirmed)
+    candidateStore.saveResumeDraft(
+      candidate.id,
+      { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
+      [],
+    );
 
   let call = 0;
   const engine = {
-    ...(includeSourceReader ? { getSources: () => [{
-      id: 'registered-empty', name: 'Zero', type: 'rss', enabled: true,
-      targetUrl: 'https://zero.example/jobs', refreshIntervalMinutes: 60,
-      itemsFoundTotal: 0, itemsActiveTotal: 0, market: 'Великобритания',
-    }] } : {}),
+    ...(includeSourceReader
+      ? {
+          getSources: () => [
+            {
+              id: 'registered-empty',
+              name: 'Zero',
+              type: 'rss',
+              enabled: true,
+              targetUrl: 'https://zero.example/jobs',
+              refreshIntervalMinutes: 60,
+              itemsFoundTotal: 0,
+              itemsActiveTotal: 0,
+              market: 'Великобритания',
+            },
+          ],
+        }
+      : {}),
     getMatchedVacanciesAsync: async () => {
       call += 1;
       await waitForMatching;
@@ -97,8 +110,11 @@ async function createPagingApp(
 describe('чтение подбора страницами', () => {
   it('отдаёт подборку страницами по 20 записей из одной посчитанной подборки (PRB-040)', async () => {
     const { app, authorization } = await createPagingApp();
-    const get = (offset: number) => app.inject({
-      url: `/api/v1/candidate/matched-vacancies?offset=${offset}`, headers: { authorization } });
+    const get = (offset: number) =>
+      app.inject({
+        url: `/api/v1/candidate/matched-vacancies?offset=${offset}`,
+        headers: { authorization },
+      });
     const first = (await get(0)).json();
     expect(first.data).toHaveLength(20);
     expect(first.meta.pageOffsets).toEqual([0, 20]);
@@ -109,30 +125,44 @@ describe('чтение подбора страницами', () => {
 
   it('serves session and connections while a matching read is still running', async () => {
     let finish!: () => void;
-    const waiting = new Promise<void>((resolve) => { finish = resolve; });
+    const waiting = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     const { app, authorization, calls } = await createPagingApp(waiting);
-    const matched = app.inject({ url: '/api/v1/candidate/matched-vacancies', headers: { authorization } }).then((response) => response);
+    const matched = app
+      .inject({ url: '/api/v1/candidate/matched-vacancies', headers: { authorization } })
+      .then((response) => response);
     // Give Fastify the request; matching must remain pending during both reads.
     await new Promise((resolve) => setTimeout(resolve, 20));
     try {
       expect(calls()).toBe(1);
       const session = await app.inject({ url: '/api/v1/auth/me' });
-      const connections = await app.inject({ url: '/api/v1/candidate/connections', headers: { authorization } });
+      const connections = await app.inject({
+        url: '/api/v1/candidate/connections',
+        headers: { authorization },
+      });
       expect(session.statusCode).toBe(200);
       expect(connections.statusCode).toBe(200);
       expect(Array.isArray(connections.json().data)).toBe(true);
-    } finally { finish(); }
+    } finally {
+      finish();
+    }
     expect((await matched).statusCode).toBe(200);
   });
 
   it('проверяет неизвестные источники и роли даже без подтверждённого профиля', async () => {
     const { app, authorization } = await createPagingApp(undefined, undefined, true);
     for (const query of ['source=unknown', 'role=unknown']) {
-      const response = await app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
-        headers: { authorization } });
+      const response = await app.inject({
+        url: `/api/v1/candidate/matched-vacancies?${query}`,
+        headers: { authorization },
+      });
       expect(response.statusCode).toBe(400);
     }
-    const empty = await app.inject({ url: '/api/v1/candidate/matched-vacancies', headers: { authorization } });
+    const empty = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
     expect(empty.statusCode).toBe(200);
     expect(empty.json().meta.facets.total).toBe(0);
   });
@@ -162,22 +192,42 @@ describe('чтение подбора страницами', () => {
   });
 
   it('сужает смешанную подборку до пагинации по регионам, источникам и удалёнке', async () => {
-    const items = pool('mixed', 40).map((item, index) => ({ ...item, cluster: {
-      ...item.cluster, canonicalLocation: index < 30 ? 'Berlin' : 'Dubai',
-      isRemote: index >= 30, sources: [{ sourceId: index < 30 ? 'eu-jobs' : 'mena-jobs',
-        sourceName: 'Работа', sourceType: 'direct' as const, sourceUrl: '', observedAt: '' }],
-    } }));
+    const items = pool('mixed', 40).map((item, index) => ({
+      ...item,
+      cluster: {
+        ...item.cluster,
+        canonicalLocation: index < 30 ? 'Berlin' : 'Dubai',
+        isRemote: index >= 30,
+        sources: [
+          {
+            sourceId: index < 30 ? 'eu-jobs' : 'mena-jobs',
+            sourceName: 'Работа',
+            sourceType: 'direct' as const,
+            sourceUrl: '',
+            observedAt: '',
+          },
+        ],
+      },
+    }));
     const { app, authorization } = await createPagingApp(undefined, items);
-    const get = (query: string) => app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
-      headers: { authorization } });
+    const get = (query: string) =>
+      app.inject({
+        url: `/api/v1/candidate/matched-vacancies?${query}`,
+        headers: { authorization },
+      });
     const first = (await get('region=eu&source=eu-jobs')).json();
     expect(first.meta.total).toBe(30);
     expect(first.meta.facets.total).toBe(40);
-    expect(first.meta.facets.regions).toEqual([{ id: 'eu', count: 30 }, { id: 'mena', count: 10 }]);
+    expect(first.meta.facets.regions).toEqual([
+      { id: 'eu', count: 30 },
+      { id: 'mena', count: 10 },
+    ]);
     const page = (await get('region=eu&source=eu-jobs&offset=20')).json();
     expect(page.meta.total).toBe(30);
     expect(page.data).toHaveLength(10);
-    expect(page.data.every((item: MatchedVacancyItem) => item.cluster.canonicalLocation === 'Berlin')).toBe(true);
+    expect(
+      page.data.every((item: MatchedVacancyItem) => item.cluster.canonicalLocation === 'Berlin'),
+    ).toBe(true);
     const bothSources = (await get('source=eu-jobs&source=mena-jobs')).json();
     expect(bothSources.meta.total).toBe(40);
     const remote = (await get('remote=1&source=mena-jobs')).json();
@@ -187,8 +237,11 @@ describe('чтение подбора страницами', () => {
 
   it('сводка охватывает снимок, фильтры применяются до страницы и значения проверяются', async () => {
     const { app, authorization } = await createPagingApp();
-    const get = (query: string) => app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
-      headers: { authorization } });
+    const get = (query: string) =>
+      app.inject({
+        url: `/api/v1/candidate/matched-vacancies?${query}`,
+        headers: { authorization },
+      });
     const first = await get('offset=0');
     expect(first.json().meta.facets.total).toBe(40);
     expect(first.json().meta.facets.regions).toEqual([{ id: 'ru', count: 40 }]);
@@ -198,7 +251,13 @@ describe('чтение подбора страницами', () => {
     const repeated = await get('region=eu&region=ru&level=unknown');
     expect(repeated.json().meta.total).toBe(40);
     expect((await get('offset=20')).json().meta.facets).toBeUndefined();
-    for (const query of ['level=invalid', 'region=invalid', 'remote=yes', 'source=invalid', 'role=invalid']) {
+    for (const query of [
+      'level=invalid',
+      'region=invalid',
+      'remote=yes',
+      'source=invalid',
+      'role=invalid',
+    ]) {
       expect((await get(query)).statusCode).toBe(400);
     }
   });
@@ -211,19 +270,31 @@ describe('чтение подбора страницами', () => {
       clusters: 1620,
       updatedAt: '2026-10-07T06:12:00.000Z',
     }));
-    const get = (query: string) => app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
-      headers: { authorization } });
+    const get = (query: string) =>
+      app.inject({
+        url: `/api/v1/candidate/matched-vacancies?${query}`,
+        headers: { authorization },
+      });
     const first = (await get('region=eu')).json();
-    expect(first.meta.facets.catalogSummary).toEqual({
-      roleLevelMatches: 36, catalogTotal: 1620, observedAt: '2026-10-07T06:12:00.000Z',
+    expect(first.meta.facets.catalogSummary).toMatchObject({
+      roleLevelMatches: 36,
+      catalogTotal: 1620,
+      observedAt: '2026-10-07T06:12:00.000Z',
+    });
+    // 01.11: the header counts the same filtered set the list pages through.
+    expect(first.meta.facets.catalogSummary).toMatchObject({
+      selectionTotal: first.meta.total,
+      fitCounted: 0,
     });
     expect((await get('offset=20')).json().meta.facets).toBeUndefined();
   });
 
   it('без размера каталога сводки нет — клиент пишет «неизвестно» (B485)', async () => {
     const { app, authorization } = await createPagingApp();
-    const response = await app.inject({ url: '/api/v1/candidate/matched-vacancies',
-      headers: { authorization } });
+    const response = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
+    });
     expect(response.json().meta.facets).not.toHaveProperty('catalogSummary');
   });
 
@@ -239,7 +310,9 @@ describe('чтение подбора страницами', () => {
     const plan: number[] = first.json().meta.pageOffsets;
     expect(plan.length).toBeGreaterThan(1);
 
-    const ids: string[] = first.json().data.map((item: { cluster: { id: string } }) => item.cluster.id);
+    const ids: string[] = first
+      .json()
+      .data.map((item: { cluster: { id: string } }) => item.cluster.id);
     for (const offset of plan.slice(1)) {
       const page = await app.inject({
         method: 'GET',

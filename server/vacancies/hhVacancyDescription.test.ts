@@ -198,10 +198,10 @@ describe('HhVacancyDescriptionLoader', () => {
     expect(loaded).toMatchObject({ description: expect.stringContaining('Руководить командой') });
   });
 
-  it('a page that fails on its own (404, no description) does not pause other cards', async () => {
+  it('a page that fails on its own (500, no description) does not pause other cards', async () => {
     const transport = vi
       .fn()
-      .mockResolvedValueOnce({ status: 404, body: '' })
+      .mockResolvedValueOnce({ status: 500, body: '' })
       .mockResolvedValueOnce({ status: 200, body: '<main>без описания</main>' })
       .mockResolvedValueOnce({ status: 200, body: page });
     const loader = new HhVacancyDescriptionLoader({
@@ -228,5 +228,25 @@ describe('HhVacancyDescriptionLoader', () => {
     await expect(loader.load('https://hh.ru/vacancy/1')).resolves.toMatchObject({
       blocked: 'refused',
     });
+  });
+
+  it('01.11: 404 for a deleted vacancy is a removal, from the response status, not page text', async () => {
+    const transport = vi.fn().mockResolvedValue({ status: 404, body: 'Вакансия в архиве' });
+    const loader = new HhVacancyDescriptionLoader({
+      transport,
+      sleep: vi.fn().mockResolvedValue(undefined),
+    });
+    await expect(loader.load(vacancyUrl)).resolves.toEqual({ archived: true, skills: [] });
+  });
+
+  it('a 200 page whose i18n mentions «Вакансия в архиве» stays live (B312)', async () => {
+    const transport = vi
+      .fn()
+      .mockResolvedValue({ status: 200, body: `${page}<script>"Вакансия в архиве"</script>` });
+    const loader = new HhVacancyDescriptionLoader({
+      transport,
+      sleep: vi.fn().mockResolvedValue(undefined),
+    });
+    await expect(loader.load(vacancyUrl)).resolves.not.toHaveProperty('archived');
   });
 });

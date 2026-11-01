@@ -31,6 +31,9 @@ export interface HhCatalogTextEngine {
     cursor: string | undefined,
     limit: number,
   ): { ids: string[]; cursor?: string };
+  /** Голова очереди подборок кандидатов (01.11): идёт раньше каталога. */
+  peekPriority?(limit: number): string[];
+  dropPriority?(ids: readonly string[]): void;
   loadVacancyDescription(
     id: string,
   ): Promise<Pick<VacancyDescriptionLoadResult, 'status' | 'unavailable' | 'blocked'>>;
@@ -99,9 +102,21 @@ export class HhCatalogTextBackfill {
   }
 
   private async loadPage(): Promise<HhCatalogTextReport> {
+    // 01.11: подборки кандидатов раньше каталога — процент ждёт именно их текст.
+    const priority = (this.engine.peekPriority?.(this.perTick * 4) ?? [])
+      .filter((id) => !this.waiting(id))
+      .slice(0, this.perTick);
+    if (priority.length > 0) return this.loadIds(priority, true);
     const page = this.engine.loadHhTextCandidates(this.cursor, this.perTick);
+    const report = await this.loadIds(page.ids, false);
+    // Страница пройдена — дальше; конец прохода начинает с самых свежих карточек.
+    if (!report.blocked) this.cursor = page.cursor;
+    return report;
+  }
+
+  private async loadIds(ids: readonly string[], priority: boolean): Promise<HhCatalogTextReport> {
     const tally = { requested: 0, loaded: 0, retired: 0, failed: 0 };
-    for (const id of page.ids) {
+    for (const id of ids) {
       if (this.waiting(id)) continue;
       const result = await this.engine.loadVacancyDescription(id);
       // Пауза загрузчика: запроса не было, запись не виновата — повторить её.
@@ -110,15 +125,16 @@ export class HhCatalogTextBackfill {
       if (result.status === 'failed') {
         tally.failed += 1;
         this.markFailed(id);
+        // Неудачная строка подборки уходит в общий обход с отступом и не держит голову очереди.
+        if (priority) this.engine.dropPriority?.([id]);
         if (result.blocked === 'refused') return { ...tally, blocked: true };
         continue;
       }
       this.attempts.delete(id);
+      if (priority) this.engine.dropPriority?.([id]);
       if (result.status === 'loaded') tally.loaded += 1;
       else if (result.unavailable) tally.retired += 1;
     }
-    // Страница пройдена — дальше; конец прохода начинает с самых свежих карточек.
-    this.cursor = page.cursor;
     return tally;
   }
 }
