@@ -11,6 +11,7 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
 import { vacancyFitStage } from '../../shared/vacancyFitPercent';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
+import { createGeoBlocker } from './vacancyFitGeoBlocks';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
 import { wantedCompaniesBreakTies, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
@@ -129,6 +130,7 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
   const runtime = deps.vacancyMechanics;
   if (!runtime) return undefined;
   const context = createVacancyFitContextReader(deps, candidateId);
+  const geoBlocks = createGeoBlocker(deps, candidateId);
   return {
     // Точный разбор дорог (отпечатки всех фактов, проверка результата, полный
     // текст вакансии) — только для вакансий с сохранённым результатом.
@@ -153,7 +155,9 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
         }
         views.set(
           id,
-          compactFitView(textStillLoading(id, target.description, view, target.fullText)),
+          compactFitView(
+            geoBlocks(target, textStillLoading(id, target.description, view, target.fullText)),
+          ),
         );
       }
       return views;
@@ -241,12 +245,16 @@ export function withShownPageFitViews(
   const runtime = deps.vacancyMechanics;
   if (!runtime) return [...items];
   const context = createVacancyFitContextReader(deps, candidateId);
+  const geoBlocks = createGeoBlocker(deps, candidateId);
   return items.map((item) => {
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
     const view = runtime.view(context(target, []));
     const fitView = compactFitView(
-      textStillLoading(item.cluster.id, target.description, view, target.fullText),
+      geoBlocks(
+        target,
+        textStillLoading(item.cluster.id, target.description, view, target.fullText),
+      ),
     );
     return { ...item, explanation: explanationWithFitView(item.explanation, fitView) };
   });
