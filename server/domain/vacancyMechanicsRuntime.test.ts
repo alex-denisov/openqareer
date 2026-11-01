@@ -158,6 +158,24 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.view(source).state).not.toBe('no_requirements');
   });
 
+  it('a previous result that does not assess the re-extracted requirements shows no percent (02.11 owner)', async () => {
+    const runtime = setup(); const source = input();
+    const client = fitClient(async (request) => {
+      const ids = (JSON.parse(request.input) as { requirements: { id: string }[] }).requirements.map((item) => item.id);
+      return { content: JSON.stringify({ assessments: ids.map((requirementId, i) => ({ requirementId, status: 'matched', evidence: [{ factId: 'private-fact', quote: DISTINCT_QUOTES[i % 3] }] })) }) };
+    });
+    runtime.enqueue(source); await runtime.runNext(client);
+    expect(runtime.view(source).result?.coveragePercent).toBe(100);
+    // The text is read again (coverage-2): new requirement ids, the old verdicts name none of them.
+    const row = runtime.database.prepare('SELECT cache_key, result_json FROM vacancy_requirements_cache').get() as { cache_key: string; result_json: string };
+    const result = JSON.parse(row.result_json);
+    const requirements = [...result.requirements.map((item: { id: string }) => ({ ...item, id: `new-${item.id}` }))];
+    runtime.database.prepare('UPDATE vacancy_requirements_cache SET result_json=? WHERE cache_key=?').run(JSON.stringify({ ...result, requirements }), row.cache_key);
+    const view = runtime.view(source);
+    expect(view.result).toBeUndefined();
+    expect(['ready', 'refreshing']).not.toContain(view.state);
+  });
+
   it('isolates candidate caches and invalidates after profile or description changes', async () => {
     const runtime = setup(); const source = input(); runtime.enqueue(source); await runtime.runNext(null);
     expect(runtime.view(input('another-candidate')).result).toBeUndefined();

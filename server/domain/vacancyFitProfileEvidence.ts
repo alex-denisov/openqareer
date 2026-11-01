@@ -16,6 +16,7 @@ export const MAX_EXPERIENCE_EVIDENCE_CHARS = 1500;
 export const MAX_FIT_EVIDENCE_BYTES = 32_000;
 
 type Section =
+  | 'tenure'
   | 'location'
   | 'achievement'
   | 'headline'
@@ -127,9 +128,44 @@ function credentialSections(draft: ResumeDraft): readonly SectionText[] {
   ];
 }
 
-function draftSections(draft: ResumeDraft, text: MemoryText): readonly SectionText[] {
+const monthOf = (date: string | undefined): number | null => {
+  const match = date?.match(/^(\d{4})(?:-(\d{2}))?/u);
+  return match ? Number(match[1]) * 12 + (Number(match[2] ?? 1) - 1) : null;
+};
+const yearsWord = (years: number): string => {
+  const [tens, ones] = [years % 100, years % 10];
+  if (tens >= 11 && tens <= 14) return 'лет';
+  return ones === 1 ? 'год' : ones >= 2 && ones <= 4 ? 'года' : 'лет';
+};
+
+/** 02.11 owner: «опыт от 5 лет» needs the total, counted from the place dates with overlaps merged. */
+function tenureText(draft: ResumeDraft, now: Date): string {
+  const today = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  const spans = draft.experience
+    .map(
+      (item) =>
+        [monthOf(item.startDate), item.current ? today : (monthOf(item.endDate) ?? null)] as const,
+    )
+    .filter(
+      (span): span is readonly [number, number] =>
+        span[0] !== null && span[1] !== null && span[1] >= span[0],
+    )
+    .sort((left, right) => left[0] - right[0]);
+  const { months } = spans.reduce(
+    (total, [start, end]) => {
+      const from = Math.max(start, total.until);
+      return end + 1 > from ? { months: total.months + end + 1 - from, until: end + 1 } : total;
+    },
+    { months: 0, until: -Infinity },
+  );
+  const years = Math.floor(months / 12);
+  return years > 0 ? `Общий стаж работы: ${years} ${yearsWord(years)} (по датам мест работы)` : '';
+}
+
+function draftSections(draft: ResumeDraft, text: MemoryText, now: Date): readonly SectionText[] {
   const location = draft.candidate.contact?.location;
   return [
+    ['tenure', undefined, tenureText(draft, now)],
     // Conditions (work authorisation, country-restricted remote) are judged against where they live.
     ['location', undefined, location ? `Местоположение: ${location}` : ''],
     ['headline', undefined, draft.candidate.headline ?? ''],
@@ -152,6 +188,7 @@ function draftSections(draft: ResumeDraft, text: MemoryText): readonly SectionTe
 export function vacancyFitEvidenceFacts(
   candidateId: string,
   snapshot: EvidenceSnapshot,
+  now = new Date(),
 ): readonly VacancyFitFact[] {
   const memory = snapshot.memory
     .map((fact) => ({ ...fact, candidateId }))
@@ -165,7 +202,7 @@ export function vacancyFitEvidenceFacts(
   const seen = new Set<string>();
   const byId = new Map(snapshot.memory.map((fact) => [fact.id, fact.statement]));
   const text: MemoryText = (id) => (id ? byId.get(id) : undefined);
-  const profile = (draft ? draftSections(draft, text) : [])
+  const profile = (draft ? draftSections(draft, text, now) : [])
     .map(([section, itemId, text]) => profileFact(candidateId, section, itemId, text))
     .filter((fact): fact is VacancyFitFact => {
       if (!fact || seen.has(fact.id)) return false;
