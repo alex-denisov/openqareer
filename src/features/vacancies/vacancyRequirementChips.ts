@@ -7,6 +7,8 @@ export interface RequirementChips {
   readonly unconfirmed: readonly string[];
   /** Yellow: stated in the profile but not checked; counts half. */
   readonly stated?: readonly string[];
+  /** Amber: the evidence covers part of the requirement (02.11), shown apart from met ones. */
+  readonly partial?: readonly string[];
   /** Chip name → full requirement text for the tooltip (B510). */
   readonly quotes?: Readonly<Record<string, string>>;
   /** Conditions (education, language, format, work permit): listed apart, never as skill chips. */
@@ -55,6 +57,12 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
   const confirmed: string[] = [];
   const unconfirmed: string[] = [];
   const stated: string[] = [];
+  const partial: string[] = [];
+  const partialIds = new Set(
+    (view.result?.assessments ?? [])
+      .filter((item) => item.status === 'partial')
+      .map((item) => item.requirementId),
+  );
   const quotes: Record<string, string> = {};
   const conditions: string[] = [];
   for (const requirement of view.requirements) {
@@ -68,10 +76,18 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
     if (!label || !key || seen.has(key)) continue;
     seen.add(key);
     const checked = matched.get(requirement.id);
-    (checked === undefined ? unconfirmed : checked ? confirmed : stated).push(label);
+    if (partialIds.has(requirement.id)) partial.push(label);
+    else (checked === undefined ? unconfirmed : checked ? confirmed : stated).push(label);
     if (requirement.text.trim() !== label) quotes[label] = requirement.text.trim();
   }
-  return { confirmed, unconfirmed, stated, quotes, ...(conditions.length ? { conditions } : {}) };
+  return {
+    confirmed,
+    unconfirmed,
+    stated,
+    ...(partial.length ? { partial } : {}),
+    quotes,
+    ...(conditions.length ? { conditions } : {}),
+  };
 }
 
 const CONFIRMED_SKILL_PREFIX = 'Подтверждённый навык: ';

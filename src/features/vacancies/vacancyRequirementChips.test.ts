@@ -44,6 +44,20 @@ describe('fitRequirementChips', () => {
     });
   });
 
+  it('keeps partial matches apart from stated ones, so the card can tell them apart (02.11)', () => {
+    const view = {
+      state: 'ready',
+      requirements: [requirement('a', 'Kafka'), requirement('b', 'Go')],
+      result: {
+        assessments: [
+          { requirementId: 'a', status: 'partial', evidence: [] },
+          { requirementId: 'b', status: 'matched', evidence: [] },
+        ],
+      },
+    } as unknown as VacancyFitView;
+    expect(fitRequirementChips(view)).toMatchObject({ partial: ['Kafka'], stated: ['Go'] });
+  });
+
   it('shows the short label and keeps the sentence for the tooltip (B510)', () => {
     const long =
       'Proven track record as a senior engineering leader - you have owned technical direction';

@@ -2,7 +2,12 @@ import type { VacancyFitView } from '../../../shared/vacancyFit';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
 import { requestVacancySkillCheck } from './vacancyQuizOffer';
-import { vacancyFitBoost, vacancyFitMark, vacancyFitSentence } from './vacancyFitModel';
+import {
+  vacancyFitBoost,
+  vacancyFitConfidenceHint,
+  vacancyFitMark,
+  vacancyFitSentence,
+} from './vacancyFitModel';
 
 /** «92 %» in the tier colour; colour only supplements the number (28.10 mockup). */
 function FitNumber({
@@ -114,12 +119,14 @@ export function VacancyFitBlock({
   if (mark.kind === 'none') return <FitNoneBlock view={view} caption={mark.caption} />;
   const sentence = vacancyFitSentence(view);
   const boost = vacancyFitBoost(view);
+  const hint = vacancyFitConfidenceHint(view);
   return (
     <section className="vacancy-fit-block" aria-label={`Совпадение ${mark.percent} %`}>
       <FitNumber view={view} size="lg" />
       <div className="vacancy-fit-block-text">
         <h3>Совпадение {mark.percent}&nbsp;%</h3>
         {sentence ? <p>{sentence}</p> : null}
+        {hint ? <p className="vacancy-fit-confidence">{hint}</p> : null}
       </div>
       {boost ? (
         <button

@@ -6,7 +6,7 @@ import {
   type VacancyFitTier,
 } from '../../../shared/vacancyFitPercent';
 import { fitRequirementChips } from './vacancyRequirementChips';
-import { quizOfferSkills, quizOfferTitle } from './vacancyQuizOffer';
+import { quizOfferSkills } from './vacancyQuizOffer';
 
 /** The row cell, the 390 row and the expanded block read this one model (28.10 mockup). */
 export type VacancyFitMark =
@@ -70,6 +70,16 @@ export function vacancyFitBoost(view: VacancyFitView | undefined): VacancyFitBoo
   // The quiz names the stated skills; experience the quiz does not pick still gets the button.
   const quizzable = quizOfferSkills(view).filter((skill) => stated.includes(skill));
   const skills = quizzable.length > 0 ? quizzable : stated.slice(0, 2);
-  const quiz = quizOfferTitle(skills).replace(/^Пройти к/u, 'к');
-  return { label: `Подтвердить навыки: ${quiz}`, skills };
+  return { label: `Проверить навыки: ${skills.join(', ')}`, skills };
+}
+
+/** Below this many counted skill requirements a percent rests on too little text (02.11). */
+export const FIT_CONFIDENT_REQUIREMENTS = 6;
+
+/** A visible hint, not a formula change: 4 of 4 reads as 100 % but says little. */
+export function vacancyFitConfidenceHint(view: VacancyFitView | undefined): string | null {
+  if (vacancyFitPercent(view) === null) return null;
+  const { total } = view!.result!.coverage;
+  if (total >= FIT_CONFIDENT_REQUIREMENTS) return null;
+  return `Посчитано всего по ${total} требованиям из текста вакансии — процент приблизительный.`;
 }

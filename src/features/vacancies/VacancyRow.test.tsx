@@ -286,6 +286,57 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     expect(html).not.toContain('Соответствие вашему профилю');
   });
 
+  it('labels met, partial and missing with text and quotes the profile per requirement (02.11)', () => {
+    const base = item();
+    const req = (id: string) => ({
+      id,
+      text: id,
+      sourceQuote: id,
+      origin: 'explicit',
+      importance: 'high',
+      stopFactor: false,
+    });
+    const withFit: MatchedVacancyItem = {
+      ...base,
+      explanation: {
+        ...base.explanation,
+        fitView: {
+          state: 'ready',
+          requirements: [req('Бюджетирование'), req('SAP'), req('Kafka')],
+          result: {
+            status: 'assessed',
+            reason: 'assessed',
+            dataState: 'complete',
+            coveragePercent: 50,
+            coverage: { matched: 1, partial: 1, total: 3 },
+            calculatedAt: '2026-11-02T10:00:00.000Z',
+            gates: {},
+            assessments: [
+              {
+                requirementId: 'Бюджетирование',
+                status: 'matched',
+                evidence: [{ factId: 'f', quote: 'IT budget management' }],
+              },
+              {
+                requirementId: 'SAP',
+                status: 'partial',
+                evidence: [{ factId: 'f', quote: 'ERP rollout' }],
+              },
+              { requirementId: 'Kafka', status: 'unknown', evidence: [] },
+            ],
+          },
+        } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>,
+      },
+    };
+    const html = render({ item: withFit, layout: 'screen', isSelected: true });
+    expect(html).toContain('Есть в профиле');
+    expect(html).toContain('Частично');
+    expect(html).toContain('Нет в профиле');
+    expect(html).toMatch(/Бюджетирование[^]*есть в профиле[^]*IT budget management/u);
+    expect(html).toMatch(/SAP[^]*частично[^]*ERP rollout/u);
+    expect(html).toContain('Посчитано всего по 3 требованиям');
+  });
+
   it('lists every counted requirement, unconfirmed first, under the percent block (28.10)', () => {
     const base = item();
     const names = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'B1', 'B2', 'B3'];

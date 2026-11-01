@@ -420,3 +420,48 @@
   outline-offset: 2px;
   border-radius: var(--career-radius-sm);
 }
+
+/* 02.11: few counted requirements — the percent is rough, said in words. */
+.vacancy-fit-confidence {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+.vacancy-fit-verdicts {
+  display: grid;
+  gap: var(--career-space-2);
+  margin-block-start: var(--career-space-3);
+}
+.vacancy-fit-verdicts h4 {
+  margin: 0;
+  font-size: var(--career-text-sm);
+}
+.vacancy-fit-verdicts ul {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vacancy-fit-verdicts li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-1) var(--career-space-2);
+  font-size: var(--career-text-xs);
+}
+.vacancy-fit-verdict-name {
+  font-weight: 600;
+}
+.vacancy-fit-verdicts .is-matched .vacancy-fit-verdict-status {
+  color: var(--career-success);
+}
+.vacancy-fit-verdicts .is-partial .vacancy-fit-verdict-status {
+  color: var(--career-warning);
+}
+.vacancy-fit-verdicts .is-unmatched .vacancy-fit-verdict-status,
+.vacancy-fit-verdicts .is-unknown .vacancy-fit-verdict-status {
+  color: var(--career-text-dim);
+}
+.vacancy-fit-verdicts q {
+  flex-basis: 100%;
+  color: var(--career-text-dim);
+}

@@ -530,3 +530,13 @@ div.vacancy-push-row {
   background: transparent;
   cursor: pointer;
 }
+
+/* 02.11: group titles and the verdict list line up with the section heading on 390. */
+.vacancy-push-requirements .vacancies-screen-chip-group-title,
+.vacancy-push-requirements .vacancy-fit-verdicts {
+  padding-inline: var(--career-space-4);
+}
+.vacancy-push-requirements .vacancy-fit-verdicts h4 {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}

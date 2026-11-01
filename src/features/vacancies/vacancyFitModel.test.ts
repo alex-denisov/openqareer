@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitResult, VacancyFitView } from '../../../shared/vacancyFit';
-import { vacancyFitBoost, vacancyFitMark, vacancyFitSentence } from './vacancyFitModel';
+import {
+  vacancyFitBoost,
+  vacancyFitConfidenceHint,
+  vacancyFitMark,
+  vacancyFitSentence,
+} from './vacancyFitModel';
 
 const matched = { status: 'matched', reason: '' } as const;
 
@@ -127,7 +132,7 @@ describe('vacancyFitSentence: the 29.10 mockup text', () => {
 describe('vacancyFitBoost: the quiz button whenever stated requirements are unchecked', () => {
   it('offers a quiz on the stated skills as a check, not a percent raise (01.11)', () => {
     expect(vacancyFitBoost(mockupView())).toEqual({
-      label: 'Подтвердить навыки: квиз по Kafka и Kubernetes',
+      label: 'Проверить навыки: Kafka, Kubernetes',
       skills: ['Kafka', 'Kubernetes'],
     });
   });
@@ -177,6 +182,22 @@ describe('29.10 tails', () => {
         ),
       },
     };
-    expect(vacancyFitBoost(marked)?.label).toBe('Подтвердить навыки: квиз по Опыт');
+    expect(vacancyFitBoost(marked)?.label).toBe('Проверить навыки: Опыт');
+  });
+});
+
+describe('vacancyFitConfidenceHint: few requirements make a rough percent (02.11)', () => {
+  it('warns when fewer than six skill requirements were counted', () => {
+    const v = view(
+      { coveragePercent: 100, coverage: { matched: 4, total: 4, unknown: 0 } },
+      'ready',
+      ['A', 'B', 'C', 'D'],
+    );
+    expect(vacancyFitConfidenceHint(v)).toBe(
+      'Посчитано всего по 4 требованиям из текста вакансии — процент приблизительный.',
+    );
+  });
+  it('is silent from six requirements on', () => {
+    expect(vacancyFitConfidenceHint(mockupView())).toBeNull();
   });
 });
