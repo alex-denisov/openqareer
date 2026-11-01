@@ -1,12 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CheckCircle, Circle, Link, Question } from '@phosphor-icons/react';
-import {
-  getCurrentRoleSkillAssessment,
-  type RoleSkillAssessmentCurrent,
-} from '../skills/roleSkillAssessmentApi';
 import { skillSourceLabel } from './ProfileMobileSkills';
 import { useProvenanceLabelOf } from './ProfileProvenanceChip';
 import { SkillConfirmEntry } from './SkillConfirmEntry';
+import { ProfileSkillDemandCard } from './ProfileSkillDemandCard';
 import { skillStatusLabel } from './skillStatusLabel';
 import { useSkillConfirmations } from './useSkillConfirmations';
 import type { SkillConfirmation } from '../skills/skillConfirmationApi';
@@ -145,95 +142,14 @@ function DesktopSkillsCard(props: ProfileMobileDataProps) {
   );
 }
 
-function useAssessmentSummary(candidateId: string) {
-  const [current, setCurrent] = useState<RoleSkillAssessmentCurrent | null>();
-  useEffect(() => {
-    let active = true;
-    setCurrent(undefined);
-    void getCurrentRoleSkillAssessment().then(
-      (result) => {
-        if (active) setCurrent(result);
-      },
-      () => {
-        if (active) setCurrent(null);
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [candidateId]);
-  return current;
-}
-
-function assessmentDescription(current: RoleSkillAssessmentCurrent | null | undefined): string {
-  if (current === undefined) return 'Проверяем сохранённое состояние…';
-  switch (current?.state) {
-    case 'ready':
-      return 'Уровень не оценён: проверка навыков не пройдена.';
-    case 'run':
-      return 'Проверка начата. Продолжите с сохранённого шага.';
-    case 'result':
-      return 'Проверка завершена. Откройте сохранённый результат.';
-    case 'role_changed':
-      return 'Требования роли изменились. Откройте проверку, чтобы обновить результат.';
-    case 'role_not_selected':
-      return 'Сначала выберите целевую роль.';
-    case 'too_few_vacancies':
-      return `В выборке ${current.sampleSize} вакансий; для проверки требуется ${current.threshold}.`;
-    case 'insufficient_requirements':
-      return current.collecting
-        ? 'Требования роли собираются из текстов вакансий.'
-        : 'В выборке недостаточно проверенных требований роли.';
-    default:
-      return 'Нет проверенных данных о текущей проверке.';
-  }
-}
-
-function DesktopAssessmentCard(props: ProfileMobileDataProps) {
-  const current = useAssessmentSummary(props.candidateId);
-  const title =
-    current && 'roleTitle' in current
-      ? current.roleTitle
-      : current && 'run' in current
-        ? current.run.roleTitle
-        : props.draft.targetRole || 'Навыки выбранной роли';
-  const action =
-    current?.state === 'result'
-      ? 'Открыть результат'
-      : current?.state === 'run'
-        ? 'Продолжить'
-        : 'Начать';
-  return (
-    <section
-      className="career-profile-screen-panel profile-desktop-assessment"
-      aria-labelledby="profile-assessment-title"
-    >
-      <div className="career-profile-screen-section-head">
-        <h2 id="profile-assessment-title">Проверка навыков</h2>
-      </div>
-      <div className="profile-desktop-assessment-row">
-        <div>
-          <b>{title}</b>
-          <p>{assessmentDescription(current)}</p>
-        </div>
-        <button
-          type="button"
-          className="career-secondary-button career-btn-sm"
-          disabled={!props.onOpenRoleSkillAssessment}
-          onClick={props.onOpenRoleSkillAssessment}
-        >
-          {action}
-        </button>
-      </div>
-    </section>
-  );
-}
-
 export function ProfileDesktopSkills(props: ProfileMobileDataProps) {
   return (
     <div className="profile-desktop-skills-stack">
       <DesktopSkillsCard {...props} />
-      <DesktopAssessmentCard {...props} />
+      <ProfileSkillDemandCard
+        candidateId={props.candidateId}
+        onOpen={props.onOpenRoleSkillAssessment}
+      />
     </div>
   );
 }

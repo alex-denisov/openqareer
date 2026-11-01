@@ -1,3 +1,4 @@
+import { registerRoleSkillDemandRoutes } from './roleSkillDemandRoutes';
 import { withSalaryFloorProposal } from '../domain/careerConditionClaim';
 import { buildCoachCareerContext } from './coachCareerContext';
 import { adaptationContextFromInput, decorateAdaptationResult, labelAdaptationMessage, scopeAdaptationKnowledge, registerAdaptationCoachRoutes } from './adaptationCoach';
@@ -467,6 +468,7 @@ export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps)
   registerCoachTurnStreamRoute(app, deps);
   registerAdaptationCoachRoutes(app, deps);
   registerRoleSkillAssessmentRoutes(app, deps);
+  registerRoleSkillDemandRoutes(app, deps);
   app.post(
     '/api/v1/coach/turn',
     {
