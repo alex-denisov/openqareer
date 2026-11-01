@@ -332,7 +332,8 @@ jobs:
           printf '%s\n' "$release"
           grep -q "\"version\":\"$VERSION\"" <<<"$release" || { echo 'landing does not report the new version' >&2; exit 1; }
           grep -Eq "\"version\": *\"$VERSION\"" <<<"$feed" || { echo 'update feed does not offer the new version' >&2; exit 1; }
+          # The stable address redirects to the versioned file, which carries the name.
           for path in /downloads/openqareer-macos.dmg /downloads/openqareer-windows.exe; do
-            curl -fsSI "https://openqareer.com$path" | grep -qi "filename=\"OpenQareer-$VERSION-" ||
+            curl -fsSIL "https://openqareer.com$path" | grep -qi "filename=\"OpenQareer-$VERSION-" ||
               { echo "$path does not serve $VERSION" >&2; exit 1; }
           done
