@@ -400,6 +400,22 @@ const C66_VACANCY: MatchedVacancyItem = {
   },
 };
 
+/** B591: «Проверка навыков» shows what vacancies of the target role require. */
+const SKILL_DEMAND = {
+  state: 'ready',
+  roles: [
+    {
+      roleTitle: 'VP of Engineering',
+      sampleSize: 24,
+      observedAt: '2026-10-30T09:00:00.000Z',
+      skills: [
+        { name: 'Kubernetes', vacancies: 15, inProfile: false },
+        { name: 'AWS', vacancies: 12, inProfile: true },
+      ],
+    },
+  ],
+};
+
 async function stubSession(
   page: Page,
   importedSources?: readonly ImportedSourceSummary[],
@@ -416,6 +432,9 @@ async function stubSession(
       return route.fulfill({ json: { data: [], meta: { nextOffset: null } } });
     }
     if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
+    if (pathname === '/api/v1/candidate/role-skill-demand') {
+      return route.fulfill({ json: { data: SKILL_DEMAND } });
+    }
     if (pathname === '/api/v1/account/profile') {
       return route.fulfill({ json: { data: ACCOUNT } });
     }
@@ -802,7 +821,12 @@ test.describe('B441 Profile screen from mockup 2', () => {
     if (!isMobile) {
       const assessmentCard = page.locator('.profile-desktop-assessment');
       await expect(assessmentCard.getByRole('heading', { name: 'Проверка навыков' })).toBeVisible();
-      const startAssessment = assessmentCard.getByRole('button', { name: 'Начать', exact: true });
+      const startAssessment = assessmentCard.getByRole('button', {
+        name: 'Проверить навыки',
+        exact: true,
+      });
+      await expect(assessmentCard).toContainText('24 вакансии');
+      await expect(assessmentCard).toContainText('нет в профиле');
       await expect(startAssessment).toBeEnabled();
       await startAssessment.click();
       const roleAssessment = page.getByTestId('role-skill-assessment');

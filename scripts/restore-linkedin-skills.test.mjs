@@ -5,7 +5,13 @@ const draft = {
   targetRole: 'CTO',
   skills: [
     { id: 'imp-skill-1', evidenceMemoryId: 'm1', name: 'n8n' },
-    { id: 'skill-1', name: 'ITIL', status: 'подтверждён', source: 'квиз openqareer', verifiedAt: '2026-10-29' },
+    {
+      id: 'skill-1',
+      name: 'ITIL',
+      status: 'подтверждён',
+      source: 'квиз openqareer',
+      verifiedAt: '2026-10-29',
+    },
   ],
 };
 
