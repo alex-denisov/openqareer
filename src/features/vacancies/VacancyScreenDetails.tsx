@@ -25,7 +25,7 @@ import {
 import { vacancyGeoFit } from './VacancyScreenRowCells';
 import { publishVacancyFitRead, useLatestVacancyFitView } from './vacancyFitViewUpdates';
 import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
-import { useVacancySummary } from './vacancyDetailApi';
+import { useVacancySummary, HIDDEN_TEXT_COPY } from './vacancyDetailApi';
 import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
 import { vacancyFitMark } from './vacancyFitModel';
 import { VacancyFitVerdicts } from './VacancyFitVerdicts';
@@ -642,6 +642,8 @@ export function VacancyScreenDescription({
         <p className="vacancies-screen-description-empty" role="status">
           Загружаем описание…
         </p>
+      ) : summary.hidden ? (
+        <p className="vacancies-screen-description-empty">{HIDDEN_TEXT_COPY}</p>
       ) : (
         <p className="vacancies-screen-description-empty">
           Краткого описания нет. Полный текст можно проверить на площадке.

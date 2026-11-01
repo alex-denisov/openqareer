@@ -3,7 +3,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { ImportModalShell } from '../connections/ImportModalShell';
-import { useVacancyDetail, type VacancyDetailState } from './vacancyDetailApi';
+import { useVacancyDetail, type VacancyDetailState, HIDDEN_TEXT_COPY } from './vacancyDetailApi';
 import { parseDescriptionSections } from './vacancyDescriptionSections';
 import { decodeVacancyText } from './vacancyText';
 
@@ -84,6 +84,9 @@ function VacancyDescription({
     return <p className="vacancies-info-description is-empty">Загружаем описание…</p>;
   }
   const text = detail.status === 'ready' ? detail.detail.description : decodeVacancyText(summary);
+  if (!text && detail.status === 'ready' && detail.detail.textHidden) {
+    return <p className="vacancies-info-description is-empty">{HIDDEN_TEXT_COPY}</p>;
+  }
   if (!text) {
     return (
       <p className="vacancies-info-description is-empty">

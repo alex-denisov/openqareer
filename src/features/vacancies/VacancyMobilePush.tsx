@@ -22,7 +22,13 @@ import { pluralRu } from '../../../shared/pluralRu';
 import { CheckCircle } from '@phosphor-icons/react';
 import { vacancyGeoLabel, vacancyLevelLabel } from './VacancyScreenRowCells';
 import { VacancyScreenRequirementChips } from './VacancyScreenDetails';
-import { useVacancySummary } from './vacancyDetailApi';
+import { useVacancySummary, HIDDEN_TEXT_COPY, type VacancySummaryText } from './vacancyDetailApi';
+
+function summaryLine(summary: VacancySummaryText): string {
+  if (summary.text) return summary.text;
+  if (summary.loading) return 'Загружаем описание…';
+  return summary.hidden ? HIDDEN_TEXT_COPY : 'Краткого описания нет.';
+}
 import type { CompanyPathActions } from './VacancyCompanyPathPanel';
 import { useVacancyPathCircles, type VacancyPathCirclesState } from './useVacancyPathCircles';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
@@ -210,7 +216,7 @@ function JobPage({
         <h3 className="vacancy-push-cap">Описание</h3>
         <div className="vacancy-push-list">
           <p className="vacancy-push-quote">
-            {summary.text ?? (summary.loading ? 'Загружаем описание…' : 'Краткого описания нет.')}
+            {summaryLine(summary)}
           </p>
           <PushRow
             icon={<FileText aria-hidden="true" />}

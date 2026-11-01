@@ -621,6 +621,10 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
       ...(loaded.unavailable ? { unavailable: true } : {}),
       // 02.11: the worker reads this card next; the card shows «загружаем» and asks again.
       ...(loaded.pending && !description ? { pending: true } : {}),
+      // 02.11: hh answered «работодатель ограничил доступ»; the card says so.
+      ...((loaded.restricted || full?.descriptionHidden) && !full?.fullDescription?.trim()
+        ? { textHidden: true }
+        : {}),
       skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),
       responsibilities: full?.responsibilities ?? [],
     },

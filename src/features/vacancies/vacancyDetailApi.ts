@@ -12,6 +12,8 @@ export interface VacancyDetailText {
   readonly summary?: string;
   /** 02.11: the server is still reading the hh text; the card asks again shortly. */
   readonly pending?: boolean;
+  /** 02.11: the employer opened the text only to some applicants on hh. */
+  readonly textHidden?: boolean;
 }
 
 /** Full vacancy text for «Подробнее»; the matched list carries none (B266). */
@@ -64,9 +66,15 @@ export function useVacancyDetail(clusterId: string, enabled: boolean): VacancyDe
   return state;
 }
 
+/** 02.11: hh answered «работодатель ограничил доступ» — not «нет описания». */
+export const HIDDEN_TEXT_COPY =
+  'Работодатель открыл текст вакансии не всем соискателям — прочитайте его на площадке.';
+
 export interface VacancySummaryText {
   readonly text?: string;
   readonly loading?: boolean;
+  /** Работодатель скрыл текст: карточка говорит это, а не «нет описания». */
+  readonly hidden?: boolean;
 }
 
 /** Краткое описание карточки: из страницы, иначе из деталей; пока грузится — честно «загружаем». */
@@ -92,6 +100,7 @@ export function vacancySummaryText(
   if (detail.status === 'loading' || detail.status === 'idle') return { loading: true };
   if (detail.status !== 'ready') return {};
   if (detail.detail.pending && !detail.detail.description.trim()) return { loading: true };
+  if (detail.detail.textHidden && !detail.detail.description.trim()) return { hidden: true };
   const summary = withoutMarkdownLinks(detail.detail.summary ?? '');
   if (summary) return { text: summary };
   const opening = openingOfDescription(withoutMarkdownLinks(detail.detail.description));

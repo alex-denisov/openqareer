@@ -350,6 +350,7 @@ describe('employer-restricted hh text (02.11)', () => {
 
     await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
       status: 'failed',
+      restricted: true,
     });
     expect(pool.getVacancy(vacancy.id)?.descriptionHidden).toBeUndefined();
     await expect(engine.loadVacancyDescription(vacancy.id)).resolves.toMatchObject({
