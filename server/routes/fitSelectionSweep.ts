@@ -36,6 +36,19 @@ export function selectionToCount(
   );
 }
 
+/**
+ * 01.11: every hh row of the matched list needs its text, not only the rows the plan counts:
+ * 1 552 of 1 648 short-text rows of the owner's roles were never read because the general
+ * loader restarts from the newest of 585K rows on each of ~22 worker restarts a day.
+ */
+export function selectionToRead(items: readonly MatchedVacancyItem[]): string[] {
+  return items
+    .map((item) => item.cluster.id)
+    .filter((id) => id.startsWith(HH_CLUSTER_PREFIX));
+}
+
+const HH_CLUSTER_PREFIX = 'cluster-src-hh-search:';
+
 /** Cheap order-sensitive digest of the ids still to count: the gate only compares it. */
 export function selectionStamp(clusterIds: readonly string[]): string {
   let hash = 0;
@@ -69,6 +82,7 @@ export function createSelectionFitSweep({
     preload: Preload,
     requestFit: RequestFit,
     selectionKey = '',
+    readIds: readonly string[] = [],
   ): Promise<void> {
     const last = started.get(candidateId);
     if (last !== undefined && last.key === selectionKey && now() - last.at < windowMs) return;
@@ -89,6 +103,21 @@ export function createSelectionFitSweep({
         requestFit(ids, start);
       } catch {
         // One failed queue write leaves the next chunks to this sweep and the rest to the next.
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    // Text only, after the counted rows: these rows wait for a card open or a wider plan.
+    const counted = new Set(clusterIds);
+    const rest = readIds.filter((id) => !counted.has(id));
+    for (let start = 0; start < rest.length; start += chunk) {
+      if (started.get(candidateId) !== mine) return;
+      try {
+        await preload(
+          rest.slice(start, start + chunk).map((id) => id.replace(/^cluster-/u, '')),
+          clusterIds.length + start,
+        );
+      } catch {
+        // The background loader still reaches the row.
       }
       await new Promise((resolve) => setImmediate(resolve));
     }

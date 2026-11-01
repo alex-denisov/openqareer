@@ -4,6 +4,7 @@ import {
   FREE_SELECTION_FIT_LIMIT,
   selectionFitLimit,
   selectionToCount,
+  selectionToRead,
 } from './fitSelectionSweep';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 
@@ -112,5 +113,37 @@ describe('whole-selection fit sweep (CPO 28.10 evening)', () => {
     const queued = requestFit.mock.calls.map(([ids]) => ids[0]);
     expect(queued).toContain('cluster-z');
     expect(queued).not.toContain('cluster-y');
+  });
+});
+
+describe('hh text for the whole matched list (01.11)', () => {
+  it('selectionToRead takes every hh row in list order, counted or not, past the plan limit', () => {
+    const items = [
+      row('cluster-src-hh-search:1', 'counted', 80),
+      row('cluster-src-remotive:2'),
+      row('cluster-src-hh-search:3'),
+      row('cluster-src-hh-search:4', 'refreshing', 40),
+    ];
+    expect(selectionToRead(items)).toEqual([
+      'cluster-src-hh-search:1',
+      'cluster-src-hh-search:3',
+      'cluster-src-hh-search:4',
+    ]);
+  });
+
+  it('queues text for rows outside the count after the counted ones, without a fit request', async () => {
+    const preload = vi.fn();
+    const requestFit = vi.fn();
+    const sweep = createSelectionFitSweep({ chunk: 2 });
+    await sweep('cand', ['cluster-a'], preload, requestFit, 'k', [
+      'cluster-a',
+      'cluster-b',
+      'cluster-c',
+    ]);
+    expect(preload.mock.calls).toEqual([
+      [['a'], 0],
+      [['b', 'c'], 1],
+    ]);
+    expect(requestFit.mock.calls).toEqual([[['cluster-a'], 0]]);
   });
 });
