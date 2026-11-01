@@ -228,6 +228,41 @@ describe('multi-source fetcher: заголовки Indeed (B218)', () => {
     expect(calls).toBeGreaterThan(0);
     expect(reading).toMatchObject({ partial: true });
   });
+
+  // 31.10: 46 опросов подряд кончились «fetch failed» — один сброс соединения
+  // на любой из ~300 страниц окна выбрасывал всё прочитанное за час.
+  it('сбой транспорта посреди окна отдаёт прочитанное частичным чтением', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => {
+      calls += 1;
+      if (calls === 2) throw new TypeError('fetch failed');
+      return new Response(
+        JSON.stringify({ data: { jobSearch: { pageInfo: { nextCursor: '' }, results: [] } } }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async () => {},
+      now: () => 0,
+    });
+
+    const reading = await fetcher(indeed);
+
+    expect(calls).toBe(2);
+    expect(reading).toMatchObject({ partial: true });
+  });
+
+  it('сбой на первой странице остаётся ошибкой источника', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new TypeError('fetch failed');
+    });
+    const fetcher = buildMultiSourceFetcher(refuse, refuse, undefined, {
+      sleep: async () => {},
+      now: () => 0,
+    });
+
+    await expect(fetcher(indeed)).rejects.toThrow('fetch failed');
+  });
 });
 
 describe('multi-source fetcher: Bayt career site and Obscura stealth (B218)', () => {

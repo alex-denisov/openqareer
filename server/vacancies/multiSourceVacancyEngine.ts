@@ -137,6 +137,28 @@ export interface SourceSyncOutcome {
   /** How many of them the pool now holds for this source. */
   readonly kept: number;
   readonly message?: string;
+  /** A full reading that would have wiped most of the slice and was merged instead. */
+  readonly replaceRefused?: ReplaceRefusal;
+}
+
+export interface ReplaceRefusal {
+  readonly existing: number;
+  readonly fetched: number;
+}
+
+/**
+ * Охрана среза: «полное» чтение, после которого от большого среза осталось бы
+ * меньше половины, не заменяет его, а дополняет. 27.10 одна синхронизация
+ * Indeed из 534 записей так стёрла 169 577 вакансий: чтение окна веера было
+ * объявлено полным. Настоящее опустение площадки заметит уборка по сроку и
+ * проверка живости ссылок, а не одно чтение.
+ */
+export const REPLACE_GUARD_MIN_SLICE = 200;
+export const REPLACE_GUARD_MAX_REMOVED_SHARE = 0.5;
+
+export function refusesSliceReplace(existing: number, fetched: number): boolean {
+  if (existing < REPLACE_GUARD_MIN_SLICE) return false;
+  return existing - fetched > existing * REPLACE_GUARD_MAX_REMOVED_SHARE;
 }
 
 export interface RequestedSourceSync {
@@ -1313,8 +1335,20 @@ export class MultiSourceVacancyEngine {
       nowMs,
     });
 
-    const kept = await this.acceptReading(source, fetched, nowMs, partial, dropObservedBefore);
-    return { sourceId: source.id, status: 'healthy', fetched: fetched.length, kept };
+    const { kept, replaceRefused } = await this.acceptReading(
+      source,
+      fetched,
+      nowMs,
+      partial,
+      dropObservedBefore,
+    );
+    return {
+      sourceId: source.id,
+      status: 'healthy',
+      fetched: fetched.length,
+      kept,
+      ...(replaceRefused ? { replaceRefused } : {}),
+    };
   }
 
   private async runSync(
@@ -1377,9 +1411,9 @@ export class MultiSourceVacancyEngine {
     source: VacancySourceConfig,
     fetched: readonly UnifiedVacancy[],
     nowMs: number,
-    partial = false,
+    readingPartial = false,
     dropObservedBefore?: string,
-  ): Promise<number> {
+  ): Promise<{ kept: number; replaceRefused?: ReplaceRefusal }> {
     // Название площадки едет вместе с записью: на экране кандидат читает
     // источник, а не тип адаптера (PRB-017).
     const freshFetched = fetched
@@ -1387,6 +1421,11 @@ export class MultiSourceVacancyEngine {
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
+    const existing = readingPartial ? 0 : this.pool.countSourceSlice(source.id).total;
+    const replaceRefused = refusesSliceReplace(existing, freshFetched.length)
+      ? { existing, fetched: freshFetched.length }
+      : undefined;
+    const partial = readingPartial || replaceRefused !== undefined;
     const changedExistingMembership =
       partial && hasChangedExistingMembership(this.pool, freshFetched);
 
@@ -1438,7 +1477,7 @@ export class MultiSourceVacancyEngine {
       this.pendingVacancies.push(...freshFetched);
     }
     this.poolChangedSinceRecluster = true;
-    return freshFetched.length;
+    return { kept: freshFetched.length, ...(replaceRefused ? { replaceRefused } : {}) };
   }
 
   /**

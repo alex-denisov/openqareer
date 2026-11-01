@@ -323,6 +323,17 @@ export class MaintenanceWorker {
       failed: failed.map((outcome) => outcome.sourceId),
       kept: synced.reduce((sum, outcome) => sum + outcome.kept, 0),
     };
+    for (const outcome of failed) {
+      this.log.warn({ sourceId: outcome.sourceId, message: outcome.message }, 'source-sync-failed');
+    }
+    for (const outcome of outcomes) {
+      if (outcome.replaceRefused) {
+        this.log.warn(
+          { sourceId: outcome.sourceId, ...outcome.replaceRefused },
+          'pool-slice-replace-refused',
+        );
+      }
+    }
     if (outcomes.length > 0) {
       this.log.info({ ...report, poolSize: this.engine.poolSize }, 'multi-source-sync-completed');
     }
