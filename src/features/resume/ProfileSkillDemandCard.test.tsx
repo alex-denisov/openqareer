@@ -67,7 +67,9 @@ describe('ProfileSkillDemandCard', () => {
   });
 
   it('stays hidden while the summary is computed and shows it once ready', async () => {
-    getRoleSkillDemand.mockResolvedValueOnce({ state: 'pending', roles: [] }).mockResolvedValue(ready);
+    getRoleSkillDemand
+      .mockResolvedValueOnce({ state: 'pending', roles: [] })
+      .mockResolvedValue(ready);
     const view = await render();
     expect(view.textContent).toBe('');
     await act(async () => {
