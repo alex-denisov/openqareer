@@ -198,6 +198,18 @@ const REVENUE_TITLE = /\b(?:revenue|revops)\b/iu;
 const CEO_TITLE =
   /(?<!\p{L})(?:ceo|chief executive officer|генеральн\p{L}* директор\p{L}*)(?!\p{L})/iu;
 
+/** «CEO / COO», «COO с функционалом CEO» — операционная роль, она остаётся. */
+const COO_TITLE =
+  /(?<!\p{L})(?:coo|chief operating officer|операционн\p{L}* директор\p{L}*)(?!\p{L})/iu;
+
+function isCeoOutsideCampaign(
+  roleFunctions: readonly FunctionCode[],
+  vacancyTitle: string,
+): boolean {
+  if (roleFunctions.includes('exec-general') || !CEO_TITLE.test(vacancyTitle)) return false;
+  return !(roleFunctions.includes('ops') && COO_TITLE.test(vacancyTitle));
+}
+
 const ASSISTANT_TITLE = /(?<!\p{L})(?:assistant|ассистент\p{L}*|помощник\p{L}*)(?!\p{L})/iu;
 
 /**
@@ -260,7 +272,7 @@ export function evaluateSemanticRole(
 
   if (
     isAssistantForExecutive(targetLevel, vacancyTitle) ||
-    (CEO_TITLE.test(vacancyTitle) && !roleFunctions.includes('exec-general'))
+    isCeoOutsideCampaign(roleFunctions, vacancyTitle)
   ) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
