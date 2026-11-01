@@ -182,6 +182,27 @@ describe('VacancyRow (B266/B324)', () => {
     });
   });
 
+  it('lists partial fit verdicts and labels preliminary term-matcher lists (01.11)', () => {
+    const fit: MatchedVacancyItem = {
+      ...item(),
+      explanation: {
+        ...item().explanation,
+        matchingPoints: ['Бюджетирование'],
+        partialPoints: ['Опыт SAP'],
+        missingPoints: [],
+        pointsSource: 'fit',
+      },
+    };
+    const html = render({ item: fit, isSelected: true });
+    expect(html).toContain('Опыт SAP — частично');
+    expect(html).not.toContain('предварительно');
+    const pending = {
+      ...fit,
+      explanation: { ...fit.explanation, pointsSource: 'preliminary' as const },
+    };
+    expect(render({ item: pending, isSelected: true })).toContain('предварительно');
+  });
+
   describe('B262 · trust signals in vacancy row', () => {
     it('does not render trust line for clean/ok vacancies', () => {
       const html = render();

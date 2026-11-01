@@ -198,6 +198,10 @@ interface VacancyMatchExplanation {
   requirements?: VacancyRequirementCoverage;
   matchingPoints: string[];
   missingPoints: string[];
+  /** Half-met requirements from the fit assessments (01.11). */
+  partialPoints?: string[];
+  /** `fit`: the lists are the fit verdicts; `preliminary`: the term matcher, until a fit result exists. */
+  pointsSource?: 'fit' | 'preliminary';
   /** Совпадение со ссылкой на факт профиля, тот же порядок, что и `matchingPoints`. */
   matchingFacts?: readonly VacancyMatchingFact[];
   /**

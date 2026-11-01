@@ -139,6 +139,10 @@ export interface VacancyMatchExplanation {
   requirements?: VacancyRequirementCoverage;
   matchingPoints: string[];
   missingPoints: string[];
+  /** Half-met requirements from the fit assessments (01.11). */
+  partialPoints?: string[];
+  /** `fit`: the lists are the fit verdicts; `preliminary`: the term matcher, until a fit result exists. */
+  pointsSource?: 'fit' | 'preliminary';
   /**
    * Совпадение с конкретным фактом профиля, а не просто со строкой (B248,
    * «совпадает по фактам профиля»). Тот же порядок и текст, что и у
