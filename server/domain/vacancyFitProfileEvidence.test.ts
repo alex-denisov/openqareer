@@ -3,6 +3,7 @@ import { assessVacancyFit, type VacancyFitAssessor, type VacancyFitInput } from 
 import {
   MAX_PROFILE_EVIDENCE_FACTS,
   MAX_PROFILE_EVIDENCE_CHARS,
+  MAX_FIT_EVIDENCE_BYTES,
   vacancyFitEvidenceFacts,
 } from './vacancyFitProfileEvidence';
 
@@ -139,5 +140,28 @@ describe('vacancy fit evidence from the whole profile (01.11)', () => {
       'matched',
     ]);
     expect(result.coveragePercent).toBe(67);
+  });
+  it('keeps the prompt under the per-call budget for a large profile, places first (01.11 prod)', () => {
+    // adenisov.test after #273: bullets of 20 places plus 200 dossier facts made the prompt exceed
+    // the $0.01 hold, and every call was refused before the network as «model unavailable».
+    const bullets = Array.from({ length: 200 }, (_, i) => ({
+      ...memoryFact,
+      id: `b${i}`,
+      statement: `Управлял P&L направления ${i}, `.repeat(12),
+    }));
+    const experience = Array.from({ length: 20 }, (_, i) => ({
+      ...draft.experience[0],
+      id: `e${i}`,
+      bulletMemoryIds: [`b${i}`, `b${i + 20}`],
+    }));
+    const facts = vacancyFitEvidenceFacts('cand', {
+      memory: bullets,
+      resume: { draft: { ...draft, experience } },
+    } as never);
+    const bytes = Buffer.byteLength(
+      JSON.stringify(facts.map(({ id, statement }) => ({ id, statement }))),
+    );
+    expect(bytes).toBeLessThanOrEqual(MAX_FIT_EVIDENCE_BYTES);
+    expect(facts.some((fact) => fact.id === 'profile:experience:e19')).toBe(true);
   });
 });

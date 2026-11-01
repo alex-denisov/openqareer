@@ -8,6 +8,12 @@ export const MAX_PROFILE_EVIDENCE_FACTS = 120;
 export const MAX_PROFILE_EVIDENCE_CHARS = 600;
 /** A place carries its description and bullets (02.11: P&L lived there and was never sent). */
 export const MAX_EXPERIENCE_EVIDENCE_CHARS = 1500;
+/**
+ * Bytes of the facts JSON the model sees. The bulk client refuses a call whose upper bound exceeds
+ * the $0.01 hold (~58 KB with 4096 output tokens) before the network: 01.11 a large profile hit it
+ * on every vacancy and the recount stood still as «model unavailable».
+ */
+export const MAX_FIT_EVIDENCE_BYTES = 32_000;
 
 type Section =
   | 'location'
@@ -167,5 +173,16 @@ export function vacancyFitEvidenceFacts(
       return true;
     })
     .slice(0, MAX_PROFILE_EVIDENCE_FACTS);
-  return [...memory, ...profile];
+  return withinBytes([...profile, ...memory]);
+}
+
+/** The candidate's own profile first, then dossier facts, until the prompt budget is spent. */
+function withinBytes(facts: readonly VacancyFitFact[]): readonly VacancyFitFact[] {
+  let bytes = 2;
+  return facts.filter((fact) => {
+    const size = Buffer.byteLength(JSON.stringify({ id: fact.id, statement: fact.statement })) + 1;
+    if (bytes + size > MAX_FIT_EVIDENCE_BYTES) return false;
+    bytes += size;
+    return true;
+  });
 }
