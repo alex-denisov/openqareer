@@ -2591,11 +2591,43 @@ test.describe('Consultant proposals in every profile section (01.11)', () => {
         'Перенос платёжного ядра на Kubernetes с нулевым простоем для 40 млн транзакций в сутки.',
       proposedText: 'Перенёс платёжное ядро на Kubernetes без простоя: 40 млн транзакций в сутки.',
     }),
+    itemCommand('cmd-item-about', 'О себе — с результатом в первой строке', {
+      section: 'about',
+      currentText: 'Старое о себе',
+      proposedText: 'Руковожу платформенной инженерией в финтехе: 40 млн транзакций в сутки.',
+    }),
+    itemCommand('cmd-item-lang', 'Уровень немецкого по последнему экзамену', {
+      section: 'languages',
+      itemId: 'lang-2',
+      operation: 'update',
+      itemField: 'cefr',
+      currentText: 'B2',
+      proposedText: 'C1',
+    }),
+    itemCommand('cmd-item-cert', 'Официальное название сертификата', {
+      section: 'certifications',
+      itemId: 'cert-2',
+      operation: 'update',
+      itemField: 'name',
+      currentText: 'Certified Kubernetes Administrator (CKA)',
+      proposedText: 'CKA: Certified Kubernetes Administrator',
+    }),
+    itemCommand('cmd-item-course', 'Курс подтверждает навык из вакансий', {
+      section: 'courses',
+      operation: 'add',
+      currentText: '',
+      proposedText: 'Designing Data-Intensive Applications',
+    }),
+    itemCommand('cmd-item-ach', 'Награда без повтора в опыте', {
+      section: 'achievements',
+      itemId: 'achievement-1',
+      operation: 'remove',
+      currentText: 'Fintech Engineering Leader of the Year',
+      proposedText: 'Fintech Engineering Leader of the Year',
+    }),
   ];
 
-  test('education and projects show the consultant card inside the section', async ({
-    page,
-  }, testInfo) => {
+  test('every profile section shows its consultant card', async ({ page }, testInfo) => {
     await stubSession(page);
     await page.route('**/api/v1/candidate/career-commands', (route) =>
       route.fulfill({ json: { data: commands } }),
@@ -2603,10 +2635,19 @@ test.describe('Consultant proposals in every profile section (01.11)', () => {
     await openProfile(page);
     const mobile = testInfo.project.name === 'mobile-390';
     const width = mobile ? 390 : 1440;
-    for (const [label, route, commandId, sectionId] of [
+    const all = [
+      ['Обо мне', 'about', 'cmd-item-about', 'sec-about'],
       ['Образование', 'edu', 'cmd-item-edu', 'sec-education'],
+      // No courses yet: at 1440 their proposals sit in «Образование».
+      ['Образование', 'edu', 'cmd-item-course', 'sec-education'],
       ['Проекты', 'proj', 'cmd-item-proj', 'sec-projects'],
-    ] as const) {
+      ['Языки', 'lang', 'cmd-item-lang', 'sec-languages'],
+      // Certificates and achievements are dialogs at 1440; proposals sit in «Языки».
+      ['', 'certifications', 'cmd-item-cert', 'sec-languages'],
+      ['', 'achievements', 'cmd-item-ach', 'sec-languages'],
+    ] as const;
+    // The 390 home lists only some sections; the rest are desktop-only rows.
+    for (const [label, route, commandId, sectionId] of all.filter(([l]) => !mobile || l)) {
       if (mobile) {
         await page
           .locator('.career-profile-mobile .pm-row')
@@ -2625,7 +2666,7 @@ test.describe('Consultant proposals in every profile section (01.11)', () => {
       await expect(card.getByRole('button', { name: 'Принять', exact: true })).toBeEnabled();
       await card.scrollIntoViewIfNeeded();
       await page.screenshot({
-        path: `output/playwright/item-suggestions/${route}-${width}.png`,
+        path: `output/playwright/item-suggestions/${commandId}-${width}.png`,
         animations: 'disabled',
       });
       if (mobile) await page.getByRole('button', { name: 'Назад', exact: true }).click();

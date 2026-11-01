@@ -14,6 +14,7 @@ import { SectionHead } from './ProfileSectionHead';
 import { ProfileFactProvenance, useProfileProvenance } from './ProfileProvenanceChip';
 import { coursesNotFoundLead } from './profileProvenance';
 import type { ResumeDraft, ResumeEducationInput } from './resumeTypes';
+import { withoutSeeMoreMarker } from '../../../shared/seeMoreMarker';
 
 interface SectionProps {
   readonly draft: ResumeDraft;
@@ -128,7 +129,7 @@ function EducationRow({
         <SectionRemoveButton label="Удалить образование" onClick={onRemove} />
       </div>
       <div className="career-profile-screen-edu-meta">{entry.qualification}</div>
-      {entry.description ? <p>{entry.description}</p> : null}
+      {entry.description ? <p>{withoutSeeMoreMarker(entry.description)}</p> : null}
       <div className="career-profile-screen-entry-origin">
         <ProfileFactProvenance memoryId={entry.evidenceMemoryId} />
       </div>

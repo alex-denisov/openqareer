@@ -2,6 +2,7 @@ import { mergeEducation, mergeExperience, mergeLanguages } from './resumeDocumen
 import type { ReactNode } from 'react';
 import { formatExperiencePeriod } from './resumeExport';
 import type { ResumeDocument, ResumeDraft } from './resumeTypes';
+import { withoutSeeMoreMarker } from '../../../shared/seeMoreMarker';
 
 interface ResumePrintDocumentProps {
   readonly document: ResumeDocument;
@@ -74,7 +75,7 @@ function PrintExperience({ document, draft }: { document: ResumeDocument; draft:
         <article key={entry.id} className="career-resume-print-entry">
           {entry.heading ? <h3>{entry.heading}</h3> : null}
           {entry.period ? <p className="career-resume-print-period">{entry.period}</p> : null}
-          {entry.description ? <p>{entry.description}</p> : null}
+          {entry.description ? <p>{withoutSeeMoreMarker(entry.description)}</p> : null}
           {entry.bullets.length > 0 ? (
             <ul>
               {entry.bullets.map((bullet, index) => (

@@ -20,6 +20,7 @@ import {
   type LinkedInProfileV2,
 } from '../../../shared/linkedinProfileV2';
 import { z, type ZodTypeAny } from 'zod';
+import { withoutSeeMoreMarker } from '../../../shared/seeMoreMarker';
 
 function keepValid<T extends ZodTypeAny>(schema: T, items: readonly unknown[]): z.infer<T>[] {
   return items
@@ -31,6 +32,14 @@ function keepValid<T extends ZodTypeAny>(schema: T, items: readonly unknown[]): 
 function keepValidScalar<T extends ZodTypeAny>(schema: T, value: unknown): z.infer<T> | undefined {
   const result = schema.safeParse(value);
   return result.success ? result.data : undefined;
+}
+
+function withCleanDescriptions<T extends { readonly description?: string }>(
+  items: readonly T[],
+): T[] {
+  return items.map((item) =>
+    item.description ? { ...item, description: withoutSeeMoreMarker(item.description) } : item,
+  );
 }
 
 const captionSchema = z.string().trim().min(1).max(300);
@@ -47,15 +56,12 @@ export function sanitizeLinkedInProfileV2(profile: LinkedInProfileV2): LinkedInP
     fullName: keepValidScalar(captionSchema, profile.fullName),
     targetRole: keepValidScalar(captionSchema, profile.targetRole),
     headline: keepValidScalar(captionSchema, profile.headline),
-    photoSourceUrl: keepValidScalar(
-      z.string().trim().max(2_000).url(),
-      profile.photoSourceUrl,
-    ),
+    photoSourceUrl: keepValidScalar(z.string().trim().max(2_000).url(), profile.photoSourceUrl),
     about: keepValidScalar(z.string().trim().max(10_000), profile.about),
     contact: { ...profile.contact, links: contactLinks },
     experience: keepValid(experienceSchema, profile.experience),
     skills: keepValid(captionSchema, profile.skills),
-    education: keepValid(educationSchema, profile.education),
+    education: withCleanDescriptions(keepValid(educationSchema, profile.education)),
     courses: keepValid(courseSchema, profile.courses),
     tests: keepValid(testSchema, profile.tests),
     recommendations: keepValid(recommendationSchema, profile.recommendations),
@@ -63,7 +69,9 @@ export function sanitizeLinkedInProfileV2(profile: LinkedInProfileV2): LinkedInP
     certifications: profile.certifications
       ? keepValid(certificationSchema, profile.certifications)
       : undefined,
-    projects: profile.projects ? keepValid(projectSchema, profile.projects) : undefined,
+    projects: profile.projects
+      ? withCleanDescriptions(keepValid(projectSchema, profile.projects))
+      : undefined,
     achievements: profile.achievements
       ? keepValid(achievementSchema, profile.achievements)
       : undefined,
@@ -130,7 +138,10 @@ function trimToCeilings(profile: LinkedInProfileV2): ValidLinkedInProfile {
   if (trimmed.contact.links.length <= CONTACT_LINKS_CEILING) return { profile: trimmed, dropped };
   dropped.push('contact.links');
   return {
-    profile: { ...trimmed, contact: { ...trimmed.contact, links: trimmed.contact.links.slice(0, CONTACT_LINKS_CEILING) } },
+    profile: {
+      ...trimmed,
+      contact: { ...trimmed.contact, links: trimmed.contact.links.slice(0, CONTACT_LINKS_CEILING) },
+    },
     dropped,
   };
 }
@@ -149,7 +160,12 @@ function withoutIssuePath(value: unknown, path: readonly PropertyKey[]): unknown
     const { [head]: _removed, ...kept } = record;
     return kept;
   }
-  return { ...record, [head]: isListItem ? child.filter((_, index) => index !== rest[0]) : withoutIssuePath(child, rest) };
+  return {
+    ...record,
+    [head]: isListItem
+      ? child.filter((_, index) => index !== rest[0])
+      : withoutIssuePath(child, rest),
+  };
 }
 
 function describePath(path: readonly PropertyKey[]): string {
