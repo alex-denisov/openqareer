@@ -192,6 +192,10 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
   ];
 }
 
+function semanticDateColumns(vacancy: UnifiedVacancy): SQLInputValue[] {
+  return [vacancy.id, parseMs(vacancy.publishedAt) ?? null, flag(vacancy.isRemote)];
+}
+
 /**
  * The vacancy pool on disk. Opens its own connection to the same file the
  * candidate store uses, the way the auth service does, so the tables are
@@ -902,6 +906,19 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
+  /**
+   * hh переопубликует вакансию под тем же id: дата индекса пула сдвигается,
+   * а строка смыслового индекса хранила дату первой вставки (на проде 01.11
+   * так устарели 383 тыс. из 1,05 млн строк). Дата догоняется при записи —
+   * по первичному ключу, без прохода по таблице.
+   */
+  private prepareSemanticDateSync() {
+    return this.database.prepare(
+      `UPDATE vacancy_semantic SET published_ms = ?2, is_remote = ?3
+       WHERE id = ?1 AND (published_ms IS NOT ?2 OR is_remote IS NOT ?3)`,
+    );
+  }
+
   private prepareClusterTextPending() {
     return this.database.prepare(
       'INSERT OR IGNORE INTO cluster_text_pending (vacancy_id, requested_ms) VALUES (?, ?)',
@@ -1015,6 +1032,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const storedAt = this.nextSliceTimestamp(sourceId);
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
+    const semanticDates = this.prepareSemanticDateSync();
     const projection = this.prepareProjectionUpsert();
     const textPending = this.prepareClusterTextPending();
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
@@ -1027,6 +1045,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           existing.set(vacancy.id, stored);
           insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
           index.run(...indexColumns(stored, sourceId), 0);
+          semanticDates.run(...semanticDateColumns(stored));
           projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
           if (gainedFullText(previous, stored)) textPending.run(stored.id, Date.now());
         }
@@ -1044,6 +1063,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const storedAt = this.nextSliceTimestamp(sourceId);
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
+    const semanticDates = this.prepareSemanticDateSync();
     const projection = this.prepareProjectionUpsert();
     const textPending = this.prepareClusterTextPending();
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
@@ -1056,6 +1076,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           existing.set(vacancy.id, stored);
           insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
           index.run(...indexColumns(stored, sourceId), 0);
+          semanticDates.run(...semanticDateColumns(stored));
           projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
           if (gainedFullText(previous, stored)) textPending.run(stored.id, Date.now());
         }
