@@ -16,7 +16,7 @@ import { ProfileAtsAssessment } from './ProfileReviewAndVersions';
 import { ProfileResumeVersions } from './ProfileReviewAndVersions';
 import { previewProjection, selectDocument } from './resumeStudioModel';
 import { estimateResumePages } from './targetedResumeVolume';
-import { useProfileAtsAssessment } from './useProfileAtsAssessment';
+import { clearProfileAtsAssessmentCache, useProfileAtsAssessment } from './useProfileAtsAssessment';
 
 const api = vi.hoisted(() => ({
   createResumeVersion: vi.fn(),
@@ -199,6 +199,7 @@ let container: HTMLDivElement | null = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearProfileAtsAssessmentCache();
   storedVersions.clear();
   api.getResumeVersions.mockResolvedValue({
     items: [],

@@ -5,8 +5,6 @@ import { parseAboutContent } from './profileAbout';
 import { updateAbout } from './profileEntryEditing';
 import { SectionEditActions } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
-import { ProfileProvenanceChip, useProfileProvenance } from './ProfileProvenanceChip';
-import { aboutProvenance } from './profileProvenance';
 import {
   InlineConsultantSuggestion,
   type InlineSuggestionItem,
@@ -313,14 +311,12 @@ function useProfileAboutView(props: ProfileAboutSectionProps) {
 
 function AboutSectionHead({
   about,
-  candidate,
   onEdit,
 }: {
   readonly about?: string;
   readonly candidate: ResumeDraft['candidate'];
   readonly onEdit: () => void;
 }) {
-  const { memory } = useProfileProvenance();
   return (
     <SectionHead
       id="sec-about-title"
@@ -332,14 +328,8 @@ function AboutSectionHead({
           aria-label="Изменить «Обо мне»"
           onClick={onEdit}
         >
-          {about ? (
-            <ProfileProvenanceChip provenance={aboutProvenance(candidate, memory)} />
-          ) : (
-            <>
-              <PencilSimple size="1em" aria-hidden="true" />
-              Добавить текст
-            </>
-          )}
+          <PencilSimple size="1em" aria-hidden="true" />
+          {about ? 'Изменить' : 'Добавить текст'}
         </button>
       }
     />

@@ -20,7 +20,6 @@ export interface ProfileAtsAssessmentProps {
   readonly desktopLayout?: boolean;
   readonly enabled?: boolean;
   /** The block calculates only after the candidate asks (D2). */
-  readonly onDemand?: boolean;
   readonly id?: string;
 }
 
@@ -254,11 +253,9 @@ function useAtsCardState(props: ProfileAtsAssessmentProps) {
     request,
     refreshKey,
     enabled,
-    onDemand,
   } = props;
   const internal = useProfileAtsAssessment({
     enabled: enabled ?? suppliedAssessment === undefined,
-    onDemand,
     request,
     refreshKey,
   });
@@ -274,8 +271,7 @@ function useAtsCardState(props: ProfileAtsAssessmentProps) {
     : score === null
       ? 'Оценка ATS неизвестна'
       : `Оценка ATS ${score} из 100`;
-  const idle = suppliedAssessment === undefined && Boolean(internal.idle);
-  return { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel, idle };
+  return { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel };
 }
 
 /** Макет 2 «ATS: нет избранных вакансий». */
@@ -290,7 +286,7 @@ export function AtsRoleBasisNote() {
 
 export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
   const { id = 'sec-ats', desktopLayout = false } = props;
-  const { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel, idle } =
+  const { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel } =
     useAtsCardState(props);
   return (
     <section
@@ -304,12 +300,7 @@ export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
         assessment={assessment}
         sourceVersion={sourceVersion}
       />
-      {idle ? (
-        <button type="button" className="career-secondary-button career-btn-sm" onClick={refresh}>
-          Рассчитать оценку ATS
-        </button>
-      ) : null}
-      {error || idle ? null : (
+      {error ? null : (
         <div className="career-profile-screen-ats-score">
           <strong
             className="career-profile-screen-ats-value"

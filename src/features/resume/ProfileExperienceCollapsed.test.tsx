@@ -65,13 +65,14 @@ describe('ProfileExperienceSection: старые места и происхож�
     const compact = container.querySelector('.career-profile-screen-place-compact');
     expect(compact?.textContent).toContain('Ритейл Системс');
     expect(compact?.textContent).toContain('Тимлид · 06.2013 — 08.2017');
-    expect(compact?.textContent).toContain('из LinkedIn, 12.09');
+    // Provenance stays in data and History, not on the place (owner, 02.11).
+    expect(compact?.textContent).not.toContain('из LinkedIn');
     expect(container.querySelectorAll('[data-experience-id]')).toHaveLength(2);
 
     act(() => expand.click());
     expect(container.querySelectorAll('[data-experience-id]')).toHaveLength(3);
     expect(container.querySelector('.career-profile-screen-place-compact')).toBeNull();
-    expect(container.textContent).toContain('источник неизвестен');
+    expect(container.textContent).not.toContain('источник неизвестен');
     act(() => root.unmount());
   });
 });

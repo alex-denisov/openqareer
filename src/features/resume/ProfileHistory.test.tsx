@@ -4,8 +4,12 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CoachApiError } from '../coach/apiClient';
 import type { CandidateMemory } from '../coach/coachApi';
-import { experienceConfirmation, experienceConfirmationLabel } from './ExperienceConfirmation';
-import { ProfileHistoryList } from './ProfileHistory';
+import {
+  ConfirmExperienceButton,
+  experienceConfirmation,
+  experienceConfirmationLabel,
+} from './ExperienceConfirmation';
+import { ProfileHistoryList, ProfileHistorySection } from './ProfileHistory';
 import type { ProfileHistoryItem } from './profileHistoryApi';
 
 const api = vi.hoisted(() => ({
@@ -34,11 +38,11 @@ const entry: ProfileHistoryItem = {
   revertedAt: null,
 };
 
-async function render() {
+async function render(node: React.ReactNode = <ProfileHistoryList />) {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(<ProfileHistoryList />));
+  await act(async () => root.render(node));
   cleanup.push(() => {
     act(() => root.unmount());
     container.remove();
@@ -150,5 +154,55 @@ describe('experience confirmation label', () => {
     expect(experienceConfirmationLabel(experienceConfirmation(place, memory))).toBe(
       'Не подтверждено вами',
     );
+  });
+});
+
+const rows = (container: HTMLElement) =>
+  container.querySelectorAll('[data-testid="profile-history-row"]');
+const buttonWith = (container: HTMLElement, text: string) =>
+  [...container.querySelectorAll('button')].find((button) => button.textContent?.includes(text));
+
+describe('История изменений, owner 02.11', () => {
+  it('is folded and reads nothing until opened', async () => {
+    api.getProfileHistory.mockResolvedValue({ entries: [entry], total: 1, page: 0, pageSize: 20 });
+    const container = await render(<ProfileHistorySection />);
+    const details = container.querySelector('details');
+    expect(details?.open).toBe(false);
+    expect(api.getProfileHistory).not.toHaveBeenCalled();
+    await act(async () => {
+      details!.open = true;
+      details!.dispatchEvent(new Event('toggle'));
+    });
+    expect(api.getProfileHistory).toHaveBeenCalledTimes(1);
+    expect(rows(container)).toHaveLength(1);
+  });
+
+  it('opens on the five newest and grows by «Показать ещё»', async () => {
+    const entries = Array.from({ length: 7 }, (_, index) => ({ ...entry, id: `c-${index}` }));
+    api.getProfileHistory.mockResolvedValue({ entries, total: 7, page: 0, pageSize: 20 });
+    const container = await render();
+    expect(rows(container)).toHaveLength(5);
+    await act(async () => buttonWith(container, 'Показать ещё 2')?.click());
+    expect(rows(container)).toHaveLength(7);
+    expect(api.getProfileHistory).toHaveBeenCalledTimes(1);
+    expect(buttonWith(container, 'Показать ещё')).toBeUndefined();
+  });
+});
+
+describe('ConfirmExperienceButton', () => {
+  it('ties the real error to the button and re-reads the profile anyway', async () => {
+    api.confirmProfileExperience.mockRejectedValue(
+      new CoachApiError('Место работы не найдено.', 'experience_not_found', false),
+    );
+    const onConfirmed = vi.fn();
+    const container = await render(
+      <ConfirmExperienceButton experienceId="exp-1" onConfirmed={onConfirmed} />,
+    );
+    await act(async () => buttonWith(container, 'Подтвердить')?.click());
+    const button = container.querySelector('button')!;
+    const error = container.querySelector('[role="alert"]')!;
+    expect(error.textContent).toBe('Место работы не найдено.');
+    expect(button.getAttribute('aria-describedby')).toBe(error.id);
+    expect(onConfirmed).toHaveBeenCalledTimes(1);
   });
 });

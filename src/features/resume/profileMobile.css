@@ -962,3 +962,10 @@
   gap: var(--career-space-2);
   min-block-size: var(--career-target-min);
 }
+
+.pm-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--career-success, var(--career-text));
+}

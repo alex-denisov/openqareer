@@ -1,3 +1,4 @@
+import { pendingProfileFactCount } from './pendingProfileFacts';
 import {
   Briefcase,
   Question,
@@ -95,9 +96,7 @@ export function ProfileMobileReview(props: ProfileMobileDataProps & ProfileMobil
   const confirmations = blocks.find((block) => block.id === 'confirmations');
   const pending = confirmations?.issueCount ?? confirmations?.issues.length ?? 0;
   // Same count as «N фактов ждут подтверждения» on the 1440 top card.
-  const proposed = (props.memory ?? []).filter(
-    (item) => item.kind === 'fact' && item.status === 'proposed',
-  ).length;
+  const proposed = pendingProfileFactCount(props.draft, props.memory ?? []);
   const discuss = props.onFillQuestionnaire
     ? () => props.onFillQuestionnaire?.('Проверка резюме')
     : props.onOpenExpert;

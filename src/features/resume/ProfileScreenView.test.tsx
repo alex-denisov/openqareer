@@ -228,7 +228,7 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('career-profile-screen-position-bullets');
     expect(html).toContain('Отвечал за платёжную стратегию для 6 продуктовых команд.');
     expect(html).toContain('career-profile-screen-lang-source');
-    expect(html).toContain('из LinkedIn, 12.09');
+    expect(html).not.toContain('из LinkedIn, 12.09');
     expect(html).not.toContain('Full professional proficiency');
   });
 

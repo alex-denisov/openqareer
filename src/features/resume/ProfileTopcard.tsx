@@ -1,3 +1,4 @@
+import { pendingProfileFactCount } from './pendingProfileFacts';
 import { useState, type ReactNode } from 'react';
 import { ProfileImportLive } from './ProfileImportLive';
 import { useLinkedInImportProgress } from '../connections/linkedinImportProgress';
@@ -553,9 +554,7 @@ function ProfileCompletenessSummary({
   readonly onOpenData?: () => void;
 }) {
   const completeness = profileCompleteness(draft);
-  const proposedFactCount = memory.filter(
-    (item) => item.kind === 'fact' && item.status === 'proposed',
-  ).length;
+  const proposedFactCount = pendingProfileFactCount(draft, memory);
   return (
     <div className="career-profile-screen-completion">
       <div>

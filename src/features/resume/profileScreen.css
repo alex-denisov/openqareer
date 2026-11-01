@@ -1097,3 +1097,39 @@
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }
+
+/* «Подтвердить» and its error stay together in the chip row (owner, 02.11). */
+.career-profile-screen-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2, 8px);
+}
+
+.career-profile-screen-confirm-error {
+  color: var(--career-danger);
+  font-size: var(--career-text-xs);
+}
+
+/* «12 замечаний» opens the remarks themselves (owner, 02.11). */
+.career-profile-screen-review-badge.is-toggle {
+  gap: var(--career-space-1);
+  font: inherit;
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+}
+
+.career-profile-screen-review-badge.is-toggle[aria-expanded='true']
+  .career-profile-screen-review-caret {
+  transform: rotate(180deg);
+}
+
+.career-profile-screen-review-remarks {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--career-space-1);
+  margin: 0;
+  padding-inline-start: var(--career-space-4);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-sm);
+}

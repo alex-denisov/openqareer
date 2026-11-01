@@ -60,7 +60,7 @@ describe('ProfileLanguagesSection', () => {
     expect(html).toContain('career-profile-screen-lang-level">свободный (C1)');
     expect(html.match(/career-profile-screen-lang-meter/g)).toHaveLength(2);
     expect(html.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(5);
-    expect(html).toContain('источник неизвестен');
+    expect(html).not.toContain('источник неизвестен');
     expect(html).not.toContain('Full professional proficiency');
   });
 
@@ -94,8 +94,9 @@ describe('ProfileLanguagesSection', () => {
         />
       </ProfileProvenanceProvider>,
     );
-    expect(html).toContain('из LinkedIn, 12.09');
-    expect(html).toContain('со слов кандидата');
+    // Provenance is no longer printed on profile blocks (owner, 02.11).
+    expect(html).not.toContain('из LinkedIn, 12.09');
+    expect(html).not.toContain('со слов кандидата');
     expect(html).not.toContain('Источник: импортированный профиль');
   });
 });
