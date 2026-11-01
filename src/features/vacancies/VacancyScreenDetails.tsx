@@ -313,8 +313,17 @@ function RequirementConditions({
   );
 }
 
-function requirementsStatusText(reading: boolean, fromFit: boolean): string {
+/** 02.11 АЙСБЕРРИ: a parsed text with under 3 requirements says the row's verdict, not «не разобраны». */
+function fewRequirements(view: Parameters<typeof vacancyFitMark>[0]): boolean {
+  const mark = vacancyFitMark(view);
+  return mark.kind === 'none' && mark.caption === 'мало требований';
+}
+const FEW_REQUIREMENTS_TEXT = 'Мало требований: в тексте вакансии меньше 3 требований.';
+
+function requirementsStatusText(reading: boolean, fromFit: boolean, few: boolean): string {
+  if (few) return FEW_REQUIREMENTS_TEXT;
   if (reading) return 'Загружаем требования…';
+
   return fromFit ? REQUIREMENTS_PENDING_TEXT : 'Требования ещё не разобраны.';
 }
 
@@ -404,7 +413,7 @@ export function VacancyScreenRequirementChips({
         />
       ) : (
         <p className="vacancies-screen-no-requirements">
-          {requirementsStatusText(readingRequirements, Boolean(fromFit))}
+          {requirementsStatusText(readingRequirements, Boolean(fromFit), fewRequirements(fitView))}
         </p>
       )}
       <RequirementsNote

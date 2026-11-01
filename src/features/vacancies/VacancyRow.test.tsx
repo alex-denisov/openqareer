@@ -443,4 +443,19 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     const html = render({ item: empty, layout: 'screen', isSelected: true });
     expect(html).toContain('Требования ещё не разобраны.');
   });
+  it('АЙСБЕРРИ: a parsed text with under 3 requirements gives the row verdict in the card (02.11)', () => {
+    const base = item();
+    const few: MatchedVacancyItem = {
+      ...base,
+      explanation: {
+        ...base.explanation,
+        matchingPoints: [],
+        missingPoints: [],
+        fitView: { state: 'no_requirements', requirements: [] },
+      },
+    };
+    const html = render({ item: few, layout: 'screen', isSelected: true });
+    expect(html).toContain('Мало требований: в тексте вакансии меньше 3 требований.');
+    expect(html).not.toContain('Требования ещё не разобраны.');
+  });
 });
