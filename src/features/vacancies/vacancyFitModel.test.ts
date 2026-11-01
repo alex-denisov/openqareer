@@ -133,7 +133,7 @@ describe('vacancyFitSentence: the 29.10 mockup text', () => {
 describe('vacancyFitBoost: the quiz button whenever stated requirements are unchecked', () => {
   it('offers a quiz on the stated skills as a check, not a percent raise (01.11)', () => {
     expect(vacancyFitBoost(mockupView())).toEqual({
-      label: 'Проверить навыки: Kafka, Kubernetes',
+      label: 'Проверить навыки',
       skills: ['Kafka', 'Kubernetes'],
     });
   });
@@ -183,7 +183,7 @@ describe('29.10 tails', () => {
         ),
       },
     };
-    expect(vacancyFitBoost(marked)?.label).toBe('Проверить навыки: Опыт');
+    expect(vacancyFitBoost(marked)).toEqual({ label: 'Проверить навыки', skills: ['Опыт'] });
   });
 });
 

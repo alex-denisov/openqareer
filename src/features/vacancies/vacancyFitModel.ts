@@ -62,7 +62,8 @@ export interface VacancyFitBoost {
   readonly skills: readonly string[];
 }
 
-/** «Подтвердить квизом: A и B» whenever requirements stated in the profile are unchecked (01.11: the percent stays). */
+/** «Проверить навыки» whenever requirements stated in the profile are unchecked (01.11: the percent stays).
+ *  The sentence above already names them, so the button stays one line at 390 (01.11 run 3). */
 export function vacancyFitBoost(view: VacancyFitView | undefined): VacancyFitBoost | null {
   const percent = vacancyFitPercent(view);
   const stated = fitRequirementChips(view)?.stated ?? [];
@@ -70,7 +71,7 @@ export function vacancyFitBoost(view: VacancyFitView | undefined): VacancyFitBoo
   // The quiz names the stated skills; experience the quiz does not pick still gets the button.
   const quizzable = quizOfferSkills(view).filter((skill) => stated.includes(skill));
   const skills = quizzable.length > 0 ? quizzable : stated.slice(0, 2);
-  return { label: `Проверить навыки: ${skills.join(', ')}`, skills };
+  return { label: 'Проверить навыки', skills };
 }
 
 /** Below this many counted skill requirements a percent rests on too little text (02.11). */

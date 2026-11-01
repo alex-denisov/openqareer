@@ -327,8 +327,7 @@
 }
 .vacancy-fit-block {
   display: grid;
-  /* 29.10: a long quiz name wraps inside the button, the sentence keeps its width. */
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, max-content);
+  grid-template-columns: auto minmax(0, 1fr) max-content;
   align-items: center;
   gap: var(--career-space-4);
   padding-block-end: var(--career-space-4);
@@ -346,9 +345,8 @@
 }
 .vacancy-fit-boost {
   justify-self: end;
-  max-inline-size: 340px;
-  white-space: normal;
-  text-align: start;
+  /* 01.11 run 3: a fixed short label, always one line. */
+  white-space: nowrap;
 }
 @media (max-width: 760px) {
   .vacancy-fit-bar {
