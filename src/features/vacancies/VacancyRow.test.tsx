@@ -286,6 +286,55 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     expect(html).not.toContain('Соответствие вашему профилю');
   });
 
+  it('names a contradicted condition on the row and in the card, keeping the percent (02.11)', () => {
+    const base = item();
+    const req = (id: string) => ({
+      id,
+      text: id,
+      sourceQuote: id,
+      origin: 'explicit',
+      importance: 'high',
+      stopFactor: false,
+    });
+    const withFit: MatchedVacancyItem = {
+      ...base,
+      explanation: {
+        ...base.explanation,
+        fitView: {
+          state: 'ready',
+          requirements: [req('A'), req('B'), req('C')],
+          result: {
+            status: 'assessed',
+            reason: 'assessed',
+            dataState: 'partial',
+            coveragePercent: 100,
+            coverage: { matched: 3, total: 3 },
+            calculatedAt: '2026-11-02T10:00:00.000Z',
+            gates: {},
+            conditionBlocks: [
+              {
+                requirementId: 'c',
+                text: 'US work authorization required',
+                quote: 'Vilnius, Lithuania',
+              },
+            ],
+            assessments: ['A', 'B', 'C'].map((id) => ({
+              requirementId: id,
+              status: 'matched',
+              evidence: [{ factId: 'f', quote: id }],
+            })),
+          },
+        } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>,
+      },
+    };
+    const html = render({ item: withFit, layout: 'screen', isSelected: true });
+    expect(html).toContain(
+      'Не подходит по условиям: US work authorization required. В профиле: «Vilnius, Lithuania».',
+    );
+    expect(html).toMatch(/vacancy-fit-cap[^>]*>[^<]*Не подходит по условиям/u);
+    expect(html).toMatch(/Совпадение 100/u);
+  });
+
   it('labels met, partial and missing with text and quotes the profile per requirement (02.11)', () => {
     const base = item();
     const req = (id: string) => ({

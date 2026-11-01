@@ -52,6 +52,11 @@ export function compareFitDirected(
   right: VacancyFitView | undefined,
   dir: VacancySortDirection,
 ): number {
+  // 02.11: a condition the profile clearly fails (work authorisation, country) ranks the row last.
+  const blocked = (view: VacancyFitView | undefined) =>
+    Number((view?.result?.conditionBlocks?.length ?? 0) > 0);
+  const byBlock = blocked(left) - blocked(right);
+  if (byBlock) return byBlock;
   if (dir === 'desc') return compareFitPercent(left, right);
   const rank = (view: VacancyFitView | undefined) => ASCENDING_RANK[vacancyFitStage(view)];
   return (

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { VacancyFitResult, VacancyFitView } from '../../../shared/vacancyFit';
 import {
   vacancyFitBoost,
+  vacancyFitConditionBlock,
   vacancyFitConfidenceHint,
   vacancyFitMark,
   vacancyFitSentence,
@@ -199,5 +200,31 @@ describe('vacancyFitConfidenceHint: few requirements make a rough percent (02.11
   });
   it('is silent from six requirements on', () => {
     expect(vacancyFitConfidenceHint(mockupView())).toBeNull();
+  });
+});
+
+describe('vacancyFitConditionBlock: a contradicted condition named next to the percent (02.11)', () => {
+  it('names the condition and the profile fact', () => {
+    const base = mockupView();
+    const v = {
+      ...base,
+      result: {
+        ...base.result!,
+        conditionBlocks: [
+          {
+            requirementId: 'c',
+            text: 'US work authorization required',
+            quote: 'Vilnius, Lithuania',
+          },
+        ],
+      },
+    };
+    expect(vacancyFitConditionBlock(v)).toEqual({
+      short: 'Не подходит по условиям',
+      text: 'Не подходит по условиям: US work authorization required. В профиле: «Vilnius, Lithuania».',
+    });
+  });
+  it('is null without blocks', () => {
+    expect(vacancyFitConditionBlock(mockupView())).toBeNull();
   });
 });

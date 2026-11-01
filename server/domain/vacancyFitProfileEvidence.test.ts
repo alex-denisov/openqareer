@@ -90,7 +90,8 @@ describe('vacancy fit evidence from the whole profile (01.11)', () => {
     );
   });
 
-  it('matches «Бюджетирование ИТ» against an «IT budget management» skill entry at full credit', async () => {
+  // 02.11: a bare skill tag is partial at most — the match is found, but counts half.
+  it('matches «Бюджетирование ИТ» against an «IT budget management» skill entry as partial', async () => {
     const facts = vacancyFitEvidenceFacts('cand', snapshot);
     const requirement = (id: string, text: string) => ({
       id,
@@ -133,10 +134,10 @@ describe('vacancy fit evidence from the whole profile (01.11)', () => {
     };
     const result = await assessVacancyFit(input, assessor);
     expect(result.assessments.map((item) => item.status)).toEqual([
-      'matched',
-      'matched',
+      'partial',
+      'partial',
       'matched',
     ]);
-    expect(result.coveragePercent).toBe(100);
+    expect(result.coveragePercent).toBe(67);
   });
 });

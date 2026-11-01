@@ -465,3 +465,9 @@
   flex-basis: 100%;
   color: var(--career-text-dim);
 }
+
+/* 02.11: a condition the profile clearly fails — words first, the warning colour only supports them. */
+.vacancy-fit-cap.is-blocked,
+.vacancy-fit-condition-block {
+  color: var(--career-warning);
+}

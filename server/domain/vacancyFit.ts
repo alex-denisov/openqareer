@@ -1,6 +1,6 @@
 import { MIN_FIT_SKILL_REQUIREMENTS, PARTIAL_REQUIREMENT_CREDIT } from '../../shared/vacancyFitPercent';
 import { createHash } from 'node:crypto';
-import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
+import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitConditionBlock, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
 import { isImportedMemoryId } from './resumeImport';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
@@ -104,6 +104,32 @@ function quotes(fact: VacancyFitFact | undefined, quote: string): boolean {
   return !!fact && (fact.statement.includes(quote) || minimizeModelText(fact.statement).includes(quote));
 }
 
+/** A bare profile tag («Executive Leadership») says the word, not the work behind it. */
+const isTagEvidence = (factId: string) => factId.startsWith('profile:skill:');
+/** One quote may back at most this many requirements; a third use is a stretch (02.11). */
+const MAX_REQUIREMENTS_PER_QUOTE = 2;
+
+/** 02.11: tag-only evidence is partial at most; an over-used quote backs nothing. */
+function withEvidenceRules(items: readonly VacancyFitRequirementAssessment[]): VacancyFitRequirementAssessment[] {
+  const uses = new Map<string, number>();
+  return items.map((item) => {
+    if (item.status === 'unknown' || item.status === 'unmatched') return item;
+    const keys = item.evidence.map((entry) => `${entry.factId}\u0000${entry.quote.trim()}`);
+    if (keys.some((key) => (uses.get(key) ?? 0) >= MAX_REQUIREMENTS_PER_QUOTE)) return { requirementId: item.requirementId, status: 'unknown', evidence: [] };
+    for (const key of keys) uses.set(key, (uses.get(key) ?? 0) + 1);
+    return item.status === 'matched' && item.evidence.every((entry) => isTagEvidence(entry.factId)) ? { ...item, status: 'partial' } : item;
+  });
+}
+
+/** Conditions a quoted profile fact contradicts: they block the row, never the skill percent (02.11). */
+const BLOCKING_CONDITIONS: readonly string[] = ['workAuthorization', 'workFormat'];
+function conditionBlocks(requirements: readonly VacancyRequirement[], assessments: readonly VacancyFitRequirementAssessment[]): VacancyFitConditionBlock[] {
+  return requirements.filter((requirement) => !isSkillRequirement(requirement) && BLOCKING_CONDITIONS.includes(requirement.kind)).flatMap((requirement) => {
+    const item = assessments.find((entry) => entry.requirementId === requirement.id);
+    return item?.status === 'unmatched' && item.evidence[0] ? [{ requirementId: requirement.id, text: requirement.text, quote: item.evidence[0].quote }] : [];
+  });
+}
+
 /** Validates model claims against exact candidate-owned source text. Missing facts are unknown. */
 export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toISOString()): VacancyFitResult {
   const facts = eligibleFacts(input);
@@ -115,13 +141,14 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   })) as unknown as VacancyFitGates;
   const requirements = sourcedRequirements(input);
   const checkedIds = new Set(input.checkedFactIds ?? []);
-  const assessments: VacancyFitRequirementAssessment[] = requirements.map((requirement) => {
+  const claimed: VacancyFitRequirementAssessment[] = requirements.map((requirement) => {
     const claims = input.assessments?.filter((claim) => claim.requirementId === requirement.id) ?? [];
     const claim = claims.length === 1 ? claims[0] : undefined;
     if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !Array.isArray(claim.evidence) || !claim.evidence.length || claim.evidence.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !quotes(factMap.get(entry.factId), entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
     const evidence = claim.evidence.map(({ factId, quote }) => ({ factId, quote }));
     return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status !== 'unmatched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
   });
+  const assessments = withEvidenceRules(claimed);
   // Owner 28.10: a model answer that confirms nothing is «0 из N», not «no percent». Without an
   // answer (no claims at all) the requirements are not assessed yet.
   const answered = (input.assessments?.length ?? 0) > 0;
@@ -149,7 +176,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
     coveragePercent: percent(skills),
     requiredCoverage: { matched: requiredSkills.filter((item) => item.status === 'matched').length, total: requiredSkills.length, percent: percent(requiredSkills) },
-    coverage: count(skills), conditionCoverage: count(conditions),
+    coverage: count(skills), conditionCoverage: count(conditions), conditionBlocks: conditionBlocks(requirements, assessments),
     // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
     assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,
   };

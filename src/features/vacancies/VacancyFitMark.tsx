@@ -4,6 +4,7 @@ import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
 import { requestVacancySkillCheck } from './vacancyQuizOffer';
 import {
   vacancyFitBoost,
+  vacancyFitConditionBlock,
   vacancyFitConfidenceHint,
   vacancyFitMark,
   vacancyFitSentence,
@@ -47,12 +48,18 @@ function FitNumber({
 export function VacancyFitCell({ item }: { readonly item: MatchedVacancyItem }) {
   const view = useLatestVacancyFitView(item.cluster.id, item.explanation.fitView);
   const mark = vacancyFitMark(view);
+  // 02.11: a failed condition is said in words next to the percent, which stays skill coverage.
+  const block = vacancyFitConditionBlock(view);
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--fit" data-label="Совпадение">
       <FitNumber view={view} />
       {mark.kind === 'pending' ? null : (
-        <span className="vacancy-fit-cap" aria-hidden="true">
-          {mark.caption}
+        <span
+          className={`vacancy-fit-cap${block ? ' is-blocked' : ''}`}
+          title={block?.text}
+          aria-hidden={block ? undefined : true}
+        >
+          {block ? block.short : mark.caption}
         </span>
       )}
     </span>
@@ -120,12 +127,14 @@ export function VacancyFitBlock({
   const sentence = vacancyFitSentence(view);
   const boost = vacancyFitBoost(view);
   const hint = vacancyFitConfidenceHint(view);
+  const block = vacancyFitConditionBlock(view);
   return (
     <section className="vacancy-fit-block" aria-label={`Совпадение ${mark.percent} %`}>
       <FitNumber view={view} size="lg" />
       <div className="vacancy-fit-block-text">
         <h3>Совпадение {mark.percent}&nbsp;%</h3>
         {sentence ? <p>{sentence}</p> : null}
+        {block ? <p className="vacancy-fit-condition-block">{block.text}</p> : null}
         {hint ? <p className="vacancy-fit-confidence">{hint}</p> : null}
       </div>
       {boost ? (
