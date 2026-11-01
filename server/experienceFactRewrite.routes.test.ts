@@ -377,4 +377,52 @@ describe('accepting consultant bullets confirms the workplace (01.11)', () => {
     expect(reverted.statusCode).toBe(200);
     expect(chronology(ctx)).toMatchObject({ status: 'proposed', confidence: 'candidate-reported' });
   });
+
+  async function historyOf(ctx: Awaited<ReturnType<typeof acceptedRewrite>>) {
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/profile/history',
+      headers: { authorization: ctx.headers.authorization },
+    });
+    return response.json().data as {
+      total: number;
+      entries: {
+        id: string;
+        actor: string;
+        section: string;
+        appliedText: string;
+        revertedAt: string | null;
+      }[];
+    };
+  }
+
+  it('a rewrite accepted before the change log is in the history and «Вернуть» undoes it', async () => {
+    const ctx = await acceptedRewrite();
+    const { database } = ctx.store as unknown as {
+      database: { prepare(sql: string): { run(...args: unknown[]): unknown } };
+    };
+    database.prepare('DELETE FROM profile_change_log WHERE candidate_id = ?').run(ctx.candidateId);
+
+    const page = await historyOf(ctx);
+    expect(page.total).toBe(1);
+    const [entry] = page.entries;
+    expect(entry).toMatchObject({ actor: 'consultant', section: 'experience', revertedAt: null });
+    expect(entry!.appliedText).toContain('Расширил команду поддержки');
+
+    const reverted = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/profile/history/${entry!.id}/revert`,
+      headers: ctx.headers,
+    });
+    expect(reverted.statusCode).toBe(200);
+    const place = ctx.store.getSnapshot(ctx.candidateId).resume!.draft.experience[0]!;
+    expect(place.bulletMemoryIds).toEqual([]);
+  });
+
+  it('a logged rewrite shows the accepted bullets, once', async () => {
+    const ctx = await acceptedRewrite();
+    const page = await historyOf(ctx);
+    expect(page.total).toBe(1);
+    expect(page.entries[0]!.appliedText).toContain('Расширил команду поддержки');
+  });
 });

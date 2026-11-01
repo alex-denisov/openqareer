@@ -314,4 +314,32 @@ describe('История пишет навыки по-русски, без JSON 
       appliedText: 'Навык ITIL — подтверждён проверкой',
     });
   });
+
+  it('a skill re-check that only moved the date says «дата проверки 28.10 → 29.10»', async () => {
+    const ctx = await setup();
+    const skill = (verifiedAt: string) =>
+      JSON.stringify({
+        name: 'Docker',
+        status: 'подтверждён',
+        source: 'квиз openqareer',
+        verifiedAt,
+      });
+    ctx.store.profileRevisionRepo.recordRevision({
+      id: randomUUID(),
+      candidateId: ctx.candidateId,
+      commandId: randomUUID(),
+      section: 'skills',
+      experienceId: 'docker',
+      previousText: skill('2026-10-28T13:23:00.000Z'),
+      appliedText: skill('2026-10-29T11:52:00.000Z'),
+      createdAt: '2026-10-29T11:52:00.000Z',
+    });
+
+    const [entry] = (await history(ctx)).entries;
+    expect(entry).toMatchObject({
+      label: 'Docker',
+      previousText: 'дата проверки 28.10',
+      appliedText: 'дата проверки 29.10',
+    });
+  });
 });

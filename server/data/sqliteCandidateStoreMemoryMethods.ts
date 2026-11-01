@@ -124,7 +124,13 @@ function applyExperienceFactRewrite(
       repository.addDerived(candidateId, bullet.memoryId, bullet.text, messages);
     }
     deps.saveResumeDraft(candidateId, applied.draft, snapshot.resume?.evidenceSnapshot ?? []);
-    confirmRewrittenPlaces(deps.profileChangeLog, candidateId, applied.draft, applied.record);
+    confirmRewrittenPlaces(
+      deps.profileChangeLog,
+      candidateId,
+      applied.draft,
+      applied.record,
+      applied.statements.map((bullet) => bullet.text),
+    );
     return applied.record;
   });
 }
