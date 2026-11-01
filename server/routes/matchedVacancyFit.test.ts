@@ -240,7 +240,7 @@ describe('порядок CPO при фильтре и после обновле�
   const order = (rows: MatchedVacancyItem[]) =>
     [...rows].sort((a, b) => compareFitOrder(a, b)).map((x) => x.cluster.id);
 
-  it('свежие строки без расчёта стоят ниже посчитанных на 40 %+ и выше посчитанных ниже 40 %', () => {
+  it('свежие строки без расчёта стоят после всех посчитанных (02.11)', () => {
     const rows = [
       fresh('new-unseen'),
       fresh('new-queued', { state: 'processing', requirements: [] }),
@@ -250,11 +250,10 @@ describe('порядок CPO при фильтре и после обновле�
       item('counted-45', 45),
     ];
     const ids = order(rows);
-    expect(ids.slice(0, 2)).toEqual(['counted-80', 'counted-45']);
+    expect(ids.slice(0, 3)).toEqual(['counted-80', 'counted-45', 'counted-20']);
     // Among rows still counting the selection's relevance decides.
-    // A failed count is re-queued on show: it is still counting, never above 40 %+.
-    expect(new Set(ids.slice(2, 5))).toEqual(new Set(['new-queued', 'new-unseen', 'new-failed']));
-    expect(ids.slice(5)).toEqual(['counted-20']);
+    // A failed count is re-queued on show: it is still counting, never above a percent.
+    expect(new Set(ids.slice(3))).toEqual(new Set(['new-queued', 'new-unseen', 'new-failed']));
   });
 
   it('отфильтрованная подборка (одна локация) держит то же правило', () => {
@@ -294,6 +293,15 @@ describe('textStillLoading (01.11)', () => {
   it('keeps the verdict once text exists or for other sources', () => {
     expect(textStillLoading('cluster-src-hh-search:1', 'Текст', view)).toBe(view);
     expect(textStillLoading('cluster-src-indeed:1', '', view)).toBe(view);
+  });
+  it('a «no requirements» verdict on the search snippet is still counting until the full text is read (02.11 АЙСБЕРРИ)', () => {
+    const snippet = { state: 'no_requirements', requirements: [] } as unknown as VacancyFitView;
+    expect(textStillLoading('cluster-src-hh-search:1', 'Сниппет', snippet, false).state).toBe(
+      'not_requested',
+    );
+    expect(textStillLoading('cluster-src-hh-search:1', 'Полный текст', snippet, true)).toBe(
+      snippet,
+    );
   });
 });
 

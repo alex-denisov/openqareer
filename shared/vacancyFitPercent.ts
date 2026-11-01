@@ -54,16 +54,17 @@ export function vacancyFitStage(view: VacancyFitView | undefined): VacancyFitSta
   return 'none';
 }
 
+// 02.11 (.app run 3): a row still counting sat between 40 % and 31 %; every percent goes first now.
 const STAGE_RANK: Readonly<Record<VacancyFitStage, number>> = {
   counted: 0,
+  counted_low: 0,
   counting: 1,
-  counted_low: 2,
-  none: 3,
+  none: 2,
 };
 
 /**
- * 40 %+ by percent, then rows still counting (the caller keeps relevance among them), then
- * counted rows below 40 % by percent, then rows that cannot be counted.
+ * Every counted row by percent, then rows still counting (the caller keeps relevance among them),
+ * then rows that cannot be counted. Rows blocked by a condition go after all of them (vacancySort).
  */
 export function compareFitPercent(
   left: VacancyFitView | undefined,
