@@ -9,6 +9,8 @@ const vacancyFacets: MatchedVacancyFacets = {
   total: 148,
   catalogSummary: {
     roleLevelMatches: 214,
+    selectionTotal: 148,
+    fitCounted: 90,
     catalogTotal: 1620,
     observedAt: '2026-10-07T06:12:00.000Z',
   },
@@ -53,7 +55,7 @@ test.describe('B485 — сводка каталога, подвал и счёт�
     } else {
       const summary = page.getByRole('region', { name: 'Сводка подбора' });
       await expect(summary).toContainText(
-        '214 из 1 620 вакансий каталога подходят по роли и уровню.',
+        '148 вакансий подходят по роли и уровню · процент посчитан для 90 из 148 · в каталоге 1 620.',
       );
       await expect(summary).toContainText('каталог на 07.10 09:12');
       await expect(footer).toContainText('Показано 20 из 148');

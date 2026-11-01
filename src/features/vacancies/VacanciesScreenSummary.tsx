@@ -30,15 +30,23 @@ export function catalogSnapshotLabel(value?: string): string | undefined {
     .replace(', ', ' ');
 }
 
+/**
+ * 01.11: the big number and «процент посчитан» come from the same filtered selection the
+ * list shows; the catalog size is its own number with its own date (DESIGN.md: no number
+ * without a source).
+ */
 function summaryHeadline(catalogSummary: MatchedVacancyFacets['catalogSummary']): string {
-  if (catalogSummary?.catalogTotal === undefined) {
-    return 'вакансий подходят по роли и уровню.';
-  }
-  return (
-    'из ' +
-    countLabel(catalogSummary.catalogTotal) +
-    ' вакансий каталога подходят по роли и уровню.'
-  );
+  const total = catalogSummary?.selectionTotal;
+  const counted = catalogSummary?.fitCounted;
+  const fit =
+    total !== undefined && counted !== undefined && total > 0
+      ? counted >= total
+        ? ' · процент посчитан для всех'
+        : ` · процент посчитан для ${countLabel(counted)} из ${countLabel(total)}`
+      : '';
+  const head = `вакансий подходят по роли и уровню${fit}`;
+  if (catalogSummary?.catalogTotal === undefined) return `${head}.`;
+  return `${head} · в каталоге ${countLabel(catalogSummary.catalogTotal)}.`;
 }
 
 function catalogProvenance(
@@ -58,8 +66,7 @@ export function VacanciesScreenSummary({
   catalogSummary,
   onReset,
 }: VacanciesScreenSummaryProps) {
-  const catalogCount =
-    catalogSummary?.catalogTotal !== undefined ? catalogSummary.roleLevelMatches : poolTotal;
+  const catalogCount = catalogSummary?.selectionTotal ?? poolTotal;
   const asOf = catalogSnapshotLabel(catalogSummary?.observedAt);
 
   return (

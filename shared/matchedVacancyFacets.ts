@@ -25,7 +25,11 @@ export interface MatchedVacancySourceGroup {
 }
 
 export interface MatchedVacancyCatalogSummary {
+  /** Role/level matches in a capped snapshot before the candidate's filters: not shown (01.11). */
   readonly roleLevelMatches: number;
+  /** 01.11: the filtered selection the list shows, and how many of its rows have a percent. */
+  readonly selectionTotal?: number;
+  readonly fitCounted?: number;
   readonly catalogTotal: number;
   readonly observedAt?: string;
 }

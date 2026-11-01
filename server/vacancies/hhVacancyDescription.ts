@@ -10,7 +10,7 @@ const DESCRIPTION_PATTERN =
 export interface HhVacancyDetails {
   readonly description?: string;
   readonly skills: readonly string[];
-  /** Работодатель снял вакансию: страница отвечает 200, но показывает «Вакансия в архиве». */
+  /** Работодатель снял вакансию (статус в данных страницы) или удалил её (ответ 404). */
   readonly archived?: boolean;
   /**
    * Признак блокировки площадки (B535): `refused` — hh ответил 403/429/451,
@@ -161,7 +161,9 @@ export class HhVacancyDescriptionLoader {
       const response = await this.options.transport(url);
       refused =
         REFUSAL_STATUSES.has(response.status) && !FORBIDDEN_VACANCY_MARKER.test(response.body);
-      if (response.status === 200) {
+      // 01.11: hh отвечает 404 на удалённую вакансию — это статус ответа, не текст страницы.
+      if (response.status === 404) details = { archived: true, skills: [] };
+      else if (response.status === 200) {
         const description = descriptionFromPage(response.body);
         const skills = skillsFromPage(response.body);
         if (ARCHIVED_MARKER.test(response.body)) details = { archived: true, skills: [] };

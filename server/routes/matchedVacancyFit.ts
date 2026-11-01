@@ -123,11 +123,27 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
           runtime.enqueue(input);
           requeued += 1;
         }
-        views.set(id, compactFitView(view));
+        views.set(id, compactFitView(textStillLoading(id, target.description, view)));
       }
       return views;
     },
   };
+}
+
+const HH_CLUSTER_PREFIX = 'cluster-src-hh-search:';
+
+/**
+ * 01.11: an hh row whose text the background loader has not read yet is still counting, not
+ * «мало требований»: the search page carries no text, so «no description» is not its verdict.
+ */
+export function textStillLoading(
+  clusterId: string,
+  description: string,
+  view: VacancyFitView,
+): VacancyFitView {
+  if (view.state !== 'no_description' || !clusterId.startsWith(HH_CLUSTER_PREFIX)) return view;
+  if (description.trim()) return view;
+  return { ...view, state: 'not_requested' };
 }
 
 async function refreshFitViews(
@@ -290,7 +306,8 @@ export function requestFitForVacancyIds(
     const target = readVacancyFitTarget(deps, id);
     if (!target) return;
     const input = context(target, []);
-    if (!['not_requested', 'failed'].includes(runtime.view(input).state)) return;
+    // 01.11: `refreshing` shows the old version's percent; the sweep queues the current one too.
+    if (!['not_requested', 'failed', 'refreshing'].includes(runtime.view(input).state)) return;
     runtime.enqueue(
       input,
       backgroundRank === undefined ? {} : { backgroundRank: backgroundRank + index },
