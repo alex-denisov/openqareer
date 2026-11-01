@@ -11,6 +11,7 @@ import {
   planStructuredResumeImport,
 } from '../domain/structuredResumeImport';
 import { resolveCandidateMedia, type DownloadedMedia } from '../domain/candidateMedia';
+import { mergeReimportedDraft, protectedEditsFromRevisions } from '../domain/resumeReimportMerge';
 import { nativeSourceConnectionView } from '../connectors/nativeSourceConnection';
 import type { Handler } from './candidateRoutes';
 import { resumeStudioView } from './candidateRoutes';
@@ -76,10 +77,18 @@ async function commitStructuredImport(
 ) {
   const mediaBySourceUrl = await resolveStructuredMedia(candidateId, body.profile, log);
   const withMedia = attachResumeMedia(plan.draft, body.profile, mediaBySourceUrl);
+  const existing = deps.candidateStore.getSnapshot(candidateId)?.resume?.draft;
   // Replacing the profile must not carry sections over from the old source.
+  // A re-import from the same source merges: ids, confirmations and accepted
+  // consultant edits stay; a differing value of an edited field becomes a proposal.
   const draft = replaceProfile
     ? withMedia
-    : keepFilledSections(withMedia, deps.candidateStore.getSnapshot(candidateId)?.resume?.draft);
+    : mergeReimportedDraft(
+        keepFilledSections(withMedia, existing),
+        existing,
+        protectedEditsFromRevisions(deps.candidateStore.profileRevisionRepo.listRevisions(candidateId)),
+        body.sourceReceipt.platform,
+      );
   const commit = replaceProfile
     ? deps.candidateStore.replaceProfileWithImport.bind(deps.candidateStore)
     : deps.candidateStore.commitResumeImport.bind(deps.candidateStore);

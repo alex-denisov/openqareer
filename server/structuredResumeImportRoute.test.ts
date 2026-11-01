@@ -393,6 +393,71 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     });
   });
 
+  it('re-import merges: keeps ids, confirmed skills and a consultant-edited title, proposes the LinkedIn value', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+    const first = structuredBody();
+    const firstProfile = { ...first.profile, skills: ['Docker'] };
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: { ...first, profile: firstProfile },
+    });
+    const imported = store.getSnapshot(candidateId).resume!;
+    const roleId = imported.draft.experience[0].id;
+    const chronologyMemoryId = imported.draft.experience[0].chronologyMemoryId;
+    store.saveResumeDraft(
+      candidateId,
+      {
+        ...imported.draft,
+        experience: [{ ...imported.draft.experience[0], title: 'Chief Technology Officer' }],
+        skills: [
+          { ...imported.draft.skills![0], status: 'подтверждён', source: 'квиз openqareer', verifiedAt: '2026-10-29' },
+          { id: 'skill-itil', name: 'ITIL', status: 'подтверждён', source: 'квиз openqareer', verifiedAt: '2026-10-29' },
+        ],
+      },
+      imported.evidenceSnapshot,
+    );
+    store.profileRevisionRepo.recordRevision({
+      id: 'rev-1',
+      candidateId,
+      commandId: 'cmd-1',
+      section: 'experience',
+      experienceId: roleId,
+      previousText: 'VP of Technology & Operations',
+      appliedText: 'Chief Technology Officer',
+      createdAt: '2026-10-29T12:00:00.000Z',
+    });
+
+    const reimport = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: {
+        ...first,
+        profile: {
+          ...firstProfile,
+          skills: ['Docker', 'Kubernetes'],
+          experience: [{ ...first.profile.experience[0], title: 'SVP Technology' }],
+        },
+      },
+    });
+
+    expect(reimport.statusCode).toBe(200);
+    const draft = store.getSnapshot(candidateId).resume!.draft;
+    expect(draft.experience.map((role) => [role.id, role.title])).toEqual([[roleId, 'Chief Technology Officer']]);
+    expect(store.getSnapshot(candidateId).memory.some((fact) => fact.id === chronologyMemoryId)).toBe(true);
+    expect(draft.skills?.map((skill) => [skill.name, skill.status ?? null])).toEqual([
+      ['Docker', 'подтверждён'],
+      ['Kubernetes', null],
+      ['ITIL', 'подтверждён'],
+    ]);
+    expect(draft.skills?.[0].id).toBe(imported.draft.skills![0].id);
+    expect(draft.sourceSuggestions?.profileUpdates).toEqual([
+      { platform: 'linkedin', section: 'experience', entryId: roleId, field: 'title', proposedText: 'SVP Technology' },
+    ]);
+  });
+
   it('never writes work preferences from an openToWork suggestion', async () => {
     const { app, store, candidateId, authorization } = await createApp();
     const body = structuredBody({
