@@ -78,6 +78,12 @@ const ADDITIONAL_ANCHORS: readonly AnchorHit[] = [
   { code: 'it-ops', anchor: 'ит-поддержки' },
   { code: 'support', anchor: 'it-поддержки' },
   { code: 'support', anchor: 'ит-поддержки' },
+  // Аудит 01.11: «Руководитель отдела клиентского обслуживания» оставалась без функции.
+  { code: 'support', anchor: 'клиентского обслуживания' },
+  { code: 'support', anchor: 'клиентского сервиса' },
+  { code: 'support', anchor: 'клиентской поддержки' },
+  // «Исполнительный директор» в русских вакансиях — второе лицо, ведущее операционку.
+  { code: 'ops', anchor: 'исполнительный директор' },
   { code: 'it-ops', anchor: 'it infrastructure' },
   { code: 'it-ops', anchor: 'it support' },
   { code: 'it-ops', anchor: 'it solution delivery executive' },

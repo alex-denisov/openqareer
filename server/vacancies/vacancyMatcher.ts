@@ -194,6 +194,10 @@ const SPECIALIST_FUNCTIONS: readonly FunctionCode[] = [
 /** Revenue Operations и RevOps — продажи, а не ops от роли COO (28.10). */
 const REVENUE_TITLE = /\b(?:revenue|revops)\b/iu;
 
+/** «Исполнительный директор (CEO)» — первое лицо, а не COO кампании. */
+const CEO_TITLE =
+  /(?<!\p{L})(?:ceo|chief executive officer|генеральн\p{L}* директор\p{L}*)(?!\p{L})/iu;
+
 const ASSISTANT_TITLE = /(?<!\p{L})(?:assistant|ассистент\p{L}*|помощник\p{L}*)(?!\p{L})/iu;
 
 /**
@@ -254,7 +258,10 @@ export function evaluateSemanticRole(
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
-  if (isAssistantForExecutive(targetLevel, vacancyTitle)) {
+  if (
+    isAssistantForExecutive(targetLevel, vacancyTitle) ||
+    (CEO_TITLE.test(vacancyTitle) && !roleFunctions.includes('exec-general'))
+  ) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 

@@ -24,6 +24,8 @@ describe('подбор руководителя: смежные функции �
     'Руководитель IT-поддержки',
     'Head of AI / Руководитель AI-направления',
     'Технический руководитель направления /CTO',
+    'Руководитель отдела клиентского обслуживания',
+    'Исполнительный директор',
   ])('оставляет «%s»', (title) => {
     expect(roleOf(title)).not.toBe('none');
   });
@@ -36,6 +38,8 @@ describe('подбор руководителя: смежные функции �
     'Video Study Participant',
     'Customer Success Expression of Interest Form',
     'Site Reliability Engineer Expression of Interest Form',
+    'Исполнительный директор (CEO)',
+    'Операционный директор сети (общепит)',
   ])('убирает «%s»', (title) => {
     expect(roleOf(title)).toBe('none');
   });
