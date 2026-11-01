@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { ProfileFactProvenance } from './ProfileProvenanceChip';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
@@ -21,6 +22,8 @@ import type { ResumeCertificationInput, ResumeDraft, ResumeProjectInput } from '
 
 interface SectionProps {
   readonly draft: ResumeDraft;
+  /** Consultant proposals for this section, shown under its head (01.11). */
+  readonly consultant?: ReactNode;
   readonly saving?: boolean;
   readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
 }
@@ -145,7 +148,12 @@ function NewCertificateForm({
   );
 }
 
-export function ProfileCertificatesSection({ draft, saving, onSectionSave }: SectionProps) {
+export function ProfileCertificatesSection({
+  draft,
+  saving,
+  onSectionSave,
+  consultant,
+}: SectionProps) {
   const certifications = draft.certifications ?? [];
   const [newEntry, setNewEntry] = useState<ResumeCertificationInput>();
   const addItem = () => setNewEntry(addCertification(draft).certifications?.at(-1));
@@ -161,6 +169,7 @@ export function ProfileCertificatesSection({ draft, saving, onSectionSave }: Sec
         count={certifications.length ? String(certifications.length) : undefined}
         action={<SectionAddButton label="Добавить сертификат" onClick={addItem} />}
       />
+      {consultant}
       {newEntry ? (
         <NewCertificateForm
           draft={draft}
@@ -346,7 +355,7 @@ function NewProjectEntryForm({
   );
 }
 
-export function ProfileProjectsSection({ draft, saving, onSectionSave }: SectionProps) {
+export function ProfileProjectsSection({ draft, saving, onSectionSave, consultant }: SectionProps) {
   const projects = draft.projects ?? [];
   const [newEntry, setNewEntry] = useState<ResumeProjectInput>();
   return (
@@ -365,6 +374,7 @@ export function ProfileProjectsSection({ draft, saving, onSectionSave }: Section
           />
         }
       />
+      {consultant}
       {newEntry ? (
         <NewProjectEntryForm
           draft={draft}

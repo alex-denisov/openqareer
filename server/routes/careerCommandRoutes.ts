@@ -108,6 +108,10 @@ function resolveExecutionTarget(
   const normalizedRevision = {
     ...proposal.resumeRevision,
     field: proposal.resumeRevision.field ?? undefined,
+    itemId: proposal.resumeRevision.itemId ?? undefined,
+    operation: proposal.resumeRevision.operation ?? undefined,
+    itemField: proposal.resumeRevision.itemField ?? undefined,
+    itemFields: proposal.resumeRevision.itemFields ?? undefined,
   };
   const currentText = currentTextForResumeRevision(
     snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT,
@@ -119,7 +123,7 @@ function resolveExecutionTarget(
       ok: false,
       status: 422,
       code: 'resume_revision_target_stale',
-      message: 'Раздел опыта изменился. Обновите предложение консультанта.',
+      message: 'Раздел профиля изменился. Обновите предложение консультанта.',
     };
   }
   return {

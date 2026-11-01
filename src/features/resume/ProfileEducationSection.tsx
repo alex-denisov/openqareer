@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Info } from '@phosphor-icons/react';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
@@ -16,6 +17,8 @@ import type { ResumeDraft, ResumeEducationInput } from './resumeTypes';
 
 interface SectionProps {
   readonly draft: ResumeDraft;
+  /** Consultant proposals for this section, shown under its head (01.11). */
+  readonly consultant?: ReactNode;
   readonly saving?: boolean;
   readonly onAddCourse?: () => void;
   readonly onConsultCourses?: () => void;
@@ -181,6 +184,7 @@ export function ProfileEducationSection(props: SectionProps) {
         title="Образование"
         action={<SectionAddButton label="Добавить образование" onClick={addItem} />}
       />
+      {props.consultant}
       {newEntry ? (
         <EducationEditForm
           entry={newEntry}

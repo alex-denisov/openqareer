@@ -27,6 +27,7 @@ const SECTION_LABEL: Readonly<Record<string, string>> = {
   languages: 'Языки',
   skills: 'Навыки',
   courses: 'Курсы',
+  achievements: 'Достижения',
 };
 
 const EMPTY_VALUE = 'пусто';

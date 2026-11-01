@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ProfileItemSection } from '../../../shared/profileItemRevision';
+import { ProfileItemSuggestions } from './ProfileItemSuggestions';
 import { CandidateFootprintAuditView } from '../reputation/CandidateFootprintAuditView';
 import { ProfileAchievementsSection } from './ProfileAchievementsSection';
 import { ProfileRecommendationsSection } from './ProfileRecommendationsSection';
@@ -81,7 +83,34 @@ function useVersionCount(candidateId: string) {
   return count;
 }
 
+const MOBILE_ITEM_SECTIONS: Partial<Record<string, readonly ProfileItemSection[]>> = {
+  edu: ['education', 'courses'],
+  proj: ['projects'],
+  lang: ['languages'],
+  certifications: ['certifications'],
+  achievements: ['achievements'],
+};
+
+/** A collection page with the consultant's proposals for it on top (01.11). */
 function MobileCollectionDetail(props: DetailProps) {
+  const sections = MOBILE_ITEM_SECTIONS[props.route.page];
+  const content = <MobileCollectionContent {...props} />;
+  if (!sections || !content) return content;
+  return (
+    <>
+      <ProfileItemSuggestions
+        sections={sections}
+        suggestions={props.suggestions}
+        onAcceptSuggestion={props.onAcceptSuggestion}
+        onDismissSuggestion={props.onDismissSuggestion}
+        onRevertSuggestion={props.onRevertSuggestion}
+      />
+      {content}
+    </>
+  );
+}
+
+function MobileCollectionContent(props: DetailProps) {
   switch (props.route.page) {
     case 'edu':
       return (

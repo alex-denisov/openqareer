@@ -15,6 +15,7 @@ export const LIST_SECTIONS = [
   'languages',
   'skills',
   'courses',
+  'achievements',
 ] as const;
 
 type TextSection = (typeof TEXT_SECTIONS)[number];
@@ -39,6 +40,7 @@ const SUMMARY_KEYS = [
   'issuer',
   'cefr',
   'level',
+  'provider',
   'description',
 ] as const;
 

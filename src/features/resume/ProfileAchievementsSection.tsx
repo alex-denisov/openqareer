@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
 import { addAchievement, removeAchievement, updateAchievement } from './profileEntryEditing';
@@ -12,6 +13,8 @@ import type { ResumeAchievementInput, ResumeDraft } from './resumeTypes';
 
 interface SectionProps {
   readonly draft: ResumeDraft;
+  /** Consultant proposals for this section, shown under its head (01.11). */
+  readonly consultant?: ReactNode;
   readonly saving?: boolean;
   readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
 }
@@ -144,10 +147,14 @@ function groupAchievements(
   return groups;
 }
 
-export function ProfileAchievementsSection({ draft, saving, onSectionSave }: SectionProps) {
+export function ProfileAchievementsSection({
+  draft,
+  saving,
+  onSectionSave,
+  consultant,
+}: SectionProps) {
   const achievements = draft.achievements ?? [];
   const [newEntry, setNewEntry] = useState<ResumeAchievementInput>();
-  const groups = groupAchievements(achievements);
   const addItem = () => setNewEntry(addAchievement(draft).achievements?.at(-1));
   return (
     <section
@@ -160,6 +167,7 @@ export function ProfileAchievementsSection({ draft, saving, onSectionSave }: Sec
         title="Достижения"
         action={<SectionAddButton label="Добавить достижение" onClick={addItem} />}
       />
+      {consultant}
       {newEntry ? (
         <NewAchievementForm
           draft={draft}
@@ -172,21 +180,30 @@ export function ProfileAchievementsSection({ draft, saving, onSectionSave }: Sec
       {!achievements.length && !newEntry ? (
         <p className="career-profile-screen-empty-note">Достижений пока нет.</p>
       ) : (
-        [...groups.entries()].map(([kind, items]) => (
-          <div key={kind} className="career-profile-screen-achv-group">
-            <h3>{ACHIEVEMENT_GROUP_LABEL[kind]}</h3>
-            {items.map((item) => (
-              <AchievementItem
-                key={item.id}
-                entry={item}
-                saving={saving}
-                onSave={(patch) => onSectionSave(updateAchievement(draft, item.id, patch))}
-                onRemove={() => onSectionSave(removeAchievement(draft, item.id))}
-              />
-            ))}
-          </div>
-        ))
+        <AchievementGroups draft={draft} saving={saving} onSectionSave={onSectionSave} />
       )}
     </section>
+  );
+}
+
+function AchievementGroups({ draft, saving, onSectionSave }: SectionProps) {
+  const groups = groupAchievements(draft.achievements ?? []);
+  return (
+    <>
+      {[...groups.entries()].map(([kind, items]) => (
+        <div key={kind} className="career-profile-screen-achv-group">
+          <h3>{ACHIEVEMENT_GROUP_LABEL[kind]}</h3>
+          {items.map((item) => (
+            <AchievementItem
+              key={item.id}
+              entry={item}
+              saving={saving}
+              onSave={(patch) => onSectionSave(updateAchievement(draft, item.id, patch))}
+              onRemove={() => onSectionSave(removeAchievement(draft, item.id))}
+            />
+          ))}
+        </div>
+      ))}
+    </>
   );
 }

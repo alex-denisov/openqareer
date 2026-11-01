@@ -19,6 +19,15 @@ import type { FactTrustState } from '../data/sqliteProfileChangeLogRepository';
 import type { CareerActionProposal } from '../domain/coach';
 import { CareerCommandNotFoundError } from '../data/sqliteCareerCommandRepository';
 import { currentSkillText, writeSkillState } from './skillRevision';
+import { isProfileItemSection } from '../../shared/profileItemRevision';
+import {
+  applyProfileItemRevision,
+  currentProfileItemText,
+  profileItemSummary,
+} from '../domain/profileItemRevision';
+import { currentProfileValue, withProfileValue } from '../domain/profileChangeDiff';
+import { resumeDraftSchema } from '../domain/resumeDraft';
+import { materializeManualResumeEvidence } from '../routes/manualResumeEvidence';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import type { CareerCommandRecord, ResumeReviseExecutionTarget } from './careerCommandPlanner';
 
@@ -174,6 +183,10 @@ export class CareerCommandDispatcher {
     if (previousText === null || previousText !== target.currentText) {
       throw new ResumeRevisionConflictError();
     }
+    if (isProfileItemSection(target.section)) {
+      this.applyItemRevision(candidateId, command, target, currentDraft, snapshot);
+      return this.finishProfileRevision(candidateId, command, action, this.now().toISOString());
+    }
     const { chronologyLinks, factStates } = this.applyResumeRevision(
       candidateId,
       command,
@@ -204,6 +217,79 @@ export class CareerCommandDispatcher {
       createdAt: finishedAt,
     });
     return this.finishProfileRevision(candidateId, command, action, finishedAt);
+  }
+
+  /**
+   * A list-section revision (01.11) is written like the candidate's own save:
+   * changed fields get the candidate's fact, the item's whole value goes into
+   * the change log, which is also what revert restores.
+   */
+  private applyItemRevision(
+    candidateId: string,
+    command: CareerCommandRecord,
+    target: ResumeReviseExecutionTarget,
+    currentDraft: ResumeDraft,
+    snapshot: CandidateSnapshot,
+  ): void {
+    const { draft, itemId } = applyProfileItemRevision(
+      currentDraft,
+      target,
+      consultantItemId(command.commandId),
+    );
+    const bound = materializeManualResumeEvidence(
+      this.store,
+      candidateId,
+      draft,
+      currentDraft,
+      new Set(snapshot.memory.map((memory) => memory.id)),
+    );
+    if (!resumeDraftSchema.safeParse(bound).success) throw new ResumeRevisionConflictError();
+    const refs = memoryRefs(command.proposal.evidenceRefs);
+    const before = itemEvidenceId(currentDraft, target.section, itemId);
+    const factStates = this.store.profileChangeLog.readFactStates(candidateId, [
+      ...refs,
+      ...(before ? [before] : []),
+    ]);
+    this.saveDraftWithProjection(candidateId, bound);
+    const after = itemEvidenceId(bound, target.section, itemId);
+    this.confirmByCandidate(candidateId, [...refs, ...(after ? [after] : [])]);
+    this.store.profileChangeLog.record({
+      id: randomUUID(),
+      candidateId,
+      actor: 'consultant',
+      section: target.section,
+      itemId,
+      label: itemLabel(bound, currentDraft, target.section, itemId),
+      previous: currentProfileValue(currentDraft, target.section, itemId) ?? '',
+      applied: currentProfileValue(bound, target.section, itemId) ?? '',
+      commandId: command.commandId,
+      factStates,
+      createdAt: this.now().toISOString(),
+    });
+  }
+
+  private saveDraftWithProjection(candidateId: string, draft: ResumeDraft): void {
+    const latest = this.store.getSnapshot(candidateId);
+    const projection = buildResumeStudioProjection({ ...draft, evidence: latest.memory });
+    this.store.saveResumeDraft(candidateId, draft, projection.evidenceSnapshot);
+  }
+
+  private revertItemRevision(candidateId: string, command: CareerCommandRecord) {
+    const change = this.store.profileChangeLog.getByCommandId(candidateId, command.commandId);
+    if (!change) throw new ProfileRevisionNotFoundError();
+    if (change.revertedAt) throw new ProfileRevisionAlreadyRevertedError();
+    const draft = this.store.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
+    if (currentProfileValue(draft, change.section, change.itemId) !== change.applied) {
+      throw new ResumeRevisionConflictError();
+    }
+    this.saveDraftWithProjection(
+      candidateId,
+      withProfileValue(draft, change.section, change.itemId, change.previous),
+    );
+    const revertedAt = this.now().toISOString();
+    this.store.profileChangeLog.writeFactStates(candidateId, change.factStates, revertedAt);
+    this.store.profileChangeLog.markReverted(candidateId, change.id, revertedAt);
+    return command;
   }
 
   private startProfileRevision(command: CareerCommandRecord, startedAt: string) {
@@ -283,6 +369,8 @@ export class CareerCommandDispatcher {
     finishedAt: string,
     chronologyLinks?: ExperienceChronologyRevisionLinks,
   ): void {
+    // List sections keep their revision in the change log, never here.
+    if (isProfileItemSection(target.section)) throw new Error('profile_item_revision_not_logged');
     this.store.profileRevisionRepo.recordRevision({
       id: randomUUID(),
       candidateId,
@@ -353,9 +441,22 @@ export class CareerCommandDispatcher {
     this.store.saveResumeDraft(candidateId, revertedDraft, projection.evidenceSnapshot);
   }
 
-  async revert(candidateId: string, commandId: string): Promise<CareerCommandRecord> {
+  /** The reverted command as the client reads it, with the reverted mark. */
+  async revert(candidateId: string, commandId: string): Promise<CareerCommandView> {
+    const command = await this.revertCommand(candidateId, commandId);
+    return this.withRevisionState(candidateId, command);
+  }
+
+  private async revertCommand(
+    candidateId: string,
+    commandId: string,
+  ): Promise<CareerCommandRecord> {
     const command = this.store.getCareerCommand(candidateId, commandId);
     if (!command) throw new CareerCommandNotFoundError();
+    const section = (command.executionTarget as ResumeReviseExecutionTarget | null)?.section;
+    if (section && isProfileItemSection(section)) {
+      return this.store.transaction(() => this.revertItemRevision(candidateId, command));
+    }
     return this.store.transaction(() => {
       const revision = this.store.profileRevisionRepo.getRevisionByCommandId(
         candidateId,
@@ -399,6 +500,11 @@ export class CareerCommandDispatcher {
 
   private withRevisionState(candidateId: string, command: CareerCommandRecord): CareerCommandView {
     if (command.capability !== 'resume.revise') return command;
+    const section = (command.executionTarget as ResumeReviseExecutionTarget | null)?.section;
+    if (section && isProfileItemSection(section)) {
+      const change = this.store.profileChangeLog.getByCommandId(candidateId, command.commandId);
+      return change?.revertedAt ? { ...command, profileRevisionReverted: true } : command;
+    }
     const revision = this.store.profileRevisionRepo.getRevisionByCommandId(
       candidateId,
       command.commandId,
@@ -408,6 +514,36 @@ export class CareerCommandDispatcher {
 }
 
 type ExperienceEntry = ResumeDraft['experience'][number];
+type ListItem = { readonly id: string } & Record<string, unknown>;
+
+/** A consultant-added item gets an id the draft schema accepts. */
+function consultantItemId(commandId: string): string {
+  return `consultant-${commandId.replace(/[^A-Za-z0-9]/gu, '').slice(0, 16)}`;
+}
+
+function memoryRefs(evidenceRefs: readonly string[]): string[] {
+  return evidenceRefs.map((ref) => (ref.startsWith('memory:') ? ref.slice('memory:'.length) : ref));
+}
+
+function itemOf(draft: ResumeDraft, section: string, itemId: string): ListItem | undefined {
+  const items = ((draft as unknown as Record<string, unknown>)[section] ?? []) as ListItem[];
+  return items.find((item) => item.id === itemId);
+}
+
+function itemEvidenceId(draft: ResumeDraft, section: string, itemId: string): string | null {
+  const evidence = itemOf(draft, section, itemId)?.evidenceMemoryId;
+  return typeof evidence === 'string' && !evidence.startsWith('manual-') ? evidence : null;
+}
+
+function itemLabel(
+  next: ResumeDraft,
+  previous: ResumeDraft,
+  section: string,
+  itemId: string,
+): string {
+  const item = itemOf(next, section, itemId) ?? itemOf(previous, section, itemId);
+  return item ? profileItemSummary(item) : '';
+}
 
 const CANDIDATE_CONFIRMED = 'candidate-confirmed';
 
@@ -496,10 +632,16 @@ export function currentTextForResumeRevision(
     readonly experienceId?: string | null;
     readonly memoryId?: string | null;
     readonly field?: ResumeReviseExecutionTarget['field'];
+    readonly itemId?: string | null;
+    readonly operation?: ResumeReviseExecutionTarget['operation'] | null;
+    readonly itemField?: string | null;
   },
   memory: CandidateSnapshot['memory'] = [],
 ): string | null {
   if (target.field && (target.section !== 'experience' || target.memoryId)) return null;
+  if (isProfileItemSection(target.section)) {
+    return currentProfileItemText(draft, { ...target, proposedText: '' });
+  }
   if (target.section === 'headline') {
     return draft.candidate.headline ?? '';
   }

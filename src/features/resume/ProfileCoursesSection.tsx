@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
 import { BookOpen } from '@phosphor-icons/react';
@@ -14,6 +15,8 @@ import type { ResumeCourseInput, ResumeDraft } from './resumeTypes';
 
 interface SectionProps {
   readonly draft: ResumeDraft;
+  /** Consultant proposals for this section, shown under its head (01.11). */
+  readonly consultant?: ReactNode;
   readonly saving?: boolean;
   readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
   readonly importedLabel?: string;
@@ -149,6 +152,7 @@ export function ProfileCoursesSection({
   saving,
   onSectionSave,
   importedLabel,
+  consultant,
 }: SectionProps) {
   const courses = draft.courses ?? [];
   const [newEntry, setNewEntry] = useState<ResumeCourseInput>();
@@ -165,6 +169,7 @@ export function ProfileCoursesSection({
         emptyTag={!courses.length}
         action={<SectionAddButton label="Добавить курс" onClick={addItem} />}
       />
+      {consultant}
       {newEntry ? (
         <NewCourseEntryForm
           draft={draft}

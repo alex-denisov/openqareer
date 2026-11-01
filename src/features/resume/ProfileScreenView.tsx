@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { ProfileItemSection } from '../../../shared/profileItemRevision';
+import { ProfileItemSuggestions } from './ProfileItemSuggestions';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import {
   getConnections,
@@ -218,6 +220,17 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
 // eslint-disable-next-line max-lines-per-function
 function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
   const desktopProfileLayout = useDesktopProfileLayout();
+  // The 1440 layout keeps courses, certificates and achievements out of the
+  // main column, so their proposals sit with education and languages there.
+  const itemSuggestions = (sections: readonly ProfileItemSection[]) => (
+    <ProfileItemSuggestions
+      sections={sections}
+      suggestions={props.suggestions}
+      onAcceptSuggestion={props.onAcceptSuggestion}
+      onDismissSuggestion={props.onDismissSuggestion}
+      onRevertSuggestion={props.onRevertSuggestion}
+    />
+  );
   const dataDialog = useProfileDataDialog(props, desktopProfileLayout);
   useDesktopProfileFocus(
     props,
@@ -410,13 +423,22 @@ function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
                 draft={draft}
                 saving={saving}
                 onSectionSave={onSectionSave}
+                consultant={itemSuggestions(
+                  desktopProfileLayout ? ['education', 'courses'] : ['education'],
+                )}
               />
-              <ProfileProjectsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+              <ProfileProjectsSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
+                consultant={itemSuggestions(['projects'])}
+              />
               {!desktopProfileLayout ? (
                 <ProfileCoursesSection
                   draft={draft}
                   saving={saving}
                   onSectionSave={onSectionSave}
+                  consultant={itemSuggestions(['courses'])}
                   importedLabel={importedSource?.label}
                 />
               ) : null}
@@ -425,12 +447,18 @@ function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
                   draft={draft}
                   saving={saving}
                   onSectionSave={onSectionSave}
+                  consultant={itemSuggestions(['certifications'])}
                 />
               ) : null}
               <ProfileLanguagesSection
                 draft={draft}
                 saving={saving}
                 onSectionSave={onSectionSave}
+                consultant={itemSuggestions(
+                  desktopProfileLayout
+                    ? ['languages', 'certifications', 'achievements']
+                    : ['languages'],
+                )}
               />
               {!desktopProfileLayout ? (
                 <ProfileRecommendationsSection
@@ -444,6 +472,7 @@ function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
                   draft={draft}
                   saving={saving}
                   onSectionSave={onSectionSave}
+                  consultant={itemSuggestions(['achievements'])}
                 />
               ) : null}
             </div>
