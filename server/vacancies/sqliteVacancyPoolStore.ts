@@ -20,6 +20,7 @@ import {
   VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
   VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
   MIGRATION_35,
+  CLUSTER_TEXT_PENDING_TABLE,
 } from '../data/sqliteSchema';
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
@@ -335,6 +336,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE);
     this.database.exec(HH_TEXT_PRIORITY_TABLE);
+    this.database.exec(CLUSTER_TEXT_PENDING_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
@@ -896,6 +898,65 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
+  private prepareClusterTextPending() {
+    return this.database.prepare(
+      'INSERT OR IGNORE INTO cluster_text_pending (vacancy_id, requested_ms) VALUES (?, ?)',
+    );
+  }
+
+  /**
+   * Записи, которым сведение должно заново найти двойников по тексту (01.11):
+   * сначала очередь дочитанных текстов, потом один проход по старым записям с
+   * текстом. Курсор — `rowid`, за вызов просматривается не больше `scan` строк.
+   */
+  nextClusterTextBatch(limit = 200, scan = 5_000): UnifiedVacancy[] {
+    const want = Math.max(1, Math.min(Math.trunc(limit), 1_000));
+    const queued = this.database
+      .prepare('SELECT vacancy_id AS id FROM cluster_text_pending ORDER BY requested_ms LIMIT ?')
+      .all(want) as unknown as Array<{ id: string }>;
+    if (queued.length > 0) {
+      const remove = this.database.prepare('DELETE FROM cluster_text_pending WHERE vacancy_id = ?');
+      this.inTransaction(() => queued.forEach((row) => remove.run(row.id)));
+      return queued
+        .map((row) => this.getVacancy(row.id))
+        .filter((vacancy): vacancy is UnifiedVacancy => vacancy !== undefined);
+    }
+    const state = this.database
+      .prepare('SELECT cursor_rowid, completed FROM cluster_text_backfill_state WHERE id = 1')
+      .get() as { cursor_rowid: number; completed: number };
+    if (state.completed === 1) return [];
+    const rows = this.database
+      .prepare(
+        `SELECT rowid, payload, expired_at FROM vacancy_pool
+          WHERE rowid > ? ORDER BY rowid LIMIT ?`,
+      )
+      .all(state.cursor_rowid, Math.max(1, Math.trunc(scan))) as unknown as Array<{
+      rowid: number;
+      payload: string;
+      expired_at: string | null;
+    }>;
+    if (rows.length === 0) {
+      this.database
+        .prepare('UPDATE cluster_text_backfill_state SET completed = 1 WHERE id = 1')
+        .run();
+      return [];
+    }
+    this.database
+      .prepare('UPDATE cluster_text_backfill_state SET cursor_rowid = ? WHERE id = 1')
+      .run(rows[rows.length - 1]!.rowid);
+    const found: UnifiedVacancy[] = [];
+    for (const row of rows) {
+      if (row.expired_at !== null || !row.payload.includes('"fullDescription"')) continue;
+      try {
+        const vacancy = JSON.parse(row.payload) as UnifiedVacancy;
+        if (vacancy.fullDescription?.trim()) found.push(vacancy);
+      } catch {
+        // Повреждённая запись двойника не ищет.
+      }
+    }
+    return found;
+  }
+
   private prepareProjectionUpsert() {
     return this.database.prepare(
       `INSERT INTO vacancy_cluster_input (id, cluster_json) VALUES (?, ?)
@@ -951,6 +1012,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
+    const textPending = this.prepareClusterTextPending();
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
       const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
       this.writeTransaction('upsert', sourceId, chunk.length, tally, () => {
@@ -962,6 +1024,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
           index.run(...indexColumns(stored, sourceId), 0);
           projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
+          if (gainedFullText(previous, stored)) textPending.run(stored.id, Date.now());
         }
       });
     }
@@ -978,6 +1041,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const insert = this.prepareUpsert();
     const index = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
+    const textPending = this.prepareClusterTextPending();
     for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
       const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
       this.writeTransaction('upsert', sourceId, chunk.length, tally, () => {
@@ -989,6 +1053,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
           index.run(...indexColumns(stored, sourceId), 0);
           projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
+          if (gainedFullText(previous, stored)) textPending.run(stored.id, Date.now());
         }
       });
       await yieldToEventLoop();
@@ -2708,4 +2773,9 @@ export function parseVacancy(payload: string): UnifiedVacancy | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Текст дочитан этой записью впервые: сведение должно поискать двойника (01.11). */
+function gainedFullText(previous: UnifiedVacancy | undefined, stored: UnifiedVacancy): boolean {
+  return Boolean(previous && !previous.fullDescription?.trim() && stored.fullDescription?.trim());
 }

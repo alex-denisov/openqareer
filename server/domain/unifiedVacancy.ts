@@ -69,6 +69,8 @@ export interface UnifiedVacancy {
   aboutCompany?: string;
   contactInfo?: string;
   fullDescription?: string;
+  /** Отпечаток «название + полный текст» (01.11): проекция сведения несёт его вместо текста. */
+  textKey?: string;
   postType?: 'vacancy' | 'candidate_resume' | 'ad' | 'digest';
   url: string;
   provenance: VacancyProvenance;
@@ -102,6 +104,8 @@ export interface VacancyCluster {
   /** Формат работы, посчитанный до обрезки выжимки страницей подборки (B446-g4). */
   workFormat?: import('../../shared/vacancyWorkFormat').VacancyWorkFormat;
   descriptionSummary: string;
+  /** Отпечаток «название + полный текст» основателя: тот же текст сводится при другом работодателе. */
+  textKey?: string;
   skills: string[];
   primaryUrl: string;
   sources: VacancyProvenance[];

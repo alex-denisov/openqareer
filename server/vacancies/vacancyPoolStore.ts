@@ -178,6 +178,8 @@ export interface VacancyPoolStore {
   loadClustersByKeys?(lookups: readonly VacancyClusterLookup[]): VacancyCluster[];
   loadClusterRepresentatives?(lookups: readonly VacancyClusterLookup[]): ClusterRepresentative[];
   backfillClusterKeysStep?(chunk?: number): number;
+  /** 01.11: записи с только что дочитанным текстом, потом проход по старым — для сведения. */
+  nextClusterTextBatch?(limit?: number, scan?: number): UnifiedVacancy[];
   clusterKeysReady?(): boolean;
   /** Materialized public catalog (B229); absent while its bounded backfill runs. */
   loadCatalogEntriesPage?(query: CatalogEntriesQuery): CatalogEntriesPage;
