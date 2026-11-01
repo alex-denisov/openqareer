@@ -21,9 +21,10 @@ import {
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 const pageQuery = z.object({ page: z.coerce.number().int().min(0).max(10_000).default(0) });
-// Consultant edits accepted before the change log are listed as `revision:<id>`.
+// Consultant edits accepted before the change log are listed as `revision:<id>`
+// and consultant rewrites accepted in «Опыт» as `rewrite:<id>`.
 const changeParams = z.object({
-  changeId: z.string().regex(/^(revision:)?[0-9a-f-]{36}$/i),
+  changeId: z.string().regex(/^(revision:|rewrite:)?[0-9a-f-]{36}$/i),
 });
 const experienceParams = z.object({ experienceId: z.string().min(1).max(200) });
 

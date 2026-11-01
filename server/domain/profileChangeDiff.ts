@@ -167,6 +167,54 @@ export function describeSectionValue(section: string, value: string): string {
   return describeProfileValue(value);
 }
 
+const FIELD_LABELS: Readonly<Record<string, string>> = {
+  verifiedAt: 'дата проверки',
+  level: 'уровень',
+  status: 'статус',
+  source: 'источник',
+  startDate: 'начало',
+  endDate: 'окончание',
+};
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})T/;
+
+function fieldText(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return '—';
+  const date = ISO_DATE.exec(value);
+  return date ? `${date[3]}.${date[2]}` : value.trim();
+}
+
+/** Only the fields that differ, as «дата проверки 28.10», one string per side. */
+function changedFields(previous: string, applied: string): [string, string] | null {
+  const before = parsedItem(previous);
+  const after = parsedItem(applied);
+  if (!before || !after) return null;
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+    (key) => key !== 'id' && JSON.stringify(before[key]) !== JSON.stringify(after[key]),
+  );
+  if (keys.length === 0) return null;
+  const side = (item: Record<string, unknown>) =>
+    keys.map((key) => `${FIELD_LABELS[key] ?? key} ${fieldText(item[key])}`).join(', ');
+  return [side(before), side(after)];
+}
+
+/**
+ * Both sides of a history row. When the summaries read the same (a re-check
+ * that only moved the date), the row names just the fields that changed.
+ */
+export function describeSectionChange(
+  section: string,
+  previous: string,
+  applied: string,
+): { readonly previousText: string; readonly appliedText: string } {
+  const previousText = describeSectionValue(section, previous);
+  const appliedText = describeSectionValue(section, applied);
+  if (previousText !== appliedText || !previousText) return { previousText, appliedText };
+  const fields = changedFields(previous, applied);
+  return fields
+    ? { previousText: fields[0], appliedText: fields[1] }
+    : { previousText, appliedText };
+}
+
 /** The display name of a list item from either side of a change, else the fallback. */
 export function displayNameOf(previous: string, applied: string, fallback: string): string {
   for (const value of [applied, previous]) {

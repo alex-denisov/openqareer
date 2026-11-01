@@ -8,13 +8,14 @@ import type {
 } from '../data/sqliteProfileChangeLogRepository';
 import {
   currentProfileValue,
-  describeSectionValue,
+  describeSectionChange,
   displayNameOf,
   withProfileValue,
 } from '../domain/profileChangeDiff';
 import type { ProfileRevisionRecord } from '../data/sqliteProfileRevisionRepository';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { buildResumeStudioProjection } from '../domain/resumeStudio';
+import { LEGACY_REWRITE_PREFIX, legacyRewriteItems } from './profileHistoryRewrites';
 import { experienceFactIds } from './careerCommandDispatcher';
 
 export const PROFILE_HISTORY_PAGE_SIZE = 20;
@@ -65,7 +66,10 @@ export function listProfileHistory(
   candidateId: string,
   page: number,
 ): ProfileHistoryPage {
-  const legacy = legacyRevisionItems(store, candidateId);
+  const legacy = [
+    ...legacyRevisionItems(store, candidateId),
+    ...legacyRewriteItems(store, candidateId, store.getSnapshot(candidateId)),
+  ];
   const window = (page + 1) * PROFILE_HISTORY_PAGE_SIZE;
   const { entries, total } = store.profileChangeLog.list(candidateId, 0, window);
   const merged = [...entries.map(toHistoryItem), ...legacy]
@@ -90,8 +94,7 @@ function toHistoryItem(entry: ProfileChangeEntry): ProfileHistoryItem {
       entry.section === 'skills'
         ? displayNameOf(entry.previous, entry.applied, entry.label)
         : entry.label,
-    previousText: describeSectionValue(entry.section, entry.previous),
-    appliedText: describeSectionValue(entry.section, entry.applied),
+    ...describeSectionChange(entry.section, entry.previous, entry.applied),
     createdAt: entry.createdAt,
     revertedAt: entry.revertedAt,
   };
@@ -124,8 +127,7 @@ function legacyRevisionItems(store: CandidateStore, candidateId: string): Profil
       kind: 'value',
       itemId: revision.experienceId ?? null,
       label,
-      previousText: describeSectionValue(revision.section, revision.previousText),
-      appliedText: describeSectionValue(revision.section, revision.appliedText),
+      ...describeSectionChange(revision.section, revision.previousText, revision.appliedText),
       createdAt: revision.createdAt,
       revertedAt: revision.revertedAt ?? null,
     };
@@ -180,6 +182,13 @@ export async function revertProfileChange(
   changeId: string,
   revertCommand: (commandId: string) => Promise<unknown>,
 ): Promise<void> {
+  if (changeId.startsWith(LEGACY_REWRITE_PREFIX)) {
+    const rewriteId = changeId.slice(LEGACY_REWRITE_PREFIX.length);
+    if (!store.revertExperienceFactRewrite(candidateId, rewriteId)) {
+      throw new ProfileChangeNotFoundError();
+    }
+    return;
+  }
   if (changeId.startsWith(LEGACY_PREFIX)) {
     const revisionId = changeId.slice(LEGACY_PREFIX.length);
     const revision = legacyRevisions(store, candidateId).find((item) => item.id === revisionId);

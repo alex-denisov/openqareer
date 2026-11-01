@@ -19,6 +19,7 @@ export function confirmRewrittenPlaces(
   candidateId: string,
   draft: ResumeDraft,
   record: ResumeFactRewriteRecord,
+  bulletTexts: readonly string[],
 ): void {
   const placeIds = new Set(record.bullets.map((bullet) => bullet.experienceId));
   const places = draft.experience.filter((entry) => placeIds.has(entry.id));
@@ -43,11 +44,19 @@ export function confirmRewrittenPlaces(
     itemId: places.length === 1 ? places[0]!.id : null,
     label: places.map((entry) => [entry.title, entry.employer].filter(Boolean).join(' · ')).join('; '),
     previous: 'Не подтверждено вами',
-    applied: 'Пункты консультанта приняты, место подтверждено вами',
+    applied: describeAcceptedBullets(bulletTexts),
     commandId: commandIdOf(record.id),
     factStates: states,
     createdAt: record.appliedAt,
   });
+}
+
+/** «Пункты консультанта: «…»; «…». Место подтверждено вами» — what the accept wrote. */
+export function describeAcceptedBullets(bulletTexts: readonly string[]): string {
+  const bullets = bulletTexts.map((text) => `«${text}»`).join('; ');
+  return bullets
+    ? `Пункты консультанта: ${bullets}. Место подтверждено вами`
+    : 'Место подтверждено вами';
 }
 
 /** Undoing a rewrite gives the place back the trust it had before the accept. */
