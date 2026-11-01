@@ -50,6 +50,7 @@ import type {
   StoredCandidateMedia,
 } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import type { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 import { createProfileRepositories } from './sqliteCandidateStoreProfileRepositories';
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
@@ -141,6 +142,7 @@ export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentR
 export class SqliteCandidateStore implements CandidateStore {
   readonly notificationRepository: SqliteNotificationRepository;
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
+  readonly profileChangeLog: SqliteProfileChangeLogRepository;
   readonly starPrepRepo: SqliteStarPrepRepository;
   readonly starStoriesRepo: SqliteStarStoriesRepository;
   readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
@@ -196,6 +198,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.notificationRepository = new SqliteNotificationRepository(this.database, this.sealedText);
     ({
       profileRevisionRepo: this.profileRevisionRepo,
+      profileChangeLog: this.profileChangeLog,
       starPrepRepo: this.starPrepRepo,
       referralTrackRepo: this.referralTrackRepo,
       careerVectorRepo: this.careerVectorRepo,
@@ -416,10 +419,18 @@ export class SqliteCandidateStore implements CandidateStore {
     const native = this.sourceConnections.list(candidateId);
     const resume = this.resumeRepository.get(candidateId);
     const edits = [...this.profileRevisionRepo.listRevisions(candidateId), ...factRewriteEdits(resume?.draft)];
+    const withSources = this.conversations.importSources.withProvenance(
+      candidateId,
+      parts,
+      native,
+      edits,
+    );
+    const confirmations = this.profileChangeLog.consultantConfirmations(candidateId);
     return {
       candidate,
       ...parts,
-      ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits),
+      ...withSources,
+      memory: withConsultantConfirmations(withSources.memory, confirmations),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: withStoredTeamSizes(resume, parts.memory),
@@ -755,7 +766,11 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   private commitNewResumeImport(candidateId: string, input: ResumeImportCommit) {
-    return commitResumeImportWithDedupe(this.importDeps(), candidateId, input);
+    const before = this.resumeRepository.get(candidateId)?.draft;
+    const committed = commitResumeImportWithDedupe(this.importDeps(), candidateId, input);
+    const after = this.resumeRepository.get(candidateId)?.draft;
+    if (after) this.profileChangeLog.recordDraftChanges(candidateId, before, after, 'import');
+    return committed;
   }
 
   private importDeps() {
@@ -876,4 +891,17 @@ function referencedMediaIds(draft: ResumeDraft): string[] {
     draft.candidate.photoMediaId,
     ...draft.experience.map((role) => role.employerLogoMediaId),
   ].filter((value): value is string => Boolean(value));
+}
+
+/** Marks facts the candidate confirmed by accepting a consultant edit that is still in place. */
+function withConsultantConfirmations(
+  memory: StoredMemory[],
+  confirmations: ReadonlyMap<string, string>,
+): StoredMemory[] {
+  return memory.map((entry) => {
+    const at = confirmations.get(entry.id);
+    return at && entry.confidence === 'candidate-confirmed'
+      ? { ...entry, consultantConfirmedAt: at }
+      : entry;
+  });
 }

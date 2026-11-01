@@ -3,6 +3,7 @@ import type { SealedText } from './sealedText';
 import { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
 import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
+import { SqliteProfileChangeLogRepository } from './sqliteProfileChangeLogRepository';
 import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
@@ -20,6 +21,7 @@ export function createProfileRepositories(
 ) {
   return {
     profileRevisionRepo: new SqliteProfileRevisionRepository(database, sealedText),
+    profileChangeLog: new SqliteProfileChangeLogRepository(database, sealedText),
     starPrepRepo: new SqliteStarPrepRepository(database, sealedText),
     referralTrackRepo: new SqliteReferralTrackRepository(database, sealedText),
     careerVectorRepo: new SqliteCareerVectorRepository(database, sealedText),

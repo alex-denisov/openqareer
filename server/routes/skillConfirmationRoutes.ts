@@ -328,6 +328,12 @@ async function handleRepairLegacy(deps: RouteDeps, request: FastifyRequest, repl
   const applied = apply && repair.changes.length > 0;
   if (applied) {
     deps.candidateStore.saveResumeDraft(candidate.id, repair.draft, stored.evidenceSnapshot);
+    deps.candidateStore.profileChangeLog.recordDraftChanges(
+      candidate.id,
+      stored.draft,
+      repair.draft,
+      'skill_check',
+    );
     request.log.info({ changes: repair.changes.length }, 'legacy_quiz_skills_repaired');
   }
   return reply.send({ data: { applied, changes: repair.changes } });
