@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
+import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
 import { normalizeSalaryLabel } from './catalogCopy';
 import { mkdirSync } from 'node:fs';
@@ -20,7 +21,6 @@ import {
   VACANCY_SOURCE_SYNC_REQUESTED_AT_COLUMN,
   VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
   MIGRATION_35,
-  CLUSTER_TEXT_PENDING_TABLE,
 } from '../data/sqliteSchema';
 import { MATCH_ORDER_SCHEMA } from './vacancyMatchIndex';
 import { VacancyMatchReader, type MatchRowReader } from './vacancyMatchReader';
@@ -335,8 +335,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE);
-    this.database.exec(HH_TEXT_PRIORITY_TABLE);
-    this.database.exec(CLUSTER_TEXT_PENDING_TABLE);
+    this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
