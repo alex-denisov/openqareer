@@ -21,6 +21,8 @@ export interface SemanticBackfillReport {
   /** Индексные строки, пройденные курсором, включая размеченные и expired. */
   readonly poolRowsScanned: number;
   readonly backfilled: number;
+  /** Строки индекса, догнавшие дату и удалёнку записи пула. */
+  readonly resynced: number;
   readonly newKeys: number;
   readonly pruned: number;
   readonly passFinished: boolean;
@@ -69,6 +71,7 @@ export class SemanticBackfill {
     const windowEnd = this.windowEnd(chunk);
     const rows = this.readWindow(windowEnd);
     const { backfilled, newKeys } = this.writeChunk(rows);
+    const resynced = this.resyncWindow(windowEnd);
     const poolRowsScanned = windowEnd === null ? this.countRemainingRows() : chunk;
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
@@ -77,6 +80,7 @@ export class SemanticBackfill {
       scanned: rows.length,
       poolRowsScanned,
       backfilled,
+      resynced,
       newKeys,
       pruned,
       passFinished,
@@ -227,6 +231,28 @@ export class SemanticBackfill {
       throw error;
     }
     return stale.length;
+  }
+
+  /**
+   * hh переопубликует вакансию под тем же id — дата в `vacancy_pool_index`
+   * сдвигается, а строка смыслового индекса хранила дату первой вставки: на
+   * проде 01.11 так устарели 383 тыс. из 1,05 млн строк, и живая вакансия
+   * выпадала из 30-дневного окна подбора. Окно — то же, что у наполнения.
+   */
+  private resyncWindow(windowEnd: string | null): number {
+    const upperBound = windowEnd === null ? '' : 'AND i.id <= ?';
+    const params = windowEnd === null ? [this.cursor] : [this.cursor, windowEnd];
+    return Number(
+      this.database
+        .prepare(
+          `UPDATE vacancy_semantic SET published_ms = i.published_ms, is_remote = i.is_remote
+           FROM vacancy_pool_index i
+           WHERE vacancy_semantic.id = i.id AND i.id > ? ${upperBound} AND i.expired = 0
+             AND (vacancy_semantic.published_ms IS NOT i.published_ms
+               OR vacancy_semantic.is_remote IS NOT i.is_remote)`,
+        )
+        .run(...params).changes,
+    );
   }
 
   /** Сколько названий уже в кеше — для журнала в конце прохода. */

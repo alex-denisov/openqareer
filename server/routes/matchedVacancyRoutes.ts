@@ -1,4 +1,5 @@
 import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
+import { matchGeographyOf } from '../vacancies/matchGeography';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readSortedFilters } from './matchedVacancySort';
 import { DEFAULT_VACANCY_SORT, type VacancySort } from '../../shared/vacancySort';
@@ -405,6 +406,7 @@ async function readMatchedPage(
     confirmedSkills,
     targetRoles,
     targetLevel,
+    matchGeographyOf(campaign.careerGeography),
   );
   return {
     response: buildMatchedResponse(

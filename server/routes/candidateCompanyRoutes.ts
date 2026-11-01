@@ -1,4 +1,5 @@
 import { personNameFromTitle } from '../../shared/personName';
+import { matchGeographyOf } from '../vacancies/matchGeography';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { candidateChannels } from '../../shared/recruiterChannel';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -154,6 +155,7 @@ async function readCurrentMatched(deps: RouteDeps, candidateId: string) {
     confirmedSkills,
     roles,
     level,
+    matchGeographyOf(campaign.careerGeography),
   );
   return finishMatchedVacancies(snapshot, roles, campaign, deps.candidateStore, candidateId);
 }

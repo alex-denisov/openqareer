@@ -73,6 +73,11 @@ const ADDITIONAL_ANCHORS: readonly AnchorHit[] = [
   { code: 'it-ops', anchor: 'it portfolio' },
   { code: 'it-ops', anchor: 'it operations manager' },
   { code: 'it-ops', anchor: 'it operations' },
+  // «Руководитель IT-поддержки» (аудит 01.11): дефис склеивает слово, якорь «it» его не видит.
+  { code: 'it-ops', anchor: 'it-поддержки' },
+  { code: 'it-ops', anchor: 'ит-поддержки' },
+  { code: 'support', anchor: 'it-поддержки' },
+  { code: 'support', anchor: 'ит-поддержки' },
   { code: 'it-ops', anchor: 'it infrastructure' },
   { code: 'it-ops', anchor: 'it support' },
   { code: 'it-ops', anchor: 'it solution delivery executive' },
@@ -208,6 +213,7 @@ const ADDITIONAL_ANCHORS: readonly AnchorHit[] = [
   { code: 'hospitality', anchor: 'ресторанной' },
   { code: 'hospitality', anchor: 'ресторан' },
   { code: 'hospitality', anchor: 'ресторана' },
+  { code: 'hospitality', anchor: 'ресторанов' },
   { code: 'hospitality', anchor: 'общепит' },
   { code: 'hospitality', anchor: 'шеф-повар' },
   { code: 'hospitality', anchor: 'кафе' },
@@ -284,9 +290,14 @@ const ADDITIONAL_ANCHORS: readonly AnchorHit[] = [
   { code: 'construction', anchor: 'строительства' },
   { code: 'construction', anchor: 'строительного' },
   { code: 'construction', anchor: 'монтажного отдела' },
+  { code: 'construction', anchor: 'пто' },
+  { code: 'construction', anchor: 'мкд' },
 
   { code: 'agriculture', anchor: 'сельхозпредприятия' },
   { code: 'agriculture', anchor: 'сельхоз' },
+  { code: 'agriculture', anchor: 'животноводству' },
+  { code: 'agriculture', anchor: 'животноводства' },
+  { code: 'agriculture', anchor: 'птицеводства' },
 
   { code: 'marketing', anchor: 'рекламного агентства' },
 

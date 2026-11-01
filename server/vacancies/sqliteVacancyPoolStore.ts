@@ -30,7 +30,10 @@ import {
   storedHhSampleByText,
   type StoredHhSampleQuery,
 } from './storedHhSampleQuery';
-import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions';
+import {
+  campaignLevelFloor,
+  candidateRoleFunctionCodes,
+} from './titleParse/candidateRoleFunctions';
 import { LEVEL_RANK } from './levelMatcher';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
@@ -643,6 +646,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return buildSemanticMatchQuery({
       functionCodes,
       levelRank: candidate.targetLevel ? LEVEL_RANK[candidate.targetLevel] : null,
+      levelFloorRank: campaignLevelFloor(candidate.targetRoles, candidate.targetLevel),
+      ...(candidate.matchGeography ? { geography: candidate.matchGeography } : {}),
       window,
       preferRemote,
       limit,

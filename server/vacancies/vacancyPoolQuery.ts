@@ -146,8 +146,11 @@ export const DEFAULT_MATCH_CANDIDATE_LIMIT = 500;
  * тысячи подходящих записей, и 500 самых новых строк после склейки давали
  * ~190 карточек из ~2 000. Замер на проде 01.10: 5 000 строк — 0.8 с против
  * 0.56 с для 500, чтение идёт в отдельном процессе и кешируется снимком.
+ * Аудит 01.11: география кампании теперь фильтрует до предела, и у
+ * adenisov.test (Москва и удалёнка, пять ролей) остаётся 3 306 строк — 3 000
+ * срезали самые старые московские вакансии.
  */
-export const SEMANTIC_MATCH_CANDIDATE_LIMIT = 3000;
+export const SEMANTIC_MATCH_CANDIDATE_LIMIT = 4000;
 
 export interface MatchCandidateQueryOptions {
   readonly limit?: number;
