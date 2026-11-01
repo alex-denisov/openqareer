@@ -164,4 +164,18 @@ describe('vacancy fit evidence from the whole profile (01.11)', () => {
     expect(bytes).toBeLessThanOrEqual(MAX_FIT_EVIDENCE_BYTES);
     expect(facts.some((fact) => fact.id === 'profile:experience:e19')).toBe(true);
   });
+  it('states total years of experience from the place dates (02.11 owner: «опыт от 5 лет» was unknown)', () => {
+    const experience = [
+      { ...draft.experience[0], id: 'a', startDate: '2004-03', endDate: '2012-06', current: false },
+      { ...draft.experience[0], id: 'b', startDate: '2012-07', current: true },
+    ];
+    const facts = vacancyFitEvidenceFacts(
+      'cand',
+      { memory: [], resume: { draft: { ...draft, experience } } } as never,
+      new Date('2026-11-02'),
+    );
+    expect(facts.find((fact) => fact.id === 'profile:tenure')?.statement).toBe(
+      'Общий стаж работы: 22 года (по датам мест работы)',
+    );
+  });
 });
