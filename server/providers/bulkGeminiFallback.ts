@@ -12,6 +12,8 @@ import {
  * module every other Gemini stage uses; the answer goes back through the caller's own JSON schema.
  */
 export const BULK_FALLBACK_PROVIDER = 'gemini';
+/** Fixed sampling seed of every Vertex bulk call. */
+const SAMPLING_SEED = 20261102;
 /** Catalog price of gemini-3.8-flash per million tokens (28.10): what a call is booked at. */
 const DEFAULT_INPUT_PER_MILLION_USD = 0.825;
 const DEFAULT_OUTPUT_PER_MILLION_USD = 4.125;
@@ -83,6 +85,9 @@ export class VertexBulkFallback implements BulkFallback {
               responseMimeType: 'application/json',
               maxOutputTokens: request.maxTokens,
               thinkingConfig: { thinkingLevel: 'low' },
+              // 02.11: a repeated call samples the same way. Gemini 3 keeps its default temperature:
+              // Google warns that a lower one loops.
+              seed: SAMPLING_SEED,
             },
           }),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

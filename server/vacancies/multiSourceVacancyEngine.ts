@@ -402,7 +402,6 @@ export class MultiSourceVacancyEngine {
    */
   private readonly linkProbe?: LinkProbe;
   private readonly descriptionLoader?: VacancyDescriptionLoader;
-  private readonly hhRoleTermsReader?: () => readonly string[];
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
   private readonly workdayDetailFetch?: WorkdayDetailFetch;
   private workdayDescriptions?: WorkdayDescriptionBackfill;
@@ -419,7 +418,6 @@ export class MultiSourceVacancyEngine {
     descriptionLoader?: VacancyDescriptionLoader;
     recluster?: ReclusterMode;
     /** Роли кандидатов для очереди текста hh (02.11); без них очередь — каталог и пул. */
-    hhRoleTerms?: () => readonly string[];
     workdayDetailFetch?: WorkdayDetailFetch;
   }) {
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
@@ -434,7 +432,6 @@ export class MultiSourceVacancyEngine {
     this.robots = options?.robots;
     this.linkProbe = options?.linkProbe;
     this.descriptionLoader = options?.descriptionLoader;
-    this.hhRoleTermsReader = options?.hhRoleTerms;
     this.workdayDetailFetch = options?.workdayDetailFetch;
     // Source state is a small bounded registry, unlike the vacancy/cluster
     // pool. Load it immediately so the HTTP admin surface can show a durable
@@ -1041,7 +1038,7 @@ export class MultiSourceVacancyEngine {
         },
         // 02.11: rows whose title matches a candidate's role go before the catalog and the pool.
         loadHhTextCandidates: (cursor, limit) =>
-          pool.loadHhTextCandidates!(cursor, limit, this.hhRoleTerms()),
+          pool.loadHhTextCandidates!(cursor, limit),
         loadSavedCursor: () => pool.loadHhTextCursor?.(),
         saveCursor: (cursor) => pool.saveHhTextCursor?.(cursor),
         peekPriority: (limit) => pool.peekHhTextPriority?.(limit) ?? [],
@@ -1174,16 +1171,6 @@ export class MultiSourceVacancyEngine {
    * 01.11: строки подборки в голову очереди текста hh воркера обслуживания; сеть здесь
    * не трогается. Ошибку записи видит вызывающий.
    */
-  /** Роли кандидатов (таблица спроса, 02.11) — для очереди текста hh по названию. */
-  private hhRoleTerms(): readonly string[] {
-    try {
-      return this.hhRoleTermsReader?.() ?? [];
-    } catch {
-      // Роли — ускорение очереди, не условие: без них обход идёт по каталогу и пулу.
-      return [];
-    }
-  }
-
   public requestHhTextPriority(ids: readonly string[], baseRank = 0): void {
     this.pool.requestHhTextPriority?.(ids, baseRank);
   }

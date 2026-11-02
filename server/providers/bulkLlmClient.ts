@@ -194,6 +194,9 @@ export class BulkLlmClient {
         { role: 'user', content: input.input },
       ],
       max_tokens: maxTokens,
+      // 02.11: one fit input gave 25 % and 58 %. Every pinned host takes `temperature`; not every
+      // one takes `seed` (streamlake), and `require_parameters` would drop it.
+      temperature: 0,
       reasoning: { enabled: false },
       usage: { include: true },
       provider: {

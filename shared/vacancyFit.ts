@@ -26,10 +26,11 @@ export interface VacancyFitPoint {
 }
 export type VacancyFitFailure =
   'model_unavailable' | 'model_invalid' | 'requirements' | 'profile_changed' | 'other';
-/** 02.11: tag-only and indirect evidence partial, synonyms and listed elements count, contradicted conditions block. */
-export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-7';
+/** 02.11: tag-only and indirect evidence partial, synonyms and listed elements count, contradicted conditions block; one quote may back many requirements. */
+export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-8';
 /** Shown while the current version is calculated, so a version bump never hides a known percent. */
 export const LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS: readonly string[] = [
+  'evidence-coverage-7',
   'evidence-coverage-6',
   'evidence-coverage-5',
   'evidence-coverage-4',

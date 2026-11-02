@@ -18,7 +18,7 @@ export interface VacancyRequirementsJob {
   readonly leaseUntil: number;
   readonly attempts: number;
 }
-interface JobRow { id: string; input_json: string; lease_token: string; lease_until: number; attempts: number }
+interface JobRow { id: string; cache_key: string; input_json: string; lease_token: string; lease_until: number; attempts: number }
 
 /** Public vacancy data only. Constructed by the background worker's own DB connection. */
 /** Bumped when a parser change makes earlier model failures worth one more try (B522: 2; B562-r quotes: 4). */
@@ -29,6 +29,8 @@ const MAX_ATTEMPTS = 3;
 export const LABEL_UPGRADE_PRIORITY = 0.1;
 /** A requeue keeps label upgrades (0.1) and title strategy below shown pages, and never lifts a job above them (B510-r). */
 const REQUEUE_PRIORITY = 1.5;
+/** A job keyed by another release waits this long before this release looks at it again. */
+const OTHER_RELEASE_WAIT_MS = 60_000;
 
 export class SqliteVacancyRequirementsStore {
   constructor(private readonly db: DatabaseSync) { this.ensureSchema(); }
@@ -124,9 +126,15 @@ export class SqliteVacancyRequirementsStore {
     const priority = Number.isFinite(options.titleStrategyPriority) ? options.titleStrategyPriority! : 0;
     const fresh = Number.isFinite(options.freshAt) ? options.freshAt! : 0;
     const key = vacancyRequirementsCacheKey(input);
+    // A completed job without its cache row is run again (02.11: 119 such jobs, written by the
+    // previous release's worker under its own version key, deferred 410 fits until they timed out).
     this.db.prepare(`INSERT INTO vacancy_requirements_jobs
       (id,cache_key,input_json,priority,fresh_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?)
-      ON CONFLICT(cache_key) DO UPDATE SET priority=MAX(priority,excluded.priority),fresh_at=MAX(fresh_at,excluded.fresh_at)`)
+      ON CONFLICT(cache_key) DO UPDATE SET priority=MAX(priority,excluded.priority),fresh_at=MAX(fresh_at,excluded.fresh_at),
+        status=CASE WHEN status='completed' THEN 'queued' ELSE status END,
+        attempts=CASE WHEN status='completed' THEN 0 ELSE attempts END,
+        available_at=CASE WHEN status='completed' THEN 0 ELSE available_at END,
+        updated_at=CASE WHEN status='completed' THEN excluded.updated_at ELSE updated_at END`)
       .run(randomUUID(), key, JSON.stringify(input), priority, fresh, now, now);
     const row = this.db.prepare('SELECT id,status FROM vacancy_requirements_jobs WHERE cache_key=?').get(key) as { id: string; status: string };
     return { state: row.status === 'failed' ? 'failed' : 'queued', jobId: row.id };
@@ -139,10 +147,16 @@ export class SqliteVacancyRequirementsStore {
     try {
       this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='failed',lease_token=NULL
         WHERE status='leased' AND lease_until<=? AND attempts>=3`).run(now);
-      const row = this.db.prepare(`SELECT id,input_json,attempts FROM vacancy_requirements_jobs
+      const row = this.db.prepare(`SELECT id,cache_key,input_json,attempts FROM vacancy_requirements_jobs
         WHERE attempts<3 AND priority>=? AND ((status='queued' AND available_at<=?) OR (status='leased' AND lease_until<=?))
         ORDER BY priority DESC,fresh_at DESC,created_at,id LIMIT 1`).get(minPriority, now, now) as JobRow | undefined;
       if (!row) { this.db.exec('COMMIT'); return null; }
+      if (vacancyRequirementsCacheKey(JSON.parse(row.input_json) as VacancyRequirementsInput) !== row.cache_key) {
+        // Another extractor version queued it: during a deploy the other release's worker takes it.
+        this.db.prepare('UPDATE vacancy_requirements_jobs SET available_at=? WHERE id=?').run(now + OTHER_RELEASE_WAIT_MS, row.id);
+        this.db.exec('COMMIT');
+        return null;
+      }
       const token = `${workerId}:${randomUUID()}`;
       this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='leased',attempts=attempts+1,
         lease_token=?,lease_until=?,updated_at=? WHERE id=?`).run(token, now + leaseMs, now, row.id);

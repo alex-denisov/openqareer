@@ -226,11 +226,7 @@ export interface VacancyPoolStore {
   peekHhTextPriority?(limit: number): string[];
   dropHhTextPriority?(vacancyIds: readonly string[]): void;
   /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
-  loadHhTextCandidates?(
-    cursor: string | undefined,
-    limit: number,
-    roleTerms?: readonly string[],
-  ): { ids: string[]; cursor?: string };
+  loadHhTextCandidates?(cursor: string | undefined, limit: number): { ids: string[]; cursor?: string };
   /** Позиция обхода текста hh между перезапусками воркера (02.11). */
   loadHhTextCursor?(): string | undefined;
   saveHhTextCursor?(cursor: string | undefined): void;

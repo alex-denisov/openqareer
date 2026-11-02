@@ -62,7 +62,10 @@ export interface RouteDeps {
   matchedPoolPrecompute?: Pick<
     import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute,
     'prioritizeCampaign'
-  >;
+  > &
+    Partial<
+      Pick<import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute, 'setFitRequester'>
+    >;
   /** Роли кандидатов — запросы к площадкам вакансий (27.10). */
   vacancyDemand?: import('../vacancies/vacancyDemandStore').VacancyDemandStore;
   searchVacancies: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;

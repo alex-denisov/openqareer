@@ -128,4 +128,47 @@ describe('MatchedPoolPrecompute (C60)', () => {
       await app.close();
     }
   });
+
+  it('hands each prepared selection to the fit queue, so fits run without a list read (02.11)', async () => {
+    const engine = {
+      getMatchedVacanciesAsync: async () => [item('a'), item('b')],
+    } as unknown as RouteDeps['multiSourceEngine'];
+    const store = {
+      listRecentCampaignCandidateIds: () => ['candidate-1'],
+      getSnapshot: () => ({
+        memory: [
+          {
+            kind: 'fact',
+            domain: 'skill',
+            confidence: 'candidate-confirmed',
+            statement: 'TypeScript',
+          },
+        ],
+      }),
+      getCandidateWorkspace: () => ({
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: '',
+        regions: [],
+        currentSituation: '',
+        constraints: '',
+        urgency: 'active',
+        campaign: {
+          roles: ['Head of Engineering'],
+          regions: [],
+          revision: 1,
+          updatedAt: '2026-11-02T00:00:00.000Z',
+        },
+      }),
+    } as unknown as RouteDeps['candidateStore'];
+    const precompute = new MatchedPoolPrecompute({ candidateStore: store, engine, pauseMs: 0 });
+    const handed: { candidateId: string; ids: string[] }[] = [];
+    precompute.setFitRequester(async (candidateId, snapshot) => {
+      handed.push({ candidateId, ids: snapshot.map((row) => row.cluster.id) });
+    });
+
+    await precompute.run();
+
+    expect(handed).toEqual([{ candidateId: 'candidate-1', ids: ['a', 'b'] }]);
+  });
 });
