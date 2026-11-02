@@ -164,6 +164,32 @@ export class SqliteVacancyFitStore {
     return new Set(ids);
   }
 
+  /**
+   * Prod 03.11: the first list read of a process opened every stored result of the candidate in
+   * one call (~4 s of the event loop, once per deploy). This fills the same memo in rowid order,
+   * a batch at a time, letting queued requests run between batches; a partial memo is valid.
+   */
+  async warmCachedVacancyIds(
+    candidateId: string,
+    { batch = 200, yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve)) }: { readonly batch?: number; readonly yieldToLoop?: () => Promise<void> } = {},
+  ): Promise<void> {
+    const candidateKey = this.candidateKey(candidateId);
+    const page = this.database.prepare('SELECT rowid AS id, cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? ORDER BY rowid LIMIT ?');
+    for (;;) {
+      const known = this.cachedIdsMemo.get(candidateKey);
+      const rows = page.all(candidateKey, known?.last ?? 0, batch) as { id: number; cache_key: string; result_cipher: string }[];
+      if (rows.length === 0) return;
+      const ids = new Set(known?.ids ?? []);
+      for (const row of rows) {
+        const id = this.openedVacancyId(row, candidateId);
+        if (id) ids.add(id);
+      }
+      this.cachedIdsMemo.set(candidateKey, { ids, count: (known?.count ?? 0) + rows.length, last: rows.at(-1)!.id });
+      await yieldToLoop();
+      if (rows.length < batch) return;
+    }
+  }
+
   private openedVacancyId(row: { cache_key: string; result_cipher: string }, candidateId: string): string | undefined {
     try {
       const result = JSON.parse(this.sealedText.open(row.result_cipher, row.cache_key)) as VacancyFitResult;

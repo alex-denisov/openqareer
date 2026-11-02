@@ -595,6 +595,55 @@ describe('Resume Studio claim discipline', () => {
     expect(projection.master.experience[0]?.endDate).toBeNull();
   });
 
+  describe('imported date formats', () => {
+    const codesFor = (startDate: string, endDate: string, current = false) =>
+      buildResumeStudioProjection({
+        ...completeInput(),
+        experience: [
+          {
+            id: 'imported-role',
+            chronologyMemoryId: 'role-current',
+            title: 'Director',
+            employer: 'Example GmbH',
+            startDate,
+            endDate,
+            current,
+            bulletMemoryIds: ['outcome-current'],
+          },
+        ],
+      }).master.unknowns.map((item) => item.code);
+
+    it.each([
+      ['Apr 2023', 'Nov 2025'],
+      ['Sept 2019', 'November 2025'],
+      ['ноябрь 2024', 'ноября 2025'],
+      ['янв. 2020', 'ноя 2025'],
+      ['11.2025', '03/2026'],
+      ['2016', '2018'],
+    ])('does not flag %s / %s', (start, end) => {
+      const codes = codesFor(start, end);
+      expect(codes).not.toContain('invalid-chronology-date');
+      expect(codes).not.toContain('chronology-conflict');
+    });
+
+    it('does not flag open-ended markers on a current role', () => {
+      for (const end of ['Present', 'по настоящее время', 'н. в.']) {
+        const codes = codesFor('Nov 2025', end, true);
+        expect(codes).not.toContain('invalid-chronology-date');
+        expect(codes).not.toContain('chronology-conflict');
+      }
+    });
+
+    it('still flags unparseable text', () => {
+      expect(codesFor('весна когда-то', '2023-06')).toContain('invalid-chronology-date');
+    });
+
+    it('detects start after end in imported formats', () => {
+      expect(codesFor('Mar 2020', 'Jul 2016')).toContain('chronology-conflict');
+      expect(codesFor('март 2020', 'июль 2016')).toContain('chronology-conflict');
+    });
+  });
+
   it('returns an entirely unknown document for an empty draft', () => {
     const projection = buildResumeStudioProjection({
       ...EMPTY_RESUME_DRAFT,

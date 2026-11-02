@@ -1,4 +1,5 @@
 import { managementSkillMatcher } from '../connectors/managementSkillsDictionary';
+import { parseResumeMonth } from './resumeMonth';
 import type {
   ResumeDocument,
   ResumeExperience,
@@ -312,8 +313,8 @@ function hasValidExperienceDates(experience: ResumeExperience): boolean {
 
 function dateTime(value: string | boolean | undefined): number | null {
   if (typeof value !== 'string' || !value.trim()) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  const parsed = parseResumeMonth(value);
+  return parsed ? parsed.year * 12 + parsed.month : null;
 }
 
 function documentFactSources(

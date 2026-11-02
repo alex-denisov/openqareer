@@ -18,6 +18,8 @@ import type {
 } from '../domain/resumeVersions';
 import type { ResumeDocument, ResumeStudioProjection } from '../domain/resumeStudioTypes';
 import type { RouteDeps } from './deps';
+import { currentMasterVersion, roleAtsRequest } from '../../shared/atsBasis';
+import { readCareerRoles } from './careerRolesRead';
 import {
   authenticateCandidate,
   csrfError,
@@ -483,10 +485,10 @@ function assessTargetedResumeVersion(
   candidateId: string,
   versionId: string,
   evaluatedAt: string,
-): ResumeAtsAssessment | null {
+): AtsAssessmentResult | null {
   const version = deps.candidateStore.getResumeVersion(candidateId, versionId);
   if (!version) return null;
-  return buildResumeAtsAssessment({
+  const assessment = buildResumeAtsAssessment({
     document: version.snapshot.document,
     atsText: formatTargetedResumeAsAtsText(version.snapshot),
     requirements: version.requirements,
@@ -499,12 +501,13 @@ function assessTargetedResumeVersion(
     resumeSourceRevision: version.sourceMasterRevision,
     evaluatedAt,
   });
+  return { assessment, basis: { version: resumeVersionListItem(version), roleTitle: null } };
 }
 
 function assessCandidateMasterResume(
   deps: RouteDeps,
   candidateId: string,
-  input: z.infer<typeof atsAssessmentSchema>,
+  input: { readonly title?: string; readonly requirements?: readonly string[] },
   evaluatedAt: string,
 ): ResumeAtsAssessment {
   const master = currentMaster(deps, candidateId);
@@ -561,17 +564,23 @@ async function handleResumeAtsAssessment(
     return validationError(reply, request, 'invalid_ats_assessment_input', body.error);
   }
   const evaluatedAt = new Date().toISOString();
+  if (isUnchosenBasis(body.data)) {
+    return {
+      data: await assessOwnBasis(deps, request, candidate.id, evaluatedAt),
+      meta: { requestId: request.id },
+    };
+  }
   if (body.data.versionId) {
     if (body.data.title !== undefined || body.data.requirements !== undefined) {
       return invalidVersionAssessmentRequest(reply, request);
     }
-    const assessment = assessTargetedResumeVersion(
+    const result = assessTargetedResumeVersion(
       deps,
       candidate.id,
       body.data.versionId,
       evaluatedAt,
     );
-    if (!assessment) {
+    if (!result) {
       return sendError(
         reply,
         request,
@@ -581,10 +590,71 @@ async function handleResumeAtsAssessment(
         false,
       );
     }
-    return { data: { assessment }, meta: { requestId: request.id } };
+    return { data: result, meta: { requestId: request.id } };
   }
   const assessment = assessCandidateMasterResume(deps, candidate.id, body.data, evaluatedAt);
-  return { data: { assessment }, meta: { requestId: request.id } };
+  return { data: { assessment, basis: NO_BASIS }, meta: { requestId: request.id } };
+}
+
+const NO_BASIS: AtsBasis = { version: null, roleTitle: null };
+
+/** Что легло в оценку — карточка показывает версию или пометку «по роли». */
+interface AtsBasis {
+  readonly version: ReturnType<typeof resumeVersionListItem> | null;
+  readonly roleTitle: string | null;
+}
+
+interface AtsAssessmentResult {
+  readonly assessment: ResumeAtsAssessment;
+  readonly basis: AtsBasis;
+}
+
+type AtsAssessmentInput = z.infer<typeof atsAssessmentSchema>;
+
+/** Пустое тело — открытие «Профиля»: версию и роль выбирает сервер (один запрос вместо трёх). */
+function isUnchosenBasis(input: AtsAssessmentInput): boolean {
+  return (
+    input.versionId === undefined && input.title === undefined && input.requirements === undefined
+  );
+}
+
+/**
+ * Правило `shared/atsBasis`: версия из текущего мастер-резюме, иначе роль
+ * «Карьеры» с повторяющимися требованиями, иначе мастер без ключевых слов.
+ * Роли читаются только без подходящей версии — это чтение пула.
+ */
+async function assessOwnBasis(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  evaluatedAt: string,
+): Promise<AtsAssessmentResult> {
+  const master = currentMaster(deps, candidateId);
+  const page = deps.candidateStore.listResumeVersions(candidateId, {
+    limit: MAX_PAGE_SIZE,
+    cursor: null,
+  });
+  const version = currentMasterVersion(page.items, master.revision);
+  const byVersion = version
+    ? assessTargetedResumeVersion(deps, candidateId, version.id, evaluatedAt)
+    : null;
+  if (byVersion) return byVersion;
+  const byRole = await careerRoleBasis(deps, request, candidateId);
+  return {
+    assessment: assessCandidateMasterResume(deps, candidateId, byRole?.request ?? {}, evaluatedAt),
+    basis: { version: null, roleTitle: byRole?.roleTitle ?? null },
+  };
+}
+
+/** Роли не прочитались — оценка остаётся без ключевых слов, а не падает. */
+async function careerRoleBasis(deps: RouteDeps, request: FastifyRequest, candidateId: string) {
+  try {
+    const roles = await readCareerRoles(deps, request, candidateId);
+    return roles ? roleAtsRequest(roles) : null;
+  } catch (error) {
+    request.log.warn({ error }, 'ats_role_basis_unavailable');
+    return null;
+  }
 }
 
 function currentMaster(deps: RouteDeps, candidateId: string): CandidateResumeMaster {

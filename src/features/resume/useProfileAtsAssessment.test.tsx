@@ -20,6 +20,7 @@ import { clearProfileAtsAssessmentCache, useProfileAtsAssessment } from './usePr
 
 const api = vi.hoisted(() => ({
   createResumeVersion: vi.fn(),
+  getProfileAtsAssessment: vi.fn(),
   getResumeAtsAssessment: vi.fn(),
   getResumeVersion: vi.fn(),
   getResumeVersions: vi.fn(),
@@ -102,13 +103,6 @@ const matchingVersion: ResumeVersionSummary = {
   sourceMasterRevision: 'master-revision-current',
   createdAt: '2026-10-17T09:00:00.000Z',
   updatedAt: '2026-10-17T09:15:00.000Z',
-};
-
-const staleVersion: ResumeVersionSummary = {
-  ...matchingVersion,
-  id: 'version-stale',
-  title: 'Older Platform Engineer',
-  sourceMasterRevision: 'master-revision-old',
 };
 
 const storedVersions = new Map<string, StoredResumeVersion>();
@@ -208,8 +202,18 @@ beforeEach(() => {
     currentMasterRevision: 'master-revision-current',
   });
   api.getResumeAtsAssessment.mockResolvedValue(unknownAssessment);
+  api.getProfileAtsAssessment.mockResolvedValue({
+    assessment: unknownAssessment,
+    basis: { version: null, roleTitle: null },
+  });
   coach.getRoleHypotheses.mockResolvedValue([]);
 });
+
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
 
 afterEach(() => {
   if (root) act(() => root?.unmount());
@@ -227,24 +231,15 @@ function mount(node: ReactNode) {
 }
 
 describe('useProfileAtsAssessment', () => {
-  it('scores the newest saved version based on the current master revision', async () => {
-    api.getResumeVersions.mockResolvedValue({
-      items: [staleVersion, matchingVersion],
-      nextCursor: null,
-      totalCount: 2,
-      currentMasterRevision: 'master-revision-current',
+  it('shows the version the server scored from the current master', async () => {
+    api.getProfileAtsAssessment.mockResolvedValue({
+      assessment: measuredAssessment,
+      basis: { version: matchingVersion, roleTitle: null },
     });
-    api.getResumeAtsAssessment.mockResolvedValue(measuredAssessment);
     const mounted = mount(<AssessmentHarness />);
+    await settle();
 
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledWith(
-      { versionId: 'version-current' },
-      expect.any(AbortSignal),
-    );
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledWith(expect.any(AbortSignal));
     expect(mounted.querySelector('[data-testid="assessment"]')?.textContent).toBe('85');
     expect(mounted.querySelector('[data-testid="source-version"]')?.textContent).toBe(
       'Platform Engineer',
@@ -252,22 +247,40 @@ describe('useProfileAtsAssessment', () => {
     expect(mounted.querySelector('[data-testid="loading"]')?.textContent).toBe('false');
   });
 
-  it('keeps keyword context unknown when there is no current saved version', async () => {
-    api.getResumeVersions.mockResolvedValue({
-      items: [staleVersion],
-      nextCursor: null,
-      totalCount: 1,
-      currentMasterRevision: 'master-revision-current',
-    });
+  it('keeps keyword context unknown when the server found no basis', async () => {
     const mounted = mount(<AssessmentHarness />);
+    await settle();
 
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledWith({}, expect.any(AbortSignal));
     expect(mounted.querySelector('[data-testid="assessment"]')?.textContent).toBe('unknown');
     expect(mounted.querySelector('[data-testid="source-version"]')?.textContent).toBe('none');
+    expect(mounted.querySelector('[data-testid="role-basis"]')?.textContent).toBe('none');
+  });
+
+  it('sends exactly one assessment request on mount, without reading versions or roles first', () => {
+    api.getProfileAtsAssessment.mockReturnValue(new Promise(() => undefined));
+    mount(<AssessmentHarness />);
+
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledTimes(1);
+    expect(api.getResumeAtsAssessment).not.toHaveBeenCalled();
+    expect(api.getResumeVersions).not.toHaveBeenCalled();
+    expect(coach.getRoleHypotheses).not.toHaveBeenCalled();
+  });
+
+  it('sends an explicit version or role choice as is', async () => {
+    function Explicit() {
+      const { assessment } = useProfileAtsAssessment({ request: { versionId: 'version-current' } });
+      return <span>{assessment?.total.score ?? 'unknown'}</span>;
+    }
+    api.getResumeAtsAssessment.mockResolvedValue(measuredAssessment);
+    const mounted = mount(<Explicit />);
+    await settle();
+
+    expect(api.getResumeAtsAssessment).toHaveBeenCalledWith(
+      { versionId: 'version-current' },
+      expect.any(AbortSignal),
+    );
+    expect(api.getProfileAtsAssessment).not.toHaveBeenCalled();
+    expect(mounted.textContent).toBe('85');
   });
 });
 
@@ -412,46 +425,18 @@ describe('ProfileResumeVersions persistence handlers', () => {
 });
 
 describe('useProfileAtsAssessment by role (макет 2 «ATS: нет избранных вакансий»)', () => {
-  it('measures keywords by the Career role when no targeted version exists', async () => {
-    coach.getRoleHypotheses.mockResolvedValue([
-      {
-        id: 'r1',
-        title: 'Head of Engineering',
-        origin: 'market',
-        reason: null,
-        evidenceRefs: [],
-        family: null,
-        confirmation: {
-          state: 'observed',
-          sampleSize: 40,
-          observedFrom: '2026-09-01',
-          observedTo: '2026-10-01',
-          sources: [{ source: 'hh', count: 40 }],
-          repeatedRequirements: ['Kafka'],
-          matchedRequirements: 0,
-        },
-      },
-    ]);
-    const mounted = mount(<AssessmentHarness />);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+  it('marks the card «по роли» with the Career role the server used', async () => {
+    api.getProfileAtsAssessment.mockResolvedValue({
+      assessment: measuredAssessment,
+      basis: { version: null, roleTitle: 'Head of Engineering' },
     });
+    const mounted = mount(<AssessmentHarness />);
+    await settle();
 
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledWith(
-      { title: 'По роли «Head of Engineering»', requirements: ['Kafka'] },
-      expect.any(AbortSignal),
-    );
     expect(mounted.querySelector('[data-testid="role-basis"]')?.textContent).toBe(
       'Head of Engineering',
     );
-  });
-
-  it('asks for roles while the versions read is still open (02.11 prod waterfall)', () => {
-    api.getResumeVersions.mockReturnValue(new Promise(() => undefined));
-    mount(<AssessmentHarness />);
-
-    expect(api.getResumeVersions).toHaveBeenCalled();
-    expect(coach.getRoleHypotheses).toHaveBeenCalled();
+    expect(mounted.querySelector('[data-testid="source-version"]')?.textContent).toBe('none');
   });
 
   it('starts before the profile revision is known and keeps that load when it arrives', async () => {
@@ -459,38 +444,25 @@ describe('useProfileAtsAssessment by role (макет 2 «ATS: нет избра
       const { assessment } = useProfileAtsAssessment({ refreshKey: revision });
       return <span data-testid="assessment">{assessment?.total.score ?? 'unknown'}</span>;
     }
-    api.getResumeAtsAssessment.mockResolvedValue(measuredAssessment);
+    api.getProfileAtsAssessment.mockResolvedValue({
+      assessment: measuredAssessment,
+      basis: { version: null, roleTitle: null },
+    });
     mount(<Revisioned revision={null} />);
-    expect(api.getResumeVersions).toHaveBeenCalledTimes(1);
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledTimes(1);
 
     act(() => root?.render(<Revisioned revision="2026-11-02T10:00:00.000Z" />));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(api.getResumeVersions).toHaveBeenCalledTimes(1);
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledTimes(1);
+    await settle();
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledTimes(1);
     expect(container?.textContent).toBe('85');
 
     act(() => root?.render(<Revisioned revision="2026-11-02T11:00:00.000Z" />));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledTimes(2);
-  });
-
-  it('keeps the old request when roles cannot be read', async () => {
-    coach.getRoleHypotheses.mockRejectedValue(new Error('offline'));
-    const mounted = mount(<AssessmentHarness />);
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledWith({}, expect.any(AbortSignal));
-    expect(mounted.querySelector('[data-testid="role-basis"]')?.textContent).toBe('none');
+    await settle();
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledTimes(2);
   });
 
   it('shows candidate copy, not an engine message, when the assessment fails (B536)', async () => {
-    api.getResumeAtsAssessment.mockRejectedValue(
+    api.getProfileAtsAssessment.mockRejectedValue(
       new TypeError("Cannot read properties of undefined (reading 'assessment')"),
     );
     const mounted = mount(<AssessmentHarness />);

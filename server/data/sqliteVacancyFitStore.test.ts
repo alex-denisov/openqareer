@@ -41,6 +41,24 @@ describe('encrypted persistent vacancy fit cache and queue', () => {
     expect([...store.cachedVacancyIds('candidate-c')]).toEqual([]);
     database.close();
   });
+  it('warms the stored-result ids in batches that yield, then a list read opens nothing (prod 03.11: 4 s on the first read of a process)', async () => {
+    const { database } = setup();
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const store = new SqliteVacancyFitStore(database, sealed);
+    const ids = Array.from({ length: 7 }, (_, index) => `vacancy-${index}`);
+    for (const vacancyId of ids) { const row = { ...input(), vacancyId }; store.putCache(row, evaluateVacancyFit(row), now); }
+    const other = input('candidate-b');
+    store.putCache(other, evaluateVacancyFit(other), now);
+    const opened = vi.spyOn(sealed, 'open');
+    let yields = 0;
+    await store.warmCachedVacancyIds('candidate-a', { batch: 3, yieldToLoop: async () => { yields += 1; } });
+    expect(yields).toBe(3);
+    expect(opened).toHaveBeenCalledTimes(7);
+    opened.mockClear();
+    expect([...store.cachedVacancyIds('candidate-a')].sort()).toEqual([...ids].sort());
+    expect(opened).not.toHaveBeenCalled();
+    database.close();
+  });
   it('opens only rows stored since the last read (prod 02.11: every list page opened them all)', () => {
     const { database } = setup();
     const sealed = new SealedText(Buffer.alloc(32, 7));

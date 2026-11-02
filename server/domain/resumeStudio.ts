@@ -25,6 +25,7 @@ import type {
   ResumeUnknown,
 } from './resumeStudioTypes';
 import type { ResumeConventions, ResumeStudioInput } from './resumeStudioTypes';
+import { isOpenEndedDate } from './resumeMonth';
 import {
   buildEvidenceCatalog,
   clean,
@@ -345,7 +346,8 @@ function addChronologyIssues(
   unknowns: ResumeUnknown[],
 ): void {
   const start = clean(role.startDate);
-  const end = clean(role.endDate);
+  const rawEnd = clean(role.endDate);
+  const end = rawEnd && isOpenEndedDate(rawEnd) ? null : rawEnd;
   for (const value of [start, end]) {
     if (value && !isResumeDate(value)) {
       unknowns.push(

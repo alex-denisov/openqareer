@@ -6,6 +6,7 @@ import { ProfileAtsAssessment } from './ProfileAtsAssessment';
 import { clearProfileAtsAssessmentCache, useProfileAtsAssessment } from './useProfileAtsAssessment';
 
 const api = vi.hoisted(() => ({
+  getProfileAtsAssessment: vi.fn(),
   getResumeAtsAssessment: vi.fn(),
   getResumeVersions: vi.fn(),
 }));
@@ -51,33 +52,32 @@ function render(refreshKey: string) {
 }
 
 const ASSESSMENT = { total: { score: 72, maximum: 100, status: 'measured' } };
+const NO_BASIS = { version: null, roleTitle: null };
 
 describe('ATS block loads on Profile open (owner, 02.11)', () => {
   it('calculates on mount without a «Рассчитать» button', async () => {
-    api.getResumeVersions.mockResolvedValue({ items: [], currentMasterRevision: 1 });
-    api.getResumeAtsAssessment.mockResolvedValue(ASSESSMENT);
+    api.getProfileAtsAssessment.mockResolvedValue({ assessment: ASSESSMENT, basis: NO_BASIS });
     const container = renderProbe('rev-1');
     await act(async () => undefined);
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledTimes(1);
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledTimes(1);
     expect(container.textContent).toBe('72');
   });
 
   it('shows the cached result at once for an unchanged profile and recomputes after a change', async () => {
-    api.getResumeVersions.mockResolvedValue({ items: [], currentMasterRevision: 1 });
-    api.getResumeAtsAssessment.mockResolvedValue(ASSESSMENT);
+    api.getProfileAtsAssessment.mockResolvedValue({ assessment: ASSESSMENT, basis: NO_BASIS });
     renderProbe('rev-1');
     await act(async () => undefined);
     const again = renderProbe('rev-1');
     expect(again.textContent).toBe('72');
     await act(async () => undefined);
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledTimes(1);
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledTimes(1);
     renderProbe('rev-2');
     await act(async () => undefined);
-    expect(api.getResumeAtsAssessment).toHaveBeenCalledTimes(2);
+    expect(api.getProfileAtsAssessment).toHaveBeenCalledTimes(2);
   });
 
   it('hides the «— из 100» scale when the assessment failed, keeping error and retry', async () => {
-    api.getResumeVersions.mockRejectedValue(new Error('x'));
+    api.getProfileAtsAssessment.mockRejectedValue(new Error('x'));
     const container = render('rev-1');
     await act(async () => undefined);
     expect(container.querySelector('[role="alert"]')).not.toBeNull();

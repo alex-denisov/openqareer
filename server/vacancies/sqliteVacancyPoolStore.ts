@@ -2705,6 +2705,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
+  /** Walks every active row (`path <> ''` is in no index): ~1.4 s on prod; the engine passes a cached total for big groups. */
+  private countCatalogEntries(condition: string, params: readonly SQLInputValue[]): number {
+    return (
+      this.database
+        .prepare(`SELECT count(*) AS n FROM catalog_entries WHERE ${condition}`)
+        .get(...params) as { n: number }
+    ).n;
+  }
+
   loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
     const limit = Math.max(1, Math.min(Math.trunc(query.limit), 50_000));
     const where = ["status = 'active'", "path <> ''"];
@@ -2717,12 +2726,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       where.push('role_slug = ?');
       filterParams.push(query.role);
     }
-    const condition = where.join(' AND ');
-    const total = (
-      this.database
-        .prepare(`SELECT count(*) AS n FROM catalog_entries WHERE ${condition}`)
-        .get(...filterParams) as { n: number }
-    ).n;
+    const total = query.knownTotal ?? this.countCatalogEntries(where.join(' AND '), filterParams);
 
     const pageWhere = [...where];
     const pageParams = [...filterParams];
