@@ -176,8 +176,11 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
     await page.route('**/api/v1/candidate/resume/ats-assessment', async (route) => {
       const body = route.request().postDataJSON() as { readonly versionId?: string };
       const evaluatedAt = '2026-10-17T09:30:00.000Z';
+      // Пустое тело — открытие «Профиля»: сервер берёт версию из текущего мастера.
+      const picked =
+        storedVersion && (body.versionId || storedVersion.sourceMasterRevision === MASTER_REVISION);
       const assessment =
-        body.versionId && storedVersion
+        picked && storedVersion
           ? buildResumeAtsAssessment({
               document: storedVersion.snapshot.document,
               atsText: formatTargetedResumeAsAtsText(storedVersion.snapshot),
@@ -199,7 +202,9 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
               resumeUpdatedAt: null,
               evaluatedAt,
             });
-      return route.fulfill({ json: { data: { assessment } } });
+      const version = picked && storedVersion ? { ...storedVersion, snapshot: undefined } : null;
+      const basis = { version, roleTitle: null };
+      return route.fulfill({ json: { data: { assessment, basis } } });
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);

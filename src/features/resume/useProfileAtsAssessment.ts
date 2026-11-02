@@ -2,13 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ResumeAtsAssessment } from '../../../server/domain/resumeAtsAssessment';
 import type { ResumeVersionSummary } from '../../../server/domain/resumeVersions';
 import {
+  getProfileAtsAssessment,
   getResumeAtsAssessment,
-  getResumeVersions,
   type ResumeAtsAssessmentRequest,
 } from './resumeVersionsApi';
-import { getRoleHypotheses } from '../coach/coachApi';
 import { apiErrorMessage } from '../coach/apiClient';
-import { roleAtsRequest } from './atsRoleBasis';
 
 export const RESUME_VERSION_COLLECTION_CHANGED_EVENT =
   'openqareer:resume-version-collection-changed';
@@ -37,36 +35,18 @@ async function loadProfileAssessment(
   readonly sourceVersion: ResumeVersionSummary | null;
   readonly roleBasis: string | null;
 }> {
-  let request: ResumeAtsAssessmentRequest;
-  let sourceVersion: ResumeVersionSummary | null = null;
-  let roleBasis: string | null = null;
   if (requestKey === null) {
-    // Both reads start together: one after the other they cost a full extra round (02.11 prod).
-    const roles = roleBasisOrNull(signal);
-    const versions = await getResumeVersions({ limit: 50, signal });
-    sourceVersion =
-      versions.items.find((item) => item.sourceMasterRevision === versions.currentMasterRevision) ??
-      null;
-    const byRole = sourceVersion ? null : await roles;
-    roleBasis = byRole?.roleTitle ?? null;
-    request = sourceVersion ? { versionId: sourceVersion.id } : (byRole?.request ?? {});
-  } else {
-    request = JSON.parse(requestKey) as ResumeAtsAssessmentRequest;
+    // One round trip: the server picks the version and the Career role itself
+    // (shared/atsBasis). Reading both first cost 1–2 s more on prod (03.11).
+    const { assessment, basis } = await getProfileAtsAssessment(signal);
+    return { assessment, sourceVersion: basis.version, roleBasis: basis.roleTitle };
   }
+  const request = JSON.parse(requestKey) as ResumeAtsAssessmentRequest;
   return {
     assessment: await getResumeAtsAssessment(request, signal),
-    sourceVersion,
-    roleBasis,
+    sourceVersion: null,
+    roleBasis: null,
   };
-}
-
-/** Роли не прочитались — оценка остаётся без ключевых слов, как раньше, а не падает. */
-async function roleBasisOrNull(signal: AbortSignal) {
-  try {
-    return roleAtsRequest(await getRoleHypotheses(signal));
-  } catch {
-    return null;
-  }
 }
 
 function subscribeToVersionChanges(refresh: () => void): () => void {
