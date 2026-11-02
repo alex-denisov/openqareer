@@ -51,6 +51,8 @@ function requestedAtFor(now: string, options: FitEnqueueOptions): string {
 }
 
 export class SqliteVacancyFitStore {
+  private readonly cachedIdsMemo = new Map<string, { readonly ids: ReadonlySet<string>; readonly count: number; readonly last: number }>();
+
   constructor(private readonly database: DatabaseSync, private readonly sealedText: SealedText) {
     database.exec(`CREATE TABLE IF NOT EXISTS vacancy_fit_cache (
       cache_key TEXT PRIMARY KEY, candidate_key TEXT NOT NULL,
@@ -131,17 +133,36 @@ export class SqliteVacancyFitStore {
    * тысяч вакансий без результата. Свежесть результата проверяет getCache.
    */
   cachedVacancyIds(candidateId: string): Set<string> {
-    const rows = this.database.prepare('SELECT cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ?')
-      .all(this.candidateKey(candidateId)) as { cache_key: string; result_cipher: string }[];
-    const ids = new Set<string>();
-    for (const row of rows) {
-      try {
-        const result = JSON.parse(this.sealedText.open(row.result_cipher, row.cache_key)) as VacancyFitResult;
-        if (result.candidateId === candidateId) ids.add(result.vacancyId);
-      } catch { /* повреждённая строка не даёт вакансии результата */ }
+    const candidateKey = this.candidateKey(candidateId);
+    const stat = this.database.prepare('SELECT COUNT(*) AS count, COALESCE(MAX(rowid), 0) AS last FROM vacancy_fit_cache WHERE candidate_key = ?')
+      .get(candidateKey) as { count: number; last: number };
+    const known = this.cachedIdsMemo.get(candidateKey);
+    // Prod 02.11: every list page opened every stored result (seconds of CPU on the event loop).
+    // Rows are only added or replaced (a new rowid); only a delete forces a full read.
+    const since = known && known.last <= stat.last ? known.last : 0;
+    const rows = this.database.prepare('SELECT cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ?')
+      .all(candidateKey, since) as { cache_key: string; result_cipher: string }[];
+    // Counts that do not add up mean a row was deleted: read all of them again.
+    if (since > 0 && known && known.count + rows.length !== stat.count) {
+      this.cachedIdsMemo.delete(candidateKey);
+      return this.cachedVacancyIds(candidateId);
     }
-    return ids;
+    const ids = new Set(since > 0 && known ? known.ids : []);
+    for (const row of rows) {
+      const id = this.openedVacancyId(row, candidateId);
+      if (id) ids.add(id);
+    }
+    this.cachedIdsMemo.set(candidateKey, { ids, count: stat.count, last: stat.last });
+    return new Set(ids);
   }
+
+  private openedVacancyId(row: { cache_key: string; result_cipher: string }, candidateId: string): string | undefined {
+    try {
+      const result = JSON.parse(this.sealedText.open(row.result_cipher, row.cache_key)) as VacancyFitResult;
+      return result.candidateId === candidateId ? result.vacancyId : undefined;
+    } catch { return undefined; /* повреждённая строка не даёт вакансии результата */ }
+  }
+
 
   /**
    * The newest result of an earlier algorithm version, its numbers derived again from its verified

@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SealedText } from './sealedText';
 import { SqliteVacancyFitStore } from './sqliteVacancyFitStore';
 import { evaluateVacancyFit, type VacancyFitInput } from '../domain/vacancyFit';
@@ -39,6 +39,27 @@ describe('encrypted persistent vacancy fit cache and queue', () => {
     store.putCache(b, evaluateVacancyFit(b), now);
     expect([...store.cachedVacancyIds('candidate-a')].sort()).toEqual(['vacancy', 'vacancy-2']);
     expect([...store.cachedVacancyIds('candidate-c')]).toEqual([]);
+    database.close();
+  });
+  it('opens only rows stored since the last read (prod 02.11: every list page opened them all)', () => {
+    const { database } = setup();
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const opened = vi.spyOn(sealed, 'open');
+    const store = new SqliteVacancyFitStore(database, sealed);
+    const a = input();
+    store.putCache(a, evaluateVacancyFit(a), now);
+    expect([...store.cachedVacancyIds('candidate-a')]).toEqual(['vacancy']);
+    opened.mockClear();
+    expect([...store.cachedVacancyIds('candidate-a')]).toEqual(['vacancy']);
+    expect(opened).not.toHaveBeenCalled();
+    const second = { ...input(), vacancyId: 'vacancy-2' };
+    // Another process (the maintenance worker) writes the row: the store did not see the write.
+    new SqliteVacancyFitStore(database, sealed).putCache(second, evaluateVacancyFit(second), now);
+    opened.mockClear();
+    expect([...store.cachedVacancyIds('candidate-a')].sort()).toEqual(['vacancy', 'vacancy-2']);
+    expect(opened).toHaveBeenCalledTimes(1);
+    database.prepare('DELETE FROM vacancy_fit_cache WHERE rowid = (SELECT MIN(rowid) FROM vacancy_fit_cache)').run();
+    expect([...store.cachedVacancyIds('candidate-a')]).toEqual(['vacancy-2']);
     database.close();
   });
   it('persists queue/cache across store recreation and never exposes profile statements in SQLite rows', () => {
