@@ -620,7 +620,10 @@ test.describe('B232 readability gate', () => {
     await pitchAction.focus();
     await expect(pitchAction).toBeFocused();
     await page.keyboard.press('Enter');
-    const heading = page.getByRole('heading', { name: 'Письмо под вакансию', level: 1 });
+    const heading = page.getByRole('heading', {
+      name: 'Как откликнуться: три круга связей',
+      level: 2,
+    });
     await expect(heading).toBeVisible();
     const back = page.getByRole('button', { name: 'Назад к вакансиям' });
     await expect(back).toBeFocused();

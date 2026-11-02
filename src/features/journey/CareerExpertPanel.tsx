@@ -1,4 +1,5 @@
 import { AdaptationAdviceContext } from '../diary/AdaptationAdviceContext';
+import { usePageTitleOverrideValue } from '../shell/pageTitleOverride';
 import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
 import { CareerRoleOffer } from '../career-map/CareerRoleOffer';
@@ -192,7 +193,14 @@ export function CareerExpertPanel({
   }
   const contextKey = JSON.stringify([stage, subject]);
   // Макет 13: на вкладке «Компании и люди» консультант подписан ею, а не «Вакансии».
-  const sectionTitle = subject?.kind === 'company' ? 'Компании и люди' : STAGE_TITLE[stage];
+  // Макет 9: на экране письма консультант подписан «Письмо»; экран сам называет страницу.
+  const screenTitle = usePageTitleOverrideValue();
+  const sectionTitle =
+    subject?.kind === 'company'
+      ? 'Компании и люди'
+      : stage === 'vacancies' && screenTitle
+        ? screenTitle
+        : STAGE_TITLE[stage];
   const threadCompany = subject?.kind === 'company' ? subject.id : undefined;
   const currentContext = useRef(contextKey);
   currentContext.current = contextKey;

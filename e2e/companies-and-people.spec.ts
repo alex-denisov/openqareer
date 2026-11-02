@@ -407,7 +407,9 @@ test('a recruiter hypothesis shows its public source, date and one cold action',
     .getByRole('button', { name: /^Холодный отклик/u })
     .first()
     .click();
-  await expect(page.getByRole('heading', { name: 'Письмо под вакансию' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Как откликнуться: три круга связей' }),
+  ).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Круг 3' })).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -486,7 +488,9 @@ test('people are cards per person and open the letter in their circle', async ({
   if (mobile) await page.getByRole('button', { name: 'Написать Марии Орловой' }).click();
   else await people.getByRole('button', { name: 'Написать знакомому' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Письмо под вакансию' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Как откликнуться: три круга связей' }),
+  ).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Круг 1' })).toHaveAttribute('aria-selected', 'true');
 });
 
