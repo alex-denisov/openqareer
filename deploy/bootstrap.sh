@@ -170,6 +170,13 @@ install_caddy_configuration() {
 }
 
 [[ "$(id -u)" == "0" ]] || fail "run with sudo/root"
+
+# Only the proxy configuration: validate, back up, install, reload. No service
+# restarts, units or keys — for a Caddyfile change on a running host (02.11).
+if [[ "$PUBLIC_KEY_FILE" == "--caddy-only" ]]; then
+  install_caddy_configuration
+  exit 0
+fi
 for command_name in apt-get awk basename cat chmod chown cmp curl cut \
   dpkg-query flock getent grep id install ip ln mktemp readlink rm scp seq \
   sha256sum tar systemctl systemd-analyze touch tr useradd visudo; do
