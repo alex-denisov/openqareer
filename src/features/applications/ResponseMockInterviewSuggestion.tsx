@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ApplicationView } from './applicationsApi';
 import { formatDayMonthTime } from './responseCardFace';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import { mockInterviewVacancyFromApplication } from '../interview/mockInterviewVacancy';
 import {
   usePublishConsultantSuggestion,
   type ConsultantScreenSuggestion,
@@ -44,18 +45,11 @@ export function ResponseMockInterviewSuggestion({
   const [open, setOpen] = useState(false);
   usePublishConsultantSuggestion(responseMockInterviewSuggestion(application, () => setOpen(true)));
   if (!open) return null;
-  const company = application.vacancy?.companyHidden
-    ? undefined
-    : (application.vacancy?.company ?? undefined);
   return (
     <InterviewPrepModal
       isOpen
       onClose={() => setOpen(false)}
-      vacancy={{
-        id: application.id,
-        title: application.vacancy?.title ?? 'Вакансия без названия',
-        company,
-      }}
+      vacancy={mockInterviewVacancyFromApplication(application)}
       startInMockInterview
       initialStressMode={false}
     />
