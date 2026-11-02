@@ -1,5 +1,5 @@
 import { MIN_FIT_SKILL_REQUIREMENTS, PARTIAL_REQUIREMENT_CREDIT } from '../../shared/vacancyFitPercent';
-import { createHash } from 'node:crypto';
+import { createHash, type Hash } from 'node:crypto';
 import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitConditionBlock, type VacancyFitGates, type VacancyFitRequirementAssessment, type VacancyFitResult } from '../../shared/vacancyFit';
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
 import { isImportedMemoryId } from './resumeImport';
@@ -78,6 +78,33 @@ function eligibleFacts(input: VacancyFitInput): readonly VacancyFitFact[] {
 
 export type VacancyFitFactScope = 'evidence' | 'all';
 
+interface ProfilePart {
+  /** SHA-256 state after `[candidateId,facts,` — copied, never updated in place. */
+  readonly prefix: Hash;
+  readonly importedIds: readonly string[];
+}
+/**
+ * Prod CPU profile 03.11: every shown row hashed the whole profile 6–10 times (current, earlier and
+ * previous-version keys), 3.9 of 21 busy seconds. The facts are one array per profile read, so the
+ * hash state after them is kept for that array and each key hashes only its own tail.
+ */
+const profileParts = new WeakMap<readonly VacancyFitFact[], Map<string, ProfilePart>>();
+const json = (value: unknown) => JSON.stringify(value) ?? 'null';
+function profilePart(input: VacancyFitInput, factScope: VacancyFitFactScope): ProfilePart {
+  const byKey = profileParts.get(input.facts) ?? new Map<string, ProfilePart>();
+  profileParts.set(input.facts, byKey);
+  const key = `${factScope}\u0000${input.candidateId}`;
+  const known = byKey.get(key);
+  if (known) return known;
+  const facts = factScope === 'all' ? input.facts : eligibleFacts(input);
+  const part = {
+    prefix: createHash('sha256').update(`[${json(input.candidateId)},${json(facts)},`),
+    importedIds: input.facts.filter(isImportedEvidence).map((fact) => fact.id),
+  };
+  byKey.set(key, part);
+  return part;
+}
+
 /** SHA hashes are transient; persistent tenant indexes are keyed HMACs in the store. */
 export function vacancyFitFingerprint(
   input: VacancyFitInput,
@@ -87,14 +114,15 @@ export function vacancyFitFingerprint(
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   // B580-r: the consultant writes hypotheses and open questions every few seconds; keyed by them,
   // every percent was reset (469 «profile_changed» jobs on prod 29.10). `all` reads older keys.
-  const facts = factScope === 'all' ? input.facts : eligibleFacts(input);
-  const importedIds = input.facts.filter(isImportedEvidence).map((fact) => fact.id);
+  const { prefix, importedIds } = profilePart(input, factScope);
   const checkedIds = [...(input.checkedFactIds ?? [])].sort();
+  // B562: a profile whose evidence includes imported facts gets a new key, so its result cached
+  // without them (and the completed queue row) is not reused; confirmed-only profiles keep theirs.
+  // The same bytes as hash([candidateId, facts, gates, profileContextHash, ...extra]).
+  const tail = [input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : []), ...(checkedIds.length ? [{ checkedEvidence: checkedIds }] : [])];
   return {
     vacancyHash: hash([input.vacancyId, input.description, input.requirements]),
-    // B562: a profile whose evidence includes imported facts gets a new key, so its result cached
-    // without them (and the completed queue row) is not reused; confirmed-only profiles keep theirs.
-    profileHash: hash([input.candidateId, facts, input.gates, input.profileContextHash, ...(importedIds.length ? [{ importedEvidence: importedIds }] : []), ...(checkedIds.length ? [{ checkedEvidence: checkedIds }] : [])]),
+    profileHash: prefix.copy().update(`${tail.map(json).join(',')}]`).digest('hex'),
     algorithmVersion,
   };
 }

@@ -55,6 +55,8 @@ import {
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, candidatePlan, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
+import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -401,6 +403,8 @@ async function readMatchedPage(
   decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
   fitLimit = Number.POSITIVE_INFINITY,
 ) {
+  // The profile reads before this ran in one piece with the request start (prod 03.11).
+  await yieldToEventLoop();
   const startedAt = performance.now();
   const snapshot = await readMatchedSnapshot(
     engine,
@@ -465,27 +469,34 @@ function withMarketSalary(deps: RouteDeps, items: MatchedVacancyItem[]): Matched
   });
 }
 
-/** Fit views, salary and fit work for a built page, each step timed (CPO prod 02.11). */
-function finishMatchedPage(
+/**
+ * Fit views, salary and fit work for a built page, each step timed (CPO prod 02.11). Each step
+ * lets queued requests through first (prod 03.11: four parallel pages held the loop 0.3–1.1 s).
+ * Fit work starts after the page is built and with the unscoped deps: its sweep outlives the request.
+ */
+async function finishMatchedPage(
   deps: RouteDeps,
+  backgroundDeps: RouteDeps,
   candidateId: string,
   orderedPage: ReturnType<typeof buildMatchedResponse>,
   context: { readonly offset: number; readonly fitLimit: number; readonly request: FastifyRequest },
 ) {
+  await yieldToEventLoop();
   const fitViewsStartedAt = performance.now();
-  const shown = withShownPageFitViews(deps, candidateId, orderedPage.data);
+  const shown = await withShownPageFitViews(deps, candidateId, orderedPage.data);
   const fitViewsMs = elapsedMs(fitViewsStartedAt);
   const salaryStartedAt = performance.now();
   const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
   const salaryMs = elapsedMs(salaryStartedAt);
+  await yieldToEventLoop();
   const fitWorkStartedAt = performance.now();
-  startFitWork(deps, candidateId, response, context, context.request);
+  startFitWork(backgroundDeps, candidateId, response, context, context.request);
   return { response, steps: { fitViewsMs, salaryMs, fitWorkMs: elapsedMs(fitWorkStartedAt) } };
 }
 
-const handleMatchedVacancies: Handler = async (deps, request, reply) => {
+const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
+  const deps = withRequestScopedCandidateReads(backgroundDeps), requestStartedAt = performance.now();
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
-  const requestStartedAt = performance.now();
   const cold = !observedMatchEngines.has(multiSourceEngine);
   observedMatchEngines.add(multiSourceEngine);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
@@ -522,19 +533,19 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     fitLimit,
   );
   const context = { offset, fitLimit, request };
-  const { response, steps } = finishMatchedPage(deps, candidate.id, orderedPage, context);
+  const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, context);
   logMatchedTiming(
     request,
     config.matchMode ?? 'legacy',
     cold,
     candidateCampaignMs,
     semanticQueryAndSqlMs,
-    response,
+    page.response,
     requestStartedAt,
-    steps,
+    page.steps,
   );
 
-  return matchedVacancyResponse(response, request.id, targetLevel, sort);
+  return matchedVacancyResponse(page.response, request.id, targetLevel, sort);
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
