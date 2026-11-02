@@ -133,6 +133,19 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.takeStats()).toMatchObject({ deferred: 0, completed: 1 });
   });
 
+  it('a fit whose requirements job is completed without its cache row completes instead of deferring (prod 02.11)', async () => {
+    const runtime = setup(); const source = input();
+    const requirementsInput = { vacancyId: source.vacancyId, description: source.description };
+    runtime.requirements.enqueue(requirementsInput);
+    await runtime.requirements.runNext('w', async (job) => extractVacancyRequirements(job), Date.now());
+    // 01.11: the previous release's worker completed the job but wrote the cache under its own version.
+    runtime.database.exec('DELETE FROM vacancy_requirements_cache');
+    runtime.fit.enqueue(source);
+    expect(await runtime.runNext(null)).toBe(true);
+    expect(runtime.takeStats()).toMatchObject({ deferred: 0, completed: 1 });
+    expect(runtime.view(source).state).toBe('ready');
+  });
+
   it('upgrades rules-1 caches gradually: old chips stay, shown vacancies go first (B510)', async () => {
     const runtime = setup(); const source = input();
     const legacy = { ...source, vacancyId: 'vacancy-legacy' };
