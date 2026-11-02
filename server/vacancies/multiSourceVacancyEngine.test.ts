@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
+import type { VacancyPoolStore } from './vacancyPoolStore';
 import { clusterVacancies } from './vacancyDeduplicator';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
@@ -575,5 +576,71 @@ describe('MultiSourceVacancyEngine.getActiveCluster — id from a request-time c
     expect(engine.getActiveCluster('cluster-second-2')).toBeUndefined();
     expect(engine.isKnownVacancyGone('cluster-second-2')).toBe(true);
     expect(engine.isKnownVacancyGone('cluster-does-not-exist-at-all')).toBe(false);
+  });
+});
+
+describe('MultiSourceVacancyEngine public catalog totals', () => {
+  const listing = (place: string, count: number, role?: string) => ({
+    place,
+    placeLabel: place,
+    ...(role ? { role, roleLabel: role } : {}),
+    path: `/vacancies/${place}${role ? `/${role}` : ''}`,
+    count,
+  });
+
+  function build() {
+    const queries: Array<Record<string, unknown>> = [];
+    const store = new MemoryVacancyPoolStore();
+    const pool = Object.assign(store, {
+      catalogProjectionReady: () => true,
+      loadClustersPage: () => ({ items: [] }),
+      loadCatalogListings: vi.fn(() => [listing('berlin', 40, 'dev'), listing('berlin', 90)]),
+      loadCatalogEntriesPage: vi.fn((q: Record<string, unknown>) => {
+        queries.push(q);
+        return { items: [], total: typeof q.knownTotal === 'number' ? q.knownTotal : 2 };
+      }),
+    });
+    return {
+      engine: new MultiSourceVacancyEngine({ sources: [], pool: pool as unknown as VacancyPoolStore }),
+      queries,
+    };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('serves a listed group total from the cached summaries, without a count', () => {
+    const { engine, queries } = build();
+    engine.getPublicCatalogEntriesPage({ limit: 10, place: 'berlin', role: 'dev' });
+    engine.getPublicCatalogEntriesPage({ limit: 10, place: 'berlin' });
+    expect(queries.map((q) => q.knownTotal)).toEqual([40, 90]);
+  });
+
+  it('counts an unlisted small group exactly', () => {
+    const { engine, queries } = build();
+    const page = engine.getPublicCatalogEntriesPage({ limit: 10, place: 'tiny' });
+    expect(queries[0]).not.toHaveProperty('knownTotal');
+    expect(page?.total).toBe(2);
+  });
+
+  it('counts the whole catalog once per TTL, then reuses it', () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const { engine, queries } = build();
+    engine.getPublicCatalogEntriesPage({ limit: 10 });
+    engine.getPublicCatalogEntriesPage({ limit: 10 });
+    expect(queries.map((q) => q.knownTotal)).toEqual([undefined, 2]);
+    vi.setSystemTime(1_000_000 + 5 * 60_000 + 1);
+    engine.getPublicCatalogEntriesPage({ limit: 10 });
+    expect(queries[2]).not.toHaveProperty('knownTotal');
+  });
+
+  it('refreshes summary totals after the cache window', () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const { engine, queries } = build();
+    engine.getPublicCatalogEntriesPage({ limit: 10, place: 'berlin' });
+    vi.setSystemTime(1_000_000 + 5 * 60_000 + 1);
+    engine.getPublicCatalogEntriesPage({ limit: 10, place: 'berlin' });
+    expect(queries.map((q) => q.knownTotal)).toEqual([90, 90]);
   });
 });
