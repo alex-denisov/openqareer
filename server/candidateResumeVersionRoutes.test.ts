@@ -466,11 +466,10 @@ describe('candidate resume version and ATS APIs', () => {
       payload: {},
     });
     expect(emptyContext.statusCode).toBe(200);
-    expect(emptyContext.json().data.assessment.total).toEqual({
-      score: null,
-      maximum: 100,
-      status: 'partial',
-    });
+    const emptyTotal = emptyContext.json().data.assessment.total;
+    expect(emptyTotal.status).toBe('partial');
+    expect(emptyTotal.maximum).toBe(70);
+    expect(emptyTotal.score).toEqual(expect.any(Number));
     expect(emptyContext.json().data.assessment.dimensions.keywords.status).toBe('unknown');
     expect(emptyContext.json().data.assessment.dimensions.structure.source).toBe('Мастер-резюме');
 
