@@ -86,6 +86,12 @@ export function scheduleCatalogRuSummaryJob(
   if (!client) return () => runtime.close();
   const store = new CatalogRuSummaryStore(database);
   store.ensureTable();
+  // The spend checks run every tick; the ledger table has no index of its own on day and task.
+  if (database.prepare("SELECT 1 FROM sqlite_master WHERE name = 'bulk_llm_spend'").get()) {
+    database.exec(
+      'CREATE INDEX IF NOT EXISTS bulk_llm_spend_day_task ON bulk_llm_spend(day, task)',
+    );
+  }
   const job = new CatalogRuSummaryJob({
     store,
     client,

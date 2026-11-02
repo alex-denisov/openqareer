@@ -67,6 +67,8 @@ export interface CatalogRuSummaryReport {
 
 type Completion = { complete(input: BulkLlmInput): Promise<BulkLlmResult> };
 
+const OUTAGE_PAUSE_MS = 10 * 60_000;
+const IDLE_PAUSE_MS = 5 * 60_000;
 /** Rows looked at per tick: unchanged rechecks are cheap, only one may cost a model call. */
 const CANDIDATES_PER_TICK = 20;
 /** 600 words of Russian fit in ~1 200 tokens; the cap keeps a runaway answer cheap. */
@@ -136,7 +138,11 @@ export class CatalogRuSummaryJob {
     if (blocked) return { ...tally, skipped: blocked };
     const { store } = this.options;
     const candidates = store.candidates(now, CATALOG_RU_SUMMARY_VERSION, CANDIDATES_PER_TICK);
-    if (candidates.length === 0) return { ...tally, skipped: 'idle' };
+    if (candidates.length === 0) {
+      // Nothing to do: the candidate query walks the catalog, so it is not repeated every tick.
+      this.pausedUntil = now + IDLE_PAUSE_MS;
+      return { ...tally, skipped: 'idle' };
+    }
     for (const candidate of candidates) {
       const description = store.sourceText(candidate);
       const hash = catalogSummarySourceHash(candidate.title, description);
@@ -189,7 +195,11 @@ export class CatalogRuSummaryJob {
     };
     const result = await this.complete(source, now);
     if (result === 'paused') return { ...tally, skipped: 'paused' };
-    if (result === 'unavailable') return fail('model_unavailable');
+    if (result === 'unavailable') {
+      // An outage is not the card's fault: no attempt is spent, the step waits instead.
+      this.pausedUntil = now + OUTAGE_PAUSE_MS;
+      return { ...tally, issue: 'model_unavailable', skipped: 'paused' };
+    }
     const parsed = parseCatalogRuSummary(result.content, source);
     if ('issue' in parsed) return fail(parsed.issue, result.model);
     store.saveReady(

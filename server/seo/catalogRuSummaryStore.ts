@@ -4,7 +4,7 @@
  * One row per catalog card, bound to the hash of the text it was written from
  * and to the prompt version. The maintenance process writes; the web server
  * reads one row per card page. Candidates are the cards that can be indexed
- * (salary, employer, role, seen within 14 days), newest first.
+ * (a known salary, employer, role, seen within 14 days), newest first.
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { CARD_SEEN_WITHIN_DAYS } from './catalogIndexing';
@@ -27,8 +27,11 @@ export const CATALOG_RU_SUMMARIES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalo
   updated_at TEXT NOT NULL
 ) STRICT`;
 
-/** A card whose text has not changed is re-read this often to notice a rewrite. */
-export const SUMMARY_RECHECK_MS = 3 * 86_400_000;
+/**
+ * A card whose text has not changed is re-read this often to notice a rewrite.
+ * Until then a rewritten card hides its summary on the page but stays in the sitemap.
+ */
+export const SUMMARY_RECHECK_MS = 86_400_000;
 /** After this many unusable answers for the same text the card waits for a new text or version. */
 export const SUMMARY_MAX_ATTEMPTS = 3;
 const SUMMARY_RETRY_MS = 6 * 3_600_000;
@@ -91,7 +94,7 @@ export class CatalogRuSummaryStore {
            FROM catalog_entries c
            LEFT JOIN catalog_ru_summaries s ON s.cluster_id = c.cluster_id
           WHERE c.status = 'active' AND c.path <> ''
-            AND c.salary_label IS NOT NULL AND c.salary_label <> ''
+            AND c.salary_label IS NOT NULL AND c.salary_label GLOB '*[1-9]*'
             AND trim(c.company) <> '' AND c.role_slug IS NOT NULL
             AND c.last_seen_ms >= ?
             AND (s.cluster_id IS NULL OR s.version <> ? OR s.checked_ms < ?
@@ -133,8 +136,13 @@ export class CatalogRuSummaryStore {
   sourceText(candidate: Pick<CatalogRuSummaryCandidate, 'clusterId' | 'snippet'>): string {
     const poolId = poolIdOf(candidate.clusterId);
     const row = poolId
-      ? (this.database.prepare('SELECT payload FROM vacancy_pool WHERE id = ?').get(poolId) as
-          { payload: string } | undefined)
+      ? // Only a live row, as the page's `getVacancy` reads: an expired one leaves the page on the snippet.
+        (this.database
+          .prepare(
+            `SELECT p.payload FROM vacancy_pool p JOIN vacancy_pool_index i ON i.id = p.id
+              WHERE p.id = ? AND i.expired = 0`,
+          )
+          .get(poolId) as { payload: string } | undefined)
       : undefined;
     let payload: { fullDescription?: unknown; description?: unknown } = {};
     try {

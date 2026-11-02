@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
+import { CATALOG_RU_SUMMARY_VERSION } from './catalogRuSummary';
+import { CatalogRuSummaryStore } from './catalogRuSummaryStore';
 import { VACANCY_CATALOG_ENTRIES_TABLE } from '../data/sqliteSchema';
 import { INDEXED_PLACE_MIN, INDEXED_PLACE_ROLE_MIN, LISTING_RETAIN_DAYS } from './catalogIndexing';
 import { readListingHistory } from './catalogListingHistory';
@@ -140,6 +142,29 @@ describe('computeCatalogSitemaps', () => {
       'https://openqareer.com/vacancies/job/frontend-developer-at-acme-good',
     ]);
     expect(jobs.urlCount).toBe(1);
+  });
+
+  it('lists a card without a snippet once it has a Russian summary of the current version (03.11)', () => {
+    const db = database([
+      { id: 'hh', summary: '' },
+      { id: 'hhold', summary: '' },
+    ]);
+    const store = new CatalogRuSummaryStore(db);
+    store.ensureTable();
+    const summary = { text: 'Первое. Второе.', facts: {} };
+    store.saveReady('cluster-hh', 'hash', CATALOG_RU_SUMMARY_VERSION, summary, 'm', NOW.getTime());
+    store.saveReady(
+      'cluster-hhold',
+      'hash',
+      CATALOG_RU_SUMMARY_VERSION - 1,
+      summary,
+      'm',
+      NOW.getTime(),
+    );
+    const jobs = computeCatalogSitemaps(db, NOW).find((file) => file.name === 'jobs-1.xml')!;
+    expect(locs(jobs.xml)).toEqual([
+      'https://openqareer.com/vacancies/job/frontend-developer-at-acme-hh',
+    ]);
   });
 
   it('keeps a live card listed past its first week (03.11)', () => {

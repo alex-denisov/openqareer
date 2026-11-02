@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe('readCatalogRuSummary', () => {
-  it('shows the summary only for the text it was written from, and counts the card as described', () => {
+  it('shows and counts the summary only for the text it was written from', () => {
     const path = databaseWith((store) =>
       store.saveReady(
         'cluster-a',
@@ -56,7 +56,7 @@ describe('readCatalogRuSummary', () => {
         description: 'новый текст',
       }),
     ).toEqual({
-      described: true,
+      described: false,
     });
     expect(
       readCatalogRuSummary(path, {

@@ -66,6 +66,8 @@ export interface IndexableCardFields {
   readonly lastSeenAt: string;
   /** Withdrawal date when the source named one. */
   readonly withdrawnAt?: string;
+  /** Our own Russian summary exists (`catalogRuSummary.ts`): the card counts as described. */
+  readonly hasRuSummary?: boolean;
 }
 
 /** A salary label with a real amount: «0 $» is an unknown salary, not a salary. */
@@ -80,7 +82,8 @@ export function hasKnownSalary(label: string | undefined): boolean {
  */
 const CARD_QUALITY_RULES: ReadonlyArray<(entry: IndexableCardFields) => boolean> = [
   (entry) => hasKnownSalary(entry.salaryLabel),
-  (entry) => entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN,
+  // 03.11: hh.ru search rows carry no snippet, but a Russian summary of the loaded text describes the card.
+  (entry) => entry.hasRuSummary === true || entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN,
   (entry) => entry.company.trim().length > 0,
   (entry) => catalogRoleOf(entry) !== null,
 ];

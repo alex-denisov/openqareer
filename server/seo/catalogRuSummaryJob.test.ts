@@ -1,6 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MIGRATION_23, VACANCY_CATALOG_ENTRIES_TABLE } from '../data/sqliteSchema';
+import {
+  MIGRATION_23,
+  VACANCY_CATALOG_ENTRIES_TABLE,
+  VACANCY_POOL_INDEX_TABLE,
+} from '../data/sqliteSchema';
 import { BULK_BUDGET_EXCEEDED, type BulkLlmInput } from '../providers/bulkLlmClient';
 import { CATALOG_RU_SUMMARY_VERSION, catalogSummarySourceHash } from './catalogRuSummary';
 import {
@@ -40,7 +44,7 @@ let store: CatalogRuSummaryStore;
 
 function addCard(
   id: string,
-  options: { publishedMs: number; text?: string; salary?: string | null },
+  options: { publishedMs: number; text?: string; salary?: string | null; expired?: boolean },
 ) {
   database
     .prepare(
@@ -65,6 +69,12 @@ function addCard(
       `INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload) VALUES (?, 'hh', '', '', ?)`,
     )
     .run(id, JSON.stringify({ description: '', fullDescription: options.text ?? TEXT }));
+  database
+    .prepare(
+      `INSERT INTO vacancy_pool_index (id, source_id, is_active, url, search_text, expired)
+       VALUES (?, 'hh', 1, 'https://hh.ru/vacancy/1', '', ?)`,
+    )
+    .run(id, options.expired ? 1 : 0);
 }
 
 function fakeClient(content = ANSWER) {
@@ -91,7 +101,7 @@ function job(client: ReturnType<typeof fakeClient>, now = NOW, spend = noSpend) 
 
 beforeEach(() => {
   database = new DatabaseSync(':memory:');
-  database.exec(MIGRATION_23 + VACANCY_CATALOG_ENTRIES_TABLE);
+  database.exec(MIGRATION_23 + VACANCY_POOL_INDEX_TABLE + VACANCY_CATALOG_ENTRIES_TABLE);
   store = new CatalogRuSummaryStore(database);
   store.ensureTable();
 });
@@ -161,6 +171,28 @@ describe('catalog Russian summary job', () => {
     expect(await job(client).step()).toEqual({ thin: 1, written: 0, failed: 0, unchanged: 0 });
     expect(await job(client).step()).toMatchObject({ skipped: 'idle' });
     expect(client.calls).toHaveLength(0);
+  });
+
+  it('reads only a live pool row, as the page does, and treats an expired one as no text', async () => {
+    addCard('expired', { publishedMs: NOW - DAY, expired: true });
+    const client = fakeClient();
+    expect(await job(client).step()).toMatchObject({ thin: 1, written: 0 });
+    expect(client.calls).toHaveLength(0);
+  });
+
+  it('waits out a provider outage without spending the card attempts', async () => {
+    addCard('card', { publishedMs: NOW - DAY });
+    const client = fakeClient();
+    client.complete.mockRejectedValueOnce(new Error('bulk stage failed'));
+    const outage = job(client);
+    expect(await outage.step()).toMatchObject({
+      skipped: 'paused',
+      issue: 'model_unavailable',
+      failed: 0,
+    });
+    expect(await outage.step()).toMatchObject({ skipped: 'paused' });
+    expect(client.complete).toHaveBeenCalledTimes(1);
+    expect(await job(client, NOW + 11 * 60_000).step()).toMatchObject({ written: 1 });
   });
 
   it('records an answer with an invented number as failed and retries it later', async () => {
