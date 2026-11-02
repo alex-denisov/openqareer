@@ -210,6 +210,7 @@ function RecipientActions({
           className="career-btn is-sm is-ghost"
           disabled={frozen}
           aria-expanded={choosing}
+          aria-label="Изменить получателя"
           onClick={onToggleChoice}
         >
           Изменить

@@ -474,7 +474,7 @@ async function reviewWithConsultant(page: Page): Promise<void> {
 }
 
 async function openRecipientChoice(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Изменить' }).click();
+  await page.getByRole('button', { name: 'Изменить получателя' }).click();
 }
 
 async function showIntroductionPaths(page: Page): Promise<void> {
@@ -549,7 +549,7 @@ test.describe('B449 — письмо под вакансию', () => {
       const css = Array.from(document.styleSheets)
         .flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText))
         .join('\n');
-      const notices = document.querySelector('.career-letter-notice');
+      const notices = document.querySelector('.career-letter-notes');
       if (!notices) throw new Error('B528 notice must exist before capturing its harness');
       return (
         '<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>B528 notice</title><style>' +
@@ -595,7 +595,8 @@ test.describe('B449 — письмо под вакансию', () => {
     await openRecipientChoice(page);
     await expect(page.getByRole('radio')).toHaveCount(2);
     await captureState(page, testInfo, 'circle-1');
-    await page.getByRole('radio').nth(1).check();
+    // The picker closes on choice, so a click, not check(), selects the path.
+    await page.getByRole('radio').nth(1).click();
     await expect.poll(() => state.pitchBodies.at(-1)?.recipient?.name).toBe('Анатолий Волков');
     await page.getByRole('tab', { name: /Круг 2/u }).click();
     await expect(page.locator('.career-letter-card')).toContainText('Попросить представить');
@@ -605,7 +606,7 @@ test.describe('B449 — письмо под вакансию', () => {
     );
     await openRecipientChoice(page);
     const introductionRecipients = page.locator('.career-letter-screen').getByRole('radio');
-    await introductionRecipients.nth(1).check();
+    await introductionRecipients.nth(1).click();
     await expect.poll(() => state.pitchBodies.at(-1)?.recipient?.name).toBe('Анатолий Волков');
     await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveValue(
       /^Анатолий Волков,/u,
@@ -728,7 +729,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await dialog.getByLabel('Как вы знакомы').fill('Работали вместе в одной команде');
     await dialog.getByRole('button', { name: 'Сохранить контакт' }).click();
     await expect(dialog.getByRole('status')).toContainText('Контакт сохранён.');
-    await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Изменить', exact: true })).toHaveCount(0);
     await expect(page.locator('.career-letter-card')).toContainText('Елена Мельникова');
     await dialog.getByRole('button', { name: 'Закрыть контакты' }).click();
 

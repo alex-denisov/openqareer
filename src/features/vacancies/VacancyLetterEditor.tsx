@@ -159,7 +159,7 @@ export function LetterNotices({
       ))}
       {fewFacts ? (
         <p role="status">
-          В профиле мало подтверждённых фактов: письмо не добавляет достижения без источника.
+          <span>В профиле мало подтверждённых фактов: письмо не добавляет достижения без источника.</span>
           {onGatherFacts ? (
             <button type="button" className="career-btn is-sm is-ghost" onClick={onGatherFacts}>
               <ChatCircleText size={16} aria-hidden="true" />
