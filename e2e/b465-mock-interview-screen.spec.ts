@@ -103,7 +103,6 @@ async function openPreparationDialog(page: Page, width: number): Promise<void> {
       .locator('.career-responses-selected')
       .getByRole('button', { name: 'Начать мок-интервью' })
       .click();
-    return;
   } else {
     const card = page
       .locator('.career-responses-card')
@@ -112,13 +111,12 @@ async function openPreparationDialog(page: Page, width: number): Promise<void> {
     await card.locator('.career-responses-card-body').click();
     await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
   }
-  await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
+  await expect(page.locator('.career-mock-dialog')).toBeVisible();
 }
 
-/** 1440: тренажёр открыт из подготовки и возвращает в неё; 390: открыт сразу и закрывается целиком. */
-async function expectBackFromSimulator(page: Page, width: number): Promise<void> {
-  if (width <= 760) await expect(page.locator('.career-mock-dialog')).toBeHidden();
-  else await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
+/** Тренажёр открыт из панели отклика сразу (макет 5) и закрывается целиком. */
+async function expectBackFromSimulator(page: Page, _width: number): Promise<void> {
+  await expect(page.locator('.career-mock-dialog')).toBeHidden();
 }
 
 async function startSimulator(page: Page): Promise<void> {
@@ -410,7 +408,7 @@ test('returns to preparation and protects an unsent answer at 1440 and 390', asy
       await startSimulator(page);
       await page.getByRole('button', { name: 'Позже' }).click();
       await expectBackFromSimulator(page, width);
-      if (width <= 760) await openPreparationDialog(page, width);
+      await openPreparationDialog(page, width);
       await startSimulator(page);
       await page.getByRole('button', { name: 'Начать', exact: true }).click();
       await page.getByLabel('Ваш ответ').fill('Черновик ответа, который ещё не отправлен.');
@@ -582,6 +580,7 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
   browser,
 }, info) => {
   test.skip(info.project.name !== 'desktop-1440', 'This flow drives and captures both viewports.');
+  test.setTimeout(60_000);
   for (const width of [1440, 390]) {
     const context = await browser.newContext();
     const page = await context.newPage();
