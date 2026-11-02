@@ -1,4 +1,5 @@
 import { buildApp } from './app';
+import { captureCpuProfileOnSignal } from './observability/cpuProfileOnSignal';
 import { readServerConfig } from './config';
 import { scheduleLandingStatsRefresh } from './landing/landingStatsSchedule';
 import { scheduleCurrencyRatesRefresh } from './currency/cbrRatesSchedule';
@@ -376,6 +377,7 @@ async function shutdown(signal: string): Promise<void> {
 
 process.once('SIGINT', () => void shutdown('SIGINT'));
 process.once('SIGTERM', () => void shutdown('SIGTERM'));
+captureCpuProfileOnSignal((fields, message) => app.log.info(fields, message));
 
 try {
   await app.listen({ host: config.host, port: config.port });
