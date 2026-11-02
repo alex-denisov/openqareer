@@ -433,7 +433,7 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     );
   });
 
-  it('из выбранного интервью можно открыть подготовку и спросить консультанта', () => {
+  it('из выбранного интервью «Начать мок-интервью» открывает тренажёр, из него можно спросить консультанта', () => {
     const onOpenExpert = vi.fn();
     const interviewApps = [
       application({
@@ -462,9 +462,9 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       prepBtn?.click();
     });
 
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(document.querySelector('.career-mock-dialog[role="dialog"]')).not.toBeNull();
     const askBtn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Спросить консультанта'),
+      b.getAttribute('aria-label') === 'Спросить консультанта',
     );
     expect(askBtn).toBeDefined();
 

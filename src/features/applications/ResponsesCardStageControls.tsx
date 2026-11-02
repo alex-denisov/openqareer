@@ -4,6 +4,7 @@ import { deliveryState } from '../../../shared/applicationStage';
 import { humanSourceLabel } from './sourceLabels';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import { mockInterviewVacancyFromApplication } from '../interview/mockInterviewVacancy';
 import { StarStoriesModal } from '../interview/StarStoriesModal';
 import {
   patchApplication,
@@ -68,13 +69,7 @@ export function PrepareInterviewControl({
       <InterviewPrepModal
         isOpen={open}
         onClose={() => setOpen(false)}
-        vacancy={{
-          id: application.id,
-          title: application.vacancy?.title ?? 'Без названия',
-          company: application.vacancy?.companyHidden
-            ? undefined
-            : (application.vacancy?.company ?? undefined),
-        }}
+        vacancy={mockInterviewVacancyFromApplication(application)}
         onAskConsultant={askConsultant}
         onOpenStarStories={() => {
           setOpen(false);

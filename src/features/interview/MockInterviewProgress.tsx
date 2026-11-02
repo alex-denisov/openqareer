@@ -1,22 +1,23 @@
 import type { InterviewSessionView } from './interviewSimulatorApi';
 
-export function QuestionProgress({ session, modeLabel }: {
+/** Заголовок карточки состояния и счёт «4 / 10» с полосой (макет 14). */
+export function QuestionProgress({ session, title }: {
   readonly session: InterviewSessionView;
-  readonly modeLabel: string;
+  readonly title: string;
 }) {
   const current = Math.min(session.currentQuestionIndex + 1, session.questions.length);
   return (
     <div className="career-mock-progress-block">
-      <div className="career-mock-progress-heading">
-        <h2>Вопрос {current} из {session.questions.length}</h2>
-        <span>{modeLabel}</span>
+      <h2>{title}</h2>
+      <div className="career-mock-progress-count">
+        <span>{current} / {session.questions.length}</span>
+        <progress
+          className="career-mock-progress"
+          value={current}
+          max={session.questions.length}
+          aria-label={`Вопрос ${current} из ${session.questions.length}`}
+        />
       </div>
-      <progress
-        className="career-mock-progress"
-        value={current}
-        max={session.questions.length}
-        aria-label={`Вопрос ${current} из ${session.questions.length}`}
-      />
     </div>
   );
 }

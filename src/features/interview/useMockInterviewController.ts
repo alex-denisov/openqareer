@@ -12,7 +12,11 @@ import type { MockInterviewQuestionScope, MockInterviewScreen } from './mockInte
 
 export type { MockInterviewQuestionScope, MockInterviewScreen } from './mockInterviewControllerTypes';
 
-export function useMockInterviewController(roleTitle: string, onBackToPreparation: () => void) {
+export function useMockInterviewController(
+  roleTitle: string,
+  onBackToPreparation: () => void,
+  applicationId?: string,
+) {
   const model = useMockInterviewSession();
   const speech = useSpeechTranscription();
   const [screen, setScreen] = useState<MockInterviewScreen>('setup');
@@ -35,7 +39,7 @@ export function useMockInterviewController(roleTitle: string, onBackToPreparatio
   }, [mode, model.session?.mode]);
   const currentQuestionAnswer = currentQuestion?.answer?.text ?? '';
   const setupActions = useMockInterviewSetupActions({
-    model, mode, roleTitle, questionScope, stressMode, setScreen, setDraft, answerStartedAt,
+    model, mode, roleTitle, applicationId, questionScope, stressMode, setScreen, setDraft, answerStartedAt,
   });
   const answerActions = useMockInterviewAnswerActions({
     model, speech, currentQuestionAnswer, setDraft, setScreen, answerStartedAt,

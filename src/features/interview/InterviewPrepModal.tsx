@@ -26,6 +26,8 @@ export interface InterviewPrepModalProps {
   readonly onAskConsultant?: () => void;
   readonly onOpenStarStories?: () => void;
   readonly onWriteDiary?: InterviewDiaryPort;
+  /** «Начать мок-интервью» открывает сразу тренажёр (макет 5), «Подготовиться» — подготовку. */
+  readonly startWith?: 'preparation' | 'mock';
 }
 
 export function InterviewPrepModal(props: InterviewPrepModalProps) {
@@ -34,7 +36,7 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
 
 function InterviewPrepModalState(props: InterviewPrepModalProps) {
   const [tab, setTab] = useState<InterviewPrepTab>(props.initialTab ?? 'overview');
-  const [mockInterviewOpen, setMockInterviewOpen] = useState(false);
+  const [mockInterviewOpen, setMockInterviewOpen] = useState(props.startWith === 'mock');
   const [starStoriesOpen, setStarStoriesOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const afterStarStoriesClose = useRef<(() => void) | null>(null);
@@ -49,10 +51,11 @@ function InterviewPrepModalState(props: InterviewPrepModalProps) {
     afterStarStoriesClose.current = null;
   }, []);
   const onClose = props.onClose;
+  const startsWithMock = props.startWith === 'mock';
   const handleEscape = useCallback(() => {
-    if (mockInterviewOpen) setMockInterviewOpen(false);
+    if (mockInterviewOpen && !startsWithMock) setMockInterviewOpen(false);
     else onClose();
-  }, [mockInterviewOpen, onClose]);
+  }, [mockInterviewOpen, onClose, startsWithMock]);
   useModalAccessibility(props.isOpen, handleEscape, cardRef);
   if (!props.isOpen) return null;
   const brief = generateInterviewPrepBrief({
@@ -136,7 +139,7 @@ function InterviewPrepBackdrop({ props, tab, brief, cardRef, dialogRef, mockInte
         <MockInterviewSimulator
           vacancy={props.vacancy}
           dialogRef={dialogRef}
-          onBackToPreparation={() => setMockInterviewOpen(false)}
+          onBackToPreparation={() => (props.startWith === 'mock' ? props.onClose() : setMockInterviewOpen(false))}
           onOpenStarStories={openStarStories}
           onAskConsultant={props.onAskConsultant}
           onWriteDiary={props.onWriteDiary}

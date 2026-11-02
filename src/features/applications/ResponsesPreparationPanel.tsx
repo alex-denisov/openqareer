@@ -10,6 +10,7 @@ import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { apiErrorMessage } from '../coach/apiClient';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import { mockInterviewVacancyFromApplication } from '../interview/mockInterviewVacancy';
 import { StarStoriesModal } from '../interview/StarStoriesModal';
 import { getStarStories } from '../interview/starStoriesApi';
 import type { StarStoriesSnapshot } from '../../../shared/starStories';
@@ -285,7 +286,12 @@ function PreparationDialogs({
       <InterviewPrepModal
         isOpen={preparationOpen}
         onClose={onClosePreparation}
-        vacancy={{ id: selectedInterview?.id ?? '', title, company }}
+        startWith="mock"
+        vacancy={
+          selectedInterview
+            ? { ...mockInterviewVacancyFromApplication(selectedInterview), title, company }
+            : { id: '', title, company }
+        }
         onAskConsultant={askConsultant}
         onOpenStarStories={onOpenStories}
       />

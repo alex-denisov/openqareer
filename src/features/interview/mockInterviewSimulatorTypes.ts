@@ -9,6 +9,14 @@ export interface MockInterviewVacancy {
   readonly skills?: readonly string[];
   readonly location?: string;
   readonly isRemote?: boolean;
+  /** Отклик, по которому идёт тренировка: сервер берёт роль из него. */
+  readonly applicationId?: string;
+  /** Назначенное интервью по отклику, ISO. */
+  readonly interviewAt?: string;
+  /** Площадка вакансии, например «hh.ru». */
+  readonly source?: string;
+  /** Когда вакансия сохранена в отклике, ISO. */
+  readonly sourceSavedAt?: string;
 }
 
 export interface InterviewDiaryEntry {
