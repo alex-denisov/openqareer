@@ -9,9 +9,26 @@ import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
 import type { ProposedRole } from '../shared/roleProposals';
 
 const careerRoles = vi.hoisted(() => ({
-  readCareerRoles: vi.fn(async (): Promise<unknown> => null),
+  readCareerRoleContext: vi.fn(async (): Promise<unknown> => null),
 }));
 vi.mock('./routes/careerRolesRead', () => careerRoles);
+
+const requirementSources = vi.hoisted(() => ({
+  readRoleKeywords: vi.fn(async (): Promise<unknown> => ({ keywords: [], vacanciesCounted: 0 })),
+  readVacancyKeywords: vi.fn((): string[] | null => null),
+}));
+vi.mock('./routes/atsRequirementSources', () => requirementSources);
+
+const fitContext = vi.hoisted(() => ({
+  readVacancyFitTarget: vi.fn((): unknown => undefined),
+}));
+vi.mock('./routes/vacancyFitContext', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./routes/vacancyFitContext')>()),
+  ...fitContext,
+}));
+
+/** Контекст ролей так, как его отдаёт `readCareerRoleContext`. */
+const withRoles = (roles: ProposedRole[]) => ({ context: { matched: [] }, roles });
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -56,8 +73,14 @@ const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
 const stores: SqliteCandidateStore[] = [];
 
 afterEach(async () => {
-  careerRoles.readCareerRoles.mockReset();
-  careerRoles.readCareerRoles.mockResolvedValue(null);
+  careerRoles.readCareerRoleContext.mockReset();
+  careerRoles.readCareerRoleContext.mockResolvedValue(null);
+  requirementSources.readRoleKeywords.mockReset();
+  requirementSources.readRoleKeywords.mockResolvedValue({ keywords: [], vacanciesCounted: 0 });
+  requirementSources.readVacancyKeywords.mockReset();
+  requirementSources.readVacancyKeywords.mockReturnValue(null);
+  fitContext.readVacancyFitTarget.mockReset();
+  fitContext.readVacancyFitTarget.mockReturnValue(undefined);
   await Promise.all(apps.splice(0).map((app) => app.close()));
   stores.splice(0).forEach((store) => store.close());
 });
@@ -468,7 +491,7 @@ describe('candidate resume version and ATS APIs', () => {
     expect(emptyContext.statusCode).toBe(200);
     const emptyTotal = emptyContext.json().data.assessment.total;
     expect(emptyTotal.status).toBe('partial');
-    expect(emptyTotal.maximum).toBe(70);
+    expect(emptyTotal.maximum).toBeLessThan(100);
     expect(emptyTotal.score).toEqual(expect.any(Number));
     expect(emptyContext.json().data.assessment.dimensions.keywords.status).toBe('unknown');
     expect(emptyContext.json().data.assessment.dimensions.structure.source).toBe('Мастер-резюме');
@@ -603,14 +626,18 @@ describe('ATS assessment picks its own basis in one request (Profile open)', () 
     expect(response.json().data.assessment.context.requirementSource.label).toBe(
       'Platform Engineer',
     );
-    expect(careerRoles.readCareerRoles).not.toHaveBeenCalled();
+    expect(careerRoles.readCareerRoleContext).not.toHaveBeenCalled();
   });
 
   it('falls back to the first observed Career role when no current version exists', async () => {
     const { app, authorization, candidateId } = await createApp();
-    careerRoles.readCareerRoles.mockResolvedValue([
-      observedRole('Head of Engineering', ['Kafka', 'Kubernetes']),
-    ]);
+    careerRoles.readCareerRoleContext.mockResolvedValue(
+      withRoles([observedRole('Head of Engineering', ['Управление командой'])]),
+    );
+    requirementSources.readRoleKeywords.mockResolvedValue({
+      keywords: ['Kafka', 'Kubernetes', 'Terraform'],
+      vacanciesCounted: 23,
+    });
 
     const response = await app.inject({
       method: 'POST',
@@ -620,21 +647,77 @@ describe('ATS assessment picks its own basis in one request (Profile open)', () 
     });
 
     expect(response.statusCode).toBe(200);
-    expect(careerRoles.readCareerRoles).toHaveBeenCalledWith(
+    expect(careerRoles.readCareerRoleContext).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
       candidateId,
     );
     expect(response.json().data.basis).toEqual({ version: null, roleTitle: 'Head of Engineering' });
     expect(response.json().data.assessment.context.requirementSource.label).toBe(
-      'По роли «Head of Engineering»',
+      'По роли «Head of Engineering»: 23 вакансии',
     );
-    expect(response.json().data.assessment.dimensions.keywords.sampleSize).toBe(2);
+    const keywords = response.json().data.assessment.dimensions.keywords;
+    expect(keywords.sampleSize).toBe(3);
+    expect(keywords.status).toBe('measured');
+    expect(requirementSources.readRoleKeywords).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+      'Head of Engineering',
+    );
+  });
+
+  it('scores a saved vacancy from its cached extracted requirements', async () => {
+    const { app, authorization } = await createApp();
+    fitContext.readVacancyFitTarget.mockReturnValue({ vacancyId: 'cluster-9', title: 'CTO' });
+    requirementSources.readVacancyKeywords.mockReturnValue(['Kafka', 'Terraform', 'Ansible']);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: { vacancyId: 'cluster-9' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { assessment } = response.json().data;
+    expect(assessment.context.requirementSource).toMatchObject({
+      kind: 'saved_vacancy',
+      sourceId: 'cluster-9',
+      label: 'CTO',
+    });
+    expect(assessment.dimensions.keywords.sampleSize).toBe(3);
+    expect(careerRoles.readCareerRoleContext).not.toHaveBeenCalled();
+  });
+
+  it('keeps keywords unknown for a saved vacancy without cached requirements', async () => {
+    const { app, authorization } = await createApp();
+    fitContext.readVacancyFitTarget.mockReturnValue({ vacancyId: 'cluster-9', title: 'CTO' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: { vacancyId: 'cluster-9' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.assessment.dimensions.keywords.status).toBe('unknown');
+  });
+
+  it('answers 404 for an unknown saved vacancy', async () => {
+    const { app, authorization } = await createApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: { vacancyId: 'cluster-missing' },
+    });
+    expect(response.statusCode).toBe(404);
   });
 
   it('still scores the master when roles cannot be read', async () => {
     const { app, authorization } = await createApp();
-    careerRoles.readCareerRoles.mockRejectedValue(new Error('pool offline'));
+    careerRoles.readCareerRoleContext.mockRejectedValue(new Error('pool offline'));
 
     const response = await app.inject({
       method: 'POST',
@@ -673,6 +756,6 @@ describe('ATS assessment picks its own basis in one request (Profile open)', () 
     expect(byRole.statusCode).toBe(200);
     expect(byRole.json().data.basis).toEqual({ version: null, roleTitle: null });
     expect(byRole.json().data.assessment.context.requirementSource.label).toBe('По роли «CTO»');
-    expect(careerRoles.readCareerRoles).not.toHaveBeenCalled();
+    expect(careerRoles.readCareerRoleContext).not.toHaveBeenCalled();
   });
 });

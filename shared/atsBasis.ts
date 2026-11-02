@@ -39,3 +39,48 @@ export function roleAtsRequest(roles: readonly ProposedRole[]): AtsRoleBasis | n
   }
   return null;
 }
+
+/** Роли «Карьеры», подтверждённые пулом, в порядке экрана. */
+export function observedCareerRoles(roles: readonly ProposedRole[]): ProposedRole[] {
+  return roles.filter((role) => role.confirmation.state === 'observed');
+}
+
+/** Меньше трёх слов ATS не оценивает: короткий список добираем тегами роли. */
+const MIN_ROLE_KEYWORDS = 3;
+
+function vacancyCountLabel(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return `${count} вакансий`;
+  if (last === 1) return `${count} вакансия`;
+  if (last >= 2 && last <= 4) return `${count} вакансии`;
+  return `${count} вакансий`;
+}
+
+/**
+ * Основа оценки по роли: ключевые слова из требований вакансий роли (10–15 штук),
+ * а теги площадки — только добавка, когда требований извлечено мало.
+ * Подпись называет выборку, чтобы цифра не выглядела рыночным анализом.
+ */
+export function roleKeywordBasis(
+  role: ProposedRole,
+  found: { readonly keywords: readonly string[]; readonly vacanciesCounted: number },
+): AtsRoleBasis | null {
+  const tags = role.confirmation.state === 'observed' ? role.confirmation.repeatedRequirements : [];
+  const requirements = [...found.keywords];
+  if (requirements.length < MIN_ROLE_KEYWORDS) {
+    const seen = new Set(requirements.map((item) => item.toLowerCase()));
+    for (const tag of tags) {
+      if (!seen.has(tag.toLowerCase())) {
+        seen.add(tag.toLowerCase());
+        requirements.push(tag);
+      }
+    }
+  }
+  if (!requirements.length) return null;
+  const sample = found.keywords.length > 0 ? `: ${vacancyCountLabel(found.vacanciesCounted)}` : '';
+  return {
+    request: { title: `По роли «${role.title}»${sample}`, requirements },
+    roleTitle: role.title,
+  };
+}

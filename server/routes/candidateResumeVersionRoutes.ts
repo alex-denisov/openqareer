@@ -18,8 +18,10 @@ import type {
 } from '../domain/resumeVersions';
 import type { ResumeDocument, ResumeStudioProjection } from '../domain/resumeStudioTypes';
 import type { RouteDeps } from './deps';
-import { currentMasterVersion, roleAtsRequest } from '../../shared/atsBasis';
-import { readCareerRoles } from './careerRolesRead';
+import { currentMasterVersion, observedCareerRoles, roleKeywordBasis } from '../../shared/atsBasis';
+import { readCareerRoleContext } from './careerRolesRead';
+import { readRoleKeywords, readVacancyKeywords } from './atsRequirementSources';
+import { readVacancyFitTarget } from './vacancyFitContext';
 import {
   authenticateCandidate,
   csrfError,
@@ -29,6 +31,8 @@ import {
 } from './helpers';
 
 const MAX_PAGE_SIZE = 50;
+/** Ролей, по которым ищем основу оценки: у первой может не быть извлечённых требований. */
+const MAX_ROLES_TRIED = 3;
 const versionIdSchema = z.string().uuid();
 const requirementSchema = z.string().trim().min(1).max(160);
 const createVersionSchema = z.object({
@@ -44,6 +48,7 @@ const atsAssessmentSchema = z.object({
   title: z.string().trim().max(160).optional(),
   requirements: z.array(requirementSchema).max(50).optional(),
   versionId: versionIdSchema.optional(),
+  vacancyId: z.string().trim().min(1).max(200).optional(),
 });
 const versionQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(20),
@@ -507,18 +512,29 @@ function assessTargetedResumeVersion(
 function assessCandidateMasterResume(
   deps: RouteDeps,
   candidateId: string,
-  input: { readonly title?: string; readonly requirements?: readonly string[] },
+  input: {
+    readonly title?: string;
+    readonly requirements?: readonly string[];
+    readonly savedVacancyId?: string;
+  },
   evaluatedAt: string,
 ): ResumeAtsAssessment {
   const master = currentMaster(deps, candidateId);
   const requirements = input.requirements ?? [];
   const requirementSource: AtsRequirementSource | null =
     requirements.length > 0
-      ? {
-          kind: 'candidate_input',
-          label: input.title?.trim() || 'Требования, указанные кандидатом',
-          capturedAt: evaluatedAt,
-        }
+      ? input.savedVacancyId
+        ? {
+            kind: 'saved_vacancy',
+            sourceId: input.savedVacancyId,
+            label: input.title?.trim() || 'Сохранённая вакансия',
+            capturedAt: evaluatedAt,
+          }
+        : {
+            kind: 'candidate_input',
+            label: input.title?.trim() || 'Требования, указанные кандидатом',
+            capturedAt: evaluatedAt,
+          }
       : null;
   return buildResumeAtsAssessment({
     document: master.document,
@@ -570,6 +586,12 @@ async function handleResumeAtsAssessment(
       meta: { requestId: request.id },
     };
   }
+  if (body.data.vacancyId) {
+    if (body.data.versionId || body.data.title !== undefined || body.data.requirements !== undefined) {
+      return invalidVersionAssessmentRequest(reply, request);
+    }
+    return assessSavedVacancy(deps, request, reply, candidate.id, body.data.vacancyId, evaluatedAt);
+  }
   if (body.data.versionId) {
     if (body.data.title !== undefined || body.data.requirements !== undefined) {
       return invalidVersionAssessmentRequest(reply, request);
@@ -596,6 +618,29 @@ async function handleResumeAtsAssessment(
   return { data: { assessment, basis: NO_BASIS }, meta: { requestId: request.id } };
 }
 
+/** Сохранённая вакансия: требования берутся из кэша извлечения, не из тегов и слов названия. */
+function assessSavedVacancy(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidateId: string,
+  vacancyId: string,
+  evaluatedAt: string,
+): unknown {
+  const target = readVacancyFitTarget(deps, vacancyId);
+  if (!target) {
+    return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
+  }
+  const requirements = readVacancyKeywords(deps, vacancyId) ?? [];
+  const assessment = assessCandidateMasterResume(
+    deps,
+    candidateId,
+    { title: target.title, requirements, savedVacancyId: vacancyId },
+    evaluatedAt,
+  );
+  return { data: { assessment, basis: NO_BASIS }, meta: { requestId: request.id } };
+}
+
 const NO_BASIS: AtsBasis = { version: null, roleTitle: null };
 
 /** Что легло в оценку — карточка показывает версию или пометку «по роли». */
@@ -614,7 +659,10 @@ type AtsAssessmentInput = z.infer<typeof atsAssessmentSchema>;
 /** Пустое тело — открытие «Профиля»: версию и роль выбирает сервер (один запрос вместо трёх). */
 function isUnchosenBasis(input: AtsAssessmentInput): boolean {
   return (
-    input.versionId === undefined && input.title === undefined && input.requirements === undefined
+    input.versionId === undefined &&
+    input.vacancyId === undefined &&
+    input.title === undefined &&
+    input.requirements === undefined
   );
 }
 
@@ -649,8 +697,14 @@ async function assessOwnBasis(
 /** Роли не прочитались — оценка остаётся без ключевых слов, а не падает. */
 async function careerRoleBasis(deps: RouteDeps, request: FastifyRequest, candidateId: string) {
   try {
-    const roles = await readCareerRoles(deps, request, candidateId);
-    return roles ? roleAtsRequest(roles) : null;
+    const read = await readCareerRoleContext(deps, request, candidateId);
+    if (!read) return null;
+    for (const role of observedCareerRoles(read.roles).slice(0, MAX_ROLES_TRIED)) {
+      const found = await readRoleKeywords(deps, read.context.matched, role.title);
+      const basis = roleKeywordBasis(role, found);
+      if (basis) return basis;
+    }
+    return null;
   } catch (error) {
     request.log.warn({ error }, 'ats_role_basis_unavailable');
     return null;
