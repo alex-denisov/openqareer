@@ -711,9 +711,8 @@ test.describe('B450 responses workspace', () => {
     await expect(rows).toHaveCount(40);
     await page.getByRole('checkbox', { name: 'Выбрать отклики на странице' }).check();
     await page.getByRole('button', { name: 'Выбрать все 968 по фильтру' }).click();
-    await page.getByRole('combobox', { name: 'Действие' }).selectOption('retry');
-    await page.getByRole('button', { name: 'Проверить', exact: true }).click();
-    const confirm = page.getByRole('button', { name: /Подтвердить \d+/ });
+    await page.getByRole('button', { name: 'Повторить отклик', exact: true }).click();
+    const confirm = page.getByRole('button', { name: /Подтвердить: \d+/ });
     const confirmCount = Number((await confirm.textContent())?.match(/\d+/)?.[0] ?? 0);
     expect(confirmCount).toBeGreaterThan(0);
     await confirm.click();
@@ -877,7 +876,8 @@ test.describe('B450 responses workspace', () => {
 
     const firstCard = page.locator('.career-responses-card').first();
     const title = await firstCard.locator('.career-responses-card-role').innerText();
-    await firstCard.getByRole('button', { name: 'Действия с карточкой' }).click();
+    await firstCard.locator('.career-responses-card-body').click();
+    await page.locator('.career-responses-selected .career-responses-menu-wrap > button').click();
     const menu = page.locator('.career-responses-card-menu').first();
     const downloadPromise = page.waitForEvent('download');
     await menu.getByRole('button', { name: 'Экспорт' }).click();
@@ -896,7 +896,8 @@ test.describe('B450 responses workspace', () => {
     await openResponses(page);
     await waitForResponsesPool(page);
     const reloadedCard = page.locator('.career-responses-card').filter({ hasText: title }).first();
-    await reloadedCard.getByRole('button', { name: 'Действия с карточкой' }).click();
+    await reloadedCard.locator('.career-responses-card-body').click();
+    await page.locator('.career-responses-selected .career-responses-menu-wrap > button').click();
     await expect(page.locator('.career-responses-card-menu').first()).toContainText('Контакт');
   });
 
@@ -1014,8 +1015,8 @@ test.describe('B450 responses workspace', () => {
     await expect(selected).toContainText('Компания 900');
     await expect(selected).toContainText('Материалы');
     await expect(selected).toContainText('Доставка');
-    await expect(selected).toContainText('О компании');
-    await expect(selected).toContainText('проверенная карточка компании не привязана');
+    await expect(selected).toContainText('Досье');
+    await expect(selected).toContainText('Проверенная карточка компании не привязана');
     await selected.screenshot({ path: testInfo.outputPath('b450-selected-response-1440.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await hideConsultantForEvidence(page);
@@ -1050,7 +1051,7 @@ test.describe('B450 responses workspace', () => {
     await failedResponse.click();
 
     const selected = page.locator('.career-responses-selected');
-    await expect(selected).toContainText('Попытка не удалась');
+    await expect(selected).toContainText('Не доставлено');
     await expect(selected).toContainText('Сайт не подтвердил отправку');
   });
 
@@ -1074,10 +1075,11 @@ test.describe('B450 responses workspace', () => {
       .locator('.career-responses-card')
       .filter({ hasText: /Руководитель платформы 3(?!\d)/u });
     await expect(card).toHaveCount(1);
-    await expect(card).toContainText('Пробовали отправить');
-    await expect(card).toContainText(
-      'Подтверждение LinkedIn не получено; доставка не подтверждена.',
-    );
+    await expect(card).toContainText('Отправлено');
+    await card.locator('.career-responses-card-body').click();
+    const selected = page.locator('.career-responses-selected');
+    await expect(selected).toContainText('квитанции нет');
+    await expect(selected).toContainText('Не подтверждено');
   });
 
   test('вкладка подготовки подключает STAR-истории и существующий поток мок-интервью', async ({

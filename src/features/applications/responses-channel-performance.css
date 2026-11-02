@@ -1,22 +1,27 @@
-.career-responses-channel-performance {
-  display: grid;
-  gap: var(--career-space-3);
-  min-inline-size: 0;
-  margin-block-start: var(--career-space-4);
-  padding: var(--career-space-4);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  background: var(--career-surface);
-}
-
 .career-responses-channel-performance h2,
 .career-responses-channel-performance p {
   margin: 0;
 }
 
-.career-responses-channel-performance header p,
 .career-responses-channel-performance__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
   color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-responses-channel-performance__note > svg {
+  flex: none;
+  margin-block-start: 1px;
+}
+
+.career-responses-channel-performance__n {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
 }
 
 .career-responses-channel-performance__table-wrap {
@@ -43,8 +48,17 @@
   text-align: start;
 }
 
+.career-responses-channel-performance table {
+  font-size: var(--career-text-sm);
+}
+
+.career-responses-channel-performance tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
 .career-responses-channel-performance thead {
   color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
   background: var(--career-surface-raised);
 }
 

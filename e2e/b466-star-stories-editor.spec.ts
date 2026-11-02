@@ -186,7 +186,9 @@ test('lists, creates, edits and opens linked STAR stories at 1440 and 390', asyn
         .fill('Сервис снова работает.');
       await page.getByRole('button', { name: 'Сохранить историю' }).click();
       await expect(page.getByRole('button', { name: 'Добавить историю' })).toBeVisible();
-      await expect(page.getByText('Не подтверждено')).toBeVisible();
+      await expect(
+        page.getByLabel('STAR-истории', { exact: true }).getByText('Не подтверждено'),
+      ).toBeVisible();
       await page.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
       await expect(page.getByRole('dialog')).toHaveCount(0);
       if (width <= 760) {
@@ -198,7 +200,8 @@ test('lists, creates, edits and opens linked STAR stories at 1440 and 390', asyn
         const card = page
           .locator('.career-responses-card')
           .filter({ hasText: 'Руководитель инженерной команды' });
-        await card.getByRole('button', { name: 'Подготовиться' }).click();
+        await card.locator('.career-responses-card-body').click();
+        await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
       }
       const prepDialog = page.getByRole('dialog');
       await expect(prepDialog).toBeVisible();

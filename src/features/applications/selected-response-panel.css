@@ -1,213 +1,180 @@
-.career-responses-card-delivery,
-.career-responses-card-stage {
-  display: flex;
-  flex-wrap: wrap;
+/* Mockup 5 `.tag`: one status pill with an icon and a date (B484 R1). */
+.career-responses-status-pill {
+  display: inline-flex;
   align-items: center;
-  gap: var(--career-space-2);
+  justify-self: start;
+  align-self: flex-start;
+  inline-size: fit-content;
+  gap: var(--career-space-1);
+  max-inline-size: 100%;
   margin: 0;
-  padding: var(--career-space-2);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface-raised);
+  padding: 2px var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-space-1);
+  background: transparent;
   color: var(--career-text-soft);
+  font: inherit;
   font-size: var(--career-text-xs);
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.career-responses-card-delivery.is-delivered {
-  border-color: var(--career-success);
+.career-responses-status-pill svg {
+  flex: none;
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.career-responses-status-pill.is-ok,
+.career-responses-status-pill.is-offer {
   color: var(--career-success);
+  border-color: color-mix(in oklch, var(--career-success) 45%, transparent);
 }
 
-.career-responses-card-delivery.is-failed {
-  border-color: var(--career-danger);
+.career-responses-status-pill.is-fail {
   color: var(--career-danger);
+  border-color: color-mix(in oklch, var(--career-danger) 45%, transparent);
 }
 
-.career-responses-card-delivery.is-attempted {
-  border-color: var(--career-warning);
-  color: var(--career-warning);
+.career-responses-status-pill.is-reply,
+.career-responses-status-pill.is-interview {
+  color: var(--career-accent);
+  border-color: color-mix(in oklch, var(--career-accent) 45%, transparent);
 }
 
-.career-responses-card-delivery small {
-  color: var(--career-text-soft);
+.career-responses-status-pill.is-interview {
+  background: var(--career-accent-soft);
+}
+
+.career-responses-status-pill.is-trigger {
+  min-block-size: 32px;
+  cursor: pointer;
 }
 
 .career-responses-selected {
   display: grid;
   gap: var(--career-space-4);
   min-inline-size: 0;
-  margin-block-start: var(--career-space-4);
-  padding: var(--career-space-4);
+  margin-block-start: var(--career-space-6);
+  padding: var(--career-space-6);
   border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-md);
-  background: var(--career-surface);
+  background: var(--career-bg-elevated);
 }
 
-.career-responses-selected__head,
-.career-responses-selected__interview,
-.career-responses-selected__columns,
-.career-responses-selected__actions,
-.career-responses-selected__dossier p {
+.career-responses-selected__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+}
+
+.career-responses-selected__head-actions {
   display: flex;
   align-items: center;
   gap: var(--career-space-3);
 }
 
-.career-responses-selected__head {
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.career-responses-selected__eyebrow {
-  margin: 0 0 var(--career-space-1);
-  color: var(--career-text-soft);
-}
-
-.career-responses-selected h2,
-.career-responses-selected h3,
-.career-responses-selected p {
-  margin-block: 0;
-}
-
-.career-responses-selected h2 {
-  overflow-wrap: anywhere;
-}
-
-.career-responses-selected h3 {
-  margin-block-end: var(--career-space-2);
-}
-
-.career-responses-selected__interview,
-.career-responses-selected__dossier small {
-  color: var(--career-text-soft);
+.career-responses-selected__head-actions .career-responses-menu-wrap {
+  position: relative;
 }
 
 .career-responses-selected__next {
-  display: grid;
-  gap: var(--career-space-1);
-  padding: var(--career-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
   border-radius: var(--career-radius-sm);
   background: var(--career-accent-soft);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
 }
 
-.career-responses-selected__next span,
-.career-responses-selected__columns section > p,
-.career-responses-selected__delivery a {
-  color: var(--career-text-soft);
+.career-responses-selected__next > svg {
+  flex: none;
+  color: var(--career-accent);
 }
 
-.career-responses-selected__columns > section {
-  flex: 1;
-  min-inline-size: 0;
-}
-
-.career-responses-selected__columns ul {
+.career-responses-selected__columns {
   display: grid;
-  gap: var(--career-space-2);
-  margin: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-6);
+}
+
+.career-responses-selected__rows {
+  display: grid;
+  margin: var(--career-space-2) 0 0;
   padding: 0;
   list-style: none;
 }
 
-.career-responses-selected__columns li {
+.career-responses-selected__row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--career-space-3);
   align-items: center;
-  gap: var(--career-space-2);
-  padding-block: var(--career-space-2);
-  border-block-end: var(--career-border-width) solid var(--career-line);
+  padding: var(--career-space-3) 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
 }
 
-.career-responses-selected__columns li strong {
-  color: var(--career-text-soft);
-  text-align: end;
+.career-responses-selected__row:first-child {
+  border-block-start: 0;
 }
 
-.career-responses-selected__delivery {
-  display: grid;
-  gap: var(--career-space-2);
-  padding: var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface-raised);
-}
-
-.career-responses-selected__delivery a {
+.career-responses-selected__row-icon {
   display: inline-flex;
-  align-items: center;
-  gap: var(--career-space-1);
+  color: var(--career-text-soft);
 }
 
-.career-responses-selected__delivery.is-delivered > span:first-child {
-  color: var(--career-success);
+.career-responses-selected__row-text {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+  font-size: var(--career-text-sm);
 }
 
-.career-responses-selected__delivery.is-failed > span:first-child {
-  color: var(--career-danger);
+.career-responses-selected__row-text small,
+.career-responses-selected__row-aside small {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-responses-selected__rows.is-plain .career-responses-selected__row {
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-responses-selected__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
 }
 
 .career-responses-selected__dossier {
   display: grid;
   gap: var(--career-space-2);
-  padding-block-start: var(--career-space-3);
-  border-block-start: var(--career-border-width) solid var(--career-line);
 }
 
-.career-responses-selected__dossier p {
-  flex-wrap: wrap;
+.career-responses-selected__head-actions
+  .career-responses-menu-wrap
+  > .career-responses-status-pill {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 32px;
+  padding: 2px var(--career-space-2);
 }
 
-.career-responses-selected__dossier span,
-.career-responses-selected__dossier small {
-  color: var(--career-text-soft);
-}
-
-.career-responses-selected__actions {
-  flex-wrap: wrap;
-}
-
-@media (max-width: 40rem) {
-  .career-responses-selected {
-    padding: var(--career-space-3);
-  }
-
-  .career-responses-selected__head,
-  .career-responses-selected__columns {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .career-responses-selected__columns li {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .career-responses-selected__columns li strong {
-    grid-column: 2;
-    text-align: start;
-  }
-}
-
-/* B542: строка «Рекрутер» в карточке отклика — его называет напоминание на «Сегодня». */
-.career-responses-contact {
+/* Mockup 5 «Рекрутер» row: same row rhythm as the dossier list. */
+.career-responses-selected__dossier .career-responses-contact {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--career-space-2);
+  justify-content: space-between;
+  gap: var(--career-space-3);
   margin: 0;
-}
-
-.career-responses-contact label {
-  display: grid;
-  flex: 1 1 16rem;
-  gap: var(--career-space-1);
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-}
-
-.career-responses-contact [role='alert'] {
-  flex-basis: 100%;
-  margin: 0;
-  color: var(--career-danger);
-  font-size: var(--career-text-xs);
+  padding: var(--career-space-3) 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
 }
