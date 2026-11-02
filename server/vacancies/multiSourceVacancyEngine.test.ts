@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
+import type { VacancyPoolStore } from './vacancyPoolStore';
 import { clusterVacancies } from './vacancyDeduplicator';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
@@ -599,7 +600,10 @@ describe('MultiSourceVacancyEngine public catalog totals', () => {
         return { items: [], total: typeof q.knownTotal === 'number' ? q.knownTotal : 2 };
       }),
     });
-    return { engine: new MultiSourceVacancyEngine({ sources: [], pool }), queries };
+    return {
+      engine: new MultiSourceVacancyEngine({ sources: [], pool: pool as unknown as VacancyPoolStore }),
+      queries,
+    };
   }
 
   afterEach(() => {
