@@ -26,6 +26,7 @@ import { scheduleSalaryMarketSnapshots } from './salaryMarket/salaryMarketSchedu
 import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
 import { scheduleCurrencyRatesJob } from './currency/cbrRatesSchedule';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
+import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 
 /**
@@ -126,12 +127,14 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
 }
 
 let stopSalaryMarketSnapshots: (() => void) | undefined;
+let stopCatalogRuSummaries: (() => void) | undefined;
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   stopSalaryMarketSnapshots?.();
+  stopCatalogRuSummaries?.();
   log.info({ signal }, 'maintenance-shutdown-started');
   // `restoreAsync` reads the large SQLite pool in bounded chunks, but a
   // single restore can still take more than the old systemd stop window on
@@ -171,6 +174,8 @@ try {
   stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
   scheduleCatalogSitemapJob(semanticDatabase, log);
+  // 03.11: Russian card summaries through the bulk channel, newest indexable cards first.
+  stopCatalogRuSummaries = scheduleCatalogRuSummaryJob(semanticDatabase, config.databasePath, log);
   // B546: market salary estimates stream every salaried vacancy, so only here.
   scheduleMarketSalaryEstimateJob(semanticDatabase, log);
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
