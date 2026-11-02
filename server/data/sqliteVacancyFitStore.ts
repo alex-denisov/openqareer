@@ -100,6 +100,12 @@ export class SqliteVacancyFitStore {
     return { state: row.status === 'pending' && row.last_error ? 'retrying' : row.status, lastError: row.last_error };
   }
 
+  /** A current-version row exists under the input's key; nothing is decrypted. */
+  hasCache(input: VacancyFitInput): boolean {
+    return this.database.prepare('SELECT 1 FROM vacancy_fit_cache WHERE cache_key = ? AND candidate_key = ?')
+      .get(this.cacheKey(input), this.candidateKey(input.candidateId)) !== undefined;
+  }
+
   getCache(input: VacancyFitInput): VacancyFitResult | undefined {
     const current = this.readCache(input);
     if (current) return current;

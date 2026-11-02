@@ -117,6 +117,16 @@ export class VacancyMechanicsRuntime {
     };
   }
   cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
+  /**
+   * The current result exists under this input's key, read without opening it (prod 02.11: the
+   * selection sweep decrypted every counted row to learn it was counted). The key covers the
+   * profile, the text and the current extractor's requirements, so a hit is a current result.
+   */
+  hasCurrentResult(input: VacancyFitInput): boolean {
+    const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
+    if (!input.description.trim() || extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) return false;
+    return this.fit.hasCache({ ...input, requirements: extracted.requirements });
+  }
   /** `backgroundRank` (B580): the selection sweep queues below every page the candidate looks at. */
   enqueue(input: VacancyFitInput, options: FitEnqueueOptions = {}) {
     const requirementInput = { vacancyId: input.vacancyId, description: input.description };
