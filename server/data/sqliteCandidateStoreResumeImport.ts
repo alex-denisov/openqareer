@@ -471,7 +471,8 @@ function draftMemoryIds(draft: ResumeImportCommit['draft']): ReadonlySet<string>
   return new Set([...entryIds, ...roleIds].filter((id): id is string => Boolean(id)));
 }
 
-function referencedMediaIds(draft: ResumeImportCommit['draft']): string[] {
+/** Every `candidate_media` row a draft still points at — the rest gets pruned. */
+export function referencedMediaIds(draft: ResumeImportCommit['draft']): string[] {
   return [
     draft.candidate.photoMediaId,
     ...draft.experience.map((role) => role.employerLogoMediaId),

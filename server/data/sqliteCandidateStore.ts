@@ -1,4 +1,5 @@
 import { recordCandidateGoal, readSeoGoalSummary } from './seoGoalRepository';
+import { SnapshotMemo } from './sqliteSnapshotMemo';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { AssessmentId, AssessmentResult, AssessmentSubmission } from '../domain/assessment';
@@ -121,6 +122,7 @@ import {
   commitSourceConnectionOnly,
   findResumeImportReplay,
   replaceProfileWithImport,
+  referencedMediaIds,
 } from './sqliteCandidateStoreResumeImport';
 import {
   CandidateDocumentRetentionError,
@@ -172,9 +174,11 @@ export class SqliteCandidateStore implements CandidateStore {
   private consultantMethods!: ConsultantStoreMethods;
   private sourceConnections!: SourceConnectionController;
   private readonly applicationTracker: ApplicationTrackerController;
+  private snapshotMemo!: SnapshotMemo<CandidateSnapshot>;
 
   constructor(options: SqliteStoreOptions) {
     this.database = openCandidateDatabase(options.databasePath);
+    this.snapshotMemo = new SnapshotMemo(this.database);
     this.sealedText = new SealedText(options.encryptionKey);
     ({
       assessmentsRepository: this.assessmentsRepository,
@@ -414,6 +418,11 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot {
+    if (stage !== undefined) return this.readSnapshot(candidateId, stage);
+    return this.snapshotMemo.read(candidateId, () => this.readSnapshot(candidateId));
+  }
+
+  private readSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot {
     const candidate = this.requireCandidate(candidateId);
     const parts = this.conversations.snapshotParts(candidateId, stage);
     const native = this.sourceConnections.list(candidateId);
@@ -857,10 +866,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   private requireCandidate(candidateId: string): CandidateIdentity {
     const row = this.database
-      .prepare(
-        `SELECT id, data_class, locale, created_at
-         FROM candidates WHERE id = ?`,
-      )
+      .prepare('SELECT id, data_class, locale, created_at FROM candidates WHERE id = ?')
       .get(candidateId) as CandidateRow | undefined;
     if (!row) {
       throw new CandidateNotFoundError();
@@ -873,10 +879,3 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 }
 
-/** Every `candidate_media` row a draft still points at — the rest gets pruned. */
-function referencedMediaIds(draft: ResumeDraft): string[] {
-  return [
-    draft.candidate.photoMediaId,
-    ...draft.experience.map((role) => role.employerLogoMediaId),
-  ].filter((value): value is string => Boolean(value));
-}
