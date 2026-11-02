@@ -95,7 +95,7 @@ describe('ResponsesBoard columns', () => {
     });
     expect(html).not.toContain('aria-label="Отказ"');
     expect(html).toContain('Нужно действие:');
-    expect(html).toContain('Архив');
+    expect(html).toContain('Закрыто 1');
     expect(html).toContain('Доставка подтверждена');
     expect(html).not.toContain('https://jobs.test/receipt');
     expect(html).toContain('Пробовали отправить');
@@ -247,77 +247,44 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     });
 
     expect(firstCard.classList.contains('is-selected')).toBe(true);
-    expect(container.textContent).toContain('Выбранный отклик');
+    expect(container.querySelector('#career-responses-selected-title')?.textContent).toBe(
+      'Acme, First Role',
+    );
     expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(0);
   });
 
-  it('закрывает открытое меню по нажатию Escape', () => {
+  function openStatusMenu() {
     act(() => {
       root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
     });
-
     const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
-    const menuButton = firstCard.querySelector(
-      '.career-responses-menu-wrap > button',
-    ) as HTMLButtonElement;
-
+    expect(firstCard.querySelector('.career-responses-menu-wrap')).toBeNull();
     act(() => {
-      menuButton.click();
+      (firstCard.querySelector('.career-responses-card-role') as HTMLElement).click();
     });
-    expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
+    const chip = container.querySelector(
+      '.career-responses-selected .career-responses-menu-wrap > button',
+    ) as HTMLButtonElement;
+    act(() => {
+      chip.click();
+    });
+    expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(1);
+  }
 
+  it('B484: меню бывшего «⋮» открывается чипом статуса панели и закрывается Escape', () => {
+    openStatusMenu();
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
     expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(0);
   });
 
-  it('закрывает меню по клику снаружи карточки', () => {
-    act(() => {
-      root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
-    });
-
-    const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
-    const menuButton = firstCard.querySelector(
-      '.career-responses-menu-wrap > button',
-    ) as HTMLButtonElement;
-
-    act(() => {
-      menuButton.click();
-    });
-    expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
-
+  it('B484: меню статуса закрывается по клику снаружи', () => {
+    openStatusMenu();
     act(() => {
       document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
     });
     expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(0);
-  });
-
-  it('держит открытым ровно одно меню на доске: открытие второй карточки закрывает первую', () => {
-    act(() => {
-      root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
-    });
-
-    const cards = container.querySelectorAll('.career-responses-card');
-    const firstMenu = cards[0].querySelector(
-      '.career-responses-menu-wrap > button',
-    ) as HTMLButtonElement;
-    const secondMenu = cards[1].querySelector(
-      '.career-responses-menu-wrap > button',
-    ) as HTMLButtonElement;
-
-    act(() => {
-      firstMenu.click();
-    });
-    expect(cards[0].querySelectorAll('.career-responses-card-menu').length).toBe(1);
-    expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(0);
-
-    act(() => {
-      secondMenu.click();
-    });
-    expect(cards[0].querySelectorAll('.career-responses-card-menu').length).toBe(0);
-    expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(1);
-    expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(1);
   });
 
   describe('D15: фильтрация колонки Интервью', () => {
@@ -713,7 +680,7 @@ describe('ResponsesBoard B450 workspace navigation', () => {
     });
     expect(container.textContent).toContain('Security Lead');
     expect(container.textContent).not.toContain('Platform Engineer');
-    expect(container.textContent).toContain('Напоминание компании просрочено');
+    expect(container.textContent).toContain('Напомнить компании, срок был');
   });
 });
 

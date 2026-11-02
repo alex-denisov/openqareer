@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ResponsesCard } from './ResponsesCard';
+import { CardMenu, ResponsesCard } from './ResponsesCard';
 import type { ApplicationView } from './applicationsApi';
 
 function makeApplication(overrides: Partial<ApplicationView> = {}): ApplicationView {
@@ -36,15 +36,13 @@ function makeApplication(overrides: Partial<ApplicationView> = {}): ApplicationV
   };
 }
 
-describe('ResponsesCard (B414)', () => {
-  it('Критерий 1: Оба select карточки используют один класс стиля', () => {
-    const app = makeApplication({ stage: 'applied' });
-    const html = renderToStaticMarkup(
+describe('ResponsesCard face (B484 R1–R3)', () => {
+  function renderCard(overrides: Partial<ApplicationView> = {}) {
+    return renderToStaticMarkup(
       <ResponsesCard
-        application={app}
+        application={makeApplication(overrides)}
         failed={false}
         conflicted={false}
-        isMenuOpen={true}
         onRetry={() => {}}
         onRefresh={() => {}}
         onSaveNote={() => {}}
@@ -53,7 +51,37 @@ describe('ResponsesCard (B414)', () => {
         onScheduleInterview={async () => {}}
       />,
     );
+  }
 
+  it('shows one dated status pill and a concrete step, no menu and no letter warning', () => {
+    const html = renderCard({ deliveryReceiptRecordedAt: '2026-10-03T09:00:00' });
+    expect(html).toContain('career-responses-status-pill is-ok');
+    expect(html).toContain('Доставлено 03.10');
+    expect(html).not.toContain('Письмо не собрано');
+    expect(html).not.toContain('Действия с карточкой');
+    expect(html).not.toContain('Подготовиться');
+  });
+
+  it('says «Не доставлено» once, with the reason', () => {
+    const html = renderCard({ deliveryReceipt: { kind: 'failure_note', value: 'резюме скрыто' } });
+    expect(html.match(/Не доставлено/g)).toHaveLength(1);
+    expect(html).toContain('Повторить отклик');
+  });
+});
+
+describe('ResponsesCard menu (B414)', () => {
+  it('Критерий 1: Оба select меню используют один класс стиля', () => {
+    const app = makeApplication({ stage: 'applied' });
+    const html = renderToStaticMarkup(
+      <CardMenu
+        application={app}
+        onRefresh={() => {}}
+        onSaveNote={() => {}}
+        onSkip={() => {}}
+        onChangeStage={() => {}}
+        onScheduleInterview={async () => {}}
+      />,
+    );
     // В карточке на этапе applied присутствуют оба select: "Этап" и "Доказательство доставки"
     expect(html).toContain('Этап');
     expect(html).toContain('Доказательство доставки');

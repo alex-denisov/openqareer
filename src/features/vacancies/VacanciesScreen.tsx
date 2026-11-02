@@ -18,6 +18,7 @@ import type { NavigationOptions, PathDestination, PathStep } from '../shell/path
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyLetterScreen } from './VacancyLetterScreen';
 import { useVacancyLetterRoute, type CompanyLetterOpen } from './useVacancyLetterRoute';
+import { letterHostProps } from './vacancyLetterHost';
 import { VacancySourceHealthNotice } from './VacancySourceHealthNotice';
 import {
   countActiveFilters,
@@ -768,8 +769,7 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
           vacancy={letterRequest.vacancy}
           initialCircle={letterRequest.initialCircle}
           onBack={close}
-          onOpenResponses={input.onOpenResponses}
-          onOpenExpert={input.onOpenExpert}
+          {...letterHostProps(input)}
         />
         <VacancyOutreachDialog screenState={screenState} />
       </>

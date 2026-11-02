@@ -620,7 +620,10 @@ test.describe('B232 readability gate', () => {
     await pitchAction.focus();
     await expect(pitchAction).toBeFocused();
     await page.keyboard.press('Enter');
-    const heading = page.getByRole('heading', { name: 'Письмо под вакансию', level: 1 });
+    const heading = page.getByRole('heading', {
+      name: 'Как откликнуться: три круга связей',
+      level: 2,
+    });
     await expect(heading).toBeVisible();
     const back = page.getByRole('button', { name: 'Назад к вакансиям' });
     await expect(back).toBeFocused();
@@ -975,7 +978,8 @@ test.describe('B232 readability gate', () => {
     await page.screenshot({ path: 'output/playwright/B337/board-1176.png' });
 
     // Open card menu by clicking card body
-    await page.getByRole('button', { name: 'Действия с карточкой' }).first().click();
+    await page.locator('.career-responses-card-body').first().click();
+    await page.locator('.career-responses-selected .career-responses-menu-wrap > button').click();
     await expect(page.locator('.career-responses-card-menu')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B337/card-menu-1176.png' });
 

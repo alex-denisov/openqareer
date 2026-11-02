@@ -62,10 +62,10 @@ test('B355 exposes a complete archived-history funnel through a real accessible 
   await seedB486Workspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await openB486Responses(page);
-  const toggle = page.getByRole('button', { name: 'Аналитика этапов', exact: true });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  // B484: stage analytics sits behind «Пояснение» of «Результативность по каналам».
   calls.length = 0;
-  await toggle.click();
+  await page.getByRole('button', { name: 'Пояснение', exact: true }).click();
+  const toggle = page.getByRole('button', { name: 'Аналитика этапов', exact: true });
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   const panel = page.getByRole('region', { name: 'История этапов откликов' });
   await expect(panel.getByText('Карточек в выборке:', { exact: false })).toContainText('102');

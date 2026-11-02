@@ -1,12 +1,20 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import {
   Buildings,
-  CalendarBlank,
+  ChatCircle,
+  CheckCircle,
+  Clock,
   EnvelopeSimple,
   FileText,
   LinkSimple,
-  Sparkle,
+  ListChecks,
+  Microphone,
+  Path,
+  Target,
+  UsersThree,
+  WarningCircle,
 } from '@phosphor-icons/react';
+import { pluralRu } from '../../../shared/pluralRu';
 import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
@@ -14,21 +22,17 @@ import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { mockInterviewVacancyFromApplication } from '../interview/mockInterviewVacancy';
 import { StarStoriesModal } from '../interview/StarStoriesModal';
 import { humanSourceLabel } from './sourceLabels';
-import { waitingLabel } from './waitingLabel';
+import { ResponseStatusMenu, type ResponseStatusMenuProps } from './ResponsesCard';
+import { formatDayMonth, responseNextStep } from './responseCardFace';
 import { FollowUpSentControl } from './ResponsesCardStageControls';
 import { ResponseContactRow } from './ResponseContactRow';
 import { getApplicationContact, saveApplicationContact } from './applicationContactApi';
 import './selected-response-panel.css';
 
-interface SelectedResponsePanelProps {
+type SelectedResponsePanelProps = Omit<ResponseStatusMenuProps, 'application'> & {
   readonly application: ApplicationView;
   readonly onMarkFollowUpSent: () => Promise<void>;
-  readonly onOpenExpert?: (
-    stage: CoachTurnStage,
-    subject?: CoachTurnSubject,
-    subjectTitle?: string,
-  ) => void;
-}
+};
 
 interface SelectedResponseView {
   readonly displayCompany: string;
@@ -99,9 +103,10 @@ function SelectedResponseContent({
       aria-labelledby="career-responses-selected-title"
     >
       <SelectedResponseHeader
-        application={props.application}
+        props={props}
         company={view.displayCompany}
         title={view.title}
+        onDiscuss={view.askConsultant}
       />
       <SelectedResponseDetails
         application={props.application}
@@ -109,8 +114,6 @@ function SelectedResponseContent({
         onMarkFollowUpSent={props.onMarkFollowUpSent}
         onStartPreparation={view.onStartPreparation}
         onOpenStories={view.onOpenStories}
-        onDiscuss={view.askConsultant}
-        hasExpert={Boolean(props.onOpenExpert)}
       />
       <SelectedResponseDialogs
         application={props.application}
@@ -128,28 +131,33 @@ function SelectedResponseContent({
 }
 
 function SelectedResponseHeader({
-  application,
+  props,
   company,
   title,
+  onDiscuss,
 }: {
-  readonly application: ApplicationView;
+  readonly props: SelectedResponsePanelProps;
   readonly company: string;
   readonly title: string;
+  readonly onDiscuss?: () => void;
 }) {
-  const scheduledAt = application.nearestInterview?.scheduledAt;
   return (
     <header className="career-responses-selected__head">
-      <div>
-        <p className="career-responses-selected__eyebrow">Выбранный отклик</p>
-        <h2 id="career-responses-selected-title">
-          {company}, {title}
-        </h2>
+      <h2 id="career-responses-selected-title" className="career-section-title">
+        {company}, {title}
+      </h2>
+      <div className="career-responses-selected__head-actions">
+        <ResponseStatusMenu {...props} />
+        {onDiscuss ? (
+          <button
+            type="button"
+            className="career-btn career-btn-secondary career-btn-sm"
+            onClick={onDiscuss}
+          >
+            <ChatCircle aria-hidden="true" /> Обсудить
+          </button>
+        ) : null}
       </div>
-      {scheduledAt ? (
-        <p className="career-responses-selected__interview">
-          <CalendarBlank aria-hidden="true" /> Интервью {formatDateTime(scheduledAt)}
-        </p>
-      ) : null}
     </header>
   );
 }
@@ -160,16 +168,12 @@ function SelectedResponseDetails({
   onMarkFollowUpSent,
   onStartPreparation,
   onOpenStories,
-  onDiscuss,
-  hasExpert,
 }: {
   readonly application: ApplicationView;
   readonly company: string;
   readonly onMarkFollowUpSent: () => Promise<void>;
   readonly onStartPreparation: () => void;
   readonly onOpenStories: () => void;
-  readonly onDiscuss?: () => void;
-  readonly hasExpert: boolean;
 }) {
   return (
     <>
@@ -183,8 +187,6 @@ function SelectedResponseDetails({
       <SelectedResponseActions
         onStartPreparation={onStartPreparation}
         onOpenStories={onOpenStories}
-        onDiscuss={onDiscuss}
-        hasExpert={hasExpert}
       />
     </>
   );
@@ -193,13 +195,9 @@ function SelectedResponseDetails({
 function SelectedResponseActions({
   onStartPreparation,
   onOpenStories,
-  onDiscuss,
-  hasExpert,
 }: {
   readonly onStartPreparation: () => void;
   readonly onOpenStories: () => void;
-  readonly onDiscuss?: () => void;
-  readonly hasExpert: boolean;
 }) {
   return (
     <div className="career-responses-selected__actions">
@@ -208,24 +206,15 @@ function SelectedResponseActions({
         className="career-btn career-btn-primary career-btn-sm"
         onClick={onStartPreparation}
       >
-        <Sparkle aria-hidden="true" /> Начать мок-интервью
+        <Microphone aria-hidden="true" /> Начать мок-интервью
       </button>
       <button
         type="button"
         className="career-btn career-btn-secondary career-btn-sm"
         onClick={onOpenStories}
       >
-        Открыть STAR-истории
+        <ListChecks aria-hidden="true" /> Открыть STAR-истории
       </button>
-      {hasExpert ? (
-        <button
-          type="button"
-          className="career-btn career-btn-secondary career-btn-sm"
-          onClick={onDiscuss}
-        >
-          Обсудить
-        </button>
-      ) : null}
     </div>
   );
 }
@@ -287,83 +276,153 @@ function createResponseExpertHandler(
 }
 
 function NextStep({ application }: { readonly application: ApplicationView }) {
-  const waiting = waitingLabel({
-    stage: application.stage,
-    whoseTurn: application.whoseTurn,
-    hasMaterials: application.materials.coverLetter || application.materials.resume,
-    followUp: application.followUp,
-    nearestInterviewNeedsPrep:
-      application.nearestInterview !== null && application.nearestInterview.prepStatus !== 'ready',
-    closedReason: application.closedReason,
-  });
-  const text = application.nearestInterview?.scheduledAt
-    ? `Подготовиться к интервью ${formatDateTime(application.nearestInterview.scheduledAt)}`
-    : application.followUp?.dueAt
-      ? `${waiting.text} · срок ${formatDateTime(application.followUp.dueAt)}`
-      : waiting.text;
+  const next = responseNextStep(application);
+  const left = daysLeft(application.followUp?.dueAt ?? application.followUpDueAt);
   return (
-    <div className="career-responses-selected__next" role="status">
-      <span>Следующий шаг</span>
-      <strong>{text}</strong>
+    <p className="career-responses-selected__next" role="status">
+      <Target aria-hidden="true" />
+      <span>
+        Следующий шаг: {lowerFirst(next.text)}.{left === null ? '' : ` ${left}.`}
+      </span>
+    </p>
+  );
+}
+
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLocaleLowerCase('ru-RU') + text.slice(1);
+}
+
+function daysLeft(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const due = new Date(value).getTime();
+  if (Number.isNaN(due)) return null;
+  const days = Math.ceil((due - Date.now()) / 86_400_000);
+  if (days < 0) return 'Срок прошёл';
+  if (days === 0) return 'Срок сегодня';
+  return `Осталось ${pluralRu(days, ['день', 'дня', 'дней'])}`;
+}
+
+interface PanelRowProps {
+  readonly icon: ReactNode;
+  readonly title: string;
+  readonly detail: string;
+  readonly aside?: ReactNode;
+}
+
+function PanelRow({ icon, title, detail, aside }: PanelRowProps) {
+  return (
+    <div className="career-responses-selected__row">
+      <span className="career-responses-selected__row-icon">{icon}</span>
+      <span className="career-responses-selected__row-text">
+        <strong>{title}</strong>
+        <small>{detail}</small>
+      </span>
+      {aside ? <span className="career-responses-selected__row-aside">{aside}</span> : null}
     </div>
   );
 }
 
+/** Mockup 5 «Материалы». Material bodies are not linked to the record yet, so no «Открыть». */
 function Materials({ application }: { readonly application: ApplicationView }) {
+  const { resume, coverLetter } = application.materials;
   return (
     <section aria-labelledby="career-responses-materials-title">
-      <h3 id="career-responses-materials-title">Материалы</h3>
-      <ul>
-        <li>
-          <FileText aria-hidden="true" />
-          <span>Резюме</span>
-          <strong>
-            {application.materials.resume ? 'Подготовлено' : 'Не привязано к отклику'}
-          </strong>
-        </li>
-        <li>
-          <EnvelopeSimple aria-hidden="true" />
-          <span>Сопроводительное письмо</span>
-          <strong>
-            {application.materials.coverLetter ? 'Подготовлено' : 'Не привязано к отклику'}
-          </strong>
-        </li>
-      </ul>
+      <h3 id="career-responses-materials-title" className="career-subsection-title">
+        Материалы
+      </h3>
+      <div className="career-responses-selected__rows">
+        <PanelRow
+          icon={<FileText aria-hidden="true" />}
+          title={resume ? 'Резюме под вакансию' : 'Резюме не привязано'}
+          detail={
+            resume
+              ? 'Версия сохранена вместе с откликом'
+              : 'Отклик ушёл без сохранённой версии резюме'
+          }
+        />
+        <PanelRow
+          icon={<EnvelopeSimple aria-hidden="true" />}
+          title={coverLetter ? 'Письмо' : 'Письмо не привязано'}
+          detail={
+            coverLetter ? 'Текст сохранён вместе с откликом' : 'Отклик ушёл без сохранённого письма'
+          }
+        />
+        <PanelRow
+          icon={<Path aria-hidden="true" />}
+          title="Трек рекомендации"
+          detail="Путь через связи для этого отклика не построен"
+        />
+      </div>
     </section>
   );
 }
 
+/** Mockup 5 «Доставка»: one row per recorded attempt with its receipt. */
 function Delivery({ application }: { readonly application: ApplicationView }) {
   const receipt = application.deliveryReceipt ?? null;
   const state = deliveryState(application.stage, receipt);
-  const label =
-    state === 'delivered'
-      ? 'Доставка подтверждена'
-      : state === 'failed'
-        ? 'Попытка не удалась'
-        : state === 'attempted'
-          ? 'Отправка не подтверждена'
-          : 'Черновик, не отправлено';
+  const channel = application.vacancy?.source
+    ? humanSourceLabel(application.vacancy.source)
+    : 'Канал не указан';
+  const sentAt = formatDayMonth(application.appliedAt);
   const receiptUrl = receipt?.kind === 'confirmation_url' ? safeHttpsUrl(receipt.value) : null;
+  const detail =
+    state === 'prepared'
+      ? 'Черновик, ничего не отправлено'
+      : state === 'failed'
+        ? `Ошибка: ${receipt?.value ?? 'причина не указана'}. Ничего не отправлено.`
+        : [
+            sentAt ? `Отправлено ${sentAt}` : 'Дата отправки не указана',
+            receipt ? 'квитанция сохранена' : 'квитанции нет',
+          ].join(' · ');
   return (
     <section aria-labelledby="career-responses-delivery-title">
-      <h3 id="career-responses-delivery-title">Доставка</h3>
-      <p className={`career-responses-selected__delivery is-${state}`}>
-        <span>{label}</span>
-        {receiptUrl ? (
-          <a href={receiptUrl} target="_blank" rel="noreferrer">
-            <LinkSimple aria-hidden="true" /> Квитанция
-          </a>
-        ) : receipt?.kind === 'failure_note' ? (
-          <span>{receipt.value}</span>
-        ) : receipt ? (
-          <span>Квитанция сохранена</span>
-        ) : null}
-      </p>
+      <h3 id="career-responses-delivery-title" className="career-subsection-title">
+        Доставка
+      </h3>
+      <div className="career-responses-selected__rows">
+        <PanelRow
+          icon={<DeliveryIcon state={state} />}
+          title={channel}
+          detail={detail}
+          aside={
+            receiptUrl ? (
+              <a href={receiptUrl} target="_blank" rel="noreferrer">
+                <LinkSimple aria-hidden="true" /> Квитанция
+              </a>
+            ) : (
+              <span className={`career-responses-status-pill is-${DELIVERY_TONE[state]}`}>
+                {DELIVERY_LABEL[state]}
+              </span>
+            )
+          }
+        />
+      </div>
     </section>
   );
 }
 
+const DELIVERY_LABEL = {
+  prepared: 'Черновик',
+  attempted: 'Не подтверждено',
+  delivered: 'Доставлено',
+  failed: 'Не доставлено',
+} as const;
+
+const DELIVERY_TONE = {
+  prepared: 'draft',
+  attempted: 'sent',
+  delivered: 'ok',
+  failed: 'fail',
+} as const;
+
+function DeliveryIcon({ state }: { readonly state: keyof typeof DELIVERY_LABEL }) {
+  if (state === 'delivered') return <CheckCircle aria-hidden="true" />;
+  if (state === 'failed') return <WarningCircle aria-hidden="true" />;
+  return <Clock aria-hidden="true" />;
+}
+
+/** Mockup 5 company section of the selected response. Interviewers are not in the model yet: an honest empty row. */
 function Dossier({
   application,
   company,
@@ -371,24 +430,37 @@ function Dossier({
   readonly application: ApplicationView;
   readonly company: string;
 }) {
-  const source = application.vacancy?.source;
+  const source = application.vacancy?.source ? humanSourceLabel(application.vacancy.source) : null;
+  const since = formatDayMonth(application.createdAt);
   return (
     <section
       className="career-responses-selected__dossier"
       aria-labelledby="career-responses-dossier-title"
     >
-      <h3 id="career-responses-dossier-title">О компании</h3>
-      <p>
-        <Buildings aria-hidden="true" />
-        <strong>{company}</strong>
-        <span>Локация не указана в отклике</span>
-      </p>
-      <p>
-        Роль: {application.vacancy?.title ?? 'не указана'} · источник:{' '}
-        {source ? humanSourceLabel(source) : 'не указан'}
-      </p>
+      <h3 id="career-responses-dossier-title" className="career-subsection-title">
+        О компании
+      </h3>
+      <div className="career-responses-selected__rows is-plain">
+        <PanelRow
+          icon={<Buildings aria-hidden="true" />}
+          title={`Компания: ${company}`}
+          detail={`Роль: ${application.vacancy?.title ?? 'не указана'}. Проверенная карточка компании не привязана.`}
+          aside={
+            source ? (
+              <small>
+                <LinkSimple aria-hidden="true" /> {source}
+                {since ? `, ${since}` : ''}
+              </small>
+            ) : null
+          }
+        />
+        <PanelRow
+          icon={<UsersThree aria-hidden="true" />}
+          title="Интервьюеры не указаны"
+          detail="Имена появятся, когда компания пришлёт приглашение"
+        />
+      </div>
       <ApplicationContactRow applicationId={application.id} />
-      <small>Показаны сведения из отклика; проверенная карточка компании не привязана.</small>
     </section>
   );
 }
@@ -400,18 +472,6 @@ function ApplicationContactRow({ applicationId }: { readonly applicationId: stri
     [applicationId],
   );
   return <ResponseContactRow key={applicationId} load={load} save={save} />;
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'дата не указана'
-    : date.toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
 }
 
 function safeHttpsUrl(value: string): string | null {

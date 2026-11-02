@@ -61,8 +61,8 @@ describe('ArchivedResponsesSection', () => {
     });
 
     const toggle = container.querySelector('.career-responses-archive-toggle') as HTMLButtonElement;
-    expect(toggle.textContent).toContain('Архив');
-    expect(toggle.textContent).toContain('3');
+    expect(toggle.textContent).toContain('Показать закрытые');
+    expect(container.textContent).toContain('Закрыто 3: вы перенесли в архив 1, нет движения');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
 
     act(() => toggle.click());
@@ -78,7 +78,11 @@ describe('ArchivedResponsesSection', () => {
     const onRestore = vi.fn().mockResolvedValue(undefined);
     act(() => {
       root.render(
-        <ArchivedResponsesSection applications={[application]} initiallyOpen onRestore={onRestore} />,
+        <ArchivedResponsesSection
+          applications={[application]}
+          initiallyOpen
+          onRestore={onRestore}
+        />,
       );
     });
     const restore = Array.from(container.querySelectorAll('button')).find((button) =>

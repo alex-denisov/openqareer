@@ -109,7 +109,8 @@ async function openPreparationDialog(page: Page, width: number): Promise<void> {
       .locator('.career-responses-card')
       .filter({ hasText: interviewApplication.vacancy.title });
     await expect(card).toBeVisible();
-    await card.getByRole('button', { name: 'Подготовиться' }).click();
+    await card.locator('.career-responses-card-body').click();
+    await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
   }
   await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
 }

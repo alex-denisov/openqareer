@@ -493,13 +493,15 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   const card = page.locator('.career-responses-card').filter({ hasText: 'Genetec' });
   await expect(card).toBeVisible();
 
-  await card.getByLabel('Действия с карточкой').click();
-  await card.locator('.career-responses-stage-control select').first().selectOption('interview');
-  await card.locator('input[type="date"]').fill('2026-09-30');
+  await card.locator('.career-responses-card-body').click();
+  await page.locator('.career-responses-selected .career-responses-menu-wrap > button').click();
+  const menu = page.locator('.career-responses-card-menu');
+  await menu.locator('.career-responses-stage-control select').first().selectOption('interview');
+  await menu.locator('input[type="date"]').fill('2026-09-30');
   if (captureEvidence) {
     await page.screenshot({ path: `output/playwright/c70-interview-assignment-${viewport}.png` });
   }
-  await card.getByRole('button', { name: 'Сохранить этап' }).click();
+  await menu.getByRole('button', { name: 'Сохранить этап' }).click();
 
   await openInterviewPrep(page, card);
   await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
@@ -511,12 +513,12 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await openToday(page);
 }
 
-/** 1440 cards carry «Подготовиться»; the 390 tracker opens preparation from the selected response. */
+/** Preparation opens from the selected response panel at every width (B484: no card button). */
 async function openInterviewPrep(page: Page, card: Locator): Promise<void> {
-  const compact = (page.viewportSize()?.width ?? 1440) < 1024;
-  const button = compact
-    ? page.getByRole('button', { name: 'Начать мок-интервью' })
-    : card.getByRole('button', { name: 'Подготовиться' });
+  if ((page.viewportSize()?.width ?? 1440) >= 1024) {
+    await card.locator('.career-responses-card-body').click();
+  }
+  const button = page.getByRole('button', { name: 'Начать мок-интервью' });
   await expect(button).toBeVisible();
   await button.click();
 }
