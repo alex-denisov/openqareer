@@ -610,7 +610,6 @@ export function ProfileReviewAndVersions(props: ProfileReviewAndVersionsProps) {
         />
         <ProfileAtsAssessment
           desktopLayout={desktopLayout}
-          enabled={Boolean(view)}
           refreshKey={view?.savedAt?.updatedAt ?? null}
         />
       </div>

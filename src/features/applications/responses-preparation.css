@@ -1,85 +1,167 @@
+/* R15 «Подготовка»: карточки на 1440, сгруппированные списки iOS-стиля на 390.
+   Брейкпоинт 40rem общий с responses-mobile.css. */
 .career-responses-preparation {
   display: grid;
-  gap: var(--career-space-4);
+  gap: var(--career-space-3);
   min-inline-size: 0;
 }
 
-.career-responses-preparation > section {
-  display: grid;
-  gap: var(--career-space-3);
-  padding: var(--career-space-4);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  background: var(--career-surface);
-}
-
-.career-responses-preparation header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--career-space-3);
-}
-
-.career-responses-preparation h2,
 .career-responses-preparation p {
   margin: 0;
 }
 
-.career-responses-preparation header p,
-.career-responses-preparation small {
-  color: var(--career-text-soft);
+.career-prep-card {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  padding: var(--career-space-6);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  background: var(--career-bg-elevated);
 }
 
-.career-responses-preparation__story-list,
-.career-responses-preparation__materials ul {
-  display: grid;
-  gap: var(--career-space-2);
+.career-prep-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+}
+
+.career-prep-head h2 {
+  flex: 1;
+  min-inline-size: 0;
   margin: 0;
-  padding: 0;
-  list-style: none;
+  font-size: var(--career-text-md);
 }
 
-.career-responses-preparation__story-list li {
+.career-prep-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-prep-list {
   display: grid;
-  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.career-prep-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--career-space-3);
   padding-block: var(--career-space-3);
   border-block-start: var(--career-border-width) solid var(--career-line);
 }
 
-.career-responses-preparation__story-list span,
-.career-responses-preparation__story-list small {
-  color: var(--career-text-soft);
+.career-prep-row:first-child {
+  border-block-start: 0;
 }
 
-.career-responses-preparation__interviews label {
+.career-prep-main {
   display: grid;
   gap: var(--career-space-1);
-  min-inline-size: min(100%, 24rem);
-  color: var(--career-text-soft);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
-.career-responses-preparation__interviews select {
-  min-block-size: max(44px, var(--career-target-min));
+.career-prep-main b {
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.career-prep-main p {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-prep-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-prep-origin svg {
+  flex: none;
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.career-prep-ico,
+.career-prep-chev,
+.career-prep-foot,
+.career-prep-cta {
+  display: none;
+}
+
+.career-prep-stress {
+  padding-block-start: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-prep-select-field {
+  display: grid;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+/* Контрактный select: оболочка + стрелка (shared.css .career-select-wrap). */
+.career-prep-select-field .career-select-wrap {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+  max-inline-size: 28rem;
   min-inline-size: 0;
-  padding: var(--career-space-2) var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line-strong);
+}
+
+.career-prep-select-field .career-select {
+  appearance: none;
+  -webkit-appearance: none;
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding: 0 calc(var(--career-space-3) + 1.25rem + var(--career-space-2)) 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-field-edge);
   border-radius: var(--career-radius-sm);
-  background: var(--career-surface-raised);
+  background: var(--career-bg-elevated);
   color: var(--career-text);
   font: inherit;
+  font-size: var(--career-text-sm);
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 
-.career-responses-preparation__materials {
+.career-prep-select-field .career-select:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.career-prep-select-field .career-select-caret {
+  position: absolute;
+  inset-block: 0;
+  block-size: 100%;
+  inset-inline-end: var(--career-space-3);
   display: grid;
-  gap: var(--career-space-3);
-  padding: var(--career-space-3);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface-raised);
+  place-items: center;
+  color: var(--career-text-soft);
+  pointer-events: none;
 }
 
-.career-responses-preparation__materials li,
-.career-responses-preparation__interview-date {
-  display: flex;
+.career-prep-act,
+.career-prep-start {
+  display: inline-flex;
   align-items: center;
   gap: var(--career-space-2);
 }
@@ -93,7 +175,7 @@
 }
 
 .career-responses-preparation__error button {
-  min-block-size: max(44px, var(--career-target-min));
+  min-block-size: var(--career-target-min);
   padding-inline: var(--career-space-3);
   border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
@@ -104,11 +186,181 @@
 }
 
 @media (max-width: 40rem) {
-  .career-responses-preparation > section {
-    padding: var(--career-space-3);
+  .career-responses-preparation {
+    gap: var(--career-space-5);
+    padding-block-start: var(--career-space-3);
   }
 
-  .career-responses-preparation header {
+  .career-prep-card {
+    gap: var(--career-space-2);
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .career-prep-head {
+    min-block-size: 0;
+    padding-inline: var(--career-space-4);
+    gap: var(--career-space-2);
+  }
+
+  .career-prep-head h2 {
+    flex: none;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  /* «STAR на фактах профиля · N»: счётчик встаёт в заголовок группы. */
+  .career-prep-tag {
+    padding: 0;
+    border: 0;
+    color: var(--career-text-soft);
+  }
+
+  .career-prep-tag::before {
+    content: '·\00a0';
+  }
+
+  .career-prep-open-all {
+    display: none;
+  }
+
+  .career-prep-list {
+    border-radius: 20px;
+    background: var(--career-surface);
+    overflow: hidden;
+  }
+
+  .career-prep-list:empty {
+    display: none;
+  }
+
+  .career-prep-list > p {
+    padding: var(--career-space-3) var(--career-space-4);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+
+  .career-prep-row {
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-3);
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+    border: 0;
+  }
+
+  .career-prep-row + .career-prep-row::before {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 56px 0;
+    border-block-start: 1px solid var(--career-line);
+  }
+
+  .career-prep-ico {
     display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: 9px;
+    background: var(--career-surface-raised);
+    color: var(--career-text-soft);
+  }
+
+  .career-prep-ico svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+
+  .career-prep-main {
+    flex: 1;
+    gap: 0;
+  }
+
+  .career-prep-main b {
+    font-size: var(--career-text-md);
+    font-weight: 500;
+  }
+
+  .career-prep-act {
+    flex: none;
+    min-block-size: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--career-text-dim);
+  }
+
+  /* Вся строка нажимается: кнопка растягивается на строку. */
+  .career-prep-act::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .career-prep-act > svg:not(.career-prep-chev),
+  .career-prep-start {
+    display: none;
+  }
+
+  .career-prep-act-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .career-prep-chev {
+    display: block;
+    inline-size: 14px;
+    block-size: 14px;
+  }
+
+  .career-prep-materials {
+    display: none;
+  }
+
+  .career-prep-stress {
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+    border-block-start: var(--career-border-width) solid var(--career-line);
+    font-size: var(--career-text-sm);
+  }
+
+  .career-prep-foot {
+    display: block;
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+  }
+
+  .career-prep-select-field {
+    padding: var(--career-space-2) var(--career-space-4);
+    border-block-end: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-prep-cta {
+    position: sticky;
+    inset-block-end: calc(
+      var(--career-mobile-nav-height) + var(--career-space-3) + env(safe-area-inset-bottom)
+    );
+    display: flex;
+  }
+
+  .career-prep-cta .career-btn {
+    flex: 1;
+    justify-content: center;
+    gap: var(--career-space-2);
+    min-block-size: 50px;
+    border-radius: 25px;
+    font-size: var(--career-text-md);
+    font-weight: 600;
+    box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
   }
 }

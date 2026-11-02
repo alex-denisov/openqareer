@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ResumeAtsAssessment } from '../../../server/domain/resumeAtsAssessment';
 import type { ResumeVersionSummary } from '../../../server/domain/resumeVersions';
 import {
@@ -120,7 +120,7 @@ function applyResult(result: AssessmentResult, set: AssessmentLoadSetters): void
 
 function startAssessmentLoad(
   requestKey: string | null,
-  cacheKey: string,
+  cacheKey: () => string | null,
   set: AssessmentLoadSetters,
 ): () => void {
   const controller = new AbortController();
@@ -130,7 +130,8 @@ function startAssessmentLoad(
   void loadProfileAssessment(requestKey, controller.signal)
     .then((result) => {
       if (!active) return;
-      remember(cacheKey, result);
+      const key = cacheKey();
+      if (key !== null) remember(key, result);
       applyResult(result, set);
     })
     .catch((reason: unknown) => {
@@ -152,7 +153,7 @@ export function useProfileAtsAssessment(
   const { enabled = true, request, refreshKey = null } = options;
   const requestKey = request === undefined ? null : JSON.stringify(request);
   const cacheKey = cacheKeyOf(requestKey, refreshKey);
-  const cached = assessmentCache.get(cacheKey);
+  const cached = refreshKey === null ? undefined : assessmentCache.get(cacheKey);
   const [assessment, setAssessment] = useState<ResumeAtsAssessment | null>(
     cached?.assessment ?? null,
   );
@@ -164,6 +165,10 @@ export function useProfileAtsAssessment(
   const [error, setError] = useState<string | null>(null);
   const [refreshSequence, setRefreshSequence] = useState(0);
   const refresh = useCallback(() => setRefreshSequence((value) => value + 1), []);
+  const loadRevision = useLoadRevision(refreshKey);
+  // The result is kept under the revision known when it lands, never under «not read yet».
+  const latestCacheKey = useRef<string | null>(null);
+  latestCacheKey.current = refreshKey === null ? null : cacheKey;
 
   useEffect(() => {
     if (!enabled) {
@@ -171,17 +176,29 @@ export function useProfileAtsAssessment(
       return;
     }
     const set = { setAssessment, setSourceVersion, setRoleBasis, setLoading, setError };
-    const hit = refreshSequence === 0 ? assessmentCache.get(cacheKey) : undefined;
+    const key = latestCacheKey.current;
+    const hit = refreshSequence === 0 && key !== null ? assessmentCache.get(key) : undefined;
     if (hit) {
       applyResult(hit, set);
       setError(null);
       setLoading(false);
       return;
     }
-    return startAssessmentLoad(requestKey, cacheKey, set);
-  }, [enabled, cacheKey, requestKey, refreshSequence]);
+    return startAssessmentLoad(requestKey, () => latestCacheKey.current, set);
+  }, [enabled, loadRevision, requestKey, refreshSequence]);
 
   useEffect(() => subscribeToVersionChanges(refresh), [refresh]);
 
   return { assessment, sourceVersion, roleBasis, loading, error, refresh };
+}
+
+/**
+ * The assessment starts before the profile is read (prod 02.11: waiting for it
+ * cost about a second). The first revision to arrive is the one that load is
+ * already scoring, so only a later change starts another load.
+ */
+function useLoadRevision(refreshKey: string | null): string | null {
+  const [first, setFirst] = useState(refreshKey);
+  if (first === null && refreshKey !== null) setFirst(refreshKey);
+  return refreshKey === null || refreshKey === first ? null : refreshKey;
 }

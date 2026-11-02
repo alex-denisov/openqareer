@@ -273,7 +273,8 @@ describe('ProfileScreenSurface — states', () => {
     expect(skillsWithQuizHandler).toContain('Подтвердить навык');
     expect(skillsWithQuizHandler).not.toContain('Пройти квиз');
     expect(profileHtml).toContain('career-profile-screen-ats-card');
-    expect(profileHtml).toContain('aria-label="Оценка ATS неизвестна"');
+    // ATS starts with the screen, not after the profile read (02.11).
+    expect(profileHtml).toContain('aria-label="Оценка ATS рассчитывается"');
     expect(profileHtml).toContain('из 100');
     expect(profileHtml).not.toContain('>JSON<');
   });

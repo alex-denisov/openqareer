@@ -4,11 +4,16 @@ import { DatabaseSync } from 'node:sqlite';
 import { SealedText } from './sealedText';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 
+export type CandidateCompanyWantStage = 'want' | 'path' | 'waiting';
+
 export interface CandidateCompanyWant {
   readonly companyKey: string;
   readonly companyName: string;
   readonly nextStep: string | null;
   readonly nextStepDueAt: string | null;
+  /** Null means the stage is derived from vacancies and recruiter search. */
+  readonly stage: CandidateCompanyWantStage | null;
+  readonly createdAt: string;
   readonly updatedAt: string;
 }
 
@@ -17,7 +22,16 @@ interface WantRow {
   company_name: string;
   next_step_cipher: string | null;
   next_step_due_at: string | null;
+  stage: string | null;
+  created_at: string;
   updated_at: string;
+}
+
+const WANT_COLUMNS =
+  'company_key, company_name, next_step_cipher, next_step_due_at, stage, created_at, updated_at';
+
+function parseStage(value: string | null): CandidateCompanyWantStage | null {
+  return value === 'want' || value === 'path' || value === 'waiting' ? value : null;
 }
 
 type RepositoryOptions = DatabaseSync | { databasePath: string; encryptionKey: Buffer };
@@ -68,11 +82,17 @@ export class SqliteCandidateCompanyWantsRepository {
         PRIMARY KEY (candidate_id, company_key)
       ) STRICT;
     `);
+    const columns = this.database
+      .prepare('PRAGMA table_info(candidate_company_wants)')
+      .all() as unknown as { name: string }[];
+    if (!columns.some((column) => column.name === 'stage')) {
+      this.database.exec('ALTER TABLE candidate_company_wants ADD COLUMN stage TEXT');
+    }
   }
 
   list(candidateId: string): CandidateCompanyWant[] {
     const rows = this.database.prepare(`
-      SELECT company_key, company_name, next_step_cipher, next_step_due_at, updated_at
+      SELECT ${WANT_COLUMNS}
       FROM candidate_company_wants WHERE candidate_id = ? ORDER BY company_name COLLATE NOCASE
     `).all(candidateId) as unknown as WantRow[];
     return rows.map((row) => this.toWant(candidateId, row));
@@ -80,7 +100,7 @@ export class SqliteCandidateCompanyWantsRepository {
 
   get(candidateId: string, companyKey: string): CandidateCompanyWant | null {
     const row = this.database.prepare(`
-      SELECT company_key, company_name, next_step_cipher, next_step_due_at, updated_at
+      SELECT ${WANT_COLUMNS}
       FROM candidate_company_wants WHERE candidate_id = ? AND company_key = ?
     `).get(candidateId, companyKey) as WantRow | undefined;
     return row ? this.toWant(candidateId, row) : null;
@@ -166,6 +186,19 @@ export class SqliteCandidateCompanyWantsRepository {
     return new Set(rows.map((row) => row.company_key));
   }
 
+  setStage(
+    candidateId: string,
+    companyKey: string,
+    stage: CandidateCompanyWantStage | null,
+    now = new Date().toISOString(),
+  ): boolean {
+    const result = this.database.prepare(`
+      UPDATE candidate_company_wants SET stage = ?, updated_at = ?
+      WHERE candidate_id = ? AND company_key = ?
+    `).run(stage, now, candidateId, companyKey);
+    return Number(result.changes) === 1;
+  }
+
   remove(candidateId: string, companyKey: string): boolean {
     const result = this.database.prepare(
       'DELETE FROM candidate_company_wants WHERE candidate_id = ? AND company_key = ?',
@@ -185,6 +218,8 @@ export class SqliteCandidateCompanyWantsRepository {
         ? this.sealedText.open(row.next_step_cipher, this.associatedData(candidateId, row.company_key))
         : null,
       nextStepDueAt: row.next_step_cipher ? row.next_step_due_at : null,
+      stage: parseStage(row.stage),
+      createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }

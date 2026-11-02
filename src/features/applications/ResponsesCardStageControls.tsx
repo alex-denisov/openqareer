@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   patchApplication,
   patchApplicationInterview,
@@ -32,10 +32,14 @@ export function InterviewDebriefControl({
   application,
   onSaveDebrief,
   onRefresh,
+  label = 'Дебрифинг',
+  buttonClassName = 'career-btn career-btn-secondary career-btn-sm',
 }: {
   application: ApplicationView;
   onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>;
   onRefresh?: () => void;
+  label?: ReactNode;
+  buttonClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -52,10 +56,10 @@ export function InterviewDebriefControl({
     <div className="career-responses-debrief-action">
       <button
         type="button"
-        className="career-btn career-btn-secondary career-btn-sm"
+        className={buttonClassName}
         onClick={() => setOpen(true)}
       >
-        Дебрифинг
+        {label}
       </button>
       <InterviewDebriefModal
         isOpen={open}

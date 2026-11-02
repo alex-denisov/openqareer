@@ -40,7 +40,11 @@ import './mock-interview-flow.css';
 type Flow = ReturnType<typeof useMockInterviewController>;
 
 export function MockInterviewSimulator(props: MockInterviewSimulatorProps) {
-  const flow = useMockInterviewController(props.vacancy.title, props.onBackToPreparation);
+  const flow = useMockInterviewController(
+    props.vacancy.title,
+    props.onBackToPreparation,
+    props.initialStressMode,
+  );
   useEscapeLayer(flow.returnToPreparation, true);
 
   return (

@@ -253,10 +253,10 @@ function buildMatchedResponse(
         catalogTotals,
       );
     },
+    { continuing: filters.offset > 0 },
   );
   const page = buildMatchedVacancyPage(list.filtered, filters.offset, undefined, list.pageOffsets);
-  const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
-  const titleParseStartedAt = performance.now();
+  const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt), titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
     titleParseStore.getByKey(key),
   );

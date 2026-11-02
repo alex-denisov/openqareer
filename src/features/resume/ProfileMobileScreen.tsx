@@ -252,7 +252,6 @@ export function ProfileMobileScreen(props: ProfileMobileScreenProps) {
   const { activeTab, onTab, setLocalTab } = useMobileTab(props);
   // Starts on the first profile read, so the key does not change under a running assessment.
   const ats = useProfileAtsAssessment({
-    enabled: Boolean(props.view),
     refreshKey: props.view?.savedAt?.updatedAt ?? null,
   });
   const versionCount = useVersionCount(props.candidateId);
