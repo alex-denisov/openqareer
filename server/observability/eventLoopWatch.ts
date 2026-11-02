@@ -1,5 +1,6 @@
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 import type { FastifyInstance } from 'fastify';
+import { redactRequestUrlForLogs } from './redactRequestUrl';
 
 type WatchLog = (fields: Record<string, unknown>, message: string) => void;
 
@@ -48,7 +49,7 @@ function trackRequests(app: FastifyInstance): Map<string, Tracked> {
   app.addHook('onRequest', async (request) => {
     tracked.set(request.id, {
       method: request.method,
-      url: request.url,
+      url: redactRequestUrlForLogs(request.url),
       startedAt: performance.now(),
     });
   });

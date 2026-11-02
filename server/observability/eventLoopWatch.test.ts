@@ -20,12 +20,12 @@ describe('event loop watch (CPO prod 02.11: /health 37 s, static files 23 s)', (
       return { ok: true };
     });
     await app.ready();
-    await app.inject({ url: '/slow?offset=7' });
+    await app.inject({ url: '/slow?offset=7&token=secret-value' });
     await new Promise((resolve) => setTimeout(resolve, 40));
     await app.close();
     const stall = log.mock.calls.find(([, msg]) => msg === 'event-loop-stall')?.[0];
     expect(stall?.stallMs).toBeGreaterThanOrEqual(150);
-    expect(stall?.inFlight).toEqual([expect.objectContaining({ url: '/slow?offset=7' })]);
+    expect(stall?.inFlight).toEqual([expect.objectContaining({ url: '/slow?offset=7&token=%5BREDACTED%5D' })]);
   });
 
   it('reports loop delay per period', async () => {

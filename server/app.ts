@@ -1,5 +1,6 @@
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
+import { redactRequestUrlForLogs } from './observability/redactRequestUrl';
 import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
 import { SqliteMarketSalaryEstimateStore } from './vacancies/marketSalary/sqliteMarketSalaryEstimateStore';
 import cookie from '@fastify/cookie';
@@ -206,24 +207,7 @@ function loggerOptions(
   };
 }
 
-export function redactRequestUrlForLogs(value: unknown): string {
-  if (typeof value !== 'string') return '[REDACTED]';
-  try {
-    const url = new URL(value, 'http://localhost');
-    for (const key of [...url.searchParams.keys()]) {
-      const normalized = key.toLowerCase();
-      if (
-        ['token', 'code', 'secret', 'password'].includes(normalized) ||
-        normalized.endsWith('_token')
-      ) {
-        url.searchParams.set(key, '[REDACTED]');
-      }
-    }
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return '[REDACTED]';
-  }
-}
+export { redactRequestUrlForLogs };
 
 /** B557: вошедший — действующая сессия или токен кандидата; лимиты частоты его не касаются. */
 function signedInCheck(
