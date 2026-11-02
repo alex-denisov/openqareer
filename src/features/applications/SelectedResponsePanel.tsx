@@ -436,7 +436,7 @@ function Dossier({
       aria-labelledby="career-responses-dossier-title"
     >
       <h3 id="career-responses-dossier-title" className="career-subsection-title">
-        Досье
+        О компании
       </h3>
       <div className="career-responses-selected__rows is-plain">
         <PanelRow
