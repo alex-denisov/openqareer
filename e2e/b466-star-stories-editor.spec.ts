@@ -191,33 +191,20 @@ test('lists, creates, edits and opens linked STAR stories at 1440 and 390', asyn
       ).toBeVisible();
       await page.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      if (width <= 760) {
-        await page
-          .locator('.career-responses-selected')
-          .getByRole('button', { name: 'Начать мок-интервью' })
-          .click();
-      } else {
+      if (width > 760) {
         const card = page
           .locator('.career-responses-card')
           .filter({ hasText: 'Руководитель инженерной команды' });
         await card.locator('.career-responses-card-body').click();
-        await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
       }
-      const prepDialog = page.getByRole('dialog');
-      await expect(prepDialog).toBeVisible();
-      const prepBackground = await prepDialog.evaluate(
-        (element) => getComputedStyle(element).backgroundColor,
-      );
-      expect(prepBackground).not.toBe('rgba(0, 0, 0, 0)');
-      await prepDialog.getByRole('tab', { name: 'Вопросы к вам (STAR)' }).click();
-      const openStoriesFromPrep = prepDialog.getByRole('button', {
-        name: 'Открыть STAR-истории',
-      });
-      await expect(openStoriesFromPrep).toBeVisible();
-      await capture(page, `${width}-star-stories-from-prep`);
-      await openStoriesFromPrep.click();
+      // Макет 5: «Начать мок-интервью» запускает тренажёр; STAR-истории открываются из панели отклика.
+      await page
+        .locator('.career-responses-selected')
+        .getByRole('button', { name: 'Открыть STAR-истории' })
+        .click();
       await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toBeVisible();
       await expect(page.getByRole('dialog')).toHaveCount(1);
+      await capture(page, `${width}-star-stories-from-response`);
       await page.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
     } finally {
       await context.close();

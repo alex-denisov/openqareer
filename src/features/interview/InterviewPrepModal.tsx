@@ -52,10 +52,11 @@ function InterviewPrepModalState(props: InterviewPrepModalProps) {
     afterStarStoriesClose.current = null;
   }, []);
   const onClose = props.onClose;
+  const startsWithMock = props.startInMockInterview;
   const handleEscape = useCallback(() => {
-    if (mockInterviewOpen) setMockInterviewOpen(false);
+    if (mockInterviewOpen && !startsWithMock) setMockInterviewOpen(false);
     else onClose();
-  }, [mockInterviewOpen, onClose]);
+  }, [mockInterviewOpen, onClose, startsWithMock]);
   useModalAccessibility(props.isOpen, handleEscape, cardRef);
   if (!props.isOpen) return null;
   const brief = generateInterviewPrepBrief({
@@ -139,7 +140,7 @@ function InterviewPrepBackdrop({ props, tab, brief, cardRef, dialogRef, mockInte
         <MockInterviewSimulator
           vacancy={props.vacancy}
           dialogRef={dialogRef}
-          onBackToPreparation={() => setMockInterviewOpen(false)}
+          onBackToPreparation={() => (props.startInMockInterview ? props.onClose() : setMockInterviewOpen(false))}
           onOpenStarStories={openStarStories}
           onAskConsultant={props.onAskConsultant}
           onWriteDiary={props.onWriteDiary}

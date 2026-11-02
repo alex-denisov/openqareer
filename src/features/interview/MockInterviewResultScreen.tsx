@@ -1,11 +1,17 @@
 import { InterviewDiaryAction } from './InterviewDiaryAction';
 import { useState } from 'react';
-import { ArrowClockwise, CheckCircle, Notebook } from '@phosphor-icons/react';
+import { ArrowClockwise, CheckCircle, Circle, Notebook, WarningCircle } from '@phosphor-icons/react';
 import type { InterviewSessionView } from './interviewSimulatorApi';
-import { deriveInterviewRecommendations, presentInterviewTopics } from './interviewSimulatorPresentation';
+import {
+  deriveInterviewRecommendations,
+  formatSourceDate,
+  presentInterviewTopics,
+  questionWord,
+} from './interviewSimulatorPresentation';
 import type { InterviewDiaryPort, MockInterviewSimulatorProps } from './mockInterviewSimulatorTypes';
 import type { MockInterviewFlow } from './useMockInterviewController';
-import { InlineError, MissingQuestion, SourcePanel } from './MockInterviewSupport';
+import { InlineError, MissingQuestion } from './MockInterviewSupport';
+import { SourcePanel } from './MockInterviewSourcePanel';
 
 export function ResultScreen({ flow, props }: {
   readonly flow: MockInterviewFlow;
@@ -18,15 +24,8 @@ export function ResultScreen({ flow, props }: {
   return (
     <div className="career-mock-layout career-mock-result-layout">
       <main className="career-mock-panel career-mock-result-panel">
-        <header className="career-mock-result-heading">
-          <CheckCircle aria-hidden="true" className="career-mock-result-icon" />
-          <div>
-            <h2>Мок-интервью завершено</h2>
-            <p>{session.questions.length} вопросов. Это тренировка, не прогноз результата реального интервью.</p>
-          </div>
-        </header>
         <TopicList topics={topics} />
-        <RecommendationList recommendations={recommendations} />
+        <RecommendationList recommendations={recommendations} interviewAt={props.vacancy.interviewAt} />
         <ResultActions
           session={session}
           busy={flow.operation !== null}
@@ -36,7 +35,7 @@ export function ResultScreen({ flow, props }: {
         />
       </main>
       <SourcePanel
-        session={session}
+        vacancy={props.vacancy}
         stories={flow.starStories}
         storiesError={flow.starStoriesError}
         onOpenStories={() => props.onOpenStarStories(() => flow.retryLoad())}
@@ -48,30 +47,50 @@ export function ResultScreen({ flow, props }: {
 function TopicList({ topics }: { readonly topics: ReturnType<typeof presentInterviewTopics> }) {
   return (
     <section className="career-mock-topic-list" aria-labelledby="career-mock-topic-title">
-      <h3 id="career-mock-topic-title">Итог по темам</h3>
-      <ul>
+      <h2 id="career-mock-topic-title">Итог по темам</h2>
+      <ul className="career-mock-criteria">
         {topics.map((topic) => (
           <li key={topic.topic}>
-            <div className="career-mock-topic-heading">
-              <strong>{topic.topic}</strong>
-              <span className="career-mock-status">{topic.status}</span>
+            <TopicIcon status={topic.status} />
+            <div>
+              <div className="career-mock-criterion-title">
+                <strong>{topic.topic}</strong>
+                <span className={`career-mock-status career-mock-status--${STATUS_POINTS[topic.status]}`}>{topic.status}</span>
+              </div>
+              <p>{topic.answered} {questionWord(topic.answered)}, оценено по критериям</p>
             </div>
-            <p>{topic.answered} {questionWord(topic.answered)} оценено по рубрике.</p>
           </li>
         ))}
       </ul>
-      <p className="career-mock-muted">Общего балла нет. Он не описывает готовность к реальному интервью.</p>
+      <p className="career-mock-muted">Без общего балла: на {topics.reduce((sum, topic) => sum + topic.answered, 0)} ответах он ничего не доказывает.</p>
     </section>
   );
 }
 
-function RecommendationList({ recommendations }: { readonly recommendations: readonly string[] }) {
+const STATUS_POINTS: Readonly<Record<ReturnType<typeof presentInterviewTopics>[number]['status'], string>> = {
+  Есть: '2',
+  Частично: '1',
+  Нет: '0',
+  'Не оценено': 'none',
+};
+
+function TopicIcon({ status }: { readonly status: ReturnType<typeof presentInterviewTopics>[number]['status'] }) {
+  if (status === 'Есть') return <CheckCircle aria-hidden="true" className="career-mock-criterion-icon is-yes" />;
+  if (status === 'Частично') return <WarningCircle aria-hidden="true" className="career-mock-criterion-icon is-partial" />;
+  return <Circle aria-hidden="true" className="career-mock-criterion-icon is-no" />;
+}
+
+function RecommendationList({ recommendations, interviewAt }: {
+  readonly recommendations: readonly string[];
+  readonly interviewAt?: string;
+}) {
+  const date = interviewAt ? formatSourceDate(interviewAt) : null;
   return (
     <section className="career-mock-recommendations" aria-labelledby="career-mock-recommendations-title">
-      <h3 id="career-mock-recommendations-title">Что подготовить перед следующим интервью</h3>
+      <h2 id="career-mock-recommendations-title">{date ? `Что сделать до интервью ${date}` : 'Что сделать до интервью'}</h2>
       {recommendations.length ? (
         <ul>{recommendations.map((item) => <li key={item}>{item}</li>)}</ul>
-      ) : <p>По сохранённым ответам нет рекомендаций по рубрике.</p>}
+      ) : <p className="career-mock-muted">По сохранённым ответам все критерии закрыты.</p>}
     </section>
   );
 }
@@ -114,13 +133,4 @@ function ResultActions({ session, busy, diary, onStartAgain, onBack }: {
       {diaryError ? <InlineError error={diaryError} /> : null}
     </div>
   );
-}
-
-function questionWord(count: number): string {
-  const lastTwo = count % 100;
-  if (lastTwo >= 11 && lastTwo <= 14) return 'вопросов';
-  const last = count % 10;
-  if (last === 1) return 'вопрос';
-  if (last >= 2 && last <= 4) return 'вопроса';
-  return 'вопросов';
 }

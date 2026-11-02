@@ -1,4 +1,6 @@
-export const INTERVIEW_QUESTION_COUNT = 5;
+import { INTERVIEW_QUESTION_COUNT } from '../../shared/interviewPlan';
+
+export { INTERVIEW_QUESTION_COUNT };
 
 export type InterviewQuestionType = 'behavioral' | 'system_design';
 export type InterviewAnswerMode = 'text' | 'voice';

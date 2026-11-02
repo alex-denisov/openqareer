@@ -1197,6 +1197,6 @@ test.describe('B450 responses workspace', () => {
     await expect(simulator).toBeVisible();
     await simulator.getByRole('button', { name: 'Начать', exact: true }).click();
     const activeSession = page.getByRole('dialog', { name: 'Вопрос' });
-    await expect(activeSession.getByRole('heading', { name: /Вопрос 1 из/ })).toBeVisible();
+    await expect(activeSession.locator('.career-mock-progress-count')).toContainText('1 /');
   });
 });

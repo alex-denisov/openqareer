@@ -1,0 +1,503 @@
+/* B465: экран «Мок-интервью» по макету 14 — шапка раздела, карточка тренировки, источники, состояния. */
+
+/* M1, M7: на 1440 тренажёр лежит под шапкой кабинета; страница под ним не прокручивается и не видна. */
+html:has(.career-interview-backdrop--simulator),
+body:has(.career-interview-backdrop--simulator),
+.career-shell:has(.career-interview-backdrop--simulator) .career-main {
+  overflow: hidden;
+}
+
+@media (min-width: 761px) {
+  .career-interview-backdrop--simulator {
+    inset-block-start: calc(var(--career-target-min) + var(--career-space-5));
+  }
+
+  .career-shell:has(.career-interview-backdrop--simulator) .career-desktop-topbar {
+    z-index: 10000;
+  }
+
+  .career-shell:has(.career-mock-section-title-portal) .career-desktop-topbar > h1:not(.career-mock-section-title-portal),
+  .career-shell:has(.career-mock-section-title-portal) .career-desktop-topbar-hint {
+    display: none;
+  }
+
+  .career-desktop-topbar > .career-mock-section-title-portal {
+    order: -1;
+  }
+}
+
+.career-mock-section-title-portal {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--career-text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* M2: карточка тренировки. */
+.career-mock-session-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--career-space-4);
+  padding: var(--career-space-3) var(--career-space-6) var(--career-space-5);
+}
+
+.career-mock-session-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.career-mock-session-bar h2 {
+  margin: 0;
+  min-inline-size: 0;
+  font-size: var(--career-text-md);
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.career-mock-date-chip,
+.career-mock-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  inline-size: fit-content;
+  padding: var(--career-space-1) var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.career-mock-date-chip {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+}
+
+.career-mock-mode-chip.is-done {
+  border-color: var(--career-success);
+  color: var(--career-success);
+}
+
+.career-mock-session-bar .career-mock-session-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin-inline-start: auto;
+  padding: 0;
+  border: 0;
+  color: var(--career-text-soft);
+  background: transparent;
+}
+
+.career-mock-session-summary {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+
+/* M3: подписи-счёты и стресс-режим одной строкой. */
+.career-mock-stress-option label {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+/* M5: «Позже» — вторичная кнопка. */
+.career-mock-action-row .career-mock-later {
+  min-inline-size: 0;
+}
+
+/* M4: «На чём строятся вопросы». */
+.career-mock-source-list {
+  display: grid;
+  gap: var(--career-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-mock-source-list li {
+  display: grid;
+  grid-template-columns: var(--career-space-5) minmax(0, 1fr);
+  gap: var(--career-space-2);
+  align-items: start;
+}
+
+.career-mock-source-icon {
+  display: inline-flex;
+  padding-block-start: 2px;
+  color: var(--career-text-soft);
+}
+
+.career-mock-source-icon svg {
+  inline-size: var(--career-space-4);
+  block-size: var(--career-space-4);
+}
+
+.career-mock-source-list li.is-active .career-mock-source-icon {
+  color: var(--career-accent);
+}
+
+.career-mock-source-copy {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.career-mock-source-copy strong {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 650;
+}
+
+.career-mock-source-copy span {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.career-mock-source-origin {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-mock-source-panel .career-mock-source-disclaimer {
+  padding-block-start: 0;
+  font-size: var(--career-text-xs);
+}
+
+/* M6: карточки состояний. */
+.career-mock-progress-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+}
+
+.career-mock-panel .career-mock-progress-block h2,
+.career-mock-topic-list h2,
+.career-mock-recommendations h2 {
+  margin: 0;
+  font-size: var(--career-text-md);
+  line-height: 1.35;
+}
+
+.career-mock-progress-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.career-mock-progress-count .career-mock-progress {
+  inline-size: calc(var(--career-space-8) * 4);
+}
+
+.career-mock-composer {
+  position: relative;
+  display: block;
+  margin-block-start: auto;
+  padding: 0;
+}
+
+.career-mock-composer textarea {
+  display: block;
+  min-block-size: calc(var(--career-target-min) + var(--career-space-5));
+  padding-inline-end: calc(var(--career-target-min) + var(--career-space-4));
+  resize: none;
+}
+
+.career-mock-composer .career-mock-send {
+  position: absolute;
+  inset-block-start: var(--career-space-2);
+  inset-inline-end: var(--career-space-2);
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  min-inline-size: 0;
+  block-size: var(--career-target-min);
+  border: 0;
+  border-radius: var(--career-radius-sm);
+  color: var(--career-on-accent, var(--career-bg));
+  background: var(--career-accent);
+  cursor: pointer;
+}
+
+.career-mock-composer .career-mock-send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.career-mock-recording {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  font-size: var(--career-text-sm);
+}
+
+.career-mock-recording-dot {
+  inline-size: var(--career-space-2);
+  block-size: var(--career-space-2);
+  border-radius: 50%;
+  background: var(--career-text-dim);
+}
+
+.career-mock-recording.is-recording .career-mock-recording-dot {
+  background: var(--career-danger);
+}
+
+.career-mock-transcript {
+  min-block-size: 0;
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}
+
+.career-mock-answer-quote {
+  display: grid;
+  gap: var(--career-space-1);
+  padding: var(--career-space-4);
+  border: 0;
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}
+
+.career-mock-answer-quote h3 {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 400;
+}
+
+ul.career-mock-criteria {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+ul.career-mock-criteria > li {
+  display: grid;
+  grid-template-columns: var(--career-space-6) minmax(0, 1fr);
+  gap: var(--career-space-2);
+  padding: var(--career-space-4) 0;
+  border: 0;
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+ul.career-mock-criteria > li:last-child {
+  border-block-end: 0;
+}
+
+ul.career-mock-criteria .career-mock-criterion-title {
+  justify-content: flex-start;
+}
+
+ul.career-mock-criteria li p {
+  margin-block-start: var(--career-space-2);
+  font-size: var(--career-text-xs);
+}
+
+.career-mock-criterion-icon {
+  inline-size: var(--career-space-4);
+  block-size: var(--career-space-4);
+  margin-block-start: 2px;
+  color: var(--career-text-soft);
+}
+
+.career-mock-criterion-icon.is-yes {
+  color: var(--career-success);
+}
+
+.career-mock-criterion-icon.is-partial {
+  color: var(--career-accent);
+}
+
+.career-mock-status {
+  min-block-size: 0;
+  padding: 2px var(--career-space-2);
+  font-weight: 600;
+}
+
+.career-mock-review-actions,
+.career-mock-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-mock-result-actions > div {
+  display: contents;
+}
+
+.career-mock-recommendations ul {
+  gap: 0;
+}
+
+.career-mock-recommendations li {
+  padding: var(--career-space-4) 0;
+  border: 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  border-radius: 0;
+  color: var(--career-text);
+  background: transparent;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .career-mock-page-heading .career-mock-date-chip {
+    margin-block-start: var(--career-space-1);
+  }
+
+  .career-mock-progress-block h2 {
+    font-size: var(--career-text-sm);
+  }
+
+  .career-mock-review-actions,
+  .career-mock-result-actions,
+  .career-mock-question-actions,
+  .career-mock-voice-actions {
+    display: grid;
+    justify-items: stretch;
+  }
+}
+
+@media (min-width: 761px) {
+  .career-mock-dialog .career-mock-content {
+    padding-block-start: var(--career-space-6);
+  }
+
+  .career-mock-source-panel {
+    padding: var(--career-space-6);
+  }
+
+  .career-mock-setup-panel .career-mock-primary {
+    min-inline-size: 0;
+  }
+
+  .career-mock-question-panel .career-mock-question-prompt {
+    max-inline-size: 78%;
+    padding: var(--career-space-3);
+    font-size: var(--career-text-sm);
+  }
+}
+
+/* 390: тренажёр на весь экран, нижняя навигация лежит поверх (M7); порядок блоков как в макете. */
+@media (max-width: 760px) {
+  .career-interview-backdrop--simulator {
+    inset-block-end: 0;
+  }
+
+  .career-mock-dialog .career-mock-content {
+    padding-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-8) + env(safe-area-inset-bottom));
+  }
+
+  .career-mock-setup-panel .career-mock-page-heading h2 {
+    font-size: var(--career-text-xl);
+    line-height: 1.2;
+  }
+
+  .career-mock-setup-panel .career-mock-page-heading .career-mock-date-chip {
+    padding: 0;
+    border: 0;
+    font-weight: 400;
+  }
+
+  .career-mock-setup-panel .career-mock-section-title {
+    display: none;
+  }
+
+  .career-mock-setup-panel > .career-mock-action-row {
+    display: contents;
+  }
+
+  .career-mock-setup-panel .career-mock-primary {
+    order: 3;
+    inline-size: 100%;
+    min-block-size: calc(var(--career-target-min) + var(--career-space-1));
+    border-radius: 999px;
+  }
+
+  .career-mock-setup-panel .career-mock-help {
+    order: 4;
+    padding: 0 var(--career-space-2);
+    border: 0;
+    background: transparent;
+  }
+
+  .career-mock-setup-layout > .career-mock-source-panel {
+    order: 5;
+    padding: var(--career-space-2);
+    border: 0;
+    background: transparent;
+  }
+
+  .career-mock-setup-panel .career-mock-later {
+    order: 6;
+    justify-self: center;
+    inline-size: 100%;
+    border: 0;
+    background: transparent;
+  }
+}
+
+@media (max-width: 760px) {
+  .career-mock-dialog .career-mock-session-header {
+    display: none;
+  }
+
+  .career-shell:has(.career-interview-backdrop--simulator) .career-mobile-nav {
+    z-index: 10000;
+  }
+}
+
+.career-mock-mobile-hero {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .career-mock-mobile-hero {
+    display: grid;
+    gap: var(--career-space-1);
+    padding-inline: var(--career-space-2);
+  }
+
+  .career-mock-mobile-hero h2 {
+    margin: 0;
+    font-size: var(--career-text-xl);
+    line-height: 1.2;
+  }
+
+  .career-mock-mobile-hero p {
+    margin: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 760px) {
+  /* На 390 заголовок разбора — в герое над карточкой, как в макете. */
+  .career-mock-review-panel .career-mock-progress-block h2 {
+    display: none;
+  }
+}

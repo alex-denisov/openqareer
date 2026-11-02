@@ -16,6 +16,7 @@ export function useMockInterviewController(
   roleTitle: string,
   onBackToPreparation: () => void,
   initialStressMode = false,
+  applicationId?: string,
 ) {
   const model = useMockInterviewSession();
   const speech = useSpeechTranscription();
@@ -39,7 +40,7 @@ export function useMockInterviewController(
   }, [mode, model.session?.mode]);
   const currentQuestionAnswer = currentQuestion?.answer?.text ?? '';
   const setupActions = useMockInterviewSetupActions({
-    model, mode, roleTitle, questionScope, stressMode, setScreen, setDraft, answerStartedAt,
+    model, mode, roleTitle, applicationId, questionScope, stressMode, setScreen, setDraft, answerStartedAt,
   });
   const answerActions = useMockInterviewAnswerActions({
     model, speech, currentQuestionAnswer, setDraft, setScreen, answerStartedAt,
