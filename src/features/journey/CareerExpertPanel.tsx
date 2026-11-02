@@ -1,4 +1,5 @@
 import { AdaptationAdviceContext } from '../diary/AdaptationAdviceContext';
+import { usePageTitleOverrideValue } from '../shell/pageTitleOverride';
 import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
 import { CareerRoleOffer } from '../career-map/CareerRoleOffer';
@@ -192,7 +193,14 @@ export function CareerExpertPanel({
   }
   const contextKey = JSON.stringify([stage, subject]);
   // Макет 13: на вкладке «Компании и люди» консультант подписан ею, а не «Вакансии».
-  const sectionTitle = subject?.kind === 'company' ? 'Компании и люди' : STAGE_TITLE[stage];
+  // Макет 9: на экране письма консультант подписан «Письмо»; экран сам называет страницу.
+  const screenTitle = usePageTitleOverrideValue();
+  const sectionTitle =
+    subject?.kind === 'company'
+      ? 'Компании и люди'
+      : stage === 'vacancies' && screenTitle
+        ? screenTitle
+        : STAGE_TITLE[stage];
   const threadCompany = subject?.kind === 'company' ? subject.id : undefined;
   const currentContext = useRef(contextKey);
   currentContext.current = contextKey;
@@ -405,18 +413,30 @@ export function CareerExpertPanel({
       const updated = await getCandidateWithMessages(stage, threadCompany);
       if (currentContext.current === operationContext) setSnapshot(updated);
     } catch {
-      if (currentContext.current === operationContext) setError('Ответ сохранён, но историю пока не удалось обновить.');
+      if (currentContext.current === operationContext)
+        setError('Ответ сохранён, но историю пока не удалось обновить.');
     }
     return true;
   }
   const turns = consultantTurns(snapshot?.messages);
   const currentTurnIds = new Set(latestExchange(turns).map((turn) => turn.id));
-  const latestContextTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationContext);
+  const latestContextTurn = [...(snapshot?.turns ?? [])]
+    .reverse()
+    .find((turn) => turn.status === 'completed' && turn.result?.adaptationContext);
   const contextResult = liveResult?.adaptationContext ? liveResult : latestContextTurn?.result;
-  const contextTurnKey = liveResult?.adaptationContext ? liveTurnIdempotencyKey : latestContextTurn?.idempotencyKey;
-  const latestAdaptationTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationTask && turn.result.adaptationContext);
+  const contextTurnKey = liveResult?.adaptationContext
+    ? liveTurnIdempotencyKey
+    : latestContextTurn?.idempotencyKey;
+  const latestAdaptationTurn = [...(snapshot?.turns ?? [])]
+    .reverse()
+    .find(
+      (turn) =>
+        turn.status === 'completed' && turn.result?.adaptationTask && turn.result.adaptationContext,
+    );
   const adaptationResult = liveResult?.adaptationTask ? liveResult : latestAdaptationTurn?.result;
-  const adaptationTurnKey = liveResult?.adaptationTask ? liveTurnIdempotencyKey : latestAdaptationTurn?.idempotencyKey;
+  const adaptationTurnKey = liveResult?.adaptationTask
+    ? liveTurnIdempotencyKey
+    : latestAdaptationTurn?.idempotencyKey;
   // 28.10: the consultant answered first; the analysis with proposals joins this turn later.
   useEffect(() => {
     if (liveResult?.analysis !== 'pending' || !liveTurnIdempotencyKey) return;
@@ -621,7 +641,12 @@ export function CareerExpertPanel({
           {loadingSession ? <ExpertPanelSkeleton /> : null}
           {!loadingSession && (turns.length || showLiveMessage) ? (
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки истории с клавиатуры, включая Safari.
-            <div className="career-dialogue-history" role="log" tabIndex={0} aria-label="История диалога">
+            <div
+              className="career-dialogue-history"
+              role="log"
+              tabIndex={0}
+              aria-label="История диалога"
+            >
               {turns.map((message) => (
                 <article
                   className={`career-dialogue-turn is-${message.role}${currentTurnIds.has(message.id) ? '' : ' is-earlier'}`}
@@ -664,12 +689,24 @@ export function CareerExpertPanel({
                   ) : null}
                 </article>
               ) : null}
-          {stage === 'diary' && contextResult?.adaptationContext && !contextResult.adaptationTask && contextTurnKey ? <AdaptationAdviceContext key={contextTurnKey} turnKey={contextTurnKey} /> : null}
-          {stage === 'diary' && adaptationResult?.adaptationTask && adaptationResult.adaptationContext && adaptationTurnKey ? (
-            <AdaptationTaskProposal key={adaptationTurnKey} turnKey={adaptationTurnKey}
-              context={adaptationResult.adaptationContext} suggestion={adaptationResult.adaptationTask}
-              currentSubject={subject} />
-          ) : null}
+              {stage === 'diary' &&
+              contextResult?.adaptationContext &&
+              !contextResult.adaptationTask &&
+              contextTurnKey ? (
+                <AdaptationAdviceContext key={contextTurnKey} turnKey={contextTurnKey} />
+              ) : null}
+              {stage === 'diary' &&
+              adaptationResult?.adaptationTask &&
+              adaptationResult.adaptationContext &&
+              adaptationTurnKey ? (
+                <AdaptationTaskProposal
+                  key={adaptationTurnKey}
+                  turnKey={adaptationTurnKey}
+                  context={adaptationResult.adaptationContext}
+                  suggestion={adaptationResult.adaptationTask}
+                  currentSubject={subject}
+                />
+              ) : null}
 
               {liveResult?.analysis === 'pending' ? (
                 <p role="status" className="career-diary-note">
@@ -680,7 +717,12 @@ export function CareerExpertPanel({
             </div>
           ) : !loadingSession ? (
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки истории с клавиатуры, включая Safari.
-            <div className="career-dialogue-history" role="log" tabIndex={0} aria-label="История диалога">
+            <div
+              className="career-dialogue-history"
+              role="log"
+              tabIndex={0}
+              aria-label="История диалога"
+            >
               <article className="career-dialogue-turn is-assistant">
                 <span>Карьерный консультант</span>
                 <ConsultantMessage
@@ -713,8 +755,12 @@ export function CareerExpertPanel({
               ) : null}
             </div>
           ) : null}
-          {subjectTitle && stage === 'diary' ? <p className="career-diary-note">Контекст: {subjectTitle}</p> : null}
-          {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} draft={streamingReply} /> : null}
+          {subjectTitle && stage === 'diary' ? (
+            <p className="career-diary-note">Контекст: {subjectTitle}</p>
+          ) : null}
+          {pendingQuestion ? (
+            <ExpertWaitingRow question={pendingQuestion} draft={streamingReply} />
+          ) : null}
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
           ) : null}
@@ -800,7 +846,11 @@ export function CareerExpertPanel({
                 if (event.target.value.trim()) setQuickRepliesDismissed(true);
                 if (!event.target.value.trim()) setVoiceDraft(false);
               }}
-              placeholder={subject?.kind === 'company' ? 'Спросите про компании и людей' : 'Спросите по этому разделу'}
+              placeholder={
+                subject?.kind === 'company'
+                  ? 'Спросите про компании и людей'
+                  : 'Спросите по этому разделу'
+              }
               rows={1}
               disabled={sending || voiceTextLocked}
             />

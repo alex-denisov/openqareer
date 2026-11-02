@@ -438,7 +438,9 @@ async function openLetter(page: Page): Promise<void> {
   await expect(circleThree.or(prepare).first()).toBeVisible();
   if (await circleThree.isVisible()) await circleThree.click();
   await prepare.click();
-  await expect(page.getByRole('heading', { name: 'Письмо под вакансию' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Как откликнуться: три круга связей' }),
+  ).toBeVisible();
   // G5 A4: «Подготовить письмо» круга 3 открывает письмо на круге 3; сценарии ниже начинают с круга 1.
   const tab = (circle: number) =>
     page.getByRole('tab', { name: new RegExp(`Круг ${circle}`, 'u') });
@@ -453,11 +455,11 @@ async function waitForLetter(page: Page): Promise<void> {
 }
 
 async function reviewWithConsultant(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Попросить правки у консультанта' }).click();
+  await page.getByRole('button', { name: 'Попросить правки' }).click();
   const panel = page.locator('.career-expert-panel');
   await expect(panel).toBeVisible();
   await expect(panel.locator('header strong')).toHaveText('Консультант');
-  await expect(panel.locator('header small')).toContainText('Вакансии');
+  await expect(panel.locator('header small')).toContainText('Письмо');
   const viewportWidth = page.viewportSize()?.width ?? 0;
   if (viewportWidth <= 760) {
     await expect(panel).toHaveAttribute('data-mobile-expanded', 'true');
@@ -471,11 +473,13 @@ async function reviewWithConsultant(page: Page): Promise<void> {
   }
 }
 
+async function openRecipientChoice(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Изменить' }).click();
+}
+
 async function showIntroductionPaths(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Показать пути' }).click();
-  await expect(page.locator('.career-letter-circle-section')).toContainText(
-    'Попросить представить',
-  );
+  await expect(page.locator('.career-letter-card')).toContainText('Попросить представить');
 }
 
 async function captureState(page: Page, testInfo: TestInfo, name: string): Promise<void> {
@@ -577,7 +581,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await captureState(page, testInfo, 'pitch-loading');
     await releasePitch(state);
     await waitForLetter(page);
-    await expect(page.getByText(/письмо опирается только на выбранные факты/u)).toBeVisible();
+    await expect(page.getByText(/Длина подобрана под канал/u)).toBeVisible();
     await captureState(page, testInfo, 'high-facts');
   });
 
@@ -588,18 +592,18 @@ test.describe('B449 — письмо под вакансию', () => {
     await installLetterMocks(page, state);
     await openLetter(page);
     await waitForLetter(page);
+    await openRecipientChoice(page);
     await expect(page.getByRole('radio')).toHaveCount(2);
     await captureState(page, testInfo, 'circle-1');
     await page.getByRole('radio').nth(1).check();
     await expect.poll(() => state.pitchBodies.at(-1)?.recipient?.name).toBe('Анатолий Волков');
     await page.getByRole('tab', { name: /Круг 2/u }).click();
-    await expect(page.locator('.career-letter-circle-section')).toContainText(
-      'Попросить представить',
-    );
+    await expect(page.locator('.career-letter-card')).toContainText('Попросить представить');
     await expect.poll(() => state.pitchBodies.at(-1)?.recipient?.name).toBe('Мария Крылова');
     await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveValue(
       /^Мария Крылова,/u,
     );
+    await openRecipientChoice(page);
     const introductionRecipients = page.locator('.career-letter-screen').getByRole('radio');
     await introductionRecipients.nth(1).check();
     await expect.poll(() => state.pitchBodies.at(-1)?.recipient?.name).toBe('Анатолий Волков');
@@ -608,7 +612,7 @@ test.describe('B449 — письмо под вакансию', () => {
     );
     await captureState(page, testInfo, 'circle-2');
     await page.getByRole('tab', { name: /Круг 3/u }).click();
-    await expect(page.locator('.career-letter-circle-section')).toContainText('Холодный отклик');
+    await expect(page.locator('.career-letter-card')).toContainText('Холодный отклик');
     await captureState(page, testInfo, 'circle-3');
     await reviewWithConsultant(page);
     const workplace = page.locator('.career-letter-screen').getByRole('checkbox').first();
@@ -724,8 +728,8 @@ test.describe('B449 — письмо под вакансию', () => {
     await dialog.getByLabel('Как вы знакомы').fill('Работали вместе в одной команде');
     await dialog.getByRole('button', { name: 'Сохранить контакт' }).click();
     await expect(dialog.getByRole('status')).toContainText('Контакт сохранён.');
-    await expect(page.getByRole('radio')).toHaveCount(1);
-    await expect(page.locator('.career-letter-circle-section')).toContainText('Елена Мельникова');
+    await expect(page.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
+    await expect(page.locator('.career-letter-card')).toContainText('Елена Мельникова');
     await dialog.getByRole('button', { name: 'Закрыть контакты' }).click();
 
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -794,18 +798,16 @@ test.describe('B449 — письмо под вакансию', () => {
     await page.keyboard.press('ArrowRight');
     const circleTwo = tabs.getByRole('tab', { name: /Круг 2/u });
     await expect(circleTwo).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.career-letter-circle-section')).toContainText(
-      'Попросить представить',
-    );
+    await expect(page.locator('.career-letter-card')).toContainText('Попросить представить');
     await expect.poll(() => state.pitchBodies.at(-1)?.recipient?.name).toBe('Мария Крылова');
     await circleTwo.press('ArrowRight');
     await expect(tabs.getByRole('tab', { name: /Круг 3/u })).toHaveAttribute(
       'aria-selected',
       'true',
     );
-    const delivery = page.locator('.career-letter-delivery-summary');
+    const delivery = page.getByRole('group', { name: 'Куда и что отправим' });
     await expect(delivery).toContainText('Резюме не прикреплено');
-    await expect(delivery.getByRole('button')).toHaveCount(0);
+    await expect(delivery.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
     await captureState(page, testInfo, 'cold-outreach-availability');
   });
 
