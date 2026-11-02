@@ -168,7 +168,14 @@ describe('buildResumeAtsAssessment', () => {
       evaluatedAt,
     });
 
-    expect(result.total).toEqual({ score: null, maximum: 100, status: 'partial' });
+    const { structure, dates, format } = result.dimensions;
+    const measured = [structure, dates, format];
+    expect(result.total).toEqual({
+      score: measured.reduce((sum, item) => sum + (item.score ?? 0), 0),
+      maximum: measured.reduce((sum, item) => sum + item.maximum, 0),
+      status: 'partial',
+    });
+    expect(result.total.maximum).toBeLessThan(100);
     expect(result.dimensions.keywords).toMatchObject({
       score: null,
       maximum: 30,
@@ -194,7 +201,7 @@ describe('buildResumeAtsAssessment', () => {
 
     expect(result.dimensions.keywords.status).toBe('unknown');
     expect(result.dimensions.keywords.sampleSize).toBe(0);
-    expect(result.total.score).toBeNull();
+    expect(result.total).toMatchObject({ status: 'partial', maximum: 70 });
   });
 
   it('reports missing experience dates and empty ATS text as unknown samples', () => {
@@ -219,7 +226,8 @@ describe('buildResumeAtsAssessment', () => {
       sampleSize: 0,
       status: 'unknown',
     });
-    expect(result.total.score).toBeNull();
+    expect(result.total.status).toBe('partial');
+    expect(result.total.maximum).toBe(45);
   });
 
   it('uses whole normalized phrases and reports matching terms and source fields', () => {
