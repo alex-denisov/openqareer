@@ -58,8 +58,33 @@ export function vacancyFitContext(
   return createVacancyFitContextReader(deps, candidateId)(target, requirements);
 }
 
-export function createVacancyFitContextReader(deps: RouteDeps, candidateId: string) {
+type VacancyFitContextReader = (
+  target: NonNullable<ReturnType<typeof readVacancyFitTarget>>,
+  requirements: readonly VacancyRequirement[],
+) => VacancyFitInput;
+const readersBySnapshot = new WeakMap<object, Map<string, VacancyFitContextReader>>();
+
+/**
+ * One reader per snapshot read (prod CPU profile 03.11: a list page built it 3–4 times, each
+ * time collecting the evidence facts and four stamps). The same snapshot object means nothing
+ * was written since it was read (the store memo) or the same request (scoped reads).
+ */
+export function createVacancyFitContextReader(deps: RouteDeps, candidateId: string): VacancyFitContextReader {
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
+  const readers = readersBySnapshot.get(snapshot) ?? new Map<string, VacancyFitContextReader>();
+  readersBySnapshot.set(snapshot, readers);
+  const known = readers.get(candidateId);
+  if (known) return known;
+  const reader = buildVacancyFitContextReader(deps, candidateId, snapshot);
+  readers.set(candidateId, reader);
+  return reader;
+}
+
+function buildVacancyFitContextReader(
+  deps: RouteDeps,
+  candidateId: string,
+  snapshot: ReturnType<RouteDeps['candidateStore']['getSnapshot']>,
+): VacancyFitContextReader {
   const workspace = deps.candidateStore.getCandidateWorkspace(candidateId);
   const profileContextHash = vacancyFitProfileStamp(snapshot, workspace);
   const previousProfileContextHash = previousVacancyFitProfileStamp(snapshot, workspace);

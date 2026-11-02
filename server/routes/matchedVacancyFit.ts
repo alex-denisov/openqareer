@@ -14,6 +14,7 @@ import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFi
 import { createGeoBlocker } from './vacancyFitGeoBlocks';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
+import { mapYielding } from '../vacancies/mapYielding';
 import { wantedCompaniesBreakTies, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 
 const FIT_ORDER_WINDOW_MS = 60_000;
@@ -243,16 +244,16 @@ function orderByFit(
  * Показанная страница получает текущее состояние разбора для каждой вакансии:
  * «в очереди», «нет описания», свежий процент — без окна кэша порядка.
  */
-export function withShownPageFitViews(
+export async function withShownPageFitViews(
   deps: RouteDeps,
   candidateId: string,
   items: readonly MatchedVacancyItem[],
-): MatchedVacancyItem[] {
+): Promise<MatchedVacancyItem[]> {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return [...items];
   const context = createVacancyFitContextReader(deps, candidateId);
   const geoBlocks = createGeoBlocker(deps, candidateId);
-  return items.map((item) => {
+  return mapYielding(items, (item) => {
     const target = readVacancyFitTarget(deps, item.cluster.id);
     if (!target) return item;
     const view = runtime.view(context(target, []));

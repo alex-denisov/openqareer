@@ -90,6 +90,26 @@ describe('one requeue of model failures after a parser upgrade (B522)', () => {
     database.close();
   });
 
+  it('finds the rows with a read and writes them by rowid in small batches (prod 03.11: the startup UPDATE scans held the write lock ~100 s)', () => {
+    const database = new DatabaseSync(':memory:');
+    const fit = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));
+    for (let index = 0; index < 120; index += 1) fit.enqueue(fitInput(`v${index}`), '2026-11-02T01:00:00.000Z');
+    database.exec(`UPDATE vacancy_fit_queue SET status='failed',last_error='requirements_wait_timeout',requeue_revision=NULL,updated_at='2026-11-02T02:00:00.000Z'`);
+    const statements: string[] = [];
+    const prepare = database.prepare.bind(database);
+    database.prepare = ((sql: string) => {
+      statements.push(sql.replace(/\s+/gu, ' '));
+      return prepare(sql);
+    }) as typeof database.prepare;
+    expect(fit.requeueOrphanedRequirementsTimeouts('2026-11-02T03:00:00.000Z')).toBe(120);
+    database.exec(`UPDATE vacancy_fit_queue SET status='failed'`);
+    expect(fit.requeueFailedOnce(2, '2026-11-02T04:00:00.000Z')).toBe(120);
+    const updates = statements.filter((sql) => /^\s*UPDATE/iu.test(sql));
+    expect(updates.length).toBeGreaterThanOrEqual(6);
+    expect(updates.every((sql) => sql.includes('rowid IN ('))).toBe(true);
+    database.close();
+  });
+
   it('requeues on the next worker start what failed before the B562-r quote fix: requirements and their fits', () => {
     const database = new DatabaseSync(':memory:');
     const store = new SqliteVacancyRequirementsStore(database);

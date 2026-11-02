@@ -61,15 +61,15 @@ describe('pool fit order', () => {
     expect(targetReads.sort()).toEqual(['v400', 'v7']);
   });
 
-  it('gives every vacancy of the shown page its current fit state', () => {
-    const page = withShownPageFitViews(deps({ b: 70 }), 'order-b', [item('a'), item('b')]);
+  it('gives every vacancy of the shown page its current fit state', async () => {
+    const page = await withShownPageFitViews(deps({ b: 70 }), 'order-b', [item('a'), item('b')]);
     expect(page.map((entry) => entry.explanation.fitView?.state)).toEqual([
       'not_requested',
       'ready',
     ]);
   });
 
-  it('an hh row whose text is not read yet says «считаем» on the shown page too (АЙСБЕРРИ, 01.11)', () => {
+  it('an hh row whose text is not read yet says «считаем» on the shown page too (АЙСБЕРРИ, 01.11)', async () => {
     const hh = 'cluster-src-hh-search:138272249';
     const noText = {
       ...deps({}),
@@ -78,7 +78,7 @@ describe('pool fit order', () => {
         view: () => ({ state: 'no_description', requirements: [] }),
       },
     } as unknown as RouteDeps;
-    const [row] = withShownPageFitViews(noText, 'order-hh', [item(hh)]);
+    const [row] = await withShownPageFitViews(noText, 'order-hh', [item(hh)]);
     expect(row?.explanation.fitView?.state).toBe('not_requested');
   });
 
