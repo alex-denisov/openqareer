@@ -10,17 +10,22 @@ const LOAD_AHEAD_PX = 400;
  */
 export function useLoadMoreOnScroll(hasMore: boolean, onLoadMore: (() => void) | undefined) {
   const sentinel = useRef<HTMLDivElement>(null);
+  // 02.11: a new callback on every render re-created the observer, which fired again while the
+  // list end stayed in view — a load loop that kept replacing «Показать ещё 20» (AUD-4 red on main).
+  const latest = useRef(onLoadMore);
+  latest.current = onLoadMore;
+  const canLoad = Boolean(onLoadMore);
   useEffect(() => {
     const node = sentinel.current;
-    if (!node || !hasMore || !onLoadMore || typeof IntersectionObserver === 'undefined') return;
+    if (!node || !hasMore || !canLoad || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) onLoadMore();
+        if (entries.some((entry) => entry.isIntersecting)) latest.current?.();
       },
       { rootMargin: `0px 0px ${LOAD_AHEAD_PX}px 0px` },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, onLoadMore]);
+  }, [hasMore, canLoad]);
   return sentinel;
 }

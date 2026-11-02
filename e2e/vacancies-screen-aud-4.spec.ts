@@ -220,8 +220,10 @@ test.describe('AUD-4 — экран вакансий', () => {
     const rows = page.locator('.vac-list-item');
     await expect(rows).toHaveCount(20);
     const loadMore = page.getByRole('button', { name: 'Показать ещё 20', exact: true });
-    await expect(loadMore).toBeVisible();
-    await loadMore.click();
+    await expect(loadMore).toHaveCount(1);
+    // 01.11 (#270): reaching the list end loads the next rows; the button is the keyboard fallback
+    // and leaves once nothing remains. A click here raced the scroll load and hit a detached node.
+    await rows.last().scrollIntoViewIfNeeded();
     await expect(rows).toHaveCount(25);
     await expect(loadMore).toHaveCount(0);
   });

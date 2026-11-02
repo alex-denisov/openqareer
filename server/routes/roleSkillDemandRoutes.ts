@@ -13,16 +13,22 @@ import { createRoleRequirementReader } from './roleSkillRequirementSource';
 const MAX_DEMAND_ROLES = 5;
 const DEMAND_TTL_MS = 6 * 60 * 60 * 1_000;
 
-type RoleSample = { readonly roleTitle: string; readonly vacancies: readonly RoleAssessmentVacancy[] };
+type RoleSample = {
+  readonly roleTitle: string;
+  readonly vacancies: readonly RoleAssessmentVacancy[];
+};
 
 const caches = new WeakMap<RouteDeps, RoleSkillDemandCache<readonly RoleSample[]>>();
 
 function cacheOf(deps: RouteDeps): RoleSkillDemandCache<readonly RoleSample[]> {
   let cache = caches.get(deps);
   if (!cache) {
-    cache = new RoleSkillDemandCache((roles, candidateId) => readSamples(deps, candidateId, roles), {
-      ttlMs: DEMAND_TTL_MS,
-    });
+    cache = new RoleSkillDemandCache(
+      (roles, candidateId) => readSamples(deps, candidateId, roles),
+      {
+        ttlMs: DEMAND_TTL_MS,
+      },
+    );
     caches.set(deps, cache);
   }
   return cache;

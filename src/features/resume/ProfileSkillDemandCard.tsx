@@ -44,8 +44,9 @@ function RoleDemand({ demand }: { readonly demand: RoleSkillDemand }) {
         <div>
           <b>{demand.roleTitle}</b>
           <p>
-            Что чаще всего требуют вакансии роли: {pluralRu(demand.sampleSize, ['вакансия', 'вакансии', 'вакансий'])}{' '}
-            в подборке, данные на {date}.
+            Что чаще всего требуют вакансии роли:{' '}
+            {pluralRu(demand.sampleSize, ['вакансия', 'вакансии', 'вакансий'])} в подборке, данные
+            на {date}.
           </p>
         </div>
       </div>
