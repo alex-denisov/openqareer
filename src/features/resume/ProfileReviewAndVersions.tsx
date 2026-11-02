@@ -202,15 +202,9 @@ function buildReviewBlocks(
   return blocks;
 }
 
-function distinctReviewIssues(issues: readonly ResumeUnknown[]): ResumeUnknown[] {
-  return Array.from(
-    new Map(
-      orderUnknowns(issues).map((issue) => [
-        `${issue.code}:${issue.entryId ?? 'profile'}:${issue.memoryId ?? ''}:${issue.message}`,
-        issue,
-      ]),
-    ).values(),
-  );
+/** One remark per text: the count matches the list the badge opens (owner, 02.11). */
+export function distinctReviewIssues(issues: readonly ResumeUnknown[]): ResumeUnknown[] {
+  return Array.from(new Map(orderUnknowns(issues).map((issue) => [issue.message, issue])).values());
 }
 
 /** Returns the saved master's deduplicated review issue count when loaded. */
