@@ -41,11 +41,13 @@ async function loadProfileAssessment(
   let sourceVersion: ResumeVersionSummary | null = null;
   let roleBasis: string | null = null;
   if (requestKey === null) {
+    // Both reads start together: one after the other they cost a full extra round (02.11 prod).
+    const roles = roleBasisOrNull(signal);
     const versions = await getResumeVersions({ limit: 50, signal });
     sourceVersion =
       versions.items.find((item) => item.sourceMasterRevision === versions.currentMasterRevision) ??
       null;
-    const byRole = sourceVersion ? null : await roleBasisOrNull(signal);
+    const byRole = sourceVersion ? null : await roles;
     roleBasis = byRole?.roleTitle ?? null;
     request = sourceVersion ? { versionId: sourceVersion.id } : (byRole?.request ?? {});
   } else {
