@@ -28,6 +28,7 @@ import {
   registerCandidateConnectionRoutes,
 } from './candidateConnectionRoutes';
 import { registerConnectionSearchRoutes } from './connectionSearchRoutes';
+import { registerCandidateCompanyWantRoutes } from './candidateCompanyWantRoutes';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -190,7 +191,7 @@ function linkedinStatus(
   return { status: 'disconnected', importedAt: contactsImportedAt, contactsImported };
 }
 
-async function companyContext(
+export async function companyContext(
   deps: RouteDeps,
   candidateId: string,
 ): Promise<CandidateCompanyContext> {
@@ -251,7 +252,7 @@ function candidateNotFound(reply: FastifyReply, request: FastifyRequest): Fastif
   );
 }
 
-function wantRepository(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+export function wantRepository(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (deps.candidateCompanyWantsRepo) return deps.candidateCompanyWantsRepo;
   sendError(
     reply,
@@ -581,7 +582,7 @@ async function handleDismissContactProposal(
   return { data: { dismissed: true }, meta: { requestId: request.id } };
 }
 
-function recruiterQueueStatus(
+export function recruiterQueueStatus(
   statuses: readonly string[],
 ): 'queued' | 'running' | 'ready' | 'failed' {
   if (statuses.includes('ready')) return 'ready';
@@ -590,7 +591,7 @@ function recruiterQueueStatus(
   return 'failed';
 }
 
-function canSearchRecruiters(
+export function canSearchRecruiters(
   deps: RouteDeps,
   request: FastifyRequest,
   reply: FastifyReply,
@@ -633,7 +634,7 @@ async function matchedCompanyVacancyIds(
     .slice(0, 3);
 }
 
-function enqueueCompanyRecruiterJobs(
+export function enqueueCompanyRecruiterJobs(
   repo: NonNullable<RouteDeps['recruiterContactsRepo']>,
   candidateId: string,
   vacancyIds: readonly string[],
@@ -741,6 +742,7 @@ export function registerCandidateCompanyRoutes(app: FastifyInstance, deps: Route
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
     withDeps(deps, handleSearchRecruiter),
   );
+  registerCandidateCompanyWantRoutes(app, deps);
   registerCandidateConnectionRoutes(app, deps);
   registerConnectionSearchRoutes(app, deps);
 }
