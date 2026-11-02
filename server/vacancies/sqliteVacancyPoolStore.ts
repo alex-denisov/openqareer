@@ -2716,11 +2716,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       filterParams.push(query.role);
     }
     const condition = where.join(' AND ');
-    const total = (
-      this.database
-        .prepare(`SELECT count(*) AS n FROM catalog_entries WHERE ${condition}`)
-        .get(...filterParams) as { n: number }
-    ).n;
+    // The count walks every active row (`path <> ''` is in no index): ~1.4 s on
+    // prod. The engine passes a cached total for big groups.
+    const total =
+      query.knownTotal !== undefined
+        ? query.knownTotal
+        : (
+            this.database
+              .prepare(`SELECT count(*) AS n FROM catalog_entries WHERE ${condition}`)
+              .get(...filterParams) as { n: number }
+          ).n;
 
     const pageWhere = [...where];
     const pageParams = [...filterParams];

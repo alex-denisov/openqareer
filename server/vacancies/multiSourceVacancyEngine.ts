@@ -352,6 +352,8 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
 
 export class MultiSourceVacancyEngine {
   private listingsCache: { at: number; value: CatalogListingSummary[] | undefined } | null = null;
+  /** Whole-catalog total: the one count no listing summary covers. */
+  private rootTotalCache: { at: number; total: number } | null = null;
   private readonly now: () => number = () => Date.now();
 
   private sources: Map<string, VacancySourceConfig> = new Map();
@@ -799,7 +801,31 @@ export class MultiSourceVacancyEngine {
       return undefined;
     }
     if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
-    return this.pool.loadCatalogEntriesPage(query);
+    const known = this.knownCatalogTotal(query);
+    const page = this.pool.loadCatalogEntriesPage(
+      known === undefined ? query : { ...query, knownTotal: known },
+    );
+    if (!query.place && !query.role && known === undefined) {
+      this.rootTotalCache = { at: this.now(), total: page.total };
+    }
+    return page;
+  }
+
+  /**
+   * A total without the table scan: listed groups (>= 3) come from the cached
+   * summaries, the whole catalog from a TTL copy. Unlisted groups have < 3
+   * entries and are counted exactly through an index. Stale by LISTINGS_CACHE_MS.
+   */
+  private knownCatalogTotal(query: CatalogEntriesQuery): number | undefined {
+    if (query.knownTotal !== undefined) return query.knownTotal;
+    const now = this.now();
+    if (!query.place) {
+      if (query.role) return undefined;
+      const root = this.rootTotalCache;
+      return root && now - root.at < LISTINGS_CACHE_MS ? root.total : undefined;
+    }
+    const listings = this.getPublicCatalogListings();
+    return listings?.find((l) => l.place === query.place && l.role === query.role)?.count;
   }
 
   /** HTTP (B485): одна строка итогов по ключу; ошибка чтения — сводки нет. */
