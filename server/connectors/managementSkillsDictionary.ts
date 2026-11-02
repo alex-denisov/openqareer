@@ -24,7 +24,7 @@ export const MANAGEMENT_SKILLS_DICTIONARY: readonly ManagementSkillDefinition[] 
   {
     canonical: 'Управление командой',
     synonyms: ['управление командой', 'руководство командой', 'руководство коллективом', 'управление коллективом', 'team management', 'people management', 'командное лидерство', 'руководство людьми', 'руководство отделом', 'управление людьми', 'управление персоналом', 'Team Leadership', 'Cross-functional Team Leadership', 'Cross-functional Leadership', 'Executive Leadership', 'Leadership', 'лидерство', 'построение команды', 'масштабирование команды'],
-    textPatterns: ['(?:управл\\S*|руковод\\S*)\\s+(?:команд\\S*|коллектив\\S*|людьми|персонал\\S*|отдел\\S*)', 'team\\s+management', 'people\\s+management', '(?:cross-functional\\s+)?team\\s+leadership', 'executive\\s+leadership', 'построен\\S*\\s+команд\\S*', 'масштабирован\\S*\\s+команд\\S*', 'лидерств\\S*'],
+    textPatterns: ['(?:управл\\S*|руковод\\S*)\\s+(?:команд\\S*|коллектив\\S*|людьми|персонал\\S*|отдел\\S*)', 'team\\s+management', 'people\\s+management', '(?:cross-functional\\s+)?team\\s+leadership', 'executive\\s+leadership', '(?:led|lead|leading|managed|managing)\\s+(?:a\\s+|the\\s+)?(?:cross-functional\\s+)?teams?', 'построен\\S*\\s+команд\\S*', 'масштабирован\\S*\\s+команд\\S*', 'лидерств\\S*'],
   },
   {
     canonical: 'Бюджетирование',
@@ -168,4 +168,13 @@ export function extractManagementSkillsFromText(text: string): string[] {
     }
   }
   return Array.from(found);
+}
+
+/**
+ * Регулярное выражение для записи словаря: синонимы и textPatterns с границами слов.
+ * Для навыка вне словаря возвращает null.
+ */
+export function managementSkillMatcher(skill: string): RegExp | null {
+  const canonical = canonicalizeSkill(skill);
+  return COMPILED_PATTERNS.find((item) => item.canonical === canonical)?.regex ?? null;
 }

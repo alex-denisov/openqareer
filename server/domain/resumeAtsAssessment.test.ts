@@ -114,25 +114,25 @@ describe('buildResumeAtsAssessment', () => {
         '=== SKILLS ===',
         'Kubernetes, PostgreSQL',
       ].join('\n'),
-      requirements: ['Kubernetes', 'Terraform'],
+      requirements: ['Kubernetes', 'Terraform', 'Ansible'],
       requirementSource,
       resumeUpdatedAt: '2026-10-17T09:30:00.000Z',
       resumeSourceRevision: 'opaque-resume-revision',
       evaluatedAt,
     });
 
-    expect(result.total).toEqual({ score: 85, maximum: 100, status: 'measured' });
+    expect(result.total).toEqual({ score: 80, maximum: 100, status: 'measured' });
     expect(result.dimensions).toMatchObject({
       structure: { score: 25, maximum: 25, sampleSize: 5, status: 'measured' },
       keywords: {
-        score: 15,
+        score: 10,
         maximum: 30,
-        sampleSize: 2,
+        sampleSize: 3,
         status: 'measured',
         matched: 1,
-        required: 2,
+        required: 3,
         matchedRequirements: ['Kubernetes'],
-        unmatchedRequirements: ['Terraform'],
+        unmatchedRequirements: ['Terraform', 'Ansible'],
         evidence: [
           {
             requirement: 'Kubernetes',
@@ -145,6 +145,7 @@ describe('buildResumeAtsAssessment', () => {
             ],
           },
           { requirement: 'Terraform', matches: [] },
+          { requirement: 'Ansible', matches: [] },
         ],
       },
       dates: { score: 20, maximum: 20, sampleSize: 1, status: 'measured' },
@@ -277,6 +278,69 @@ describe('buildResumeAtsAssessment', () => {
     });
   });
 
+  describe('cross-language keywords and minimum sample', () => {
+    const englishDocument: ResumeDocument = {
+      ...makeDocument([
+        experience('exec-role', '2018-01', '2024-03', false, [
+          'Led a team of 40 engineers across three countries.',
+        ]),
+      ]),
+      skills: [{ id: 'skill-tl', name: 'Team Leadership' }],
+    };
+    const run = (requirements: readonly string[]) =>
+      buildResumeAtsAssessment({
+        document: englishDocument,
+        atsText: 'ADA EXAMPLE',
+        requirements,
+        requirementSource,
+        resumeUpdatedAt: null,
+        evaluatedAt,
+      }).dimensions.keywords;
+
+    it('matches a Russian dictionary requirement against English facts', () => {
+      const keywords = run(['Управление командой', 'Kubernetes', 'Terraform']);
+      expect(keywords.status).toBe('measured');
+      expect(keywords.matchedRequirements).toEqual(['Управление командой']);
+      expect(keywords.evidence?.[0]?.matches).toEqual([
+        { field: 'Опыт: пункт', text: 'Led a team of 40 engineers across three countries.' },
+        { field: 'Навыки', text: 'Team Leadership' },
+      ]);
+    });
+
+    it('still needs an exact match for terms outside the dictionary', () => {
+      const keywords = run(['Квантовая запутанность', 'Terraform', 'Ansible']);
+      expect(keywords.matched).toBe(0);
+      expect(keywords.score).toBe(0);
+    });
+
+    it('is unknown below three distinct requirements but keeps evidence', () => {
+      const result = buildResumeAtsAssessment({
+        document: englishDocument,
+        atsText: 'ADA EXAMPLE',
+        requirements: ['Управление командой', 'управление  командой!', 'Terraform'],
+        requirementSource,
+        resumeUpdatedAt: null,
+        evaluatedAt,
+      });
+      const keywords = result.dimensions.keywords;
+      expect(keywords).toMatchObject({
+        status: 'unknown',
+        score: null,
+        sampleSize: 2,
+        matchedRequirements: ['Управление командой'],
+        unmatchedRequirements: ['Terraform'],
+        summary: 'Недостаточно требований для оценки: нужно хотя бы 3, сейчас 2.',
+      });
+      expect(keywords.evidence).toHaveLength(2);
+      expect(result.total.status).toBe('partial');
+    });
+
+    it('is measured from three requirements', () => {
+      const keywords = run(['Управление командой', 'Terraform', 'Ansible']);
+      expect(keywords).toMatchObject({ status: 'measured', score: 10, sampleSize: 3 });
+    });
+  });
+
   it('does not treat the target-role header as keyword evidence by itself', () => {
     const document: ResumeDocument = {
       ...makeDocument([]),
@@ -288,7 +352,7 @@ describe('buildResumeAtsAssessment', () => {
     const result = buildResumeAtsAssessment({
       document,
       atsText: 'ADA EXAMPLE\\nPlatform Engineer',
-      requirements: ['Platform Engineer'],
+      requirements: ['Platform Engineer', 'Terraform', 'Ansible'],
       requirementSource,
       resumeUpdatedAt: null,
       evaluatedAt,
@@ -297,8 +361,8 @@ describe('buildResumeAtsAssessment', () => {
     expect(result.dimensions.keywords).toMatchObject({
       score: 0,
       matched: 0,
-      unmatchedRequirements: ['Platform Engineer'],
-      evidence: [{ requirement: 'Platform Engineer', matches: [] }],
+      unmatchedRequirements: ['Platform Engineer', 'Terraform', 'Ansible'],
+      evidence: expect.arrayContaining([{ requirement: 'Platform Engineer', matches: [] }]),
     });
   });
 
