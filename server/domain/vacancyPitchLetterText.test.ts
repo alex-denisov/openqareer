@@ -25,7 +25,7 @@ describe('letter text (B496/B528)', () => {
     expect(pitch.language).toBe('ru');
     expect(pitch.atsCoverLetter).not.toMatch(RAW_FIELD);
     expect(pitch.emailPitch.body).not.toMatch(RAW_FIELD);
-    expect(pitch.atsCoverLetter).toContain('Head of Engineering в компании Финтех Лаб');
+    expect(pitch.atsCoverLetter).toContain('Сейчас работаю на позиции Head of Engineering в компании Финтех Лаб');
     expect(pitch.usedEvidenceIds).toEqual(expect.arrayContaining(['wp1', 'wp2']));
     for (const notice of pitch.notices) expect(notice).toMatch(/\p{Script=Cyrillic}/u);
   });
@@ -39,6 +39,7 @@ describe('letter text (B496/B528)', () => {
     expect(pitch.atsCoverLetter).not.toMatch(RAW_FIELD);
     expect(pitch.atsCoverLetter).not.toMatch(/\p{Script=Cyrillic}{3,}\s*:/u);
     expect(pitch.atsCoverLetter).toContain('Head of Engineering at Финтех Лаб');
+    expect(pitch.atsCoverLetter).not.toContain('Сократил');
     expect(pitch.notices.length).toBeGreaterThan(0);
     for (const notice of pitch.notices) expect(notice).toMatch(/\p{Script=Cyrillic}/u);
   });

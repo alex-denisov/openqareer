@@ -406,7 +406,7 @@ export function buildWorkplaceSentence(
   if (phrases.length === 0) return '';
   const [first, ...rest] = phrases;
   if (language === 'ru') {
-    const now = workplaces[0]?.current ? 'Сейчас работаю' : 'Последнее место —';
+    const now = workplaces[0]?.current ? 'Сейчас работаю на позиции' : 'Последнее место —';
     return rest.length ? `${now} ${first}; до этого — ${rest.join(', ')}.` : `${now} ${first}.`;
   }
   const now = workplaces[0]?.current ? 'I currently work as' : 'Most recently I worked as';
@@ -422,7 +422,9 @@ function buildEvidenceParagraph(
   notices: string[],
   useRanking: boolean,
 ): string {
-  const facts = allFacts.filter((fact) => !isStructuredRecordStatement(fact.statement));
+  // Шаблон не переводит: русская фраза в английском письме читается как ошибка.
+  const facts = allFacts.filter((fact) => !isStructuredRecordStatement(fact.statement) &&
+    (language === 'ru' || !/\p{Script=Cyrillic}/u.test(fact.statement)));
   const career = buildWorkplaceSentence(workplaces, language, usedIds);
   if (facts.length === 0) {
     // The "too few facts" state is not letter content — it goes to `notices`

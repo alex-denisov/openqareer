@@ -39,7 +39,7 @@ const TEMPLATE_SENTENCE = new RegExp([
   String.raw`в профиле (?:подтверждён практический опыт|нет подтверждённых фактов)`,
   String.raw`требования вакансии не сопоставлены`,
   // B528: фраза о местах работы собрана из записей профиля, а не моделью.
-  String.raw`^(?:сейчас работаю|последнее место —|i currently work as|most recently i worked as)\s`,
+  String.raw`^(?:сейчас работаю на позиции|последнее место —|i currently work as|most recently i worked as)\s`,
 ].join('|'), 'iu');
 
 // Intros glued to the first fact: the fact after them is still checked.
