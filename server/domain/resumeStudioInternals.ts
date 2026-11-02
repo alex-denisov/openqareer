@@ -1,3 +1,4 @@
+import { parseResumeMonth } from './resumeMonth';
 import type {
   CefrLevel,
 } from './resumeDraft';
@@ -302,11 +303,10 @@ function containsQuantity(value: string): boolean {
 }
 
 export function isResumeDate(value: string): boolean {
-  return /^\d{4}-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?$/u.test(value);
+  return parseResumeMonth(value) !== null;
 }
 
 export function dateRank(value: string | null | undefined): number | null {
-  if (!value || !isResumeDate(value)) return null;
-  const [year, month] = value.split('-').map(Number);
-  return year! * 12 + month!;
+  const parsed = parseResumeMonth(value);
+  return parsed ? parsed.year * 12 + parsed.month : null;
 }

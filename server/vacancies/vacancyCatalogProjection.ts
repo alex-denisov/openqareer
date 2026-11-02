@@ -44,6 +44,8 @@ export interface CatalogEntriesQuery {
   readonly after?: CatalogCursor;
   readonly place?: string;
   readonly role?: string;
+  /** A total the caller already holds (bounded-stale); the store skips its count scan. */
+  readonly knownTotal?: number;
 }
 
 export interface CatalogEntriesPage {

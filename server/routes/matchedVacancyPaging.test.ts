@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
@@ -132,10 +132,10 @@ describe('чтение подбора страницами', () => {
     const matched = app
       .inject({ url: '/api/v1/candidate/matched-vacancies', headers: { authorization } })
       .then((response) => response);
-    // Give Fastify the request; matching must remain pending during both reads.
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Give Fastify the request (the route yields before matching); matching must remain
+    // pending during both reads.
+    await vi.waitFor(() => expect(calls()).toBe(1), { timeout: 2_000, interval: 5 });
     try {
-      expect(calls()).toBe(1);
       const session = await app.inject({ url: '/api/v1/auth/me' });
       const connections = await app.inject({
         url: '/api/v1/candidate/connections',

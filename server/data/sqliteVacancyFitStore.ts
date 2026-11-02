@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS, VACANCY_FIT_ALGORITHM_VERSION, type VacancyFitResult } from '../../shared/vacancyFit';
 import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitFactScope, type VacancyFitInput } from '../domain/vacancyFit';
 import { SealedText } from './sealedText';
@@ -23,6 +23,8 @@ const DEFER_MS = 60_000;
 const ORPHANED_REQUIREMENTS_SINCE = '2026-11-01T21:00:00.000Z';
 /** One claim moves at most this many rows of another release before it returns empty-handed. */
 const MAX_REKEYS_PER_CLAIM = 50;
+/** Rows one worker-start requeue write touches: each holds the write lock a few ms per row. */
+const REQUEUE_BATCH = 20;
 const RETRY_BASE_MS = 30_000;
 const LATE_COLUMNS = [
   ['requested_at', 'TEXT'],
@@ -160,6 +162,32 @@ export class SqliteVacancyFitStore {
     }
     this.cachedIdsMemo.set(candidateKey, { ids, count: stat.count, last: stat.last });
     return new Set(ids);
+  }
+
+  /**
+   * Prod 03.11: the first list read of a process opened every stored result of the candidate in
+   * one call (~4 s of the event loop, once per deploy). This fills the same memo in rowid order,
+   * a batch at a time, letting queued requests run between batches; a partial memo is valid.
+   */
+  async warmCachedVacancyIds(
+    candidateId: string,
+    { batch = 200, yieldToLoop = () => new Promise<void>((resolve) => setImmediate(resolve)) }: { readonly batch?: number; readonly yieldToLoop?: () => Promise<void> } = {},
+  ): Promise<void> {
+    const candidateKey = this.candidateKey(candidateId);
+    const page = this.database.prepare('SELECT rowid AS id, cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? ORDER BY rowid LIMIT ?');
+    for (;;) {
+      const known = this.cachedIdsMemo.get(candidateKey);
+      const rows = page.all(candidateKey, known?.last ?? 0, batch) as { id: number; cache_key: string; result_cipher: string }[];
+      if (rows.length === 0) return;
+      const ids = new Set(known?.ids ?? []);
+      for (const row of rows) {
+        const id = this.openedVacancyId(row, candidateId);
+        if (id) ids.add(id);
+      }
+      this.cachedIdsMemo.set(candidateKey, { ids, count: (known?.count ?? 0) + rows.length, last: rows.at(-1)!.id });
+      await yieldToLoop();
+      if (rows.length < batch) return;
+    }
   }
 
   private openedVacancyId(row: { cache_key: string; result_cipher: string }, candidateId: string): string | undefined {
@@ -330,10 +358,10 @@ export class SqliteVacancyFitStore {
    * so pages the candidate opens now stay ahead; a failure under the current revision stays failed.
    */
   requeueFailedOnce(revision = MECHANICS_REQUEUE_REVISION, now = new Date().toISOString()): number {
-    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',attempts=0,defers=0,last_error=NULL,
-      lease_token=NULL,lease_until=NULL,requested_at=created_at,requeue_revision=?,updated_at=?
-      WHERE status='failed' AND input_cipher<>'' AND COALESCE(requeue_revision,1)<?`).run(revision, now, revision);
-    return Number(update.changes);
+    return this.requeueFound(
+      `status='failed' AND input_cipher<>'' AND COALESCE(requeue_revision,1)<?`, [revision],
+      `requested_at=created_at,requeue_revision=?,`, [revision], now,
+    );
   }
 
   /**
@@ -341,10 +369,29 @@ export class SqliteVacancyFitStore {
    * requirements store). Those that ran out of defers since then go back with their request time.
    */
   requeueOrphanedRequirementsTimeouts(now = new Date().toISOString()): number {
-    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',attempts=0,defers=0,last_error=NULL,
-      lease_token=NULL,lease_until=NULL,updated_at=?
-      WHERE status='failed' AND last_error='requirements_wait_timeout' AND input_cipher<>'' AND updated_at>=?`).run(now, ORPHANED_REQUIREMENTS_SINCE);
-    return Number(update.changes);
+    return this.requeueFound(
+      `status='failed' AND last_error='requirements_wait_timeout' AND input_cipher<>'' AND updated_at>=?`, [ORPHANED_REQUIREMENTS_SINCE],
+      '', [], now,
+    );
+  }
+
+  /**
+   * Prod 03.11: as one UPDATE each, the two worker-start requeues scanned 19K failed rows (their
+   * ciphers on overflow pages) for 72 s and 30 s under the write lock; every HTTP write waited out
+   * its 20 s busy timeout on the event loop. The rows are found by a read, which takes no lock in
+   * WAL, and written by rowid in small batches that check the condition again.
+   */
+  private requeueFound(where: string, whereArgs: readonly SQLInputValue[], set: string, setArgs: readonly SQLInputValue[], now: string): number {
+    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${where}`).all(...whereArgs) as { id: number }[]).map((row) => row.id);
+    let changed = 0;
+    for (let start = 0; start < ids.length; start += REQUEUE_BATCH) {
+      const batch = ids.slice(start, start + REQUEUE_BATCH);
+      const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',attempts=0,defers=0,last_error=NULL,
+        lease_token=NULL,lease_until=NULL,${set}updated_at=? WHERE rowid IN (${batch.map(() => '?').join(',')}) AND ${where}`)
+        .run(...setArgs, now, ...batch, ...whereArgs);
+      changed += Number(update.changes);
+    }
+    return changed;
   }
 
   deleteCandidate(candidateId: string): void {

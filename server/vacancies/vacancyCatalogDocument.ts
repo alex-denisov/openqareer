@@ -148,9 +148,16 @@ const CTA_BOX =
 
 const formatDate = formatRuDate;
 
-function descriptionBlock(markdown: string, summary: string, structured = false): string {
+function descriptionBlock(
+  markdown: string,
+  summary: string,
+  structured = false,
+  language?: string,
+): string {
   const html = renderDescriptionHtml(markdown) || renderDescriptionHtml(summary);
-  const property = structured ? ' itemprop="description"' : '';
+  // The page chrome is Russian (`<html lang="ru">`); the employer's text keeps its own language.
+  const property =
+    (structured ? ' itemprop="description"' : '') + (language ? ` lang="${language}"` : '');
   // Microdata text values must keep word boundaries between paragraphs/list items.
   const content = structured ? html.replace(/<\/(p|h2|li)>/gu, '</$1>\n') : html;
   return html
@@ -319,6 +326,15 @@ function aboutBox(entry: CatalogEntry, employer: string): string {
   );
 }
 
+function vacancyText(detail: VacancyDetail, structured: boolean): string {
+  return descriptionBlock(
+    meaningfulText(detail.description, detail.entry.title),
+    meaningfulText(detail.entry.summary, detail.entry.title),
+    structured,
+    detail.language,
+  );
+}
+
 export function renderVacancyDocument(detail: VacancyDetail): string {
   const { entry } = detail;
   const posting = detail.indexable
@@ -348,11 +364,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     (entry.skills.length > 0
       ? `<ul class="cat-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
       : '') +
-    descriptionBlock(
-      meaningfulText(detail.description, entry.title),
-      meaningfulText(entry.summary, entry.title),
-      Boolean(posting),
-    ) +
+    vacancyText(detail, Boolean(posting)) +
     '<p class="cat-note">openqareer не кадровое агентство: вакансия собрана с открытого источника, ' +
     'отклик подаётся на сайте работодателя.</p>' +
     // B574: the cabinet offer leads the column; «О вакансии» keeps one button.

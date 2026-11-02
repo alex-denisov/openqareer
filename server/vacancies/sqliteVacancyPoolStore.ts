@@ -1778,9 +1778,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   /** Позиция обхода текста hh (02.11): воркер перезапускается ~22 раза в сутки и шёл заново. */
   loadHhTextCursor(): string | undefined {
-    const row = this.database
-      .prepare('SELECT cursor FROM hh_text_state WHERE id = 1')
-      .get() as { cursor: string | null } | undefined;
+    const row = this.database.prepare('SELECT cursor FROM hh_text_state WHERE id = 1').get() as
+      { cursor: string | null } | undefined;
     return row?.cursor ?? undefined;
   }
 
@@ -1909,7 +1908,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     nowMs: number = Date.now(),
   ): void {
     if (codes.length === 0) {
-      this.database.prepare('DELETE FROM hh_text_role_targets WHERE candidate_id = ?').run(candidateId);
+      this.database
+        .prepare('DELETE FROM hh_text_role_targets WHERE candidate_id = ?')
+        .run(candidateId);
       return;
     }
     this.database
@@ -2679,6 +2680,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       // A malformed compact field is an empty list, never a reason to hydrate
       // the source cluster during a public request.
     }
+    const salaryLabel = row.salary_label ? normalizeSalaryLabel(row.salary_label) : '';
     return {
       clusterId: row.cluster_id,
       key: row.entry_key,
@@ -2687,7 +2689,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       company: row.company,
       ...(row.location ? { location: row.location } : {}),
       isRemote: row.is_remote === 1,
-      ...(row.salary_label ? { salaryLabel: normalizeSalaryLabel(row.salary_label) } : {}),
+      ...(salaryLabel ? { salaryLabel } : {}),
       summary: row.summary,
       skills,
       sourceUrl: row.source_url,
@@ -2703,6 +2705,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
+  /** Walks every active row (`path <> ''` is in no index): ~1.4 s on prod; the engine passes a cached total for big groups. */
+  private countCatalogEntries(condition: string, params: readonly SQLInputValue[]): number {
+    return (
+      this.database
+        .prepare(`SELECT count(*) AS n FROM catalog_entries WHERE ${condition}`)
+        .get(...params) as { n: number }
+    ).n;
+  }
+
   loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
     const limit = Math.max(1, Math.min(Math.trunc(query.limit), 50_000));
     const where = ["status = 'active'", "path <> ''"];
@@ -2715,12 +2726,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       where.push('role_slug = ?');
       filterParams.push(query.role);
     }
-    const condition = where.join(' AND ');
-    const total = (
-      this.database
-        .prepare(`SELECT count(*) AS n FROM catalog_entries WHERE ${condition}`)
-        .get(...filterParams) as { n: number }
-    ).n;
+    const total = query.knownTotal ?? this.countCatalogEntries(where.join(' AND '), filterParams);
 
     const pageWhere = [...where];
     const pageParams = [...filterParams];

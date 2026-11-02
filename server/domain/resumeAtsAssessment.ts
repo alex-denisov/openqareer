@@ -1,3 +1,5 @@
+import { managementSkillMatcher } from '../connectors/managementSkillsDictionary';
+import { parseResumeMonth } from './resumeMonth';
 import type {
   ResumeDocument,
   ResumeExperience,
@@ -76,6 +78,7 @@ const MAXIMUM = {
 } as const;
 
 const UNKNOWN_KEYWORD_SOURCE = 'Нет проверенных требований вакансии';
+const MIN_KEYWORD_REQUIREMENTS = 3;
 const MAX_ATS_LINE_CHARACTERS = 120;
 
 export function buildResumeAtsAssessment(
@@ -146,14 +149,19 @@ function keywordEvidenceForRequirement(
   factSources: readonly { readonly field: string; readonly text: string }[],
 ): AtsKeywordEvidence {
   const normalizedRequirement = normalizeText(requirement);
+  const dictionaryPattern = managementSkillMatcher(requirement);
   const seen = new Set<string>();
   const matches = factSources.flatMap((fact) => {
     const normalizedFact = normalizeText(fact.text);
     const boundaryFact = ` ${normalizedFact} `;
     const boundaryRequirement = ` ${normalizedRequirement} `;
     const identity = `${fact.field}${String.fromCharCode(0)}${fact.text}`;
-    if (!normalizedFact.includes(normalizedRequirement) || seen.has(identity)) return [];
-    if (!boundaryFact.includes(boundaryRequirement)) return [];
+    if (seen.has(identity)) return [];
+    const matchesFact = dictionaryPattern
+      ? dictionaryPattern.test(fact.text)
+      : normalizedFact.includes(normalizedRequirement) &&
+        boundaryFact.includes(boundaryRequirement);
+    if (!matchesFact) return [];
     seen.add(identity);
     return [{ field: fact.field, text: evidenceText(fact.text) }];
   });
@@ -185,6 +193,14 @@ function keywordDimension(
   const evidence = requirements.map((requirement) =>
     keywordEvidenceForRequirement(requirement, factSources),
   );
+  return keywordResult(requirementSource.label, requirements.length, evidence);
+}
+
+function keywordResult(
+  source: string,
+  sampleSize: number,
+  evidence: readonly AtsKeywordEvidence[],
+): ResumeAtsDimension {
   const matchedRequirements = evidence
     .filter((item) => item.matches.length > 0)
     .map((item) => item.requirement);
@@ -192,15 +208,18 @@ function keywordDimension(
     .filter((item) => item.matches.length === 0)
     .map((item) => item.requirement);
   const matched = matchedRequirements.length;
+  const enough = sampleSize >= MIN_KEYWORD_REQUIREMENTS;
   return {
-    score: Math.round((MAXIMUM.keywords * matched) / requirements.length),
+    score: enough ? Math.round((MAXIMUM.keywords * matched) / sampleSize) : null,
     maximum: MAXIMUM.keywords,
-    status: 'measured',
-    source: requirementSource.label,
-    sampleSize: requirements.length,
-    summary: 'Сопоставлены точные текстовые совпадения, без синонимов.',
+    status: enough ? 'measured' : 'unknown',
+    source,
+    sampleSize,
+    summary: enough
+      ? 'Сопоставлены точные совпадения и известные русские и английские формулировки управленческих навыков.'
+      : `Недостаточно требований для оценки: нужно хотя бы ${MIN_KEYWORD_REQUIREMENTS}, сейчас ${sampleSize}.`,
     matched,
-    required: requirements.length,
+    required: sampleSize,
     matchedRequirements,
     unmatchedRequirements,
     evidence,
@@ -294,8 +313,8 @@ function hasValidExperienceDates(experience: ResumeExperience): boolean {
 
 function dateTime(value: string | boolean | undefined): number | null {
   if (typeof value !== 'string' || !value.trim()) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  const parsed = parseResumeMonth(value);
+  return parsed ? parsed.year * 12 + parsed.month : null;
 }
 
 function documentFactSources(

@@ -23,11 +23,10 @@ import {
   type StrategyRole,
 } from '../../shared/careerStrategy';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
-import { finishMatchedVacancies } from './matchedVacancyRoutes';
-import { readCampaign } from './campaignContext';
 import { registerCampaignRoutes } from './campaignRoutes';
 import { readRoleContext, type RoleContext } from './vacancyRoleContext';
-import { careerRolesWithCandidateChoices, persistCareerRoles } from './careerRoleSync';
+import { persistCareerRoles } from './careerRoleSync';
+import { readCareerRoleContext } from './careerRolesRead';
 import { vacancySourceRegistryView } from '../vacancies/vacancySourceRegistry';
 import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRoutes';
 import { registerApplicationRoutes } from './applicationRoutes';
@@ -106,8 +105,8 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
   );
   if (!candidate) return undefined;
 
-  const context = await readRoleContext(deps, request, candidate.id);
-  if (!context) {
+  const read = await readCareerRoleContext(deps, request, candidate.id);
+  if (!read) {
     return {
       data: [],
       meta: {
@@ -118,15 +117,7 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
     };
   }
 
-  const campaign = readCampaign(deps.candidateStore, candidate.id);
-  const listed = finishMatchedVacancies(
-    context.matched,
-    [...campaign.roles.value],
-    campaign,
-    deps.candidateStore,
-    candidate.id,
-  );
-  const roles = careerRolesWithCandidateChoices(deps, candidate.id, context, listed);
+  const { context, roles } = read;
   try {
     persistCareerRoles(deps, candidate.id, roles);
   } catch (error) {

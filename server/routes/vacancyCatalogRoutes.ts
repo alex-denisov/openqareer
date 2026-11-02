@@ -25,10 +25,13 @@ import {
   type CatalogPage,
 } from '../vacancies/vacancyCatalogPage';
 import {
+  MIN_LISTING_SIZE,
   catalogListings,
   listingEntries,
   type CatalogListingSummary,
 } from '../vacancies/vacancyCatalogFacets';
+import { nearbyListings, smallListingSummary } from '../vacancies/catalogNearbyListings';
+import { isIndexableListing } from '../seo/catalogIndexing';
 import {
   catalogFilterGroups,
   catalogFilterGroupsFromListings,
@@ -43,7 +46,7 @@ import {
   renderGoneDocument,
   renderVacancyDocument,
 } from '../vacancies/vacancyCatalogDocument';
-import { getCatalogSitemaps } from '../seo/catalogSitemapSchedule';
+import { getCatalogSitemaps, getListingHistory } from '../seo/catalogSitemapSchedule';
 import { isValidIndexNowKey } from '../seo/indexNow';
 import { renderSitemapIndex, type SitemapFile } from '../seo/sitemapXml';
 import {
@@ -229,9 +232,14 @@ function listingEntriesPage(
 }
 
 /**
- * Список по месту и роли. Список, которого нет или который опустел ниже порога
- * публикации, отвечает `410`, а не пустой страницей: адрес, который мы сами же
- * перестали печатать, должен уйти из индекса, а не копиться.
+ * Список по месту и роли (03.11).
+ * - Есть хотя бы одна вакансия — `200`. Ниже порога публикации страница
+ *   честно говорит, что вакансий мало, и ведёт на соседние списки.
+ * - Индексируется по порогу, а однажды проиндексированный — ещё 30 дней,
+ *   пока в нём есть вакансия (`isIndexableListing`): раньше страница у порога
+ *   каждый день переключалась index/noindex/410.
+ * - Опустевший список, который мы публиковали, — `301` на место, место — на
+ *   каталог. Адрес, которого никогда не было, уходит дальше и отвечает `410`.
  */
 function handleProjectedListing(
   deps: RouteDeps,
@@ -242,19 +250,30 @@ function handleProjectedListing(
   if (!listing) return undefined;
   const projectedListings = deps.multiSourceEngine.getPublicCatalogListings();
   if (!projectedListings) return undefined;
-  const summary = projectedListings.find(
-    (candidate) =>
-      candidate.place === listing.place && (candidate.role ?? undefined) === listing.role,
-  );
-  if (!summary) return undefined;
   const cursor = cursorOf(request);
   const { counts, chip, projected } = listingEntriesPage(deps, request, listing, cursor);
   if (!projected) return undefined;
+  const history = getListingHistory(listing.place, listing.role);
+  if (projected.total === 0) {
+    return history ? reply.redirect(emptiedListingTarget(deps, listing), 301) : undefined;
+  }
+  const published = projectedListings.find(
+    (candidate) =>
+      candidate.place === listing.place && (candidate.role ?? undefined) === listing.role,
+  );
+  const summary = published ?? smallListingSummary(listing, projected.items, projected.total);
+  if (!summary) return undefined;
   const requestedPage = cursor ? (listing.page ?? 1) : 1;
+  const page = projectedPage(projected, requestedPage, summary, chip);
+  // A chip page counts the chip; the listing itself is the unfiltered total.
+  const total = chip ? summary.count : projected.total;
   return sendDocument(
     reply,
     renderCatalogDocument(
-      projectedPage(projected, requestedPage, summary, chip),
+      {
+        ...page,
+        indexable: !chip && isIndexableListing(total, Boolean(listing.role), history, new Date()),
+      },
       filtersForListings(projectedListings, {
         place: listing.place,
         ...(listing.role ? { role: listing.role } : {}),
@@ -265,9 +284,23 @@ function handleProjectedListing(
           ...(listing.role ? { role: listing.role } : {}),
         }),
         chips: { counts, ...(chip ? { active: chip } : {}), path: summary.path },
+        ...(total < MIN_LISTING_SIZE ? { nearby: nearbyListings(projectedListings, listing) } : {}),
       },
     ),
   );
+}
+
+/** A role list moves to its place while the place has a vacancy, else to the catalog. */
+function emptiedListingTarget(
+  deps: RouteDeps,
+  listing: NonNullable<ReturnType<typeof parseListingPath>>,
+): string {
+  if (!listing.role) return CATALOG_ROOT;
+  const place = deps.multiSourceEngine.getPublicCatalogEntriesPage({
+    limit: 1,
+    place: listing.place,
+  });
+  return place && place.total > 0 ? (listingPath(listing.place) ?? CATALOG_ROOT) : CATALOG_ROOT;
 }
 
 /**

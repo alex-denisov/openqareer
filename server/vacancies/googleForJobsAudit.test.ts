@@ -137,12 +137,14 @@ describe('B227: аудит разметки Google for Jobs (Schema.org JobPosti
     expect(detail!.indexable).toBe(false);
   });
 
-  it('ставит validThrough через 30 дней после публикации и не выдумывает остальное', () => {
+  it('ставит validThrough через 30 дней после последней проверки и не выдумывает остальное', () => {
     const detail = buildVacancyDetail(sampleCluster({ canonicalLocation: undefined }));
     const posting = detail!.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting');
-    expect(posting!.validThrough).toBe('2026-10-08T10:00:00.000Z');
+    // 03.11: the card was still up when last seen (14.09), so the horizon counts from then.
+    expect(posting!.validThrough).toBe('2026-10-14T08:00:00.000Z');
     expect(posting).not.toHaveProperty('jobLocation');
-    expect(posting).not.toHaveProperty('inLanguage');
+    // The language is read from the employer's own text, which is Russian here.
+    expect(posting!.inLanguage).toBe('ru');
   });
 
   it('возвращает 410 Gone для снятых и несуществующих вакансий во избежание пессимизации в Google', async () => {
