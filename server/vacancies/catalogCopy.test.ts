@@ -50,4 +50,11 @@ describe('normalizeSalaryLabel', () => {
     expect(normalizeSalaryLabel('от 90\u00a0000 ₽')).toBe('от 90\u00a0000 ₽');
     expect(normalizeSalaryLabel('100 — 200 XYZ')).toBe('100 — 200 XYZ');
   });
+
+  it('drops a stored zero salary and reads a zero lower bound as «до» (03.11)', () => {
+    expect(normalizeSalaryLabel('0 $')).toBe('');
+    expect(normalizeSalaryLabel('0 — 0 USD')).toBe('');
+    expect(normalizeSalaryLabel('0 — 5\u00a0000 USD')).toBe('до 5\u00a0000 $');
+    expect(normalizeSalaryLabel('10 — 20 $')).toBe('10 — 20 $');
+  });
 });

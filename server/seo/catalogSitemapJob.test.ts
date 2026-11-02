@@ -1,7 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { VACANCY_CATALOG_ENTRIES_TABLE } from '../data/sqliteSchema';
-import { INDEXED_PLACE_MIN } from './catalogIndexing';
+import { INDEXED_PLACE_MIN, INDEXED_PLACE_ROLE_MIN, LISTING_RETAIN_DAYS } from './catalogIndexing';
+import { readListingHistory } from './catalogListingHistory';
 import {
   computeCatalogSitemaps,
   readCatalogSitemaps,
@@ -127,7 +128,7 @@ describe('computeCatalogSitemaps', () => {
         { id: 'nocompany', company: ' ' },
         { id: 'norole', role: null },
         { id: 'stale', seen: 20 },
-        { id: 'old', posted: 30 },
+        { id: 'zero', salary: '0 $' },
         { id: 'gone', status: 'archived' },
         { id: 'notext', summary: '' },
         { id: 'titleonly', summary: 'Бухгалтер' },
@@ -139,6 +140,54 @@ describe('computeCatalogSitemaps', () => {
       'https://openqareer.com/vacancies/job/frontend-developer-at-acme-good',
     ]);
     expect(jobs.urlCount).toBe(1);
+  });
+
+  it('keeps a live card listed past its first week (03.11)', () => {
+    const files = computeCatalogSitemaps(database([{ id: 'old', posted: 30, seen: 1 }]), NOW);
+    const jobs = files.find((file) => file.name === 'jobs-1.xml')!;
+    expect(locs(jobs.xml)).toEqual([
+      'https://openqareer.com/vacancies/job/frontend-developer-at-acme-old',
+    ]);
+  });
+
+  it('keeps a once-indexed listing for 30 days while it has a vacancy', () => {
+    const db = database([
+      ...Array.from({ length: INDEXED_PLACE_ROLE_MIN }, (_, index) => ({
+        id: `m${index}`,
+        place: 'minsk',
+        role: 'business-analyst',
+      })),
+    ]);
+    const role = 'https://openqareer.com/vacancies/minsk/business-analyst';
+    const listed = (now: Date) =>
+      computeCatalogSitemaps(db, now).flatMap((file) =>
+        file.name.startsWith('listings') ? locs(file.xml) : [],
+      );
+    expect(listed(NOW)).toContain(role);
+    db.exec("DELETE FROM catalog_entries WHERE entry_key IN ('m0', 'm1', 'm2', 'm3')");
+    expect(listed(new Date(NOW.getTime() + 10 * DAY))).toContain(role);
+    expect(listed(new Date(NOW.getTime() + (LISTING_RETAIN_DAYS + 1) * DAY))).not.toContain(role);
+    db.exec("DELETE FROM catalog_entries WHERE entry_key = 'm4'");
+    expect(listed(new Date(NOW.getTime() + DAY))).not.toContain(role);
+  });
+
+  it('remembers published listings and when they last qualified', () => {
+    const db = database([
+      ...berlinRows('h'),
+      { id: 'p1', place: 'paris', role: null },
+      { id: 'p2', place: 'paris', role: null },
+      { id: 'p3', place: 'paris', role: null },
+      { id: 'one', place: 'oslo', role: null },
+    ]);
+    computeCatalogSitemaps(db, NOW);
+    const history = readListingHistory(db);
+    expect(history.get('berlin/')).toEqual({
+      firstQualifiedAt: NOW.toISOString(),
+      lastQualifiedAt: NOW.toISOString(),
+    });
+    expect(history.get('paris/')).toEqual({});
+    // Never published (below MIN_LISTING_SIZE): its path never existed for crawlers.
+    expect(history.has('oslo/')).toBe(false);
   });
 
   it('gives each listing the date of its freshest vacancy', () => {

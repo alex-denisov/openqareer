@@ -145,10 +145,43 @@ describe('страница публичного каталога ваканси�
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
 
     expect(posting).not.toHaveProperty('jobLocation');
-    // Язык текста вакансии задаёт работодатель, и мы его не знаем.
-    expect(posting).not.toHaveProperty('inLanguage');
-    // validThrough — наш срок, а не поле площадки: публикация + 30 дней.
-    expect(posting.validThrough).toBe('2026-10-01T00:00:00.000Z');
+    expect(posting).not.toHaveProperty('baseSalary');
+    // validThrough — наш срок, а не поле площадки: последняя проверка + 30 дней.
+    expect(posting.validThrough).toBe('2026-10-06T00:00:00.000Z');
+  });
+
+  it('берёт язык из букв текста работодателя, а смешанный текст оставляет без языка', () => {
+    const russian = buildVacancyDetail(cluster())!;
+    expect(russian.language).toBe('ru');
+    const english = buildVacancyDetail(
+      cluster(),
+      'We are hiring a privacy counsel to own data policy and team training.',
+    )!;
+    expect(english.language).toBe('en');
+    const mixed = buildVacancyDetail(
+      cluster(),
+      'Privacy counsel юрист по данным policy и обучение',
+    )!;
+    expect(mixed.language).toBeUndefined();
+    expect(
+      mixed.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting'),
+    ).not.toHaveProperty('inLanguage');
+  });
+
+  it('не печатает нулевую зарплату и размечает baseSalary только с периодом', () => {
+    expect(
+      buildVacancyDetail(cluster({ salary: { from: 0, currency: 'USD' } }))!.entry.salaryLabel,
+    ).toBeUndefined();
+    const ranged = buildVacancyDetail(
+      cluster({ salary: { from: 0, to: 150000, currency: 'RUR', period: 'month' } }),
+    )!;
+    expect(ranged.entry.salaryLabel).toBe('до 150\u00a0000 ₽');
+    const posting = ranged.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+    expect(posting.baseSalary).toEqual({
+      '@type': 'MonetaryAmount',
+      currency: 'RUB',
+      value: { '@type': 'QuantitativeValue', value: 150000, unitText: 'MONTH' },
+    });
   });
 
   it('не размечает JobPosting карточку без вилки или без работодателя', () => {
