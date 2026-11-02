@@ -1,20 +1,25 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
-import type { ApplicationView, CreateApplicationInput } from './applicationsApi';
+import { useCallback, useEffect, useState, type ComponentProps } from 'react';
+import { Plus } from '@phosphor-icons/react';
+import type { ApplicationView } from './applicationsApi';
 import { listApplicationsPage } from './applicationsApi';
 import type { UseApplications } from './useApplications';
 import { OfferEditModal } from './OfferEditModal';
 import { OfferComparisonMatrix } from './OfferComparisonMatrix';
-import { calculateOfferCompensation } from './offerCompensation';
+import {
+  AddOfferButton,
+  AddOfferForm,
+  CompareOffersButton,
+  EMPTY_OFFERS_TEXT,
+  OfferRow,
+  OffersCard,
+  TotalCompCard,
+} from './ResponsesOffersParts';
+import './responses-offers.css';
 
-export function ResponsesOffersPanel({ state }: { readonly state: UseApplications }) {
+function useOffers() {
   const [applications, setApplications] = useState<readonly ApplicationView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [addOpen, setAddOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [comparing, setComparing] = useState(false);
-
   const reload = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -27,89 +32,169 @@ export function ResponsesOffersPanel({ state }: { readonly state: UseApplication
       setLoading(false);
     }
   }, []);
-  useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+  return { applications, setApplications, loading, error, reload };
+}
 
-  const editingApplication = applications.find((application) => application.id === editingId) ?? null;
+export function ResponsesOffersPanel({ state }: { readonly state: UseApplications }) {
+  const { applications, setApplications, loading, error, reload } = useOffers();
+  const [addOpen, setAddOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const editing = applications.find((application) => application.id === editingId) ?? null;
+  const toggleAdd = () => setAddOpen((open) => !open);
   return (
-    <section className="career-responses-offers" aria-label="Офферы">
-      <header className="career-responses-offers-header">
-        <div><h2>Офферы</h2><p>{applications.length} сохранено</p></div>
-        <div>
-          <button type="button" className="career-btn career-btn-secondary career-btn-sm" onClick={() => setComparing(true)} disabled={applications.length < 2}>
-            Сравнить офферы
-          </button>
-          <button type="button" className="career-btn career-btn-primary career-btn-sm" onClick={() => setAddOpen((open) => !open)}>
-            {addOpen ? 'Отменить' : 'Добавить оффер'}
-          </button>
-        </div>
-      </header>
-      {error ? <p role="alert">{error} <button type="button" onClick={() => void reload()}>Повторить</button></p> : null}
-      {loading ? <p role="status">Загружаем офферы…</p> : null}
-      {!loading && applications.length === 0 ? <p role="status">Сохранённых офферов пока нет.</p> : null}
-      {addOpen ? <AddOfferForm state={state} onCreated={(application) => { setApplications((items) => [...items, application]); setEditingId(application.id); setAddOpen(false); }} /> : null}
-      <ul className="career-responses-offer-list">
-        {applications.map((application) => (
-          <OfferRow key={application.id} application={application} onEdit={() => setEditingId(application.id)} />
-        ))}
-      </ul>
-      {editingApplication ? <OfferEditModal application={editingApplication} isOpen onClose={() => setEditingId(null)} onSave={async (id, terms, respondBy) => { await state.saveOffer(id, terms, respondBy); await reload(); }} /> : null}
-      {comparing ? <OfferComparisonMatrix applications={applications} onClose={() => setComparing(false)} onEditOffer={(id) => { setComparing(false); setEditingId(id); }} /> : null}
-      {!loading && applications.length > 0 ? <button type="button" className="career-btn career-btn-secondary career-btn-sm" onClick={() => void reload()}>Обновить офферы</button> : null}
-    </section>
+    <div className="career-offers-panel" aria-label="Офферы">
+      <OffersListCard
+        state={state}
+        applications={applications}
+        loading={loading}
+        error={error}
+        addOpen={addOpen}
+        onToggleAdd={toggleAdd}
+        onReload={() => void reload()}
+        onCompare={() => setComparing(true)}
+        onEdit={setEditingId}
+        onCreated={(application) => {
+          setApplications((items) => [...items, application]);
+          setEditingId(application.id);
+          setAddOpen(false);
+        }}
+      />
+      <TotalCompCard offersCount={applications.length} />
+      <div className="career-offers-cta">
+        <button type="button" className="career-btn career-btn-primary" onClick={toggleAdd}>
+          <Plus aria-hidden="true" /> {addOpen ? 'Отменить' : 'Добавить оффер'}
+        </button>
+      </div>
+      <OfferDialogs
+        editing={editing}
+        comparing={comparing}
+        applications={applications}
+        onSave={async (id, terms, respondBy) => {
+          await state.saveOffer(id, terms, respondBy);
+          await reload();
+        }}
+        onCloseEdit={() => setEditingId(null)}
+        onCloseCompare={() => setComparing(false)}
+        onEditFromCompare={(id) => {
+          setComparing(false);
+          setEditingId(id);
+        }}
+      />
+    </div>
   );
 }
 
-function AddOfferForm({
-  state,
-  onCreated,
-}: {
+function OffersHero() {
+  return (
+    <div className="career-offers-hero">
+      <h2>Офферов пока нет</h2>
+      <p>Добавьте первый: платформа соберёт total comp и покажет позицию на торге.</p>
+    </div>
+  );
+}
+
+function OfferDialogs(props: {
+  readonly editing: ApplicationView | null;
+  readonly comparing: boolean;
+  readonly applications: readonly ApplicationView[];
+  readonly onSave: ComponentProps<typeof OfferEditModal>['onSave'];
+  readonly onCloseEdit: () => void;
+  readonly onCloseCompare: () => void;
+  readonly onEditFromCompare: (id: string) => void;
+}) {
+  return (
+    <>
+      {props.editing ? (
+        <OfferEditModal
+          application={props.editing}
+          isOpen
+          onClose={props.onCloseEdit}
+          onSave={props.onSave}
+        />
+      ) : null}
+      {props.comparing ? (
+        <OfferComparisonMatrix
+          applications={props.applications}
+          onClose={props.onCloseCompare}
+          onEditOffer={props.onEditFromCompare}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function OffersListCard(props: {
   readonly state: UseApplications;
+  readonly applications: readonly ApplicationView[];
+  readonly loading: boolean;
+  readonly error: string;
+  readonly addOpen: boolean;
+  readonly onToggleAdd: () => void;
+  readonly onReload: () => void;
+  readonly onCompare: () => void;
+  readonly onEdit: (id: string) => void;
   readonly onCreated: (application: ApplicationView) => void;
 }) {
-  const [company, setCompany] = useState('');
-  const [title, setTitle] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setError('');
-    try {
-      const input: CreateApplicationInput = {
-        stage: 'offer',
-        manualVacancy: { title: title.trim(), company: company.trim(), source: 'other' },
-      };
-      const application = await state.addManualCard(input);
-      onCreated(application);
-    } catch {
-      setError('Не удалось создать карточку оффера. Повторите запрос.');
-    } finally {
-      setSaving(false);
-    }
-  }
+  const { applications, loading, error, addOpen } = props;
+  const isEmpty = !loading && !error && applications.length === 0;
   return (
-    <form className="career-responses-add-offer" onSubmit={(event) => void submit(event)}>
-      <label>Компания<input value={company} onChange={(event) => setCompany(event.currentTarget.value)} required maxLength={300} /></label>
-      <label>Роль<input value={title} onChange={(event) => setTitle(event.currentTarget.value)} required maxLength={300} /></label>
-      {error ? <p role="alert">{error}</p> : null}
-      <button type="submit" className="career-btn career-btn-primary career-btn-sm" disabled={saving || !company.trim() || !title.trim()}>
-        {saving ? 'Сохраняем' : 'Продолжить к условиям'}
-      </button>
-    </form>
+    <>
+      {isEmpty ? <OffersHero /> : null}
+      <OffersCard
+        count={applications.length}
+        isEmpty={isEmpty && !addOpen}
+        actions={
+          <>
+            {applications.length >= 2 ? <CompareOffersButton onClick={props.onCompare} /> : null}
+            <AddOfferButton open={addOpen} onToggle={props.onToggleAdd} />
+          </>
+        }
+      >
+        <OffersStatus loading={loading} error={error} onReload={props.onReload} />
+        {isEmpty ? (
+          <p className="career-offers-text" role="status">
+            {EMPTY_OFFERS_TEXT}
+          </p>
+        ) : null}
+        {addOpen ? <AddOfferForm state={props.state} onCreated={props.onCreated} /> : null}
+        <ul className="career-offers-list">
+          {applications.map((application) => (
+            <OfferRow
+              key={application.id}
+              application={application}
+              onEdit={() => props.onEdit(application.id)}
+            />
+          ))}
+        </ul>
+      </OffersCard>
+    </>
   );
 }
 
-function OfferRow({ application, onEdit }: { readonly application: ApplicationView; readonly onEdit: () => void }) {
-  const terms = application.offer?.terms;
-  const compensation = calculateOfferCompensation(terms ?? {});
-  const amount = terms?.baseSalary === undefined
-    ? 'Условия не указаны'
-    : `${new Intl.NumberFormat('ru-RU').format(compensation.totalAnnualCompensation)} ${terms.currency === 'USD' ? '$' : terms.currency === 'EUR' ? '€' : '₽'} в год`;
+function OffersStatus({
+  loading,
+  error,
+  onReload,
+}: {
+  readonly loading: boolean;
+  readonly error: string;
+  readonly onReload: () => void;
+}) {
   return (
-    <li className="career-responses-offer-row">
-      <div><strong>{application.vacancy?.company || 'Компания не указана'}</strong><span>{application.vacancy?.title || 'Роль не указана'}</span></div>
-      <div><span>Совокупная компенсация</span><strong>{amount}</strong></div>
-      <button type="button" onClick={onEdit}>Изменить условия</button>
-    </li>
+    <>
+      {error ? (
+        <p role="alert">
+          {error}{' '}
+          <button type="button" onClick={onReload}>
+            Повторить
+          </button>
+        </p>
+      ) : null}
+      {loading ? <p role="status">Загружаем офферы…</p> : null}
+    </>
   );
 }

@@ -39,6 +39,22 @@ describe('candidate company wants repository (B439)', () => {
     expect(stored.next_step_cipher).not.toContain('Написать Марии Орловой');
   });
 
+  it('stores a manual stage and adds the column to an existing table (B492)', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec(`CREATE TABLE candidate_company_wants (
+      candidate_id TEXT NOT NULL, company_key TEXT NOT NULL, company_name TEXT NOT NULL,
+      next_step_cipher TEXT, next_step_due_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+      PRIMARY KEY (candidate_id, company_key)) STRICT;
+      INSERT INTO candidate_company_wants VALUES ('c', 'k', 'Бета', NULL, NULL, '2026-10-01', '2026-10-01');`);
+    const repository = new SqliteCandidateCompanyWantsRepository(database, Buffer.alloc(32, 13));
+    resources.push({ database, repository });
+
+    expect(repository.get('c', 'k')).toMatchObject({ stage: null, createdAt: '2026-10-01' });
+    expect(repository.setStage('c', 'k', 'waiting', '2026-10-05')).toBe(true);
+    expect(repository.get('c', 'k')).toMatchObject({ stage: 'waiting', updatedAt: '2026-10-05' });
+    expect(repository.setStage('c', 'missing', 'path')).toBe(false);
+  });
+
   it('removes wants idempotently and scopes them to the candidate', () => {
     const database = new DatabaseSync(':memory:');
     database.exec("CREATE TABLE candidates (id TEXT PRIMARY KEY); INSERT INTO candidates VALUES ('candidate-a'), ('candidate-b');");
