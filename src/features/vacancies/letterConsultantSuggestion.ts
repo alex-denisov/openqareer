@@ -12,7 +12,14 @@ export interface LetterStarEdit {
   readonly sentence: string;
 }
 
-const CYRILLIC = /[а-яё]/i;
+type LetterLanguage = 'ru' | 'en';
+
+/** По большинству букв: в английском письме бывают русские названия компаний, и наоборот. */
+function scriptLanguage(text: string): LetterLanguage {
+  const cyrillic = text.match(/[а-яё]/giu)?.length ?? 0;
+  const latin = text.match(/[a-z]/giu)?.length ?? 0;
+  return cyrillic > latin ? 'ru' : 'en';
+}
 
 function normalize(text: string): string {
   return text
@@ -36,13 +43,13 @@ function asSentence(result: string): string {
 export function letterStarEdit(
   letterText: string,
   stories: readonly StarStoryView[],
+  language: LetterLanguage = scriptLanguage(letterText),
 ): LetterStarEdit | null {
   const text = normalize(letterText);
   if (!text) return null;
-  const letterIsRussian = CYRILLIC.test(letterText);
   const candidate = [...stories]
     .filter((story) => story.confidence === 'confirmed' && story.fields.result.trim())
-    .filter((story) => CYRILLIC.test(story.fields.result) === letterIsRussian)
+    .filter((story) => scriptLanguage(story.fields.result) === language)
     .filter((story) => !text.includes(normalize(story.fields.result)))
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
   if (!candidate) return null;
@@ -76,6 +83,7 @@ export function letterConsultantSuggestion(
 }
 
 interface LetterDraftPort {
+  readonly pitch: { readonly language?: LetterLanguage } | null;
   readonly text: string;
   readonly setText: (text: string) => void;
   readonly loading: boolean;
@@ -92,7 +100,8 @@ export function useLetterConsultantSuggestion(draft: LetterDraftPort, frozen: bo
       .catch(() => setStories([]));
     return () => controller.abort();
   }, []);
-  const edit = frozen || draft.loading ? null : letterStarEdit(draft.text, stories);
+  const edit =
+    frozen || draft.loading ? null : letterStarEdit(draft.text, stories, draft.pitch?.language);
   usePublishConsultantSuggestion(
     edit
       ? letterConsultantSuggestion(edit, () =>

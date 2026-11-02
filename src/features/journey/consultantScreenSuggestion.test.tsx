@@ -108,6 +108,10 @@ describe('letter edit suggestion (mockup 9)', () => {
     ).toBeNull();
     expect(letterStarEdit('Dear team,\n\nI cut releases.', [story({})])).toBeNull();
     expect(letterStarEdit('', [story({})])).toBeNull();
+    const englishWithRussianNames =
+      'Hello! I led platform teams at Маркет Софт and Финтех Лаб.\n\nBest regards';
+    expect(letterStarEdit(englishWithRussianNames, [story({})])).toBeNull();
+    expect(letterStarEdit('Здравствуйте', [story({})], 'en')).toBeNull();
   });
 });
 
