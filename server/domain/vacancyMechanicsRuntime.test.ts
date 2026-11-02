@@ -104,6 +104,22 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.view(source).state).toBe('ready');
   });
 
+  it('says a row is counted without opening its result (prod 02.11: the sweep decrypted every row)', async () => {
+    const runtime = setup();
+    const source = input();
+    expect(runtime.hasCurrentResult(source)).toBe(false);
+    runtime.enqueue(source);
+    await runtime.runNext(null);
+    expect(runtime.view(source).state).toBe('ready');
+    const opened = vi.spyOn(runtime.fit, 'getCache');
+    expect(runtime.hasCurrentResult(source)).toBe(true);
+    expect(opened).not.toHaveBeenCalled();
+    // A profile change gives a new key: the row has to be counted again.
+    expect(runtime.hasCurrentResult({ ...source, checkedFactIds: [] , facts: [] })).toBe(false);
+    runtime.database.exec('DELETE FROM vacancy_fit_cache');
+    expect(runtime.hasCurrentResult(source)).toBe(false);
+  });
+
   it('a failed refresh keeps the previous percent on screen instead of «не посчитан» (prod 29.10)', async () => {
     const runtime = setup();
     const source = input();

@@ -399,6 +399,8 @@ export function requestFitForVacancyIds(
     const target = readVacancyFitTarget(deps, id);
     if (!target) return;
     const input = context(target, []);
+    // 02.11 prod profile: the sweep opened every counted row's result to learn it was counted.
+    if (backgroundRank !== undefined && runtime.hasCurrentResult(input)) return;
     // 01.11: `refreshing` shows the old version's percent; the sweep queues the current one too.
     if (!['not_requested', 'failed', 'refreshing'].includes(runtime.view(input).state)) return;
     runtime.enqueue(
