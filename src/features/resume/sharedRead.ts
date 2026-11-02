@@ -1,23 +1,47 @@
-/**
- * Callers that ask for the same read at the same time get one request (CPO prod,
- * 02.11: one Profile open sent /resume four times). A finished read is not reused,
- * so the next open reads fresh; `forget` drops a read that a write made stale.
- */
-const inFlight = new Map<string, Promise<unknown>>();
+import { onApiWrite } from '../coach/apiClient';
 
-export function sharedRead<T>(key: string, read: () => Promise<T>): Promise<T> {
-  const current = inFlight.get(key) as Promise<T> | undefined;
-  if (current) return current;
-  const next = read().finally(() => {
-    if (inFlight.get(key) === next) inFlight.delete(key);
-  });
-  inFlight.set(key, next);
-  return next;
+/**
+ * Callers that ask for the same read get one request (CPO prod, 02.11: one Profile open
+ * sent /resume three or four times, seconds apart). A finished read is kept for `keepMs`;
+ * any write through `apiFetch` drops every kept read, so a refresh after it reads fresh.
+ */
+const reads = new Map<string, { readonly promise: Promise<unknown>; settledAt?: number }>();
+
+export function sharedRead<T>(
+  key: string,
+  read: () => Promise<T>,
+  { keepMs = 0 }: { readonly keepMs?: number } = {},
+): Promise<T> {
+  const current = reads.get(key);
+  const fresh =
+    current && (current.settledAt === undefined || Date.now() - current.settledAt < keepMs);
+  if (current && fresh) return current.promise as Promise<T>;
+  const entry: { readonly promise: Promise<T>; settledAt?: number } = {
+    promise: read().then(
+      (value) => {
+        entry.settledAt = Date.now();
+        if (keepMs <= 0 && reads.get(key) === entry) reads.delete(key);
+        return value;
+      },
+      (error: unknown) => {
+        if (reads.get(key) === entry) reads.delete(key);
+        throw error;
+      },
+    ),
+  };
+  reads.set(key, entry);
+  return entry.promise;
 }
 
 export function forgetSharedRead(key: string): void {
-  inFlight.delete(key);
+  reads.delete(key);
 }
+
+export function forgetAllSharedReads(): void {
+  reads.clear();
+}
+
+onApiWrite(forgetAllSharedReads);
 
 /** A caller that aborts stops waiting; the shared read goes on for the others. */
 export function untilAborted<T>(read: Promise<T>, signal?: AbortSignal): Promise<T> {

@@ -111,7 +111,31 @@ export function getApiBaseUrl(): string {
   return '';
 }
 
+const writeListeners = new Set<() => void>();
+
+/** Reads kept in memory drop themselves on any write (resume `sharedRead`, CPO 02.11). */
+export function onApiWrite(listener: () => void): () => void {
+  writeListeners.add(listener);
+  return () => writeListeners.delete(listener);
+}
+
+function notifyWrite(): void {
+  writeListeners.forEach((listener) => listener());
+}
+
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD') return apiFetchOnce(input, init);
+  // Before and after: a read started while the write was running holds the old profile.
+  notifyWrite();
+  try {
+    return await apiFetchOnce(input, init);
+  } finally {
+    notifyWrite();
+  }
+}
+
+async function apiFetchOnce(input: string, init: RequestInit): Promise<Response> {
   const baseUrl = getApiBaseUrl();
   const fullUrl = input.startsWith('http') ? input : `${baseUrl}${input}`;
   const token = getStoredSessionToken();

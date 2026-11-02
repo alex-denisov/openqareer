@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getResumeStudio, saveResumeStudioDraft } from './resumeApi';
 import { getResumeVersions } from './resumeVersionsApi';
+import { apiFetch } from '../coach/apiClient';
+import { forgetAllSharedReads } from './sharedRead';
 
 function stubFetch(body: unknown) {
   const fetchMock = vi.fn(
@@ -14,15 +16,17 @@ function stubFetch(body: unknown) {
 }
 
 describe('one read per Profile open (CPO prod, 02.11: /resume ×4, versions ×2)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    forgetAllSharedReads();
+  });
 
   it('shares one /resume request between callers that ask at the same time', async () => {
     const fetchMock = stubFetch({ draft: {} });
     const reads = await Promise.all([getResumeStudio(), getResumeStudio(), getResumeStudio()]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(reads[0]).toBe(reads[2]);
-    await getResumeStudio();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('does not hand a read started before a save to a caller after it', async () => {
@@ -57,5 +61,27 @@ describe('one read per Profile open (CPO prod, 02.11: /resume ×4, versions ×2)
     first.abort();
     await expect(aborted).rejects.toThrow();
     await expect(kept).resolves.toEqual(page);
+  });
+
+  it('one Profile open reads /resume once although its parts ask seconds apart (CPO prod 02.11: ×3)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const fetchMock = stubFetch({ draft: {} });
+    await getResumeStudio();
+    vi.setSystemTime(Date.now() + 3_000);
+    await getResumeStudio();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + 20_000);
+    await getResumeStudio();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('any write drops the kept read, so a refresh after it reads the new profile', async () => {
+    const fetchMock = stubFetch({ draft: {} });
+    await getResumeStudio();
+    await apiFetch('/api/v1/candidate/resume/experience/x/confirm', { method: 'POST', body: '{}' });
+    await getResumeStudio();
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/candidate/resume')).length,
+    ).toBe(2);
   });
 });
