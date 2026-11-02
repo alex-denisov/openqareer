@@ -516,6 +516,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     return unconfirmedCandidateMatchResponse(request.id, offset, campaign, sourceRegistry);
   }
 
+  await deps.vacancyMechanics?.warmCachedVacancyIds?.(candidate.id);
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
   const fitLimit = selectionFitLimit(candidatePlan(deps, candidate.id));
   const { response: orderedPage, semanticQueryAndSqlMs } = await readMatchedPage(
@@ -532,8 +533,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     withWantedCompanyOrder(deps, candidate.id, sort),
     fitLimit,
   );
-  const context = { offset, fitLimit, request };
-  const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, context);
+  const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, { offset, fitLimit, request });
   logMatchedTiming(
     request,
     config.matchMode ?? 'legacy',

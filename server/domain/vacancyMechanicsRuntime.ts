@@ -117,6 +117,7 @@ export class VacancyMechanicsRuntime {
     };
   }
   cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
+  warmCachedVacancyIds(candidateId: string): Promise<void> { return this.fit.warmCachedVacancyIds(candidateId); }
   /**
    * The current result exists under this input's key, read without opening it (prod 02.11: the
    * selection sweep decrypted every counted row to learn it was counted). The key covers the
