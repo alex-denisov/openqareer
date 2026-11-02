@@ -283,6 +283,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
   private readonly databasePath: string;
   private matchReader?: MatchRowReader;
+  private readonly hhTextTargetNoted = new Map<string, { key: string; ms: number }>();
   private readonly writeChunkSize: number;
   private readonly onWrite?: (event: PoolWriteEvent) => void;
   readonly matchMode: 'legacy' | 'semantic';
@@ -648,10 +649,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     preferRemote: boolean,
     limit: number,
   ): { sql: string; params: SQLInputValue[] } {
+    const levelFloorRank = campaignLevelFloor(candidate.targetRoles, candidate.targetLevel);
+    this.noteHhTextRoleTarget(candidate.candidateId, functionCodes, levelFloorRank ?? null);
     return buildSemanticMatchQuery({
       functionCodes,
       levelRank: candidate.targetLevel ? LEVEL_RANK[candidate.targetLevel] : null,
-      levelFloorRank: campaignLevelFloor(candidate.targetRoles, candidate.targetLevel),
+      levelFloorRank,
       ...(candidate.matchGeography ? { geography: candidate.matchGeography } : {}),
       window,
       preferRemote,
@@ -1830,16 +1833,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * в обходе; `undefined` — проход закончен. За вызов просматривается не больше
    * `HH_TEXT_SCAN_LIMIT` строк, чтобы тик не стал полным чтением пула.
    */
-  loadHhTextCandidates(
-    cursor: string | undefined,
-    limit: number,
-    roleTerms: readonly string[] = [],
-  ): HhTextCandidates {
-    const terms = roleTerms.map((term) => term.trim().toLocaleLowerCase('ru')).filter(Boolean);
+  loadHhTextCandidates(cursor: string | undefined, limit: number): HhTextCandidates {
+    const targets = this.hhTextRoleTargets();
     const parsed = parseHhTextCursor(cursor);
-    // Без ролей кандидатов фаза ролей пуста: обход сразу идёт по каталогу.
+    // Без целей кампаний фаза ролей пуста: обход сразу идёт по каталогу.
     const position: HhTextPosition =
-      parsed.phase === 'role' && terms.length === 0 ? nextHhTextPhase(parsed)! : parsed;
+      parsed.phase === 'role' && targets.length === 0 ? nextHhTextPhase(parsed)! : parsed;
     const want = Math.max(1, Math.min(Math.trunc(limit), 100));
     const ids: string[] = [];
     let scanned = 0;
@@ -1848,7 +1847,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       const role = at.phase === 'role';
       if (scanned >= (role ? HH_TEXT_ROLE_SCAN_LIMIT : HH_TEXT_SCAN_LIMIT)) break;
       const rows = role
-        ? this.hhTextRolePage(at, HH_TEXT_ROLE_PAGE)
+        ? this.hhTextRolePage(at, HH_TEXT_ROLE_PAGE, targets)
         : this.hhTextPage(at, HH_TEXT_PAGE);
       if (rows.length === 0) {
         at = nextHhTextPhase(at);
@@ -1857,9 +1856,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       for (const row of rows) {
         scanned += 1;
         at = { phase: at.phase, ms: row.ms, key: row.key };
-        const wanted = role
-          ? terms.some((term) => (row.title ?? '').includes(term)) && this.hhNeedsText(row.id)
-          : 'need' in row && row.need === 1;
+        const wanted = role ? this.hhNeedsText(row.id) : 'need' in row && row.need === 1;
         if (wanted) ids.push(row.id);
         if (ids.length >= want) break;
       }
@@ -1868,31 +1865,106 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   /**
-   * 02.11: the role phase reads only the index (lowercased title in `search_text`, no payload
-   * JSON), so one call scans 50K rows; the text check runs only on rows whose title matches.
-   * Before, 2 000 payload rows a call gave 1-6 role rows a tick: 303 requests an hour.
+   * 02.11: the role phase walks what the selection would match — hh rows whose parsed title
+   * (`vacancy_semantic`) has an active campaign's function and a level at or above its floor,
+   * newest first. The 36 demand phrases it used before missed 1 265 of the owner's 1 313
+   * short rows («технический директор», «исполнительный директор (CEO)»).
    */
   private hhTextRolePage(
     at: HhTextPosition,
     size: number,
-  ): Array<{ id: string; ms: number; key: string; title: string }> {
+    targets: readonly HhTextRoleTarget[],
+  ): Array<{ id: string; ms: number; key: string }> {
+    const clauses = targets.map(
+      (target) =>
+        `(s.function_code IN (${target.codes.map(() => '?').join(', ')})` +
+        (target.floor === null ? ')' : ' AND (s.level_rank >= ? OR s.level_rank IS NULL))'),
+    );
+    const params = targets.flatMap((target) =>
+      target.floor === null ? [...target.codes] : [...target.codes, target.floor],
+    );
     const rows = this.database
       .prepare(
-        `SELECT i.id AS id, i.published_ms AS ms, i.search_text AS text
-           FROM vacancy_pool_index i
+        `SELECT DISTINCT s.id AS id, s.published_ms AS ms
+           FROM vacancy_semantic s
+           JOIN vacancy_pool_index i ON i.id = s.id
           WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 0
-            AND (i.published_ms < ? OR (i.published_ms = ? AND i.id > ?))
-          ORDER BY i.published_ms DESC, i.id ASC
+            AND (${clauses.join(' OR ')})
+            AND (s.published_ms < ? OR (s.published_ms = ? AND s.id > ?))
+          ORDER BY s.published_ms DESC, s.id ASC
           LIMIT ?`,
       )
-      .all(at.ms, at.ms, at.key, size) as Array<{ id: string; ms: number; text: string | null }>;
-    // The first line of `search_text` is the title, lowercased when the row was indexed.
-    return rows.map((row) => ({
-      id: row.id,
-      ms: row.ms,
-      key: row.id,
-      title: (row.text ?? '').split('\n', 1)[0]!.toLocaleLowerCase('ru'),
-    }));
+      .all(...params, at.ms, at.ms, at.key, size) as Array<{ id: string; ms: number }>;
+    return rows.map((row) => ({ id: row.id, ms: row.ms, key: row.id }));
+  }
+
+  /**
+   * Цель кампании для очереди текста hh: функции и нижняя граница уровня, как у подбора.
+   * Пишется, когда подбор кандидата считается; пустые коды цель снимают.
+   */
+  recordHhTextRoleTarget(
+    candidateId: string,
+    codes: readonly string[],
+    floor: number | null,
+    nowMs: number = Date.now(),
+  ): void {
+    if (codes.length === 0) {
+      this.database.prepare('DELETE FROM hh_text_role_targets WHERE candidate_id = ?').run(candidateId);
+      return;
+    }
+    this.database
+      .prepare(
+        `INSERT INTO hh_text_role_targets (candidate_id, function_codes, level_floor, updated_ms)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(candidate_id) DO UPDATE SET function_codes = excluded.function_codes,
+           level_floor = excluded.level_floor, updated_ms = excluded.updated_ms`,
+      )
+      .run(candidateId, JSON.stringify([...codes].sort()), floor, nowMs);
+  }
+
+  /** Подбор кандидата считался: его цель ведёт очередь текста hh. Пишет раз в час на цель. */
+  private noteHhTextRoleTarget(
+    candidateId: string,
+    codes: readonly string[],
+    floor: number | null,
+  ): void {
+    const key = `${[...codes].sort().join(',')}|${floor ?? ''}`;
+    const last = this.hhTextTargetNoted.get(candidateId);
+    const nowMs = Date.now();
+    if (last && last.key === key && nowMs - last.ms < HH_TEXT_TARGET_REFRESH_MS) return;
+    try {
+      this.recordHhTextRoleTarget(candidateId, codes, floor, nowMs);
+      this.hhTextTargetNoted.set(candidateId, { key, ms: nowMs });
+    } catch (error) {
+      // Цель — ускорение очереди текста, не условие подбора: подбор идёт дальше.
+      console.warn(
+        JSON.stringify({
+          event: 'hh-text-role-target-failed',
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+        }),
+      );
+    }
+  }
+
+  private hhTextRoleTargets(nowMs: number = Date.now()): HhTextRoleTarget[] {
+    const rows = this.database
+      .prepare(
+        `SELECT function_codes AS codes, level_floor AS floor FROM hh_text_role_targets
+          WHERE updated_ms >= ? ORDER BY updated_ms DESC LIMIT ?`,
+      )
+      .all(nowMs - HH_TEXT_TARGET_TTL_MS, HH_TEXT_MAX_TARGETS) as Array<{
+      codes: string;
+      floor: number | null;
+    }>;
+    return rows.flatMap((row) => {
+      try {
+        const codes = JSON.parse(row.codes) as unknown;
+        if (!Array.isArray(codes) || codes.length === 0) return [];
+        return [{ codes: codes.map(String), floor: row.floor }];
+      } catch {
+        return [];
+      }
+    });
   }
 
   private hhNeedsText(id: string): boolean {
@@ -2846,6 +2918,15 @@ const HH_TEXT_PAGE = 200;
 const HH_TEXT_SCAN_LIMIT = 2_000;
 const HH_TEXT_ROLE_PAGE = 2_000;
 const HH_TEXT_ROLE_SCAN_LIMIT = 50_000;
+/** Цели кампаний, чей подбор считался за последние 14 дней: активные кампании. */
+const HH_TEXT_TARGET_TTL_MS = 14 * 24 * 60 * 60 * 1_000;
+const HH_TEXT_MAX_TARGETS = 50;
+const HH_TEXT_TARGET_REFRESH_MS = 60 * 60 * 1_000;
+
+interface HhTextRoleTarget {
+  readonly codes: readonly string[];
+  readonly floor: number | null;
+}
 
 /** Живая hh-запись, которой нужен текст: не снята, текста нет, работодатель его не скрыл. */
 const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
