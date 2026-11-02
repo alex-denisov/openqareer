@@ -1,11 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import type { SessionAuth } from './auth/authService';
 import type { ServerConfig } from './config';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { CoachProvider } from './providers/coachProvider';
 import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
+import type { ProposedRole } from '../shared/roleProposals';
+
+const careerRoles = vi.hoisted(() => ({
+  readCareerRoles: vi.fn(async (): Promise<unknown> => null),
+}));
+vi.mock('./routes/careerRolesRead', () => careerRoles);
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -50,6 +56,8 @@ const apps: Awaited<ReturnType<typeof buildApp>>[] = [];
 const stores: SqliteCandidateStore[] = [];
 
 afterEach(async () => {
+  careerRoles.readCareerRoles.mockReset();
+  careerRoles.readCareerRoles.mockResolvedValue(null);
   await Promise.all(apps.splice(0).map((app) => app.close()));
   stores.splice(0).forEach((store) => store.close());
 });
@@ -528,5 +536,144 @@ describe('candidate resume version and ATS APIs', () => {
       },
     });
     expect(tooManyRequirements.statusCode).toBe(400);
+  });
+});
+
+function observedRole(title: string, repeatedRequirements: string[]): ProposedRole {
+  return {
+    id: title,
+    title,
+    origin: 'market',
+    reason: null,
+    evidenceRefs: [],
+    family: null,
+    confirmation: {
+      state: 'observed',
+      sampleSize: 40,
+      observedFrom: '2026-09-01',
+      observedTo: '2026-10-01',
+      sources: [{ source: 'hh', count: 40 }],
+      repeatedRequirements,
+      matchedRequirements: 0,
+    },
+  };
+}
+
+async function createCurrentVersion(
+  app: Awaited<ReturnType<typeof createApp>>['app'],
+  authorization: string,
+  title: string,
+) {
+  const list = await app.inject({
+    method: 'GET',
+    url: '/api/v1/candidate/resume/versions',
+    headers: headers(authorization),
+  });
+  const versionId = randomUUID();
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/candidate/resume/versions',
+    headers: headers(authorization, versionId),
+    payload: {
+      title,
+      requirements: ['Kubernetes', 'Terraform'],
+      expectedMasterRevision: list.json().data.currentMasterRevision,
+    },
+  });
+  expect(created.statusCode).toBe(201);
+  return versionId;
+}
+
+describe('ATS assessment picks its own basis in one request (Profile open)', () => {
+  it('scores the version built from the current master without reading roles', async () => {
+    const { app, authorization } = await createApp();
+    const versionId = await createCurrentVersion(app, authorization, 'Platform Engineer');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.basis).toMatchObject({
+      version: { id: versionId, title: 'Platform Engineer', revision: 1 },
+      roleTitle: null,
+    });
+    expect(response.json().data.assessment.context.requirementSource.label).toBe(
+      'Platform Engineer',
+    );
+    expect(careerRoles.readCareerRoles).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the first observed Career role when no current version exists', async () => {
+    const { app, authorization, candidateId } = await createApp();
+    careerRoles.readCareerRoles.mockResolvedValue([
+      observedRole('Head of Engineering', ['Kafka', 'Kubernetes']),
+    ]);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(careerRoles.readCareerRoles).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      candidateId,
+    );
+    expect(response.json().data.basis).toEqual({ version: null, roleTitle: 'Head of Engineering' });
+    expect(response.json().data.assessment.context.requirementSource.label).toBe(
+      'По роли «Head of Engineering»',
+    );
+    expect(response.json().data.assessment.dimensions.keywords.sampleSize).toBe(2);
+  });
+
+  it('still scores the master when roles cannot be read', async () => {
+    const { app, authorization } = await createApp();
+    careerRoles.readCareerRoles.mockRejectedValue(new Error('pool offline'));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.basis).toEqual({ version: null, roleTitle: null });
+    expect(response.json().data.assessment.context.requirementSource).toBeNull();
+  });
+
+  it('keeps an explicit version or role choice from the card', async () => {
+    const { app, authorization } = await createApp();
+    const versionId = await createCurrentVersion(app, authorization, 'Platform Engineer');
+
+    const byVersion = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: { versionId },
+    });
+    expect(byVersion.statusCode).toBe(200);
+    expect(byVersion.json().data.basis).toMatchObject({
+      version: { id: versionId },
+      roleTitle: null,
+    });
+
+    const byRole = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/ats-assessment',
+      headers: headers(authorization),
+      payload: { title: 'По роли «CTO»', requirements: ['Kafka'] },
+    });
+    expect(byRole.statusCode).toBe(200);
+    expect(byRole.json().data.basis).toEqual({ version: null, roleTitle: null });
+    expect(byRole.json().data.assessment.context.requirementSource.label).toBe('По роли «CTO»');
+    expect(careerRoles.readCareerRoles).not.toHaveBeenCalled();
   });
 });

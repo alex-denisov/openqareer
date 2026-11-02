@@ -29,6 +29,7 @@ import type {
   TodaySnapshot,
 } from '../../src/features/today/todayApi';
 import type { ResumeAtsAssessmentRequest } from '../../src/features/resume/resumeVersionsApi';
+import { currentMasterVersion } from '../../shared/atsBasis';
 
 const CANDIDATE_ID = 'block-a-visual-andrei';
 const AS_OF = '2026-10-07T06:12:00.000Z';
@@ -747,15 +748,23 @@ async function routeResumeVersionsAndAssessment(
     return true;
   }
   if (path === '/api/v1/candidate/resume/ats-assessment' && method === 'POST') {
-    const assessment = buildAssessment(
-      state,
-      route.request().postDataJSON() as ResumeAtsAssessmentRequest,
-    );
+    const body = (route.request().postDataJSON() ?? {}) as ResumeAtsAssessmentRequest;
+    // Пустое тело — открытие «Профиля»: версию выбирает сервер (shared/atsBasis).
+    const unchosen = !body.versionId && !body.title && !body.requirements;
+    const listed = currentVersions(state);
+    const picked = unchosen
+      ? currentMasterVersion(listed.items, listed.currentMasterRevision)
+      : null;
+    const chosen = body.versionId ? listed.items.find((item) => item.id === body.versionId) : null;
+    const assessment = buildAssessment(state, picked ? { versionId: picked.id } : body);
     if (!assessment) {
       await apiError(route, 404, 'resume_version_not_found', 'Версия резюме не найдена.');
       return true;
     }
-    await apiData(route, { assessment });
+    await apiData(route, {
+      assessment,
+      basis: { version: picked ?? chosen ?? null, roleTitle: null },
+    });
     return true;
   }
   return false;

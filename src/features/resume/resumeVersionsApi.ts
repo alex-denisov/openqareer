@@ -102,14 +102,49 @@ export async function getResumeAtsAssessment(
   input: ResumeAtsAssessmentRequest,
   signal?: AbortSignal,
 ): Promise<ResumeAtsAssessment> {
+  return (await postAtsAssessment(input, signal)).assessment;
+}
+
+/** Версия или роль, по которой сервер посчитал оценку, когда кандидат её не выбрал. */
+export interface ResumeAtsBasis {
+  readonly version: ResumeVersionSummary | null;
+  readonly roleTitle: string | null;
+}
+
+export interface ProfileAtsAssessmentResult {
+  readonly assessment: ResumeAtsAssessment;
+  readonly basis: ResumeAtsBasis;
+}
+
+/**
+ * Открытие «Профиля»: пустое тело — версию и роль выбирает сервер по правилу
+ * `shared/atsBasis`, и карточка получает оценку одним запросом.
+ */
+export function getProfileAtsAssessment(signal?: AbortSignal): Promise<ProfileAtsAssessmentResult> {
+  return postAtsAssessment({}, signal);
+}
+
+async function postAtsAssessment(
+  input: ResumeAtsAssessmentRequest,
+  signal?: AbortSignal,
+): Promise<ProfileAtsAssessmentResult> {
   const response = await apiFetch('/api/v1/candidate/resume/ats-assessment', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
     signal,
   });
-  const result = await readData<{ assessment?: ResumeAtsAssessment | null } | null>(response);
+  const result = await readData<{
+    assessment?: ResumeAtsAssessment | null;
+    basis?: Partial<ResumeAtsBasis> | null;
+  } | null>(response);
   const assessment = result?.assessment;
   if (!assessment || typeof assessment !== 'object') throw malformedResponseError();
-  return assessment;
+  return {
+    assessment,
+    basis: {
+      version: result?.basis?.version ?? null,
+      roleTitle: result?.basis?.roleTitle ?? null,
+    },
+  };
 }
