@@ -38,7 +38,7 @@ function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequiremen
   const description = normalizedSource(input.description);
   const seen = new Set<string>();
   return input.requirements.filter((requirement) => {
-    if (!requirement.id.trim() || seen.has(requirement.id) || requirement.origin === 'inferred' || !requirement.sourceQuote.trim() || !description.includes(normalizedSource(requirement.sourceQuote))) return false;
+    if (!requirement.id.trim() || seen.has(requirement.id) || isGenericSkillTag(requirement) || requirement.origin === 'inferred' || !requirement.sourceQuote.trim() || !description.includes(normalizedSource(requirement.sourceQuote))) return false;
     seen.add(requirement.id);
     return true;
   }).sort((a, b) => Number(b.hard || b.stopFactor) - Number(a.hard || a.stopFactor) || a.id.localeCompare(b.id));
@@ -105,26 +105,38 @@ function quotes(fact: VacancyFitFact | undefined, quote: string): boolean {
 }
 
 /** A bare profile tag («Executive Leadership») says the word, not the work behind it. */
-const isTagEvidence = (factId: string) => factId.startsWith('profile:skill:');
-/** One quote may back at most this many requirements; a third use is a stretch (02.11). */
-const MAX_REQUIREMENTS_PER_QUOTE = 2;
+const isTagFact = (factId: string) => factId.startsWith('profile:skill:');
+const SKILLS_TAIL = 'навыки: ';
+/** 02.11 audit: «Linux» quoted from the skills list of a place is a tag as much as a skills-list entry. */
+function isTagEvidence(fact: VacancyFitFact | undefined, entry: { readonly factId: string; readonly quote: string }): boolean {
+  if (isTagFact(entry.factId)) return true;
+  const tail = fact?.statement.lastIndexOf(SKILLS_TAIL) ?? -1;
+  return tail >= 0 && fact!.statement.indexOf(entry.quote.trim(), tail) >= 0 && !fact!.statement.slice(0, tail).includes(entry.quote.trim());
+}
 
 /**
- * 02.11: tag-only evidence is partial at most. Many-to-many (owner 02.11): one bullet may back
- * several requirements; a requirement is met in full while one of its quotes backs at most two,
- * and a requirement whose every quote is used up counts partial with its evidence, never unknown.
+ * 02.11: tag-only evidence is partial at most. One strong quote may back any number of
+ * requirements in full (owner 02.11 audit: the cap of two turned a strong profile into partials).
  */
-function withEvidenceRules(items: readonly VacancyFitRequirementAssessment[]): VacancyFitRequirementAssessment[] {
-  const uses = new Map<string, number>();
+function withEvidenceRules(items: readonly VacancyFitRequirementAssessment[], factMap: ReadonlyMap<string, VacancyFitFact>): VacancyFitRequirementAssessment[] {
   return items.map((item) => {
-    if (item.status === 'unknown' || item.status === 'unmatched') return item;
-    const keys = item.evidence.map((entry) => `${entry.factId}\u0000${entry.quote.trim()}`);
-    const usedUp = keys.length > 0 && keys.every((key) => (uses.get(key) ?? 0) >= MAX_REQUIREMENTS_PER_QUOTE);
-    for (const key of keys) uses.set(key, (uses.get(key) ?? 0) + 1);
-    const tagOnly = item.evidence.every((entry) => isTagEvidence(entry.factId));
-    return item.status === 'matched' && (usedUp || tagOnly) ? { ...item, status: 'partial' } : item;
+    const tagOnly = item.evidence.every((entry) => isTagEvidence(factMap.get(entry.factId), entry));
+    return item.status === 'matched' && tagOnly ? { ...item, status: 'partial' } : item;
   });
 }
+
+/** Where the candidate lives: the resume draft section or the imported contact line. */
+const isLocationFact = (factId: string) => factId === 'profile:location' || (isImportedMemoryId(factId) && factId.endsWith('-location'));
+const NON_LOCATION_CONDITIONS: readonly string[] = ['education', 'language', 'license'];
+/** 02.11 audit: «Dubai» was the sole quote of five unmatched skills (MS Office, communication…). */
+const acceptsLocationEvidence = (requirement: VacancyRequirement) => !isSkillRequirement(requirement) && !NON_LOCATION_CONDITIONS.includes(requirement.kind);
+
+/** Bare soft-skill tags a job board appends to every posting (Indeed): no requirement of this vacancy. */
+const GENERIC_SKILL_TAGS = new Set([
+  'critical thinking', 'entrepreneurship', 'emotional intelligence', 'open-mindedness', 'collaboration',
+  'solution orientation', 'process excellence', 'ai proficiency', 'data literacy', 'communication',
+]);
+const isGenericSkillTag = (requirement: VacancyRequirement) => GENERIC_SKILL_TAGS.has(requirement.text.trim().toLowerCase());
 
 /** Conditions a quoted profile fact contradicts: they block the row, never the skill percent (02.11). */
 const BLOCKING_CONDITIONS: readonly string[] = ['workAuthorization', 'workFormat'];
@@ -149,11 +161,12 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const claimed: VacancyFitRequirementAssessment[] = requirements.map((requirement) => {
     const claims = input.assessments?.filter((claim) => claim.requirementId === requirement.id) ?? [];
     const claim = claims.length === 1 ? claims[0] : undefined;
-    if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !Array.isArray(claim.evidence) || !claim.evidence.length || claim.evidence.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !quotes(factMap.get(entry.factId), entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
-    const evidence = claim.evidence.map(({ factId, quote }) => ({ factId, quote }));
+    const cited = Array.isArray(claim?.evidence) ? claim.evidence.filter((entry) => acceptsLocationEvidence(requirement) || !isLocationFact(entry.factId)) : [];
+    if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !cited.length || cited.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !quotes(factMap.get(entry.factId), entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
+    const evidence = cited.map(({ factId, quote }) => ({ factId, quote }));
     return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status !== 'unmatched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
   });
-  const assessments = withEvidenceRules(claimed);
+  const assessments = withEvidenceRules(claimed, factMap);
   // Owner 28.10: a model answer that confirms nothing is «0 из N», not «no percent». Without an
   // answer (no claims at all) the requirements are not assessed yet.
   const answered = (input.assessments?.length ?? 0) > 0;
