@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reviewRemarks, type ReviewBlock } from './ProfileReviewAndVersions';
+import { distinctReviewIssues, reviewRemarks, type ReviewBlock } from './ProfileReviewAndVersions';
 
 describe('reviewRemarks', () => {
   it('lists every remark behind «N замечаний», findings included (owner, 02.11)', () => {
@@ -18,6 +18,20 @@ describe('reviewRemarks', () => {
       'Нет даты окончания.',
       'Нет результатов в цифрах.',
       'Размер команды неизвестен в 2 местах.',
+    ]);
+  });
+});
+
+describe('distinctReviewIssues', () => {
+  it('counts one remark once, as the list shows it (owner prod, 02.11: 12 vs 9)', () => {
+    const issues = [
+      { code: 'invalid-chronology-date', entryId: 'a', message: 'Проверьте дату «Nov 2025».' },
+      { code: 'invalid-chronology-date', entryId: 'b', message: 'Проверьте дату «Nov 2025».' },
+      { code: 'missing-role-claims', entryId: 'a', message: 'Нет результатов в цифрах.' },
+    ] as unknown as ReviewBlock['issues'];
+    expect(distinctReviewIssues(issues).map((issue) => issue.message)).toEqual([
+      'Проверьте дату «Nov 2025».',
+      'Нет результатов в цифрах.',
     ]);
   });
 });

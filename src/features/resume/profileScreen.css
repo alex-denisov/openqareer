@@ -1133,3 +1133,7 @@
   color: var(--career-text-dim);
   font-size: var(--career-text-sm);
 }
+
+.career-profile-screen-review-remarks[hidden] {
+  display: none;
+}
