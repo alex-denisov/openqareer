@@ -533,6 +533,19 @@ async function openToday(page: Page): Promise<void> {
   await row.click();
   const todayCard = page.locator('.career-responses-card').filter({ hasText: 'Genetec' });
   await openInterviewPrep(page, todayCard);
+  if (viewport < 1024) {
+    // Макет 5: на 390 «Начать мок-интервью» сразу открывает тренажёр по этому отклику.
+    // «Подготовиться» в строке 390 открывает подготовку, «Начать мок-интервью» — сразу тренажёр.
+    const opened = page.locator('.career-mock-dialog, .career-interview-modal').first();
+    await expect(opened).toContainText('Genetec');
+    if (await page.locator('.career-mock-dialog').count()) {
+      await page.locator('.career-mock-dialog').getByRole('button', { name: 'Назад к подготовке' }).first().click();
+    } else {
+      await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
+    }
+    await expect(opened).toBeHidden();
+    return;
+  }
   await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
   await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
 }

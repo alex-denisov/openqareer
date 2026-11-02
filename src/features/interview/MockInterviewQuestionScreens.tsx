@@ -12,6 +12,7 @@ import {
   PencilSimple,
   WarningCircle,
 } from '@phosphor-icons/react';
+import { InterviewDiaryAction } from './InterviewDiaryAction';
 import type { SpeechIssue } from './browserSpeechRecognition';
 import type { InterviewQuestionView } from './interviewSimulatorApi';
 import type { MockInterviewSimulatorProps } from './mockInterviewSimulatorTypes';
@@ -82,7 +83,7 @@ function AnswerComposer({ draft, disabled, onChange, onSubmit }: {
   };
   return (
     <form className="career-mock-composer" onSubmit={submit}>
-      <label className="career-mock-sr-only" htmlFor="career-mock-answer">Ответ</label>
+      <label className="career-mock-sr-only" htmlFor="career-mock-answer">Ваш ответ</label>
       <textarea
         id="career-mock-answer"
         value={draft}
@@ -98,7 +99,7 @@ function AnswerComposer({ draft, disabled, onChange, onSubmit }: {
       <button
         type="submit"
         className="career-mock-send"
-        aria-label={disabled ? 'Оцениваем ответ' : 'Отправить'}
+        aria-label={disabled ? 'Оцениваем ответ' : 'Отправить ответ'}
         disabled={disabled || !draft.trim()}
         aria-busy={disabled}
       >
@@ -122,7 +123,7 @@ export function VoiceScreen({ flow, props }: ScreenProps) {
         <p className="career-mock-question-prompt">{question.prompt}</p>
         <RecordingStatus voice={voice} />
         <VoiceTranscript voice={voice} />
-        {voice.issue ? <SpeechIssueNotice issue={voice.issue} onText={flow.switchToText} onRestart={flow.startVoice} /> : null}
+        {voice.issue ? <SpeechIssueNotice issue={voice.issue} /> : null}
         {flow.error ? <SessionError flow={flow} onRetryAnswer={finish} /> : null}
         <VoiceActions voice={voice} busy={flow.operation !== null} onFinish={finish} onRestart={flow.startVoice} onText={flow.switchToText} />
       </main>
@@ -145,7 +146,7 @@ function RecordingStatus({ voice }: { readonly voice: SpeechTranscription }) {
 function VoiceTranscript({ voice }: { readonly voice: SpeechTranscription }) {
   const placeholder = voice.state === 'recording'
     ? 'Говорите. Распознанный текст появится здесь.'
-    : 'Нажмите «Начать заново», чтобы записать ответ.';
+    : 'Нажмите «Начать запись», чтобы ответить голосом.';
   return (
     <section className="career-mock-transcript" aria-label="Распознанный текст ответа">
       <p className="career-mock-transcript-label">Распознано сейчас</p>
@@ -154,28 +155,16 @@ function VoiceTranscript({ voice }: { readonly voice: SpeechTranscription }) {
   );
 }
 
-function SpeechIssueNotice({ issue, onText, onRestart }: {
-  readonly issue: SpeechIssue;
-  readonly onText: () => void;
-  readonly onRestart: () => void;
-}) {
+function SpeechIssueNotice({ issue }: { readonly issue: SpeechIssue }) {
   const message = issue === 'permission'
     ? 'Микрофон недоступен: разрешение не выдано. Можно ответить текстом, прогресс сохранён.'
     : issue === 'unrecognized'
-      ? 'Не удалось разобрать запись. Звук не сохранён. Повторите ответ или напишите его.'
+      ? 'Речь не распознана: звук не сохранён. Повторите ответ или напишите его.'
       : 'Распознавание речи недоступно в этом браузере. Можно ответить текстом, прогресс сохранён.';
   return (
     <div className={`career-mock-inline-note${issue === 'unrecognized' ? '' : ' is-error'}`} role="status">
       <WarningCircle aria-hidden="true" className="career-mock-icon" />
       <span>{message}</span>
-      {issue === 'unrecognized' ? (
-        <button type="button" className="career-btn career-btn-secondary career-btn-sm" onClick={onRestart}>Записать снова</button>
-      ) : (
-        <button type="button" className="career-btn career-btn-secondary career-btn-sm" onClick={onText}>
-          <PencilSimple aria-hidden="true" className="career-mock-icon" />
-          Ответить текстом
-        </button>
-      )}
       {issue === 'permission' ? (
         <details>
           <summary>Как разрешить</summary>
@@ -204,7 +193,7 @@ function VoiceActions({ voice, busy, onFinish, onRestart, onText }: {
       ) : (
         <button type="button" className="career-btn career-btn-ghost" onClick={onRestart}>
           <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
-          Начать заново
+          {voice.transcript.trim() ? 'Начать заново' : 'Начать запись'}
         </button>
       )}
       <button type="button" className="career-btn career-btn-ghost" onClick={onText}>
@@ -229,6 +218,7 @@ export function ReviewScreen({ flow, props }: ScreenProps) {
           <p>«{answer.text}»</p>
         </section>
         <CriteriaList questionType={question.type} evaluation={answer.evaluation} />
+        <InterviewDiaryAction key={`${session.id}:${session.version}`} sessionId={session.id} />
         {answer.evaluation.feedback ? <ModelFeedback message={answer.evaluation.feedback} /> : null}
         {flow.error ? <SessionError flow={flow} /> : null}
         <div className="career-mock-action-row career-mock-review-actions">

@@ -190,16 +190,20 @@ test('lists, creates, edits and opens linked STAR stories at 1440 and 390', asyn
       await page.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
       await expect(page.getByRole('dialog')).toHaveCount(0);
       if (width <= 760) {
+        // Макет 5: на 390 «Начать мок-интервью» запускает тренажёр; истории открываются из панели отклика.
         await page
           .locator('.career-responses-selected')
-          .getByRole('button', { name: 'Начать мок-интервью' })
+          .getByRole('button', { name: 'Открыть STAR-истории' })
           .click();
-      } else {
-        const card = page
-          .locator('.career-responses-card')
-          .filter({ hasText: 'Руководитель инженерной команды' });
-        await card.getByRole('button', { name: 'Подготовиться' }).click();
+        await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toBeVisible();
+        await expect(page.getByRole('dialog')).toHaveCount(1);
+        await page.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
+        return;
       }
+      const card = page
+        .locator('.career-responses-card')
+        .filter({ hasText: 'Руководитель инженерной команды' });
+      await card.getByRole('button', { name: 'Подготовиться' }).click();
       const prepDialog = page.getByRole('dialog');
       await expect(prepDialog).toBeVisible();
       const prepBackground = await prepDialog.evaluate(

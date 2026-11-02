@@ -494,3 +494,10 @@ ul.career-mock-criteria li p {
     line-height: 1.45;
   }
 }
+
+@media (max-width: 760px) {
+  /* На 390 заголовок разбора — в герое над карточкой, как в макете. */
+  .career-mock-review-panel .career-mock-progress-block h2 {
+    display: none;
+  }
+}

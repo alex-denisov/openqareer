@@ -1099,17 +1099,12 @@ test.describe('B450 responses workspace', () => {
     await expect(page.getByText('Кризис в команде: уход ведущего инженера')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Интервью и материалы' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Начать мок-интервью' })).toBeVisible();
+    // Макет 5: «Начать мок-интервью» сразу открывает тренажёр, без окна справки.
     await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
-
-    const preparationDialog = page.getByRole('dialog', { name: /Интервью:/ });
-    await expect(
-      preparationDialog.getByRole('button', { name: 'Начать мок-интервью' }),
-    ).toBeVisible();
-    await preparationDialog.getByRole('button', { name: 'Начать мок-интервью' }).click();
     const simulator = page.getByRole('dialog', { name: 'Мок-интервью' });
     await expect(simulator).toBeVisible();
     await simulator.getByRole('button', { name: 'Начать', exact: true }).click();
     const activeSession = page.getByRole('dialog', { name: 'Вопрос' });
-    await expect(activeSession.getByRole('heading', { name: /Вопрос 1 из/ })).toBeVisible();
+    await expect(activeSession.locator('.career-mock-progress-count')).toContainText('1 /');
   });
 });

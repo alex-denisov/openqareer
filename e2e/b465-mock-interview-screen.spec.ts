@@ -73,7 +73,11 @@ async function installSpeechStub(page: Page): Promise<void> {
   });
 }
 
-async function openPreparation(page: Page, width: number): Promise<void> {
+async function openPreparation(
+  page: Page,
+  width: number,
+  beforeOpen?: () => Promise<void>,
+): Promise<void> {
   // Фикстуры датированы сентябрём–октябрём 2026: окно «30 дней» считается от этой даты, а не от часов машины.
   await page.clock.setFixedTime(new Date('2026-10-15T09:00:00.000Z'));
   await installSpeechStub(page);
@@ -83,6 +87,7 @@ async function openPreparation(page: Page, width: number): Promise<void> {
   );
   await page.setViewportSize({ width, height: width <= 760 ? 844 : 900 });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await beforeOpen?.();
   await openPreparationDialog(page, width);
 }
 
@@ -93,10 +98,12 @@ async function openPreparationDialog(page: Page, width: number): Promise<void> {
   if (width <= 760) {
     // B486: the 390 list opens the next step from the row, not from a board card.
     await page.getByRole('button', { name: /^Открыть следующий шаг: Подготовиться/u }).click();
+    // Макет 5: «Начать мок-интервью» в панели отклика сразу открывает тренажёр.
     await page
       .locator('.career-responses-selected')
       .getByRole('button', { name: 'Начать мок-интервью' })
       .click();
+    return;
   } else {
     const card = page
       .locator('.career-responses-card')
@@ -107,11 +114,17 @@ async function openPreparationDialog(page: Page, width: number): Promise<void> {
   await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
 }
 
+/** 1440: тренажёр открыт из подготовки и возвращает в неё; 390: открыт сразу и закрывается целиком. */
+async function expectBackFromSimulator(page: Page, width: number): Promise<void> {
+  if (width <= 760) await expect(page.locator('.career-mock-dialog')).toBeHidden();
+  else await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
+}
+
 async function startSimulator(page: Page): Promise<void> {
-  await page
-    .getByRole('dialog', { name: /Интервью/u })
-    .getByRole('button', { name: 'Начать мок-интервью' })
-    .click();
+  const preparation = page.getByRole('dialog', { name: /Интервью/u });
+  if (await preparation.count()) {
+    await preparation.getByRole('button', { name: 'Начать мок-интервью' }).click();
+  }
   await expect(
     page.getByRole('heading', { level: 1, name: 'Мок-интервью', exact: true }),
   ).toBeVisible();
@@ -209,7 +222,7 @@ async function createStarStoryFromSimulator(page: Page): Promise<void> {
 
 async function finishWithPartialAnswers(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Следующий вопрос' }).click();
-  await expect(page.getByRole('heading', { name: /Вопрос 2 из/u })).toBeVisible();
+  await expect(page.locator('.career-mock-progress-count')).toContainText('2 /');
   await page.getByRole('button', { name: 'Остановиться' }).click();
   await expect(page.getByRole('heading', { name: 'Тренировка остановлена' })).toBeVisible();
 }
@@ -220,7 +233,7 @@ async function resumeAndFinish(page: Page): Promise<void> {
   for (let index = 0; index < 4; index += 1) {
     await page.getByRole('button', { name: 'Пропустить вопрос' }).click();
   }
-  await expect(page.getByRole('heading', { name: 'Мок-интервью завершено' })).toBeVisible();
+  await expect(page.locator('.career-mock-content')).toContainText('Мок-интервью завершено');
 }
 
 test('runs text and voice interview screens through a partial result at 1440 and 390', async ({
@@ -236,7 +249,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
       await startSimulator(page);
       await checkAndCapture(page, `${width}-empty-setup`, true);
       await createStarStoryFromSimulator(page);
-      await expect(page.locator('.career-mock-source-panel')).toContainText('1 всего');
+      await expect(page.locator('.career-mock-source-panel')).toContainText('Ваши STAR-истории: 1');
       await page.getByRole('radio', { name: 'Только поведенческие' }).check();
       await page.getByRole('checkbox', { name: /Стресс-режим/u }).check();
       const startRequest = page.waitForRequest((request) => {
@@ -270,7 +283,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
       await checkAndCapture(page, `${width}-interrupted`);
       await resumeAndFinish(page);
       await expect(page.locator('.career-mock-topic-list')).toContainText(
-        '1 вопрос оценено по рубрике.',
+        '1 вопрос, оценено по критериям',
       );
       await expect(page.getByRole('button', { name: 'Записать в дневник' })).toBeVisible();
       await checkAndCapture(page, `${width}-partial-result`, true);
@@ -362,7 +375,7 @@ test('opens the STAR story linked to an answer review at 1440 and 390', async ({
       });
       await startSimulator(page);
       await page.getByRole('button', { name: 'Начать', exact: true }).click();
-      await expect(page.locator('.career-mock-source-panel')).toContainText(story.title);
+      await expect(page.locator('.career-mock-content')).toContainText(`STAR-истории «${story.title}»`);
       await page
         .getByLabel('Ваш ответ')
         .fill(
@@ -395,8 +408,8 @@ test('returns to preparation and protects an unsent answer at 1440 and 390', asy
       await openPreparation(page, width);
       await startSimulator(page);
       await page.getByRole('button', { name: 'Позже' }).click();
-      await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
-
+      await expectBackFromSimulator(page, width);
+      if (width <= 760) await openPreparationDialog(page, width);
       await startSimulator(page);
       await page.getByRole('button', { name: 'Начать', exact: true }).click();
       await page.getByLabel('Ваш ответ').fill('Черновик ответа, который ещё не отправлен.');
@@ -413,7 +426,7 @@ test('returns to preparation and protects an unsent answer at 1440 and 390', asy
         .getByRole('alertdialog', { name: 'Ответ ещё не отправлен' })
         .getByRole('button', { name: 'Выйти без отправки' })
         .click();
-      await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
+      await expectBackFromSimulator(page, width);
       await capture(page, `${width}-unsent-answer-exit`);
     } finally {
       await context.close();
@@ -483,9 +496,11 @@ async function completeFailureState(
   width: number,
   state: 'loading' | 'question-loading' | 'error' | 'paywall' | 'model',
 ): Promise<void> {
-  await openPreparation(page, width);
-  if (state === 'loading') await delaySessionLoad(page);
-  if (state === 'error') await failSessionLoad(page);
+  // На 390 тренажёр открывается сразу, поэтому задержку и ошибку загрузки ставим до входа.
+  await openPreparation(page, width, async () => {
+    if (state === 'loading') await delaySessionLoad(page);
+    if (state === 'error') await failSessionLoad(page);
+  });
   await startSimulator(page);
   if (state === 'loading') {
     await expect(page.locator('.career-mock-loading-card')).toContainText(
@@ -579,11 +594,8 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
       await page.setViewportSize({ width, height: width <= 760 ? 844 : 900 });
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
       await openPreparationDialog(page, width);
-      await page
-        .getByRole('dialog', { name: /Интервью/u })
-        .getByRole('button', { name: 'Начать мок-интервью' })
-        .click();
-      await expect(page.locator('.career-mock-source-panel')).toContainText('18 всего');
+      await startSimulator(page);
+      await expect(page.locator('.career-mock-source-panel')).toContainText('Ваши STAR-истории: 18');
       await checkAndCapture(page, `${width}-many-stories`, true);
     } finally {
       await context.close();
