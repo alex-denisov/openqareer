@@ -77,6 +77,19 @@ describe('one requeue of model failures after a parser upgrade (B522)', () => {
     database.close();
   });
 
+  it('requeues fits that timed out waiting for requirements since the 01.11 orphaned extractions, once they are back', () => {
+    const database = new DatabaseSync(':memory:');
+    const fit = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));
+    fit.enqueue(fitInput('before'), '2026-10-28T03:00:00.000Z');
+    fit.enqueue(fitInput('stalled'), '2026-11-02T01:00:00.000Z');
+    database.exec(`UPDATE vacancy_fit_queue SET status='failed',last_error='requirements_wait_timeout',
+      updated_at=CASE WHEN created_at<'2026-11-01' THEN '2026-10-28T04:00:00.000Z' ELSE '2026-11-02T02:00:00.000Z' END`);
+    expect(fit.requeueOrphanedRequirementsTimeouts('2026-11-02T03:00:00.000Z')).toBe(1);
+    expect(fit.getJobState(fitInput('stalled'))).toBe('pending');
+    expect(fit.getJobState(fitInput('before'))).toBe('failed');
+    database.close();
+  });
+
   it('requeues on the next worker start what failed before the B562-r quote fix: requirements and their fits', () => {
     const database = new DatabaseSync(':memory:');
     const store = new SqliteVacancyRequirementsStore(database);

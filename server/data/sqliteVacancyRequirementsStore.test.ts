@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { extractVacancyRequirements, type VacancyRequirementsInput } from '../domain/vacancyRequirements';
+import { extractVacancyRequirements, vacancyRequirementsCacheKey, type VacancyRequirementsInput } from '../domain/vacancyRequirements';
 import { SqliteVacancyRequirementsStore } from './sqliteVacancyRequirementsStore';
 
 describe('durable public vacancy requirement queue', () => {
@@ -161,5 +161,24 @@ describe('durable public vacancy requirement queue', () => {
     expect(store.enqueue(alias).state).toBe('cached');
     expect(store.get(alias)).toMatchObject({ vacancyId: alias.vacancyId, clusterId: 'c1' });
     expect(store.getLatest(alias.vacancyId)?.status).toBe('extracted');
+  });
+
+  it('re-extracts a completed job whose current-version cache row is missing (prod 02.11)', async () => {
+    const { store, db } = setup(); store.enqueue(input);
+    store.complete(store.claim('worker', 1)!, extractVacancyRequirements(input), 2);
+    // 01.11: the previous release's worker completed this release's job under its own version key.
+    db.exec('DELETE FROM vacancy_requirements_cache');
+    expect(store.enqueue(input, { titleStrategyPriority: 2, now: 3 }).state).toBe('queued');
+    expect(await store.runNext('worker', async (source) => extractVacancyRequirements(source), 4)).not.toBeNull();
+    expect(store.getLatest(input.vacancyId, extractVacancyRequirements(input).descriptionHash)?.status).toBe('extracted');
+  });
+
+  it('leaves a job keyed by another extractor version to its own release instead of completing it', async () => {
+    const { store, db } = setup(); store.enqueue(input);
+    db.prepare('UPDATE vacancy_requirements_jobs SET cache_key=?').run(vacancyRequirementsCacheKey({ ...input, extractorVersion: 'next-release' }));
+    const extract = vi.fn(async (source: VacancyRequirementsInput) => extractVacancyRequirements(source));
+    expect(await store.runNext('old-release', extract, 10)).toBeNull();
+    expect(extract).not.toHaveBeenCalled();
+    expect(db.prepare('SELECT status,attempts FROM vacancy_requirements_jobs').get()).toEqual({ status: 'queued', attempts: 0 });
   });
 });

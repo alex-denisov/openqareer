@@ -19,6 +19,8 @@ export type VacancyFitDeferOutcome = 'deferred' | 'failed' | 'lost';
 /** A job waiting for requirements gives up after this many pauses (~30 min at the default pause). */
 export const VACANCY_FIT_MAX_DEFERS = 30;
 const DEFER_MS = 60_000;
+/** The deploy that left requirement jobs completed without their cache rows (01.11, #283). */
+const ORPHANED_REQUIREMENTS_SINCE = '2026-11-01T21:00:00.000Z';
 /** One claim moves at most this many rows of another release before it returns empty-handed. */
 const MAX_REKEYS_PER_CLAIM = 50;
 const RETRY_BASE_MS = 30_000;
@@ -304,6 +306,17 @@ export class SqliteVacancyFitStore {
     const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',attempts=0,defers=0,last_error=NULL,
       lease_token=NULL,lease_until=NULL,requested_at=created_at,requeue_revision=?,updated_at=?
       WHERE status='failed' AND input_cipher<>'' AND COALESCE(requeue_revision,1)<?`).run(revision, now, revision);
+    return Number(update.changes);
+  }
+
+  /**
+   * 02.11: fits waited on requirement jobs marked completed without a cache row (fixed in the
+   * requirements store). Those that ran out of defers since then go back with their request time.
+   */
+  requeueOrphanedRequirementsTimeouts(now = new Date().toISOString()): number {
+    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',attempts=0,defers=0,last_error=NULL,
+      lease_token=NULL,lease_until=NULL,updated_at=?
+      WHERE status='failed' AND last_error='requirements_wait_timeout' AND input_cipher<>'' AND updated_at>=?`).run(now, ORPHANED_REQUIREMENTS_SINCE);
     return Number(update.changes);
   }
 
