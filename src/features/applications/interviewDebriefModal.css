@@ -80,7 +80,9 @@
   color: var(--career-text-secondary, #334155);
   background: var(--career-surface-raised, #f8fafc);
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease;
   min-height: 40px;
 }
 

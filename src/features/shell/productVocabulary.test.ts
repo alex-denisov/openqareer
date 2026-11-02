@@ -9,10 +9,22 @@ import { describe, expect, it } from 'vitest';
  *
  * Страж запрещает слово целиком — и в тексте на экране, и в комментариях: одна
  * оставленная строка возвращает термин в продукт через следующую правку.
+ *
+ * Одно исключение (B484, макет 5): заголовок раздела о компании-работодателе в
+ * панели выбранного отклика. Это сведения о компании, не факты кандидата;
+ * исключение — ровно эта строка заголовка в этом файле, больше нигде.
  */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const SCANNED = ['src', 'server', 'shared'];
 const FORBIDDEN = /досье/i;
+const ALLOWED_COMPANY_SECTION = {
+  file: 'src/features/applications/SelectedResponsePanel.tsx',
+  line: /^\s*Досье\s*$/u,
+};
+
+function isAllowed(file: string, line: string): boolean {
+  return file === ALLOWED_COMPANY_SECTION.file && ALLOWED_COMPANY_SECTION.line.test(line);
+}
 
 function sourceFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -31,7 +43,9 @@ describe('product vocabulary', () => {
           .readFileSync(file, 'utf8')
           .split('\n')
           .flatMap((line, index) =>
-            FORBIDDEN.test(line) ? [`${path.relative(ROOT, file)}:${index + 1}`] : [],
+            FORBIDDEN.test(line) && !isAllowed(path.relative(ROOT, file), line)
+              ? [`${path.relative(ROOT, file)}:${index + 1}`]
+              : [],
           ),
       );
 

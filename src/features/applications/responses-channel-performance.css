@@ -39,6 +39,7 @@
   width: 100%;
   border-collapse: collapse;
   color: var(--career-text);
+  font-size: var(--career-text-sm);
 }
 
 .career-responses-channel-performance th,
@@ -46,10 +47,6 @@
   padding: var(--career-space-2) var(--career-space-3);
   border-block-end: var(--career-border-width) solid var(--career-line);
   text-align: start;
-}
-
-.career-responses-channel-performance table {
-  font-size: var(--career-text-sm);
 }
 
 .career-responses-channel-performance tbody tr:last-child > * {

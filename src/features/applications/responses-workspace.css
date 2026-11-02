@@ -1181,13 +1181,6 @@
   outline-offset: var(--career-space-1);
 }
 
-.career-responses-bulk-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--career-space-2);
-}
-
 .career-cabinet-view-responses .career-responses-selection {
   font-size: var(--career-text-sm);
 }

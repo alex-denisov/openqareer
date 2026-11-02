@@ -420,7 +420,7 @@ function DeliveryIcon({ state }: { readonly state: keyof typeof DELIVERY_LABEL }
   return <Clock aria-hidden="true" />;
 }
 
-/** Mockup 5 «Досье». Interviewers are not in the model yet: an honest empty row. */
+/** Mockup 5 company section of the selected response. Interviewers are not in the model yet: an honest empty row. */
 function Dossier({
   application,
   company,
