@@ -151,7 +151,9 @@ describe('consultant rewrite of conversation facts in «Опыт» (29.10)', () 
   it('shows the consultant’s bullets by employer and never the candidate’s raw words', async () => {
     const container = await render();
     const block = container.querySelector('[data-testid="experience-fact-rewrite"]')!;
-    expect(block.textContent).toContain('Консультант переписал рассказанное вами в пункты «Опыта»');
+    expect(block.textContent).not.toContain(
+      'Консультант переписал рассказанное вами в пункты «Опыта»',
+    );
     const places = [...block.querySelectorAll('[data-experience-id]')];
     expect(places.map((place) => place.getAttribute('data-experience-id'))).toEqual([
       'rosseti',
@@ -230,10 +232,8 @@ describe('consultant rewrite of conversation facts in «Опыт» (29.10)', () 
     expect(api.requestFactRewrite).toHaveBeenCalledTimes(2);
   });
 
-  it('offers «Отменить правку» for a fresh rewrite and undoes it', async () => {
+  it('shows no «Отменить правку» banner after a rewrite: History undoes it (owner, 02.11)', async () => {
     vi.spyOn(api, 'requestFactRewrite').mockResolvedValue(null);
-    const revert = vi.spyOn(api, 'revertFactRewrite').mockResolvedValue();
-    const onRefresh = vi.fn();
     const applied: ResumeDraft = {
       ...draft,
       declinedFactIds: ['f-rosseti', 'f-fishance', 'f-loose'],
@@ -246,12 +246,9 @@ describe('consultant rewrite of conversation facts in «Опыт» (29.10)', () 
         },
       ],
     };
-    const container = await render({ draft: applied, onRefresh });
-    expect(api.requestFactRewrite).not.toHaveBeenCalled();
-    expect(container.textContent).toContain('Пункты консультанта добавлены в «Опыт».');
-    await act(async () => button(container, 'Отменить правку').click());
-    expect(revert).toHaveBeenCalledWith('rewrite-1');
-    expect(onRefresh).toHaveBeenCalledTimes(1);
+    const container = await render({ draft: applied });
+    expect(container.textContent).not.toContain('Пункты консультанта добавлены');
+    expect(container.textContent).not.toContain('Отменить правку');
   });
 
   it('says the consultant failed and retries on request', async () => {

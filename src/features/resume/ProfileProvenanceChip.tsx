@@ -1,5 +1,4 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { LinkSimple, Sparkle, User } from '@phosphor-icons/react';
 import type { CandidateMemory, FactProvenance, ImportedSourceSummary } from '../coach/coachApi';
 import { provenanceLabel } from './profileProvenance';
 
@@ -51,27 +50,17 @@ export function useProvenanceLabelOf(): (memoryId: string | undefined) => string
   return (memoryId) => provenanceLabel(factProvenance(memory, memoryId));
 }
 
-/** Макет 2: «из LinkedIn, 12.09» / «со слов кандидата» / «консультант 06.10». */
-export function ProfileProvenanceChip({
-  provenance,
-}: {
+/**
+ * Provenance stays in the data and in «История изменений»; the profile no longer
+ * prints «из LinkedIn, 25.09» on every block (owner, 02.11).
+ */
+export function ProfileProvenanceChip(_props: {
   readonly provenance: FactProvenance | undefined;
-}) {
-  const Icon =
-    provenance?.kind === 'consultant'
-      ? Sparkle
-      : provenance?.kind === 'candidate'
-        ? User
-        : LinkSimple;
-  return (
-    <span className="career-profile-provenance">
-      <Icon size={14} aria-hidden="true" />
-      {provenanceLabel(provenance)}
-    </span>
-  );
+}): null {
+  return null;
 }
 
 /** The chip for an entry linked to one dossier fact. */
-export function ProfileFactProvenance({ memoryId }: { readonly memoryId: string | undefined }) {
-  return <ProfileProvenanceChip provenance={useFactProvenance(memoryId)} />;
+export function ProfileFactProvenance(_props: { readonly memoryId: string | undefined }): null {
+  return null;
 }

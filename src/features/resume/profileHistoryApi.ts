@@ -44,7 +44,11 @@ export async function revertProfileHistoryEntry(changeId: string): Promise<void>
 export async function confirmProfileExperience(experienceId: string): Promise<void> {
   const response = await apiFetch(
     `/api/v1/candidate/profile/experience/${encodeURIComponent(experienceId)}/confirm`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    },
   );
   await readData<{ confirmed: true }>(response);
 }

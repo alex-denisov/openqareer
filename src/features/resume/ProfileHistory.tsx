@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowCounterClockwise, ClockCounterClockwise } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, CaretDown, ClockCounterClockwise } from '@phosphor-icons/react';
 import { CoachApiError } from '../coach/apiClient';
-import { SectionHead } from './ProfileSectionHead';
 import {
   getProfileHistory,
   revertProfileHistoryEntry,
@@ -31,6 +30,8 @@ const SECTION_LABEL: Readonly<Record<string, string>> = {
 };
 
 const EMPTY_VALUE = '—';
+/** The list opens on the five newest changes and grows by five (owner, 02.11). */
+export const HISTORY_STEP = 5;
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', {
@@ -186,12 +187,27 @@ function HistoryRow({
   );
 }
 
+/** Five more rows per click; the next server page is read once the loaded rows run out. */
+function useShownCount(state: HistoryState, load: (page: number) => Promise<void>) {
+  const [shown, setShown] = useState(HISTORY_STEP);
+  const showMore = () => {
+    const next = shown + HISTORY_STEP;
+    setShown(next);
+    if (next > state.entries.length && state.entries.length < state.total) {
+      void load(state.nextPage);
+    }
+  };
+  return { shown, showMore };
+}
+
 /**
  * «История изменений»: who changed which profile section, «было → стало»,
- * with «Вернуть». Pages of 20, newest first. `onChanged` refreshes the profile.
+ * with «Вернуть». Newest first, five at a time; the server pages by 20.
+ * `onChanged` refreshes the profile.
  */
 export function ProfileHistoryList({ onChanged }: { readonly onChanged?: () => void }) {
   const { state, load } = useProfileHistory();
+  const { shown, showMore } = useShownCount(state, load);
   const reload = () => {
     void load(0);
     onChanged?.();
@@ -220,33 +236,45 @@ export function ProfileHistoryList({ onChanged }: { readonly onChanged?: () => v
   return (
     <div className="profile-history" aria-busy={state.status === 'loading'}>
       <ol className="profile-history__list">
-        {state.entries.map((entry) => (
+        {state.entries.slice(0, shown).map((entry) => (
           <HistoryRow key={entry.id} entry={entry} onReverted={reload} />
         ))}
       </ol>
-      {state.entries.length < state.total ? (
+      {shown < state.total ? (
         <button
           type="button"
           className="career-quiet-button profile-history__more"
           disabled={state.status === 'loading'}
-          onClick={() => void load(state.nextPage)}
+          onClick={showMore}
         >
-          Показать ещё
+          {`Показать ещё ${Math.min(HISTORY_STEP, state.total - shown)}`}
         </button>
       ) : null}
     </div>
   );
 }
 
+/** Collapsed by default (`career-home-fold`, DESIGN.md); the list is read on first open. */
 export function ProfileHistorySection({ onChanged }: { readonly onChanged?: () => void }) {
+  const [opened, setOpened] = useState(false);
   return (
     <section
       id="sec-history"
       className="career-profile-screen-panel career-profile-screen-section profile-history-panel"
-      aria-labelledby="sec-history-title"
+      aria-label="История изменений"
     >
-      <SectionHead id="sec-history-title" title="История изменений" />
-      <ProfileHistoryList onChanged={onChanged} />
+      <details
+        className="career-home-fold profile-history-fold"
+        onToggle={(event) => {
+          if (event.currentTarget.open) setOpened(true);
+        }}
+      >
+        <summary className="career-profile-screen-section-head profile-history-fold__summary">
+          <h2 id="sec-history-title">История изменений</h2>
+          <CaretDown size={16} aria-hidden="true" className="profile-history-fold__caret" />
+        </summary>
+        {opened ? <ProfileHistoryList onChanged={onChanged} /> : null}
+      </details>
     </section>
   );
 }

@@ -243,7 +243,10 @@ test('1440: accepted place reads «Подтверждено вами · с ко�
   await openProfile(page);
 
   const accepted = page.locator('[data-experience-id="exp-1"]');
-  await expect(accepted.getByText('Подтверждено вами · с консультантом 01.11')).toBeVisible();
+  // One green check «Подтверждено»; the full sentence stays its accessible name (owner, 02.11).
+  await expect(
+    accepted.getByLabel('Подтверждено вами · с консультантом 01.11', { exact: false }),
+  ).toHaveText('Подтверждено');
   const unconfirmed = page.locator('[data-experience-id="exp-2"]');
   await expect(unconfirmed.getByRole('button', { name: 'Подтвердить' })).toBeVisible();
   await accepted.scrollIntoViewIfNeeded();
@@ -251,6 +254,9 @@ test('1440: accepted place reads «Подтверждено вами · с ко�
 
   const history = page.locator('#sec-history');
   await history.scrollIntoViewIfNeeded();
+  // Folded by default (owner, 02.11): nothing is listed until the summary opens it.
+  await expect(history.getByTestId('profile-history-row')).toHaveCount(0);
+  await history.getByText('История изменений').click();
   await expect(history.getByTestId('profile-history-row')).toHaveCount(4);
   await expect(history.getByText('Консультант').first()).toBeVisible();
   await expect(history.getByRole('button', { name: 'Вернуть' })).toHaveCount(3);

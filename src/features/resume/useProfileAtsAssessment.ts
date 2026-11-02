@@ -21,14 +21,10 @@ export interface ProfileAtsAssessmentState {
   readonly loading: boolean;
   readonly error: string | null;
   readonly refresh: () => void;
-  /** On-demand mode only: the candidate has not asked for a calculation yet. */
-  readonly idle?: boolean;
 }
 
 export interface UseProfileAtsAssessmentOptions {
   readonly enabled?: boolean;
-  /** Opening the profile must not write (D2): calculate only after an explicit action. */
-  readonly onDemand?: boolean;
   readonly request?: ResumeAtsAssessmentRequest;
   readonly refreshKey?: string | null;
 }
@@ -78,6 +74,33 @@ function subscribeToVersionChanges(refresh: () => void): () => void {
   return () => window.removeEventListener(RESUME_VERSION_COLLECTION_CHANGED_EVENT, handleChange);
 }
 
+type AssessmentResult = Awaited<ReturnType<typeof loadProfileAssessment>>;
+
+/**
+ * The last result per request and profile revision. The assessment is a pure
+ * read of the saved profile (no writes), so it runs on every Profile open
+ * (owner, 02.11) and a reopen with an unchanged profile shows it at once.
+ */
+const assessmentCache = new Map<string, AssessmentResult>();
+const ASSESSMENT_CACHE_LIMIT = 8;
+
+function cacheKeyOf(requestKey: string | null, refreshKey: string | null): string {
+  return `${requestKey ?? 'master'}|${refreshKey ?? ''}`;
+}
+
+function remember(key: string, result: AssessmentResult): void {
+  assessmentCache.delete(key);
+  assessmentCache.set(key, result);
+  if (assessmentCache.size > ASSESSMENT_CACHE_LIMIT) {
+    assessmentCache.delete(assessmentCache.keys().next().value as string);
+  }
+}
+
+/** Test seam: forget cached results between cases. */
+export function clearProfileAtsAssessmentCache(): void {
+  assessmentCache.clear();
+}
+
 interface AssessmentLoadSetters {
   readonly setAssessment: (value: ResumeAtsAssessment | null) => void;
   readonly setSourceVersion: (value: ResumeVersionSummary | null) => void;
@@ -87,20 +110,26 @@ interface AssessmentLoadSetters {
 }
 
 /** Starts one assessment request; the returned cleanup aborts it. */
-function startAssessmentLoad(requestKey: string | null, set: AssessmentLoadSetters): () => void {
+function applyResult(result: AssessmentResult, set: AssessmentLoadSetters): void {
+  set.setAssessment(result.assessment);
+  set.setSourceVersion(result.sourceVersion);
+  set.setRoleBasis(result.roleBasis);
+}
+
+function startAssessmentLoad(
+  requestKey: string | null,
+  cacheKey: string,
+  set: AssessmentLoadSetters,
+): () => void {
   const controller = new AbortController();
   let active = true;
   set.setLoading(true);
-  set.setAssessment(null);
-  set.setSourceVersion(null);
-  set.setRoleBasis(null);
   set.setError(null);
   void loadProfileAssessment(requestKey, controller.signal)
     .then((result) => {
       if (!active) return;
-      set.setAssessment(result.assessment);
-      set.setSourceVersion(result.sourceVersion);
-      set.setRoleBasis(result.roleBasis);
+      remember(cacheKey, result);
+      applyResult(result, set);
     })
     .catch((reason: unknown) => {
       if (!active || controller.signal.aborted) return;
@@ -118,45 +147,39 @@ function startAssessmentLoad(requestKey: string | null, set: AssessmentLoadSette
 export function useProfileAtsAssessment(
   options: UseProfileAtsAssessmentOptions = {},
 ): ProfileAtsAssessmentState {
-  const { enabled: allowed = true, onDemand = false, request, refreshKey = null } = options;
+  const { enabled = true, request, refreshKey = null } = options;
   const requestKey = request === undefined ? null : JSON.stringify(request);
-  const [assessment, setAssessment] = useState<ResumeAtsAssessment | null>(null);
-  const [sourceVersion, setSourceVersion] = useState<ResumeVersionSummary | null>(null);
-  const [roleBasis, setRoleBasis] = useState<string | null>(null);
-  const [loading, setLoading] = useState(allowed && !onDemand);
+  const cacheKey = cacheKeyOf(requestKey, refreshKey);
+  const cached = assessmentCache.get(cacheKey);
+  const [assessment, setAssessment] = useState<ResumeAtsAssessment | null>(
+    cached?.assessment ?? null,
+  );
+  const [sourceVersion, setSourceVersion] = useState<ResumeVersionSummary | null>(
+    cached?.sourceVersion ?? null,
+  );
+  const [roleBasis, setRoleBasis] = useState<string | null>(cached?.roleBasis ?? null);
+  const [loading, setLoading] = useState(enabled && !cached);
   const [error, setError] = useState<string | null>(null);
   const [refreshSequence, setRefreshSequence] = useState(0);
-  const [requested, setRequested] = useState(!onDemand);
-  const enabled = allowed && requested;
-  const bump = useCallback(() => setRefreshSequence((value) => value + 1), []);
-  const refresh = useCallback(() => {
-    setRequested(true);
-    bump();
-  }, [bump]);
+  const refresh = useCallback(() => setRefreshSequence((value) => value + 1), []);
 
   useEffect(() => {
     if (!enabled) {
       setLoading(false);
       return;
     }
-    return startAssessmentLoad(requestKey, {
-      setAssessment,
-      setSourceVersion,
-      setRoleBasis,
-      setLoading,
-      setError,
-    });
-  }, [enabled, refreshKey, requestKey, refreshSequence]);
+    const set = { setAssessment, setSourceVersion, setRoleBasis, setLoading, setError };
+    const hit = refreshSequence === 0 ? assessmentCache.get(cacheKey) : undefined;
+    if (hit) {
+      applyResult(hit, set);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    return startAssessmentLoad(requestKey, cacheKey, set);
+  }, [enabled, cacheKey, requestKey, refreshSequence]);
 
-  useEffect(() => subscribeToVersionChanges(bump), [bump]);
+  useEffect(() => subscribeToVersionChanges(refresh), [refresh]);
 
-  return {
-    assessment,
-    sourceVersion,
-    roleBasis,
-    loading,
-    error,
-    refresh,
-    idle: allowed && !requested,
-  };
+  return { assessment, sourceVersion, roleBasis, loading, error, refresh };
 }

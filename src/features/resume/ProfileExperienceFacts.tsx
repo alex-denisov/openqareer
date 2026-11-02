@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
-import { ArrowsClockwise, Check, CheckCircle, Sparkle, Spinner, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, Check, Sparkle, Spinner, X } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import {
   rewriteSourceFacts,
@@ -7,11 +7,7 @@ import {
 } from '../../../server/domain/experienceFactRewrite';
 import { CoachApiError } from '../coach/apiClient';
 import type { CandidateMemory } from '../coach/coachApi';
-import {
-  applyFactRewrite,
-  requestFactRewrite,
-  revertFactRewrite,
-} from './experienceFactRewriteApi';
+import { applyFactRewrite, requestFactRewrite } from './experienceFactRewriteApi';
 import { hasBulletsLeft, ProposalBullets, type BulletEdits } from './ProfileFactRewriteBullets';
 import type { ResumeDraft } from './resumeTypes';
 import './profileExperienceSuggestions.css';
@@ -21,8 +17,6 @@ type SectionSave = (next: ResumeDraft) => Promise<boolean | void> | boolean | vo
 type Refresh = () => Promise<void> | void;
 
 const NOT_SAVED = 'Не сохранилось: нет связи с сервером. Попробуйте ещё раз.';
-/** How long the accepted rewrite keeps its «Отменить правку» in the block. */
-const UNDO_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 function messageOf(reason: unknown): string {
   return reason instanceof Error && reason.message ? reason.message : NOT_SAVED;
@@ -34,12 +28,6 @@ export function declineFacts(draft: ResumeDraft, factIds: readonly string[]): Re
     ...draft,
     declinedFactIds: [...new Set([...(draft.declinedFactIds ?? []), ...factIds])],
   };
-}
-
-/** The last accepted rewrite, while its undo is still offered. */
-function recentRewrite(draft: ResumeDraft, now: number) {
-  const last = draft.factRewrites?.at(-1);
-  return last && now - Date.parse(last.appliedAt) < UNDO_WINDOW_MS ? last : undefined;
 }
 
 type ProposalState =
@@ -159,12 +147,7 @@ function useRewriteActions(
         throw new Error(NOT_SAVED);
       }
     });
-  const revert = (rewriteId: string) =>
-    void actions.run('revert', async () => {
-      await revertFactRewrite(rewriteId);
-      await onProfileChanged?.();
-    });
-  return { actions, accept, dismiss, revert };
+  return { actions, accept, dismiss };
 }
 
 function leftOutNote(count: number): string | null {
@@ -176,12 +159,7 @@ function BlockHeader({ titleId }: { readonly titleId: string }) {
   return (
     <header className="pm-sg-h profile-experience-suggestions__header">
       <Sparkle size={16} weight="regular" aria-hidden="true" />
-      <b id={titleId}>
-        <span className="profile-experience-suggestions__mobile-title">Пункты из беседы</span>
-        <span className="profile-experience-suggestions__desktop-title">
-          Консультант переписал рассказанное вами в пункты «Опыта»
-        </span>
-      </b>
+      <b id={titleId}>Пункты из беседы</b>
       <span className="profile-experience-suggestions__source">Предложено консультантом</span>
     </header>
   );
@@ -264,37 +242,6 @@ function ProposalBody({
   );
 }
 
-function AppliedState({
-  busy,
-  onRevert,
-}: {
-  readonly busy: boolean;
-  readonly onRevert: () => void;
-}) {
-  return (
-    <div className="profile-experience-suggestions__row-state" data-testid="fact-rewrite-applied">
-      <span role="status">
-        <CheckCircle size={16} weight="regular" aria-hidden="true" />
-        Пункты консультанта добавлены в «Опыт».
-      </span>
-      <button
-        type="button"
-        className="career-btn is-sm pm-text profile-experience-suggestions__revert"
-        disabled={busy}
-        aria-busy={busy || undefined}
-        onClick={onRevert}
-      >
-        {busy ? (
-          <Spinner size={16} weight="regular" aria-hidden="true" />
-        ) : (
-          <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
-        )}
-        {busy ? 'Отменяем…' : 'Отменить правку'}
-      </button>
-    </div>
-  );
-}
-
 function ProposalStatus({
   state,
   onRetry,
@@ -330,7 +277,6 @@ export interface ExperienceFactRewriteProps {
   readonly onSectionSave: SectionSave;
   /** Re-reads the profile after the server changed it (accept, undo). */
   readonly onProfileChanged?: Refresh;
-  readonly now?: () => number;
 }
 
 /**
@@ -343,22 +289,21 @@ export function ExperienceFactRewrite({
   memory,
   onSectionSave,
   onProfileChanged,
-  now = Date.now,
 }: ExperienceFactRewriteProps) {
   const titleId = useId();
   const sourceKey = useSourceKey(draft, memory);
   const { state, retry } = useRewriteProposal(sourceKey);
-  const { actions, accept, dismiss, revert } = useRewriteActions(
+  const { actions, accept, dismiss } = useRewriteActions(
     draft,
     onSectionSave,
     onProfileChanged,
     retry,
   );
-  const applied = recentRewrite(draft, now());
   // A proposal without bullets offers nothing to accept: it is not shown at all.
   const proposal =
     state.status === 'ready' && state.proposal?.places.length ? state.proposal : null;
-  if (!applied && (!sourceKey || (state.status === 'ready' && !proposal))) return null;
+  // An accepted rewrite is undone from «История изменений» (owner, 02.11), not from a banner here.
+  if (!sourceKey || (state.status === 'ready' && !proposal)) return null;
 
   return (
     <section
@@ -368,9 +313,6 @@ export function ExperienceFactRewrite({
       data-testid="experience-fact-rewrite"
     >
       <BlockHeader titleId={titleId} />
-      {applied ? (
-        <AppliedState busy={actions.busy === 'revert'} onRevert={() => revert(applied.id)} />
-      ) : null}
       {sourceKey ? <ProposalStatus state={state} onRetry={retry} /> : null}
       {proposal ? (
         <ProposalBody

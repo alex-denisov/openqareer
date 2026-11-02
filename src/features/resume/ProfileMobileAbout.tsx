@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useProfileProvenance } from './ProfileProvenanceChip';
-import { aboutProvenance, provenanceSourceValue } from './profileProvenance';
 import { PencilSimple, Sparkle } from '@phosphor-icons/react';
 import { parseAboutContent } from './profileAbout';
 import { updateAbout } from './profileEntryEditing';
@@ -71,13 +69,6 @@ function MobileAboutText({ text }: { readonly text: string }) {
   );
 }
 
-function MobileAboutOrigin({ draft }: Pick<ProfileMobileDataProps, 'draft'>) {
-  const { memory } = useProfileProvenance();
-  return (
-    <p className="pm-foot">{provenanceSourceValue(aboutProvenance(draft.candidate, memory))}.</p>
-  );
-}
-
 export function ProfileMobileAbout(props: ProfileMobileDataProps) {
   const [editing, setEditing] = useState(false);
   if (editing) return <MobileAboutEditor {...props} onClose={() => setEditing(false)} />;
@@ -85,7 +76,6 @@ export function ProfileMobileAbout(props: ProfileMobileDataProps) {
   return (
     <>
       {about ? <MobileAboutText text={about} /> : <p className="pm-note">Раздел пока пуст.</p>}
-      {about ? <MobileAboutOrigin draft={props.draft} /> : null}
       <ProfileMobileGroup>
         <ProfileMobileRow
           icon={PencilSimple}

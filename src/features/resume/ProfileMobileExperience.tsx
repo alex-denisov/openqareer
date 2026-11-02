@@ -4,9 +4,8 @@ import {
   experienceConfirmation,
   experienceConfirmationLabel,
 } from './ExperienceConfirmation';
-import { useFactProvenance } from './ProfileProvenanceChip';
-import { provenanceSourceValue } from './profileProvenance';
-import { Briefcase, PencilSimple, Plus, Question } from '@phosphor-icons/react';
+import { experienceChips, profileLanguage } from './experienceChips';
+import { Briefcase, CheckCircle, PencilSimple, Plus, Question } from '@phosphor-icons/react';
 import { ProfileMobilePositionEditor } from './ProfileMobilePositionEditor';
 import {
   ExperienceSuggestionsList,
@@ -86,24 +85,21 @@ function MobileExperienceFacts({
   readonly onConfirmed?: () => Promise<void> | void;
 }) {
   const confirmation = experienceConfirmation(entry, memory);
-  const workplace =
-    entry.workplaceType === 'on_site'
-      ? 'офис'
-      : entry.workplaceType === 'hybrid'
-        ? 'гибрид'
-        : entry.workplaceType === 'remote'
-          ? 'удалённо'
-          : undefined;
-  const source = provenanceSourceValue(useFactProvenance(entry.chronologyMemoryId));
+  const lang = profileLanguage([entry.title]);
+  const place = experienceChips(entry, [], lang)
+    .filter((chip) => chip.key === 'location' || chip.key === 'workplace')
+    .map((chip) => chip.label);
   return (
     <ProfileMobileGroup>
       <ProfileMobileKeyValue label="Место">
-        {[entry.location, workplace].filter(Boolean).join(', ') || 'Не указано'}
+        {place.join(', ') || 'Не указано'}
       </ProfileMobileKeyValue>
-      <ProfileMobileKeyValue label="Источник">{source}</ProfileMobileKeyValue>
       <ProfileMobileKeyValue label="Подтверждено">
         {confirmation.confirmed ? (
-          experienceConfirmationLabel(confirmation).replace('Подтверждено вами', 'вами')
+          <span className="pm-ok" aria-label={experienceConfirmationLabel(confirmation)}>
+            <CheckCircle size={16} weight="fill" aria-hidden="true" />
+            Подтверждено
+          </span>
         ) : (
           <>
             не подтверждено вами

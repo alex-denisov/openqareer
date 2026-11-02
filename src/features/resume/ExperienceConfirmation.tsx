@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { CheckCircle } from '@phosphor-icons/react';
 import { CoachApiError, type CandidateMemory } from '../coach/coachApi';
 import { confirmProfileExperience } from './profileHistoryApi';
@@ -45,7 +45,12 @@ export function experienceConfirmationLabel({
     : 'Подтверждено вами';
 }
 
-/** The explicit «Подтвердить» for a place nobody proposed edits to. */
+/**
+ * The explicit «Подтвердить» for a place nobody proposed edits to. The profile
+ * is re-read after a failure too: on 01.11 the server saved every confirmation
+ * while the button reported a lost connection, so the error stays only while
+ * the place is still unconfirmed (the button unmounts once it is).
+ */
 export function ConfirmExperienceButton({
   experienceId,
   onConfirmed,
@@ -55,6 +60,7 @@ export function ConfirmExperienceButton({
   readonly onConfirmed?: () => Promise<void> | void;
   readonly className?: string;
 }) {
+  const errorId = useId();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const confirm = async () => {
@@ -62,19 +68,22 @@ export function ConfirmExperienceButton({
     setError(null);
     try {
       await confirmProfileExperience(experienceId);
-      await onConfirmed?.();
     } catch (caught) {
       setError(caught instanceof CoachApiError ? caught.message : 'Не удалось подтвердить.');
+    }
+    try {
+      await onConfirmed?.();
     } finally {
       setBusy(false);
     }
   };
   return (
-    <>
+    <span className="career-profile-screen-confirm">
       <button
         type="button"
         className={className}
         disabled={busy}
+        aria-describedby={error ? errorId : undefined}
         data-testid="confirm-experience"
         onClick={() => void confirm()}
       >
@@ -82,10 +91,10 @@ export function ConfirmExperienceButton({
         <span>{busy ? 'Подтверждаю…' : 'Подтвердить'}</span>
       </button>
       {error ? (
-        <span className="career-profile-screen-confirm-error" role="alert">
+        <span id={errorId} className="career-profile-screen-confirm-error" role="alert">
           {error}
         </span>
       ) : null}
-    </>
+    </span>
   );
 }

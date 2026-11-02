@@ -144,3 +144,27 @@
     justify-self: start;
   }
 }
+
+/* «История изменений» is folded by default (owner, 02.11; career-home-fold). */
+.profile-history-fold__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+  min-block-size: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.profile-history-fold__summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-history-fold[open] .profile-history-fold__caret {
+  transform: rotate(180deg);
+}
+
+.profile-history-fold[open] > .profile-history,
+.profile-history-fold[open] > .profile-history__empty {
+  margin-block-start: var(--career-space-3);
+}

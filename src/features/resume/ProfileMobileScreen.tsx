@@ -251,7 +251,6 @@ export function ProfileMobileScreen(props: ProfileMobileScreenProps) {
   const navigation = useProfileMobileNavigation();
   const { activeTab, onTab, setLocalTab } = useMobileTab(props);
   const ats = useProfileAtsAssessment({
-    onDemand: true,
     refreshKey: props.view?.savedAt?.updatedAt,
   });
   const versionCount = useVersionCount(props.candidateId);

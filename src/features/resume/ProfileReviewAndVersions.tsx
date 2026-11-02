@@ -1,10 +1,23 @@
-import { useMemo } from 'react';
-import { ArrowRight, Sparkle, CheckCircle, Question, Warning, Info } from '@phosphor-icons/react';
+import { useId, useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  CaretDown,
+  Sparkle,
+  CheckCircle,
+  Question,
+  Warning,
+  Info,
+} from '@phosphor-icons/react';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { pluralRu } from '../../../shared/pluralRu';
 import { profileCompleteness } from './profileCompleteness';
 import type { CandidateMemory } from '../coach/coachApi';
-import { aboutFinding, experienceFinding, experienceFindingCount } from './reviewFindings';
+import {
+  aboutFinding,
+  experienceFinding,
+  experienceFindingCount,
+  teamSizeFinding,
+} from './reviewFindings';
 import { orderUnknowns, previewProjection, selectDocument } from './resumeStudioModel';
 import {
   ProfileAtsAssessment as ProfileAtsAssessmentContent,
@@ -49,6 +62,8 @@ export interface ReviewBlock {
   readonly hasData: boolean;
   readonly issueCount?: number;
   readonly description?: string;
+  /** Review findings counted on top of the projection issues («Размер команды неизвестен…»). */
+  readonly extraRemarks?: readonly string[];
 }
 
 function reviewBlockForIssue(issue: ResumeUnknown, draft: ResumeDraft): ReviewBlockId {
@@ -152,8 +167,13 @@ function withFindings(
     const description = findings[block.id];
     const described = description && !block.description ? { ...block, description } : block;
     const extra = block.id === 'experience' ? experienceFindingCount(draft) : 0;
+    const remark = extra ? teamSizeFinding(draft) : undefined;
     return extra
-      ? { ...described, issueCount: actionableIssues(described).length + extra }
+      ? {
+          ...described,
+          issueCount: actionableIssues(described).length + extra,
+          extraRemarks: remark ? [remark] : [],
+        }
       : described;
   });
 }
@@ -242,32 +262,73 @@ function reviewDescription(block: ReviewBlock): string {
     : 'Нет данных, чтобы проверить этот блок.';
 }
 
+/** Every remark behind a block's count: projection issues first, then review findings. */
+export function reviewRemarks(block: ReviewBlock): readonly string[] {
+  return [
+    ...new Set([
+      ...actionableIssues(block).map((issue) => issue.message),
+      ...(block.extraRemarks ?? []),
+    ]),
+  ].filter(Boolean);
+}
+
+function ReviewBadgeIcon({ kind }: { readonly kind: 'clear' | 'unknown' | 'issues' }) {
+  if (kind === 'clear') return <CheckCircle size={14} aria-hidden="true" />;
+  if (kind === 'unknown') return <Question size={14} aria-hidden="true" />;
+  return <Warning size={14} aria-hidden="true" />;
+}
+
+/** «12 замечаний» opens the twelve remarks themselves (owner, 02.11). */
+function ReviewBlockRow({ block }: { readonly block: ReviewBlock }) {
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const status = reviewStatus(block);
+  const statusKind =
+    status === 'Замечаний нет' ? 'clear' : status === 'Неизвестно' ? 'unknown' : 'issues';
+  const remarks = statusKind === 'issues' ? reviewRemarks(block) : [];
+  const badgeClass = `career-profile-screen-review-badge is-${statusKind}`;
+  return (
+    <div className="career-profile-screen-review-row" data-review-block={block.id}>
+      <div className="career-profile-screen-review-copy">
+        <strong>{block.label}</strong>
+        <p>{reviewDescription(block)}</p>
+      </div>
+      {remarks.length ? (
+        <button
+          type="button"
+          className={`${badgeClass} is-toggle`}
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-label={`${block.label}: ${status}. ${open ? 'Скрыть' : 'Показать'} список`}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <ReviewBadgeIcon kind={statusKind} />
+          {status}
+          <CaretDown size={14} aria-hidden="true" className="career-profile-screen-review-caret" />
+        </button>
+      ) : (
+        <span className={badgeClass}>
+          <ReviewBadgeIcon kind={statusKind} />
+          {status}
+        </span>
+      )}
+      {remarks.length ? (
+        <ul id={listId} className="career-profile-screen-review-remarks" hidden={!open}>
+          {remarks.map((remark) => (
+            <li key={remark}>{remark}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function ReviewBlockRows({ blocks }: { readonly blocks: readonly ReviewBlock[] }) {
   return (
     <div className="career-profile-screen-review-rows">
-      {blocks.map((block) => {
-        const status = reviewStatus(block);
-        const statusKind =
-          status === 'Замечаний нет' ? 'clear' : status === 'Неизвестно' ? 'unknown' : 'issues';
-        return (
-          <div className="career-profile-screen-review-row" key={block.id}>
-            <div className="career-profile-screen-review-copy">
-              <strong>{block.label}</strong>
-              <p>{reviewDescription(block)}</p>
-            </div>
-            <span className={`career-profile-screen-review-badge is-${statusKind}`}>
-              {statusKind === 'clear' ? (
-                <CheckCircle size={14} aria-hidden="true" />
-              ) : statusKind === 'unknown' ? (
-                <Question size={14} aria-hidden="true" />
-              ) : (
-                <Warning size={14} aria-hidden="true" />
-              )}
-              {status}
-            </span>
-          </div>
-        );
-      })}
+      {blocks.map((block) => (
+        <ReviewBlockRow key={block.id} block={block} />
+      ))}
     </div>
   );
 }
@@ -553,7 +614,11 @@ export function ProfileReviewAndVersions(props: ProfileReviewAndVersionsProps) {
           onTabChange={onTabChange}
           desktopLayout={desktopLayout}
         />
-        <ProfileAtsAssessment desktopLayout={desktopLayout} enabled={Boolean(view)} onDemand />
+        <ProfileAtsAssessment
+          desktopLayout={desktopLayout}
+          enabled={Boolean(view)}
+          refreshKey={view?.savedAt?.updatedAt ?? null}
+        />
       </div>
       {!desktopLayout && view ? (
         <ProfileResumeVersions draft={draft} memory={memory} view={view} />

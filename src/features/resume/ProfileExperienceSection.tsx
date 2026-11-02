@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react';
 import { CollapsiblePlace, EXPANDED_PLACES } from './ProfileExperienceCollapsed';
-import { ProfileFactProvenance } from './ProfileProvenanceChip';
+import { experienceChips, profileLanguage, type ExperienceChip } from './experienceChips';
 import {
   Buildings,
   CheckCircle,
-  Circle,
   House,
   Info,
   Laptop,
   MapPin,
+  UsersThree,
   type Icon,
 } from '@phosphor-icons/react';
 import { CareerTooltip } from '../shell/CareerTooltip';
@@ -71,12 +71,6 @@ const WORKPLACE_ICON: Record<string, Icon> = {
   on_site: Buildings,
   hybrid: House,
   remote: Laptop,
-};
-
-const WORKPLACE_LABEL: Record<string, string> = {
-  on_site: 'Офис',
-  hybrid: 'Гибрид',
-  remote: 'Удалённо',
 };
 
 type ExperiencePatchHandler = (
@@ -152,7 +146,12 @@ function PositionSummary({
         />
         <SectionRemoveButton label="Удалить должность" onClick={onRemove} />
       </div>
-      <PositionEvidenceBadge entry={entry} memory={memory} onConfirmed={onConfirmed} />
+      <PositionEvidenceBadge
+        entry={entry}
+        bullets={bullets}
+        memory={memory}
+        onConfirmed={onConfirmed}
+      />
       <PositionDetails
         entry={entry}
         bullets={bullets}
@@ -166,63 +165,70 @@ function PositionSummary({
   );
 }
 
-function PositionPlace({ entry }: { readonly entry: ResumeExperienceInput }) {
-  const WorkplaceIcon = entry.workplaceType ? WORKPLACE_ICON[entry.workplaceType] : undefined;
+const CHIP_ICON: Partial<Record<ExperienceChip['key'], Icon>> = {
+  location: MapPin,
+  team: UsersThree,
+};
+
+function PositionChips({
+  entry,
+  texts,
+}: {
+  readonly entry: ResumeExperienceInput;
+  readonly texts: readonly string[];
+}) {
+  const lang = profileLanguage([entry.title, ...texts]);
   return (
     <>
-      {entry.location ? (
-        <span className="career-profile-screen-company-span">
-          <MapPin size={14} aria-hidden="true" />
-          {entry.location}
-        </span>
-      ) : null}
-      {entry.workplaceType ? (
-        <span className="career-profile-screen-company-span">
-          {WorkplaceIcon ? <WorkplaceIcon size={14} aria-hidden="true" /> : null}
-          {WORKPLACE_LABEL[entry.workplaceType]?.toLocaleLowerCase('ru-RU')}
-        </span>
-      ) : null}
+      {experienceChips(entry, texts, lang).map((chip) => {
+        const ChipIcon =
+          chip.key === 'workplace' && entry.workplaceType
+            ? WORKPLACE_ICON[entry.workplaceType]
+            : CHIP_ICON[chip.key];
+        return (
+          <span
+            key={chip.key}
+            className={`career-profile-screen-tag${chip.accent ? ' is-accent' : ''}`}
+            data-chip={chip.key}
+          >
+            {ChipIcon ? <ChipIcon size={14} aria-hidden="true" /> : null}
+            {chip.label}
+          </span>
+        );
+      })}
     </>
   );
 }
 
 function PositionEvidenceBadge({
   entry,
+  bullets,
   memory,
   onConfirmed,
 }: {
   readonly entry: ResumeExperienceInput;
+  readonly bullets: readonly string[];
   readonly memory: readonly CandidateMemory[];
   readonly onConfirmed?: () => Promise<void> | void;
 }) {
   const confirmation = experienceConfirmation(entry, memory);
-  const label = experienceConfirmationLabel(confirmation);
   return (
     <div className="career-profile-screen-position-tags">
-      {entry.current ? (
-        <span className="career-profile-screen-tag is-accent">Работаю здесь</span>
-      ) : null}
-      <PositionPlace entry={entry} />
-      <ProfileFactProvenance memoryId={entry.chronologyMemoryId} />
-      {entry.employmentType ? (
-        <span className="career-profile-screen-tag">{entry.employmentType}</span>
-      ) : null}
-      <span
-        className={`career-profile-screen-tag${confirmation.confirmed ? ' is-verified' : ''}`}
-        title="Работодатель не проверяется; подтверждение относится к фактам профиля."
-        aria-label={`${label}. Работодатель не проверяется.`}
-      >
-        {confirmation.confirmed ? (
-          <CheckCircle size={14} aria-hidden="true" />
-        ) : (
-          <Circle size={14} aria-hidden="true" />
-        )}
-        {label}
-      </span>
-      {!confirmation.confirmed && entry.bulletMemoryIds.length > 0 ? (
+      <PositionChips entry={entry} texts={bullets} />
+      {confirmation.confirmed ? (
+        <span
+          className="career-profile-screen-tag is-verified"
+          title="Работодатель не проверяется; подтверждение относится к фактам профиля."
+          aria-label={`${experienceConfirmationLabel(confirmation)}. Работодатель не проверяется.`}
+          data-chip="confirmed"
+        >
+          <CheckCircle size={14} weight="fill" aria-hidden="true" />
+          Подтверждено
+        </span>
+      ) : entry.bulletMemoryIds.length > 0 ? (
         <ConfirmExperienceButton experienceId={entry.id} onConfirmed={onConfirmed} />
       ) : null}
-      <ProfileTeamSizeTag teamSize={entry.teamSize} />
+      {entry.teamSize ? null : <ProfileTeamSizeTag teamSize={entry.teamSize} />}
     </div>
   );
 }
