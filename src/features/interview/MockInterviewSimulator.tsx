@@ -27,6 +27,7 @@ export function MockInterviewSimulator(props: MockInterviewSimulatorProps) {
   const flow = useMockInterviewController(
     props.vacancy.title,
     props.onBackToPreparation,
+    props.initialStressMode,
     props.vacancy.applicationId,
   );
   useEscapeLayer(flow.returnToPreparation, true);

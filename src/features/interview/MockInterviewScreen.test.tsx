@@ -55,7 +55,7 @@ describe('Мок-интервью по макету 14', () => {
 
   it('п. 8: «Начать мок-интервью» открывает сразу тренажёр, а не справку', () => {
     const html = renderToStaticMarkup(
-      <InterviewPrepModal isOpen onClose={vi.fn()} vacancy={vacancy} startWith="mock" />,
+      <InterviewPrepModal isOpen onClose={vi.fn()} vacancy={vacancy} startInMockInterview />,
     );
     expect(html).toContain('career-mock-dialog');
     expect(html).toContain('Интервью 10.10, 14:00');

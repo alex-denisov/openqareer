@@ -263,10 +263,10 @@ function createCompanies(total = 2) {
       name: `Компания ${index + 3}`,
       location: 'Москва',
       industry: 'ИТ',
-      vacancyCount: 1,
+      vacancyCount: index % 4 === 0 ? 0 : 1,
       contactsCount: null,
       contactsImportedAt: null,
-      want: false,
+      want: true,
       nextStep: null,
       hasRecruiter: false,
       recruiterSearchStatus: 'idle',
@@ -275,6 +275,36 @@ function createCompanies(total = 2) {
       recruiters: [],
     })),
   ];
+}
+
+function companyWantRows(companies: ReturnType<typeof createCompanies>, params: URLSearchParams) {
+  const stage = params.get('stage') ?? 'all';
+  const search = (params.get('search') ?? '').toLocaleLowerCase('ru-RU');
+  return companies
+    .filter((company) => company.want)
+    .map((company) => ({ ...company, wantStage: company.vacancyCount > 0 ? 'want' : 'waiting' }))
+    .filter((company) => stage === 'all' || company.wantStage === stage)
+    .filter((company) => !search || company.name.toLocaleLowerCase('ru-RU').includes(search));
+}
+
+function companyWantPage(companies: ReturnType<typeof createCompanies>, params: URLSearchParams) {
+  const offset = Number(params.get('offset') ?? 0);
+  const rows = companyWantRows(companies, params);
+  const wanted = companyWantRows(companies, new URLSearchParams());
+  return {
+    items: rows.slice(offset, offset + 20),
+    total: rows.length,
+    offset,
+    limit: 20,
+    counts: {
+      all: wanted.length,
+      new: 0,
+      want: wanted.filter((company) => company.wantStage === 'want').length,
+      path: 0,
+      waiting: wanted.filter((company) => company.wantStage === 'waiting').length,
+    },
+    industries: [...new Set(wanted.map((company) => company.industry))],
+  };
 }
 
 function companyPage(
@@ -506,6 +536,31 @@ async function handleCompanyRoute(
         url.searchParams.get('search') ?? '',
       ),
     );
+    return true;
+  }
+  if (path === '/api/v1/candidate/companies/wants' && method === 'GET') {
+    calls.companyPageQueries.push(url.href);
+    await fulfill(route, companyWantPage(companies, url.searchParams));
+    return true;
+  }
+  if (path === '/api/v1/candidate/companies/wants/selection' && method === 'GET') {
+    calls.companyPageQueries.push(url.href);
+    const items = companyWantRows(companies, url.searchParams).map((company) => ({
+      key: company.key,
+      name: company.name,
+      industry: company.industry,
+      stage: company.wantStage,
+      vacancyCount: company.vacancyCount,
+      contactsCount: company.contactsCount,
+      nextStep: company.nextStep?.text ?? null,
+    }));
+    await fulfill(route, { items, total: items.length });
+    return true;
+  }
+  if (path === '/api/v1/candidate/companies/wants/recruiter-search' && method === 'POST') {
+    const body = request.postDataJSON() as { companyKeys: string[] };
+    calls.companyMutations.push({ method, path, body });
+    await fulfill(route, { queuedCount: body.companyKeys.length, skippedCount: 0 });
     return true;
   }
   const match = path.match(
@@ -790,74 +845,101 @@ test.describe('B450 responses workspace', () => {
     });
   });
 
-  test('компании сохраняют желание, следующий шаг, поиск пути и пакетное действие', async ({
+  test('«Хочу в компанию»: строка, массовые действия и добавление списком', async ({
     page,
   }, testInfo) => {
-    const calls = await installMocks(page);
+    const calls = await installMocks(page, { companyCount: 120 });
     await seedWorkspace(page);
     await openResponses(page);
-    await page.getByRole('tab', { name: 'Хочу в компанию' }).click();
-    const panel = page.locator('section[aria-label="Компании, которые интересуют"]');
-    await expect(panel.getByText('Northstar Labs')).toBeVisible();
-    await panel.getByRole('button', { name: 'Добавить компании' }).click();
-    const row = page
-      .locator('.career-responses-company-row')
-      .filter({ hasText: 'Orbital Systems' });
-    await expect(row).toBeVisible();
-    await row.getByRole('button', { name: 'Хочу в компанию' }).click();
-    await row.getByLabel('Следующий шаг').fill('Написать нанимающему менеджеру');
-    await row.getByRole('button', { name: 'Сохранить шаг' }).click();
-    await row.getByRole('button', { name: 'Найти путь к рекрутеру' }).click();
-    await expect(row).toContainText('Ищем путь к рекрутеру');
-    await expect(row.getByRole('button', { name: 'Найти путь к рекрутеру' })).toBeDisabled();
-    await panel.getByRole('button', { name: 'Выбрать все 2 по фильтру' }).click();
-    await panel.getByRole('button', { name: 'Проверить', exact: true }).click();
-    await panel.getByRole('button', { name: 'Подтвердить 2' }).click();
-    expect(calls.companyMutations.map((call) => call.path)).toEqual(
-      expect.arrayContaining([
-        '/api/v1/candidate/companies/orbital/want',
-        '/api/v1/candidate/companies/orbital/next-step',
-        '/api/v1/candidate/companies/orbital/recruiter-search',
-      ]),
-    );
-    expect(
-      calls.companyMutations.find((call) => call.path.endsWith('/next-step'))?.body,
-    ).toMatchObject({ text: 'Написать нанимающему менеджеру' });
-    expect(calls.companyBulkPreview).toMatchObject({ action: 'add' });
-    expect(calls.companyBulkExecute).toMatchObject({ confirmCount: 2 });
+    await page.getByRole('tab', { name: /Хочу/ }).first().click();
+    const panel = page.locator('section[aria-label="Хочу в компанию"]');
     if (page.viewportSize()?.width === 390) {
+      await expect(panel.locator('.career-company-wants-sum')).toContainText('компаний');
+      await panel.getByRole('button', { name: 'Выбрать', exact: true }).click();
+      await panel.getByRole('button', { name: 'Все', exact: true }).click();
+      await expect(panel.locator('.career-company-wants-selbar')).toContainText(/Выбрано\s*119/);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - window.innerWidth,
       );
       expect(overflow).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: testInfo.outputPath('b492-wants-390.png') });
+      return;
     }
-    await page.screenshot({ path: testInfo.outputPath('b450-companies.png'), fullPage: false });
+    const row = panel.getByRole('row').filter({ hasText: 'Northstar Labs' });
+    await expect(row).toBeVisible();
+    await row.getByRole('button', { name: 'Действия: Northstar Labs' }).click();
+    await page.getByRole('menuitem', { name: 'Следующий шаг…' }).click();
+    await page.getByLabel('Что сделать дальше').fill('Написать нанимающему менеджеру');
+    await page.getByRole('button', { name: 'Сохранить' }).click();
+    await expect.poll(() => calls.companyBulkExecute).toMatchObject({ action: 'set_next_step' });
+
+    await panel.getByRole('button', { name: 'Выбрать все 119 по фильтру' }).click();
+    await expect(panel.getByText(/Выбрано\s*119\s*из\s*119/)).toBeVisible();
+    await panel.getByRole('button', { name: 'Найти пути' }).click();
+    await expect
+      .poll(() => calls.companyMutations.at(-1)?.path)
+      .toBe('/api/v1/candidate/companies/wants/recruiter-search');
+    expect(
+      (calls.companyMutations.at(-1)?.body as { companyKeys: string[] }).companyKeys,
+    ).toHaveLength(119);
+
+    await panel.getByRole('button', { name: 'Выбрать все 119 по фильтру' }).click();
+    await panel.getByRole('button', { name: 'Убрать из «Хочу»' }).click();
+    await panel.getByRole('button', { name: 'Убрать', exact: true }).click();
+    await expect.poll(() => calls.companyBulkExecute).toMatchObject({ action: 'remove' });
+    expect((calls.companyBulkExecute?.companies as unknown[]).length).toBe(119);
+
+    await panel.getByRole('button', { name: 'Добавить компании' }).click();
+    await page.getByLabel('Названия компаний, по одной в строке').fill('Альфа\nБета\nАльфа');
+    await expect(page.getByText('Компаний в списке: 2.')).toBeVisible();
+    await page.getByRole('button', { name: 'Добавить', exact: true }).click();
+    await expect.poll(() => calls.companyBulkExecute).toMatchObject({ action: 'add' });
+    await page.screenshot({ path: testInfo.outputPath('b492-wants-1440.png'), fullPage: false });
   });
 
-  test('company list filters and pages rows only when requested', async ({ page }) => {
-    const calls = await installMocks(page, { companyCount: 25 });
+  test('снимки вкладок «Хочу», «Подготовка», «Офферы» (B492)', async ({ page }, testInfo) => {
+    await installMocks(page, { companyCount: 120 });
     await seedWorkspace(page);
     await openResponses(page);
-    await page.getByRole('tab', { name: 'Хочу в компанию' }).click();
+    const width = page.viewportSize()?.width ?? 0;
+    for (const [tab, file] of [
+      [/^Хочу/, 'want'],
+      [/^Подготовка/, 'prep'],
+      [/^Офферы/, 'offers'],
+    ] as const) {
+      await page.getByRole('tab', { name: tab }).first().click();
+      await page.waitForTimeout(400);
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+      await page.screenshot({
+        path: testInfo.outputPath(`b492-${width}-${file}.png`),
+        fullPage: true,
+      });
+    }
+  });
 
-    const panel = page.locator('section[aria-label="Компании, которые интересуют"]');
-    const rows = panel.locator('.career-responses-company-row');
-    await panel.getByRole('tab', { name: /Хочу/ }).click();
-    await expect(rows).toHaveCount(1);
-    await expect(rows.first()).toContainText('Northstar Labs');
-    expect(calls.companyPageQueries.at(-1)).toContain('filter=want');
-    await panel.getByRole('tab', { name: /Новые вакансии/ }).click();
+  test('«Хочу в компанию»: чипы этапов, поиск и «Показать ещё 20»', async ({ page }) => {
+    test.skip(page.viewportSize()?.width === 390, 'таблица и чипы — только 1440');
+    const calls = await installMocks(page, { companyCount: 45 });
+    await seedWorkspace(page);
+    await openResponses(page);
+    await page.getByRole('tab', { name: /Хочу/ }).first().click();
+    const panel = page.locator('section[aria-label="Хочу в компанию"]');
+    const rows = panel.locator('tbody tr');
     await expect(rows).toHaveCount(20);
-    const more = panel.getByRole('button', { name: 'Показать ещё' });
-    await expect(more).toBeVisible();
-    await more.click();
-    await expect(rows).toHaveCount(25);
+    await expect(panel.locator('.career-company-wants-footer')).toContainText(
+      /Показано\s*20\s*из\s*44/,
+    );
+    await panel.getByRole('button', { name: 'Показать ещё 20' }).click();
+    await expect(rows).toHaveCount(40);
     expect(calls.companyPageQueries.at(-1)).toContain('offset=20');
-
-    await panel.getByLabel('Найти компанию').fill('Компания 25');
-    await panel.getByRole('button', { name: 'Найти', exact: true }).click();
+    await panel.getByRole('button', { name: /жду вакансию/ }).click();
+    expect(calls.companyPageQueries.at(-1)).toContain('stage=waiting');
+    await panel.getByRole('button', { name: /всего/ }).click();
+    await panel.getByPlaceholder('Название компании или отрасль').fill('Компания 25');
     await expect(rows).toHaveCount(1);
-    await expect(rows.first()).toContainText('Компания 25');
     expect(new URL(calls.companyPageQueries.at(-1) ?? '').searchParams.get('search')).toBe(
       'Компания 25',
     );
@@ -908,13 +990,17 @@ test.describe('B450 responses workspace', () => {
     await openResponses(page);
     await page.getByRole('tab', { name: 'Офферы' }).click();
     await expect(page.getByRole('button', { name: 'Сравнить офферы' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Добавить оффер' }).click();
     await page
-      .locator('form.career-responses-add-offer')
+      .getByRole('button', { name: 'Добавить оффер' })
+      .filter({ visible: true })
+      .first()
+      .click();
+    await page
+      .locator('form.career-offers-add')
       .getByRole('textbox', { name: 'Компания' })
       .fill('Polar Systems');
     await page
-      .locator('form.career-responses-add-offer')
+      .locator('form.career-offers-add')
       .getByRole('textbox', { name: 'Роль' })
       .fill('VP Engineering');
     await page.getByRole('button', { name: 'Продолжить к условиям' }).click();
@@ -1097,10 +1183,14 @@ test.describe('B450 responses workspace', () => {
 
     await expect(page.getByRole('heading', { name: 'STAR на фактах профиля' })).toBeVisible();
     await expect(page.getByText('Кризис в команде: уход ведущего инженера')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Интервью и материалы' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Начать мок-интервью' })).toBeVisible();
-    // Макет 5: «Начать мок-интервью» сразу открывает тренажёр, без окна справки.
-    await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
+    await expect(page.getByRole('heading', { name: 'Мок-интервью' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Дебриф' })).toBeVisible();
+    const start = page
+      .getByRole('button', { name: 'Начать мок-интервью' })
+      .filter({ visible: true })
+      .first();
+    await expect(start).toBeVisible();
+    await start.click();
     const simulator = page.getByRole('dialog', { name: 'Мок-интервью' });
     await expect(simulator).toBeVisible();
     await simulator.getByRole('button', { name: 'Начать', exact: true }).click();

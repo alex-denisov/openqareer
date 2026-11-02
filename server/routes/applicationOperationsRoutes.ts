@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { COMPANY_WANT_BULK_LIMIT } from './candidateCompanyWantRoutes';
 import { APPLICATION_STAGES, deliveryState, type ApplicationStage } from '../../shared/applicationStage';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import type { ApplicationTrackerMethods } from '../data/sqliteCandidateStoreApplicationMethods';
@@ -58,17 +59,21 @@ const companyInputSchema = z.object({
   companyName: z.string().trim().min(1).max(300),
   nextStep: z.string().trim().min(1).max(180).optional(),
   nextStepDueAt: isoDateField.nullable().optional(),
+  stage: z.enum(['want', 'path', 'waiting']).optional(),
 });
-const companyWantActionSchema = z.enum(['add', 'set_next_step', 'remove']);
+const companyWantActionSchema = z.enum(['add', 'set_next_step', 'set_stage', 'remove']);
 const companyWantBaseSchema = z.object({
   operationId: z.string().trim().min(1).max(120),
   action: companyWantActionSchema,
-  companies: z.array(companyInputSchema).min(1).max(100),
-  confirmCount: z.number().int().nonnegative().max(100),
+  companies: z.array(companyInputSchema).min(1).max(COMPANY_WANT_BULK_LIMIT),
+  confirmCount: z.number().int().nonnegative().max(COMPANY_WANT_BULK_LIMIT),
 });
 const companyWantBulkSchema = companyWantBaseSchema.superRefine((input, context) => {
   if (input.action === 'set_next_step' && input.companies.some((company) => !company.nextStep)) {
     context.addIssue({ code: 'custom', message: 'Для следующего шага нужен текст', path: ['companies'] });
+  }
+  if (input.action === 'set_stage' && input.companies.some((company) => !company.stage)) {
+    context.addIssue({ code: 'custom', message: 'Для смены статуса нужен статус', path: ['companies'] });
   }
 });
 const companyWantPreviewSchema = companyWantBaseSchema
@@ -76,6 +81,9 @@ const companyWantPreviewSchema = companyWantBaseSchema
   .superRefine((input, context) => {
     if (input.action === 'set_next_step' && input.companies.some((company) => !company.nextStep)) {
       context.addIssue({ code: 'custom', message: 'Для следующего шага нужен текст', path: ['companies'] });
+    }
+    if (input.action === 'set_stage' && input.companies.some((company) => !company.stage)) {
+      context.addIssue({ code: 'custom', message: 'Для смены статуса нужен статус', path: ['companies'] });
     }
   });
 
@@ -465,6 +473,7 @@ function applyCompanyWantAction(
   if (action === 'set_next_step') {
     repository.setNextStep(candidateId, key, company.nextStep ?? null, company.nextStepDueAt ?? null, now);
   }
+  if (action === 'set_stage') repository.setStage(candidateId, key, company.stage ?? null, now);
   if (action === 'remove') repository.remove(candidateId, key);
 }
 

@@ -454,6 +454,30 @@ describe('useProfileAtsAssessment by role (макет 2 «ATS: нет избра
     expect(coach.getRoleHypotheses).toHaveBeenCalled();
   });
 
+  it('starts before the profile revision is known and keeps that load when it arrives', async () => {
+    function Revisioned({ revision }: { readonly revision: string | null }) {
+      const { assessment } = useProfileAtsAssessment({ refreshKey: revision });
+      return <span data-testid="assessment">{assessment?.total.score ?? 'unknown'}</span>;
+    }
+    api.getResumeAtsAssessment.mockResolvedValue(measuredAssessment);
+    mount(<Revisioned revision={null} />);
+    expect(api.getResumeVersions).toHaveBeenCalledTimes(1);
+
+    act(() => root?.render(<Revisioned revision="2026-11-02T10:00:00.000Z" />));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(api.getResumeVersions).toHaveBeenCalledTimes(1);
+    expect(api.getResumeAtsAssessment).toHaveBeenCalledTimes(1);
+    expect(container?.textContent).toBe('85');
+
+    act(() => root?.render(<Revisioned revision="2026-11-02T11:00:00.000Z" />));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(api.getResumeAtsAssessment).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps the old request when roles cannot be read', async () => {
     coach.getRoleHypotheses.mockRejectedValue(new Error('offline'));
     const mounted = mount(<AssessmentHarness />);

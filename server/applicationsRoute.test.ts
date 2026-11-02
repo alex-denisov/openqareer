@@ -603,6 +603,52 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     });
   });
 
+  it('handles 150 company wants in one batch, sets a stage and pages «Хочу» (B451/B492)', async () => {
+    const { app, authorization } = await createApp();
+    const companies = Array.from({ length: 150 }, (_, index) => ({ companyName: `Компания ${index}` }));
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/applications/company-wants/bulk',
+      headers: { authorization, ...ORIGIN },
+      payload: { operationId: 'b492-add-150', action: 'add', confirmCount: 150, companies },
+    });
+    expect(created.json().data.changedCount).toBe(150);
+    const staged = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/applications/company-wants/bulk',
+      headers: { authorization, ...ORIGIN },
+      payload: {
+        operationId: 'b492-stage',
+        action: 'set_stage',
+        confirmCount: 2,
+        companies: [
+          { companyName: 'Компания 1', stage: 'path' },
+          { companyName: 'Компания 2', stage: 'path' },
+        ],
+      },
+    });
+    expect(staged.json().data.changedCount).toBe(2);
+    const page = await app.inject({
+      url: '/api/v1/candidate/companies/wants?stage=all&offset=20',
+      headers: { authorization },
+    });
+    expect(page.statusCode).toBe(200);
+    expect(page.json().data).toMatchObject({
+      total: 150,
+      offset: 20,
+      counts: { all: 150, new: 0, want: 0, path: 2, waiting: 148 },
+    });
+    expect(page.json().data.items).toHaveLength(20);
+    const selection = await app.inject({
+      url: '/api/v1/candidate/companies/wants/selection?stage=path',
+      headers: { authorization },
+    });
+    expect(selection.json().data.items.map((item: { name: string }) => item.name).sort()).toEqual([
+      'Компания 1',
+      'Компания 2',
+    ]);
+  });
+
   it('batch-adds, updates and removes candidate company wants idempotently', async () => {
     const { app, authorization } = await createApp();
     const url = '/api/v1/candidate/applications/company-wants';

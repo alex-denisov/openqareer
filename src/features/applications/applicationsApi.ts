@@ -1,3 +1,4 @@
+import type { CandidateCompanyWantStage } from '../../../shared/candidateCompany';
 import type { ApplicationView as StoredApplicationView } from '../../../server/domain/applicationDerivedFields';
 import {
   APPLICATION_STAGES,
@@ -135,12 +136,13 @@ export interface ApplicationBulkResult {
   readonly stage?: ApplicationStage;
 }
 
-export type CompanyWantBulkAction = 'add' | 'set_next_step' | 'remove';
+export type CompanyWantBulkAction = 'add' | 'set_next_step' | 'set_stage' | 'remove';
 
 export interface CompanyWantBulkItem {
   readonly companyName: string;
   readonly nextStep?: string;
   readonly nextStepDueAt?: string | null;
+  readonly stage?: CandidateCompanyWantStage;
 }
 
 export interface ApplicationBulkPreview {

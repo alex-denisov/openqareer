@@ -26,8 +26,9 @@ export interface InterviewPrepModalProps {
   readonly onAskConsultant?: () => void;
   readonly onOpenStarStories?: () => void;
   readonly onWriteDiary?: InterviewDiaryPort;
-  /** «Начать мок-интервью» открывает сразу тренажёр (макет 5), «Подготовиться» — подготовку. */
-  readonly startWith?: 'preparation' | 'mock';
+  /** Open the mock interview setup at once instead of the preparation brief. */
+  readonly startInMockInterview?: boolean;
+  readonly initialStressMode?: boolean;
 }
 
 export function InterviewPrepModal(props: InterviewPrepModalProps) {
@@ -36,7 +37,7 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
 
 function InterviewPrepModalState(props: InterviewPrepModalProps) {
   const [tab, setTab] = useState<InterviewPrepTab>(props.initialTab ?? 'overview');
-  const [mockInterviewOpen, setMockInterviewOpen] = useState(props.startWith === 'mock');
+  const [mockInterviewOpen, setMockInterviewOpen] = useState(props.startInMockInterview ?? false);
   const [starStoriesOpen, setStarStoriesOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const afterStarStoriesClose = useRef<(() => void) | null>(null);
@@ -51,7 +52,7 @@ function InterviewPrepModalState(props: InterviewPrepModalProps) {
     afterStarStoriesClose.current = null;
   }, []);
   const onClose = props.onClose;
-  const startsWithMock = props.startWith === 'mock';
+  const startsWithMock = props.startInMockInterview;
   const handleEscape = useCallback(() => {
     if (mockInterviewOpen && !startsWithMock) setMockInterviewOpen(false);
     else onClose();
@@ -139,10 +140,11 @@ function InterviewPrepBackdrop({ props, tab, brief, cardRef, dialogRef, mockInte
         <MockInterviewSimulator
           vacancy={props.vacancy}
           dialogRef={dialogRef}
-          onBackToPreparation={() => (props.startWith === 'mock' ? props.onClose() : setMockInterviewOpen(false))}
+          onBackToPreparation={() => (props.startInMockInterview ? props.onClose() : setMockInterviewOpen(false))}
           onOpenStarStories={openStarStories}
           onAskConsultant={props.onAskConsultant}
           onWriteDiary={props.onWriteDiary}
+          initialStressMode={props.initialStressMode}
         />
       ) : (
         <InterviewPrepDialog props={props} tab={tab} brief={brief} dialogRef={dialogRef} onTabChange={setTab} onStart={() => setMockInterviewOpen(true)} />

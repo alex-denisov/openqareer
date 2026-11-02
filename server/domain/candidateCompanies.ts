@@ -3,13 +3,17 @@ import { normalizeCompanyName } from './company';
 import type {
   CandidateCompanyOpportunity,
   CandidateCompanyRecruiter,
+  CandidateCompanyWantStage,
 } from '../../shared/candidateCompany';
 import type { CandidateCompanyWant } from '../data/sqliteCandidateCompanyWantsRepository';
 
 type CandidateCompanyWantSummary = Pick<
   CandidateCompanyWant,
   'companyKey' | 'companyName' | 'nextStep' | 'nextStepDueAt'
->;
+> &
+  Partial<Pick<CandidateCompanyWant, 'stage' | 'createdAt'>>;
+
+const NEW_VACANCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface CandidateCompanyVacancyInput {
   readonly id: string;
@@ -43,7 +47,9 @@ export function buildCandidateCompanyRows(input: {
   readonly recruiters: readonly CandidateCompanyRecruiter[];
   readonly jobs: readonly CandidateCompanyJobInput[];
   readonly networkContactCounts?: ReadonlyMap<string, CandidateNetworkContactCount>;
+  readonly now?: number;
 }): CandidateCompanyOpportunity[] {
+  const newSince = (input.now ?? Date.now()) - NEW_VACANCY_WINDOW_MS;
   const companies = new Map<string, CompanyAccumulator>();
   for (const vacancy of input.vacancies) addVacancy(companies, vacancy);
   for (const want of input.wants) addWant(companies, want);
@@ -51,7 +57,7 @@ export function buildCandidateCompanyRows(input: {
   for (const job of input.jobs) addRecruiterJob(companies, input.vacancies, job);
 
   return Array.from(companies.values(), (company) =>
-    finishCompany(company, input.networkContactCounts?.get(company.key)),
+    finishCompany(company, input.networkContactCounts?.get(company.key), newSince),
   );
 }
 
@@ -96,6 +102,14 @@ export function filterCandidateCompanyRows(
   });
 }
 
+function derivedWantStage(
+  vacancyCount: number,
+  recruiterSearchStatus: CandidateCompanyOpportunity['recruiterSearchStatus'],
+): CandidateCompanyWantStage {
+  if (recruiterSearchStatus !== 'idle' && recruiterSearchStatus !== 'failed') return 'path';
+  return vacancyCount === 0 ? 'waiting' : 'want';
+}
+
 function knownCount(value: number | null): number {
   return value ?? -1;
 }
@@ -106,6 +120,8 @@ interface CompanyAccumulator {
   location: string | null;
   industry: string | null;
   want: boolean;
+  manualStage: CandidateCompanyWant['stage'];
+  wantedAt: string | null;
   nextStep: CandidateCompanyOpportunity['nextStep'];
   vacancies: Map<string, CandidateCompanyOpportunity['vacancies'][number]>;
   sources: Map<string, CandidateCompanyOpportunity['sources'][number]>;
@@ -123,6 +139,8 @@ function companyFor(companies: Map<string, CompanyAccumulator>, name: string): C
     location: null,
     industry: null,
     want: false,
+    manualStage: null,
+    wantedAt: null,
     nextStep: null,
     vacancies: new Map(),
     sources: new Map(),
@@ -164,6 +182,8 @@ function addWant(
 ): void {
   const company = companyFor(companies, want.companyName);
   company.want = true;
+  company.manualStage = want.stage ?? null;
+  company.wantedAt = want.createdAt ?? null;
   company.nextStep = want.nextStep ? { text: want.nextStep, dueAt: want.nextStepDueAt } : null;
 }
 
@@ -191,6 +211,7 @@ function addRecruiterJob(
 function finishCompany(
   company: CompanyAccumulator,
   contactCount: CandidateNetworkContactCount | undefined,
+  newSince: number,
 ): CandidateCompanyOpportunity {
   const recruiters = Array.from(company.recruiters.values());
   const statuses = company.jobStatuses;
@@ -217,6 +238,11 @@ function finishCompany(
     contactsCount: contactCount?.count ?? null,
     contactsImportedAt: contactCount?.importedAt ?? null,
     want: company.want,
+    wantStage: company.want
+      ? (company.manualStage ?? derivedWantStage(company.vacancies.size, recruiterSearchStatus))
+      : null,
+    wantedAt: company.wantedAt,
+    hasNewVacancies: vacancies.some((vacancy) => Date.parse(vacancy.sourceDate) >= newSince),
     nextStep: company.nextStep,
     hasRecruiter: recruiters.length > 0,
     recruiterSearchStatus,

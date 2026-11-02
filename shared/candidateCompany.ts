@@ -1,6 +1,11 @@
 import type { CandidateRecruiterChannel } from './recruiterChannel';
 export type CandidateCompanySort = 'default' | 'contacts' | 'alphabetical';
 export type CandidateCompanyFilter = 'all' | 'want' | 'contacts' | 'recruiter';
+/** Stage of a company in the candidate's «Хочу» list; mutually exclusive. */
+export type CandidateCompanyWantStage = 'want' | 'path' | 'waiting';
+export type CandidateCompanyWantStageFilter = 'all' | 'new' | CandidateCompanyWantStage;
+export type CandidateCompanyContactsFilter = 'any' | 'with' | 'without';
+export type CandidateCompanyWantSort = 'vacancies' | 'alphabetical' | 'added';
 export type CandidateLinkedInStatus = 'connected' | 'profile-imported' | 'disconnected';
 export type CandidateCompanyRecruiterSearchStatus =
   'idle' | 'queued' | 'running' | 'ready' | 'failed';
@@ -60,6 +65,11 @@ export interface CandidateCompanyOpportunity {
   readonly contactProposalDismissed?: boolean;
   /** Vacancies come from the pool: none of them is in the current selection. */
   readonly outsideSelection?: boolean;
+  /** Present for companies in «Хочу»: stored manual stage or the derived one. */
+  readonly wantStage?: CandidateCompanyWantStage | null;
+  readonly wantedAt?: string | null;
+  /** A matched vacancy of this company was observed within the last 7 days. */
+  readonly hasNewVacancies?: boolean;
   readonly nextStep: CandidateCompanyNextStep | null;
   readonly hasRecruiter: boolean;
   readonly recruiterSearchStatus: CandidateCompanyRecruiterSearchStatus;
@@ -90,6 +100,35 @@ export interface CandidateCompanyPage {
   };
   readonly linkedin: CandidateCompanyConnectionStatus;
   readonly searchConsentGranted: boolean;
+}
+
+export interface CandidateCompanyWantCounts {
+  readonly all: number;
+  readonly new: number;
+  readonly want: number;
+  readonly path: number;
+  readonly waiting: number;
+}
+
+/** One page of the «Хочу в компанию» list (only companies the candidate wants). */
+export interface CandidateCompanyWantPage {
+  readonly items: readonly CandidateCompanyOpportunity[];
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly counts: CandidateCompanyWantCounts;
+  readonly industries: readonly string[];
+}
+
+/** Compact row for selection by filter, export and bulk actions. */
+export interface CandidateCompanyWantSelectionItem {
+  readonly key: string;
+  readonly name: string;
+  readonly industry: string | null;
+  readonly stage: CandidateCompanyWantStage;
+  readonly vacancyCount: number;
+  readonly contactsCount: number | null;
+  readonly nextStep: string | null;
 }
 
 export interface CandidateCompanyDetails {

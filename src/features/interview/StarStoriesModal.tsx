@@ -65,12 +65,15 @@ export function StarStoriesModal({
   isOpen,
   onClose,
   onAskConsultant,
+  initialEditStory,
 }: {
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly onAskConsultant?: () => void;
+  /** Open the editor for this story at once (mount the modal fresh per use). */
+  readonly initialEditStory?: StarStoryView;
 }) {
-  const state = useStarStoriesModalState(isOpen);
+  const state = useStarStoriesModalState(isOpen, initialEditStory);
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeEditor = state.closeEditor;
   const closeModal = useCallback(() => {
@@ -104,12 +107,12 @@ interface StarStoriesModalState {
   retryLoad: () => void;
 }
 
-function useStarStoriesModalState(isOpen: boolean): StarStoriesModalState {
+function useStarStoriesModalState(isOpen: boolean, initial?: StarStoryView): StarStoriesModalState {
   const [snapshot, setSnapshot] = useState<StarStoriesSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string>();
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [editingStory, setEditingStory] = useState<StarStoryView>();
+  const [editorOpen, setEditorOpen] = useState(Boolean(initial));
+  const [editingStory, setEditingStory] = useState<StarStoryView | undefined>(initial);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [reloadToken, setReloadToken] = useState(0);

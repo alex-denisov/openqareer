@@ -32,4 +32,6 @@ export interface MockInterviewSimulatorProps {
   readonly onOpenStarStories: (afterClose?: () => void) => void;
   readonly onAskConsultant?: () => void;
   readonly onWriteDiary?: InterviewDiaryPort;
+  /** Initial value of the «Стресс-режим» option on the setup screen. */
+  readonly initialStressMode?: boolean;
 }

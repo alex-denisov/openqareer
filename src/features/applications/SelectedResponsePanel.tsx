@@ -256,7 +256,7 @@ function SelectedResponseDialogs({
       <InterviewPrepModal
         isOpen={preparationOpen}
         onClose={onClosePreparation}
-        startWith="mock"
+        startInMockInterview
         vacancy={{ ...mockInterviewVacancyFromApplication(application), title, company }}
         onAskConsultant={onAskConsultant}
         onOpenStarStories={onOpenStories}

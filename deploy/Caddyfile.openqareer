@@ -55,6 +55,24 @@ openqareer.com {
 		-Server
 	}
 
+	# Hashed build files come from disk, not through node: during an event-loop
+	# stall in the application an 865-byte chunk waited 2 s for its first byte
+	# (prod 02.11). `previous` keeps an old hash alive through one release
+	# switch; a file in neither falls through to the application, which answers
+	# 404 exactly as before.
+	@assetFile {
+		path /assets/*
+		file {
+			root /srv/openqareer
+			try_files /current{path} /previous{path}
+		}
+	}
+	handle @assetFile {
+		root * /srv/openqareer
+		rewrite * {http.matchers.file.relative}
+		file_server
+	}
+
 	reverse_proxy 127.0.0.1:3210 {
 		# One hop, the real client: rate limits must not merge every relayed user.
 		header_up X-Forwarded-For {client_ip}
