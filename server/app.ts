@@ -1,4 +1,5 @@
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
+import { registerEventLoopWatch } from './observability/eventLoopWatch';
 import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
 import { SqliteMarketSalaryEstimateStore } from './vacancies/marketSalary/sqliteMarketSalaryEstimateStore';
 import cookie from '@fastify/cookie';
@@ -306,6 +307,7 @@ async function createFastifyBase(
     },
   }));
 
+  registerEventLoopWatch(app);
   return app;
 }
 
