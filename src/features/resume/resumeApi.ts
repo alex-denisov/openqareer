@@ -4,6 +4,8 @@ import type { ResumeStudioView } from './resumeTypes';
 import { forgetSharedRead, sharedRead } from './sharedRead';
 
 const RESUME_READ = 'resume';
+/** One Profile open: its parts ask for the resume seconds apart (CPO prod 02.11). */
+const RESUME_READ_KEEP_MS = 15_000;
 import type { ResumeDraft } from './resumeTypes';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 
@@ -13,8 +15,10 @@ import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
  * back as stale evidence instead of surviving inside the document.
  */
 export function getResumeStudio(): Promise<ResumeStudioView> {
-  return sharedRead(RESUME_READ, async () =>
-    readData<ResumeStudioView>(await apiFetch('/api/v1/candidate/resume')),
+  return sharedRead(
+    RESUME_READ,
+    async () => readData<ResumeStudioView>(await apiFetch('/api/v1/candidate/resume')),
+    { keepMs: RESUME_READ_KEEP_MS },
   );
 }
 

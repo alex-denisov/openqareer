@@ -446,6 +446,14 @@ describe('useProfileAtsAssessment by role (макет 2 «ATS: нет избра
     );
   });
 
+  it('asks for roles while the versions read is still open (02.11 prod waterfall)', () => {
+    api.getResumeVersions.mockReturnValue(new Promise(() => undefined));
+    mount(<AssessmentHarness />);
+
+    expect(api.getResumeVersions).toHaveBeenCalled();
+    expect(coach.getRoleHypotheses).toHaveBeenCalled();
+  });
+
   it('keeps the old request when roles cannot be read', async () => {
     coach.getRoleHypotheses.mockRejectedValue(new Error('offline'));
     const mounted = mount(<AssessmentHarness />);
