@@ -38,10 +38,12 @@ const TEMPLATE_SENTENCE = new RegExp([
   String.raw`компания, в которой я хочу работать`,
   String.raw`в профиле (?:подтверждён практический опыт|нет подтверждённых фактов)`,
   String.raw`требования вакансии не сопоставлены`,
+  // B528: фраза о местах работы собрана из записей профиля, а не моделью.
+  String.raw`^(?:сейчас работаю|последнее место —|i currently work as|most recently i worked as)\s`,
 ].join('|'), 'iu');
 
 // Intros glued to the first fact: the fact after them is still checked.
-const TEMPLATE_PREFIX = /^(?:my profile records the following facts:|в профиле зафиксированы следующие факты:|коротко о моём опыте:|briefly on my background:|my experience:|мой опыт:)\s*/iu;
+const TEMPLATE_PREFIX = /^(?:my profile records the following facts:|в профиле зафиксированы следующие факты:|из результатов:|among my results:|коротко о моём опыте:|briefly on my background:|my experience:|мой опыт:)\s*/iu;
 
 function normalized(text: string): string {
   return text.toLocaleLowerCase().replace(/ё/gu, 'е')
