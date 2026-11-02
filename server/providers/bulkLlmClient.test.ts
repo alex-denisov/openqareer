@@ -44,7 +44,7 @@ function response(cost: number) {
   });
 }
 it('accounts actual cost and pins privacy, routing and reasoning', async () => {
-  let body: { provider: unknown; reasoning: unknown; messages: Array<{ content: string }> };
+  let body: { provider: unknown; reasoning: unknown; temperature: unknown; seed?: unknown; messages: Array<{ content: string }> };
   const runtime = createBulkLlmRuntime(
     options((async (_u, init) => {
       body = JSON.parse(String(init?.body));
@@ -61,6 +61,10 @@ it('accounts actual cost and pins privacy, routing and reasoning', async () => {
     quantizations: ['fp8'],
   });
   expect(body!.reasoning).toEqual({ enabled: false });
+  // 02.11: one input gave 25 % and 58 %; greedy sampling. No seed: streamlake has none and
+  // `require_parameters` would drop it.
+  expect(body!.temperature).toBe(0);
+  expect(body!.seed).toBeUndefined();
   expect(body!.messages[0].content).toBe('stable');
   runtime.close();
 });

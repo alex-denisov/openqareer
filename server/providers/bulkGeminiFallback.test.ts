@@ -50,3 +50,17 @@ it('refuses an answer from another model and a failed status', async () => {
     }),
   ).rejects.toThrow('Bulk fallback status 403');
 });
+
+it('asks Vertex for a fixed seed, so a repeated call samples the same way (02.11)', async () => {
+  const bodies: Array<{ generationConfig: Record<string, unknown> }> = [];
+  const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).includes('oauth2')) return Response.json({ access_token: 't', expires_in: 3600 });
+    bodies.push(JSON.parse(String(init?.body)));
+    return Response.json(answer('gemini-3.8-flash'));
+  }) as typeof fetch;
+  const fallback = new VertexBulkFallback(config, 0.5, 3, fetchImpl);
+  await fallback.complete({ prefix: 's', input: 'i', maxTokens: 512 });
+  await fallback.complete({ prefix: 's', input: 'i', maxTokens: 512 });
+  expect(bodies[0]!.generationConfig.seed).toEqual(expect.any(Number));
+  expect(bodies[1]!.generationConfig.seed).toBe(bodies[0]!.generationConfig.seed);
+});
