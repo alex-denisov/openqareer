@@ -4,6 +4,7 @@ import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { apiErrorMessage } from '../coach/apiClient';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import { mockInterviewVacancyFromApplication } from '../interview/mockInterviewVacancy';
 import { StarStoriesModal } from '../interview/StarStoriesModal';
 import { getStarStories } from '../interview/starStoriesApi';
 import type { StarStoriesSnapshot, StarStoryView } from '../../../shared/starStories';
@@ -104,11 +105,11 @@ function PreparationDialogs(props: {
         <InterviewPrepModal
           isOpen
           onClose={props.onClosePreparation}
-          vacancy={{
-            id: props.selectedInterview?.id ?? '',
-            title: details.title,
-            company: details.company,
-          }}
+          vacancy={
+            props.selectedInterview
+              ? { ...mockInterviewVacancyFromApplication(props.selectedInterview), title: details.title, company: details.company }
+              : { id: '', title: details.title, company: details.company }
+          }
           onAskConsultant={details.askConsultant}
           startInMockInterview
           initialStressMode={props.stress}

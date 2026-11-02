@@ -8,6 +8,7 @@ interface SetupActionOptions {
   readonly model: MockInterviewSessionState;
   readonly mode: InterviewAnswerMode;
   readonly roleTitle: string;
+  readonly applicationId?: string;
   readonly questionScope: MockInterviewQuestionScope;
   readonly stressMode: boolean;
   readonly setScreen: Dispatch<SetStateAction<MockInterviewScreen>>;
@@ -21,6 +22,7 @@ export function useMockInterviewSetupActions(options: SetupActionOptions) {
     const result = await options.model.startTraining({
       mode: options.mode,
       roleTitle: options.roleTitle,
+      ...(options.applicationId ? { applicationId: options.applicationId } : {}),
       questionTypes: questionTypesForScope(options.questionScope),
       stressMode: options.stressMode,
     });
@@ -177,7 +179,7 @@ export function useMockInterviewExitActions(options: ExitActionOptions) {
   return { returnToPreparation, confirmReturnToPreparation, refreshSession };
 }
 
-function questionTypesForScope(scope: MockInterviewQuestionScope): readonly InterviewQuestionType[] {
+export function questionTypesForScope(scope: MockInterviewQuestionScope): readonly InterviewQuestionType[] {
   if (scope === 'behavioral') return ['behavioral'];
   if (scope === 'system_design') return ['system_design'];
   return ['behavioral', 'system_design'];

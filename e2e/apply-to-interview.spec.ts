@@ -504,11 +504,11 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await menu.getByRole('button', { name: 'Сохранить этап' }).click();
 
   await openInterviewPrep(page, card);
-  await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
+  await expect(page.locator('.career-mock-dialog')).toContainText('Genetec');
   if (captureEvidence) {
     await page.screenshot({ path: `output/playwright/c70-interview-prep-${viewport}.png` });
   }
-  await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
+  await closeTrainer(page);
 
   await openToday(page);
 }
@@ -523,6 +523,17 @@ async function openInterviewPrep(page: Page, card: Locator): Promise<void> {
   await button.click();
 }
 
+/** Макет 5: «Начать мок-интервью» открывает тренажёр сразу; «назад» закрывает его целиком. */
+async function closeTrainer(page: Page): Promise<void> {
+  const trainer = page.locator('.career-mock-dialog');
+  await trainer
+    .getByRole('button', { name: 'Назад к подготовке' })
+    .filter({ visible: true })
+    .first()
+    .click();
+  await expect(trainer).toBeHidden();
+}
+
 async function openToday(page: Page): Promise<void> {
   const viewport = page.viewportSize()?.width ?? 0;
   await page.locator('button[aria-label="Сегодня"]:visible').first().click();
@@ -535,8 +546,8 @@ async function openToday(page: Page): Promise<void> {
   await row.click();
   const todayCard = page.locator('.career-responses-card').filter({ hasText: 'Genetec' });
   await openInterviewPrep(page, todayCard);
-  await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
-  await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
+  await expect(page.locator('.career-mock-dialog')).toContainText('Genetec');
+  await closeTrainer(page);
 }
 
 async function walkManualAppliedChain(page: Page): Promise<void> {

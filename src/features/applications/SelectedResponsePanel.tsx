@@ -19,6 +19,7 @@ import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import { mockInterviewVacancyFromApplication } from '../interview/mockInterviewVacancy';
 import { StarStoriesModal } from '../interview/StarStoriesModal';
 import { humanSourceLabel } from './sourceLabels';
 import { ResponseStatusMenu, type ResponseStatusMenuProps } from './ResponsesCard';
@@ -244,7 +245,8 @@ function SelectedResponseDialogs({
       <InterviewPrepModal
         isOpen={preparationOpen}
         onClose={onClosePreparation}
-        vacancy={{ id: application.id, title, company }}
+        startInMockInterview
+        vacancy={{ ...mockInterviewVacancyFromApplication(application), title, company }}
         onAskConsultant={onAskConsultant}
         onOpenStarStories={onOpenStories}
       />

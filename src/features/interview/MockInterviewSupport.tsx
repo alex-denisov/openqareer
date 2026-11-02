@@ -2,14 +2,15 @@ import { useEffect, useRef } from 'react';
 import {
   ArrowRight,
   CircleNotch,
-  Plus,
   StopCircle,
   WarningCircle,
 } from '@phosphor-icons/react';
-import type { InterviewQuestionView, InterviewSessionView } from './interviewSimulatorApi';
+import type { InterviewSessionView } from './interviewSimulatorApi';
 import type { StarStoriesSnapshot } from '../../../shared/starStories';
 import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import type { MockInterviewScreen } from './mockInterviewControllerTypes';
+import type { MockInterviewVacancy } from './mockInterviewSimulatorTypes';
+import { SourcePanel } from './MockInterviewSourcePanel';
 
 interface SupportFlow {
   readonly loadError: { readonly message: string } | null;
@@ -26,74 +27,8 @@ interface SupportFlow {
 }
 
 interface SupportSimulatorProps {
+  readonly vacancy: MockInterviewVacancy;
   readonly onOpenStarStories: (afterClose?: () => void) => void;
-}
-
-interface SupportVacancy {
-  readonly title: string;
-  readonly company?: string;
-}
-
-export function SourcePanel({
-  vacancy,
-  stories,
-  storiesError,
-  loading,
-  session,
-  question,
-  onOpenStories,
-}: {
-  readonly vacancy?: SupportVacancy;
-  readonly stories?: StarStoriesSnapshot | null;
-  readonly storiesError?: string | null;
-  readonly loading?: boolean;
-  readonly session?: InterviewSessionView | null;
-  readonly question?: InterviewQuestionView | null;
-  readonly onOpenStories: () => void;
-}) {
-  const title = session?.vacancyTitle ?? session?.roleTitle ?? vacancy?.title;
-  const sourceStory = question?.storyTitle;
-  const confirmed = stories?.stories.filter((story) => story.confidence === 'confirmed').length ?? 0;
-  const unconfirmed = stories?.stories.filter((story) => story.confidence === 'unconfirmed').length ?? 0;
-  const storyCount = stories?.stories.length ?? 0;
-  return (
-    <aside className="career-mock-source-panel" aria-labelledby="career-mock-sources-title">
-      <h2 id="career-mock-sources-title">На чём строятся вопросы</h2>
-      {title ? <SourceLine label="Роль или вакансия" value={title} /> : null}
-      {session ? <SourceLine label="Тип вопросов" value={sourceLabel(session.questionTypes)} /> : null}
-      {sourceStory ? <SourceLine label="STAR-история" value={sourceStory} /> : null}
-      {loading ? <div className="career-mock-source-skeleton" aria-hidden="true" /> : null}
-      {storiesError ? <p className="career-mock-muted" role="status">{storiesError}</p> : null}
-      {stories ? (
-        <SourceLine label="STAR-истории" value={`${storyCount} всего, ${confirmed} подтверждено, ${unconfirmed} не подтверждено`} />
-      ) : null}
-      {stories && storyCount === 0 ? (
-        <div className="career-mock-empty-note" role="status">
-          В профиле нет сохранённых STAR-историй. Поведенческие вопросы можно пройти на примере из личного опыта.
-          <button type="button" className="career-btn career-btn-secondary" onClick={onOpenStories}>
-            <Plus aria-hidden="true" className="career-mock-icon" />
-            Добавить историю
-          </button>
-        </div>
-      ) : null}
-      <p className="career-mock-source-disclaimer">
-        Оценка по рубрике может ошибаться. Это тренировка, не прогноз результата реального интервью.
-      </p>
-    </aside>
-  );
-}
-
-function SourceLine({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <div className="career-mock-source-line">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function sourceLabel(types: InterviewSessionView['questionTypes']): string {
-  return types.map((type) => type === 'behavioral' ? 'поведенческие' : 'System Design').join(' и ');
 }
 
 export function PaywallScreen({ onBack }: { readonly onBack: () => void }) {
@@ -219,7 +154,7 @@ export function InterruptedScreen({ flow, props }: { readonly flow: SupportFlow;
         </div>
       </div>
       <SourcePanel
-        session={session}
+        vacancy={props.vacancy}
         stories={flow.starStories}
         storiesError={flow.starStoriesError}
         onOpenStories={() => props.onOpenStarStories(() => flow.retryLoad())}
