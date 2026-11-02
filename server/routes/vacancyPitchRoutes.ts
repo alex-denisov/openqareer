@@ -192,6 +192,22 @@ function vacancyNotFoundResponse(
   return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
 }
 
+/** Места работы профиля для письма; доказательства — только годные для письма факты. */
+function letterWorkplaces(
+  snapshot: ReturnType<RouteDeps['candidateStore']['getSnapshot']>,
+  usableEvidenceIds: ReadonlySet<string>,
+) {
+  return (snapshot.resume?.draft.experience ?? []).map((workplace) => ({
+    id: workplace.id,
+    employer: workplace.employer ?? null,
+    title: workplace.title ?? null,
+    startDate: workplace.startDate ?? null,
+    endDate: workplace.endDate ?? null,
+    current: workplace.current,
+    evidenceIds: [workplace.chronologyMemoryId, ...workplace.bulletMemoryIds].filter((id) => usableEvidenceIds.has(id)),
+  }));
+}
+
 async function writeVacancyPitch(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -206,15 +222,7 @@ async function writeVacancyPitch(
   const excludedEvidenceIds = new Set(body?.excludedEvidenceIds ?? []);
   const facts = allFacts.filter((fact) => !excludedEvidenceIds.has(fact.id));
   const usableEvidenceIds = new Set(filterUsablePitchFacts(allFacts).map((fact) => fact.id));
-  const candidateWorkplaces = (snapshot.resume?.draft.experience ?? []).map((workplace) => ({
-    id: workplace.id,
-    employer: workplace.employer ?? null,
-    title: workplace.title ?? null,
-    startDate: workplace.startDate ?? null,
-    endDate: workplace.endDate ?? null,
-    current: workplace.current,
-    evidenceIds: [workplace.chronologyMemoryId, ...workplace.bulletMemoryIds].filter((id) => usableEvidenceIds.has(id)),
-  }));
+  const candidateWorkplaces = letterWorkplaces(snapshot, usableEvidenceIds);
   const tone = body?.tone ?? 'executive';
   const pitch = generateVacancyPitch({
     vacancy,
