@@ -153,7 +153,7 @@ export function LetterNotices({
   if (!english && notices.length === 0 && !fewFacts) return null;
   return (
     <div className="career-letter-notes">
-      {english ? <p role="status">Частично: язык English</p> : null}
+      {english ? <p role="status">Письмо на английском: так написана вакансия.</p> : null}
       {notices.map((notice) => (
         <p key={notice}>{notice}</p>
       ))}

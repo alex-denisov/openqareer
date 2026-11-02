@@ -664,7 +664,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await waitForLetter(page);
     state.pitchMode = 'english';
     await page.getByLabel('Язык').selectOption('en');
-    await expect(page.getByText('Частично: язык English')).toBeVisible();
+    await expect(page.getByText('Письмо на английском: так написана вакансия.')).toBeVisible();
     await captureState(page, testInfo, 'english-partial');
 
     const preservedText = 'Кандидатская правка, которую нужно сохранить при ошибке.';

@@ -367,6 +367,22 @@
   display: grid;
   gap: var(--career-space-3);
   min-inline-size: 0;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+/* Mockup 9: the circles heading puts its (i) at the right edge. */
+.career-letter-fork > .career-letter-sub-head {
+  justify-content: space-between;
+}
+
+/* The (i) of the mockup is a bare icon, not a bordered button. */
+.career-letter-info-tip.career-btn {
+  border-color: transparent;
+  background: transparent;
+  color: var(--career-text-soft);
 }
 
 .career-letter-sub-head,
@@ -454,6 +470,8 @@
 }
 
 .career-letter-editor textarea {
+  font-size: var(--career-text-sm);
+  line-height: 1.6;
   inline-size: 100%;
   min-inline-size: 0;
   box-sizing: border-box;
