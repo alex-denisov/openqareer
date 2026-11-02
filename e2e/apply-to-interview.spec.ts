@@ -526,7 +526,11 @@ async function openInterviewPrep(page: Page, card: Locator): Promise<void> {
 /** Макет 5: «Начать мок-интервью» открывает тренажёр сразу; «назад» закрывает его целиком. */
 async function closeTrainer(page: Page): Promise<void> {
   const trainer = page.locator('.career-mock-dialog');
-  await trainer.getByRole('button', { name: 'Назад к подготовке' }).filter({ visible: true }).first().click();
+  await trainer
+    .getByRole('button', { name: 'Назад к подготовке' })
+    .filter({ visible: true })
+    .first()
+    .click();
   await expect(trainer).toBeHidden();
 }
 

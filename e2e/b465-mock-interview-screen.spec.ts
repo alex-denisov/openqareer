@@ -374,7 +374,9 @@ test('opens the STAR story linked to an answer review at 1440 and 390', async ({
       });
       await startSimulator(page);
       await page.getByRole('button', { name: 'Начать', exact: true }).click();
-      await expect(page.locator('.career-mock-content')).toContainText(`STAR-истории «${story.title}»`);
+      await expect(page.locator('.career-mock-content')).toContainText(
+        `STAR-истории «${story.title}»`,
+      );
       await page
         .getByLabel('Ваш ответ')
         .fill(
@@ -595,7 +597,9 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
       await openPreparationDialog(page, width);
       await startSimulator(page);
-      await expect(page.locator('.career-mock-source-panel')).toContainText('Ваши STAR-истории: 18');
+      await expect(page.locator('.career-mock-source-panel')).toContainText(
+        'Ваши STAR-истории: 18',
+      );
       await checkAndCapture(page, `${width}-many-stories`, true);
     } finally {
       await context.close();
