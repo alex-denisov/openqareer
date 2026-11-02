@@ -1,3 +1,4 @@
+import { sharedRead, untilAborted } from './sharedRead';
 import { apiFetch, malformedResponseError, readData, readDataObject } from '../coach/apiClient';
 import type { ResumeAtsAssessment } from '../../../server/domain/resumeAtsAssessment';
 import type {
@@ -45,14 +46,15 @@ export async function getResumeVersions(
     limit: String(input.limit ?? 20),
     ...(input.cursor ? { cursor: input.cursor } : {}),
   });
-  const response = await apiFetch('/api/v1/candidate/resume/versions?' + query.toString(), {
-    signal: input.signal,
+  const path = '/api/v1/candidate/resume/versions?' + query.toString();
+  const read = sharedRead(path, async () => {
+    // An empty or malformed page must reach the caller's error state, not crash the cabinet
+    // inside a state updater that reads `items`.
+    const list = await readDataObject<ResumeVersionList>(await apiFetch(path));
+    if (!Array.isArray(list.items)) throw malformedResponseError();
+    return list;
   });
-  // An empty or malformed page must reach the caller's error state, not crash the cabinet
-  // inside a state updater that reads `items`.
-  const list = await readDataObject<ResumeVersionList>(response);
-  if (!Array.isArray(list.items)) throw malformedResponseError();
-  return list;
+  return untilAborted(read, input.signal);
 }
 
 export async function createResumeVersion(

@@ -1,6 +1,9 @@
 import { apiFetch, readData } from '../coach/apiClient';
 import type { ParsedResume } from '../workspace/resumeParser';
 import type { ResumeStudioView } from './resumeTypes';
+import { forgetSharedRead, sharedRead } from './sharedRead';
+
+const RESUME_READ = 'resume';
 import type { ResumeDraft } from './resumeTypes';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 
@@ -9,9 +12,10 @@ import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
  * current dossier on every read, so a fact revoked after the last save comes
  * back as stale evidence instead of surviving inside the document.
  */
-export async function getResumeStudio(): Promise<ResumeStudioView> {
-  const response = await apiFetch('/api/v1/candidate/resume');
-  return readData<ResumeStudioView>(response);
+export function getResumeStudio(): Promise<ResumeStudioView> {
+  return sharedRead(RESUME_READ, async () =>
+    readData<ResumeStudioView>(await apiFetch('/api/v1/candidate/resume')),
+  );
 }
 
 /**
@@ -19,9 +23,8 @@ export async function getResumeStudio(): Promise<ResumeStudioView> {
  * snapshot the documents were built from. This is why the interface never
  * autosaves: saving is the candidate's act of standing behind the facts.
  */
-export async function saveResumeStudioDraft(
-  draft: ResumeDraft,
-): Promise<ResumeStudioView> {
+export async function saveResumeStudioDraft(draft: ResumeDraft): Promise<ResumeStudioView> {
+  forgetSharedRead(RESUME_READ);
   const response = await apiFetch('/api/v1/candidate/resume', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
