@@ -682,6 +682,16 @@ test.describe('B441 Profile screen from mockup 2', () => {
         /^(\d+) \1 /u,
       );
     }
+    const remarksToggle = review.locator('.career-profile-screen-review-badge.is-toggle').first();
+    await expect(remarksToggle).toHaveAttribute('aria-expanded', 'false');
+    const remarks = review.locator(`[id="${await remarksToggle.getAttribute('aria-controls')}"]`);
+    await expect(remarks).toBeHidden();
+    await remarksToggle.click();
+    await expect(remarks).toBeVisible();
+    await expect(remarks.locator('li')).toHaveCount(
+      Number((await remarksToggle.innerText()).match(/\d+/u)?.[0]),
+    );
+    await remarksToggle.click();
     await expect(
       review.getByRole('button', { name: /Собрать факты с консультантом/u }),
     ).toBeVisible();
