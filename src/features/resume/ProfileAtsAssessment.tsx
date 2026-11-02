@@ -6,6 +6,7 @@ import type {
 } from '../../../server/domain/resumeAtsAssessment';
 import type { ResumeVersionSummary } from '../../../server/domain/resumeVersions';
 import { CareerTooltip } from '../shell/CareerTooltip';
+import { atsTotalView, keywordTip } from './atsTotal';
 import { useProfileAtsAssessment } from './useProfileAtsAssessment';
 import type { ResumeAtsAssessmentRequest } from './resumeVersionsApi';
 
@@ -165,18 +166,6 @@ function AtsDimensions({
   );
 }
 
-function keywordGuidance(assessment: ResumeAtsAssessment | null): string {
-  const requirementSource = assessment?.context.requirementSource;
-  if (!requirementSource) {
-    return 'Оценка для конкретной вакансии неизвестна. Создайте целевую версию с требованиями, чтобы получить проверяемые совпадения.';
-  }
-  const missing = assessment?.dimensions.keywords.unmatchedRequirements ?? [];
-  if (missing.length) {
-    return `Проверьте требования без точного текстового совпадения: ${missing.join(', ')}.`;
-  }
-  return assessment?.dimensions.keywords.summary ?? 'Проверьте исходные данные и текст резюме.';
-}
-
 function AtsContext({
   assessment,
   sourceVersion,
@@ -231,15 +220,15 @@ function AtsKeywordEvidence({ assessment }: { readonly assessment: ResumeAtsAsse
 }
 
 function AtsGuidance({ assessment }: { readonly assessment: ResumeAtsAssessment | null }) {
+  const tip = keywordTip(assessment);
+  if (!tip) return null;
   return (
-    <>
-      <div className="career-profile-screen-ats-guidance">
-        <Lightbulb size="1em" aria-hidden="true" />
-        <p>
-          <strong>Что оптимизировать:</strong> {keywordGuidance(assessment)}
-        </p>
-      </div>
-    </>
+    <div className="career-profile-screen-ats-guidance">
+      <Lightbulb size="1em" aria-hidden="true" />
+      <p>
+        <strong>Что оптимизировать:</strong> {tip}
+      </p>
+    </div>
   );
 }
 
@@ -265,13 +254,24 @@ function useAtsCardState(props: ProfileAtsAssessmentProps) {
   const error = suppliedError ?? internal.error;
   const refresh = onRefresh ?? internal.refresh;
   const roleBasis = suppliedAssessment === undefined ? (internal.roleBasis ?? null) : null;
-  const score = assessment?.total.score ?? null;
+  const { score, maximum, note } = atsTotalView(assessment);
   const ariaLabel = loading
     ? 'Оценка ATS рассчитывается'
     : score === null
       ? 'Оценка ATS неизвестна'
-      : `Оценка ATS ${score} из 100`;
-  return { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel };
+      : `Оценка ATS ${score} из ${maximum}`;
+  return {
+    assessment,
+    sourceVersion,
+    roleBasis,
+    loading,
+    error,
+    refresh,
+    score,
+    maximum,
+    note,
+    ariaLabel,
+  };
 }
 
 /** Макет 2 «ATS: нет избранных вакансий». */
@@ -286,8 +286,18 @@ export function AtsRoleBasisNote() {
 
 export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
   const { id = 'sec-ats', desktopLayout = false } = props;
-  const { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel } =
-    useAtsCardState(props);
+  const {
+    assessment,
+    sourceVersion,
+    roleBasis,
+    loading,
+    error,
+    refresh,
+    score,
+    maximum,
+    note,
+    ariaLabel,
+  } = useAtsCardState(props);
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-quality-card career-profile-screen-ats-card"
@@ -309,10 +319,11 @@ export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
           >
             {loading ? '…' : (score ?? '—')}
           </strong>
-          <span className="career-profile-screen-ats-unit">из 100</span>
+          <span className="career-profile-screen-ats-unit">из {maximum}</span>
           {roleBasis ? <span className="career-profile-screen-tag">по роли</span> : null}
         </div>
       )}
+      {note && !loading && !error ? <p className="career-profile-ats-role-note">{note}</p> : null}
       {roleBasis ? <AtsRoleBasisNote /> : null}
       <AtsRetryError error={error} onRefresh={refresh} loading={loading} />
       <AtsDimensions assessment={assessment} desktopLayout={desktopLayout} />

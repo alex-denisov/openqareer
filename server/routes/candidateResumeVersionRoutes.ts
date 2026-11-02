@@ -561,6 +561,17 @@ function invalidVersionAssessmentRequest(
   );
 }
 
+function versionNotFound(reply: FastifyReply, request: FastifyRequest): FastifyReply {
+  return sendError(
+    reply,
+    request,
+    404,
+    'resume_version_not_found',
+    'Версия резюме не найдена.',
+    false,
+  );
+}
+
 async function handleResumeAtsAssessment(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -587,10 +598,7 @@ async function handleResumeAtsAssessment(
     };
   }
   if (body.data.vacancyId) {
-    if (body.data.versionId || body.data.title !== undefined || body.data.requirements !== undefined) {
-      return invalidVersionAssessmentRequest(reply, request);
-    }
-    return assessSavedVacancy(deps, request, reply, candidate.id, body.data.vacancyId, evaluatedAt);
+    return assessSavedVacancy(deps, request, reply, candidate.id, body.data, evaluatedAt);
   }
   if (body.data.versionId) {
     if (body.data.title !== undefined || body.data.requirements !== undefined) {
@@ -602,16 +610,7 @@ async function handleResumeAtsAssessment(
       body.data.versionId,
       evaluatedAt,
     );
-    if (!result) {
-      return sendError(
-        reply,
-        request,
-        404,
-        'resume_version_not_found',
-        'Версия резюме не найдена.',
-        false,
-      );
-    }
+    if (!result) return versionNotFound(reply, request);
     return { data: result, meta: { requestId: request.id } };
   }
   const assessment = assessCandidateMasterResume(deps, candidate.id, body.data, evaluatedAt);
@@ -624,9 +623,13 @@ function assessSavedVacancy(
   request: FastifyRequest,
   reply: FastifyReply,
   candidateId: string,
-  vacancyId: string,
+  input: AtsAssessmentInput,
   evaluatedAt: string,
 ): unknown {
+  const vacancyId = input.vacancyId ?? '';
+  if (input.versionId || input.title !== undefined || input.requirements !== undefined) {
+    return invalidVersionAssessmentRequest(reply, request);
+  }
   const target = readVacancyFitTarget(deps, vacancyId);
   if (!target) {
     return sendError(reply, request, 404, 'vacancy_not_found', 'Вакансия не найдена.', false);
