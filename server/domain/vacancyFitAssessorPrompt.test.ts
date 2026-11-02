@@ -28,9 +28,11 @@ describe('fit prompt rules from the .app run 3 (02.11)', () => {
     );
   });
 
-  it('Астрал: evidence that only borders on the requirement is partial at most', async () => {
+  it('owner audit 02.11: partial is the same work at a smaller scope; an adjacent area is unknown', async () => {
     const prompt = await sentPrompt();
-    expect(prompt).toContain('Indirect evidence shows at most partial');
-    expect(prompt).toContain('CSAT or SLA results do not show work with product teams');
+    expect(prompt).toContain('Partial: the same kind of work at a smaller scope, fewer years, or some of the listed elements');
+    expect(prompt).toContain('A fact about an adjacent area is unknown, not partial');
+    expect(prompt).toContain('AV in classrooms does not show TV broadcast signal chains');
+    expect(prompt).toContain('a general skill ("Linux", "IT Infrastructure Management") does not show a specific technology');
   });
 });

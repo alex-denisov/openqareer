@@ -15,7 +15,7 @@ const skill = (id: string, text: string) => ({
 });
 
 describe('evidence quality (02.11)', () => {
-  it('one quote backs at most two requirements in full; a third use counts partial, never «нет в профиле» (02.11 owner)', () => {
+  it('one strong quote backs any number of requirements in full (owner 02.11, was two)', () => {
     const input = fitInput();
     const evidence = [{ factId: 'f1', quote: 'TypeScript services' }];
     const result = evaluateVacancyFit({
@@ -29,9 +29,9 @@ describe('evidence quality (02.11)', () => {
     expect(result.assessments.map((item) => item.status)).toEqual([
       'matched',
       'matched',
-      'partial',
+      'matched',
     ]);
-    expect(result.assessments[2]!.evidence).toEqual(evidence);
+    expect(result.coveragePercent).toBe(100);
   });
 
   it('many-to-many: a requirement with one fresh quote stays matched though another quote is used up', () => {
@@ -73,6 +73,90 @@ describe('evidence quality (02.11)', () => {
     });
     expect(result.assessments[0].status).toBe('partial');
     expect(result.coveragePercent).toBe(83);
+  });
+});
+
+describe('fit accuracy audit (owner 02.11)', () => {
+  it('a quote from the skills list of a place is a tag: it alone meets a requirement partially', () => {
+    const input = fitInput();
+    const place = {
+      ...input.facts[0],
+      id: 'profile:experience:e1',
+      statement: 'VP Operations — Acme; led support; навыки: Linux, Kubernetes',
+      evidenceSource: 'profile' as const,
+    };
+    const result = evaluateVacancyFit({
+      ...input,
+      checkedFactIds: [],
+      facts: [...input.facts, place],
+      assessments: [
+        { requirementId: 'r1', status: 'matched', evidence: [{ factId: place.id, quote: 'Linux' }] },
+        { requirementId: 's2', status: 'matched', evidence: [{ factId: place.id, quote: 'led support' }] },
+        { requirementId: 's3', status: 'matched', evidence: [{ factId: 'f1', quote: 'SQL' }] },
+      ],
+    });
+    expect(result.assessments.map((item) => item.status)).toEqual(['partial', 'matched', 'matched']);
+  });
+
+  it('a location quote backs only a location condition: elsewhere it is dropped and the claim is unknown', () => {
+    const input = fitInput();
+    const location = {
+      ...input.facts[0],
+      id: 'impe12a7b15ff-location',
+      status: 'proposed' as const,
+      statement: 'Dubai, United Arab Emirates',
+    };
+    const result = evaluateVacancyFit({
+      ...input,
+      description: `${input.description} Must be located within the US.`,
+      facts: [...input.facts, location],
+      requirements: [
+        ...input.requirements,
+        { ...skill('c1', 'Must be located within the US'), skill: false },
+      ],
+      assessments: [
+        { requirementId: 'r1', status: 'unmatched', evidence: [{ factId: location.id, quote: 'Dubai' }] },
+        {
+          requirementId: 's2',
+          status: 'matched',
+          evidence: [
+            { factId: location.id, quote: 'Dubai' },
+            { factId: 'f1', quote: 'Node' },
+          ],
+        },
+        { requirementId: 's3', status: 'matched', evidence: [{ factId: 'f1', quote: 'SQL' }] },
+        { requirementId: 'c1', status: 'unmatched', evidence: [{ factId: location.id, quote: 'Dubai' }] },
+      ],
+    });
+    const byId = new Map(result.assessments.map((item) => [item.requirementId, item]));
+    expect(['r1', 's2', 's3', 'c1'].map((id) => byId.get(id)?.status)).toEqual(['unknown', 'matched', 'matched', 'unmatched']);
+    expect(byId.get('s2')?.evidence).toEqual([{ factId: 'f1', quote: 'Node' }]);
+  });
+
+  it('generic skill tags of a job board are no requirements of the percent', () => {
+    const input = fitInput();
+    const tags = ['Critical Thinking', 'Emotional Intelligence', 'Communication', 'AI Proficiency'];
+    const result = evaluateVacancyFit({
+      ...input,
+      description: `${input.description} ${tags.join(' ')}`,
+      requirements: [
+        ...input.requirements,
+        ...tags.map((text, index) => ({ ...skill(`t${index}`, text), origin: 'structural' as const, label: text, skill: true })),
+      ],
+    });
+    expect(result.coverage.total).toBe(3);
+    expect(result.assessments.map((item) => item.requirementId)).toEqual(['r1', 's2', 's3']);
+  });
+
+  it('a sentence that names communication stays a requirement', () => {
+    const input = fitInput();
+    const text = 'Strong verbal and written communication skills';
+    const result = evaluateVacancyFit({
+      ...input,
+      description: `${input.description} ${text}`,
+      requirements: [...input.requirements, { ...skill('t1', text), label: 'Communication', skill: true }],
+    });
+    expect(result.coverage.total).toBe(4);
   });
 });
 
