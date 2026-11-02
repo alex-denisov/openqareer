@@ -286,6 +286,11 @@ interface ResponsesFilterControlsProps {
   readonly onPeriodChange: (period: ResponsesPeriod) => void;
   readonly view: ResponsesViewMode;
   readonly onViewChange: (view: ResponsesViewMode) => void;
+  /** «Этап» in the 390 filter sheet reuses the funnel summary filters. */
+  readonly stageCounts?: Record<ApplicationStage, number>;
+  readonly needsActionCount?: number;
+  readonly actionOnly?: boolean;
+  readonly onSummaryFilter?: (filter: ResponsesSummaryFilter) => void;
 }
 
 export function ResponsesFilterControls(props: ResponsesFilterControlsProps) {
@@ -321,13 +326,35 @@ function SelectWrap({ children }: { readonly children: ReactNode }) {
 }
 
 interface MobileFilterDraft {
+  readonly stage: string;
   readonly channel: string;
   readonly period: ResponsesPeriod;
   readonly sortMode: ResponsesSortMode;
 }
 
+const DEFAULT_MOBILE_FILTER_DRAFT: MobileFilterDraft = {
+  stage: 'все',
+  channel: '',
+  period: '30',
+  sortMode: 'step',
+};
+
+function mobileStageItems(props: ResponsesFilterControlsProps): readonly SummaryItem[] {
+  return buildSummaryItems(props.stageCounts, props.needsActionCount ?? 0, false);
+}
+
+function currentStageKey(props: ResponsesFilterControlsProps): string {
+  if (props.actionOnly) return 'нужно действие';
+  const stages = JSON.stringify([...(props.query.stage ?? [])].sort());
+  const match = mobileStageItems(props).find(
+    (item) => !item.filter.actionOnly && JSON.stringify([...item.filter.stage].sort()) === stages,
+  );
+  return match?.label ?? 'все';
+}
+
 function createMobileFilterDraft(props: ResponsesFilterControlsProps): MobileFilterDraft {
   return {
+    stage: currentStageKey(props),
     channel: props.query.channel?.[0] ?? '',
     period: props.period,
     sortMode: props.sortMode,
@@ -375,6 +402,10 @@ function useMobileFilterDialog(props: ResponsesFilterControlsProps) {
   };
   const apply = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const stageItem = mobileStageItems(props).find((item) => item.label === draft.stage);
+    if (props.onSummaryFilter && stageItem && draft.stage !== currentStageKey(props)) {
+      props.onSummaryFilter(stageItem.filter);
+    }
     props.onQueryChange({ channel: draft.channel ? [draft.channel] : [], offset: 0 });
     props.onPeriodChange(draft.period);
     props.onSortChange(draft.sortMode);
@@ -425,11 +456,7 @@ function MobileFilterDialog({
         onClose={state.handleClose}
         onKeyDown={state.handleTabTrap}
       >
-        <form onSubmit={state.apply}>
-          <h2 id="career-responses-filter-title">Фильтры</h2>
-          <MobileFilterFields draft={state.draft} setDraft={state.setDraft} channels={channels} />
-          <MobileFilterActions onCancel={state.close} />
-        </form>
+        <MobileFilterForm props={props} state={state} channels={channels} />
       </dialog>
     </>
   );
@@ -477,14 +504,72 @@ function MobileFilterFields({
   );
 }
 
-function MobileFilterActions({ onCancel }: { readonly onCancel: () => void }) {
+function MobileFilterForm({
+  props,
+  state,
+  channels,
+}: {
+  readonly props: ResponsesFilterControlsProps;
+  readonly state: ReturnType<typeof useMobileFilterDialog>;
+  readonly channels: readonly string[];
+}) {
+  return (
+    <form onSubmit={state.apply}>
+      <header className="career-responses-filter-head">
+        <h2 id="career-responses-filter-title">Фильтры</h2>
+        <button
+          type="button"
+          className="career-btn career-btn-ghost career-btn-sm"
+          onClick={() => state.setDraft(DEFAULT_MOBILE_FILTER_DRAFT)}
+        >
+          Сбросить
+        </button>
+      </header>
+      {props.onSummaryFilter ? (
+        <MobileStageField
+          items={mobileStageItems(props)}
+          value={state.draft.stage}
+          onChange={(stage) => state.setDraft((current) => ({ ...current, stage }))}
+        />
+      ) : null}
+      <MobileFilterFields draft={state.draft} setDraft={state.setDraft} channels={channels} />
+      <MobileFilterActions />
+    </form>
+  );
+}
+
+function MobileStageField({
+  items,
+  value,
+  onChange,
+}: {
+  readonly items: readonly SummaryItem[];
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+}) {
+  return (
+    <div className="career-responses-filter-field">
+      <label htmlFor="career-responses-filter-stage">Этап</label>
+      <select
+        id="career-responses-filter-stage"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {items.map((item) => (
+          <option key={item.label} value={item.label}>
+            {item.label.charAt(0).toUpperCase() + item.label.slice(1)} · {item.count}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function MobileFilterActions() {
   return (
     <footer className="career-responses-filter-actions">
-      <button type="button" className="career-btn career-btn-secondary" onClick={onCancel}>
-        Отмена
-      </button>
       <button type="submit" className="career-btn career-btn-primary">
-        Применить
+        Показать
       </button>
     </footer>
   );

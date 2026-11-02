@@ -2,7 +2,14 @@ import type { ReactNode } from 'react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListPageMeta, ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
-import { ResponsesApplicationsTable, ResponsesMobileFeed } from './ResponsesApplicationsTable';
+import { useState } from 'react';
+import { ResponsesApplicationsTable } from './ResponsesApplicationsTable';
+import { ResponsesMobileFeed, type ResponsesMobileSelection } from './ResponsesMobileFeed';
+import {
+  ResponsesMobileClosedContent,
+  ResponsesMobilePush,
+  type ResponsesMobilePushView,
+} from './ResponsesMobilePush';
 import {
   ResponsesAutomationLink,
   usePendingAutomationApprovalCount,
@@ -160,12 +167,61 @@ function FunnelWorkspace({
   readonly workspace: WorkspaceController;
   readonly tableView: ReactNode;
 }) {
+  const [push, setPush] = useState<ResponsesMobilePushView | null>(null);
+  const closePush = () => {
+    const returnTo = push?.kind === 'response' ? push.id : null;
+    setPush(null);
+    window.requestAnimationFrame(() => {
+      const row = returnTo
+        ? document.querySelector<HTMLElement>(`[data-application-id="${CSS.escape(returnTo)}"]`)
+        : null;
+      row?.focus();
+    });
+  };
+  const openPush = (view: ResponsesMobilePushView) => {
+    if (view.kind === 'response') workspace.selectApplication(view.id);
+    setPush(view);
+  };
   return (
-    <>
+    <div className="career-responses-funnel-flow" data-mobile-push={push ? push.kind : undefined}>
+      {push ? (
+        <ResponsesMobilePush view={push} onBack={closePush}>
+          <MobilePushContent view={push} props={props} workspace={workspace} />
+        </ResponsesMobilePush>
+      ) : null}
       <FunnelControls state={props.state} workspace={workspace} />
-      <FunnelResults props={props} workspace={workspace} tableView={tableView} />
-    </>
+      <FunnelResults
+        props={props}
+        workspace={workspace}
+        tableView={tableView}
+        pushOpen={push !== null}
+        onOpenPush={openPush}
+      />
+    </div>
   );
+}
+
+/** Push screens reuse the 1440 blocks so every function keeps one implementation. */
+function MobilePushContent({
+  view,
+  props,
+  workspace,
+}: {
+  readonly view: ResponsesMobilePushView;
+  readonly props: ResponsesWorkspaceScreenProps;
+  readonly workspace: WorkspaceController;
+}) {
+  if (view.kind === 'response') return <SelectedResponse props={props} workspace={workspace} />;
+  if (view.kind === 'channels') {
+    return (
+      <ChannelPerformance
+        props={props}
+        workspace={workspace}
+        applications={workspace.filteredApplications}
+      />
+    );
+  }
+  return <ResponsesMobileClosedContent state={props.state} />;
 }
 
 function FunnelControls({
@@ -196,6 +252,10 @@ function FunnelControls({
         onPeriodChange={workspace.changePeriod}
         view={workspace.view}
         onViewChange={workspace.setView}
+        stageCounts={workspace.stageCounts}
+        needsActionCount={workspace.needsActionCount}
+        actionOnly={workspace.actionOnly}
+        onSummaryFilter={workspace.applySummaryFilter}
       />
     </>
   );
@@ -205,28 +265,20 @@ function FunnelResults({
   props,
   workspace,
   tableView,
+  pushOpen,
+  onOpenPush,
 }: {
   readonly props: ResponsesWorkspaceScreenProps;
   readonly workspace: WorkspaceController;
   readonly tableView: ReactNode;
+  readonly pushOpen: boolean;
+  readonly onOpenPush: (view: ResponsesMobilePushView) => void;
 }) {
   const applications = workspace.filteredApplications;
-  const pendingApprovalCount = usePendingAutomationApprovalCount();
   return (
     <>
       <PoolStatusMessage workspace={workspace} />
-      <ResponsesAutomationLink
-        count={pendingApprovalCount}
-        onOpenAutomation={props.onOpenAutomation}
-      />
-      <ResponsesMobileFeed
-        applications={applications}
-        allApplications={props.state.applications}
-        visibleLimit={workspace.mobileListLimit}
-        onLoadMore={workspace.loadMoreMobileList}
-        onSelectApplication={workspace.selectApplication}
-        onRefreshApplications={props.state.refreshApplications}
-      />
+      <FunnelMobileFeed props={props} workspace={workspace} onOpenPush={onOpenPush} />
       <FunnelBodyContent
         props={props}
         workspace={workspace}
@@ -234,8 +286,13 @@ function FunnelResults({
         tableView={tableView}
       />
       <TablePagination workspace={workspace} applicationCount={applications.length} />
-      <SelectedResponse props={props} workspace={workspace} />
-      <ChannelPerformance props={props} workspace={workspace} applications={applications} />
+      {/* The 390 push screen renders these itself; never two copies in the DOM. */}
+      {pushOpen ? null : (
+        <>
+          <SelectedResponse props={props} workspace={workspace} />
+          <ChannelPerformance props={props} workspace={workspace} applications={applications} />
+        </>
+      )}
     </>
   );
 }
@@ -267,6 +324,37 @@ function ChannelPerformance({
   );
 }
 
+function FunnelMobileFeed({
+  props,
+  workspace,
+  onOpenPush,
+}: {
+  readonly props: ResponsesWorkspaceScreenProps;
+  readonly workspace: WorkspaceController;
+  readonly onOpenPush: (view: ResponsesMobilePushView) => void;
+}) {
+  const pendingApprovalCount = usePendingAutomationApprovalCount();
+  return (
+    <ResponsesMobileFeed
+      applications={workspace.filteredApplications}
+      allApplications={props.state.applications}
+      visibleLimit={workspace.mobileListLimit}
+      onLoadMore={workspace.loadMoreMobileList}
+      onOpenApplication={(id) => onOpenPush({ kind: 'response', id })}
+      onOpenChannels={() => onOpenPush({ kind: 'channels' })}
+      onOpenClosed={() => onOpenPush({ kind: 'closed' })}
+      onRefreshApplications={props.state.refreshApplications}
+      selection={mobileSelection(workspace)}
+      header={
+        <ResponsesAutomationLink
+          count={pendingApprovalCount}
+          onOpenAutomation={props.onOpenAutomation}
+        />
+      }
+    />
+  );
+}
+
 function SelectedResponse({
   props,
   workspace,
@@ -292,6 +380,18 @@ function SelectedResponse({
       onSkip={(reasonId) => void props.state.skip(application, reasonId)}
     />
   );
+}
+
+function mobileSelection(workspace: WorkspaceController): ResponsesMobileSelection {
+  return {
+    selectedIds: workspace.selectedIds,
+    allSelectedByFilter: workspace.allSelectedByFilter,
+    query: workspace.query,
+    onToggleSelected: workspace.toggleSelected,
+    onToggleAllFiltered: workspace.toggleAllFiltered,
+    onClearSelection: workspace.clearSelection,
+    onBulkComplete: workspace.bulkComplete,
+  };
 }
 
 function PoolStatusMessage({ workspace }: { readonly workspace: WorkspaceController }) {

@@ -1,0 +1,72 @@
+import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { CaretLeft } from '@phosphor-icons/react';
+import { ArchivedResponsesSection } from './ArchivedResponsesSection';
+import { ArchiveReasonsList } from './PipelineAnalyticsView';
+import { closedResponseReasons, isClosedResponse } from './ResponsesMobileLinks';
+import type { UseApplications } from './useApplications';
+
+/** 390 push screens of «Отклики» (mockup 5: `mv=proc`, `mv=learn`, closed list). */
+export type ResponsesMobilePushView =
+  | { readonly kind: 'response'; readonly id: string }
+  | { readonly kind: 'channels' }
+  | { readonly kind: 'closed' };
+
+const PUSH_TITLES: Record<ResponsesMobilePushView['kind'], string> = {
+  response: 'Процесс',
+  channels: 'Каналы',
+  closed: 'Закрыто',
+};
+
+export function ResponsesMobilePush({
+  view,
+  onBack,
+  children,
+}: {
+  readonly view: ResponsesMobilePushView;
+  readonly onBack: () => void;
+  readonly children: ReactNode;
+}) {
+  const titleId = useId();
+  const backRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    backRef.current?.focus({ preventScroll: true });
+    window.scrollTo?.({ top: 0 });
+  }, [view]);
+  return (
+    <section className="career-responses-mobile-push" aria-labelledby={titleId}>
+      <header className="career-responses-mobile-push-header">
+        <button
+          ref={backRef}
+          type="button"
+          className="career-btn is-ghost is-icon"
+          aria-label="Назад к откликам"
+          onClick={onBack}
+        >
+          <CaretLeft size={20} aria-hidden="true" />
+        </button>
+        <h2 id={titleId}>{PUSH_TITLES[view.kind]}</h2>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** «Закрыто»: closing reasons and the archive with restore (moved off the 390 page, R19). */
+export function ResponsesMobileClosedContent({ state }: { readonly state: UseApplications }) {
+  const closed = state.applications.filter(isClosedResponse);
+  return (
+    <>
+      {closed.length > 0 ? (
+        <ArchiveReasonsList
+          reasons={closedResponseReasons(closed)}
+          title="Причины закрытия откликов"
+        />
+      ) : null}
+      <ArchivedResponsesSection
+        applications={state.applications.filter((item) => item.stage === 'archived')}
+        initiallyOpen
+        onRestore={state.restoreFromArchive}
+      />
+    </>
+  );
+}

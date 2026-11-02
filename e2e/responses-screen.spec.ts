@@ -335,12 +335,15 @@ test.describe('B251 responses screen', () => {
         'Пробовали отправить',
       );
       await expect(
-        rows.filter({ hasText: 'Enterprise Architect Director' }).filter({ hasText: 'Ответили' }),
-      ).toContainText('Ответили');
+        rows
+          .filter({ hasText: 'Enterprise Architect Director' })
+          .filter({ hasText: /Ответ \d\d\.\d\d/ }),
+      ).toContainText('Ответ');
       await expect(
         rows.filter({ hasText: 'Enterprise Architect Director — раунд 2' }),
       ).toContainText('Интервью');
-      await expect(page.getByRole('button', { name: 'Показать закрытые' })).toBeVisible();
+      // B486: closed responses and the archive live behind the «Закрыто» push screen at 390.
+      await expect(page.getByRole('button', { name: /^Закрыто/ })).toBeVisible();
       return;
     }
 
@@ -439,9 +442,16 @@ test.describe('B251 responses screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
+    const mobile = testInfo.project.name === 'mobile-390';
     const archiveToggle = page.getByRole('button', { name: 'Показать закрытые' });
-    await expect(archiveToggle).toHaveAttribute('aria-expanded', 'false');
-    await archiveToggle.click();
+    if (mobile) {
+      // B486: the 390 archive opens expanded inside the «Закрыто» push screen.
+      await page.getByRole('button', { name: /^Закрыто/ }).click();
+      await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true');
+    } else {
+      await expect(archiveToggle).toHaveAttribute('aria-expanded', 'false');
+      await archiveToggle.click();
+    }
     const archiveCards = page.locator('.career-responses-archive-card');
     await expect(archiveCards).toHaveCount(3);
     await expect(archiveCards.filter({ hasText: 'Role moved by candidate' })).toContainText(
@@ -482,7 +492,8 @@ test.describe('B251 responses screen', () => {
       .click();
 
     await expect(page.getByRole('button', { name: 'Показать закрытые' })).toBeVisible();
-    if (testInfo.project.name === 'mobile-390') {
+    if (mobile) {
+      await page.getByRole('button', { name: 'Назад к откликам' }).click();
       await expect(
         page.getByRole('listitem').filter({ hasText: 'Role moved by candidate' }),
       ).toBeVisible();
@@ -616,12 +627,14 @@ test.describe('B251 responses screen', () => {
         .getByRole('list', { name: 'Нужно действие' })
         .getByRole('listitem')
         .filter({ hasText: 'Peraton' });
-      await response.getByRole('button', { name: /Открыть следующий шаг/ }).click();
+      await response.getByRole('button', { name: /^Открыть отклик: Peraton/ }).click();
     } else {
       const card = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
       await card.locator('.career-responses-card-body').click();
     }
-    const selectedPanel = page.locator('.career-responses-selected');
+    const selectedPanel = (
+      testInfo.project.name === 'mobile-390' ? page.getByRole('region', { name: 'Процесс' }) : page
+    ).locator('.career-responses-selected');
     await expect(selectedPanel).toBeVisible();
     await selectedPanel.getByRole('button', { name: 'Напоминание отправлено' }).click();
     await expect(selectedPanel.getByRole('button', { name: 'Напоминание отправлено' })).toHaveCount(
