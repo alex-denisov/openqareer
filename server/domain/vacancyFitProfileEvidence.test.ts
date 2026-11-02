@@ -1,3 +1,4 @@
+import { vacancyFitPromptFacts } from './vacancyFitPromptFacts';
 import { describe, expect, it } from 'vitest';
 import { assessVacancyFit, type VacancyFitAssessor, type VacancyFitInput } from './vacancyFit';
 import {
@@ -158,11 +159,12 @@ describe('vacancy fit evidence from the whole profile (01.11)', () => {
       memory: bullets,
       resume: { draft: { ...draft, experience } },
     } as never);
+    const sent = vacancyFitPromptFacts(facts, [{ text: 'P&L' }]);
     const bytes = Buffer.byteLength(
-      JSON.stringify(facts.map(({ id, statement }) => ({ id, statement }))),
+      JSON.stringify(sent.map(({ id, statement }) => ({ id, statement }))),
     );
     expect(bytes).toBeLessThanOrEqual(MAX_FIT_EVIDENCE_BYTES);
-    expect(facts.some((fact) => fact.id === 'profile:experience:e19')).toBe(true);
+    expect(sent.some((fact) => fact.id === 'profile:experience:e19')).toBe(true);
   });
   it('states total years of experience from the place dates (02.11 owner: «опыт от 5 лет» was unknown)', () => {
     const experience = [

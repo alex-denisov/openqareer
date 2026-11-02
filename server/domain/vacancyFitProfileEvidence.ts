@@ -210,16 +210,6 @@ export function vacancyFitEvidenceFacts(
       return true;
     })
     .slice(0, MAX_PROFILE_EVIDENCE_FACTS);
-  return withinBytes([...profile, ...memory]);
-}
-
-/** The candidate's own profile first, then dossier facts, until the prompt budget is spent. */
-function withinBytes(facts: readonly VacancyFitFact[]): readonly VacancyFitFact[] {
-  let bytes = 2;
-  return facts.filter((fact) => {
-    const size = Buffer.byteLength(JSON.stringify({ id: fact.id, statement: fact.statement })) + 1;
-    if (bytes + size > MAX_FIT_EVIDENCE_BYTES) return false;
-    bytes += size;
-    return true;
-  });
+  // 02.11: the byte budget is spent per vacancy by relevance (vacancyFitPromptFacts), not here by order.
+  return [...profile, ...memory];
 }

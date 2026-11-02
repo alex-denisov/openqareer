@@ -1,6 +1,7 @@
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import type { BulkLlmInput } from '../providers/bulkLlmClient';
 import type { VacancyFitAssessor } from './vacancyFit';
+import { vacancyFitPromptFacts } from './vacancyFitPromptFacts';
 import type { VacancyFitRequirementAssessment } from '../../shared/vacancyFit';
 
 export interface VacancyFitBulkClient {
@@ -12,7 +13,7 @@ const INSTRUCTIONS = `Assess only the supplied sourced vacancy requirements agai
 export function createVacancyFitAssessor(client: VacancyFitBulkClient, runId: string): VacancyFitAssessor {
   return {
     async assess(input) {
-      const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(input.facts.map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length) });
+      const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(vacancyFitPromptFacts(input.facts, input.requirements).map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length) });
       const parsed: unknown = JSON.parse(withoutMarkdownFence(response.content));
       if (!parsed || typeof parsed !== 'object' || !('assessments' in parsed) || !Array.isArray(parsed.assessments) || parsed.assessments.length > input.requirements.length) throw new Error('invalid vacancy fit assessment');
       return parsed.assessments.map(parseAssessment);
