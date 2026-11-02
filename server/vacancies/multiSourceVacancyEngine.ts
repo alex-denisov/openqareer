@@ -65,6 +65,7 @@ import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
 import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import { mapYielding } from './mapYielding';
 import type { CatalogTotals } from './matchedCatalogSummary';
 import {
   WorkdayDescriptionBackfill,
@@ -2019,12 +2020,11 @@ export class MultiSourceVacancyEngine {
     const clusters = clusterVacancies(await this.pool.queryMatchCandidatesAsync(effective)).filter(
       (cluster) => cluster.status === 'active',
     );
-    return clusters
-      .map((cluster) => ({
-        cluster,
-        explanation: matchCandidateWithVacancy(effective, cluster),
-      }))
-      .sort(compareMatchedVacancies);
+    const matched = await mapYielding(clusters, (cluster) => ({
+      cluster,
+      explanation: matchCandidateWithVacancy(effective, cluster),
+    }));
+    return matched.sort(compareMatchedVacancies);
   }
 
   public async testSource(
