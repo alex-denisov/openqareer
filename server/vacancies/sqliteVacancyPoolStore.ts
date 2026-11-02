@@ -1844,49 +1844,62 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const ids: string[] = [];
     let scanned = 0;
     let at: HhTextPosition | undefined = position;
-    while (at && ids.length < want && scanned < HH_TEXT_SCAN_LIMIT) {
-      const rows = this.hhTextPage(at, HH_TEXT_PAGE);
+    while (at && ids.length < want) {
+      const role = at.phase === 'role';
+      if (scanned >= (role ? HH_TEXT_ROLE_SCAN_LIMIT : HH_TEXT_SCAN_LIMIT)) break;
+      const rows = role
+        ? this.hhTextRolePage(at, HH_TEXT_ROLE_PAGE)
+        : this.hhTextPage(at, HH_TEXT_PAGE);
       if (rows.length === 0) {
         at = nextHhTextPhase(at);
         continue;
       }
       for (const row of rows) {
         scanned += 1;
-        const matches =
-          at.phase !== 'role' || terms.some((term) => (row.title ?? '').toLocaleLowerCase('ru').includes(term));
         at = { phase: at.phase, ms: row.ms, key: row.key };
-        if (row.need === 1 && matches) ids.push(row.id);
+        const wanted = role
+          ? terms.some((term) => (row.title ?? '').includes(term)) && this.hhNeedsText(row.id)
+          : 'need' in row && row.need === 1;
+        if (wanted) ids.push(row.id);
         if (ids.length >= want) break;
       }
     }
     return { ids, ...(at ? { cursor: formatHhTextCursor(at) } : {}) };
   }
 
-  /** 02.11: the role phase walks the same index newest first and carries the title. */
+  /**
+   * 02.11: the role phase reads only the index (lowercased title in `search_text`, no payload
+   * JSON), so one call scans 50K rows; the text check runs only on rows whose title matches.
+   * Before, 2 000 payload rows a call gave 1-6 role rows a tick: 303 requests an hour.
+   */
   private hhTextRolePage(
     at: HhTextPosition,
     size: number,
-  ): Array<{ id: string; ms: number; key: string; need: number; title: string }> {
-    const needsText = HH_NEEDS_TEXT;
-      return this.database
-        .prepare(
-          `SELECT i.id AS id, i.published_ms AS ms, i.id AS key,
-                  CASE WHEN ${needsText} THEN 1 ELSE 0 END AS need,
-                  coalesce(json_extract(p.payload, '$.title'), '') AS title
-             FROM vacancy_pool_index i
-             JOIN vacancy_pool p ON p.id = i.id
-            WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 0
-              AND (i.published_ms < ? OR (i.published_ms = ? AND i.id > ?))
-            ORDER BY i.published_ms DESC, i.id ASC
-            LIMIT ?`,
-        )
-        .all(at.ms, at.ms, at.key, size) as Array<{
-        id: string;
-        ms: number;
-        key: string;
-        need: number;
-        title: string;
-      }>;
+  ): Array<{ id: string; ms: number; key: string; title: string }> {
+    const rows = this.database
+      .prepare(
+        `SELECT i.id AS id, i.published_ms AS ms, i.search_text AS text
+           FROM vacancy_pool_index i
+          WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 0
+            AND (i.published_ms < ? OR (i.published_ms = ? AND i.id > ?))
+          ORDER BY i.published_ms DESC, i.id ASC
+          LIMIT ?`,
+      )
+      .all(at.ms, at.ms, at.key, size) as Array<{ id: string; ms: number; text: string | null }>;
+    // The first line of `search_text` is the title, lowercased when the row was indexed.
+    return rows.map((row) => ({
+      id: row.id,
+      ms: row.ms,
+      key: row.id,
+      title: (row.text ?? '').split('\n', 1)[0]!.toLocaleLowerCase('ru'),
+    }));
+  }
+
+  private hhNeedsText(id: string): boolean {
+    const row = this.database
+      .prepare(`SELECT 1 AS need FROM vacancy_pool p WHERE p.id = ? AND ${HH_NEEDS_TEXT}`)
+      .get(id);
+    return row !== undefined;
   }
 
   private hhTextPage(
@@ -1894,7 +1907,6 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     size: number,
   ): Array<{ id: string; ms: number; key: string; need: number; title?: string }> {
     const needsText = HH_NEEDS_TEXT;
-    if (at.phase === 'role') return this.hhTextRolePage(at, size);
     if (at.phase === 'catalog') {
       return this.database
         .prepare(
@@ -2832,6 +2844,8 @@ interface HhTextPosition {
 
 const HH_TEXT_PAGE = 200;
 const HH_TEXT_SCAN_LIMIT = 2_000;
+const HH_TEXT_ROLE_PAGE = 2_000;
+const HH_TEXT_ROLE_SCAN_LIMIT = 50_000;
 
 /** Живая hh-запись, которой нужен текст: не снята, текста нет, работодатель его не скрыл. */
 const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
