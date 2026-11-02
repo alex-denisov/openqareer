@@ -12,13 +12,17 @@ import type { MockInterviewQuestionScope, MockInterviewScreen } from './mockInte
 
 export type { MockInterviewQuestionScope, MockInterviewScreen } from './mockInterviewControllerTypes';
 
-export function useMockInterviewController(roleTitle: string, onBackToPreparation: () => void) {
+export function useMockInterviewController(
+  roleTitle: string,
+  onBackToPreparation: () => void,
+  initialStressMode = false,
+) {
   const model = useMockInterviewSession();
   const speech = useSpeechTranscription();
   const [screen, setScreen] = useState<MockInterviewScreen>('setup');
   const [mode, setMode] = useState<InterviewAnswerMode>('text');
   const [questionScope, setQuestionScope] = useState<MockInterviewQuestionScope>('both');
-  const [stressMode, setStressMode] = useState(false);
+  const [stressMode, setStressMode] = useState(initialStressMode);
   const [draft, setDraft] = useState('');
   const [exitConfirmation, setExitConfirmation] = useState(false);
   const answerStartedAt = useRef(Date.now());
