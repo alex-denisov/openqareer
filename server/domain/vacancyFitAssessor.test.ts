@@ -9,6 +9,17 @@ describe('bounded candidate-data assessor adapter', () => {
     expect((await assessor.assess({ requirements, facts: [] }))[0].evidence[0].quote).toBe('TypeScript');
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1', dataClass: 'candidate', task: 'vacancy-fit', maxTokens: 4096 }));
   });
+  it('sends the same prompt for the same fit input, so a re-run is asked the same question (02.11)', async () => {
+    const complete = vi.fn().mockResolvedValue({ content: JSON.stringify({ assessments: [] }) });
+    const assessor = createVacancyFitAssessor({ complete }, 'run-1');
+    const requirements = [{ id: 'r', text: 'TypeScript', sourceQuote: 'TypeScript', origin: 'explicit' as const, kind: 'experience' as const, importance: 'high' as const, hard: true, stopFactor: false }];
+    const facts = [{ id: 'b', candidateId: 'c', kind: 'fact' as const, status: 'confirmed' as const, statement: 'Node services', sourceMessageIds: ['m'], sensitive: false },
+      { id: 'a', candidateId: 'c', kind: 'fact' as const, status: 'confirmed' as const, statement: 'TypeScript', sourceMessageIds: ['m'], sensitive: false }];
+    await assessor.assess({ requirements, facts }).catch(() => undefined);
+    await assessor.assess({ requirements, facts }).catch(() => undefined);
+    const [first, second] = complete.mock.calls.map(([request]) => ({ prefix: request.prefix, input: request.input }));
+    expect(second).toEqual(first);
+  });
   it('rejects invented output shape instead of trusting unstructured content', async () => {
     const assessor = createVacancyFitAssessor({ complete: vi.fn().mockResolvedValue({ content: '{"score":95}' }) }, 'run-1');
     await expect(assessor.assess({ requirements: [], facts: [] })).rejects.toThrow('invalid vacancy fit assessment');
