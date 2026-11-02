@@ -1,6 +1,6 @@
 import type { CandidateStore } from '../data/candidateStore';
 import { matchGeographyOf } from './matchGeography';
-import type { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
+import type { MatchedVacancyItem, MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { readCampaign } from '../routes/campaignContext';
 import { readTargetLevel } from '../routes/vacancyRoleContext';
 import {
@@ -16,6 +16,11 @@ type Logger = {
   info(fields: Record<string, unknown>, message: string): void;
   error(fields: Record<string, unknown>, message: string): void;
 };
+/** Queues fits for a prepared selection (02.11): set by the app once its route deps exist. */
+export type PrecomputedFitRequester = (
+  candidateId: string,
+  snapshot: readonly MatchedVacancyItem[],
+) => Promise<void>;
 
 export interface MatchedPoolPrecomputeOptions {
   readonly candidateStore: CandidateStore;
@@ -34,6 +39,7 @@ export class MatchedPoolPrecompute {
   private readonly priority: string[] = [];
   private active: Promise<void> | undefined;
   private log: Logger | undefined;
+  private requestFit: PrecomputedFitRequester | undefined;
   private readonly pauseMs: number;
   private readonly now: () => number;
 
@@ -52,6 +58,10 @@ export class MatchedPoolPrecompute {
 
   setLogger(log: Logger): void {
     this.log = log;
+  }
+
+  setFitRequester(requestFit: PrecomputedFitRequester): void {
+    this.requestFit = requestFit;
   }
 
   run(): Promise<void> {
@@ -100,7 +110,7 @@ export class MatchedPoolPrecompute {
     const targetRoles = [...campaign.roles.value];
     if (confirmedSkills.length === 0 && targetRoles.length === 0) return;
     const targetLevel = readTargetLevel(this.options.candidateStore, candidateId, targetRoles);
-    await readMatchedSnapshot(
+    const snapshot = await readMatchedSnapshot(
       this.options.engine,
       candidateId,
       confirmedSkills,
@@ -108,6 +118,13 @@ export class MatchedPoolPrecompute {
       targetLevel,
       matchGeographyOf(campaign.careerGeography),
     );
+    // The sweep runs in chunks on its own: the next candidate's snapshot does not wait for it.
+    void this.requestFit?.(candidateId, snapshot).catch((error: unknown) => {
+      this.log?.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'matched-precompute-fit-failed',
+      );
+    });
   }
 }
 

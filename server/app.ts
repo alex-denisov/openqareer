@@ -1,3 +1,4 @@
+import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
 import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
 import { SqliteMarketSalaryEstimateStore } from './vacancies/marketSalary/sqliteMarketSalaryEstimateStore';
 import cookie from '@fastify/cookie';
@@ -455,6 +456,14 @@ function assembleRouteDeps(
   };
 }
 
+/** 02.11: the background precompute queues fits too; the runtime is read when a pass runs. */
+function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
+  deps.matchedPoolPrecompute?.setFitRequester?.((candidateId, snapshot) =>
+    queuePrecomputedSelectionFit(deps, candidateId, snapshot),
+  );
+  return deps;
+}
+
 function createBillingRouteDependencies(
   options: BuildAppOptions,
   config: ServerConfig,
@@ -577,7 +586,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     searchRemotive,
     titleParseStore: options.titleParseStore,
   });
-  const deps = assembleRouteDeps(options, services);
+  const deps = withPrecomputedFit(assembleRouteDeps(options, services));
   deps.vacancyMechanics = new VacancyMechanicsRuntime(config.databasePath, config.dataEncryptionKey, currentVacancyFitProfileValidator(candidateStore));
   deps.bulkLlmRuntime =
     options.bulkLlmRuntime ?? createBulkLlmRuntime({ databasePath: config.databasePath });
