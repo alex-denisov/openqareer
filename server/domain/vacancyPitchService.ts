@@ -61,6 +61,17 @@ export interface GenerateVacancyPitchOptions {
   readonly recipient?: PitchRecipient;
   /** B422: кандидат отметил компанию вакансии «Хочу в эту компанию». */
   readonly targetCompany?: boolean;
+  /** B528: места работы, выбранные кандидатом для письма, в порядке профиля. */
+  readonly workplaces?: readonly PitchWorkplace[];
+}
+
+export interface PitchWorkplace {
+  readonly employer: string | null;
+  readonly title: string | null;
+  readonly startDate: string | null;
+  readonly endDate: string | null;
+  readonly current: boolean;
+  readonly evidenceIds: readonly string[];
 }
 
 export interface VacancyPitchUsedFact {
@@ -111,7 +122,7 @@ function isNegativeStatement(statement: string): boolean {
  * иначе — английский. Явный параметр запроса всегда важнее (B266).
  */
 export function detectVacancyLanguage(vacancy: VacancyPitchInputVacancy): PitchLanguage {
-  const text = `${vacancy.title} ${vacancy.description ?? ''}`;
+  const text = `${vacancy.title} ${vacancy.description ?? ''} ${(vacancy.responsibilities ?? []).join(' ')}`;
   return /\p{Script=Cyrillic}/u.test(text) ? 'ru' : 'en';
 }
 
@@ -221,7 +232,7 @@ const RU_COPY: Copy = {
     return 'Здравствуйте! Заинтересовала вакансия ' + title + ' в ' + target + '. ' + opening;
   },
   targetCompany: (company) => `${company} — компания, в которой я хочу работать.`,
-  evidenceIntro: 'В профиле зафиксированы следующие факты:',
+  evidenceIntro: 'Из результатов:',
   stackEmpty: 'Требования вакансии не сопоставлены с фактами профиля.',
   stackMatched: (skills) => `В профиле подтверждён практический опыт работы со стеком: ${skills}`,
   stackMissing: (skills) => `В профиле нет подтверждённых фактов по требованиям: ${skills}`,
@@ -294,7 +305,7 @@ const EN_COPY: Copy = {
     return `Hello! I'm interested in the ${title} role at ${target}. ${opening}`;
   },
   targetCompany: (company) => `${company} is a company I want to work for.`,
-  evidenceIntro: 'My profile records the following facts:',
+  evidenceIntro: 'Among my results:',
   stackEmpty: "The vacancy's requirements have not been matched against profile facts.",
   stackMatched: (skills) => `My profile confirms hands-on experience with: ${skills}`,
   stackMissing: (skills) => `My profile has no confirmed facts for: ${skills}`,
@@ -352,18 +363,74 @@ function copyFor(language: PitchLanguage): Copy {
   return language === 'en' ? EN_COPY : RU_COPY;
 }
 
+/**
+ * Записи профиля «Заголовок\nПоле: значение» (образование, язык, место
+ * работы) — данные для экрана, а не фразы: в письмо их не цитируем (B496).
+ */
+export function isStructuredRecordStatement(statement: string): boolean {
+  return /\n[^\n:]{2,40}:\s/u.test(statement);
+}
+
+function yearOf(date: string | null): string | null {
+  return date?.match(/\d{4}/u)?.[0] ?? null;
+}
+
+function workplacePeriod(place: PitchWorkplace, language: PitchLanguage): string {
+  const start = yearOf(place.startDate);
+  const end = place.current ? (language === 'ru' ? 'по сей день' : 'present') : yearOf(place.endDate);
+  if (!start) return '';
+  return end && end !== start ? ` (${start}–${end})` : ` (${start})`;
+}
+
+function workplacePhrase(place: PitchWorkplace, language: PitchLanguage): string | null {
+  const title = place.title?.trim();
+  const employer = place.employer?.trim();
+  if (!title && !employer) return null;
+  const joiner = language === 'ru' ? ' в компании ' : ' at ';
+  const head = title && employer ? `${title}${joiner}${employer}` : (title ?? employer ?? '');
+  return `${head}${workplacePeriod(place, language)}`;
+}
+
+/** Человеческая фраза о выбранных местах работы; их id — следы фактов (B528). */
+export function buildWorkplaceSentence(
+  workplaces: readonly PitchWorkplace[],
+  language: PitchLanguage,
+  usedIds?: Set<string>,
+): string {
+  const phrases = workplaces.slice(0, 3).flatMap((place) => {
+    const phrase = workplacePhrase(place, language);
+    if (!phrase) return [];
+    for (const id of place.evidenceIds) usedIds?.add(id);
+    return [phrase];
+  });
+  if (phrases.length === 0) return '';
+  const [first, ...rest] = phrases;
+  if (language === 'ru') {
+    const now = workplaces[0]?.current ? 'Сейчас работаю на позиции' : 'Последнее место —';
+    return rest.length ? `${now} ${first}; до этого — ${rest.join(', ')}.` : `${now} ${first}.`;
+  }
+  const now = workplaces[0]?.current ? 'I currently work as' : 'Most recently I worked as';
+  return rest.length ? `${now} ${first}; before that, ${rest.join(', ')}.` : `${now} ${first}.`;
+}
+
 function buildEvidenceParagraph(
   copy: Copy,
-  facts: readonly VacancyPitchInputFact[],
+  language: PitchLanguage,
+  allFacts: readonly VacancyPitchInputFact[],
+  workplaces: readonly PitchWorkplace[],
   usedIds: Set<string>,
   notices: string[],
   useRanking: boolean,
 ): string {
+  // Шаблон не переводит: русская фраза в английском письме читается как ошибка.
+  const facts = allFacts.filter((fact) => !isStructuredRecordStatement(fact.statement) &&
+    (language === 'ru' || !/\p{Script=Cyrillic}/u.test(fact.statement)));
+  const career = buildWorkplaceSentence(workplaces, language, usedIds);
   if (facts.length === 0) {
     // The "too few facts" state is not letter content — it goes to `notices`
     // and the paragraph is simply omitted (B266).
-    notices.push(copy.noticeNoFacts);
-    return '';
+    if (!career) notices.push(RU_COPY.noticeNoFacts);
+    return career;
   }
   const metricFact = useRanking
     ? facts[0]
@@ -374,7 +441,7 @@ function buildEvidenceParagraph(
   const statements = [metricFact?.statement, ...otherFacts.map((f) => f.statement)].filter(
     (s): s is string => Boolean(s),
   );
-  return `${copy.evidenceIntro} ${joinSentences(statements)}`;
+  return [career, `${copy.evidenceIntro} ${joinSentences(statements)}`].filter(Boolean).join(' ');
 }
 
 /** Факты часто уже кончаются точкой — склейка не должна давать «..» (прод 25.09). */
@@ -450,11 +517,11 @@ function buildStackParagraph(
   if (matchedSkills.length > 0) {
     parts.push(copy.stackMatched(matchedSkills.join(', ')));
   } else {
-    notices.push(copy.noticeNoStackMatch);
+    notices.push(RU_COPY.noticeNoStackMatch);
   }
 
   if (missingSkills.length > 0) {
-    notices.push(copy.stackMissing(missingSkills.slice(0, 3).join(', ')));
+    notices.push(RU_COPY.stackMissing(missingSkills.slice(0, 3).join(', ')));
   }
 
   return parts.length > 0 ? `${parts.join('. ')}.` : '';
@@ -560,11 +627,13 @@ function assemblePitches(params: {
   notices: string[];
   useRanking: boolean;
   targetCompany?: boolean;
+  language: PitchLanguage;
+  workplaces: readonly PitchWorkplace[];
 }) {
   const { copy, vacancy, candidateName, usableFacts, tone, recipient, usedIds, notices, useRanking } = params;
   const wish = params.targetCompany && vacancy.company ? ` ${copy.targetCompany(vacancy.company)}` : '';
   const intro = copy.intro(vacancy.title, vacancy.company, tone) + wish;
-  const evidence = buildEvidenceParagraph(copy, usableFacts, usedIds, notices, useRanking);
+  const evidence = buildEvidenceParagraph(copy, params.language, usableFacts, params.workplaces, usedIds, notices, useRanking);
   const stack = buildStackParagraph(copy, vacancy, usableFacts, usedIds, notices);
   const closing = copy.closing(tone);
   return {
@@ -605,6 +674,8 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
     usedIds: usedEvidenceIds,
     notices,
     useRanking,
+    language,
+    workplaces: options.workplaces ?? [],
     ...(options.targetCompany ? { targetCompany: true } : {}),
   });
 

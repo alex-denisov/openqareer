@@ -1,5 +1,6 @@
 import { useAdaptationPanelContext } from '../diary/adaptationDiscussion';
 import { usePageTitleOverrideValue } from './pageTitleOverride';
+import { CandidateDisplayNameContext } from './candidateDisplayName';
 import { OPEN_VIEW_EVENT } from '../desktopNotify/openViewEvent';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
@@ -698,25 +699,27 @@ export function CareerWorkspaceShell({
                 activeView !== 'career' &&
                 !roleSkillAssessmentOpen &&
                 (activeView !== 'diary' || diaryAccess.isVisible) ? (
-                  <CareerCabinet
-                    key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetMountRevision.current}`}
-                    refreshRevision={activeView === 'profile' ? cabinetRevision : undefined}
-                    view={activeView as CareerCabinetView}
-                    initialProfileTab={returnToProfileSkills ? 'skills' : undefined}
-                    navigationOptions={navigationOptions}
-                    session={cabinetSession}
-                    workspace={visibleWorkspace}
-                    onNavigate={navigate}
-                    onOpenAutomation={() => navigate('automation')}
-                    onOpenTariffs={() => navigate('tariffs')}
-                    onOpenConnections={openConnections}
-                    onOpenNotifications={openNotifications}
-                    onOpenExpert={openExpert}
-                    onOpenSkillQuizBank={openSkillQuizBank}
-                    onOpenRoleSkillAssessment={() => openRoleSkillAssessment()}
-                    onMobileSceneChange={setProfileMobileScene}
-                    onUpdateWorkspace={onUpdateWorkspace}
-                  />
+                  <CandidateDisplayNameContext.Provider value={cabinetSession.displayName ?? null}>
+                    <CareerCabinet
+                      key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetMountRevision.current}`}
+                      refreshRevision={activeView === 'profile' ? cabinetRevision : undefined}
+                      view={activeView as CareerCabinetView}
+                      initialProfileTab={returnToProfileSkills ? 'skills' : undefined}
+                      navigationOptions={navigationOptions}
+                      session={cabinetSession}
+                      workspace={visibleWorkspace}
+                      onNavigate={navigate}
+                      onOpenAutomation={() => navigate('automation')}
+                      onOpenTariffs={() => navigate('tariffs')}
+                      onOpenConnections={openConnections}
+                      onOpenNotifications={openNotifications}
+                      onOpenExpert={openExpert}
+                      onOpenSkillQuizBank={openSkillQuizBank}
+                      onOpenRoleSkillAssessment={() => openRoleSkillAssessment()}
+                      onMobileSceneChange={setProfileMobileScene}
+                      onUpdateWorkspace={onUpdateWorkspace}
+                    />
+                  </CandidateDisplayNameContext.Provider>
                 ) : null}
                 {cabinetSession &&
                 !intakeVisible &&
