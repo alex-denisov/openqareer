@@ -15,7 +15,7 @@ const skill = (id: string, text: string) => ({
 });
 
 describe('evidence quality (02.11)', () => {
-  it('one quote backs at most two requirements; the third is unknown', () => {
+  it('one quote backs at most two requirements in full; a third use counts partial, never «нет в профиле» (02.11 owner)', () => {
     const input = fitInput();
     const evidence = [{ factId: 'f1', quote: 'TypeScript services' }];
     const result = evaluateVacancyFit({
@@ -29,8 +29,24 @@ describe('evidence quality (02.11)', () => {
     expect(result.assessments.map((item) => item.status)).toEqual([
       'matched',
       'matched',
-      'unknown',
+      'partial',
     ]);
+    expect(result.assessments[2]!.evidence).toEqual(evidence);
+  });
+
+  it('many-to-many: a requirement with one fresh quote stays matched though another quote is used up', () => {
+    const input = fitInput();
+    const shared = { factId: 'f1', quote: 'TypeScript services' };
+    const fresh = { factId: 'f1', quote: 'TypeScript' };
+    const result = evaluateVacancyFit({
+      ...input,
+      assessments: [
+        { requirementId: 'r1', status: 'matched' as const, evidence: [shared] },
+        { requirementId: 's2', status: 'matched' as const, evidence: [shared] },
+        { requirementId: 's3', status: 'matched' as const, evidence: [shared, fresh] },
+      ],
+    });
+    expect(result.assessments.map((item) => item.status)).toEqual(['matched', 'matched', 'matched']);
   });
 
   it('a bare profile tag meets a requirement at most partially', () => {

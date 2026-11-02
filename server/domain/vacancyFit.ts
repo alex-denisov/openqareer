@@ -109,15 +109,20 @@ const isTagEvidence = (factId: string) => factId.startsWith('profile:skill:');
 /** One quote may back at most this many requirements; a third use is a stretch (02.11). */
 const MAX_REQUIREMENTS_PER_QUOTE = 2;
 
-/** 02.11: tag-only evidence is partial at most; an over-used quote backs nothing. */
+/**
+ * 02.11: tag-only evidence is partial at most. Many-to-many (owner 02.11): one bullet may back
+ * several requirements; a requirement is met in full while one of its quotes backs at most two,
+ * and a requirement whose every quote is used up counts partial with its evidence, never unknown.
+ */
 function withEvidenceRules(items: readonly VacancyFitRequirementAssessment[]): VacancyFitRequirementAssessment[] {
   const uses = new Map<string, number>();
   return items.map((item) => {
     if (item.status === 'unknown' || item.status === 'unmatched') return item;
     const keys = item.evidence.map((entry) => `${entry.factId}\u0000${entry.quote.trim()}`);
-    if (keys.some((key) => (uses.get(key) ?? 0) >= MAX_REQUIREMENTS_PER_QUOTE)) return { requirementId: item.requirementId, status: 'unknown', evidence: [] };
+    const usedUp = keys.length > 0 && keys.every((key) => (uses.get(key) ?? 0) >= MAX_REQUIREMENTS_PER_QUOTE);
     for (const key of keys) uses.set(key, (uses.get(key) ?? 0) + 1);
-    return item.status === 'matched' && item.evidence.every((entry) => isTagEvidence(entry.factId)) ? { ...item, status: 'partial' } : item;
+    const tagOnly = item.evidence.every((entry) => isTagEvidence(entry.factId));
+    return item.status === 'matched' && (usedUp || tagOnly) ? { ...item, status: 'partial' } : item;
   });
 }
 
