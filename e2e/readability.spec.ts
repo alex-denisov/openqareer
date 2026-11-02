@@ -978,7 +978,8 @@ test.describe('B232 readability gate', () => {
     await page.screenshot({ path: 'output/playwright/B337/board-1176.png' });
 
     // Open card menu by clicking card body
-    await page.getByRole('button', { name: 'Действия с карточкой' }).first().click();
+    await page.locator('.career-responses-card-body').first().click();
+    await page.locator('.career-responses-selected .career-responses-menu-wrap > button').click();
     await expect(page.locator('.career-responses-card-menu')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B337/card-menu-1176.png' });
 

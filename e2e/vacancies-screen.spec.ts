@@ -615,7 +615,7 @@ test.describe('B250 vacancies screen', () => {
     await openArchive.click();
 
     await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
-    const archiveToggle = page.getByRole('button', { name: 'Архив · 1' });
+    const archiveToggle = page.getByRole('button', { name: 'Показать закрытые' });
     await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true');
     await expect(archiveToggle).toBeFocused();
     await expect(archiveToggle).toBeInViewport();

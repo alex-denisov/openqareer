@@ -27,6 +27,12 @@ import { CandidateActionPanel } from './CandidateActionPanel';
 import { countResponsesNeedingAction, isResponseNeedingAction } from './responsesFiltering';
 import { ResponsesMobileLinks } from './ResponsesMobileLinks';
 import { humanSourceLabel } from './sourceLabels';
+import {
+  formatDayMonth,
+  responseNextStep as cardNextStep,
+  responseStatusPill,
+} from './responseCardFace';
+import { StatusIcon } from './ResponsesCard';
 import { waitingLabel } from './waitingLabel';
 
 export interface ResponsesApplicationsTableProps {
@@ -421,33 +427,35 @@ interface BulkActionController {
   readonly previewCount: number | null;
   readonly error: string;
   readonly busy: boolean;
-  readonly preview: () => void;
+  readonly preview: (action: ApplicationBulkAction['type']) => void;
   readonly confirm: () => void;
 }
 
 function useApplicationBulkPreview(
   query: ApplicationListQuery,
-  action: ApplicationBulkAction['type'],
   setBusy: (value: boolean) => void,
   setError: (value: string) => void,
   setPreviewCount: (value: number | null) => void,
 ) {
-  const runPreview = useCallback(async () => {
-    setBusy(true);
-    setError('');
-    try {
-      const result = await previewApplicationBulk(
-        query,
-        action === 'close' ? { type: 'close' } : { type: 'retry' },
-      );
-      setPreviewCount(result.affectedCount);
-    } catch {
-      setError('Не удалось проверить состав массового действия. Повторите запрос.');
-    } finally {
-      setBusy(false);
-    }
-  }, [action, query, setBusy, setError, setPreviewCount]);
-  return useCallback(() => void runPreview(), [runPreview]);
+  const runPreview = useCallback(
+    async (next: ApplicationBulkAction['type']) => {
+      setBusy(true);
+      setError('');
+      try {
+        const result = await previewApplicationBulk(
+          query,
+          next === 'close' ? { type: 'close' } : { type: 'retry' },
+        );
+        setPreviewCount(result.affectedCount);
+      } catch {
+        setError('Не удалось проверить состав массового действия. Повторите запрос.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [query, setBusy, setError, setPreviewCount],
+  );
+  return useCallback((next: ApplicationBulkAction['type']) => void runPreview(next), [runPreview]);
 }
 
 function useApplicationBulkConfirm(
@@ -497,7 +505,11 @@ function useApplicationBulkActions(
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const preview = useApplicationBulkPreview(query, action, setBusy, setError, setPreviewCount);
+  const runPreview = useApplicationBulkPreview(query, setBusy, setError, setPreviewCount);
+  const preview = (next: ApplicationBulkAction['type']) => {
+    setAction(next);
+    runPreview(next);
+  };
   const confirm = useApplicationBulkConfirm(
     query,
     action,
@@ -519,31 +531,41 @@ function ApplicationBulkActions({
 }) {
   const controller = useApplicationBulkActions(query, onComplete);
   return (
-    <div className="career-responses-bulk-actions" aria-label="Массовое действие">
-      <label>
-        Действие
-        <select
-          value={controller.action}
-          onChange={(event) =>
-            controller.setAction(event.currentTarget.value as ApplicationBulkAction['type'])
-          }
+    <div className="career-responses-bulk-actions" role="group" aria-label="Массовое действие">
+      {BULK_ACTIONS.map((item) => (
+        <button
+          key={item.type}
+          type="button"
+          className="career-btn career-btn-secondary career-btn-sm"
+          aria-pressed={controller.action === item.type}
+          disabled={controller.busy}
+          onClick={() => controller.preview(item.type)}
         >
-          <option value="close">Закрыть отклики</option>
-          <option value="retry">Подготовить повторы</option>
-        </select>
-      </label>
-      <button type="button" onClick={controller.preview} disabled={controller.busy}>
-        {controller.busy ? 'Проверяем' : 'Проверить'}
-      </button>
+          {item.label}
+        </button>
+      ))}
       {controller.previewCount !== null ? (
-        <button type="button" onClick={controller.confirm} disabled={controller.busy}>
-          Подтвердить {controller.previewCount}
+        <button
+          type="button"
+          className="career-btn career-btn-primary career-btn-sm"
+          onClick={controller.confirm}
+          disabled={controller.busy}
+        >
+          Подтвердить: {controller.previewCount}
         </button>
       ) : null}
       {controller.error ? <span role="alert">{controller.error}</span> : null}
     </div>
   );
 }
+
+const BULK_ACTIONS: readonly {
+  readonly type: ApplicationBulkAction['type'];
+  readonly label: string;
+}[] = [
+  { type: 'retry', label: 'Повторить отклик' },
+  { type: 'close', label: 'Закрыть отклики' },
+];
 
 function ApplicationTable({
   applications,
@@ -572,9 +594,6 @@ function ApplicationTable({
           <th scope="col">Следующий шаг</th>
           <th scope="col">Срок</th>
           <th scope="col">Отправлено</th>
-          <th scope="col">
-            <span className="career-sr-only">Действия</span>
-          </th>
         </tr>
       </thead>
       <tbody>
@@ -604,7 +623,6 @@ function ApplicationTableRow({
   const company = vacancy?.companyHidden
     ? 'Компания скрыта'
     : vacancy?.company || 'Компания не указана';
-  const delivery = deliveryState(application.stage, application.deliveryReceipt ?? null);
   const dueAt =
     application.followUp?.dueAt ??
     application.followUpDueAt ??
@@ -620,69 +638,38 @@ function ApplicationTableRow({
         />
       </td>
       <td className="career-responses-table__company-role">
-        <strong>{company}</strong>
-        <span>{vacancy?.title ?? 'Вакансия без названия'}</span>
+        <button
+          type="button"
+          aria-label={
+            'Открыть отклик: ' + (vacancy?.title ?? 'Вакансия без названия') + ', ' + company
+          }
+          aria-pressed={active}
+          onClick={onSelectApplication}
+        >
+          <strong>{company}</strong>
+          <span>{vacancy?.title ?? 'Вакансия без названия'}</span>
+        </button>
       </td>
       <td>{humanSourceLabel(vacancy?.source)}</td>
       <td>
-        <ApplicationStatusCell application={application} delivery={delivery} />
+        <ApplicationStatusCell application={application} />
       </td>
-      <td>{responseNextStep(application)}</td>
-      <td className="career-numeric">{dueAt ? formatDate(dueAt) : '—'}</td>
-      <td className="career-numeric">{formatDate(application.createdAt)}</td>
-      <ResponseActionCell
-        title={vacancy?.title ?? 'Вакансия без названия'}
-        company={company}
-        active={active}
-        onSelect={onSelectApplication}
-      />
+      <td>{cardNextStep(application).text}</td>
+      <td className="career-numeric">{formatDayMonth(dueAt) ?? '—'}</td>
+      <td className="career-numeric">
+        {formatDayMonth(application.appliedAt ?? application.createdAt) ?? '—'}
+      </td>
     </tr>
   );
 }
 
-function ResponseActionCell({
-  title,
-  company,
-  active,
-  onSelect,
-}: {
-  readonly title: string;
-  readonly company: string;
-  readonly active: boolean;
-  readonly onSelect: () => void;
-}) {
+function ApplicationStatusCell({ application }: { readonly application: ApplicationView }) {
+  const pill = responseStatusPill(application);
   return (
-    <td className="career-responses-table__action">
-      <button
-        type="button"
-        aria-label={'Открыть отклик: ' + title + ', ' + company}
-        aria-pressed={active}
-        onClick={onSelect}
-      >
-        <DotsThreeVertical aria-hidden="true" />
-      </button>
-    </td>
-  );
-}
-
-function ApplicationStatusCell({
-  application,
-  delivery,
-}: {
-  readonly application: ApplicationView;
-  readonly delivery: ReturnType<typeof deliveryState>;
-}) {
-  return (
-    <>
-      <span className={'career-responses-status is-' + application.stage}>
-        {tableStageLabel(application.stage)}
-      </span>
-      {application.stage === 'applied' ? (
-        <small className={'career-responses-status-note is-' + delivery}>
-          {deliveryStateLabel(delivery)}
-        </small>
-      ) : null}
-    </>
+    <span className={'career-responses-status-pill is-' + pill.tone}>
+      <StatusIcon tone={pill.tone} />
+      {pill.label}
+    </span>
   );
 }
 

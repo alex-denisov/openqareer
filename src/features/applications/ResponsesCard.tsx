@@ -3,10 +3,14 @@ import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowClockwise,
   ArrowRight,
+  CalendarBlank,
   CaretDown,
-  DotsThreeVertical,
-  FileText,
-  Warning,
+  CheckCircle,
+  Clock,
+  EnvelopeOpen,
+  PaperPlaneTilt,
+  WarningCircle,
+  XCircle,
 } from '@phosphor-icons/react';
 import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
 import type { DeliveryReceipt } from '../../../shared/applicationStage';
@@ -15,8 +19,8 @@ import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { ApplicationView } from './applicationsApi';
 import { ApplicationLabelsEditor } from './ApplicationLabelsEditor';
 import { localIsoDate } from './localIsoDate';
-import { waitingLabel } from './waitingLabel';
-import { buildSubjectTitle, CardStageBlocks } from './ResponsesCardStageControls';
+import { responseNextStep, responseStatusPill, type StatusTone } from './responseCardFace';
+import { buildSubjectTitle } from './ResponsesCardStageControls';
 
 const STAGE_LABEL: Record<ApplicationStage, string> = {
   saved: 'Хочу',
@@ -34,9 +38,6 @@ interface ResponsesCardProps {
   readonly onSelect?: () => void;
   readonly failed: boolean;
   readonly conflicted: boolean;
-  readonly isMenuOpen?: boolean;
-  readonly onToggleMenu?: () => void;
-  readonly onCloseMenu?: () => void;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -60,31 +61,11 @@ interface ResponsesCardProps {
  * company, materials and the next step only (B251 S4 acceptance review);
  * stage change gets its own affordance in the next slice.
  */
-function waitingLabelFor(application: ApplicationView) {
-  return waitingLabel({
-    stage: application.stage,
-    whoseTurn: application.whoseTurn,
-    hasMaterials: application.materials.coverLetter || application.materials.resume,
-    followUp: application.followUp,
-    nearestInterviewNeedsPrep:
-      application.nearestInterview !== null && application.nearestInterview.prepStatus !== 'ready',
-    closedReason: application.closedReason,
-  });
-}
-
-function useCardMenuState(
-  isMenuOpen: boolean | undefined,
-  onToggleMenu: (() => void) | undefined,
-  onCloseMenu: (() => void) | undefined,
-) {
-  const [localMenuOpen, setLocalMenuOpen] = useState(false);
-  const menuOpen = isMenuOpen !== undefined ? isMenuOpen : localMenuOpen;
-  const toggleMenu = onToggleMenu ?? (() => setLocalMenuOpen((open) => !open));
-  const closeMenu = useCallback(
-    () => (onCloseMenu ? onCloseMenu() : setLocalMenuOpen(false)),
-    [onCloseMenu],
-  );
-  const cardRef = useRef<HTMLElement | null>(null);
+function useStatusMenuState() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const toggleMenu = () => setMenuOpen((open) => !open);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   useEscapeLayer(closeMenu, menuOpen);
 
   useEffect(() => {
@@ -103,39 +84,27 @@ function useCardMenuState(
   return { menuOpen, toggleMenu, closeMenu, cardRef };
 }
 
-function CardHeaderContent({
-  title,
-  company,
-  hasMaterials,
-}: {
-  title: string;
-  company: string;
-  hasMaterials: boolean;
-}) {
+function CardHeaderContent({ title, company }: { title: string; company: string }) {
   return (
     <>
       <div className="career-responses-card-company">{company}</div>
       <div className="career-responses-card-role">{title}</div>
-      <MaterialsBadge hasMaterials={hasMaterials} />
     </>
   );
 }
 
 function CardTopBody({
   vacancy,
-  materials,
   selected,
   onSelect,
 }: {
   vacancy?: ApplicationView['vacancy'];
-  materials: ApplicationView['materials'];
   selected: boolean;
   onSelect?: () => void;
 }) {
   const company = vacancy?.companyHidden
     ? 'компания скрыта'
     : vacancy?.company || 'компания не указана';
-  const hasMaterials = Boolean(materials.coverLetter || materials.resume);
 
   return (
     <div
@@ -151,33 +120,22 @@ function CardTopBody({
         }
       }}
     >
-      <CardHeaderContent
-        title={vacancy?.title ?? 'Без названия'}
-        company={company}
-        hasMaterials={hasMaterials}
-      />
+      <CardHeaderContent title={vacancy?.title ?? 'Без названия'} company={company} />
     </div>
   );
 }
 
 export function ResponsesCard(props: ResponsesCardProps) {
-  const { application, failed, conflicted, isMenuOpen, onToggleMenu, onCloseMenu } = props;
-  const { menuOpen, toggleMenu, closeMenu, cardRef } = useCardMenuState(
-    isMenuOpen,
-    onToggleMenu,
-    onCloseMenu,
-  );
-  const label = waitingLabelFor(application);
+  const { application, failed, conflicted } = props;
+  const next = responseNextStep(application);
 
   return (
     <article
-      ref={cardRef}
-      className={`career-responses-card${label.on === 'you' ? ' is-your-turn' : ''}${props.selected ? ' is-selected' : ''}`}
+      className={`career-responses-card${next.yours ? ' is-your-turn' : ''}${props.selected ? ' is-selected' : ''}`}
       data-cluster={application.clusterId ?? ''}
     >
       <CardTopBody
         vacancy={application.vacancy}
-        materials={application.materials}
         selected={Boolean(props.selected)}
         onSelect={props.onSelect}
       />
@@ -187,78 +145,56 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onRetry={props.onRetry}
         onRefresh={props.onRefresh}
       />
-      <CardStageBlocks
-        application={application}
-        onOpenExpert={props.onOpenExpert}
-      />
-      <CardFooter
-        application={application}
-        labelText={label.text}
-        labelOn={label.on}
-        menuOpen={menuOpen}
-        onToggleMenu={toggleMenu}
-        onCloseMenu={closeMenu}
-        onOpenExpert={props.onOpenExpert}
-        onChangeStage={props.onChangeStage}
-        onScheduleInterview={props.onScheduleInterview}
-        onSaveNote={props.onSaveNote}
-        onRefresh={props.onRefresh}
-        onSkip={props.onSkip}
-      />
+      <ResponseStatusPillView application={application} />
+      <p className={`career-responses-waiting ${next.yours ? 'is-on-you' : 'is-on-them'}`}>
+        <ArrowRight size={14} aria-hidden="true" />
+        {next.text}
+      </p>
     </article>
   );
 }
 
-interface CardFooterProps {
-  application: ApplicationView;
-  labelText: string;
-  labelOn: 'you' | 'them' | null;
-  menuOpen: boolean;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onChangeStage: (
+export interface ResponseStatusMenuProps {
+  readonly application: ApplicationView;
+  readonly onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+  ) => void;
+  readonly onChangeStage: (
     stage: ApplicationStage,
     occurredAt: string,
     receipt?: DeliveryReceipt | null,
   ) => void;
-  onScheduleInterview: (scheduledAt: string) => Promise<void>;
-  onSaveNote: (notes: string) => void;
-  onRefresh: () => void;
-  onSkip: (reasonId: SkipReasonId) => void;
+  readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
+  readonly onSaveNote: (notes: string) => void;
+  readonly onRefresh: () => void;
+  readonly onSkip: (reasonId: SkipReasonId) => void;
 }
 
-interface CardMenuWrapProps {
-  application: ApplicationView;
-  menuOpen: boolean;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onChangeStage: (
-    stage: ApplicationStage,
-    occurredAt: string,
-    receipt?: DeliveryReceipt | null,
-  ) => void;
-  onScheduleInterview: (scheduledAt: string) => Promise<void>;
-  onSaveNote: (notes: string) => void;
-  onRefresh: () => void;
-  onSkip: (reasonId: SkipReasonId) => void;
-}
-
-function CardMenuWrap(props: CardMenuWrapProps) {
-  const { application, menuOpen, onToggleMenu, onCloseMenu } = props;
-  const discuss = createCardDiscussionHandler(props, application, onCloseMenu);
+/**
+ * The former card "⋮" (B484 R3): the mockup's card face has no menu, so the
+ * stage change, labels, note, export and skip live behind the status chip
+ * of the selected response panel — the status is what they change.
+ */
+export function ResponseStatusMenu(props: ResponseStatusMenuProps) {
+  const { application } = props;
+  const { menuOpen, toggleMenu, closeMenu, cardRef } = useStatusMenuState();
+  const pill = responseStatusPill(application);
+  const discuss = createCardDiscussionHandler(props, application, closeMenu);
   return (
-    <div className="career-responses-menu-wrap">
+    <div className="career-responses-menu-wrap" ref={cardRef}>
       <button
         type="button"
-        aria-label="Действия с карточкой"
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleMenu();
-        }}
+        className={`career-responses-status-pill is-${pill.tone} is-trigger`}
+        aria-haspopup="dialog"
+        aria-expanded={menuOpen}
+        title="Изменить статус, метки, заметку"
+        onClick={toggleMenu}
       >
-        <DotsThreeVertical size={18} />
+        <StatusIcon tone={pill.tone} />
+        {pill.label}
+        <CaretDown size={12} aria-hidden="true" />
       </button>
       {menuOpen ? (
         <CardMenu
@@ -266,20 +202,20 @@ function CardMenuWrap(props: CardMenuWrapProps) {
           onDiscussWithConsultant={discuss}
           onChangeStage={(stage, occurredAt, receipt) => {
             props.onChangeStage(stage, occurredAt, receipt);
-            onCloseMenu();
+            closeMenu();
           }}
           onScheduleInterview={(scheduledAt) => {
-            onCloseMenu();
+            closeMenu();
             return props.onScheduleInterview(scheduledAt);
           }}
           onSaveNote={(notes) => {
             props.onSaveNote(notes);
-            onCloseMenu();
+            closeMenu();
           }}
           onRefresh={props.onRefresh}
           onSkip={(reasonId) => {
             props.onSkip(reasonId);
-            onCloseMenu();
+            closeMenu();
           }}
         />
       ) : null}
@@ -287,9 +223,8 @@ function CardMenuWrap(props: CardMenuWrapProps) {
   );
 }
 
-
 function createCardDiscussionHandler(
-  props: CardMenuWrapProps,
+  props: ResponseStatusMenuProps,
   application: ApplicationView,
   onCloseMenu: () => void,
 ) {
@@ -304,48 +239,29 @@ function createCardDiscussionHandler(
   };
 }
 
-function CardFooter({
-  application,
-  labelText,
-  labelOn,
-  menuOpen,
-  onToggleMenu,
-  onCloseMenu,
-  onOpenExpert,
-  onChangeStage,
-  onScheduleInterview,
-  onSaveNote,
-  onRefresh,
-  onSkip,
-}: CardFooterProps) {
-  return (
-    <div className="career-responses-card-footer">
-      <span className={`career-responses-waiting ${labelOn ? `is-on-${labelOn}` : 'is-closed'}`}>
-        <ArrowRight size={14} aria-hidden="true" />
-        {labelText}
-      </span>
-      <CardMenuWrap
-        application={application}
-        menuOpen={menuOpen}
-        onToggleMenu={onToggleMenu}
-        onCloseMenu={onCloseMenu}
-        onOpenExpert={onOpenExpert}
-        onChangeStage={onChangeStage}
-        onScheduleInterview={onScheduleInterview}
-        onSaveNote={onSaveNote}
-        onRefresh={onRefresh}
-        onSkip={onSkip}
-      />
-    </div>
-  );
+export function StatusIcon({ tone }: { readonly tone: StatusTone }) {
+  const Icon = STATUS_ICON[tone];
+  return <Icon size={12} aria-hidden="true" />;
 }
 
-function MaterialsBadge({ hasMaterials }: { hasMaterials: boolean }) {
+const STATUS_ICON: Record<StatusTone, typeof Clock> = {
+  draft: Clock,
+  sent: PaperPlaneTilt,
+  ok: CheckCircle,
+  fail: WarningCircle,
+  reply: EnvelopeOpen,
+  interview: CalendarBlank,
+  offer: CheckCircle,
+  closed: XCircle,
+};
+
+function ResponseStatusPillView({ application }: { readonly application: ApplicationView }) {
+  const pill = responseStatusPill(application);
   return (
-    <div className={`career-responses-card-materials${hasMaterials ? '' : ' is-missing'}`}>
-      {hasMaterials ? <FileText size={12} /> : <Warning size={12} />}
-      {hasMaterials ? 'Письмо · резюме' : 'Письмо не собрано'}
-    </div>
+    <p className={`career-responses-status-pill is-${pill.tone}`}>
+      <StatusIcon tone={pill.tone} />
+      {pill.label}
+    </p>
   );
 }
 
@@ -629,7 +545,7 @@ interface CardMenuProps {
   readonly onSkip: (reasonId: SkipReasonId) => void;
 }
 
-function CardMenu(props: CardMenuProps) {
+export function CardMenu(props: CardMenuProps) {
   const { application, onChangeStage, onScheduleInterview } = props;
   return (
     <div className="career-responses-card-menu">
@@ -643,7 +559,6 @@ function CardMenu(props: CardMenuProps) {
     </div>
   );
 }
-
 
 function CardMenuExtras(
   props: Pick<
@@ -679,10 +594,9 @@ function CardMenuExtras(
   );
 }
 
-
 function exportApplication(application: ApplicationView) {
   const vacancy = application.vacancy;
-  const company = vacancy?.companyHidden ? 'Компания скрыта' : vacancy?.company ?? '';
+  const company = vacancy?.companyHidden ? 'Компания скрыта' : (vacancy?.company ?? '');
   const rows = [
     ['Компания', company],
     ['Роль', vacancy?.title ?? ''],

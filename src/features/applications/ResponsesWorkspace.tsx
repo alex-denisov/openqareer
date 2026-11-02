@@ -235,15 +235,35 @@ function FunnelResults({
       />
       <TablePagination workspace={workspace} applicationCount={applications.length} />
       <SelectedResponse props={props} workspace={workspace} />
-      <ResponsesChannelPerformance applications={applications} query={workspace.query} />
-      <ResponsesPipelineAnalytics
-        query={workspace.query}
-        revision={props.state.applications}
-        initiallyExpanded={props.initialTab === 'analytics'}
-        onOpenVacancies={props.onOpenVacancies}
-        onOpenExpert={props.onOpenExpert}
-      />
+      <ChannelPerformance props={props} workspace={workspace} applications={applications} />
     </>
+  );
+}
+
+function ChannelPerformance({
+  props,
+  workspace,
+  applications,
+}: {
+  readonly props: ResponsesWorkspaceScreenProps;
+  readonly workspace: WorkspaceController;
+  readonly applications: readonly ApplicationView[];
+}) {
+  return (
+    <ResponsesChannelPerformance
+      applications={applications}
+      query={workspace.query}
+      initiallyExplained={props.initialTab === 'analytics'}
+      explanation={
+        <ResponsesPipelineAnalytics
+          query={workspace.query}
+          revision={props.state.applications}
+          initiallyExpanded
+          onOpenVacancies={props.onOpenVacancies}
+          onOpenExpert={props.onOpenExpert}
+        />
+      }
+    />
   );
 }
 
@@ -261,6 +281,15 @@ function SelectedResponse({
       application={application}
       onOpenExpert={props.onOpenExpert}
       onMarkFollowUpSent={() => props.state.markFollowUpSent(application.id)}
+      onChangeStage={(stage, occurredAt, receipt) =>
+        props.state.changeStage(application.id, stage, occurredAt, receipt)
+      }
+      onScheduleInterview={(scheduledAt) =>
+        props.state.scheduleInterview(application.id, scheduledAt)
+      }
+      onRefresh={props.state.reload}
+      onSaveNote={(notes) => props.state.saveNote(application.id, notes)}
+      onSkip={(reasonId) => void props.state.skip(application, reasonId)}
     />
   );
 }
@@ -339,15 +368,23 @@ function TablePagination({
   readonly workspace: WorkspaceController;
   readonly applicationCount: number;
 }) {
-  if (workspace.view !== 'table' || applicationCount <= workspace.tableLimit) return null;
+  if (workspace.view !== 'table' || applicationCount === 0) return null;
+  const shown = Math.min(workspace.tableLimit, applicationCount);
   return (
-    <button
-      type="button"
-      className="career-btn career-btn-secondary career-btn-sm"
-      onClick={workspace.loadMoreTable}
-    >
-      Показать ещё 20
-    </button>
+    <div className="career-responses-table-footer">
+      <span>
+        Показано {shown.toLocaleString('ru-RU')} из {applicationCount.toLocaleString('ru-RU')}
+      </span>
+      {applicationCount > shown ? (
+        <button
+          type="button"
+          className="career-btn career-btn-secondary career-btn-sm"
+          onClick={workspace.loadMoreTable}
+        >
+          Показать ещё 20
+        </button>
+      ) : null}
+    </div>
   );
 }
 

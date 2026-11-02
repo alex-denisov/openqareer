@@ -179,9 +179,6 @@ function BoardColumnsList({
   visibleCounts,
   onLoadMore,
   onSwitchToTable,
-  activeMenuCardId,
-  onToggleMenu,
-  onCloseMenu,
   onOpenExpert,
 }: {
   columns: readonly Column[];
@@ -192,9 +189,6 @@ function BoardColumnsList({
   visibleCounts: Readonly<Record<string, number>>;
   onLoadMore: (column: string) => void;
   onSwitchToTable: () => void;
-  activeMenuCardId: string | null;
-  onToggleMenu: (cardId: string) => void;
-  onCloseMenu: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   return (
@@ -210,9 +204,6 @@ function BoardColumnsList({
           visibleCount={visibleCounts[column.key] ?? 4}
           onLoadMore={() => onLoadMore(column.key)}
           onSwitchToTable={onSwitchToTable}
-          activeMenuCardId={activeMenuCardId}
-          onToggleMenu={onToggleMenu}
-          onCloseMenu={onCloseMenu}
           onOpenExpert={onOpenExpert}
         />
       ))}
@@ -230,9 +221,6 @@ interface BoardColumnsAndArchiveProps {
   readonly visibleCounts: Readonly<Record<string, number>>;
   readonly onLoadMore: (column: string) => void;
   readonly onSwitchToTable: () => void;
-  readonly activeMenuCardId: string | null;
-  readonly onToggleMenu: (id: string) => void;
-  readonly onCloseMenu: () => void;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -250,9 +238,6 @@ function BoardColumnsAndArchive({
   visibleCounts,
   onLoadMore,
   onSwitchToTable,
-  activeMenuCardId,
-  onToggleMenu,
-  onCloseMenu,
   onOpenExpert,
 }: BoardColumnsAndArchiveProps) {
   return (
@@ -266,9 +251,6 @@ function BoardColumnsAndArchive({
         visibleCounts={visibleCounts}
         onLoadMore={onLoadMore}
         onSwitchToTable={onSwitchToTable}
-        activeMenuCardId={activeMenuCardId}
-        onToggleMenu={onToggleMenu}
-        onCloseMenu={onCloseMenu}
         onOpenExpert={onOpenExpert}
       />
       <ArchivedResponsesSection
@@ -280,37 +262,16 @@ function BoardColumnsAndArchive({
   );
 }
 
-type BoardTabContentProps = Omit<
-  BoardColumnsAndArchiveProps,
-  'activeMenuCardId' | 'onToggleMenu' | 'onCloseMenu'
-> & {
+type BoardTabContentProps = BoardColumnsAndArchiveProps & {
   readonly stageFilter?: ApplicationStage | null;
   readonly onClearFilter?: () => void;
 };
 
 function BoardTabContent(props: BoardTabContentProps) {
-  const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
-  return (
-    <BoardTabColumnsContent
-      props={props}
-      activeMenuCardId={activeMenuCardId}
-      onToggleMenu={(id) => setActiveMenuCardId((current) => (current === id ? null : id))}
-      onCloseMenu={() => setActiveMenuCardId(null)}
-    />
-  );
+  return <BoardTabColumnsContent props={props} />;
 }
 
-function BoardTabColumnsContent({
-  props,
-  activeMenuCardId,
-  onToggleMenu,
-  onCloseMenu,
-}: {
-  readonly props: BoardTabContentProps;
-  readonly activeMenuCardId: string | null;
-  readonly onToggleMenu: (id: string) => void;
-  readonly onCloseMenu: () => void;
-}) {
+function BoardTabColumnsContent({ props }: { readonly props: BoardTabContentProps }) {
   return (
     <>
       {props.stageFilter === 'interview' && props.onClearFilter ? (
@@ -326,9 +287,6 @@ function BoardTabColumnsContent({
         visibleCounts={props.visibleCounts}
         onLoadMore={props.onLoadMore}
         onSwitchToTable={props.onSwitchToTable}
-        activeMenuCardId={activeMenuCardId}
-        onToggleMenu={onToggleMenu}
-        onCloseMenu={onCloseMenu}
         onOpenExpert={props.onOpenExpert}
       />
     </>
@@ -444,9 +402,6 @@ interface BoardColumnProps {
   visibleCount: number;
   onLoadMore: () => void;
   onSwitchToTable: () => void;
-  activeMenuCardId: string | null;
-  onToggleMenu: (cardId: string) => void;
-  onCloseMenu: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }
 
@@ -478,18 +433,12 @@ function ColumnCardItem({
   state,
   selected,
   onSelectApplication,
-  isMenuOpen,
-  onToggleMenu,
-  onCloseMenu,
   onOpenExpert,
 }: {
   application: ApplicationView;
   state: UseApplications;
   selected: boolean;
   onSelectApplication: (id: string) => void;
-  isMenuOpen: boolean;
-  onToggleMenu: (id: string) => void;
-  onCloseMenu: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   return (
@@ -499,9 +448,6 @@ function ColumnCardItem({
       onSelect={() => onSelectApplication(application.id)}
       failed={state.failedChanges.has(application.id)}
       conflicted={state.conflicts.has(application.id)}
-      isMenuOpen={isMenuOpen}
-      onToggleMenu={() => onToggleMenu(application.id)}
-      onCloseMenu={onCloseMenu}
       onOpenExpert={onOpenExpert}
       onChangeStage={(stage, occurredAt, receipt) =>
         state.changeStage(application.id, stage, occurredAt, receipt)
@@ -524,9 +470,6 @@ function BoardColumn({
   visibleCount,
   onLoadMore,
   onSwitchToTable,
-  activeMenuCardId,
-  onToggleMenu,
-  onCloseMenu,
   onOpenExpert,
 }: BoardColumnProps) {
   const allCards = applicationsForColumn(applications, column);
@@ -551,9 +494,6 @@ function BoardColumn({
         onSelectApplication={onSelectApplication}
         onLoadMore={onLoadMore}
         onSwitchToTable={onSwitchToTable}
-        activeMenuCardId={activeMenuCardId}
-        onToggleMenu={onToggleMenu}
-        onCloseMenu={onCloseMenu}
         onOpenExpert={onOpenExpert}
       />
     </section>
@@ -569,9 +509,6 @@ interface BoardColumnContentProps {
   readonly onSelectApplication: (id: string) => void;
   readonly onLoadMore: () => void;
   readonly onSwitchToTable: () => void;
-  readonly activeMenuCardId: string | null;
-  readonly onToggleMenu: (id: string) => void;
-  readonly onCloseMenu: () => void;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -588,9 +525,6 @@ function BoardColumnContent({
   onSelectApplication,
   onLoadMore,
   onSwitchToTable,
-  activeMenuCardId,
-  onToggleMenu,
-  onCloseMenu,
   onOpenExpert,
 }: BoardColumnContentProps) {
   return (
@@ -602,9 +536,6 @@ function BoardColumnContent({
           state={state}
           selected={selectedId === application.id}
           onSelectApplication={onSelectApplication}
-          isMenuOpen={activeMenuCardId === application.id}
-          onToggleMenu={onToggleMenu}
-          onCloseMenu={onCloseMenu}
           onOpenExpert={onOpenExpert}
         />
       ))}

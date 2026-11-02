@@ -340,7 +340,7 @@ test.describe('B251 responses screen', () => {
       await expect(
         rows.filter({ hasText: 'Enterprise Architect Director — раунд 2' }),
       ).toContainText('Интервью');
-      await expect(page.getByRole('button', { name: 'Архив · 1' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Показать закрытые' })).toBeVisible();
       return;
     }
 
@@ -365,7 +365,7 @@ test.describe('B251 responses screen', () => {
     await expect(sentCards).toHaveCount(5);
     await expect(
       sentCards.filter({ hasText: 'Enterprise Architect, Senior Advisor' }),
-    ).toContainText('Пробовали отправить');
+    ).toContainText('Отправлено');
     await expect(sentCards.filter({ hasText: 'Cloud & Infra Solution Architect' })).toContainText(
       'Черновик, не отправлено',
     );
@@ -374,7 +374,7 @@ test.describe('B251 responses screen', () => {
     await expect(
       page.locator('.career-responses-column[aria-label="Оффер"] .career-responses-column-count'),
     ).toHaveText('0');
-    await expect(page.getByRole('button', { name: 'Архив · 1' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Показать закрытые' })).toBeVisible();
   });
 
   test('shows three archive reasons and restores a card to its previous stage', async ({
@@ -439,7 +439,7 @@ test.describe('B251 responses screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
-    const archiveToggle = page.getByRole('button', { name: 'Архив · 3' });
+    const archiveToggle = page.getByRole('button', { name: 'Показать закрытые' });
     await expect(archiveToggle).toHaveAttribute('aria-expanded', 'false');
     await archiveToggle.click();
     const archiveCards = page.locator('.career-responses-archive-card');
@@ -481,7 +481,7 @@ test.describe('B251 responses screen', () => {
       .getByRole('button', { name: 'Вернуть в работу' })
       .click();
 
-    await expect(page.getByRole('button', { name: 'Архив · 2' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Показать закрытые' })).toBeVisible();
     if (testInfo.project.name === 'mobile-390') {
       await expect(
         page.getByRole('listitem').filter({ hasText: 'Role moved by candidate' }),
@@ -562,9 +562,11 @@ test.describe('B251 responses screen', () => {
     await openResponses(page);
 
     const card = page.getByRole('article').filter({ hasText: 'Cloud & Infra Solution Architect' });
-    await card.getByRole('button', { name: 'Действия с карточкой' }).click();
-    await card.getByRole('combobox', { name: 'Этап' }).selectOption('responded');
-    await card.getByRole('button', { name: 'Сохранить этап' }).click();
+    await card.locator('.career-responses-card-body').click();
+    await page.locator('.career-responses-selected .career-responses-menu-wrap > button').click();
+    const menu = page.locator('.career-responses-card-menu');
+    await menu.getByRole('combobox', { name: 'Этап' }).selectOption('responded');
+    await menu.getByRole('button', { name: 'Сохранить этап' }).click();
 
     const conflict = card.getByRole('alert');
     await expect(conflict).toContainText('Карточку изменили в другом окне.');
@@ -625,7 +627,7 @@ test.describe('B251 responses screen', () => {
     await expect(selectedPanel.getByRole('button', { name: 'Напоминание отправлено' })).toHaveCount(
       0,
     );
-    await expect(selectedPanel).toContainText('Отправлен · рано для напоминания компании');
+    await expect(selectedPanel).toContainText('Следующий шаг: ждать ответа');
   });
 
   test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {
@@ -755,9 +757,10 @@ test.describe('B251 responses screen', () => {
     await expect(page.locator('.career-responses-board')).toBeVisible();
     const channelSection = page.locator('.career-responses-channel-performance');
     await expect(channelSection).toBeVisible();
-    await expect(channelSection).toContainText('выборка 7');
+    await expect(channelSection).toContainText('по 7 откликам');
     await expect(channelSection).toContainText('Меньше 20 откликов: узкие места не определены.');
-    await expect(channelSection.locator('tbody tr')).toHaveCount(2);
+    await expect(channelSection.locator('tbody tr')).toHaveCount(3);
+    await expect(channelSection.locator('tbody tr').last()).toContainText('Всего');
     await expect(channelSection).toContainText('Ввод вручную');
     await page.screenshot({ path: testInfo.outputPath('b450-channels-1440.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
@@ -785,11 +788,12 @@ test.describe('B251 responses screen', () => {
 
     const peratonCard = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
     await expect(peratonCard).toBeVisible();
-    const menuBtn = peratonCard.getByRole('button', { name: 'Действия с карточкой' });
-    await menuBtn.click();
+    await peratonCard.locator('.career-responses-card-body').click();
+    await page.locator('.career-responses-selected .career-responses-menu-wrap > button').click();
+    const peratonMenu = page.locator('.career-responses-card-menu');
 
-    const stageSelect = peratonCard.locator('select.career-responses-select').first();
-    const deliveryLabel = peratonCard.locator('.career-responses-select-field').filter({
+    const stageSelect = peratonMenu.locator('select.career-responses-select').first();
+    const deliveryLabel = peratonMenu.locator('.career-responses-select-field').filter({
       hasText: 'Доказательство доставки',
     });
     const deliverySelect = deliveryLabel.locator('select.career-responses-select');
