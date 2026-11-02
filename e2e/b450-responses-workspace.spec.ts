@@ -854,10 +854,10 @@ test.describe('B450 responses workspace', () => {
     await page.getByRole('tab', { name: /Хочу/ }).first().click();
     const panel = page.locator('section[aria-label="Хочу в компанию"]');
     if (page.viewportSize()?.width === 390) {
-      await expect(panel.getByText('компаний', { exact: false }).first()).toBeVisible();
+      await expect(panel.locator('.career-company-wants-sum')).toContainText('компаний');
       await panel.getByRole('button', { name: 'Выбрать', exact: true }).click();
       await panel.getByRole('button', { name: 'Все', exact: true }).click();
-      await expect(panel.getByText(/Выбрано\s*119/)).toBeVisible();
+      await expect(panel.locator('.career-company-wants-selbar')).toContainText(/Выбрано\s*119/);
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth - window.innerWidth,
       );
@@ -929,7 +929,9 @@ test.describe('B450 responses workspace', () => {
     const panel = page.locator('section[aria-label="Хочу в компанию"]');
     const rows = panel.locator('tbody tr');
     await expect(rows).toHaveCount(20);
-    await expect(panel.getByText(/Показано\s*20\s*из\s*44/)).toBeVisible();
+    await expect(panel.locator('.career-company-wants-footer')).toContainText(
+      /Показано\s*20\s*из\s*44/,
+    );
     await panel.getByRole('button', { name: 'Показать ещё 20' }).click();
     await expect(rows).toHaveCount(40);
     expect(calls.companyPageQueries.at(-1)).toContain('offset=20');
@@ -988,13 +990,17 @@ test.describe('B450 responses workspace', () => {
     await openResponses(page);
     await page.getByRole('tab', { name: 'Офферы' }).click();
     await expect(page.getByRole('button', { name: 'Сравнить офферы' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Добавить оффер' }).click();
     await page
-      .locator('form.career-responses-add-offer')
+      .getByRole('button', { name: 'Добавить оффер' })
+      .filter({ visible: true })
+      .first()
+      .click();
+    await page
+      .locator('form.career-offers-add')
       .getByRole('textbox', { name: 'Компания' })
       .fill('Polar Systems');
     await page
-      .locator('form.career-responses-add-offer')
+      .locator('form.career-offers-add')
       .getByRole('textbox', { name: 'Роль' })
       .fill('VP Engineering');
     await page.getByRole('button', { name: 'Продолжить к условиям' }).click();
@@ -1177,15 +1183,14 @@ test.describe('B450 responses workspace', () => {
 
     await expect(page.getByRole('heading', { name: 'STAR на фактах профиля' })).toBeVisible();
     await expect(page.getByText('Кризис в команде: уход ведущего инженера')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Интервью и материалы' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Начать мок-интервью' })).toBeVisible();
-    await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
-
-    const preparationDialog = page.getByRole('dialog', { name: /Интервью:/ });
-    await expect(
-      preparationDialog.getByRole('button', { name: 'Начать мок-интервью' }),
-    ).toBeVisible();
-    await preparationDialog.getByRole('button', { name: 'Начать мок-интервью' }).click();
+    await expect(page.getByRole('heading', { name: 'Мок-интервью' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Дебриф' })).toBeVisible();
+    const start = page
+      .getByRole('button', { name: 'Начать мок-интервью' })
+      .filter({ visible: true })
+      .first();
+    await expect(start).toBeVisible();
+    await start.click();
     const simulator = page.getByRole('dialog', { name: 'Мок-интервью' });
     await expect(simulator).toBeVisible();
     await simulator.getByRole('button', { name: 'Начать', exact: true }).click();

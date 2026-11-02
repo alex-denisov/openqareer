@@ -340,3 +340,12 @@
     box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
   }
 }
+
+/* Отступ под вкладками на 1440, как в макете 5 (вкладки → первый блок 20 px). */
+@media (min-width: 761px) {
+  .career-offers-panel,
+  .career-responses-preparation,
+  .career-company-wants {
+    padding-block-start: var(--career-space-5);
+  }
+}

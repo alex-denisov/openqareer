@@ -208,7 +208,12 @@ function MobileRowBody({
         </span>
       </div>
       <small className="career-company-wants-r2">
-        {[company.industry, `контактов ${company.contactsCount ?? 0}`].filter(Boolean).join(' · ')}
+        {[
+          company.industry,
+          company.contactsCount === null ? null : `контактов ${company.contactsCount}`,
+        ]
+          .filter(Boolean)
+          .join(' · ')}
       </small>
       <div className="career-company-wants-r3">
         <span className={`career-company-wants-tag is-${stage}`}>

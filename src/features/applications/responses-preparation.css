@@ -151,6 +151,7 @@
 .career-prep-select-field .career-select-caret {
   position: absolute;
   inset-block: 0;
+  block-size: 100%;
   inset-inline-end: var(--career-space-3);
   display: grid;
   place-items: center;
@@ -187,6 +188,7 @@
 @media (max-width: 40rem) {
   .career-responses-preparation {
     gap: var(--career-space-5);
+    padding-block-start: var(--career-space-3);
   }
 
   .career-prep-card {
@@ -218,7 +220,7 @@
   }
 
   .career-prep-tag::before {
-    content: '· ';
+    content: '·\00a0';
   }
 
   .career-prep-open-all {
