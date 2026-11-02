@@ -22,7 +22,9 @@ import {
   vacancyKey,
   vacancyPath,
 } from '../../shared/vacancyCatalogRoutes';
-import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster, VacancySalary } from '../domain/unifiedVacancy';
+import { textLanguage, type ProfileLanguage } from '../domain/profileLanguage';
+import type { VacancySalaryPeriod } from '../../shared/vacancySalaryPeriod';
 import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 import { renderDescriptionHtml } from './catalogMarkdown';
 import { countryCodeOf } from '../domain/geoCoordinates';
@@ -99,6 +101,8 @@ export interface VacancyDetail {
   readonly vacancy?: UnifiedVacancy;
   /** False → the page is `noindex, follow` and carries no `JobPosting`. */
   readonly indexable: boolean;
+  /** Language of the employer's own text when its letters are clear; the page chrome stays ru. */
+  readonly language?: ProfileLanguage;
 }
 
 function isoDate(value: string): string {
@@ -116,9 +120,27 @@ const CURRENCY_LABEL: Readonly<Record<string, string>> = {
   UAH: '₴',
 };
 
+/**
+ * A source that writes `0` for an unknown bound («0 $» on Kodland, Yuno,
+ * Huzzle, Apryse cards, 03.11) did not name a salary. Zero bounds are dropped;
+ * no positive bound left means no salary.
+ */
+function positiveSalary(salary: VacancySalary | undefined): VacancySalary | undefined {
+  if (!salary) return undefined;
+  const from = salary.from !== undefined && salary.from > 0 ? salary.from : undefined;
+  const to = salary.to !== undefined && salary.to > 0 ? salary.to : undefined;
+  if (from === undefined && to === undefined) return undefined;
+  const { from: _from, to: _to, ...rest } = salary;
+  return {
+    ...rest,
+    ...(from !== undefined ? { from } : {}),
+    ...(to !== undefined ? { to } : {}),
+  };
+}
+
 function salaryLabel(cluster: VacancyCluster): string | undefined {
-  const salary = cluster.salary;
-  if (!salary || (salary.from === undefined && salary.to === undefined)) return undefined;
+  const salary = positiveSalary(cluster.salary);
+  if (!salary) return undefined;
   const code = salary.currency?.toUpperCase() ?? '';
   const currency = code ? ` ${CURRENCY_LABEL[code] ?? code}` : '';
   const money = (value: number) => value.toLocaleString('ru-RU');
@@ -336,17 +358,52 @@ function postingLocation(entry: CatalogEntry, isRemote: boolean): Record<string,
   };
 }
 
+const SALARY_UNIT: Readonly<Record<VacancySalaryPeriod, string>> = {
+  hour: 'HOUR',
+  month: 'MONTH',
+  year: 'YEAR',
+};
+
+/** ISO 4217 for the codes sources write their own way. */
+const ISO_CURRENCY: Readonly<Record<string, string>> = { RUR: 'RUB' };
+
+/**
+ * Google `baseSalary`, only from what the source stated: a positive amount, a
+ * currency and a pay period (`unitText`). Currency and magnitude cannot
+ * establish the period, so a salary without one stays in the visible card only.
+ */
+function baseSalaryOf(raw: VacancySalary | undefined): Record<string, unknown> {
+  const salary = positiveSalary(raw);
+  const code = salary?.currency?.trim().toUpperCase();
+  if (!salary?.period || !code || !/^[A-Z]{3}$/u.test(code)) return {};
+  const { from, to } = salary;
+  return {
+    baseSalary: {
+      '@type': 'MonetaryAmount',
+      currency: ISO_CURRENCY[code] ?? code,
+      value: {
+        '@type': 'QuantitativeValue',
+        ...(from !== undefined && to !== undefined && from !== to
+          ? { minValue: from, maxValue: to }
+          : { value: from ?? to }),
+        unitText: SALARY_UNIT[salary.period],
+      },
+    },
+  };
+}
+
 function jobPosting(
   cluster: VacancyCluster,
   entry: CatalogEntry,
   description: string,
   vacancy?: UnifiedVacancy,
+  inLanguage?: ProfileLanguage,
 ): StructuredNode {
   const withdrawnAt = vacancy?.archivedAt;
   const employmentType = googleEmploymentType(vacancy?.employmentType);
   // Частное лицо — не организация, и его имени в разметке не место (INC-023).
   const company = entry.company === PRIVATE_EMPLOYER ? '' : entry.company.trim();
-  const validThrough = validThroughOf(entry.publishedAt, withdrawnAt);
+  const validThrough = validThroughOf(entry.publishedAt, withdrawnAt, entry.lastSeenAt);
 
   return {
     '@type': 'JobPosting',
@@ -358,9 +415,10 @@ function jobPosting(
     ...(validThrough ? { validThrough } : {}),
     identifier: { '@type': 'PropertyValue', name: 'openqareer', value: entry.key },
     url: `${SITE_ORIGIN}${entry.path}`,
-    // Языка вакансии мы не знаем: текст пришёл от работодателя и бывает любым.
-    // На живом проде разметка объявляла `ru-RU` над английским описанием —
-    // машинно читаемая неправда, поэтому поля здесь просто нет.
+    // Язык — по буквам самого текста работодателя, а не по интерфейсу: прежде
+    // разметка объявляла `ru-RU` над английским описанием. Смешанный текст
+    // остаётся без поля.
+    ...(inLanguage ? { inLanguage } : {}),
     // Отклик подаётся на площадке работодателя, а не здесь. Сказать обратное —
     // обещать кандидату действие, которого продукт не делает.
     directApply: false,
@@ -368,9 +426,7 @@ function jobPosting(
     ...postingLocation(entry, cluster.isRemote),
     ...(employmentType ? { employmentType } : {}),
     ...(entry.skills.length > 0 ? { skills: entry.skills.map(readableSkill).join(', ') } : {}),
-    // VacancySalary has no source-backed pay period. Google baseSalary needs
-    // the actual amount per HOUR/DAY/WEEK/MONTH/YEAR; currency and magnitude
-    // cannot establish it. Keep the source range in the visible card only.
+    ...baseSalaryOf(cluster.salary),
   };
 }
 
@@ -391,18 +447,29 @@ export function buildVacancyDetail(
   const description = vacancy
     ? renderUnifiedVacancyView(vacancy)
     : fullDescription?.trim() || entry.summary;
-  const indexable = isIndexableCard(entry, now);
+  const indexable = isIndexableCard(
+    vacancy?.archivedAt ? { ...entry, withdrawnAt: vacancy.archivedAt } : entry,
+    now,
+  );
   const crumbs = breadcrumbs({ name: entry.title, path: entry.path });
+  // The rendered template carries Russian section headings; the employer's
+  // own text decides the language.
+  const language = textLanguage(
+    vacancy?.fullDescription || vacancy?.description || fullDescription || entry.summary,
+  );
 
   return {
     entry,
     description,
     jsonLd: {
       '@context': 'https://schema.org',
-      '@graph': indexable ? [jobPosting(cluster, entry, description, vacancy), crumbs] : [crumbs],
+      '@graph': indexable
+        ? [jobPosting(cluster, entry, description, vacancy, language), crumbs]
+        : [crumbs],
     },
     ...(vacancy ? { vacancy } : {}),
     indexable,
+    ...(language ? { language } : {}),
   };
 }
 

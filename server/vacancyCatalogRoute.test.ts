@@ -6,7 +6,11 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import type { UnifiedVacancy } from './domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
-import { resetCatalogSitemaps, setCatalogSitemaps } from './seo/catalogSitemapSchedule';
+import {
+  resetCatalogSitemaps,
+  setCatalogSitemaps,
+  setListingHistory,
+} from './seo/catalogSitemapSchedule';
 import { buildSitemapFiles } from './seo/sitemapXml';
 
 afterEach(() => resetCatalogSitemaps());
@@ -406,5 +410,97 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     expect(detail.body).not.toContain('noindex');
     expect(detail.body).toContain('itemtype="https://schema.org/JobPosting"');
     expect(detail.body).toMatch(/itemprop="validThrough" content="\d{4}-\d{2}-\d{2}T/u);
+  });
+});
+
+describe('03.11: listings keep their address and index between thresholds', () => {
+  afterEach(() => resetCatalogSitemaps());
+
+  const recently = { lastQualifiedAt: new Date().toISOString() };
+  const robots = (body: string) => /<meta name="robots" content="([^"]+)">/u.exec(body)?.[1];
+
+  it('renders a listing below the publication threshold with a note and nearby lists', async () => {
+    const app = await appWithPool([
+      ...Array.from({ length: 5 }, (_, index) => vacancy(index)),
+      vacancy(20, { title: 'Product Designer', company: 'Studio' }),
+    ]);
+    const response = await app.inject({ method: 'GET', url: '/vacancies/berlin/product-designer' });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('Здесь пока мало вакансий');
+    expect(response.body).toContain('href="/vacancies/berlin"');
+    expect(robots(response.body)).toBe('noindex, follow');
+  });
+
+  it('keeps a once-indexed listing with fewer vacancies than the threshold indexable', async () => {
+    const app = await appWithPool(Array.from({ length: 2 }, (_, index) => vacancy(index)));
+    setListingHistory(new Map([['berlin/frontend-developer', recently]]));
+    const response = await app.inject({
+      method: 'GET',
+      url: '/vacancies/berlin/frontend-developer',
+    });
+    expect(response.statusCode).toBe(200);
+    expect(robots(response.body)).toBeUndefined();
+  });
+
+  it('moves an emptied role list to its place, and an emptied place to the catalog (301)', async () => {
+    const app = await appWithPool(Array.from({ length: 3 }, (_, index) => vacancy(index)));
+    setListingHistory(
+      new Map([
+        ['berlin/designer', recently],
+        ['moscow/designer', recently],
+        ['moscow/', recently],
+      ]),
+    );
+    const role = await app.inject({ method: 'GET', url: '/vacancies/berlin/designer' });
+    expect(role.statusCode).toBe(301);
+    expect(role.headers.location).toBe('/vacancies/berlin');
+    const lonely = await app.inject({ method: 'GET', url: '/vacancies/moscow/designer' });
+    expect(lonely.headers.location).toBe('/vacancies');
+    const place = await app.inject({ method: 'GET', url: '/vacancies/moscow' });
+    expect(place.statusCode).toBe(301);
+    expect(place.headers.location).toBe('/vacancies');
+  });
+
+  it('answers 410 to a listing path that never existed', async () => {
+    const app = await appWithPool(Array.from({ length: 3 }, (_, index) => vacancy(index)));
+    const response = await app.inject({ method: 'GET', url: '/vacancies/berlin/astronaut' });
+    expect(response.statusCode).toBe(410);
+  });
+});
+
+describe('03.11: card salary and language markup', () => {
+  it('marks a stated salary with its period as baseSalary', async () => {
+    const app = await appWithPool([vacancy(1, { salary: { ...SALARY, period: 'year' } })]);
+    const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
+    expect(detail.body).toContain(
+      'itemprop="baseSalary" itemscope itemtype="https://schema.org/MonetaryAmount"',
+    );
+    expect(detail.body).toContain('<meta itemprop="currency" content="USD">');
+    expect(detail.body).toContain('<meta itemprop="minValue" content="5000">');
+    expect(detail.body).toContain('<meta itemprop="maxValue" content="6000">');
+    expect(detail.body).toContain('<meta itemprop="unitText" content="YEAR">');
+  });
+
+  it('never prints a zero salary', async () => {
+    const app = await appWithPool([vacancy(1, { salary: { from: 0, currency: 'USD' } })]);
+    const catalog = await app.inject({ method: 'GET', url: '/vacancies' });
+    const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
+    for (const body of [catalog.body, detail.body]) {
+      expect(body).not.toMatch(/>\s*0\s\$/u);
+      expect(body).not.toContain('baseSalary');
+    }
+  });
+
+  it('declares the language of the employer text, not of the page chrome', async () => {
+    const app = await appWithPool([
+      vacancy(1, {
+        salary: SALARY,
+        description: 'Build the hiring product with a small team. '.repeat(10),
+      }),
+    ]);
+    const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
+    expect(detail.body).toContain('<html lang="ru">');
+    expect(detail.body).toMatch(/class="cat-body" itemprop="description" lang="en"/u);
+    expect(detail.body).toContain('<meta itemprop="inLanguage" content="en">');
   });
 });

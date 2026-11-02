@@ -12,6 +12,7 @@ import { LISTING_CHIPS, type CatalogChip, type ChipCounts } from './catalogChips
 import { countLabel } from './catalogCopy';
 import { escapeHtml } from './catalogHtml';
 import { ARROW, jobsCard, pager } from './catalogListingJobs';
+import type { NearbyListing } from './catalogNearbyListings';
 import type { SalaryStats } from './catalogSalaryStats';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import type { CatalogPage } from './vacancyCatalogPage';
@@ -30,6 +31,25 @@ export interface ListingExtras {
   readonly stats?: SalaryStats;
   readonly now?: Date;
   readonly chips?: ListingChips;
+  /** Set below the publication threshold: the page says so and links nearby lists. */
+  readonly nearby?: readonly NearbyListing[];
+}
+
+function fewCard(page: CatalogPage, nearby?: readonly NearbyListing[]): string {
+  if (!nearby) return '';
+  const items = nearby
+    .map(
+      (link) =>
+        `<li><a href="${escapeHtml(link.path)}">${escapeHtml(link.label)}<span>${link.count.toLocaleString('ru-RU')}</span></a></li>`,
+    )
+    .join('');
+  return (
+    '<div class="lv-card lv-side-like"><h2>Здесь пока мало вакансий</h2>' +
+    `<p>Сейчас в этом списке ${countLabel(page.total)}. Он пополняется, когда площадки публикуют новые; ` +
+    'ниже — списки рядом, где выбор больше.</p>' +
+    (items ? `<ul class="lv-facet">${items}</ul>` : '') +
+    '</div>'
+  );
 }
 
 function chipRow(chips?: ListingChips): string {
@@ -224,6 +244,7 @@ export function renderListingMain(
     `<a class="ps-btn is-primary is-lg" href="/signup?from=catalog${role ? `&amp;role=${encodeURIComponent(role)}` : ''}">Подобрать под моё резюме</a></div>` +
     `${searchForm(page, names)}${chipRow(extras.chips)}</div></section>` +
     '<div class="ps-wrap lv-grid"><div>' +
+    fewCard(page, extras.nearby) +
     jobsCard(page, now) +
     answer(page, names, extras.stats) +
     '<div class="lv-sticky"><a class="ps-btn is-primary is-lg" href="/signup?from=catalog">Показать мой процент совпадения · бесплатно</a></div>' +

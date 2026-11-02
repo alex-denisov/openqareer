@@ -8,16 +8,18 @@
  * stays reachable (`noindex, follow`) so links through it still count.
  *
  * Measured on prod 20.10 (307 170 active cards): salary + employer + English
- * role + seen within 14 days = 32 127 cards; adding "posted within 7 days"
- * gives 6 075. The posting window also keeps `validThrough` (posting + 30
- * days) at least three weeks in the future for every indexed card.
+ * role + seen within 14 days = 32 127 cards.
+ *
+ * 03.11: a "posted within 7 days" window used to sit on top. It turned every
+ * live card `noindex` on its eighth day; Google saw 3 834 such pages from
+ * 24.10 and impressions fell 259 → 30 a day. A card now stays indexed while it
+ * is live (seen recently, `validThrough` ahead); measured on prod 03.11:
+ * 3 115 → 8 430 cards.
  */
 import { catalogRoleOf } from '../vacancies/vacancyCatalogFacets';
 
 /** A card nobody has re-observed for this long may already be gone at the source. */
 export const CARD_SEEN_WITHIN_DAYS = 14;
-/** Only recent postings are indexed; older ones keep their address, not the index slot. */
-export const CARD_POSTED_WITHIN_DAYS = 7;
 /** Our own horizon for a posting whose source named no withdrawal date. */
 export const POSTING_VALID_DAYS = 30;
 /**
@@ -45,6 +47,13 @@ export const INDEXED_PLACE_MIN = 10;
  */
 export const INDEXED_CARD_SUMMARY_MIN = 100;
 export const INDEXED_PLACE_ROLE_MIN = 5;
+/**
+ * Hysteresis for listings (03.11). A listing that crossed its threshold keeps
+ * `index` and its sitemap line for this long while it still has a vacancy:
+ * a city+role page around 5 entries used to flip index/noindex/410 daily, and
+ * Googlebot got ~560 4xx on listings it had indexed in ten days.
+ */
+export const LISTING_RETAIN_DAYS = 30;
 
 const DAY_MS = 86_400_000;
 
@@ -55,6 +64,32 @@ export interface IndexableCardFields {
   readonly summary: string;
   readonly publishedAt: string;
   readonly lastSeenAt: string;
+  /** Withdrawal date when the source named one. */
+  readonly withdrawnAt?: string;
+}
+
+/** A salary label with a real amount: «0 $» is an unknown salary, not a salary. */
+export function hasKnownSalary(label: string | undefined): boolean {
+  return /[1-9]/u.test(label ?? '');
+}
+
+/**
+ * Quality rules: the card has something a search result can show. Kept as a
+ * list so another rule (a Russian summary counting as a description) is one
+ * more line, not a rewrite.
+ */
+const CARD_QUALITY_RULES: ReadonlyArray<(entry: IndexableCardFields) => boolean> = [
+  (entry) => hasKnownSalary(entry.salaryLabel),
+  (entry) => entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN,
+  (entry) => entry.company.trim().length > 0,
+  (entry) => catalogRoleOf(entry) !== null,
+];
+
+/** Live: re-observed recently and not past its `validThrough`. */
+function isLiveCard(entry: IndexableCardFields, now: Date): boolean {
+  if (!withinDays(entry.lastSeenAt, CARD_SEEN_WITHIN_DAYS, now)) return false;
+  const validThrough = validThroughOf(entry.publishedAt, entry.withdrawnAt, entry.lastSeenAt);
+  return validThrough === undefined || Date.parse(validThrough) > now.getTime();
 }
 
 function withinDays(value: string, days: number, now: Date): boolean {
@@ -64,29 +99,56 @@ function withinDays(value: string, days: number, now: Date): boolean {
 
 /** The same rule the sitemap job applies in SQL (`catalogSitemapJob`). */
 export function isIndexableCard(entry: IndexableCardFields, now: Date): boolean {
-  return (
-    Boolean(entry.salaryLabel) &&
-    entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN &&
-    entry.company.trim().length > 0 &&
-    catalogRoleOf(entry) !== null &&
-    withinDays(entry.lastSeenAt, CARD_SEEN_WITHIN_DAYS, now) &&
-    withinDays(entry.publishedAt, CARD_POSTED_WITHIN_DAYS, now)
-  );
+  return CARD_QUALITY_RULES.every((rule) => rule(entry)) && isLiveCard(entry, now);
 }
 
-/** Withdrawal date when the source named one, else posting + 30 days. */
-export function validThroughOf(publishedAt: string, withdrawnAt?: string): string | undefined {
+/**
+ * Withdrawal date when the source named one, else 30 days after the later of
+ * posting and the last time we saw the posting still up: a card re-observed
+ * today is not expiring next week because it was posted a month ago.
+ */
+export function validThroughOf(
+  publishedAt: string,
+  withdrawnAt?: string,
+  lastSeenAt?: string,
+): string | undefined {
   if (withdrawnAt && Number.isFinite(Date.parse(withdrawnAt))) return withdrawnAt;
   const posted = Date.parse(publishedAt);
   if (!Number.isFinite(posted)) return undefined;
-  return new Date(posted + POSTING_VALID_DAYS * DAY_MS).toISOString();
+  const seen = lastSeenAt ? Date.parse(lastSeenAt) : Number.NaN;
+  const from = Number.isFinite(seen) ? Math.max(posted, seen) : posted;
+  return new Date(from + POSTING_VALID_DAYS * DAY_MS).toISOString();
 }
 
 export function isIndexablePage(page: number): boolean {
   return page <= DEEP_PAGE_NOINDEX_AFTER;
 }
 
-/** Whether a place (or place+role) listing with `total` vacancies asks to be indexed. */
-export function isIndexableListing(total: number, hasRole: boolean): boolean {
+/** Last time a listing met its threshold, kept by the maintenance process. */
+export interface ListingIndexHistory {
+  readonly firstQualifiedAt?: string;
+  readonly lastQualifiedAt?: string;
+}
+
+export function listingQualifies(total: number, hasRole: boolean): boolean {
   return total >= (hasRole ? INDEXED_PLACE_ROLE_MIN : INDEXED_PLACE_MIN);
+}
+
+/**
+ * Whether a place (or place+role) listing with `total` vacancies asks to be
+ * indexed: at its threshold, or — once indexed — for `LISTING_RETAIN_DAYS`
+ * after it last met it, while it has at least one vacancy.
+ */
+export function isIndexableListing(
+  total: number,
+  hasRole: boolean,
+  history?: ListingIndexHistory,
+  now: Date = new Date(),
+): boolean {
+  if (listingQualifies(total, hasRole)) return true;
+  return (
+    total >= 1 &&
+    history?.lastQualifiedAt !== undefined &&
+    withinDays(history.lastQualifiedAt, LISTING_RETAIN_DAYS, now)
+  );
 }

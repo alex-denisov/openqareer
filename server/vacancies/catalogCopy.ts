@@ -104,11 +104,16 @@ const CURRENCY_SIGN: Readonly<Record<string, string>> = {
 /**
  * Labels stored by earlier releases read «1 500 — 2 999 USD» or
  * «125 000 — 125 000 RUR»: swap the code for its sign and fold equal ends.
+ * A zero bound is an unknown one (03.11, «0 $» in the lists): «0 — 5 000 $»
+ * reads «до 5 000 $», and a label with no positive amount is no label ('').
  */
 export function normalizeSalaryLabel(label: string): string {
-  const signed = label.replace(/\s([A-Z]{3})$/u, (whole, code: string) =>
-    CURRENCY_SIGN[code] ? ` ${CURRENCY_SIGN[code]}` : whole,
-  );
+  if (!/[1-9]/u.test(label)) return '';
+  const signed = label
+    .replace(/\s([A-Z]{3})$/u, (whole, code: string) =>
+      CURRENCY_SIGN[code] ? ` ${CURRENCY_SIGN[code]}` : whole,
+    )
+    .replace(/^0\s—\s/u, 'до ');
   const equal = /^([\d\s\u00a0\u202f]+?)\s—\s\1(\s.*)?$/u.exec(signed);
   return equal ? `${equal[1]}${equal[2] ?? ''}` : signed;
 }

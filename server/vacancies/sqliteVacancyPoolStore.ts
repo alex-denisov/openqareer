@@ -1778,9 +1778,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   /** Позиция обхода текста hh (02.11): воркер перезапускается ~22 раза в сутки и шёл заново. */
   loadHhTextCursor(): string | undefined {
-    const row = this.database
-      .prepare('SELECT cursor FROM hh_text_state WHERE id = 1')
-      .get() as { cursor: string | null } | undefined;
+    const row = this.database.prepare('SELECT cursor FROM hh_text_state WHERE id = 1').get() as
+      { cursor: string | null } | undefined;
     return row?.cursor ?? undefined;
   }
 
@@ -1909,7 +1908,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     nowMs: number = Date.now(),
   ): void {
     if (codes.length === 0) {
-      this.database.prepare('DELETE FROM hh_text_role_targets WHERE candidate_id = ?').run(candidateId);
+      this.database
+        .prepare('DELETE FROM hh_text_role_targets WHERE candidate_id = ?')
+        .run(candidateId);
       return;
     }
     this.database
@@ -2679,6 +2680,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       // A malformed compact field is an empty list, never a reason to hydrate
       // the source cluster during a public request.
     }
+    const salaryLabel = row.salary_label ? normalizeSalaryLabel(row.salary_label) : '';
     return {
       clusterId: row.cluster_id,
       key: row.entry_key,
@@ -2687,7 +2689,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       company: row.company,
       ...(row.location ? { location: row.location } : {}),
       isRemote: row.is_remote === 1,
-      ...(row.salary_label ? { salaryLabel: normalizeSalaryLabel(row.salary_label) } : {}),
+      ...(salaryLabel ? { salaryLabel } : {}),
       summary: row.summary,
       skills,
       sourceUrl: row.source_url,

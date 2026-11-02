@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   isIndexableListing,
   INDEXED_CARD_SUMMARY_MIN,
-  CARD_POSTED_WITHIN_DAYS,
   CARD_SEEN_WITHIN_DAYS,
+  LISTING_RETAIN_DAYS,
   DEEP_PAGE_NOINDEX_AFTER,
   isIndexableCard,
   isIndexablePage,
@@ -53,10 +53,19 @@ describe('isIndexableCard', () => {
     ).toBe(false);
   });
 
-  it('drops a card posted before the posting window, however often it is seen', () => {
-    expect(
-      isIndexableCard({ ...valuable, publishedAt: daysAgo(CARD_POSTED_WITHIN_DAYS + 1) }, NOW),
-    ).toBe(false);
+  it('keeps a live card indexed past its first week (03.11: noindex on day 8)', () => {
+    expect(isIndexableCard({ ...valuable, publishedAt: daysAgo(8) }, NOW)).toBe(true);
+    expect(isIndexableCard({ ...valuable, publishedAt: daysAgo(60) }, NOW)).toBe(true);
+  });
+
+  it('drops a card whose source withdrawal date has passed', () => {
+    expect(isIndexableCard({ ...valuable, withdrawnAt: daysAgo(1) }, NOW)).toBe(false);
+    expect(isIndexableCard({ ...valuable, withdrawnAt: daysAgo(-5) }, NOW)).toBe(true);
+  });
+
+  it('treats a zero salary as no salary', () => {
+    expect(isIndexableCard({ ...valuable, salaryLabel: '0 $' }, NOW)).toBe(false);
+    expect(isIndexableCard({ ...valuable, salaryLabel: '0 — 0 USD' }, NOW)).toBe(false);
   });
 
   it('treats an unparseable date as not fresh', () => {
@@ -73,6 +82,12 @@ describe('validThroughOf', () => {
 
   it('is thirty days after posting otherwise', () => {
     expect(validThroughOf('2026-10-01T09:30:00.000Z')).toBe('2026-10-31T09:30:00.000Z');
+  });
+
+  it('counts the thirty days from the last sighting when it is later', () => {
+    expect(validThroughOf('2026-09-01T00:00:00.000Z', undefined, '2026-10-20T00:00:00.000Z')).toBe(
+      '2026-11-19T00:00:00.000Z',
+    );
   });
 
   it('is absent when the posting date is unparseable', () => {
@@ -94,5 +109,16 @@ describe('isIndexableListing', () => {
     expect(isIndexableListing(10, false)).toBe(true);
     expect(isIndexableListing(4, true)).toBe(false);
     expect(isIndexableListing(5, true)).toBe(true);
+  });
+
+  it('keeps a once-indexed listing for the retain window while it has a vacancy', () => {
+    const recent = { lastQualifiedAt: daysAgo(LISTING_RETAIN_DAYS - 1) };
+    expect(isIndexableListing(1, true, recent, NOW)).toBe(true);
+    expect(isIndexableListing(3, false, recent, NOW)).toBe(true);
+    expect(isIndexableListing(0, true, recent, NOW)).toBe(false);
+    expect(
+      isIndexableListing(4, true, { lastQualifiedAt: daysAgo(LISTING_RETAIN_DAYS + 1) }, NOW),
+    ).toBe(false);
+    expect(isIndexableListing(4, true, {}, NOW)).toBe(false);
   });
 });
