@@ -280,9 +280,11 @@ function logMatchedTiming(
   semanticQueryAndSqlMs: number,
   response: ReturnType<typeof buildMatchedResponse>,
   requestStartedAt: number,
+  steps: Readonly<Record<string, number>> = {},
 ): void {
   request.log.info(
     {
+      ...steps,
       mode,
       cold,
       candidateCampaignMs,
@@ -463,6 +465,24 @@ function withMarketSalary(deps: RouteDeps, items: MatchedVacancyItem[]): Matched
   });
 }
 
+/** Fit views, salary and fit work for a built page, each step timed (CPO prod 02.11). */
+function finishMatchedPage(
+  deps: RouteDeps,
+  candidateId: string,
+  orderedPage: ReturnType<typeof buildMatchedResponse>,
+  context: { readonly offset: number; readonly fitLimit: number; readonly request: FastifyRequest },
+) {
+  const fitViewsStartedAt = performance.now();
+  const shown = withShownPageFitViews(deps, candidateId, orderedPage.data);
+  const fitViewsMs = elapsedMs(fitViewsStartedAt);
+  const salaryStartedAt = performance.now();
+  const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
+  const salaryMs = elapsedMs(salaryStartedAt);
+  const fitWorkStartedAt = performance.now();
+  startFitWork(deps, candidateId, response, context, context.request);
+  return { response, steps: { fitViewsMs, salaryMs, fitWorkMs: elapsedMs(fitWorkStartedAt) } };
+}
+
 const handleMatchedVacancies: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
   const requestStartedAt = performance.now();
@@ -501,11 +521,8 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     withWantedCompanyOrder(deps, candidate.id, sort),
     fitLimit,
   );
-  const shown = withShownPageFitViews(deps, candidate.id, orderedPage.data);
-  const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
-
-  startFitWork(deps, candidate.id, response, { offset, fitLimit }, request);
-
+  const context = { offset, fitLimit, request };
+  const { response, steps } = finishMatchedPage(deps, candidate.id, orderedPage, context);
   logMatchedTiming(
     request,
     config.matchMode ?? 'legacy',
@@ -514,6 +531,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     semanticQueryAndSqlMs,
     response,
     requestStartedAt,
+    steps,
   );
 
   return matchedVacancyResponse(response, request.id, targetLevel, sort);
