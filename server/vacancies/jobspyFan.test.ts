@@ -120,3 +120,50 @@ describe('спрос LinkedIn и Indeed — только латиница (27.10
     expect(combos.some((combo) => combo.term === 'head of ai')).toBe(true);
   });
 });
+
+describe('поддержка клиентов и ОАЭ (покрытие 03.11)', () => {
+  it('веер читает руководящие роли поддержки', () => {
+    for (const term of [
+      'head of customer support',
+      'head of support',
+      'customer support director',
+      'director of customer service',
+      'vp customer support',
+      'vp customer success',
+      'head of customer experience',
+      'customer experience director',
+      'head of customer service',
+      'contact center director',
+      'head of technical support',
+      'it support manager',
+      'head of it support',
+      'service desk manager',
+    ]) {
+      expect(FAN_TERMS, term).toContain(term);
+    }
+  });
+
+  it('круг веера вырос меньше чем на четверть', () => {
+    expect(FAN_SIZE).toBeLessThan(5600 * 1.25);
+  });
+
+  it('роли спроса идут по всей стране ОАЭ, а не по одному городу', () => {
+    const locations = new Set<string>();
+    for (let hour = 0; hour < 48; hour += 1) {
+      for (const combo of fanCombosForSync(hour * 3_600_000, 60, 30, ['head of ai'])) {
+        if (combo.term === 'head of ai' && combo.target.indeedCountry === 'AE') {
+          locations.add(combo.target.location);
+        }
+      }
+    }
+    expect([...locations].sort()).toEqual(['Abu Dhabi', 'Dubai', 'Sharjah']);
+  });
+
+  it('Шарджа есть среди рынков со страной Indeed AE', () => {
+    expect(MARKET_TARGETS).toContainEqual({
+      region: 'mena',
+      indeedCountry: 'AE',
+      location: 'Sharjah',
+    });
+  });
+});

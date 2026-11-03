@@ -19,8 +19,8 @@ describe('роли кандидатов → запросы к LinkedIn и Indeed
     expect(searchTermsForRoles(['VP of Engineering / Technology'])).toEqual(['vp of engineering']);
   });
 
-  it('роль, которую уже читает общий веер, не повторяется', () => {
-    expect(searchTermsForRoles(['CTO', 'Chief of Staff'])).toEqual([]);
+  it('роль из общего веера всё равно идёт запросом: роли спроса читаются раньше круга', () => {
+    expect(searchTermsForRoles(['CTO', 'Chief of Staff'])).toEqual(['chief of staff']);
   });
 
   it('название, которого словарь не знает, не уходит запросом', () => {

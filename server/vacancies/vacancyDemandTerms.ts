@@ -1,5 +1,4 @@
 import { ontology } from '../../shared/roleOntology';
-import { FAN_TERMS } from './jobspyFan';
 import { rulesParse } from './titleParse/rulesParse';
 
 /**
@@ -20,7 +19,6 @@ const CYRILLIC_ROLE = /^[\p{Script=Cyrillic}a-z0-9&+.,'\s-]+$/u;
 
 const MIN_WORDS = 2;
 const MAX_TERM_LENGTH = 60;
-const KNOWN_TERMS: ReadonlySet<string> = new Set(FAN_TERMS);
 
 /** Сколько английских формулировок получает руководящая роль: рынок называет её по-разному. */
 const LEADER_VARIANTS = 5;
@@ -96,7 +94,7 @@ export function searchTermsForRoles(titles: readonly string[]): string[] {
   for (const title of titles) {
     for (const part of title.split(/\s+\/\s+|\s*\|\s*/u)) {
       for (const term of termsFor(part)) {
-        if (!KNOWN_TERMS.has(term)) terms.add(term);
+        terms.add(term);
       }
       const russian = russianTermFor(part);
       if (russian) terms.add(russian);
