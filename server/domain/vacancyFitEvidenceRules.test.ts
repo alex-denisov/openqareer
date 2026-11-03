@@ -244,3 +244,83 @@ describe('profile evidence carries what experience says (02.11)', () => {
     expect(facts.find((fact) => fact.id === 'profile:location')?.statement).toContain('Lithuania');
   });
 });
+
+describe('a location line is judged by the search conditions, not the profile city (03.11)', () => {
+  // Prod 03.11, hh 138955968 for adenisov.test: the profile says Dubai (set for Dubai recruiters),
+  // the search places are Москва, Удалённо из РФ, ОАЭ. The office line was «unmatched» by Dubai.
+  const office = 'Работа из офиса в Москве, график 5/2, 09:00–18:00';
+  const dubai = (input: ReturnType<typeof fitInput>) => ({
+    ...input.facts[0],
+    id: 'profile:location',
+    statement: 'Местоположение: Dubai, United Arab Emirates',
+    evidenceSource: 'profile' as const,
+  });
+  const officeInput = (placeCovered?: boolean) => {
+    const input = fitInput();
+    const location = dubai(input);
+    return {
+      ...input,
+      description: `${input.description} ${office}`,
+      facts: [...input.facts, location],
+      requirements: [...input.requirements, { ...skill('c1', office), kind: 'workFormat' as const }],
+      assessments: [
+        ...input.assessments!,
+        { requirementId: 'c1', status: 'unmatched' as const, evidence: [{ factId: location.id, quote: 'Dubai, United Arab Emirates' }] },
+      ],
+      ...(placeCovered === undefined ? {} : { placeCovered }),
+    };
+  };
+
+  it('search places that cover the vacancy meet the line: no block, counted as met, the stored claim kept', () => {
+    const before = evaluateVacancyFit(officeInput());
+    expect(before.conditionBlocks).toEqual([{ requirementId: 'c1', text: office, quote: 'Dubai, United Arab Emirates' }]);
+    expect(before.conditionCoverage).toMatchObject({ matched: 0, total: 1 });
+
+    const after = evaluateVacancyFit(officeInput(true));
+    expect(after.coveragePercent).toBe(100);
+    expect(after.conditionBlocks).toEqual([]);
+    expect(after.placeCovered).toEqual(['c1']);
+    expect(after.conditionCoverage).toMatchObject({ matched: 1, total: 1 });
+    // A cached result is read again without a model call: its assessments must stay as stored.
+    expect(after.assessments).toEqual(before.assessments);
+  });
+
+  it('a location line the model left unknown is met as well', () => {
+    const input = officeInput(true);
+    const result = evaluateVacancyFit({
+      ...input,
+      assessments: [...fitInput().assessments!, { requirementId: 'c1', status: 'unknown', evidence: [] }],
+    });
+    expect(result.placeCovered).toEqual(['c1']);
+    expect(result.conditionCoverage).toMatchObject({ matched: 1, total: 1 });
+  });
+
+  it('search places that miss the vacancy keep the verdict; without places the profile city decides', () => {
+    expect(evaluateVacancyFit(officeInput(false)).conditionBlocks).toHaveLength(1);
+    expect(evaluateVacancyFit(officeInput(false)).placeCovered).toBeUndefined();
+    expect(evaluateVacancyFit(officeInput()).placeCovered).toBeUndefined();
+  });
+
+  it('a covered place is no work permit and no education', () => {
+    const input = fitInput();
+    const location = dubai(input);
+    const result = evaluateVacancyFit({
+      ...input,
+      description: `${input.description} Right to work in Russia. Bachelor degree.`,
+      facts: [...input.facts, location],
+      requirements: [
+        ...input.requirements,
+        { ...skill('c1', 'Right to work in Russia'), kind: 'workAuthorization' as const },
+        { ...skill('c2', 'Bachelor degree'), kind: 'education' as const },
+      ],
+      assessments: [
+        ...input.assessments!,
+        { requirementId: 'c1', status: 'unmatched', evidence: [{ factId: location.id, quote: 'Dubai, United Arab Emirates' }] },
+        { requirementId: 'c2', status: 'unknown', evidence: [] },
+      ],
+      placeCovered: true,
+    });
+    expect(result.placeCovered).toBeUndefined();
+    expect(result.conditionBlocks).toHaveLength(1);
+  });
+});

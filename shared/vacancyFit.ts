@@ -102,6 +102,11 @@ export interface VacancyFitResult {
    * as met in the percent; the stored assessments stay as the model gave them, so no model call repeats.
    */
   readonly implied?: readonly { readonly requirementId: string; readonly role: string }[];
+  /**
+   * 03.11: location lines (an onsite city, a format) the search conditions cover. Met whatever the
+   * profile city says; the stored assessments stay as the model gave them, like `implied`.
+   */
+  readonly placeCovered?: readonly string[];
   /** 02.11: work authorisation or country-restricted remote a quoted profile fact contradicts. */
   readonly conditionBlocks?: readonly VacancyFitConditionBlock[];
   readonly reason:

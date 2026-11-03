@@ -212,6 +212,26 @@ describe('conditionCoverageWithGeo', () => {
     });
   });
 
+  it('строка, которую сервер засчитал по условиям поиска (placeCovered), не считается дважды', () => {
+    const language = { ...requirement('lang', 'Английский B2'), kind: 'language', skill: false } as VacancyFitView['requirements'][number];
+    const covered = {
+      state: 'ready',
+      requirements: [kirov, language],
+      result: {
+        assessments: [
+          { requirementId: 'loc', status: 'unmatched', evidence: [] },
+          { requirementId: 'lang', status: 'unknown', evidence: [] },
+        ],
+        placeCovered: ['loc'],
+        conditionCoverage: { matched: 1, total: 2, unknown: 1 },
+      },
+    } as unknown as VacancyFitView;
+    expect(conditionCoverageWithGeo(covered, { geoMatched: true, location: 'Киров' })).toEqual({
+      matched: 1,
+      total: 2,
+    });
+  });
+
   it('уже подтверждённое сервером не считается дважды', () => {
     expect(
       conditionCoverageWithGeo(view('matched'), { geoMatched: true, location: 'Киров' }),
