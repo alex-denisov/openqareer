@@ -165,17 +165,29 @@ function backoffMs(attempt: number, retryAfterSeconds?: number): number {
   return Math.min(Math.max(exponential, asked), LINKEDIN_429_MAX_MS);
 }
 
-export async function fetchLinkedinGuest(
+type GuestResponse = Awaited<ReturnType<LinkedinFetchDeps['fetchPage']>>;
+
+/**
+ * 429 — the platform asks to slow down: pause by Retry-After or exponentially,
+ * retry; if it persists the caller stops. The first request is never retried.
+ */
+async function fetchWithBackoff(
   deps: LinkedinFetchDeps,
-  nowMs: number = Date.now(),
-): Promise<SourceReading> {
-  const capability = deps.providerCapability ?? linkedinProviderCapability().verdict;
-  if (capability === 'not_configured') {
-    return { vacancies: [], partial: true };
+  url: string,
+  mayRetry: boolean,
+): Promise<GuestResponse> {
+  let response = await deps.fetchPage(url, { ...LINKEDIN_HEADERS });
+  for (let attempt = 0; mayRetry && attempt < LINKEDIN_429_RETRIES; attempt += 1) {
+    if (response.status !== 429) break;
+    await deps.sleep(backoffMs(attempt, response.retryAfterSeconds));
+    response = await deps.fetchPage(url, { ...LINKEDIN_HEADERS });
   }
-  // Сначала роли кандидатов, затем окно веера (27.10).
-  const demand = deps.demandTerms ?? currentFanDemand();
-  const combos = [
+  return response;
+}
+
+/** Candidate roles first, then the fan window (27.10), then the UAE block. */
+function syncCombos(nowMs: number, demand: readonly string[]): FanCombo[] {
+  return [
     ...fanCombosForSync(
       nowMs,
       LINKEDIN_INTERVAL_MINUTES,
@@ -187,6 +199,17 @@ export async function fetchLinkedinGuest(
       demand.filter((term) => /^[a-z0-9&+.,'\s-]+$/u.test(term)),
     ),
   ];
+}
+
+export async function fetchLinkedinGuest(
+  deps: LinkedinFetchDeps,
+  nowMs: number = Date.now(),
+): Promise<SourceReading> {
+  const capability = deps.providerCapability ?? linkedinProviderCapability().verdict;
+  if (capability === 'not_configured') {
+    return { vacancies: [], partial: true };
+  }
+  const combos = syncCombos(nowMs, deps.demandTerms ?? currentFanDemand());
   const vacancies: UnifiedVacancy[] = [];
   // Веер шире одного опроса, поэтому чтение частичное: движок дополняет срез,
   // а не заменяет его — иначе каждый опрос стирал бы прошлые комбинации.
@@ -204,17 +227,7 @@ export async function fetchLinkedinGuest(
       }
       requests += 1;
       const url = linkedinGuestUrl(start, combo);
-      let response = await deps.fetchPage(url, { ...LINKEDIN_HEADERS });
-      // 429 — площадка просит притормозить: пауза по Retry-After или
-      // экспоненциальная, затем повтор; не помогло — останавливаемся совсем.
-      // Первая страница обязана прочитаться: отказ на ней — отказ площадки,
-      // а не пустой успех (B199).
-      if (response.status === 429 && requests > 1) {
-        for (let attempt = 0; attempt < LINKEDIN_429_RETRIES && response.status === 429; attempt += 1) {
-          await deps.sleep(backoffMs(attempt, response.retryAfterSeconds));
-          response = await deps.fetchPage(url, { ...LINKEDIN_HEADERS });
-        }
-      }
+      const response = await fetchWithBackoff(deps, url, requests > 1);
       const { status, body } = response;
       if (status === 429) {
         if (requests === 1) throw new Error('vacancy_source_unreachable: 429');
