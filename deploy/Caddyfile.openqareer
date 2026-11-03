@@ -83,3 +83,9 @@ openqareer.com {
 		header_up X-Forwarded-For {client_ip}
 	}
 }
+
+# 03.11: typed and linked www addresses had no record at all. One 301 to the
+# apex keeps the path and query, so the old link lands on the same page.
+www.openqareer.com {
+	redir https://openqareer.com{uri} permanent
+}
