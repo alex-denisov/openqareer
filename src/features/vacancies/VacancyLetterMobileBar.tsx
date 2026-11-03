@@ -6,8 +6,8 @@ import './vacancy-letter-mobile-bar.css';
 /**
  * Макет 9 при 390: шапка «Письма» как у остальных push-экранов — «Назад», заголовок и
  * консультант справа. Шапка «Вакансий» на экране письма не рисуется, поэтому без этой
- * строки консультант на телефоне был недоступен. На широком экране скрыта: там «Назад»
- * в карточке вакансии, консультант — в боковой панели.
+ * строки консультант на телефоне был недоступен. Рисуется только на узком экране: на
+ * широком «Назад» в карточке вакансии, консультант — в боковой панели.
  */
 export function VacancyLetterMobileBar({
   onBack,
@@ -18,8 +18,8 @@ export function VacancyLetterMobileBar({
 }) {
   const backRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    // Фокус на «Назад», как у карточки вакансии на широком экране, — только если шапка видна.
-    if (backRef.current?.offsetParent) backRef.current.focus();
+    // Фокус на «Назад», как у карточки вакансии на широком экране.
+    backRef.current?.focus();
   }, []);
   return (
     <header className="vacancy-push-bar career-letter-mobile-bar">

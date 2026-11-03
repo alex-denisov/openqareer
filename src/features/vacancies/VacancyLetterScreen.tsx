@@ -22,6 +22,7 @@ import { LetterInfoTip } from './VacancyLetterInfoTip';
 import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import { useLetterConsultantSuggestion } from './letterConsultantSuggestion';
 import { VacancyLetterMobileBar } from './VacancyLetterMobileBar';
+import { useCompactViewport } from './useCompactViewport';
 import './vacancy-letter.css';
 
 export interface VacancyLetterTarget {
@@ -142,10 +143,14 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
   usePageTitleOverride('Письмо');
   const actions = useLetterPageActions(vacancy, onOpenExpert);
   const frozen = Boolean(state.approval.saved);
+  // Макет 9 при 390: «Назад» и консультант — в шапке экрана, в карточке вакансии «Назад» нет.
+  const compact = useCompactViewport();
   return (
     <section className="career-letter-screen" aria-labelledby="career-letter-title">
-      <VacancyLetterMobileBar onBack={onBack} onOpenConsultant={actions.onOpenConsultant} />
-      <VacancyCard vacancy={vacancy} onBack={onBack} />
+      {compact ? (
+        <VacancyLetterMobileBar onBack={onBack} onOpenConsultant={actions.onOpenConsultant} />
+      ) : null}
+      <VacancyCard vacancy={vacancy} onBack={compact ? undefined : onBack} />
       <section className="career-letter-fork" aria-labelledby="career-letter-fork-title">
         <div className="career-letter-sub-head">
           <h2 id="career-letter-fork-title">Как откликнуться: три круга связей</h2>
@@ -348,13 +353,13 @@ function VacancyCard({
   onBack,
 }: {
   readonly vacancy: VacancyLetterTarget;
-  readonly onBack: () => void;
+  readonly onBack?: () => void;
 }) {
   const location = vacancy.canonicalLocation ?? 'Локация не указана';
   const sources = vacancy.sources.map((source) => source.sourceName).filter(Boolean);
   return (
     <section className="career-letter-vacancy" aria-label="Вакансия">
-      <LetterBackButton onBack={onBack} />
+      {onBack ? <LetterBackButton onBack={onBack} /> : null}
       <div className="career-letter-vacancy-copy">
         <h2 id="career-letter-title">{vacancy.canonicalTitle}</h2>
         <p>
