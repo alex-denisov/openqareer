@@ -135,7 +135,7 @@ async function fetchXmlAtsBoard(
       headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
       signal,
     });
-    if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+    if (!res.ok) throw unreachableError(res);
     return res.text();
   });
   const observedAt = new Date().toISOString();
@@ -143,6 +143,18 @@ async function fetchXmlAtsBoard(
     observedAt,
     sourceName: source.name,
     sourceUrl: url,
+  });
+}
+
+/**
+ * A refusing board keeps its status and headers on the error: the scheduler
+ * reads `Retry-After` from them, and a 429 from a careers site (Microsoft,
+ * 03.11) then waits as long as the site asked instead of being retried blind.
+ */
+function unreachableError(res: Response): Error {
+  return Object.assign(new Error(`vacancy_source_unreachable: ${res.status}`), {
+    statusCode: res.status,
+    headers: res.headers,
   });
 }
 
@@ -208,7 +220,7 @@ async function readJsonPayload(
         }
       }
     }
-    throw new Error(`vacancy_source_unreachable: ${res.status}`);
+    throw unreachableError(res);
   }
   const observedAt = new Date().toISOString();
   return { payload: await res.json(), observedAt };

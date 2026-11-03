@@ -252,6 +252,31 @@ describe('multi-source fetcher: заголовки Indeed (B218)', () => {
     expect(reading).toMatchObject({ partial: true });
   });
 
+  it('keeps the status and Retry-After of a refusing board on the thrown error (Microsoft 429)', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response('slow down', { status: 429, headers: { 'retry-after': '1800' } }),
+    );
+    const fetcher = buildMultiSourceFetcher(refuse, refuse);
+    const microsoft: VacancySourceConfig = {
+      id: 'src-microsoft-careers',
+      name: 'Microsoft',
+      type: 'json_api',
+      enabled: true,
+      targetUrl: 'https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com',
+      refreshIntervalMinutes: 240,
+      itemsFoundTotal: 0,
+      itemsActiveTotal: 0,
+    };
+
+    const failure = await fetcher(microsoft).catch((err: unknown) => err);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as { statusCode?: number }).statusCode).toBe(429);
+    expect(
+      (failure as { headers?: Headers }).headers?.get('retry-after'),
+    ).toBe('1800');
+  });
+
   it('сбой на первой странице остаётся ошибкой источника', async () => {
     vi.stubGlobal('fetch', async () => {
       throw new TypeError('fetch failed');
