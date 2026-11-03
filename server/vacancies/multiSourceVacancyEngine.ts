@@ -466,6 +466,15 @@ export class MultiSourceVacancyEngine {
       source.lastErrorMessage = state.lastErrorMessage;
       source.itemsFoundTotal = state.itemsFoundTotal;
       source.itemsActiveTotal = state.itemsActiveTotal;
+      // The snapshot is written by the last successful sync. A source that is
+      // not healthy (disabled, failing) never refreshes it while its rows
+      // expire, so the admin kept showing 41 271 for an empty slice
+      // (2026-11-03). One indexed point count per such source, not per start.
+      if (state.lastStatus !== 'healthy' && state.itemsFoundTotal > 0) {
+        const slice = this.pool.countSourceSlice(source.id);
+        source.itemsFoundTotal = slice.total;
+        source.itemsActiveTotal = slice.active;
+      }
       source.syncRequestedAt = state.syncRequestedAt;
       source.syncStartedAt = state.syncStartedAt;
       if (state.observations) {
