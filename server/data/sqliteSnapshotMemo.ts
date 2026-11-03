@@ -1,40 +1,64 @@
 import type { DatabaseSync } from 'node:sqlite';
 
 /**
+ * How long a kept snapshot outlives commits made through other connections.
+ *
+ * Prod CPU profile 03.11: the fit queue, sessions and the mechanics worker commit every second
+ * through their own connections, so a memo dropped on any commit re-read and decrypted the dossier
+ * on every `/fit` call and every sweep chunk — 11.5 of 40 busy seconds, runs up to 2.2 s. The
+ * snapshot tables are written only through the candidate store's own connection; a foreign commit
+ * (a worker's start-up migration) is seen within this window.
+ */
+export const FOREIGN_COMMIT_GRACE_MS = 15_000;
+
+interface Kept<T> {
+  readonly snapshot: T;
+  readonly readAt: number;
+  readonly sharedVersion: number;
+}
+
+/**
  * The decrypted candidate snapshot, kept while the database is unchanged.
  *
  * Prod CPU profile 02.11: getSnapshot took 12 of 20 busy seconds. One
  * matched-vacancies page opened the same dossier several times, and the client
  * reads the pool as ~25 pages. `total_changes()` moves on every write through
- * this connection and `PRAGMA data_version` on every commit by another one, so
- * any write anywhere drops every kept snapshot. A snapshot is shared: callers
- * must not change it. Reads inside a transaction are never kept.
+ * this connection and drops every kept snapshot at once; `PRAGMA data_version`
+ * moves on every commit by another one and drops the snapshots read more than
+ * {@link FOREIGN_COMMIT_GRACE_MS} ago. A snapshot is shared: callers must not
+ * change it. Reads inside a transaction are never kept.
  */
 export class SnapshotMemo<T> {
-  private readonly kept = new Map<string, T>();
-  private version = '';
+  private readonly kept = new Map<string, Kept<T>>();
+  private localVersion = -1;
 
-  constructor(private readonly database: DatabaseSync) {}
+  constructor(
+    private readonly database: DatabaseSync,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   read(candidateId: string, load: () => T): T {
     // Inside a transaction the snapshot may hold writes a rollback will undo.
     if (this.database.isTransaction) return load();
-    const version = this.currentVersion();
-    if (version !== this.version) {
-      this.kept.clear();
-      this.version = version;
-    }
+    const { local, shared } = this.currentVersion();
+    if (local !== this.localVersion) this.kept.clear();
+    this.localVersion = local;
     const hit = this.kept.get(candidateId);
-    if (hit !== undefined) return hit;
+    if (hit && (hit.sharedVersion === shared || this.now() - hit.readAt <= FOREIGN_COMMIT_GRACE_MS)) {
+      return hit.snapshot;
+    }
+    this.kept.delete(candidateId);
     const snapshot = load();
     // A write during load (lazy migration, repair) means the result may be older than the data.
-    if (this.currentVersion() === version) this.kept.set(candidateId, snapshot);
+    if (this.currentVersion().local === local) {
+      this.kept.set(candidateId, { snapshot, readAt: this.now(), sharedVersion: shared });
+    }
     return snapshot;
   }
 
-  private currentVersion(): string {
+  private currentVersion(): { local: number; shared: number } {
     const local = this.database.prepare('SELECT total_changes() AS changes').get() as { changes: number };
     const shared = this.database.prepare('PRAGMA data_version').get() as { data_version: number };
-    return `${local.changes}:${shared.data_version}`;
+    return { local: local.changes, shared: shared.data_version };
   }
 }
