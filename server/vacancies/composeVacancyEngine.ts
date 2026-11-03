@@ -1,3 +1,7 @@
+import { DatabaseSync } from 'node:sqlite';
+import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import { readLinkedinPoolJobs } from './linkedinPoolSource';
+import type { SourceReading } from './multiSourceVacancyEngine';
 import { currentFanDemand } from './jobspyFan';
 import { searchHhVacancies } from '../connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from '../connectors/remotiveVacancySearch';
@@ -37,6 +41,12 @@ export interface ComposeVacancyEngineOptions {
   readonly matchMode?: 'legacy' | 'semantic';
 }
 
+function openPoolJobsDatabase(databasePath: string): DatabaseSync {
+  const database = new DatabaseSync(databasePath);
+  applySqliteBusyTimeout(database);
+  return database;
+}
+
 /**
  * Одна сборка движка пула для обоих процессов (B230): HTTP отвечает из пула,
  * обслуживатель его пополняет. Раньше всё это жило в `server/index.ts`, и
@@ -62,10 +72,22 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     // Роли кандидатов вне справочника hh ищутся по названию (27.10).
     demandTerms: currentFanDemand,
   });
+  // Карточки пула LinkedIn читаются своим соединением и только при опросе источника.
+  let poolJobsDatabase: DatabaseSync | undefined;
+  const readPoolJobs = (): SourceReading => {
+    poolJobsDatabase ??= openPoolJobsDatabase(options.databasePath);
+    return readLinkedinPoolJobs(poolJobsDatabase, {
+      now: new Date(),
+      observedAt: new Date().toISOString(),
+      hasVacancy: (id) => engine.hasVacancy(id),
+    });
+  };
   const engine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
     fetcher:
       options.fetcher ??
-      buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator),
+      buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
+        readLinkedinPoolJobs: readPoolJobs,
+      }),
     pool,
     // Право обхода спрашивается у самой площадки, а не берётся из записи,
     // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
@@ -86,6 +108,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     hhCrawlSettings,
     hhCrawlCoordinator,
     close: () => {
+      poolJobsDatabase?.close();
       pool.close();
       hhCrawlSettings.close();
     },

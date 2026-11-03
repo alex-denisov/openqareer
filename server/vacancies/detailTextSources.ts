@@ -236,6 +236,8 @@ const BY_ID: Readonly<Record<string, DetailTextSource>> = {
   'src-netflix': netflix,
   'src-apple-jobs': apple,
   'src-linkedin-guest': linkedin,
+  // Карточки пула: тот же LinkedIn id, тот же гостевой jobPosting (подкачка текста).
+  'src-linkedin-crawler': linkedin,
   'src-habr-career': jsonLdPage('career.habr.com', /^\/vacancies\/\d+\/?$/),
   'src-yc-work-at-startup': jsonLdPage(
     'www.ycombinator.com',

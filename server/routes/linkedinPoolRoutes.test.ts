@@ -400,4 +400,21 @@ describe('admin LinkedIn pool boundary', () => {
     });
     expect(response.statusCode).toBe(413);
   });
+  it('lets only an admin read and switch pool job reading (on by default)', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    const candidateCookie = await signIn(app, CANDIDATE);
+    const url = '/api/v1/admin/linkedin/job-reading';
+    const origin = 'http://localhost:3000';
+    const initial = await app.inject({ method: 'GET', url, headers: { cookie: adminCookie } });
+    expect(initial.json().data).toMatchObject({ enabled: true });
+    const denied = await app.inject({ method: 'PUT', url, headers: { cookie: candidateCookie, origin }, payload: { enabled: false } });
+    expect(denied.statusCode).toBeGreaterThanOrEqual(401);
+    const invalid = await app.inject({ method: 'PUT', url, headers: { cookie: adminCookie, origin }, payload: { enabled: 'no' } });
+    expect(invalid.statusCode).toBe(422);
+    const off = await app.inject({ method: 'PUT', url, headers: { cookie: adminCookie, origin }, payload: { enabled: false } });
+    expect(off.json().data).toMatchObject({ enabled: false });
+    const after = await app.inject({ method: 'GET', url, headers: { cookie: adminCookie } });
+    expect(after.json().data).toMatchObject({ enabled: false });
+  });
 });

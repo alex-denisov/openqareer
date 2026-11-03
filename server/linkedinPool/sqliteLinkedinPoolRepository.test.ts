@@ -411,7 +411,13 @@ describe('SqliteLinkedinPoolRepository', () => {
         account.id,
         '2026-09-29T00:00:00.000Z',
       ),
-    ).toEqual({ pageCount: 2, attemptedCompanyHashes: [companyHash], lastPageAt: now.toISOString() });
+    ).toEqual({
+      pageCount: 2,
+      jobSearchPageCount: 0,
+      attemptedJobQueryHashes: [],
+      attemptedCompanyHashes: [companyHash],
+      lastPageAt: now.toISOString(),
+    });
     const details = repository
       .getDatabase()
       .prepare('SELECT detail FROM linkedin_pool_audit WHERE account_id = ?')

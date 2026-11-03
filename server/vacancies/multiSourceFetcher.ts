@@ -429,6 +429,8 @@ export interface MultiSourceFetcherDeps {
   readonly fetchWithStealth?: typeof fetchWithStealthFallback;
   readonly linkedinCrawlerDeps?: LinkedinCrawlerDeps;
   readonly fetchLinkedinCrawler?: (deps?: LinkedinCrawlerDeps) => Promise<SourceReading>;
+  /** Карточки поиска вакансий на сессиях пула (решение владельца 03.11); всегда частичное чтение. */
+  readonly readLinkedinPoolJobs?: () => SourceReading;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -531,6 +533,9 @@ export function buildMultiSourceFetcher(
       return fetchJsonOrCareerSite(source, options, deps, sleep, now);
     }
     if (source.type === 'hh_search') return fetchHhSearchBatch(crawlCoordinator);
+    if (source.id === 'src-linkedin-crawler' && deps.readLinkedinPoolJobs) {
+      return deps.readLinkedinPoolJobs();
+    }
     if (source.type === 'linkedin_crawler' || source.id === 'src-linkedin-crawler') {
       const runner = deps.fetchLinkedinCrawler ?? fetchLinkedinCrawler;
       return runner({
