@@ -61,8 +61,14 @@ describe('VacancyDetailPanel (B250)', () => {
   it('shows logo, title, company/location/format and the compact salary', () => {
     const html = render();
     expect(html).toContain('Business Information Architect');
-    expect(html).toContain('Genetec · Canada · удалённо');
+    expect(html).toContain('Genetec · Удалённо, Canada');
     expect(html).toContain('$190–240 тыс.');
+  });
+
+  it('names the stored remote scope in Russian (03.11)', () => {
+    const html = render({ item: item({}, { canonicalLocation: 'Remote', remoteScope: 'US' }) });
+    expect(html).toContain('Genetec · Удалённо, только США');
+    expect(html).not.toContain('Remote');
   });
 
   it('lists matched facts and unconfirmed points from the explanation', () => {
