@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { ApplicationView } from './applicationsApi';
 import { computePipelineAnalytics } from './pipelineAnalytics';
@@ -53,7 +53,7 @@ export function ResponsesMobileChannels({
   explanation,
 }: {
   readonly applications: readonly ApplicationView[];
-  /** Stage analytics stays reachable here, behind «Аналитика этапов». */
+  /** Stage analytics with its own «Аналитика этапов» toggle, collapsed at first. */
   readonly explanation?: ReactNode;
 }) {
   const groups = mobileChannelGroups(applications);
@@ -78,7 +78,7 @@ export function ResponsesMobileChannels({
           Это наблюдение, не обещание результата: роли и компании в каналах разные.
         </p>
       ) : null}
-      {explanation ? <StageAnalyticsDisclosure>{explanation}</StageAnalyticsDisclosure> : null}
+      {explanation ? <div className="career-responses-mobile-disclosure">{explanation}</div> : null}
     </div>
   );
 }
@@ -102,26 +102,5 @@ function ChannelGroup({ group }: { readonly group: ChannelTotals }) {
         </div>
       </dl>
     </section>
-  );
-}
-
-function StageAnalyticsDisclosure({ children }: { readonly children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  return (
-    <div className="career-responses-mobile-disclosure">
-      <button
-        type="button"
-        className="career-btn career-btn-ghost"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen((value) => !value)}
-      >
-        Аналитика этапов
-      </button>
-      <div id={id} hidden={!open}>
-        {open ? children : null}
-      </div>
-    </div>
   );
 }

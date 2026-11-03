@@ -227,7 +227,9 @@ function MobilePushContent({
     return (
       <ResponsesMobileChannels
         applications={workspace.filteredApplications}
-        explanation={<StageAnalytics props={props} workspace={workspace} />}
+        explanation={
+          <StageAnalytics props={props} workspace={workspace} initiallyExpanded={false} />
+        }
       />
     );
   }
@@ -331,15 +333,17 @@ function ChannelPerformance({
 function StageAnalytics({
   props,
   workspace,
+  initiallyExpanded = true,
 }: {
   readonly props: ResponsesWorkspaceScreenProps;
   readonly workspace: WorkspaceController;
+  readonly initiallyExpanded?: boolean;
 }) {
   return (
     <ResponsesPipelineAnalytics
       query={workspace.query}
       revision={props.state.applications}
-      initiallyExpanded
+      initiallyExpanded={initiallyExpanded}
       onOpenVacancies={props.onOpenVacancies}
       onOpenExpert={props.onOpenExpert}
     />

@@ -50,8 +50,10 @@ async function openStories(page: Page, width: number): Promise<void> {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Отклики' }).click();
   }
   if (width <= 760) {
-    // B486: the 390 list selects a response from its row, not from a board card.
-    await page.getByRole('button', { name: /^Открыть следующий шаг: Подготовиться/u }).click();
+    // B486: at 390 the whole row is one button and opens the response's «Процесс» push.
+    await page
+      .getByRole('button', { name: /^Открыть отклик:.*Руководитель инженерной команды/u })
+      .click();
   } else {
     const card = page
       .locator('.career-responses-card')
