@@ -35,7 +35,6 @@ import {
 } from '../vacancies/useVacancyApplications';
 import { useApplications } from '../applications/useApplications';
 import type { ApplicationView } from '../applications/applicationsApi';
-import { ResponsesBoard } from '../applications/ResponsesBoard';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { PageHeader } from '../shell/PageHeader';
@@ -58,6 +57,7 @@ import type {
 } from '../vacancies/vacancyProfileRequirement';
 import type { NavigationOptions } from '../shell/pathIndicator';
 import type { CareerCabinetView } from './cabinetViews';
+import { CabinetResponses } from './CabinetResponses';
 import { CareerDiaryPage } from '../diary/CareerDiaryPage';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { profileFocusForAction } from './profileFocusForAction';
@@ -683,13 +683,12 @@ function CabinetSection({
 
   if (view === 'responses') {
     return (
-      <ResponsesBoard
-        state={applicationsTracker}
-        onOpenVacancies={() => onNavigate('opportunities')}
+      <CabinetResponses
+        tracker={applicationsTracker}
+        navigationOptions={navigationOptions}
+        onNavigate={onNavigate}
+        onProfileTabChange={onProfileTabChange}
         onOpenAutomation={onOpenAutomation}
-        initialStageFilter={navigationOptions?.stage}
-        initialArchiveOpen={navigationOptions?.openArchive}
-        initialApplicationId={navigationOptions?.applicationId}
         onOpenExpert={onOpenExpert}
       />
     );

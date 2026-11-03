@@ -52,6 +52,7 @@ export interface ResponsesWorkspaceScreenProps {
   readonly onClearFilter?: () => void;
   readonly onOpenVacancies: () => void;
   readonly onOpenAutomation?: () => void;
+  readonly onOpenResume?: () => void;
   readonly initialTab?: 'board' | 'analytics';
   readonly initialApplicationId?: string;
   /** At 390 the archive lives in the «Закрыто» push screen, so the deep link opens it. */
@@ -96,7 +97,11 @@ function WorkspacePanelContent({
 
 export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
   const workspace = useWorkspaceController(props);
-  const tableView = renderTableView({ state: props.state, workspace });
+  const tableView = renderTableView({
+    state: props.state,
+    workspace,
+    onOpenResume: props.onOpenResume,
+  });
   const sections: readonly ResponsesWorkspaceSection[] = [
     'funnel',
     'company-wants',
@@ -140,13 +145,15 @@ export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
 interface WorkspaceQueryActionsInput {
   readonly state: UseApplications;
   readonly workspace: WorkspaceController;
+  readonly onOpenResume?: () => void;
 }
 
-function renderTableView({ state, workspace }: WorkspaceQueryActionsInput) {
+function renderTableView({ state, workspace, onOpenResume }: WorkspaceQueryActionsInput) {
   const visibleApplications = workspace.filteredApplications.slice(0, workspace.tableLimit);
   return (
     <ResponsesApplicationsTable
       applications={visibleApplications}
+      filteredApplications={workspace.filteredApplications}
       selectedIds={workspace.selectedIds}
       onToggleSelected={workspace.toggleSelected}
       onToggleAll={() => workspace.toggleAllVisible(visibleApplications)}
@@ -159,6 +166,7 @@ function renderTableView({ state, workspace }: WorkspaceQueryActionsInput) {
       onBulkComplete={workspace.bulkComplete}
       selectedApplicationId={workspace.selectedApplication?.id}
       onSelectApplication={workspace.selectApplication}
+      onOpenResume={onOpenResume}
     />
   );
 }
