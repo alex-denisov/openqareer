@@ -78,6 +78,8 @@ export interface UnifiedVacancy {
   descriptionHiddenSeen?: number;
   /** Отпечаток «название + полный текст» (01.11): проекция сведения несёт его вместо текста. */
   textKey?: string;
+  /** Область удалёнки (`shared/remoteScope`): считается при записи проекции из полного текста. */
+  remoteScope?: string;
   postType?: 'vacancy' | 'candidate_resume' | 'ad' | 'digest';
   url: string;
   provenance: VacancyProvenance;
@@ -107,6 +109,8 @@ export interface VacancyCluster {
   employerIsPerson?: boolean;
   canonicalLocation?: string;
   isRemote: boolean;
+  /** Откуда можно работать на удалёнке: `global` или коды стран и блоков (03.11). */
+  remoteScope?: string;
   salary?: VacancySalary;
   /** Формат работы, посчитанный до обрезки выжимки страницей подборки (B446-g4). */
   workFormat?: import('../../shared/vacancyWorkFormat').VacancyWorkFormat;

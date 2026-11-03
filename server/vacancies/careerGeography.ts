@@ -5,6 +5,7 @@ import {
   parseVacancyLocation,
 } from '../../shared/locationTree';
 import type { CandidateDecisionProfile } from '../../shared/workPreferences';
+import { parseRemoteScope, remoteScopeAllows } from '../../shared/remoteScope';
 import { regionOfVacancy } from './vacancyGeography';
 import '../../shared/geo/serverGeoDirectory';
 
@@ -20,6 +21,11 @@ export interface CareerGeography {
   readonly places: readonly string[];
   /** Удалённые вакансии входят в географию. */
   readonly remote: boolean;
+  /**
+   * Откуда кандидат работает удалённо («Удалённо из РФ» — `ru`). Пусто —
+   * страна не названа, подходит удалёнка с любой областью (03.11).
+   */
+  readonly remoteRegions: readonly CandidateRegion[];
   readonly regions: readonly CandidateRegion[];
 }
 
@@ -51,11 +57,15 @@ export function careerGeographyOf(
     });
     if (region) regions.add(region);
   }
-  if (remoteEntries.some((entry) => HOME_COUNTRY_MARK.test(entry))) regions.add('ru');
+  const remoteRegions = remoteEntries.some((entry) => HOME_COUNTRY_MARK.test(entry))
+    ? (['ru'] as const)
+    : [];
+  for (const region of remoteRegions) regions.add(region);
   return {
     labels,
     places: Array.from(new Set(placeEntries.map(placeKey))),
     remote,
+    remoteRegions,
     regions: [...regions],
   };
 }
@@ -64,12 +74,19 @@ interface GeographyItem {
   readonly cluster: {
     readonly canonicalLocation?: string;
     readonly isRemote?: boolean;
+    readonly remoteScope?: string;
     readonly companyFeatures?: { readonly country?: string };
   };
 }
 
+/** «Удалённо из РФ» не берёт удалёнку «только США»; область не посчитана — берёт. */
+function remoteWithinReach(item: GeographyItem, geography: CareerGeography): boolean {
+  if (!geography.remote || !item.cluster.isRemote) return false;
+  return remoteScopeAllows(parseRemoteScope(item.cluster.remoteScope), geography.remoteRegions);
+}
+
 export function withinCareerGeography(item: GeographyItem, geography: CareerGeography): boolean {
-  if (geography.remote && item.cluster.isRemote) return true;
+  if (remoteWithinReach(item, geography)) return true;
   if (geography.places.length === 0) return false;
   return matchesLocationSelection(
     {

@@ -229,7 +229,7 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     const { sql, params } = buildSemanticMatchQuery({
       functionCodes: ['eng-mgmt', 'it-ops'],
       levelRank: 3,
-      geography: { cityNames, remote: true },
+      geography: { cityNames, remote: true, remoteAreas: [] },
       window: { fromMs: 0, toMs: 5_000 },
       preferRemote: false,
       limit: 50,

@@ -1,3 +1,4 @@
+import { vacancyRemoteLabel } from '../vacancies/vacancyRemoteLabel';
 import { vacancyCoverage } from '../vacancies/vacancyFilters';
 import { useEffect, useState } from 'react';
 import {
@@ -26,7 +27,9 @@ export function TargetVacancyHeader({ item }: { item: MatchedVacancyItem }) {
         <strong>{item.cluster.canonicalTitle}</strong>
         <small>
           {employerLabel(item.cluster.canonicalCompany)} ·{' '}
-          {item.cluster.canonicalLocation || (item.cluster.isRemote ? 'Remote' : 'Локация не указана')}
+          {item.cluster.isRemote
+            ? vacancyRemoteLabel(item.cluster)
+            : item.cluster.canonicalLocation || 'Локация не указана'}
         </small>
       </div>
       <span className={`career-match-badge ${roleMatchClass(item.explanation.roleMatch)}`}>

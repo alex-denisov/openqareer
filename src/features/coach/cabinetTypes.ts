@@ -142,6 +142,8 @@ interface VacancyCluster {
   canonicalCompany: string;
   canonicalLocation?: string;
   isRemote: boolean;
+  /** Откуда можно работать на удалёнке: `global` или коды стран (`shared/remoteScope`). */
+  remoteScope?: string;
   /** B446-g4: формат работы с сервера; без него — разбор места и выжимки. */
   workFormat?: import('../../../shared/vacancyWorkFormat').VacancyWorkFormat;
   salary?: {

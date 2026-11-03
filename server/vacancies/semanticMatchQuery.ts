@@ -81,18 +81,42 @@ function buildGeographyFilter(geography: MatchGeography | undefined): {
           SELECT coalesce(json_extract(c.cluster_json, '$.location'), '') AS location
           FROM vacancy_cluster_input c WHERE c.id = s.id LIMIT 1
         ) place, json_each(?) name WHERE instr(place.location, name.value) > 0)`;
-  const remote = geography.remote ? ['i.is_remote = 1'] : [];
+  const remote = geography.remote ? [remoteCondition(geography.remoteAreas)] : [];
+  const remoteParams =
+    geography.remote && geography.remoteAreas.length > 0
+      ? [JSON.stringify(geography.remoteAreas)]
+      : [];
   return {
     sql: `AND (${[...remote, places].join(' OR ')})`,
-    params: [JSON.stringify(cityNameVariants(geography.cityNames))],
+    params: [...remoteParams, JSON.stringify(cityNameVariants(geography.cityNames))],
   };
+}
+
+/**
+ * 03.11: «Удалённо из РФ» не тратит окно чтения на удалёнку «только США».
+ * Область читается один раз на строку, коды идут одним JSON-параметром;
+ * строка без посчитанной области проходит, как раньше.
+ */
+function remoteCondition(areas: readonly string[]): string {
+  if (areas.length === 0) return 'i.is_remote = 1';
+  return `(i.is_remote = 1 AND EXISTS (SELECT 1 FROM (
+          SELECT json_extract(c.cluster_json, '$.remoteScope') AS scope
+          FROM vacancy_cluster_input c WHERE c.id = s.id LIMIT 1
+        ) remote WHERE remote.scope IS NULL OR remote.scope = 'global'
+          OR EXISTS (SELECT 1 FROM json_each(?) area
+            WHERE instr(',' || remote.scope || ',', ',' || area.value || ',') > 0)))`;
 }
 
 function cityNameVariants(names: readonly string[]): string[] {
   const variants = names.flatMap((name) => {
     const lower = name.toLocaleLowerCase('ru-RU');
     const capital = lower.charAt(0).toLocaleUpperCase('ru-RU') + lower.slice(1);
-    return [name, lower, capital, lower.toLocaleUpperCase('ru-RU')];
+    // «Abu Dhabi», «New York»: справочник хранит латиницу строчными.
+    const titled = lower.replace(
+      /(^|[\s-])(\p{L})/gu,
+      (_, gap: string, letter: string) => `${gap}${letter.toLocaleUpperCase('ru-RU')}`,
+    );
+    return [name, lower, capital, titled, lower.toLocaleUpperCase('ru-RU')];
   });
   return Array.from(new Set(variants.filter((name) => name.trim().length > 0)));
 }
