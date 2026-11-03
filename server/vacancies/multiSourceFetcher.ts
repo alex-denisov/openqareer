@@ -33,6 +33,7 @@ type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<Vac
  * площадкам отказ «aborted due to timeout» (прод 2026-09-06, 92 источника).
  */
 const JSON_SOURCE_TIMEOUT_MS = 45_000;
+const LINKEDIN_PAGE_TIMEOUT_MS = 20_000;
 
 const FETCH_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
@@ -277,7 +278,8 @@ async function fetchLinkedinGuestSource(
 ): Promise<SourceReading> {
   return fetchLinkedinGuest({
     fetchPage: async (url, headers) => {
-      return withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, async (signal) => {
+      // Per page, not per poll: one slow page ends the run with what was read.
+      return withRequestTimeout(LINKEDIN_PAGE_TIMEOUT_MS, async (signal) => {
         const res = await fetch(url, { headers, signal });
         return { status: res.status, body: res.ok ? await res.text() : '' };
       });

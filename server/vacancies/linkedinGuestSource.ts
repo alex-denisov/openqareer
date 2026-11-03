@@ -3,7 +3,6 @@ import type { SourceReading } from './multiSourceVacancyEngine';
 import { buildJsonVacancy, fromIso, isUsableVacancy } from './jsonVacancyRecord';
 import { LINKEDIN_GUEST_URL } from './jobspyEndpoints';
 import {
-  FAN_SIZE,
   type FanCombo,
   currentFanDemand,
   fanComboAt,
@@ -133,6 +132,9 @@ export interface LinkedinFetchDeps {
   readonly providerCapability?: LinkedinProviderCapabilityVerdict;
   /** Роли спроса; без них — то, что подключил обслуживатель пула. */
   readonly demandTerms?: readonly string[];
+  /** Wall-clock budget of one run, ms; the run ends successfully when spent. */
+  readonly budgetMs?: number;
+  readonly clock?: () => number;
 }
 
 /** Pause between requests: at least 0.4 s plus jitter (flat cadence draws 429). */
@@ -201,6 +203,58 @@ function syncCombos(nowMs: number, demand: readonly string[]): FanCombo[] {
   ];
 }
 
+/** One run may spend this long reading; the rest of the fan waits for the next run. */
+export const LINKEDIN_BUDGET_MS = 150_000;
+
+/**
+ * Where the last run stopped inside the current fan window. Kept in memory: a
+ * restart only costs one repeated page range, and no schema change is needed.
+ */
+interface FanCursor {
+  readonly tick: number;
+  readonly combo: number;
+  readonly page: number;
+}
+let fanCursor: FanCursor | null = null;
+
+/** Test hook: forget where the previous run stopped. */
+export function resetLinkedinFanCursor(): void {
+  fanCursor = null;
+}
+
+function resumePoint(tick: number): { combo: number; page: number } {
+  return fanCursor && fanCursor.tick === tick
+    ? { combo: fanCursor.combo, page: fanCursor.page }
+    : { combo: 0, page: 0 };
+}
+
+type PageOutcome = 'cards' | 'exhausted' | 'stop';
+
+async function readPage(
+  deps: LinkedinFetchDeps,
+  url: string,
+  firstRequest: boolean,
+  into: UnifiedVacancy[],
+): Promise<PageOutcome> {
+  let response: GuestResponse;
+  try {
+    response = await fetchWithBackoff(deps, url, !firstRequest);
+  } catch (error) {
+    // A page that timed out costs that page, not the pages already read.
+    if (firstRequest) throw error;
+    return 'stop';
+  }
+  const { status, body } = response;
+  if (status === 429 || status < 200 || status >= 400) {
+    if (firstRequest) throw new Error(`vacancy_source_unreachable: ${status}`);
+    return 'stop';
+  }
+  const parsed = parseLinkedinCards(body, deps.observedAt);
+  if (parsed.length === 0) return 'exhausted';
+  into.push(...parsed);
+  return 'cards';
+}
+
 export async function fetchLinkedinGuest(
   deps: LinkedinFetchDeps,
   nowMs: number = Date.now(),
@@ -210,15 +264,21 @@ export async function fetchLinkedinGuest(
     return { vacancies: [], partial: true };
   }
   const combos = syncCombos(nowMs, deps.demandTerms ?? currentFanDemand());
+  const clock = deps.clock ?? Date.now;
+  const budgetMs = deps.budgetMs ?? LINKEDIN_BUDGET_MS;
+  const startedAt = clock();
+  const tick = Math.floor(nowMs / (LINKEDIN_INTERVAL_MINUTES * 60_000));
+  const resume = resumePoint(tick);
   const vacancies: UnifiedVacancy[] = [];
-  // Веер шире одного опроса, поэтому чтение частичное: движок дополняет срез,
-  // а не заменяет его — иначе каждый опрос стирал бы прошлые комбинации.
-  let partial = true;
   let requests = 0;
+  let stoppedAt: FanCursor | null = null;
 
-  for (const combo of combos) {
-    for (let page = 0; page < LINKEDIN_PAGES_PER_COMBO; page += 1) {
-      const start = page * LINKEDIN_PAGE;
+  scan: for (let c = resume.combo; c < combos.length; c += 1) {
+    for (let page = c === resume.combo ? resume.page : 0; page < LINKEDIN_PAGES_PER_COMBO; page += 1) {
+      if (requests > 0 && clock() - startedAt >= budgetMs) {
+        stoppedAt = { tick, combo: c, page };
+        break scan;
+      }
       // Джиттер: LinkedIn быстро отдаёт 429 ровному такту (B218 security-review).
       if (requests > 0) {
         await deps.sleep(
@@ -226,25 +286,20 @@ export async function fetchLinkedinGuest(
         );
       }
       requests += 1;
-      const url = linkedinGuestUrl(start, combo);
-      const response = await fetchWithBackoff(deps, url, requests > 1);
-      const { status, body } = response;
-      if (status === 429) {
-        if (requests === 1) throw new Error('vacancy_source_unreachable: 429');
-        return { vacancies: vacancies.filter(isUsableVacancy), partial: true };
+      const url = linkedinGuestUrl(page * LINKEDIN_PAGE, combos[c]!);
+      const outcome = await readPage(deps, url, requests === 1, vacancies);
+      if (outcome === 'stop') {
+        // Resume after the page that failed, so a stuck page cannot pin the fan.
+        stoppedAt = { tick, combo: c, page: page + 1 };
+        break scan;
       }
-      if (status < 200 || status >= 400) {
-        if (requests === 1) throw new Error(`vacancy_source_unreachable: ${status}`);
-        return { vacancies: vacancies.filter(isUsableVacancy), partial: true };
-      }
-      const parsed = parseLinkedinCards(body, deps.observedAt);
-      // Комбинация исчерпана — к следующей, не добивая её потолок впустую.
-      if (parsed.length === 0) break;
-      vacancies.push(...parsed);
+      if (outcome === 'exhausted') break;
     }
   }
 
-  // Полный круг веера за один опрос — чтение полное.
-  if (LINKEDIN_COMBOS_PER_SYNC >= FAN_SIZE) partial = false;
-  return { vacancies: vacancies.filter(isUsableVacancy), partial };
+  // A run that reached the end of the window starts the next one from the top.
+  fanCursor = stoppedAt;
+  // Веер шире одного опроса, поэтому чтение всегда частичное: движок дополняет
+  // срез, а не заменяет его — иначе каждый опрос стирал бы прошлые комбинации.
+  return { vacancies: vacancies.filter(isUsableVacancy), partial: true };
 }
