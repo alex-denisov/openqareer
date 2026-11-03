@@ -230,4 +230,20 @@ describe('pool vacancy reader (jobs search)', () => {
       lastFailureCode: 'challenge_required',
     });
   });
+  it('keeps the search url (role, location) out of failure reasons', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    seedDemand(repository, ['qa engineer']);
+    const fake = fakeBrowser();
+    fake.page.goto.mockImplementationOnce(async (url: string) => {
+      throw new Error(`page.goto: Timeout 25000ms exceeded.\nCall log:\n  - navigating to "${url}", waiting until "domcontentloaded"`);
+    });
+    const { executor } = makeExecutor(repository, account.id, fake);
+
+    const result = await executor.runStep();
+    expect(result.status).toBe('transient_failure');
+    expect(result.reason).toContain('Timeout');
+    expect(result.reason).not.toContain('keywords=');
+    expect(result.reason).not.toContain('qa');
+  });
 });

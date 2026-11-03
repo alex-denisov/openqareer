@@ -640,7 +640,10 @@ function isRedirectLoop(error: unknown): boolean {
 
 /** Имя и сообщение ошибки, обрезанные; cookies и заголовки сюда не попадают. */
 function describeFailure(error: unknown): string {
-  if (error instanceof Error) return `${error.name}: ${error.message}`.slice(0, 300);
+  // Адрес страницы несёт роль и локацию запроса: в причину сбоя он не попадает.
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`.replace(/https?:\/\/[^\s"']+/giu, '[url]').slice(0, 300);
+  }
   return 'unknown_error';
 }
 
