@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
-import { CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
+import { CATALOG_LISTINGS_TABLE, CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
@@ -343,7 +343,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
-    this.database.exec(CATALOG_TOTALS_TABLE);
+    this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE);
     this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
@@ -2658,6 +2658,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            observed_at = excluded.observed_at, computed_at = excluded.computed_at`,
       )
       .run(row.n, observedAt, computedAt);
+    this.database
+      .prepare(
+        `INSERT INTO catalog_listings (id, listings_json, computed_at) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET listings_json = excluded.listings_json,
+           computed_at = excluded.computed_at`,
+      )
+      .run(JSON.stringify(this.countCatalogListings()), computedAt);
     return { clusters: row.n, updatedAt: observedAt, computedAt };
   }
 
@@ -2759,7 +2766,23 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
+  /** Maintenance writes them with the totals; until its first pass they are counted here. */
   loadCatalogListings(): CatalogListingSummary[] {
+    const stored = this.database
+      .prepare('SELECT listings_json FROM catalog_listings WHERE id = 1')
+      .get() as { listings_json: string } | undefined;
+    if (stored) {
+      try {
+        const parsed: unknown = JSON.parse(stored.listings_json);
+        if (Array.isArray(parsed)) return parsed as CatalogListingSummary[];
+      } catch {
+        // A damaged row is counted again below, as before maintenance wrote one.
+      }
+    }
+    return this.countCatalogListings();
+  }
+
+  private countCatalogListings(): CatalogListingSummary[] {
     const rows = this.database
       .prepare(
         `SELECT place_slug, max(place_label) AS place_label,
