@@ -30,3 +30,15 @@ describe('openqareer-env-set: ключ Anthropic (28.10)', () => {
     expect(run(`OPENQAREER_ANTHROPIC_API_KEY=${key}\n`, file)).toContain('unchanged');
   });
 });
+
+describe('openqareer-env-set: ключ Search Console (04.11)', () => {
+  it('принимает base64 со знаками + / = и не печатает значение', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'oq-env-')), 'openqareer.env');
+    writeFileSync(file, 'OPENQAREER_AI_MODEL=gpt-5.6-luna\n');
+    const value = `${'QUJD+/'.repeat(30)}==`;
+    const first = run(`OPENQAREER_GSC_SERVICE_ACCOUNT_B64=${value}\n`, file);
+    expect(first).toContain('OPENQAREER_GSC_SERVICE_ACCOUNT_B64 set');
+    expect(first).not.toContain(value);
+    expect(readFileSync(file, 'utf8')).toContain(`OPENQAREER_GSC_SERVICE_ACCOUNT_B64=${value}`);
+  });
+});

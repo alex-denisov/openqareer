@@ -68,6 +68,7 @@ export function vertexPublisherBaseUrl(config: VertexConfig): string {
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const TOKEN_LIFETIME_S = 3600;
+const VERTEX_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 /** Токен обновляется за пять минут до конца, чтобы не отдать протухший. */
 const TOKEN_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
@@ -75,12 +76,14 @@ function base64Url(value: string): string {
   return Buffer.from(value).toString('base64url');
 }
 
-function signedAssertion(config: VertexConfig, nowS: number): string {
+type ServiceAccountIdentity = Pick<VertexConfig, 'clientEmail' | 'privateKey'>;
+
+function signedAssertion(config: ServiceAccountIdentity, scope: string, nowS: number): string {
   const header = base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claims = base64Url(
     JSON.stringify({
       iss: config.clientEmail,
-      scope: 'https://www.googleapis.com/auth/cloud-platform',
+      scope,
       aud: TOKEN_URL,
       iat: nowS,
       exp: nowS + TOKEN_LIFETIME_S,
@@ -97,9 +100,10 @@ export class VertexTokenProvider {
   private pending?: Promise<string>;
 
   constructor(
-    private readonly config: VertexConfig,
+    private readonly config: ServiceAccountIdentity,
     private readonly fetchImpl: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
+    private readonly scope: string = VERTEX_SCOPE,
   ) {}
 
   async token(): Promise<string> {
@@ -113,7 +117,7 @@ export class VertexTokenProvider {
   }
 
   private async issue(): Promise<string> {
-    const assertion = signedAssertion(this.config, Math.floor(this.now() / 1000));
+    const assertion = signedAssertion(this.config, this.scope, Math.floor(this.now() / 1000));
     const response = await this.fetchImpl(TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
