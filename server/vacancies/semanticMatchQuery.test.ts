@@ -205,4 +205,42 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
     expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['target-ops']);
   });
+
+  /**
+   * 03.11: «ОАЭ» в «Карьере» развернулась в 322 написания городов, и каждое
+   * читало место строки заново — 81 с на проде при тайм-ауте чтения 12 с.
+   */
+  it('reads a long list of place names as one parameter per branch', () => {
+    const located = (id: string, location: string, publishedMs: number, isRemote = 0) => {
+      seed(id, 'eng-mgmt', 3, publishedMs, isRemote);
+      database
+        .prepare('UPDATE vacancy_cluster_input SET cluster_json = ? WHERE id = ?')
+        .run(JSON.stringify({ id, location }), id);
+    };
+    located('moscow', 'Москва', 1_000);
+    located('dubai', 'Dubai, United Arab Emirates', 2_000);
+    located('berlin', 'Berlin', 3_000);
+    located('remote-berlin', 'Berlin', 4_000, 1);
+    const cityNames = [
+      'Москва',
+      ...Array.from({ length: 300 }, (_, index) => `city-${index}`),
+      'Dubai',
+    ];
+    const { sql, params } = buildSemanticMatchQuery({
+      functionCodes: ['eng-mgmt', 'it-ops'],
+      levelRank: 3,
+      geography: { cityNames, remote: true },
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+
+    expect(params.length).toBeLessThan(40);
+    const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
+    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual([
+      'remote-berlin',
+      'dubai',
+      'moscow',
+    ]);
+  });
 });

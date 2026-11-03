@@ -66,18 +66,26 @@ function buildFunctionBranch(
  * из 487 руководящих вакансий города в подборку попадали 29. Место читается
  * из проекции сведения той же строки; `lower()` SQLite знает только латиницу,
  * поэтому кириллица сравнивается в написаниях, которые дал вызывающий.
+ *
+ * 03.11: страна разворачивается в сотни написаний городов («ОАЭ» — 322), и
+ * отдельный `instr` на каждое заново читал место строки — 81 с на проде при
+ * тайм-ауте чтения 12 с. Место читается один раз на строку (`LIMIT 1` не даёт
+ * подзапросу раствориться), написания идут одним JSON-параметром — 1 с.
  */
 function buildGeographyFilter(geography: MatchGeography | undefined): {
   sql: string;
   params: string[];
 } {
   if (!geography || geography.cityNames.length === 0) return { sql: '', params: [] };
-  const location = `coalesce((SELECT json_extract(c.cluster_json, '$.location')
-        FROM vacancy_cluster_input c WHERE c.id = s.id), '')`;
-  const names = cityNameVariants(geography.cityNames);
-  const places = names.map(() => `instr(${location}, ?) > 0`);
+  const places = `EXISTS (SELECT 1 FROM (
+          SELECT coalesce(json_extract(c.cluster_json, '$.location'), '') AS location
+          FROM vacancy_cluster_input c WHERE c.id = s.id LIMIT 1
+        ) place, json_each(?) name WHERE instr(place.location, name.value) > 0)`;
   const remote = geography.remote ? ['i.is_remote = 1'] : [];
-  return { sql: `AND (${[...remote, ...places].join(' OR ')})`, params: names };
+  return {
+    sql: `AND (${[...remote, places].join(' OR ')})`,
+    params: [JSON.stringify(cityNameVariants(geography.cityNames))],
+  };
 }
 
 function cityNameVariants(names: readonly string[]): string[] {
