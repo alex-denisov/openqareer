@@ -63,7 +63,7 @@ export function selectionStamp(clusterIds: readonly string[]): string {
 /** `rank` — the chunk's first place in the selection. */
 type Preload = (vacancyIds: readonly string[], rank: number) => Promise<unknown> | unknown;
 /** `rank` is the chunk's first place in the selection: the queue keeps relevance order (B580). */
-type RequestFit = (clusterIds: readonly string[], rank: number) => Promise<void> | void;
+type RequestFit = (clusterIds: readonly string[], rank: number) => void;
 
 /**
  * 01.11: one sweep per candidate and selection key (profile stamp + the whole filtered
@@ -100,7 +100,7 @@ export function createSelectionFitSweep({
         // A failed text request leaves the row to the background loader.
       }
       try {
-        await requestFit(ids, start);
+        requestFit(ids, start);
       } catch {
         // One failed queue write leaves the next chunks to this sweep and the rest to the next.
       }

@@ -35,30 +35,10 @@ describe('logPoolWrites (PRB-043 срез 2)', () => {
 
   it('предупреждает о транзакции дольше секунды и молчит о быстрой', () => {
     const { lines, observe } = capture();
-    observe({
-      kind: 'transaction',
-      operation: 'upsert',
-      sourceId: 'hh',
-      rows: 250,
-      durationMs: 120,
-      lockWaitMs: 0,
-    });
-    observe({
-      kind: 'transaction',
-      operation: 'remove',
-      sourceId: 'hh',
-      rows: 250,
-      durationMs: 1400,
-      lockWaitMs: 1300,
-    });
+    observe({ kind: 'transaction', operation: 'upsert', sourceId: 'hh', rows: 250, durationMs: 120 });
+    observe({ kind: 'transaction', operation: 'remove', sourceId: 'hh', rows: 250, durationMs: 1400 });
     expect(lines).toEqual([
-      expect.objectContaining({
-        level: 40,
-        msg: 'pool-write-slow',
-        operation: 'remove',
-        durationMs: 1400,
-        lockWaitMs: 1300,
-      }),
+      expect.objectContaining({ level: 40, msg: 'pool-write-slow', operation: 'remove', durationMs: 1400 }),
     ]);
   });
 });

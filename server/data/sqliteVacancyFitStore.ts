@@ -140,7 +140,7 @@ export class SqliteVacancyFitStore {
    * чтением. Сортировка пула считает точный разбор только для них, а не для
    * тысяч вакансий без результата. Свежесть результата проверяет getCache.
    */
-  cachedVacancyIds(candidateId: string): ReadonlySet<string> {
+  cachedVacancyIds(candidateId: string): Set<string> {
     const candidateKey = this.candidateKey(candidateId);
     const stat = this.database.prepare('SELECT COUNT(*) AS count, COALESCE(MAX(rowid), 0) AS last FROM vacancy_fit_cache WHERE candidate_key = ?')
       .get(candidateKey) as { count: number; last: number };
@@ -155,15 +155,13 @@ export class SqliteVacancyFitStore {
       this.cachedIdsMemo.delete(candidateKey);
       return this.cachedVacancyIds(candidateId);
     }
-    // PRB-041: nothing landed — the same set, not a copy of thousands of ids per page read.
-    if (since > 0 && known && rows.length === 0) return known.ids;
     const ids = new Set(since > 0 && known ? known.ids : []);
     for (const row of rows) {
       const id = this.openedVacancyId(row, candidateId);
       if (id) ids.add(id);
     }
     this.cachedIdsMemo.set(candidateKey, { ids, count: stat.count, last: stat.last });
-    return ids;
+    return new Set(ids);
   }
 
   /**

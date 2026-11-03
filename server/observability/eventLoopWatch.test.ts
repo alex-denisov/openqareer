@@ -2,7 +2,7 @@ import { request as httpRequest } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
-import { namedInFlight, registerEventLoopWatch } from './eventLoopWatch';
+import { registerEventLoopWatch } from './eventLoopWatch';
 
 function busy(ms: number): void {
   const until = Date.now() + ms;
@@ -54,20 +54,6 @@ describe('event loop watch (CPO prod 02.11: /health 37 s, static files 23 s)', (
     await app.close();
     const stall = log.mock.calls.find(([, msg]) => msg === 'event-loop-stall')?.[0];
     expect(stall?.inFlight).toEqual([expect.objectContaining({ url: '/slow' })]);
-  });
-
-  it('names the oldest unfinished requests before finished ones (prod 03.11: eight finished company reads hid what held a 7.6 s stall)', () => {
-    const finished = Array.from({ length: 9 }, (_, index) => ({
-      method: 'GET',
-      url: `/fast/${index}`,
-      ageMs: 80,
-      finished: true,
-    }));
-    const open = { method: 'POST', url: '/held', ageMs: 7_600, finished: false };
-    const named = namedInFlight([...finished, open]);
-    expect(named).toHaveLength(8);
-    expect(named[0]).toEqual(open);
-    expect(named.slice(1).every((item) => item.finished)).toBe(true);
   });
 
   it('reports loop delay per period', async () => {

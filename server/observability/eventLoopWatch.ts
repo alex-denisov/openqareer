@@ -27,11 +27,7 @@ const MAX_NAMED = 8;
 const round = (value: number) => Math.round(value * 10) / 10;
 
 /** Requests open during the held window, finished ones included, oldest first. */
-function heldRequests(
-  tracked: Map<string, Tracked>,
-  windowStart: number,
-  now: number,
-): HeldRequest[] {
+function heldRequests(tracked: Map<string, Tracked>, windowStart: number, now: number) {
   const held = [...tracked.entries()];
   for (const [id, item] of held) {
     if (item.finishedAt !== undefined) tracked.delete(id);
@@ -46,23 +42,6 @@ function heldRequests(
       ageMs: Math.round((item.finishedAt ?? now) - item.startedAt),
       finished: item.finishedAt !== undefined,
     }));
-}
-
-interface HeldRequest {
-  readonly method: string;
-  readonly url: string;
-  readonly ageMs: number;
-  readonly finished: boolean;
-}
-
-/**
- * The named few: unfinished requests first, then finished ones, each oldest first. Prod 03.11:
- * eight finished company reads filled the list and hid the request that held a 7.6 s stall.
- */
-export function namedInFlight(held: readonly HeldRequest[]): HeldRequest[] {
-  const open = held.filter((item) => !item.finished);
-  const done = held.filter((item) => item.finished);
-  return [...open, ...done].slice(0, MAX_NAMED);
 }
 
 function trackRequests(app: FastifyInstance): Map<string, Tracked> {
@@ -107,9 +86,8 @@ function stallTicker(
       log(
         {
           stallMs: Math.round(late),
-          inFlight: namedInFlight(held),
+          inFlight: held.slice(0, MAX_NAMED),
           inFlightCount: held.length,
-          unfinishedCount: held.filter((item) => !item.finished).length,
         },
         'event-loop-stall',
       );
