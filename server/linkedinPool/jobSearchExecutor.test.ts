@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,11 +24,6 @@ const jobsPage = readFileSync(
   'utf8',
 );
 const companyPage = '<main>urn:li:fsd_company:(11348) urn:li:fsd_company:(11348) urn:li:fsd_company:(5)</main>';
-const exaNick = {
-  url: 'https://es.linkedin.com/in/nick-wadding/en',
-  title: 'Nick Wadding',
-  text: '# Nick Wadding\nRecruiting for Data roles at Northwind Group\nManchester, England, United Kingdom (GB)\n500 connections',
-};
 const resources: Array<{ repository: SqliteLinkedinPoolRepository; directory: string }> = [];
 
 afterEach(() => {
