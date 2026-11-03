@@ -94,13 +94,14 @@ describe('B227: аудит разметки Google for Jobs (Schema.org JobPosti
 
   it('корректно размечает удаленный формат работы (TELECOMMUTE)', () => {
     const remoteCluster = sampleCluster({
-      canonicalLocation: undefined,
+      canonicalLocation: 'United States',
       isRemote: true,
     });
     const detail = buildVacancyDetail(remoteCluster);
     const posting = detail!.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting');
 
     expect(posting!.jobLocationType).toBe('TELECOMMUTE');
+    expect(posting!.applicantLocationRequirements).toEqual({ '@type': 'Country', name: 'US' });
     expect(posting).not.toHaveProperty('jobLocation');
   });
 
