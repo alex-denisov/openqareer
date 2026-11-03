@@ -243,9 +243,43 @@ describe('страница публичного каталога ваканси�
   });
 
   it('называет удалённую вакансию удалённой так, как это понимает поисковик', () => {
-    const detail = buildVacancyDetail(cluster({ isRemote: true, canonicalLocation: undefined }))!;
+    const detail = buildVacancyDetail(cluster({ isRemote: true, canonicalLocation: 'Germany' }))!;
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
     expect(posting.jobLocationType).toBe('TELECOMMUTE');
+  });
+
+  it('не размечает удалённую вакансию без страны кандидата: Google считает её ошибкой', () => {
+    // 03.11 GSC: «Missing field applicantLocationRequirements». Без страны
+    // TELECOMMUTE недопустим, а без него нужен адрес, которого нет.
+    const detail = buildVacancyDetail(cluster({ isRemote: true, canonicalLocation: undefined }))!;
+    expect(detail.indexable).toBe(true);
+    expect(detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')).toBeUndefined();
+  });
+
+  it('берёт макрорегион из названия, когда площадка не дала места (wagmo, LATAM)', () => {
+    const detail = buildVacancyDetail(
+      cluster({
+        isRemote: true,
+        canonicalLocation: undefined,
+        canonicalTitle: 'Senior Software Engineer LATAM',
+      }),
+    )!;
+    const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+    expect(posting.jobLocationType).toBe('TELECOMMUTE');
+    expect(posting.applicantLocationRequirements).toEqual(
+      expect.arrayContaining([{ '@type': 'Country', name: 'BR' }]),
+    );
+  });
+
+  it('перечисляет все страны, которые назвала площадка', () => {
+    const detail = buildVacancyDetail(
+      cluster({ isRemote: true, canonicalLocation: 'Poland; Portugal' }),
+    )!;
+    const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+    expect(posting.applicantLocationRequirements).toEqual([
+      { '@type': 'Country', name: 'PL' },
+      { '@type': 'Country', name: 'PT' },
+    ]);
   });
 
   it('отказывает вакансии без адреса', () => {

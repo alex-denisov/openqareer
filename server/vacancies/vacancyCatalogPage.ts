@@ -31,6 +31,7 @@ import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 import { renderDescriptionHtml } from './catalogMarkdown';
 import { countryCodeOf } from '../domain/geoCoordinates';
 import { countLabel } from './catalogCopy';
+import { applicantCountries } from './applicantLocations';
 import { isIndexableCard, isIndexableListing, validThroughOf } from '../seo/catalogIndexing';
 
 /** Сколько карточек на странице каталога. */
@@ -341,8 +342,22 @@ export function googleEmploymentType(value?: string): string | undefined {
   return EMPLOYMENT_TYPES.find(([pattern]) => pattern.test(trimmed))?.[1];
 }
 
-/** Where the job is, with the ISO country Google asks for (B535). */
-function postingLocation(entry: CatalogEntry, isRemote: boolean): Record<string, unknown> {
+function applicantRequirements(countries: readonly string[]): unknown {
+  const nodes = countries.map((name) => ({ '@type': 'Country', name }));
+  return nodes.length === 1 ? nodes[0] : nodes;
+}
+
+/**
+ * Where the job is, with the ISO country Google asks for (B535). A remote job
+ * with no applicant country gets `undefined`: Google needs at least one
+ * Country with TELECOMMUTE, and without TELECOMMUTE a postal address (03.11).
+ */
+function postingLocation(
+  entry: CatalogEntry,
+  isRemote: boolean,
+): Record<string, unknown> | undefined {
+  const applicants = isRemote ? applicantCountries(entry.location, entry.title) : [];
+  if (isRemote && applicants.length === 0) return undefined;
   const country = countryCodeOf(entry.location);
   // A remote country restriction is not a physical city or office.
   const countryOnly =
@@ -362,10 +377,8 @@ function postingLocation(entry: CatalogEntry, isRemote: boolean): Record<string,
         }
       : {}),
     ...(isRemote ? { jobLocationType: 'TELECOMMUTE' } : {}),
-    // Google requires the allowed applicant country for remote postings.
-    ...(isRemote && country
-      ? { applicantLocationRequirements: { '@type': 'Country', name: country } }
-      : {}),
+    // Google requires the allowed applicant countries for remote postings.
+    ...(isRemote ? { applicantLocationRequirements: applicantRequirements(applicants) } : {}),
   };
 }
 
@@ -409,7 +422,9 @@ function jobPosting(
   description: string,
   vacancy?: UnifiedVacancy,
   inLanguage?: ProfileLanguage,
-): StructuredNode {
+): StructuredNode | undefined {
+  const location = postingLocation(entry, cluster.isRemote);
+  if (!location) return undefined;
   const withdrawnAt = vacancy?.archivedAt;
   const employmentType = googleEmploymentType(vacancy?.employmentType);
   // Частное лицо — не организация, и его имени в разметке не место (INC-023).
@@ -434,7 +449,7 @@ function jobPosting(
     // обещать кандидату действие, которого продукт не делает.
     directApply: false,
     ...(company ? { hiringOrganization: { '@type': 'Organization', name: company } } : {}),
-    ...postingLocation(entry, cluster.isRemote),
+    ...location,
     ...(employmentType ? { employmentType } : {}),
     ...(entry.skills.length > 0 ? { skills: entry.skills.map(readableSkill).join(', ') } : {}),
     ...baseSalaryOf(cluster.salary),
@@ -484,15 +499,16 @@ export function buildVacancyDetail(
   const language = textLanguage(
     vacancy?.fullDescription || vacancy?.description || fullDescription || entry.summary,
   );
+  const posting = indexable
+    ? jobPosting(cluster, entry, description, vacancy, language)
+    : undefined;
 
   return {
     entry,
     description,
     jsonLd: {
       '@context': 'https://schema.org',
-      '@graph': indexable
-        ? [jobPosting(cluster, entry, description, vacancy, language), crumbs]
-        : [crumbs],
+      '@graph': [posting, crumbs].filter((node): node is StructuredNode => node !== undefined),
     },
     ...(vacancy ? { vacancy } : {}),
     indexable,
