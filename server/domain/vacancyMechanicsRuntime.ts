@@ -116,7 +116,7 @@ export class VacancyMechanicsRuntime {
       ...(state === 'failed' ? { failure: fitFailure(job?.lastError) } : {}),
     };
   }
-  cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
+  cachedVacancyIds(candidateId: string): ReadonlySet<string> { return this.fit.cachedVacancyIds(candidateId); }
   warmCachedVacancyIds(candidateId: string): Promise<void> { return this.fit.warmCachedVacancyIds(candidateId); }
   /**
    * The current result exists under this input's key, read without opening it (prod 02.11: the
