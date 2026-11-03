@@ -37,6 +37,21 @@ describe('remote scope from the location field', () => {
   it('worldwide in the location wins over the text', () => {
     expect(scope('Worldwide', 'Must be based in the US.')).toBe('global');
   });
+
+  it('«Global» and «Anywhere» as the whole place are worldwide (03.11 acceptance)', () => {
+    expect(scope('Global', 'Must be based in the US.')).toBe('global');
+    expect(scope('Remote - Global')).toBe('global');
+    expect(scope('Anywhere')).toBe('global');
+    expect(scope('Global Payments, Atlanta')).toBe('US');
+  });
+
+  it('acceptance places name their countries', () => {
+    expect(scope('United Arab Emirates')).toBe('AE');
+    expect(scope('Egypt')).toBe('EG');
+    expect(scope('Qatar')).toBe('QA');
+    expect(scope('Israel')).toBe('IL');
+    expect(scope('AU: Melbourne: (260 Burwood Rd)')).toBe('AU');
+  });
 });
 
 describe('remote scope from the description', () => {

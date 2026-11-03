@@ -19,6 +19,14 @@ export interface RemoteScopeInput {
 const GLOBAL_MARK =
   /worldwide|anywhere in the world|from anywhere(?! in)|all over the world|any country|globally|любой точки мира|любой стран|любого места/iu;
 
+/** «Global», «Remote - Global», «Anywhere»: место целиком из пометок без страны. */
+const GLOBAL_PLACE = /^(?:[\s,;|/()–—-]*(?:fully\s+)?(?:remote|global|anywhere)[\s,;|/()–—-]*)+$/iu;
+
+/** Голое «Remote» не глобально: область уточняет текст. */
+function isGlobalPlace(location: string): boolean {
+  return GLOBAL_PLACE.test(location) && !/^(?:fully\s+)?remote$/iu.test(location);
+}
+
 /** Фразы, за которыми идёт область найма. */
 const SCOPE_TRIGGERS: readonly RegExp[] = [
   /\b(?:anywhere|located|based|residing|reside|resident|living|live|work(?:ing)?|remote(?:ly)?|hire|hiring|candidates?)\s+(?:with)?in(?:side)?\s+/giu,
@@ -60,7 +68,7 @@ function serialize(areas: readonly string[]): string {
 /** Строка области для проекции: `global` или коды через запятую. */
 export function extractRemoteScope(input: RemoteScopeInput): string {
   const location = input.location?.trim() ?? '';
-  if (GLOBAL_MARK.test(location)) return GLOBAL_REMOTE_SCOPE;
+  if (GLOBAL_MARK.test(location) || isGlobalPlace(location)) return GLOBAL_REMOTE_SCOPE;
   const fromLocation = locationAreas(location);
   if (fromLocation.length > 0) return serialize(fromLocation);
   return serialize(descriptionAreas(input.description ?? ''));
