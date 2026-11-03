@@ -26,6 +26,14 @@ const BROWSER_USER_AGENT =
 const DIRECT_TIMEOUT_MS = 30_000;
 const EGRESS_TIMEOUT_MS = 45_000;
 
+/** `Retry-After`: секунды или HTTP-дата; мусор и прошлое — не ожидание. */
+export function parseRetryAfterMs(value: string | null, nowMs = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  const ms = /^\d+$/.test(trimmed) ? Number(trimmed) * 1_000 : Date.parse(trimmed) - nowMs;
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined;
+}
+
 /** Прямой путь: обычный запрос с браузерным представлением. */
 export const directHhTransport: HhSearchTransport = async (url) => {
   try {
@@ -39,7 +47,12 @@ export const directHhTransport: HhSearchTransport = async (url) => {
     });
     // A 403 keeps its page: the vacancy state tells «employer restricted» from a refusal.
     const keepBody = response.ok || response.status === 403;
-    return { status: response.status, body: keepBody ? await response.text() : '' };
+    const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+    return {
+      status: response.status,
+      body: keepBody ? await response.text() : '',
+      ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+    };
   } catch {
     // Недоступность — это отказ, а не пустая страница: разбор обязан упасть.
     return { status: 0, body: '' };

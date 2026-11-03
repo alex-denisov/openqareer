@@ -417,7 +417,9 @@ export class MaintenanceWorker {
     if (this.stopped || !this.engine.runHhCatalogTextStep) return undefined;
     try {
       const report = await this.engine.runHhCatalogTextStep();
-      if (report.requested > 0) this.log.info({ ...report }, 'vacancy-hh-catalog-text-tick');
+      const { rateWindow, ...tick } = report;
+      if (tick.requested > 0) this.log.info({ ...tick }, 'vacancy-hh-catalog-text-tick');
+      if (rateWindow) this.log.info({ ...rateWindow }, 'hh-text-rate');
       return report;
     } catch (error: unknown) {
       this.log.error({ errorName: errorName(error) }, 'vacancy-hh-catalog-text-failed');
