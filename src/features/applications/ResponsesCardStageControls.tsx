@@ -42,7 +42,36 @@ export function InterviewDebriefControl({
   buttonClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
+  return (
+    <div className="career-responses-debrief-action">
+      <button type="button" className={buttonClassName} onClick={() => setOpen(true)}>
+        {label}
+      </button>
+      <InterviewDebriefDialog
+        application={application}
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        onSaveDebrief={onSaveDebrief}
+        onRefresh={onRefresh}
+      />
+    </div>
+  );
+}
 
+/** Окно дебрифа по отклику; открывается и кнопкой «Заполнить», и предложением консультанта. */
+export function InterviewDebriefDialog({
+  application,
+  isOpen,
+  onClose,
+  onSaveDebrief,
+  onRefresh,
+}: {
+  application: ApplicationView;
+  isOpen: boolean;
+  onClose: () => void;
+  onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>;
+  onRefresh?: () => void;
+}) {
   const handleSave = async (data: InterviewDebriefSubmitData) => {
     await saveDebriefForApplication(application, data, onSaveDebrief);
     onRefresh?.();
@@ -53,23 +82,14 @@ export function InterviewDebriefControl({
     : (application.vacancy?.company ?? undefined);
 
   return (
-    <div className="career-responses-debrief-action">
-      <button
-        type="button"
-        className={buttonClassName}
-        onClick={() => setOpen(true)}
-      >
-        {label}
-      </button>
-      <InterviewDebriefModal
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        onSave={handleSave}
-        vacancyTitle={application.vacancy?.title ?? 'Без названия'}
-        company={company}
-        initialPromisedDate={application.followUpDueAt}
-      />
-    </div>
+    <InterviewDebriefModal
+      isOpen={isOpen}
+      onClose={onClose}
+      onSave={handleSave}
+      vacancyTitle={application.vacancy?.title ?? 'Без названия'}
+      company={company}
+      initialPromisedDate={application.followUpDueAt}
+    />
   );
 }
 

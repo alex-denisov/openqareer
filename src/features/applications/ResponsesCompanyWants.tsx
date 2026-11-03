@@ -27,6 +27,7 @@ import { CompanyWantsMobile } from './CompanyWantsMobile';
 import { COMPANY_WANT_PAGE_SIZE } from './companyWantsApi';
 import { WANT_STAGE_LABELS, nextStepText, toSelectionItem } from './companyWantsModel';
 import { useCompanyWants, type CompanyWantsController } from './useCompanyWants';
+import { useWantTabSuggestion } from './useWantTabSuggestion';
 import './responses-company-wants.css';
 
 type Selection = readonly CandidateCompanyWantSelectionItem[];
@@ -80,6 +81,7 @@ export function CompanyWantsPanel() {
   const controller = useCompanyWants();
   const [addOpen, setAddOpen] = useState(false);
   const [stepTarget, setStepTarget] = useState<StepTarget | null>(null);
+  useWantTabSuggestion(controller, () => setAddOpen(true));
   const view: CompanyWantsView = {
     controller,
     openAdd: () => setAddOpen(true),

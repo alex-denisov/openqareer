@@ -64,6 +64,7 @@ import {
 } from './CareerWorkspaceShellHelpers';
 import { CareerDiaryAccessProvider } from './careerDiaryAccess';
 import { ConsultantSuggestionProvider } from '../journey/consultantScreenSuggestion';
+import { useTrainerConsultant } from './useTrainerConsultant';
 import { CareerDiaryShellControls, CareerDiaryAccessStatus } from './CareerDiaryShellControls';
 import { useCareerDiaryShellAccess } from './useCareerDiaryShellAccess';
 import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
@@ -221,6 +222,7 @@ function CareerWorkspaceShellContent({
   const expertPanelVisible = isCompactViewport
     ? expertPanelOpen && expertSheetExpanded
     : expertPanelOpen;
+  const trainerConsultant = useTrainerConsultant(expertPanelVisible, isCompactViewport);
 
   useEffect(() => {
     if (!sessionPending) {
@@ -594,8 +596,11 @@ function CareerWorkspaceShellContent({
               sessionPending && !sessionError ? 'Проверяем вход и читаем ваш профиль' : null
             }
             showNotifications={!isCompactViewport}
-            showConsultantButton={false}
-            onOpenConsultant={() => openExpert()}
+            showConsultantButton={trainerConsultant.showTopbarButton}
+            onOpenConsultant={() => {
+              trainerConsultant.request();
+              openExpert();
+            }}
             session={session}
             sessionPending={sessionPending}
             hidden={accountOpen}
@@ -883,7 +888,7 @@ function CareerWorkspaceShellContent({
         ) : null}
         {isCompactViewport || !accountOpen ? (
           <aside
-            className={`panel-col${expertPanelVisible ? ' is-open' : ''}`}
+            className={`panel-col${expertPanelVisible ? ' is-open' : ''}${trainerConsultant.panelColClass}`}
             role="presentation"
             aria-hidden={isCompactViewport && !expertPanelVisible ? true : undefined}
           >

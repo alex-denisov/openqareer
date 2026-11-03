@@ -501,3 +501,18 @@ ul.career-mock-criteria li p {
     display: none;
   }
 }
+
+/* Макет 14: у тренажёра на 1440 нет колонки консультанта; значок в шапке кладёт панель поверх. */
+@media (min-width: 761px) {
+  .panel-col.is-behind-trainer > .career-expert-panel {
+    display: none;
+  }
+
+  .panel-col.is-over-trainer > .career-expert-panel {
+    z-index: 10001;
+  }
+
+  .panel-col.is-over-trainer > .career-expert-panel:not(.consultant-overlay) {
+    position: relative;
+  }
+}
