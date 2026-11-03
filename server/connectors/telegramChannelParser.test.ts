@@ -183,6 +183,33 @@ describe('Telegram posts name the real title and never invent an employer (B164)
     expect(parsed?.title).toBe('Level Artist / Unity');
   });
 
+  it('keeps paragraph and bullet line breaks in the description', () => {
+    const html = [
+      'Senior Backend Developer',
+      'Мы разрабатываем платёжную систему на Go и Kafka.',
+      '<br/>Требования:',
+      '• Опыт на Go от 4 лет',
+      '• Опыт с highload   и  микросервисами',
+      '<br/>Условия:',
+      '• Зарплата от 300 000 руб.',
+      'Контакты: @hr_recruiter',
+    ].join('<br/>');
+
+    const parsed = parseTelegramJobPost(html, meta);
+
+    expect(parsed?.description).toContain('Требования:\n• Опыт на Go от 4 лет\n• Опыт с highload и микросервисами');
+    expect(parsed?.description).toContain('\n\nТребования:');
+  });
+
+  it('reads the employer out of «<Studio> ищет <role>» when no label exists', () => {
+    const html = 'Nival ищет Senior Game Designer<br/>Удалённо, полная занятость, стек Unity и C#, опыт от 3 лет.<br/>Требования: Unity.<br/>Условия: зарплата от 200 000 руб.<br/>Контакты: @hr_nival';
+
+    const parsed = parseTelegramJobPost(html, meta);
+
+    expect(parsed?.title).toBe('Senior Game Designer');
+    expect(parsed?.company).toBe('Nival');
+  });
+
   it('does not turn a post whose role it cannot read into a vacancy (PRB-018)', () => {
     const post = [
       'Доброго времени суток!',

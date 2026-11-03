@@ -137,6 +137,19 @@ function afterSeeksVerb(value: string): string {
   return match && ROLE_WORD.test(match[1]) ? match[1].trim() : value;
 }
 
+/** «Nival ищет Game Designer» — the name before the verb is the employer. */
+const NOT_A_NAME_BEFORE_SEEKS = /^(?:мы|я|наша|наш|команда|компания|студия|вакансия)$/iu;
+
+function readEmployerBeforeSeeks(line: string): string {
+  const match = stripTitlePrefix(line).match(
+    /^(?:(?:компания|студия|агентство)\s+)?(.{2,60}?)\s+(?:ищет|ищем|ищут|разыскивает|hiring)\s+(.+)$/iu,
+  );
+  if (!match || !ROLE_WORD.test(match[2])) return '';
+  const name = match[1].replace(/^[«"“']|[»"”']$/gu, '').trim();
+  if (NOT_A_NAME_BEFORE_SEEKS.test(name) || !readsLikeAName(name)) return '';
+  return cleanEmployer(name);
+}
+
 function cutAtClause(value: string): string {
   let cut = value.length;
   for (const boundary of TITLE_BOUNDARIES) {
@@ -202,7 +215,9 @@ function readHeaderFromLine(
   const read = readTitleLine(line);
   if (!read) return null;
 
-  const header = labelled ? { title: read, company: labelled } : splitEmployerOutOfTitle(read);
+  const split = labelled ? { title: read, company: labelled } : splitEmployerOutOfTitle(read);
+  const header =
+    split.company === '' ? { ...split, company: readEmployerBeforeSeeks(line) } : split;
   if (isReadableTitle(header.title)) return header;
 
   // Строка оказалась длиннее названия: должность стоит до «в …», дальше идёт
