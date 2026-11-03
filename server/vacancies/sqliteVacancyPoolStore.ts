@@ -1019,7 +1019,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     chunk: readonly UnifiedVacancy[],
   ): Map<string, UnifiedVacancy> {
     const existing = new Map<string, UnifiedVacancy>();
-    if (sourceId !== HH_SEARCH_SOURCE_ID && !isDetailTextSource(sourceId)) return existing;
+    if (!mergesStoredSnapshot(sourceId)) return existing;
     const ids = Array.from(new Set(chunk.map((vacancy) => vacancy.id)));
     const bindLimit = 800;
     for (let offset = 0; offset < ids.length; offset += bindLimit) {
@@ -1045,6 +1045,59 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return existing;
   }
 
+  /** Byte length of each stored payload, read from the record header (no overflow pages). */
+  private storedPayloadBytes(ids: readonly string[]): Map<string, number> {
+    const bytes = new Map<string, number>();
+    const unique = Array.from(new Set(ids));
+    const bindLimit = 800;
+    for (let offset = 0; offset < unique.length; offset += bindLimit) {
+      const selected = unique.slice(offset, offset + bindLimit);
+      const rows = this.database
+        .prepare(
+          `SELECT id, octet_length(payload) AS bytes FROM vacancy_pool
+            WHERE id IN (${selected.map(() => '?').join(', ')})`,
+        )
+        .all(...selected) as Array<{ id: string; bytes: number }>;
+      for (const row of rows) bytes.set(row.id, row.bytes);
+    }
+    return bytes;
+  }
+
+  /**
+   * PRB-041: the stored hh snapshots of a chunk are read, parsed and merged
+   * before the write lock — inside it they held the lock 11–18 s for one row.
+   */
+  private prepareUpsertRows(
+    sourceId: string,
+    chunk: readonly UnifiedVacancy[],
+  ): readonly PreparedUpsertRow[] {
+    if (!mergesStoredSnapshot(sourceId))
+      return mergeUpsertRows(sourceId, chunk, new Map(), new Map());
+    const bytes = this.storedPayloadBytes(chunk.map((vacancy) => vacancy.id));
+    return mergeUpsertRows(sourceId, chunk, this.loadExistingHhVacancies(sourceId, chunk), bytes);
+  }
+
+  /**
+   * Inside the transaction: another writer (hh text pass, skills backfill) may
+   * have stored text since the read. A changed payload length re-reads the
+   * chunk under the lock so the loaded text is merged, not overwritten.
+   */
+  private refreshChangedRows(
+    sourceId: string,
+    rows: readonly PreparedUpsertRow[],
+  ): readonly PreparedUpsertRow[] {
+    if (!mergesStoredSnapshot(sourceId)) return rows;
+    const bytes = this.storedPayloadBytes(rows.map((row) => row.vacancy.id));
+    if (rows.every((row) => bytes.get(row.vacancy.id) === row.bytes)) return rows;
+    const vacancies = rows.map((row) => row.vacancy);
+    return mergeUpsertRows(
+      sourceId,
+      vacancies,
+      this.loadExistingHhVacancies(sourceId, vacancies),
+      bytes,
+    );
+  }
+
   /**
    * Пишет срез порциями, каждая — своя транзакция. Одна дата `stored_at` на
    * весь вызов: по ней замена среза потом отличает записи этого чтения от тех,
@@ -1057,11 +1110,19 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   ): string {
     const storedAt = this.nextSliceTimestamp(sourceId);
     const statements = this.prepareUpsertStatements();
-    for (let offset = 0; offset < vacancies.length;) {
-      const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
-      offset += this.writeTransaction('upsert', sourceId, tally, () =>
-        this.upsertRows(sourceId, chunk, storedAt, statements),
+    for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
+      let pending = this.prepareUpsertRows(
+        sourceId,
+        vacancies.slice(offset, offset + this.writeChunkSize),
       );
+      while (pending.length > 0) {
+        const rows = pending;
+        pending = pending.slice(
+          this.writeTransaction('upsert', sourceId, tally, () =>
+            this.upsertRows(sourceId, rows, storedAt, statements),
+          ),
+        );
+      }
     }
     return storedAt;
   }
@@ -1074,12 +1135,21 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   ): Promise<string> {
     const storedAt = this.nextSliceTimestamp(sourceId);
     const statements = this.prepareUpsertStatements();
-    for (let offset = 0; offset < vacancies.length;) {
-      const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
-      offset += this.writeTransaction('upsert', sourceId, tally, () =>
-        this.upsertRows(sourceId, chunk, storedAt, statements),
+    for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
+      let pending = this.prepareUpsertRows(
+        sourceId,
+        vacancies.slice(offset, offset + this.writeChunkSize),
       );
       await yieldToEventLoop();
+      while (pending.length > 0) {
+        const rows = pending;
+        pending = pending.slice(
+          this.writeTransaction('upsert', sourceId, tally, () =>
+            this.upsertRows(sourceId, rows, storedAt, statements),
+          ),
+        );
+        await yieldToEventLoop();
+      }
     }
     return storedAt;
   }
@@ -1094,30 +1164,23 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
-  /** Writes rows of one chunk until the transaction spends its budget; returns how many. */
+  /** Writes prepared rows until the transaction spends its budget; returns how many. */
   private upsertRows(
     sourceId: string,
-    chunk: readonly UnifiedVacancy[],
+    prepared: readonly PreparedUpsertRow[],
     storedAt: string,
     statements: ReturnType<SqliteVacancyPoolStore['prepareUpsertStatements']>,
   ): number {
     const startedAt = performance.now();
-    const existing = this.loadExistingHhVacancies(sourceId, chunk);
     let written = 0;
-    for (const vacancy of chunk) {
-      const previous = existing.get(vacancy.id);
-      const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
-      existing.set(vacancy.id, stored);
-      statements.insert.run(
-        stored.id,
-        sourceId,
-        stored.publishedAt,
-        storedAt,
-        JSON.stringify(stored),
-      );
+    for (const { previous, stored, payload, projection } of this.refreshChangedRows(
+      sourceId,
+      prepared,
+    )) {
+      statements.insert.run(stored.id, sourceId, stored.publishedAt, storedAt, payload);
       statements.index.run(...indexColumns(stored, sourceId), 0);
       statements.semanticDates.run(...semanticDateColumns(stored));
-      statements.projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
+      statements.projection.run(stored.id, projection);
       if (gainedFullText(previous, stored)) statements.textPending.run(stored.id, Date.now());
       written += 1;
       if (performance.now() - startedAt >= this.writeBudgetMs) break;
@@ -3049,6 +3112,43 @@ function parseHhTextCursor(cursor: string | undefined): HhTextPosition {
 
 function formatHhTextCursor(at: HhTextPosition): string {
   return `${at.phase}|${at.ms}|${at.key}`;
+}
+
+interface PreparedUpsertRow {
+  readonly vacancy: UnifiedVacancy;
+  readonly previous: UnifiedVacancy | undefined;
+  readonly stored: UnifiedVacancy;
+  readonly payload: string;
+  readonly projection: string;
+  /** Stored payload length when the snapshot was read; undefined for a new row. */
+  readonly bytes: number | undefined;
+}
+
+function mergesStoredSnapshot(sourceId: string): boolean {
+  return sourceId === HH_SEARCH_SOURCE_ID || isDetailTextSource(sourceId);
+}
+
+/** A repeated id in one chunk merges onto the row written just before it. */
+function mergeUpsertRows(
+  sourceId: string,
+  chunk: readonly UnifiedVacancy[],
+  existing: ReadonlyMap<string, UnifiedVacancy>,
+  bytes: ReadonlyMap<string, number>,
+): readonly PreparedUpsertRow[] {
+  const latest = new Map(existing);
+  return chunk.map((vacancy) => {
+    const previous = latest.get(vacancy.id);
+    const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
+    latest.set(vacancy.id, stored);
+    return {
+      vacancy,
+      previous,
+      stored,
+      payload: JSON.stringify(stored),
+      projection: JSON.stringify(clusterProjectionOf(stored)),
+      bytes: bytes.get(vacancy.id),
+    };
+  });
 }
 
 /** Повторная запись площадки не стирает дочитанный текст (hh — B304, Workday и др. — B535). */
