@@ -12,6 +12,10 @@ export type ResponsesMobilePushView =
   | { readonly kind: 'channels' }
   | { readonly kind: 'closed' };
 
+/** Push kinds of the other «Отклики» tabs (mockup 5: `prepx` from «Подготовка», `co` from «Хочу»). */
+export type ResponsesMobilePushKind =
+  ResponsesMobilePushView['kind'] | 'story' | 'mock' | 'debrief' | 'company';
+
 /** Same breakpoint as `responses-mobile.css`; push screens exist only below it. */
 const COMPACT_QUERY = '(max-width: 40rem)';
 
@@ -30,10 +34,14 @@ export function useCompactResponses(): boolean {
   return compact;
 }
 
-const PUSH_TITLES: Record<ResponsesMobilePushView['kind'], string> = {
+const PUSH_TITLES: Record<ResponsesMobilePushKind, string> = {
   response: 'Процесс',
   channels: 'Каналы',
   closed: 'Закрыто',
+  story: 'Подготовка',
+  mock: 'Мок-интервью',
+  debrief: 'Дебриф',
+  company: 'Компания',
 };
 
 export function ResponsesMobilePush({
@@ -42,7 +50,7 @@ export function ResponsesMobilePush({
   onOpenConsultant,
   children,
 }: {
-  readonly view: ResponsesMobilePushView;
+  readonly view: { readonly kind: ResponsesMobilePushKind };
   readonly onBack: () => void;
   /** Right slot of the push bar, the same consultant as the shell top bar it covers. */
   readonly onOpenConsultant?: () => void;

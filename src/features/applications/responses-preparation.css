@@ -380,3 +380,54 @@
     box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
   }
 }
+
+/* 390 «Подготовка» (mockup 5 `vt=p`, B511 G3 item 8): whole rows push to their screens. */
+@media (max-width: 40rem) {
+  /* «STAR на фактах профиля · N» and «Открыть STAR-истории» share one caption line. */
+  .career-prep-head {
+    flex-wrap: nowrap;
+  }
+
+  .career-prep-open-all {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .career-prep-head h2 {
+    flex: 0 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .career-prep-link {
+    inline-size: 100%;
+    color: var(--career-text);
+    background: none;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .career-prep-link small {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+
+  .career-prep-link .career-prep-chev {
+    flex: none;
+    color: var(--career-text-dim);
+  }
+
+  .career-prep-card > .career-prep-foot {
+    margin-block-start: calc(var(--career-space-1) * -1);
+  }
+
+  .career-prep-list > .career-prep-stress {
+    border-block-start: 0;
+  }
+
+  .career-responses-mobile-push .career-debrief-form {
+    min-inline-size: 0;
+  }
+}

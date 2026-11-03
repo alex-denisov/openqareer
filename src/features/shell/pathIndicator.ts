@@ -16,6 +16,8 @@ export interface NavigationOptions {
   readonly openArchive?: boolean;
   /** Открыть карточку этого отклика сразу (B542, «Смотреть» на «Сегодня»). */
   readonly applicationId?: string;
+  /** «Вакансии» opens with the selection filtered by this company («Хочу» → «Компания», B511). */
+  readonly companyName?: string;
 }
 
 /**

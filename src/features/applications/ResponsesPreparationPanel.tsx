@@ -9,6 +9,8 @@ import { StarStoriesModal } from '../interview/StarStoriesModal';
 import { getStarStories } from '../interview/starStoriesApi';
 import { usePublishConsultantSuggestion } from '../journey/consultantScreenSuggestion';
 import { InterviewDebriefDialog } from './ResponsesCardStageControls';
+import { useCompactResponses } from './ResponsesMobilePush';
+import { ResponsesPreparationMobile, type PreparationPushView } from './ResponsesPreparationMobile';
 import { preparationTabSuggestion } from './responsesTabSuggestions';
 import type { StarStoriesSnapshot, StarStoryView } from '../../../shared/starStories';
 import {
@@ -40,36 +42,36 @@ export function ResponsesPreparationPanel({
   readonly onOpenExpert?: ExpertHandler;
 }) {
   const prep = usePreparationState(applications);
-  const { interviews, selectedInterview, setPreparationOpen } = prep;
+  const { selectedInterview, setPreparationOpen } = prep;
   const stories = useStarStories();
   const { storiesModal, setStoriesModal, closeStories } = useStoriesModal(stories.retry);
-  const details = getInterviewPreparationDetails(selectedInterview, onOpenExpert);
+  const { compact, push, setPush } = usePreparationPush();
   usePreparationSuggestion(applications, stories, prep, () => setStoriesModal({ open: true }));
+  const body: PreparationBodyProps = {
+    prep,
+    stories,
+    onRefresh,
+    onEditStory: (story) => setStoriesModal({ open: true, editStory: story }),
+    onOpenAllStories: () => setStoriesModal({ open: true }),
+  };
   return (
-    <div className="career-responses-preparation" aria-label="Подготовка к интервью">
-      <StarStoriesCard
-        stories={stories}
-        onEdit={(story) => setStoriesModal({ open: true, editStory: story })}
-        onOpenAll={() => setStoriesModal({ open: true })}
-      />
-      <MockInterviewCard
-        interviews={interviews}
-        selected={selectedInterview}
-        selectedId={prep.interviewId}
-        stress={prep.stress}
-        onSelect={prep.setInterviewId}
-        onStress={prep.setStress}
-        onStart={() => setPreparationOpen(true)}
-      />
-      <DebriefCard applications={interviewsNeedingDebrief(interviews)} onRefresh={onRefresh} />
-      {selectedInterview ? <MobileStartCta onStart={() => setPreparationOpen(true)} /> : null}
+    <div
+      className="career-responses-preparation career-responses-push-host"
+      aria-label="Подготовка к интервью"
+      data-mobile-push={push ? push.kind : undefined}
+    >
+      {compact ? (
+        <MobilePreparation {...body} push={push} onPush={setPush} onOpenExpert={onOpenExpert} />
+      ) : (
+        <DesktopPreparation {...body} />
+      )}
       <SuggestedDebrief prep={prep} onRefresh={onRefresh} />
       <PreparationDialogs
         preparationOpen={prep.preparationOpen}
         storiesModal={storiesModal}
         selectedInterview={selectedInterview}
         stress={prep.stress}
-        details={details}
+        details={getInterviewPreparationDetails(selectedInterview, onOpenExpert)}
         onClosePreparation={() => setPreparationOpen(false)}
         onCloseStories={closeStories}
         onOpenStories={() => {
@@ -81,6 +83,72 @@ export function ResponsesPreparationPanel({
   );
 }
 
+/** 390 push of «Подготовка»; above 40rem there is none, whatever was open before a resize. */
+function usePreparationPush() {
+  const compact = useCompactResponses();
+  const [pushState, setPush] = useState<PreparationPushView | null>(null);
+  return { compact, push: compact ? pushState : null, setPush };
+}
+
+interface PreparationBodyProps {
+  readonly prep: PreparationState;
+  readonly stories: StarStoriesState;
+  readonly onRefresh: () => void;
+  readonly onEditStory: (story: StarStoryView) => void;
+  readonly onOpenAllStories: () => void;
+}
+
+/** 1440: the cards of mockup 5 «Подготовка», unchanged by the 390 list. */
+function DesktopPreparation({
+  prep,
+  stories,
+  onRefresh,
+  onEditStory,
+  onOpenAllStories,
+}: PreparationBodyProps) {
+  return (
+    <>
+      <StarStoriesCard stories={stories} onEdit={onEditStory} onOpenAll={onOpenAllStories} />
+      <MockInterviewCard
+        interviews={prep.interviews}
+        selected={prep.selectedInterview}
+        selectedId={prep.interviewId}
+        stress={prep.stress}
+        onSelect={prep.setInterviewId}
+        onStress={prep.setStress}
+        onStart={() => prep.setPreparationOpen(true)}
+      />
+      <DebriefCard applications={interviewsNeedingDebrief(prep.interviews)} onRefresh={onRefresh} />
+      {prep.selectedInterview ? (
+        <MobileStartCta onStart={() => prep.setPreparationOpen(true)} />
+      ) : null}
+    </>
+  );
+}
+
+function MobilePreparation({
+  prep,
+  onOpenExpert,
+  ...props
+}: PreparationBodyProps & {
+  readonly push: PreparationPushView | null;
+  readonly onPush: (view: PreparationPushView | null) => void;
+  readonly onOpenExpert?: ExpertHandler;
+}) {
+  return (
+    <ResponsesPreparationMobile
+      {...props}
+      onOpenConsultant={onOpenExpert ? () => onOpenExpert('interviews') : undefined}
+      interviews={prep.interviews}
+      debriefs={interviewsNeedingDebrief(prep.interviews)}
+      selectedInterview={prep.selectedInterview}
+      stress={prep.stress}
+      onStress={prep.setStress}
+      onStartMock={prep.startMockWith}
+    />
+  );
+}
+
 type PreparationState = ReturnType<typeof usePreparationState>;
 
 function usePreparationState(applications: readonly ApplicationView[]) {
@@ -88,11 +156,12 @@ function usePreparationState(applications: readonly ApplicationView[]) {
   const [preparationOpen, setPreparationOpen] = useState(false);
   const [stress, setStress] = useState(false);
   const [debriefId, setDebriefId] = useState<string | null>(null);
-  const startMock = (id: string) => {
+  const startMockWith = (id: string, withStress: boolean) => {
     selection.setInterviewId(id);
-    setStress(false);
+    setStress(withStress);
     setPreparationOpen(true);
   };
+  const startMock = (id: string) => startMockWith(id, false);
   return {
     ...selection,
     preparationOpen,
@@ -102,6 +171,7 @@ function usePreparationState(applications: readonly ApplicationView[]) {
     debriefId,
     setDebriefId,
     startMock,
+    startMockWith,
   };
 }
 

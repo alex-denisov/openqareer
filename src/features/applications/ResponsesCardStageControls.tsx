@@ -4,7 +4,11 @@ import {
   patchApplicationInterview,
   type ApplicationView,
 } from './applicationsApi';
-import { InterviewDebriefModal, type InterviewDebriefSubmitData } from './InterviewDebriefModal';
+import {
+  InterviewDebriefInline,
+  InterviewDebriefModal,
+  type InterviewDebriefSubmitData,
+} from './InterviewDebriefModal';
 
 async function saveDebriefForApplication(
   application: ApplicationView,
@@ -88,6 +92,28 @@ export function InterviewDebriefDialog({
       onSave={handleSave}
       vacancyTitle={application.vacancy?.title ?? 'Без названия'}
       company={company}
+      initialPromisedDate={application.followUpDueAt}
+    />
+  );
+}
+
+/** The debrief form of one response laid on a 390 push screen; saving returns to the list. */
+export function InterviewDebriefPushForm({
+  application,
+  onDone,
+  onRefresh,
+}: {
+  application: ApplicationView;
+  onDone: () => void;
+  onRefresh?: () => void;
+}) {
+  return (
+    <InterviewDebriefInline
+      onClose={onDone}
+      onSave={async (data) => {
+        await saveDebriefForApplication(application, data);
+        onRefresh?.();
+      }}
       initialPromisedDate={application.followUpDueAt}
     />
   );

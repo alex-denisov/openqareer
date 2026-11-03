@@ -53,6 +53,7 @@ export interface ResponsesWorkspaceScreenProps {
   readonly onOpenVacancies: () => void;
   readonly onOpenAutomation?: () => void;
   readonly onOpenResume?: () => void;
+  readonly onOpenCompanyVacancies?: (companyName: string) => void;
   readonly initialTab?: 'board' | 'analytics';
   readonly initialApplicationId?: string;
   /** At 390 the archive lives in the «Закрыто» push screen, so the deep link opens it. */
@@ -81,7 +82,14 @@ function WorkspacePanelContent({
     case 'funnel':
       return <FunnelWorkspace props={props} workspace={workspace} tableView={tableView} />;
     case 'company-wants':
-      return <CompanyWantsPanel />;
+      return (
+        <CompanyWantsPanel
+          onOpenCompanyVacancies={props.onOpenCompanyVacancies}
+          onOpenConsultant={
+            props.onOpenExpert ? () => props.onOpenExpert?.('responses') : undefined
+          }
+        />
+      );
     case 'preparation':
       return (
         <ResponsesPreparationPanel

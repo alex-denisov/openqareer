@@ -1290,3 +1290,119 @@ test.describe('B450 responses workspace', () => {
     await expect(activeSession.locator('.career-mock-progress-count')).toContainText('1 /');
   });
 });
+
+// B511 G3 item 8: at 390 «Подготовка» is a list of row-links and «Хочу» rows push «Компания».
+test.describe('B511 «Отклики» 390 push screens', () => {
+  test.beforeEach(({ page: _page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'push screens exist only at 390');
+  });
+
+  async function openPreparation(page: Page) {
+    await installMocks(page);
+    // The fixture interviews are on 15.10 at 10:00: a day later they are past and need a debrief.
+    await page.clock.setFixedTime(new Date('2026-10-16T09:00:00.000Z'));
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page.getByRole('tab', { name: 'Подготовка' }).click();
+    const panel = page.getByLabel('Подготовка к интервью');
+    await expect(panel.getByRole('heading', { name: 'STAR на фактах профиля' })).toBeVisible();
+    return panel;
+  }
+
+  test('«Подготовка» lists row-links; the story pushes «История» with its editor', async ({
+    page,
+  }, testInfo) => {
+    const panel = await openPreparation(page);
+    await expect(panel.locator('select')).toHaveCount(0);
+    await expect(panel.getByRole('checkbox')).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: /^Заполнить/ })).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: /^Мок-интервью: / }).first()).toBeVisible();
+    await expect(panel.getByRole('button', { name: /^Дебриф: / }).first()).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('b511-390-vtp.png') });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    ).toBeLessThanOrEqual(0);
+
+    await panel.getByRole('button', { name: /^Открыть историю: Кризис в команде/ }).click();
+    const push = page.getByRole('region', { name: 'Подготовка' });
+    await expect(push).toBeVisible();
+    await expect(page.locator('.career-topbar')).toBeHidden();
+    await expect(page.getByRole('navigation', { name: 'Разделы откликов' })).toBeHidden();
+    await expect(push.getByRole('heading', { name: /Кризис в команде/ })).toBeVisible();
+    const structure = push.getByRole('region', { name: 'Структура' });
+    for (const field of ['Ситуация', 'Задача', 'Действие', 'Результат']) {
+      await expect(structure).toContainText(`${field}Заполнено`);
+    }
+    await expect(push.getByRole('button', { name: 'Начать мок-интервью' })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('b511-390-prepx.png') });
+
+    await push.getByRole('button', { name: /^Править: Кризис в команде/ }).click();
+    const editor = page.getByRole('dialog', { name: /STAR-истори/ });
+    await expect(editor.getByRole('heading', { name: 'Править STAR-историю' })).toBeVisible();
+    await expect(editor.getByRole('textbox').first()).toHaveValue(/Кризис в команде/);
+    await page.keyboard.press('Escape');
+    await push.getByRole('button', { name: 'Назад к откликам' }).click();
+    await expect(page.getByRole('navigation', { name: 'Разделы откликов' })).toBeVisible();
+  });
+
+  test('the mock row pushes the stress choice and the debrief row the form', async ({ page }) => {
+    const panel = await openPreparation(page);
+    await panel
+      .getByRole('button', { name: /^Мок-интервью: / })
+      .first()
+      .click();
+    const mock = page.getByRole('region', { name: 'Мок-интервью' });
+    await expect(mock.getByRole('region', { name: 'Материалы' })).toContainText('Резюме');
+    await mock.getByRole('checkbox', { name: /Стресс-режим/ }).check();
+    await mock.getByRole('button', { name: 'Начать мок-интервью' }).click();
+    await expect(page.getByRole('dialog', { name: 'Мок-интервью' })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await mock.getByRole('button', { name: 'Назад к откликам' }).click();
+    await panel
+      .getByRole('button', { name: /^Дебриф: / })
+      .first()
+      .click();
+    const debrief = page.getByRole('region', { name: 'Дебриф' });
+    await expect(debrief.locator('form.career-debrief-form')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await debrief.getByRole('button', { name: 'Отмена' }).click();
+    await expect(panel.getByRole('heading', { name: 'Дебриф' })).toBeVisible();
+  });
+
+  test('a «Хочу» row pushes «Компания» bound to the row actions', async ({ page }, testInfo) => {
+    const calls = await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await page.getByRole('tab', { name: /Хочу/ }).first().click();
+    const wants = page.locator('section[aria-label="Хочу в компанию"]');
+    await wants.getByRole('button', { name: 'Открыть компанию: Northstar Labs' }).click();
+
+    const push = page.getByRole('region', { name: 'Компания' });
+    await expect(push.getByRole('heading', { name: 'Northstar Labs' })).toBeVisible();
+    await expect(page.locator('.career-topbar')).toBeHidden();
+    const facts = push.getByRole('definition');
+    await expect(facts.first()).toContainText('Хочу');
+    await expect(push).toContainText('Вакансий3');
+    await expect(push.getByText('Оповещения о вакансиях')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('b511-390-co.png') });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    ).toBeLessThanOrEqual(0);
+
+    await push.getByRole('button', { name: 'Найти путь к рекрутеру' }).click();
+    await expect
+      .poll(() => calls.companyMutations.at(-1)?.path)
+      .toBe('/api/v1/candidate/companies/wants/recruiter-search');
+    await push.getByRole('button', { name: 'Сменить статус' }).click();
+    await page.getByRole('menuitem', { name: 'Ищу путь' }).click();
+    await expect.poll(() => calls.companyBulkExecute).toMatchObject({ action: 'set_stage' });
+    await push.getByRole('button', { name: 'Убрать из «Хочу»' }).click();
+    await expect(push.getByRole('alertdialog', { name: 'Подтверждение' })).toBeVisible();
+    await push.getByRole('button', { name: 'Отмена' }).click();
+
+    await push.getByRole('button', { name: 'Открыть 3 вакансии' }).click();
+    await expect(page.locator('.career-cabinet-view-opportunities')).toBeVisible();
+  });
+});

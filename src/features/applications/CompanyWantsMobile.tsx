@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { CaretDown, CaretRight, Check, Path, Plus, Trash, Upload } from '@phosphor-icons/react';
 import type {
   CandidateCompanyOpportunity,
   CandidateCompanyWantSelectionItem,
 } from '../../../shared/candidateCompany';
 import { CompanyWantsMenu, type CompanyWantsMenuItem } from './CompanyWantsMenu';
+import { CompanyWantsPush } from './CompanyWantsPush';
 import { COMPANY_WANT_BULK_LIMIT, COMPANY_WANT_PAGE_SIZE } from './companyWantsApi';
 import { WANT_STAGE_LABELS, nextStepText } from './companyWantsModel';
 import {
@@ -15,16 +16,42 @@ import {
   stageMenuItems,
   type CompanyWantsView,
 } from './ResponsesCompanyWants';
+import { useCompactResponses } from './ResponsesMobilePush';
 
 type Selection = readonly CandidateCompanyWantSelectionItem[];
 
 /** 390: grouped list from the mockup (vt=w) — selection mode, rows, «Показать ещё», add row. */
 export function CompanyWantsMobile({ view }: { readonly view: CompanyWantsView }) {
+  const compact = useCompactResponses();
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const closePush = useCallback(() => setOpenKey(null), []);
+  const pushKey = compact ? openKey : null;
+  return (
+    <div
+      className="career-company-wants-mob career-responses-push-host"
+      data-mobile-push={pushKey ? 'company' : undefined}
+    >
+      {pushKey ? (
+        <CompanyWantsPush view={view} companyKey={pushKey} onBack={closePush} />
+      ) : (
+        <MobileOverview view={view} onOpen={compact ? setOpenKey : undefined} />
+      )}
+    </div>
+  );
+}
+
+function MobileOverview({
+  view,
+  onOpen,
+}: {
+  readonly view: CompanyWantsView;
+  readonly onOpen?: (key: string) => void;
+}) {
   const { controller } = view;
   const [selecting, setSelecting] = useState(false);
   const total = controller.page?.total ?? 0;
   return (
-    <div className="career-company-wants-mob">
+    <>
       {selecting ? (
         <MobileSelectionBar
           view={view}
@@ -51,18 +78,20 @@ export function CompanyWantsMobile({ view }: { readonly view: CompanyWantsView }
         </div>
       )}
       <Feedback controller={controller} />
-      <MobileList view={view} selecting={selecting} />
+      <MobileList view={view} selecting={selecting} onOpen={onOpen} />
       <AddRow onAdd={view.openAdd} />
-    </div>
+    </>
   );
 }
 
 function MobileList({
   view,
   selecting,
+  onOpen,
 }: {
   readonly view: CompanyWantsView;
   readonly selecting: boolean;
+  readonly onOpen?: (key: string) => void;
 }) {
   const { controller } = view;
   const total = controller.page?.total ?? 0;
@@ -71,7 +100,13 @@ function MobileList({
     <>
       <div className="career-company-wants-cards">
         {controller.items.map((company) => (
-          <MobileRow key={company.key} view={view} company={company} selecting={selecting} />
+          <MobileRow
+            key={company.key}
+            view={view}
+            company={company}
+            selecting={selecting}
+            onOpen={onOpen}
+          />
         ))}
         {shown === 0 ? (
           <p className="career-company-wants-foot" role="status">
@@ -230,10 +265,12 @@ function MobileRow({
   view,
   company,
   selecting,
+  onOpen,
 }: {
   readonly view: CompanyWantsView;
   readonly company: CandidateCompanyOpportunity;
   readonly selecting: boolean;
+  readonly onOpen?: (key: string) => void;
 }) {
   const selected = view.controller.isSelected(company.key);
   const body = <MobileRowBody company={company} selecting={selecting} selected={selected} />;
@@ -244,6 +281,19 @@ function MobileRow({
         className={selected ? 'career-company-wants-card is-selected' : 'career-company-wants-card'}
         aria-pressed={selected}
         onClick={() => view.controller.toggleOne(company)}
+      >
+        {body}
+      </button>
+    );
+  }
+  // 390: the row pushes «Компания» (mockup 5 `co`); between 640 and 760 px it keeps its menu.
+  if (onOpen) {
+    return (
+      <button
+        type="button"
+        className="career-company-wants-card"
+        aria-label={`Открыть компанию: ${company.name}`}
+        onClick={() => onOpen(company.key)}
       >
         {body}
       </button>

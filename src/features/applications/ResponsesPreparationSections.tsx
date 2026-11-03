@@ -31,12 +31,14 @@ export function SectionCard({
   title,
   count,
   actions,
+  foot,
   children,
 }: {
   readonly id: string;
   readonly title: string;
   readonly count?: number;
   readonly actions?: ReactNode;
+  readonly foot?: string;
   readonly children: ReactNode;
 }) {
   return (
@@ -47,6 +49,7 @@ export function SectionCard({
         {actions}
       </div>
       <div className="career-prep-list">{children}</div>
+      {foot ? <p className="career-prep-foot">{foot}</p> : null}
     </section>
   );
 }
@@ -84,7 +87,7 @@ export function StarStoriesCard({
   );
 }
 
-function StoryLoadState({ stories }: { readonly stories: StarStoriesState }) {
+export function StoryLoadState({ stories }: { readonly stories: StarStoriesState }) {
   if (stories.loading) return <p role="status">Загружаем STAR-истории…</p>;
   if (stories.error) {
     return (
@@ -106,12 +109,16 @@ function StoryLoadState({ stories }: { readonly stories: StarStoriesState }) {
   return null;
 }
 
+export function filledStarFields(story: StarStoryView): number {
+  return STAR_FIELDS.filter((field) => story.fields[field].trim().length > 0).length;
+}
+
 function storyCompleteness(story: StarStoryView): string {
-  const filled = STAR_FIELDS.filter((field) => story.fields[field].trim().length > 0).length;
+  const filled = filledStarFields(story);
   return `Ситуация, задача, действие, результат: заполнено ${filled} из ${STAR_FIELDS.length}`;
 }
 
-function storyProvenance(story: StarStoryView): string {
+export function storyProvenance(story: StarStoryView): string {
   const confirmation =
     story.confidence === 'confirmed'
       ? 'подтверждено фактами профиля'
@@ -225,7 +232,7 @@ function MockInterviewRow({
   );
 }
 
-function StressOption({
+export function StressOption({
   checked,
   onChange,
 }: {
@@ -351,7 +358,7 @@ export function formatDateTime(value: string): string {
       });
 }
 
-function formatDate(value: string): string {
+export function formatDate(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? ''
