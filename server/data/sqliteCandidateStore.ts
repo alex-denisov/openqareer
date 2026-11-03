@@ -178,7 +178,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   constructor(options: SqliteStoreOptions) {
     this.database = openCandidateDatabase(options.databasePath);
-    this.snapshotMemo = new SnapshotMemo(this.database);
+    this.snapshotMemo = new SnapshotMemo(this.database, { foreignCommitGraceMs: options.snapshotForeignCommitGraceMs });
     this.sealedText = new SealedText(options.encryptionKey);
     ({
       assessmentsRepository: this.assessmentsRepository,
