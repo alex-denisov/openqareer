@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
+import { errorDiagnostics } from '../observability/errorDiagnostics';
 import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -349,6 +350,7 @@ function handleRouteError(
     {
       errorName: error instanceof Error ? error.name : 'UnknownError',
       errorCode: getErrorCode(error),
+      ...errorDiagnostics(error),
     },
     'request-failed',
   );
