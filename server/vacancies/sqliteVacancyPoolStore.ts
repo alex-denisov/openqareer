@@ -135,6 +135,16 @@ interface CatalogProjectionStatements {
   readonly remove: { run(...values: SQLInputValue[]): unknown };
 }
 
+/** 03.11: a sibling process holding an older reading ledger never overwrites a newer one. */
+const OBSERVATIONS_NEWER_WINS = `CASE
+  WHEN excluded.observations IS NULL THEN vacancy_source_state.observations
+  WHEN vacancy_source_state.observations IS NULL THEN excluded.observations
+  WHEN coalesce(json_extract(excluded.observations, '$.lastReadingAt'), '')
+    >= coalesce(json_extract(vacancy_source_state.observations, '$.lastReadingAt'), '')
+  THEN excluded.observations
+  ELSE vacancy_source_state.observations
+END`;
+
 const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 
 /** Сколько строк дочитывается из `payload` за один шаг фонового прохода. */
@@ -1353,7 +1363,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            last_error_message = excluded.last_error_message,
            items_found_total = excluded.items_found_total,
            items_active_total = excluded.items_active_total,
-           observations = excluded.observations,
+           observations = ${OBSERVATIONS_NEWER_WINS},
            sync_requested_at = CASE
              WHEN vacancy_source_state.sync_requested_at IS NULL
              THEN excluded.sync_requested_at

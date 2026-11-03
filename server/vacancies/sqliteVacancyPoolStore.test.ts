@@ -68,6 +68,37 @@ describe('SqliteVacancyPoolStore', () => {
     ]);
   });
 
+  it('03.11: a process with an older reading ledger does not overwrite a newer one', () => {
+    const { store } = openStore();
+    const ledger = (lastReadingAt: string, successful: number) =>
+      ({
+        lastReadingAt,
+        windowReadings: 9,
+        windowSuccessful: successful,
+        consecutiveEmptyReadings: 0,
+      }) as never;
+    store.saveSourceState({
+      sourceId: 'src',
+      lastStatus: 'healthy',
+      lastSyncAt: '2026-11-03T10:50:00.000Z',
+      itemsFoundTotal: 1,
+      itemsActiveTotal: 1,
+      observations: ledger('2026-11-03T10:50:00.000Z', 9),
+    });
+    // A long-running sibling process still holds the ledger it loaded at start.
+    store.saveSourceState({
+      sourceId: 'src',
+      lastStatus: 'healthy',
+      lastSyncAt: '2026-11-03T10:55:00.000Z',
+      itemsFoundTotal: 1,
+      itemsActiveTotal: 1,
+      observations: ledger('2026-10-27T17:35:00.000Z', 0),
+    });
+    const [state] = store.loadSourceStates();
+    expect(state?.observations?.windowSuccessful).toBe(9);
+    expect(state?.lastSyncAt).toBe('2026-11-03T10:55:00.000Z');
+  });
+
   it('drops a status word it does not recognise rather than passing it on', () => {
     const { store, path } = openStore();
     store.saveSourceState({

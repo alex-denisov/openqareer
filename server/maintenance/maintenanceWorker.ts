@@ -127,7 +127,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   // раз в 20 с, LinkedIn — один раз в 10–20 с случайно; темп держит сам шаг.
   workdayDescriptionMs: 10 * 1_000,
   // До 10 карточек hh за тик при 1 чтении в секунду у загрузчика (B535).
-  hhCatalogTextMs: 12 * 1_000,
+  hhCatalogTextMs: 3 * 1_000,
   // 500 кластеров за 2 с: проход прода (~710 тыс.) ≈ 47 мин, потом час покоя (B535).
   orphanClustersMs: 2 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
