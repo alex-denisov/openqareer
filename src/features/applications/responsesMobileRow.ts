@@ -80,9 +80,11 @@ export function mobileStatusLabel(application: ApplicationView): string {
     if (state === 'failed') return 'Не доставлено';
     return 'Пробовали отправить';
   }
-  if (stage === 'interview' && application.nearestInterview?.scheduledAt) {
-    const when = formatInterviewDateTime(application.nearestInterview.scheduledAt);
-    return when ? 'Интервью ' + when : 'Интервью';
+  if (stage === 'interview') {
+    // The stage-change date is not the interview date (B511 G3b item 4): without a
+    // slot the row says so, in the same words as the 1440 status pill.
+    const when = formatInterviewDateTime(application.nearestInterview?.scheduledAt ?? '');
+    return when ? 'Интервью ' + when : 'Интервью, дата не указана';
   }
   const labels = {
     responded: 'Ответ',
