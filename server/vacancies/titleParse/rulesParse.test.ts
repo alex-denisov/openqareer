@@ -345,3 +345,23 @@ describe('rulesParse (B267 S1)', () => {
     }
   });
 });
+
+describe('функция поддержки клиентов (покрытие 03.11)', () => {
+  it.each([
+    'Head of Support / Руководитель сервиса — VPN-холдинга',
+    'Head of Support',
+    'Support Director',
+    'Director of Support',
+    'Contact Centre Manager',
+    'Head of Contact Center',
+    'Customer Care Director',
+    'Head of Customer Service',
+    'Service Desk Manager',
+    'Helpdesk Team Lead',
+    'Руководитель службы поддержки',
+    'Руководитель поддержки',
+    'Директор по клиентскому сервису',
+  ])('%s относится к функции support', (title) => {
+    expect(rulesParse(title).functions).toContain('support');
+  });
+});
