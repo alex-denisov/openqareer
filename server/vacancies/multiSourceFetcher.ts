@@ -33,6 +33,7 @@ type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<Vac
  * площадкам отказ «aborted due to timeout» (прод 2026-09-06, 92 источника).
  */
 const JSON_SOURCE_TIMEOUT_MS = 45_000;
+const LINKEDIN_PAGE_TIMEOUT_MS = 20_000;
 
 const FETCH_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
@@ -226,6 +227,30 @@ async function readJsonPayload(
   return { payload: await res.json(), observedAt };
 }
 
+function isTimeoutError(err: unknown): boolean {
+  return err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+}
+
+/**
+ * One timed-out first page is retried once after a pause (Apple 03.11, Amazon
+ * 02.11): a single slow answer must not fail a poll that has read nothing yet.
+ * Later pages are not retried; their failure already keeps the pages read.
+ */
+async function fetchFirstPageOnce(
+  request: PagedRequest,
+  isFirst: boolean,
+  pause: () => Promise<void>,
+  fetchStealth?: typeof fetchWithStealthFallback,
+): Promise<Awaited<ReturnType<typeof fetchJsonPayload>>> {
+  try {
+    return await fetchJsonPayload(request, fetchStealth);
+  } catch (err) {
+    if (!isFirst || !isTimeoutError(err)) throw err;
+    await pause();
+    return fetchJsonPayload(request, fetchStealth);
+  }
+}
+
 /**
  * Постраничная площадка (B216): опрос читает не больше `pagesPerSync` страниц
  * и, если площадка отдала не всё, называет чтение частичным — движок тогда
@@ -249,7 +274,12 @@ async function fetchPagedJsonApi(
     if (pagesRead > 0) await sleep(jitter(plan.delayMs, now));
     let fetchedPage: Awaited<ReturnType<typeof fetchJsonPayload>>;
     try {
-      fetchedPage = await fetchJsonPayload(request, fetchStealth);
+      fetchedPage = await fetchFirstPageOnce(
+        request,
+        pagesRead === 0,
+        () => sleep(plan.delayMs * 4),
+        fetchStealth,
+      );
     } catch (err) {
       // Сбой на первой странице — ошибка источника. Дальше он обрывает только
       // окно: прочитанное уходит частичным чтением, а не выбрасывается
@@ -277,7 +307,8 @@ async function fetchLinkedinGuestSource(
 ): Promise<SourceReading> {
   return fetchLinkedinGuest({
     fetchPage: async (url, headers) => {
-      return withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, async (signal) => {
+      // Per page, not per poll: one slow page ends the run with what was read.
+      return withRequestTimeout(LINKEDIN_PAGE_TIMEOUT_MS, async (signal) => {
         const res = await fetch(url, { headers, signal });
         return { status: res.status, body: res.ok ? await res.text() : '' };
       });

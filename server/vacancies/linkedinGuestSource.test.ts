@@ -7,6 +7,7 @@ import {
   parseLinkedinCards,
   LINKEDIN_SOURCE_ID,
   UAE_LOCATIONS,
+  resetLinkedinFanCursor,
 } from './linkedinGuestSource';
 
 /**
@@ -262,5 +263,76 @@ describe('LinkedIn guest source (B218)', () => {
     expect(backoff[1]!).toBeGreaterThan(backoff[0]!);
     expect(reading.partial).toBe(true);
     expect(reading.vacancies).toHaveLength(1);
+  });
+
+  describe('time budget and page timeouts (03.11)', () => {
+    const base = {
+      sleep: async () => {},
+      observedAt: '2026-11-03T09:00:00.000Z',
+      providerCapability: 'provider_permitted' as const,
+      demandTerms: [] as string[],
+    };
+
+    it('a page timeout after the first page keeps what was read', async () => {
+      let calls = 0;
+      const reading = await fetchLinkedinGuest(
+        {
+          ...base,
+          fetchPage: async () => {
+            calls += 1;
+            if (calls <= 2) return { status: 200, body: `<ul>${CARD(String(calls), 'A')}</ul>` };
+            throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+          },
+        },
+        0,
+      );
+      expect(reading.vacancies).toHaveLength(2);
+      expect(reading.partial).toBe(true);
+    });
+
+    it('a timeout on the very first page is a source failure', async () => {
+      await expect(
+        fetchLinkedinGuest(
+          {
+            ...base,
+            fetchPage: async () => {
+              throw new DOMException('timeout', 'TimeoutError');
+            },
+          },
+          1,
+        ),
+      ).rejects.toThrow(/timeout/);
+    });
+
+    it('an exhausted budget ends the run successfully, the next run resumes there', async () => {
+      resetLinkedinFanCursor();
+      let now = 0;
+      let n = 0;
+      const urls: string[] = [];
+      const deps = {
+        ...base,
+        budgetMs: 1_000,
+        clock: () => now,
+        fetchPage: async (url: string) => {
+          urls.push(url);
+          now += 400;
+          n += 1;
+          return { status: 200, body: `<ul>${CARD(String(n), 'A')}</ul>` };
+        },
+      };
+      const first = await fetchLinkedinGuest(deps, 5_000);
+      expect(first.partial).toBe(true);
+      expect(first.vacancies.length).toBe(3);
+      const firstCombo = new URL(urls[0]!).searchParams.get('keywords');
+      urls.length = 0;
+      now = 0;
+      await fetchLinkedinGuest(deps, 5_000 + 60_000);
+      const secondFirst = new URL(urls[0]!);
+      // same 90-minute tick: continues the fan, does not restart from combo 0
+      expect(urls.length).toBeGreaterThan(0);
+      expect(`${secondFirst.searchParams.get('keywords')}|${secondFirst.searchParams.get('start')}`).not.toBe(
+        `${firstCombo}|0`,
+      );
+    });
   });
 });
