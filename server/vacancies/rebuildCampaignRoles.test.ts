@@ -26,8 +26,33 @@ describe('rebuildCampaignRoles (B267 S5)', () => {
       getCandidateWorkspace: () => workspace,
       getSnapshot: () => ({
         memory: [
-          { id: 'title', statement: 'VP of Technology & Operations', status: 'confirmed' },
-          { id: 'ops', statement: 'COO owned operations', status: 'confirmed' },
+          {
+            id: 'title',
+            kind: 'fact',
+            domain: 'role-evidence',
+            statement: 'VP of Technology & Operations',
+            status: 'confirmed',
+            sourceMessageIds: ['m1'],
+            sensitive: false,
+          },
+          {
+            id: 'ops',
+            kind: 'fact',
+            domain: 'role-evidence',
+            statement: 'COO owned operations',
+            status: 'confirmed',
+            sourceMessageIds: ['m1'],
+            sensitive: false,
+          },
+          {
+            id: 'guess',
+            kind: 'hypothesis',
+            domain: 'gap',
+            statement: 'Chief Audit Executive по гипотезе консультанта',
+            status: 'proposed',
+            sourceMessageIds: ['m1'],
+            sensitive: false,
+          },
         ],
         resume: null,
       }),
@@ -49,6 +74,10 @@ describe('rebuildCampaignRoles (B267 S5)', () => {
     expect(workspace.campaign?.revision).toBe(3);
     expect(workspace.campaign?.auto?.roles.some((role) => role.id === 'eng-mgmt.cto')).toBe(false);
     expect(workspace.campaign?.auto?.roles.length).toBeLessThanOrEqual(10);
+    expect(workspace.campaign?.auto?.roles.flatMap((role) => role.evidenceRefs)).not.toContain(
+      'memory:guess',
+    );
+    expect(workspace.campaign?.auto?.model).toBe('rules');
   });
 
   it('берёт заголовок профиля, а не устаревший ответ мастера, и не выдумывает явные регионы', async () => {
@@ -64,7 +93,17 @@ describe('rebuildCampaignRoles (B267 S5)', () => {
     const store = {
       getCandidateWorkspace: () => workspace,
       getSnapshot: () => ({
-        memory: [{ id: 'exp', statement: 'VP of Technology, 250+ people', status: 'proposed' }],
+        memory: [
+          {
+            id: 'impabcdef0123-exp-1',
+            kind: 'fact',
+            domain: 'role-evidence',
+            statement: 'VP of Technology, 250+ people',
+            status: 'proposed',
+            sourceMessageIds: ['import'],
+            sensitive: false,
+          },
+        ],
         resume: {
           draft: { candidate: { headline: 'VP of Technology & Operations | Ex-Co-Founder' } },
         },

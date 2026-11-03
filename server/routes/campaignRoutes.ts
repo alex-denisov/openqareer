@@ -137,7 +137,10 @@ const handleRebuildCampaignRoles: Handler = async (deps, request, reply) => {
   );
   if (!candidate) return undefined;
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
-  void rebuildCampaignRoles(deps, candidate.id, { force: true }).catch((error) => {
+  void rebuildCampaignRoles(deps, candidate.id, {
+    force: true,
+    log: (fields, message) => request.log.info(fields, message),
+  }).catch((error) => {
     request.log.error({ error }, 'campaign_roles_rebuild_failed');
   });
   return reply.code(202).send({ data: { status: 'queued' }, meta: { requestId: request.id } });

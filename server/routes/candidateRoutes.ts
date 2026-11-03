@@ -402,7 +402,7 @@ async function importResumeIntoDossier(
       : candidateStore.commitResumeImport(candidate.id, commit);
   const digest = resumeDocumentDigest(candidate.id, body.source, body.text);
   recordImportCompletedNotification(deps, request, candidate.id, 'resume_import', digest);
-  void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
+  void rebuildCampaignRoles(deps, candidate.id, { log: (fields, message) => request.log.info(fields, message) }).catch((error) => {
     request.log.error({ error }, 'campaign_roles_rebuild_failed');
   });
   return {
