@@ -47,7 +47,18 @@ export interface HhVacancyDescriptionLoaderOptions {
   readonly failedCacheJitterMs?: number;
   readonly random?: () => number;
   readonly maxPendingRequests?: number;
+  /**
+   * 03.11: запросов в полёте одновременно. Старты по-прежнему разнесены на
+   * `minIntervalMs`, так что скорость не выше одного запроса в секунду; конвейер
+   * лишь не ждёт ответа перед следующим стартом. По умолчанию 1 (как раньше).
+   */
+  readonly maxConcurrent?: number;
 }
+
+/** Пауза после отказа удваивается с каждым подряд идущим, но не дольше этого. */
+const MAX_REFUSAL_BACKOFF_MS = 15 * 60 * 1_000;
+/** Столько подряд ответов 5xx/сбоев сети считаются сбоем площадки, а не карточки. */
+const TRANSIENT_STREAK_TO_PAUSE = 3;
 
 interface CachedHhVacancyDetails {
   readonly details?: HhVacancyDetails;
@@ -105,6 +116,10 @@ export class HhVacancyDescriptionLoader {
   private readonly cached = new Map<string, CachedHhVacancyDetails>();
   private readonly inFlight = new Map<string, Promise<HhVacancyDetails | undefined>>();
   private requestQueue: Promise<void> = Promise.resolve();
+  private active = 0;
+  private readonly slotWaiters: Array<() => void> = [];
+  private refusalStreak = 0;
+  private transientStreak = 0;
   private lastRequestAt = Number.NEGATIVE_INFINITY;
   private retryAfter = Number.NEGATIVE_INFINITY;
 
@@ -132,11 +147,13 @@ export class HhVacancyDescriptionLoader {
     );
     if (this.inFlight.size >= maxPendingRequests) return Promise.resolve(BACKOFF);
 
-    const request = this.requestQueue.then(() => this.loadFromTransport(url));
-    this.requestQueue = request.then(
+    // Очередь держит только старт запроса (слот и пауза), не ответ: так ответы перекрываются.
+    const started = this.requestQueue.then(() => this.start(url));
+    this.requestQueue = started.then(
       () => undefined,
       () => undefined,
     );
+    const request = started.then((early) => (early.done ? early.details : this.finish(url)));
     this.inFlight.set(url, request);
     void request.then(
       () => this.inFlight.delete(url),
@@ -145,23 +162,58 @@ export class HhVacancyDescriptionLoader {
     return request;
   }
 
-  private async loadFromTransport(url: string): Promise<HhVacancyDetails | undefined> {
-    if (this.isLoaded(url)) return this.cached.get(url)?.details;
+  private async acquireSlot(): Promise<void> {
+    const max = Math.max(1, Math.floor(this.options.maxConcurrent ?? 1));
+    while (this.active >= max) {
+      await new Promise<void>((resolve) => this.slotWaiters.push(resolve));
+    }
+    this.active += 1;
+  }
 
+  private releaseSlot(): void {
+    this.active -= 1;
+    this.slotWaiters.shift()?.();
+  }
+
+  /** Ждёт слот и паузу между стартами; `done` — ответ уже известен без сети. */
+  private async start(
+    url: string,
+  ): Promise<{ done: true; details: HhVacancyDetails | undefined } | { done: false }> {
+    if (this.isLoaded(url)) return { done: true, details: this.cached.get(url)?.details };
     const now = this.options.now ?? Date.now;
-    if (this.retryAfter > now()) return BACKOFF;
+    if (this.retryAfter > now()) return { done: true, details: BACKOFF };
+    await this.acquireSlot();
     const delay = Math.max(
       0,
       (this.options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS) - (now() - this.lastRequestAt),
     );
-    if (delay > 0) await this.options.sleep(delay);
+    try {
+      if (delay > 0) await this.options.sleep(delay);
+    } catch (error) {
+      this.releaseSlot();
+      throw error;
+    }
     this.lastRequestAt = now();
+    return { done: false };
+  }
 
+  private async finish(url: string): Promise<HhVacancyDetails | undefined> {
+    try {
+      return await this.loadFromTransport(url);
+    } finally {
+      this.releaseSlot();
+    }
+  }
+
+  private async loadFromTransport(url: string): Promise<HhVacancyDetails | undefined> {
+    const now = this.options.now ?? Date.now;
     let details: HhVacancyDetails | undefined;
     let refused = false;
     let restricted = false;
+    let transient = false;
     try {
       const response = await this.options.transport(url);
+      transient = response.status === 429 || response.status >= 500;
       refused =
         REFUSAL_STATUSES.has(response.status) && !FORBIDDEN_VACANCY_MARKER.test(response.body);
       restricted = response.status === 403 && FORBIDDEN_VACANCY_MARKER.test(response.body);
@@ -175,6 +227,13 @@ export class HhVacancyDescriptionLoader {
       }
     } catch {
       details = undefined;
+      transient = true;
+    }
+    if (details || restricted) {
+      this.refusalStreak = 0;
+      this.transientStreak = 0;
+    } else if (transient && !refused) {
+      this.transientStreak += 1;
     }
     if (details) {
       this.cached.set(url, { details });
@@ -188,7 +247,18 @@ export class HhVacancyDescriptionLoader {
       this.cached.set(url, { retryAt });
       // Общая пауза — только когда hh отказывает нам; сбой одной карточки
       // (404, страница без описания, сеть) остальных не держит (прод 21.10).
-      if (refused) this.retryAfter = Math.max(this.retryAfter, retryAt);
+      // 03.11: подряд идущие отказы удваивают паузу (60 с, 2, 4 ... до 15 мин).
+      if (refused) {
+        this.refusalStreak += 1;
+        const grown = Math.min(failedCacheTtlMs * 2 ** (this.refusalStreak - 1), MAX_REFUSAL_BACKOFF_MS);
+        this.retryAfter = Math.max(this.retryAfter, now() + grown + (retryAt - now() - failedCacheTtlMs));
+      } else if (this.transientStreak >= TRANSIENT_STREAK_TO_PAUSE) {
+        const grown = Math.min(
+          failedCacheTtlMs * 2 ** (this.transientStreak - TRANSIENT_STREAK_TO_PAUSE),
+          MAX_REFUSAL_BACKOFF_MS,
+        );
+        this.retryAfter = Math.max(this.retryAfter, now() + grown);
+      }
     }
     if (refused) return { blocked: 'refused', skills: [] };
     // Не кешируется как ответ: повтор через отступ решает, скрыт ли текст насовсем.

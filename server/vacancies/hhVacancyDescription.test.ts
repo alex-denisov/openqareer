@@ -170,6 +170,7 @@ describe('HhVacancyDescriptionLoader', () => {
 
     const first = loader.load('https://hh.ru/vacancy/9001');
     expect(await loader.load('https://hh.ru/vacancy/9002')).toMatchObject({ blocked: 'backoff' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(transport).toHaveBeenCalledTimes(1);
     release({ status: 200, body: page });
     await first;
@@ -252,5 +253,80 @@ describe('HhVacancyDescriptionLoader', () => {
       sleep: vi.fn().mockResolvedValue(undefined),
     });
     await expect(loader.load(vacancyUrl)).resolves.not.toHaveProperty('archived');
+  });
+
+  it('03.11: with maxConcurrent 3 slow responses overlap, starts stay one second apart', async () => {
+    let now = 0;
+    const starts: number[] = [];
+    let active = 0;
+    let peak = 0;
+    const transport = vi.fn(async () => {
+      starts.push(now);
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { status: 200, body: page };
+    });
+    const loader = new HhVacancyDescriptionLoader({
+      transport,
+      sleep: async (ms) => {
+        now += ms;
+      },
+      now: () => now,
+      minIntervalMs: 1_000,
+      maxConcurrent: 3,
+      failedCacheJitterMs: 0,
+    });
+    await Promise.all(
+      [1, 2, 3, 4, 5, 6].map((n) => loader.load(`https://hh.ru/vacancy/${9000 + n}`)),
+    );
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(3);
+    for (let index = 1; index < starts.length; index += 1) {
+      expect(starts[index]! - starts[index - 1]!).toBeGreaterThanOrEqual(1_000);
+    }
+  });
+
+  it('03.11: repeated 429 doubles the pause, a good page resets it', async () => {
+    let now = 0;
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 429, body: '' })
+      .mockResolvedValueOnce({ status: 429, body: '' })
+      .mockResolvedValueOnce({ status: 200, body: page });
+    const loader = new HhVacancyDescriptionLoader({
+      transport,
+      sleep: async () => undefined,
+      now: () => now,
+      failedCacheTtlMs: 60_000,
+      failedCacheJitterMs: 0,
+    });
+    await loader.load('https://hh.ru/vacancy/1');
+    now += 60_001;
+    await loader.load('https://hh.ru/vacancy/2');
+    // The second refusal in a row waits twice as long.
+    now += 60_001;
+    await expect(loader.load('https://hh.ru/vacancy/3')).resolves.toMatchObject({ blocked: 'backoff' });
+    now += 60_001;
+    await expect(loader.load('https://hh.ru/vacancy/3')).resolves.toMatchObject({ skills: [] });
+    expect(transport).toHaveBeenCalledTimes(3);
+  });
+
+  it('03.11: three 5xx in a row pause the loader, one 5xx does not', async () => {
+    let now = 0;
+    const transport = vi.fn().mockResolvedValue({ status: 503, body: '' });
+    const loader = new HhVacancyDescriptionLoader({
+      transport,
+      sleep: async () => undefined,
+      now: () => now,
+      failedCacheTtlMs: 60_000,
+      failedCacheJitterMs: 0,
+    });
+    await loader.load('https://hh.ru/vacancy/1');
+    await expect(loader.load('https://hh.ru/vacancy/2')).resolves.toBeUndefined();
+    await loader.load('https://hh.ru/vacancy/3');
+    await expect(loader.load('https://hh.ru/vacancy/4')).resolves.toMatchObject({ blocked: 'backoff' });
+    expect(transport).toHaveBeenCalledTimes(3);
   });
 });
