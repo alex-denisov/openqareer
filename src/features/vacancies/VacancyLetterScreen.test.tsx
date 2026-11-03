@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { LetterScreenState } from './vacancyLetterController';
 import { VacancyLetterScreen, type VacancyLetterTarget } from './VacancyLetterScreen';
-import { factsLabel, workplaceRange } from './VacancyLetterEditor';
+import { factsLabel, LetterNotices, workplaceRange } from './VacancyLetterEditor';
+import type { VacancyPitchResult } from './vacancyPitchApi';
 import { CandidateDisplayNameContext } from '../shell/candidateDisplayName';
 
 const state: { current: LetterScreenState } = { current: undefined as never };
@@ -130,6 +131,49 @@ describe('VacancyLetterScreen (mockup 9)', () => {
   it('offers «Открыть» for the resume only when the host gives a way to', () => {
     expect(html()).not.toContain('>Открыть<');
     expect(html({ onOpenResume: vi.fn() })).toContain('>Открыть<');
+  });
+});
+
+describe('the note under the letter (G3 L2)', () => {
+  const pitch = (extra: Partial<VacancyPitchResult>): VacancyPitchResult => ({
+    vacancyId: 'v1',
+    emailPitch: { subject: 's', body: 'b' },
+    linkedInNote: '',
+    atsCoverLetter: '',
+    usedEvidenceIds: ['e1'],
+    language: 'en',
+    generatedAt: '2026-11-03T00:00:00.000Z',
+    ...extra,
+  });
+  const notes = (extra: Partial<VacancyPitchResult>) =>
+    renderToStaticMarkup(<LetterNotices pitch={pitch(extra)} />);
+
+  it('shows nothing for a clean English letter — no language banner', () => {
+    expect(notes({})).toBe('');
+  });
+
+  it('shows one line even when the server sends several', () => {
+    const markup = notes({
+      notices: ['Первая.', 'Вторая.'],
+      unconfirmedRequirements: ['IT director'],
+    });
+    expect(markup).toContain('Первая.');
+    expect(markup).not.toContain('Вторая.');
+    expect(markup).not.toContain('IT director');
+  });
+
+  it('counts unconfirmed requirements and lists their human labels on demand', () => {
+    const markup = notes({
+      unconfirmedRequirements: ['Director of technology', 'Technology director'],
+    });
+    expect(markup).toContain(
+      '<summary>2 требования вакансии не подтверждены фактами профиля</summary>',
+    );
+    expect(markup).toContain('<li>Director of technology</li>');
+    expect(markup).not.toMatch(/\p{L}+-\p{Lu}\p{Ll}+/u);
+    expect(notes({ unconfirmedRequirements: ['Kafka'] })).toContain(
+      '1 требование вакансии не подтверждено',
+    );
   });
 });
 

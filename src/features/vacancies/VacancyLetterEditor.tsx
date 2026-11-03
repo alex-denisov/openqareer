@@ -138,26 +138,43 @@ export function LetterEditor({
   );
 }
 
+function requirementsNote(count: number): string {
+  const last = count % 10;
+  const tens = count % 100;
+  const few = last >= 2 && last <= 4 && (tens < 12 || tens > 14);
+  if (last === 1 && tens !== 11) return `${count} требование вакансии не подтверждено фактами профиля`;
+  return `${count} ${few ? 'требования' : 'требований'} вакансии не подтверждены фактами профиля`;
+}
+
+function UnconfirmedRequirementsNote({ labels }: { readonly labels: readonly string[] }) {
+  return (
+    <details className="career-letter-requirements">
+      <summary>{requirementsNote(labels.length)}</summary>
+      <ul>
+        {labels.map((label) => (
+          <li key={label}>{label}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/**
+ * Под письмом в макете 9 — одна строка «слов · длина · от имени». Сигнал о
+ * фактах остаётся, но одной короткой заметкой, самой полезной (G3 L2, 03.11).
+ */
 export function LetterNotices({
   pitch,
-  language,
   onGatherFacts,
 }: {
   readonly pitch: VacancyPitchResult;
-  readonly language: 'auto' | PitchLanguage;
   readonly onGatherFacts?: () => void;
 }) {
-  const notices = pitch.notices ?? [];
-  const fewFacts = pitch.usedEvidenceIds.length === 0;
-  const english = language === 'en' || pitch.language === 'en';
-  if (!english && notices.length === 0 && !fewFacts) return null;
-  return (
-    <div className="career-letter-notes">
-      {english ? <p role="status">Письмо на английском: так написана вакансия.</p> : null}
-      {notices.map((notice) => (
-        <p key={notice}>{notice}</p>
-      ))}
-      {fewFacts ? (
+  const notice = pitch.notices?.[0];
+  const unconfirmed = pitch.unconfirmedRequirements ?? [];
+  if (pitch.usedEvidenceIds.length === 0) {
+    return (
+      <div className="career-letter-notes">
         <p role="status">
           <span>В профиле мало подтверждённых фактов: письмо не добавляет достижения без источника.</span>
           {onGatherFacts ? (
@@ -167,7 +184,13 @@ export function LetterNotices({
             </button>
           ) : null}
         </p>
-      ) : null}
+      </div>
+    );
+  }
+  if (!notice && unconfirmed.length === 0) return null;
+  return (
+    <div className="career-letter-notes">
+      {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} />}
     </div>
   );
 }

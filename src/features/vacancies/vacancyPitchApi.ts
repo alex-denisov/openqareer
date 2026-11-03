@@ -35,8 +35,10 @@ export interface VacancyPitchResult {
   readonly usedFacts?: readonly { id: string; basis: 'confirmed' | 'imported' }[];
   readonly candidateWorkplaces?: readonly CandidateWorkplaceForLetter[];
   readonly language?: 'en' | 'ru';
-  /** UI hints such as "few facts" or "requirements unmatched" — never letter text. */
+  /** UI hints such as "few facts" or claims to check — never letter text; at most one. */
   readonly notices?: readonly string[];
+  /** Vacancy requirements no profile fact confirms, as human labels (G3 L2). */
+  readonly unconfirmedRequirements?: readonly string[];
   readonly generatedAt: string;
 }
 
