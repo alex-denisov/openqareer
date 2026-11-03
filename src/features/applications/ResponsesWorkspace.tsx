@@ -53,6 +53,8 @@ export interface ResponsesWorkspaceScreenProps {
   readonly onOpenAutomation?: () => void;
   readonly initialTab?: 'board' | 'analytics';
   readonly initialApplicationId?: string;
+  /** At 390 the archive lives in the «Закрыто» push screen, so the deep link opens it. */
+  readonly initialArchiveOpen?: boolean;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -171,7 +173,7 @@ function FunnelWorkspace({
 }) {
   const compact = useCompactResponses();
   const [pushState, setPush] = useState<ResponsesMobilePushView | null>(() =>
-    props.initialApplicationId ? { kind: 'response', id: props.initialApplicationId } : null,
+    initialPushView(props),
   );
   const push = compact ? pushState : null;
   const closePush = () => {
@@ -556,4 +558,9 @@ function MockInterviewSuggestion({ workspace }: { readonly workspace: WorkspaceC
       application={workspace.selectedApplication}
     />
   ) : null;
+}
+
+function initialPushView(props: ResponsesWorkspaceScreenProps): ResponsesMobilePushView | null {
+  if (props.initialApplicationId) return { kind: 'response', id: props.initialApplicationId };
+  return props.initialArchiveOpen ? { kind: 'closed' } : null;
 }

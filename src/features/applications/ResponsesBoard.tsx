@@ -302,6 +302,7 @@ function ReadyBoard({ initialArchiveOpen, ...props }: ReadyBoardProps) {
   return (
     <ResponsesWorkspaceScreen
       {...props}
+      initialArchiveOpen={initialArchiveOpen}
       columnsContent={(input) => (
         <BoardColumnsView
           {...input}
