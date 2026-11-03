@@ -30,7 +30,7 @@ describe('letter text (B496/B528)', () => {
     for (const notice of pitch.notices) expect(notice).toMatch(/\p{Script=Cyrillic}/u);
   });
 
-  it('English vacancy → English letter, still no raw fields, notices stay Russian', () => {
+  it('English vacancy → English letter, no raw fields, no Cyrillic, notices stay Russian', () => {
     const pitch = generateVacancyPitch({
       vacancy: { id: 'v', title: 'Director, Technology Operations', company: 'Leidos', requiredSkills: ['ITIL'] },
       facts, workplaces,
@@ -38,9 +38,10 @@ describe('letter text (B496/B528)', () => {
     expect(pitch.language).toBe('en');
     expect(pitch.atsCoverLetter).not.toMatch(RAW_FIELD);
     expect(pitch.atsCoverLetter).not.toMatch(/\p{Script=Cyrillic}{3,}\s*:/u);
-    expect(pitch.atsCoverLetter).toContain('Head of Engineering at Финтех Лаб');
-    expect(pitch.atsCoverLetter).not.toContain('Сократил');
-    expect(pitch.notices.length).toBeGreaterThan(0);
+    expect(pitch.atsCoverLetter).toContain('Head of Engineering at Fintekh Lab');
+    expect(pitch.atsCoverLetter).toContain('Head of Engineering at Market Soft');
+    expect(pitch.atsCoverLetter).not.toMatch(/\p{Script=Cyrillic}/u);
+    expect(pitch.unconfirmedRequirements).toEqual(['ITIL']);
     for (const notice of pitch.notices) expect(notice).toMatch(/\p{Script=Cyrillic}/u);
   });
 });

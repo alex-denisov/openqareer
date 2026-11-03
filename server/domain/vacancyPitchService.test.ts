@@ -120,9 +120,8 @@ describe('vacancyPitchService', () => {
     // Does not claim to be a Kafka/Kubernetes veteran, but cites existing adjacent skills
     expect(pitch.usedEvidenceIds).toContain('mem-003');
     expect(pitch.emailPitch.body).not.toMatch(/Kafka|Kubernetes/i);
-    expect(pitch.notices).toContain(
-      'В профиле нет подтверждённых фактов по требованиям: Kafka, Kubernetes',
-    );
+    expect(pitch.unconfirmedRequirements).toEqual(['Kafka', 'Kubernetes']);
+    expect(pitch.notices).toEqual([]);
   });
 
   it('reports which vacancy requirements the letter answered (C46)', () => {
@@ -397,7 +396,7 @@ describe('vacancyPitchService', () => {
     ]);
     expect(pitch.emailPitch.body).not.toContain('has no confirmed facts');
     expect(pitch.atsCoverLetter).not.toContain('has no confirmed facts');
-    expect(pitch.notices.length).toBeGreaterThan(0);
+    expect(pitch.unconfirmedRequirements).toEqual(['Product & Operations']);
   });
 
   it('использует evidenceRefs выбранной роли первыми и в шаблоне', () => {

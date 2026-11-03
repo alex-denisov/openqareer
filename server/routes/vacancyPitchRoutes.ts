@@ -315,9 +315,10 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
       candidateWorkplaces: result.candidateWorkplaces,
       outputFactChecks: result.outputFactChecks,
       ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
-      notices: [...result.pitch.notices, ...generatedTextFactNotices(
+      // One note under the letter (G3 L2, mockup 9); the fact gate's goes first (B528).
+      notices: [...generatedTextFactNotices(
         result.pitch.language, Object.values(result.outputFactChecks), result.written.factCheck,
-      )],
+      ), ...result.pitch.notices].slice(0, 1),
       bodySource: result.written.body ? ('model' as const) : ('template' as const),
       ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
     },

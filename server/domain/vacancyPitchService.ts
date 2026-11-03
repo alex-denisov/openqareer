@@ -5,6 +5,7 @@ import {
   rankPitchFacts,
   type PitchFactRankingContext,
 } from './pitchFactRanking';
+import { englishJobTitle, englishProperName, hasCyrillic, requirementLabel } from './letterLanguage';
 
 export type PitchTone = 'executive' | 'confident' | 'technical';
 export type PitchLanguage = 'en' | 'ru';
@@ -92,9 +93,11 @@ export interface VacancyPitchResponse {
   readonly usedFacts: readonly VacancyPitchUsedFact[];
   /** Требования вакансии, на которые письмо ответило конкретным фактом профиля (C46). */
   readonly coveredRequirements: readonly string[];
+  /** Требования без подтверждающего факта, подписями для человека (G3 L2). */
+  readonly unconfirmedRequirements: readonly string[];
   readonly language: PitchLanguage;
   /**
-   * Состояния «мало фактов» / «требования не сопоставлены» уходят сюда, а не
+   * Состояние «мало фактов» уходит сюда, а не
    * в тело письма: кандидат копирует тело рекрутеру как есть, и служебный
    * текст об отсутствии данных там читать не должен никто, кроме кандидата.
    */
@@ -187,9 +190,8 @@ interface Copy {
   /** B422: кандидат отметил компанию «Хочу в эту компанию». */
   targetCompany(company: string): string;
   evidenceIntro: string;
-  stackEmpty: string;
+  experienceSnippet(statement: string): string;
   stackMatched(skills: string): string;
-  stackMissing(skills: string): string;
   closing(tone: PitchTone): string;
   linkedIn(vacancy: VacancyPitchInputVacancy, tone: PitchTone, snippet: string): string;
   ats: {
@@ -198,6 +200,7 @@ interface Copy {
     candidate: string;
     greeting(company: string | undefined): string;
     resultsHeading: string;
+    experienceHeading: string;
     fitHeading: string;
     signOff: string;
   };
@@ -209,7 +212,6 @@ interface Copy {
   companyFallback: string;
   candidateFallback: string;
   noticeNoFacts: string;
-  noticeNoStackMatch: string;
 }
 
 const RU_COPY: Copy = {
@@ -233,9 +235,8 @@ const RU_COPY: Copy = {
   },
   targetCompany: (company) => `${company} — компания, в которой я хочу работать.`,
   evidenceIntro: 'Из результатов:',
-  stackEmpty: 'Требования вакансии не сопоставлены с фактами профиля.',
+  experienceSnippet: (statement) => ` Мой опыт: ${statement}.`,
   stackMatched: (skills) => `В профиле подтверждён практический опыт работы со стеком: ${skills}`,
-  stackMissing: (skills) => `В профиле нет подтверждённых фактов по требованиям: ${skills}`,
   closing: (tone) => {
     if (tone === 'technical') {
       return 'Буду рад ответить на технические вопросы и разобрать архитектурные кейсы на короткой встрече.';
@@ -261,6 +262,7 @@ const RU_COPY: Copy = {
     candidate: 'Кандидат',
     greeting: (company) => `Уважаемая команда${company ? ` ${company}` : ''}!`,
     resultsHeading: 'Ключевые результаты:',
+    experienceHeading: 'Опыт:',
     fitHeading: 'Соответствие требованиям роли:',
     signOff: 'С уважением,',
   },
@@ -283,7 +285,6 @@ const RU_COPY: Copy = {
   companyFallback: 'вашей команды',
   candidateFallback: 'Кандидат',
   noticeNoFacts: 'В профиле пока нет фактов, годных для письма — добавьте их перед отправкой.',
-  noticeNoStackMatch: 'Требования вакансии не сопоставлены ни с одним фактом профиля.',
 };
 
 const EN_COPY: Copy = {
@@ -306,9 +307,8 @@ const EN_COPY: Copy = {
   },
   targetCompany: (company) => `${company} is a company I want to work for.`,
   evidenceIntro: 'Among my results:',
-  stackEmpty: "The vacancy's requirements have not been matched against profile facts.",
+  experienceSnippet: (statement) => ` My experience: ${statement}.`,
   stackMatched: (skills) => `My profile confirms hands-on experience with: ${skills}`,
-  stackMissing: (skills) => `My profile has no confirmed facts for: ${skills}`,
   closing: (tone) => {
     if (tone === 'technical') {
       return "I'd be glad to answer technical questions and walk through architecture cases on a short call.";
@@ -334,6 +334,7 @@ const EN_COPY: Copy = {
     candidate: 'Candidate',
     greeting: (company) => `Dear ${company ?? 'Hiring'} Team,`,
     resultsHeading: 'Key results:',
+    experienceHeading: 'Experience:',
     fitHeading: 'Fit against the role requirements:',
     signOff: 'Best regards,',
   },
@@ -356,7 +357,6 @@ const EN_COPY: Copy = {
   companyFallback: 'your team',
   candidateFallback: 'Candidate',
   noticeNoFacts: 'No profile facts are ready for this letter yet — add them before sending.',
-  noticeNoStackMatch: "The vacancy's requirements are not matched against any profile fact.",
 };
 
 function copyFor(language: PitchLanguage): Copy {
@@ -382,13 +382,29 @@ function workplacePeriod(place: PitchWorkplace, language: PitchLanguage): string
   return end && end !== start ? ` (${start}–${end})` : ` (${start})`;
 }
 
-function workplacePhrase(place: PitchWorkplace, language: PitchLanguage): string | null {
-  const title = place.title?.trim();
-  const employer = place.employer?.trim();
+interface WorkplacePhrase {
+  readonly text: string;
+  readonly hasTitle: boolean;
+}
+
+/** В английском письме — только английские должность и компания (G3 L1). */
+function workplaceParts(place: PitchWorkplace, language: PitchLanguage) {
+  const title = place.title?.trim() || null;
+  const employer = place.employer?.trim() || null;
+  if (language === 'ru') return { title, employer };
+  return {
+    title: title ? englishJobTitle(title) : null,
+    employer: employer ? englishProperName(employer) : null,
+  };
+}
+
+function workplacePhrase(place: PitchWorkplace, language: PitchLanguage): WorkplacePhrase | null {
+  const { title, employer } = workplaceParts(place, language);
   if (!title && !employer) return null;
   const joiner = language === 'ru' ? ' в компании ' : ' at ';
-  const head = title && employer ? `${title}${joiner}${employer}` : (title ?? employer ?? '');
-  return `${head}${workplacePeriod(place, language)}`;
+  const head = title && employer ? `${title}${joiner}${employer}`
+    : (title ?? `${language === 'ru' ? 'в компании ' : 'at '}${employer ?? ''}`);
+  return { text: `${head}${workplacePeriod(place, language)}`, hasTitle: Boolean(title) };
 }
 
 /** Человеческая фраза о выбранных местах работы; их id — следы фактов (B528). */
@@ -404,27 +420,56 @@ export function buildWorkplaceSentence(
     return [phrase];
   });
   if (phrases.length === 0) return '';
-  const [first, ...rest] = phrases;
+  const [first, ...others] = phrases;
+  if (!first) return '';
+  const rest = others.map((phrase) => phrase.text);
   if (language === 'ru') {
-    const now = workplaces[0]?.current ? 'Сейчас работаю на позиции' : 'Последнее место —';
-    return rest.length ? `${now} ${first}; до этого — ${rest.join(', ')}.` : `${now} ${first}.`;
+    const now = workplaces[0]?.current
+      ? (first.hasTitle ? 'Сейчас работаю на позиции' : 'Сейчас работаю')
+      : 'Последнее место —';
+    return rest.length ? `${now} ${first.text}; до этого — ${rest.join(', ')}.` : `${now} ${first.text}.`;
   }
-  const now = workplaces[0]?.current ? 'I currently work as' : 'Most recently I worked as';
-  return rest.length ? `${now} ${first}; before that, ${rest.join(', ')}.` : `${now} ${first}.`;
+  const verb = workplaces[0]?.current ? 'I currently work' : 'Most recently I worked';
+  const now = first.hasTitle ? `${verb} as` : verb;
+  return rest.length ? `${now} ${first.text}; before that, ${rest.join(', ')}.` : `${now} ${first.text}.`;
+}
+
+// Начало слова: иначе «cut» находится в «executive», «led» — в «skilled».
+const OUTCOME_VERB = /(?<!\p{L})(?:созда|основа|возглав|руковод|разработа|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|вырос|выраст|led|founded|created|built|launched|grew|increased|reduced|cut|achieved|implemented|doubled|delivered|managed|scaled)/iu;
+
+/**
+ * Результат — фраза с итогом, а не строка навыка: «Kubernetes. Kafka. Go.»
+ * под заголовком «Among my results» читается как подмена (G3 L1, 03.11).
+ */
+function isResultFact(fact: VacancyPitchInputFact): boolean {
+  if (fact.domain === 'skill') return false;
+  if ((fact.statement.match(/[\p{L}\p{N}]+/gu) ?? []).length < 3) return false;
+  // role-evidence — опыт выбранной роли кампании, его ставит первым ранжирование.
+  return fact.domain === 'outcome' || fact.domain === 'role-evidence' ||
+    /\d/u.test(fact.statement) || OUTCOME_VERB.test(fact.statement);
+}
+
+/**
+ * Факты, которые можно процитировать рекрутеру как результат: без записей
+ * профиля «Поле: значение» и на языке письма — шаблон не переводит.
+ */
+function letterResultFacts(
+  facts: readonly VacancyPitchInputFact[],
+  language: PitchLanguage,
+): VacancyPitchInputFact[] {
+  return facts.filter((fact) => !isStructuredRecordStatement(fact.statement) &&
+    (language === 'ru' || !hasCyrillic(fact.statement)) && isResultFact(fact));
 }
 
 function buildEvidenceParagraph(
   copy: Copy,
   language: PitchLanguage,
-  allFacts: readonly VacancyPitchInputFact[],
+  facts: readonly VacancyPitchInputFact[],
   workplaces: readonly PitchWorkplace[],
   usedIds: Set<string>,
   notices: string[],
   useRanking: boolean,
 ): string {
-  // Шаблон не переводит: русская фраза в английском письме читается как ошибка.
-  const facts = allFacts.filter((fact) => !isStructuredRecordStatement(fact.statement) &&
-    (language === 'ru' || !/\p{Script=Cyrillic}/u.test(fact.statement)));
   const career = buildWorkplaceSentence(workplaces, language, usedIds);
   if (facts.length === 0) {
     // The "too few facts" state is not letter content — it goes to `notices`
@@ -495,36 +540,21 @@ function matchRequirements(
   return { matched, missing, matchedIds };
 }
 
+/**
+ * Непокрытые требования — не текст письма и не служебная строка с ключами:
+ * они уходят в `unconfirmedRequirements` подписями для человека (G3 L2).
+ */
 function buildStackParagraph(
   copy: Copy,
   vacancy: VacancyPitchInputVacancy,
   facts: readonly VacancyPitchInputFact[],
   usedIds: Set<string>,
-  notices: string[],
 ): string {
   const reqSkills = vacancy.requiredSkills ?? [];
-  // Nothing to match is a state for the notice line, never a sentence the
-  // candidate would copy to a recruiter (B266).
   if (reqSkills.length === 0) return '';
-
-  const { matched: matchedSkills, missing: missingSkills, matchedIds } = matchRequirements(
-    reqSkills,
-    facts,
-  );
+  const { matched, matchedIds } = matchRequirements(reqSkills, facts);
   for (const id of matchedIds) usedIds.add(id);
-
-  const parts: string[] = [];
-  if (matchedSkills.length > 0) {
-    parts.push(copy.stackMatched(matchedSkills.join(', ')));
-  } else {
-    notices.push(RU_COPY.noticeNoStackMatch);
-  }
-
-  if (missingSkills.length > 0) {
-    notices.push(RU_COPY.stackMissing(missingSkills.slice(0, 3).join(', ')));
-  }
-
-  return parts.length > 0 ? `${parts.join('. ')}.` : '';
+  return matched.length > 0 ? `${copy.stackMatched(matched.map(requirementLabel).join(', '))}.` : '';
 }
 
 function buildLinkedInNote(
@@ -541,7 +571,7 @@ function buildLinkedInNote(
   let snippet = '';
   if (firstFact) {
     usedIds.add(firstFact.id);
-    snippet = ` My experience: ${firstFact.statement}.`;
+    snippet = copy.experienceSnippet(firstFact.statement.trim().replace(/[.;,\s]+$/u, ''));
   }
   const note = copy.linkedIn(vacancy, tone, firstFact ? snippet : '');
   return truncateSafely(note, LINKEDIN_NOTE_LIMIT);
@@ -557,7 +587,7 @@ function buildAtsCoverLetter(
   vacancy: VacancyPitchInputVacancy,
   candidateName: string,
   intro: string,
-  evidence: string,
+  evidence: { readonly text: string; readonly hasResults: boolean },
   stack: string,
   closing: string,
 ): string {
@@ -571,7 +601,7 @@ function buildAtsCoverLetter(
     '',
     intro,
     '',
-    ...section(copy.ats.resultsHeading, evidence),
+    ...section(evidence.hasResults ? copy.ats.resultsHeading : copy.ats.experienceHeading, evidence.text),
     ...section(copy.ats.fitHeading, stack),
     closing,
     '',
@@ -633,14 +663,15 @@ function assemblePitches(params: {
   const { copy, vacancy, candidateName, usableFacts, tone, recipient, usedIds, notices, useRanking } = params;
   const wish = params.targetCompany && vacancy.company ? ` ${copy.targetCompany(vacancy.company)}` : '';
   const intro = copy.intro(vacancy.title, vacancy.company, tone) + wish;
-  const evidence = buildEvidenceParagraph(copy, params.language, usableFacts, params.workplaces, usedIds, notices, useRanking);
-  const stack = buildStackParagraph(copy, vacancy, usableFacts, usedIds, notices);
+  const results = letterResultFacts(usableFacts, params.language);
+  const evidence = buildEvidenceParagraph(copy, params.language, results, params.workplaces, usedIds, notices, useRanking);
+  const stack = buildStackParagraph(copy, vacancy, usableFacts, usedIds);
   const closing = copy.closing(tone);
   return {
     emailBody: [intro, evidence, stack, closing].filter((p) => p.length > 0).join('\n\n'),
-    linkedInNote: buildLinkedInNote(copy, vacancy, usableFacts, tone, usedIds, useRanking),
-    atsCoverLetter: buildAtsCoverLetter(copy, vacancy, candidateName, intro, evidence, stack, closing),
-    contactMessage: buildContactMessage(copy, vacancy, candidateName, usableFacts, tone, recipient, usedIds, useRanking),
+    linkedInNote: buildLinkedInNote(copy, vacancy, results, tone, usedIds, useRanking),
+    atsCoverLetter: buildAtsCoverLetter(copy, vacancy, candidateName, intro, { text: evidence, hasResults: results.length > 0 }, stack, closing),
+    contactMessage: buildContactMessage(copy, vacancy, candidateName, results, tone, recipient, usedIds, useRanking),
   };
 }
 
@@ -656,12 +687,14 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const { vacancy, tone = 'executive' } = options;
   const language = options.language ?? detectVacancyLanguage(vacancy);
   const copy = copyFor(language);
-  const candidateName = options.candidateName?.trim() || copy.candidateFallback;
+  const ownName = options.candidateName?.trim();
+  const candidateName = ownName ? (language === 'en' ? englishProperName(ownName) : ownName) : copy.candidateFallback;
   const usableFacts = rankPitchFacts(filterUsableFacts(options.facts), vacancy, options.rankingContext);
   const useRanking = hasRoleAwarePitchRanking(options.rankingContext);
   const usedEvidenceIds = new Set<string>();
   const notices: string[] = [];
 
+  const requirements = matchRequirements(vacancy.requiredSkills ?? [], usableFacts);
   const metricFact = usableFacts.find((f) => /\d+/u.test(f.statement));
   const subject = copy.subject(vacancy.title, candidateName, tone, Boolean(metricFact));
   const pitches = assemblePitches({
@@ -687,7 +720,8 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
     contactMessage: stripHiddenMarkers(pitches.contactMessage),
     usedEvidenceIds: Array.from(usedEvidenceIds),
     usedFacts: buildUsedFacts(usedEvidenceIds, usableFacts),
-    coveredRequirements: matchRequirements(vacancy.requiredSkills ?? [], usableFacts).matched,
+    coveredRequirements: requirements.matched,
+    unconfirmedRequirements: requirements.missing.map(requirementLabel),
     language,
     notices,
     generatedAt: new Date().toISOString(),

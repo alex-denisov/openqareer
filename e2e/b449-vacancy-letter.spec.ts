@@ -239,6 +239,7 @@ function pitchResponse(vacancyId: string, mode: PitchMode, request: PitchRequest
       ],
       language,
       notices: fewFacts ? ['В профиле мало подтверждённых фактов.'] : [],
+      unconfirmedRequirements: language === 'en' ? ['Director of technology', 'IT director'] : [],
       generatedAt: '2026-10-10T12:00:00.000Z',
     },
   };
@@ -650,7 +651,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await expect(page.getByRole('main')).toContainText('Business Information Architect');
   });
 
-  test('recovers from generation errors and shows English and few-facts notices', async ({
+  test('recovers from generation errors and shows the requirements and few-facts notes', async ({
     page,
   }, testInfo) => {
     const state = createRouteState('rich', 'error');
@@ -665,7 +666,16 @@ test.describe('B449 — письмо под вакансию', () => {
     await waitForLetter(page);
     state.pitchMode = 'english';
     await page.getByLabel('Язык').selectOption('en');
-    await expect(page.getByText('Письмо на английском: так написана вакансия.')).toBeVisible();
+    const requirements = page.locator('.career-letter-requirements');
+    await expect(requirements.locator('summary')).toHaveText(
+      '2 требования вакансии не подтверждены фактами профиля',
+    );
+    await requirements.locator('summary').click();
+    await expect(requirements.getByRole('listitem')).toHaveText([
+      'Director of technology',
+      'IT director',
+    ]);
+    await expect(page.locator('.career-letter-notes')).not.toContainText('Письмо на английском');
     await captureState(page, testInfo, 'english-partial');
 
     const preservedText = 'Кандидатская правка, которую нужно сохранить при ошибке.';

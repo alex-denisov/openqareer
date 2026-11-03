@@ -30,7 +30,7 @@ const TEMPLATE_SENTENCE = new RegExp([
   String.raw`^(?:(?:hello|hi|dear)\b|здравствуйте|уважаем)`,
   String.raw`^my name is .+, reaching out regarding`,
   String.raw`\b(?:i'?m interested in|applying for|i'?m submitting my application|is a company i want to work for)`,
-  String.raw`\b(?:i'?d be glad|happy to discuss|let's set up|great to connect)`,
+  String.raw`\b(?:i'?d be glad|i'?d welcome a brief call|happy to discuss|let's set up|great to connect)`,
   String.raw`\bmy profile (?:confirms hands-on experience|has no confirmed facts)`,
   String.raw`requirements have not been matched`,
   String.raw`(?:^|\s)(?:заинтересовал[аи]?|откликаюсь|пишу по поводу|меня зовут)\s`,
@@ -39,7 +39,7 @@ const TEMPLATE_SENTENCE = new RegExp([
   String.raw`в профиле (?:подтверждён практический опыт|нет подтверждённых фактов)`,
   String.raw`требования вакансии не сопоставлены`,
   // B528: фраза о местах работы собрана из записей профиля, а не моделью.
-  String.raw`^(?:сейчас работаю на позиции|последнее место —|i currently work as|most recently i worked as)\s`,
+  String.raw`^(?:сейчас работаю(?: на позиции)?|последнее место —|i currently work(?: as)?|most recently i worked(?: as)?)\s`,
 ].join('|'), 'iu');
 
 // Intros glued to the first fact: the fact after them is still checked.
@@ -103,7 +103,8 @@ export function checkPitchOutputFacts(
 const SHOWN_CLAIMS = 3;
 
 /** Notices are for the candidate, not the letter: always in Russian, one line
- *  for all unconfirmed claims instead of a question per sentence (26.10). */
+ *  for all unconfirmed claims instead of a question per sentence (26.10).
+ *  The route keeps only the first one: the letter screen shows one note (G3 L2). */
 export function generatedTextFactNotices(
   _letterLanguage: 'en' | 'ru',
   outputChecks: readonly GeneratedTextFactCheck[],

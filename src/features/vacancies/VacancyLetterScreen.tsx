@@ -308,11 +308,7 @@ function LetterDraftContent({
         onEdit={state.approval.reset}
       />
       {state.draft.pitch ? (
-        <LetterNotices
-          pitch={state.draft.pitch}
-          language={state.language}
-          onGatherFacts={onGatherFacts}
-        />
+        <LetterNotices pitch={state.draft.pitch} onGatherFacts={onGatherFacts} />
       ) : null}
       <TariffQuotaNote quota="applications" refreshKey={state.draft.loading} />
       {state.draft.pitch ? (

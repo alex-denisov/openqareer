@@ -504,6 +504,20 @@
   gap: var(--career-space-2);
 }
 
+.career-letter-requirements {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-letter-requirements summary {
+  cursor: pointer;
+}
+
+.career-letter-requirements ul {
+  margin: var(--career-space-1) 0 0;
+  padding-inline-start: var(--career-space-4);
+}
+
 .career-letter-workplaces li {
   min-inline-size: 0;
   border-block-end: var(--career-border-width) solid var(--career-line);
