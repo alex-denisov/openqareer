@@ -21,6 +21,7 @@ import {
 import { LetterInfoTip } from './VacancyLetterInfoTip';
 import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import { useLetterConsultantSuggestion } from './letterConsultantSuggestion';
+import { VacancyLetterMobileBar } from './VacancyLetterMobileBar';
 import './vacancy-letter.css';
 
 export interface VacancyLetterTarget {
@@ -121,6 +122,9 @@ function useLetterPageActions(vacancy: VacancyLetterTarget, onOpenExpert?: OpenE
     onAskEdits: onOpenExpert
       ? () => openExpertFor('vacancies', 'Правки письма: ' + vacancy.canonicalTitle)
       : undefined,
+    onOpenConsultant: onOpenExpert
+      ? () => openExpertFor('vacancies', 'Письмо: ' + vacancy.canonicalTitle)
+      : undefined,
   };
 }
 
@@ -140,6 +144,7 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
   const frozen = Boolean(state.approval.saved);
   return (
     <section className="career-letter-screen" aria-labelledby="career-letter-title">
+      <VacancyLetterMobileBar onBack={onBack} onOpenConsultant={actions.onOpenConsultant} />
       <VacancyCard vacancy={vacancy} onBack={onBack} />
       <section className="career-letter-fork" aria-labelledby="career-letter-fork-title">
         <div className="career-letter-sub-head">

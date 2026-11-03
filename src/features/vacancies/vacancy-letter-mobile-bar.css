@@ -1,0 +1,20 @@
+/* B600: шапка «Письма» при 390 (макет 9: «Назад» · «Письмо» · консультант). */
+.career-letter-mobile-bar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .career-letter-screen > .career-letter-mobile-bar {
+    display: grid;
+    z-index: 25;
+  }
+
+  /* «Назад» переехала в шапку: в карточке вакансии второй не нужна. */
+  .career-letter-vacancy .career-letter-back {
+    display: none;
+  }
+
+  .career-letter-vacancy {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
