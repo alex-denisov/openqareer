@@ -365,8 +365,8 @@ describe('Registry & adapter wiring integration', () => {
     expect(ziprecruiter).toBeDefined();
     expect(ziprecruiter?.type).toBe('json_api');
     expect(ziprecruiter?.accessClass).toBe('api');
-    expect(ziprecruiter?.addressStatus).toBe('live');
-    expect(ziprecruiter?.enabled).toBe(true);
+    expect(ziprecruiter?.addressStatus).toBe('official_access_required'); // owner 03.11
+    expect(ziprecruiter?.enabled).toBe(false);
   });
 
   it('wires adapters into hasJsonAdapter and normalizeJsonSource', () => {
@@ -795,8 +795,8 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
     expect(gd).toBeDefined();
     expect(gd?.type).toBe('json_api');
     expect(gd?.accessClass).toBe('api');
-    expect(gd?.addressStatus).toBe('live');
-    expect(gd?.enabled).toBe(true);
+    expect(gd?.addressStatus).toBe('official_access_required'); // owner 03.11
+    expect(gd?.enabled).toBe(false);
 
     expect(bayt).toBeDefined();
     expect(bayt?.type).toBe('career_site');
