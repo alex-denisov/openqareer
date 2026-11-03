@@ -246,4 +246,37 @@ describe('pool vacancy reader (jobs search)', () => {
     expect(result.reason).not.toContain('keywords=');
     expect(result.reason).not.toContain('qa');
   });
+  it('counts job search pages in the account daily page budget (warm-up + search never exceed it)', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    for (const company of ['Alpha Ltd', 'Beta Ltd', 'Gamma Ltd', 'Delta Ltd']) seedCompany(repository, company);
+    seedDemand(repository, ['qa engineer', 'test lead']);
+    const fake = fakeBrowser();
+    const budget = 7;
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory: async () => fake.browser as never,
+      notifyOwner: async () => ({ status: 'sent', httpStatus: 200, messageId: 1 }),
+      now: () => now,
+      random: () => 0.5,
+      wait: async () => undefined,
+      planDay: (accountId, dateString) => ({
+        accountId, dateString, dayOfWeek: 2, isWeekend: false, dayStartMinutes: 0, dayEndMinutes: 1440,
+        isRestDay: false, dailyPageBudget: budget,
+        windows: [{ id: 'all', startMinutes: 0, endMinutes: 1440, skipped: false }],
+      }),
+    });
+
+    const statuses: string[] = [];
+    for (let step = 0; step < 12; step += 1) statuses.push((await executor.runStep()).status);
+    const audited = repository.getDatabase()
+      .prepare("SELECT count(*) AS n FROM linkedin_pool_audit WHERE action = 'linkedin_executor_page'")
+      .get() as { n: number };
+    expect(fake.navigated.length).toBe(audited.n);
+    expect(audited.n).toBeLessThanOrEqual(budget);
+    expect(fake.navigated.some((u) => u.includes('/jobs/search/'))).toBe(true);
+    expect(statuses).toContain('daily_limit');
+  });
 });
