@@ -5,6 +5,7 @@ import { readTargetLevel } from './vacancyRoleContext';
 import { evaluateLevelMatch } from '../vacancies/levelMatcher';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import { regionOfVacancy } from '../vacancies/vacancyGeography';
+import { withinCareerGeography, type CareerGeography } from '../vacancies/careerGeography';
 import { isResumeEvidenceEligible } from '../domain/resumeEvidenceEligibility';
 import { vacancyFitEvidenceFacts } from '../domain/vacancyFitProfileEvidence';
 import type { VacancyFitInput } from '../domain/vacancyFit';
@@ -38,6 +39,18 @@ export function readVacancyFitTarget(deps: RouteDeps, vacancyId: string) {
 export function regionGate(region: string | undefined, regions: { readonly value: readonly string[]; readonly origin: string }): VacancyFitGate {
   if (!region || regions.origin === 'default' || regions.value.length === 0) return gate('unknown', 'География не подтверждена.');
   return gate(regions.value.includes(region) ? 'matched' : 'blocked', 'Сверено с географией выбранной кампании.');
+}
+
+/**
+ * 03.11 owner: location lines are judged by the search conditions (places and remote scopes), not
+ * by the profile city. `undefined` when the conditions name no place: the profile city decides.
+ */
+export function placeCoveredBySearch(
+  geography: CareerGeography | null | undefined,
+  target: { readonly location?: string; readonly isRemote: boolean },
+): boolean | undefined {
+  if (!geography?.labels.length) return undefined;
+  return withinCareerGeography({ cluster: { canonicalLocation: target.location, isRemote: target.isRemote } }, geography);
 }
 
 function roleGate(roles: readonly string[], title: string): VacancyFitGate {
@@ -100,6 +113,7 @@ function buildVacancyFitContextReader(
   const region = regionOfVacancy({ location: target.location, country: target.country });
   const eligible = facts.filter(isResumeEvidenceEligible);
   const location = (target.country ?? target.location ?? '').toLocaleLowerCase();
+  const placeCovered = placeCoveredBySearch(campaign.careerGeography, target);
   const authorization = location && eligible.find((fact) =>
     /право на работу|work authori[sz]ation|right to work/iu.test(fact.statement) &&
     fact.statement.toLocaleLowerCase().includes(location) &&
@@ -107,6 +121,7 @@ function buildVacancyFitContextReader(
       .some((prefix) => [prefix + location, prefix + location + '.'].includes(fact.statement.toLocaleLowerCase().trim())));
   return {
     candidateId, profileContextHash, previousProfileContextHash, roleScopedProfileContextHash, legacyProfileContextHash, vacancyId: target.vacancyId, description: target.description, requirements, facts, checkedFactIds,
+    ...(placeCovered === undefined ? {} : { placeCovered }),
     gates: {
       role: roleGate(campaign.roles.value, target.title),
       level: level === 'match' ? gate('matched', 'Уровень совпадает с целевым.')

@@ -168,10 +168,13 @@ export function conditionCoverageWithGeo(
   const stem = geo.geoMatched && geo.location ? cityStem(geo.location) : undefined;
   if (!stem) return { matched: coverage.matched, total: coverage.total };
   const matched = matchedRequirements(view);
+  // 03.11: lines the server met by the search conditions are in `coverage.matched` already.
+  const placed = new Set(view?.result?.placeCovered ?? []);
   const byGeo = (view?.requirements ?? []).filter(
     (requirement) =>
       !isSkillRequirement(requirement) &&
       !matched.has(requirement.id) &&
+      !placed.has(requirement.id) &&
       `${requirement.label ?? ''} ${requirement.text}`.toLocaleLowerCase('ru').includes(stem),
   ).length;
   return { matched: Math.min(coverage.total, coverage.matched + byGeo), total: coverage.total };
