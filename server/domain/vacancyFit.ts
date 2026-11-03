@@ -187,8 +187,13 @@ function weighting(requirements: readonly VacancyRequirement[], skills: readonly
   // A soft trait that experience implies counts as met unless a quoted fact contradicts it; the
   // stored assessment is left as it was, so reading an old result needs no model call.
   const byId = new Map(requirements.map((item) => [item.id, item]));
-  const role = impliedSoftRole(facts.map((fact) => fact.statement));
-  const implied = role ? skills.filter((item) => item.status !== 'unmatched' && item.status !== 'matched' && isSoftRequirementText(byId.get(item.requirementId)?.text ?? '')).map((item) => ({ requirementId: item.requirementId, role })) : [];
+  const roleFacts = facts.map((fact) => ({ id: fact.id, statement: fact.statement }));
+  const implied = skills
+    .filter((item) => item.status !== 'unmatched' && item.status !== 'matched' && isSoftRequirementText(byId.get(item.requirementId)?.text ?? ''))
+    .flatMap((item) => {
+      const role = impliedSoftRole(roleFacts, byId.get(item.requirementId)?.text ?? '');
+      return role ? [{ requirementId: item.requirementId, role }] : [];
+    });
   const impliedIds = new Set(implied.map((item) => item.requirementId));
   const credit = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId) ? 1 : item.status === 'partial' ? PARTIAL_REQUIREMENT_CREDIT : 0;
   const weight = (item: VacancyFitRequirementAssessment) => {
