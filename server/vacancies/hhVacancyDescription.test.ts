@@ -314,7 +314,7 @@ describe('HhVacancyDescriptionLoader', () => {
   });
 
   it('03.11: three 5xx in a row pause the loader, one 5xx does not', async () => {
-    let now = 0;
+    const now = 0;
     const transport = vi.fn().mockResolvedValue({ status: 503, body: '' });
     const loader = new HhVacancyDescriptionLoader({
       transport,
