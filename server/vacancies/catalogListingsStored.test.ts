@@ -48,7 +48,11 @@ const sampleCluster: VacancyCluster = {
 };
 
 const listingClusters = (titles: readonly string[]) =>
-  titles.map((title, index) => ({ ...sampleCluster, id: `cluster-listing-${index}`, canonicalTitle: title }));
+  titles.map((title, index) => ({
+    ...sampleCluster,
+    id: `cluster-listing-${index}`,
+    canonicalTitle: title,
+  }));
 
 describe('stored catalog listings (PRB-041)', () => {
   it('serves the listings maintenance wrote, without the GROUP BY over the projection', () => {
@@ -66,7 +70,9 @@ describe('stored catalog listings (PRB-041)', () => {
   it('counts live until maintenance has written them, and rewrites them on the next pass', () => {
     const { store, path } = openStore();
     store.saveClusters(listingClusters(['Бухгалтер', 'Бухгалтер', 'Бухгалтер']));
-    expect(store.loadCatalogListings().find((listing) => listing.role === 'accountant')?.count).toBe(3);
+    expect(
+      store.loadCatalogListings().find((listing) => listing.role === 'accountant')?.count,
+    ).toBe(3);
 
     store.recomputeCatalogTotals('2026-11-03T10:00:00.000Z');
     new DatabaseSync(path).prepare('DELETE FROM catalog_entries').run();

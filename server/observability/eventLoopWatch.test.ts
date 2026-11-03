@@ -27,7 +27,9 @@ describe('event loop watch (CPO prod 02.11: /health 37 s, static files 23 s)', (
     await app.close();
     const stall = log.mock.calls.find(([, msg]) => msg === 'event-loop-stall')?.[0];
     expect(stall?.stallMs).toBeGreaterThanOrEqual(150);
-    expect(stall?.inFlight).toEqual([expect.objectContaining({ url: '/slow?offset=7&token=%5BREDACTED%5D' })]);
+    expect(stall?.inFlight).toEqual([
+      expect.objectContaining({ url: '/slow?offset=7&token=%5BREDACTED%5D' }),
+    ]);
   });
 
   it('forgets a request the client dropped (prod 03.11: 78 dropped reads named in every stall for hours)', async () => {

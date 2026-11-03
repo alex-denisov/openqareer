@@ -49,7 +49,7 @@ describe('getSnapshot memo', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'oq-snap-')), 'db.sqlite');
     const store = createStore(path);
     const candidate = createCandidate(store);
-    const first = store.getSnapshot(candidate.id);
+    store.getSnapshot(candidate.id);
     const other = new DatabaseSync(path);
     other.exec('CREATE TABLE IF NOT EXISTS memo_probe (x INTEGER)');
     other.close();
