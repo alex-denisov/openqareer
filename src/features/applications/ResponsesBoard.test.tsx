@@ -96,7 +96,7 @@ describe('ResponsesBoard columns', () => {
     expect(html).not.toContain('aria-label="Отказ"');
     expect(html).toContain('Нужно действие:');
     expect(html).toContain('Закрыто 1');
-    expect(html).toContain('Доставка подтверждена');
+    expect(html).toContain('Доставлено');
     expect(html).not.toContain('https://jobs.test/receipt');
     expect(html).toContain('Пробовали отправить');
     expect(html).toContain('1');

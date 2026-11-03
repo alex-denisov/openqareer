@@ -475,11 +475,14 @@ test.describe('B251 responses screen', () => {
       );
       await page.setViewportSize({ width: 390, height: 844 });
       await page.screenshot({ path: 'output/playwright/B363/responses-390.png', fullPage: true });
-      await archiveToggle.evaluate((toggle) =>
-        toggle.scrollIntoView({ block: 'start', behavior: 'instant' }),
-      );
+      // B486: the 390 archive lives in the «Закрыто» push screen.
+      await page.getByRole('button', { name: /^Закрыто/ }).click();
       await page.screenshot({ path: 'output/playwright/B363/archive-390.png' });
+      await page.getByRole('button', { name: 'Назад к откликам' }).click();
       await page.setViewportSize({ width: 1176, height: 900 });
+      // The push replaced the page, so the desktop archive comes back collapsed.
+      await archiveToggle.click();
+      await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true');
       await archiveToggle.evaluate((toggle) =>
         toggle.scrollIntoView({ block: 'start', behavior: 'instant' }),
       );
@@ -778,6 +781,8 @@ test.describe('B251 responses screen', () => {
     await page.screenshot({ path: testInfo.outputPath('b450-channels-1440.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await hideConsultantForEvidence(page);
+    // B486: at 390 the channels block opens as the «Каналы» push screen.
+    await page.getByRole('button', { name: /Результативность по каналам/ }).click();
     await channelSection.scrollIntoViewIfNeeded();
     await channelSection.screenshot({ path: testInfo.outputPath('b450-channels-390.png') });
     await captureCareerHarness(

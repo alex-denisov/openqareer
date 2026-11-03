@@ -8,6 +8,7 @@ import { ResponsesMobileFeed, type ResponsesMobileSelection } from './ResponsesM
 import {
   ResponsesMobileClosedContent,
   ResponsesMobilePush,
+  useCompactResponses,
   type ResponsesMobilePushView,
 } from './ResponsesMobilePush';
 import {
@@ -167,7 +168,11 @@ function FunnelWorkspace({
   readonly workspace: WorkspaceController;
   readonly tableView: ReactNode;
 }) {
-  const [push, setPush] = useState<ResponsesMobilePushView | null>(null);
+  const compact = useCompactResponses();
+  const [pushState, setPush] = useState<ResponsesMobilePushView | null>(() =>
+    props.initialApplicationId ? { kind: 'response', id: props.initialApplicationId } : null,
+  );
+  const push = compact ? pushState : null;
   const closePush = () => {
     const returnTo = push?.kind === 'response' ? push.id : null;
     setPush(null);
@@ -279,16 +284,16 @@ function FunnelResults({
     <>
       <PoolStatusMessage workspace={workspace} />
       <FunnelMobileFeed props={props} workspace={workspace} onOpenPush={onOpenPush} />
-      <FunnelBodyContent
-        props={props}
-        workspace={workspace}
-        applications={applications}
-        tableView={tableView}
-      />
-      <TablePagination workspace={workspace} applicationCount={applications.length} />
-      {/* The 390 push screen renders these itself; never two copies in the DOM. */}
+      {/* The 390 push screen renders its own copies; never two in the DOM. */}
       {pushOpen ? null : (
         <>
+          <FunnelBodyContent
+            props={props}
+            workspace={workspace}
+            applications={applications}
+            tableView={tableView}
+          />
+          <TablePagination workspace={workspace} applicationCount={applications.length} />
           <SelectedResponse props={props} workspace={workspace} />
           <ChannelPerformance props={props} workspace={workspace} applications={applications} />
         </>

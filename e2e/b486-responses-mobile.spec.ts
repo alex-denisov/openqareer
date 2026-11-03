@@ -256,7 +256,9 @@ test.describe('B486 mobile responses', () => {
     await channelLink.click();
     const channels = page.getByRole('region', { name: 'Каналы' });
     await expect(channels).toBeVisible();
-    await expect(channels.getByRole('button', { name: 'Аналитика этапов' })).toBeVisible();
+    // «Аналитика этапов» lives behind the channels «Пояснение» (B484), now inside the push.
+    await channels.getByRole('button', { name: 'Пояснение' }).click();
+    await expect(channels.getByRole('region', { name: 'История этапов откликов' })).toBeVisible();
     await channels.getByRole('button', { name: 'Назад к откликам' }).click();
 
     const closedLink = page.getByRole('button', { name: /^Закрыто/ });

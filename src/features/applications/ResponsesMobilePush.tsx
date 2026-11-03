@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { CaretLeft } from '@phosphor-icons/react';
 import { ArchivedResponsesSection } from './ArchivedResponsesSection';
 import { ArchiveReasonsList } from './PipelineAnalyticsView';
@@ -10,6 +10,24 @@ export type ResponsesMobilePushView =
   | { readonly kind: 'response'; readonly id: string }
   | { readonly kind: 'channels' }
   | { readonly kind: 'closed' };
+
+/** Same breakpoint as `responses-mobile.css`; push screens exist only below it. */
+const COMPACT_QUERY = '(max-width: 40rem)';
+
+export function useCompactResponses(): boolean {
+  const [compact, setCompact] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.(COMPACT_QUERY).matches === true,
+  );
+  useEffect(() => {
+    const media = window.matchMedia?.(COMPACT_QUERY);
+    if (!media) return undefined;
+    const update = () => setCompact(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  return compact;
+}
 
 const PUSH_TITLES: Record<ResponsesMobilePushView['kind'], string> = {
   response: 'Процесс',

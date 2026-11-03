@@ -513,10 +513,13 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await openToday(page);
 }
 
-/** Preparation opens from the selected response panel at every width (B484: no card button). */
+/** Preparation opens from the selected response panel (B484); at 390 the panel is the row's push (B486). */
 async function openInterviewPrep(page: Page, card: Locator): Promise<void> {
-  if ((page.viewportSize()?.width ?? 1440) >= 1024) {
+  const width = page.viewportSize()?.width ?? 1440;
+  if (width >= 1024) {
     await card.locator('.career-responses-card-body').click();
+  } else if (width <= 640) {
+    await page.locator('.career-responses-mobile-row').filter({ hasText: 'Genetec' }).click();
   }
   const button = page.getByRole('button', { name: 'Начать мок-интервью' });
   await expect(button).toBeVisible();
