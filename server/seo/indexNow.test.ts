@@ -2,6 +2,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createIndexNowNotifier, INDEXNOW_URL_LIMIT } from './indexNow';
 
+const ENDPOINTS = ['https://api.indexnow.org/indexnow', 'https://yandex.com/indexnow'];
+
 interface LogEntry {
   level: 'info' | 'error';
   details: Record<string, unknown>;
@@ -63,18 +65,52 @@ describe('IndexNow notifier', () => {
     await notify(db, [original[0]!]);
     await notify(db, original);
 
-    const submitted = fetcher.mock.calls.map(([, init]) => JSON.parse(String(init?.body)) as {
-      host: string;
-      key: string;
-      urlList: string[];
-    });
+    const submitted = fetcher.mock.calls.map(
+      ([, init]) =>
+        JSON.parse(String(init?.body)) as {
+          host: string;
+          key: string;
+          urlList: string[];
+        },
+    );
+    const both = <T>(value: T) => [value, value];
     expect(submitted.map((payload) => payload.urlList)).toEqual([
-      ['https://openqareer.com/vacancies/job/a', 'https://openqareer.com/vacancies/job/b'],
-      ['https://openqareer.com/vacancies/job/b'],
-      ['https://openqareer.com/vacancies/job/b'],
+      ...both(['https://openqareer.com/vacancies/job/a', 'https://openqareer.com/vacancies/job/b']),
+      ...both(['https://openqareer.com/vacancies/job/b']),
+      ...both(['https://openqareer.com/vacancies/job/b']),
     ]);
     expect(submitted[0]).toMatchObject({ host: 'openqareer.com', key: 'a1b2c3d4e5f6a7b8' });
-    expect(fetcher.mock.calls.every(([input]) => input === 'https://api.indexnow.org/indexnow')).toBe(true);
+    expect(fetcher.mock.calls.map(([input]) => input)).toEqual([
+      ...ENDPOINTS,
+      ...ENDPOINTS,
+      ...ENDPOINTS,
+    ]);
+    // 03.11: a success is visible in the journal, per endpoint, with count and status.
+    expect(log.entries.filter((entry) => entry.message === 'indexnow-submitted')[0]).toMatchObject({
+      level: 'info',
+      details: { endpoint: 'api.indexnow.org', urls: 2, statusCode: 202 },
+    });
+  });
+
+  it('counts a batch as sent when one endpoint accepted it', async () => {
+    const log = testLogger();
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockResolvedValue(new Response(null, { status: 200 }));
+    const notify = createIndexNowNotifier('a1b2c3d4e5f6a7b8', log, fetcher);
+    const db = database();
+    const changed = [url('/vacancies/job/a', '2026-10-20')];
+
+    await notify(db, changed);
+    await notify(db, changed);
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(log.entries.map((entry) => [entry.message, entry.details.endpoint])).toEqual([
+      ['indexnow-submitted', 'api.indexnow.org'],
+      ['indexnow-submit-failed', 'yandex.com'],
+    ]);
   });
 
   it('splits requests at 10,000 URLs', async () => {
@@ -90,7 +126,7 @@ describe('IndexNow notifier', () => {
       const body = JSON.parse(String(init?.body)) as { urlList: string[] };
       return body.urlList.length;
     });
-    expect(counts).toEqual([10_000, 1]);
+    expect(counts).toEqual([10_000, 10_000, 1, 1]);
   });
 
   it('logs network and server failures, then retries them in the next cycle', async () => {
@@ -98,7 +134,9 @@ describe('IndexNow notifier', () => {
     const fetcher = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new TypeError('network down'))
-      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockRejectedValueOnce(new TypeError('network down'));
     const notify = createIndexNowNotifier('a1b2c3d4e5f6a7b8', log, fetcher);
     const db = database();
     const changed = [url('/vacancies/job/a', '2026-10-20')];
@@ -106,15 +144,17 @@ describe('IndexNow notifier', () => {
     await expect(notify(db, changed)).resolves.toBeUndefined();
     await expect(notify(db, changed)).resolves.toBeUndefined();
 
-    expect(fetcher).toHaveBeenCalledTimes(2);
-    expect(log.entries.filter((entry) => entry.level === 'error')).toEqual([
-      { level: 'error', details: { errorName: 'TypeError' }, message: 'indexnow-submit-failed' },
-      {
-        level: 'error',
-        details: { statusCode: 503 },
-        message: 'indexnow-submit-failed',
-      },
-    ]);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    const errors = log.entries.filter((entry) => entry.level === 'error');
+    expect(errors.map((entry) => entry.message)).toEqual(
+      Array.from({ length: 4 }, () => 'indexnow-submit-failed'),
+    );
+    expect(errors[0]!.details).toMatchObject({
+      endpoint: 'api.indexnow.org',
+      errorName: 'TypeError',
+    });
+    expect(errors[1]!.details).toMatchObject({ endpoint: 'yandex.com', statusCode: 503, urls: 1 });
+    expect(typeof errors[0]!.details.ms).toBe('number');
   });
 
   it('rejects invalid keys without logging or transmitting the key value', async () => {
