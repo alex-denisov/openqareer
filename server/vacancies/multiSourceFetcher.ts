@@ -19,7 +19,7 @@ import {
   normalizeBaytHtml,
 } from './jobspyAdapters';
 import { baytHeaders } from './jobspyEndpoints';
-import { fetchLinkedinCrawler, type LinkedinCrawlerDeps } from '../crawler/linkedinIngestRunner';
+import type { LinkedinCrawlerDeps } from '../crawler/linkedinIngestRunner';
 import { withRequestTimeout } from './requestTimeout';
 import { fetchYcWorkAtStartup, YC_WORK_AT_STARTUP_SOURCE_ID } from './ycWorkAtStartupSource';
 
@@ -533,15 +533,9 @@ export function buildMultiSourceFetcher(
       return fetchJsonOrCareerSite(source, options, deps, sleep, now);
     }
     if (source.type === 'hh_search') return fetchHhSearchBatch(crawlCoordinator);
-    if (source.id === 'src-linkedin-crawler' && deps.readLinkedinPoolJobs) {
-      return deps.readLinkedinPoolJobs();
-    }
-    if (source.type === 'linkedin_crawler' || source.id === 'src-linkedin-crawler') {
-      const runner = deps.fetchLinkedinCrawler ?? fetchLinkedinCrawler;
-      return runner({
-        ...deps.linkedinCrawlerDeps,
-        ...(options?.query ? { query: options.query } : {}),
-      });
+    if (source.id === 'src-linkedin-crawler') {
+      // Только карточки пула; без читателя источник пуст (старый краулер Obscura не вызывается).
+      return deps.readLinkedinPoolJobs?.() ?? { vacancies: [], partial: true };
     }
     // An unimplemented source type has not been measured, so it must not report
     // a successful empty reading (B161).
