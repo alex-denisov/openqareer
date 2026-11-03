@@ -425,19 +425,27 @@ export async function requestFitForVacancyIds(
  * Показанная страница сама ставит расчёт в очередь фонового воркера: процент
  * появляется по мере обработки, без кнопки на каждой вакансии. Расход
  * ограничен бюджетом B522 в воркере.
+ *
+ * PRB-041: each row's enqueue retries, seals and writes; a 100-row page did it in one piece
+ * (1.3 s, 6 s at offset 333 on prod 03.11), so rows go in slices with turns between them.
  */
-export function requestFitForShownPage(
+export async function requestFitForShownPage(
   deps: RouteDeps,
   candidateId: string,
   items: readonly MatchedVacancyItem[],
-): void {
+  slicing: { readonly sliceMs?: number; readonly now?: () => number } = {},
+): Promise<void> {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
   const context = createVacancyFitContextReader(deps, candidateId);
-  for (const id of vacanciesAwaitingFit(items)) {
-    const target = readVacancyFitTarget(deps, id);
-    if (target) runtime.enqueue(context(target, []));
-  }
+  await mapYielding(
+    vacanciesAwaitingFit(items),
+    (id) => {
+      const target = readVacancyFitTarget(deps, id);
+      if (target) runtime.enqueue(context(target, []));
+    },
+    slicing,
+  );
 }
 
 /** «Совпадение» in the chosen direction; rows that cannot be counted go last (29.10). */

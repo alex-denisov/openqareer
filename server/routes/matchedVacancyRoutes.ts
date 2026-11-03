@@ -328,16 +328,17 @@ function startFitWork(
   { offset, fitLimit }: { readonly offset: number; readonly fitLimit: number },
   request: FastifyRequest,
 ): void {
+  const logFailure = (rows: number) => (error: unknown) =>
+    request.log.warn(
+      { errorName: error instanceof Error ? error.name : 'UnknownError', rows },
+      'fit-request-failed',
+    );
   // B580: on Free a page past the first 300 rows is counted card by card, when opened.
-  requestFitForShownPage(deps, candidateId, response.data.slice(0, Math.max(0, fitLimit - offset)));
+  const shown = response.data.slice(0, Math.max(0, fitLimit - offset));
+  void requestFitForShownPage(deps, candidateId, shown).catch(logFailure(shown.length));
   const engine = deps.multiSourceEngine;
   const requestFit = (ids: readonly string[]) => {
-    void requestFitForVacancyIds(deps, candidateId, ids).catch((error: unknown) =>
-      request.log.warn(
-        { errorName: error instanceof Error ? error.name : 'UnknownError', rows: ids.length },
-        'fit-request-failed',
-      ),
-    );
+    void requestFitForVacancyIds(deps, candidateId, ids).catch(logFailure(ids.length));
   };
   preloadTopMatchedDescriptions(engine, response.warmIds, offset, request, requestFit);
   if (typeof engine.requestHhTextPriority !== 'function') return;
