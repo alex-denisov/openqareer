@@ -96,8 +96,14 @@ async function openPreparationDialog(page: Page, width: number): Promise<void> {
     width <= 760 ? page.locator('.career-mobile-nav') : page.locator('aside#career-rail nav');
   await nav.getByRole('button', { name: 'Отклики' }).click();
   if (width <= 760) {
-    // B486: the 390 list opens the next step from the row, not from a board card.
-    await page.getByRole('button', { name: /^Открыть следующий шаг: Подготовиться/u }).click();
+    // B486: at 390 the whole row is one button and opens the response's «Процесс» push;
+    // after the simulator closes the push is still open, so the row is tapped only once.
+    if (!(await page.getByRole('region', { name: 'Процесс' }).isVisible())) {
+      await page
+        .getByRole('button', { name: /^Открыть отклик:/u })
+        .first()
+        .click();
+    }
     // Макет 5: «Начать мок-интервью» в панели отклика сразу открывает тренажёр.
     await page
       .locator('.career-responses-selected')
