@@ -219,6 +219,31 @@ async function createStarStoryFromSimulator(page: Page): Promise<void> {
   await storiesDialog.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
 }
 
+/** 390, макет 14 view=q: вопрос пузырём, поле ответа закреплено над навигацией, голос — из дока. */
+async function expectChatDock(page: Page): Promise<void> {
+  const composer = page.locator('.career-mock-composer');
+  await expect(composer).toHaveCSS('position', 'fixed');
+  await expect(page.getByRole('button', { name: 'Голосовой ввод' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Действия с вопросом' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ответить голосом' })).toBeHidden();
+  const navTop = await page
+    .locator('.career-mobile-nav')
+    .evaluate((nav) => nav.getBoundingClientRect().top);
+  const dockBottom = await composer.evaluate((node) => node.getBoundingClientRect().bottom);
+  expect(dockBottom).toBeLessThanOrEqual(navTop);
+}
+
+/** Итог: «Начать» у рекомендации по STAR-вопросу открывает редактор историй. */
+async function expectRecommendationOpensStory(page: Page): Promise<void> {
+  const list = page.locator('.career-mock-recommendation-list');
+  await expect(list.locator('li').first()).toBeVisible();
+  await list.getByRole('button', { name: 'Начать' }).first().click();
+  const stories = page.getByRole('dialog', { name: 'STAR-истории' });
+  await expect(stories).toBeVisible();
+  await stories.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
+  await expect(page.locator('.career-mock-content')).toContainText('Мок-интервью завершено');
+}
+
 async function finishWithPartialAnswers(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Следующий вопрос' }).click();
   await expect(page.locator('.career-mock-progress-count')).toContainText('2 /');
@@ -228,9 +253,9 @@ async function finishWithPartialAnswers(page: Page): Promise<void> {
 
 async function resumeAndFinish(page: Page): Promise<void> {
   await page.getByRole('button', { name: /Продолжить с вопроса 2/u }).click();
-  await expect(page.getByRole('button', { name: 'Пропустить вопрос' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Пропустить( вопрос)?$/u })).toBeVisible();
   for (let index = 0; index < 4; index += 1) {
-    await page.getByRole('button', { name: 'Пропустить вопрос' }).click();
+    await page.getByRole('button', { name: /^Пропустить( вопрос)?$/u }).click();
   }
   await expect(page.locator('.career-mock-content')).toContainText('Мок-интервью завершено');
 }
@@ -265,6 +290,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
         stressMode: true,
       });
       await expect(page.getByLabel('Ваш ответ')).toBeVisible();
+      if (width <= 760) await expectChatDock(page);
       await checkAndCapture(page, `${width}-text-question`);
       await page
         .getByLabel('Ваш ответ')
@@ -286,6 +312,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
       );
       await expect(page.getByRole('button', { name: 'Записать в дневник' })).toBeVisible();
       await checkAndCapture(page, `${width}-partial-result`, true);
+      await expectRecommendationOpensStory(page);
       await page.getByRole('button', { name: 'Пройти заново' }).click();
       await page.getByRole('radio', { name: /Голосом/u }).check();
       await page.getByRole('button', { name: 'Начать', exact: true }).click();
