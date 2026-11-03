@@ -654,6 +654,14 @@ export function AdminLinkedinPoolView() {
                     <dd>{formatMoment(account.lastHeartbeatAt)}</dd>
                   </div>
                   <div>
+                    <dt>Фоновая активность</dt>
+                    <dd>
+                      {account.executorActivity?.lastStepAt
+                        ? `${formatMoment(account.executorActivity.lastStepAt)} · страниц за 24 ч: ${account.executorActivity.pagesLast24h}`
+                        : 'нет шагов за 30 дней'}
+                    </dd>
+                  </div>
+                  <div>
                     <dt>Доступ источника</dt>
                     <dd>{capabilityCopy(account.capabilityVerdict)}</dd>
                   </div>

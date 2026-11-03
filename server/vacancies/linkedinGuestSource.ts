@@ -126,13 +126,79 @@ export interface LinkedinFetchDeps {
   readonly fetchPage: (
     url: string,
     headers: Record<string, string>,
-  ) => Promise<{ status: number; body: string }>;
+  ) => Promise<{ status: number; body: string; retryAfterSeconds?: number }>;
   readonly sleep: (ms: number) => Promise<void>;
   readonly observedAt: string;
   /** Test/provider adapter must opt in explicitly; the default is fail-closed. */
   readonly providerCapability?: LinkedinProviderCapabilityVerdict;
   /** Роли спроса; без них — то, что подключил обслуживатель пула. */
   readonly demandTerms?: readonly string[];
+}
+
+/** Pause between requests: at least 0.4 s plus jitter (flat cadence draws 429). */
+export const LINKEDIN_MIN_PAUSE_MS = 400;
+export const LINKEDIN_PAUSE_JITTER_MS = 600;
+/** 429: retries per request, base pause doubles each time, capped. */
+const LINKEDIN_429_RETRIES = 2;
+const LINKEDIN_429_BASE_MS = 5_000;
+const LINKEDIN_429_MAX_MS = 120_000;
+
+/** UAE is read on every sync (owner 2026-11-03): three emirates and the country. */
+export const UAE_LOCATIONS = ['Dubai', 'Abu Dhabi', 'Sharjah', 'United Arab Emirates'] as const;
+const UAE_COMBOS_PER_SYNC = UAE_LOCATIONS.length;
+
+function uaeCombos(
+  nowMs: number,
+  terms: readonly string[],
+): FanCombo[] {
+  const tick = Math.floor(nowMs / (LINKEDIN_INTERVAL_MINUTES * 60_000));
+  const roles = terms.length > 0 ? terms : ['software engineer'];
+  return UAE_LOCATIONS.map((location, step) => ({
+    term: roles[(tick * UAE_COMBOS_PER_SYNC + step) % roles.length]!,
+    target: { region: 'mena', indeedCountry: 'AE', location },
+  }));
+}
+
+function backoffMs(attempt: number, retryAfterSeconds?: number): number {
+  const exponential = LINKEDIN_429_BASE_MS * 2 ** attempt;
+  const asked = retryAfterSeconds && retryAfterSeconds > 0 ? retryAfterSeconds * 1000 : 0;
+  return Math.min(Math.max(exponential, asked), LINKEDIN_429_MAX_MS);
+}
+
+type GuestResponse = Awaited<ReturnType<LinkedinFetchDeps['fetchPage']>>;
+
+/**
+ * 429 — the platform asks to slow down: pause by Retry-After or exponentially,
+ * retry; if it persists the caller stops. The first request is never retried.
+ */
+async function fetchWithBackoff(
+  deps: LinkedinFetchDeps,
+  url: string,
+  mayRetry: boolean,
+): Promise<GuestResponse> {
+  let response = await deps.fetchPage(url, { ...LINKEDIN_HEADERS });
+  for (let attempt = 0; mayRetry && attempt < LINKEDIN_429_RETRIES; attempt += 1) {
+    if (response.status !== 429) break;
+    await deps.sleep(backoffMs(attempt, response.retryAfterSeconds));
+    response = await deps.fetchPage(url, { ...LINKEDIN_HEADERS });
+  }
+  return response;
+}
+
+/** Candidate roles first, then the fan window (27.10), then the UAE block. */
+function syncCombos(nowMs: number, demand: readonly string[]): FanCombo[] {
+  return [
+    ...fanCombosForSync(
+      nowMs,
+      LINKEDIN_INTERVAL_MINUTES,
+      LINKEDIN_COMBOS_PER_SYNC - UAE_COMBOS_PER_SYNC,
+      demand,
+    ),
+    ...uaeCombos(
+      nowMs,
+      demand.filter((term) => /^[a-z0-9&+.,'\s-]+$/u.test(term)),
+    ),
+  ];
 }
 
 export async function fetchLinkedinGuest(
@@ -143,13 +209,7 @@ export async function fetchLinkedinGuest(
   if (capability === 'not_configured') {
     return { vacancies: [], partial: true };
   }
-  // Сначала роли кандидатов, затем окно веера (27.10).
-  const combos = fanCombosForSync(
-    nowMs,
-    LINKEDIN_INTERVAL_MINUTES,
-    LINKEDIN_COMBOS_PER_SYNC,
-    deps.demandTerms ?? currentFanDemand(),
-  );
+  const combos = syncCombos(nowMs, deps.demandTerms ?? currentFanDemand());
   const vacancies: UnifiedVacancy[] = [];
   // Веер шире одного опроса, поэтому чтение частичное: движок дополняет срез,
   // а не заменяет его — иначе каждый опрос стирал бы прошлые комбинации.
@@ -160,14 +220,15 @@ export async function fetchLinkedinGuest(
     for (let page = 0; page < LINKEDIN_PAGES_PER_COMBO; page += 1) {
       const start = page * LINKEDIN_PAGE;
       // Джиттер: LinkedIn быстро отдаёт 429 ровному такту (B218 security-review).
-      if (requests > 0) await deps.sleep(600 + Math.floor(Math.random() * 600));
+      if (requests > 0) {
+        await deps.sleep(
+          LINKEDIN_MIN_PAUSE_MS + Math.floor(Math.random() * LINKEDIN_PAUSE_JITTER_MS),
+        );
+      }
       requests += 1;
-      const { status, body } = await deps.fetchPage(linkedinGuestUrl(start, combo), {
-        ...LINKEDIN_HEADERS,
-      });
-      // 429 — площадка просит остановиться, и мы останавливаемся совсем.
-      // Первая страница обязана прочитаться: отказ на ней — отказ площадки,
-      // а не пустой успех (B199).
+      const url = linkedinGuestUrl(start, combo);
+      const response = await fetchWithBackoff(deps, url, requests > 1);
+      const { status, body } = response;
       if (status === 429) {
         if (requests === 1) throw new Error('vacancy_source_unreachable: 429');
         return { vacancies: vacancies.filter(isUsableVacancy), partial: true };

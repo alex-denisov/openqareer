@@ -460,4 +460,23 @@ describe('SqliteLinkedinPoolRepository', () => {
     expect(updated.timezone).toBe('Europe/London');
     expect(repository.findAccount(explicitAcc.id)?.timezone).toBe('Europe/London');
   });
+
+  it('shows the executor activity of the account: last step and pages in 24 h', () => {
+    const now = new Date('2026-11-03T12:00:00.000Z');
+    const { repository } = createRepository(undefined, () => now);
+    const account = createAccount(repository);
+    const hash = 'b'.repeat(64);
+    expect(repository.list({ limit: 25, offset: 0 }).accounts[0]?.executorActivity).toEqual({
+      lastStepAt: null,
+      pagesLast24h: 0,
+    });
+    const db = repository.getDatabase();
+    recordLinkedinExecutorPageAttempt(db, account.id, 'company_search', hash, new Date('2026-11-01T09:00:00.000Z'));
+    recordLinkedinExecutorPageAttempt(db, account.id, 'company_search', hash, new Date('2026-11-03T10:00:00.000Z'));
+    recordLinkedinExecutorPageAttempt(db, account.id, 'company_people', hash, new Date('2026-11-03T10:05:00.000Z'));
+    expect(repository.list({ limit: 25, offset: 0 }).accounts[0]?.executorActivity).toEqual({
+      lastStepAt: '2026-11-03T10:05:00.000Z',
+      pagesLast24h: 2,
+    });
+  });
 });

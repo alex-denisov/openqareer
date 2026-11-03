@@ -93,6 +93,7 @@ describe('registry of vacancy sources', () => {
       'ats-smartrecruiters-visa',
       'remotive',
       'src-indeed',
+      'src-linkedin-guest',
     ]);
   });
 });
@@ -400,7 +401,7 @@ describe('LinkedIn Obscura crawler in default registry (B208)', () => {
     expect(source?.accessClass).toBe('browser_session');
     expect(source?.addressStatus).toBe('official_access_required');
     expect(source?.enabled).toBe(false);
-    expect(source?.disabledReason).toContain('provider_permission_required');
+    expect(source?.disabledReason).toContain('no vacancy reader on pool sessions');
     expect(source?.targetUrl).toBe('https://www.linkedin.com/jobs/search');
 
     const readings = vacancySourceMeasurements('src-linkedin-crawler');

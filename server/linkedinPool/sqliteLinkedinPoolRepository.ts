@@ -18,6 +18,7 @@ import {
   type LinkedinPoolAccount,
   type LinkedinPoolPage,
   type LinkedinProviderProbe,
+  type LinkedinPoolExecutorActivity,
   type LinkedinPoolServerSessionSummary,
   type LinkedinSessionCookie,
   type LinkedinSessionState,
@@ -681,8 +682,29 @@ export class SqliteLinkedinPoolRepository {
     );
   }
 
+  /**
+   * Executor activity from the audit trail. The created_at index bounds the
+   * scan to the last 30 days; account ids are few, so a point query per row is fine.
+   */
+  private executorActivity(accountId: string): LinkedinPoolExecutorActivity {
+    const nowMs = this.now().getTime();
+    const since30 = new Date(nowMs - 30 * 24 * 3_600_000).toISOString();
+    const since24 = new Date(nowMs - 24 * 3_600_000).toISOString();
+    const row = this.database
+      .prepare(
+        `SELECT max(created_at) AS last_at,
+                coalesce(sum(action = 'linkedin_executor_page' AND created_at >= ?), 0) AS pages
+           FROM linkedin_pool_audit
+          WHERE created_at >= ? AND account_id = ?
+            AND action IN ('linkedin_executor_page', 'linkedin_executor_company')`,
+      )
+      .get(since24, since30, accountId) as { last_at: string | null; pages: number };
+    return { lastStepAt: row.last_at, pagesLast24h: row.pages };
+  }
+
   private toAccount(row: AccountRow): LinkedinPoolAccount {
     return {
+      executorActivity: this.executorActivity(row.id),
       id: row.id,
       adminLabel: row.admin_label,
       emailLogin: this.openEmail(row),

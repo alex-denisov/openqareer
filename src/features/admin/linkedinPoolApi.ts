@@ -48,6 +48,7 @@ export interface LinkedinPoolAccount {
   createdAt: string;
   updatedAt: string;
   serverSession: LinkedinPoolServerSessionSummary | null;
+  executorActivity?: { lastStepAt: string | null; pagesLast24h: number };
 }
 
 export interface LinkedinPoolServerSessionSummary {
