@@ -43,13 +43,66 @@ export function isCompensationLine(text: string): boolean {
 const LEADING_ROLE = /(?<!\p{L})(?:head of|vice president|VP|director|chief|C[A-Z]O|lead|manager|руководител\S*|директор\S*|начальник\S*|заведующ\S*|управляющ\S*)(?!\p{L})[^,.;\n]{0,50}/iu;
 const CLIENT_WORK = /(?<!\p{L})(?:client|customer|stakeholder|executive|board|C-level|клиент\S*|заказчик\S*|руководств\S*|топ-менеджмент\S*|VIP)[^,.;\n]{0,40}/iu;
 
-/** Soft skills follow from experience: a leading role or work with clients and management (03.11). */
-export function impliedSoftRole(statements: readonly string[]): string | undefined {
-  for (const pattern of [LEADING_ROLE, CLIENT_WORK]) {
-    for (const statement of statements) {
-      const match = statement.match(pattern);
-      if (match) return match[0].replace(/\s+/gu, ' ').replace(/[\s,;:–—-]+$/u, '').trim();
+const ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const decodeEntities = (text: string): string =>
+  text.replace(/&(#\d+|#x[\da-f]+|[a-z]+);/giu, (whole, name: string) => {
+    if (name.startsWith('#')) {
+      const code = name[1] === 'x' || name[1] === 'X' ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+      return Number.isFinite(code) && code > 0 && code < 0x110000 ? String.fromCodePoint(code) : whole;
     }
-  }
-  return undefined;
+    return ENTITIES[name.toLowerCase()] ?? whole;
+  });
+const MAX_ROLE_CHARS = 80;
+/** One readable line: entities decoded, spaces folded, cut at a word boundary, never mid-word. */
+function tidyRole(text: string): string {
+  const value = decodeEntities(text).replace(/\s+/gu, ' ').replace(/[\s,;:–—-]+$/u, '').trim();
+  if (value.length <= MAX_ROLE_CHARS) return value;
+  const cut = value.slice(0, MAX_ROLE_CHARS);
+  return cut.slice(0, Math.max(cut.lastIndexOf(' '), 1)).replace(/[\s,;:–—|(&-]+$/u, '');
+}
+const CLIENT_REQUIREMENT = /communicat|client|customer|stakeholder|коммуникац|клиент|заказчик|переговор|общени/iu;
+const matched = (statement: string, pattern: RegExp): string | undefined => statement.match(pattern)?.[0];
+
+/** Experience fact "Title — Employer; period; ..." -> "Title, Employer". */
+function experienceLabel(statement: string): string {
+  return tidyRole((statement.split(';')[0] ?? '').replace(/\s+[—–]\s+/u, ', '));
+}
+
+interface RoleCandidate { readonly label: string; readonly client: boolean; readonly leading: boolean }
+
+function roleCandidate(fact: ImpliedRoleFact): RoleCandidate | undefined {
+  if (fact.id === 'profile:headline') return undefined;
+  const isExperience = fact.id?.startsWith('profile:experience');
+  const leading = matched(fact.statement, LEADING_ROLE);
+  const client = matched(fact.statement, CLIENT_WORK);
+  if (!leading && !client) return undefined;
+  if (isExperience) return { label: experienceLabel(fact.statement), client: Boolean(client), leading: Boolean(leading) };
+  return { label: tidyRole((leading ?? client) as string), client: Boolean(client), leading: Boolean(leading) };
+}
+
+/** The headline names a role only when no experience fact exists; "A | B ($50M" is cut before the bar and the bracket. */
+function headlineRole(fact: ImpliedRoleFact | undefined): string | undefined {
+  if (!fact || !matched(fact.statement, LEADING_ROLE)) return undefined;
+  const first = decodeEntities(fact.statement).split(/\s+\|\s+/u)[0] ?? '';
+  const label = tidyRole(first.replace(/\s*[([{][^)\]}]*$/u, ''));
+  return label || undefined;
+}
+
+export interface ImpliedRoleFact { readonly id?: string; readonly statement: string }
+
+/**
+ * Soft skills follow from experience: a leading role or work with clients and management (03.11).
+ * The role comes from experience facts (title and employer): for communication and client
+ * requirements the one tied to clients, support or leadership, otherwise the first leading one.
+ * The profile headline is the last resort, only when there is no experience fact at all.
+ */
+export function impliedSoftRole(facts: readonly (ImpliedRoleFact | string)[], requirementText = ''): string | undefined {
+  const list = facts.map((fact): ImpliedRoleFact => (typeof fact === 'string' ? { statement: fact } : fact));
+  const candidates = list.map(roleCandidate).filter((item): item is RoleCandidate => item !== undefined && item.label !== '');
+  const wantsClient = CLIENT_REQUIREMENT.test(requirementText);
+  const pick = (test: (item: RoleCandidate) => boolean) => candidates.find(test)?.label;
+  const best = wantsClient ? pick((item) => item.client && item.leading) ?? pick((item) => item.client) ?? pick((item) => item.leading) : pick((item) => item.leading) ?? pick((item) => item.client);
+  if (best) return best;
+  if (list.some((fact) => fact.id?.startsWith('profile:experience'))) return undefined;
+  return headlineRole(list.find((fact) => fact.id === 'profile:headline'));
 }

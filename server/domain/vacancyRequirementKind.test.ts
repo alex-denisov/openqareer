@@ -31,4 +31,25 @@ describe('implied soft skill from experience', () => {
   it('is absent without a leading role or client work', () => {
     expect(impliedSoftRole(['Wrote TypeScript services', 'Built a data pipeline'])).toBeUndefined();
   });
+  it('picks the client-facing experience role for communication, not the headline', () => {
+    const facts = [
+      { id: 'profile:headline', statement: 'VP of Technology &amp; Operations | Ex-Co-Founder ($50M' },
+      { id: 'profile:experience:1', statement: 'Director of Engineering — Acme; 2015-2018; built platform' },
+      { id: 'm1', statement: 'Head of VIP IT Support — Kaspersky' },
+    ];
+    expect(impliedSoftRole(facts, 'Verbal communication')).toBe('Head of VIP IT Support — Kaspersky');
+  });
+  it('uses the most senior experience role otherwise and joins title and employer', () => {
+    const facts = [{ id: 'profile:experience:1', statement: 'Head of VIP IT Support — Лаборатория Касперского; 2018-2023; клиенты' }];
+    expect(impliedSoftRole(facts, 'Strong ownership')).toBe('Head of VIP IT Support, Лаборатория Касперского');
+  });
+  it('headline is the last resort: no bar, bracket or entity', () => {
+    const role = impliedSoftRole([{ id: 'profile:headline', statement: 'VP of Technology &amp; Operations | Ex-Co-Founder ($50M' }], 'Teamwork');
+    expect(role).toBe('VP of Technology & Operations');
+  });
+  it('never cuts a long role in the middle of a word', () => {
+    const role = impliedSoftRole([{ id: 'profile:experience:1', statement: 'Director of International Strategic Partnerships and Enterprise Transformation — Contoso; 2020' }]) ?? '';
+    expect(role.length).toBeLessThanOrEqual(80);
+    expect(role).toMatch(/(Enterprise|Transformation|Partnerships|and)$/u);
+  });
 });
