@@ -44,6 +44,7 @@ import { waitForCoachAnalysis } from '../coach/coachResultDelivery';
 import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import { starterPromptsForStage } from './starterPrompts';
 import { useConsultantScreenSuggestion } from './consultantScreenSuggestion';
+import { useConsultantScreenTopic } from './consultantScreenTopic';
 import { ConsultantScreenSuggestionCard } from './ConsultantScreenSuggestionCard';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
@@ -149,6 +150,7 @@ export function CareerExpertPanel({
   const [sending, setSending] = useState(false);
   const [decisionProposalCount, setDecisionProposalCount] = useState(0);
   const screenSuggestion = useConsultantScreenSuggestion(stage);
+  const screenTopic = useConsultantScreenTopic(stage);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   // 29.10: the consultant's reply while it is written; the saved turn replaces it.
   const [streamingReply, setStreamingReply] = useState<string>();
@@ -698,7 +700,7 @@ export function CareerExpertPanel({
                   text={
                     intakeMode
                       ? 'Начнём с источника. Подключите LinkedIn или hh.ru, загрузите резюме или просто расскажите, чем занимаетесь.'
-                      : STAGE_INITIAL_REPLICA[stage]
+                      : (screenTopic?.intro ?? STAGE_INITIAL_REPLICA[stage])
                   }
                 />
               </article>
@@ -713,7 +715,7 @@ export function CareerExpertPanel({
                   prompts={
                     intakeMode
                       ? ['С чего начать?', 'Что вы читаете в LinkedIn?', 'Можно без LinkedIn?']
-                      : starterPromptsForStage(stage)
+                      : (screenTopic?.prompts ?? starterPromptsForStage(stage))
                   }
                   variantClass={intakeMode ? 'career-expert-starters' : undefined}
                   ariaLabel="Темы для начала"

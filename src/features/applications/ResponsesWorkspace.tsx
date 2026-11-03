@@ -32,6 +32,8 @@ import {
 import type { UseApplications } from './useApplications';
 import { OPEN_APPLICATION_STAGES, useWorkspaceController } from './responsesWorkspaceController';
 import type { WorkspaceController } from './responsesWorkspaceController';
+import { RESPONSES_TAB_TOPICS } from './responsesTabTopics';
+import { usePublishConsultantTopic } from '../journey/consultantScreenTopic';
 import './responses-workspace.css';
 import './responses-mobile.css';
 
@@ -105,6 +107,7 @@ function WorkspacePanelContent({
 
 export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
   const workspace = useWorkspaceController(props);
+  usePublishConsultantTopic(RESPONSES_TAB_TOPICS[workspace.section]);
   const tableView = renderTableView({
     state: props.state,
     workspace,
