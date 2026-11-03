@@ -255,6 +255,38 @@ describe('HhCatalogTextBackfill', () => {
     expect(cursors).toEqual([undefined, undefined]);
   });
 
+  it('03.11: reads several cards in flight, and stops pulling new ones after a refusal', async () => {
+    let active = 0;
+    let peak = 0;
+    const seen: string[] = [];
+    const engine: HhCatalogTextEngine = {
+      hhTextReady: () => true,
+      loadHhTextCandidates: () => ({ ids: ['a', 'b', 'c', 'd', 'e', 'f'] }),
+      loadVacancyDescription: async (id) => {
+        seen.push(id);
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return id === 'a'
+          ? { unavailable: false, status: 'failed' as const, blocked: 'refused' as const }
+          : { unavailable: false, status: 'loaded' as const };
+      },
+    };
+    const backfill = new HhCatalogTextBackfill({ engine, perTick: 6, concurrency: 3, now: () => 0 });
+    const report = await backfill.step();
+    expect(peak).toBe(3);
+    expect(report.blocked).toBe(true);
+    expect(seen.length).toBeLessThan(6);
+  });
+
+  it('03.11: concurrency 3 loads a whole page', async () => {
+    const { engine, loaded } = engineWith([{ ids: ['a', 'b', 'c', 'd', 'e'] }], {});
+    const backfill = new HhCatalogTextBackfill({ engine, perTick: 5, concurrency: 3, now: () => 0 });
+    expect(await backfill.step()).toMatchObject({ requested: 5, loaded: 5 });
+    expect([...loaded].sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
   it('a loader backoff ends the tick without counting the record as failed', async () => {
     const { engine } = scriptedEngine([{ ids: ['a'] }], {
       a: [{ status: 'failed', blocked: 'backoff' }],

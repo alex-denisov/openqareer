@@ -205,6 +205,21 @@ export class HhVacancyDescriptionLoader {
     }
   }
 
+  /** 03.11: подряд идущие отказы удваивают паузу (60 с, 2, 4 ... до 15 мин); сбои 5xx — после серии. */
+  private extendPause(refused: boolean, baseMs: number, jitterMs: number, nowMs: number): void {
+    if (refused) {
+      this.refusalStreak += 1;
+      const grown = Math.min(baseMs * 2 ** (this.refusalStreak - 1), MAX_REFUSAL_BACKOFF_MS);
+      this.retryAfter = Math.max(this.retryAfter, nowMs + grown + jitterMs);
+    } else if (this.transientStreak >= TRANSIENT_STREAK_TO_PAUSE) {
+      const grown = Math.min(
+        baseMs * 2 ** (this.transientStreak - TRANSIENT_STREAK_TO_PAUSE),
+        MAX_REFUSAL_BACKOFF_MS,
+      );
+      this.retryAfter = Math.max(this.retryAfter, nowMs + grown);
+    }
+  }
+
   private async loadFromTransport(url: string): Promise<HhVacancyDetails | undefined> {
     const now = this.options.now ?? Date.now;
     let details: HhVacancyDetails | undefined;
@@ -247,18 +262,7 @@ export class HhVacancyDescriptionLoader {
       this.cached.set(url, { retryAt });
       // Общая пауза — только когда hh отказывает нам; сбой одной карточки
       // (404, страница без описания, сеть) остальных не держит (прод 21.10).
-      // 03.11: подряд идущие отказы удваивают паузу (60 с, 2, 4 ... до 15 мин).
-      if (refused) {
-        this.refusalStreak += 1;
-        const grown = Math.min(failedCacheTtlMs * 2 ** (this.refusalStreak - 1), MAX_REFUSAL_BACKOFF_MS);
-        this.retryAfter = Math.max(this.retryAfter, now() + grown + (retryAt - now() - failedCacheTtlMs));
-      } else if (this.transientStreak >= TRANSIENT_STREAK_TO_PAUSE) {
-        const grown = Math.min(
-          failedCacheTtlMs * 2 ** (this.transientStreak - TRANSIENT_STREAK_TO_PAUSE),
-          MAX_REFUSAL_BACKOFF_MS,
-        );
-        this.retryAfter = Math.max(this.retryAfter, now() + grown);
-      }
+      this.extendPause(refused, failedCacheTtlMs, retryAt - now() - failedCacheTtlMs, now());
     }
     if (refused) return { blocked: 'refused', skills: [] };
     // Не кешируется как ответ: повтор через отступ решает, скрыт ли текст насовсем.

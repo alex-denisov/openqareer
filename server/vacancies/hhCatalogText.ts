@@ -18,6 +18,10 @@ import type { VacancyDescriptionLoadResult } from './multiSourceVacancyEngine';
  */
 
 const DEFAULT_PER_TICK = 10;
+/** 03.11: порция тика на проде — 20 карточек (~20 с при старте раз в секунду). */
+export const HH_TEXT_PER_TICK = 20;
+/** 03.11: в полёте до трёх карточек; старты разнесены загрузчиком (не чаще раза в секунду). */
+export const HH_TEXT_CONCURRENCY = 3;
 /** Первый повтор неудачной записи через час, дальше вдвое дольше, не реже суток. */
 export const HH_TEXT_RETRY_BASE_MS = 60 * 60 * 1_000;
 const HH_TEXT_RETRY_MAX_MS = 24 * 60 * 60 * 1_000;
@@ -65,13 +69,21 @@ const EMPTY: HhCatalogTextReport = { requested: 0, loaded: 0, retired: 0, failed
 export class HhCatalogTextBackfill {
   private readonly engine: HhCatalogTextEngine;
   private readonly perTick: number;
+  private readonly concurrency: number;
   private readonly now: () => number;
   private readonly attempts = new Map<string, HhTextAttempts>();
   private cursor: string | undefined;
   private cursorRead = false;
   private running = false;
 
-  constructor(options: { engine: HhCatalogTextEngine; perTick?: number; now?: () => number }) {
+  constructor(options: {
+    engine: HhCatalogTextEngine;
+    perTick?: number;
+    /** 03.11: карточек в полёте (старты всё равно разнесены загрузчиком). */
+    concurrency?: number;
+    now?: () => number;
+  }) {
+    this.concurrency = Math.max(1, Math.floor(options.concurrency ?? 1));
     this.engine = options.engine;
     this.perTick = options.perTick ?? DEFAULT_PER_TICK;
     this.now = options.now ?? Date.now;
@@ -136,26 +148,40 @@ export class HhCatalogTextBackfill {
       ...(hidden > 0 ? { hidden } : {}),
       ...extra,
     });
-    for (const id of ids) {
-      if (this.waiting(id)) continue;
-      const result = await this.engine.loadVacancyDescription(id);
-      // Пауза загрузчика: запроса не было, запись не виновата — повторить её.
-      if (result.blocked === 'backoff') return report({ blocked: true });
-      tally.requested += 1;
-      if (result.status === 'failed') {
-        tally.failed += 1;
-        this.markFailed(id);
-        // Неудачная строка подборки уходит в общий обход с отступом и не держит голову очереди.
+    let stop = false;
+    let blocked = false;
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (!stop && next < ids.length) {
+        const id = ids[next++]!;
+        if (this.waiting(id)) continue;
+        const result = await this.engine.loadVacancyDescription(id);
+        // Пауза загрузчика: запроса не было, запись не виновата — повторить её.
+        if (result.blocked === 'backoff') {
+          stop = true;
+          blocked = true;
+          continue;
+        }
+        tally.requested += 1;
+        if (result.status === 'failed') {
+          tally.failed += 1;
+          this.markFailed(id);
+          // Неудачная строка подборки уходит в общий обход с отступом и не держит голову очереди.
+          if (priority) this.engine.dropPriority?.([id]);
+          if (result.blocked === 'refused') {
+            stop = true;
+            blocked = true;
+          }
+          continue;
+        }
+        this.attempts.delete(id);
         if (priority) this.engine.dropPriority?.([id]);
-        if (result.blocked === 'refused') return report({ blocked: true });
-        continue;
+        if (result.status === 'loaded') tally.loaded += 1;
+        else if (result.restricted) hidden += 1;
+        else if (result.unavailable) tally.retired += 1;
       }
-      this.attempts.delete(id);
-      if (priority) this.engine.dropPriority?.([id]);
-      if (result.status === 'loaded') tally.loaded += 1;
-      else if (result.restricted) hidden += 1;
-      else if (result.unavailable) tally.retired += 1;
-    }
-    return report();
+    };
+    await Promise.all(Array.from({ length: Math.min(this.concurrency, ids.length) }, worker));
+    return blocked ? report({ blocked: true }) : report();
   }
 }
