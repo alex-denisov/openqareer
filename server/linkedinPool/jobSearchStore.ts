@@ -45,8 +45,10 @@ export function isPoolJobReadingEnabled(database: DatabaseSync): boolean {
       .prepare('SELECT enabled FROM linkedin_pool_job_settings WHERE id = 1')
       .get() as { enabled: number } | undefined;
     return row ? row.enabled === 1 : true;
-  } catch {
-    return true;
+  } catch (error: unknown) {
+    // Нет таблицы — решения в админке ещё не было, действует значение по умолчанию.
+    // Любая другая ошибка БД: чтение выключено (fail-closed).
+    return error instanceof Error && /no such table/iu.test(error.message);
   }
 }
 

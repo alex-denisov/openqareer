@@ -36,6 +36,18 @@ describe('job reading flag', () => {
   });
 });
 
+describe('job reading flag on database errors', () => {
+  it('stays on only when the settings table does not exist yet', () => {
+    expect(isPoolJobReadingEnabled(new DatabaseSync(':memory:'))).toBe(true);
+  });
+
+  it('fails closed (off) on any other database error', () => {
+    const db = database();
+    db.close();
+    expect(isPoolJobReadingEnabled(db)).toBe(false);
+  });
+});
+
 describe('shouldReadJobsNow', () => {
   it('interleaves: about one job page per two other pages, capped per day', () => {
     expect(shouldReadJobsNow({ jobPages: 0, otherPages: 0 })).toBe(true);
