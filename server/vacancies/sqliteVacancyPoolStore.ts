@@ -1532,7 +1532,25 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
-  private prepareCatalogEntryUpsert() {
+  /**
+   * The 32-bit `vacancyKey` of two different clusters can collide (03.11 prod:
+   * UNIQUE entry_key aborted a whole Indeed write). The first holder keeps the
+   * key, the later cluster is simply not addressable, and the write goes on.
+   */
+  private prepareCatalogEntryUpsert(): CatalogProjectionStatements['upsert'] {
+    const holder = this.database.prepare(
+      'SELECT cluster_id FROM catalog_entries WHERE entry_key = ? AND cluster_id <> ?',
+    );
+    const statement = this.prepareCatalogEntryStatement();
+    return {
+      run: (...values: SQLInputValue[]) => {
+        if (holder.get(values[1] as string, values[0] as string)) return undefined;
+        return statement.run(...values);
+      },
+    };
+  }
+
+  private prepareCatalogEntryStatement() {
     return this.database.prepare(
       `INSERT INTO catalog_entries (
          cluster_id, entry_key, path, title, company, location, is_remote,
