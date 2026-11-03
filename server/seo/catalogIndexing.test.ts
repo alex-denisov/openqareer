@@ -38,6 +38,8 @@ describe('isIndexableCard', () => {
 
   it('drops a card whose source passed no job text, so JobPosting would hold only the title', () => {
     expect(isIndexableCard({ ...valuable, summary: '' }, NOW)).toBe(false);
+    // 03.11: our Russian summary of the loaded text counts as the description.
+    expect(isIndexableCard({ ...valuable, summary: '', hasRuSummary: true }, NOW)).toBe(true);
     expect(isIndexableCard({ ...valuable, summary: 'Бухгалтер' }, NOW)).toBe(false);
     expect(
       isIndexableCard({ ...valuable, summary: 'x'.repeat(INDEXED_CARD_SUMMARY_MIN) }, NOW),

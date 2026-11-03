@@ -11,6 +11,8 @@
  * `JobPosting` получает только карточка из индексируемого набора
  * (`seo/catalogIndexing`).
  */
+import { catalogSummarySourceText, type CatalogRuSummary } from '../seo/catalogRuSummary';
+import type { CatalogRuSummaryRead } from '../seo/catalogRuSummaryReader';
 import { RELOCATION_PLACE } from './catalogChips';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { PRIVATE_EMPLOYER, publicEmployerName } from '../../shared/privateEmployer';
@@ -103,7 +105,16 @@ export interface VacancyDetail {
   readonly indexable: boolean;
   /** Language of the employer's own text when its letters are clear; the page chrome stays ru. */
   readonly language?: ProfileLanguage;
+  /** Our Russian summary, shown while it matches the text on the page (03.11). */
+  readonly ruSummary?: CatalogRuSummary;
 }
+
+/** Reads the card's stored Russian summary for the text the page shows. */
+export type RuSummaryReader = (card: {
+  readonly clusterId: string;
+  readonly title: string;
+  readonly description: string;
+}) => CatalogRuSummaryRead;
 
 function isoDate(value: string): string {
   return value.slice(0, 10);
@@ -441,14 +452,30 @@ export function buildVacancyDetail(
   fullDescription?: string,
   vacancy?: UnifiedVacancy,
   now: Date = new Date(),
+  readRuSummary?: RuSummaryReader,
 ): VacancyDetail | null {
   const entry = toCatalogEntry(cluster);
   if (!entry) return null;
+  // The same text, in the same order, the summary job hashed (`CatalogRuSummaryStore.sourceText`).
+  const ru = readRuSummary?.({
+    clusterId: cluster.id,
+    title: entry.title,
+    description: catalogSummarySourceText(
+      vacancy?.fullDescription,
+      vacancy?.description,
+      fullDescription,
+      entry.summary,
+    ),
+  });
   const description = vacancy
     ? renderUnifiedVacancyView(vacancy)
     : fullDescription?.trim() || entry.summary;
   const indexable = isIndexableCard(
-    vacancy?.archivedAt ? { ...entry, withdrawnAt: vacancy.archivedAt } : entry,
+    {
+      ...entry,
+      ...(vacancy?.archivedAt ? { withdrawnAt: vacancy.archivedAt } : {}),
+      hasRuSummary: ru?.described === true,
+    },
     now,
   );
   const crumbs = breadcrumbs({ name: entry.title, path: entry.path });
@@ -470,6 +497,7 @@ export function buildVacancyDetail(
     ...(vacancy ? { vacancy } : {}),
     indexable,
     ...(language ? { language } : {}),
+    ...(ru?.summary ? { ruSummary: ru.summary } : {}),
   };
 }
 

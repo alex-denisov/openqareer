@@ -93,6 +93,53 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).not.toContain('noindex');
   });
 
+  it('показывает русскую сводку над оригиналом, берёт её в описание и открывает карточку без текста (03.11)', () => {
+    const summary = {
+      text: 'Reddit ищет директора по правовым вопросам приватности. Он отвечает за политику данных.',
+      facts: { role: 'Директор по праву, руководитель', requirements: ['Опыт в праве <данных>'] },
+    };
+    const reads: Array<{ clusterId: string; title: string; description: string }> = [];
+    const paid = cluster({
+      salary: { from: 200000, to: 300000, currency: 'USD' },
+      descriptionSummary: '',
+    });
+    const detail = buildVacancyDetail(
+      paid,
+      'Full English text of the posting.',
+      undefined,
+      new Date('2026-09-06T12:00:00.000Z'),
+      (card) => {
+        reads.push(card);
+        return { described: true, summary };
+      },
+    )!;
+    const html = renderVacancyDocument(detail);
+
+    expect(reads).toEqual([
+      {
+        clusterId: 'board-1:cluster-1',
+        title: 'Director, Privacy Legal',
+        description: 'Full English text of the posting.',
+      },
+    ]);
+    expect(html).toContain('<section class="cat-ru" lang="ru"');
+    expect(html.indexOf('class="cat-ru"')).toBeLessThan(html.indexOf('class="cat-body"'));
+    expect(html).toContain('<dt>Роль и уровень</dt><dd>Директор по праву, руководитель</dd>');
+    expect(html).toContain('<li>Опыт в праве &lt;данных&gt;</li>');
+    expect(html).toContain('<dt>Зарплата</dt>');
+    expect(html).toContain(`<meta name="description" content="${summary.text}">`);
+    expect(html).not.toContain('noindex');
+  });
+
+  it('без сводки страница остаётся прежней', () => {
+    const html = renderVacancyDocument(
+      buildVacancyDetail(cluster(), undefined, undefined, new Date(), () => ({
+        described: false,
+      }))!,
+    );
+    expect(html).not.toContain('cat-ru');
+  });
+
   it('закрывает от индекса карточку вне индексируемого набора, но оставляет ссылки', () => {
     const html = renderVacancyDocument(buildVacancyDetail(cluster())!);
     expect(html).toContain('<meta name="robots" content="noindex, follow">');

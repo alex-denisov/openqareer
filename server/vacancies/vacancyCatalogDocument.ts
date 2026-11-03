@@ -26,6 +26,7 @@ import type {
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import { isIndexablePage } from '../seo/catalogIndexing';
 import { escapeHtml } from './catalogHtml';
+import { ruSummaryBlock } from './catalogRuSummaryHtml';
 import { ogImageUrl } from '../../shared/seoHead';
 import { CATALOG_STYLE } from './catalogStyle';
 import { catalogChromeFooter, catalogChromeHeader } from './catalogChrome';
@@ -327,11 +328,20 @@ function aboutBox(entry: CatalogEntry, employer: string): string {
 }
 
 function vacancyText(detail: VacancyDetail, structured: boolean): string {
-  return descriptionBlock(
-    meaningfulText(detail.description, detail.entry.title),
-    meaningfulText(detail.entry.summary, detail.entry.title),
-    structured,
-    detail.language,
+  const summary = detail.ruSummary
+    ? ruSummaryBlock(detail.ruSummary, {
+        ...(detail.entry.salaryLabel ? { salaryLabel: detail.entry.salaryLabel } : {}),
+        ...(detail.entry.sourceName ? { sourceName: detail.entry.sourceName } : {}),
+      })
+    : '';
+  return (
+    summary +
+    descriptionBlock(
+      meaningfulText(detail.description, detail.entry.title),
+      meaningfulText(detail.entry.summary, detail.entry.title),
+      structured,
+      detail.language,
+    )
   );
 }
 
@@ -346,12 +356,15 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
   };
   const employer = employerLabel(publicEmployerName(entry.company));
   const title = `${entry.title} — ${employer} · openqareer`;
-  const description = plainSummary(
-    // The body goes through plainSummary on its own first: the generated
-    // template preamble («Статус: Опубликовано…») is only dropped at its start.
-    `${entry.title}, ${employer}, ${placeLabel(entry)}${entry.salaryLabel ? `, ${entry.salaryLabel}` : ''}. ${plainSummary(meaningfulText(detail.description, entry.title) || meaningfulText(entry.summary, entry.title), 400)}`,
-    160,
-  );
+  // 03.11: our Russian summary is the snippet; the employer's text only when there is none.
+  const description = detail.ruSummary
+    ? plainSummary(detail.ruSummary.text, 160)
+    : plainSummary(
+        // The body goes through plainSummary on its own first: the generated
+        // template preamble («Статус: Опубликовано…») is only dropped at its start.
+        `${entry.title}, ${employer}, ${placeLabel(entry)}${entry.salaryLabel ? `, ${entry.salaryLabel}` : ''}. ${plainSummary(meaningfulText(detail.description, entry.title) || meaningfulText(entry.summary, entry.title), 400)}`,
+        160,
+      );
 
   const body =
     siteHeader() +
