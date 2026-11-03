@@ -68,6 +68,8 @@ export interface CatalogRuSummaryReport {
 type Completion = { complete(input: BulkLlmInput): Promise<BulkLlmResult> };
 
 const OUTAGE_PAUSE_MS = 10 * 60_000;
+/** The bulk client's error when the last stage's answer failed `accept` (`bulkLlmClient.ts`). */
+const BULK_ANSWER_REJECTED = 'Bulk answer rejected';
 const IDLE_PAUSE_MS = 5 * 60_000;
 /** Rows looked at per tick: unchanged rechecks are cheap, only one may cost a model call. */
 const CANDIDATES_PER_TICK = 20;
@@ -200,6 +202,7 @@ export class CatalogRuSummaryJob {
       this.pausedUntil = now + OUTAGE_PAUSE_MS;
       return { ...tally, issue: 'model_unavailable', skipped: 'paused' };
     }
+    if ('rejected' in result) return fail(result.rejected);
     const parsed = parseCatalogRuSummary(result.content, source);
     if ('issue' in parsed) return fail(parsed.issue, result.model);
     store.saveReady(
@@ -222,7 +225,8 @@ export class CatalogRuSummaryJob {
   private async complete(
     source: CatalogRuSummarySource,
     now: number,
-  ): Promise<BulkLlmResult | 'paused' | 'unavailable'> {
+  ): Promise<BulkLlmResult | 'paused' | 'unavailable' | { readonly rejected: string }> {
+    let lastIssue = 'answer_rejected';
     try {
       return await this.options.client.complete({
         runId: catalogRuSummaryRunId(now),
@@ -232,9 +236,17 @@ export class CatalogRuSummaryJob {
         input: catalogRuSummaryInput(source),
         maxTokens: SUMMARY_MAX_TOKENS,
         // An unusable answer moves the call to the next stage of the chain.
-        accept: (content) => 'summary' in parseCatalogRuSummary(content, source),
+        accept: (content) => {
+          const parsed = parseCatalogRuSummary(content, source);
+          if ('issue' in parsed) lastIssue = parsed.issue;
+          return 'summary' in parsed;
+        },
       });
     } catch (error: unknown) {
+      // Every stage answered and no answer passed the checks: the card's attempt, not an outage.
+      if (error instanceof Error && error.message.startsWith(BULK_ANSWER_REJECTED)) {
+        return { rejected: lastIssue };
+      }
       if (!(error instanceof Error) || error.message !== BULK_BUDGET_EXCEEDED) return 'unavailable';
       const date = new Date(now);
       this.pausedUntil = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);

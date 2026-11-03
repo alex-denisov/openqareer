@@ -195,6 +195,19 @@ describe('catalog Russian summary job', () => {
     expect(await job(client, NOW + 11 * 60_000).step()).toMatchObject({ written: 1 });
   });
 
+  it('counts answers every stage got wrong as the card attempt, not as an outage', async () => {
+    addCard('card', { publishedMs: NOW - DAY });
+    addCard('next', { publishedMs: NOW - 2 * DAY });
+    const client = fakeClient();
+    client.complete.mockImplementationOnce(async (input: BulkLlmInput) => {
+      input.accept?.('{"summary":"One English sentence. Another one."}');
+      throw new Error('Bulk answer rejected (vertex)');
+    });
+    const step = job(client);
+    expect(await step.step()).toMatchObject({ failed: 1, issue: 'not_russian' });
+    expect(await step.step()).toMatchObject({ written: 1 });
+  });
+
   it('records an answer with an invented number as failed and retries it later', async () => {
     addCard('card', { publishedMs: NOW - DAY });
     const invented = JSON.parse(ANSWER) as { summary: string };
