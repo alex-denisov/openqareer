@@ -46,6 +46,7 @@ export function ResponsesBoard({
   initialTab,
   initialApplicationId,
   onOpenExpert,
+  onOpenResume,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
@@ -55,6 +56,7 @@ export function ResponsesBoard({
   initialApplicationId?: string;
   initialTab?: 'board' | 'analytics';
   onOpenAutomation?: () => void;
+  onOpenResume?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [stageFilter, setStageFilter] = useStageFilter(initialStageFilter);
@@ -78,6 +80,7 @@ export function ResponsesBoard({
       initialApplicationId={initialApplicationId}
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
+      onOpenResume={onOpenResume}
     />
   );
 }

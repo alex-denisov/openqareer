@@ -4,31 +4,100 @@
   display: none;
 }
 
-.career-responses-bulk-actions {
+.career-responses-bulk-actions,
+.career-responses-bulk-confirm {
   display: flex;
   align-items: center;
   gap: var(--career-space-2);
   flex-wrap: wrap;
-  padding: var(--career-space-3);
   color: var(--career-text-soft);
 }
 
-.career-responses-bulk-actions button,
-.career-responses-bulk-actions select {
+/* Mockup 5 `.career-btn.is-sm`: 32 px drawn, a 44 px hit area through a transparent border. */
+.career-responses-bulk-actions .career-btn-sm,
+.career-responses-bulk-confirm .career-btn-sm {
+  --sm-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
   min-block-size: var(--career-target-min);
-  padding: var(--career-space-2) var(--career-space-3);
+  margin-inline: calc(var(--sm-gutter) * -1);
+  padding: 0 var(--career-space-3);
+  border: var(--sm-gutter) solid transparent;
+  border-radius: calc(var(--career-radius-sm) + var(--sm-gutter));
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--career-field-edge);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.career-responses-bulk-actions .career-btn-sm.career-btn-primary,
+.career-responses-bulk-confirm .career-btn-sm.career-btn-primary {
+  color: var(--career-accent-ink);
+}
+
+.career-responses-bulk-actions .career-btn-sm svg {
+  inline-size: 1.15em;
+  block-size: 1.15em;
+}
+
+.career-responses-bulk-group {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+/* Mockup 5 `.bulk-sep`: a rule between the status group and the common one. */
+.career-responses-bulk-sep {
+  align-self: stretch;
+  margin-inline: var(--career-space-2);
+  border-inline-start: var(--career-border-width) solid var(--career-line-strong);
+}
+
+.career-responses-bulk-hint {
+  margin: 0;
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim, var(--career-text-soft));
+}
+
+.career-responses-bulk-label {
+  position: relative;
+}
+
+.career-responses-bulk-label__menu {
+  position: absolute;
+  inset-block-start: calc(100% + var(--career-space-1));
+  inset-inline-start: 0;
+  z-index: 5;
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 15rem;
+  padding: var(--career-space-3);
   border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
   background: var(--career-surface-raised);
   color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-responses-bulk-label__menu p {
+  margin: 0;
+}
+
+.career-responses-bulk-label__menu button,
+.career-responses-bulk-label__menu input {
+  min-block-size: 32px;
+  padding: var(--career-space-1) var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text);
   font: inherit;
+  text-align: start;
   cursor: pointer;
 }
 
-.career-responses-bulk-actions label {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-2);
+.career-responses-bulk-label__menu form,
+.career-responses-bulk-label__menu label {
+  display: grid;
+  gap: var(--career-space-1);
 }
 
 .career-responses-workspace-tabs,
@@ -41,7 +110,6 @@
 
 .career-responses-workspace-tabs button,
 .career-responses-view-switch button,
-.career-responses-selection button,
 .career-responses-table button {
   min-block-size: var(--career-target-min);
   padding: var(--career-space-2) var(--career-space-3);
@@ -59,6 +127,12 @@
 }
 
 .career-responses-table-wrap {
+  display: grid;
+  gap: var(--career-space-3);
+  max-width: 100%;
+}
+
+.career-responses-table-scroll {
   max-width: 100%;
   overflow-x: auto;
   border: var(--career-border-width) solid var(--career-line);
@@ -69,11 +143,37 @@
   display: none;
 }
 
+/* Mockup 5 `.bulk`: «Выбрано N из M, все со статусом …» and the filter link on the right. */
 .career-responses-selection {
-  justify-content: space-between;
   flex-wrap: wrap;
-  padding: var(--career-space-3);
-  border-bottom: var(--career-border-width) solid var(--career-line);
+  gap: var(--career-space-3);
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}
+
+.career-responses-selection > svg {
+  color: var(--career-accent);
+}
+
+.career-responses-selection .career-responses-status-pill {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.career-responses-selection > .career-responses-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--career-target-min);
+  margin-inline-start: auto;
+  padding: 0 var(--career-space-2);
+  border: 0;
+  background: transparent;
+  color: var(--career-accent);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .career-responses-table {
@@ -1183,11 +1283,6 @@
 
 .career-cabinet-view-responses .career-responses-selection {
   font-size: var(--career-text-sm);
-}
-
-.career-cabinet-view-responses .career-responses-selection button {
-  min-block-size: 32px;
-  font-size: var(--career-text-xs);
 }
 
 @media (max-width: 760px) {

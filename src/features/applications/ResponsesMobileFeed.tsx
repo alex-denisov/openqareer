@@ -15,7 +15,7 @@ import {
 import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
 import { CandidateActionPanel } from './CandidateActionPanel';
-import { ApplicationBulkActions } from './ResponsesApplicationsTable';
+import { ApplicationBulkActions } from './ResponsesSelectionBar';
 import { ResponsesMobileLinks } from './ResponsesMobileLinks';
 import { countResponsesNeedingAction, isResponseNeedingAction } from './responsesFiltering';
 import { mobileDueDate, mobileNextStepLabel, mobileStatusLabel } from './responsesMobileRow';

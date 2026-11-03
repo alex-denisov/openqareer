@@ -444,11 +444,11 @@ async function handleApplicationRoute(
     const body = request.postDataJSON() as RecordValue;
     calls.applicationBulkExecute = body;
     const confirmCount = typeof body.confirmCount === 'number' ? body.confirmCount : 0;
-    calls.applicationBulkResponse = {
-      state: 'prepared',
-      preparedCount: confirmCount,
-      sentCount: 0,
-    };
+    const actionType = (body.action as RecordValue).type;
+    calls.applicationBulkResponse =
+      actionType === 'retry'
+        ? { state: 'prepared', preparedCount: confirmCount, sentCount: 0 }
+        : { state: 'completed', changedCount: confirmCount };
     await fulfill(route, calls.applicationBulkResponse);
     return true;
   }
@@ -505,9 +505,11 @@ function filterMockApplications(
   const channels = Array.isArray(filters.channel) ? filters.channel.map(String) : [];
   const from = typeof filters.from === 'string' ? filters.from : '';
   const to = typeof filters.to === 'string' ? filters.to : '';
+  const ids = Array.isArray(filters.ids) ? filters.ids.map(String) : null;
   return applications.filter((item) => {
     const date = String(item.createdAt).slice(0, 10);
     return (
+      (!ids || ids.includes(item.id)) &&
       (!stages.length || stages.includes(item.stage)) &&
       (!channels.length || channels.includes(String(item.vacancy?.source ?? ''))) &&
       (!from || date >= from) &&
@@ -766,6 +768,28 @@ test.describe('B450 responses workspace', () => {
     await expect(rows).toHaveCount(40);
     await page.getByRole('checkbox', { name: 'Выбрать отклики на странице' }).check();
     await page.getByRole('button', { name: 'Выбрать все 968 по фильтру' }).click();
+    await expect(page.locator('.career-responses-selection')).toContainText(
+      /Выбрано\s*968\s*из\s*968/,
+    );
+    // Mixed statuses: only the common actions stay (mockup 5 `5-selall`).
+    await expect(page.getByRole('button', { name: 'Повторить отклик', exact: true })).toHaveCount(
+      0,
+    );
+    await expect(page.getByRole('button', { name: 'Закрыть отклики', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Снять выбор', exact: true }).click();
+    const failedRows = page
+      .locator('.career-responses-table tbody tr')
+      .filter({ hasText: 'Не доставлено' });
+    await failedRows.nth(0).getByRole('checkbox').check();
+    await failedRows.nth(1).getByRole('checkbox').check();
+    await expect(page.locator('.career-responses-selection')).toContainText(
+      'все со статусом Не доставлено',
+    );
+    await page.locator('.career-responses-selection').evaluate((element) => {
+      for (let node = element.parentElement; node; node = node.parentElement) node.scrollTop = 0;
+      window.scrollTo(0, 0);
+    });
+    await page.screenshot({ path: testInfo.outputPath('b511-selall-failed-1440.png') });
     await page.getByRole('button', { name: 'Повторить отклик', exact: true }).click();
     const confirm = page.getByRole('button', { name: /Подтвердить: \d+/ });
     const confirmCount = Number((await confirm.textContent())?.match(/\d+/)?.[0] ?? 0);
@@ -785,6 +809,52 @@ test.describe('B450 responses workspace', () => {
       sentCount: 0,
     });
     expect(calls.outboundRetryPaths).toEqual([]);
+  });
+
+  test('выбор строк таблицы: счётчик и действия для выбранных (5-selall)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(page.viewportSize()?.width === 390, 'таблица — только 1440');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const calls = await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page.getByRole('button', { name: 'Таблица', exact: true }).click();
+    const selection = page.locator('.career-responses-selection');
+    await expect(selection).toHaveCount(0);
+    const boxes = page.locator('.career-responses-table tbody input[type="checkbox"]');
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    await expect(selection).toContainText(/Выбрано\s*2\s*из\s*968/);
+    await page.screenshot({ path: testInfo.outputPath('b511-selall-1440.png'), fullPage: false });
+
+    await page.getByRole('button', { name: 'Добавить метку', exact: true }).click();
+    await page.getByLabel('Новая метка').fill('Срочно');
+    await page.getByRole('button', { name: 'Создать и добавить' }).click();
+    await page.getByRole('button', { name: 'Подтвердить: 2' }).click();
+    await expect(page.locator('.career-responses-bulk-notice')).toContainText(
+      'Метка «Срочно» добавлена откликам: 2.',
+    );
+    expect(calls.applicationBulkExecute).toMatchObject({
+      action: { type: 'label' },
+      confirmCount: 2,
+      filters: { ids: expect.arrayContaining([expect.any(String)]) },
+    });
+    expect((calls.applicationBulkExecute?.filters as { ids: string[] }).ids).toHaveLength(2);
+
+    await boxes.nth(0).check();
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Экспорт', exact: true }).click();
+    expect((await download).suggestedFilename()).toBe('otkliki.csv');
+
+    await page.getByRole('button', { name: 'Закрыть отклики', exact: true }).click();
+    await page.getByRole('button', { name: 'Подтвердить: 1' }).click();
+    await expect(page.locator('.career-responses-bulk-notice')).toContainText(
+      'Закрыто 1 откликов.',
+    );
+    expect(calls.applicationBulkExecute).toMatchObject({ action: { type: 'close' } });
+    expect((calls.applicationBulkExecute?.filters as { ids: string[] }).ids).toHaveLength(1);
   });
 
   test('мобильный список остаётся в пределах 390 px', async ({ page }, testInfo) => {
@@ -872,6 +942,12 @@ test.describe('B450 responses workspace', () => {
     await page.getByRole('button', { name: 'Сохранить' }).click();
     await expect.poll(() => calls.companyBulkExecute).toMatchObject({ action: 'set_next_step' });
 
+    await expect(panel.locator('.career-company-wants-selection')).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: 'Найти пути' })).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath('b511-want-none-1440.png') });
+    await row.getByRole('checkbox', { name: 'Выбрать Northstar Labs' }).check();
+    await expect(panel.getByText(/Выбрано\s*1\s*из\s*119/)).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('b511-want-one-1440.png') });
     await panel.getByRole('button', { name: 'Выбрать все 119 по фильтру' }).click();
     await expect(panel.getByText(/Выбрано\s*119\s*из\s*119/)).toBeVisible();
     await panel.getByRole('button', { name: 'Найти пути' }).click();
@@ -882,6 +958,8 @@ test.describe('B450 responses workspace', () => {
       (calls.companyMutations.at(-1)?.body as { companyKeys: string[] }).companyKeys,
     ).toHaveLength(119);
 
+    await expect(panel.locator('.career-company-wants-selection')).toHaveCount(0);
+    await row.getByRole('checkbox', { name: 'Выбрать Northstar Labs' }).check();
     await panel.getByRole('button', { name: 'Выбрать все 119 по фильтру' }).click();
     await panel.getByRole('button', { name: 'Убрать из «Хочу»' }).click();
     await panel.getByRole('button', { name: 'Убрать', exact: true }).click();

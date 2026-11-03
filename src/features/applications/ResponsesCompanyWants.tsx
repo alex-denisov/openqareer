@@ -91,8 +91,7 @@ export function CompanyWantsPanel() {
       <div className="career-company-wants-desk">
         <StageChips controller={controller} />
         <FilterTools view={view} />
-        <SelectionBar controller={controller} />
-        <BulkActions view={view} />
+        <SelectionTools view={view} />
         <Feedback controller={controller} />
         <CompanyTable view={view} />
         <TableFooter controller={controller} />
@@ -254,6 +253,17 @@ function FilterSelects({ controller }: { readonly controller: CompanyWantsContro
   );
 }
 
+/** Mockup 5 `5-want`: the bar and its actions appear only once a company is picked. */
+function SelectionTools({ view }: { readonly view: CompanyWantsView }) {
+  if (view.controller.selected.length === 0) return null;
+  return (
+    <>
+      <SelectionBar controller={view.controller} />
+      <BulkActions view={view} />
+    </>
+  );
+}
+
 function SelectionBar({ controller }: { readonly controller: CompanyWantsController }) {
   const total = controller.page?.total ?? 0;
   const allSelected = total > 0 && controller.selected.length >= Math.min(total, 500);
@@ -279,7 +289,7 @@ function SelectionBar({ controller }: { readonly controller: CompanyWantsControl
 function BulkActions({ view }: { readonly view: CompanyWantsView }) {
   const { controller } = view;
   const items = controller.selected;
-  const disabled = controller.busy || items.length === 0;
+  const disabled = controller.busy;
   return (
     <div className="career-company-wants-bulk" role="group" aria-label="Действия с выбранными">
       <button

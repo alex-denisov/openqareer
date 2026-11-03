@@ -20,12 +20,6 @@ const applicationFilterObjectSchema = z.object({
   to: z.string().date().optional(),
 });
 
-const applicationFilterSchema = applicationFilterObjectSchema.superRefine((filters, context) => {
-  if (filters.from && filters.to && filters.from > filters.to) {
-    context.addIssue({ code: 'custom', message: 'Период задан в обратном порядке', path: ['to'] });
-  }
-});
-
 export const listApplicationsQuerySchema = applicationFilterObjectSchema.extend({
   sort: z.enum(['date', 'company', 'stage']).default('date'),
   direction: z.enum(['asc', 'desc']).default('desc'),
@@ -42,9 +36,18 @@ const bulkActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('close') }),
   z.object({ type: z.literal('set_stage'), stage: z.enum(APPLICATION_STAGES) }),
   z.object({ type: z.literal('retry') }),
+  z.object({ type: z.literal('label'), labelId: z.string().trim().min(1).max(120) }),
 ]);
 
-const bulkFilterBodySchema = applicationFilterSchema;
+/** Rows picked by hand in the table: the bulk action applies to them only, within the filter. */
+export const APPLICATION_BULK_IDS_LIMIT = 500;
+const bulkFilterBodySchema = applicationFilterObjectSchema
+  .extend({ ids: z.array(z.string().trim().min(1).max(120)).min(1).max(APPLICATION_BULK_IDS_LIMIT).optional() })
+  .superRefine((filters, context) => {
+    if (filters.from && filters.to && filters.from > filters.to) {
+      context.addIssue({ code: 'custom', message: 'Период задан в обратном порядке', path: ['to'] });
+    }
+  });
 const bulkPreviewSchema = z.object({ filters: bulkFilterBodySchema, action: bulkActionSchema });
 const bulkOperationSchema = bulkPreviewSchema.extend({
   operationId: z.string().trim().min(1).max(120),
@@ -87,7 +90,8 @@ const companyWantPreviewSchema = companyWantBaseSchema
     }
   });
 
-type ApplicationFilters = z.infer<typeof applicationFilterSchema>;
+type ApplicationFilters = z.infer<typeof applicationFilterObjectSchema>;
+type BulkFilters = z.infer<typeof bulkFilterBodySchema>;
 type ListQuery = z.infer<typeof listApplicationsQuerySchema>;
 type ApplicationOperationStore = Pick<
   ApplicationTrackerMethods,
@@ -110,11 +114,18 @@ type ApplicationRow = {
   vacancy?: { company?: string | null; source?: string | null } | null;
   deliveryReceipt?: { kind: string; value: string } | null;
   version?: number;
-  labels?: readonly unknown[];
+  labels?: readonly { id: string }[];
 };
 type ApplicationWithLabels<T extends ApplicationRow> = T & {
   labels: ReturnType<ApplicationOperationStore['listApplicationLabels']>;
 };
+
+class ApplicationLabelMissingError extends Error {
+  constructor() {
+    super('Метка не найдена.');
+    this.name = 'ApplicationLabelMissingError';
+  }
+}
 
 class BulkConfirmationError extends Error {
   constructor(readonly affectedCount: number) {
@@ -216,12 +227,17 @@ function countApplicationStages(rows: readonly ApplicationRow[]): Record<Applica
   return counts;
 }
 
-function bulkTargets(deps: RouteDeps, candidateId: string, filters: ApplicationFilters, action: z.infer<typeof bulkActionSchema>) {
+function bulkTargets(deps: RouteDeps, candidateId: string, filters: BulkFilters, action: z.infer<typeof bulkActionSchema>) {
+  const { ids, ...listFilters } = filters;
+  const picked = ids ? new Set(ids) : null;
   const rows = filterApplicationRows(listApplicationsWithLabels(deps, candidateId), {
-    ...filters,
+    ...listFilters,
     sort: 'date',
     direction: 'desc',
-  });
+  }).filter((row) => !picked || picked.has(row.id));
+  if (action.type === 'label') {
+    return rows.filter((row) => !(row.labels ?? []).some((label) => label.id === action.labelId));
+  }
   if (action.type === 'retry') {
     return rows.filter((row) => deliveryState(row.stage as ApplicationStage, row.deliveryReceipt as never) === 'failed');
   }
@@ -240,6 +256,9 @@ function safeCandidate(deps: RouteDeps, request: FastifyRequest, reply: FastifyR
 function applicationMutationError(error: unknown, request: FastifyRequest, reply: FastifyReply) {
   if (error instanceof Error && error.name === 'ApplicationOperationConflictError') {
     return sendError(reply, request, 409, 'idempotency_key_reused', error.message, false);
+  }
+  if (error instanceof ApplicationLabelMissingError) {
+    return sendError(reply, request, 404, 'application_label_not_found', error.message, false);
   }
   if (error instanceof BulkConfirmationError) {
     return sendError(reply, request, 409, 'bulk_confirmation_count_changed', error.message, false, undefined, {
@@ -287,6 +306,7 @@ function executeApplicationBulk(
   const targets = bulkTargets(deps, candidateId, body.filters, body.action);
   if (targets.length !== body.confirmCount) throw new BulkConfirmationError(targets.length);
   if (body.action.type === 'retry') return prepareRetries(store, candidateId, body.operationId, targets);
+  if (body.action.type === 'label') return assignLabels(store, candidateId, body.action.labelId, targets);
   const stage = body.action.type === 'close' ? 'archived' : body.action.stage;
   return closeOrChangeApplications(store, candidateId, stage, targets);
 }
@@ -305,6 +325,22 @@ function prepareRetries(
     requestedAt,
   );
   return { state: 'prepared', preparedCount, sentCount: 0, changedCount: preparedCount };
+}
+
+function assignLabels(
+  store: ApplicationOperationStore,
+  candidateId: string,
+  labelId: string,
+  targets: readonly ApplicationRow[],
+): Record<string, unknown> {
+  const now = new Date().toISOString();
+  let changedCount = 0;
+  for (const { id } of targets) {
+    const result = store.assignApplicationLabel(candidateId, id, labelId, now);
+    if (!result.label) throw new ApplicationLabelMissingError();
+    if (result.changed) changedCount += 1;
+  }
+  return { state: 'completed', changedCount };
 }
 
 function closeOrChangeApplications(
