@@ -308,7 +308,12 @@ export function CareerWorkspaceShell({
   useEffect(() => {
     const onOpenView = (event: Event) => {
       const view = (event as CustomEvent<{ view?: unknown }>).detail?.view;
-      if (view === 'opportunities' || view === 'responses' || view === 'notifications') {
+      if (
+        view === 'opportunities' ||
+        view === 'responses' ||
+        view === 'notifications' ||
+        view === 'profile'
+      ) {
         navigateRef.current(view);
       }
     };
