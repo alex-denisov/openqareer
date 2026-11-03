@@ -103,3 +103,21 @@ describe('HTTP status carried only in the message', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('source whose tool is not installed (Glassdoor/ZipRecruiter without obscura)', () => {
+  it('is reported as not configured, not as an error, and never counts as a failed reading', async () => {
+    const id = 'src-glassdoor';
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source(id)],
+      fetcher: async () => {
+        throw new Error('source_not_configured: obscura binary is not installed');
+      },
+    });
+    const outcome = await engine.syncSource(id, undefined, BASE);
+    expect(outcome.status).toBe('disabled');
+    expect(outcome.message).toMatch(/source_not_configured/);
+    const stored = engine.getSources().find((s) => s.id === id);
+    expect(stored?.lastStatus).not.toBe('error');
+    expect(stored?.lastErrorMessage).toMatch(/source_not_configured/);
+  });
+});

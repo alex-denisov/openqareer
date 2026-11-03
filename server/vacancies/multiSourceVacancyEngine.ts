@@ -1489,6 +1489,15 @@ export class MultiSourceVacancyEngine {
       return await this.readSource(source, query, nowMs);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (message.startsWith('source_not_configured')) {
+        // The tool this source needs is not installed here: say so once, do not
+        // log an error or a failed reading on every poll.
+        source.lastSyncAt = new Date(nowMs).toISOString();
+        source.lastStatus = 'degraded';
+        source.lastErrorMessage = message;
+        this.persistSourceState(source);
+        return { sourceId, status: 'disabled', fetched: 0, kept: 0, message };
+      }
       // Провал транспорта — не пустой улов: про содержимое площадки он не
       // говорит ничего, поэтому серию пустых уловов он не удлиняет (B200).
       const { statusCode, retryAfterHeader } = extractErrorHttpDetails(err);

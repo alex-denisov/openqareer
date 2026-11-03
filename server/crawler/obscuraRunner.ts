@@ -147,6 +147,13 @@ export class ObscuraRunner {
       timeout: options.timeoutMs ?? 30_000,
       maxBuffer: 20 * 1024 * 1024,
       encoding: 'utf-8',
+    }).catch((err: unknown) => {
+      // A host without the binary is a setup gap, not a source failure: it
+      // must read as «not configured» rather than an error every poll.
+      if ((err as { code?: unknown } | null)?.code === 'ENOENT') {
+        throw new Error('source_not_configured: obscura binary is not installed', { cause: err });
+      }
+      throw err;
     });
   }
 }
