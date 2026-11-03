@@ -90,11 +90,33 @@ function observedAt(match: OrderableMatch): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+/**
+ * PRB-041: the text and domain checks ran 2–4 times per sort comparison —
+ * about 40 % of the matched page's event-loop stalls. They depend only on the
+ * record, so they run once per record object; a new version is a new object.
+ */
+const suspiciousByRecord = new WeakMap<object, boolean>();
+
+function isSuspiciousRecord(cluster: OrderableMatch['cluster']): boolean {
+  const cached = suspiciousByRecord.get(cluster);
+  if (cached !== undefined) return cached;
+  const { deadLink, linkStatus, status, canonicalTitle, descriptionSummary, primaryUrl } = cluster;
+  const suspicious = vacancyTrustSignals({
+    deadLink,
+    linkStatus,
+    status,
+    canonicalTitle,
+    descriptionSummary,
+    primaryUrl,
+  }).isSuspicious;
+  suspiciousByRecord.set(cluster, suspicious);
+  return suspicious;
+}
+
 export function trustRank(match: OrderableMatch, now: string = ''): number {
-  const signals = vacancyTrustSignals(match.cluster, now);
-  if (signals.level === 'ok') return 2;
-  if (signals.level === 'stale') return 1;
-  return 0; // 'suspicious' and dead links
+  if (isSuspiciousRecord(match.cluster)) return 0; // suspicious and dead links
+  const { firstObservedAt, vacanciesCount } = match.cluster;
+  return vacancyTrustSignals({ firstObservedAt, vacanciesCount }, now).isStale ? 1 : 2;
 }
 
 export function compareMatchedVacancies(
