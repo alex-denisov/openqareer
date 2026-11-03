@@ -4,16 +4,19 @@
  * Новая запись получает `remoteScope` в `clusterProjectionOf`; старые
  * удалённые строки (~145 000 на проде) дописывает этот проход в процессе
  * обслуживания. Без `ALTER TABLE` и без долгой транзакции: схема не меняется,
- * таблица состояния создаётся мгновенно, а пачка в 200 строк держит
- * блокировку записи миллисекунды — выкат и веб-сервер её не ждут
- * (`schema-migration-eats-health-window`, окно здоровья 20 с).
+ * таблица состояния создаётся мгновенно, проекции считаются до транзакции,
+ * а под блокировкой записи идут только изменившиеся строки: миллисекунды,
+ * выкат и веб-сервер её не ждут (`schema-migration-eats-health-window`).
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { clusterProjectionOf } from './vacancyPoolQuery';
 import { parseVacancy } from './sqliteVacancyPoolStore';
 
-/** Новая версия правил разбора — новый ключ: проход начнётся сначала. */
-export const REMOTE_SCOPE_BACKFILL_KEY = 'remote-scope-v1';
+/**
+ * Новая версия правил разбора — новый ключ: проход начнётся сначала.
+ * v2 (03.11): «Global» и «Anywhere» целиком — область из любой страны.
+ */
+export const REMOTE_SCOPE_BACKFILL_KEY = 'remote-scope-v2';
 
 const STATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS remote_scope_backfill_state (
   key TEXT PRIMARY KEY,
@@ -65,19 +68,45 @@ function readCandidates(database: DatabaseSync, cursor: number, limit: number): 
     .all(cursor, limit) as unknown as CandidateRow[];
 }
 
-function rewriteProjections(database: DatabaseSync, rows: readonly CandidateRow[]): number {
+function storedScope(projection: string | null): string | undefined {
+  if (!projection?.includes('"remoteScope"')) return undefined;
+  return (JSON.parse(projection) as { remoteScope?: string }).remoteScope;
+}
+
+interface Rewrite {
+  readonly id: string;
+  readonly payload: string;
+  readonly projection: string;
+}
+
+/**
+ * Считает проекции вне транзакции и оставляет только строки, где область по
+ * новым правилам другая: повторный проход после смены правил пишет мало.
+ */
+function changedProjections(database: DatabaseSync, rows: readonly CandidateRow[]): Rewrite[] {
+  const payloadOf = database.prepare('SELECT payload FROM vacancy_pool WHERE id = ?');
+  return rows.flatMap((row) => {
+    const stored = payloadOf.get(row.id) as { payload: string } | undefined;
+    const vacancy = stored ? parseVacancy(stored.payload) : undefined;
+    if (!stored || !vacancy) return [];
+    const projection = clusterProjectionOf({ ...vacancy, id: row.id });
+    if (row.projection && storedScope(row.projection) === projection.remoteScope) return [];
+    return [{ id: row.id, payload: stored.payload, projection: JSON.stringify(projection) }];
+  });
+}
+
+/** Под блокировкой записи — только запись; строку, которую успели переписать, не трогает. */
+function writeProjections(database: DatabaseSync, rewrites: readonly Rewrite[]): number {
   const payloadOf = database.prepare('SELECT payload FROM vacancy_pool WHERE id = ?');
   const upsert = database.prepare(
     `INSERT INTO vacancy_cluster_input (id, cluster_json) VALUES (?, ?)
      ON CONFLICT(id) DO UPDATE SET cluster_json = excluded.cluster_json`,
   );
   let updated = 0;
-  for (const row of rows) {
-    if (row.projection?.includes('"remoteScope"')) continue;
-    const stored = payloadOf.get(row.id) as { payload: string } | undefined;
-    const vacancy = stored ? parseVacancy(stored.payload) : undefined;
-    if (!vacancy) continue;
-    upsert.run(row.id, JSON.stringify(clusterProjectionOf({ ...vacancy, id: row.id })));
+  for (const rewrite of rewrites) {
+    const current = payloadOf.get(rewrite.id) as { payload: string } | undefined;
+    if (current?.payload !== rewrite.payload) continue;
+    upsert.run(rewrite.id, rewrite.projection);
     updated += 1;
   }
   return updated;
@@ -96,9 +125,10 @@ export function runRemoteScopeBackfillBatch(
     writeState(database, key, state.cursor, true);
     return { scanned: 0, updated: 0, completed: true };
   }
+  const rewrites = changedProjections(database, rows);
   database.exec('BEGIN IMMEDIATE');
   try {
-    const updated = rewriteProjections(database, rows);
+    const updated = writeProjections(database, rewrites);
     writeState(database, key, rows[rows.length - 1]!.rowid, false);
     database.exec('COMMIT');
     return { scanned: rows.length, updated, completed: false };

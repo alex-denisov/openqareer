@@ -80,16 +80,21 @@ describe('remote scope backfill', () => {
     });
   });
 
-  it('skips projections that already carry a scope', () => {
+  it('rewrites a stored scope only when the rules now read it differently', () => {
     const database = seeded();
+    // v1 read «Remote» + «anywhere in the US» right, and «Москва» as worldwide wrongly.
     database
       .prepare('UPDATE vacancy_cluster_input SET cluster_json = ? WHERE id = ?')
-      .run(JSON.stringify({ id: 'tidi', remoteScope: 'global' }), 'tidi');
+      .run(JSON.stringify({ id: 'tidi', location: 'Remote', remoteScope: 'US' }), 'tidi');
+    database
+      .prepare('UPDATE vacancy_cluster_input SET cluster_json = ? WHERE id = ?')
+      .run(JSON.stringify({ id: 'moscow', location: 'Москва', remoteScope: 'global' }), 'moscow');
     expect(runRemoteScopeBackfillBatch(database, 10)).toEqual({
       scanned: 2,
       updated: 1,
       completed: false,
     });
-    expect(scopeOf(database, 'tidi')).toBe('global');
+    expect(scopeOf(database, 'tidi')).toBe('US');
+    expect(scopeOf(database, 'moscow')).toBe('RU');
   });
 });
