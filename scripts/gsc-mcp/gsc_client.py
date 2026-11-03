@@ -6,12 +6,14 @@ the HTTP call so they are unit-tested without the network.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Any, Protocol
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 GSC_API = "https://www.googleapis.com/webmasters/v3"
 INSPECT_API = "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect"
 PAGESPEED_API = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed"
+INDEXING_API = "https://indexing.googleapis.com/v3/urlNotifications"
 
 DIMENSIONS = frozenset({"query", "page", "country", "device", "date", "searchAppearance"})
 OPERATORS = frozenset({"equals", "notEquals", "contains", "notContains",
@@ -19,12 +21,22 @@ OPERATORS = frozenset({"equals", "notEquals", "contains", "notContains",
 SEARCH_TYPES = frozenset({"web", "image", "video", "news", "discover", "googleNews"})
 DATA_STATES = frozenset({"final", "all"})
 MAX_ROWS = 25_000
+NOTIFY_TYPES = frozenset({"URL_UPDATED", "URL_DELETED"})
+GONE_STATUSES = frozenset({404, 410})
+# Indexing API accepts only JobPosting pages; a call per URL spends daily quota.
+MAX_NOTIFY = 100
+JOB_POSTING = re.compile(
+    r'itemtype="https?://schema\.org/JobPosting"|"@type"\s*:\s*"JobPosting"')
 CORE_AUDITS = ("first-contentful-paint", "largest-contentful-paint", "total-blocking-time",
                "cumulative-layout-shift", "speed-index", "interactive")
 
 
 class GscError(RuntimeError):
     """An API call failed; the message is safe to show to the agent."""
+
+    def __init__(self, message: str, status: int = 0) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class Session(Protocol):
@@ -87,6 +99,48 @@ def shape_rows(dimensions: list[str], rows: list[dict[str, Any]]) -> list[dict[s
             for r in rows]
 
 
+def has_job_posting(html: str) -> bool:
+    """JobPosting as microdata (our catalog cards) or JSON-LD."""
+    return bool(JOB_POSTING.search(html))
+
+
+def check_on_site(url: str, site_url: str) -> None:
+    """Same scheme and host, path under the site; no reliance on a trailing slash."""
+    u, site = urlsplit(url), urlsplit(site_url)
+    if (u.scheme, u.netloc) != (site.scheme, site.netloc) or not u.path.startswith(
+            site.path.rstrip("/") + "/"):
+        raise ValueError(f"адрес не на сайте {site_url}")
+
+
+def check_batch(urls: list[str]) -> None:
+    if not urls:
+        raise ValueError("пустой список адресов")
+    if len(urls) > MAX_NOTIFY:
+        raise ValueError(f"не больше {MAX_NOTIFY} адресов за вызов: каждый тратит дневную квоту")
+
+
+def check_notification(url: str, kind: str, site_url: str, status: int, html: str) -> None:
+    """Refuse a notification Google would treat as wrong or that wastes quota."""
+    if kind not in NOTIFY_TYPES:
+        raise ValueError(f"тип уведомления: одно из {sorted(NOTIFY_TYPES)}")
+    check_on_site(url, site_url)
+    if kind == "URL_DELETED":
+        if status not in GONE_STATUSES:
+            raise ValueError(f"URL_DELETED только для страницы с 404/410, сейчас {status}")
+        return
+    if status != 200:
+        raise ValueError(f"URL_UPDATED только для живой страницы (200), сейчас {status}")
+    if not has_job_posting(html):
+        raise ValueError("на странице нет разметки JobPosting: Indexing API её не принимает")
+
+
+def check_sitemap(site_url: str, feed_url: str) -> str:
+    check_on_site(feed_url, site_url)
+    if not feed_url.endswith(".xml"):
+        raise ValueError(f"sitemap должен быть .xml на сайте {site_url}")
+    return site_path(feed_url)
+
+
 def summarize_pagespeed(raw: dict[str, Any]) -> dict[str, Any]:
     lh = raw.get("lighthouseResult", {})
     audits = lh.get("audits", {})
@@ -108,5 +162,5 @@ def call(session: Session, method: str, url: str, **kwargs: Any) -> dict[str, An
     if not response.ok:
         err = body.get("error", {}) if isinstance(body, dict) else {}
         raise GscError(f"Google API {response.status_code} {err.get('status', '')}: "
-                       f"{err.get('message', 'нет описания')}"[:500])
+                       f"{err.get('message', 'нет описания')}"[:500], response.status_code)
     return body
