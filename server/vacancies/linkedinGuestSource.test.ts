@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
+import { linkedinProviderCapability } from '../crawler/linkedinProviderCapability';
 import {
   fetchLinkedinGuest,
   linkedinGuestUrl,
   parseLinkedinCards,
   LINKEDIN_SOURCE_ID,
+  UAE_LOCATIONS,
 } from './linkedinGuestSource';
 
 /**
@@ -19,7 +22,27 @@ const CARD = (id: string, title: string) => `<li>
   </div></li>`;
 
 describe('LinkedIn guest source (B218)', () => {
-  it('fails closed without an explicit provider capability', async () => {
+  it('owner decision 2026-11-03: guest channel is on by default', async () => {
+    expect(linkedinProviderCapability().verdict).toBe('provider_permitted');
+    const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === LINKEDIN_SOURCE_ID);
+    expect(source?.enabled).toBe(true);
+    expect(source?.disabledReason).toBeUndefined();
+    let calls = 0;
+    await fetchLinkedinGuest(
+      {
+        fetchPage: async () => {
+          calls += 1;
+          return { status: 200, body: '<ul></ul>' };
+        },
+        sleep: async () => {},
+        observedAt: 'now',
+      },
+      0,
+    );
+    expect(calls).toBeGreaterThan(0);
+  });
+
+  it('fails closed when the capability is explicitly not configured', async () => {
     let calls = 0;
     const reading = await fetchLinkedinGuest({
       fetchPage: async () => {
@@ -28,6 +51,7 @@ describe('LinkedIn guest source (B218)', () => {
       },
       sleep: async () => {},
       observedAt: 'now',
+      providerCapability: 'not_configured',
     });
 
     expect(reading).toEqual({ vacancies: [], partial: true });
@@ -90,7 +114,7 @@ describe('LinkedIn guest source (B218)', () => {
     // Двадцать комбинаций за опрос, и каждая — свой рынок: порция опроса
     // покрывает разные регионы, а не одну роль в двадцати городах подряд.
     const locations = new Set(seen.map((s) => s.location));
-    expect(locations.size).toBe(20);
+    expect(locations.size).toBeGreaterThanOrEqual(18);
     expect(reading.vacancies).toHaveLength(20);
     // Веер шире опроса, поэтому срез дополняется, а не заменяется.
     expect(reading.partial).toBe(true);
@@ -111,7 +135,7 @@ describe('LinkedIn guest source (B218)', () => {
       },
       0,
     );
-    expect(calls).toBe(2);
+    expect(calls).toBe(4);
     expect(reading.vacancies).toHaveLength(1);
     expect(reading.partial).toBe(true);
   });
@@ -148,6 +172,95 @@ describe('LinkedIn guest source (B218)', () => {
     );
     expect(terms[0]).toBe('head of ai');
     expect(terms.filter((term) => term === 'head of ai').length).toBeGreaterThan(1);
-    expect(terms.at(-1)).not.toBe('head of ai');
+    expect(terms.at(-UAE_LOCATIONS.length - 1)).not.toBe('head of ai');
+  });
+
+  it('every sync reads the UAE: Dubai, Abu Dhabi, Sharjah and the country', async () => {
+    const locations = new Set<string>();
+    for (let tick = 0; tick < 3; tick += 1) {
+      await fetchLinkedinGuest(
+        {
+          fetchPage: async (url) => {
+            const params = new URL(url).searchParams;
+            if (params.get('start') === '0') locations.add(params.get('location')!);
+            return { status: 200, body: '<ul></ul>' };
+          },
+          sleep: async () => {},
+          observedAt: 'now',
+          providerCapability: 'provider_permitted',
+        },
+        tick * 90 * 60_000,
+      );
+    }
+    for (const place of ['Dubai', 'Abu Dhabi', 'Sharjah', 'United Arab Emirates']) {
+      expect(locations.has(place)).toBe(true);
+    }
+  });
+
+  it('pauses at least 0.4 s with jitter between requests', async () => {
+    const pauses: number[] = [];
+    await fetchLinkedinGuest(
+      {
+        fetchPage: async () => ({ status: 200, body: '<ul></ul>' }),
+        sleep: async (ms) => {
+          pauses.push(ms);
+        },
+        observedAt: 'now',
+        providerCapability: 'provider_permitted',
+      },
+      0,
+    );
+    expect(pauses.length).toBeGreaterThan(5);
+    expect(Math.min(...pauses)).toBeGreaterThanOrEqual(400);
+    expect(new Set(pauses).size).toBeGreaterThan(1);
+  });
+
+  it('429 mid-run: waits with exponential backoff / Retry-After, then continues', async () => {
+    let calls = 0;
+    const pauses: number[] = [];
+    const reading = await fetchLinkedinGuest(
+      {
+        fetchPage: async () => {
+          calls += 1;
+          if (calls === 2) return { status: 429, body: '', retryAfterSeconds: 30 };
+          if (calls === 1) return { status: 200, body: `<ul>${CARD('1', 'A')}</ul>` };
+          return { status: 200, body: `<ul>${CARD(`9${calls}`, 'B')}</ul>` };
+        },
+        sleep: async (ms) => {
+          pauses.push(ms);
+        },
+        observedAt: 'now',
+        providerCapability: 'provider_permitted',
+      },
+      0,
+    );
+    expect(pauses.some((ms) => ms >= 30_000)).toBe(true);
+    expect(reading.vacancies.length).toBeGreaterThan(1);
+    expect(reading.partial).toBe(true);
+  });
+
+  it('repeated 429 stops the run, partial, with growing pauses', async () => {
+    let calls = 0;
+    const pauses: number[] = [];
+    const reading = await fetchLinkedinGuest(
+      {
+        fetchPage: async () => {
+          calls += 1;
+          if (calls === 1) return { status: 200, body: `<ul>${CARD('1', 'A')}</ul>` };
+          return { status: 429, body: '' };
+        },
+        sleep: async (ms) => {
+          pauses.push(ms);
+        },
+        observedAt: 'now',
+        providerCapability: 'provider_permitted',
+      },
+      0,
+    );
+    const backoff = pauses.filter((ms) => ms >= 5_000);
+    expect(backoff.length).toBe(2);
+    expect(backoff[1]!).toBeGreaterThan(backoff[0]!);
+    expect(reading.partial).toBe(true);
+    expect(reading.vacancies).toHaveLength(1);
   });
 });

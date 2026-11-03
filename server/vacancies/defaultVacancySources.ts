@@ -559,10 +559,16 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'json_api',
     accessClass: 'open_web',
     market: 'US, EU, MENA, APAC, LATAM, СНГ, Россия, удалёнка (гостевой список LinkedIn)',
-    addressStatus: 'official_access_required',
-    enabled: false,
-    disabledReason:
-      'provider_permission_required: гостевой HTML/API-канал не является разрешённым provider capability; владелец пула не заменяет разрешение площадки.',
+    addressStatus: 'live',
+    enabled: true,
+    // Решение владельца 2026-11-03 (снимает запрет B242): основной путь
+    // LinkedIn — гостевой список; темп вежливый, 429 — пауза и стоп.
+    robotsOverride: {
+      grantedBy: 'owner',
+      grantedOn: '2026-11-03',
+      basis:
+        'Прямое решение владельца 2026-11-03: гостевой поиск LinkedIn включён как основной путь (550 карточек на запрос, 56 запросов подряд без 429); чтение веером всегда частичное и срез не заменяет.',
+    },
     targetUrl: 'https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search',
     refreshIntervalMinutes: 90,
     itemsFoundTotal: 0,
@@ -576,7 +582,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     market: 'US, EU, MENA, APAC, LATAM, СНГ, Россия, удалёнка (серверный сбор Obscura)',
     addressStatus: 'official_access_required',
     enabled: false,
-    disabledReason: `${linkedInCapability.reason}: legacy Obscura crawler is not a provider-permitted capability`,
+    disabledReason: `${linkedInCapability.reason}: pool sessions are permitted, but no vacancy reader on pool sessions exists yet (linkedinPool/* reads company pages only); the legacy Obscura crawler has no configured accounts`,
     targetUrl: 'https://www.linkedin.com/jobs/search',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
