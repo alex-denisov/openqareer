@@ -75,6 +75,12 @@ export function isLinkedinSessionCookieDomain(value: string): boolean {
   );
 }
 
+/** What the background executor did with the account (audit-derived, no page data). */
+export interface LinkedinPoolExecutorActivity {
+  readonly lastStepAt: string | null;
+  readonly pagesLast24h: number;
+}
+
 export interface LinkedinPoolAccount {
   readonly id: string;
   readonly adminLabel: string;
@@ -92,6 +98,7 @@ export interface LinkedinPoolAccount {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly serverSession: LinkedinPoolServerSessionSummary | null;
+  readonly executorActivity: LinkedinPoolExecutorActivity;
 }
 
 export interface LinkedinPoolPage {
