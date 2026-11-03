@@ -13,6 +13,7 @@ import {
 } from './catalogSitemapJob';
 import type { ListingIndexHistory } from './catalogIndexing';
 import { listingHistoryKey, readListingHistory } from './catalogListingHistory';
+import { createGoogleIndexingNotifier } from './googleIndexing';
 import { createIndexNowNotifier } from './indexNow';
 import type { SitemapFile } from './sitemapXml';
 
@@ -59,6 +60,10 @@ function errorName(error: unknown): string {
 /** Maintenance process only: the listings query groups the whole catalog. */
 export function scheduleCatalogSitemapJob(database: DatabaseSync, log: SitemapLog): () => void {
   const notifyIndexNow = createIndexNowNotifier(process.env.INDEXNOW_KEY, log);
+  const notifyGoogle = createGoogleIndexingNotifier(
+    process.env.OPENQAREER_GSC_SERVICE_ACCOUNT_B64,
+    log,
+  );
   let running = false;
   const run = async () => {
     if (running) return;
@@ -68,10 +73,9 @@ export function scheduleCatalogSitemapJob(database: DatabaseSync, log: SitemapLo
       const now = new Date();
       const files = computeCatalogSitemaps(database, now);
       writeCatalogSitemaps(database, files, now);
-      await notifyIndexNow(
-        database,
-        files.flatMap((file) => file.urls ?? []),
-      );
+      const urls = files.flatMap((file) => file.urls ?? []);
+      await notifyIndexNow(database, urls);
+      await notifyGoogle(database, urls);
       log.info(
         {
           ms: Date.now() - started,
