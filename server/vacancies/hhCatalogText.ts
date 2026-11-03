@@ -1,3 +1,4 @@
+import type { HhTextRateWindow } from './hhTextRate';
 import type { VacancyDescriptionLoadResult } from './multiSourceVacancyEngine';
 
 /**
@@ -22,6 +23,8 @@ const DEFAULT_PER_TICK = 10;
 export const HH_TEXT_PER_TICK = 20;
 /** 03.11: в полёте до трёх карточек; старты разнесены загрузчиком (не чаще раза в секунду). */
 export const HH_TEXT_CONCURRENCY = 3;
+/** Такт воркера (`hhCatalogTextMs`): порция при адаптивном темпе считается на этот период. */
+export const HH_TEXT_TICK_MS = 3_000;
 /** Первый повтор неудачной записи через час, дальше вдвое дольше, не реже суток. */
 export const HH_TEXT_RETRY_BASE_MS = 60 * 60 * 1_000;
 const HH_TEXT_RETRY_MAX_MS = 24 * 60 * 60 * 1_000;
@@ -56,6 +59,8 @@ export interface HhCatalogTextReport {
   readonly hidden?: number;
   /** Тик оборван признаком блокировки площадки. */
   readonly blocked?: boolean;
+  /** 03.11: закрытое окно адаптивного темпа — воркер пишет его строкой `hh-text-rate`. */
+  readonly rateWindow?: HhTextRateWindow;
 }
 
 export interface HhTextAttempts {
@@ -68,8 +73,8 @@ const EMPTY: HhCatalogTextReport = { requested: 0, loaded: 0, retired: 0, failed
 
 export class HhCatalogTextBackfill {
   private readonly engine: HhCatalogTextEngine;
-  private readonly perTick: number;
-  private readonly concurrency: number;
+  private readonly perTickOf: () => number;
+  private readonly concurrencyOf: () => number;
   private readonly now: () => number;
   private readonly attempts = new Map<string, HhTextAttempts>();
   private cursor: string | undefined;
@@ -78,14 +83,18 @@ export class HhCatalogTextBackfill {
 
   constructor(options: {
     engine: HhCatalogTextEngine;
-    perTick?: number;
+    /** Число или функция: при адаптивном темпе порция растёт вместе с ним. */
+    perTick?: number | (() => number);
     /** 03.11: карточек в полёте (старты всё равно разнесены загрузчиком). */
-    concurrency?: number;
+    concurrency?: number | (() => number);
     now?: () => number;
   }) {
-    this.concurrency = Math.max(1, Math.floor(options.concurrency ?? 1));
+    const concurrency = options.concurrency ?? 1;
+    this.concurrencyOf = () =>
+      Math.max(1, Math.floor(typeof concurrency === 'function' ? concurrency() : concurrency));
     this.engine = options.engine;
-    this.perTick = options.perTick ?? DEFAULT_PER_TICK;
+    const perTick = options.perTick ?? DEFAULT_PER_TICK;
+    this.perTickOf = () => (typeof perTick === 'function' ? perTick() : perTick);
     this.now = options.now ?? Date.now;
   }
 
@@ -121,16 +130,17 @@ export class HhCatalogTextBackfill {
 
   private async loadPage(): Promise<HhCatalogTextReport> {
     // 01.11: подборки кандидатов раньше каталога — процент ждёт именно их текст.
-    const priority = (this.engine.peekPriority?.(this.perTick * 4) ?? [])
+    const perTick = this.perTickOf();
+    const priority = (this.engine.peekPriority?.(perTick * 4) ?? [])
       .filter((id) => !this.waiting(id))
-      .slice(0, this.perTick);
+      .slice(0, perTick);
     if (priority.length > 0) return this.loadIds(priority, true);
     if (!this.cursorRead) {
       // 02.11: the worker restarts ~22 times a day; each start walked from the newest row again.
       this.cursor = this.engine.loadSavedCursor?.();
       this.cursorRead = true;
     }
-    const page = this.engine.loadHhTextCandidates(this.cursor, this.perTick);
+    const page = this.engine.loadHhTextCandidates(this.cursor, perTick);
     const report = await this.loadIds(page.ids, false);
     // Страница пройдена — дальше; конец прохода начинает с самых свежих карточек.
     if (!report.blocked) {
@@ -181,7 +191,7 @@ export class HhCatalogTextBackfill {
         else if (result.unavailable) tally.retired += 1;
       }
     };
-    await Promise.all(Array.from({ length: Math.min(this.concurrency, ids.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(this.concurrencyOf(), ids.length) }, worker));
     return blocked ? report({ blocked: true }) : report();
   }
 }

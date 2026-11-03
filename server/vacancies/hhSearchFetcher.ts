@@ -24,6 +24,8 @@ const ALL_RUSSIA_AREA = '113';
 export interface HhSearchTransportResult {
   readonly status: number;
   readonly body: string;
+  /** Заголовок `Retry-After` в миллисекундах, если площадка его прислала. */
+  readonly retryAfterMs?: number;
 }
 
 export type HhSearchTransport = (url: string) => Promise<HhSearchTransportResult>;
