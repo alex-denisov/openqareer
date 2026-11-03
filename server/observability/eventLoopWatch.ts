@@ -55,10 +55,14 @@ function trackRequests(app: FastifyInstance): Map<string, Tracked> {
   });
   // A handler that holds the loop often finishes before the late tick sees the stall, so a
   // finished request stays named until the next tick.
-  app.addHook('onResponse', async (request) => {
+  const finish = async (request: { id: string }) => {
     const item = tracked.get(request.id);
     if (item) tracked.set(request.id, { ...item, finishedAt: performance.now() });
-  });
+  };
+  app.addHook('onResponse', finish);
+  // Prod 03.11: a read the client dropped never reached onResponse and stayed «in flight» for hours,
+  // crowding the requests that really held the loop out of the named eight.
+  app.addHook('onRequestAbort', finish);
   return tracked;
 }
 
