@@ -9,32 +9,54 @@ export function unwrapCdata(text: string): string {
 }
 
 const NAMED_ENTITIES: Record<string, string> = {
-  amp: '&',
-  lt: '<',
-  gt: '>',
-  quot: '"',
-  apos: "'",
-  nbsp: ' ',
-  mdash: '—',
-  ndash: '–',
-  hellip: '…',
-  laquo: '«',
-  raquo: '»',
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ensp: ' ', emsp: ' ',
+  thinsp: ' ', shy: '', zwnj: '', zwj: '', mdash: '—', ndash: '–', hellip: '…',
+  laquo: '«', raquo: '»', lsquo: '‘', rsquo: '’', sbquo: '‚', ldquo: '“',
+  rdquo: '”', bdquo: '„', lsaquo: '‹', rsaquo: '›', bull: '•', middot: '·',
+  deg: '°', copy: '©', reg: '®', trade: '™', euro: '€', pound: '£', yen: '¥',
+  cent: '¢', sect: '§', para: '¶', times: '×', divide: '÷', plusmn: '±',
+  frac12: '½', frac14: '¼', frac34: '¾', micro: 'µ', larr: '←', rarr: '→',
+  uarr: '↑', darr: '↓', check: '✓', star: '☆', dagger: '†', permil: '‰',
+  prime: '′', Prime: '″', minus: '−', ne: '≠', le: '≤', ge: '≥', infin: '∞',
+  acute: '´', uml: '¨', iexcl: '¡', iquest: '¿', ordf: 'ª', ordm: 'º',
+  sup1: '¹', sup2: '²', sup3: '³', not: '¬', macr: '¯', cedil: '¸',
+  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å',
+  aelig: 'æ', ccedil: 'ç', egrave: 'è', eacute: 'é', ecirc: 'ê', euml: 'ë',
+  igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï', ntilde: 'ñ', ograve: 'ò',
+  oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', oslash: 'ø', ugrave: 'ù',
+  uacute: 'ú', ucirc: 'û', uuml: 'ü', yacute: 'ý', szlig: 'ß',
+  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å',
+  AElig: 'Æ', Ccedil: 'Ç', Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë',
+  Iacute: 'Í', Ntilde: 'Ñ', Oacute: 'Ó', Ouml: 'Ö', Oslash: 'Ø', Uacute: 'Ú',
+  Uuml: 'Ü',
 };
+
+const DOUBLE_ESCAPED = /&amp;(#\d+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g;
 
 /**
  * Feeds escape their text; a card that prints `&nbsp;` or `&#8212;` back at the
  * candidate shows the escaping rather than the vacancy (B164 prod walk).
- * Each escape is resolved exactly once, so a double-escaped `&amp;nbsp;` comes
- * out as the literal `&nbsp;` the feed meant to print rather than a space.
+ * Indeed escapes twice (`&amp;rsquo;`, 62% of its prod rows), so an `&amp;`
+ * that wraps another escape is unwrapped first.
  */
 export function decodeFeedEntities(text: string): string {
+  let unwrapped = text;
+  for (let i = 0; i < 3 && DOUBLE_ESCAPED.test(unwrapped); i += 1) {
+    DOUBLE_ESCAPED.lastIndex = 0;
+    unwrapped = unwrapped.replace(DOUBLE_ESCAPED, '&$1;');
+  }
+  DOUBLE_ESCAPED.lastIndex = 0;
+  return decodeOnce(unwrapped);
+}
+
+/** One decode pass, used by the markup stripper whose own second pass handles `&amp;lt;`. */
+function decodeOnce(text: string): string {
   return text
     .replace(/&#(\d+);/g, (_match, code: string) => codePoint(Number.parseInt(code, 10)))
     .replace(/&#[xX]([0-9a-fA-F]+);/g, (_match, code: string) =>
       codePoint(Number.parseInt(code, 16)),
     )
-    .replace(/&([a-zA-Z]+);/g, (match, name: string) => NAMED_ENTITIES[name] ?? match)
+    .replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (match, name: string) => NAMED_ENTITIES[name] ?? match)
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
@@ -59,7 +81,7 @@ export function htmlToFeedText(html: string): string {
   // mentions a tag.
   let text = html;
   for (let pass = 0; pass < 2; pass += 1) {
-    const stripped = decodeFeedEntities(
+    const stripped = decodeOnce(
       text
         .replace(/<(?:script|style)\b[^>]*>[\s\S]*?<\/(?:script|style)>/gi, ' ')
         // Safe text keeps the structure candidates need, but never the source

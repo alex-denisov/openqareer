@@ -81,6 +81,8 @@ export interface SourceObservations {
   readonly windowSuccessful: number;
   /** Перепись последнего непустого улова; `null` — непустого улова не было. */
   readonly census: ReadingCensus | null;
+  /** Consecutive 404 answers; an employer board that keeps answering 404 is closed. */
+  readonly consecutiveNotFound?: number;
   /** Подлинность: доля неперепечатанных объявлений из дедупликатора B205. */
   readonly authenticity?: {
     readonly originalShare: CountedShare;
@@ -175,6 +177,8 @@ export interface ReadingRecord {
   /** Перепись улова; у неуспешного опроса улова нет. */
   readonly census?: ReadingCensus;
   readonly atMs: number;
+  /** The transport answered 404: the address itself is gone, not the catch empty. */
+  readonly notFound?: boolean;
 }
 
 /**
@@ -210,6 +214,13 @@ export function recordReading(
     windowReadings: (windowExpired ? 0 : previous.windowReadings) + 1,
     windowSuccessful: (windowExpired ? 0 : previous.windowSuccessful) + (reading.succeeded ? 1 : 0),
     census: caught && reading.census ? reading.census : previous.census,
+    // Only a 404 extends the run; any other failure says nothing about the
+    // address, and a good reading proves it is alive.
+    consecutiveNotFound: reading.notFound
+      ? (previous.consecutiveNotFound ?? 0) + 1
+      : reading.succeeded
+        ? 0
+        : (previous.consecutiveNotFound ?? 0),
   };
 }
 

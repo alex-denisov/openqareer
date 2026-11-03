@@ -46,6 +46,21 @@ describe('feed HTML turned into readable text (B164)', () => {
   });
 });
 
+describe('Indeed double escaping and typographic entities', () => {
+  it('decodes typographic named entities', () => {
+    expect(decodeFeedEntities('It&rsquo;s &ldquo;ok&rdquo; &bull; 9&ndash;5 &hellip; a&nbsp;b')).toBe(
+      'It’s “ok” • 9–5 … a b',
+    );
+  });
+
+  it('decodes an escape that was escaped twice', () => {
+    expect(decodeFeedEntities('We&amp;rsquo;re hiring &amp;amp; growing &amp;#8212; now')).toBe(
+      'We’re hiring & growing — now',
+    );
+    expect(htmlToFeedText('<p>We&amp;rsquo;re</p>')).toBe('We’re');
+  });
+});
+
 describe('markup escaped more than once (B164)', () => {
   it('reads a description a board escaped on the way out', () => {
     expect(

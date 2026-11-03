@@ -208,6 +208,19 @@ function extractStructuredJobSections(text: string) {
   };
 }
 
+/**
+ * The post as a candidate reads it: paragraphs and bullet lines survive, only
+ * runs of spaces inside a line collapse. Flattening everything to one line
+ * glued «•» items together.
+ */
+export function telegramPostToReadableText(html: string): string {
+  const lines = decodeFeedEntities(html.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' '))
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t\u00a0]+/g, ' ').trim());
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 export function parseTelegramJobPost(
   text: string,
   meta: {
@@ -253,7 +266,7 @@ export function parseTelegramJobPost(
     company,
     isRemote: /удален|remote|удалён|anywhere/i.test(cleanText),
     salary,
-    description: cleanText,
+    description: telegramPostToReadableText(text),
     requiredSkills: extractSkillsFromText(cleanText),
     experienceLevel: extractExperienceLevel(cleanText),
     employmentType: extractEmploymentType(cleanText),
