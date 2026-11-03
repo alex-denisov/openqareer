@@ -4,10 +4,14 @@ import type { DatabaseSync } from 'node:sqlite';
 export type LinkedinPoolExecutorPageKind =
   | 'company_search'
   | 'company_page'
-  | 'company_people';
+  | 'company_people'
+  | 'jobs_search';
 
 export interface LinkedinPoolExecutorDailyUsage {
   readonly pageCount: number;
+  /** Страницы поиска вакансий (входят в pageCount) и их запросы за сутки. */
+  readonly jobSearchPageCount: number;
+  readonly attemptedJobQueryHashes: readonly string[];
   readonly attemptedCompanyHashes: readonly string[];
   readonly lastPageAt: string | null;
 }
@@ -123,7 +127,9 @@ export function getLinkedinExecutorDailyUsage(
     )
     .all(accountId, since) as Array<{ action: string; detail: string | null; created_at: string }>;
   const hashes = new Set<string>();
+  const jobHashes: string[] = [];
   let pageCount = 0;
+  let jobSearchPageCount = 0;
   let lastPageAt: string | null = null;
   for (const row of rows) {
     if (row.action === 'linkedin_executor_company' && row.detail && COMPANY_HASH.test(row.detail)) {
@@ -132,9 +138,14 @@ export function getLinkedinExecutorDailyUsage(
     if (row.action === 'linkedin_executor_page') {
       pageCount += 1;
       lastPageAt = row.created_at;
+      const jobQuery = /^page=jobs_search;company=([a-f0-9]{64})$/u.exec(row.detail ?? '');
+      if (jobQuery) {
+        jobSearchPageCount += 1;
+        jobHashes.push(jobQuery[1]!);
+      }
     }
   }
-  return { pageCount, attemptedCompanyHashes: [...hashes], lastPageAt };
+  return { pageCount, jobSearchPageCount, attemptedJobQueryHashes: jobHashes, attemptedCompanyHashes: [...hashes], lastPageAt };
 }
 
 function assertCompanyHash(companyHash: string): void {
