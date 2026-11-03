@@ -1,0 +1,107 @@
+import { hasCyrillic } from './letterLanguage';
+
+/**
+ * Результаты абзаца «опыт» (G3b, 03.11): под каждым местом экран пишет «Для
+ * письма доступно: N подтверждённых фактов», значит, в письме должны быть
+ * именно они — пункты мест работы, итоги первыми, не больше двух. Запись о
+ * самом месте (хронология) — не результат: место уже названо фразой о карьере.
+ * Русский пункт попадает в английское письмо только переведённым.
+ */
+
+export interface LetterResultFact {
+  readonly id: string;
+  readonly statement: string;
+  readonly domain?: string;
+}
+
+export interface LetterResultWorkplace {
+  /** Запись хронологии о месте; её id тоже есть в `evidenceIds`. */
+  readonly recordId?: string | null;
+  readonly evidenceIds: readonly string[];
+}
+
+export type LetterLanguage = 'en' | 'ru';
+
+const WORKPLACE_RESULT_LIMIT = 2;
+
+// Начало слова: иначе «cut» находится в «executive», «led» — в «skilled».
+const OUTCOME_VERB = /(?<!\p{L})(?:созда|основа|возглав|руковод|разработа|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|вырос|выраст|led|founded|created|built|launched|grew|increased|reduced|cut|achieved|implemented|doubled|delivered|managed|scaled)/iu;
+
+/**
+ * Записи профиля «Заголовок\nПоле: значение» (образование, язык, место
+ * работы) — данные для экрана, а не фразы: в письмо их не цитируем (B496).
+ */
+export function isStructuredRecordStatement(statement: string): boolean {
+  return /\n[^\n:]{2,40}:\s/u.test(statement);
+}
+
+/**
+ * Результат — фраза с итогом, а не строка навыка: «Kubernetes. Kafka. Go.»
+ * под заголовком «Among my results» читается как подмена (G3 L1, 03.11).
+ */
+export function isResultFact(fact: LetterResultFact): boolean {
+  if (fact.domain === 'skill' || isStructuredRecordStatement(fact.statement)) return false;
+  if ((fact.statement.match(/[\p{L}\p{N}]+/gu) ?? []).length < 3) return false;
+  // role-evidence — опыт выбранной роли кампании, его ставит первым ранжирование.
+  return fact.domain === 'outcome' || fact.domain === 'role-evidence' ||
+    /\d/u.test(fact.statement) || OUTCOME_VERB.test(fact.statement);
+}
+
+function recordIds(workplaces: readonly LetterResultWorkplace[]): Set<string> {
+  return new Set(workplaces.flatMap((place) => (place.recordId ? [place.recordId] : [])));
+}
+
+/** Пункты выбранных мест (без записей о самих местах), итоги первыми. */
+function workplaceResults<T extends LetterResultFact>(
+  facts: readonly T[],
+  workplaces: readonly LetterResultWorkplace[],
+): T[] {
+  const records = recordIds(workplaces);
+  const order = workplaces.flatMap((place) => place.evidenceIds).filter((id) => !records.has(id));
+  const byId = new Map(facts.map((fact) => [fact.id, fact]));
+  const bullets = [...new Set(order)].flatMap((id) => {
+    const fact = byId.get(id);
+    return fact && isResultFact(fact) ? [fact] : [];
+  });
+  const outcomeFirst = (fact: T) => (fact.domain === 'outcome' ? 0 : 1);
+  return [...bullets].sort((a, b) => outcomeFirst(a) - outcomeFirst(b));
+}
+
+/** Русские пункты мест, которые английское письмо может процитировать только в переводе. */
+export function letterFactsToTranslate<T extends LetterResultFact>(
+  facts: readonly T[],
+  workplaces: readonly LetterResultWorkplace[],
+  language: LetterLanguage,
+): T[] {
+  if (language !== 'en') return [];
+  return workplaceResults(facts, workplaces)
+    .filter((fact) => hasCyrillic(fact.statement))
+    .slice(0, WORKPLACE_RESULT_LIMIT);
+}
+
+/** Факты с переведёнными формулировками: письмо и проверка фактов видят один текст. */
+export function withTranslatedStatements<T extends LetterResultFact>(
+  facts: readonly T[],
+  translations: ReadonlyMap<string, string> | undefined,
+): T[] {
+  if (!translations || translations.size === 0) return [...facts];
+  return facts.map((fact) => {
+    const statement = translations.get(fact.id);
+    return statement ? { ...fact, statement } : fact;
+  });
+}
+
+/**
+ * Результаты для письма: пункты мест работы (до двух, итоги первыми), если
+ * они есть на языке письма; иначе — прежний отбор по ранжированию. Записи о
+ * местах не цитируются никогда.
+ */
+export function orderLetterResults<T extends LetterResultFact>(
+  results: readonly T[],
+  workplaces: readonly LetterResultWorkplace[],
+): T[] {
+  const records = recordIds(workplaces);
+  const usable = results.filter((fact) => !records.has(fact.id));
+  const fromPlaces = workplaceResults(usable, workplaces).slice(0, WORKPLACE_RESULT_LIMIT);
+  return fromPlaces.length > 0 ? fromPlaces : usable;
+}

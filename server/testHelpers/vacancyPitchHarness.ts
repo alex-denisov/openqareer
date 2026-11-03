@@ -1,3 +1,4 @@
+import type { RouteDeps } from '../routes/deps';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,6 +63,7 @@ export async function createApp(
     coverLetterWriter?: CoverLetterWriter;
     titleParse?: TitleParseEntry;
     descriptionLoader?: VacancyDescriptionLoader;
+    experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
@@ -105,6 +107,7 @@ export async function createApp(
     multiSourceVacancyEngine: multiSourceEngine,
     serveStatic: false,
     ...(options.coverLetterWriter ? { coverLetterWriter: options.coverLetterWriter } : {}),
+    ...(options.experienceFactRewriter ? { experienceFactRewriter: options.experienceFactRewriter } : {}),
     titleParseStore,
   });
 
