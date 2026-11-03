@@ -17,7 +17,8 @@ function fact(label: string, value: string | undefined): string {
 
 function salaryFact(card: RuSummaryCard): string | undefined {
   if (!card.salaryLabel) return undefined;
-  const source = card.sourceName?.replace(/\s*\(страница поиска\)$/u, '').trim();
+  // «Himalayas (JSON API)», «hh.ru (страница поиска)»: the reader sees the board, not how we read it.
+  const source = card.sourceName?.replace(/\s*\([^)]*\)\s*$/u, '').trim();
   return source ? `${card.salaryLabel} — по данным ${source}` : card.salaryLabel;
 }
 
