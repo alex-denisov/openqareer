@@ -20,6 +20,7 @@ import {
 } from './jobspyAdapters';
 import { baytHeaders } from './jobspyEndpoints';
 import { fetchLinkedinCrawler, type LinkedinCrawlerDeps } from '../crawler/linkedinIngestRunner';
+import { withRequestTimeout } from './requestTimeout';
 import { fetchYcWorkAtStartup, YC_WORK_AT_STARTUP_SOURCE_ID } from './ycWorkAtStartupSource';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
@@ -129,13 +130,16 @@ async function fetchXmlAtsBoard(
   source: VacancySourceConfig,
   url: string,
 ): Promise<UnifiedVacancy[]> {
-  const res = await fetch(url, {
-    headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
-    signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
+  const body = await withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, async (signal) => {
+    const res = await fetch(url, {
+      headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
+      signal,
+    });
+    if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+    return res.text();
   });
-  if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
   const observedAt = new Date().toISOString();
-  return normalizeJsonSource(source.id, await res.text(), {
+  return normalizeJsonSource(source.id, body, {
     observedAt,
     sourceName: source.name,
     sourceUrl: url,
@@ -168,11 +172,22 @@ async function fetchJsonPayload(
     },
     request.headers,
   );
+  return withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, (signal) =>
+    readJsonPayload(request, mergedHeaders, signal, fetchStealth),
+  );
+}
+
+async function readJsonPayload(
+  request: PagedRequest,
+  mergedHeaders: Record<string, string>,
+  signal: AbortSignal,
+  fetchStealth: typeof fetchWithStealthFallback,
+): Promise<{ payload: unknown; observedAt: string }> {
   const res = await fetch(request.url, {
     method: request.method ?? 'GET',
     headers: mergedHeaders,
     ...(request.method === 'POST' ? { body: JSON.stringify(request.body ?? {}) } : {}),
-    signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
+    signal,
   });
   if (!res.ok) {
     const errorBody = await res.text().catch(() => '');
@@ -250,11 +265,10 @@ async function fetchLinkedinGuestSource(
 ): Promise<SourceReading> {
   return fetchLinkedinGuest({
     fetchPage: async (url, headers) => {
-      const res = await fetch(url, {
-        headers,
-        signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
+      return withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, async (signal) => {
+        const res = await fetch(url, { headers, signal });
+        return { status: res.status, body: res.ok ? await res.text() : '' };
       });
-      return { status: res.status, body: res.ok ? await res.text() : '' };
     },
     sleep,
     observedAt: new Date().toISOString(),
