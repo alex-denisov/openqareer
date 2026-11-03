@@ -388,28 +388,37 @@ export function vacanciesToWarm(
 
 /** Ставит расчёт для перечисленных вакансий, которым он ещё нужен (после дочитывания текста). */
 /** `backgroundRank` — the first row's place in the selection sweep; absent for rows on screen. */
-export function requestFitForVacancyIds(
+/**
+ * PRB-041 (prod 03.11): a preload callback or a sweep chunk queued its rows in one piece — up to
+ * 1 s on the event loop for one page. Rows are queued in slices, letting queued requests run.
+ */
+export async function requestFitForVacancyIds(
   deps: RouteDeps,
   candidateId: string,
   vacancyIds: readonly string[],
   backgroundRank?: number,
-): void {
+  slicing: { readonly sliceMs?: number; readonly now?: () => number } = {},
+): Promise<void> {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
   const context = createVacancyFitContextReader(deps, candidateId);
-  vacancyIds.forEach((id, index) => {
-    const target = readVacancyFitTarget(deps, id);
-    if (!target) return;
-    const input = context(target, []);
-    // 02.11 prod profile: the sweep opened every counted row's result to learn it was counted.
-    if (backgroundRank !== undefined && runtime.hasCurrentResult(input)) return;
-    // 01.11: `refreshing` shows the old version's percent; the sweep queues the current one too.
-    if (!['not_requested', 'failed', 'refreshing'].includes(runtime.view(input).state)) return;
-    runtime.enqueue(
-      input,
-      backgroundRank === undefined ? {} : { backgroundRank: backgroundRank + index },
-    );
-  });
+  await mapYielding(
+    vacancyIds.map((id, index) => ({ id, index })),
+    ({ id, index }) => {
+      const target = readVacancyFitTarget(deps, id);
+      if (!target) return;
+      const input = context(target, []);
+      // 02.11 prod profile: the sweep opened every counted row's result to learn it was counted.
+      if (backgroundRank !== undefined && runtime.hasCurrentResult(input)) return;
+      // 01.11: `refreshing` shows the old version's percent; the sweep queues the current one too.
+      if (!['not_requested', 'failed', 'refreshing'].includes(runtime.view(input).state)) return;
+      runtime.enqueue(
+        input,
+        backgroundRank === undefined ? {} : { backgroundRank: backgroundRank + index },
+      );
+    },
+    slicing,
+  );
 }
 
 /**
