@@ -3,6 +3,7 @@
  * те же правила, что в src/features/site/publicSite.css; каталог отдаётся
  * сервером без бандла, поэтому правила продублированы здесь.
  */
+import { RU_SUMMARY_STYLE } from './catalogRuSummaryHtml';
 import { LISTING_STYLE } from './catalogListingStyle';
 
 export const CATALOG_STYLE =
@@ -643,4 +644,6 @@ html[data-oq-signed-in][data-oq-admin] .ps-btn.ps-admin {
 .cat-ac li.sep{min-height:0;height:1px;padding:0;margin:4px 0;background:var(--ps-line);cursor:default}
 .cat-ac li.hint{color:var(--ps-mute);cursor:default}
 @media (max-width:760px){.cat-vh{grid-template-columns:minmax(0,1fr)}.cat-vh>.ps-btn{display:none}.cat-search{grid-template-columns:minmax(0,1fr);box-shadow:none}.cat-fld+.cat-fld{border-left:0;border-top:1px solid var(--ps-line)}}
-` + LISTING_STYLE;
+` +
+  LISTING_STYLE +
+  RU_SUMMARY_STYLE;

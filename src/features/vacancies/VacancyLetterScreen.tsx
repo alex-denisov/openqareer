@@ -20,6 +20,7 @@ import {
 } from './VacancyLetterEditor';
 import { LetterInfoTip } from './VacancyLetterInfoTip';
 import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
+import { useLetterConsultantSuggestion } from './letterConsultantSuggestion';
 import './vacancy-letter.css';
 
 export interface VacancyLetterTarget {
@@ -87,6 +88,7 @@ export function VacancyLetterScreen({
   onOpenExpert,
 }: VacancyLetterScreenProps) {
   const state = useVacancyLetterController(vacancy.id, initialCircle);
+  useLetterConsultantSuggestion(state.draft, Boolean(state.approval.saved));
   return (
     <VacancyLetterPage
       vacancy={vacancy}

@@ -44,14 +44,20 @@ function ScoreRing({
   );
 }
 
-function ScoreGauge({ score }: { readonly score: number | null }) {
+function ScoreGauge({
+  score,
+  maximum,
+}: {
+  readonly score: number | null;
+  readonly maximum: number;
+}) {
   const circumference = 2 * Math.PI * 84;
   const arc = circumference * 0.75;
   return (
     <div
       className="pm-gauge"
       role="img"
-      aria-label={score === null ? 'Оценка ATS неизвестна' : `${score} из 100`}
+      aria-label={score === null ? 'Оценка ATS неизвестна' : `${score} из ${maximum}`}
     >
       <svg viewBox="0 0 200 170" aria-hidden="true">
         <g transform="rotate(135 100 100)">
@@ -75,14 +81,14 @@ function ScoreGauge({ score }: { readonly score: number | null }) {
               className="profile-mobile-gauge-value"
               strokeWidth="14"
               strokeLinecap="round"
-              strokeDasharray={`${(arc * score) / 100} ${circumference}`}
+              strokeDasharray={`${(arc * score) / maximum} ${circumference}`}
             />
           )}
         </g>
       </svg>
       <div className="pm-gauge-v">
         <span className="num">{score ?? '—'}</span>
-        <small>из 100</small>
+        <small>из {maximum}</small>
       </div>
     </div>
   );
@@ -117,7 +123,8 @@ function AtsCategories({ assessment }: Pick<ProfileAtsAssessmentState, 'assessme
 }
 
 function dimensionGuidance(dimension: ResumeAtsDimension): string | undefined {
-  return dimension.score === null || dimension.score < dimension.maximum
+  // «Недостаточно требований» — не совет: у неизвестного блока подсказки нет.
+  return dimension.score !== null && dimension.score < dimension.maximum
     ? dimension.summary
     : undefined;
 }
@@ -170,7 +177,12 @@ export function ProfileMobileAts(
     : props.onOpenExpert;
   return (
     <>
-      {ats.error ? null : <ScoreGauge score={ats.assessment?.total.score ?? null} />}
+      {ats.error ? null : (
+        <ScoreGauge
+          score={ats.assessment?.total.score ?? null}
+          maximum={ats.assessment?.total.maximum ?? 100}
+        />
+      )}
       {ats.roleBasis ? (
         <div className="pm-tip">
           <Info size="1em" aria-hidden="true" />

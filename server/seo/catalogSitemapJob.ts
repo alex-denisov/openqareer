@@ -20,6 +20,8 @@ import {
   recordListingHistory,
   type ListingCount,
 } from './catalogListingHistory';
+import { CATALOG_RU_SUMMARY_VERSION } from './catalogRuSummary';
+import { CATALOG_RU_SUMMARIES_TABLE_SQL } from './catalogRuSummaryStore';
 import { buildSitemapFiles, type SitemapFile, type SitemapUrl } from './sitemapXml';
 
 export const CATALOG_SITEMAPS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_sitemaps (
@@ -40,17 +42,26 @@ const DAY_MS = 86_400_000;
  * leaves the active set.
  */
 function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
+  // The summary job creates the table on its first tick; the sitemap may run before it.
+  database.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
   const rows = database
     .prepare(
       `SELECT path, published_at FROM catalog_entries
         WHERE status = 'active' AND path <> ''
           AND last_seen_ms >= ?
           AND salary_label IS NOT NULL AND salary_label GLOB '*[1-9]*'
-          AND length(trim(summary)) >= ?
+          AND (length(trim(summary)) >= ?
+               OR EXISTS (SELECT 1 FROM catalog_ru_summaries s
+                           WHERE s.cluster_id = catalog_entries.cluster_id
+                             AND s.status = 'ready' AND s.version = ?))
           AND trim(company) <> '' AND role_slug IS NOT NULL
         ORDER BY published_ms DESC, entry_key ASC`,
     )
-    .all(now.getTime() - CARD_SEEN_WITHIN_DAYS * DAY_MS, INDEXED_CARD_SUMMARY_MIN) as Array<{
+    .all(
+      now.getTime() - CARD_SEEN_WITHIN_DAYS * DAY_MS,
+      INDEXED_CARD_SUMMARY_MIN,
+      CATALOG_RU_SUMMARY_VERSION,
+    ) as Array<{
     path: string;
     published_at: string;
   }>;

@@ -13,6 +13,7 @@ import { ResponsesPreparationPanel } from './ResponsesPreparationPanel';
 import { ResponsesPipelineAnalytics } from './ResponsesPipelineAnalytics';
 import { ResponsesChannelPerformance } from './ResponsesChannelPerformance';
 import { SelectedResponsePanel } from './SelectedResponsePanel';
+import { ResponseMockInterviewSuggestion } from './ResponseMockInterviewSuggestion';
 import {
   ResponsesFunnelSummary,
   ResponsesFilterControls,
@@ -235,6 +236,12 @@ function FunnelResults({
       />
       <TablePagination workspace={workspace} applicationCount={applications.length} />
       <SelectedResponse props={props} workspace={workspace} />
+      {workspace.selectedApplication ? (
+        <ResponseMockInterviewSuggestion
+          key={workspace.selectedApplication.id}
+          application={workspace.selectedApplication}
+        />
+      ) : null}
       <ChannelPerformance props={props} workspace={workspace} applications={applications} />
     </>
   );

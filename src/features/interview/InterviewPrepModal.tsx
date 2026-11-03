@@ -6,6 +6,7 @@ import { StarStoriesModal } from './StarStoriesModal';
 import { MockInterviewSimulator } from './MockInterviewSimulator';
 import type { InterviewDiaryPort, MockInterviewVacancy } from './mockInterviewSimulatorTypes';
 import { useModalAccessibility } from './interviewModalAccessibility';
+import { useSuppressConsultantSuggestion } from '../journey/consultantScreenSuggestion';
 import {
   generateInterviewPrepBrief,
   type CompanyOverview,
@@ -32,6 +33,7 @@ export interface InterviewPrepModalProps {
 }
 
 export function InterviewPrepModal(props: InterviewPrepModalProps) {
+  useSuppressConsultantSuggestion(props.isOpen);
   return <InterviewPrepModalState {...props} />;
 }
 

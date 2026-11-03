@@ -5,6 +5,7 @@
  * каталог, и поисковик его не увидит. HTML собирается на запросе, потому что
  * пул меняется каждый час, а сборка неизменяема.
  */
+import { readCatalogRuSummary } from '../seo/catalogRuSummaryReader';
 import { searchIndexFor } from '../vacancies/vacancyCatalogSearch';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
@@ -21,6 +22,7 @@ import {
   buildListingPage,
   buildListingPageFromEntries,
   buildVacancyDetail,
+  type RuSummaryReader,
   catalogEntries,
   type CatalogPage,
 } from '../vacancies/vacancyCatalogPage';
@@ -385,6 +387,11 @@ async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: Fa
  * единственный ответ, по которому поисковик выбрасывает адрес из индекса
  * сразу, а не копит мёртвые ссылки на домене.
  */
+/** One primary-key row per card page; the maintenance process writes the summaries. */
+function ruSummaryReader(deps: RouteDeps): RuSummaryReader {
+  return (card) => readCatalogRuSummary(deps.config.databasePath, card);
+}
+
 async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const key = parseVacancyPath(request.url);
   const projected = key ? deps.multiSourceEngine.getPublicCatalogEntry(key) : undefined;
@@ -395,7 +402,13 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
       : undefined;
     const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
     const detail = found
-      ? buildVacancyDetail(found, full?.fullDescription ?? full?.description, full)
+      ? buildVacancyDetail(
+          found,
+          full?.fullDescription ?? full?.description,
+          full,
+          new Date(),
+          ruSummaryReader(deps),
+        )
       : null;
     if (detail) return sendDocument(reply, renderVacancyDocument(detail));
     return sendDocument(
@@ -413,7 +426,13 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const sourceId = found?.id.startsWith('cluster-') ? found.id.slice('cluster-'.length) : undefined;
   const full = sourceId ? deps.multiSourceEngine.getVacancy(sourceId) : undefined;
   const detail = found
-    ? buildVacancyDetail(found, full?.fullDescription ?? full?.description, full)
+    ? buildVacancyDetail(
+        found,
+        full?.fullDescription ?? full?.description,
+        full,
+        new Date(),
+        ruSummaryReader(deps),
+      )
     : null;
 
   if (!detail) {

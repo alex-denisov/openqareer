@@ -63,6 +63,7 @@ import {
   type OpenExpertOptions,
 } from './CareerWorkspaceShellHelpers';
 import { CareerDiaryAccessProvider } from './careerDiaryAccess';
+import { ConsultantSuggestionProvider } from '../journey/consultantScreenSuggestion';
 import { CareerDiaryShellControls, CareerDiaryAccessStatus } from './CareerDiaryShellControls';
 import { useCareerDiaryShellAccess } from './useCareerDiaryShellAccess';
 import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
@@ -92,7 +93,16 @@ interface CareerWorkspaceShellProps {
   initialView?: ShellView;
 }
 
-export function CareerWorkspaceShell({
+/** Экраны публикуют предложения консультанта по своим данным (макеты 5 и 9, B600). */
+export function CareerWorkspaceShell(props: CareerWorkspaceShellProps) {
+  return (
+    <ConsultantSuggestionProvider>
+      <CareerWorkspaceShellContent {...props} />
+    </ConsultantSuggestionProvider>
+  );
+}
+
+function CareerWorkspaceShellContent({
   workspace,
   invalidStorage = false,
   storageError,

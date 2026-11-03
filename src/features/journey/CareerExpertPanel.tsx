@@ -43,6 +43,8 @@ import { applySkillQuizResult } from '../coach/careerCommandApi';
 import { waitForCoachAnalysis } from '../coach/coachResultDelivery';
 import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import { starterPromptsForStage } from './starterPrompts';
+import { useConsultantScreenSuggestion } from './consultantScreenSuggestion';
+import { ConsultantScreenSuggestionCard } from './ConsultantScreenSuggestionCard';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
 import { ExpertHistoryRow, ExpertVisibleLine } from './expertSheetParts';
@@ -146,6 +148,7 @@ export function CareerExpertPanel({
   const [voiceDraft, setVoiceDraft] = useState(false);
   const [sending, setSending] = useState(false);
   const [decisionProposalCount, setDecisionProposalCount] = useState(0);
+  const screenSuggestion = useConsultantScreenSuggestion(stage);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   // 29.10: the consultant's reply while it is written; the saved turn replaces it.
   const [streamingReply, setStreamingReply] = useState<string>();
@@ -701,6 +704,7 @@ export function CareerExpertPanel({
               </article>
               {user &&
               stage !== 'profile' &&
+              !screenSuggestion.suggestion &&
               !loadingSnapshot &&
               !historyOpen &&
               !content.trim() &&
@@ -726,10 +730,23 @@ export function CareerExpertPanel({
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
           ) : null}
-          {stage === 'vacancies' && user && !loadingSnapshot && onStartSkillCheck ? (
+          {user && !loadingSnapshot && screenSuggestion.suggestion ? (
+            <ConsultantScreenSuggestionCard
+              key={screenSuggestion.suggestion.id}
+              suggestion={screenSuggestion.suggestion}
+              onDismiss={screenSuggestion.dismiss}
+            />
+          ) : null}
+          {stage === 'vacancies' &&
+          user &&
+          !loadingSnapshot &&
+          !screenSuggestion.suggestion &&
+          onStartSkillCheck ? (
             <VacancyQuizProposal onStart={onStartSkillCheck} onChooseRole={onChooseRole} />
           ) : null}
-          {stage === 'vacancies' && user && !loadingSnapshot ? <CompaniesContactProposal /> : null}
+          {stage === 'vacancies' && user && !loadingSnapshot && !screenSuggestion.suggestion ? (
+            <CompaniesContactProposal />
+          ) : null}
           {stage === 'career' && user && !loadingSnapshot ? <CareerRoleOffer /> : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />

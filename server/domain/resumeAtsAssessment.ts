@@ -42,7 +42,8 @@ export interface ResumeAtsDimension {
 export interface ResumeAtsAssessment {
   readonly total: {
     readonly score: number | null;
-    readonly maximum: 100;
+    /** Сумма максимумов измеренных блоков: 100, пока измерены все четыре. */
+    readonly maximum: number;
     readonly status: 'measured' | 'partial' | 'unknown';
   };
   readonly dimensions: {
@@ -94,16 +95,20 @@ export function buildResumeAtsAssessment(
     dates: dateDimension(input.document.experience),
     format: formatDimension(input.document, input.atsText),
   };
-  const scores = Object.values(dimensions).map((dimension) => dimension.score);
-  const allMeasured = scores.every((score): score is number => score !== null);
-  const anyMeasured = scores.some((score) => score !== null);
+  const measured = Object.values(dimensions).filter(
+    (dimension): dimension is ResumeAtsDimension & { readonly score: number } =>
+      dimension.score !== null,
+  );
+  const allMeasured = measured.length === Object.keys(dimensions).length;
+  // Неизвестный блок не обнуляет итог: показываем измеренную сумму из измеренного максимума.
+  const total = {
+    score: measured.length ? measured.reduce((sum, item) => sum + item.score, 0) : null,
+    maximum: measured.length ? measured.reduce((sum, item) => sum + item.maximum, 0) : 100,
+    status: allMeasured ? ('measured' as const) : measured.length ? ('partial' as const) : ('unknown' as const),
+  };
 
   return {
-    total: {
-      score: allMeasured ? scores.reduce((sum, score) => sum + score, 0) : null,
-      maximum: 100,
-      status: allMeasured ? 'measured' : anyMeasured ? 'partial' : 'unknown',
-    },
+    total,
     dimensions,
     context: {
       resumeUpdatedAt: validTimestamp(input.resumeUpdatedAt) ? input.resumeUpdatedAt : null,
