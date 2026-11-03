@@ -42,21 +42,6 @@ const partnerCampaignPatchSchema = z.object({
   remoteOnly: z.boolean().optional(),
 });
 
-function removedAutoRoleIds(
-  campaign: CandidateWorkspaceState['campaign'],
-  kept: ReadonlySet<string>,
-): string[] {
-  const selected = new Set(campaign?.roles ?? []);
-  return (campaign?.auto?.roles ?? [])
-    .filter(
-      (role) =>
-        (selected.has(role.id) || selected.has(role.title)) &&
-        !kept.has(role.id) &&
-        !kept.has(role.title),
-    )
-    .map((role) => role.id);
-}
-
 function publicCandidate(candidate: CareerPartnerCandidate) {
   return {
     userId: candidate.userId,
@@ -182,19 +167,7 @@ function savePartnerCampaign(
   body: z.infer<typeof partnerCampaignPatchSchema>,
 ) {
   const roles = body.roles.map((role) => (typeof role === 'string' ? role : role.title));
-  const kept = new Set(
-    body.roles.flatMap((role) =>
-      typeof role === 'string'
-        ? [role]
-        : [role.id, role.title].filter((value): value is string => Boolean(value)),
-    ),
-  );
-  const dismissed = [
-    ...new Set([
-      ...(stored.campaign?.dismissed ?? []),
-      ...removedAutoRoleIds(stored.campaign, kept),
-    ]),
-  ];
+  const dismissed = stored.campaign?.dismissed ?? [];
   const campaign: NonNullable<CandidateWorkspaceState['campaign']> = {
     roles,
     regions: body.regions,

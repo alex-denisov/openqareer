@@ -224,4 +224,57 @@ describe('buildCampaignRoleSet (B267 S5)', () => {
 
     expect(result.roles).toEqual([]);
   });
+
+  it('когда модель теряет роли только из-за отклонённых, список добирается правилами до пяти', async () => {
+    const facts = campaignRoleFacts(ownerMemory);
+    const logged: Array<[Record<string, unknown>, string]> = [];
+    const answer = ['it-ops.cio', 'eng-mgmt.cto', 'ops.coo', 'product.cpo', 'support.cco', 'exec-general.ceo'];
+    const result = await buildCampaignRoleSet({
+      facts,
+      profileTitle: null,
+      dismissed: ['it-ops.cio', 'eng-mgmt.cto'],
+      log: (fields, message) => logged.push([fields, message]),
+      model: {
+        name: 'gemini-test',
+        propose: async () => answer.map((id, index) => ({
+          id,
+          level: 'c-level',
+          kind: index === 0 ? 'primary' : 'adjacent',
+          evidenceRefs: [facts[0].ref],
+          reason: 'Подтверждено фактом профиля',
+        })),
+      },
+    });
+    const ids = result.roles.map((role) => role.id);
+
+    expect(ids.slice(0, 4)).toEqual(['ops.coo', 'product.cpo', 'support.cco', 'exec-general.ceo']);
+    expect(ids).toHaveLength(5);
+    expect(new Set(ids).size).toBe(5);
+    expect(ids).not.toContain('it-ops.cio');
+    expect(ids).not.toContain('eng-mgmt.cto');
+    expect(result.roles.filter((role) => role.kind === 'primary')).toHaveLength(1);
+    expect(result.model).toBe('gemini-test+rules');
+    expect(logged.map(([, message]) => message)).toContain('campaign-role-model-topped-up');
+    expect(logged.map(([, message]) => message)).not.toContain('campaign-role-model-rejected');
+  });
+
+  it('ответ, который короток не из-за отклонённых, по-прежнему уходит правилам', async () => {
+    const facts = campaignRoleFacts(ownerMemory);
+    const result = await buildCampaignRoleSet({
+      facts,
+      profileTitle: null,
+      dismissed: ['it-ops.cio'],
+      model: {
+        propose: async () => ['it-ops.cio', 'eng-mgmt.cto', 'ops.coo'].map((id, index) => ({
+          id,
+          level: 'c-level',
+          kind: index === 0 ? 'primary' : 'adjacent',
+          evidenceRefs: [facts[0].ref],
+          reason: 'Подтверждено фактом профиля',
+        })),
+      },
+    });
+
+    expect(result.model).toBe('rules');
+  });
 });

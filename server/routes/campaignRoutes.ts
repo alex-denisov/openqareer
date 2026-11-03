@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { CANDIDATE_REGIONS } from '../../src/features/workspace/candidateRegions';
-import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import { campaignMeta, readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import {
@@ -62,21 +61,6 @@ const WORKSPACE_REQUIRED = {
   message: 'Пройдите мастер знакомства прежде, чем выбирать кампанию.',
 } as const;
 
-function removedAutoRoleIds(
-  campaign: CandidateWorkspaceState['campaign'],
-  kept: ReadonlySet<string>,
-): string[] {
-  const previouslyChosen = new Set(campaign?.roles ?? []);
-  return (campaign?.auto?.roles ?? [])
-    .filter(
-      (role) =>
-        (previouslyChosen.has(role.id) || previouslyChosen.has(role.title)) &&
-        !kept.has(role.id) &&
-        !kept.has(role.title),
-    )
-    .map((role) => role.id);
-}
-
 const handleSaveCampaign: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -97,14 +81,6 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
   }
   const previousRevision = stored.campaign?.revision ?? 0;
   const roles = body.roles.map((role) => (typeof role === 'string' ? role : role.title));
-  const kept = new Set(
-    body.roles.flatMap((role) =>
-      typeof role === 'string'
-        ? [role]
-        : [role.id, role.title].filter((value): value is string => Boolean(value)),
-    ),
-  );
-  const removedAutoIds = removedAutoRoleIds(stored.campaign, kept);
   candidateStore.saveCandidateWorkspace(candidate.id, {
     ...stored,
     campaign: {
@@ -115,9 +91,9 @@ const handleSaveCampaign: Handler = async (deps, request, reply) => {
       updatedAt: new Date().toISOString(),
       ...(stored.campaign?.auto ? { auto: stored.campaign.auto } : {}),
       ...(stored.campaign?.careerRoles ? { careerRoles: stored.campaign.careerRoles } : {}),
-      ...(stored.campaign?.dismissed?.length || removedAutoIds.length
-        ? { dismissed: [...new Set([...(stored.campaign?.dismissed ?? []), ...removedAutoIds])] }
-        : {}),
+      // A saved list is not a refusal: the premises form replaces it with one role. 03.11 that
+      // dismissed CTO and CIO for adenisov.test. A role is declined by removing it on «Карьера».
+      ...(stored.campaign?.dismissed?.length ? { dismissed: stored.campaign.dismissed } : {}),
     },
   });
   deps.matchedPoolPrecompute?.prioritizeCampaign(candidate.id);

@@ -1,3 +1,6 @@
+import { ontology } from '../../shared/roleOntology';
+import { careerRoleId } from '../../shared/roleProposals';
+import { rejectedCareerRoleIds } from '../routes/campaignContext';
 import type { RouteDeps } from '../routes/deps';
 import { candidateHasLlmAccess } from '../routes/helpers';
 import type { StoredMemory } from '../data/candidateStore';
@@ -25,6 +28,26 @@ export function campaignRoleFacts(memory: readonly StoredMemory[]): CampaignRole
   }));
 }
 
+/**
+ * What the candidate declined: earlier dismissals plus roles removed on «Карьера». That removal is
+ * stored by title (`career-role:<id>`), so it is matched against the role's names here.
+ */
+function declinedRoleIds(
+  store: RouteDeps['candidateStore'],
+  candidateId: string,
+  dismissed: readonly string[] | undefined,
+): string[] {
+  const rejected = rejectedCareerRoleIds(store, candidateId);
+  const removed = [...ontology.rolesById.values()]
+    .filter((role) =>
+      [role.titleEn, role.titleRu, ...role.variants.en, ...role.variants.ru].some((title) =>
+        rejected.has(careerRoleId(title)),
+      ),
+    )
+    .map((role) => role.id);
+  return [...new Set([...(dismissed ?? []), ...removed])];
+}
+
 /** Пересборка меняет только машинную часть кампании. */
 export async function rebuildCampaignRoles(
   deps: Pick<RouteDeps, 'candidateStore' | 'campaignRoleModel' | 'matchedPoolPrecompute'> &
@@ -45,7 +68,7 @@ export async function rebuildCampaignRoles(
       snapshot?.resume?.draft.candidate?.headline?.trim() ||
       snapshot?.resume?.draft.targetRole?.trim() ||
       before.targetDirection,
-    dismissed: before.campaign?.dismissed,
+    dismissed: declinedRoleIds(deps.candidateStore, candidateId, before.campaign?.dismissed),
     model: candidateHasLlmAccess(deps, candidateId) ? deps.campaignRoleModel : undefined,
     ...(options.log ? { log: options.log } : {}),
   });
@@ -74,5 +97,6 @@ export async function rebuildCampaignRoles(
       },
     },
   });
+  options.log?.({ builtBy: auto.model, roles: auto.roles.length }, 'campaign-roles-rebuilt');
   deps.matchedPoolPrecompute?.prioritizeCampaign(candidateId);
 }

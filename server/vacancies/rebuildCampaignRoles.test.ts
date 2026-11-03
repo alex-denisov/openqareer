@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { RouteDeps } from '../routes/deps';
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
+import { careerRoleId } from '../../shared/roleProposals';
 import { rebuildCampaignRoles } from './rebuildCampaignRoles';
 
 describe('rebuildCampaignRoles (B267 S5)', () => {
@@ -129,5 +130,45 @@ describe('rebuildCampaignRoles (B267 S5)', () => {
     expect(workspace.campaign?.roles).toEqual([]);
     // Прод 26.09: запись без прежней кампании падала на схеме (revision 0).
     expect(candidateWorkspaceSchema.safeParse(workspace).success).toBe(true);
+  });
+
+  it('роль, убранная кандидатом на «Карьере», не возвращается, а успешная пересборка пишется в журнал', async () => {
+    let workspace: CandidateWorkspaceState = {
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: '',
+      regions: [],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+    };
+    const fact = (id: string, statement: string) => ({
+      id, kind: 'fact', domain: 'role-evidence', statement, status: 'confirmed', sourceMessageIds: ['m1'], sensitive: false,
+    });
+    const store = {
+      getCandidateWorkspace: () => workspace,
+      getSnapshot: () => ({
+        memory: [fact('a', 'VP of Technology & Operations'), fact('b', 'COO owned operations')],
+        resume: null,
+      }),
+      getConsultantRejections: () => [{ proposalKey: `career-role:${careerRoleId('Chief Technology Officer')}` }],
+      saveCandidateWorkspace: (_candidateId: string, next: CandidateWorkspaceState) => {
+        workspace = next;
+        return next;
+      },
+    };
+    const logged: Array<[Record<string, unknown>, string]> = [];
+
+    await rebuildCampaignRoles(
+      { candidateStore: store } as unknown as Pick<RouteDeps, 'candidateStore' | 'campaignRoleModel'>,
+      'candidate',
+      { log: (fields, message) => logged.push([fields, message]) },
+    );
+
+    const roles = workspace.campaign?.auto?.roles ?? [];
+    expect(roles.length).toBeGreaterThan(0);
+    expect(roles.some((role) => role.id === 'eng-mgmt.cto')).toBe(false);
+    expect(workspace.campaign?.dismissed).toBeUndefined();
+    expect(logged).toEqual([[{ builtBy: 'rules', roles: roles.length }, 'campaign-roles-rebuilt']]);
   });
 });

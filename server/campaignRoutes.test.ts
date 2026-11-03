@@ -124,6 +124,45 @@ describe('POST /api/v1/candidate/campaign', () => {
     expect(saved?.auto?.roles).toHaveLength(2);
     expect(saved?.dismissed ?? []).not.toContain('ops.coo');
   });
+
+  it('does not dismiss a chosen auto role when the saved list drops it and keeps earlier dismissals', async () => {
+    const automatic = (id: string, title: string) => ({
+      id, title, titleRu: title, functions: ['ops'], level: 'vp' as const, kind: 'adjacent' as const,
+      synonyms: [], evidenceRefs: ['memory:1'], reason: 'Выбрано по фактам.',
+    });
+    const { app, candidateStore, candidate } = await createAppWithWorkspace({
+      resumeText: '',
+      resumeSource: 'text',
+      targetDirection: 'VP Technology Ops',
+      regions: ['ru'],
+      currentSituation: '',
+      constraints: '',
+      urgency: 'active',
+      campaign: {
+        roles: ['VP Technology Ops', 'COO'],
+        regions: ['ru'],
+        revision: 1,
+        updatedAt: '2026-09-24T00:00:00.000Z',
+        dismissed: ['finance.cfo'],
+        auto: {
+          roles: [automatic('ops.vp', 'VP Technology Ops'), automatic('ops.coo', 'COO')],
+          factsDigest: 'digest',
+          generatedAt: '2026-09-24T00:00:00.000Z',
+          model: 'rules',
+        },
+      },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/campaign',
+      headers: { authorization: `Bearer ${candidate.accessToken}`, origin: 'http://localhost:3000' },
+      payload: { roles: ['Head of Sales'], regions: ['ru'] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(candidateStore.getCandidateWorkspace(candidate.id)?.campaign?.dismissed).toEqual(['finance.cfo']);
+  });
 });
 
 describe('GET /api/v1/candidate/campaign', () => {
