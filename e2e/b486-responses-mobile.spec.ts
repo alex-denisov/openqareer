@@ -102,7 +102,11 @@ test.describe('B486 mobile responses', () => {
     await expect(response).toContainText('Пробовали отправить');
     await expect(response.locator('time')).toBeVisible();
 
-    await expect(response).toContainText('Напомнить сегодня');
+    // B511 G3 item 5: an unconfirmed send is resent, not followed up; the action is accent.
+    await expect(response.locator('.career-responses-mobile-row-next')).toHaveText(
+      'Повторить отклик',
+    );
+    await expect(response.locator('.career-responses-mobile-row-next')).toHaveClass(/is-hot/);
     await expect(response.locator('svg[data-arrow]')).toHaveCount(0);
 
     const row = response.getByRole('button', { name: /^Открыть отклик: Peraton/ });
@@ -110,12 +114,25 @@ test.describe('B486 mobile responses', () => {
     await row.click();
     const push = page.getByRole('region', { name: 'Процесс' });
     await expect(push).toBeVisible();
-    await expect(push.getByRole('heading', { name: /^Peraton,/ })).toBeVisible();
+    // B511 G3 item 4: the push has its own bar, the company alone, «роль · канал» under it.
+    await expect(page.locator('.career-topbar')).toBeHidden();
+    await expect(push.getByRole('heading', { name: 'Peraton', exact: true })).toBeVisible();
+    await expect(push.locator('.career-responses-selected__sub')).toHaveText(
+      'Enterprise Architect, Senior Advisor · hh.ru',
+    );
+    await expect(push.getByRole('button', { name: 'Консультант: открыть' })).toBeVisible();
     // Макет 5 `proc`: the panel's groups, each once, from the response's own data.
     for (const group of ['Материалы', 'Доставка']) {
       await expect(push.getByRole('region', { name: group, exact: true })).toHaveCount(1);
     }
-    await expect(push.getByRole('status').filter({ hasText: 'Следующий шаг' })).toBeVisible();
+    const step = push.getByRole('region', { name: 'Следующий шаг', exact: true });
+    await expect(step.getByRole('button')).toContainText('Повторить отклик');
+    const about = push.getByRole('region', { name: 'О компании', exact: true });
+    await expect(about.locator('.career-responses-contact')).toContainText('Рекрутер не указан');
+    // Pinned above the menu: the mock interview and the round chat; STAR lives in «Подготовка».
+    await expect(push.getByRole('button', { name: 'Начать мок-интервью' })).toBeVisible();
+    await expect(push.getByRole('button', { name: 'Обсудить с консультантом' })).toBeVisible();
+    await expect(push.getByRole('button', { name: 'Открыть STAR-истории' })).toBeHidden();
     await expect(push.getByRole('region', { name: 'Доставка', exact: true })).toContainText(
       'Не подтверждено',
     );

@@ -1,5 +1,6 @@
 import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
+import { needsResend } from './responseCardFace';
 import { waitingLabel } from './waitingLabel';
 
 export interface MobileDueDate {
@@ -93,7 +94,14 @@ export function mobileStatusLabel(application: ApplicationView): string {
   return datedLabel(labels[stage], application.stageChangedAt);
 }
 
-export function mobileNextStepLabel(application: ApplicationView): string {
+export interface MobileNextStep {
+  readonly label: string;
+  /** Mockup 5 `.om-next.is-hot`: only the candidate's real move is in the accent colour. */
+  readonly hot: boolean;
+}
+
+export function mobileNextStep(application: ApplicationView): MobileNextStep {
+  if (needsResend(application)) return { label: 'Повторить отклик', hot: true };
   const step = waitingLabel({
     stage: application.stage,
     whoseTurn: application.whoseTurn,
@@ -102,7 +110,11 @@ export function mobileNextStepLabel(application: ApplicationView): string {
     nearestInterviewNeedsPrep:
       application.nearestInterview !== null && application.nearestInterview.prepStatus !== 'ready',
     closedReason: application.closedReason,
-  }).text;
+  });
+  return { label: shortStepLabel(step.text), hot: step.on === 'you' };
+}
+
+function shortStepLabel(step: string): string {
   if (step === 'Напоминание компании просрочено') return 'Напомнить рекрутеру';
   if (step.startsWith('Напоминание компании сегодня')) return 'Напомнить сегодня';
   if (step === 'Подготовиться к интервью') return 'Подготовиться';

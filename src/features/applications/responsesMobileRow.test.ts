@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ApplicationView } from './applicationsApi';
-import { mobileDueDate, mobileStatusLabel, shortDate } from './responsesMobileRow';
+import { mobileDueDate, mobileNextStep, mobileStatusLabel, shortDate } from './responsesMobileRow';
 
 function application(overrides: Partial<ApplicationView>): ApplicationView {
   return {
@@ -96,5 +96,62 @@ describe('mobileDueDate', () => {
 
   it('shows nothing without a dated step', () => {
     expect(mobileDueDate(application({}), NOW)).toBeNull();
+  });
+});
+
+describe('mobileNextStep', () => {
+  const overdue = {
+    dueAt: '2026-10-02T09:00:00.000Z',
+    urgency: 'overdue',
+    source: 'standard_schedule',
+    daysSinceContact: 9,
+  } as ApplicationView['followUp'];
+
+  it('retries a failed delivery instead of reminding the recruiter', () => {
+    expect(
+      mobileNextStep(
+        application({
+          whoseTurn: 'candidate',
+          followUp: overdue,
+          deliveryReceipt: { kind: 'failure_note', value: 'hh.ru 500' },
+        }),
+      ),
+    ).toEqual({ label: 'Повторить отклик', hot: true });
+    expect(
+      mobileNextStep(application({ deliveryReceipt: { kind: 'failure_note', value: 'x' } })),
+    ).toEqual({ label: 'Повторить отклик', hot: true });
+  });
+
+  it('retries an unconfirmed attempt once a reminder would be due', () => {
+    expect(mobileNextStep(application({ whoseTurn: 'candidate', followUp: overdue }))).toEqual({
+      label: 'Повторить отклик',
+      hot: true,
+    });
+  });
+
+  it('reminds the recruiter only after a confirmed delivery', () => {
+    expect(
+      mobileNextStep(
+        application({
+          whoseTurn: 'candidate',
+          followUp: overdue,
+          deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
+        }),
+      ),
+    ).toEqual({ label: 'Напомнить рекрутеру', hot: true });
+  });
+
+  it('keeps passive steps quiet', () => {
+    expect(mobileNextStep(application({}))).toEqual({ label: 'Ждать ответа', hot: false });
+    expect(
+      mobileNextStep(application({ stage: 'rejected', whoseTurn: null, closedReason: null })).hot,
+    ).toBe(false);
+  });
+
+  it('marks the candidate move as an action', () => {
+    expect(mobileNextStep(application({ stage: 'offer', whoseTurn: 'candidate' }))).toEqual({
+      label: 'Решить по офферу',
+      hot: true,
+    });
   });
 });

@@ -596,15 +596,20 @@
     white-space: nowrap;
   }
 
+  /* Макет 5 `.om-next`: a passive step is soft, only `.is-hot` (the candidate's move) is accent. */
   .career-responses-mobile-row-next {
     min-inline-size: 0;
     overflow: hidden;
-    color: var(--career-accent);
+    color: var(--career-text-soft);
     font-size: var(--career-text-xs);
-    font-weight: 600;
+    font-weight: 400;
     text-align: end;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .career-responses-mobile-row-next.is-hot {
+    color: var(--career-accent);
   }
 
   .career-responses-mobile-feed-footer {
@@ -851,87 +856,6 @@
     gap: var(--career-space-4);
     min-inline-size: 0;
     padding-block-end: var(--career-space-6);
-  }
-
-  .career-responses-mobile-push-header {
-    display: flex;
-    align-items: center;
-    gap: var(--career-space-3);
-    min-inline-size: 0;
-  }
-
-  .career-responses-mobile-push-header .career-btn.is-icon {
-    flex: none;
-    inline-size: var(--career-target-min);
-    min-block-size: var(--career-target-min);
-    padding: 0;
-    border-radius: var(--career-radius-pill);
-  }
-
-  .career-responses-mobile-push-header h2 {
-    min-inline-size: 0;
-    margin: 0;
-    font-size: var(--career-text-md);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
-
-  .career-responses-mobile-push .career-responses-selected__eyebrow {
-    display: none;
-  }
-
-  /* Макет 5 `proc`: the panel loses its frame; each group is a soft heading over a list card. */
-  .career-responses-mobile-push .career-responses-selected {
-    margin-block-start: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
-  }
-
-  .career-responses-mobile-push .career-responses-selected__head h2 {
-    flex: 1 1 100%;
-    font-size: var(--career-text-xl);
-    overflow-wrap: anywhere;
-  }
-
-  .career-responses-mobile-push .career-responses-selected__columns {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--career-space-4);
-  }
-
-  .career-responses-mobile-push .career-responses-selected section > .career-subsection-title {
-    padding-inline: var(--career-space-4);
-    color: var(--career-text-soft);
-    font-size: var(--career-text-sm);
-  }
-
-  .career-responses-mobile-push .career-responses-selected__rows {
-    border: var(--career-border-width) solid var(--career-line);
-    border-radius: var(--career-radius-md);
-    overflow: hidden;
-    background: var(--career-surface);
-  }
-
-  .career-responses-mobile-push .career-responses-selected__row {
-    min-block-size: var(--career-target-min);
-    padding: var(--career-space-3) var(--career-space-4);
-  }
-
-  .career-responses-mobile-push .career-responses-selected__next {
-    min-block-size: var(--career-target-min);
-    border: var(--career-border-width) solid var(--career-line);
-    border-radius: var(--career-radius-md);
-    background: var(--career-surface);
-  }
-
-  .career-responses-mobile-push .career-responses-selected__actions {
-    display: grid;
-    gap: var(--career-space-2);
-  }
-
-  .career-responses-mobile-push .career-responses-selected__actions .career-btn {
-    min-block-size: var(--career-target-min);
-    border-radius: var(--career-radius-pill);
   }
 
   .career-responses-mobile-selection {

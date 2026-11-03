@@ -1,0 +1,267 @@
+/* The 1440 panel has no subline, step row or round chat button: they exist for the 390 push. */
+.career-responses-selected__sub,
+.career-responses-selected__step,
+.career-responses-selected__chat {
+  display: none;
+}
+
+/*
+ * 390 push screens of «Отклики» (mockup 5 `proc`, `learn`, B511 G3 item 4): the push
+ * draws its own top bar — round back, centred title, consultant — and the shell bar
+ * steps aside while it is open, as on the vacancy and company push screens.
+ */
+@media (max-width: 40rem) {
+  .career-shell:has(.career-responses-funnel-flow[data-mobile-push]) {
+    grid-template-rows: 0 minmax(0, 1fr);
+  }
+
+  .career-shell:has(.career-responses-funnel-flow[data-mobile-push]) .career-topbar,
+  .career-cabinet:has(.career-responses-funnel-flow[data-mobile-push]) > .career-page-header {
+    display: none;
+  }
+
+  /* The push bar takes the shell bar's place at the very top. */
+  .career-shell:has(.career-responses-funnel-flow[data-mobile-push]) .career-main {
+    padding-block-start: 0;
+  }
+
+  .career-responses-mobile-push-header {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
+    align-items: center;
+    min-block-size: var(--career-target-min);
+    padding-block-start: env(safe-area-inset-top, 0);
+    background: var(--career-bg);
+  }
+
+  /* Mockup `.topbar-back`: a 44 px glass circle. */
+  .career-responses-mobile-push-back {
+    display: grid;
+    place-items: center;
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    padding: 0;
+    border: var(--career-border-width) solid
+      color-mix(in oklch, var(--career-text) 14%, transparent);
+    border-radius: 50%;
+    color: var(--career-text);
+    background: color-mix(in oklch, var(--career-bg-elevated) 62%, transparent);
+    box-shadow: 0 2px 10px rgb(0 0 0 / 28%);
+    cursor: pointer;
+  }
+
+  .career-responses-mobile-push-header h2 {
+    grid-column: 2;
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--career-text-md);
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .career-responses-mobile-push-consultant {
+    grid-column: 3;
+    display: grid;
+    place-items: center;
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--career-accent);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__eyebrow,
+  .career-responses-mobile-push .career-responses-selected__title-role,
+  .career-responses-mobile-push .career-responses-selected__next,
+  .career-responses-mobile-push .career-responses-selected__discuss,
+  .career-responses-mobile-push .career-responses-selected__stories {
+    display: none;
+  }
+
+  /* Mockup `.pm-view`: no frame, groups 20 px apart. */
+  .career-responses-mobile-push .career-responses-selected {
+    gap: var(--career-space-5);
+    margin-block-start: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  /* Mockup `.pm-hero`: the company on one line, «роль · канал · интервью» under it. */
+  .career-responses-mobile-push .career-responses-selected__head {
+    display: grid;
+    gap: var(--career-space-2);
+    min-block-size: 0;
+    padding-inline: var(--career-space-1);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__title {
+    display: grid;
+    gap: 2px;
+    min-inline-size: 0;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__head h2 {
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--career-text-xl);
+    font-weight: 600;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__sub {
+    display: block;
+    margin: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+
+  /* The status chip keeps stage, labels, note and skip: it reads as the row's status line. */
+  .career-responses-mobile-push .career-responses-selected__head-actions {
+    justify-content: flex-start;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__step {
+    display: grid;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--career-space-5);
+  }
+
+  /* Mockup `.pm-group` / `.pm-cap`. */
+  .career-responses-mobile-push .career-responses-selected section {
+    display: grid;
+    gap: var(--career-space-2);
+  }
+
+  .career-responses-mobile-push .career-responses-selected section > .career-subsection-title {
+    margin: 0;
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  /* Mockup `.pm-list`: a 20 px card without a border. */
+  .career-responses-mobile-push .career-responses-selected__rows {
+    margin: 0;
+    border: 0;
+    border-radius: calc(var(--career-radius-md) + var(--career-space-1));
+    overflow: hidden;
+    background: var(--career-surface);
+  }
+
+  /* Mockup `.pm-row`: 56 px, the divider starts after the icon. */
+  .career-responses-mobile-push .career-responses-selected__row,
+  .career-responses-mobile-push .career-responses-selected__rows > .career-responses-contact {
+    position: relative;
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+    border-block-start: 0;
+  }
+
+  .career-responses-mobile-push
+    .career-responses-selected__row
+    + .career-responses-selected__row::before,
+  .career-responses-mobile-push
+    .career-responses-selected__rows
+    > .career-responses-contact::before {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 56px 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  /* Mockup `.pm-ico`: a 32 px tile with an 18 px icon. */
+  .career-responses-mobile-push .career-responses-selected__row-icon,
+  .career-responses-mobile-push .career-responses-selected__rows > .career-responses-contact > svg {
+    display: grid;
+    place-items: center;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: 9px;
+    color: var(--career-text-soft);
+    background: color-mix(in oklch, white 7%, transparent);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__rows > .career-responses-contact > svg {
+    box-sizing: border-box;
+    padding: 7px;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__row-icon svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__row-text strong {
+    font-size: var(--career-text-md);
+    font-weight: 500;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__chevron {
+    inline-size: 14px;
+    block-size: 14px;
+    color: var(--career-text-dim);
+  }
+
+  /*
+   * Mockup `.vm-cta`: pinned 36 px above the bottom menu. The sticky offset counts from
+   * `.career-main`'s padding edge, which already reserves the menu plus 16 px.
+   */
+  .career-responses-mobile-push .career-responses-selected__actions {
+    position: sticky;
+    inset-block-end: var(--career-space-5);
+    z-index: 4;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--career-space-2);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__actions .career-btn-primary {
+    flex: 1;
+    min-inline-size: 0;
+    white-space: normal;
+    min-block-size: 50px;
+    border-radius: 25px;
+    font-size: var(--career-text-md);
+    box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__chat {
+    display: grid;
+    flex: none;
+    place-items: center;
+    inline-size: 50px;
+    block-size: 50px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--career-text-dim);
+    background: color-mix(in oklch, var(--career-bg-elevated) 70%, transparent);
+    box-shadow: inset 0 0 0 var(--career-border-width) color-mix(in oklch, white 14%, transparent);
+    backdrop-filter: blur(16px);
+    cursor: pointer;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__chat svg {
+    inline-size: 22px;
+    block-size: 22px;
+  }
+}

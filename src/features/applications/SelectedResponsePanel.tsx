@@ -2,6 +2,7 @@ import { useCallback, useState, type ReactNode } from 'react';
 import {
   Buildings,
   ChatCircle,
+  ChatText,
   CheckCircle,
   Clock,
   EnvelopeSimple,
@@ -14,7 +15,6 @@ import {
   UsersThree,
   WarningCircle,
 } from '@phosphor-icons/react';
-import { pluralRu } from '../../../shared/pluralRu';
 import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
@@ -27,6 +27,7 @@ import { formatDayMonth, responseNextStep } from './responseCardFace';
 import { FollowUpSentControl } from './ResponsesCardStageControls';
 import { ResponseContactRow } from './ResponseContactRow';
 import { getApplicationContact, saveApplicationContact } from './applicationContactApi';
+import { daysLeft, NextStepRow, responseSubline, stepDeadline } from './SelectedResponseMobile';
 import './selected-response-panel.css';
 
 type SelectedResponsePanelProps = Omit<ResponseStatusMenuProps, 'application'> & {
@@ -114,6 +115,7 @@ function SelectedResponseContent({
         onMarkFollowUpSent={props.onMarkFollowUpSent}
         onStartPreparation={view.onStartPreparation}
         onOpenStories={view.onOpenStories}
+        onDiscuss={view.askConsultant}
       />
       <SelectedResponseDialogs
         application={props.application}
@@ -143,15 +145,20 @@ function SelectedResponseHeader({
 }) {
   return (
     <header className="career-responses-selected__head">
-      <h2 id="career-responses-selected-title" className="career-section-title">
-        {company}, {title}
-      </h2>
+      <div className="career-responses-selected__title">
+        {/* 390 (mockup 5 `proc`) shows the company alone; the role moves to the subline. */}
+        <h2 id="career-responses-selected-title" className="career-section-title">
+          {company}
+          <span className="career-responses-selected__title-role">, {title}</span>
+        </h2>
+        <p className="career-responses-selected__sub">{responseSubline(props.application)}</p>
+      </div>
       <div className="career-responses-selected__head-actions">
         <ResponseStatusMenu {...props} />
         {onDiscuss ? (
           <button
             type="button"
-            className="career-btn career-btn-secondary career-btn-sm"
+            className="career-btn career-btn-secondary career-btn-sm career-responses-selected__discuss"
             onClick={onDiscuss}
           >
             <ChatCircle aria-hidden="true" /> Обсудить
@@ -168,16 +175,21 @@ function SelectedResponseDetails({
   onMarkFollowUpSent,
   onStartPreparation,
   onOpenStories,
+  onDiscuss,
 }: {
   readonly application: ApplicationView;
   readonly company: string;
   readonly onMarkFollowUpSent: () => Promise<void>;
   readonly onStartPreparation: () => void;
   readonly onOpenStories: () => void;
+  readonly onDiscuss?: () => void;
 }) {
+  // An interview step opens its preparation; any other step is worked out with the consultant.
+  const openStep = application.stage === 'interview' ? onStartPreparation : onDiscuss;
   return (
     <>
       <NextStep application={application} />
+      <NextStepRow application={application} onOpen={openStep} />
       <FollowUpSentControl application={application} onMark={onMarkFollowUpSent} />
       <div className="career-responses-selected__columns">
         <Materials application={application} />
@@ -187,17 +199,21 @@ function SelectedResponseDetails({
       <SelectedResponseActions
         onStartPreparation={onStartPreparation}
         onOpenStories={onOpenStories}
+        onDiscuss={onDiscuss}
       />
     </>
   );
 }
 
+/** At 390 the row is pinned above the menu: «Начать мок-интервью» plus the round chat button. */
 function SelectedResponseActions({
   onStartPreparation,
   onOpenStories,
+  onDiscuss,
 }: {
   readonly onStartPreparation: () => void;
   readonly onOpenStories: () => void;
+  readonly onDiscuss?: () => void;
 }) {
   return (
     <div className="career-responses-selected__actions">
@@ -210,11 +226,21 @@ function SelectedResponseActions({
       </button>
       <button
         type="button"
-        className="career-btn career-btn-secondary career-btn-sm"
+        className="career-btn career-btn-secondary career-btn-sm career-responses-selected__stories"
         onClick={onOpenStories}
       >
         <ListChecks aria-hidden="true" /> Открыть STAR-истории
       </button>
+      {onDiscuss ? (
+        <button
+          type="button"
+          className="career-responses-selected__chat"
+          aria-label="Обсудить с консультантом"
+          onClick={onDiscuss}
+        >
+          <ChatText aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -277,7 +303,7 @@ function createResponseExpertHandler(
 
 function NextStep({ application }: { readonly application: ApplicationView }) {
   const next = responseNextStep(application);
-  const left = daysLeft(application.followUp?.dueAt ?? application.followUpDueAt);
+  const left = daysLeft(stepDeadline(application));
   return (
     <p className="career-responses-selected__next" role="status">
       <Target aria-hidden="true" />
@@ -290,16 +316,6 @@ function NextStep({ application }: { readonly application: ApplicationView }) {
 
 function lowerFirst(text: string): string {
   return text.charAt(0).toLocaleLowerCase('ru-RU') + text.slice(1);
-}
-
-function daysLeft(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const due = new Date(value).getTime();
-  if (Number.isNaN(due)) return null;
-  const days = Math.ceil((due - Date.now()) / 86_400_000);
-  if (days < 0) return 'Срок прошёл';
-  if (days === 0) return 'Срок сегодня';
-  return `Осталось ${pluralRu(days, ['день', 'дня', 'дней'])}`;
 }
 
 interface PanelRowProps {
@@ -459,8 +475,8 @@ function Dossier({
           title="Интервьюеры не указаны"
           detail="Имена появятся, когда компания пришлёт приглашение"
         />
+        <ApplicationContactRow applicationId={application.id} />
       </div>
-      <ApplicationContactRow applicationId={application.id} />
     </section>
   );
 }

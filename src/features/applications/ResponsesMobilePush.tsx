@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { CaretLeft } from '@phosphor-icons/react';
+import { CaretLeft, Sparkle } from '@phosphor-icons/react';
 import { ArchivedResponsesSection } from './ArchivedResponsesSection';
 import { ArchiveReasonsList } from './PipelineAnalyticsView';
 import { closedResponseReasons, isClosedResponse } from './ResponsesMobileLinks';
 import type { UseApplications } from './useApplications';
+import './responses-mobile-process.css';
 
 /** 390 push screens of «Отклики» (mockup 5: `mv=proc`, `mv=learn`, closed list). */
 export type ResponsesMobilePushView =
@@ -38,10 +39,13 @@ const PUSH_TITLES: Record<ResponsesMobilePushView['kind'], string> = {
 export function ResponsesMobilePush({
   view,
   onBack,
+  onOpenConsultant,
   children,
 }: {
   readonly view: ResponsesMobilePushView;
   readonly onBack: () => void;
+  /** Right slot of the push bar, the same consultant as the shell top bar it covers. */
+  readonly onOpenConsultant?: () => void;
   readonly children: ReactNode;
 }) {
   const titleId = useId();
@@ -56,13 +60,23 @@ export function ResponsesMobilePush({
         <button
           ref={backRef}
           type="button"
-          className="career-btn is-ghost is-icon"
+          className="career-responses-mobile-push-back"
           aria-label="Назад к откликам"
           onClick={onBack}
         >
           <CaretLeft size={20} aria-hidden="true" />
         </button>
         <h2 id={titleId}>{PUSH_TITLES[view.kind]}</h2>
+        {onOpenConsultant ? (
+          <button
+            type="button"
+            className="career-responses-mobile-push-consultant"
+            aria-label="Консультант: открыть"
+            onClick={onOpenConsultant}
+          >
+            <Sparkle size={18} aria-hidden="true" />
+          </button>
+        ) : null}
       </header>
       {children}
     </section>

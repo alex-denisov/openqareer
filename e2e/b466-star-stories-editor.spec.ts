@@ -50,10 +50,8 @@ async function openStories(page: Page, width: number): Promise<void> {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Отклики' }).click();
   }
   if (width <= 760) {
-    // B486: at 390 the whole row is one button and opens the response's «Процесс» push.
-    await page
-      .getByRole('button', { name: /^Открыть отклик:.*Руководитель инженерной команды/u })
-      .click();
+    // B511 G3 item 4: at 390 STAR stories open from «Подготовка», not from the «Процесс» push.
+    await page.getByRole('tab', { name: 'Подготовка' }).click();
   } else {
     const card = page
       .locator('.career-responses-card')
@@ -199,10 +197,13 @@ test('lists, creates, edits and opens linked STAR stories at 1440 and 390', asyn
           .filter({ hasText: 'Руководитель инженерной команды' });
         await card.locator('.career-responses-card-body').click();
       }
-      // Макет 5: «Начать мок-интервью» запускает тренажёр; STAR-истории открываются из панели отклика.
+      // Макет 5: «Начать мок-интервью» запускает тренажёр; STAR-истории открываются из панели
+      // отклика на 1440 и из «Подготовки» на 390.
       await page
-        .locator('.career-responses-selected')
+        .locator(width > 760 ? '.career-responses-selected' : '.career-responses-tab-panel')
         .getByRole('button', { name: 'Открыть STAR-истории' })
+        .filter({ visible: true })
+        .first()
         .click();
       await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toBeVisible();
       await expect(page.getByRole('dialog')).toHaveCount(1);

@@ -92,6 +92,21 @@ function appliedPill(input: FaceInput): ResponseStatusPill {
   return { tone: 'sent', label: withDate('Отправлено', formatDayMonth(input.appliedAt)) };
 }
 
+const REMINDER_URGENCIES: ReadonlySet<string> = new Set(['due', 'overdue', 'stale']);
+
+/**
+ * A reminder only makes sense after a confirmed delivery: a failed send, or an
+ * unconfirmed one at the point a reminder would be due, asks to resend (B511 G3 item 5).
+ */
+export function needsResend(
+  input: Pick<ApplicationView, 'stage' | 'deliveryReceipt' | 'followUp'>,
+): boolean {
+  if (input.stage !== 'applied') return false;
+  const state = deliveryState('applied', input.deliveryReceipt ?? null);
+  if (state === 'failed') return true;
+  return state === 'attempted' && REMINDER_URGENCIES.has(input.followUp?.urgency ?? '');
+}
+
 /**
  * The recruiter's name is not in the application model yet, so the step
  * names the company as the addressee instead of inventing a person.
@@ -104,12 +119,7 @@ export function responseNextStep(input: FaceInput): ResponseNextStep {
     const action = hasLetter ? 'Одобрить письмо' : 'Собрать письмо';
     return { text: due ? `${action} до ${due}` : action, yours: true };
   }
-  if (
-    input.stage === 'applied' &&
-    deliveryState('applied', input.deliveryReceipt ?? null) === 'failed'
-  ) {
-    return { text: 'Повторить отклик', yours: true };
-  }
+  if (needsResend(input)) return { text: 'Повторить отклик', yours: true };
   const urgency = input.followUp?.urgency;
   if (urgency === 'due') return { text: 'Напомнить компании сегодня', yours: true };
   if (urgency === 'overdue' || urgency === 'stale') {

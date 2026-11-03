@@ -223,7 +223,23 @@
     content: '·\00a0';
   }
 
+  /*
+   * The 390 «Процесс» push has no STAR button (B511 G3 item 4), so the whole list opens
+   * from here: a quiet accent action at the end of the group heading, like «Выбрать»
+   * beside «Нужно действие · N» in mockup 5.
+   */
   .career-prep-open-all {
+    min-block-size: var(--career-target-min);
+    margin-inline-start: auto;
+    padding-inline: var(--career-space-2);
+    border: 0;
+    color: var(--career-accent);
+    background: transparent;
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  .career-prep-open-all svg {
     display: none;
   }
 

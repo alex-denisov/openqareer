@@ -166,15 +166,46 @@
   padding: 2px var(--career-space-2);
 }
 
-/* Mockup 5 «Рекрутер» row: same row rhythm as the dossier list. */
-.career-responses-selected__dossier .career-responses-contact {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* Mockup 5 «Рекрутер» row: a left-aligned row of the «О компании» list, the button at the end. */
+.career-responses-selected__rows > p.career-responses-contact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--career-space-3);
+  align-items: center;
   margin: 0;
   padding: var(--career-space-3) 0;
   border-block-start: var(--career-border-width) solid var(--career-line);
   font-size: var(--career-text-sm);
   font-weight: 600;
+  text-align: start;
+}
+
+.career-responses-selected__rows > p.career-responses-contact > svg {
+  color: var(--career-text-soft);
+}
+
+.career-responses-selected__rows > form.career-responses-contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--career-space-2);
+  padding: var(--career-space-3) var(--career-space-4);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+/* The 390 next step row is a button that keeps the row grid. */
+.career-responses-selected__row.is-link {
+  inline-size: 100%;
+  border-inline: 0;
+  border-block-end: 0;
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.career-responses-selected__row.is-link:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: calc(-2 * var(--career-border-width));
 }

@@ -18,7 +18,7 @@ import { CandidateActionPanel } from './CandidateActionPanel';
 import { ApplicationBulkActions } from './ResponsesSelectionBar';
 import { ResponsesMobileLinks } from './ResponsesMobileLinks';
 import { countResponsesNeedingAction, isResponseNeedingAction } from './responsesFiltering';
-import { mobileDueDate, mobileNextStepLabel, mobileStatusLabel } from './responsesMobileRow';
+import { mobileDueDate, mobileNextStep, mobileStatusLabel } from './responsesMobileRow';
 import { humanSourceLabel } from './sourceLabels';
 
 export interface ResponsesMobileSelection {
@@ -320,6 +320,7 @@ function MobileRowContent({
   readonly checked: boolean;
 }) {
   const due = mobileDueDate(application);
+  const next = mobileNextStep(application);
   return (
     <>
       <span className="career-responses-mobile-row-heading">
@@ -344,7 +345,9 @@ function MobileRowContent({
           {mobileStatusIcon(application)}
           <span>{mobileStatusLabel(application)}</span>
         </span>
-        <span className="career-responses-mobile-row-next">{mobileNextStepLabel(application)}</span>
+        <span className={'career-responses-mobile-row-next' + (next.hot ? ' is-hot' : '')}>
+          {next.label}
+        </span>
       </span>
     </>
   );

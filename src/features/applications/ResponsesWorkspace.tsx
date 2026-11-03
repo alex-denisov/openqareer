@@ -185,6 +185,8 @@ function FunnelWorkspace({
     initialPushView(props),
   );
   const push = compact ? pushState : null;
+  const { onOpenExpert } = props;
+  const openConsultant = onOpenExpert ? () => onOpenExpert('responses') : undefined;
   const closePush = () => {
     const returnTo = push?.kind === 'response' ? push.id : null;
     setPush(null);
@@ -202,7 +204,7 @@ function FunnelWorkspace({
   return (
     <div className="career-responses-funnel-flow" data-mobile-push={push ? push.kind : undefined}>
       {push ? (
-        <ResponsesMobilePush view={push} onBack={closePush}>
+        <ResponsesMobilePush view={push} onBack={closePush} onOpenConsultant={openConsultant}>
           <MobilePushContent view={push} props={props} workspace={workspace} />
         </ResponsesMobilePush>
       ) : null}
