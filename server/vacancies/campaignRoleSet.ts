@@ -193,7 +193,9 @@ function validateModelRoles(
   }
   if (dropped.length > 0)
     log?.({ dropped, kept: kept.length }, 'campaign-role-model-items-dropped');
-  if (kept.length < MIN_ROLES) {
+  // Short only because of the candidate's own dismissals: the answer is sound, rules fill the gap.
+  const dismissedCount = dropped.filter((item) => item.endsWith(':dismissed')).length;
+  if (kept.length < MIN_ROLES && (kept.length === 0 || kept.length + dismissedCount < MIN_ROLES)) {
     log?.({ reason: 'too_few_roles', kept: kept.length }, 'campaign-role-model-rejected');
     return null;
   }
@@ -210,6 +212,19 @@ function validateModelRoles(
         item.reason,
       ),
     );
+}
+
+/** Adds rules roles to a model answer left short by dismissals, up to the minimum. */
+function withRulesRoles(
+  modeled: readonly CampaignRoleProposal[],
+  rules: readonly CampaignRoleProposal[],
+): CampaignRoleProposal[] {
+  const taken = new Set(modeled.map((role) => role.id));
+  const added = rules
+    .filter((role) => !taken.has(role.id))
+    .slice(0, MIN_ROLES - modeled.length)
+    .map((role) => ({ ...role, kind: 'adjacent' as const }));
+  return [...modeled, ...added];
 }
 
 export async function buildCampaignRoleSet(input: {
@@ -239,11 +254,22 @@ export async function buildCampaignRoleSet(input: {
       : null;
   const modeled =
     raw === null ? null : validateModelRoles(raw, candidates, input.facts, dismissed, input.log);
-  const roles = modeled ?? fallbackRoles(input.facts, input.profileTitle ?? null, level, dismissed);
+  const needsRules = !modeled || modeled.length < MIN_ROLES;
+  const rules = needsRules
+    ? fallbackRoles(input.facts, input.profileTitle ?? null, level, dismissed)
+    : [];
+  const roles = modeled ? (needsRules ? withRulesRoles(modeled, rules) : modeled) : rules;
+  const modelName = input.model?.name ?? 'model';
+  if (modeled && needsRules) {
+    input.log?.(
+      { kept: modeled.length, added: roles.length - modeled.length },
+      'campaign-role-model-topped-up',
+    );
+  }
   return {
     roles: roles.slice(0, MAX_ROLES),
     factsDigest: campaignFactsDigest(input.facts),
     generatedAt: (input.now?.() ?? new Date()).toISOString(),
-    model: modeled ? (input.model?.name ?? 'model') : 'rules',
+    model: !modeled ? 'rules' : needsRules ? `${modelName}+rules` : modelName,
   };
 }

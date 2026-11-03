@@ -16,6 +16,30 @@ function fact(partial: Partial<CampaignMemoryFact> & { statement: string }): Cam
 }
 
 describe('resolveCampaign (B247, срез 1)', () => {
+  it('авто-роль, убранная кандидатом на «Карьере», не идёт ни в подбор, ни в список авто-ролей', () => {
+    const autoRole = (id: string, title: string) => ({
+      id, title, titleRu: title, functions: ['ops'], level: 'vp' as const, kind: 'adjacent' as const,
+      synonyms: [], evidenceRefs: ['memory:1'], reason: 'Выбрано по фактам.',
+    });
+    const resolution = resolveCampaign({
+      memory: [],
+      resumeTargetRole: null,
+      profileRegions: [],
+      explicit: null,
+      auto: {
+        roles: [autoRole('eng-mgmt.cto', 'CTO'), autoRole('ops.coo', 'COO')],
+        factsDigest: 'digest',
+        generatedAt: '2026-11-04T00:00:00.000Z',
+        model: 'rules',
+      },
+      rejectedRoleIds: new Set(['role-cto']),
+      roleIdOf: (title) => `role-${title.toLowerCase()}`,
+    });
+
+    expect(resolution.roles).toEqual({ value: ['COO'], origin: 'model' });
+    expect(resolution.autoRoles.map((role) => role.id)).toEqual(['ops.coo']);
+  });
+
   it('без явного выбора берёт подтверждённую роль профиля раньше гипотезы и резюме', () => {
     const resolution = resolveCampaign({
       memory: [
