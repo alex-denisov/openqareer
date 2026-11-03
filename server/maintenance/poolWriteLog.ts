@@ -34,6 +34,7 @@ export function logPoolWrites(log: MaintenanceLog): (event: PoolWriteEvent) => v
           sourceId: event.sourceId,
           rows: event.rows,
           durationMs: Math.round(event.durationMs),
+          lockWaitMs: Math.round(event.lockWaitMs),
         },
         'pool-write-slow',
       );
