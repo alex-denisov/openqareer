@@ -234,6 +234,184 @@
     min-block-size: calc(var(--career-target-min) + var(--career-space-1));
     border-radius: var(--career-radius-pill);
   }
+
+  /* Макет 5 `filters` / `stagef`: grouped rows and the «Этап» radio sheet. */
+  .career-responses-filter-row,
+  .career-responses-stage-option {
+    display: grid;
+    align-items: center;
+    gap: var(--career-space-3);
+    inline-size: 100%;
+    min-inline-size: 0;
+    min-block-size: var(--career-target-min);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-md);
+    padding: var(--career-space-3) var(--career-space-4);
+    color: var(--career-text);
+    background: var(--career-surface);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .career-responses-filter-row {
+    grid-template-columns: var(--career-space-8) minmax(0, 1fr) auto var(--career-space-4);
+  }
+
+  .career-responses-filter-row-icon {
+    display: grid;
+    place-items: center;
+    inline-size: var(--career-space-8);
+    block-size: var(--career-space-8);
+    border-radius: var(--career-radius-sm);
+    color: var(--career-text-soft);
+    background: var(--career-surface-raised);
+  }
+
+  .career-responses-filter-row-icon svg,
+  .career-responses-filter-row-caret {
+    inline-size: var(--career-space-4);
+    block-size: var(--career-space-4);
+    color: var(--career-text-soft);
+  }
+
+  .career-responses-filter-row-label {
+    font-weight: 600;
+  }
+
+  .career-responses-filter-row-value,
+  .career-responses-stage-option-count {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+
+  .career-responses-stage-sheet {
+    display: grid;
+    gap: var(--career-space-4);
+  }
+
+  .career-responses-stage-options {
+    display: grid;
+    margin: 0;
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-md);
+    padding: 0;
+    overflow: hidden;
+    background: var(--career-surface);
+  }
+
+  .career-responses-stage-options .career-responses-stage-option {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .career-responses-stage-option + .career-responses-stage-option {
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  /* The shell draws the radio itself (career-shell.css); only keep it at its own size. */
+  .career-responses-stage-options .career-responses-stage-option input[type='radio'] {
+    grid-column: 1;
+    grid-row: 1;
+    inline-size: 18px;
+    block-size: 18px;
+    min-block-size: 0;
+  }
+
+  .career-responses-stage-options .career-responses-stage-option-label {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .career-responses-stage-options .career-responses-stage-option-count {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .career-responses-stage-option-label {
+    font-weight: 500;
+  }
+
+  /* Макет 5 `proc` / `learn`: push intro, grouped lists with label left and value right. */
+  .career-responses-mobile-process,
+  .career-responses-mobile-channels {
+    display: grid;
+    gap: var(--career-space-4);
+    min-inline-size: 0;
+  }
+
+  .career-responses-mobile-push-intro h3 {
+    margin: 0;
+    color: var(--career-text);
+    font-size: var(--career-text-xl);
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
+  .career-responses-mobile-push-intro p,
+  .career-responses-mobile-note,
+  .career-responses-mobile-empty {
+    margin: var(--career-space-1) 0 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+
+  .career-responses-mobile-group,
+  .career-responses-mobile-actions {
+    display: grid;
+    gap: var(--career-space-2);
+    min-inline-size: 0;
+  }
+
+  .career-responses-mobile-group h4,
+  .career-responses-mobile-actions h4 {
+    margin: 0;
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+    font-weight: 600;
+  }
+
+  .career-responses-mobile-list {
+    display: grid;
+    margin: 0;
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-md);
+    overflow: hidden;
+    background: var(--career-surface);
+  }
+
+  .career-responses-mobile-list > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--career-space-3);
+    min-block-size: var(--career-target-min);
+    padding: var(--career-space-2) var(--career-space-4);
+  }
+
+  .career-responses-mobile-list > div + div {
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-responses-mobile-list dt {
+    min-inline-size: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+    overflow-wrap: anywhere;
+  }
+
+  .career-responses-mobile-list dd {
+    margin: 0;
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+    font-weight: 600;
+    text-align: end;
+    overflow-wrap: anywhere;
+  }
 }
 
 .career-responses-mobile-feed {
@@ -700,6 +878,60 @@
 
   .career-responses-mobile-push .career-responses-selected__eyebrow {
     display: none;
+  }
+
+  /* Макет 5 `proc`: the panel loses its frame; each group is a soft heading over a list card. */
+  .career-responses-mobile-push .career-responses-selected {
+    margin-block-start: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__head h2 {
+    flex: 1 1 100%;
+    font-size: var(--career-text-xl);
+    overflow-wrap: anywhere;
+  }
+
+  .career-responses-mobile-push .career-responses-selected__columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--career-space-4);
+  }
+
+  .career-responses-mobile-push .career-responses-selected section > .career-subsection-title {
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__rows {
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-md);
+    overflow: hidden;
+    background: var(--career-surface);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__row {
+    min-block-size: var(--career-target-min);
+    padding: var(--career-space-3) var(--career-space-4);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__next {
+    min-block-size: var(--career-target-min);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__actions {
+    display: grid;
+    gap: var(--career-space-2);
+  }
+
+  .career-responses-mobile-push .career-responses-selected__actions .career-btn {
+    min-block-size: var(--career-target-min);
+    border-radius: var(--career-radius-pill);
   }
 
   .career-responses-mobile-selection {

@@ -22,6 +22,7 @@ import { ResponsesPipelineAnalytics } from './ResponsesPipelineAnalytics';
 import { ResponsesChannelPerformance } from './ResponsesChannelPerformance';
 import { SelectedResponsePanel } from './SelectedResponsePanel';
 import { ResponseMockInterviewSuggestion } from './ResponseMockInterviewSuggestion';
+import { ResponsesMobileChannels } from './ResponsesMobileChannels';
 import {
   ResponsesFunnelSummary,
   ResponsesFilterControls,
@@ -219,13 +220,14 @@ function MobilePushContent({
   readonly props: ResponsesWorkspaceScreenProps;
   readonly workspace: WorkspaceController;
 }) {
+  // Макет 5 `proc`: the response panel already holds its groups (next step, materials,
+  // delivery, «О компании») from real data; responses-mobile.css lays them out as lists.
   if (view.kind === 'response') return <SelectedResponse props={props} workspace={workspace} />;
   if (view.kind === 'channels') {
     return (
-      <ChannelPerformance
-        props={props}
-        workspace={workspace}
+      <ResponsesMobileChannels
         applications={workspace.filteredApplications}
+        explanation={<StageAnalytics props={props} workspace={workspace} />}
       />
     );
   }
@@ -321,15 +323,25 @@ function ChannelPerformance({
       applications={applications}
       query={workspace.query}
       initiallyExplained={props.initialTab === 'analytics'}
-      explanation={
-        <ResponsesPipelineAnalytics
-          query={workspace.query}
-          revision={props.state.applications}
-          initiallyExpanded
-          onOpenVacancies={props.onOpenVacancies}
-          onOpenExpert={props.onOpenExpert}
-        />
-      }
+      explanation={<StageAnalytics props={props} workspace={workspace} />}
+    />
+  );
+}
+
+function StageAnalytics({
+  props,
+  workspace,
+}: {
+  readonly props: ResponsesWorkspaceScreenProps;
+  readonly workspace: WorkspaceController;
+}) {
+  return (
+    <ResponsesPipelineAnalytics
+      query={workspace.query}
+      revision={props.state.applications}
+      initiallyExpanded
+      onOpenVacancies={props.onOpenVacancies}
+      onOpenExpert={props.onOpenExpert}
     />
   );
 }

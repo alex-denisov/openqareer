@@ -110,6 +110,15 @@ test.describe('B486 mobile responses', () => {
     await row.click();
     const push = page.getByRole('region', { name: 'Процесс' });
     await expect(push).toBeVisible();
+    await expect(push.getByRole('heading', { name: /^Peraton,/ })).toBeVisible();
+    // Макет 5 `proc`: the panel's groups, each once, from the response's own data.
+    for (const group of ['Материалы', 'Доставка']) {
+      await expect(push.getByRole('region', { name: group, exact: true })).toHaveCount(1);
+    }
+    await expect(push.getByRole('status').filter({ hasText: 'Следующий шаг' })).toBeVisible();
+    await expect(push.getByRole('region', { name: 'Доставка', exact: true })).toContainText(
+      'Не подтверждено',
+    );
     await expect(push.getByRole('region', { name: /Peraton/ })).toBeVisible();
     await expect(page.getByRole('list', { name: 'Нужно действие' })).toBeHidden();
     await expect(page.getByRole('tablist', { name: 'Отклики' })).toBeHidden();
@@ -176,9 +185,14 @@ test.describe('B486 mobile responses', () => {
     await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Фильтры' });
     await expect(dialog.getByRole('button', { name: 'Сбросить' })).toBeVisible();
-    const stage = dialog.getByLabel('Этап');
-    await expect(stage.locator('option')).toHaveCount(7);
-    await stage.selectOption('интервью');
+    // Макет 5 `stagef`: the «Этап» row opens its own sheet of seven stages with counts.
+    await dialog.getByRole('button', { name: /^Этап/ }).click();
+    const stageSheet = page.getByRole('dialog', { name: 'Этап' });
+    await expect(stageSheet.getByRole('radio')).toHaveCount(7);
+    await expect(stageSheet.getByRole('radio', { name: 'Все' })).toBeChecked();
+    await stageSheet.getByRole('radio', { name: 'Интервью' }).click();
+    await expect(dialog.getByRole('button', { name: /^Этап/ })).toContainText('Интервью');
+    await expect(dialog.getByRole('button', { name: /^Этап/ })).toBeFocused();
     await dialog.getByRole('button', { name: 'Показать', exact: true }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('listitem').filter({ hasText: 'Peraton' })).toHaveCount(0);
@@ -256,8 +270,15 @@ test.describe('B486 mobile responses', () => {
     await channelLink.click();
     const channels = page.getByRole('region', { name: 'Каналы' });
     await expect(channels).toBeVisible();
-    // «Аналитика этапов» lives behind the channels «Пояснение» (B484), now inside the push.
-    await channels.getByRole('button', { name: 'Пояснение' }).click();
+    // Макет 5 `learn`: one grouped card per channel plus «Всего» when there are several.
+    await expect(
+      channels.getByRole('heading', { name: 'Результативность по каналам' }),
+    ).toBeVisible();
+    const hh = channels.getByRole('region', { name: 'hh.ru' });
+    await expect(hh).toContainText('Откликов');
+    await expect(hh).toContainText(/Ответили\s*\d+,\d % \(\d+\)/);
+    // «Аналитика этапов» stays reachable inside the push.
+    await channels.getByRole('button', { name: 'Аналитика этапов' }).click();
     await expect(channels.getByRole('region', { name: 'История этапов откликов' })).toBeVisible();
     await channels.getByRole('button', { name: 'Назад к откликам' }).click();
 
@@ -334,6 +355,9 @@ test.describe('B486 mobile responses', () => {
     await back.click();
     await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
     await page.screenshot({ path: `${dir}/after-390-filters.png` });
+    await page.getByRole('button', { name: /^Этап/ }).click();
+    await page.screenshot({ path: `${dir}/after-390-stagef.png` });
+    await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Выбрать', exact: true }).click();
     await page

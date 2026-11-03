@@ -779,17 +779,18 @@ test.describe('B251 responses screen', () => {
     await expect(channelSection.locator('tbody tr').last()).toContainText('Всего');
     await expect(channelSection).toContainText('Ввод вручную');
     await page.screenshot({ path: testInfo.outputPath('b450-channels-1440.png'), fullPage: true });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await hideConsultantForEvidence(page);
-    // B486: at 390 the channels block opens as the «Каналы» push screen.
-    await page.getByRole('button', { name: /Результативность по каналам/ }).click();
-    await channelSection.scrollIntoViewIfNeeded();
-    await channelSection.screenshot({ path: testInfo.outputPath('b450-channels-390.png') });
     await captureCareerHarness(
       page,
       testInfo.outputPath('b450-channels-harness.html'),
       '.career-responses-channel-performance',
     );
+    await page.setViewportSize({ width: 390, height: 844 });
+    await hideConsultantForEvidence(page);
+    // B486: at 390 the channels open as the «Каналы» push in the mockup 5 `learn` layout.
+    await page.getByRole('button', { name: /Результативность по каналам/ }).click();
+    const channelsPush = page.getByRole('region', { name: 'Каналы' });
+    await expect(channelsPush.getByRole('region', { name: 'Всего' })).toContainText('Откликов');
+    await channelsPush.screenshot({ path: testInfo.outputPath('b450-channels-390.png') });
   });
 
   test('B414: единое оформление select доказательства доставки и этапа', async ({

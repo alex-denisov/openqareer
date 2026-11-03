@@ -13,6 +13,7 @@ import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
 import { getCandidateCompanyPage } from '../vacancies/candidateCompaniesApi';
 import { humanSourceLabel } from './sourceLabels';
+import { STAGE_SHEET_TITLE_ID, StageSheet, StageSheetRow } from './ResponsesStageSheet';
 import type { ResponsesSortMode } from './responsesFiltering';
 
 export type ResponsesWorkspaceSection = 'funnel' | 'company-wants' | 'preparation' | 'offers';
@@ -387,8 +388,10 @@ function useMobileFilterDialog(props: ResponsesFilterControlsProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState(() => createMobileFilterDraft(props));
+  const [stageSheetOpen, setStageSheetOpen] = useState(false);
   const open = () => {
     setDraft(createMobileFilterDraft(props));
+    setStageSheetOpen(false);
     dialogRef.current?.showModal();
     setIsOpen(true);
   };
@@ -417,6 +420,8 @@ function useMobileFilterDialog(props: ResponsesFilterControlsProps) {
     isOpen,
     draft,
     setDraft,
+    stageSheetOpen,
+    setStageSheetOpen,
     open,
     close,
     handleClose,
@@ -451,12 +456,18 @@ function MobileFilterDialog({
         ref={state.dialogRef}
         id="career-responses-filter-dialog"
         className="career-responses-filter-dialog"
-        aria-labelledby="career-responses-filter-title"
+        aria-labelledby={
+          state.stageSheetOpen ? STAGE_SHEET_TITLE_ID : 'career-responses-filter-title'
+        }
         aria-modal="true"
         onClose={state.handleClose}
         onKeyDown={state.handleTabTrap}
       >
-        <MobileFilterForm props={props} state={state} channels={channels} />
+        {state.stageSheetOpen ? (
+          <MobileStageSheet props={props} state={state} />
+        ) : (
+          <MobileFilterForm props={props} state={state} channels={channels} />
+        )}
       </dialog>
     </>
   );
@@ -526,11 +537,7 @@ function MobileFilterForm({
         </button>
       </header>
       {props.onSummaryFilter ? (
-        <MobileStageField
-          items={mobileStageItems(props)}
-          value={state.draft.stage}
-          onChange={(stage) => state.setDraft((current) => ({ ...current, stage }))}
-        />
+        <StageSheetRow value={state.draft.stage} onOpen={() => state.setStageSheetOpen(true)} />
       ) : null}
       <MobileFilterFields draft={state.draft} setDraft={state.setDraft} channels={channels} />
       <MobileFilterActions />
@@ -538,30 +545,33 @@ function MobileFilterForm({
   );
 }
 
-function MobileStageField({
-  items,
-  value,
-  onChange,
+/** «Этап» sheet replaces the filter sheet; a pick returns to it with the draft updated. */
+function MobileStageSheet({
+  props,
+  state,
 }: {
-  readonly items: readonly SummaryItem[];
-  readonly value: string;
-  readonly onChange: (value: string) => void;
+  readonly props: ResponsesFilterControlsProps;
+  readonly state: ReturnType<typeof useMobileFilterDialog>;
 }) {
+  const backToFilters = () => {
+    state.setStageSheetOpen(false);
+    window.requestAnimationFrame(() =>
+      state.dialogRef.current?.querySelector<HTMLElement>('[data-stage-row]')?.focus(),
+    );
+  };
   return (
-    <div className="career-responses-filter-field">
-      <label htmlFor="career-responses-filter-stage">Этап</label>
-      <select
-        id="career-responses-filter-stage"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {items.map((item) => (
-          <option key={item.label} value={item.label}>
-            {item.label.charAt(0).toUpperCase() + item.label.slice(1)} · {item.count}
-          </option>
-        ))}
-      </select>
-    </div>
+    <StageSheet
+      items={mobileStageItems(props).map((item) => ({
+        key: item.label,
+        count: String(item.count),
+      }))}
+      value={state.draft.stage}
+      onPick={(stage) => {
+        state.setDraft((current) => ({ ...current, stage }));
+        backToFilters();
+      }}
+      onClose={backToFilters}
+    />
   );
 }
 

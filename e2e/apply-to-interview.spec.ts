@@ -513,12 +513,13 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await openToday(page);
 }
 
-/** Preparation opens from the selected response panel (B484); at 390 the panel is the row's push (B486). */
+/** Preparation opens from the selected response panel (B484); at 390 it is the «Процесс» push (B486). */
 async function openInterviewPrep(page: Page, card: Locator): Promise<void> {
   const width = page.viewportSize()?.width ?? 1440;
   if (width >= 1024) {
     await card.locator('.career-responses-card-body').click();
-  } else if (width <= 640) {
+  } else if (width <= 640 && !(await page.getByRole('region', { name: 'Процесс' }).isVisible())) {
+    // A Today row already lands on the push; a plain list visit needs the row tap.
     await page.locator('.career-responses-mobile-row').filter({ hasText: 'Genetec' }).click();
   }
   const button = page.getByRole('button', { name: 'Начать мок-интервью' });
