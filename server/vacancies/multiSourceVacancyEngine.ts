@@ -1,6 +1,7 @@
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
    are intentionally kept together so replacement, expiry and reclustering share
    one transaction boundary. */
+import { parseAtsBoardSourceId } from './atsBoardAdapters';
 import type { ChipCounts } from './catalogChips';
 import type { CatalogChipQuery } from './vacancyPoolStore';
 import type { SalaryStats } from './catalogSalaryStats';
@@ -315,6 +316,14 @@ function lastSyncMs(source: VacancySourceConfig): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function statusFromMessage(message: unknown): number | undefined {
+  const match = typeof message === 'string' ? message.match(/vacancy_source_unreachable: (\d{3})\b/) : null;
+  return match ? Number(match[1]) : undefined;
+}
+
+/** Polls in a row that must answer 404 before an ATS board counts as closed. */
+const BOARD_CLOSED_AFTER_NOT_FOUND = 3;
+
 function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfterHeader?: string } {
   if (!err || typeof err !== 'object') return {};
   const obj = err as Record<string, unknown>;
@@ -325,7 +334,7 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
         ? obj.status
         : typeof (obj.response as Record<string, unknown> | undefined)?.status === 'number'
           ? ((obj.response as Record<string, unknown>).status as number)
-          : undefined;
+          : statusFromMessage(obj.message);
 
   const headers =
     (obj.headers as { get?: (k: string) => string | null } | undefined) ??
@@ -1482,12 +1491,12 @@ export class MultiSourceVacancyEngine {
       const message = err instanceof Error ? err.message : String(err);
       // Провал транспорта — не пустой улов: про содержимое площадки он не
       // говорит ничего, поэтому серию пустых уловов он не удлиняет (B200).
-      this.observe(source.id, { succeeded: false, atMs: nowMs });
+      const { statusCode, retryAfterHeader } = extractErrorHttpDetails(err);
+      this.observe(source.id, { succeeded: false, atMs: nowMs, notFound: statusCode === 404 });
       source.lastSyncAt = new Date(nowMs).toISOString();
       source.lastStatus = 'error';
       source.lastErrorMessage = message;
-
-      const { statusCode, retryAfterHeader } = extractErrorHttpDetails(err);
+      const boardClosed = await this.withdrawClosedBoard(source);
       this.scheduler.recordAttempt(source.id, {
         success: false,
         statusCode,
@@ -1498,8 +1507,33 @@ export class MultiSourceVacancyEngine {
       this.persistSourceState(source);
       // A failed reading is not evidence that the source went empty, so the
       // slice it delivered last time stays until a successful run replaces it.
-      return { sourceId, status: 'error', fetched: 0, kept: 0, message };
+      return { sourceId, status: 'error', fetched: 0, kept: 0, message: boardClosed ?? message };
     }
+  }
+
+  /**
+   * An employer ATS board that answers 404 on several polls in a row is closed,
+   * not temporarily down: its vacancies are withdrawn instead of staying
+   * matchable for thirty days. One or two 404s change nothing, and only boards
+   * the registry knows by provider are treated this way (03.11: greenhouse
+   * amplitude/postman/outschool/wayve, recruitee google/olx/samsung).
+   */
+  private async withdrawClosedBoard(source: VacancySourceConfig): Promise<string | undefined> {
+    const count = this.observations.get(source.id)?.consecutiveNotFound ?? 0;
+    if (count < BOARD_CLOSED_AFTER_NOT_FOUND || !parseAtsBoardSourceId(source.id)) {
+      return undefined;
+    }
+    if (this.pool.replaceSourceSliceAsync) {
+      await this.pool.replaceSourceSliceAsync(source.id, []);
+    } else {
+      this.pool.replaceSourceSlice(source.id, []);
+    }
+    this.requiresFullRecluster = true;
+    source.itemsActiveTotal = 0;
+    source.itemsFoundTotal = 0;
+    source.lastErrorMessage = `board_closed: ${count} consecutive 404`;
+    this.persistSourceState(source);
+    return source.lastErrorMessage;
   }
 
   /**
