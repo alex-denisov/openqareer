@@ -7,7 +7,7 @@ import {
 } from '@phosphor-icons/react';
 import type { StarField, StarStoryView } from '../../../shared/starStories';
 
-const FIELD_LABELS: Readonly<Record<StarField, string>> = {
+export const FIELD_LABELS: Readonly<Record<StarField, string>> = {
   situation: 'Ситуация',
   task: 'Задача',
   action: 'Действие',

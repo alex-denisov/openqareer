@@ -847,8 +847,21 @@
   }
 
   .career-responses-board-wrap:has(.career-responses-funnel-flow[data-mobile-push])
+    .career-responses-workspace-nav,
+  .career-responses-board-wrap:has(.career-responses-push-host[data-mobile-push])
     .career-responses-workspace-nav {
     display: none;
+  }
+
+  .career-responses-push-host[data-mobile-push] {
+    padding-block-start: 0;
+  }
+
+  .career-responses-push-host > .career-responses-mobile-push {
+    display: grid;
+    gap: var(--career-space-4);
+    min-inline-size: 0;
+    padding-block-end: var(--career-space-6);
   }
 
   .career-responses-funnel-flow > .career-responses-mobile-push {

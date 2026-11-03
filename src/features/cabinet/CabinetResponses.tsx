@@ -21,6 +21,7 @@ export function CabinetResponses(props: CabinetResponsesProps) {
     <ResponsesBoard
       state={props.tracker}
       onOpenVacancies={() => onNavigate('opportunities')}
+      onOpenCompanyVacancies={(companyName) => onNavigate('opportunities', { companyName })}
       onOpenAutomation={props.onOpenAutomation}
       initialStageFilter={navigationOptions?.stage}
       initialArchiveOpen={navigationOptions?.openArchive}

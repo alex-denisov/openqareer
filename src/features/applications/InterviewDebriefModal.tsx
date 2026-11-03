@@ -1,10 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { X } from '@phosphor-icons/react';
 import { useEscapeLayer } from '../shell/escapeLayers';
-import {
-  computeDebriefFollowUpDate,
-  type DebriefDeadlinePreset,
-} from './debriefDeadline';
+import { computeDebriefFollowUpDate, type DebriefDeadlinePreset } from './debriefDeadline';
 import './interviewDebriefModal.css';
 
 export type InterviewFeeling = 'positive' | 'neutral' | 'difficult';
@@ -152,6 +149,20 @@ export function InterviewDebriefModal(props: InterviewDebriefModalProps) {
   );
 }
 
+/** 390 «Дебриф» push: the same form on the page instead of a dialog (B511 G3 item 8). */
+export function InterviewDebriefInline(
+  props: Omit<InterviewDebriefModalProps, 'isOpen' | 'vacancyTitle' | 'company'>,
+) {
+  const state = useInterviewDebriefState({
+    initialFeeling: props.initialFeeling ?? 'positive',
+    initialQuestions: props.initialQuestions ?? '',
+    initialPromisedDate: props.initialPromisedDate ?? null,
+    onSave: props.onSave,
+    onClose: props.onClose,
+  });
+  return <DebriefForm state={state} onClose={props.onClose} />;
+}
+
 function DebriefHeader({
   company,
   vacancyTitle,
@@ -168,15 +179,11 @@ function DebriefHeader({
           Итоги интервью
         </h2>
         <p className="career-debrief-modal-subtitle">
-          {vacancyTitle}{company ? ` · ${company}` : ''}
+          {vacancyTitle}
+          {company ? ` · ${company}` : ''}
         </p>
       </div>
-      <button
-        type="button"
-        className="career-btn-icon"
-        onClick={onClose}
-        aria-label="Закрыть"
-      >
+      <button type="button" className="career-btn-icon" onClick={onClose} aria-label="Закрыть">
         <X size={18} aria-hidden="true" />
       </button>
     </header>
@@ -201,7 +208,11 @@ function DebriefFeelingGroup({
       <span className="career-debrief-label" id="feeling-group-label">
         Как прошло собеседование
       </span>
-      <div className="career-debrief-feeling-options" role="radiogroup" aria-labelledby="feeling-group-label">
+      <div
+        className="career-debrief-feeling-options"
+        role="radiogroup"
+        aria-labelledby="feeling-group-label"
+      >
         {options.map((opt) => (
           <label
             key={opt.id}
@@ -293,13 +304,7 @@ function DebriefDeadlinesGroup({
   );
 }
 
-function DebriefActions({
-  saving,
-  onClose,
-}: {
-  saving: boolean;
-  onClose: () => void;
-}) {
+function DebriefActions({ saving, onClose }: { saving: boolean; onClose: () => void }) {
   return (
     <div className="career-debrief-modal-actions">
       <button
@@ -310,11 +315,7 @@ function DebriefActions({
       >
         Отмена
       </button>
-      <button
-        type="submit"
-        className="career-btn career-btn-primary"
-        disabled={saving}
-      >
+      <button type="submit" className="career-btn career-btn-primary" disabled={saving}>
         {saving ? 'Сохраняем…' : 'Сохранить дебрифинг'}
       </button>
     </div>

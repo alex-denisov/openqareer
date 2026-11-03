@@ -719,6 +719,7 @@ function CabinetSection({
       focusRoleFilter={Boolean(
         navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role',
       )}
+      initialCompanyName={navigationOptions?.companyName}
     />
   );
 }

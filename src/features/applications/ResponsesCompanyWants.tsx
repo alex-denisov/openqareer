@@ -41,6 +41,9 @@ export interface CompanyWantsView {
   readonly controller: CompanyWantsController;
   readonly openAdd: () => void;
   readonly openNextStep: (items: Selection) => void;
+  /** «Открыть N вакансий» of the 390 company push: the selection filtered by the company. */
+  readonly openCompanyVacancies?: (companyName: string) => void;
+  readonly openConsultant?: () => void;
 }
 
 const STAGE_CHIPS: readonly [CandidateCompanyWantStageFilter, string][] = [
@@ -77,7 +80,13 @@ export function stageMenuItems(
   ];
 }
 
-export function CompanyWantsPanel() {
+export function CompanyWantsPanel({
+  onOpenCompanyVacancies,
+  onOpenConsultant,
+}: {
+  readonly onOpenCompanyVacancies?: (companyName: string) => void;
+  readonly onOpenConsultant?: () => void;
+} = {}) {
   const controller = useCompanyWants();
   const [addOpen, setAddOpen] = useState(false);
   const [stepTarget, setStepTarget] = useState<StepTarget | null>(null);
@@ -87,25 +96,12 @@ export function CompanyWantsPanel() {
     openAdd: () => setAddOpen(true),
     openNextStep: (items) =>
       setStepTarget({ items, initial: items.length === 1 ? (items[0]?.nextStep ?? '') : '' }),
+    openCompanyVacancies: onOpenCompanyVacancies,
+    openConsultant: onOpenConsultant,
   };
   return (
     <section className="career-company-wants" aria-label="Хочу в компанию">
-      <div className="career-company-wants-desk">
-        <StageChips controller={controller} />
-        <FilterTools view={view} />
-        <SelectionTools view={view} />
-        <Feedback controller={controller} />
-        <CompanyTable view={view} />
-        <TableFooter controller={controller} />
-        <div className="career-company-wants-note">
-          <Info aria-hidden="true" />
-          <span>
-            Добавлять можно тремя способами: из вакансий кнопкой «Хочу в эту компанию» (в том числе
-            все компании подборки сразу), по названию и списком из файла или вставкой, до 500
-            компаний за раз.
-          </span>
-        </div>
-      </div>
+      <CompanyWantsDesktop view={view} />
       <CompanyWantsMobile view={view} />
       {addOpen ? (
         <AddCompaniesDialog
@@ -123,6 +119,28 @@ export function CompanyWantsPanel() {
         />
       ) : null}
     </section>
+  );
+}
+
+function CompanyWantsDesktop({ view }: { readonly view: CompanyWantsView }) {
+  const { controller } = view;
+  return (
+    <div className="career-company-wants-desk">
+      <StageChips controller={controller} />
+      <FilterTools view={view} />
+      <SelectionTools view={view} />
+      <Feedback controller={controller} />
+      <CompanyTable view={view} />
+      <TableFooter controller={controller} />
+      <div className="career-company-wants-note">
+        <Info aria-hidden="true" />
+        <span>
+          Добавлять можно тремя способами: из вакансий кнопкой «Хочу в эту компанию» (в том числе
+          все компании подборки сразу), по названию и списком из файла или вставкой, до 500 компаний
+          за раз.
+        </span>
+      </div>
+    </div>
   );
 }
 

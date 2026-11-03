@@ -47,6 +47,7 @@ export function ResponsesBoard({
   initialApplicationId,
   onOpenExpert,
   onOpenResume,
+  onOpenCompanyVacancies,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
@@ -57,6 +58,8 @@ export function ResponsesBoard({
   initialTab?: 'board' | 'analytics';
   onOpenAutomation?: () => void;
   onOpenResume?: () => void;
+  /** «Открыть N вакансий» on the 390 company push of «Хочу». */
+  onOpenCompanyVacancies?: (companyName: string) => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [stageFilter, setStageFilter] = useStageFilter(initialStageFilter);
@@ -81,6 +84,7 @@ export function ResponsesBoard({
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
       onOpenResume={onOpenResume}
+      onOpenCompanyVacancies={onOpenCompanyVacancies}
     />
   );
 }

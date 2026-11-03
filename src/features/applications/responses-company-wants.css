@@ -671,3 +671,50 @@
     color: var(--career-text-dim);
   }
 }
+
+/* 390 push «Компания» (mockup 5 `co`, B511 G3 item 8): facts, action rows, CTA. */
+@media (max-width: 40rem) {
+  .career-company-wants-mob[data-mobile-push] {
+    gap: 0;
+  }
+
+  .career-company-wants-mob .career-responses-mobile-list dd.career-company-wants-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-1);
+    padding: 0;
+    border: 0;
+  }
+
+  .career-company-wants-push-rows > .career-company-wants-menu-root {
+    position: relative;
+    display: block;
+    inline-size: 100%;
+  }
+
+  .career-company-wants-push-rows > * + * {
+    border-block-start: 1px solid var(--career-line);
+  }
+
+  .career-company-wants-push-rows .career-company-wants-menu {
+    inset-inline: var(--career-space-4) auto;
+  }
+
+  .career-company-wants-add-row:disabled {
+    cursor: default;
+  }
+
+  .career-company-wants-add-row:disabled .career-company-wants-add-main b {
+    color: var(--career-text-soft);
+  }
+
+  .career-company-wants-remove-row,
+  .career-company-wants-remove-row .career-company-wants-add-main b {
+    color: var(--career-warning);
+  }
+
+  .career-company-wants-remove-row .career-company-wants-add-ico {
+    background: none;
+    color: var(--career-warning);
+  }
+}

@@ -109,6 +109,8 @@ export interface VacanciesScreenProps {
   readonly premisesLoading?: boolean;
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRoleFilter?: boolean;
+  /** Opened from «Хочу» → «Компания» → «Открыть N вакансий»: the selection of this company. */
+  readonly initialCompanyName?: string;
 }
 
 function useVacanciesScreenBoard(
@@ -117,18 +119,15 @@ function useVacanciesScreenBoard(
   now: string,
   onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
   initialFilters?: VacanciesScreenState,
+  initialCompanyName?: string,
 ) {
   const campaignView = extractBoardRegions(campaign);
-  const [state, setState] = useState<VacanciesScreenState>(
-    initialFilters ?? {
-      roles: [],
-      regions: [],
-      levels: [],
-      sources: [],
-      remoteOnly: false,
-    },
-  );
-  useInitialVacancyFilters(initialFilters, setState);
+  const company = initialCompanyName ? { companyName: initialCompanyName } : {};
+  const [state, setState] = useState<VacanciesScreenState>({
+    ...(initialFilters ?? { roles: [], regions: [], levels: [], sources: [], remoteOnly: false }),
+    ...company,
+  });
+  useInitialVacancyFilters(initialFilters && { ...initialFilters, ...company }, setState);
   const [visibleCount, setVisibleCount] = useState(20);
   const [selectedId, setSelectedId] = useState<string | null | undefined>(() =>
     initialSelectedId(matched),
@@ -312,6 +311,7 @@ function useVacanciesScreenState(input: VacanciesScreenProps) {
     now,
     input.onFiltersChange,
     input.initialFilters,
+    input.initialCompanyName,
   );
   const collections = useVacancyCollections(input);
   const actions = useVacancyCampaignActions(activeCampaign, {

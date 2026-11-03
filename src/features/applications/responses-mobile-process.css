@@ -11,17 +11,22 @@
  * steps aside while it is open, as on the vacancy and company push screens.
  */
 @media (max-width: 40rem) {
-  .career-shell:has(.career-responses-funnel-flow[data-mobile-push]) {
+  /* `.career-responses-push-host`: «Подготовка» and «Хочу» push too (mockup 5 `prepx`, `co`). */
+  .career-shell:has(.career-responses-funnel-flow[data-mobile-push]),
+  .career-shell:has(.career-responses-push-host[data-mobile-push]) {
     grid-template-rows: 0 minmax(0, 1fr);
   }
 
   .career-shell:has(.career-responses-funnel-flow[data-mobile-push]) .career-topbar,
-  .career-cabinet:has(.career-responses-funnel-flow[data-mobile-push]) > .career-page-header {
+  .career-cabinet:has(.career-responses-funnel-flow[data-mobile-push]) > .career-page-header,
+  .career-shell:has(.career-responses-push-host[data-mobile-push]) .career-topbar,
+  .career-cabinet:has(.career-responses-push-host[data-mobile-push]) > .career-page-header {
     display: none;
   }
 
   /* The push bar takes the shell bar's place at the very top. */
-  .career-shell:has(.career-responses-funnel-flow[data-mobile-push]) .career-main {
+  .career-shell:has(.career-responses-funnel-flow[data-mobile-push]) .career-main,
+  .career-shell:has(.career-responses-push-host[data-mobile-push]) .career-main {
     padding-block-start: 0;
   }
 
