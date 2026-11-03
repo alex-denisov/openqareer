@@ -186,7 +186,6 @@ if grep -q '# openqareer-desktop-tunnel-begin' "$CADDY_FILE"; then
     {
       gsub(/ \/desktop-tunnel-[^ ]+\*/, "")
     }
-    /^\theader \{$/ { print; print "\t\tConnection \"close\""; next }
     { print }
   ' "$CADDY_FILE" > "$TEMP_DIR/Caddyfile"
   /usr/bin/caddy validate --config "$TEMP_DIR/Caddyfile"

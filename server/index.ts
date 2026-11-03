@@ -243,6 +243,7 @@ const app = await buildApp({
   serveStatic: process.env.NODE_ENV === 'production',
 });
 matchedPoolPrecompute.setLogger(app.log);
+authService.setLogger(app.log);
 
 let vacancyRefreshTimer: NodeJS.Timeout | undefined;
 let recruiterIntelligenceTimer: NodeJS.Timeout | undefined;
