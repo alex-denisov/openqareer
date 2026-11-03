@@ -1,0 +1,29 @@
+<!-- SYNTHETIC fixture: modelled on the logged-in LinkedIn /jobs/search/ list markup
+     (scaffold-layout list items with data-occludable-job-id). Not a captured page:
+     no real session was available when this was written. Re-capture before trusting
+     class names. -->
+<html><body>
+<ul class="scaffold-layout__list-container">
+  <li data-occludable-job-id="4012345678" class="scaffold-layout__list-item">
+    <div class="job-card-container" data-job-id="urn:li:fsd_jobPosting:4012345678">
+      <a class="job-card-container__link job-card-list__title" href="/jobs/view/4012345678/?eBP=x&amp;refId=abc">
+        <strong>Senior QA Engineer &amp; Automation</strong>
+      </a>
+      <div class="artdeco-entity-lockup__subtitle"><span>Example Systems LLC</span></div>
+      <ul class="job-card-container__metadata-wrapper"><li><span>Dubai, United Arab Emirates (On-site)</span></li></ul>
+      <time datetime="2026-11-01">2 days ago</time>
+    </div>
+  </li>
+  <li data-occludable-job-id="4012345679" class="scaffold-layout__list-item">
+    <a class="job-card-container__link" href="https://www.linkedin.com/jobs/view/4012345679/">
+      <strong>Test Lead</strong>
+    </a>
+    <div class="artdeco-entity-lockup__subtitle"><span>Sample Corp</span></div>
+    <ul class="job-card-container__metadata-wrapper"><li><span>Abu Dhabi (Hybrid)</span></li></ul>
+  </li>
+  <li data-occludable-job-id="not-a-number" class="scaffold-layout__list-item"><strong>Broken</strong></li>
+  <li data-occludable-job-id="4012345678" class="scaffold-layout__list-item">
+    <a class="job-card-container__link" href="/jobs/view/4012345678/"><strong>Duplicate</strong></a>
+  </li>
+</ul>
+</body></html>

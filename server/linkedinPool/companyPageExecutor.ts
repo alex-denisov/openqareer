@@ -24,6 +24,8 @@ import {
   pauseLinkedinPoolAccountForManualReview,
   recordLinkedinExecutorCompanyAttempt,
   recordLinkedinExecutorHeartbeat,
+  isJobSearchPausedAsEmpty,
+  JOB_SEARCH_EMPTY_NOTE,
   recordLinkedinExecutorNote,
   recordLinkedinExecutorPageAttempt,
   type LinkedinPoolExecutorPageKind,
@@ -44,6 +46,16 @@ import {
   type CadencePageKind,
   type DayPlan,
 } from './linkedinCadencePolicy';
+import { linkedinJobSearchUrl, parseLinkedinJobSearchPageHtml } from './jobSearchParser';
+import {
+  ensureJobSearchSchema,
+  isPoolJobReadingEnabled,
+  nextJobSearchQuery,
+  readDemandTerms,
+  saveJobCards,
+  shouldReadJobsNow,
+  type JobSearchQuery,
+} from './jobSearchStore';
 import { createLinkedinStealthContext } from './linkedinStealthBrowser';
 import {
   acquireProfileLock,
@@ -139,6 +151,7 @@ export class LinkedinPoolCompanyPageExecutor {
   private running = false;
   private stopped = false;
   private reauthRequired = false;
+  private consecutiveEmptyJobPages = 0;
   private consecutiveTransientFailures = 0;
   private backoffUntilMs = 0;
   private cachedPlan?: { key: string; plan: DayPlan };
@@ -156,7 +169,10 @@ export class LinkedinPoolCompanyPageExecutor {
     this.wait = dependencies.wait ?? abortableWait;
     this.planDayFn = dependencies.planDay;
     this.decideFn = dependencies.decide;
-    if (this.config.enabled) ensureCompanyRecruitersSchema(this.database);
+    if (this.config.enabled) {
+      ensureCompanyRecruitersSchema(this.database);
+      ensureJobSearchSchema(this.database);
+    }
   }
 
   async runStep(): Promise<LinkedinPoolExecutorReport> {
@@ -261,6 +277,17 @@ export class LinkedinPoolCompanyPageExecutor {
     const session = await this.readReadySession(account.id, account.serverSession?.expiresAt, now);
     if ('report' in session) return session.report;
 
+    const jobQuery = this.nextJobQuery(dailyUsage, now, effectiveTimezone);
+    if (jobQuery) {
+      if (dailyUsage.pageCount > 0) {
+        await this.waitBetweenPages(detectCadencePageKind(linkedinJobSearchUrl(jobQuery.term, jobQuery.location)));
+        if (this.stopped) return report('stopped');
+        const midDecision = (this.decideFn ?? decide)(plan, this.now(), dailyUsage.pageCount, effectiveTimezone);
+        if (midDecision.status !== 'run') return report(midDecision.status);
+      }
+      return this.collectJobs(account.id, jobQuery, session.cookies, effectiveTimezone);
+    }
+
     const companyName = this.nextCompanyName(dailyUsage);
     if (!companyName) return report('no_target');
 
@@ -286,6 +313,86 @@ export class LinkedinPoolCompanyPageExecutor {
       return { report: await this.blockForReauth('expired') };
     }
     return { cookies };
+  }
+
+  /** Поиск вакансий чередуется с прогревом: ~1 страница на 2 страницы компаний, в пределах суточного лимита. */
+  private nextJobQuery(
+    usage: LinkedinPoolExecutorDailyUsage,
+    now: Date,
+    timezone: string,
+  ): JobSearchQuery | undefined {
+    if (!isPoolJobReadingEnabled(this.database)) return undefined;
+    if (this.config.enabled && isJobSearchPausedAsEmpty(this.database, this.config.accountId, now)) {
+      return undefined;
+    }
+    const otherPages = usage.pageCount - usage.jobSearchPageCount;
+    if (!shouldReadJobsNow({ jobPages: usage.jobSearchPageCount, otherPages })) return undefined;
+    return nextJobSearchQuery({
+      demandTerms: readDemandTerms(this.database),
+      jobPagesToday: usage.jobSearchPageCount,
+      dayIndex: Math.floor(linkedinLocalDayStart(now, timezone).getTime() / 86_400_000),
+      attemptedHashes: usage.attemptedJobQueryHashes,
+    });
+  }
+
+  /** Одна страница поиска вакансий; при проверке LinkedIn — пауза аккаунта, как у страниц компаний. */
+  private async collectJobs(
+    accountId: string,
+    query: JobSearchQuery,
+    cookies: readonly LinkedinSessionCookie[],
+    timezone: string,
+  ): Promise<LinkedinPoolExecutorReport> {
+    const page = await this.openPage(accountId, cookies, timezone);
+    if (page === 'busy') return report('account_not_ready');
+    const read = await this.readPage(
+      page,
+      linkedinJobSearchUrl(query.term, query.location),
+      'jobs_search',
+      query.hash,
+    );
+    if (read.status !== 'ready') return this.handlePageFailure(read, 1);
+    const cards = parseLinkedinJobSearchPageHtml(read.html ?? '');
+    saveJobCards(this.database, cards, this.now());
+    this.trackEmptyJobPage(accountId, cards.length);
+    return {
+      ...report('processed', 1, 0),
+      ...(cards.length === 0 ? { reason: 'no_job_cards' } : {}),
+    };
+  }
+
+  /** 0 карточек — не успех: две пустые страницы подряд ставят чтение вакансий на сутки. */
+  private trackEmptyJobPage(accountId: string, cardCount: number): void {
+    this.consecutiveEmptyJobPages = cardCount === 0 ? this.consecutiveEmptyJobPages + 1 : 0;
+    if (this.consecutiveEmptyJobPages < 2) return;
+    this.consecutiveEmptyJobPages = 0;
+    recordLinkedinExecutorNote(this.database, accountId, JOB_SEARCH_EMPTY_NOTE, this.now());
+  }
+
+  /** Профиль или cookie-путь, общий для страниц компаний и вакансий. */
+  private async openPage(
+    accountId: string,
+    cookies: readonly LinkedinSessionCookie[],
+    timezone: string,
+  ): Promise<Page | 'busy'> {
+    const profileDirectory = this.profileDirectoryInUse(accountId);
+    if (profileDirectory === 'busy') return 'busy';
+    return this.launchPage(profileDirectory, cookies, timezone);
+  }
+
+  private async launchPage(
+    profileDirectory: string | undefined,
+    cookies: readonly LinkedinSessionCookie[],
+    timezone: string,
+  ): Promise<Page> {
+    if (profileDirectory) {
+      this.lockedProfileDirectory = profileDirectory;
+      this.activeContext = await this.profiles!.launchContext(profileDirectory, timezone);
+    } else {
+      this.activeBrowser = await this.browserFactory();
+      this.activeContext = await createLinkedinStealthContext(this.activeBrowser, { timezone });
+      await this.activeContext.addCookies(playwrightCookies(cookies));
+    }
+    return this.activeContext.newPage();
   }
 
   private nextCompanyName(usage: LinkedinPoolExecutorDailyUsage): string | undefined {
@@ -322,15 +429,7 @@ export class LinkedinPoolCompanyPageExecutor {
     // Идёт вход в браузере сервера: профиль занят, исполнитель ждёт.
     if (profileDirectory === 'busy') return report('account_not_ready');
     recordLinkedinExecutorCompanyAttempt(this.database, accountId, hash, this.now());
-    if (profileDirectory) {
-      this.lockedProfileDirectory = profileDirectory;
-      this.activeContext = await this.profiles!.launchContext(profileDirectory, timezone);
-    } else {
-      this.activeBrowser = await this.browserFactory();
-      this.activeContext = await createLinkedinStealthContext(this.activeBrowser, { timezone });
-      await this.activeContext.addCookies(playwrightCookies(cookies));
-    }
-    const page = await this.activeContext.newPage();
+    const page = await this.launchPage(profileDirectory, cookies, timezone);
     const searchUrl = linkedinCompanySearchUrl(companyName);
     const search = await this.readPage(page, searchUrl, 'company_search', hash);
     if (search.status !== 'ready') return this.handlePageFailure(search, 1);
@@ -556,7 +655,10 @@ function isRedirectLoop(error: unknown): boolean {
 
 /** Имя и сообщение ошибки, обрезанные; cookies и заголовки сюда не попадают. */
 function describeFailure(error: unknown): string {
-  if (error instanceof Error) return `${error.name}: ${error.message}`.slice(0, 300);
+  // Адрес страницы несёт роль и локацию запроса: в причину сбоя он не попадает.
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`.replace(/https?:\/\/[^\s"']+/giu, '[url]').slice(0, 300);
+  }
   return 'unknown_error';
 }
 

@@ -2,9 +2,7 @@ import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
-import { linkedinProviderCapability } from '../crawler/linkedinProviderCapability';
 
-const linkedInCapability = linkedinProviderCapability();
 
 /**
  * The three access classes the owner named for B164: what may be read from the
@@ -576,13 +574,22 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
   },
   {
     id: 'src-linkedin-crawler',
-    name: 'LinkedIn (Obscura Crawler)',
+    name: 'LinkedIn (пул аккаунтов)',
     type: 'linkedin_crawler',
     accessClass: 'browser_session',
-    market: 'US, EU, MENA, APAC, LATAM, СНГ, Россия, удалёнка (серверный сбор Obscura)',
-    addressStatus: 'official_access_required',
-    enabled: false,
-    disabledReason: `${linkedInCapability.reason}: pool sessions are permitted, but no vacancy reader on pool sessions exists yet (linkedinPool/* reads company pages only); the legacy Obscura crawler has no configured accounts`,
+    market: 'ОАЭ и рынки спроса кандидатов (поиск вакансий на сессии сервисного аккаунта пула)',
+    addressStatus: 'live',
+    enabled: true,
+    // Решение владельца 2026-11-03: пул сервисных аккаунтов (синтетические
+    // персоны) — дополнительный источник к гостевому поиску, потому что гость
+    // видит не все вакансии. Исполнитель пула кладёт карточки в промежуточную
+    // таблицу; чтение всегда частичное, гостевая запись приоритетна.
+    robotsOverride: {
+      grantedBy: 'owner',
+      grantedOn: '2026-11-03',
+      basis:
+        'Прямое решение владельца 2026-11-03: поиск вакансий на сессиях пула сервисных аккаунтов — дополнение к гостевому поиску; темп задаёт каденция исполнителя, при проверке LinkedIn аккаунт встаёт на паузу.',
+    },
     targetUrl: 'https://www.linkedin.com/jobs/search',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,

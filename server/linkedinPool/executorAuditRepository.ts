@@ -4,10 +4,14 @@ import type { DatabaseSync } from 'node:sqlite';
 export type LinkedinPoolExecutorPageKind =
   | 'company_search'
   | 'company_page'
-  | 'company_people';
+  | 'company_people'
+  | 'jobs_search';
 
 export interface LinkedinPoolExecutorDailyUsage {
   readonly pageCount: number;
+  /** Страницы поиска вакансий (входят в pageCount) и их запросы за сутки. */
+  readonly jobSearchPageCount: number;
+  readonly attemptedJobQueryHashes: readonly string[];
   readonly attemptedCompanyHashes: readonly string[];
   readonly lastPageAt: string | null;
 }
@@ -100,10 +104,25 @@ export function recordLinkedinExecutorPageAttempt(
 }
 
 /** Короткая служебная запись журнала исполнителя (без текстов страниц и профилей). */
+export const JOB_SEARCH_EMPTY_NOTE = 'job-search-empty';
+const JOB_SEARCH_EMPTY_PAUSE_MS = 24 * 60 * 60_000;
+
+/** Две пустые страницы поиска подряд: разметка, вероятно, не совпала — чтение вакансий стоит сутки. */
+export function isJobSearchPausedAsEmpty(database: DatabaseSync, accountId: string, now: Date): boolean {
+  const since = new Date(now.getTime() - JOB_SEARCH_EMPTY_PAUSE_MS).toISOString();
+  const row = database
+    .prepare(
+      `SELECT 1 AS paused FROM linkedin_pool_audit
+       WHERE account_id = ? AND action = 'linkedin_executor_note' AND detail = ? AND created_at >= ? LIMIT 1`,
+    )
+    .get(accountId, JOB_SEARCH_EMPTY_NOTE, since);
+  return row !== undefined;
+}
+
 export function recordLinkedinExecutorNote(
   database: DatabaseSync,
   accountId: string,
-  note: 'exa_not_configured' | 'exa_failed',
+  note: 'exa_not_configured' | 'exa_failed' | typeof JOB_SEARCH_EMPTY_NOTE,
   now: Date,
 ): void {
   insertAudit(database, 'linkedin_executor_note', accountId, note, now.toISOString());
@@ -123,7 +142,9 @@ export function getLinkedinExecutorDailyUsage(
     )
     .all(accountId, since) as Array<{ action: string; detail: string | null; created_at: string }>;
   const hashes = new Set<string>();
+  const jobHashes: string[] = [];
   let pageCount = 0;
+  let jobSearchPageCount = 0;
   let lastPageAt: string | null = null;
   for (const row of rows) {
     if (row.action === 'linkedin_executor_company' && row.detail && COMPANY_HASH.test(row.detail)) {
@@ -132,9 +153,14 @@ export function getLinkedinExecutorDailyUsage(
     if (row.action === 'linkedin_executor_page') {
       pageCount += 1;
       lastPageAt = row.created_at;
+      const jobQuery = /^page=jobs_search;company=([a-f0-9]{64})$/u.exec(row.detail ?? '');
+      if (jobQuery) {
+        jobSearchPageCount += 1;
+        jobHashes.push(jobQuery[1]!);
+      }
     }
   }
-  return { pageCount, attemptedCompanyHashes: [...hashes], lastPageAt };
+  return { pageCount, jobSearchPageCount, attemptedJobQueryHashes: jobHashes, attemptedCompanyHashes: [...hashes], lastPageAt };
 }
 
 function assertCompanyHash(companyHash: string): void {

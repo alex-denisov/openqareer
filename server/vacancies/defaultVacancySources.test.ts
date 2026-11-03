@@ -93,6 +93,7 @@ describe('registry of vacancy sources', () => {
       'ats-smartrecruiters-visa',
       'remotive',
       'src-indeed',
+      'src-linkedin-crawler',
       'src-linkedin-guest',
     ]);
   });
@@ -392,16 +393,16 @@ describe('JobSpy sources in default registry', () => {
   });
 });
 
-describe('LinkedIn Obscura crawler in default registry (B208)', () => {
-  it('keeps the crawler disabled until a real account pool is configured', () => {
+describe('LinkedIn account-pool source in default registry', () => {
+  it('is enabled by owner decision 2026-11-03 and reads pool-session job searches', () => {
     const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-linkedin-crawler');
     expect(source).toBeDefined();
-    expect(source?.name).toBe('LinkedIn (Obscura Crawler)');
+    expect(source?.name).toBe('LinkedIn (пул аккаунтов)');
     expect(source?.type).toBe('linkedin_crawler');
     expect(source?.accessClass).toBe('browser_session');
-    expect(source?.addressStatus).toBe('official_access_required');
-    expect(source?.enabled).toBe(false);
-    expect(source?.disabledReason).toContain('no vacancy reader on pool sessions');
+    expect(source?.addressStatus).toBe('live');
+    expect(source?.enabled).toBe(true);
+    expect(source?.robotsOverride?.grantedOn).toBe('2026-11-03');
     expect(source?.targetUrl).toBe('https://www.linkedin.com/jobs/search');
 
     const readings = vacancySourceMeasurements('src-linkedin-crawler');

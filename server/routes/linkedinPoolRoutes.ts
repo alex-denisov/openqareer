@@ -2,6 +2,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
 import { requireAdmin, requireAdminMutation } from './adminAuth';
 import { sendError, withDeps } from './helpers';
+import { z } from 'zod';
+import {
+  JOB_SEARCH_DAILY_PAGE_LIMIT,
+  ensureJobSearchSchema,
+  isPoolJobReadingEnabled,
+  setPoolJobReadingEnabled,
+} from '../linkedinPool/jobSearchStore';
 import {
   adminLinkedinPoolCompleteSchema,
   adminLinkedinPoolCreateSchema,
@@ -308,12 +315,39 @@ async function handleDesktopTunnel(
   return { data: deps.config.desktopTunnel, meta: { requestId: request.id } };
 }
 
+const jobReadingSchema = z.object({ enabled: z.boolean() }).strict();
+
+function jobReadingState(repository: SqliteLinkedinPoolRepository) {
+  const database = repository.getDatabase();
+  ensureJobSearchSchema(database);
+  return { enabled: isPoolJobReadingEnabled(database), dailyPageLimit: JOB_SEARCH_DAILY_PAGE_LIMIT };
+}
+
+async function handleJobReadingGet(deps: LinkedinPoolDeps, request: FastifyRequest, reply: FastifyReply) {
+  if (!requireAdmin(deps, request, reply)) return;
+  const repository = repositoryOrError(deps, request, reply);
+  if (!repository) return;
+  return { data: jobReadingState(repository), meta: { requestId: request.id } };
+}
+
+async function handleJobReadingPut(deps: LinkedinPoolDeps, request: FastifyRequest, reply: FastifyReply) {
+  if (!requireAdminMutation(deps, request, reply)) return;
+  const repository = repositoryOrError(deps, request, reply);
+  if (!repository) return;
+  const body = jobReadingSchema.parse(request.body ?? {});
+  ensureJobSearchSchema(repository.getDatabase());
+  setPoolJobReadingEnabled(repository.getDatabase(), body.enabled, new Date());
+  return { data: jobReadingState(repository), meta: { requestId: request.id } };
+}
+
 export function registerLinkedinPoolRoutes(app: FastifyInstance, deps: LinkedinPoolDeps): void {
   app.get(
     '/api/v1/admin/linkedin/desktop-tunnel',
     { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } },
     withDeps(deps, handleDesktopTunnel),
   );
+  app.get('/api/v1/admin/linkedin/job-reading', withDeps(deps, handleJobReadingGet));
+  app.put('/api/v1/admin/linkedin/job-reading', withDeps(deps, handleJobReadingPut));
   app.get('/api/v1/admin/linkedin/accounts', withDeps(deps, handleList));
   app.post('/api/v1/admin/linkedin/accounts', withDeps(deps, handleCreate));
   app.patch('/api/v1/admin/linkedin/accounts/:accountId', withDeps(deps, handlePatch));
