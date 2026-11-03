@@ -47,6 +47,21 @@ function openPoolJobsDatabase(databasePath: string): DatabaseSync {
   return database;
 }
 
+function createPoolJobsReader(databasePath: string, hasVacancy: (id: string) => boolean) {
+  let database: DatabaseSync | undefined;
+  return {
+    read: (): SourceReading => {
+      database ??= openPoolJobsDatabase(databasePath);
+      return readLinkedinPoolJobs(database, {
+        now: new Date(),
+        observedAt: new Date().toISOString(),
+        hasVacancy,
+      });
+    },
+    close: (): void => database?.close(),
+  };
+}
+
 /**
  * Одна сборка движка пула для обоих процессов (B230): HTTP отвечает из пула,
  * обслуживатель его пополняет. Раньше всё это жило в `server/index.ts`, и
@@ -73,20 +88,12 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     demandTerms: currentFanDemand,
   });
   // Карточки пула LinkedIn читаются своим соединением и только при опросе источника.
-  let poolJobsDatabase: DatabaseSync | undefined;
-  const readPoolJobs = (): SourceReading => {
-    poolJobsDatabase ??= openPoolJobsDatabase(options.databasePath);
-    return readLinkedinPoolJobs(poolJobsDatabase, {
-      now: new Date(),
-      observedAt: new Date().toISOString(),
-      hasVacancy: (id) => engine.hasVacancy(id),
-    });
-  };
+  const poolJobs = createPoolJobsReader(options.databasePath, (id) => engine.hasVacancy(id));
   const engine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
     fetcher:
       options.fetcher ??
       buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
-        readLinkedinPoolJobs: readPoolJobs,
+        readLinkedinPoolJobs: poolJobs.read,
       }),
     pool,
     // Право обхода спрашивается у самой площадки, а не берётся из записи,
@@ -108,7 +115,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     hhCrawlSettings,
     hhCrawlCoordinator,
     close: () => {
-      poolJobsDatabase?.close();
+      poolJobs.close();
       pool.close();
       hhCrawlSettings.close();
     },

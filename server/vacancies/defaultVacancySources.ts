@@ -2,9 +2,7 @@ import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
-import { linkedinProviderCapability } from '../crawler/linkedinProviderCapability';
 
-const linkedInCapability = linkedinProviderCapability();
 
 /**
  * The three access classes the owner named for B164: what may be read from the
