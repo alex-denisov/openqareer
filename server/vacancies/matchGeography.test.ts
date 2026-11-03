@@ -31,7 +31,7 @@ describe('география подбора для SQL (аудит 01.11)', () =
 
     expect(after).toBeDefined();
     expect(after?.remote).toBe(true);
-    expect(after?.cityNames).toEqual(expect.arrayContaining(before?.cityNames ?? ['x']));
+    expect(after?.cityNames).toEqual(expect.arrayContaining([...(before?.cityNames ?? ['x'])]));
     expect(after?.cityNames).toEqual(expect.arrayContaining(['Дубай']));
   });
 });
