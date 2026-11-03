@@ -1,4 +1,5 @@
-import { geoCityNames } from '../../shared/geo/geoDirectory';
+import { geoCityNames, geoCountryNames } from '../../shared/geo/geoDirectory';
+import { remoteScopeAreasOf } from '../../shared/remoteScope';
 import type { CareerGeography } from './careerGeography';
 
 /**
@@ -9,6 +10,11 @@ import type { CareerGeography } from './careerGeography';
 export interface MatchGeography {
   readonly cityNames: readonly string[];
   readonly remote: boolean;
+  /**
+   * Области удалёнки, открытые кандидату (коды и блоки `shared/remoteScope`).
+   * Пусто — любая; строка без посчитанной области проходит всегда.
+   */
+  readonly remoteAreas: readonly string[];
 }
 
 const PATH_SEPARATOR = ' › ';
@@ -22,14 +28,24 @@ export function matchGeographyOf(
   career: CareerGeography | null | undefined,
 ): MatchGeography | undefined {
   if (!career || career.places.length === 0) return undefined;
-  const perPlace = career.places.map((place) =>
-    geoCityNames(place.split(PATH_SEPARATOR).at(-1)?.trim()),
-  );
+  const perPlace = career.places.map((place) => {
+    const last = place.split(PATH_SEPARATOR).at(-1)?.trim();
+    const city = geoCityNames(last);
+    // Страна рядом с городом не снимает фильтр: без него окно чтения делится
+    // на весь мир и вытесняет города из условий (03.11: +«ОАЭ» — 402 → 230).
+    return city.length > 0 || career.places.length === 1 ? city : geoCountryNames(last);
+  });
   if (perPlace.some((names) => names.length === 0)) return undefined;
-  return { cityNames: Array.from(new Set(perPlace.flat())), remote: career.remote };
+  return {
+    cityNames: Array.from(new Set(perPlace.flat())),
+    remote: career.remote,
+    remoteAreas: Array.from(new Set(career.remoteRegions.flatMap(remoteScopeAreasOf))),
+  };
 }
 
 export function matchGeographyKey(geography: MatchGeography | undefined): string {
   if (!geography) return '';
-  return `${geography.remote ? 'r' : ''}:${[...geography.cityNames].sort().join('|')}`;
+  const areas = [...geography.remoteAreas].sort().join('|');
+  const remote = `${geography.remote ? 'r' : ''}${areas ? `(${areas})` : ''}`;
+  return `${remote}:${[...geography.cityNames].sort().join('|')}`;
 }

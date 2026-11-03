@@ -317,6 +317,7 @@ describe('география «Карьеры» в подборе (CPO 26.10)', 
     labels: ['Москва', 'Удалённо из РФ'],
     places: ['Россия › Центральный › Москва'],
     remote: true,
+    remoteRegions: ['ru' as const],
     regions: ['ru' as const],
   };
 

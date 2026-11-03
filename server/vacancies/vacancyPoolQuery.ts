@@ -1,3 +1,4 @@
+import { extractRemoteScope } from './remoteScopeExtraction';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { extractAtsLink, vacancyTextKey } from './vacancyDeduplicator';
 import type { CandidateMatchProfile } from './vacancyMatcher';
@@ -89,6 +90,7 @@ export function clusterProjectionOf(vacancy: UnifiedVacancy): UnifiedVacancy {
   const atsLink = extractAtsLink(description);
   const skills = Array.isArray(vacancy.requiredSkills) ? vacancy.requiredSkills : [];
   const textKey = vacancyTextKey(vacancy);
+  const remoteScope = remoteScopeOf(vacancy);
   return {
     id: vacancy.id,
     fingerprint: vacancy.fingerprint,
@@ -105,7 +107,17 @@ export function clusterProjectionOf(vacancy: UnifiedVacancy): UnifiedVacancy {
     publishedAt: vacancy.publishedAt,
     status: vacancy.status,
     ...(textKey ? { textKey } : {}),
+    ...(remoteScope ? { remoteScope } : {}),
   };
+}
+
+/** Область удалёнки из полного текста: проекция хранит только сводку. */
+function remoteScopeOf(vacancy: UnifiedVacancy): string | undefined {
+  if (vacancy.isRemote !== true) return undefined;
+  return extractRemoteScope({
+    location: vacancy.location,
+    description: vacancy.fullDescription ?? vacancy.description,
+  });
 }
 
 export function normalizeQuery(query: string | undefined): string | undefined {

@@ -1,3 +1,4 @@
+import { vacancyRemoteLabel } from './vacancyRemoteLabel';
 import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
 import { useState, type FormEvent } from 'react';
 import { ArrowLeft, Check, Warning } from '@phosphor-icons/react';
@@ -270,8 +271,7 @@ function VacancyDetailHead({ cluster }: { readonly cluster: MatchedVacancyItem['
         <div className="vacancies-detail-company">
           {[
             cluster.canonicalCompany,
-            cluster.canonicalLocation,
-            cluster.isRemote ? 'удалённо' : null,
+            cluster.isRemote ? vacancyRemoteLabel(cluster) : cluster.canonicalLocation,
           ]
             .filter(Boolean)
             .join(' · ')}

@@ -1,3 +1,4 @@
+import { vacancyRemoteLabel } from './vacancyRemoteLabel';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -496,7 +497,9 @@ function VacancyRow({
       </div>
       <span className="career-vacancy-salary">{renderSalary(cluster.salary)}</span>
       <span className="career-vacancy-location">
-        {cluster.canonicalLocation || (cluster.isRemote ? 'Удалённо' : 'город не указан')}
+        {cluster.isRemote
+          ? vacancyRemoteLabel(cluster)
+          : cluster.canonicalLocation || 'город не указан'}
         {explanation.outsideGeography ? (
           <small className="career-vacancy-outside">не в ваших регионах</small>
         ) : null}

@@ -312,6 +312,7 @@ export function createClusterFromVacancy(vacancy: UnifiedVacancy): VacancyCluste
     ...(vacancy.employerIsPerson === true ? { employerIsPerson: true } : {}),
     canonicalLocation: vacancy.location,
     isRemote: Boolean(vacancy.isRemote),
+    ...(vacancy.isRemote && vacancy.remoteScope ? { remoteScope: vacancy.remoteScope } : {}),
     salary: vacancy.salary,
     descriptionSummary: (vacancy.description ?? '').slice(0, 300),
     ...(textKey ? { textKey } : {}),

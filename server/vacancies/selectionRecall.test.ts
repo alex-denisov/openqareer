@@ -137,7 +137,10 @@ describe('подбор: география и уровень до предела
 
     const ids = store
       .queryMatchCandidates(
-        { ...executive, matchGeography: { cityNames: ['Москва', 'moscow'], remote: true } },
+        {
+          ...executive,
+          matchGeography: { cityNames: ['Москва', 'moscow'], remote: true, remoteAreas: [] },
+        },
         { nowMs, limit: 3 },
       )
       .map((v) => v.id);

@@ -6,6 +6,7 @@ import { CheckCircle, MapPin, Question, WarningCircle } from '@phosphor-icons/re
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
 import { vacancyFormat } from './vacancyScreenCriteria';
 import { workFormatLabel } from '../../../shared/vacancyWorkFormat';
+import { vacancyRemoteLabel } from './vacancyRemoteLabel';
 
 const VACANCY_LEVEL_LABEL = {
   ic: 'Специалист',
@@ -126,6 +127,10 @@ function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
 
 /** «Москва, гибрид» — город и формат из одного разбора с фильтром «Формат» (B446-g4). */
 export function vacancyGeoLabel(item: MatchedVacancyItem): string {
+  // 03.11: удалёнка — одна русская подпись области, без «Remote, удалённо».
+  if (item.cluster.isRemote && vacancyFormat(item) === 'remote') {
+    return vacancyRemoteLabel(item.cluster);
+  }
   const place = item.cluster.canonicalLocation
     ? compactPlaceLabel(item.cluster.canonicalLocation)
     : item.cluster.isRemote

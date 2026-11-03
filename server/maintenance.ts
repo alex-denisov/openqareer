@@ -28,6 +28,7 @@ import { scheduleCurrencyRatesJob } from './currency/cbrRatesSchedule';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
+import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -178,6 +179,8 @@ try {
   stopCatalogRuSummaries = scheduleCatalogRuSummaryJob(semanticDatabase, config.databasePath, log);
   // B546: market salary estimates stream every salaried vacancy, so only here.
   scheduleMarketSalaryEstimateJob(semanticDatabase, log);
+  // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
+  scheduleRemoteScopeBackfill(semanticDatabase, log);
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
 } catch (error: unknown) {
   log.error(

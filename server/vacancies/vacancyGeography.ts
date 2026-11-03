@@ -2,6 +2,7 @@ import type { CandidateRegion } from '../../src/features/workspace/candidateRegi
 import type { OrderableMatch } from '../../shared/vacancyMatchOrder';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { northAmericanCountryOf } from '../../shared/postalPlace';
+import { parseRemoteScope, remoteScopeAllows } from '../../shared/remoteScope';
 
 /**
  * География вакансии по её локации и стране (PRB-040).
@@ -208,6 +209,7 @@ export interface GeographyMatch extends OrderableMatch {
   readonly cluster: OrderableMatch['cluster'] & {
     readonly canonicalLocation?: string;
     readonly isRemote?: boolean;
+    readonly remoteScope?: string;
     readonly companyFeatures?: { readonly country?: string };
   };
   readonly explanation: OrderableMatch['explanation'] & {
@@ -227,11 +229,15 @@ export function remoteCountryFit(
   cluster: {
     readonly canonicalLocation?: string;
     readonly isRemote?: boolean;
+    readonly remoteScope?: string;
     readonly companyFeatures?: { readonly country?: string };
   },
   regions: readonly CandidateRegion[],
 ): RemoteCountryFit | undefined {
   if (regions.length === 0 || !cluster.isRemote) return undefined;
+  // 03.11: область из места и текста; «из любой страны» — совпадение, не «страна не указана».
+  const scope = parseRemoteScope(cluster.remoteScope);
+  if (scope) return remoteScopeAllows(scope, regions) ? undefined : 'other';
   const region = regionOfVacancy({
     location: cluster.canonicalLocation,
     country: cluster.companyFeatures?.country,

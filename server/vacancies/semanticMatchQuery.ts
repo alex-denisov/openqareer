@@ -64,13 +64,13 @@ function buildFunctionBranch(
 /**
  * Аудит 01.11: 3 000 самых новых строк по всей географии вытесняли Москву —
  * из 487 руководящих вакансий города в подборку попадали 29. Место читается
- * из проекции сведения той же строки; `lower()` SQLite знает только латиницу,
- * поэтому кириллица сравнивается в написаниях, которые дал вызывающий.
+ * из проекции сведения той же строки.
  *
- * 03.11: страна разворачивается в сотни написаний городов («ОАЭ» — 322), и
- * отдельный `instr` на каждое заново читал место строки — 81 с на проде при
- * тайм-ауте чтения 12 с. Место читается один раз на строку (`LIMIT 1` не даёт
- * подзапросу раствориться), написания идут одним JSON-параметром — 1 с.
+ * 03.11: страна разворачивается в сотни городов («США» — 648 названий). Перебор
+ * `instr` по каждому написанию стоил 4,3 с на проде для Москва+США. Теперь
+ * место режется на части (`,` `;` `(` ` - ` …) и каждая часть ищется целиком
+ * в одной строке названий: Москва+США — 1,1 с, Москва+ОАЭ+удалённо — 0,7 с.
+ * Заодно ушли ложные совпадения подстрок («Ташкент» содержал «Кент»).
  */
 function buildGeographyFilter(geography: MatchGeography | undefined): {
   sql: string;
@@ -78,23 +78,67 @@ function buildGeographyFilter(geography: MatchGeography | undefined): {
 } {
   if (!geography || geography.cityNames.length === 0) return { sql: '', params: [] };
   const places = `EXISTS (SELECT 1 FROM (
-          SELECT coalesce(json_extract(c.cluster_json, '$.location'), '') AS location
+          SELECT ${PLACE_PARTS} AS parts
           FROM vacancy_cluster_input c WHERE c.id = s.id LIMIT 1
-        ) place, json_each(?) name WHERE instr(place.location, name.value) > 0)`;
-  const remote = geography.remote ? ['i.is_remote = 1'] : [];
+        ) place, json_each(CASE WHEN json_valid(place.parts) THEN place.parts ELSE '[]' END) part
+        WHERE instr(?, char(1) || trim(part.value) || char(1)) > 0)`;
+  const remote = geography.remote ? [remoteCondition(geography.remoteAreas)] : [];
+  const remoteParams =
+    geography.remote && geography.remoteAreas.length > 0
+      ? [JSON.stringify(geography.remoteAreas)]
+      : [];
   return {
     sql: `AND (${[...remote, places].join(' OR ')})`,
-    params: [JSON.stringify(cityNameVariants(geography.cityNames))],
+    params: [...remoteParams, placeNameList(geography.cityNames)],
   };
 }
 
-function cityNameVariants(names: readonly string[]): string[] {
+const PLACE_SEPARATORS = [';', '|', '/', '(', ')', ' - ', ' – ', ' — ', ':'];
+
+/** Место строки — JSON-массив частей в нижнем регистре (латиница; кириллицу `lower` не знает). */
+const PLACE_PARTS = (() => {
+  const location = `replace(replace(lower(coalesce(json_extract(c.cluster_json, '$.location'), '')), '\\', ''), '"', '')`;
+  const commas = PLACE_SEPARATORS.reduce(
+    (sql, separator) => `replace(${sql}, '${separator}', ',')`,
+    location,
+  );
+  return `'["' || replace(${commas}, ',', '","') || '"]'`;
+})();
+
+const LATIN_NAME = /^[\p{Script=Latin}\s.'’-]+$/u;
+
+/**
+ * Названия одной строкой через `char(1)`: латиница — в нижнем регистре, как
+ * часть места после `lower`; кириллица — во всех написаниях, которые встречаются.
+ */
+function placeNameList(names: readonly string[]): string {
   const variants = names.flatMap((name) => {
     const lower = name.toLocaleLowerCase('ru-RU');
+    if (LATIN_NAME.test(name)) return [lower];
     const capital = lower.charAt(0).toLocaleUpperCase('ru-RU') + lower.slice(1);
-    return [name, lower, capital, lower.toLocaleUpperCase('ru-RU')];
+    const titled = lower.replace(
+      /(^|[\s-])(\p{L})/gu,
+      (_, gap: string, letter: string) => `${gap}${letter.toLocaleUpperCase('ru-RU')}`,
+    );
+    return [name, lower, capital, titled, lower.toLocaleUpperCase('ru-RU')];
   });
-  return Array.from(new Set(variants.filter((name) => name.trim().length > 0)));
+  const unique = Array.from(new Set(variants.map((name) => name.trim()).filter(Boolean)));
+  return `\u0001${unique.join('\u0001')}\u0001`;
+}
+
+/**
+ * 03.11: «Удалённо из РФ» не тратит окно чтения на удалёнку «только США».
+ * Область читается один раз на строку, коды идут одним JSON-параметром;
+ * строка без посчитанной области проходит, как раньше.
+ */
+function remoteCondition(areas: readonly string[]): string {
+  if (areas.length === 0) return 'i.is_remote = 1';
+  return `(i.is_remote = 1 AND EXISTS (SELECT 1 FROM (
+          SELECT json_extract(c.cluster_json, '$.remoteScope') AS scope
+          FROM vacancy_cluster_input c WHERE c.id = s.id LIMIT 1
+        ) remote WHERE remote.scope IS NULL OR remote.scope = 'global'
+          OR EXISTS (SELECT 1 FROM json_each(?) area
+            WHERE instr(',' || remote.scope || ',', ',' || area.value || ',') > 0)))`;
 }
 
 function buildExcludedTitleFilter(excludedFunctions: readonly ('sales' | 'marketing')[]): string {

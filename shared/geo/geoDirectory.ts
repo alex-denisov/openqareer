@@ -135,6 +135,22 @@ export function geoCityNames(name: string | undefined, country?: string): string
   return city ? [...(index?.namesByCity.get(city) ?? [])] : [];
 }
 
+/**
+ * Написания страны и её крупнейших городов: строка вакансии хранит город, и
+ * страну в SQL можно прочитать только по ним. Пусто, если страна не узнана.
+ */
+export function geoCountryNames(name: string | undefined, maxCities = 300): string[] {
+  const label = geoCountry(name);
+  if (!label || !index) return [];
+  const countryNames = [...index.countryByName].filter(([, l]) => l === label).map(([n]) => n);
+  const topCities = index.cities
+    .filter((city) => city.country === label)
+    .sort((a, b) => b.population - a.population)
+    .slice(0, maxCities)
+    .flatMap((city) => index?.namesByCity.get(city) ?? []);
+  return [...new Set([label, ...countryNames, ...topCities])];
+}
+
 function cityValue(city: GeoCity): string {
   return city.country === HOME_COUNTRY_LABEL ? city.label : `${city.label}, ${city.country}`;
 }
