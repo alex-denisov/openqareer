@@ -128,7 +128,7 @@ describe('Linkedin Ingest Runner (B208)', () => {
     );
   });
 
-  it('integrates cleanly through buildMultiSourceFetcher', async () => {
+  it('src-linkedin-crawler no longer reaches the Obscura crawler through buildMultiSourceFetcher (pool reader replaces it)', async () => {
     const sourceConfig: VacancySourceConfig = {
       id: LINKEDIN_CRAWLER_SOURCE_ID,
       name: 'LinkedIn (Obscura Crawler)',
@@ -184,10 +184,7 @@ describe('Linkedin Ingest Runner (B208)', () => {
 
     const result = await fetcher(sourceConfig);
     expect('vacancies' in result).toBe(true);
-    if ('vacancies' in result) {
-      expect(result.partial).toBe(true);
-      expect(result.vacancies).toHaveLength(1);
-      expect(result.vacancies[0]?.title).toBe('Senior Software Engineer');
-    }
+    expect(result).toEqual({ vacancies: [], partial: true });
+    expect(scraper.scrapeJobs).not.toHaveBeenCalled();
   });
 });
