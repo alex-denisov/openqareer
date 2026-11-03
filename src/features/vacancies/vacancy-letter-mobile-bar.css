@@ -1,0 +1,11 @@
+/* B600: шапка «Письма» при 390 (макет 9: «Назад» · «Письмо» · консультант).
+   Рисуется только на узком экране (useCompactViewport); «Назад» карточки вакансии там не рисуется. */
+.career-letter-screen > .career-letter-mobile-bar {
+  z-index: 25;
+}
+
+@media (max-width: 760px) {
+  .career-letter-vacancy {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

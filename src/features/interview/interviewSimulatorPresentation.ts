@@ -39,23 +39,6 @@ function topicStatus(
   return 'Частично';
 }
 
-export function deriveInterviewRecommendations(
-  session: Pick<InterviewSessionView, 'questions'>,
-): string[] {
-  const result: string[] = [];
-  const seen = new Set<string>();
-  for (const question of session.questions) {
-    for (const criterion of Object.values(question.answer?.evaluation.criteria ?? {})) {
-      const reason = criterion.reason.trim();
-      if (criterion.points === 2 || !reason || seen.has(reason)) continue;
-      seen.add(reason);
-      result.push(reason);
-      if (result.length === 3) return result;
-    }
-  }
-  return result;
-}
-
 /** Подпись-счёт варианта вопросов: те же числа, что даст план сервера. */
 export function presentQuestionScopeCaption(
   questionTypes: readonly InterviewQuestionType[],
@@ -64,7 +47,9 @@ export function presentQuestionScopeCaption(
   return [
     counts.system_design ? `${counts.system_design} по требованиям` : null,
     counts.behavioral ? `${counts.behavioral} по STAR` : null,
-  ].filter(Boolean).join(', ');
+  ]
+    .filter(Boolean)
+    .join(', ');
 }
 
 /** «5 вопросов, около 15 минут» для шапки и строки старта. */

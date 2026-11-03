@@ -1,0 +1,148 @@
+/* B465 follow-up: экран вопроса на 390 — чат-док из макета 14 (view=q). 1440 не меняется. */
+.career-mock-dock-acts,
+.career-mock-dock-mic {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .career-mock-question-layout > .career-mock-source-panel,
+  .career-mock-question-panel .career-mock-question-actions,
+  .career-mock-question-layout .career-mock-progress-block h2 {
+    display: none;
+  }
+
+  .career-mock-question-layout .career-mock-question-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .career-mock-dock-acts {
+    display: flex;
+    gap: var(--career-space-2);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .career-mock-dock-chip {
+    flex: none;
+    min-block-size: var(--career-target-min);
+    padding: 0 var(--career-space-3);
+    border: 0;
+    border-radius: 999px;
+    color: var(--career-text-soft);
+    background: var(--career-surface);
+    font: inherit;
+    font-size: var(--career-text-sm);
+    cursor: pointer;
+  }
+
+  .career-mock-question-panel .career-mock-question-prompt {
+    justify-self: start;
+    max-inline-size: 86%;
+    margin: 0;
+    padding: var(--career-space-3) var(--career-space-4);
+    border: 0;
+    border-radius: 18px 18px 18px 6px;
+    background: var(--career-surface);
+    font-size: var(--career-text-sm);
+    line-height: 1.4;
+  }
+
+  .career-mock-question-panel .career-mock-composer {
+    position: fixed;
+    z-index: 10001;
+    inset-inline: var(--career-space-4);
+    inset-block-end: calc(
+      var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom)
+    );
+    display: flex;
+    align-items: flex-end;
+    gap: var(--career-space-2);
+    padding: var(--career-space-2) var(--career-space-2) var(--career-space-2) var(--career-space-4);
+    border-radius: 22px;
+    background: var(--career-surface);
+    box-shadow:
+      0 8px 24px color-mix(in oklch, black 40%, transparent),
+      inset 0 0 0 1px var(--career-line);
+  }
+
+  .career-mock-question-panel .career-mock-composer textarea {
+    flex: 1;
+    min-inline-size: 0;
+    min-block-size: var(--career-target-min);
+    max-block-size: 132px;
+    padding: var(--career-space-2) 0;
+    border: 0;
+    color: var(--career-text);
+    background: none;
+    font-size: var(--career-text-md);
+    field-sizing: content;
+    outline: 0;
+  }
+
+  .career-mock-question-panel .career-mock-composer .career-mock-send,
+  .career-mock-dock-mic {
+    position: static;
+    flex: none;
+    display: grid;
+    place-items: center;
+    inline-size: 36px;
+    min-inline-size: 36px;
+    block-size: 36px;
+    margin-block-end: 4px;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .career-mock-dock-mic {
+    color: var(--career-text);
+    background: color-mix(in oklch, var(--career-text) 12%, transparent);
+  }
+
+  .career-mock-question-panel .career-mock-composer .career-mock-send.is-empty {
+    display: none;
+  }
+
+  .career-mock-question-panel .career-mock-composer:focus-within {
+    box-shadow:
+      0 8px 24px color-mix(in oklch, black 40%, transparent),
+      inset 0 0 0 2px var(--career-accent);
+  }
+
+  /* Место под док, чтобы последний пузырь не уходил под поле. */
+  .career-mock-dialog:has(.career-mock-question-layout) .career-mock-content {
+    padding-block-end: calc(var(--career-mobile-nav-height) + 140px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Рекомендации итога: текст и кнопка действия в одной строке (макет 14, .check-row). */
+.career-mock-recommendations .career-mock-recommendation-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--career-space-3);
+  align-items: center;
+  padding-block: var(--career-space-3);
+}
+
+.career-mock-recommendation-list li:first-child {
+  border-block-start: 0;
+}
+
+.career-mock-recommendation-list strong {
+  min-inline-size: 0;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .career-mock-recommendations .career-mock-recommendation-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-mock-recommendation-list .career-btn {
+    justify-self: start;
+  }
+}
