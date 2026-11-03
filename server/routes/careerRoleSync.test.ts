@@ -151,9 +151,14 @@ describe('роли «Карьеры» задают сбор вакансий (27
       [role('Head of AI', 'candidate'), role('Руководитель службы поддержки')],
     );
     expect(record).toHaveBeenCalledTimes(1);
+    // Руководящая русская роль даёт несколько английских формулировок (03.11).
     expect(record.mock.calls[0]?.[0]).toEqual([
       'head of ai',
       'head of customer support',
+      'customer support director',
+      'director of customer service',
+      'head of customer success',
+      'customer experience director',
       'руководитель службы поддержки',
     ]);
   });
