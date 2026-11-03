@@ -36,13 +36,13 @@
 
 .career-app-update-text strong {
   font-size: var(--career-text-sm);
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-app-update-text p {
   margin: 0;
   font-size: var(--career-text-xs);
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .career-app-update-actions {
@@ -61,14 +61,14 @@
   background: var(--career-bg-elevated);
   border: var(--career-border-width) solid var(--career-line-strong);
   font-size: var(--career-text-sm);
-  color: var(--career-text-secondary);
+  color: var(--career-text-soft);
   margin-bottom: var(--career-space-4);
 }
 
 .career-app-update-note > svg {
   flex: none;
   margin-top: 2px;
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .career-app-update-note.is-ok > svg {
@@ -118,9 +118,9 @@
 
 .career-app-update-modal-title {
   margin: 0;
-  font-size: var(--career-text-base);
+  font-size: var(--career-text-md);
   font-weight: 600;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-app-update-modal-body {
@@ -153,7 +153,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px var(--career-space-2);
-  border-radius: var(--career-radius-xs);
+  border-radius: var(--career-space-1);
   font-size: var(--career-text-xs);
   font-weight: 500;
   line-height: 1.4;
@@ -162,17 +162,17 @@
 
 .career-app-update-tag.is-fixed {
   background: var(--career-line-strong);
-  color: var(--career-text-secondary);
+  color: var(--career-text-soft);
 }
 
 .career-app-update-tag.is-new {
-  background: color-mix(in oklch, var(--career-accent) 15%, transparent);
-  color: var(--career-accent);
+  background: color-mix(in oklch, var(--career-success) 15%, transparent);
+  color: var(--career-success);
 }
 
 .career-app-update-tag.is-improved {
-  background: color-mix(in oklch, var(--career-primary) 15%, transparent);
-  color: var(--career-primary);
+  background: color-mix(in oklch, var(--career-accent) 15%, transparent);
+  color: var(--career-accent);
 }
 
 .career-app-update-tag.is-required {
@@ -192,14 +192,14 @@
   min-inline-size: 8rem;
   height: 8px;
   background: var(--career-line-strong);
-  border-radius: var(--career-radius-full);
+  border-radius: var(--career-radius-pill);
   overflow: hidden;
 }
 
 .career-app-update-progress-fill {
   height: 100%;
   background: var(--career-accent);
-  border-radius: var(--career-radius-full);
+  border-radius: var(--career-radius-pill);
   transition: width 0.2s ease;
   width: 64%;
 }
@@ -228,19 +228,19 @@
   block-size: 8px;
   appearance: none;
   border: 0;
-  border-radius: var(--career-radius-full);
+  border-radius: var(--career-radius-pill);
   background: var(--career-line-strong);
   overflow: hidden;
 }
 
 .career-app-update-progress::-webkit-progress-bar {
   background: var(--career-line-strong);
-  border-radius: var(--career-radius-full);
+  border-radius: var(--career-radius-pill);
 }
 
 .career-app-update-progress::-webkit-progress-value {
   background: var(--career-accent);
-  border-radius: var(--career-radius-full);
+  border-radius: var(--career-radius-pill);
   transition: inline-size 0.2s ease;
 }
 

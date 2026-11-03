@@ -59,6 +59,24 @@ describe('mobileStatusLabel', () => {
       mobileStatusLabel(application({ deliveryReceipt: { kind: 'failure_note', value: 'x' } })),
     ).toBe('Не доставлено');
   });
+
+  it('never shows the stage-change date as the interview date (B511 G3b item 4)', () => {
+    expect(mobileStatusLabel(application({ stage: 'interview' }))).toBe(
+      'Интервью, дата не указана',
+    );
+    const scheduled = mobileStatusLabel(
+      application({
+        stage: 'interview',
+        nearestInterview: {
+          id: 'i1',
+          scheduledAt: '2026-10-10T11:00:00.000Z',
+          prepStatus: 'none',
+          round: 1,
+        } as ApplicationView['nearestInterview'],
+      }),
+    );
+    expect(scheduled).toMatch(/^Интервью 10\.10, \d{2}:00$/);
+  });
 });
 
 describe('mobileDueDate', () => {

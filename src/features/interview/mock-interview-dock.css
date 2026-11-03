@@ -146,3 +146,46 @@
     justify-self: start;
   }
 }
+
+/* Итог по темам (макет 14 `res`): на 1440 пояснение под (i) у заголовка, на 390 — строкой под списком. */
+.career-mock-topic-head {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-mock-topic-info.career-btn {
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  min-block-size: 0;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--career-text-soft);
+}
+
+/* Подстрока пункта «Что сделать до интервью» (макет 14, `.check-row p`). */
+.career-mock-recommendation-text {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.career-mock-recommendation-text span {
+  font-size: var(--career-text-xs);
+  font-weight: 400;
+  color: var(--career-text-soft);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .career-mock-topic-info.career-btn {
+    display: none;
+  }
+}
+
+@media (min-width: 761px) {
+  .career-mock-topic-foot {
+    display: none;
+  }
+}

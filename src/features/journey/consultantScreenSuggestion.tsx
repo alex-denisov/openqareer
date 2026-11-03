@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { CoachTurnStage } from '../coach/coachApi';
+import { ConsultantTopicProvider } from './consultantScreenTopic';
 
 /**
  * Предложение консультанта по текущему экрану (макеты 5 и 9): экран сам строит его
@@ -35,6 +36,9 @@ interface SuggestionStore {
   /** Макет 14: пока открыт тренажёр, колонка консультанта на 1440 убрана, вход — значок шапки. */
   readonly trainerOpen: boolean;
   readonly markTrainer: (delta: 1 | -1) => void;
+  /** Макет 14 `res`: на итоге тренажёра в шапке 1440 нет значка консультанта. */
+  readonly trainerResultOpen: boolean;
+  readonly markTrainerResult: (delta: 1 | -1) => void;
 }
 
 const NO_STORE: SuggestionStore = {
@@ -46,9 +50,20 @@ const NO_STORE: SuggestionStore = {
   suppress: () => undefined,
   trainerOpen: false,
   markTrainer: () => undefined,
+  trainerResultOpen: false,
+  markTrainerResult: () => undefined,
 };
 
 const ConsultantSuggestionContext = createContext<SuggestionStore>(NO_STORE);
+
+/** Сколько смонтированных экранов держат флаг: окно, тренажёр, итог тренажёра. */
+function useMountCounter(): readonly [boolean, (delta: 1 | -1) => void] {
+  const [count, setCount] = useState(0);
+  const mark = useCallback((delta: 1 | -1) => {
+    setCount((current) => Math.max(0, current + delta));
+  }, []);
+  return [count > 0, mark];
+}
 
 export function ConsultantSuggestionProvider({ children }: { readonly children: ReactNode }) {
   const [published, setPublished] = useState<{
@@ -65,30 +80,38 @@ export function ConsultantSuggestionProvider({ children }: { readonly children: 
   const dismiss = useCallback((id: string) => {
     setDismissed((current) => new Set([...current, id]));
   }, []);
-  const [suppressors, setSuppressors] = useState(0);
-  const suppress = useCallback((delta: 1 | -1) => {
-    setSuppressors((current) => Math.max(0, current + delta));
-  }, []);
-  const [trainers, setTrainers] = useState(0);
-  const markTrainer = useCallback((delta: 1 | -1) => {
-    setTrainers((current) => Math.max(0, current + delta));
-  }, []);
+  const [suppressed, suppress] = useMountCounter();
+  const [trainerOpen, markTrainer] = useMountCounter();
+  const [trainerResultOpen, markTrainerResult] = useMountCounter();
   const value = useMemo(
     () => ({
       suggestion: published?.suggestion ?? null,
       dismissed,
-      suppressed: suppressors > 0,
+      suppressed,
       publish,
       dismiss,
       suppress,
-      trainerOpen: trainers > 0,
+      trainerOpen,
       markTrainer,
+      trainerResultOpen,
+      markTrainerResult,
     }),
-    [published, dismissed, suppressors, publish, dismiss, suppress, trainers, markTrainer],
+    [
+      published,
+      dismissed,
+      suppressed,
+      publish,
+      dismiss,
+      suppress,
+      trainerOpen,
+      markTrainer,
+      trainerResultOpen,
+      markTrainerResult,
+    ],
   );
   return (
     <ConsultantSuggestionContext.Provider value={value}>
-      {children}
+      <ConsultantTopicProvider>{children}</ConsultantTopicProvider>
     </ConsultantSuggestionContext.Provider>
   );
 }
@@ -145,6 +168,20 @@ export function useMarkTrainerScreen(active: boolean) {
 
 export function useTrainerScreenOpen(): boolean {
   return useContext(ConsultantSuggestionContext).trainerOpen;
+}
+
+/** Итог тренажёра отмечает себя, пока показан: оболочка убирает значок консультанта из шапки. */
+export function useMarkTrainerResult(active: boolean) {
+  const { markTrainerResult } = useContext(ConsultantSuggestionContext);
+  useEffect(() => {
+    if (!active) return undefined;
+    markTrainerResult(1);
+    return () => markTrainerResult(-1);
+  }, [active, markTrainerResult]);
+}
+
+export function useTrainerResultOpen(): boolean {
+  return useContext(ConsultantSuggestionContext).trainerResultOpen;
 }
 
 export function useConsultantScreenSuggestion(stage: CoachTurnStage) {

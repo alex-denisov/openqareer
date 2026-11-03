@@ -30,6 +30,8 @@ export interface VacancyFitInput {
   readonly assessments?: readonly VacancyFitRequirementAssessment[];
   /** Facts a skill check wrote to the profile: a requirement they confirm counts in full (owner 29.10). */
   readonly checkedFactIds?: readonly string[];
+  /** The search conditions cover where the vacancy is (03.11); absent without conditions. Not keyed. */
+  readonly placeCovered?: boolean;
 }
 export interface VacancyFitAssessor {
   assess(input: { readonly requirements: readonly VacancyRequirement[]; readonly facts: readonly VacancyFitFact[] }): Promise<readonly VacancyFitRequirementAssessment[]>;
@@ -164,6 +166,23 @@ const NON_LOCATION_CONDITIONS: readonly string[] = ['education', 'language', 'li
 /** 02.11 audit: «Dubai» was the sole quote of five unmatched skills (MS Office, communication…). */
 const acceptsLocationEvidence = (requirement: VacancyRequirement) => !isSkillRequirement(requirement) && !NON_LOCATION_CONDITIONS.includes(requirement.kind);
 
+/** A covered place is no work permit, degree, language or licence. */
+const NON_PLACE_CONDITIONS: readonly string[] = [...NON_LOCATION_CONDITIONS, 'workAuthorization'];
+/**
+ * 03.11 owner: a location line is judged by the search conditions; the profile city (set, say, for
+ * Dubai recruiters) is only the fallback. When the conditions cover the vacancy, a format line, or a
+ * line the model judged by the profile city alone, is met. Read again on every cache read, so an old
+ * result needs no model call.
+ */
+function placeCoveredIds(input: VacancyFitInput, requirements: readonly VacancyRequirement[], assessments: readonly VacancyFitRequirementAssessment[]): ReadonlySet<string> {
+  if (!input.placeCovered) return new Set();
+  return new Set(requirements.filter((requirement) => !isSkillRequirement(requirement) && !NON_PLACE_CONDITIONS.includes(requirement.kind)).flatMap((requirement) => {
+    const item = assessments.find((entry) => entry.requirementId === requirement.id);
+    const byCity = Boolean(item?.evidence.length) && item!.evidence.every((entry) => isLocationFact(entry.factId));
+    return item?.status !== 'matched' && (requirement.kind === 'workFormat' || byCity) ? [requirement.id] : [];
+  }));
+}
+
 /** Bare soft-skill tags a job board appends to every posting (Indeed): no requirement of this vacancy. */
 const GENERIC_SKILL_TAGS = new Set([
   'critical thinking', 'entrepreneurship', 'emotional intelligence', 'open-mindedness', 'collaboration',
@@ -173,8 +192,8 @@ const isGenericSkillTag = (requirement: VacancyRequirement) => GENERIC_SKILL_TAG
 
 /** Conditions a quoted profile fact contradicts: they block the row, never the skill percent (02.11). */
 const BLOCKING_CONDITIONS: readonly string[] = ['workAuthorization', 'workFormat'];
-function conditionBlocks(requirements: readonly VacancyRequirement[], assessments: readonly VacancyFitRequirementAssessment[]): VacancyFitConditionBlock[] {
-  return requirements.filter((requirement) => !isSkillRequirement(requirement) && BLOCKING_CONDITIONS.includes(requirement.kind)).flatMap((requirement) => {
+function conditionBlocks(requirements: readonly VacancyRequirement[], assessments: readonly VacancyFitRequirementAssessment[], met: ReadonlySet<string>): VacancyFitConditionBlock[] {
+  return requirements.filter((requirement) => !isSkillRequirement(requirement) && BLOCKING_CONDITIONS.includes(requirement.kind) && !met.has(requirement.id)).flatMap((requirement) => {
     const item = assessments.find((entry) => entry.requirementId === requirement.id);
     return item?.status === 'unmatched' && item.evidence[0] ? [{ requirementId: requirement.id, text: requirement.text, quote: item.evidence[0].quote }] : [];
   });
@@ -243,8 +262,9 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const requiredSkills = skills.filter((item) => required.has(item.requirementId));
   const canScore = reason === 'assessed';
   const { implied, impliedIds, percent } = weighting(requirements, skills, facts, canScore);
+  const placed = placeCoveredIds(input, requirements, assessments);
   const count = (items: readonly VacancyFitRequirementAssessment[]) => ({
-    matched: items.filter((item) => item.status === 'matched' || impliedIds.has(item.requirementId)).length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial').length,
+    matched: items.filter((item) => item.status === 'matched' || impliedIds.has(item.requirementId) || placed.has(item.requirementId)).length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial').length,
   });
   return {
     candidateId: input.candidateId, vacancyId: input.vacancyId, algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
@@ -252,8 +272,8 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
     coveragePercent: percent(skills),
     requiredCoverage: { matched: requiredSkills.filter((item) => item.status === 'matched').length, total: requiredSkills.length, percent: percent(requiredSkills) },
-    ...(implied.length ? { implied } : {}),
-    coverage: count(skills), conditionCoverage: count(conditions), conditionBlocks: conditionBlocks(requirements, assessments),
+    ...(implied.length ? { implied } : {}), ...(placed.size ? { placeCovered: [...placed] } : {}),
+    coverage: count(skills), conditionCoverage: count(conditions), conditionBlocks: conditionBlocks(requirements, assessments, placed),
     // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
     assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,
   };

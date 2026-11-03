@@ -1,11 +1,16 @@
 import { ontology } from '../../shared/roleOntology';
 
 /**
- * Письмо пишется на одном языке (G3 L1, 03.11): русские должность и компания
- * в английском письме читаются рекрутером как ошибка. Шаблон не зовёт модель,
- * поэтому перевод детерминированный: должность — только по точному совпадению
- * со словарём ролей, компания и имя — транслитерацией (так их пишут в
- * английском резюме). Должность без перевода опускается, а не транслитерируется.
+ * Письмо пишется на одном языке (G3 L1, 03.11). Шаблон не зовёт модель,
+ * поэтому перевод детерминированный и честный (G3b, 03.11):
+ * - должность — по каноническому названию роли или по словарю «глава + область»
+ *   («Директор по разработке» → «Director of Engineering»). Варианты ролей не
+ *   годятся: они сводят разные уровни к одной роли и делали директора «Head of
+ *   Engineering». Должность без честного перевода опускается;
+ * - компания — как её написал кандидат: латиница остаётся, кириллица остаётся в
+ *   своём написании в кавычках. Транслит («Fintekh Lab») рекрутер читает как
+ *   ошибку, а английского названия компании в профиле нет;
+ * - имя кандидата — транслитерацией, как в загранпаспорте.
  */
 
 const CYRILLIC = /\p{Script=Cyrillic}/u;
@@ -68,28 +73,95 @@ function titleKey(title: string): string {
     .trim();
 }
 
-/** Русское название роли → английское, только если вариант однозначен. */
-function buildRuTitleIndex(): ReadonlyMap<string, string | null> {
+/** Канонические русские названия ролей (без «(CTO)») → английские, только однозначные. */
+function buildCanonicalTitleIndex(): ReadonlyMap<string, string | null> {
   const index = new Map<string, string | null>();
   for (const role of ontology.roles) {
-    for (const variant of [role.titleRu, ...role.variants.ru]) {
-      const key = titleKey(variant);
-      const known = index.get(key);
-      index.set(key, known === undefined || known === role.titleEn ? role.titleEn : null);
-    }
+    const key = titleKey(role.titleRu.replace(/\([^)]*\)/gu, ''));
+    const known = index.get(key);
+    index.set(key, known === undefined || known === role.titleEn ? role.titleEn : null);
   }
   return index;
 }
 
-const RU_TITLE_INDEX = buildRuTitleIndex();
+const CANONICAL_TITLES = buildCanonicalTitleIndex();
+
+const TITLE_HEADS: readonly (readonly [string, string])[] = [
+  ['заместитель генерального директора', 'Deputy CEO'],
+  ['заместитель директора', 'Deputy Director'],
+  ['заместитель руководителя', 'Deputy Head'],
+  ['вице президент', 'Vice President'],
+  ['директор', 'Director'],
+  ['руководитель', 'Head'],
+  ['начальник', 'Head'],
+];
+
+/** Подразделение между главой и областью («отдела разработки») не меняет перевод. */
+const TITLE_UNIT = /^(?:отдела|группы|направления|департамента|управления|службы|центра)\s+/u;
+
+/** Область в дательном («по разработке») и родительном («разработки») падеже. */
+const TITLE_AREAS: Readonly<Record<string, string>> = {
+  разработке: 'Engineering',
+  разработки: 'Engineering',
+  ит: 'IT',
+  it: 'IT',
+  технологиям: 'Technology',
+  технологий: 'Technology',
+  'информационной безопасности': 'Information Security',
+  инфраструктуре: 'Infrastructure',
+  инфраструктуры: 'Infrastructure',
+  эксплуатации: 'Operations',
+  операциям: 'Operations',
+  операций: 'Operations',
+  продукту: 'Product',
+  продукта: 'Product',
+  данным: 'Data',
+  данных: 'Data',
+  аналитике: 'Analytics',
+  аналитики: 'Analytics',
+  архитектуре: 'Architecture',
+  архитектуры: 'Architecture',
+  тестированию: 'QA',
+  тестирования: 'QA',
+  качеству: 'Quality',
+  качества: 'Quality',
+  дизайну: 'Design',
+  дизайна: 'Design',
+  маркетингу: 'Marketing',
+  маркетинга: 'Marketing',
+  продажам: 'Sales',
+  продаж: 'Sales',
+  персоналу: 'HR',
+  персонала: 'HR',
+  финансам: 'Finance',
+  финансов: 'Finance',
+};
+
+/** «Директор по разработке» → «Director of Engineering»; `null`, если словаря не хватает. */
+function composedTitle(key: string): string | null {
+  for (const [head, english] of TITLE_HEADS) {
+    if (!key.startsWith(`${head} `)) continue;
+    const area = key.slice(head.length + 1).replace(/^по\s+/u, '').replace(TITLE_UNIT, '');
+    const englishArea = TITLE_AREAS[area];
+    return englishArea ? `${english} of ${englishArea}` : null;
+  }
+  return null;
+}
 
 /** Должность для английского письма или `null`, если перевести честно нельзя. */
 export function englishJobTitle(title: string): string | null {
   if (!hasCyrillic(title)) return title;
-  return RU_TITLE_INDEX.get(titleKey(title)) ?? null;
+  const key = titleKey(title);
+  return CANONICAL_TITLES.get(key) ?? composedTitle(key);
 }
 
-/** Имя собственное (компания, кандидат) для английского письма. */
+/** Компания в английском письме: как написал кандидат, кириллица — в кавычках. */
+export function letterEmployerName(name: string): string {
+  if (!hasCyrillic(name)) return name;
+  return `"${name.replace(/^["«„“\s]+|["»“”\s]+$/gu, '')}"`;
+}
+
+/** Имя кандидата для английского письма. */
 export function englishProperName(name: string): string {
   return hasCyrillic(name) ? latinize(name) : name;
 }

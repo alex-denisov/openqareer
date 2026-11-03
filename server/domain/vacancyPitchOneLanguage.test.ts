@@ -60,12 +60,13 @@ describe('one language per letter (G3 L1)', () => {
       pitch.linkedInNote,
       pitch.contactMessage,
     ]) {
-      expect(text).not.toMatch(/\p{Script=Cyrillic}/u);
+      // Employers keep their own script inside quotes (G3b): never transliterated.
+      expect(text.replace(/"[^"]*"/gu, '')).not.toMatch(/\p{Script=Cyrillic}/u);
     }
     expect(pitch.emailPitch.body).toContain(
-      'I currently work as Head of Engineering at Market Soft (2019–present)',
+      'I currently work as Director of Engineering at "Маркет Софт" (2019–present)',
     );
-    expect(pitch.emailPitch.body).toContain('at Riteyl Sistems (2014–2019)');
+    expect(pitch.emailPitch.body).toContain('Head of Engineering at "Ритейл Системс" (2014–2019)');
     expect(pitch.atsCoverLetter).toContain('Ivan Petrov');
   });
 

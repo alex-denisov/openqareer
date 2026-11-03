@@ -5,7 +5,21 @@ import {
   rankPitchFacts,
   type PitchFactRankingContext,
 } from './pitchFactRanking';
-import { englishJobTitle, englishProperName, hasCyrillic, requirementLabel } from './letterLanguage';
+import {
+  englishJobTitle,
+  englishProperName,
+  hasCyrillic,
+  letterEmployerName,
+  requirementLabel,
+} from './letterLanguage';
+import {
+  isResultFact,
+  isStructuredRecordStatement,
+  orderLetterResults,
+  withTranslatedStatements,
+} from './letterResults';
+
+export { isStructuredRecordStatement } from './letterResults';
 
 export type PitchTone = 'executive' | 'confident' | 'technical';
 export type PitchLanguage = 'en' | 'ru';
@@ -64,6 +78,8 @@ export interface GenerateVacancyPitchOptions {
   readonly targetCompany?: boolean;
   /** B528: места работы, выбранные кандидатом для письма, в порядке профиля. */
   readonly workplaces?: readonly PitchWorkplace[];
+  /** G3b: пункты мест работы, переведённые на язык письма (id факта → текст). */
+  readonly translations?: ReadonlyMap<string, string>;
 }
 
 export interface PitchWorkplace {
@@ -72,6 +88,8 @@ export interface PitchWorkplace {
   readonly startDate: string | null;
   readonly endDate: string | null;
   readonly current: boolean;
+  /** Запись хронологии о самом месте: она называет место, но не результат. */
+  readonly recordId?: string | null;
   readonly evidenceIds: readonly string[];
 }
 
@@ -363,14 +381,6 @@ function copyFor(language: PitchLanguage): Copy {
   return language === 'en' ? EN_COPY : RU_COPY;
 }
 
-/**
- * Записи профиля «Заголовок\nПоле: значение» (образование, язык, место
- * работы) — данные для экрана, а не фразы: в письмо их не цитируем (B496).
- */
-export function isStructuredRecordStatement(statement: string): boolean {
-  return /\n[^\n:]{2,40}:\s/u.test(statement);
-}
-
 function yearOf(date: string | null): string | null {
   return date?.match(/\d{4}/u)?.[0] ?? null;
 }
@@ -394,7 +404,7 @@ function workplaceParts(place: PitchWorkplace, language: PitchLanguage) {
   if (language === 'ru') return { title, employer };
   return {
     title: title ? englishJobTitle(title) : null,
-    employer: employer ? englishProperName(employer) : null,
+    employer: employer ? letterEmployerName(employer) : null,
   };
 }
 
@@ -431,22 +441,19 @@ export function buildWorkplaceSentence(
   }
   const verb = workplaces[0]?.current ? 'I currently work' : 'Most recently I worked';
   const now = first.hasTitle ? `${verb} as` : verb;
-  return rest.length ? `${now} ${first.text}; before that, ${rest.join(', ')}.` : `${now} ${first.text}.`;
+  return others.length
+    ? `${now} ${first.text}; before that, I ${englishEarlierPlaces(others)}.`
+    : `${now} ${first.text}.`;
 }
 
-// Начало слова: иначе «cut» находится в «executive», «led» — в «skilled».
-const OUTCOME_VERB = /(?<!\p{L})(?:созда|основа|возглав|руковод|разработа|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|вырос|выраст|led|founded|created|built|launched|grew|increased|reduced|cut|achieved|implemented|doubled|delivered|managed|scaled)/iu;
-
-/**
- * Результат — фраза с итогом, а не строка навыка: «Kubernetes. Kafka. Go.»
- * под заголовком «Among my results» читается как подмена (G3 L1, 03.11).
- */
-function isResultFact(fact: VacancyPitchInputFact): boolean {
-  if (fact.domain === 'skill') return false;
-  if ((fact.statement.match(/[\p{L}\p{N}]+/gu) ?? []).length < 3) return false;
-  // role-evidence — опыт выбранной роли кампании, его ставит первым ранжирование.
-  return fact.domain === 'outcome' || fact.domain === 'role-evidence' ||
-    /\d/u.test(fact.statement) || OUTCOME_VERB.test(fact.statement);
+/** «was Director of Engineering at A (…) and worked at B (…)»: место без должности не висит на «at». */
+function englishEarlierPlaces(phrases: readonly WorkplacePhrase[]): string {
+  const clauses = phrases.map((phrase, index) => {
+    if (!phrase.hasTitle) return `worked ${phrase.text}`;
+    return phrases[index - 1]?.hasTitle ? phrase.text : `was ${phrase.text}`;
+  });
+  if (clauses.length < 2) return clauses.join('');
+  return `${clauses.slice(0, -1).join(', ')} and ${clauses.at(-1) ?? ''}`;
 }
 
 /**
@@ -663,7 +670,7 @@ function assemblePitches(params: {
   const { copy, vacancy, candidateName, usableFacts, tone, recipient, usedIds, notices, useRanking } = params;
   const wish = params.targetCompany && vacancy.company ? ` ${copy.targetCompany(vacancy.company)}` : '';
   const intro = copy.intro(vacancy.title, vacancy.company, tone) + wish;
-  const results = letterResultFacts(usableFacts, params.language);
+  const results = orderLetterResults(letterResultFacts(usableFacts, params.language), params.workplaces);
   const evidence = buildEvidenceParagraph(copy, params.language, results, params.workplaces, usedIds, notices, useRanking);
   const stack = buildStackParagraph(copy, vacancy, usableFacts, usedIds);
   const closing = copy.closing(tone);
@@ -689,7 +696,8 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const copy = copyFor(language);
   const ownName = options.candidateName?.trim();
   const candidateName = ownName ? (language === 'en' ? englishProperName(ownName) : ownName) : copy.candidateFallback;
-  const usableFacts = rankPitchFacts(filterUsableFacts(options.facts), vacancy, options.rankingContext);
+  const facts = withTranslatedStatements(options.facts, language === 'en' ? options.translations : undefined);
+  const usableFacts = rankPitchFacts(filterUsableFacts(facts), vacancy, options.rankingContext);
   const useRanking = hasRoleAwarePitchRanking(options.rankingContext);
   const usedEvidenceIds = new Set<string>();
   const notices: string[] = [];

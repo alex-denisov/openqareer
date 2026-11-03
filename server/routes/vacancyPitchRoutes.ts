@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
+  detectVacancyLanguage,
   filterUsablePitchFacts,
   generateVacancyPitch,
   type PitchLanguage,
@@ -9,6 +10,8 @@ import {
   type VacancyPitchInputFact,
 } from '../domain/vacancyPitchService';
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
+import { translateLetterFacts } from '../domain/letterFactTranslation';
+import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { RouteDeps } from './deps';
 import { requireTariffQuota } from './tariffQuotaGuard';
@@ -204,6 +207,7 @@ function letterWorkplaces(
     startDate: workplace.startDate ?? null,
     endDate: workplace.endDate ?? null,
     current: workplace.current,
+    recordId: workplace.chronologyMemoryId ?? null,
     evidenceIds: [workplace.chronologyMemoryId, ...workplace.bulletMemoryIds].filter((id) => usableEvidenceIds.has(id)),
   }));
 }
@@ -224,31 +228,32 @@ async function writeVacancyPitch(
   const usableEvidenceIds = new Set(filterUsablePitchFacts(allFacts).map((fact) => fact.id));
   const candidateWorkplaces = letterWorkplaces(snapshot, usableEvidenceIds);
   const tone = body?.tone ?? 'executive';
+  const language = body?.language ?? detectVacancyLanguage(vacancy);
+  const workplaces = candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id)));
+  const contextMs = Date.now() - contextStart;
+  // G3b: the model letter and the translation of the places' results share one budget.
+  const toTranslate = letterFactsToTranslate(facts, workplaces, language);
+  const [translations, written] = await Promise.all([
+    translateLetterFacts(deps.experienceFactRewriter, toTranslate, COVER_LETTER_BUDGET_MS),
+    writeCoverLetterBody(deps, request, candidateId, vacancy, facts, language, tone, rankingContext, contextMs),
+  ]);
+  if (translations.size < toTranslate.length) {
+    request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
+  }
   const pitch = generateVacancyPitch({
     vacancy,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
     facts,
     tone,
     ...(rankingContext ? { rankingContext } : {}),
-    ...(body?.language ? { language: body.language } : {}),
+    language,
     ...(body?.recipient ? { recipient: body.recipient } : {}),
     ...(isWantedCompany(deps, candidateId, vacancy.company) ? { targetCompany: true } : {}),
-    workplaces: candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id))),
+    workplaces,
+    translations,
   });
-  const contextMs = Date.now() - contextStart;
-  const written = await writeCoverLetterBody(
-    deps,
-    request,
-    candidateId,
-    vacancy,
-    facts,
-    pitch.language,
-    tone,
-    rankingContext,
-    contextMs,
-  );
   const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
-  const outputFactChecks = checkPitchOutputFacts(pitch, atsCoverLetter, facts);
+  const outputFactChecks = checkPitchOutputFacts(pitch, atsCoverLetter, withTranslatedStatements(facts, translations));
   return { pitch, written, atsCoverLetter, candidateWorkplaces, outputFactChecks };
 }
 
