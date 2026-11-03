@@ -314,7 +314,11 @@ export class SqliteRecruiterContactsRepository {
     return row?.full_name ?? null;
   }
 
-  listContactsByCandidateId(candidateId: string): RecruiterContact[] {
+  /** `vacancyIds`: only these rows are parsed — the company list asks for its selection (PRB-041). */
+  listContactsByCandidateId(
+    candidateId: string,
+    vacancyIds?: ReadonlySet<string>,
+  ): RecruiterContact[] {
     const rows = this.database.prepare(`
       SELECT id, candidate_id, vacancy_id, company_name, full_name, role_title,
         email, email_status, phone, telegram, whatsapp, linkedin_url, github_url,
@@ -325,7 +329,8 @@ export class SqliteRecruiterContactsRepository {
       WHERE candidate_id = ?
       ORDER BY created_at DESC, id
     `).all(candidateId) as unknown as RecruiterContactRow[];
-    return rows.map(toContact);
+    const asked = vacancyIds ? rows.filter((row) => vacancyIds.has(row.vacancy_id)) : rows;
+    return asked.map(toContact);
   }
 
   enqueueJob(candidateId: string, vacancyId: string, requestedAt = new Date().toISOString()): RecruiterContactJob {
