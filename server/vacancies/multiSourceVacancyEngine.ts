@@ -482,7 +482,9 @@ export class MultiSourceVacancyEngine {
       if (!source) continue;
       source.lastSyncAt = state.lastSyncAt;
       source.lastStatus = state.lastStatus;
-      source.lastErrorMessage = state.lastErrorMessage;
+      // A disabled source is not failing: its registry reason says why it is
+      // off, so an error stored before it was switched off is stale (03.11).
+      source.lastErrorMessage = source.enabled ? state.lastErrorMessage : undefined;
       source.itemsFoundTotal = state.itemsFoundTotal;
       source.itemsActiveTotal = state.itemsActiveTotal;
       // The snapshot is written by the last successful sync. A source that is
