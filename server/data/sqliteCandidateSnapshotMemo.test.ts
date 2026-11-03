@@ -27,7 +27,7 @@ describe('getSnapshot memo', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       const path = join(mkdtempSync(join(tmpdir(), 'oq-snap-')), 'db.sqlite');
-      const store = createStore(path);
+      const store = createStore(path, FOREIGN_COMMIT_GRACE_MS);
       const candidate = createCandidate(store);
       const first = store.getSnapshot(candidate.id);
       const other = new DatabaseSync(path);
@@ -45,9 +45,22 @@ describe('getSnapshot memo', () => {
     }
   });
 
-  it('drops the memo at once on a write through its own connection', () => {
+  it('drops the memo at once on another connection\'s commit unless the store opts in (the worker)', () => {
+    // The mechanics worker checks a fit against the current profile: the web process's writes are
+    // foreign to it and must be seen at once.
     const path = join(mkdtempSync(join(tmpdir(), 'oq-snap-')), 'db.sqlite');
     const store = createStore(path);
+    const candidate = createCandidate(store);
+    const first = store.getSnapshot(candidate.id);
+    const other = new DatabaseSync(path);
+    other.exec('CREATE TABLE IF NOT EXISTS memo_probe (x INTEGER)');
+    other.close();
+    expect(store.getSnapshot(candidate.id)).not.toBe(first);
+  });
+
+  it('drops the memo at once on a write through its own connection', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'oq-snap-')), 'db.sqlite');
+    const store = createStore(path, FOREIGN_COMMIT_GRACE_MS);
     const candidate = createCandidate(store);
     store.getSnapshot(candidate.id);
     const other = new DatabaseSync(path);

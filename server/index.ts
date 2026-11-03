@@ -47,6 +47,7 @@ import { persistRemoteLogin } from './linkedinPool/linkedinRemoteLoginPersistenc
 import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersistentContext';
 import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
+import { FOREIGN_COMMIT_GRACE_MS } from './data/sqliteSnapshotMemo';
 import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
 import { openVacancyDemandStore } from './vacancies/vacancyDemandStore';
 
@@ -54,6 +55,7 @@ const config = readServerConfig(process.env);
 const candidateStore = new SqliteCandidateStore({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
+  snapshotForeignCommitGraceMs: FOREIGN_COMMIT_GRACE_MS,
 });
 const authService = new AuthService({
   databasePath: config.databasePath,
