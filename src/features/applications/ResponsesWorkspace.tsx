@@ -21,6 +21,7 @@ import { ResponsesPreparationPanel } from './ResponsesPreparationPanel';
 import { ResponsesPipelineAnalytics } from './ResponsesPipelineAnalytics';
 import { ResponsesChannelPerformance } from './ResponsesChannelPerformance';
 import { SelectedResponsePanel } from './SelectedResponsePanel';
+import { ResponseMockInterviewSuggestion } from './ResponseMockInterviewSuggestion';
 import {
   ResponsesFunnelSummary,
   ResponsesFilterControls,
@@ -284,6 +285,8 @@ function FunnelResults({
     <>
       <PoolStatusMessage workspace={workspace} />
       <FunnelMobileFeed props={props} workspace={workspace} onOpenPush={onOpenPush} />
+      {/* Publishes the consultant offer; stays mounted while a 390 push screen is open. */}
+      <MockInterviewSuggestion workspace={workspace} />
       {/* The 390 push screen renders its own copies; never two in the DOM. */}
       {pushOpen ? null : (
         <>
@@ -544,4 +547,13 @@ function summaryStage(stage: readonly ApplicationStage[] | undefined): readonly 
   if (!stage) return [];
   const open = new Set(OPEN_APPLICATION_STAGES);
   return stage.length === open.size && stage.every((value) => open.has(value)) ? [] : stage;
+}
+
+function MockInterviewSuggestion({ workspace }: { readonly workspace: WorkspaceController }) {
+  return workspace.selectedApplication ? (
+    <ResponseMockInterviewSuggestion
+      key={workspace.selectedApplication.id}
+      application={workspace.selectedApplication}
+    />
+  ) : null;
 }
