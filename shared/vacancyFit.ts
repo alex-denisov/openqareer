@@ -97,6 +97,11 @@ export interface VacancyFitResult {
     readonly partial?: number;
   };
   readonly assessments: readonly VacancyFitRequirementAssessment[];
+  /**
+   * 03.11: soft skills the profile's experience implies (a leading role, work with clients). Counted
+   * as met in the percent; the stored assessments stay as the model gave them, so no model call repeats.
+   */
+  readonly implied?: readonly { readonly requirementId: string; readonly role: string }[];
   /** 02.11: work authorisation or country-restricted remote a quoted profile fact contradicts. */
   readonly conditionBlocks?: readonly VacancyFitConditionBlock[];
   readonly reason:

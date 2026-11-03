@@ -332,12 +332,13 @@ function explanationWithFitPoints(explanation: Explanation, fitView: VacancyFitV
  */
 export function compactFitView(view: VacancyFitView): VacancyFitView {
   const text = new Map(view.requirements.map((item) => [item.id, item.text]));
+  const implied = new Set((view.result?.implied ?? []).map((item) => item.requirementId));
   const points = (view.result?.assessments ?? [])
     .filter((item) => text.has(item.requirementId))
     .slice(0, MAX_FIT_POINTS)
     .map((item) => ({
       text: (text.get(item.requirementId) ?? '').slice(0, MAX_FIT_POINT_CHARS),
-      status: item.status,
+      status: implied.has(item.requirementId) ? ('matched' as const) : item.status,
     }));
   return {
     ...view,

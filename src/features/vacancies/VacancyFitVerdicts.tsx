@@ -24,7 +24,8 @@ export function VacancyFitVerdicts({ view }: { readonly view?: VacancyFitView })
       <h4>На чём основан процент</h4>
       <ul>
         {rows.map(({ requirement, assessment }) => {
-          const status = assessment?.status ?? 'unknown';
+          const impliedRole = view.result?.implied?.find((item) => item.requirementId === requirement.id)?.role;
+          const status = impliedRole ? 'matched' : assessment?.status ?? 'unknown';
           return (
             <li key={requirement.id} className={`is-${status}`}>
               <span className="vacancy-fit-verdict-name">
@@ -33,6 +34,7 @@ export function VacancyFitVerdicts({ view }: { readonly view?: VacancyFitView })
               <span className="vacancy-fit-verdict-status">
                 {VERDICT[status]}
                 {assessment?.checked ? ', проверено квизом' : ''}
+                {impliedRole ? `, следует из опыта: ${impliedRole}` : ''}
               </span>
               {assessment?.evidence.map((fact) => (
                 <q key={`${fact.factId}:${fact.quote}`}>{fact.quote}</q>

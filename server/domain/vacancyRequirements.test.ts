@@ -393,3 +393,11 @@ describe('quotes from entity-encoded and non-English descriptions (B562-r)', () 
     );
   });
 });
+
+describe('pay and perk lines are no requirements (03.11)', () => {
+  it('drops them in the rules path', () => {
+    const description = 'Requirements:\nPay: $120,000 per year\n$80,000/year\nITIL experience\nVerbal communication';
+    const texts = extractVacancyRequirements({ vacancyId: 'v', description }).requirements.map((item) => item.text);
+    expect(texts).toEqual(['ITIL experience', 'Verbal communication']);
+  });
+});

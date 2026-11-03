@@ -19,7 +19,7 @@ describe('fit scoring after 01.11: stated counts in full, partial counts half', 
       { requirementId: 's3', status: 'unknown' as const, evidence: [] },
     ];
     const stated = evaluateVacancyFit({ ...input, checkedFactIds: [], assessments });
-    expect(stated.coveragePercent).toBe(50);
+    expect(stated.coveragePercent).toBe(57);
     expect(stated.assessments.map((item) => item.status)).toEqual([
       'matched',
       'partial',
@@ -27,7 +27,7 @@ describe('fit scoring after 01.11: stated counts in full, partial counts half', 
     ]);
     expect(stated.coverage).toMatchObject({ matched: 1, partial: 1, total: 3, checked: 0 });
     const checked = evaluateVacancyFit({ ...input, assessments });
-    expect(checked.coveragePercent).toBe(50);
+    expect(checked.coveragePercent).toBe(57);
     expect(checked.assessments[0].checked).toBe(true);
   });
 

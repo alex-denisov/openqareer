@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isCompensationLine } from './vacancyRequirementKind';
 
 export const VACANCY_REQUIREMENTS_EXTRACTOR_VERSION = 'coverage-2';
 /** Caches written before model labels (B510): read until the upgrade reaches the vacancy. */
@@ -177,7 +178,7 @@ export function extractVacancyRequirements(input: VacancyRequirementsInput): Vac
       }
       continue;
     }
-    if (excludedSection || (!inSection && !EXPLICIT.test(content)) || content.length < 2 || content.length > 1500 || seen.has(content)) continue;
+    if (excludedSection || (!inSection && !EXPLICIT.test(content)) || content.length < 2 || content.length > 1500 || seen.has(content) || isCompensationLine(content)) continue;
     // Model-directed instructions are untrusted vacancy data, never requirements.
     if (/ignore (?:all |previous )?instructions|system prompt|api.?key|credentials|игнорируй.*инструкц/iu.test(content)) continue;
     requirements.push(makeRequirement(content, content, EXPLICIT.test(content) ? 'explicit' : 'structural', preferredSection));
@@ -335,6 +336,7 @@ function modelRequirement(entry: unknown, description: string, report: (issue: M
   if (!sourceQuote) { report('quote'); return null; }
   const origin = modelOrigin(originLabel, text, quoted);
   if (!origin) { report('paraphrase'); return null; }
+  if (isCompensationLine(sourceQuote) || isCompensationLine(text)) return null;
   if (/ignore (?:all |previous )?instructions|system prompt|api.?key|credentials|игнорируй.*инструкц/iu.test(sourceQuote)) return null;
   // A stated requirement is the quote itself: a trimmed or retold `text` must not drop it.
   const base = makeRequirement(origin === 'inferred' ? text.trim() : sourceQuote.trim(), sourceQuote, origin);

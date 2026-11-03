@@ -4,6 +4,7 @@ import { VACANCY_FIT_ALGORITHM_VERSION, VACANCY_FIT_GATE_NAMES, type VacancyFitC
 import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resumeEvidenceEligibility';
 import { isImportedMemoryId } from './resumeImport';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
+import { impliedSoftRole, isCompensationLine, isSoftRequirementText } from './vacancyRequirementKind';
 import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
 
 export interface VacancyFitFact extends ResumeEvidenceCandidate {
@@ -38,7 +39,7 @@ function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequiremen
   const description = normalizedSource(input.description);
   const seen = new Set<string>();
   return input.requirements.filter((requirement) => {
-    if (!requirement.id.trim() || seen.has(requirement.id) || isGenericSkillTag(requirement) || requirement.origin === 'inferred' || !requirement.sourceQuote.trim() || !description.includes(normalizedSource(requirement.sourceQuote))) return false;
+    if (!requirement.id.trim() || seen.has(requirement.id) || isGenericSkillTag(requirement) || isCompensationLine(requirement.text) || requirement.origin === 'inferred' || !requirement.sourceQuote.trim() || !description.includes(normalizedSource(requirement.sourceQuote))) return false;
     seen.add(requirement.id);
     return true;
   }).sort((a, b) => Number(b.hard || b.stopFactor) - Number(a.hard || a.stopFactor) || a.id.localeCompare(b.id));
@@ -75,6 +76,10 @@ function eligibleFacts(input: VacancyFitInput): readonly VacancyFitFact[] {
   for (const fact of input.facts) counts.set(fact.id, (counts.get(fact.id) ?? 0) + 1);
   return input.facts.filter((fact) => fact.candidateId === input.candidateId && counts.get(fact.id) === 1 && isVacancyFitEvidence(fact));
 }
+
+/** Soft traits weigh a quarter of a skill; hard or mandatory requirements one and a half (03.11). */
+const SOFT_WEIGHT = 0.25;
+const HARD_WEIGHT = 1.5;
 
 export type VacancyFitFactScope = 'evidence' | 'all';
 
@@ -211,10 +216,24 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const requiredSkills = skills.filter((item) => required.has(item.requirementId));
   const canScore = reason === 'assessed';
   // 01.11: met 1 whether stated or checked by a skill check (`checked` is a label), partial 0.5, else 0.
-  const credit = (item: VacancyFitRequirementAssessment) => item.status === 'matched' ? 1 : item.status === 'partial' ? PARTIAL_REQUIREMENT_CREDIT : 0;
-  const percent = (items: readonly VacancyFitRequirementAssessment[]) => canScore && items.length ? Math.round(items.reduce((sum, item) => sum + credit(item), 0) / items.length * 100) : null;
+  // 03.11: weighted mean; a soft trait weighs 0.25, a hard or mandatory requirement 1.5 (owner decision).
+  // A soft trait that experience implies counts as met unless a quoted fact contradicts it; the
+  // stored assessment is left as it was, so reading an old result needs no model call.
+  const byId = new Map(requirements.map((item) => [item.id, item]));
+  const role = impliedSoftRole(facts.map((fact) => fact.statement));
+  const implied = role ? skills.filter((item) => item.status !== 'unmatched' && item.status !== 'matched' && isSoftRequirementText(byId.get(item.requirementId)?.text ?? '')).map((item) => ({ requirementId: item.requirementId, role })) : [];
+  const impliedIds = new Set(implied.map((item) => item.requirementId));
+  const credit = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId) ? 1 : item.status === 'partial' ? PARTIAL_REQUIREMENT_CREDIT : 0;
+  const weight = (item: VacancyFitRequirementAssessment) => {
+    const requirement = byId.get(item.requirementId);
+    return (requirement && isSoftRequirementText(requirement.text) ? SOFT_WEIGHT : 1) * (requirement && (requirement.hard || requirement.stopFactor) ? HARD_WEIGHT : 1);
+  };
+  const percent = (items: readonly VacancyFitRequirementAssessment[]) => {
+    const total = items.reduce((sum, item) => sum + weight(item), 0);
+    return canScore && items.length ? Math.round(items.reduce((sum, item) => sum + credit(item) * weight(item), 0) / total * 100) : null;
+  };
   const count = (items: readonly VacancyFitRequirementAssessment[]) => ({
-    matched: items.filter((item) => item.status === 'matched').length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial').length,
+    matched: items.filter((item) => item.status === 'matched' || impliedIds.has(item.requirementId)).length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial').length,
   });
   return {
     candidateId: input.candidateId, vacancyId: input.vacancyId, algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
@@ -222,6 +241,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
     coveragePercent: percent(skills),
     requiredCoverage: { matched: requiredSkills.filter((item) => item.status === 'matched').length, total: requiredSkills.length, percent: percent(requiredSkills) },
+    ...(implied.length ? { implied } : {}),
     coverage: count(skills), conditionCoverage: count(conditions), conditionBlocks: conditionBlocks(requirements, assessments),
     // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
     assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,
