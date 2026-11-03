@@ -63,6 +63,45 @@ describe('MatchedPoolPrecompute (C60)', () => {
     ).toBeUndefined();
   });
 
+  it("rebuilds a candidate's auto roles once per process before the first prepared selection", async () => {
+    const order: string[] = [];
+    const engine = {
+      getMatchedVacanciesAsync: async () => {
+        order.push('snapshot');
+        return [item('prepared')];
+      },
+    } as unknown as RouteDeps['multiSourceEngine'];
+    const store = {
+      listRecentCampaignCandidateIds: () => ['candidate-1'],
+      getSnapshot: () => ({ memory: [] }),
+      getCandidateWorkspace: () => ({
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: '',
+        regions: [],
+        currentSituation: '',
+        constraints: '',
+        urgency: 'active',
+        campaign: {
+          roles: ['Head of Engineering'],
+          regions: [],
+          revision: 1,
+          updatedAt: '2026-09-27T00:00:00.000Z',
+        },
+      }),
+    } as unknown as RouteDeps['candidateStore'];
+    const precompute = new MatchedPoolPrecompute({ candidateStore: store, engine, pauseMs: 0 });
+    precompute.setCampaignRoleRefresher(async (candidateId) => {
+      order.push(`roles:${candidateId}`);
+    });
+
+    await precompute.run();
+    precompute.prioritizeCampaign('candidate-1');
+    await precompute.run();
+
+    expect(order).toEqual(['roles:candidate-1', 'snapshot', 'snapshot']);
+  });
+
   it('waits for the reader without blocking an unrelated health request', async () => {
     let release!: () => void;
     const engine = {

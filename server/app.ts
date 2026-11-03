@@ -1,4 +1,5 @@
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
+import { rebuildCampaignRoles } from './vacancies/rebuildCampaignRoles';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
 import { redactRequestUrlForLogs } from './observability/redactRequestUrl';
 import { registerReportedSeoBotObservability } from './observability/reportedSeoBots';
@@ -446,6 +447,9 @@ function assembleRouteDeps(
 function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
   deps.matchedPoolPrecompute?.setFitRequester?.((candidateId, snapshot) =>
     queuePrecomputedSelectionFit(deps, candidateId, snapshot),
+  );
+  deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.((candidateId, log) =>
+    rebuildCampaignRoles(deps, candidateId, { log }),
   );
   return deps;
 }

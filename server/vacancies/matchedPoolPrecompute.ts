@@ -22,6 +22,12 @@ export type PrecomputedFitRequester = (
   snapshot: readonly MatchedVacancyItem[],
 ) => Promise<void>;
 
+/** Rebuilds a candidate's auto roles when the rules changed (03.11); skips an up-to-date list. */
+export type CampaignRoleRefresher = (
+  candidateId: string,
+  log: (fields: Record<string, unknown>, message: string) => void,
+) => Promise<void>;
+
 export interface MatchedPoolPrecomputeOptions {
   readonly candidateStore: CandidateStore;
   readonly engine: MultiSourceVacancyEngine;
@@ -40,6 +46,9 @@ export class MatchedPoolPrecompute {
   private active: Promise<void> | undefined;
   private log: Logger | undefined;
   private requestFit: PrecomputedFitRequester | undefined;
+  private refreshRoles: CampaignRoleRefresher | undefined;
+  /** Each candidate is checked once per process: new facts rebuild roles on their own routes. */
+  private readonly rolesChecked = new Set<string>();
   private readonly pauseMs: number;
   private readonly now: () => number;
 
@@ -62,6 +71,10 @@ export class MatchedPoolPrecompute {
 
   setFitRequester(requestFit: PrecomputedFitRequester): void {
     this.requestFit = requestFit;
+  }
+
+  setCampaignRoleRefresher(refreshRoles: CampaignRoleRefresher): void {
+    this.refreshRoles = refreshRoles;
   }
 
   run(): Promise<void> {
@@ -105,6 +118,19 @@ export class MatchedPoolPrecompute {
   }
 
   private async precompute(candidateId: string): Promise<void> {
+    // Existing candidates got new auto roles only on an import or a campaign edit; the pass walks
+    // them one at a time with a pause, so the rebuild writes one workspace row per step.
+    if (this.refreshRoles && !this.rolesChecked.has(candidateId)) {
+      this.rolesChecked.add(candidateId);
+      const log = (fields: Record<string, unknown>, message: string) =>
+        this.log?.info({ candidateId, ...fields }, message);
+      await this.refreshRoles(candidateId, log).catch((error: unknown) => {
+        this.log?.error(
+          { errorName: error instanceof Error ? error.name : 'UnknownError' },
+          'campaign-roles-refresh-failed',
+        );
+      });
+    }
     const { confirmedSkills } = readMatchProfile(this.options.candidateStore, candidateId);
     const campaign = readCampaign(this.options.candidateStore, candidateId);
     const targetRoles = [...campaign.roles.value];

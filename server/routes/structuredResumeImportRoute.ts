@@ -192,7 +192,7 @@ export const handleImportStructuredResume: Handler = async (deps, request, reply
     mode === 'replace_profile',
   );
   recordImportCompletedNotification(deps, request, candidate.id, 'structured_resume_import', importDigest);
-  void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
+  void rebuildCampaignRoles(deps, candidate.id, { log: (fields, message) => request.log.info(fields, message) }).catch((error) => {
     request.log.error({ error }, 'campaign_roles_rebuild_failed');
   });
   return { data, meta: { requestId: request.id } };
