@@ -34,6 +34,8 @@ export interface RankedRole {
   readonly role: Role;
   readonly level: OntologyLevel;
   readonly evidenceRefs: readonly string[];
+  /** A position held, or its ontology neighbour, stands behind the role. */
+  readonly held: boolean;
 }
 
 function nearestLevel(role: Role, rank: number): OntologyLevel {
@@ -198,7 +200,7 @@ export function rankFallbackRoles(input: RankInput): RankedRole[] {
       const evidenceRefs = [
         ...new Set([...(held?.refs ?? []), ...facts.map((fact) => fact.ref)]),
       ].slice(0, 3);
-      return { role, level: nearestLevel(role, targetRank), evidenceRefs, score, tier };
+      return { role, level: nearestLevel(role, targetRank), evidenceRefs, score, tier, held: Boolean(held) };
     })
     // A role with no position behind it and no fact of its function is not offered.
     .filter((item) => item.score > 0)
@@ -209,5 +211,5 @@ export function rankFallbackRoles(input: RankInput): RankedRole[] {
         b.score - a.score ||
         a.role.titleEn.localeCompare(b.role.titleEn),
     );
-  return ranked.map(({ role, level, evidenceRefs }) => ({ role, level, evidenceRefs }));
+  return ranked.map(({ role, level, evidenceRefs, held }) => ({ role, level, evidenceRefs, held }));
 }
