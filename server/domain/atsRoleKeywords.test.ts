@@ -32,6 +32,24 @@ describe('topRoleKeywords', () => {
     expect(result.keywords[1]).toBe('Skill00');
   });
 
+  it('drops soft skills in every wording, RU and EN', () => {
+    const result = topRoleKeywords([
+      ['Communication skills', 'Executive communication', 'Kafka', 'стратегическое мышление'],
+      ['Коммуникативные навыки', 'Clear communication', 'Kafka', 'Cross-functional collaboration'],
+      ['Коммуникабельность', 'Problem solving', 'Стрессоустойчивость', 'Strategic thinking'],
+      ['Problem-solving', 'стрессоустойчивость', 'Cross-functional collaboration'],
+    ]);
+    expect(result.keywords).toEqual(['Kafka']);
+  });
+
+  it('keeps leadership and negotiation: an employer screens resumes for them', () => {
+    const result = topRoleKeywords([
+      ['Leadership', 'Negotiation'],
+      ['Leadership', 'Negotiation'],
+    ]);
+    expect(result.keywords).toHaveLength(2);
+  });
+
   it('does not count vacancies without any requirement', () => {
     expect(topRoleKeywords([[], ['Kafka'], ['Kafka']]).vacanciesCounted).toBe(2);
   });

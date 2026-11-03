@@ -25,4 +25,10 @@ describe('production asset delivery', () => {
     expect(caddyfile).toContain('encode gzip');
     expect(caddyfile).toContain('trusted_proxies static 107.172.153.202/32');
   });
+
+  it('sends www to the apex with the path and query kept (03.11: www was NXDOMAIN)', () => {
+    expect(caddyfile).toMatch(
+      /^www\.openqareer\.com \{\s*redir https:\/\/openqareer\.com\{uri\} permanent\s*\}$/mu,
+    );
+  });
 });
