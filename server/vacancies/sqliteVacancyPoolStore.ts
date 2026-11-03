@@ -282,6 +282,8 @@ function listingSummaryOf(row: CatalogListingRow): CatalogListingSummary {
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
   private readonly databasePath: string;
+  /** Newest `stored_at` this process gave each source (see nextSliceTimestamp). */
+  private readonly lastSliceAt = new Map<string, number>();
   private matchReader?: MatchRowReader;
   private readonly hhTextTargetNoted = new Map<string, { key: string; ms: number }>();
   private readonly writeChunkSize: number;
@@ -1095,13 +1097,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * Wall-clock milliseconds can repeat on two adjacent ticks, including an
    * empty replacement, which would leave the old row alive because the stale
    * predicate deliberately uses `<` (not `<=`) to protect newly inserted rows.
+   *
+   * PRB-041: the newest time is kept per source in this process, not read back
+   * with MAX(stored_at) — over 664K hh rows that held the HTTP event loop
+   * 1.1–1.2 s on every description a matched page loaded (20 s cold). Times
+   * come from the same host clock in every process, so the wall clock is
+   * already past another process's slice except within the same millisecond.
    */
   private nextSliceTimestamp(sourceId: string): string {
-    const row = this.database
-      .prepare('SELECT MAX(stored_at) AS stored_at FROM vacancy_pool WHERE source_id = ?')
-      .get(sourceId) as { stored_at: string | null };
-    const previous = Date.parse(row.stored_at ?? '');
-    const next = Number.isNaN(previous) ? Date.now() : Math.max(Date.now(), previous + 1);
+    const previous = this.lastSliceAt.get(sourceId) ?? Number.NEGATIVE_INFINITY;
+    const next = Math.max(Date.now(), previous + 1);
+    this.lastSliceAt.set(sourceId, next);
     return new Date(next).toISOString();
   }
 
