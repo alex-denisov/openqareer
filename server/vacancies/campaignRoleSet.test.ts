@@ -29,7 +29,8 @@ describe('buildCampaignRoleSet (B267 S5)', () => {
     };
     const result = await buildCampaignRoleSet({ facts, profileTitle: facts[0].statement, model });
 
-    expect(result.roles).toHaveLength(6);
+    expect(result.roles.length).toBeGreaterThanOrEqual(6);
+    expect(result.roles.length).toBeLessThanOrEqual(10);
     expect(result.roles[0].kind).toBe('primary');
     expect(
       result.roles.every((role) => role.title && role.titleRu && role.evidenceRefs.length > 0),
@@ -170,10 +171,11 @@ describe('buildCampaignRoleSet (B267 S5)', () => {
       },
     });
 
-    expect(result.model).toBe('gemini-test');
-    expect(result.roles).toHaveLength(9);
+    // Nine model roles stay; the three strongest by position then take the ceiling of ten.
+    expect(result.model).toBe('gemini-test+rules');
+    expect(result.roles).toHaveLength(10);
     expect(result.roles.filter((role) => role.kind === 'primary')).toHaveLength(1);
-    expect(logged).toEqual(['campaign-role-model-items-dropped']);
+    expect(logged).toContain('campaign-role-model-items-dropped');
   });
 
   it('ошибку вызова модели пишет в журнал и собирает роли правилами', async () => {
@@ -276,5 +278,101 @@ describe('buildCampaignRoleSet (B267 S5)', () => {
     });
 
     expect(result.model).toBe('rules');
+  });
+
+  describe('сильнейшие роли по правилам всегда добавляются к ответу модели', () => {
+    const answer = (ids: readonly string[], evidenceRef: string, primary = ids[0]) =>
+      ids.map((id) => ({
+        id,
+        level: 'vp',
+        kind: id === primary ? 'primary' : 'adjacent',
+        evidenceRefs: [evidenceRef],
+        reason: 'Подтверждено фактом профиля',
+      }));
+    const modelAnswer = [
+      'it-ops.vp',
+      'ops.coo',
+      'it-ops.head',
+      'support.head',
+      'eng.architecture.solutions',
+      'consulting.it-consultant.ic',
+    ];
+
+    it('ответ без CTO и CIO на фикстуре adenisov.test получает обе роли, основная остаётся за моделью', async () => {
+      const facts = campaignRoleFacts(ownerMemory);
+      const logged: Array<[Record<string, unknown>, string]> = [];
+      const result = await buildCampaignRoleSet({
+        facts,
+        profileTitle: null,
+        log: (fields, message) => logged.push([fields, message]),
+        model: { name: 'gemini-test', propose: async () => answer(modelAnswer, facts[0].ref) },
+      });
+      const ids = result.roles.map((role) => role.id);
+
+      expect(ids).toEqual(expect.arrayContaining(['eng-mgmt.cto', 'it-ops.cio', ...modelAnswer]));
+      expect(result.roles.filter((role) => role.kind === 'primary').map((role) => role.id)).toEqual(['it-ops.vp']);
+      expect(result.model).toBe('gemini-test+rules');
+      // COO is already in the answer, so of the three strongest two are added.
+      expect(logged).toContainEqual([{ kept: 6, added: 2 }, 'campaign-role-model-topped-up']);
+    });
+
+    it('роль, убранная кандидатом, не добавляется', async () => {
+      const facts = campaignRoleFacts(ownerMemory);
+      const result = await buildCampaignRoleSet({
+        facts,
+        profileTitle: null,
+        dismissed: ['eng-mgmt.cto'],
+        model: { name: 'gemini-test', propose: async () => answer(modelAnswer, facts[0].ref) },
+      });
+      const ids = result.roles.map((role) => role.id);
+
+      expect(ids).not.toContain('eng-mgmt.cto');
+      expect(ids).toContain('it-ops.cio');
+    });
+
+    it('при потолке 10 вытесняются последние роли модели, а основная остаётся', async () => {
+      const facts = campaignRoleFacts(ownerMemory);
+      const ten = [
+        'it-ops.head',
+        'support.head',
+        'eng.architecture.solutions',
+        'consulting.it-consultant.ic',
+        'it-ops.vp',
+        'ops.vp',
+        'product.vp',
+        'support.vp',
+        'eng-mgmt.vp',
+        'eng-mgmt.head',
+      ];
+      const result = await buildCampaignRoleSet({
+        facts,
+        profileTitle: null,
+        model: { name: 'gemini-test', propose: async () => answer(ten, facts[0].ref, 'eng-mgmt.head') },
+      });
+      const ids = result.roles.map((role) => role.id);
+
+      expect(ids).toHaveLength(10);
+      expect(ids).toEqual(expect.arrayContaining(['eng-mgmt.cto', 'it-ops.cio', 'ops.coo', 'eng-mgmt.head']));
+      expect(ids).not.toContain('eng-mgmt.vp');
+      expect(ids).not.toContain('support.vp');
+      expect(ids).not.toContain('product.vp');
+      expect(result.roles.filter((role) => role.kind === 'primary').map((role) => role.id)).toEqual(['eng-mgmt.head']);
+    });
+
+    it('роли без должности за ними к ответу модели не добавляются', async () => {
+      const skillOnly = [{ ref: 'memory:s', statement: 'Kubernetes, DevOps', domain: 'skill' }];
+      const result = await buildCampaignRoleSet({
+        facts: skillOnly,
+        profileTitle: null,
+        model: {
+          name: 'gemini-test',
+          propose: async ({ candidates }) =>
+            answer(candidates.slice(0, 5).map((role) => role.id), 'memory:s'),
+        },
+      });
+
+      expect(result.roles).toHaveLength(5);
+      expect(result.model).toBe('gemini-test');
+    });
   });
 });

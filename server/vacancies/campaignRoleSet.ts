@@ -9,7 +9,7 @@ import {
 import type { FunctionCode } from '../../shared/roleTaxonomy';
 import { LEVEL_RANK } from './levelMatcher';
 import { rulesParse } from './titleParse/rulesParse';
-import { rankFallbackRoles } from './campaignRoleRanking';
+import { rankFallbackRoles, type RankedRole } from './campaignRoleRanking';
 
 export interface CampaignRoleFact {
   readonly ref: string;
@@ -54,8 +54,8 @@ export interface CampaignRoleModel {
   propose(input: CampaignRoleModelInput): Promise<unknown>;
 }
 
-/** Bumped when the role rules change, so every stored auto list is rebuilt once (03.11 → v2). */
-export const CAMPAIGN_ROLE_RULES_VERSION = 'roles-v2';
+/** Bumped when the role rules change, so every stored auto list is rebuilt once (04.11 → v3). */
+export const CAMPAIGN_ROLE_RULES_VERSION = 'roles-v3';
 
 export function campaignFactsDigest(facts: readonly CampaignRoleFact[]): string {
   const input = [
@@ -77,6 +77,8 @@ const modelRoleSchema = z
 
 const MIN_ROLES = 5;
 const MAX_ROLES = 10;
+/** Roles by position that join every accepted model answer. */
+const STRONGEST_ROLES = 3;
 
 function candidateRoles(facts: readonly CampaignRoleFact[], profileTitle: string | null): Role[] {
   const functions = new Set<FunctionCode>();
@@ -121,25 +123,14 @@ function toProposal(
   };
 }
 
-function fallbackRoles(
-  facts: readonly CampaignRoleFact[],
-  profileTitle: string | null,
-  targetLevel: OntologyLevel,
-  dismissed: ReadonlySet<string>,
-): CampaignRoleProposal[] {
-  // Without a fact behind it a role is not offered: a headline alone names no evidence ref.
-  return rankFallbackRoles({ facts, profileTitle, targetLevel, dismissed })
-    .filter(({ evidenceRefs }) => evidenceRefs.length > 0)
-    .slice(0, MAX_ROLES)
-    .map(({ role, level, evidenceRefs }, index) =>
-      toProposal(
-        role,
-        level,
-        index === 0 ? 'primary' : 'adjacent',
-        evidenceRefs,
-        'Роль выбрана по должностям и фактам профиля.',
-      ),
-    );
+function rulesProposal({ role, level, evidenceRefs }: RankedRole, index: number): CampaignRoleProposal {
+  return toProposal(
+    role,
+    level,
+    index === 0 ? 'primary' : 'adjacent',
+    evidenceRefs,
+    'Роль выбрана по должностям и фактам профиля.',
+  );
 }
 
 type ModelRole = z.infer<typeof modelRoleSchema>;
@@ -214,17 +205,32 @@ function validateModelRoles(
     );
 }
 
-/** Adds rules roles to a model answer left short by dismissals, up to the minimum. */
+/**
+ * The model's choice is not final (CPO 04.11): it picks what the candidate has done, so CTO and CIO
+ * went missing for a VP of Technology. The three strongest roles by position always join it; on
+ * overflow the model's last roles give way, never its primary. Then rules fill up to the minimum.
+ */
 function withRulesRoles(
   modeled: readonly CampaignRoleProposal[],
-  rules: readonly CampaignRoleProposal[],
+  ranked: readonly RankedRole[],
 ): CampaignRoleProposal[] {
+  const adjacent = (item: RankedRole) => rulesProposal(item, 1);
   const taken = new Set(modeled.map((role) => role.id));
-  const added = rules
-    .filter((role) => !taken.has(role.id))
-    .slice(0, MIN_ROLES - modeled.length)
-    .map((role) => ({ ...role, kind: 'adjacent' as const }));
-  return [...modeled, ...added];
+  const strongest = ranked
+    .slice(0, STRONGEST_ROLES)
+    .filter((item) => item.held && !taken.has(item.role.id))
+    .map(adjacent);
+  const overflow = Math.max(0, modeled.length + strongest.length - MAX_ROLES);
+  const evicted = new Set(
+    modeled.filter((role) => role.kind !== 'primary').slice(overflow > 0 ? -overflow : modeled.length),
+  );
+  const kept = modeled.filter((role) => !evicted.has(role));
+  const chosen = new Set([...kept, ...strongest].map((role) => role.id));
+  const filler = ranked
+    .filter((item) => !chosen.has(item.role.id))
+    .slice(0, Math.max(0, MIN_ROLES - chosen.size))
+    .map(adjacent);
+  return [...kept, ...strongest, ...filler];
 }
 
 export async function buildCampaignRoleSet(input: {
@@ -254,22 +260,24 @@ export async function buildCampaignRoleSet(input: {
       : null;
   const modeled =
     raw === null ? null : validateModelRoles(raw, candidates, input.facts, dismissed, input.log);
-  const needsRules = !modeled || modeled.length < MIN_ROLES;
-  const rules = needsRules
-    ? fallbackRoles(input.facts, input.profileTitle ?? null, level, dismissed)
-    : [];
-  const roles = modeled ? (needsRules ? withRulesRoles(modeled, rules) : modeled) : rules;
-  const modelName = input.model?.name ?? 'model';
-  if (modeled && needsRules) {
-    input.log?.(
-      { kept: modeled.length, added: roles.length - modeled.length },
-      'campaign-role-model-topped-up',
-    );
+  // Without a fact behind it a role is not offered: a headline alone names no evidence ref.
+  const ranked = rankFallbackRoles({
+    facts: input.facts,
+    profileTitle: input.profileTitle ?? null,
+    targetLevel: level,
+    dismissed,
+  }).filter(({ evidenceRefs }) => evidenceRefs.length > 0);
+  const roles = modeled ? withRulesRoles(modeled, ranked) : ranked.slice(0, MAX_ROLES).map(rulesProposal);
+  const modelIds = new Set((modeled ?? []).map((role) => role.id));
+  const added = modeled ? roles.filter((role) => !modelIds.has(role.id)).length : 0;
+  if (added > 0) {
+    input.log?.({ kept: modeled?.length, added }, 'campaign-role-model-topped-up');
   }
+  const modelName = input.model?.name ?? 'model';
   return {
     roles: roles.slice(0, MAX_ROLES),
     factsDigest: campaignFactsDigest(input.facts),
     generatedAt: (input.now?.() ?? new Date()).toISOString(),
-    model: !modeled ? 'rules' : needsRules ? `${modelName}+rules` : modelName,
+    model: !modeled ? 'rules' : added > 0 ? `${modelName}+rules` : modelName,
   };
 }
