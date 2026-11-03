@@ -7,6 +7,9 @@ import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { mockInterviewVacancyFromApplication } from '../interview/mockInterviewVacancy';
 import { StarStoriesModal } from '../interview/StarStoriesModal';
 import { getStarStories } from '../interview/starStoriesApi';
+import { usePublishConsultantSuggestion } from '../journey/consultantScreenSuggestion';
+import { InterviewDebriefDialog } from './ResponsesCardStageControls';
+import { preparationTabSuggestion } from './responsesTabSuggestions';
 import type { StarStoriesSnapshot, StarStoryView } from '../../../shared/starStories';
 import {
   DebriefCard,
@@ -36,13 +39,12 @@ export function ResponsesPreparationPanel({
   readonly onRefresh: () => void;
   readonly onOpenExpert?: ExpertHandler;
 }) {
-  const { interviews, interviewId, setInterviewId, selectedInterview } =
-    useInterviewSelection(applications);
-  const [preparationOpen, setPreparationOpen] = useState(false);
-  const [stress, setStress] = useState(false);
+  const prep = usePreparationState(applications);
+  const { interviews, selectedInterview, setPreparationOpen } = prep;
   const stories = useStarStories();
   const { storiesModal, setStoriesModal, closeStories } = useStoriesModal(stories.retry);
   const details = getInterviewPreparationDetails(selectedInterview, onOpenExpert);
+  usePreparationSuggestion(applications, stories, prep, () => setStoriesModal({ open: true }));
   return (
     <div className="career-responses-preparation" aria-label="Подготовка к интервью">
       <StarStoriesCard
@@ -53,19 +55,20 @@ export function ResponsesPreparationPanel({
       <MockInterviewCard
         interviews={interviews}
         selected={selectedInterview}
-        selectedId={interviewId}
-        stress={stress}
-        onSelect={setInterviewId}
-        onStress={setStress}
+        selectedId={prep.interviewId}
+        stress={prep.stress}
+        onSelect={prep.setInterviewId}
+        onStress={prep.setStress}
         onStart={() => setPreparationOpen(true)}
       />
       <DebriefCard applications={interviewsNeedingDebrief(interviews)} onRefresh={onRefresh} />
       {selectedInterview ? <MobileStartCta onStart={() => setPreparationOpen(true)} /> : null}
+      <SuggestedDebrief prep={prep} onRefresh={onRefresh} />
       <PreparationDialogs
-        preparationOpen={preparationOpen}
+        preparationOpen={prep.preparationOpen}
         storiesModal={storiesModal}
         selectedInterview={selectedInterview}
-        stress={stress}
+        stress={prep.stress}
         details={details}
         onClosePreparation={() => setPreparationOpen(false)}
         onCloseStories={closeStories}
@@ -76,6 +79,71 @@ export function ResponsesPreparationPanel({
       />
     </div>
   );
+}
+
+type PreparationState = ReturnType<typeof usePreparationState>;
+
+function usePreparationState(applications: readonly ApplicationView[]) {
+  const selection = useInterviewSelection(applications);
+  const [preparationOpen, setPreparationOpen] = useState(false);
+  const [stress, setStress] = useState(false);
+  const [debriefId, setDebriefId] = useState<string | null>(null);
+  const startMock = (id: string) => {
+    selection.setInterviewId(id);
+    setStress(false);
+    setPreparationOpen(true);
+  };
+  return {
+    ...selection,
+    preparationOpen,
+    setPreparationOpen,
+    stress,
+    setStress,
+    debriefId,
+    setDebriefId,
+    startMock,
+  };
+}
+
+/** Макет 5 «Подготовка»: предложение консультанта из интервью и STAR-историй вкладки. */
+function usePreparationSuggestion(
+  applications: readonly ApplicationView[],
+  stories: StarStoriesState,
+  prep: PreparationState,
+  openStories: () => void,
+) {
+  usePublishConsultantSuggestion(
+    preparationTabSuggestion({
+      applications,
+      storyCount: storyCountOf(stories),
+      actions: { startMock: prep.startMock, openDebrief: prep.setDebriefId, openStories },
+    }),
+  );
+}
+
+/** «Заполнить» в предложении консультанта открывает то же окно дебрифа, что строка «Дебриф». */
+function SuggestedDebrief({
+  prep,
+  onRefresh,
+}: {
+  readonly prep: PreparationState;
+  readonly onRefresh: () => void;
+}) {
+  const application = prep.interviews.find((item) => item.id === prep.debriefId);
+  if (!application) return null;
+  return (
+    <InterviewDebriefDialog
+      application={application}
+      isOpen
+      onClose={() => prep.setDebriefId(null)}
+      onRefresh={onRefresh}
+    />
+  );
+}
+
+function storyCountOf(stories: StarStoriesState): number | undefined {
+  if (stories.loading || stories.error || !stories.snapshot) return undefined;
+  return stories.snapshot.stories.length;
 }
 
 function MobileStartCta({ onStart }: { readonly onStart: () => void }) {
@@ -107,7 +175,11 @@ function PreparationDialogs(props: {
           onClose={props.onClosePreparation}
           vacancy={
             props.selectedInterview
-              ? { ...mockInterviewVacancyFromApplication(props.selectedInterview), title: details.title, company: details.company }
+              ? {
+                  ...mockInterviewVacancyFromApplication(props.selectedInterview),
+                  title: details.title,
+                  company: details.company,
+                }
               : { id: '', title: details.title, company: details.company }
           }
           onAskConsultant={details.askConsultant}

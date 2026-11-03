@@ -32,6 +32,9 @@ interface SuggestionStore {
   readonly publish: (suggestion: ConsultantScreenSuggestion | null, ownerId: string) => void;
   readonly dismiss: (id: string) => void;
   readonly suppress: (delta: 1 | -1) => void;
+  /** Макет 14: пока открыт тренажёр, колонка консультанта на 1440 убрана, вход — значок шапки. */
+  readonly trainerOpen: boolean;
+  readonly markTrainer: (delta: 1 | -1) => void;
 }
 
 const NO_STORE: SuggestionStore = {
@@ -41,6 +44,8 @@ const NO_STORE: SuggestionStore = {
   publish: () => undefined,
   dismiss: () => undefined,
   suppress: () => undefined,
+  trainerOpen: false,
+  markTrainer: () => undefined,
 };
 
 const ConsultantSuggestionContext = createContext<SuggestionStore>(NO_STORE);
@@ -64,6 +69,10 @@ export function ConsultantSuggestionProvider({ children }: { readonly children: 
   const suppress = useCallback((delta: 1 | -1) => {
     setSuppressors((current) => Math.max(0, current + delta));
   }, []);
+  const [trainers, setTrainers] = useState(0);
+  const markTrainer = useCallback((delta: 1 | -1) => {
+    setTrainers((current) => Math.max(0, current + delta));
+  }, []);
   const value = useMemo(
     () => ({
       suggestion: published?.suggestion ?? null,
@@ -72,8 +81,10 @@ export function ConsultantSuggestionProvider({ children }: { readonly children: 
       publish,
       dismiss,
       suppress,
+      trainerOpen: trainers > 0,
+      markTrainer,
     }),
-    [published, dismissed, suppressors, publish, dismiss, suppress],
+    [published, dismissed, suppressors, publish, dismiss, suppress, trainers, markTrainer],
   );
   return (
     <ConsultantSuggestionContext.Provider value={value}>
@@ -120,6 +131,20 @@ export function useSuppressConsultantSuggestion(active: boolean) {
     suppress(1);
     return () => suppress(-1);
   }, [active, suppress]);
+}
+
+/** Тренажёр мок-интервью отмечает себя, пока открыт: оболочка прячет колонку консультанта. */
+export function useMarkTrainerScreen(active: boolean) {
+  const { markTrainer } = useContext(ConsultantSuggestionContext);
+  useEffect(() => {
+    if (!active) return undefined;
+    markTrainer(1);
+    return () => markTrainer(-1);
+  }, [active, markTrainer]);
+}
+
+export function useTrainerScreenOpen(): boolean {
+  return useContext(ConsultantSuggestionContext).trainerOpen;
 }
 
 export function useConsultantScreenSuggestion(stage: CoachTurnStage) {

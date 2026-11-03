@@ -14,6 +14,8 @@ import {
   OffersCard,
   TotalCompCard,
 } from './ResponsesOffersParts';
+import { usePublishConsultantSuggestion } from '../journey/consultantScreenSuggestion';
+import { offersTabSuggestion } from './responsesTabSuggestions';
 import './responses-offers.css';
 
 function useOffers() {
@@ -45,6 +47,7 @@ export function ResponsesOffersPanel({ state }: { readonly state: UseApplication
   const [comparing, setComparing] = useState(false);
   const editing = applications.find((application) => application.id === editingId) ?? null;
   const toggleAdd = () => setAddOpen((open) => !open);
+  useOffersSuggestion({ applications, loading, error }, setComparing, setEditingId, setAddOpen);
   return (
     <div className="career-offers-panel" aria-label="Офферы">
       <OffersListCard
@@ -85,6 +88,31 @@ export function ResponsesOffersPanel({ state }: { readonly state: UseApplication
         }}
       />
     </div>
+  );
+}
+
+/** Макет 5 «Офферы»: предложение консультанта по загруженным офферам вкладки. */
+function useOffersSuggestion(
+  offers: {
+    readonly applications: readonly ApplicationView[];
+    readonly loading: boolean;
+    readonly error: string;
+  },
+  setComparing: (comparing: boolean) => void,
+  setEditingId: (id: string) => void,
+  setAddOpen: (open: boolean) => void,
+) {
+  usePublishConsultantSuggestion(
+    offersTabSuggestion({
+      offers: offers.applications,
+      loading: offers.loading,
+      error: offers.error,
+      actions: {
+        compare: () => setComparing(true),
+        edit: setEditingId,
+        add: () => setAddOpen(true),
+      },
+    }),
   );
 }
 

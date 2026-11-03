@@ -1,4 +1,5 @@
 import '../today/today-decision-proposal.css';
+import './consultant-screen-suggestion.css';
 import { Check, X } from '@phosphor-icons/react';
 import type { ConsultantScreenSuggestion } from './consultantScreenSuggestion';
 
@@ -11,7 +12,10 @@ export function ConsultantScreenSuggestionCard({
   readonly onDismiss: (id: string) => void;
 }) {
   return (
-    <section className="career-expert-proposal" aria-label={suggestion.title}>
+    <section
+      className="career-expert-proposal career-screen-suggestion"
+      aria-label={suggestion.title}
+    >
       <p className="career-expert-proposal-title">{suggestion.title}</p>
       <p>{suggestion.detail}</p>
       <div className="career-expert-actions">

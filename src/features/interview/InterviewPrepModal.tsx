@@ -6,7 +6,7 @@ import { StarStoriesModal } from './StarStoriesModal';
 import { MockInterviewSimulator } from './MockInterviewSimulator';
 import type { InterviewDiaryPort, MockInterviewVacancy } from './mockInterviewSimulatorTypes';
 import { useModalAccessibility } from './interviewModalAccessibility';
-import { useSuppressConsultantSuggestion } from '../journey/consultantScreenSuggestion';
+import { useMarkTrainerScreen, useSuppressConsultantSuggestion } from '../journey/consultantScreenSuggestion';
 import {
   generateInterviewPrepBrief,
   type CompanyOverview,
@@ -40,6 +40,7 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
 function InterviewPrepModalState(props: InterviewPrepModalProps) {
   const [tab, setTab] = useState<InterviewPrepTab>(props.initialTab ?? 'overview');
   const [mockInterviewOpen, setMockInterviewOpen] = useState(props.startInMockInterview ?? false);
+  useMarkTrainerScreen(props.isOpen && mockInterviewOpen);
   const [starStoriesOpen, setStarStoriesOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const afterStarStoriesClose = useRef<(() => void) | null>(null);
