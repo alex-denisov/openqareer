@@ -13,10 +13,11 @@ afterEach(() => {
   );
 });
 
-export function createStore(databasePath = ':memory:') {
+export function createStore(databasePath = ':memory:', snapshotForeignCommitGraceMs?: number) {
   const store = new SqliteCandidateStore({
     databasePath,
     encryptionKey: Buffer.alloc(32, 4),
+    snapshotForeignCommitGraceMs,
   });
   stores.push(store);
   return store;

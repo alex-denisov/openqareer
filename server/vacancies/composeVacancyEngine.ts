@@ -106,6 +106,8 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     descriptionLoader: new HhVacancyDescriptionLoader({
       transport: hhPageFetcher,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      // 03.11: старты по-прежнему раз в секунду, но ответ не держит следующий старт.
+      maxConcurrent: 3,
     }),
     ...(options.recluster ? { recluster: options.recluster } : {}),
   });

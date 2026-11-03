@@ -63,7 +63,12 @@ import type {
 import type { CatalogListingSummary } from './vacancyCatalogFacets';
 
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
-import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
+import {
+  HH_TEXT_CONCURRENCY,
+  HH_TEXT_PER_TICK,
+  HhCatalogTextBackfill,
+  type HhCatalogTextReport,
+} from './hhCatalogText';
 import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mapYielding } from './mapYielding';
@@ -418,6 +423,7 @@ export class MultiSourceVacancyEngine {
   private readonly workdayDetailFetch?: WorkdayDetailFetch;
   private workdayDescriptions?: WorkdayDescriptionBackfill;
   private hhCatalogText?: HhCatalogTextBackfill;
+  private lastHhSideStepAt = 0;
   /** Successful fetches become cached only after the pool write also succeeds. */
   private readonly persistedDescriptionIds = new Set<string>();
 
@@ -1071,6 +1077,8 @@ export class MultiSourceVacancyEngine {
   public runHhCatalogTextStep(): Promise<HhCatalogTextReport> {
     const pool = this.pool;
     this.hhCatalogText ??= new HhCatalogTextBackfill({
+      perTick: HH_TEXT_PER_TICK,
+      concurrency: HH_TEXT_CONCURRENCY,
       engine: {
         hhTextReady: () => {
           const source = this.sources.get(HH_SEARCH_SOURCE_ID);
@@ -1091,8 +1099,13 @@ export class MultiSourceVacancyEngine {
         loadVacancyDescription: (id) => this.loadVacancyDescription(id),
       },
     });
-    this.runClusterTextStep();
-    pool.archiveExpiredHhClusters?.(EXPIRED_CLUSTER_BATCH);
+    // 03.11: тик текста идёт каждые 3 с; побочные шаги сведения не чаще раза в 12 с, как раньше.
+    const nowMs = Date.now();
+    if (nowMs - this.lastHhSideStepAt >= 12_000) {
+      this.lastHhSideStepAt = nowMs;
+      this.runClusterTextStep();
+      pool.archiveExpiredHhClusters?.(EXPIRED_CLUSTER_BATCH);
+    }
     return this.hhCatalogText.step();
   }
 

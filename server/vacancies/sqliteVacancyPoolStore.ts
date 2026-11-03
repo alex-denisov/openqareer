@@ -1,6 +1,6 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
-import { CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
+import { CATALOG_LISTINGS_TABLE, CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
@@ -134,6 +134,16 @@ interface CatalogProjectionStatements {
   readonly markSeen: { run(...values: SQLInputValue[]): unknown };
   readonly remove: { run(...values: SQLInputValue[]): unknown };
 }
+
+/** 03.11: a sibling process holding an older reading ledger never overwrites a newer one. */
+const OBSERVATIONS_NEWER_WINS = `CASE
+  WHEN excluded.observations IS NULL THEN vacancy_source_state.observations
+  WHEN vacancy_source_state.observations IS NULL THEN excluded.observations
+  WHEN coalesce(json_extract(excluded.observations, '$.lastReadingAt'), '')
+    >= coalesce(json_extract(vacancy_source_state.observations, '$.lastReadingAt'), '')
+  THEN excluded.observations
+  ELSE vacancy_source_state.observations
+END`;
 
 const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 
@@ -282,6 +292,8 @@ function listingSummaryOf(row: CatalogListingRow): CatalogListingSummary {
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
   private readonly databasePath: string;
+  /** Newest `stored_at` this process gave each source (see nextSliceTimestamp). */
+  private readonly lastSliceAt = new Map<string, number>();
   private matchReader?: MatchRowReader;
   private readonly hhTextTargetNoted = new Map<string, { key: string; ms: number }>();
   private readonly writeChunkSize: number;
@@ -343,7 +355,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
-    this.database.exec(CATALOG_TOTALS_TABLE);
+    this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE);
     this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
@@ -1095,13 +1107,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * Wall-clock milliseconds can repeat on two adjacent ticks, including an
    * empty replacement, which would leave the old row alive because the stale
    * predicate deliberately uses `<` (not `<=`) to protect newly inserted rows.
+   *
+   * PRB-041: the newest time is kept per source in this process, not read back
+   * with MAX(stored_at) — over 664K hh rows that held the HTTP event loop
+   * 1.1–1.2 s on every description a matched page loaded (20 s cold). Times
+   * come from the same host clock in every process, so the wall clock is
+   * already past another process's slice except within the same millisecond.
    */
   private nextSliceTimestamp(sourceId: string): string {
-    const row = this.database
-      .prepare('SELECT MAX(stored_at) AS stored_at FROM vacancy_pool WHERE source_id = ?')
-      .get(sourceId) as { stored_at: string | null };
-    const previous = Date.parse(row.stored_at ?? '');
-    const next = Number.isNaN(previous) ? Date.now() : Math.max(Date.now(), previous + 1);
+    const previous = this.lastSliceAt.get(sourceId) ?? Number.NEGATIVE_INFINITY;
+    const next = Math.max(Date.now(), previous + 1);
+    this.lastSliceAt.set(sourceId, next);
     return new Date(next).toISOString();
   }
 
@@ -1347,7 +1363,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            last_error_message = excluded.last_error_message,
            items_found_total = excluded.items_found_total,
            items_active_total = excluded.items_active_total,
-           observations = excluded.observations,
+           observations = ${OBSERVATIONS_NEWER_WINS},
            sync_requested_at = CASE
              WHEN vacancy_source_state.sync_requested_at IS NULL
              THEN excluded.sync_requested_at
@@ -2658,6 +2674,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            observed_at = excluded.observed_at, computed_at = excluded.computed_at`,
       )
       .run(row.n, observedAt, computedAt);
+    this.database
+      .prepare(
+        `INSERT INTO catalog_listings (id, listings_json, computed_at) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET listings_json = excluded.listings_json,
+           computed_at = excluded.computed_at`,
+      )
+      .run(JSON.stringify(this.countCatalogListings()), computedAt);
     return { clusters: row.n, updatedAt: observedAt, computedAt };
   }
 
@@ -2759,7 +2782,23 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     };
   }
 
+  /** Maintenance writes them with the totals; until its first pass they are counted here. */
   loadCatalogListings(): CatalogListingSummary[] {
+    const stored = this.database
+      .prepare('SELECT listings_json FROM catalog_listings WHERE id = 1')
+      .get() as { listings_json: string } | undefined;
+    if (stored) {
+      try {
+        const parsed: unknown = JSON.parse(stored.listings_json);
+        if (Array.isArray(parsed)) return parsed as CatalogListingSummary[];
+      } catch {
+        // A damaged row is counted again below, as before maintenance wrote one.
+      }
+    }
+    return this.countCatalogListings();
+  }
+
+  private countCatalogListings(): CatalogListingSummary[] {
     const rows = this.database
       .prepare(
         `SELECT place_slug, max(place_label) AS place_label,

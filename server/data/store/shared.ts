@@ -17,6 +17,13 @@ export interface StoreContext {
 export interface SqliteStoreOptions {
   databasePath: string;
   encryptionKey: Buffer;
+  /**
+   * PRB-041: how long a kept snapshot outlives commits by other connections (see SnapshotMemo).
+   * Only the web process sets it — every snapshot table is written through its own connection.
+   * Other readers (the mechanics worker checking the profile a fit was computed for) keep 0:
+   * the web process's writes are foreign to them and must be seen at once.
+   */
+  snapshotForeignCommitGraceMs?: number;
 }
 
 export interface CandidateRow {
