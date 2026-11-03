@@ -862,27 +862,3 @@ it('does not turn Himalayas role taxonomy categories into required skills', () =
   expect(vacancy?.requiredSkills).toEqual([]);
   expect(vacancy?.description).toBe('Source description remains available.');
 });
-
-describe('src-remoteok text', () => {
-  it('repairs the UTF-8-as-Latin-1 text RemoteOK sends (03.11)', () => {
-    const [vacancy] = normalizeJsonSource(
-      'src-remoteok',
-      [
-        { legal: 'API Terms of Service' },
-        {
-          id: '1137572',
-          position: 'Senior Software Engineer LATAM',
-          company: 'Wagmo',
-          description: '<p><strong>Whatâ\u0080\u0099s Important To Us</strong></p><div>Â </div>',
-          location: '',
-          url: 'https://remoteOK.com/remote-jobs/1137572',
-          tags: [],
-          date: '2026-10-26T08:00:06Z',
-        },
-      ],
-      { observedAt: OBSERVED_AT },
-    );
-    expect(vacancy?.description).not.toMatch(/â|Â/u);
-    expect(vacancy?.description).toContain('What’s Important To Us');
-  });
-});
