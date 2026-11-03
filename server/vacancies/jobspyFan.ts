@@ -77,6 +77,7 @@ export const MARKET_TARGETS: readonly FanTarget[] = [
   // MENA
   { region: 'mena', indeedCountry: 'AE', location: 'Dubai' },
   { region: 'mena', indeedCountry: 'AE', location: 'Abu Dhabi' },
+  { region: 'mena', indeedCountry: 'AE', location: 'Sharjah' },
   { region: 'mena', indeedCountry: 'SA', location: 'Riyadh' },
   { region: 'mena', indeedCountry: 'QA', location: 'Doha' },
   { region: 'mena', indeedCountry: 'KW', location: 'Kuwait City' },
@@ -153,6 +154,21 @@ export const FAN_TERMS: readonly string[] = [
   'sales manager',
   'account executive',
   'customer success manager',
+  // Руководящая поддержка клиентов (покрытие 03.11): веер её не читал вовсе.
+  'head of customer support',
+  'head of support',
+  'customer support director',
+  'director of customer service',
+  'vp customer support',
+  'vp customer success',
+  'head of customer experience',
+  'customer experience director',
+  'head of customer service',
+  'contact center director',
+  'head of technical support',
+  'it support manager',
+  'head of it support',
+  'service desk manager',
   'financial analyst',
   'accountant',
   'hr manager',
@@ -246,7 +262,7 @@ export function fanRegions(): readonly FanRegion[] {
 }
 
 /**
- * Рынки для ролей спроса (27.10): удалёнка, крупнейшие рынки и Дубай.
+ * Рынки для ролей спроса (27.10): удалёнка, крупнейшие рынки и ОАЭ целиком (Дубай, Абу-Даби, Шарджа).
  * Роль кандидата читается по ним всем за сутки, а не за круг всего веера.
  */
 const DEMAND_LOCATIONS: readonly string[] = [
@@ -255,7 +271,10 @@ const DEMAND_LOCATIONS: readonly string[] = [
   'United States',
   'London',
   'Berlin',
+  // ОАЭ целиком: у Indeed одна страна AE, города различаются локацией запроса.
   'Dubai',
+  'Abu Dhabi',
+  'Sharjah',
   'Moscow',
 ];
 const DEMAND_TARGETS: readonly FanTarget[] = DEMAND_LOCATIONS.flatMap(

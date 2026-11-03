@@ -19,8 +19,8 @@ describe('роли кандидатов → запросы к LinkedIn и Indeed
     expect(searchTermsForRoles(['VP of Engineering / Technology'])).toEqual(['vp of engineering']);
   });
 
-  it('роль, которую уже читает общий веер, не повторяется', () => {
-    expect(searchTermsForRoles(['CTO', 'Chief of Staff'])).toEqual([]);
+  it('роль из общего веера всё равно идёт запросом: роли спроса читаются раньше круга', () => {
+    expect(searchTermsForRoles(['CTO', 'Chief of Staff'])).toEqual(['chief of staff']);
   });
 
   it('название, которого словарь не знает, не уходит запросом', () => {
@@ -35,5 +35,23 @@ describe('роли кандидатов → запросы к LinkedIn и Indeed
 
   it('без повторов', () => {
     expect(searchTermsForRoles(['Head of AI', 'head of AI', 'Head of AI'])).toEqual(['head of ai']);
+  });
+
+  it('руководящая русская роль поддержки даёт несколько английских формулировок', () => {
+    const terms = searchTermsForRoles(['Директор по клиентскому сервису и технической поддержке']);
+    for (const expected of [
+      'head of customer support',
+      'customer support director',
+      'director of customer service',
+      'customer experience director',
+    ]) {
+      expect(terms).toContain(expected);
+    }
+    expect(terms.filter((term) => /^[a-z ]+$/u.test(term)).length).toBeLessThanOrEqual(6);
+  });
+
+  it('рядовая роль остаётся одним английским запросом', () => {
+    const terms = searchTermsForRoles(['Специалист технической поддержки']);
+    expect(terms.filter((term) => /^[a-z ]+$/u.test(term))).toHaveLength(1);
   });
 });
