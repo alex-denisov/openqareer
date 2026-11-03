@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeJsonSource } from './jsonSourceAdapters';
-import { repairMojibake } from './mojibake';
+import { repairMojibake, unescapeLiteralBreaks } from './mojibake';
 
 // Real RemoteOK API text, 03.11 (job 1137572 and neighbours): UTF-8 bytes
 // delivered as Latin-1 characters.
+describe('unescapeLiteralBreaks', () => {
+  it('turns literal backslash-n sequences into line breaks (22% of RemoteOK rows)', () => {
+    expect(unescapeLiteralBreaks('Role\\n\\nDuties:\\n- one\\r\\n- two')).toBe(
+      'Role\n\nDuties:\n- one\n- two',
+    );
+    expect(unescapeLiteralBreaks('plain\ntext')).toBe('plain\ntext');
+  });
+});
+
 describe('repairMojibake', () => {
   it('restores apostrophes, dashes, no-break spaces and symbols', () => {
     expect(repairMojibake('Whatâ\u0080\u0099s Important To Us')).toBe('What’s Important To Us');

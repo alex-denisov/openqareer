@@ -1,5 +1,5 @@
 import { himalayasSalaryPeriod } from '../../shared/vacancySalaryPeriod';
-import { repairMojibake } from './mojibake';
+import { repairMojibake, unescapeLiteralBreaks } from './mojibake';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
   asArray,
@@ -116,7 +116,7 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         const job = record(item);
         const salary = remoteOkSalary(job);
         // RemoteOK serves UTF-8 bytes as Latin-1 characters (03.11).
-        const clean = (value: unknown) => repairMojibake(text(value));
+        const clean = (value: unknown) => unescapeLiteralBreaks(repairMojibake(text(value)));
         return build({
           sourceId,
           context,

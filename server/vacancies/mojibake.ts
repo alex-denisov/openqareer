@@ -14,3 +14,8 @@ export function repairMojibake(text: string): string {
     return decoded.includes('�') ? run : decoded;
   });
 }
+
+/** Some JSON feeds double-escape breaks, so the text carries a literal `\n`. */
+export function unescapeLiteralBreaks(text: string): string {
+  return text.replace(/\\r\\n|\\n|\\r/g, '\n').replace(/\\t/g, ' ');
+}
