@@ -1116,7 +1116,13 @@ test.describe('B450 responses workspace', () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
     ).toBeLessThanOrEqual(0);
-    await pushed.getByRole('button', { name: 'Открыть STAR-истории' }).click();
+    // B511 G3 item 4: at 390 STAR stories live under «Подготовка», not on «Процесс».
+    await expect(pushed.getByRole('button', { name: 'Открыть STAR-истории' })).toBeHidden();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page
+      .locator('.career-responses-selected')
+      .getByRole('button', { name: 'Открыть STAR-истории' })
+      .click();
     await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toContainText(
       'Кризис в команде: уход ведущего инженера',
     );
