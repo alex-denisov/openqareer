@@ -1,7 +1,7 @@
 .career-reminder-modal-overlay {
   position: fixed;
   inset: 0;
-  background-color: var(--career-overlay-bg, rgba(0, 0, 0, 0.45));
+  background-color: var(--career-backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11,10 +11,10 @@
 }
 
 .career-reminder-modal-card {
-  background: var(--career-surface-base, #ffffff);
-  border: 1px solid var(--career-border-default, #e2e8f0);
+  background: var(--career-surface);
+  border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-lg, 12px);
-  box-shadow: var(--career-shadow-lg, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
+  box-shadow: var(--career-shadow-tooltip);
   width: 100%;
   max-width: 540px;
   max-height: 90vh;
@@ -28,20 +28,20 @@
   justify-content: space-between;
   align-items: flex-start;
   padding: var(--career-space-5, 20px) var(--career-space-5, 20px) var(--career-space-3, 12px);
-  border-bottom: 1px solid var(--career-border-subtle, #f1f5f9);
+  border-bottom: 1px solid var(--career-line);
 }
 
 .career-reminder-modal-title {
   margin: 0;
   font-size: var(--career-text-lg, 18px);
   font-weight: 600;
-  color: var(--career-text-primary, #0f172a);
+  color: var(--career-text);
 }
 
 .career-reminder-modal-subtitle {
   margin: var(--career-space-1, 4px) 0 0;
   font-size: var(--career-text-sm, 14px);
-  color: var(--career-text-muted, #64748b);
+  color: var(--career-text-dim);
 }
 
 .career-reminder-modal-body {
@@ -56,17 +56,17 @@
   align-items: flex-start;
   gap: var(--career-space-3, 12px);
   padding: var(--career-space-3, 12px);
-  background-color: var(--career-surface-raised, #f8fafc);
-  border: 1px solid var(--career-border-default, #e2e8f0);
+  background-color: var(--career-surface-raised);
+  border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-md, 8px);
   font-size: var(--career-text-xs, 12px);
-  color: var(--career-text-secondary, #475569);
+  color: var(--career-text-soft);
   line-height: 1.45;
 }
 
 .career-reminder-notice svg {
   flex-shrink: 0;
-  color: var(--career-color-primary, #0284c7);
+  color: var(--career-accent);
   margin-top: 1px;
 }
 
@@ -79,19 +79,19 @@
 .career-reminder-label {
   font-size: var(--career-text-sm, 14px);
   font-weight: 500;
-  color: var(--career-text-primary, #0f172a);
+  color: var(--career-text);
 }
 
 .career-reminder-textarea {
   width: 100%;
   box-sizing: border-box;
   padding: var(--career-space-3, 12px);
-  border: 1px solid var(--career-border-default, #cbd5e1);
+  border: 1px solid var(--career-field-edge);
   border-radius: var(--career-radius-md, 8px);
   font-size: var(--career-text-sm, 14px);
   font-family: inherit;
-  color: var(--career-text-primary, #0f172a);
-  background: var(--career-surface-base, #ffffff);
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
   line-height: 1.5;
   resize: vertical;
 }
@@ -105,8 +105,8 @@
 }
 
 .career-btn.is-copied {
-  border-color: var(--career-color-success, #16a34a);
-  color: var(--career-color-success, #16a34a);
+  border-color: var(--career-success);
+  color: var(--career-success);
 }
 
 @media (max-width: 480px) {

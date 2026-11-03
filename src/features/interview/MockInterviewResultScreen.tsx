@@ -5,9 +5,12 @@ import {
   ArrowRight,
   CheckCircle,
   Circle,
+  Info,
   Notebook,
   WarningCircle,
 } from '@phosphor-icons/react';
+import { useMarkTrainerResult } from '../journey/consultantScreenSuggestion';
+import { CareerTooltip } from '../shell/CareerTooltip';
 import type { InterviewSessionView } from './interviewSimulatorApi';
 import {
   deriveRecommendationActions,
@@ -36,6 +39,7 @@ export function ResultScreen({
   readonly props: MockInterviewSimulatorProps;
 }) {
   const session = flow.session;
+  useMarkTrainerResult(Boolean(session));
   if (!session) return <MissingQuestion onRetry={flow.retryLoad} />;
   const topics = presentInterviewTopics(session.topicSummary);
   const recommendations = deriveRecommendationActions(session);
@@ -73,9 +77,26 @@ export function ResultScreen({
 }
 
 function TopicList({ topics }: { readonly topics: ReturnType<typeof presentInterviewTopics> }) {
+  const answered = topics.reduce((sum, topic) => sum + topic.answered, 0);
+  const noScore = `Без общего балла: на ${answered} ответах он ничего не доказывает.`;
   return (
     <section className="career-mock-topic-list" aria-labelledby="career-mock-topic-title">
-      <h2 id="career-mock-topic-title">Итог по темам</h2>
+      <div className="career-mock-topic-head">
+        <h2 id="career-mock-topic-title">Итог по темам</h2>
+        {/* Макет 14 `res` 1440: пояснение под (i); на 390 оно остаётся строкой под списком. */}
+        <CareerTooltip
+          content={`${noScore} Показываем, что закрыто по критериям и что нет.`}
+          side="bottom"
+        >
+          <button
+            type="button"
+            className="career-btn career-btn-sm career-btn-ghost career-mock-topic-info"
+            aria-label="Пояснение"
+          >
+            <Info size={16} aria-hidden="true" />
+          </button>
+        </CareerTooltip>
+      </div>
       <ul className="career-mock-criteria">
         {topics.map((topic) => (
           <li key={topic.topic}>
@@ -96,10 +117,7 @@ function TopicList({ topics }: { readonly topics: ReturnType<typeof presentInter
           </li>
         ))}
       </ul>
-      <p className="career-mock-muted">
-        Без общего балла: на {topics.reduce((sum, topic) => sum + topic.answered, 0)} ответах он
-        ничего не доказывает.
-      </p>
+      <p className="career-mock-muted career-mock-topic-foot">{noScore}</p>
     </section>
   );
 }
@@ -149,7 +167,10 @@ function RecommendationList({
         <ul className="career-mock-recommendation-list">
           {recommendations.map((item) => (
             <li key={item.text}>
-              <strong>{item.text}</strong>
+              <div className="career-mock-recommendation-text">
+                <strong>{item.text}</strong>
+                <span>{item.detail}</span>
+              </div>
               <RecommendationButton action={item.action} busy={busy} onRun={onRun} />
             </li>
           ))}

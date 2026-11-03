@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   ConsultantSuggestionProvider,
+  useMarkTrainerResult,
   useMarkTrainerScreen,
 } from '../journey/consultantScreenSuggestion';
 import { useTrainerConsultant } from './useTrainerConsultant';
@@ -14,8 +15,9 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function Trainer({ open }: { readonly open: boolean }) {
+function Trainer({ open, result = false }: { readonly open: boolean; readonly result?: boolean }) {
   useMarkTrainerScreen(open);
+  useMarkTrainerResult(open && result);
   return null;
 }
 
@@ -28,11 +30,11 @@ function Shell({ visible, compact }: { readonly visible: boolean; readonly compa
 async function mount() {
   const root = createRoot(document.body.appendChild(document.createElement('div')));
   roots.push(root);
-  const render = (trainer: boolean, visible: boolean, compact = false) =>
+  const render = (trainer: boolean, visible: boolean, compact = false, result = false) =>
     act(async () =>
       root.render(
         <ConsultantSuggestionProvider>
-          <Trainer open={trainer} />
+          <Trainer open={trainer} result={result} />
           <Shell visible={visible} compact={compact} />
         </ConsultantSuggestionProvider>,
       ),
@@ -70,6 +72,14 @@ describe('consultant column on the mock interview trainer (mockup 14)', () => {
     await render(false, true);
     await render(true, true);
     expect(latest?.panelColClass).toBe(' is-behind-trainer');
+  });
+
+  it('drops the top-bar icon on the result step, as mockup 14 `res` (B511 G3b item 5)', async () => {
+    const render = await mount();
+    await render(true, true, false, true);
+    expect(latest).toMatchObject({ showTopbarButton: false, panelColClass: ' is-behind-trainer' });
+    await render(true, true, false, false);
+    expect(latest?.showTopbarButton).toBe(true);
   });
 
   it('does nothing at 390, where the trainer has its own consultant button', async () => {
