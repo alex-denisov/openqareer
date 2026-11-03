@@ -21,4 +21,16 @@ describe('candidate window cache: a continuing read', () => {
     cache.read('c1|old', () => 'old');
     expect(cache.read('c1|new', () => 'new', { continuing: true })).toBe('new');
   });
+
+  it('says ahead of a read whether that read would compute', () => {
+    let clock = 0;
+    const cache = createCandidateWindowCache<number>(60_000, () => clock);
+    expect(cache.holds('c1|k')).toBe(false);
+    cache.write('c1|k', 1);
+    expect(cache.holds('c1|k')).toBe(true);
+    expect(cache.holds('c1|other')).toBe(false);
+    clock = 90_000;
+    expect(cache.holds('c1|k')).toBe(false);
+    expect(cache.holds('c1|k', { continuing: true })).toBe(true);
+  });
 });

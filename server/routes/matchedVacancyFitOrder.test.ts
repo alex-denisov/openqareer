@@ -108,7 +108,7 @@ describe('pool fit order', () => {
 });
 
 describe('B562: a stored result under an older profile key is computed again', () => {
-  it('queues vacancies that had a result but have none for the current profile, bounded per read', () => {
+  it('queues vacancies that had a result but have none for the current profile, bounded per read', async () => {
     const enqueue = vi.fn();
     const stale = Array.from({ length: STALE_REFIT_LIMIT + 5 }, (_, index) => 's' + index);
     const base = deps({ fresh: 80 });
@@ -122,6 +122,8 @@ describe('B562: a stored result under an older profile key is computed again', (
       'order-stale',
       { by: 'fit', dir: 'desc' },
     )(['fresh', ...stale].map(item));
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
     expect(enqueue).toHaveBeenCalledTimes(STALE_REFIT_LIMIT);
     expect(enqueue.mock.calls.map(([input]) => input.vacancyId)).not.toContain('fresh');
   });

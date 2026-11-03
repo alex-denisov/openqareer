@@ -1,3 +1,4 @@
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import {
   compareFitDirected,
@@ -29,6 +30,12 @@ export const STALE_REFIT_LIMIT = 50;
 type FitViews = ReadonlyMap<string, VacancyFitView>;
 const fitViewsCache = createCandidateWindowCache<FitViews>(FIT_ORDER_WINDOW_MS);
 const refreshingFitViews = new Set<string>();
+const preparingFitViews = new Map<string, Promise<void>>();
+
+/** Where a failed background write of the fit order goes (the request's logger on the route). */
+interface FitOrderLog {
+  warn(details: { readonly errorName: string; readonly rows: number }, message: string): void;
+}
 
 /**
  * Runs before pagination, so a cached match on a later page can move to the front.
@@ -38,14 +45,19 @@ const refreshingFitViews = new Set<string>();
  * больше не держит ответ: порядок строится по прежним разборам, а свежие
  * считаются в фоне порциями, уступая event loop. Синхронно — только первый
  * раз для этого профиля, когда прежних разборов нет.
+ *
+ * PRB-041 (prod 03.11): the read that still ran in one piece was this one, inside the page build,
+ * with each stale row's retry, seal and queue write on top. `prepare` reads the same views in
+ * slices before the build, so the build only sorts; a caller that skips it reads in one piece.
  */
 export function withVacancyFitOrder(
   deps: RouteDeps,
   candidateId: string,
   sort: VacancySort = DEFAULT_VACANCY_SORT,
+  log?: FitOrderLog,
 ) {
   const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
-  const reader = createFitViewReader(deps, candidateId);
+  const reader = createFitViewReader(deps, candidateId, log);
   const stamp = reader
     ? vacancyFitProfileStamp(
         deps.candidateStore.getSnapshot(candidateId),
@@ -53,7 +65,8 @@ export function withVacancyFitOrder(
       )
     : 'none';
   const key = `${candidateId}|${stamp}`;
-  return (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] => {
+  let prepared = false;
+  const order = (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] => {
     const known = fitViewsCache.peek(key);
     if (!known) {
       const views = reader
@@ -62,6 +75,7 @@ export function withVacancyFitOrder(
       fitViewsCache.write(key, views);
       return orderByFit(items, views, sort, money);
     }
+    if (prepared) return orderByFit(items, known.value, sort, money);
     if (known.stale && reader) void refreshFitViews(key, reader, items);
     const landed = reader ? viewsLandedSince(known.value, reader.scoredIds(items)) : [];
     if (landed.length === 0) return orderByFit(items, known.value, sort, money);
@@ -69,11 +83,18 @@ export function withVacancyFitOrder(
     fitViewsCache.write(key, patched);
     return orderByFit(items, patched, sort, money);
   };
+  const prepare = async (items: readonly MatchedVacancyItem[]): Promise<void> => {
+    if (reader) await prepareFitViews(key, reader, items);
+    prepared = true;
+  };
+  return Object.assign(order, { prepare });
 }
 
 /** Порядок подборки и то, от чего он зависит помимо выдачи (ключ кэша списка). */
 export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[]) & {
   readonly cacheKey: string;
+  /** Reads the percents the order needs without holding the event loop; call before the order. */
+  readonly prepare: (items: readonly MatchedVacancyItem[]) => Promise<void>;
 };
 
 /**
@@ -84,8 +105,9 @@ export function withWantedCompanyOrder(
   deps: RouteDeps,
   candidateId: string,
   sort: VacancySort = DEFAULT_VACANCY_SORT,
+  log?: FitOrderLog,
 ): MatchedOrder {
-  const byFit = withVacancyFitOrder(deps, candidateId, sort);
+  const byFit = withVacancyFitOrder(deps, candidateId, sort, log);
   if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '' });
   const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
   // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
@@ -97,7 +119,7 @@ export function withWantedCompanyOrder(
       wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
         compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
       ),
-    { cacheKey },
+    { cacheKey, prepare: byFit.prepare },
   );
 }
 
@@ -125,13 +147,38 @@ export function viewsLandedSince(
 interface FitViewReader {
   scoredIds(items: readonly MatchedVacancyItem[]): string[];
   read(ids: readonly string[]): Map<string, VacancyFitView>;
+  readYielding(ids: readonly string[]): Promise<Map<string, VacancyFitView>>;
 }
 
-function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReader | undefined {
+function createFitViewReader(
+  deps: RouteDeps,
+  candidateId: string,
+  log?: FitOrderLog,
+): FitViewReader | undefined {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return undefined;
   const context = createVacancyFitContextReader(deps, candidateId);
   const geoBlocks = createGeoBlocker(deps, candidateId);
+  const readRow = (id: string) => {
+    const target = readVacancyFitTarget(deps, id);
+    if (!target) return undefined;
+    const input = context(target, []);
+    const view = runtime.view(input);
+    const compact = compactFitView(
+      geoBlocks(target, textStillLoading(id, target.description, view, target.fullText, target.textHidden)),
+    );
+    const stale = view.state === 'not_requested' || view.state === 'refreshing';
+    return { id, view: compact, staleInput: stale ? input : undefined };
+  };
+  const collect = (rows: readonly (ReturnType<typeof readRow>)[]) => {
+    const present = rows.flatMap((row) => (row ? [row] : []));
+    requeueStaleRows(
+      runtime,
+      present.flatMap((row) => (row.staleInput ? [row.staleInput] : [])),
+      log,
+    );
+    return new Map(present.map((row) => [row.id, row.view]));
+  };
   return {
     // Точный разбор дорог (отпечатки всех фактов, проверка результата, полный
     // текст вакансии) — только для вакансий с сохранённым результатом.
@@ -139,31 +186,57 @@ function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReade
       const scored = runtime.cachedVacancyIds(candidateId);
       return items.map((item) => item.cluster.id).filter((id) => scored.has(id));
     },
-    read(ids) {
-      const views = new Map<string, VacancyFitView>();
-      let requeued = 0;
-      for (const id of ids) {
-        const target = readVacancyFitTarget(deps, id);
-        if (!target) continue;
-        const input = context(target, []);
-        const view = runtime.view(input);
-        if (
-          (view.state === 'not_requested' || view.state === 'refreshing') &&
-          requeued < STALE_REFIT_LIMIT
-        ) {
-          runtime.enqueue(input);
-          requeued += 1;
-        }
-        views.set(
-          id,
-          compactFitView(
-            geoBlocks(target, textStillLoading(id, target.description, view, target.fullText, target.textHidden)),
-          ),
-        );
-      }
-      return views;
-    },
+    read: (ids) => collect(ids.map(readRow)),
+    readYielding: async (ids) => collect(await mapYielding(ids, readRow)),
   };
+}
+
+/** PRB-041: each row retries, seals and writes, so it runs after the read and in slices. */
+function requeueStaleRows<Input>(
+  runtime: { enqueue(input: Input): unknown },
+  inputs: readonly Input[],
+  log?: FitOrderLog,
+): void {
+  if (inputs.length === 0) return;
+  const rows = inputs.slice(0, STALE_REFIT_LIMIT);
+  void yieldToEventLoop()
+    .then(() => mapYielding(rows, (input) => runtime.enqueue(input)))
+    .catch((error: unknown) =>
+      log?.warn(
+        { errorName: error instanceof Error ? error.name : 'UnknownError', rows: rows.length },
+        'fit-requeue-failed',
+      ),
+    );
+}
+
+function prepareFitViews(
+  key: string,
+  reader: FitViewReader,
+  items: readonly MatchedVacancyItem[],
+): Promise<void> {
+  const running = preparingFitViews.get(key);
+  if (running) return running;
+  const work = readViewsAhead(key, reader, items).finally(() => preparingFitViews.delete(key));
+  preparingFitViews.set(key, work);
+  return work;
+}
+
+async function readViewsAhead(
+  key: string,
+  reader: FitViewReader,
+  items: readonly MatchedVacancyItem[],
+): Promise<void> {
+  const known = fitViewsCache.peek(key);
+  if (!known) {
+    fitViewsCache.write(key, await reader.readYielding(reader.scoredIds(items)));
+    return;
+  }
+  if (known.stale) void refreshFitViews(key, reader, items);
+  const landed = viewsLandedSince(known.value, reader.scoredIds(items));
+  if (landed.length === 0) return;
+  const read = await reader.readYielding(landed);
+  // A background refresh may have written while this read yielded; its views stay.
+  fitViewsCache.write(key, new Map([...(fitViewsCache.peek(key)?.value ?? known.value), ...read]));
 }
 
 const HH_CLUSTER_PREFIX = 'cluster-src-hh-search:';
@@ -203,10 +276,10 @@ async function refreshFitViews(
     const ids = reader.scoredIds(items);
     const views = new Map<string, VacancyFitView>();
     for (let start = 0; start < ids.length; start += FIT_REFRESH_SLICE) {
-      for (const entry of reader.read(ids.slice(start, start + FIT_REFRESH_SLICE))) {
+      await yieldToEventLoop();
+      for (const entry of await reader.readYielding(ids.slice(start, start + FIT_REFRESH_SLICE))) {
         views.set(...entry);
       }
-      await new Promise((resolve) => setImmediate(resolve));
     }
     fitViewsCache.write(key, views);
   } catch {
