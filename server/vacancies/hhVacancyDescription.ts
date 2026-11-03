@@ -1,5 +1,6 @@
 import { decodeFeedEntities, htmlToFeedText } from '../connectors/feedText';
 import type { HhSearchTransport } from './hhSearchFetcher';
+import type { HhTextRateController } from './hhTextRate';
 
 /** Не чаще одного чтения карточки в секунду — медленнее обычного просмотра человеком. */
 const DEFAULT_MIN_INTERVAL_MS = 1_000;
@@ -53,7 +54,12 @@ export interface HhVacancyDescriptionLoaderOptions {
    * лишь не ждёт ответа перед следующим стартом. По умолчанию 1 (как раньше).
    */
   readonly maxConcurrent?: number;
+  /** 03.11: адаптивный темп (AIMD); если задан, он заменяет `minIntervalMs` и `maxConcurrent`. */
+  readonly rate?: HhTextRateController;
 }
+
+/** Страница-заглушка антибота: ответ 200 без карточки, но с маркером капчи. */
+const CAPTCHA_MARKER = /captcha/i;
 
 /** Пауза после отказа удваивается с каждым подряд идущим, но не дольше этого. */
 const MAX_REFUSAL_BACKOFF_MS = 15 * 60 * 1_000;
@@ -108,6 +114,13 @@ function skillsFromPage(page: string): string[] {
   return skills;
 }
 
+function detailsFromPage(body: string): HhVacancyDetails | undefined {
+  if (ARCHIVED_MARKER.test(body)) return { archived: true, skills: [] };
+  const description = descriptionFromPage(body);
+  const skills = skillsFromPage(body);
+  return description || skills.length > 0 ? { description, skills } : undefined;
+}
+
 /**
  * Ленивый читатель одной карточки hh.ru. Успех кешируется, а отказ — только
  * на короткий TTL, чтобы временная ошибка не лишала вакансию требований навсегда.
@@ -124,6 +137,10 @@ export class HhVacancyDescriptionLoader {
   private retryAfter = Number.NEGATIVE_INFINITY;
 
   constructor(private readonly options: HhVacancyDescriptionLoaderOptions) {}
+
+  rateControl(): HhTextRateController | undefined {
+    return this.options.rate;
+  }
 
   isLoaded(url: string): boolean {
     const cached = this.cached.get(url);
@@ -163,7 +180,9 @@ export class HhVacancyDescriptionLoader {
   }
 
   private async acquireSlot(): Promise<void> {
-    const max = Math.max(1, Math.floor(this.options.maxConcurrent ?? 1));
+    const max = this.options.rate
+      ? this.options.rate.maxInFlight()
+      : Math.max(1, Math.floor(this.options.maxConcurrent ?? 1));
     while (this.active >= max) {
       await new Promise<void>((resolve) => this.slotWaiters.push(resolve));
     }
@@ -185,7 +204,8 @@ export class HhVacancyDescriptionLoader {
     await this.acquireSlot();
     const delay = Math.max(
       0,
-      (this.options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS) - (now() - this.lastRequestAt),
+      (this.options.rate?.intervalMs() ?? this.options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS) -
+        (now() - this.lastRequestAt),
     );
     try {
       if (delay > 0) await this.options.sleep(delay);
@@ -206,11 +226,18 @@ export class HhVacancyDescriptionLoader {
   }
 
   /** 03.11: подряд идущие отказы удваивают паузу (60 с, 2, 4 ... до 15 мин); сбои 5xx — после серии. */
-  private extendPause(refused: boolean, baseMs: number, jitterMs: number, nowMs: number): void {
+  private extendPause(
+    refused: boolean,
+    baseMs: number,
+    jitterMs: number,
+    nowMs: number,
+    serverWaitMs = 0,
+  ): void {
     if (refused) {
       this.refusalStreak += 1;
       const grown = Math.min(baseMs * 2 ** (this.refusalStreak - 1), MAX_REFUSAL_BACKOFF_MS);
-      this.retryAfter = Math.max(this.retryAfter, nowMs + grown + jitterMs);
+      const waited = Math.max(grown + jitterMs, Math.min(serverWaitMs, MAX_REFUSAL_BACKOFF_MS));
+      this.retryAfter = Math.max(this.retryAfter, nowMs + waited);
     } else if (this.transientStreak >= TRANSIENT_STREAK_TO_PAUSE) {
       const grown = Math.min(
         baseMs * 2 ** (this.transientStreak - TRANSIENT_STREAK_TO_PAUSE),
@@ -220,30 +247,34 @@ export class HhVacancyDescriptionLoader {
     }
   }
 
+  private recordRate(refused: boolean, transient: boolean): void {
+    this.options.rate?.record(refused ? 'refusal' : transient ? 'server_error' : 'ok');
+  }
+
   private async loadFromTransport(url: string): Promise<HhVacancyDetails | undefined> {
     const now = this.options.now ?? Date.now;
     let details: HhVacancyDetails | undefined;
     let refused = false;
     let restricted = false;
     let transient = false;
+    let serverWaitMs = 0;
     try {
       const response = await this.options.transport(url);
       transient = response.status === 429 || response.status >= 500;
       refused =
         REFUSAL_STATUSES.has(response.status) && !FORBIDDEN_VACANCY_MARKER.test(response.body);
       restricted = response.status === 403 && FORBIDDEN_VACANCY_MARKER.test(response.body);
+      serverWaitMs = response.retryAfterMs ?? 0;
       // 01.11: hh отвечает 404 на удалённую вакансию — это статус ответа, не текст страницы.
       if (response.status === 404) details = { archived: true, skills: [] };
       else if (response.status === 200) {
-        const description = descriptionFromPage(response.body);
-        const skills = skillsFromPage(response.body);
-        if (ARCHIVED_MARKER.test(response.body)) details = { archived: true, skills: [] };
-        else details = description || skills.length > 0 ? { description, skills } : undefined;
+        details = detailsFromPage(response.body);
+        if (!details && CAPTCHA_MARKER.test(response.body)) refused = true;
       }
     } catch {
-      details = undefined;
       transient = true;
     }
+    this.recordRate(refused, transient);
     if (details || restricted) {
       this.refusalStreak = 0;
       this.transientStreak = 0;
@@ -262,7 +293,13 @@ export class HhVacancyDescriptionLoader {
       this.cached.set(url, { retryAt });
       // Общая пауза — только когда hh отказывает нам; сбой одной карточки
       // (404, страница без описания, сеть) остальных не держит (прод 21.10).
-      this.extendPause(refused, failedCacheTtlMs, retryAt - now() - failedCacheTtlMs, now());
+      this.extendPause(
+        refused,
+        failedCacheTtlMs,
+        retryAt - now() - failedCacheTtlMs,
+        now(),
+        serverWaitMs,
+      );
     }
     if (refused) return { blocked: 'refused', skills: [] };
     // Не кешируется как ответ: повтор через отступ решает, скрыт ли текст насовсем.

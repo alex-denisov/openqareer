@@ -4,6 +4,7 @@ import { searchRemotiveVacancies } from '../connectors/remotiveVacancySearch';
 import { HhCrawlCoordinator } from './hhCrawlCoordinator';
 import { createHhCrawlSettings, type SqliteHhCrawlSettings } from './hhCrawlSettings';
 import { buildHhPageFetcher } from './hhSearchTransport';
+import { HhTextRateController } from './hhTextRate';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { createHttpLinkProbe } from './linkLivenessProbe';
 import { buildMultiSourceFetcher, fetchRobotsTxt } from './multiSourceFetcher';
@@ -77,8 +78,8 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     descriptionLoader: new HhVacancyDescriptionLoader({
       transport: hhPageFetcher,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-      // 03.11: старты по-прежнему раз в секунду, но ответ не держит следующий старт.
-      maxConcurrent: 3,
+      // 03.11: адаптивный темп (старт 2/с, потолок 10/с); первый отказ делит его пополам.
+      rate: new HhTextRateController(),
     }),
     ...(options.recluster ? { recluster: options.recluster } : {}),
   });

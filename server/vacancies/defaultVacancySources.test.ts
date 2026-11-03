@@ -373,8 +373,8 @@ describe('Hacker News Who is hiring source', () => {
 });
 
 describe('JobSpy sources in default registry', () => {
-  it('registers Naukri, BDJobs, and ZipRecruiter as enabled sources with measurements', () => {
-    for (const id of ['src-naukri', 'src-bdjobs', 'src-ziprecruiter']) {
+  it('registers Naukri and BDJobs as enabled sources with measurements', () => {
+    for (const id of ['src-naukri', 'src-bdjobs']) {
       const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === id);
       expect(source).toBeDefined();
       expect(source?.type).toBe('json_api');
@@ -409,5 +409,14 @@ describe('LinkedIn Obscura crawler in default registry (B208)', () => {
     const prod = readings.find((r) => r.route === 'eu-prod');
     expect(prod).toBeDefined();
     expect(prod?.items).toBeGreaterThan(0);
+  });
+});
+
+describe('Glassdoor and ZipRecruiter are not connected (owner 2026-11-03)', () => {
+  it.each(['src-glassdoor', 'src-ziprecruiter'])('%s is off with an honest reason', (id) => {
+    const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === id);
+    expect(source?.enabled).toBe(false);
+    expect(source?.addressStatus).toBe('official_access_required');
+    expect(source?.disabledReason).toContain('Indeed');
   });
 });

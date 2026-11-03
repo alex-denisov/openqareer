@@ -1,3 +1,4 @@
+import type { HhTextRateController } from './hhTextRate';
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
    are intentionally kept together so replacement, expiry and reclustering share
    one transaction boundary. */
@@ -66,6 +67,7 @@ import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 import {
   HH_TEXT_CONCURRENCY,
   HH_TEXT_PER_TICK,
+  HH_TEXT_TICK_MS,
   HhCatalogTextBackfill,
   type HhCatalogTextReport,
 } from './hhCatalogText';
@@ -118,6 +120,8 @@ export interface VacancyDescriptionLoaded {
 export interface VacancyDescriptionLoader {
   load(url: string): Promise<VacancyDescriptionLoaded | string | undefined>;
   isLoaded?(url: string): boolean;
+  /** 03.11: адаптивный темп загрузчика; без него остаются фиксированные порция и конвейер. */
+  rateControl?(): HhTextRateController | undefined;
 }
 
 export interface VacancyDescriptionLoadResult {
@@ -1077,8 +1081,8 @@ export class MultiSourceVacancyEngine {
   public runHhCatalogTextStep(): Promise<HhCatalogTextReport> {
     const pool = this.pool;
     this.hhCatalogText ??= new HhCatalogTextBackfill({
-      perTick: HH_TEXT_PER_TICK,
-      concurrency: HH_TEXT_CONCURRENCY,
+      perTick: () => this.rate()?.portionFor(HH_TEXT_TICK_MS) ?? HH_TEXT_PER_TICK,
+      concurrency: () => this.rate()?.maxInFlight() ?? HH_TEXT_CONCURRENCY,
       engine: {
         hhTextReady: () => {
           const source = this.sources.get(HH_SEARCH_SOURCE_ID);
@@ -1106,7 +1110,14 @@ export class MultiSourceVacancyEngine {
       this.runClusterTextStep();
       pool.archiveExpiredHhClusters?.(EXPIRED_CLUSTER_BATCH);
     }
-    return this.hhCatalogText.step();
+    return this.hhCatalogText.step().then((report) => {
+      const rateWindow = this.rate()?.takeClosedWindow();
+      return rateWindow ? { ...report, rateWindow } : report;
+    });
+  }
+
+  private rate(): HhTextRateController | undefined {
+    return this.descriptionLoader?.rateControl?.();
   }
 
   /**
