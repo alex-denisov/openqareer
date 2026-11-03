@@ -28,15 +28,19 @@ export interface ConsultantScreenSuggestion {
 interface SuggestionStore {
   readonly suggestion: ConsultantScreenSuggestion | null;
   readonly dismissed: ReadonlySet<string>;
+  readonly suppressed: boolean;
   readonly publish: (suggestion: ConsultantScreenSuggestion | null, ownerId: string) => void;
   readonly dismiss: (id: string) => void;
+  readonly suppress: (delta: 1 | -1) => void;
 }
 
 const NO_STORE: SuggestionStore = {
   suggestion: null,
   dismissed: new Set(),
+  suppressed: false,
   publish: () => undefined,
   dismiss: () => undefined,
+  suppress: () => undefined,
 };
 
 const ConsultantSuggestionContext = createContext<SuggestionStore>(NO_STORE);
@@ -56,9 +60,20 @@ export function ConsultantSuggestionProvider({ children }: { readonly children: 
   const dismiss = useCallback((id: string) => {
     setDismissed((current) => new Set([...current, id]));
   }, []);
+  const [suppressors, setSuppressors] = useState(0);
+  const suppress = useCallback((delta: 1 | -1) => {
+    setSuppressors((current) => Math.max(0, current + delta));
+  }, []);
   const value = useMemo(
-    () => ({ suggestion: published?.suggestion ?? null, dismissed, publish, dismiss }),
-    [published, dismissed, publish, dismiss],
+    () => ({
+      suggestion: published?.suggestion ?? null,
+      dismissed,
+      suppressed: suppressors > 0,
+      publish,
+      dismiss,
+      suppress,
+    }),
+    [published, dismissed, suppressors, publish, dismiss, suppress],
   );
   return (
     <ConsultantSuggestionContext.Provider value={value}>
@@ -94,10 +109,23 @@ export function usePublishConsultantSuggestion(suggestion: ConsultantScreenSugge
   }, [publish, stable]);
 }
 
+/**
+ * Пока открыт тренажёр или другое окно поверх экрана, предложение экрана не показываем:
+ * «Начать мок-интервью» рядом с уже открытым мок-интервью только путает.
+ */
+export function useSuppressConsultantSuggestion(active: boolean) {
+  const { suppress } = useContext(ConsultantSuggestionContext);
+  useEffect(() => {
+    if (!active) return undefined;
+    suppress(1);
+    return () => suppress(-1);
+  }, [active, suppress]);
+}
+
 export function useConsultantScreenSuggestion(stage: CoachTurnStage) {
-  const { suggestion, dismissed, dismiss } = useContext(ConsultantSuggestionContext);
+  const { suggestion, dismissed, suppressed, dismiss } = useContext(ConsultantSuggestionContext);
   const visible =
-    suggestion && suggestion.stages.includes(stage) && !dismissed.has(suggestion.id)
+    suggestion && !suppressed && suggestion.stages.includes(stage) && !dismissed.has(suggestion.id)
       ? suggestion
       : null;
   return { suggestion: visible, dismiss };

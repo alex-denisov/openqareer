@@ -15,6 +15,7 @@ import {
   ConsultantSuggestionProvider,
   useConsultantScreenSuggestion,
   usePublishConsultantSuggestion,
+  useSuppressConsultantSuggestion,
   type ConsultantScreenSuggestion,
 } from './consultantScreenSuggestion';
 
@@ -126,6 +127,11 @@ function Screen({ suggestion }: { readonly suggestion: ConsultantScreenSuggestio
   return null;
 }
 
+function Modal({ open }: { readonly open: boolean }) {
+  useSuppressConsultantSuggestion(open);
+  return null;
+}
+
 function Panel() {
   const { suggestion, dismiss } = useConsultantScreenSuggestion('responses');
   return suggestion ? (
@@ -180,6 +186,26 @@ describe('panel suggestion slot', () => {
     await other.rerender(false);
     expect(other.host.textContent).toContain('Общие вопросы');
     await rerender(false);
+  });
+
+  it('hides the suggestion while a trainer window is open over the screen', async () => {
+    const suggestion = responseMockInterviewSuggestion(application({}), () => undefined, NOW);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    roots.push(root);
+    const render = (open: boolean) =>
+      root.render(
+        <ConsultantSuggestionProvider>
+          <Screen suggestion={suggestion} />
+          <Modal open={open} />
+          <Panel />
+        </ConsultantSuggestionProvider>,
+      );
+    await act(async () => render(true));
+    expect(host.textContent).toContain('Общие вопросы');
+    await act(async () => render(false));
+    expect(host.textContent).toContain('Мок-интервью по Арка Холдинг');
   });
 
   it('ignores suggestions published for another consultant stage', async () => {
