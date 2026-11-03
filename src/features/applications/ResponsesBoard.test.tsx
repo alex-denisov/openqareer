@@ -96,7 +96,7 @@ describe('ResponsesBoard columns', () => {
     expect(html).not.toContain('aria-label="Отказ"');
     expect(html).toContain('Нужно действие:');
     expect(html).toContain('Закрыто 1');
-    expect(html).toContain('Доставка подтверждена');
+    expect(html).toContain('Доставлено');
     expect(html).not.toContain('https://jobs.test/receipt');
     expect(html).toContain('Пробовали отправить');
     expect(html).toContain('1');
@@ -563,8 +563,10 @@ describe('ResponsesBoard B450 workspace navigation', () => {
       root.render(<ResponsesBoard state={readyState([closed])} onOpenVacancies={() => {}} />);
     });
 
-    expect(container.querySelector('.career-responses-mobile-closed')).not.toBeNull();
-    expect(container.textContent).toContain('Закрыто · 1');
+    const closedLink = Array.from(container.querySelectorAll('.career-responses-mobile-link')).find(
+      (link) => link.textContent?.includes('Закрыто'),
+    );
+    expect(closedLink?.querySelector('.career-responses-mobile-link-count')?.textContent).toBe('1');
   });
 
   it('uses model-backed next steps for saved applications and offers', () => {
@@ -614,12 +616,14 @@ describe('ResponsesBoard B450 workspace navigation', () => {
         'Напомнить рекрутеру',
       ]),
     );
-    const manualSendButton = container.querySelector<HTMLButtonElement>(
-      'button[aria-controls="career-responses-mobile-manual-send"]',
-    );
-    expect(manualSendButton).not.toBeNull();
+    const chooseButton = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('.career-responses-mobile-group-header button'),
+    ).find((button) => button.textContent === 'Выбрать');
+    expect(chooseButton).not.toBeUndefined();
+    act(() => chooseButton?.click());
+    expect(container.querySelector('[role="toolbar"][aria-label="Выбор откликов"]')).not.toBeNull();
     expect(
-      container.querySelector('#career-responses-mobile-manual-send')?.hasAttribute('hidden'),
+      container.querySelector('#career-responses-mobile-actions')?.hasAttribute('hidden'),
     ).toBe(true);
   });
 

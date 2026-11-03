@@ -707,13 +707,11 @@ test.describe('B251 today screen', () => {
 
     await page.getByRole('button', { name: /Открыть: Peraton/u }).click();
     await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
-    const response = page
-      .getByRole('list', { name: 'По сроку шага' })
-      .getByRole('listitem')
-      .filter({ hasText: 'Peraton' });
-    await response.getByRole('button', { name: /Открыть следующий шаг/u }).click();
-
-    const selectedPanel = page.locator('.career-responses-selected');
+    // B486: at 390 the Today row lands straight on the response's «Процесс» push screen.
+    const selectedPanel = page
+      .getByRole('region', { name: 'Процесс' })
+      .locator('.career-responses-selected');
+    await expect(selectedPanel).toContainText('Peraton');
     const markSent = selectedPanel.getByRole('button', { name: 'Напоминание отправлено' });
     await expect(markSent).toBeVisible();
     const sentRequest = page.waitForRequest(

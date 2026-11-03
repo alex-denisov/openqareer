@@ -53,7 +53,7 @@ test.describe('B486 mobile responses', () => {
     await expect(dialog.getByLabel('Период')).toBeVisible();
     await expect(dialog.getByLabel('Сортировка')).toBeVisible();
 
-    const applyButton = dialog.getByRole('button', { name: 'Применить', exact: true });
+    const applyButton = dialog.getByRole('button', { name: 'Показать', exact: true });
     await applyButton.focus();
     await page.keyboard.press('Tab');
     expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
@@ -75,7 +75,7 @@ test.describe('B486 mobile responses', () => {
     await dialog.getByLabel('Канал').selectOption('recruiter');
     await dialog.getByLabel('Период').selectOption('all');
     await dialog.getByLabel('Сортировка').selectOption('newest');
-    await dialog.getByRole('button', { name: 'Применить', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Показать', exact: true }).click();
 
     await expect(dialog).toBeHidden();
     await expect(
@@ -102,31 +102,100 @@ test.describe('B486 mobile responses', () => {
     await expect(response).toContainText('Пробовали отправить');
     await expect(response.locator('time')).toBeVisible();
 
-    await response
-      .getByRole('button', { name: 'Открыть следующий шаг: Напомнить сегодня · Peraton' })
-      .click();
-    await expect(page.getByRole('region', { name: /Peraton/ })).toBeVisible();
+    await expect(response).toContainText('Напомнить сегодня');
+    await expect(response.locator('svg[data-arrow]')).toHaveCount(0);
+
+    const row = response.getByRole('button', { name: /^Открыть отклик: Peraton/ });
+    await expect(row).toHaveCSS('min-height', '44px');
+    await row.click();
+    const push = page.getByRole('region', { name: 'Процесс' });
+    await expect(push).toBeVisible();
+    await expect(push.getByRole('heading', { name: /^Peraton,/ })).toBeVisible();
+    // Макет 5 `proc`: the panel's groups, each once, from the response's own data.
+    for (const group of ['Материалы', 'Доставка']) {
+      await expect(push.getByRole('region', { name: group, exact: true })).toHaveCount(1);
+    }
+    await expect(push.getByRole('status').filter({ hasText: 'Следующий шаг' })).toBeVisible();
+    await expect(push.getByRole('region', { name: 'Доставка', exact: true })).toContainText(
+      'Не подтверждено',
+    );
+    await expect(push.getByRole('region', { name: /Peraton/ })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Нужно действие' })).toBeHidden();
+    await expect(page.getByRole('tablist', { name: 'Отклики' })).toBeHidden();
+    await push.getByRole('button', { name: 'Назад к откликам' }).click();
+    await expect(push).toBeHidden();
+    await expect(row).toBeFocused();
   });
 
-  test('Выбрать opens the consent-gated manual sending flow', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile-390', 'B486 mobile manual sending flow');
+  test('the 390 page has no desktop panels below the list', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'B486 R19 page bottom');
+    await stubB486Session(page);
+    await seedB486Workspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openB486Responses(page);
+    await expect(page.getByRole('list', { name: 'Нужно действие' })).toBeVisible();
+    await expect(page.getByText('Выбранный отклик', { exact: true })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Аналитика этапов' })).toBeHidden();
+    await expect(page.getByRole('region', { name: 'Закрытые отклики' })).toBeHidden();
+    await expect(page.getByRole('heading', { name: 'Результативность по каналам' })).toBeHidden();
+  });
+
+  test('Выбрать enters selection mode with the manual sending flow under Действия', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'B486 mobile selection mode');
     await stubB486Session(page);
     await seedB486Workspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openB486Responses(page);
 
-    const choose = page.getByRole('button', { name: 'Выбрать', exact: true });
-    const manualSend = page.locator('#career-responses-mobile-manual-send');
-    await expect(choose).toBeVisible();
-    await expect(choose).toHaveAttribute('aria-controls', 'career-responses-mobile-manual-send');
-    await expect(manualSend).toBeHidden();
-    await choose.click();
-    await expect(manualSend).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Ручная отправка' })).toBeVisible();
+    await page.getByRole('button', { name: 'Выбрать', exact: true }).click();
+    const toolbar = page.getByRole('toolbar', { name: 'Выбор откликов' });
+    await expect(toolbar).toBeVisible();
+    await expect(toolbar.getByRole('status')).toHaveText('Выбрано 0');
+    const firstRow = page
+      .getByRole('list', { name: 'Нужно действие' })
+      .getByRole('checkbox')
+      .first();
+    await firstRow.click();
+    await expect(firstRow).toHaveAttribute('aria-checked', 'true');
+    await expect(toolbar.getByRole('status')).toHaveText('Выбрано 1');
+
+    await toolbar.getByRole('button', { name: 'Действия' }).click();
+    const actions = page.getByRole('region', { name: 'Действия с выбранными' });
+    await expect(actions.getByRole('region', { name: 'Ручная отправка' })).toBeVisible();
     await expect(page.getByText(/ничего не уходит без «Отправить»/)).toBeVisible();
-    await page.getByRole('button', { name: 'Скрыть выбор', exact: true }).click();
-    await expect(manualSend).toBeHidden();
-    await expect(manualSend.getByRole('region')).toHaveCount(0);
+
+    await toolbar.getByRole('button', { name: 'Все', exact: true }).click();
+    await expect(toolbar.getByRole('button', { name: 'Все', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await toolbar.getByRole('button', { name: 'Отмена' }).click();
+    await expect(toolbar).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Выбрать', exact: true })).toBeVisible();
+  });
+
+  test('the Этап filter narrows the list to one stage', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'B486 mobile stage filter');
+    await stubB486Session(page);
+    await seedB486Workspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openB486Responses(page);
+    await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Фильтры' });
+    await expect(dialog.getByRole('button', { name: 'Сбросить' })).toBeVisible();
+    // Макет 5 `stagef`: the «Этап» row opens its own sheet of seven stages with counts.
+    await dialog.getByRole('button', { name: /^Этап/ }).click();
+    const stageSheet = page.getByRole('dialog', { name: 'Этап' });
+    await expect(stageSheet.getByRole('radio')).toHaveCount(7);
+    await expect(stageSheet.getByRole('radio', { name: 'Все' })).toBeChecked();
+    await stageSheet.getByRole('radio', { name: 'Интервью' }).click();
+    await expect(dialog.getByRole('button', { name: /^Этап/ })).toContainText('Интервью');
+    await expect(dialog.getByRole('button', { name: /^Этап/ })).toBeFocused();
+    await dialog.getByRole('button', { name: 'Показать', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('listitem').filter({ hasText: 'Peraton' })).toHaveCount(0);
   });
 
   test('automation link uses pending approvals and opens the existing screen', async ({
@@ -196,15 +265,28 @@ test.describe('B486 mobile responses', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openB486Responses(page);
 
-    const channelLink = page.getByRole('link', { name: /Результативность по каналам/ });
-    await expect(channelLink).toContainText('hh.ru');
+    const channelLink = page.getByRole('button', { name: /Результативность по каналам/ });
+    await expect(channelLink).toContainText(/hh\.ru \d+,\d %/);
     await channelLink.click();
-    await expect(page).toHaveURL(/#career-responses-channel-performance/);
+    const channels = page.getByRole('region', { name: 'Каналы' });
+    await expect(channels).toBeVisible();
+    // Макет 5 `learn`: one grouped card per channel plus «Всего» when there are several.
+    await expect(
+      channels.getByRole('heading', { name: 'Результативность по каналам' }),
+    ).toBeVisible();
+    const hh = channels.getByRole('region', { name: 'hh.ru' });
+    await expect(hh).toContainText('Откликов');
+    await expect(hh).toContainText(/Ответили\s*\d+,\d % \(\d+\)/);
+    // «Аналитика этапов» stays reachable inside the push.
+    await channels.getByRole('button', { name: 'Аналитика этапов' }).click();
+    await expect(channels.getByRole('region', { name: 'История этапов откликов' })).toBeVisible();
+    await channels.getByRole('button', { name: 'Назад к откликам' }).click();
 
-    const closedSummary = page.getByText('Закрыто · 2', { exact: true });
-    await expect(closedSummary).toBeVisible();
-    await closedSummary.click();
-    const breakdown = page.getByRole('region', { name: 'Причины закрытия откликов' });
+    const closedLink = page.getByRole('button', { name: /^Закрыто/ });
+    await expect(closedLink).toContainText('2');
+    await closedLink.click();
+    const closed = page.getByRole('region', { name: 'Закрыто' });
+    const breakdown = closed.getByRole('region', { name: 'Причины закрытия откликов' });
     await expect(breakdown.getByText('Причина не записана', { exact: true })).toBeVisible();
   });
 
@@ -254,8 +336,35 @@ test.describe('B486 mobile responses', () => {
       page.getByRole('button', { name: 'Центр уведомлений, 3 непрочитанных' }),
     ).toBeVisible();
     await page.mouse.move(0, 0);
-    await mkdir('test-results/evidence/B486', { recursive: true });
-    await page.screenshot({ path: 'test-results/evidence/B486/app-390.png' });
+    const dir = 'test-results/evidence/B486';
+    await mkdir(dir, { recursive: true });
+    await page.screenshot({ path: `${dir}/app-390.png` });
+    await page.screenshot({ path: `${dir}/after-390-home.png`, fullPage: true });
+    const back = page.getByRole('button', { name: 'Назад к откликам' });
+    await page
+      .getByRole('button', { name: /^Открыть отклик:/ })
+      .first()
+      .click();
+    await page.screenshot({ path: `${dir}/after-390-proc.png`, fullPage: true });
+    await back.click();
+    await page.getByRole('button', { name: /Результативность по каналам/ }).click();
+    await page.screenshot({ path: `${dir}/after-390-learn.png`, fullPage: true });
+    await back.click();
+    await page.getByRole('button', { name: /^Закрыто/ }).click();
+    await page.screenshot({ path: `${dir}/after-390-closed.png`, fullPage: true });
+    await back.click();
+    await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
+    await page.screenshot({ path: `${dir}/after-390-filters.png` });
+    await page.getByRole('button', { name: /^Этап/ }).click();
+    await page.screenshot({ path: `${dir}/after-390-stagef.png` });
+    await page.getByRole('button', { name: 'Закрыть', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Выбрать', exact: true }).click();
+    await page
+      .getByRole('toolbar', { name: 'Выбор откликов' })
+      .getByRole('button', { name: 'Все', exact: true })
+      .click();
+    await page.screenshot({ path: `${dir}/after-390-selall.png`, fullPage: true });
   });
 
   test('does not overflow horizontally at 280 px', async ({ page }, testInfo) => {

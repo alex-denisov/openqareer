@@ -1106,11 +1106,17 @@ test.describe('B450 responses workspace', () => {
     await selected.screenshot({ path: testInfo.outputPath('b450-selected-response-1440.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await hideConsultantForEvidence(page);
-    await selected.screenshot({ path: testInfo.outputPath('b450-selected-response-390.png') });
+    // B486: at 390 the selected response opens as the «Процесс» push screen.
+    await page.getByRole('button', { name: /^Открыть отклик: Компания 900/ }).click();
+    const pushed = page
+      .getByRole('region', { name: 'Процесс' })
+      .locator('.career-responses-selected');
+    await expect(pushed).toContainText('Компания 900');
+    await pushed.screenshot({ path: testInfo.outputPath('b450-selected-response-390.png') });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
     ).toBeLessThanOrEqual(0);
-    await selected.getByRole('button', { name: 'Открыть STAR-истории' }).click();
+    await pushed.getByRole('button', { name: 'Открыть STAR-истории' }).click();
     await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toContainText(
       'Кризис в команде: уход ведущего инженера',
     );
