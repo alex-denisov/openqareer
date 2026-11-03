@@ -34,7 +34,7 @@ describe('verified vacancy fit coverage', () => {
     it('counts a checked and a stated requirement 1 each and a missing one 0', () => {
       const input = fitInput();
       const result = evaluateVacancyFit({ ...input, facts: facts(input), assessments });
-      expect(result.coveragePercent).toBe(67);
+      expect(result.coveragePercent).toBe(71);
       expect(result.coverage).toEqual({ matched: 2, total: 3, unknown: 0, checked: 1, partial: 0 });
       expect(result.assessments.map((item) => item.checked ?? false)).toEqual([true, false, false]);
     });
@@ -112,7 +112,7 @@ describe('verified vacancy fit coverage', () => {
   it('marks partial evidence while keeping missing facts unknown', () => {
     const input = fitInput();
     const result = evaluateVacancyFit({ ...input, requirements: [...input.requirements, { ...input.requirements[0], id: 'r2' }] });
-    expect(result.coveragePercent).toBe(75);
+    expect(result.coveragePercent).toBe(70);
     expect(result.coverage.unknown).toBe(1);
     expect(result.dataState).toBe('partial');
   });
@@ -239,5 +239,45 @@ describe('requirement provenance on entity-encoded descriptions (B562-r)', () =>
     const result = evaluateVacancyFit({ ...input, description, requirements });
     expect(result.coverage).toEqual({ matched: 3, total: 3, unknown: 0, checked: 3, partial: 0 });
     expect(result.coveragePercent).toBe(100);
+  });
+});
+
+describe('weighted fit after 03.11', () => {
+  const req = (id: string, text: string, hard = false) => ({ id, text, sourceQuote: text, origin: 'explicit' as const, importance: 'high' as const, kind: 'other' as const, hard, stopFactor: false });
+  const base = (statement: string, soft: 'unknown' | 'partial' | 'unmatched' = 'unknown') => {
+    const input = fitInput();
+    const requirements = [req('a', 'Customer operations', true), req('b', 'ITIL'), req('c', 'Verbal communication')];
+    return {
+      ...input, description: 'Customer operations. ITIL. Verbal communication.', requirements, checkedFactIds: [],
+      facts: [{ ...input.facts[0], statement }],
+      assessments: [
+        { requirementId: 'a', status: 'matched' as const, evidence: [{ factId: 'f1', quote: statement.slice(0, 10) }] },
+        { requirementId: 'b', status: 'matched' as const, evidence: [{ factId: 'f1', quote: statement.slice(0, 10) }] },
+        { requirementId: 'c', status: soft, evidence: soft === 'unknown' ? [] : [{ factId: 'f1', quote: statement.slice(0, 10) }] },
+      ],
+    };
+  };
+  const vip = 'Head of VIP IT Support, led customer operations';
+  it('VP Customer Operations case: leader with soft skill unknown gets 100 and a note', () => {
+    const result = evaluateVacancyFit(base(vip));
+    expect(result.coveragePercent).toBe(100);
+    expect(result.implied?.[0]).toMatchObject({ requirementId: 'c' });
+    expect(result.implied?.[0].role).toMatch(/Head of VIP IT Support/u);
+    expect(result.assessments.find((item) => item.requirementId === 'c')?.status).toBe('unknown');
+  });
+  it('without a leading role the soft skill is weighted 0.25, not averaged', () => {
+    // weights: hard 1.5, plain 1, soft 0.25 -> (1.5 + 1) / 2.75 = 91
+    expect(evaluateVacancyFit(base('Wrote ITIL docs and runbooks')).coveragePercent).toBe(91);
+  });
+  it('an explicit contradiction stays unmatched', () => {
+    const result = evaluateVacancyFit(base(vip, 'unmatched'));
+    expect(result.coveragePercent).toBe(91);
+    expect(result.implied ?? []).toEqual([]);
+  });
+  it('salary lines are dropped from the requirements', () => {
+    const input = base(vip);
+    const pay = req('p', 'Pay: $120,000 per year');
+    const result = evaluateVacancyFit({ ...input, description: `${input.description} Pay: $120,000 per year`, requirements: [...input.requirements, pay] });
+    expect(result.assessments.map((item) => item.requirementId)).not.toContain('p');
   });
 });

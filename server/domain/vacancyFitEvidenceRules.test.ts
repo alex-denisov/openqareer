@@ -72,7 +72,7 @@ describe('evidence quality (02.11)', () => {
       ],
     });
     expect(result.assessments[0].status).toBe('partial');
-    expect(result.coveragePercent).toBe(83);
+    expect(result.coveragePercent).toBe(79);
   });
 });
 
