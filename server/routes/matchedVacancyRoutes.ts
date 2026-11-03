@@ -51,6 +51,7 @@ import {
   vacanciesToWarm,
   withShownPageFitViews,
   withWantedCompanyOrder,
+  type MatchedOrder,
 } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, candidatePlan, withDeps } from './helpers';
@@ -408,7 +409,7 @@ async function readMatchedPage(
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
-  decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
+  decorate: MatchedOrder,
   fitLimit = Number.POSITIVE_INFINITY,
 ) {
   // The profile reads before this ran in one piece with the request start (prod 03.11).
@@ -422,6 +423,11 @@ async function readMatchedPage(
     targetLevel,
     matchGeographyOf(campaign.careerGeography),
   );
+  // PRB-041: a list the cache will not serve is ordered from percents read here, in slices.
+  const listKey = matchedListKey(snapshot, campaign, candidateStore, candidateId, filters, decorate);
+  if (!matchedListCache.holds(listKey, { continuing: filters.offset > 0 })) {
+    await decorate.prepare(snapshot);
+  }
   return {
     response: buildMatchedResponse(
       snapshot,
@@ -538,7 +544,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     titleParseStore,
     filters,
     sourceRegistry,
-    withWantedCompanyOrder(deps, candidate.id, sort),
+    withWantedCompanyOrder(deps, candidate.id, sort, request.log),
     fitLimit,
   );
   const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, { offset, fitLimit, request });
