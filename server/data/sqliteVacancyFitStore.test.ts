@@ -80,6 +80,21 @@ describe('encrypted persistent vacancy fit cache and queue', () => {
     expect([...store.cachedVacancyIds('candidate-a')]).toEqual(['vacancy-2']);
     database.close();
   });
+  it('hands the same id set to every read until a row lands (PRB-041: each page copied thousands of ids)', () => {
+    const { database } = setup();
+    const store = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));
+    const a = input();
+    store.putCache(a, evaluateVacancyFit(a), now);
+    const first = store.cachedVacancyIds('candidate-a');
+    expect(store.cachedVacancyIds('candidate-a')).toBe(first);
+    const second = { ...input(), vacancyId: 'vacancy-2' };
+    store.putCache(second, evaluateVacancyFit(second), now);
+    const after = store.cachedVacancyIds('candidate-a');
+    expect(after).not.toBe(first);
+    expect([...first]).toEqual(['vacancy']);
+    expect([...after].sort()).toEqual(['vacancy', 'vacancy-2']);
+    database.close();
+  });
   it('persists queue/cache across store recreation and never exposes profile statements in SQLite rows', () => {
     const { database, store } = setup();
     const a = input();

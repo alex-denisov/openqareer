@@ -224,6 +224,12 @@ function semanticDateColumns(vacancy: UnifiedVacancy): SQLInputValue[] {
  * локальный бенч давал 0,3 мс и не считается. 100 строк — с запасом вдвое.
  */
 export const DEFAULT_POOL_WRITE_CHUNK = 100;
+/**
+ * PRB-041 (prod 03.11): a 100-row hh upsert held the write lock 21 s and the web process
+ * waited 15 s for it. A transaction commits once it has worked this long, so a web write
+ * waits about this much, not a whole chunk.
+ */
+export const DEFAULT_POOL_WRITE_BUDGET_MS = 100;
 
 export type PoolWriteEvent =
   | {
@@ -232,6 +238,8 @@ export type PoolWriteEvent =
       readonly sourceId: string;
       readonly rows: number;
       readonly durationMs: number;
+      /** Part of `durationMs` spent waiting for another writer before the work began. */
+      readonly lockWaitMs: number;
     }
   | {
       readonly kind: 'slice';
@@ -249,6 +257,8 @@ export interface SqliteVacancyPoolStoreOptions {
   readonly matchReader?: MatchRowReader;
   /** Строк на одну транзакцию записи среза; по умолчанию `DEFAULT_POOL_WRITE_CHUNK`. */
   readonly writeChunkSize?: number;
+  /** Работы на одну транзакцию записи среза; по умолчанию `DEFAULT_POOL_WRITE_BUDGET_MS`. */
+  readonly writeBudgetMs?: number;
   /** Свидетель каждой транзакции записи и итога замены среза — для журнала обслуживателя. */
   readonly onWrite?: (event: PoolWriteEvent) => void;
   /** Подбор по смыслу вместо LIKE по описанию (B267 S3); по умолчанию старое поведение. */
@@ -297,6 +307,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private matchReader?: MatchRowReader;
   private readonly hhTextTargetNoted = new Map<string, { key: string; ms: number }>();
   private readonly writeChunkSize: number;
+  private readonly writeBudgetMs: number;
   private readonly onWrite?: (event: PoolWriteEvent) => void;
   readonly matchMode: 'legacy' | 'semantic';
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
@@ -321,10 +332,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   constructor(options: SqliteVacancyPoolStoreOptions) {
     this.matchReader = options.matchReader;
-    this.writeChunkSize = Math.max(
-      1,
-      Math.floor(options.writeChunkSize ?? DEFAULT_POOL_WRITE_CHUNK),
-    );
+    const { writeChunkSize = DEFAULT_POOL_WRITE_CHUNK, writeBudgetMs } = options;
+    this.writeChunkSize = Math.max(1, Math.floor(writeChunkSize));
+    this.writeBudgetMs = Math.max(0, writeBudgetMs ?? DEFAULT_POOL_WRITE_BUDGET_MS);
     this.onWrite = options.onWrite;
     this.matchMode = options.matchMode ?? 'legacy';
     if (options.databasePath !== ':memory:') {
@@ -1046,60 +1056,73 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     tally: WriteTally,
   ): string {
     const storedAt = this.nextSliceTimestamp(sourceId);
-    const insert = this.prepareUpsert();
-    const index = this.prepareIndexUpsert();
-    const semanticDates = this.prepareSemanticDateSync();
-    const projection = this.prepareProjectionUpsert();
-    const textPending = this.prepareClusterTextPending();
-    for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
+    const statements = this.prepareUpsertStatements();
+    for (let offset = 0; offset < vacancies.length;) {
       const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
-      this.writeTransaction('upsert', sourceId, chunk.length, tally, () => {
-        const existing = this.loadExistingHhVacancies(sourceId, chunk);
-        for (const vacancy of chunk) {
-          const previous = existing.get(vacancy.id);
-          const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
-          existing.set(vacancy.id, stored);
-          insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
-          index.run(...indexColumns(stored, sourceId), 0);
-          semanticDates.run(...semanticDateColumns(stored));
-          projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
-          if (gainedFullText(previous, stored)) textPending.run(stored.id, Date.now());
-        }
-      });
+      offset += this.writeTransaction('upsert', sourceId, tally, () =>
+        this.upsertRows(sourceId, chunk, storedAt, statements),
+      );
     }
     return storedAt;
   }
 
-  /** Async counterpart for the maintenance worker: one event-loop turn per chunk. */
+  /** Async counterpart for the maintenance worker: one event-loop turn per transaction. */
   private async upsertAllAsync(
     sourceId: string,
     vacancies: readonly UnifiedVacancy[],
     tally: WriteTally,
   ): Promise<string> {
     const storedAt = this.nextSliceTimestamp(sourceId);
-    const insert = this.prepareUpsert();
-    const index = this.prepareIndexUpsert();
-    const semanticDates = this.prepareSemanticDateSync();
-    const projection = this.prepareProjectionUpsert();
-    const textPending = this.prepareClusterTextPending();
-    for (let offset = 0; offset < vacancies.length; offset += this.writeChunkSize) {
+    const statements = this.prepareUpsertStatements();
+    for (let offset = 0; offset < vacancies.length;) {
       const chunk = vacancies.slice(offset, offset + this.writeChunkSize);
-      this.writeTransaction('upsert', sourceId, chunk.length, tally, () => {
-        const existing = this.loadExistingHhVacancies(sourceId, chunk);
-        for (const vacancy of chunk) {
-          const previous = existing.get(vacancy.id);
-          const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
-          existing.set(vacancy.id, stored);
-          insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
-          index.run(...indexColumns(stored, sourceId), 0);
-          semanticDates.run(...semanticDateColumns(stored));
-          projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
-          if (gainedFullText(previous, stored)) textPending.run(stored.id, Date.now());
-        }
-      });
+      offset += this.writeTransaction('upsert', sourceId, tally, () =>
+        this.upsertRows(sourceId, chunk, storedAt, statements),
+      );
       await yieldToEventLoop();
     }
     return storedAt;
+  }
+
+  private prepareUpsertStatements() {
+    return {
+      insert: this.prepareUpsert(),
+      index: this.prepareIndexUpsert(),
+      semanticDates: this.prepareSemanticDateSync(),
+      projection: this.prepareProjectionUpsert(),
+      textPending: this.prepareClusterTextPending(),
+    };
+  }
+
+  /** Writes rows of one chunk until the transaction spends its budget; returns how many. */
+  private upsertRows(
+    sourceId: string,
+    chunk: readonly UnifiedVacancy[],
+    storedAt: string,
+    statements: ReturnType<SqliteVacancyPoolStore['prepareUpsertStatements']>,
+  ): number {
+    const startedAt = performance.now();
+    const existing = this.loadExistingHhVacancies(sourceId, chunk);
+    let written = 0;
+    for (const vacancy of chunk) {
+      const previous = existing.get(vacancy.id);
+      const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
+      existing.set(vacancy.id, stored);
+      statements.insert.run(
+        stored.id,
+        sourceId,
+        stored.publishedAt,
+        storedAt,
+        JSON.stringify(stored),
+      );
+      statements.index.run(...indexColumns(stored, sourceId), 0);
+      statements.semanticDates.run(...semanticDateColumns(stored));
+      statements.projection.run(stored.id, JSON.stringify(clusterProjectionOf(stored)));
+      if (gainedFullText(previous, stored)) statements.textPending.run(stored.id, Date.now());
+      written += 1;
+      if (performance.now() - startedAt >= this.writeBudgetMs) break;
+    }
+    return written;
   }
 
   /**
@@ -1135,12 +1158,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     let removed = 0;
     for (let offset = 0; offset < ids.length; offset += this.writeChunkSize) {
       const chunk = ids.slice(offset, offset + this.writeChunkSize);
-      this.writeTransaction('remove', sourceId, chunk.length, tally, () => {
+      this.writeTransaction('remove', sourceId, tally, () => {
         for (const id of chunk) {
           removeProjection.run(id);
           removeIndex.run(id);
           removed += Number(remove.run(id).changes);
         }
+        return chunk.length;
       });
     }
     return removed;
@@ -1159,12 +1183,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     let removed = 0;
     for (let offset = 0; offset < ids.length; offset += this.writeChunkSize) {
       const chunk = ids.slice(offset, offset + this.writeChunkSize);
-      this.writeTransaction('remove', sourceId, chunk.length, tally, () => {
+      this.writeTransaction('remove', sourceId, tally, () => {
         for (const id of chunk) {
           removeProjection.run(id);
           removeIndex.run(id);
           removed += Number(remove.run(id).changes);
         }
+        return chunk.length;
       });
       await yieldToEventLoop();
     }
@@ -1174,16 +1199,25 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private writeTransaction(
     operation: 'upsert' | 'remove',
     sourceId: string,
-    rows: number,
     tally: WriteTally,
-    operationBody: () => void,
-  ): void {
+    operationBody: () => number,
+  ): number {
     const startedAt = performance.now();
-    this.inTransaction(operationBody);
+    this.database.exec('BEGIN IMMEDIATE');
+    const lockWaitMs = performance.now() - startedAt;
+    let rows: number;
+    try {
+      rows = operationBody();
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
     const durationMs = performance.now() - startedAt;
     tally.transactions += 1;
     tally.maxTransactionMs = Math.max(tally.maxTransactionMs, durationMs);
-    this.onWrite?.({ kind: 'transaction', operation, sourceId, rows, durationMs });
+    this.onWrite?.({ kind: 'transaction', operation, sourceId, rows, durationMs, lockWaitMs });
+    return rows;
   }
 
   /**

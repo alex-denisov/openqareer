@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { personNameFromTitle } from '../../shared/personName';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
@@ -14,6 +15,8 @@ import {
   type CandidateCompanyVacancyInput,
 } from '../domain/candidateCompanies';
 import { finishMatchedVacancies } from './matchedVacancyRoutes';
+import { createCandidateWindowCache } from './candidateWindowCache';
+import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { isPrivateEmployerCluster } from '../vacancies/privateEmployerMask';
@@ -144,21 +147,71 @@ function safeRecruiter(contact: RecruiterContact, companyKey: string): Candidate
   };
 }
 
-async function readCurrentMatched(deps: RouteDeps, candidateId: string) {
+const NO_MATCHES: readonly MatchedVacancyItem[] = [];
+/** Same window as the matched list: the background worker re-ranks the pool no faster. */
+const SELECTION_WINDOW_MS = 60_000;
+const selectionCache = createCandidateWindowCache<SelectionProjection>(SELECTION_WINDOW_MS);
+const snapshotIds = new WeakMap<readonly MatchedVacancyItem[], number>();
+let nextSnapshotId = 0;
+
+interface SelectionProjection {
+  readonly vacancies: ReturnType<typeof projectVacancyItems>;
+}
+
+function snapshotId(snapshot: readonly MatchedVacancyItem[]): number {
+  const known = snapshotIds.get(snapshot);
+  if (known !== undefined) return known;
+  nextSnapshotId += 1;
+  snapshotIds.set(snapshot, nextSnapshotId);
+  return nextSnapshotId;
+}
+
+/**
+ * PRB-041 (prod 03.11): the cabinet reads this list and one search per company — 3 800 reads
+ * an hour, each rebuilding the whole selection (geography, profile limits, masking): 37 % of
+ * the time the event loop was held. The key carries everything the selection is built from,
+ * so a changed role, region or decision is seen on the next read.
+ */
+async function readSelection(deps: RouteDeps, candidateId: string): Promise<SelectionProjection> {
   const { confirmedSkills } = readMatchProfile(deps.candidateStore, candidateId);
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const roles = [...campaign.roles.value];
-  if (confirmedSkills.length === 0 && roles.length === 0) return [];
-  const level = readTargetLevel(deps.candidateStore, candidateId, roles);
-  const snapshot = await readMatchedSnapshot(
-    deps.multiSourceEngine,
-    candidateId,
-    confirmedSkills,
-    roles,
-    level,
-    matchGeographyOf(campaign.careerGeography),
-  );
-  return finishMatchedVacancies(snapshot, roles, campaign, deps.candidateStore, candidateId);
+  const level =
+    confirmedSkills.length === 0 && roles.length === 0
+      ? undefined
+      : readTargetLevel(deps.candidateStore, candidateId, roles);
+  const snapshot =
+    confirmedSkills.length === 0 && roles.length === 0
+      ? NO_MATCHES
+      : await readMatchedSnapshot(
+          deps.multiSourceEngine,
+          candidateId,
+          confirmedSkills,
+          roles,
+          level,
+          matchGeographyOf(campaign.careerGeography),
+        );
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify([
+        roles,
+        campaign.regions.value,
+        campaign.suggestedRegions ?? [],
+        campaign.remoteOnly,
+        campaign.careerGeography ?? null,
+        deps.candidateStore.decisionProfileRepo.get(candidateId) ?? null,
+        deps.candidateStore.listVacancyDecisions(candidateId),
+      ]),
+    )
+    .digest('hex')
+    .slice(0, 16);
+  return selectionCache.read(`${candidateId}|${snapshotId(snapshot)}|${fingerprint}`, () => {
+    const matches =
+      snapshot === NO_MATCHES
+        ? []
+        : finishMatchedVacancies(snapshot, roles, campaign, deps.candidateStore, candidateId);
+    return { vacancies: projectVacancyItems(matches) };
+  });
 }
 
 function linkedinStatus(
@@ -195,16 +248,18 @@ export async function companyContext(
   deps: RouteDeps,
   candidateId: string,
 ): Promise<CandidateCompanyContext> {
-  const matches = await readCurrentMatched(deps, candidateId);
+  const { vacancies } = await readSelection(deps, candidateId);
   const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
   // Макет 13: у компании только вакансии подборки, пул компании не подмешивается (28.10).
-  const vacancies = projectVacancyItems(matches);
   const vacancyCompanyKeys = new Map(
     vacancies.map((vacancy) => [vacancy.id, candidateCompanyKey(vacancy.companyName)]),
   );
-  const recruiters = (deps.recruiterContactsRepo?.listContactsByCandidateId(candidateId) ?? [])
-    .filter((contact) => vacancyCompanyKeys.has(contact.vacancyId))
-    .map((contact) => safeRecruiter(contact, vacancyCompanyKeys.get(contact.vacancyId)!));
+  const recruiters = (
+    deps.recruiterContactsRepo?.listContactsByCandidateId(
+      candidateId,
+      new Set(vacancyCompanyKeys.keys()),
+    ) ?? []
+  ).map((contact) => safeRecruiter(contact, vacancyCompanyKeys.get(contact.vacancyId)!));
   const jobs = (deps.recruiterContactsRepo?.listJobsByCandidateId(candidateId) ?? [])
     .filter((job) => vacancyCompanyKeys.has(job.vacancyId))
     .map((job) => ({ vacancyId: job.vacancyId, status: job.status }));

@@ -88,6 +88,18 @@ describe('SqliteRecruiterContactsRepository', () => {
     expect(retrieved[0].sourceReceipt?.method).toBe('pool_session');
   });
 
+  it('reads a candidate\'s contacts only for the asked vacancies (PRB-041: every company read parsed all)', () => {
+    const { repo } = createRepo();
+    repo.saveContacts('candidate-1', 'vac-101', [sampleContact1]);
+    repo.saveContacts('candidate-1', 'vac-202', [{ ...sampleContact2, id: 'rc-2', vacancyId: 'vac-202' }]);
+    repo.saveContacts('candidate-2', 'vac-101', [{ ...sampleContact1, id: 'rc-other' }]);
+
+    const read = repo.listContactsByCandidateId('candidate-1', new Set(['vac-101']));
+
+    expect(read.map((contact) => contact.id)).toEqual(['rc-1']);
+    expect(repo.listContactsByCandidateId('candidate-1')).toHaveLength(2);
+  });
+
   it('возвращает пустой массив для вакансии без контактов', () => {
     const { repo } = createRepo();
     const retrieved = repo.getContactsByVacancyId('non-existent');
