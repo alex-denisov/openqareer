@@ -7,6 +7,24 @@ export const MAX_ROLE_KEYWORDS = 15;
 /** Слово, встреченное у одной вакансии, — особенность работодателя, а не роли. */
 export const MIN_KEYWORD_VACANCIES = 2;
 
+/**
+ * Личные качества: в резюме их не перечисляют словами, а показывают достижениями,
+ * поэтому ATS-проверки по ключевым словам их не считают. Одна вакансия пишет
+ * «Communication skills», другая «Коммуникативные навыки» — без фильтра одно
+ * качество занимало четыре места из пятнадцати (03.11).
+ */
+const SOFT_SKILL_PATTERNS: readonly RegExp[] = [
+  /communicat|коммуник/iu,
+  /collaborat|сотрудничеств|teamwork|team player|командн\S* (?:работ|игрок)/iu,
+  /thinking|мышлени/iu,
+  /problem[\s-]solving|решени\S* (?:проблем|задач)/iu,
+  /interpersonal|межличност|emotional intelligence|эмоциональн\S* интеллект/iu,
+  /стрессоустойчив|stress resistan|adaptab|адаптивност|гибкост/iu,
+  /attention to detail|внимательност|ответственност|self-motivat|проактивн|инициативн/iu,
+];
+
+const isSoftSkill = (label: string) => SOFT_SKILL_PATTERNS.some((pattern) => pattern.test(label));
+
 export interface RoleKeywords {
   readonly keywords: readonly string[];
   /** Вакансий роли, у которых есть извлечённые требования. */
@@ -37,6 +55,7 @@ export function topRoleKeywords(perVacancy: readonly (readonly string[])[]): Rol
   for (const labels of perVacancy) {
     const seen = new Set<string>();
     for (const label of labels) {
+      if (isSoftSkill(label)) continue;
       const display = canonicalizeSkill(label);
       const key = keyOf(display);
       if (!key || seen.has(key)) continue;
