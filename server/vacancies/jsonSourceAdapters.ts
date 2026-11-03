@@ -1,4 +1,5 @@
 import { himalayasSalaryPeriod } from '../../shared/vacancySalaryPeriod';
+import { repairMojibake } from './mojibake';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
   asArray,
@@ -114,15 +115,17 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
       .map((item) => {
         const job = record(item);
         const salary = remoteOkSalary(job);
+        // RemoteOK serves UTF-8 bytes as Latin-1 characters (03.11).
+        const clean = (value: unknown) => repairMojibake(text(value));
         return build({
           sourceId,
           context,
           externalId: text(job.id) || text(job.slug),
-          title: text(job.position) || text(job.title),
-          company: text(job.company),
-          location: text(job.location) || undefined,
+          title: clean(job.position) || clean(job.title),
+          company: clean(job.company),
+          location: clean(job.location) || undefined,
           isRemote: true,
-          description: text(job.description) || text(job.position),
+          description: clean(job.description) || clean(job.position),
           skills: stringList(job.tags),
           salary,
           url: text(job.url),
@@ -259,11 +262,12 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
         sourceId,
         context,
         externalId: text(job.guid) || text(job.applicationLink),
-        title: text(job.title),
-        company: text(job.companyName),
+        // Some Himalayas texts carry the same UTF-8-as-Latin-1 damage (03.11).
+        title: repairMojibake(text(job.title)),
+        company: repairMojibake(text(job.companyName)),
         location: stringList(job.locationRestrictions).join('; ') || undefined,
         isRemote: true,
-        description: text(job.description) || text(job.excerpt) || text(job.title),
+        description: repairMojibake(text(job.description) || text(job.excerpt) || text(job.title)),
         // Himalayas categories are role taxonomy, not extracted skill evidence.
         skills: [],
         employmentType: text(job.employmentType) || undefined,
