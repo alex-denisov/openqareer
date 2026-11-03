@@ -203,20 +203,6 @@ function ResultActions({
   readonly onStartAgain: () => void;
   readonly onBack: () => void;
 }) {
-  const [diaryError, setDiaryError] = useState<string | null>(null);
-  const [writing, setWriting] = useState(false);
-  const writeDiary = async () => {
-    if (!diary) return;
-    setWriting(true);
-    setDiaryError(null);
-    try {
-      await diary({ session });
-    } catch {
-      setDiaryError('Запись в дневник не создана. Попробуйте ещё раз.');
-    } finally {
-      setWriting(false);
-    }
-  };
   return (
     <div className="career-mock-result-actions">
       <button
@@ -228,23 +214,52 @@ function ResultActions({
         <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
         Пройти заново
       </button>
-      {!diary ? <InterviewDiaryAction key={session.id} sessionId={session.id} /> : null}
       {diary ? (
-        <button
-          type="button"
-          className="career-btn career-btn-secondary"
-          disabled={writing}
-          aria-busy={writing}
-          onClick={() => void writeDiary()}
-        >
-          <Notebook aria-hidden="true" className="career-mock-icon" />
-          {writing ? 'Сохраняем' : 'Записать в дневник'}
-        </button>
-      ) : null}
+        <DiaryPortButton session={session} diary={diary} />
+      ) : (
+        <InterviewDiaryAction key={session.id} sessionId={session.id} />
+      )}
       <button type="button" className="career-btn career-btn-ghost" onClick={onBack}>
         К подготовке
       </button>
-      {diaryError ? <InlineError error={diaryError} /> : null}
     </div>
+  );
+}
+
+/** «Записать в дневник» через порт хозяина окна: состояние записи и ошибка рядом с кнопкой. */
+function DiaryPortButton({
+  session,
+  diary,
+}: {
+  readonly session: InterviewSessionView;
+  readonly diary: InterviewDiaryPort;
+}) {
+  const [diaryError, setDiaryError] = useState<string | null>(null);
+  const [writing, setWriting] = useState(false);
+  const writeDiary = async () => {
+    setWriting(true);
+    setDiaryError(null);
+    try {
+      await diary({ session });
+    } catch {
+      setDiaryError('Запись в дневник не создана. Попробуйте ещё раз.');
+    } finally {
+      setWriting(false);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="career-btn career-btn-secondary"
+        disabled={writing}
+        aria-busy={writing}
+        onClick={() => void writeDiary()}
+      >
+        <Notebook aria-hidden="true" className="career-mock-icon" />
+        {writing ? 'Сохраняем' : 'Записать в дневник'}
+      </button>
+      {diaryError ? <InlineError error={diaryError} /> : null}
+    </>
   );
 }

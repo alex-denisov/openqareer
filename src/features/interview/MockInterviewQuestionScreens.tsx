@@ -51,24 +51,7 @@ export function QuestionScreen({ flow, props }: ScreenProps) {
     <div className="career-mock-layout career-mock-question-layout">
       <main className="career-mock-panel career-mock-question-panel">
         <QuestionProgress session={flow.session} title="Вопрос" />
-        <div className="career-mock-dock-acts" role="group" aria-label="Действия с вопросом">
-          <button
-            type="button"
-            className="career-mock-dock-chip"
-            disabled={busy}
-            onClick={() => void flow.stop()}
-          >
-            Остановиться
-          </button>
-          <button
-            type="button"
-            className="career-mock-dock-chip"
-            disabled={busy}
-            onClick={() => void flow.skip()}
-          >
-            Пропустить
-          </button>
-        </div>
+        <QuestionDockActions flow={flow} busy={busy} />
         <p className="career-mock-question-prompt">{question.prompt}</p>
         {flow.error ? <SessionError flow={flow} onRetryAnswer={submit} /> : null}
         <AnswerComposer
@@ -78,35 +61,65 @@ export function QuestionScreen({ flow, props }: ScreenProps) {
           onSubmit={submit}
           onVoice={flow.startVoice}
         />
-        <div className="career-mock-action-row career-mock-question-actions">
-          <button
-            type="button"
-            className="career-btn career-btn-secondary career-btn-sm"
-            disabled={busy}
-            onClick={flow.startVoice}
-          >
-            <Microphone aria-hidden="true" className="career-mock-icon" />
-            Ответить голосом
-          </button>
-          <button
-            type="button"
-            className="career-btn career-btn-ghost career-btn-sm"
-            disabled={busy}
-            onClick={() => void flow.skip()}
-          >
-            Пропустить вопрос
-          </button>
-          <button
-            type="button"
-            className="career-btn career-btn-ghost career-btn-sm"
-            disabled={busy}
-            onClick={() => void flow.stop()}
-          >
-            Остановиться
-          </button>
-        </div>
+        <QuestionActions flow={flow} busy={busy} />
       </main>
       <QuestionSourcePanel flow={flow} props={props} />
+    </div>
+  );
+}
+
+/** 390, макет 14: «Остановиться» и «Пропустить» чипами над вопросом. */
+function QuestionDockActions({ flow, busy }: { readonly flow: Flow; readonly busy: boolean }) {
+  return (
+    <div className="career-mock-dock-acts" role="group" aria-label="Действия с вопросом">
+      <button
+        type="button"
+        className="career-mock-dock-chip"
+        disabled={busy}
+        onClick={() => void flow.stop()}
+      >
+        Остановиться
+      </button>
+      <button
+        type="button"
+        className="career-mock-dock-chip"
+        disabled={busy}
+        onClick={() => void flow.skip()}
+      >
+        Пропустить
+      </button>
+    </div>
+  );
+}
+
+function QuestionActions({ flow, busy }: { readonly flow: Flow; readonly busy: boolean }) {
+  return (
+    <div className="career-mock-action-row career-mock-question-actions">
+      <button
+        type="button"
+        className="career-btn career-btn-secondary career-btn-sm"
+        disabled={busy}
+        onClick={flow.startVoice}
+      >
+        <Microphone aria-hidden="true" className="career-mock-icon" />
+        Ответить голосом
+      </button>
+      <button
+        type="button"
+        className="career-btn career-btn-ghost career-btn-sm"
+        disabled={busy}
+        onClick={() => void flow.skip()}
+      >
+        Пропустить вопрос
+      </button>
+      <button
+        type="button"
+        className="career-btn career-btn-ghost career-btn-sm"
+        disabled={busy}
+        onClick={() => void flow.stop()}
+      >
+        Остановиться
+      </button>
     </div>
   );
 }
@@ -146,6 +159,23 @@ function AnswerComposer({
       <p id="career-mock-answer-help" className="career-mock-sr-only">
         Текст будет отправлен на оценку после нажатия кнопки.
       </p>
+      <ComposerButtons empty={empty} disabled={disabled} onVoice={onVoice} />
+    </form>
+  );
+}
+
+/** Пустое поле — микрофон (390), иначе отправка; пока ответ оценивается — индикатор. */
+function ComposerButtons({
+  empty,
+  disabled,
+  onVoice,
+}: {
+  readonly empty: boolean;
+  readonly disabled: boolean;
+  readonly onVoice: () => void;
+}) {
+  return (
+    <>
       {empty && !disabled ? (
         // 390, макет 14: пока поле пустое, в доке вместо отправки — голосовой ввод.
         <button
@@ -170,7 +200,7 @@ function AnswerComposer({
           <PaperPlaneTilt aria-hidden="true" className="career-mock-icon" />
         )}
       </button>
-    </form>
+    </>
   );
 }
 
@@ -311,38 +341,48 @@ export function ReviewScreen({ flow, props }: ScreenProps) {
         <InterviewDiaryAction key={`${session.id}:${session.version}`} sessionId={session.id} />
         {answer.evaluation.feedback ? <ModelFeedback message={answer.evaluation.feedback} /> : null}
         {flow.error ? <SessionError flow={flow} /> : null}
-        <div className="career-mock-action-row career-mock-review-actions">
-          <button
-            type="button"
-            className="career-btn career-btn-primary"
-            disabled={flow.operation !== null}
-            onClick={() => void flow.next()}
-          >
-            <ArrowRight aria-hidden="true" className="career-mock-icon" />
-            Следующий вопрос
-          </button>
-          <button
-            type="button"
-            className="career-btn career-btn-secondary"
-            disabled={flow.operation !== null}
-            onClick={flow.tryAgain}
-          >
-            <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
-            Ответить ещё раз
-          </button>
-          {question.storyId ? (
-            <button
-              type="button"
-              className="career-btn career-btn-ghost"
-              onClick={() => props.onOpenStarStories(() => flow.retryLoad())}
-            >
-              <PencilSimple aria-hidden="true" className="career-mock-icon" />
-              Править STAR-историю
-            </button>
-          ) : null}
-        </div>
+        <ReviewActions flow={flow} props={props} storyId={question.storyId} />
       </main>
       <QuestionSourcePanel flow={flow} props={props} />
+    </div>
+  );
+}
+
+function ReviewActions({
+  flow,
+  props,
+  storyId,
+}: ScreenProps & { readonly storyId: string | null }) {
+  return (
+    <div className="career-mock-action-row career-mock-review-actions">
+      <button
+        type="button"
+        className="career-btn career-btn-primary"
+        disabled={flow.operation !== null}
+        onClick={() => void flow.next()}
+      >
+        <ArrowRight aria-hidden="true" className="career-mock-icon" />
+        Следующий вопрос
+      </button>
+      <button
+        type="button"
+        className="career-btn career-btn-secondary"
+        disabled={flow.operation !== null}
+        onClick={flow.tryAgain}
+      >
+        <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
+        Ответить ещё раз
+      </button>
+      {storyId ? (
+        <button
+          type="button"
+          className="career-btn career-btn-ghost"
+          onClick={() => props.onOpenStarStories(() => flow.retryLoad())}
+        >
+          <PencilSimple aria-hidden="true" className="career-mock-icon" />
+          Править STAR-историю
+        </button>
+      ) : null}
     </div>
   );
 }
