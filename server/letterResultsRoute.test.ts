@@ -99,6 +99,15 @@ describe('translateLetterFacts', () => {
     expect(await translateLetterFacts(slow, [fact], 20)).toEqual(new Map());
   });
 
+  it('a late answer is remembered for the next letter', async () => {
+    let answer: (value: { bullets: { key: string; text: string }[] }) => void = () => undefined;
+    const late = { translate: () => new Promise<{ bullets: { key: string; text: string }[] }>((resolve) => { answer = resolve; }) };
+    expect(await translateLetterFacts(late, [fact], 20)).toEqual(new Map());
+    answer({ bullets: [{ key: 'ach-3-1', text: OUTCOME_EN }] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await translateLetterFacts(undefined, [fact], 20)).toEqual(new Map([['ach-3-1', OUTCOME_EN]]));
+  });
+
   it('a failing translator leaves the letter without a result', async () => {
     const failing = { translate: async () => { throw new Error('provider down'); } };
     expect(await translateLetterFacts(failing, [fact], 1_000)).toEqual(new Map());

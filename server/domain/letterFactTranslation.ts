@@ -55,21 +55,31 @@ export async function translateLetterFacts(
       facts: [fact.statement],
     })),
   };
+  // A late answer still lands in the cache: the next letter quotes it at once.
+  const answered = translator
+    .translate(request)
+    .then((output) => checkedTranslations(missing, output))
+    .catch(() => new Map<string, string>());
   const deadline = expiresIn(budgetMs);
-  const output = await Promise.race([
-    translator.translate(request).catch(() => null),
-    deadline.promise,
-  ]).finally(deadline.cancel);
+  const translated = await Promise.race([answered, deadline.promise]).finally(deadline.cancel);
+  return new Map([...known, ...(translated ?? [])]);
+}
+
+function checkedTranslations(
+  facts: readonly LetterResultFact[],
+  output: BulletTranslationOutput | null,
+): Map<string, string> {
   const answers = new Map((output?.bullets ?? []).map((bullet) => [bullet.key, bullet.text]));
-  const translated = missing.flatMap((fact) => {
-    const text = answers.get(fact.id);
-    if (!text) return [];
-    const checked = checkedBullet({ text, sourceFactIds: ['0'] }, new Map([['0', fact.statement]]), 'en');
-    if (!checked) return [];
-    remember(fact.statement, checked.text);
-    return [[fact.id, checked.text] as const];
-  });
-  return new Map([...known, ...translated]);
+  return new Map(
+    facts.flatMap((fact) => {
+      const text = answers.get(fact.id);
+      if (!text) return [];
+      const checked = checkedBullet({ text, sourceFactIds: ['0'] }, new Map([['0', fact.statement]]), 'en');
+      if (!checked) return [];
+      remember(fact.statement, checked.text);
+      return [[fact.id, checked.text] as const];
+    }),
+  );
 }
 
 /** Только для тестов: кэш общий на процесс. */
