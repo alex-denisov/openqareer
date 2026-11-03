@@ -26,6 +26,10 @@ const ROWS: readonly Row[] = [
   { id: 'abu-dhabi', location: 'Abu Dhabi, United Arab Emirates' },
   { id: 'new-york', location: 'New York, NY' },
   { id: 'berlin', location: 'Berlin, Germany' },
+  { id: 'troitsk', location: 'Троицк (Москва)' },
+  { id: 'tashkent', location: 'Ташкент' },
+  // Кавычки и обратная косая черта не ломают разбор места на части.
+  { id: 'quoted', location: 'Москва, БЦ "Сити" \\ башня' },
   { id: 'remote-global', location: 'Remote', isRemote: true },
   {
     id: 'remote-us',
@@ -125,10 +129,19 @@ describe('a country beside a city does not narrow the selection', () => {
     const database = seeded();
     const before = selectedIds(database, ['Москва', 'Удалённо из РФ']);
     const after = selectedIds(database, ['Москва', 'Удалённо из РФ', 'ОАЭ']);
-    expect(before).toEqual(['moscow', 'remote-global']);
+    expect(before).toEqual(['moscow', 'quoted', 'remote-global', 'troitsk']);
     expect(after).toEqual(expect.arrayContaining(before));
     expect(after).toEqual(expect.arrayContaining(['abu-dhabi', 'dubai']));
     expect(after).not.toContain('new-york');
     expect(after).not.toContain('remote-us');
+  });
+});
+
+describe('a place matches by whole parts, not substrings (03.11)', () => {
+  it('«Троицк (Москва)» is Moscow; «Ташкент» is not a US «Кент»', () => {
+    const ids = selectedIds(seeded(), ['Москва', 'США']);
+    expect(ids).toEqual(expect.arrayContaining(['moscow', 'new-york', 'troitsk']));
+    expect(ids).not.toContain('tashkent');
+    expect(ids).not.toContain('berlin');
   });
 });
