@@ -582,6 +582,7 @@ describe('ResponsesBoard B450 workspace navigation', () => {
         id: 'due-follow-up',
         stage: 'applied',
         whoseTurn: 'candidate',
+        deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
         followUp: {
           dueAt: '2026-10-14T00:00:00.000Z',
           urgency: 'due',
@@ -593,6 +594,7 @@ describe('ResponsesBoard B450 workspace navigation', () => {
         id: 'overdue-follow-up',
         stage: 'applied',
         whoseTurn: 'candidate',
+        deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
         followUp: {
           dueAt: '2026-10-10T00:00:00.000Z',
           urgency: 'overdue',

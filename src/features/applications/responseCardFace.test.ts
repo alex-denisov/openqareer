@@ -56,18 +56,24 @@ describe('responseNextStep', () => {
         },
       } as never),
     ).toEqual({ text: 'Ждать ответа до 14.10', yours: false });
+    const dueReminder = {
+      dueAt: '2026-10-08T00:00:00',
+      urgency: 'due',
+      source: 'policy',
+      daysSinceContact: 5,
+    };
     expect(
       responseNextStep({
         ...base,
         whoseTurn: 'candidate',
-        followUp: {
-          dueAt: '2026-10-08T00:00:00',
-          urgency: 'due',
-          source: 'policy',
-          daysSinceContact: 5,
-        },
+        deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
+        followUp: dueReminder,
       } as never).text,
     ).toBe('Напомнить компании сегодня');
+    // An unconfirmed send is resent, not followed up (B511 G3 item 5).
+    expect(
+      responseNextStep({ ...base, whoseTurn: 'candidate', followUp: dueReminder } as never).text,
+    ).toBe('Повторить отклик');
     expect(
       responseNextStep({
         ...base,

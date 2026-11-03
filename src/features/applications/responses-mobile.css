@@ -596,15 +596,20 @@
     white-space: nowrap;
   }
 
+  /* Макет 5 `.om-next`: a passive step is soft, only `.is-hot` (the candidate's move) is accent. */
   .career-responses-mobile-row-next {
     min-inline-size: 0;
     overflow: hidden;
-    color: var(--career-accent);
+    color: var(--career-text-soft);
     font-size: var(--career-text-xs);
-    font-weight: 600;
+    font-weight: 400;
     text-align: end;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .career-responses-mobile-row-next.is-hot {
+    color: var(--career-accent);
   }
 
   .career-responses-mobile-feed-footer {
