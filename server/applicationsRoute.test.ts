@@ -489,6 +489,47 @@ describe('B451 applications filters, labels, bulk operations and company wants',
     expect(assignment.json().error.code).toBe('application_not_found');
   });
 
+  it('applies close and label only to the rows picked by id', async () => {
+    const { app, authorization } = await createApp();
+    const ids = [];
+    for (const key of ['b451-pick-a', 'b451-pick-b', 'b451-pick-c']) {
+      ids.push((await postApplication(app, authorization, key, 'saved')).json().data.id as string);
+    }
+    const picked = ids.slice(0, 2);
+    const bulk = (path: string, payload: Record<string, unknown>) =>
+      app.inject({ method: 'POST', url: APPLICATIONS_URL + path, headers: { authorization, ...ORIGIN }, payload });
+    const label = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/application-labels',
+      headers: { authorization, ...ORIGIN },
+      payload: { name: 'Приоритет' },
+    });
+    const labelAction = { type: 'label', labelId: label.json().data.id };
+    const filters = { stage: [], ids: picked };
+    expect((await bulk('/bulk/preview', { filters, action: labelAction })).json().data.affectedCount).toBe(2);
+    const labelled = await bulk('/bulk', { filters, action: labelAction, operationId: 'b451-label-1', confirmCount: 2 });
+    expect(labelled.statusCode).toBe(200);
+    expect(labelled.json().data).toMatchObject({ state: 'completed', changedCount: 2 });
+    expect((await bulk('/bulk/preview', { filters, action: labelAction })).json().data.affectedCount).toBe(0);
+
+    const closed = await bulk('/bulk', { filters, action: { type: 'close' }, operationId: 'b451-pick-close', confirmCount: 2 });
+    expect(closed.json().data.changedCount).toBe(2);
+    const archived = await app.inject({ url: APPLICATIONS_URL + '?stage=archived', headers: { authorization } });
+    const archivedRows = archived.json().data as { id: string; labels: { name: string }[] }[];
+    expect(archivedRows.map((row) => row.id).sort()).toEqual([...picked].sort());
+    expect(archivedRows.every((row) => row.labels.some((item) => item.name === 'Приоритет'))).toBe(true);
+
+    const missing = { type: 'label', labelId: 'no-such-label' };
+    const missingRun = await bulk('/bulk', {
+      filters: { stage: [], ids: [ids[2]] },
+      action: missing,
+      operationId: 'b451-label-missing',
+      confirmCount: 1,
+    });
+    expect(missingRun.statusCode).toBe(404);
+    expect((await bulk('/bulk/preview', { filters: { stage: [], ids: [] }, action: missing })).statusCode).toBe(422);
+  });
+
   it('previews, confirms and replays a filtered close operation', async () => {
     const { app, authorization } = await createApp();
     await postApplication(app, authorization, 'b451-bulk-a', 'saved');

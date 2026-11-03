@@ -1,15 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { DotsThreeVertical } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type {
   ApplicationListPageMeta,
   ApplicationListQuery,
   ApplicationView,
-} from './applicationsApi';
-import {
-  executeApplicationBulk,
-  previewApplicationBulk,
-  type ApplicationBulkAction,
 } from './applicationsApi';
 import { humanSourceLabel } from './sourceLabels';
 import {
@@ -18,9 +13,12 @@ import {
   responseStatusPill,
 } from './responseCardFace';
 import { StatusIcon } from './ResponsesCard';
+import { ResponsesSelectionBar } from './ResponsesSelectionBar';
 
 export interface ResponsesApplicationsTableProps {
   readonly applications: readonly ApplicationView[];
+  /** Every row of the filter, not only the shown page: the bar resolves picked ids against it. */
+  readonly filteredApplications: readonly ApplicationView[];
   readonly selectedIds: ReadonlySet<string>;
   readonly onToggleSelected: (id: string) => void;
   readonly onToggleAll: () => void;
@@ -33,6 +31,8 @@ export interface ResponsesApplicationsTableProps {
   readonly onBulkComplete: (notice: string) => void;
   readonly selectedApplicationId?: string;
   readonly onSelectApplication: (id: string) => void;
+  /** «Исправить резюме и повторить» opens the resume after the retry is queued. */
+  readonly onOpenResume?: () => void;
 }
 
 interface ApplicationListProps {
@@ -60,7 +60,11 @@ export function ResponsesApplicationsTable(props: ResponsesApplicationsTableProp
   };
   return (
     <section className="career-responses-table-wrap" aria-label="Отклики таблицей">
-      <ApplicationSelectionBar {...props} onBulkComplete={handleBulkComplete} />
+      <ApplicationSelectionBar
+        {...props}
+        onBulkComplete={handleBulkComplete}
+        onNotice={setBulkNotice}
+      />
       {bulkNotice ? (
         <p className="career-responses-bulk-notice" role="status">
           {bulkNotice}
@@ -72,179 +76,31 @@ export function ResponsesApplicationsTable(props: ResponsesApplicationsTableProp
   );
 }
 
-function ApplicationSelectionBar(props: ResponsesApplicationsTableProps) {
+function ApplicationSelectionBar(
+  props: ResponsesApplicationsTableProps & {
+    readonly onBulkComplete: (notice: string) => void;
+    readonly onNotice: (notice: string) => void;
+  },
+) {
   if (!props.selectedIds.size && !props.allSelectedByFilter) return null;
+  const selected = props.allSelectedByFilter
+    ? props.filteredApplications
+    : props.filteredApplications.filter((application) => props.selectedIds.has(application.id));
   return (
-    <>
-      <div className="career-responses-selection">
-        <span role="status">
-          {props.allSelectedByFilter
-            ? 'Выбраны все ' + (props.pageMeta?.total ?? 0) + ' по фильтру'
-            : 'Выбрано ' + props.selectedIds.size + ' на странице'}
-        </span>
-        {props.pageMeta && props.allowSelectAllFiltered ? (
-          <button type="button" onClick={props.onSelectAllFiltered}>
-            {props.allSelectedByFilter
-              ? 'Снять выбор по фильтру'
-              : 'Выбрать все ' + props.pageMeta.total + ' по фильтру'}
-          </button>
-        ) : null}
-        <button type="button" onClick={props.onClearSelection}>
-          Снять выбор
-        </button>
-      </div>
-      {props.allSelectedByFilter ? (
-        <ApplicationBulkActions query={props.query} onComplete={props.onBulkComplete} />
-      ) : null}
-    </>
+    <ResponsesSelectionBar
+      selected={selected}
+      total={props.pageMeta?.total ?? props.filteredApplications.length}
+      allSelectedByFilter={props.allSelectedByFilter}
+      allowSelectAllFiltered={props.allowSelectAllFiltered}
+      query={props.query}
+      onSelectAllFiltered={props.onSelectAllFiltered}
+      onClearSelection={props.onClearSelection}
+      onComplete={props.onBulkComplete}
+      onNotice={props.onNotice}
+      onOpenResume={props.onOpenResume}
+    />
   );
 }
-
-interface BulkActionController {
-  readonly action: ApplicationBulkAction['type'];
-  readonly setAction: (action: ApplicationBulkAction['type']) => void;
-  readonly previewCount: number | null;
-  readonly error: string;
-  readonly busy: boolean;
-  readonly preview: (action: ApplicationBulkAction['type']) => void;
-  readonly confirm: () => void;
-}
-
-function useApplicationBulkPreview(
-  query: ApplicationListQuery,
-  setBusy: (value: boolean) => void,
-  setError: (value: string) => void,
-  setPreviewCount: (value: number | null) => void,
-) {
-  const runPreview = useCallback(
-    async (next: ApplicationBulkAction['type']) => {
-      setBusy(true);
-      setError('');
-      try {
-        const result = await previewApplicationBulk(
-          query,
-          next === 'close' ? { type: 'close' } : { type: 'retry' },
-        );
-        setPreviewCount(result.affectedCount);
-      } catch {
-        setError('Не удалось проверить состав массового действия. Повторите запрос.');
-      } finally {
-        setBusy(false);
-      }
-    },
-    [query, setBusy, setError, setPreviewCount],
-  );
-  return useCallback((next: ApplicationBulkAction['type']) => void runPreview(next), [runPreview]);
-}
-
-function useApplicationBulkConfirm(
-  query: ApplicationListQuery,
-  action: ApplicationBulkAction['type'],
-  previewCount: number | null,
-  onComplete: (notice: string) => void,
-  setBusy: (value: boolean) => void,
-  setError: (value: string) => void,
-  setPreviewCount: (value: number | null) => void,
-) {
-  const runConfirm = useCallback(async () => {
-    if (previewCount === null) return;
-    setBusy(true);
-    setError('');
-    try {
-      const result = await executeApplicationBulk(
-        query,
-        action === 'close' ? { type: 'close' } : { type: 'retry' },
-        previewCount,
-      );
-      const notice =
-        result.state === 'prepared'
-          ? 'В очередь подготовлено ' +
-            (result.preparedCount ?? 0) +
-            '; отправлено ' +
-            (result.sentCount ?? 0) +
-            '.'
-          : 'Закрыто ' + result.changedCount + ' откликов.';
-      setPreviewCount(null);
-      onComplete(notice);
-    } catch {
-      setError('Список изменился или действие не выполнено. Обновите фильтр и проверьте ещё раз.');
-      setPreviewCount(null);
-    } finally {
-      setBusy(false);
-    }
-  }, [action, onComplete, previewCount, query, setBusy, setError, setPreviewCount]);
-  return useCallback(() => void runConfirm(), [runConfirm]);
-}
-
-function useApplicationBulkActions(
-  query: ApplicationListQuery,
-  onComplete: (notice: string) => void,
-): BulkActionController {
-  const [action, setAction] = useState<ApplicationBulkAction['type']>('close');
-  const [previewCount, setPreviewCount] = useState<number | null>(null);
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const runPreview = useApplicationBulkPreview(query, setBusy, setError, setPreviewCount);
-  const preview = (next: ApplicationBulkAction['type']) => {
-    setAction(next);
-    runPreview(next);
-  };
-  const confirm = useApplicationBulkConfirm(
-    query,
-    action,
-    previewCount,
-    onComplete,
-    setBusy,
-    setError,
-    setPreviewCount,
-  );
-  return { action, setAction, previewCount, error, busy, preview, confirm };
-}
-
-export function ApplicationBulkActions({
-  query,
-  onComplete,
-}: {
-  readonly query: ApplicationListQuery;
-  readonly onComplete: (notice: string) => void;
-}) {
-  const controller = useApplicationBulkActions(query, onComplete);
-  return (
-    <div className="career-responses-bulk-actions" role="group" aria-label="Массовое действие">
-      {BULK_ACTIONS.map((item) => (
-        <button
-          key={item.type}
-          type="button"
-          className="career-btn career-btn-secondary career-btn-sm"
-          aria-pressed={controller.action === item.type}
-          disabled={controller.busy}
-          onClick={() => controller.preview(item.type)}
-        >
-          {item.label}
-        </button>
-      ))}
-      {controller.previewCount !== null ? (
-        <button
-          type="button"
-          className="career-btn career-btn-primary career-btn-sm"
-          onClick={controller.confirm}
-          disabled={controller.busy}
-        >
-          Подтвердить: {controller.previewCount}
-        </button>
-      ) : null}
-      {controller.error ? <span role="alert">{controller.error}</span> : null}
-    </div>
-  );
-}
-
-const BULK_ACTIONS: readonly {
-  readonly type: ApplicationBulkAction['type'];
-  readonly label: string;
-}[] = [
-  { type: 'retry', label: 'Повторить отклик' },
-  { type: 'close', label: 'Закрыть отклики' },
-];
 
 function ApplicationTable({
   applications,
@@ -256,38 +112,40 @@ function ApplicationTable({
 }: ApplicationListProps) {
   const allSelected = applications.length > 0 && selectedIds.size === applications.length;
   return (
-    <table className="career-responses-table">
-      <thead>
-        <tr>
-          <th scope="col" className="career-responses-table__select">
-            <input
-              type="checkbox"
-              aria-label="Выбрать отклики на странице"
-              checked={allSelected}
-              onChange={onToggleAll}
+    <div className="career-responses-table-scroll">
+      <table className="career-responses-table">
+        <thead>
+          <tr>
+            <th scope="col" className="career-responses-table__select">
+              <input
+                type="checkbox"
+                aria-label="Выбрать отклики на странице"
+                checked={allSelected}
+                onChange={onToggleAll}
+              />
+            </th>
+            <th scope="col">Компания и роль</th>
+            <th scope="col">Канал</th>
+            <th scope="col">Статус</th>
+            <th scope="col">Следующий шаг</th>
+            <th scope="col">Срок</th>
+            <th scope="col">Отправлено</th>
+          </tr>
+        </thead>
+        <tbody>
+          {applications.map((application) => (
+            <ApplicationTableRow
+              key={application.id}
+              application={application}
+              selected={selectedIds.has(application.id)}
+              active={selectedApplicationId === application.id}
+              onToggleSelected={() => onToggleSelected(application.id)}
+              onSelectApplication={() => onSelectApplication(application.id)}
             />
-          </th>
-          <th scope="col">Компания и роль</th>
-          <th scope="col">Канал</th>
-          <th scope="col">Статус</th>
-          <th scope="col">Следующий шаг</th>
-          <th scope="col">Срок</th>
-          <th scope="col">Отправлено</th>
-        </tr>
-      </thead>
-      <tbody>
-        {applications.map((application) => (
-          <ApplicationTableRow
-            key={application.id}
-            application={application}
-            selected={selectedIds.has(application.id)}
-            active={selectedApplicationId === application.id}
-            onToggleSelected={() => onToggleSelected(application.id)}
-            onSelectApplication={() => onSelectApplication(application.id)}
-          />
-        ))}
-      </tbody>
-    </table>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -307,7 +165,7 @@ function ApplicationTableRow({
     application.followUpDueAt ??
     application.nearestInterview?.scheduledAt;
   return (
-    <tr className={active ? 'is-selected' : undefined}>
+    <tr className={active || selected ? 'is-selected' : undefined}>
       <td className="career-responses-table__select">
         <input
           type="checkbox"

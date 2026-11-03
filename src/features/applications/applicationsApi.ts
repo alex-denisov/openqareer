@@ -126,7 +126,8 @@ export interface ApplicationListPage {
 export type ApplicationBulkAction =
   | { readonly type: 'close' }
   | { readonly type: 'set_stage'; readonly stage: ApplicationStage }
-  | { readonly type: 'retry' };
+  | { readonly type: 'retry' }
+  | { readonly type: 'label'; readonly labelId: string };
 
 export interface ApplicationBulkResult {
   readonly state: 'prepared' | 'completed';
@@ -240,14 +241,16 @@ async function parseApplicationListPage(
   };
 }
 
+/** `ids` narrows the filter to rows picked by hand; without it the action covers the whole filter. */
 export async function previewApplicationBulk(
   filters: ApplicationListQuery,
   action: ApplicationBulkAction,
+  ids?: readonly string[],
 ): Promise<ApplicationBulkPreview> {
   const response = await apiFetch('/api/v1/candidate/applications/bulk/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filters: toApplicationFilters(filters), action }),
+    body: JSON.stringify({ filters: toApplicationFilters(filters, ids), action }),
   });
   return readDataObject<ApplicationBulkPreview>(response);
 }
@@ -256,12 +259,13 @@ export async function executeApplicationBulk(
   filters: ApplicationListQuery,
   action: ApplicationBulkAction,
   confirmCount: number,
+  ids?: readonly string[],
 ): Promise<ApplicationBulkResult> {
   const response = await apiFetch('/api/v1/candidate/applications/bulk', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      filters: toApplicationFilters(filters),
+      filters: toApplicationFilters(filters, ids),
       action,
       operationId: globalThis.crypto.randomUUID(),
       confirmCount,
@@ -295,12 +299,13 @@ export async function executeCompanyWantBulk(
   return readDataObject(response);
 }
 
-function toApplicationFilters(query: ApplicationListQuery) {
+function toApplicationFilters(query: ApplicationListQuery, ids?: readonly string[]) {
   return {
     stage: query.stage ?? [],
     channel: query.channel ?? [],
     ...(query.from ? { from: query.from } : {}),
     ...(query.to ? { to: query.to } : {}),
+    ...(ids ? { ids } : {}),
   };
 }
 
