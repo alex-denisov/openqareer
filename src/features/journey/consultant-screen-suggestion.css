@@ -1,0 +1,9 @@
+/* Предложение по экрану (макеты 5 и 9): подпись кнопки в одну строку, кнопки переносятся рядом. */
+.career-screen-suggestion .career-expert-actions {
+  flex-wrap: wrap;
+  row-gap: var(--career-space-2);
+}
+
+.career-screen-suggestion .career-expert-actions > button {
+  white-space: nowrap;
+}

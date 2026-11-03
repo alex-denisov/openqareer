@@ -508,6 +508,11 @@ ul.career-mock-criteria li p {
     display: none;
   }
 
+  /* Колонка консультанта не занимает места: шапка тянется на всю ширину, как в макете. */
+  .career-shell.career-shell.career-shell:has(.panel-col.is-behind-trainer) {
+    grid-template-columns: var(--career-rail-width) minmax(0, 1fr);
+  }
+
   .panel-col.is-over-trainer > .career-expert-panel {
     z-index: 10001;
   }

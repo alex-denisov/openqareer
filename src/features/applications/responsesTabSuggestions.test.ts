@@ -119,6 +119,7 @@ describe('«Подготовка» suggestion', () => {
     );
     expect(suggestion?.title).toBe('STAR-историй пока нет');
     expect(suggestion?.detail).toMatch(/фактов профиля/);
+    expect(suggestion?.acceptLabel).toBe('Добавить историю');
     suggestion?.onAccept();
     expect(actions.openStories).toHaveBeenCalled();
   });
@@ -156,7 +157,7 @@ describe('«Хочу в компанию» suggestion', () => {
     expect(suggestion).toMatchObject({
       id: 'want:empty',
       title: 'В «Хочу» пока нет компаний',
-      acceptLabel: 'Добавить компании',
+      acceptLabel: 'Добавить',
     });
     suggestion?.onAccept();
     expect(actions.openAdd).toHaveBeenCalled();

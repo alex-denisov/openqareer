@@ -84,7 +84,7 @@ export function preparationTabSuggestion(
       id: 'prep:first-star',
       title: 'STAR-историй пока нет',
       detail: 'Соберём первую из фактов профиля: на STAR-историях строятся вопросы мок-интервью.',
-      acceptLabel: 'Открыть STAR-истории',
+      acceptLabel: 'Добавить историю',
       onAccept: actions.openStories,
     });
   }
@@ -93,7 +93,7 @@ export function preparationTabSuggestion(
     id: 'prep:no-interview',
     title: 'Интервью пока не назначено',
     detail: `${pluralRu(storyCount, ['STAR-история', 'STAR-истории', 'STAR-историй'])} ${ready}. Когда отклик дойдёт до интервью, проведём мок-интервью по нему.`,
-    acceptLabel: 'Открыть STAR-истории',
+    acceptLabel: 'Открыть истории',
     onAccept: actions.openStories,
   });
 }
@@ -136,7 +136,7 @@ export function wantTabSuggestion({
       title: 'В «Хочу» пока нет компаний',
       detail:
         'Добавьте компании, куда хотите попасть: найдём путь к рекрутеру и сообщим о новых вакансиях.',
-      acceptLabel: 'Добавить компании',
+      acceptLabel: 'Добавить',
       onAccept: actions.openAdd,
     });
   }
