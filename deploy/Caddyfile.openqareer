@@ -1,6 +1,12 @@
 {
 	servers :443 {
-		protocols h1
+		# PRB-041 (03.11): HTTP/2 with keep-alive. INC-004 pinned HTTP/1.1 and closed
+		# every connection for the Russia-to-AWS route of August; Russia now goes
+		# through the relay, which has its own TLS. Here that pin cost each of the
+		# ~50 boot requests a fresh TLS handshake (~250 ms) behind a 6-connection
+		# cap, and the «Отклики» click queued behind them. No h3: QUIC broke on the
+		# Russian route in INC-004, and h2 already removes the per-request handshake.
+		protocols h1 h2
 		# Russian-reachable relay (deploy/bootstrap-ru-relay.sh): its X-Forwarded-For
 		# names the real client, everyone else's is ignored.
 		trusted_proxies static 107.172.153.202/32
@@ -44,7 +50,6 @@ openqareer.com {
 	# make on its behalf.
 
 	header {
-		Connection "close"
 		Content-Security-Policy "default-src 'self'; base-uri 'self'; connect-src 'self' https://tiles.openfreemap.org https://mc.yandex.ru https://mc.yandex.com wss://mc.yandex.ru https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; font-src 'self'; form-action 'self'; frame-ancestors 'none'; frame-src blob: https://mc.yandex.ru https://mc.yandex.com; img-src 'self' data: blob: https://tiles.openfreemap.org https://mc.yandex.ru https://mc.yandex.com https://www.google-analytics.com https://*.google-analytics.com https://www.googletagmanager.com; object-src 'none'; script-src 'self' blob: 'wasm-unsafe-eval' https://mc.yandex.ru https://yastatic.net https://www.googletagmanager.com; style-src 'self'; worker-src 'self' blob:; upgrade-insecure-requests"
 		Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
 		Referrer-Policy "strict-origin-when-cross-origin"

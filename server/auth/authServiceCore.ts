@@ -54,7 +54,11 @@ import {
   recordAdminAudit,
 } from './adminUserManager';
 import { isValidTimezone } from '../../shared/timezoneUtils';
-import { ensureSessionDeviceHashSchema, storeAuthSession } from './sessionRepository';
+import {
+  ensureSessionDeviceHashSchema,
+  storeAuthSession,
+  type SessionDeletionLog,
+} from './sessionRepository';
 import { ensureAdminAccessSchema } from '../data/adminAccessSchema';
 import { createAdminAccessMethods } from './adminAccessMethods';
 import { collapseLegacySessions, USER_SELECT, type SessionRow } from './authServiceCoreQueries';
@@ -69,11 +73,7 @@ import {
   type UserRow,
 } from './authCoreUtils';
 import { createEmailDomainChecker, DEFAULT_MX_CHECK_BYPASS_DOMAINS } from './emailDomainCheck';
-import {
-  PASSWORD_RESET_HOURS,
-  SESSION_IDLE_MS,
-  type AuthServiceOptions,
-} from './authCoreTypes';
+import { PASSWORD_RESET_HOURS, SESSION_IDLE_MS, type AuthServiceOptions } from './authCoreTypes';
 export { SESSION_IDLE_DAYS } from './authCoreTypes';
 export type { AuthServiceOptions } from './authCoreTypes';
 
@@ -125,6 +125,7 @@ export class AuthServiceCore implements SessionAuth {
   private readonly onPasswordReset?: AuthServiceOptions['onPasswordReset'];
   protected readonly checkEmailDomain: ReturnType<typeof createEmailDomainChecker>;
   protected candidateStore?: CandidateStore;
+  private sessionLog?: SessionDeletionLog;
 
   constructor(options: AuthServiceOptions) {
     this.onPasswordReset = options.onPasswordReset;
@@ -276,6 +277,11 @@ export class AuthServiceCore implements SessionAuth {
     return isReservedUsername(normalized) || this.findUser(normalized) !== null;
   }
 
+  /** Set by the app once its logger exists: session deletions are logged with a reason (PRB-041). */
+  setLogger(log: SessionDeletionLog): void {
+    this.sessionLog = log;
+  }
+
   async login(
     identifierInput: string,
     password: string,
@@ -299,13 +305,17 @@ export class AuthServiceCore implements SessionAuth {
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
-    storeAuthSession(this.database, {
-      userId: user.id,
-      tokenHash: hashToken(sessionToken),
-      expiresAt,
-      now,
-      clientDeviceId,
-    });
+    storeAuthSession(
+      this.database,
+      {
+        userId: user.id,
+        tokenHash: hashToken(sessionToken),
+        expiresAt,
+        now,
+        clientDeviceId,
+      },
+      this.sessionLog,
+    );
     return {
       principal: this.principalForRow(user),
       sessionToken,
@@ -400,12 +410,11 @@ export class AuthServiceCore implements SessionAuth {
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
-    storeAuthSession(this.database, {
-      userId: user.id,
-      tokenHash: hashToken(sessionToken),
-      expiresAt,
-      now,
-    });
+    storeAuthSession(
+      this.database,
+      { userId: user.id, tokenHash: hashToken(sessionToken), expiresAt, now },
+      this.sessionLog,
+    );
 
     if (actorPrincipal) {
       recordAdminAudit(this.database, {
