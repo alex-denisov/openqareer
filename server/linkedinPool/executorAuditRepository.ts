@@ -104,10 +104,25 @@ export function recordLinkedinExecutorPageAttempt(
 }
 
 /** Короткая служебная запись журнала исполнителя (без текстов страниц и профилей). */
+export const JOB_SEARCH_EMPTY_NOTE = 'job-search-empty';
+const JOB_SEARCH_EMPTY_PAUSE_MS = 24 * 60 * 60_000;
+
+/** Две пустые страницы поиска подряд: разметка, вероятно, не совпала — чтение вакансий стоит сутки. */
+export function isJobSearchPausedAsEmpty(database: DatabaseSync, accountId: string, now: Date): boolean {
+  const since = new Date(now.getTime() - JOB_SEARCH_EMPTY_PAUSE_MS).toISOString();
+  const row = database
+    .prepare(
+      `SELECT 1 AS paused FROM linkedin_pool_audit
+       WHERE account_id = ? AND action = 'linkedin_executor_note' AND detail = ? AND created_at >= ? LIMIT 1`,
+    )
+    .get(accountId, JOB_SEARCH_EMPTY_NOTE, since);
+  return row !== undefined;
+}
+
 export function recordLinkedinExecutorNote(
   database: DatabaseSync,
   accountId: string,
-  note: 'exa_not_configured' | 'exa_failed',
+  note: 'exa_not_configured' | 'exa_failed' | typeof JOB_SEARCH_EMPTY_NOTE,
   now: Date,
 ): void {
   insertAudit(database, 'linkedin_executor_note', accountId, note, now.toISOString());

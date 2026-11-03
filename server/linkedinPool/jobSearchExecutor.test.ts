@@ -89,7 +89,7 @@ function seedCompany(repository: SqliteLinkedinPoolRepository, company = 'Northw
   );
 }
 
-function fakeBrowser(options?: { challenge?: boolean }) {
+function fakeBrowser(options?: { challenge?: boolean; emptyJobs?: boolean }) {
   let currentUrl = '';
   let html = '';
   const navigated: string[] = [];
@@ -102,7 +102,7 @@ function fakeBrowser(options?: { challenge?: boolean }) {
       html = options?.challenge
         ? '<main>Verify your identity</main>'
         : url.includes('/jobs/search/')
-          ? jobsPage
+          ? (options?.emptyJobs ? '<main>No matching jobs</main>' : jobsPage)
         : url.includes('/search/results/companies/')
           ? '<a href="/company/northwind-group/">Northwind Group</a>'
           : url.includes('/search/results/people/')
@@ -263,7 +263,7 @@ describe('pool vacancy reader (jobs search)', () => {
       random: () => 0.5,
       wait: async () => undefined,
       planDay: (accountId, dateString) => ({
-        accountId, dateString, dayOfWeek: 2, isWeekend: false, dayStartMinutes: 0, dayEndMinutes: 1440,
+        accountId, dateString: String(dateString), dayOfWeek: 2, isWeekend: false, dayStartMinutes: 0, dayEndMinutes: 1440,
         isRestDay: false, dailyPageBudget: budget,
         windows: [{ id: 'all', startMinutes: 0, endMinutes: 1440, skipped: false }],
       }),
@@ -278,5 +278,41 @@ describe('pool vacancy reader (jobs search)', () => {
     expect(audited.n).toBeLessThanOrEqual(budget);
     expect(fake.navigated.some((u) => u.includes('/jobs/search/'))).toBe(true);
     expect(statuses).toContain('daily_limit');
+  });
+  it('pauses job reading for a day after two empty search pages in a row and writes job-search-empty', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    seedDemand(repository, ['qa engineer', 'test lead']);
+    for (const company of ['Alpha Ltd', 'Beta Ltd', 'Gamma Ltd']) seedCompany(repository, company);
+    const fake = fakeBrowser({ emptyJobs: true });
+    const { executor } = makeExecutor(repository, account.id, fake);
+
+    for (let step = 0; step < 8; step += 1) await executor.runStep();
+    const jobPages = fake.navigated.filter((u) => u.includes('/jobs/search/'));
+    expect(jobPages).toHaveLength(2);
+    const notes = repository.getDatabase()
+      .prepare("SELECT detail FROM linkedin_pool_audit WHERE action = 'linkedin_executor_note' AND detail = 'job-search-empty'")
+      .all();
+    expect(notes).toHaveLength(1);
+  });
+
+  it('lets the pause lapse after a day', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    seedDemand(repository, ['qa engineer', 'test lead', 'qa lead']);
+    seedCompany(repository);
+    let clock = new Date(now.getTime() - 25 * 60 * 60_000);
+    const fake = fakeBrowser({ emptyJobs: true });
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id), repository, database: repository.getDatabase(),
+      browserFactory: async () => fake.browser as never,
+      notifyOwner: async () => ({ status: 'sent', httpStatus: 200, messageId: 1 }),
+      now: () => clock, random: () => 0.5, wait: async () => undefined, decide: () => ({ status: 'run' }),
+    });
+    for (let step = 0; step < 8; step += 1) await executor.runStep();
+    const before = fake.navigated.filter((u) => u.includes('/jobs/search/')).length;
+    clock = now;
+    for (let step = 0; step < 4; step += 1) await executor.runStep();
+    expect(fake.navigated.filter((u) => u.includes('/jobs/search/')).length).toBeGreaterThan(before);
   });
 });

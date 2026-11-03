@@ -24,6 +24,8 @@ import {
   pauseLinkedinPoolAccountForManualReview,
   recordLinkedinExecutorCompanyAttempt,
   recordLinkedinExecutorHeartbeat,
+  isJobSearchPausedAsEmpty,
+  JOB_SEARCH_EMPTY_NOTE,
   recordLinkedinExecutorNote,
   recordLinkedinExecutorPageAttempt,
   type LinkedinPoolExecutorPageKind,
@@ -149,6 +151,7 @@ export class LinkedinPoolCompanyPageExecutor {
   private running = false;
   private stopped = false;
   private reauthRequired = false;
+  private consecutiveEmptyJobPages = 0;
   private consecutiveTransientFailures = 0;
   private backoffUntilMs = 0;
   private cachedPlan?: { key: string; plan: DayPlan };
@@ -319,6 +322,9 @@ export class LinkedinPoolCompanyPageExecutor {
     timezone: string,
   ): JobSearchQuery | undefined {
     if (!isPoolJobReadingEnabled(this.database)) return undefined;
+    if (this.config.enabled && isJobSearchPausedAsEmpty(this.database, this.config.accountId, now)) {
+      return undefined;
+    }
     const otherPages = usage.pageCount - usage.jobSearchPageCount;
     if (!shouldReadJobsNow({ jobPages: usage.jobSearchPageCount, otherPages })) return undefined;
     return nextJobSearchQuery({
@@ -347,10 +353,19 @@ export class LinkedinPoolCompanyPageExecutor {
     if (read.status !== 'ready') return this.handlePageFailure(read, 1);
     const cards = parseLinkedinJobSearchPageHtml(read.html ?? '');
     saveJobCards(this.database, cards, this.now());
+    this.trackEmptyJobPage(accountId, cards.length);
     return {
       ...report('processed', 1, 0),
       ...(cards.length === 0 ? { reason: 'no_job_cards' } : {}),
     };
+  }
+
+  /** 0 карточек — не успех: две пустые страницы подряд ставят чтение вакансий на сутки. */
+  private trackEmptyJobPage(accountId: string, cardCount: number): void {
+    this.consecutiveEmptyJobPages = cardCount === 0 ? this.consecutiveEmptyJobPages + 1 : 0;
+    if (this.consecutiveEmptyJobPages < 2) return;
+    this.consecutiveEmptyJobPages = 0;
+    recordLinkedinExecutorNote(this.database, accountId, JOB_SEARCH_EMPTY_NOTE, this.now());
   }
 
   /** Профиль или cookie-путь, общий для страниц компаний и вакансий. */
