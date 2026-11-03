@@ -180,6 +180,28 @@ function conditionBlocks(requirements: readonly VacancyRequirement[], assessment
   });
 }
 
+/** Weights and implied soft skills of one evaluation (03.11); see the rules in the body. */
+function weighting(requirements: readonly VacancyRequirement[], skills: readonly VacancyFitRequirementAssessment[], facts: readonly VacancyFitFact[], canScore: boolean) {
+  // 01.11: met 1 whether stated or checked by a skill check (`checked` is a label), partial 0.5, else 0.
+  // 03.11: weighted mean; a soft trait weighs 0.25, a hard or mandatory requirement 1.5 (owner decision).
+  // A soft trait that experience implies counts as met unless a quoted fact contradicts it; the
+  // stored assessment is left as it was, so reading an old result needs no model call.
+  const byId = new Map(requirements.map((item) => [item.id, item]));
+  const role = impliedSoftRole(facts.map((fact) => fact.statement));
+  const implied = role ? skills.filter((item) => item.status !== 'unmatched' && item.status !== 'matched' && isSoftRequirementText(byId.get(item.requirementId)?.text ?? '')).map((item) => ({ requirementId: item.requirementId, role })) : [];
+  const impliedIds = new Set(implied.map((item) => item.requirementId));
+  const credit = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId) ? 1 : item.status === 'partial' ? PARTIAL_REQUIREMENT_CREDIT : 0;
+  const weight = (item: VacancyFitRequirementAssessment) => {
+    const requirement = byId.get(item.requirementId);
+    return (requirement && isSoftRequirementText(requirement.text) ? SOFT_WEIGHT : 1) * (requirement && (requirement.hard || requirement.stopFactor) ? HARD_WEIGHT : 1);
+  };
+  const percent = (items: readonly VacancyFitRequirementAssessment[]) => {
+    const total = items.reduce((sum, item) => sum + weight(item), 0);
+    return canScore && items.length ? Math.round(items.reduce((sum, item) => sum + credit(item) * weight(item), 0) / total * 100) : null;
+  };
+  return { implied, impliedIds, percent };
+}
+
 /** Validates model claims against exact candidate-owned source text. Missing facts are unknown. */
 export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toISOString()): VacancyFitResult {
   const facts = eligibleFacts(input);
@@ -215,23 +237,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   const required = new Set(requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor)).map((item) => item.id));
   const requiredSkills = skills.filter((item) => required.has(item.requirementId));
   const canScore = reason === 'assessed';
-  // 01.11: met 1 whether stated or checked by a skill check (`checked` is a label), partial 0.5, else 0.
-  // 03.11: weighted mean; a soft trait weighs 0.25, a hard or mandatory requirement 1.5 (owner decision).
-  // A soft trait that experience implies counts as met unless a quoted fact contradicts it; the
-  // stored assessment is left as it was, so reading an old result needs no model call.
-  const byId = new Map(requirements.map((item) => [item.id, item]));
-  const role = impliedSoftRole(facts.map((fact) => fact.statement));
-  const implied = role ? skills.filter((item) => item.status !== 'unmatched' && item.status !== 'matched' && isSoftRequirementText(byId.get(item.requirementId)?.text ?? '')).map((item) => ({ requirementId: item.requirementId, role })) : [];
-  const impliedIds = new Set(implied.map((item) => item.requirementId));
-  const credit = (item: VacancyFitRequirementAssessment) => item.status === 'matched' || impliedIds.has(item.requirementId) ? 1 : item.status === 'partial' ? PARTIAL_REQUIREMENT_CREDIT : 0;
-  const weight = (item: VacancyFitRequirementAssessment) => {
-    const requirement = byId.get(item.requirementId);
-    return (requirement && isSoftRequirementText(requirement.text) ? SOFT_WEIGHT : 1) * (requirement && (requirement.hard || requirement.stopFactor) ? HARD_WEIGHT : 1);
-  };
-  const percent = (items: readonly VacancyFitRequirementAssessment[]) => {
-    const total = items.reduce((sum, item) => sum + weight(item), 0);
-    return canScore && items.length ? Math.round(items.reduce((sum, item) => sum + credit(item) * weight(item), 0) / total * 100) : null;
-  };
+  const { implied, impliedIds, percent } = weighting(requirements, skills, facts, canScore);
   const count = (items: readonly VacancyFitRequirementAssessment[]) => ({
     matched: items.filter((item) => item.status === 'matched' || impliedIds.has(item.requirementId)).length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length, checked: items.filter((item) => item.checked).length, partial: items.filter((item) => item.status === 'partial').length,
   });
