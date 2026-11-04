@@ -6,7 +6,7 @@ import {
   CheckCircle,
   Circle,
   Clock,
-  FunnelSimple,
+  Funnel,
   Globe,
   Info,
   PencilSimple,
@@ -403,7 +403,7 @@ export function ConditionsMarketLine({
   }
   return (
     <p className="career-role-meta career-meta-icon career-market-line">
-      <FunnelSimple size={16} aria-hidden />
+      <Funnel size={16} aria-hidden />
       <span>{counted ? `С этими условиями: ${counted}` : uncountedMarketLine(summary)}</span>
     </p>
   );

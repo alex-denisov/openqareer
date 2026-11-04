@@ -517,9 +517,16 @@
   flex: none;
 }
 
-/* Макет 3: строка высотой со значок (22, inline-svg в макете). */
+/* Макет 3: строка высотой со значок (22, inline-svg в макете), текст сразу за значком 1.25em. */
 .career-market-line {
+  gap: 0;
   min-block-size: 22px;
+}
+
+.career-market-line svg {
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  margin-block-start: 0;
 }
 
 /* Скелет и пустые состояния */
