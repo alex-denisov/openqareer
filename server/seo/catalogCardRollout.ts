@@ -4,7 +4,7 @@
  * Salary stopped being a condition: Google only recommends `baseSalary`. That
  * opens tens of thousands of cards at once, and Googlebot should not meet them
  * all in a day, so a card without a stated salary enters through this table, a
- * capped number a day, freshest day first and the longest text within a day.
+ * capped number a day in portions, freshest day first and the longest text within a day.
  * Once in, a card stays while it is live and its text exists.
  *
  * Text may lie only in the pool: hh.ru search rows have an empty
@@ -29,7 +29,13 @@ export const CATALOG_CARD_ROLLOUT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalo
 ) STRICT, WITHOUT ROWID`;
 
 /** New cards a day; `OPENQAREER_CARD_ROLLOUT_DAILY_CAP` overrides, 0 stops new ones. */
-export const CARD_ROLLOUT_DAILY_CAP_DEFAULT = 1_000;
+export const CARD_ROLLOUT_DAILY_CAP_DEFAULT = 5_000;
+/**
+ * The day's cap is spent in portions, so a vacancy posted today waits hours for
+ * the next portion, not a day behind a quota spent at once; the scan takes ~30 s.
+ */
+const PORTIONS_A_DAY = 4;
+const PORTION_INTERVAL_MS = 6 * 3_600_000;
 const POOL_ID_FROM = 'cluster-'.length + 1;
 const DAY_MS = 86_400_000;
 
@@ -108,7 +114,7 @@ function candidates(database: DatabaseSync, now: Date): CandidateRow[] {
     ) as unknown as CandidateRow[];
 }
 
-/** One step, run before the sitemap files. A full day's quota skips the candidate scan. */
+/** One step, run before the sitemap files. Between portions the candidate scan is skipped. */
 export function admitCardRollout(
   database: DatabaseSync,
   now: Date,
@@ -117,10 +123,16 @@ export function admitCardRollout(
   database.exec(CATALOG_CARD_ROLLOUT_TABLE_SQL);
   database.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
   const dropped = dropWithoutText(database);
-  const { used } = database
-    .prepare('SELECT count(*) AS used FROM catalog_card_rollout WHERE admitted_ms > ?')
-    .get(now.getTime() - DAY_MS) as { used: number };
-  const quota = dailyCap - used;
+  const { used, latest } = database
+    .prepare(
+      `SELECT count(*) AS used, max(admitted_ms) AS latest
+         FROM catalog_card_rollout WHERE admitted_ms > ?`,
+    )
+    .get(now.getTime() - DAY_MS) as { used: number; latest: number | null };
+  if (latest !== null && now.getTime() - latest < PORTION_INTERVAL_MS) {
+    return { admitted: 0, dropped };
+  }
+  const quota = Math.min(dailyCap - used, Math.ceil(dailyCap / PORTIONS_A_DAY));
   if (quota <= 0) return { admitted: 0, dropped };
 
   const chosen: CandidateRow[] = [];

@@ -138,18 +138,29 @@ describe('admitCardRollout', () => {
       { id: 'short', posted: 1, poolText: TEXT },
       { id: 'long', posted: 1, poolText: TEXT.repeat(3) },
     ]);
-    admitCardRollout(db, NOW, 2);
+    admitCardRollout(db, NOW, 8);
     expect(admitted(db)).toEqual(['long', 'short']);
   });
 
-  it('holds the cap over a rolling day, across ticks', () => {
-    const db = database([{ id: 'a' }, { id: 'b' }, { id: 'c', posted: 2 }]);
-    expect(admitCardRollout(db, NOW, 2).admitted).toBe(2);
-    const halfHour = new Date(NOW.getTime() + 1_800_000);
-    expect(admitCardRollout(db, halfHour, 2).admitted).toBe(0);
-    const nextDay = new Date(NOW.getTime() + DAY + 1);
-    expect(admitCardRollout(db, nextDay, 2).admitted).toBe(1);
-    expect(admitted(db)).toEqual(['a', 'b', 'c']);
+  it('spends the cap in portions six hours apart and never above it in a rolling day', () => {
+    const db = database(['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({ id })));
+    const at = (hours: number) => new Date(NOW.getTime() + hours * 3_600_000);
+    expect(admitCardRollout(db, NOW, 3).admitted).toBe(1);
+    expect(admitCardRollout(db, at(1), 3).admitted).toBe(0);
+    expect(admitCardRollout(db, at(6), 3).admitted).toBe(1);
+    expect(admitCardRollout(db, at(12), 3).admitted).toBe(1);
+    expect(admitCardRollout(db, at(18), 3).admitted).toBe(0);
+    expect(admitCardRollout(db, at(24.5), 3).admitted).toBe(1);
+  });
+
+  it('a card posted today goes ahead of the older queue', () => {
+    const db = database([
+      { id: 'old1', posted: 5 },
+      { id: 'old2', posted: 5 },
+      { id: 'today', posted: 0 },
+    ]);
+    admitCardRollout(db, NOW, 4);
+    expect(admitted(db)).toEqual(['today']);
   });
 
   it('a cap of zero stops new cards and keeps those already in', () => {
