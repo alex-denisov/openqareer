@@ -7,8 +7,6 @@ import { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import { buildExperienceFactRewriter } from './experienceFactRewriter';
 import { createMeteredVertexFetch } from './meteredVertexFetch';
 import { chainStageLabel, MODEL_CHAINS } from './modelChains';
-import { buildResumeStructurer, QueuedResumeStructurer } from './resumeStructurer';
-import { HygienicResumeStructurer } from './hygienicResumeStructurer';
 import { buildSkillQuizModel } from './skillQuizModel';
 import { VERTEX_CHAT_TIMEOUTS_MS } from './vertexChatTimeouts';
 import { createVertexGate, type VertexCreditConfig } from './vertexCredit';
@@ -80,8 +78,8 @@ function metered(
 
 const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
 
-describe('цепочки квиза, резюме и пунктов: Vertex первым, диалог без него (04.11)', () => {
-  it.each(['skillQuizzes', 'resumeParsing', 'experienceBullets'] as const)(
+describe('цепочки квиза и пунктов: Vertex первым, диалог и разбор резюме без него (04.11)', () => {
+  it.each(['skillQuizzes', 'experienceBullets'] as const)(
     '%s: Vertex первой ступенью, прочие прежние и в прежнем порядке',
     (mechanic) => {
       const stages = labels(mechanic);
@@ -90,7 +88,7 @@ describe('цепочки квиза, резюме и пунктов: Vertex пе
     },
   );
 
-  it.each(['coach', 'coachFree'] as const)('%s: диалог кандидата идёт без Vertex', (mechanic) => {
+  it.each(['coach', 'coachFree', 'resumeParsing'] as const)('%s: без Vertex', (mechanic) => {
     expect(labels(mechanic)).not.toContain('vertex');
   });
 
@@ -105,7 +103,7 @@ describe('цепочки квиза, резюме и пунктов: Vertex пе
       'openrouter:deepseek/deepseek-v4.1-flash',
     ]);
     expect(labels('skillQuizzes').slice(1)).toEqual(labels('coach'));
-    expect(labels('resumeParsing').slice(1)).toEqual([
+    expect(labels('resumeParsing')).toEqual([
       'openai:gpt-5.6-luna',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',
@@ -118,13 +116,11 @@ describe('цепочки квиза, резюме и пунктов: Vertex пе
 
   it('потолки Vertex: кандидату хватает времени на следующую ступень', () => {
     expect(VERTEX_CHAT_TIMEOUTS_MS.skillQuizzes).toBe(25_000);
-    // Разбор резюме: 45 с бюджета минус 25 с потолка следующей ступени.
-    expect(VERTEX_CHAT_TIMEOUTS_MS.resumeParsing).toBe(20_000);
     expect(VERTEX_CHAT_TIMEOUTS_MS.experienceBullets).toBe(30_000);
   });
 });
 
-describe('квиз, разбор резюме, пункты: ступень Vertex', () => {
+describe('квиз, пункты: ступень Vertex', () => {
   const quiz = {
     questions: Array.from({ length: 8 }, (_, index) => ({
       question: `Что выберете в ситуации ${index}?`,
@@ -170,35 +166,6 @@ describe('квиз, разбор резюме, пункты: ступень Vert
     } finally {
       globalThis.fetch = real;
     }
-  });
-
-  it('резюме: Vertex первая ступень структуратора, провенанс называет модель', () => {
-    const { gate } = gateAndLedger();
-    const built = buildResumeStructurer({
-      providerCredentials: credentials,
-      vertex,
-      vertexFetch: metered(gate, 'resumeParsing', transport('{}')),
-    });
-    const inner = (built as HygienicResumeStructurer).inner as QueuedResumeStructurer;
-    expect(inner.stages.map((stage) => stage.provenance?.model)).toEqual([
-      'gemini-3.8-flash',
-      'gpt-5.6-luna',
-      'deepseek/deepseek-v4.1-flash',
-      'z-ai/glm-5.3-flash',
-    ]);
-  });
-
-  it('резюме: закрытые ворота дают null ступени, сети нет', async () => {
-    const { gate } = gateAndLedger({ untilMs: 1 });
-    const inner = transport('{}');
-    const built = buildResumeStructurer({
-      providerCredentials: credentials,
-      vertex,
-      vertexFetch: metered(gate, 'resumeParsing', inner),
-    });
-    const stage = ((built as HygienicResumeStructurer).inner as QueuedResumeStructurer).stages[0]!;
-    await expect(stage.structure('Опыт работы: '.repeat(10))).resolves.toBeNull();
-    expect(inner).not.toHaveBeenCalled();
   });
 
   it('пункты: Vertex первая ступень, ответ читается теми же проверками', async () => {

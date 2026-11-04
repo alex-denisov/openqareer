@@ -10,9 +10,7 @@ import {
 import type { ParsedResume } from '../../src/features/workspace/resumeParser';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import { HygienicResumeStructurer } from './hygienicResumeStructurer';
-import { MODEL_CHAINS, resolveChain } from './modelChains';
-import type { VertexConfig } from './vertexAi';
-import { VertexJsonClient } from './vertexJson';
+import { chainRoutes, MODEL_CHAINS } from './modelChains';
 import { assertOpenRouterModelForPersonalData, isOpenRouterBaseUrl, openRouterRouting } from './openRouterPrivacy';
 
 /** Enough for a long two-column CV; longer input is truncated, never guessed. */
@@ -183,9 +181,6 @@ function extractJsonObject(content: string): string | null {
 
 export interface ResumeStructurerConfig {
   providerCredentials?: Partial<Record<ProviderId, string>>;
-  vertex?: VertexConfig;
-  /** Учётный `fetch` механики `resumeParsing`; без него ступень Vertex не строится. */
-  vertexFetch?: typeof fetch;
 }
 
 /**
@@ -229,37 +224,23 @@ export class QueuedResumeStructurer implements ResumeStructurer {
 export function buildResumeStructurer(
   config: ResumeStructurerConfig,
 ): ResumeStructurer | undefined {
-  const stages = resolveChain(
-    MODEL_CHAINS.resumeParsing,
-    config.providerCredentials ?? {},
-    config.vertexFetch ? config.vertex : undefined,
-  );
-  if (stages.length === 0) return undefined;
+  const routes = chainRoutes(MODEL_CHAINS.resumeParsing, config.providerCredentials ?? {});
+  if (routes.length === 0) return undefined;
   // Чистка стоит на самой сборке: разобранное резюме кандидат правит в
   // «Студии» и уносит в отклики, и пути мимо неё быть не должно (B210).
   return new HygienicResumeStructurer({
     inner: new QueuedResumeStructurer(
-      stages.map((stage) =>
-        stage.kind === 'vertex'
-          ? // Vertex первым (04.11): тот же промпт и разбор ответа, транспорт через учёт.
-            new LlmResumeStructurer({
-              apiKey: '',
-              model: stage.vertex.model,
-              client: new VertexJsonClient(stage.vertex, config.vertexFetch!).asChatClient(),
-            })
-          : new LlmResumeStructurer({
-              apiKey: stage.route.apiKey,
-              model: stage.route.model,
-              baseUrl:
-                stage.route.provider === 'openai'
-                  ? undefined
-                  : modelRegistry[stage.route.provider].baseUrl,
-              timeoutMs: RESUME_STAGE_TIMEOUT_MS,
-              structuredOutput:
-                modelRegistry[stage.route.provider].models.find(
-                  (item) => item.id === stage.route.model,
-                )?.structuredOutput ?? true,
-            }),
+      routes.map(
+        (route) =>
+          new LlmResumeStructurer({
+            apiKey: route.apiKey,
+            model: route.model,
+            baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+            timeoutMs: RESUME_STAGE_TIMEOUT_MS,
+            structuredOutput:
+              modelRegistry[route.provider].models.find((item) => item.id === route.model)
+                ?.structuredOutput ?? true,
+          }),
       ),
     ),
   });
