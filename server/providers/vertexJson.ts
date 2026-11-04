@@ -59,7 +59,7 @@ export class VertexJsonClient {
   }
 
   /**
-   * The slice of an OpenAI-compatible client that resume and bullet stages use, so those stages keep
+   * The slice of an OpenAI-compatible client that the bullet stage uses, so the stage keeps
    * their prompts, caps and answer checks unchanged and only the transport differs.
    */
   asChatClient(): ChatCompletionClient {

@@ -29,9 +29,8 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('разбор резюме: Vertex, затем только платные маршруты, luna первой', () => {
+  it('разбор резюме — только платные маршруты, luna первой', () => {
     expect(labels('resumeParsing')).toEqual([
-      'vertex',
       'openai:gpt-5.6-luna',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',

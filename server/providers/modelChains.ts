@@ -47,7 +47,7 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * цепочки стоит дважды — вторая попытка дешёвой ступени до дорогих. Очереди этих механик идут по
  * массиву подряд, без отбрасывания повторов; три попытки не берём, кандидат ждёт.
  *
- * Квиз, разбор резюме и пункты резюме (`skillQuizzes`, `resumeParsing`, `experienceBullets`) получили
+ * Квиз и пункты резюме (`skillQuizzes`, `experienceBullets`) получили
  * Vertex первым по тому же решению; ступени после него прежние, потолки в `vertexChatTimeouts.ts`.
  * Диалог кандидата с консультантом (`coach`, `coachFree`) идёт без Vertex (решение владельца 04.11).
  */
@@ -61,8 +61,8 @@ export const MODEL_CHAINS = {
   coach: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** B579: 30 ходов Free в месяц — glm-5.3-flash (замер 28.10: 4/4 хода), запасная deepseek. */
   coachFree: [GLM_FLASH, DEEPSEEK_FLASH],
-  /** Разбор резюме: только платные маршруты (решение владельца 28.10). */
-  resumeParsing: [VERTEX, LUNA, DEEPSEEK_FLASH, GLM_FLASH],
+  /** Разбор резюме: только платные маршруты (решение владельца 28.10). Vertex нет: 04.11 на контрольном резюме терял опыт работы. */
+  resumeParsing: [LUNA, DEEPSEEK_FLASH, GLM_FLASH],
   /**
    * Пункты резюме из фактов беседы: текст в профиль кандидата, качество важнее цены,
    * вызов редкий (раз на набор фактов). Замер 29.10 на 65 фактах adenisov.test:

@@ -218,13 +218,6 @@ const app = await buildApp({
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
     providerCredentials: config.providerCredentials,
-    vertex: config.vertex,
-    vertexFetch: meteredVertexFetchFor(
-      config.vertex,
-      config.databasePath,
-      'resumeParsing',
-      VERTEX_CHAT_TIMEOUTS_MS.resumeParsing,
-    ),
   }),
   // Пункты резюме из фактов беседы; в журнал — только модель и причина отказа.
   experienceFactRewriter: buildExperienceFactRewriter({
