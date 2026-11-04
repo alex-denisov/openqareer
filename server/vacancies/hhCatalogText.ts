@@ -41,6 +41,9 @@ export interface HhCatalogTextEngine {
   /** Позиция обхода с прошлого запуска воркера и её запись (02.11). */
   loadSavedCursor?(): string | undefined;
   saveCursor?(cursor: string | undefined): void;
+  /** Строки ролей кандидатов (04.11): своя позиция, раньше общего обхода на каждом такте. */
+  loadRoleCandidates?(limit: number): { ids: string[]; position: string };
+  saveRolePosition?(position: string): void;
   /** Голова очереди подборок кандидатов (01.11): идёт раньше каталога. */
   peekPriority?(limit: number): string[];
   dropPriority?(ids: readonly string[]): void;
@@ -135,6 +138,13 @@ export class HhCatalogTextBackfill {
       .filter((id) => !this.waiting(id))
       .slice(0, perTick);
     if (priority.length > 0) return this.loadIds(priority, true);
+    const role = this.engine.loadRoleCandidates?.(perTick);
+    if (role) {
+      const ids = role.ids.filter((id) => !this.waiting(id));
+      const report = ids.length > 0 ? await this.loadIds(ids, false) : undefined;
+      if (!report?.blocked) this.engine.saveRolePosition?.(role.position);
+      if (report) return report;
+    }
     if (!this.cursorRead) {
       // 02.11: the worker restarts ~22 times a day; each start walked from the newest row again.
       this.cursor = this.engine.loadSavedCursor?.();
