@@ -8,6 +8,7 @@ import {
   googleEmploymentType,
   readableSkill,
 } from './vacancyCatalogPage';
+import { renderVacancyDocument } from './vacancyCatalogDocument';
 import type { UnifiedVacancy, VacancyCluster, VacancySalary } from '../domain/unifiedVacancy';
 
 function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
@@ -88,6 +89,24 @@ describe('страница публичного каталога ваканси�
     expect(types).toContain('ItemList');
     expect(types).toContain('BreadcrumbList');
   });
+
+  it.each(['src-himalayas-api', 'src-himalayas'])(
+    'не даёт JobPosting карточке, в кластере которой есть %s, но оставляет её в индексе',
+    (sourceId) => {
+      const plain = cluster();
+      const restricted = cluster({
+        sources: [...plain.sources, { ...plain.sources[0]!, sourceId, sourceName: 'Himalayas' }],
+      });
+
+      const detail = buildVacancyDetail(restricted, undefined, undefined, NOW)!;
+
+      expect(detail.indexable).toBe(true);
+      expect(detail.jsonLd['@graph'].map((node) => node['@type'])).not.toContain('JobPosting');
+      const html = renderVacancyDocument(detail);
+      expect(html).not.toContain('JobPosting');
+      expect(html).not.toContain('content="noindex');
+    },
+  );
 
   it('строит JobPosting со всеми полями, которые действительно известны', () => {
     const detail = buildVacancyDetail(cluster())!;

@@ -72,6 +72,7 @@ import type {
   StoredSourceState,
   VacancyLink,
   VacancyPoolStore,
+  ClusterMerge,
 } from './vacancyPoolStore';
 import {
   catalogEntryRowOfCluster,
@@ -268,6 +269,8 @@ export interface SqliteVacancyPoolStoreOptions {
   readonly writeChunkSize?: number;
   /** Работы на одну транзакцию записи среза; по умолчанию `DEFAULT_POOL_WRITE_BUDGET_MS`. */
   readonly writeBudgetMs?: number;
+  /** Ожидание между транзакциями записи кластеров; нужно только фоновому писателю. */
+  readonly clusterWritePause?: () => void;
   /** Свидетель каждой транзакции записи и итога замены среза — для журнала обслуживателя. */
   readonly onWrite?: (event: PoolWriteEvent) => void;
   /** Подбор по смыслу вместо LIKE по описанию (B267 S3); по умолчанию старое поведение. */
@@ -317,6 +320,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly hhTextTargetNoted = new Map<string, { key: string; ms: number }>();
   private readonly writeChunkSize: number;
   private readonly writeBudgetMs: number;
+  private readonly clusterWritePause: (() => void) | undefined;
   private readonly onWrite?: (event: PoolWriteEvent) => void;
   readonly matchMode: 'legacy' | 'semantic';
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
@@ -344,6 +348,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const { writeChunkSize = DEFAULT_POOL_WRITE_CHUNK, writeBudgetMs } = options;
     this.writeChunkSize = Math.max(1, Math.floor(writeChunkSize));
     this.writeBudgetMs = Math.max(0, writeBudgetMs ?? DEFAULT_POOL_WRITE_BUDGET_MS);
+    this.clusterWritePause = options.clusterWritePause;
     this.onWrite = options.onWrite;
     this.matchMode = options.matchMode ?? 'legacy';
     if (options.databasePath !== ':memory:') {
@@ -2234,24 +2239,66 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   saveClusters(clusters: VacancyCluster[]): void {
     if (clusters.length === 0) return;
+    const writeCluster = this.clusterWriter();
+    this.writeInPortions(clusters, writeCluster);
+  }
+
+  /** Поглотивший кластер и удаление поглощённых идут одной транзакцией: читатель не видит запись дважды. */
+  mergeClusters(merges: readonly ClusterMerge[]): void {
+    if (merges.length === 0) return;
+    // Слияния идут сразу за записью партии: зазор нужен и между этими двумя вызовами.
+    this.clusterWritePause?.();
+    const writeCluster = this.clusterWriter();
+    this.writeInPortions(merges, ({ kept, goneIds }) => {
+      writeCluster(kept);
+      for (const id of goneIds) this.deleteClusterRows(id);
+    });
+  }
+
+  /** Строка кластера, его запись в каталоге и ключи: неделимая единица записи. */
+  private clusterWriter(): (cluster: VacancyCluster) => void {
     const upsert = this.prepareClusterUpsert();
     const now = Date.now();
-    this.inTransaction(() => {
-      for (const cluster of clusters) {
-        upsert.run(
-          cluster.id,
-          cluster.id,
-          cluster.canonicalTitle,
-          cluster.canonicalCompany,
-          JSON.stringify(cluster),
-          cluster.vacanciesCount,
-          now,
-          serializeRepresentative(cluster),
-        );
-        this.upsertCatalogEntry(cluster);
-        this.writeClusterKeys(cluster);
-      }
-    });
+    return (cluster) => {
+      upsert.run(
+        cluster.id,
+        cluster.id,
+        cluster.canonicalTitle,
+        cluster.canonicalCompany,
+        JSON.stringify(cluster),
+        cluster.vacanciesCount,
+        now,
+        serializeRepresentative(cluster),
+      );
+      this.upsertCatalogEntry(cluster);
+      this.writeClusterKeys(cluster);
+    };
+  }
+
+  /**
+   * Транзакция закрывается по бюджету времени (PRB-041): запись 7–17 тыс. строк
+   * держала блокировку 1–3,4 с и останавливала чтения HTTP. Запись остаётся
+   * синхронной: партия от чтения до записи занимает один такт и не пересекается
+   * с другими писателями этого процесса. Короткие транзакции подряд соседа не
+   * пропускают: busy_timeout опрашивает блокировку редко, поэтому между ними пауза.
+   *
+   * Деление безопасно, пока запись не переходит из кластера в кластер иначе как
+   * через `mergeClusters`: сведение по ключам ищет сперва по членству, поэтому
+   * другого перехода нет. Элемент не делится, так что тяжёлый кластер один может
+   * превысить бюджет.
+   */
+  private writeInPortions<T>(items: readonly T[], write: (item: T) => void): void {
+    let position = 0;
+    while (position < items.length) {
+      if (position > 0) this.clusterWritePause?.();
+      this.inTransaction(() => {
+        const startedAt = performance.now();
+        do {
+          write(items[position]!);
+          position += 1;
+        } while (position < items.length && performance.now() - startedAt < this.writeBudgetMs);
+      });
+    }
   }
 
   private prepareClusterKeyStatements() {

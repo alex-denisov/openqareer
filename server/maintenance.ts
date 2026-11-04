@@ -39,6 +39,7 @@ import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
+import { pauseClusterWrite } from './vacancies/clusterWritePause';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -59,6 +60,8 @@ const composed = composeVacancyEngine({
   // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:
   // контракт B230 проверяется по `journalctl`, а не по 500 на входе (PRB-043).
   onPoolWrite: logPoolWrites(log),
+  // HTTP ждёт запись на главном потоке: между транзакциями кластеров ему нужен зазор.
+  clusterWritePause: pauseClusterWrite,
 });
 // Своё соединение для разметки смыслового индекса (B267 S2): короткие
 // транзакции порциями, WAL и busy_timeout как у остальных писателей пула.

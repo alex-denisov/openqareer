@@ -8,6 +8,9 @@
  * them through the sitemap. The newest go first, spread over the day so that a
  * card posted in the evening does not wait for the next reset.
  *
+ * Cards from a source whose terms forbid this (`searchRestrictedSources`) are
+ * skipped and get no notification of any kind, not even a removal.
+ *
  * The key is `OPENQAREER_GSC_SERVICE_ACCOUNT_B64`, not the Vertex one: that is
  * another account in another project, and only this one owns the Search Console
  * property.
@@ -47,6 +50,17 @@ CREATE TABLE IF NOT EXISTS catalog_google_indexing_budget (
   day TEXT NOT NULL,
   sent INTEGER NOT NULL,
   exhausted INTEGER NOT NULL
+) STRICT`;
+
+/**
+ * 04.11: every address sent so far came from a source that forbids it (273 of
+ * 273 checked on prod). Forgetting them once, with no notification, keeps the
+ * removal queue from telling Google about them while their pages stay up.
+ */
+const SENT_RESET_NAME = 'search-restricted-sources-2026-11-04';
+const SENT_RESETS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_google_indexing_resets (
+  name TEXT PRIMARY KEY,
+  applied_ms INTEGER NOT NULL
 ) STRICT`;
 
 const serviceAccountSchema = z.object({
@@ -376,11 +390,40 @@ async function sendBatch(
   return { budget, updated, deleted, sample };
 }
 
-function currentCards(urls: readonly SitemapUrl[]): Map<string, string> {
-  const cards = urls.filter((item) => parseVacancyPath(item.path) !== null);
+function vacancyCards(urls: readonly SitemapUrl[]): SitemapUrl[] {
+  return urls.filter((item) => parseVacancyPath(item.path) !== null);
+}
+
+function currentCards(cards: readonly SitemapUrl[]): Map<string, string> {
   return new Map(
     cards.map((item) => [new URL(item.path, SITE_ORIGIN).toString(), item.lastmod ?? '']),
   );
+}
+
+function resetSentOnce(database: DatabaseSync, log: GoogleIndexingLog, nowMs: number): void {
+  database.exec(SENT_RESETS_TABLE_SQL);
+  const applied = database
+    .prepare('SELECT 1 FROM catalog_google_indexing_resets WHERE name = ?')
+    .get(SENT_RESET_NAME);
+  if (applied) return;
+  let forgotten = 0;
+  inTransaction(database, () => {
+    forgotten = Number(database.prepare('DELETE FROM catalog_google_indexing_sent').run().changes);
+    database
+      .prepare('INSERT INTO catalog_google_indexing_resets (name, applied_ms) VALUES (?, ?)')
+      .run(SENT_RESET_NAME, nowMs);
+  });
+  if (forgotten > 0) log.info({ forgotten }, 'google-indexing-sent-reset');
+}
+
+/** A card whose source became restricted gets no further notification, not even a removal. */
+function forgetRestricted(database: DatabaseSync, cards: readonly SitemapUrl[]): void {
+  const restricted = cards.filter((item) => item.noIndexingApi);
+  if (restricted.length === 0) return;
+  const remove = database.prepare('DELETE FROM catalog_google_indexing_sent WHERE url = ?');
+  inTransaction(database, () => {
+    for (const item of restricted) remove.run(new URL(item.path, SITE_ORIGIN).toString());
+  });
 }
 
 async function runCycle(
@@ -391,10 +434,13 @@ async function runCycle(
   fetcher: typeof fetch,
   now: Date,
 ): Promise<void> {
-  const current = currentCards(urls);
+  const cards = vacancyCards(urls);
   // A sitemap without a single card is a failed read: nothing here says the cards are gone.
-  if (current.size === 0) return;
+  if (cards.length === 0) return;
+  const current = currentCards(cards.filter((item) => !item.noIndexingApi));
   database.exec(STATE_TABLES_SQL);
+  resetSentOnce(database, log, now.getTime());
+  forgetRestricted(database, cards);
   forgetRetitled(database, current);
   const rows = syncMissing(database, current, now.getTime());
   const { day, minutes } = pacificClock(now);

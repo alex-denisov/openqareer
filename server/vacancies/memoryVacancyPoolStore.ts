@@ -21,6 +21,7 @@ import type {
   StoredSourceState,
   VacancyLink,
   VacancyPoolStore,
+  ClusterMerge,
 } from './vacancyPoolStore';
 import {
   catalogEntryRowOfCluster,
@@ -330,6 +331,13 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   saveClusters(clusters: VacancyCluster[]): void {
     for (const cluster of clusters) {
       this.clusters.set(cluster.id, cluster);
+    }
+  }
+
+  mergeClusters(merges: readonly ClusterMerge[]): void {
+    for (const { kept, goneIds } of merges) {
+      this.clusters.set(kept.id, kept);
+      for (const id of goneIds) this.clusters.delete(id);
     }
   }
 

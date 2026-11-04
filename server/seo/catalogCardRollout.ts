@@ -20,6 +20,7 @@ import { hasPostingLocation } from '../vacancies/vacancyCatalogPage';
 import { CARD_SEEN_WITHIN_DAYS, INDEXED_CARD_SUMMARY_MIN } from './catalogIndexing';
 import { CATALOG_RU_SUMMARY_VERSION } from './catalogRuSummary';
 import { CATALOG_RU_SUMMARIES_TABLE_SQL } from './catalogRuSummaryStore';
+import { SEARCH_RESTRICTED_JSON_NEEDLES } from './searchRestrictedSources';
 
 export const CATALOG_CARD_ROLLOUT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_card_rollout (
   cluster_id TEXT PRIMARY KEY,
@@ -29,7 +30,6 @@ export const CATALOG_CARD_ROLLOUT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalo
 
 /** New cards a day; `OPENQAREER_CARD_ROLLOUT_DAILY_CAP` overrides, 0 stops new ones. */
 export const CARD_ROLLOUT_DAILY_CAP_DEFAULT = 1_000;
-const RESTRICTED_SOURCE_NEEDLE = 'src-himalayas';
 const POOL_ID_FROM = 'cluster-'.length + 1;
 const DAY_MS = 86_400_000;
 
@@ -73,6 +73,9 @@ interface CandidateRow {
 }
 
 function candidates(database: DatabaseSync, now: Date): CandidateRow[] {
+  const restricted = SEARCH_RESTRICTED_JSON_NEEDLES.map(() => 'instr(c.cluster_json, ?) > 0').join(
+    ' OR ',
+  );
   return database
     .prepare(
       `SELECT * FROM (
@@ -91,7 +94,7 @@ function candidates(database: DatabaseSync, now: Date): CandidateRow[] {
                   OR EXISTS (SELECT 1 FROM catalog_ru_summaries s
                               WHERE s.cluster_id = e.cluster_id
                                 AND s.status = 'ready' AND s.version = ?), 0))
-            AND instr(c.cluster_json, ?) = 0)
+            AND NOT (${restricted}))
         WHERE text_length >= ?
         ORDER BY published_ms / ${DAY_MS} DESC, text_length DESC, entry_key ASC`,
     )
@@ -100,7 +103,7 @@ function candidates(database: DatabaseSync, now: Date): CandidateRow[] {
       PRIVATE_EMPLOYER,
       INDEXED_CARD_SUMMARY_MIN,
       CATALOG_RU_SUMMARY_VERSION,
-      RESTRICTED_SOURCE_NEEDLE,
+      ...SEARCH_RESTRICTED_JSON_NEEDLES,
       INDEXED_CARD_SUMMARY_MIN,
     ) as unknown as CandidateRow[];
 }
