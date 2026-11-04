@@ -42,7 +42,7 @@ export interface CatalogRuSummaryLimits {
 }
 
 export const DEFAULT_CATALOG_RU_SUMMARY_LIMITS = {
-  dayUsd: 1.5,
+  dayUsd: 0.5,
   dayCalls: 3_000,
   channelShare: 0.75,
 } as const;
