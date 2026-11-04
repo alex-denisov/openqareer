@@ -356,6 +356,23 @@ async function finishMatchedPage(
   return { response, steps: { fitViewsMs, salaryMs, fitWorkMs: elapsedMs(fitWorkStartedAt) } };
 }
 
+/** What a read needs before the list, timed: on a cold process the stored results open here. */
+async function prepareMatchedRead(
+  deps: RouteDeps,
+  candidateId: string,
+  targetRoles: readonly string[],
+  sort: VacancySort,
+  log: FastifyRequest['log'],
+) {
+  const warmStartedAt = performance.now();
+  await deps.vacancyMechanics?.warmCachedVacancyIds?.(candidateId);
+  const warmFitIdsMs = elapsedMs(warmStartedAt), orderSetupStartedAt = performance.now();
+  const targetLevel = readTargetLevel(deps.candidateStore, candidateId, [...targetRoles]);
+  const fitLimit = selectionFitLimit(candidatePlan(deps, candidateId));
+  const order = withWantedCompanyOrder(deps, candidateId, sort, log);
+  return { targetLevel, fitLimit, order, warmFitIdsMs, orderSetupMs: elapsedMs(orderSetupStartedAt) };
+}
+
 const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
   const deps = withRequestScopedCandidateReads(backgroundDeps), requestStartedAt = performance.now();
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
@@ -367,6 +384,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
   const { offset } = filters;
   const sourceRegistry = matchedVacancySourceRegistry(multiSourceEngine.getSources?.() ?? []);
   const knownSourceIds = sourceRegistry.map(({ id }) => id);
+  const beforeCampaignMs = elapsedMs(requestStartedAt);
   const candidateCampaignStartedAt = performance.now();
   const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);
   const campaign = readCampaign(candidateStore, candidate.id);
@@ -378,16 +396,14 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     return unconfirmedCandidateMatchResponse(request.id, offset, campaign, sourceRegistry);
   }
 
-  await deps.vacancyMechanics?.warmCachedVacancyIds?.(candidate.id);
-  const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
-  const fitLimit = selectionFitLimit(candidatePlan(deps, candidate.id));
+  const { targetLevel, fitLimit, order, ...setupSteps } = await prepareMatchedRead(deps, candidate.id, targetRoles, sort, request.log);
   const { response: orderedPage, semanticQueryAndSqlMs, readSteps } = await readMatchedPage(
     multiSourceEngine,
     {
       candidateStore, confirmedSkills, targetRoles, targetLevel,
       campaign, titleParseStore, filters, sourceRegistry,
       candidateId: candidate.id,
-      order: withWantedCompanyOrder(deps, candidate.id, sort, request.log),
+      order,
     },
     request.log,
     fitLimit,
@@ -401,7 +417,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     semanticQueryAndSqlMs,
     page.response,
     requestStartedAt,
-    { ...readSteps, ...page.steps },
+    { beforeCampaignMs, ...setupSteps, ...readSteps, ...page.steps },
   );
 
   return matchedVacancyResponse(page.response, request.id, targetLevel, sort);
