@@ -1,10 +1,8 @@
 import { ImportSourceStore } from './importSourceStore';
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  coachTurnResultSchema,
   type CoachMessage,
   type CoachTurnInput,
-  type CoachTurnResult,
   type CoachTurnStage,
 } from '../../domain/coach';
 import { buildExperienceDossier } from '../../domain/dossier';
@@ -45,7 +43,7 @@ import {
   CandidateNotFoundError,
   CandidateStoreConflictError,
 } from './errors';
-import { withStoredMemoryCap } from './storedTurnMemoryCap';
+import { parseStoredTurnResult, reportUnreadableStoredTurn } from './storedTurnRead';
 
 export interface ConversationDeps extends StoreContext {
   documentRepository: SqliteDocumentRepository;
@@ -730,7 +728,17 @@ export class ConversationController {
   getCoachTurn(candidateId: string, key: string) {
     const row = this.getTurn(candidateId, key);
     if (!row) return null;
-    return { status: row.status, result: row.status === 'completed' ? this.outputFromTurn(candidateId, key, row).result : null };
+    return { status: row.status, result: this.readableOutput(candidateId, key, row)?.result ?? null };
+  }
+
+  private readableOutput(candidateId: string, idempotencyKey: string, turn: TurnRow): CoachProviderResult | null {
+    if (turn.status !== 'completed') return null;
+    try {
+      return this.outputFromTurn(candidateId, idempotencyKey, turn);
+    } catch (error) {
+      reportUnreadableStoredTurn(idempotencyKey, error);
+      return null;
+    }
   }
 
   private turns(candidateId: string): StoredTurn[] {
@@ -745,14 +753,7 @@ export class ConversationController {
       )
       .all(candidateId) as unknown as TurnRow[];
     return rows.map((row) => {
-      const output =
-        row.status === 'completed'
-          ? this.outputFromTurn(
-              candidateId,
-              row.idempotency_key,
-              row,
-            )
-          : null;
+      const output = this.readableOutput(candidateId, row.idempotency_key, row);
       return {
         idempotencyKey: row.idempotency_key,
         phase: row.phase,
@@ -816,16 +817,14 @@ export class ConversationController {
     ) {
       throw new Error('completed turn is incomplete');
     }
-    const parsed = coachTurnResultSchema.parse(
-      withStoredMemoryCap(
-        JSON.parse(
-          this.sealedText.open(
-            turn.result_cipher,
-            turnAssociatedData(candidateId, idempotencyKey),
-          ),
+    const parsed = parseStoredTurnResult(
+      JSON.parse(
+        this.sealedText.open(
+          turn.result_cipher,
+          turnAssociatedData(candidateId, idempotencyKey),
         ),
       ),
-    ) as CoachTurnResult;
+    );
     return {
       result: parsed,
       provider: turn.provider,
