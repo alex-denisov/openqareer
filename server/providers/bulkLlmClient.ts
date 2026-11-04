@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { BulkLlmConfig, BulkOpenRouterLane } from './bulkLlmConfig';
+import { BULK_LANE_PINS, type BulkLlmConfig, type BulkOpenRouterLane } from './bulkLlmConfig';
 import { MODEL_CHAINS } from './modelChains';
 import type { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import { maskFailureText, providerFailureText } from './failureReason';
@@ -27,6 +27,10 @@ export interface BulkLlmInput {
   maxTokens?: number;
   /** A step of the candidate's dialogue with the consultant: no Vertex, OpenRouter only (owner 04.11). */
   withoutVertex?: boolean;
+  /** The answer depends on the model: a short refusal of Vertex is asked again before the chain goes on. */
+  patientVertex?: boolean;
+  /** The model asked first after Vertex, ahead of the chain; one of `BULK_LANE_PINS`. */
+  firstLane?: string;
   /**
    * Whether an answer is usable; an unusable one moves the call to the next stage of the chain.
    * Default: the answer is JSON (every bulk task asks for JSON).
@@ -191,6 +195,13 @@ export class BulkLlmClient {
     const open = this.stages.filter((lane) => (this.down.get(lane.model)?.until ?? 0) <= this.now());
     return open.length > 0 ? open : this.stages;
   }
+  /** The open stages with the input's own first lane ahead of them, unless that lane cools. */
+  private stagesFor(input: BulkLlmInput): readonly BulkOpenRouterLane[] {
+    const open = this.openStages();
+    const pins = input.firstLane ? BULK_LANE_PINS[input.firstLane] : undefined;
+    if (!input.firstLane || !pins || (this.down.get(input.firstLane)?.until ?? 0) > this.now()) return open;
+    return [{ model: input.firstLane, ...pins }, ...open.filter((lane) => lane.model !== input.firstLane)];
+  }
   private validate(input: BulkLlmInput): number {
     if (
       !['public', 'candidate'].includes(input.dataClass) ||
@@ -285,7 +296,7 @@ export class BulkLlmClient {
     }
     let failure: BulkStageError | undefined;
     let rejected: Error | undefined;
-    for (const lane of this.openStages()) {
+    for (const lane of this.stagesFor(input)) {
       if (this.now() - startedAt > CALL_DEADLINE_MS) break;
       const outcome = await this.askStage(lane, input, accept, startedAt);
       if (outcome.result) {
