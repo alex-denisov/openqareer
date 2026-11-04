@@ -92,30 +92,6 @@ describe('IndexNow notifier', () => {
     });
   });
 
-  it('sends no restricted card, and forgets a sent one without submitting it', async () => {
-    const fetcher = vi.fn<typeof fetch>(async () => new Response(null, { status: 200 }));
-    const notify = createIndexNowNotifier('valid-key-1234', testLogger(), fetcher);
-    const db = database();
-    const submitted = () =>
-      fetcher.mock.calls.flatMap(
-        ([, init]) => (JSON.parse(String(init?.body)) as { urlList: string[] }).urlList,
-      );
-
-    await notify(db, [url('/free', '2026-11-01'), url('/later', '2026-11-01')]);
-    fetcher.mockClear();
-    await notify(db, [
-      url('/free', '2026-11-01'),
-      { ...url('/later', '2026-11-02'), searchRestricted: true },
-      { ...url('/hima', '2026-11-02'), searchRestricted: true },
-    ]);
-
-    expect(submitted()).toEqual([]);
-    const rows = db.prepare('SELECT url FROM catalog_indexnow_sent').all() as Array<{
-      url: string;
-    }>;
-    expect(rows.map((row) => new URL(row.url).pathname)).toEqual(['/free']);
-  });
-
   it('counts a batch as sent when one endpoint accepted it', async () => {
     const log = testLogger();
     const fetcher = vi

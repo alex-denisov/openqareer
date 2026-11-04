@@ -6,7 +6,7 @@
  * including through feeds or JobPosting structured data."
  *
  * Such a card keeps its page, its `index` and its sitemap line, but has no
- * JobPosting and is sent neither to the Indexing API nor to IndexNow. One such source in a cluster is
+ * JobPosting and is not sent to the Indexing API. One such source in a cluster is
  * enough: its fields are merged into the card and cannot be told apart there.
  */
 export const SEARCH_RESTRICTED_SOURCE_IDS: readonly string[] = [
