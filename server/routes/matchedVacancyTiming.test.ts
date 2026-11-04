@@ -32,6 +32,10 @@ describe('matched vacancies timing log (C44)', () => {
         mode: 'legacy',
         cold: true,
         candidateCampaignMs: expect.any(Number),
+        // PRB-041: холодное чтение теряло в журнале 5,8–17 с между этими фазами.
+        beforeCampaignMs: expect.any(Number),
+        warmFitIdsMs: expect.any(Number),
+        orderSetupMs: expect.any(Number),
         semanticQueryAndSqlMs: expect.any(Number),
         clusterJsonAndClustersMs: expect.any(Number),
         titleParseAndLevelsMs: expect.any(Number),
