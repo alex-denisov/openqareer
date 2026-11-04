@@ -38,7 +38,7 @@ export interface VacancyFitAssessor {
   assess(input: { readonly requirements: readonly VacancyRequirement[]; readonly facts: readonly VacancyFitFact[] }): Promise<readonly VacancyFitRequirementAssessment[]>;
 }
 
-function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequirement[] {
+export function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequirement[] {
   const description = normalizedSource(input.description);
   const seen = new Set<string>();
   return input.requirements.filter((requirement) => {

@@ -71,6 +71,13 @@ export class SqliteVacancyRequirementsStore {
     return row ? JSON.parse(row.result_json) as VacancyRequirementsResult : null;
   }
 
+  /** When `getLatest` was written, in ms; undefined when it has no row. */
+  latestWrittenAt(vacancyId: string, descriptionHash: string): number | undefined {
+    const row = this.db.prepare(`SELECT MAX(updated_at) AS at FROM vacancy_requirements_cache WHERE vacancy_id=? AND extractor_version=? AND description_hash=?`)
+      .get(vacancyId, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, descriptionHash) as { at: number | null };
+    return row.at ?? undefined;
+  }
+
   /** Current labels first, then a cache from before them (B510): the upgrade is gradual. */
   getLatestOrLegacy(vacancyId: string, descriptionHash?: string): VacancyRequirementsResult | null {
     for (const version of [VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, ...LEGACY_REQUIREMENTS_EXTRACTOR_VERSIONS]) {

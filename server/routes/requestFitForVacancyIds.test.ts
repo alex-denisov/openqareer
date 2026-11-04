@@ -61,6 +61,19 @@ describe('fit queue for a selection chunk (prod 02.11: 100–450 ms per chunk on
     expect(mechanics.enqueue.mock.calls.map(([input]) => input.vacancyId)).toEqual(['free']);
   });
 
+  it('a new row may spend a slot only if its finished job lost the result; a refreshing row has spent its own (04.11)', async () => {
+    const states: Record<string, string> = { r1: 'refreshing', n1: 'not_requested' };
+    const mechanics = {
+      ...runtime(new Set()),
+      view: vi.fn((input: { vacancyId: string }) => ({ state: states[input.vacancyId] })),
+      fitJobHoldsKey: vi.fn(() => false),
+    };
+    const slot = vi.fn(() => true);
+    await requestFitForVacancyIds({ vacancyMechanics: mechanics } as never, 'candidate', ['r1', 'n1'], 0, {}, slot);
+    expect(mechanics.enqueue).toHaveBeenCalledWith({ vacancyId: 'r1' }, { backgroundRank: 0 });
+    expect(mechanics.enqueue).toHaveBeenCalledWith({ vacancyId: 'n1' }, { backgroundRank: 1, reviveSlot: slot });
+  });
+
   it('lets queued requests run between rows once a slice is spent (PRB-041: up to 1 s per chunk)', async () => {
     const order: string[] = [];
     const mechanics = {

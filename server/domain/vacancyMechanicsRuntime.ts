@@ -7,7 +7,7 @@ import { SqliteVacancyFitStore, type FitEnqueueOptions } from '../data/sqliteVac
 import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
-import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
+import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
 import { assessmentFailureLine, createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
@@ -28,6 +28,12 @@ const BACKGROUND_REQUIREMENTS_PRIORITY = 0.5;
 const CHANNEL_PAUSE_MS = 60_000;
 /** A job that met the outage waits this long; its attempts stay untouched, so it never turns «failed». */
 const CHANNEL_JOB_WAIT_MS = 5 * 60_000;
+
+/**
+ * Requirements read before this moment lost their result before the 04.11 census: 119 rows that wait
+ * for the owner's decision, since each is a model call for a real candidate. Later ones go back at once.
+ */
+export const LOST_FIT_RESULTS_REVIVED_SINCE_MS = Date.parse('2026-11-04T15:45:00.000Z');
 
 /** Error classes of a failed fit job as the row names them; anything else is a plain «не завершился». */
 const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
@@ -53,11 +59,14 @@ function assessmentFailure(outcome: AssessmentOutcome): string {
       ? 'assessment_model_invalid'
       : 'assessment_model_unavailable';
 }
-/** Every requirement of the current extraction has a verdict in the result (none known: nothing to check). */
-function assessesAll(result: VacancyFitResult, requirements: readonly { readonly id: string }[] | undefined): boolean {
-  if (!requirements?.length || result.status !== 'assessed') return true;
+/**
+ * Every requirement the model is asked about has a verdict in the result. 04.11 prod: a line the text
+ * does not hold is never asked about, so comparing every extracted line hid 175 counted rows for good.
+ */
+function assessesAll(result: VacancyFitResult, resolved: VacancyFitInput): boolean {
+  if (result.status !== 'assessed') return true;
   const assessed = new Set(result.assessments.map((item) => item.requirementId));
-  return requirements.every((item) => assessed.has(item.id));
+  return sourcedRequirements(resolved).every((item) => assessed.has(item.id));
 }
 function fitFailure(lastError: string | null | undefined): VacancyFitFailure {
   return (lastError && FIT_FAILURES[lastError]) || 'other';
@@ -117,7 +126,7 @@ export class VacancyMechanicsRuntime {
     const previous = current ? undefined : this.fit.getPreviousCache(resolved);
     // 02.11 owner: a result that has no verdict for a requirement read from the current text is not
     // shown — its percent was 100 % while the card listed the new requirements as «нет в профиле».
-    const result = [current, previous].find((item) => item && assessesAll(item, extracted?.requirements));
+    const result = [current, previous].find((item) => item && assessesAll(item, resolved));
     const state = !input.description.trim()
       ? 'no_description'
       // 01.11: an older extractor's «none» is not the verdict while the model still reads the text.
@@ -153,18 +162,35 @@ export class VacancyMechanicsRuntime {
     if (!input.description.trim() || extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) return false;
     return this.fit.hasCache({ ...input, requirements: extracted.requirements });
   }
-  /** `enqueue` would create no job: one is waiting, or a finished one holds this input's key. */
+  /** `enqueue` would create no job: one is waiting, or a finished one holds this input's key and its result stands. */
   fitJobHoldsKey(input: VacancyFitInput): boolean {
     const state = this.fit.getJobState(input);
-    return state !== undefined && state !== 'failed';
+    return state !== undefined && state !== 'failed' && !this.lostItsResult(input);
   }
-  /** `backgroundRank` (B580): the selection sweep queues below every page the candidate looks at. */
-  enqueue(input: VacancyFitInput, options: FitEnqueueOptions = {}) {
+  /**
+   * The job is finished and no result exists for the requirements as they are now. Requirements not
+   * read yet leave the job alone: the worker would only count the old ones again.
+   */
+  private lostItsResult(input: VacancyFitInput): boolean {
+    if (this.fit.getJobState(input) !== 'completed') return false;
+    const hash = vacancyDescriptionHash(input.description);
+    const extracted = this.requirements.getLatest(input.vacancyId, hash);
+    if (!extracted || (this.requirements.latestWrittenAt(input.vacancyId, hash) ?? 0) < LOST_FIT_RESULTS_REVIVED_SINCE_MS) return false;
+    const resolved = { ...input, requirements: extracted.requirements };
+    return !this.fit.hasCache(resolved) && !this.fit.getCache(resolved);
+  }
+  /**
+   * `backgroundRank` (B580): the selection sweep queues below every page the candidate looks at.
+   * `reviveSlot`: a re-read of all requirements loses every result at once, so the sweep counts them
+   * under the day's ceiling; a page or a card the candidate opened passes none.
+   */
+  enqueue(input: VacancyFitInput, options: FitEnqueueOptions & { readonly reviveSlot?: () => boolean } = {}) {
     const requirementInput = { vacancyId: input.vacancyId, description: input.description };
     // This method is reached only by an explicit authenticated POST, never by the worker retry loop.
     this.requirements.retryFailed(requirementInput);
     this.requirements.enqueue(requirementInput, { titleStrategyPriority: options.backgroundRank === undefined ? 1 : BACKGROUND_REQUIREMENTS_PRIORITY });
     this.fit.retryFailed(input, undefined, options);
+    if (this.lostItsResult(input) && (options.reviveSlot?.() ?? true)) this.fit.reviveCompleted(input, undefined, options);
     return this.fit.enqueue(input, undefined, options);
   }
   /**
