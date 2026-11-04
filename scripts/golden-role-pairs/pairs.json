@@ -31,6 +31,35 @@
       ]
     },
     {
+      "id": "adenisov-test-live",
+      "label": "VP Technology / Operations / Support (adenisov.test)",
+      "roles": ["VP of Engineering / Technology", "Chief Operating Officer", "Head of IT Service Management", "Chief Technology Officer", "Head of Customer Support", "VP of Operations", "Head of AI", "AI Solutions Architect", "Chief Information Officer", "IT Director", "Customer Support Director", "AI Consultant", "Transformation Director"],
+      "geography": { "places": ["Москва", "ОАЭ"], "remote": true, "remoteRegions": ["ru"] },
+      "must": [
+        ["src-hh-search:137435454", "Технический директор (CTO), EYES OF WONDER"],
+        ["src-hh-search:138955968", "Support Team Lead, EYES OF WONDER"],
+        ["src-linkedin-guest:4484520225", "Vice President of Customer Support"],
+        ["src-linkedin-guest:4484523194", "Vice President of Global Customer Support"],
+        ["src-himalayas-api:https://himalayas.app/companies/zipliens/jobs/vp-of-customer-support", "VP of Customer Support"],
+        ["src-indeed:3420822f7c6b9b33", "Vice President of Customer Operations"],
+        ["src-himalayas-api:https://himalayas.app/companies/trustonic/jobs/svp-customer-operations", "SVP, Customer Operations"],
+        ["src-hh-search:138416646", "Директор клиентской поддержки / Head of Customer Support"],
+        ["src-hh-search:138914281", "Руководитель службы поддержки / Head of Support"],
+        ["src-hh-search:138747247", "Руководитель отдела технической поддержки"],
+        ["src-hh-search:138916164", "Операционный директор технической поддержки"],
+        ["src-indeed:62df8d3ea99b67fc", "Chief information officer (CIO)"]
+      ],
+      "mustNot": [
+        ["src-hh-search:129774047", "Продавец-консультант автомобилей"],
+        ["src-hh-search:130473537", "Начинающий специалист технической поддержки"],
+        ["src-himalayas-api:https://himalayas.app/companies/jonas-software-uk-europe/jobs/business-support-administrator", "Business Support Administrator"],
+        ["ats-ashby-cohere:277827a9-02b7-49ca-8590-458e93cab0e6", "VP Sales, EMEA"],
+        ["src-hh-search:135884349", "Chief Marketing Officer (fintech)"],
+        ["src-hh-search:138208785", "Support Manager / Специалист службы поддержки"],
+        ["src-hh-search:138129365", "Backend Developer (Middle)"]
+      ]
+    },
+    {
       "id": "senior-frontend",
       "label": "Senior Frontend Developer (синтетический)",
       "roles": ["Senior Frontend Developer"],
