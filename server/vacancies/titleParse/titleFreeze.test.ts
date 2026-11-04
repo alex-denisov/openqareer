@@ -152,6 +152,8 @@ describe('unfreezeLiveTitles', () => {
     addVacancy(db, 'dead', 'Zibble Manager', false);
     new SemanticBackfill(db).step(100);
     new TitleModelStep(db, { model: 'm', parse: async () => [] });
+    db.exec(`INSERT OR IGNORE INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
+      VALUES ('dead', 'other', 0, 'zibble manager', 1, 1)`);
     db.exec(`INSERT OR REPLACE INTO title_parse_model_queue (title_key, eligible, failures, frozen)
       VALUES ('wibble specialist', 1, 3, 1), ('zibble manager', 1, 3, 1)`);
     return db;

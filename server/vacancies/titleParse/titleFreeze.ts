@@ -49,7 +49,7 @@ export async function unfreezeLiveTitles(
      ) LIMIT ?`,
   );
   const reset = database.prepare(
-    "UPDATE title_parse_model_queue SET frozen = 0, failures = 0, last_failure = NULL WHERE title_key = ? AND frozen = 1",
+    'UPDATE title_parse_model_queue SET frozen = 0, failures = 0, last_failure = NULL WHERE title_key = ? AND frozen = 1',
   );
   let unfrozen = 0;
   let batches = 0;
