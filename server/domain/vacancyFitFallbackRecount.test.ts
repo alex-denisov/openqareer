@@ -8,7 +8,8 @@ import {
   type FallbackRecountRow,
   type VertexOnceOutcome,
 } from './vacancyFitFallbackRecount';
-import type { VacancyFitInput, VacancyFitResult } from './vacancyFit';
+import type { VacancyFitResult } from '../../shared/vacancyFit';
+import type { VacancyFitInput } from './vacancyFit';
 
 const input = (vacancyId: string): VacancyFitInput =>
   ({ candidateId: 'candidate', vacancyId }) as VacancyFitInput;

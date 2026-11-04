@@ -1,5 +1,6 @@
 import { createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
-import { assessVacancyFit, type VacancyFitInput, type VacancyFitResult } from './vacancyFit';
+import type { VacancyFitResult } from '../../shared/vacancyFit';
+import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 
 /**
  * 05.11: one pass over the rows a fallback model answered. Models disagree on one input (33 / 4 / 37

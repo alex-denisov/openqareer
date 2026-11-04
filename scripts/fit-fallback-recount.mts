@@ -6,7 +6,7 @@ import { SealedText } from '../server/data/sealedText';
 import { SqliteCandidateStore } from '../server/data/sqliteCandidateStore';
 import { SqliteVacancyFitStore } from '../server/data/sqliteVacancyFitStore';
 import { SqliteVacancyRequirementsStore } from '../server/data/sqliteVacancyRequirementsStore';
-import { VACANCY_FIT_ALGORITHM_VERSION } from '../server/domain/vacancyFit';
+import { VACANCY_FIT_ALGORITHM_VERSION } from '../shared/vacancyFit';
 import { FALLBACK_RECOUNT_TASK, askVertexOnce, recountFallbackRows, type FallbackRecountRow } from '../server/domain/vacancyFitFallbackRecount';
 import { VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, vacancyDescriptionHash } from '../server/domain/vacancyRequirements';
 import { createBulkLlmRuntime } from '../server/providers/bulkLlmRuntime';
