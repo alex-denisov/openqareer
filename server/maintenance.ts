@@ -24,6 +24,7 @@ import {
 } from './vacancies/titleParse/modelTitleParser';
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import { logPoolWrites } from './maintenance/poolWriteLog';
+import { watchWriteHolds } from './observability/sqliteWriteHolds';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
 import { useFanDemand } from './vacancies/jobspyFan';
@@ -45,6 +46,9 @@ import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSche
  */
 const config = readServerConfig(process.env);
 const log = createJsonLineLog();
+watchWriteHolds((hold) =>
+  log.warn({ ...hold, heldMs: Math.round(hold.heldMs) }, 'write-lock-held-long'),
+);
 const linkedinExecutorConfig = readExecutorConfigOrDisable();
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,

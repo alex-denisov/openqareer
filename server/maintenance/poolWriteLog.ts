@@ -27,6 +27,20 @@ export function logPoolWrites(log: MaintenanceLog): (event: PoolWriteEvent) => v
       );
       return;
     }
+    if (event.kind === 'prune') {
+      log.info(
+        {
+          scope: event.scope,
+          removed: event.removed,
+          transactions: event.transactions,
+          maxTransactionMs: Math.round(event.maxTransactionMs),
+          readMs: Math.round(event.readMs),
+          totalMs: Math.round(event.totalMs),
+        },
+        'pool-pruned',
+      );
+      return;
+    }
     if (event.durationMs > SLOW_POOL_WRITE_MS) {
       log.warn(
         {
