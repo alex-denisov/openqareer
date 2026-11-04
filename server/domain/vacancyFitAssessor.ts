@@ -14,16 +14,17 @@ const INSTRUCTIONS = `Assess only the supplied sourced vacancy requirements agai
 export function createVacancyFitAssessor(client: VacancyFitBulkClient, runId: string): VacancyFitAssessor {
   return {
     async assess(input) {
-      const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(vacancyFitPromptFacts(input.facts, input.requirements).map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length) });
+      const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(vacancyFitPromptFacts(input.facts, input.requirements).map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length, input.facts.length > 0) });
       return assessmentsOf(response.content, input.requirements.length);
     },
   };
 }
 /** An answer the parser can read moves no further down the bulk chain; any other answer does. */
-function hasAssessments(content: string, limit: number): boolean {
+function hasAssessments(content: string, limit: number, hasFacts: boolean): boolean {
   try {
-    assessmentsOf(content, limit);
-    return true;
+    const rows = assessmentsOf(content, limit);
+    // An empty list for known facts is a failed stage, not a verdict of gaps (04.11); with no facts it is honest.
+    return rows.length > 0 || limit === 0 || !hasFacts;
   } catch {
     return false;
   }

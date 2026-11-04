@@ -152,18 +152,50 @@ describe('buildResumeStructurer', () => {
 });
 
 describe('QueuedResumeStructurer', () => {
+  const answering = (model: string, answer: object | null) => ({
+    provenance: { model, promptRevision: 'r1' },
+    structure: vi.fn(async () => answer as never),
+  });
+  const place = { employer: 'Acme', title: 'Lead' };
+
+  it('an answer without places of work fails the stage: the next one reads the resume (04.11)', async () => {
+    const stages = [
+      answering('a', { experience: [], skills: ['Java'], education: [] }),
+      answering('b', { experience: [place], skills: ['Java'], education: [] }),
+    ];
+    const queued = new QueuedResumeStructurer(stages);
+    expect(await queued.structure('resume text')).toMatchObject({ experience: [place] });
+    expect(queued.provenance?.model).toBe('b');
+  });
+
+  it('a resume with no places in any answer keeps the first answer that has content', async () => {
+    const student = { experience: [], skills: ['Java'], education: ['MSU'] };
+    const stages = [answering('a', student), answering('b', null), answering('c', { experience: [], skills: ['Go'] })];
+    const queued = new QueuedResumeStructurer(stages);
+    expect(await queued.structure('resume text')).toEqual(student);
+    expect(queued.provenance?.model).toBe('a');
+    for (const item of stages) expect(item.structure).toHaveBeenCalledTimes(1);
+  });
+
+  it('an answer with nothing in it is silence: the rules parser gets its turn', async () => {
+    const queued = new QueuedResumeStructurer([
+      answering('a', { fullName: 'Ivan', experience: [], skills: [], education: [] }),
+    ]);
+    expect(await queued.structure('resume text')).toBeNull();
+  });
+
   const stage = (model: string, answer: 'null' | 'throw' | 'ok') => ({
     provenance: { model, promptRevision: 'r1' },
     structure: vi.fn(async () => {
       if (answer === 'throw') throw new Error('503');
-      return answer === 'ok' ? ({ fullName: model } as never) : null;
+      return answer === 'ok' ? ({ fullName: model, experience: [{ employer: model }] } as never) : null;
     }),
   });
 
   it('moves to the next stage on silence or failure and names the one that answered', async () => {
     const stages = [stage('a', 'throw'), stage('b', 'null'), stage('c', 'ok')];
     const queued = new QueuedResumeStructurer(stages);
-    expect(await queued.structure('resume text')).toEqual({ fullName: 'c' });
+    expect(await queued.structure('resume text')).toMatchObject({ fullName: 'c' });
     expect(queued.provenance?.model).toBe('c');
     for (const item of stages) expect(item.structure).toHaveBeenCalledTimes(1);
   });

@@ -70,6 +70,19 @@ describe('one bad entry does not lose the whole answer (04.11)', () => {
       { requirementId: 'c', status: 'unknown', evidence: [] },
     ]);
   });
+  it('an empty list for known facts fails the stage: the next one is asked (04.11)', async () => {
+    const accepts: boolean[] = [];
+    const complete = vi.fn(async (input: { accept?: (content: string) => boolean }) => {
+      accepts.push(input.accept!('{"assessments":[]}'));
+      return { content: '{"assessments":[]}' };
+    });
+    const requirements = [{ id: 'r', text: 'TypeScript', sourceQuote: 'TypeScript', origin: 'explicit' as const, importance: 'unspecified' as const }];
+    const assessor = createVacancyFitAssessor({ complete } as never, 'run-1');
+    await assessor.assess({ requirements, facts: [{ id: 'f', statement: 'TypeScript 5 лет' }] } as never);
+    await assessor.assess({ requirements, facts: [] } as never);
+    expect(accepts).toEqual([false, true]);
+  });
+
   it('an answer with no usable row is invalid and moves down the chain', async () => {
     let accepted: boolean | undefined;
     const assessor = createVacancyFitAssessor({ complete: async (input) => {
