@@ -157,12 +157,11 @@ describe('Vertex first stage of the bulk channel', () => {
       {},
       { OPENQAREER_VERTEX_CREDIT_USD: '1000', OPENQAREER_VERTEX_DAY_USD: '1000' },
     );
-    for (let index = 0; index < 40; index += 1) {
-      h.runtime.ledger.recordGeminiCall(
-        { task: 'x', model: 'gemini-3.8-flash' },
-        { cost: 0.5, promptTokens: 1, cachedTokens: 0, completionTokens: 1 },
-      );
-    }
+    // One row: 200 times the channel's day cap of $0.1, without a disk write per call under CI load.
+    h.runtime.ledger.recordGeminiCall(
+      { task: 'x', model: 'gemini-3.8-flash' },
+      { cost: 20, promptTokens: 1, cachedTokens: 0, completionTokens: 1 },
+    );
     await h.runtime.client!.complete(req);
     expect(h.runtime.status().spentUsd).toBe(0);
     expect(h.runtime.status().dayRemainingUsd).toBeCloseTo(0.1, 9);
