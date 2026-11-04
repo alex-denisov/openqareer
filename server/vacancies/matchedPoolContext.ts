@@ -4,6 +4,7 @@ import type { deriveCandidateTargetLevel } from './candidateLevel';
 import { MatchedPoolSnapshots, type MatchedPoolReadOptions } from './matchedPoolSnapshot';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { matchGeographyKey, type MatchGeography } from './matchGeography';
+import { candidateGradeRange, type GradeRange } from './titleParse/gradeRange';
 
 /** Подтверждённые навыки кандидата — то, по чему вообще можно сопоставлять. */
 export function readMatchProfile(
@@ -50,9 +51,41 @@ export function matchedSnapshotKey(
   targetRoles: readonly string[],
   targetLevel: ReturnType<typeof deriveCandidateTargetLevel>,
   geography?: MatchGeography,
+  gradeRange?: GradeRange | null,
 ): string {
   const base = `${matchProfileKey(confirmedSkills, targetRoles)}:${targetLevel ?? ''}`;
-  return geography ? `${base}:${matchGeographyKey(geography)}` : base;
+  const placed = geography ? `${base}:${matchGeographyKey(geography)}` : base;
+  return gradeRange ? `${placed}:g${gradeRange.min}-${gradeRange.max}` : placed;
+}
+
+/**
+ * Пилот диапазонов грейдов (этап 1, 04.11): сначала для adenisov.test. Для всех — отдельной правкой,
+ * после защиты от массовых пересчётов: новые строки в окне подбора ставят процент в очередь.
+ * Снимок обновляется обычным сбросом, а не по мере заполнения `vacancy_grade`.
+ */
+const GRADE_RANGE_PILOT: ReadonlySet<string> = new Set(['81d104dc-b165-4042-a1f9-ee4f316ecbfd']);
+
+type RecentTitlesReader = (candidateId: string) => readonly string[];
+const recentTitlesReaders = new WeakMap<RouteDeps['multiSourceEngine'], RecentTitlesReader>();
+
+/** Последние места работы для диапазона грейда: их знает хранилище кандидата, а не движок подбора. */
+export function setMatchedRecentTitlesReader(
+  engine: RouteDeps['multiSourceEngine'],
+  reader: RecentTitlesReader,
+): void {
+  recentTitlesReaders.set(engine, reader);
+}
+
+function gradeRangeOf(
+  engine: RouteDeps['multiSourceEngine'],
+  candidateId: string,
+  targetRoles: readonly string[],
+): GradeRange | null {
+  if (!GRADE_RANGE_PILOT.has(candidateId)) return null;
+  return candidateGradeRange({
+    targetRoles,
+    recentTitles: recentTitlesReaders.get(engine)?.(candidateId) ?? [],
+  });
 }
 
 /**
@@ -123,9 +156,10 @@ export function readMatchedSnapshot(
   geography?: MatchGeography,
   options: MatchedPoolReadOptions = {},
 ): Promise<MatchedVacancyItem[]> {
+  const gradeRange = gradeRangeOf(engine, candidateId, targetRoles);
   return snapshotsOf(engine).readAsync(
     candidateId,
-    matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel, geography),
+    matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel, geography, gradeRange),
     () =>
       engine.getMatchedVacanciesAsync({
         candidateId,
@@ -135,6 +169,7 @@ export function readMatchedSnapshot(
         preferredRemote: true,
         ...(targetLevel ? { targetLevel } : {}),
         ...(geography ? { matchGeography: geography } : {}),
+        ...(gradeRange ? { gradeRange } : {}),
       }),
     options,
   );

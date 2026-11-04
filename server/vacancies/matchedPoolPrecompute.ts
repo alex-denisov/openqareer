@@ -7,6 +7,7 @@ import {
   invalidateMatchedVacancies,
   readMatchedSnapshot,
   readMatchProfile,
+  setMatchedRecentTitlesReader,
   setMatchedSnapshotFailureLog,
 } from './matchedPoolContext';
 import { VacancyMatchUnavailable } from './vacancyMatchReader';
@@ -56,6 +57,11 @@ export class MatchedPoolPrecompute {
 
   constructor(private readonly options: MatchedPoolPrecomputeOptions) {
     this.log = options.log;
+    setMatchedRecentTitlesReader(options.engine, (candidateId) =>
+      (options.candidateStore.getSnapshot(candidateId)?.resume?.draft.experience ?? []).flatMap(
+        (place) => place.title ?? [],
+      ),
+    );
     setMatchedSnapshotFailureLog(options.engine, (error) =>
       this.log?.error(
         {

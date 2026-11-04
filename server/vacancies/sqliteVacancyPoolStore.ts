@@ -684,6 +684,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         candidate.targetLevel,
       ),
       ...(candidate.matchGeography ? { geography: candidate.matchGeography } : {}),
+      ...(candidate.gradeRange ? { gradeRange: candidate.gradeRange } : {}),
       window,
       preferRemote,
       limit,

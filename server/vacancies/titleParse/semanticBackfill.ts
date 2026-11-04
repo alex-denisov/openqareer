@@ -4,6 +4,7 @@ import { MIGRATION_35 } from '../../data/sqliteSchema';
 import { normalizeTitleKey } from './normalizeTitleKey';
 import { LEVEL_RANK } from '../levelMatcher';
 import { isSeniorManagerLead } from './rulesLevel';
+import { gradeRangeOfTitle } from './gradeRange';
 import { exactOntologyTitleKeys, rulesParse } from './rulesParse';
 
 /**
@@ -43,17 +44,25 @@ interface ParsedTitle {
 }
 
 const PRUNE_CHUNK = 5_000;
+/** Названий на шаг для грейдов: только правила, модель не вызывается. */
+const GRADE_CHUNK = 2_000;
+/** Выше этой ступени название уже различает `level_rank`. */
+const GRADE_MAX_LEVEL_RANK = 1;
 /** Названий на переразбор за шаг: удаление строк индекса идёт по `title_key`. */
 const RELABEL_CHUNK = 200;
 
 export class SemanticBackfill {
   private readonly database: DatabaseSync;
   private cursor = '';
+  private gradeCursor = '';
   /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
   private relabelDone = false;
   private ontologyCorrectionDone = false;
 
-  constructor(database: DatabaseSync) {
+  constructor(
+    database: DatabaseSync,
+    private readonly onGradeError?: (reason: string) => void,
+  ) {
     this.database = database;
     this.database.exec(MIGRATION_35);
   }
@@ -73,6 +82,7 @@ export class SemanticBackfill {
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
     const pruned = passFinished ? this.pruneOrphans() : 0;
+    this.gradeStep();
     return {
       scanned: rows.length,
       poolRowsScanned,
@@ -227,6 +237,61 @@ export class SemanticBackfill {
       throw error;
     }
     return stale.length;
+  }
+
+  /** Сбой грейдов уходит в журнал и не останавливает индексацию вакансий. */
+  private gradeStep(): void {
+    try {
+      this.gradeTitles(GRADE_CHUNK);
+    } catch (error) {
+      this.onGradeError?.(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  /**
+   * Грейд по слову в названии. Хранятся только названия со словом: без него строка подбор не сужает.
+   * Запись идёт лишь при изменении, поэтому повторный проход не пишет в базу.
+   */
+  private gradeTitles(limit: number): number {
+    const rows = this.database
+      .prepare(
+        `SELECT p.title_key AS key, p.sample_title AS title, p.level_rank AS rank,
+                g.grade_min AS min, g.grade_max AS max
+         FROM title_parse p LEFT JOIN vacancy_grade g ON g.title_key = p.title_key
+         WHERE p.title_key > ? ORDER BY p.title_key LIMIT ?`,
+      )
+      .all(this.gradeCursor, limit) as {
+      key: string;
+      title: string;
+      rank: number | null;
+      min: number | null;
+      max: number | null;
+    }[];
+    this.gradeCursor = rows.length < limit ? '' : (rows.at(-1)?.key ?? '');
+    const upsert = this.database.prepare(
+      `INSERT INTO vacancy_grade (title_key, grade_min, grade_max) VALUES (?, ?, ?)
+       ON CONFLICT(title_key) DO UPDATE SET grade_min = excluded.grade_min, grade_max = excluded.grade_max`,
+    );
+    const remove = this.database.prepare('DELETE FROM vacancy_grade WHERE title_key = ?');
+    const changes = rows.flatMap((row) => {
+      const range =
+        row.rank === null || row.rank <= GRADE_MAX_LEVEL_RANK ? gradeRangeOfTitle(row.title) : null;
+      const same = (range?.min ?? null) === row.min && (range?.max ?? null) === row.max;
+      return same ? [] : [{ key: row.key, range }];
+    });
+    if (changes.length === 0) return 0;
+    this.database.exec('BEGIN');
+    try {
+      for (const { key, range } of changes) {
+        if (range) upsert.run(key, range.min, range.max);
+        else remove.run(key);
+      }
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return changes.length;
   }
 
   /** Сколько названий уже в кеше — для журнала в конце прохода. */
