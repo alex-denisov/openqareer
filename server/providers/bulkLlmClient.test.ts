@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,8 +11,6 @@ function options(transport: typeof fetch) {
   return {
     databasePath: join(dir, 'app.db'),
     transport,
-    // Без Vertex: эти проверки — про ступени OpenRouter и бюджет.
-    vertex: null,
     env: {
       OPENQAREER_OPENROUTER_API_KEY: 'secret',
       OPENQAREER_BULK_LLM_ENABLED: 'true',
@@ -208,7 +206,7 @@ it('routes through an ordered list of pinned providers so one price change or ra
   });
   runtime.close();
 });
-it('expires a hold left by a call that never settled after the TTL at the dearest settled call of its task, not at the cap (B556)', async () => {
+it('expires a hold left by a call that never settled after the TTL at the average settled call of its task, not at the cap (B556, 04.11)', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   try {
     vi.setSystemTime(Date.parse('2026-10-22T03:00:00.000Z'));
@@ -244,11 +242,4 @@ it('expires a hold left by a call that never settled after the TTL at the deares
   } finally {
     vi.useRealTimers();
   }
-});
-
-describe('Vertex hold (prod 28.10)', () => {
-  it('covers the largest realistic Vertex call', async () => {
-    const { VERTEX_HOLD_USD } = await import('./bulkLlmClient');
-    expect(VERTEX_HOLD_USD).toBeGreaterThanOrEqual(0.02);
-  });
 });

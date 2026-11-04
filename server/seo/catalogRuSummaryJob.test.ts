@@ -201,7 +201,7 @@ describe('catalog Russian summary job', () => {
     const client = fakeClient();
     client.complete.mockImplementationOnce(async (input: BulkLlmInput) => {
       input.accept?.('{"summary":"One English sentence. Another one."}');
-      throw new Error('Bulk answer rejected (vertex)');
+      throw new Error('Bulk answer rejected (z-ai/glm-5.3-flash)');
     });
     const step = job(client);
     expect(await step.step()).toMatchObject({ failed: 1, issue: 'not_russian' });

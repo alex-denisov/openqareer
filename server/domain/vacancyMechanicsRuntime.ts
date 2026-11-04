@@ -9,7 +9,7 @@ import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vac
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
-import { BULK_BUDGET_EXCEEDED, type BulkLlmClient } from '../providers/bulkLlmClient';
+import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import {
   addMassRecount, ensureMassRecountTable, massRecountAllowance, massRecountLimit, massRecountQueued, takeMassRecountSlot, utcDay,
@@ -24,6 +24,11 @@ export const SHOWN_PAGE_PRIORITY = 1.5;
 /** Below a fit the candidate asked for (1), above the maintenance backlog (0). */
 const BACKGROUND_REQUIREMENTS_PRIORITY = 0.5;
 
+/** No stage of the channel answers: the worker claims nothing for this long. Short on purpose: no latch (28.10). */
+const CHANNEL_PAUSE_MS = 60_000;
+/** A job that met the outage waits this long; its attempts stay untouched, so it never turns «failed». */
+const CHANNEL_JOB_WAIT_MS = 5 * 60_000;
+
 /** Error classes of a failed fit job as the row names them; anything else is a plain «не завершился». */
 const FIT_FAILURES: Readonly<Record<string, VacancyFitFailure>> = {
   assessment_model_unavailable: 'model_unavailable',
@@ -36,6 +41,8 @@ interface AssessmentOutcome {
   staleProfile: boolean;
   /** The spend budget refused the call: the job waits for the next UTC day, no attempt is spent. */
   budgetPaused: boolean;
+  /** No stage could answer: the job waits in the queue and spends no attempt. */
+  channelDown: boolean;
   returned: boolean;
   invalid: boolean;
 }
@@ -85,6 +92,7 @@ export class VacancyMechanicsRuntime {
   private stats: VacancyMechanicsStats = emptyVacancyMechanicsStats();
   /** Until the next UTC day after a budget refusal: no job is claimed for a call that would be refused (B556). */
   private budgetPausedUntil = 0;
+  private channelPausedUntil = 0;
   constructor(databasePath: string, encryptionKey: Buffer, private readonly validateCurrentProfile?: (input: VacancyFitInput) => boolean) {
     this.database = new DatabaseSync(databasePath);
     applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
@@ -202,7 +210,7 @@ export class VacancyMechanicsRuntime {
     // tail of requirements only when no fit is waiting (before, every fit paid one tail call).
     const shown = await this.extractNextRequirements(client, runId, workerId, SHOWN_PAGE_PRIORITY);
     // B556 for the fit call too (01.11): no fit job is claimed for a call the budget would refuse.
-    if (client && Date.now() < this.budgetPausedUntil) return shown;
+    if (client && Date.now() < Math.max(this.budgetPausedUntil, this.channelPausedUntil)) return shown;
     const job = this.fit.claim({ leaseMs: 300000 });
     if (!job) return shown || (await this.extractNextRequirements(client, runId, workerId));
     const extracted = shown;
@@ -219,6 +227,11 @@ export class VacancyMechanicsRuntime {
           requirements = this.requirements.getLatest(job.input.vacancyId, vacancyDescriptionHash(job.input.description));
         }
       }
+      if (!requirements && Date.now() < this.channelPausedUntil) {
+        // Its requirements could not be read for the same outage: a defer would run out and fail it.
+        this.waitForChannel(job);
+        return Boolean(extracted);
+      }
       if (!requirements) {
         const dependency = this.requirements.enqueue(requirementsInput, { titleStrategyPriority: FIT_DEPENDENCY_PRIORITY });
         if (dependency.state === 'failed') this.recordFailure(this.fit.fail(job, { reason: 'requirements_failed' }), 'requirements_failed');
@@ -229,20 +242,24 @@ export class VacancyMechanicsRuntime {
       const resolved = { ...job.input, requirements: requirements.requirements };
       const { assessor, outcome } = this.trackedAssessor(client, runId, resolved);
       const result = await assessVacancyFit(resolved, assessor);
-      if (outcome.budgetPaused) {
-        this.pauseForBudget();
-        this.fit.pause(job, new Date(this.budgetPausedUntil).toISOString(), 'assessment_budget_paused');
-      } else if (client && result.reason === 'assessment_unavailable' && !outcome.returned) {
-        this.settleFailure(
-          job,
-          assessmentFailure(outcome),
-          !outcome.staleProfile && job.attempts < 3,
-        );
-      } else if (this.fit.complete(job, result, undefined, resolved)) this.stats.completed += 1;
+      this.settleAssessment(job, resolved, result, outcome, Boolean(client));
     } catch (error) {
       this.settleFailure(job, error instanceof Error && /^[a-z0-9_:-]{1,80}$/iu.test(error.message) ? error.message : 'assessment_failed', job.attempts < 3);
     }
     return true;
+  }
+
+  /** Where the job goes after its model call. */
+  private settleAssessment(job: Parameters<SqliteVacancyFitStore['pause']>[0], resolved: VacancyFitInput, result: VacancyFitResult, outcome: AssessmentOutcome, hasClient: boolean): void {
+    if (outcome.budgetPaused) {
+      this.pauseForBudget();
+      this.fit.pause(job, new Date(this.budgetPausedUntil).toISOString(), 'assessment_budget_paused');
+    } else if (outcome.channelDown) {
+      this.pauseForChannel();
+      this.waitForChannel(job);
+    } else if (hasClient && result.reason === 'assessment_unavailable' && !outcome.returned) {
+      this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && job.attempts < 3);
+    } else if (this.fit.complete(job, result, undefined, resolved)) this.stats.completed += 1;
   }
 
   /** The fit assessor with what happened to its call: the failure class names the row (B562-r). */
@@ -251,7 +268,7 @@ export class VacancyMechanicsRuntime {
     runId: string,
     resolved: VacancyFitInput,
   ) {
-    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, returned: false, invalid: false };
+    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, channelDown: false, returned: false, invalid: false };
     const base = client ? createVacancyFitAssessor(client, runId) : undefined;
     const assessor = base
       ? {
@@ -269,6 +286,10 @@ export class VacancyMechanicsRuntime {
                 outcome.budgetPaused = true;
                 throw error;
               }
+              if (error instanceof BulkChannelUnavailable) {
+                outcome.channelDown = true;
+                throw error;
+              }
               // The model answered, but not with the assessment shape: not an outage.
               outcome.invalid =
                 error instanceof SyntaxError ||
@@ -283,7 +304,7 @@ export class VacancyMechanicsRuntime {
 
   /** One queued requirements job (highest priority first); the counters feed the batch journal line. */
   private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string, minPriority = Number.NEGATIVE_INFINITY): Promise<boolean> {
-    if (client && Date.now() < this.budgetPausedUntil) return false;
+    if (client && Date.now() < Math.max(this.budgetPausedUntil, this.channelPausedUntil)) return false;
     const extracted = await this.requirements.runNext(workerId, async (input) => {
       const result = await extractVacancyRequirementsWithFallback(input,
         client ? { extract: async ({ description, instructions }) => (await client.complete({
@@ -291,6 +312,10 @@ export class VacancyMechanicsRuntime {
           // 35 entries took ~2 000 tokens on prod (22.10): 50 need headroom, or the JSON is cut.
           input: minimizeModelText(description), maxTokens: 4096,
         }).catch((error: unknown) => {
+          if (error instanceof BulkChannelUnavailable) {
+            this.pauseForChannel();
+            throw new VacancyRequirementsPausedError(Date.now() + CHANNEL_JOB_WAIT_MS);
+          }
           if (!(error instanceof Error) || error.message !== BULK_BUDGET_EXCEEDED) throw error;
           this.pauseForBudget();
           throw new VacancyRequirementsPausedError(this.budgetPausedUntil);
@@ -310,6 +335,16 @@ export class VacancyMechanicsRuntime {
     const now = new Date();
     this.budgetPausedUntil = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
     this.stats.budgetPaused += 1;
+  }
+
+  /** Not the 28.10 latch: a minute, and each new call tries the channel again. */
+  private pauseForChannel(): void {
+    this.channelPausedUntil = Date.now() + CHANNEL_PAUSE_MS;
+    this.stats.channelPaused += 1;
+  }
+
+  private waitForChannel(job: Parameters<SqliteVacancyFitStore['pause']>[0]): void {
+    this.fit.pause(job, new Date(Date.now() + CHANNEL_JOB_WAIT_MS).toISOString(), 'assessment_model_unavailable');
   }
 
   private settleFailure(job: Parameters<SqliteVacancyFitStore['fail']>[0], reason: string, retry: boolean): void {

@@ -21,11 +21,10 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('фоновая обработка: deepseek-v4-flash → glm-5.3-flash → Vertex (B580: Vertex последним)', () => {
+  it('фоновая обработка только через OpenRouter (решение владельца 04.11)', () => {
     expect(labels('bulk')).toEqual([
       'openrouter:deepseek/deepseek-v4-flash',
       'openrouter:z-ai/glm-5.3-flash',
-      'vertex',
     ]);
   });
 
@@ -47,10 +46,9 @@ describe('цепочки моделей по механикам (28.10)', () => 
     }
   });
 
-  it('структурный JSON: как фон — deepseek-v4-flash → glm-5.3-flash → Vertex', () => {
-    for (const mechanic of ['campaignRoles', 'titleParsing'] as const) {
-      expect(labels(mechanic)).toEqual(labels('bulk'));
-    }
+  it('разбор названий — как фон; роли кампании ещё держат Vertex последней', () => {
+    expect(labels('titleParsing')).toEqual(labels('bulk'));
+    expect(labels('campaignRoles')).toEqual([...labels('bulk'), 'vertex']);
   });
 
   it('квиз по навыку профиля идёт по цепочке консультанта (блок A, пакет 3)', () => {

@@ -39,6 +39,17 @@ export class SqliteBulkLlmLedger {
       .prepare('INSERT INTO bulk_llm_events VALUES(?,?,?)')
       .run(randomUUID(), kind, new Date().toISOString());
   }
+  /** True for the first caller of a UTC day across processes and restarts. */
+  firstToday(kind: string): boolean {
+    const now = new Date().toISOString();
+    return (
+      Number(
+        this.db
+          .prepare('INSERT OR IGNORE INTO bulk_llm_events VALUES(?,?,?)')
+          .run(`${kind}:${now.slice(0, 10)}`, kind, now).changes,
+      ) === 1
+    );
+  }
   private sum(where: string, ...values: string[]) {
     return Number(
       (
@@ -53,8 +64,9 @@ export class SqliteBulkLlmLedger {
   /**
    * A call that threw before settle (timeout, 5xx, worker stopped mid-call) left its hold at the
    * per-request cap, ~60x a real call; on prod 22.10 such holds took $0.54 of the $1 run (B556).
-   * After the TTL the hold is charged at the dearest settled call of its task in the last day: an
-   * upper bound of what the provider can have billed, never zero. Batch rows are left alone.
+   * After the TTL the hold is charged at the average settled call of its task in the last day. At the
+   * dearest call the 631 November rows came to $5.85 against at most $0.6 billed by OpenRouter (04.11)
+   * and took that from the day cap. Batch rows are left alone.
    */
   expireStaleHolds(now = Date.now()) {
     const cutoff = new Date(now - STALE_HOLD_TTL_MS).toISOString();
@@ -62,7 +74,7 @@ export class SqliteBulkLlmLedger {
     return Number(
       this.db
         .prepare(
-          `UPDATE bulk_llm_spend AS hold SET status='expired',cost=MIN(hold.reserved,COALESCE((SELECT MAX(done.cost) FROM bulk_llm_spend AS done
+          `UPDATE bulk_llm_spend AS hold SET status='expired',cost=MIN(hold.reserved,COALESCE((SELECT AVG(done.cost) FROM bulk_llm_spend AS done
             WHERE done.task=hold.task AND done.status='settled' AND done.created_at>=?),hold.reserved))
           WHERE hold.status='reserved' AND hold.cost IS NULL AND hold.batch_id IS NULL AND hold.created_at<?`,
         )

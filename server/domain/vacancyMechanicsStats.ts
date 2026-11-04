@@ -5,6 +5,8 @@ export interface VacancyMechanicsStats {
   requirementsInvalid: number;
   /** Jobs returned to the queue because the spend budget refused the call (B556): not an extraction failure. */
   budgetPaused: number;
+  /** No stage of the channel answered: the worker waited a minute and the job kept its attempts (04.11). */
+  channelPaused: number;
   /** Why model answers or their entries were not used (B510-r), by `ModelAnswerIssue`. */
   modelIssues: Record<string, number>;
   claimed: number;
@@ -18,7 +20,7 @@ export interface VacancyMechanicsStats {
   llmMs: number;
   lastModel: string | null;
   providers: string[];
-  /** Calls answered by the reserve lane, and why OpenRouter was skipped last (27.10). */
+  /** Calls answered by a repeat or the next stage, and why the first try failed (27.10). */
   fallbackCalls: number;
   fallbackReason: string | null;
 }
@@ -29,6 +31,7 @@ export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
     requirementsUnavailable: 0,
     requirementsInvalid: 0,
     budgetPaused: 0,
+    channelPaused: 0,
     modelIssues: {},
     claimed: 0,
     completed: 0,
@@ -55,7 +58,7 @@ function issuesPart(issues: Readonly<Record<string, number>>): string {
 
 function fallbackPart(stats: VacancyMechanicsStats): string {
   return stats.fallbackCalls
-    ? ` fallback=gemini reason=${stats.fallbackReason ?? 'unknown'} fallback_calls=${stats.fallbackCalls}`
+    ? ` repeated reason=${stats.fallbackReason ?? 'unknown'} fallback_calls=${stats.fallbackCalls}`
     : '';
 }
 
@@ -71,7 +74,7 @@ function modelPart(stats: VacancyMechanicsStats): string {
     `llm_calls=${stats.llmCalls} llm_failed=${stats.llmFailed} ` +
     `llm_avg_ms=${Math.round(stats.llmMs / stats.llmCalls)} ` +
     `extract_unavailable=${stats.requirementsUnavailable} extract_invalid=${stats.requirementsInvalid} ` +
-    `extract_failed_share=${failedShare}%${fallbackPart(stats)}${stats.budgetPaused ? ` extract_budget_paused=${stats.budgetPaused}` : ''}${issuesPart(stats.modelIssues)}`
+    `extract_failed_share=${failedShare}%${fallbackPart(stats)}${stats.budgetPaused ? ` extract_budget_paused=${stats.budgetPaused}` : ''}${stats.channelPaused ? ` channel_paused=${stats.channelPaused}` : ''}${issuesPart(stats.modelIssues)}`
   );
 }
 

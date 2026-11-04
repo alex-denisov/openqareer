@@ -16,7 +16,7 @@ describe('vacancy mechanics batch journal line', () => {
       },
       60_000,
     );
-    expect(line).toContain('fallback=gemini reason=openrouter_402 fallback_calls=1');
+    expect(line).toContain('repeated reason=openrouter_402 fallback_calls=1');
   });
   it('stays silent for an idle batch', () => {
     expect(formatVacancyMechanicsStats(emptyVacancyMechanicsStats(), 60_000)).toBeNull();
