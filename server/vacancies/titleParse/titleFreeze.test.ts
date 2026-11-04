@@ -39,7 +39,6 @@ describe('TitleModelStep failures', () => {
     const logged: unknown[] = [];
     let calls = 0;
     const parser: ModelTitleParser = {
-      model: 'm',
       parse: async () => {
         calls += 1;
         throw new Error('quota exceeded Bearer abc123secretvalue');
@@ -47,6 +46,7 @@ describe('TitleModelStep failures', () => {
     };
     const step = new TitleModelStep(db, parser, {
       maxBatches: 3,
+      maxWaitMs: 0,
       log: { warn: (fields) => logged.push(fields) },
     });
 
@@ -70,13 +70,12 @@ describe('TitleModelStep failures', () => {
     let calls = 0;
     let t = Date.parse('2026-09-26T12:00:00Z');
     const parser: ModelTitleParser = {
-      model: 'm',
       parse: async () => {
         calls += 1;
         throw new Error('down');
       },
     };
-    const step = new TitleModelStep(db, parser, { now: () => t });
+    const step = new TitleModelStep(db, parser, { now: () => t, maxWaitMs: 0 });
     await step.run();
     await step.run();
     expect(calls).toBe(1);
@@ -89,7 +88,11 @@ describe('TitleModelStep failures', () => {
     const db = database();
     addVacancy(db, 'a', 'Wibble Specialist');
     new SemanticBackfill(db).step(100);
-    const step = new TitleModelStep(db, { model: 'm', parse: async () => [] });
+    const step = new TitleModelStep(
+      db,
+      { parse: async () => ({ model: "m", results: [] }) },
+      { maxWaitMs: 0 },
+    );
     await step.run();
     expect(queue(db)[0]).toMatchObject({ failures: 0, frozen: 0 });
   });
@@ -101,8 +104,8 @@ describe('TitleModelStep failures', () => {
     new SemanticBackfill(db).step(100);
     const step = new TitleModelStep(
       db,
-      { model: 'm', parse: async () => [ok('wibble specialist')] },
-      { maxBatches: 1 },
+      { parse: async () => ({ model: 'm', results: [ok('wibble specialist')] }) },
+      { maxBatches: 1, maxWaitMs: 0 },
     );
 
     const report = await step.run();
@@ -118,8 +121,8 @@ describe('TitleModelStep failures', () => {
     new SemanticBackfill(db).step(100);
     const step = new TitleModelStep(
       db,
-      { model: 'm', parse: async () => [ok('wibble specialist')] },
-      { maxBatches: 1 },
+      { parse: async () => ({ model: 'm', results: [ok('wibble specialist')] }) },
+      { maxBatches: 1, maxWaitMs: 0 },
     );
     await step.run();
     await step.run();
@@ -135,8 +138,8 @@ describe('TitleModelStep failures', () => {
     new SemanticBackfill(db).step(100);
     const step = new TitleModelStep(
       db,
-      { model: 'm', parse: async () => [ok('wibble specialist')] },
-      { maxBatches: 1, maxCallsPerRun: 2 },
+      { parse: async () => ({ model: 'm', results: [ok('wibble specialist')] }) },
+      { maxBatches: 1, maxCallsPerRun: 2, maxWaitMs: 0 },
     );
     await step.run();
     await step.run();
@@ -151,7 +154,11 @@ describe('unfreezeLiveTitles', () => {
     addVacancy(db, 'live', 'Wibble Specialist');
     addVacancy(db, 'dead', 'Zibble Manager', false);
     new SemanticBackfill(db).step(100);
-    new TitleModelStep(db, { model: 'm', parse: async () => [] });
+    new TitleModelStep(
+      db,
+      { parse: async () => ({ model: "m", results: [] }) },
+      { maxWaitMs: 0 },
+    );
     db.exec(`INSERT OR IGNORE INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
       VALUES ('dead', 'other', 0, 'zibble manager', 1, 1)`);
     db.exec(`INSERT OR REPLACE INTO title_parse_model_queue (title_key, eligible, failures, frozen)

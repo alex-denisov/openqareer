@@ -3,17 +3,8 @@ import { z } from 'zod';
 import { ROLE_TAXONOMY, TAXONOMY_VERSION, type FunctionCode } from '../../../shared/roleTaxonomy';
 import { ontology } from '../../../shared/roleOntology';
 import { MIGRATION_35 } from '../../data/sqliteSchema';
-import {
-  retryOn429,
-  VertexTokenProvider,
-  vertexPublisherBaseUrl,
-  type VertexConfig,
-} from '../../providers/vertexAi';
+import type { BulkLlmClient } from '../../providers/bulkLlmClient';
 import { rulesParse } from './rulesParse';
-import { MODEL_CHAINS, resolveChain } from '../../providers/modelChains';
-import type { ProviderId } from '../../providers/modelRegistry';
-import { requestChatJson } from '../../providers/openRouterJson';
-import type { ProviderRoute } from '../../providers/providerQueue';
 import { describeFailure, ensureLastFailureColumn } from './titleFreeze';
 
 export interface TitleModelInput {
@@ -28,9 +19,14 @@ export interface TitleModelResult {
   readonly roleId?: string;
 }
 
-export interface ModelTitleParser {
+/** Разобранные названия и модель, которая действительно ответила (не подпись цепочки). */
+export interface TitleParseAnswer {
   readonly model: string;
-  parse(items: readonly TitleModelInput[]): Promise<readonly TitleModelResult[]>;
+  readonly results: readonly TitleModelResult[];
+}
+
+export interface ModelTitleParser {
+  parse(items: readonly TitleModelInput[]): Promise<TitleParseAnswer>;
 }
 
 const FUNCTION_CODES = ROLE_TAXONOMY.map((entry) => entry.code);
@@ -50,23 +46,6 @@ const responseItemSchema = z
   })
   .strict();
 
-const RESPONSE_SCHEMA = {
-  type: 'array',
-  maxItems: 40,
-  items: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['titleKey', 'functions', 'levelRank'],
-    properties: {
-      titleKey: { type: 'string' },
-      // Vertex отвечает 400 на `enum` внутри элементов массива — коды перечислены в промпте, проверяет zod.
-      functions: { type: 'array', minItems: 1, maxItems: 2, items: { type: 'string' } },
-      levelRank: { type: ['integer', 'null'], minimum: 0, maximum: 4 },
-      roleId: { type: 'string' },
-    },
-  },
-} as const;
-
 const SYSTEM_PROMPT = `
 Разбери каждое название вакансии. Верни ровно по одной записи на titleKey.
 functions содержит 1–2 кода только из списка: ${FUNCTION_CODES.join(', ')}.
@@ -76,63 +55,47 @@ roleId указывай только при уверенном соответс�
 Не добавляй пояснений и не меняй titleKey.
 `;
 
-interface ParserDependencies {
-  readonly fetchImpl?: typeof fetch;
-  readonly token?: () => Promise<string>;
+const TITLE_PARSE_TASK = 'title-parse';
+const MAX_BATCH = 40;
+const TITLE_MAX_TOKENS = 4_096;
+const TITLE_PROMPT = `${SYSTEM_PROMPT}\nВерни JSON-объект {"items": [...]} с записями вида {titleKey, functions, levelRank, roleId?}.`;
+
+function utcDay(now: number): string {
+  return new Date(now).toISOString().slice(0, 10);
 }
 
-export class VertexModelTitleParser implements ModelTitleParser {
-  readonly model: string;
-  private readonly fetchImpl: typeof fetch;
-  private readonly token: () => Promise<string>;
+export function titleParseRunId(now: number): string {
+  return `${TITLE_PARSE_TASK}:${utcDay(now)}`;
+}
 
+/**
+ * Разбор через фоновый канал: повторы, цепочка, журнал расхода и причины отказов ведёт
+ * `BulkLlmClient`. Сбой канала (`BulkChannelUnavailable`, бюджет, отклонённый ответ) уходит
+ * исключением; пачка с хотя бы одной годной записью — успех.
+ */
+export class BulkTitleParser implements ModelTitleParser {
   constructor(
-    private readonly config: VertexConfig,
-    dependencies: ParserDependencies = {},
-  ) {
-    this.model = config.model;
-    this.fetchImpl = dependencies.fetchImpl ?? fetch;
-    const provider = new VertexTokenProvider(config, this.fetchImpl);
-    this.token = dependencies.token ?? (() => provider.token());
-  }
+    private readonly client: Pick<BulkLlmClient, 'complete'>,
+    private readonly now: () => number = Date.now,
+  ) {}
 
-  async parse(items: readonly TitleModelInput[]): Promise<readonly TitleModelResult[]> {
-    if (items.length === 0) return [];
-    if (items.length > 40) throw new Error('title model batch exceeds 40 items');
-    const token = await this.token();
-    const response = await retryOn429(() => this.send(items, token), 2);
-    if (!response.ok) {
-      const detail = (await response.text()).replace(/\s+/g, ' ').slice(0, 400);
-      throw new Error(`title model failed with status ${response.status}: ${detail}`);
-    }
-    const body = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('');
-    if (!text) return [];
-    return decodeTitleResults(safeJson(text), items);
-  }
-
-  private send(items: readonly TitleModelInput[], token: string): Promise<Response> {
-    const url = `${vertexPublisherBaseUrl(this.config)}/models/${encodeURIComponent(this.model)}:generateContent`;
-    return this.fetchImpl(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: JSON.stringify(items) }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          responseJsonSchema: RESPONSE_SCHEMA,
-          thinkingConfig: { thinkingLevel: 'low' },
-        },
-      }),
-      signal: AbortSignal.timeout(25_000),
+  async parse(items: readonly TitleModelInput[]): Promise<TitleParseAnswer> {
+    if (items.length === 0) return { model: '', results: [] };
+    if (items.length > MAX_BATCH) throw new Error('title model batch exceeds 40 items');
+    const result = await this.client.complete({
+      runId: titleParseRunId(this.now()),
+      task: TITLE_PARSE_TASK,
+      dataClass: 'public',
+      prefix: TITLE_PROMPT,
+      input: JSON.stringify(items),
+      maxTokens: TITLE_MAX_TOKENS,
+      accept: (content) => decodeTitleResults(safeJson(content), items).length > 0,
     });
+    return { model: result.model, results: decodeTitleResults(safeJson(result.content), items) };
   }
 }
 
-/** Ответ модели — массив записей (Vertex) или `{ items: [...] }` (chat-completions). */
+/** Ответ модели: `{ items: [...] }` (допускается и голый массив). */
 function decodeTitleResults(
   decoded: unknown,
   items: readonly TitleModelInput[],
@@ -152,84 +115,15 @@ function decodeTitleResults(
   });
 }
 
-/** Ступень цепочки разбора на chat-completions: тот же промпт, ответ — `{ items: [...] }`. */
-export class ChatModelTitleParser implements ModelTitleParser {
-  readonly model: string;
-
-  constructor(
-    private readonly route: ProviderRoute,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {
-    this.model = route.model;
-  }
-
-  async parse(items: readonly TitleModelInput[]): Promise<readonly TitleModelResult[]> {
-    if (items.length === 0) return [];
-    if (items.length > 40) throw new Error('title model batch exceeds 40 items');
-    const answer = await requestChatJson(
-      this.route,
-      {
-        system: `${SYSTEM_PROMPT}\nВерни JSON-объект {"items": [...]} с записями вида {titleKey, functions, levelRank, roleId?}.`,
-        user: JSON.stringify(items),
-        maxTokens: 4_096,
-        timeoutMs: 25_000,
-      },
-      this.fetchImpl,
-    );
-    return decodeTitleResults(answer, items);
-  }
-}
-
-/**
- * Цепочка разбора названий (B580, 29.10): deepseek-v4-flash → glm-5.3-flash → Vertex.
- * Пустой ответ на непустую пачку — отказ ступени, как и исключение.
- */
-export class QueuedModelTitleParser implements ModelTitleParser {
-  constructor(readonly stages: readonly ModelTitleParser[]) {}
-
-  get model(): string {
-    return this.stages.map((stage) => stage.model).join(' → ');
-  }
-
-  async parse(items: readonly TitleModelInput[]): Promise<readonly TitleModelResult[]> {
-    let lastError: unknown;
-    for (const stage of this.stages) {
-      try {
-        const results = await stage.parse(items);
-        if (results.length > 0 || items.length === 0) return results;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    if (lastError) throw lastError;
-    return [];
-  }
-}
-
-export function buildModelTitleParser(config: {
-  providerCredentials?: Partial<Record<ProviderId, string>>;
-  vertex?: VertexConfig;
-}): ModelTitleParser | undefined {
-  const stages = resolveChain(
-    MODEL_CHAINS.titleParsing,
-    config.providerCredentials ?? {},
-    config.vertex,
-  );
-  if (stages.length === 0) return undefined;
-  return new QueuedModelTitleParser(
-    stages.map((stage) =>
-      stage.kind === 'vertex'
-        ? new VertexModelTitleParser(stage.vertex)
-        : new ChatModelTitleParser(stage.route),
-    ),
-  );
-}
-
 export interface TitleModelStepReport {
   readonly batches: number;
   readonly parsed: number;
   readonly refused: number;
   readonly frozen: number;
+  /** Названий, ушедших в модель за проход. */
+  readonly titles: number;
+  /** Названий в неполной пачке, которая ждёт таймера `maxWaitMs`. */
+  readonly heldPartial: number;
   readonly callsToday: number;
   readonly dailyCapReached: boolean;
   /** Вызовов с запуска процесса (для потолка прогона) и признак сбоя вызова в этом проходе. */
@@ -244,8 +138,22 @@ interface TitleModelStepOptions {
   readonly maxBatches?: number;
   /** Потолок вызовов модели за жизнь процесса: останавливает перепрогон у бюджета. */
   readonly maxCallsPerRun?: number;
+  /** Сколько неполная пачка (меньше 40) ждёт добора, мс. По умолчанию 30 минут. */
+  readonly maxWaitMs?: number;
   readonly log?: { warn(fields: Record<string, unknown>, message: string): void };
   readonly now?: () => number;
+}
+
+export const DEFAULT_PARTIAL_BATCH_WAIT_MS = 30 * 60_000;
+
+interface PassTally {
+  batches: number;
+  parsed: number;
+  refused: number;
+  frozen: number;
+  titles: number;
+  heldPartial: number;
+  failedCall: boolean;
 }
 
 export class TitleModelStep {
@@ -253,10 +161,16 @@ export class TitleModelStep {
   private readonly maxBatches: number;
   private readonly now: () => number;
   private readonly maxCallsPerRun: number;
+  private readonly maxWaitMs: number;
   private readonly log: TitleModelStepOptions['log'];
   private callsRun = 0;
   private pausedUntil = 0;
   private consecutiveFailures = 0;
+  /**
+   * Когда шаг впервые увидел неполную пачку. Только в памяти: перезапуск сбрасывает отсчёт, и
+   * неполная пачка ждёт ещё `maxWaitMs`; название при этом не теряется — оно в очереди в SQLite.
+   */
+  private partialSince: number | null = null;
 
   constructor(
     private readonly database: DatabaseSync,
@@ -267,6 +181,7 @@ export class TitleModelStep {
     this.maxBatches = options.maxBatches ?? 3;
     this.now = options.now ?? Date.now;
     this.maxCallsPerRun = options.maxCallsPerRun ?? Number.POSITIVE_INFINITY;
+    this.maxWaitMs = options.maxWaitMs ?? DEFAULT_PARTIAL_BATCH_WAIT_MS;
     this.log = options.log;
     this.database.exec(MIGRATION_35);
     ensureLastFailureColumn(this.database);
@@ -274,60 +189,74 @@ export class TitleModelStep {
 
   async run(): Promise<TitleModelStepReport> {
     const startedAt = this.now();
-    if (startedAt < this.pausedUntil) return this.report(0, 0, 0, 0, startedAt, false, 0);
+    const tally: PassTally = {
+      batches: 0,
+      parsed: 0,
+      refused: 0,
+      frozen: 0,
+      titles: 0,
+      heldPartial: 0,
+      failedCall: false,
+    };
+    if (startedAt < this.pausedUntil) return this.report(tally, startedAt, 0);
     this.seedQueue(500);
     const daily = this.dailyState();
-    let batches = 0;
-    let parsed = 0;
-    let refused = 0;
-    let frozen = 0;
-    let failedCall = false;
     while (
-      batches < this.maxBatches &&
-      daily.calls + batches < this.dailyCalls &&
+      tally.batches < this.maxBatches &&
+      daily.calls + tally.batches < this.dailyCalls &&
       this.callsRun < this.maxCallsPerRun
     ) {
       const items = this.nextBatch();
-      if (items.length === 0) break;
-      const outcome = await this.tryParse(items);
-      batches += 1;
-      this.callsRun += 1;
-      if (!outcome.ok) {
-        failedCall = true;
-        break;
-      }
-      this.consecutiveFailures = 0;
-      const applied = this.apply(items, outcome.results);
-      parsed += applied.parsed;
-      refused += applied.refused;
-      frozen += applied.frozen;
+      if (!this.shouldSend(items, tally)) break;
+      await this.sendBatch(items, tally);
+      if (tally.failedCall) break;
     }
-    if (batches > 0) this.addCalls(daily.day, batches);
-    return this.report(batches, parsed, refused, frozen, startedAt, failedCall, daily.calls);
+    if (tally.batches > 0) this.addCalls(daily.day, tally.batches);
+    return this.report(tally, startedAt, daily.calls);
   }
 
-  private report(
-    batches: number,
-    parsed: number,
-    refused: number,
-    frozen: number,
-    startedAt: number,
-    failedCall: boolean,
-    dailyBefore: number,
-  ): TitleModelStepReport {
-    const callsToday = dailyBefore + batches;
+  /** Полная пачка уходит сразу; неполная ждёт добора до `maxWaitMs` с первого её появления. */
+  private shouldSend(items: readonly TitleModelInput[], tally: PassTally): boolean {
+    if (items.length === 0) {
+      this.partialSince = null;
+      return false;
+    }
+    if (items.length >= MAX_BATCH) return true;
+    const now = this.now();
+    this.partialSince ??= now;
+    if (now - this.partialSince >= this.maxWaitMs) return true;
+    tally.heldPartial = items.length;
+    return false;
+  }
+
+  private async sendBatch(items: readonly TitleModelInput[], tally: PassTally): Promise<void> {
+    const partial = items.length < MAX_BATCH;
+    const outcome = await this.tryParse(items);
+    tally.batches += 1;
+    tally.titles += items.length;
+    this.callsRun += 1;
+    if (!outcome.ok) {
+      tally.failedCall = true;
+      return;
+    }
+    this.consecutiveFailures = 0;
+    if (partial) this.partialSince = null;
+    const applied = this.apply(items, outcome.answer);
+    tally.parsed += applied.parsed;
+    tally.refused += applied.refused;
+    tally.frozen += applied.frozen;
+  }
+
+  private report(tally: PassTally, startedAt: number, dailyBefore: number): TitleModelStepReport {
+    const callsToday = dailyBefore + tally.batches;
     const atCap = callsToday >= this.dailyCalls;
     const day = new Date(this.now()).toISOString().slice(0, 10);
     return {
-      batches,
-      parsed,
-      refused,
-      frozen,
+      ...tally,
       callsToday,
       dailyCapReached: atCap && this.markCapLogged(day),
       callsRun: this.callsRun,
       runCeilingReached: this.callsRun >= this.maxCallsPerRun,
-      failedCall,
       ms: this.now() - startedAt,
     };
   }
@@ -363,10 +292,10 @@ export class TitleModelStep {
   /** Сбой вызова или пустой ответ на весь батч — не отказ модели: счётчики названий не трогаем. */
   private async tryParse(
     items: readonly TitleModelInput[],
-  ): Promise<{ ok: true; results: readonly TitleModelResult[] } | { ok: false }> {
+  ): Promise<{ ok: true; answer: TitleParseAnswer } | { ok: false }> {
     try {
-      const results = await this.parser.parse(items);
-      if (results.length > 0) return { ok: true, results };
+      const answer = await this.parser.parse(items);
+      if (answer.results.length > 0) return { ok: true, answer };
       this.failCall(items, new Error('empty or invalid model answer for the whole batch'));
     } catch (error) {
       this.failCall(items, error);
@@ -380,7 +309,7 @@ export class TitleModelStep {
     const delay = Math.min(15 * 60_000, 60_000 * 2 ** (this.consecutiveFailures - 1));
     this.pausedUntil = this.now() + delay;
     this.log?.warn(
-      { reason, items: items.length, model: this.parser.model, retryInMs: delay },
+      { reason, items: items.length, retryInMs: delay },
       'title-model-call-failed',
     );
     const mark = this.database.prepare(
@@ -389,8 +318,8 @@ export class TitleModelStep {
     for (const item of items) mark.run(`call: ${reason}`, item.titleKey);
   }
 
-  private apply(items: readonly TitleModelInput[], results: readonly TitleModelResult[]) {
-    const byKey = new Map(results.map((result) => [result.titleKey, result]));
+  private apply(items: readonly TitleModelInput[], answer: TitleParseAnswer) {
+    const byKey = new Map(answer.results.map((result) => [result.titleKey, result]));
     const update = this.database.prepare(
       `UPDATE title_parse SET functions = ?, level_rank = ?, role_label = ?, parsed_by = 'model',
        model = ?, taxonomy_version = ?, parsed_at = ? WHERE title_key = ? AND parsed_by = 'rules'`,
@@ -413,7 +342,7 @@ export class TitleModelStep {
             JSON.stringify(result.functions),
             result.levelRank,
             roleLabel(result.roleId),
-            this.parser.model,
+            answer.model,
             TAXONOMY_VERSION,
             this.now(),
             item.titleKey,

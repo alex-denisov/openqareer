@@ -46,8 +46,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
     }
   });
 
-  it('разбор названий — как фон; роли кампании ещё держат Vertex последней', () => {
-    expect(labels('titleParsing')).toEqual(labels('bulk'));
+  it('роли кампании ещё держат Vertex последней', () => {
     expect(labels('campaignRoles')).toEqual([...labels('bulk'), 'vertex']);
   });
 

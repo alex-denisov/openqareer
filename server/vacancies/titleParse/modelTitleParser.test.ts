@@ -1,31 +1,13 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, expect, it, vi } from 'vitest';
-import type { VertexConfig } from '../../providers/vertexAi';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MIGRATION_23, VACANCY_POOL_INDEX_TABLE } from '../../data/sqliteSchema';
+import { BulkChannelUnavailable, type BulkLlmClient } from '../../providers/bulkLlmClient';
+import { createBulkLlmRuntime } from '../../providers/bulkLlmRuntime';
 import { SemanticBackfill } from './semanticBackfill';
-import {
-  buildModelTitleParser,
-  ChatModelTitleParser,
-  QueuedModelTitleParser,
-  TitleModelStep,
-  VertexModelTitleParser,
-  type ModelTitleParser,
-} from './modelTitleParser';
-
-const vertex: VertexConfig = {
-  projectId: 'project-test',
-  clientEmail: 'test@example.test',
-  privateKey: 'unused-in-test',
-  model: 'gemini-3.8-flash',
-  location: 'global',
-};
-
-function vertexResponse(value: unknown): Response {
-  return new Response(
-    JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(value) }] } }] }),
-    { status: 200 },
-  );
-}
+import { BulkTitleParser, TitleModelStep, type ModelTitleParser } from './modelTitleParser';
 
 function database(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
@@ -45,117 +27,50 @@ function addVacancy(db: DatabaseSync, id: string, title: string): void {
   ).run(id, title.toLowerCase());
 }
 
-describe('VertexModelTitleParser (B267 S4)', () => {
-  it('sends one Vertex request for a batch and accepts taxonomy and ontology ids', async () => {
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
-      const request = JSON.parse(String(init?.body)) as {
-        generationConfig: { thinkingConfig?: { thinkingLevel?: string } };
-      };
-      expect(request.generationConfig.thinkingConfig?.thinkingLevel).toBe('low');
-      return vertexResponse([
-        { titleKey: 'mystery lead', functions: ['eng'], levelRank: 1, roleId: 'eng.backend.lead' },
-      ]);
-    });
-    const parser = new VertexModelTitleParser(vertex, {
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      token: async () => 'token',
-    });
+const NOW = Date.parse('2026-11-04T12:00:00Z');
+const MINUTE = 60_000;
+const answer = (titleKey: string) => ({ titleKey, functions: ['data'], levelRank: 0 }) as const;
 
-    await expect(
-      parser.parse([{ titleKey: 'mystery lead', sampleTitle: 'Mystery Lead' }]),
-    ).resolves.toEqual([
-      { titleKey: 'mystery lead', functions: ['eng'], levelRank: 1, roleId: 'eng.backend.lead' },
-    ]);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+function fakeClient(content: (input: string) => unknown) {
+  const complete = vi.fn(async (request: { input: string }) => ({
+    content: JSON.stringify(content(request.input)),
+    model: 'z-ai/glm-5.3-flash',
+    provider: 'Novita',
+    usage: { cost: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0 },
+  }));
+  return { client: { complete } as unknown as BulkLlmClient, complete };
+}
+
+describe('BulkTitleParser', () => {
+  it('sends the title-parse call and returns the answering model', async () => {
+    const { client, complete } = fakeClient(() => ({ items: [answer('cto'), answer('alien')] }));
+    const parser = new BulkTitleParser(client, () => NOW);
+
+    const out = await parser.parse([{ titleKey: 'cto', sampleTitle: 'CTO' }]);
+
+    expect(out).toEqual({ model: 'z-ai/glm-5.3-flash', results: [answer('cto')] });
+    expect(complete.mock.calls[0]?.[0]).toMatchObject({
+      task: 'title-parse',
+      runId: 'title-parse:2026-11-04',
+      dataClass: 'public',
+      maxTokens: 4096,
+      input: JSON.stringify([{ titleKey: 'cto', sampleTitle: 'CTO' }]),
+    });
   });
 
-  it('keeps the parse but drops a roleId unknown to the ontology', async () => {
-    const parser = new VertexModelTitleParser(vertex, {
-      fetchImpl: async () =>
-        vertexResponse([
-          { titleKey: 'k', functions: ['eng'], levelRank: 1, roleId: 'made.up.role' },
-        ]),
-      token: async () => 'token',
-    });
-
-    await expect(parser.parse([{ titleKey: 'k', sampleTitle: 'Team Lead' }])).resolves.toEqual([
-      { titleKey: 'k', functions: ['eng'], levelRank: 1 },
-    ]);
-  });
-
-  it('preserves both marketing and operations functions from the model for a compound title', async () => {
-    const parser = new VertexModelTitleParser(vertex, {
-      fetchImpl: async () =>
-        vertexResponse([
-          {
-            titleKey: 'vp marketing creative operations',
-            functions: ['marketing', 'ops'],
-            levelRank: 3,
-          },
-        ]),
-      token: async () => 'token',
-    });
-
-    await expect(
-      parser.parse([
-        {
-          titleKey: 'vp marketing creative operations',
-          sampleTitle: 'VP Marketing Creative & Operations',
-        },
-      ]),
-    ).resolves.toEqual([
-      {
-        titleKey: 'vp marketing creative operations',
-        functions: ['marketing', 'ops'],
-        levelRank: 3,
-      },
-    ]);
-  });
-
-  it('sends no enum inside array items, which Vertex rejects with 400', async () => {
-    let sent = '';
-    const parser = new VertexModelTitleParser(vertex, {
-      fetchImpl: async (_url, init) => {
-        sent = String(init?.body);
-        return vertexResponse([]);
-      },
-      token: async () => 'token',
-    });
-
-    await parser.parse([{ titleKey: 'k', sampleTitle: 'CTO' }]);
-
-    const schema = JSON.parse(sent).generationConfig.responseJsonSchema;
-    expect(schema.items.properties.functions.items).toEqual({ type: 'string' });
-  });
-
-  it('rejects only a record with an unknown function code', async () => {
-    const parser = new VertexModelTitleParser(vertex, {
-      fetchImpl: async () =>
-        vertexResponse([
-          { titleKey: 'bad', functions: ['invented'], levelRank: 2 },
-          { titleKey: 'good', functions: ['data'], levelRank: null },
-        ]),
-      token: async () => 'token',
-    });
-
-    await expect(
-      parser.parse([
-        { titleKey: 'bad', sampleTitle: 'Bad' },
-        { titleKey: 'good', sampleTitle: 'Good' },
-      ]),
-    ).resolves.toEqual([{ titleKey: 'good', functions: ['data'], levelRank: null }]);
-  });
-
-  it('treats broken JSON as an unusable batch response', async () => {
-    const parser = new VertexModelTitleParser(vertex, {
-      fetchImpl: async () =>
-        new Response(
-          JSON.stringify({ candidates: [{ content: { parts: [{ text: '{broken' }] } }] }),
-        ),
-      token: async () => 'token',
-    });
-
-    await expect(parser.parse([{ titleKey: 'bad', sampleTitle: 'Bad' }])).resolves.toEqual([]);
+  it('accepts an answer only with a decodable record; an unknown roleId is dropped', async () => {
+    const { client, complete } = fakeClient(() => ({
+      items: [{ titleKey: 'k', functions: ['eng'], levelRank: 1, roleId: 'made.up.role' }],
+    }));
+    const out = await new BulkTitleParser(client).parse([{ titleKey: 'k', sampleTitle: 'Lead' }]);
+    expect(out.results).toEqual([{ titleKey: 'k', functions: ['eng'], levelRank: 1 }]);
+    const accept = (complete.mock.calls[0]?.[0] as unknown as { accept: (c: string) => boolean })
+      .accept;
+    expect(accept('{broken')).toBe(false);
+    expect(accept('{"items":[{"titleKey":"k","functions":["invented"],"levelRank":2}]}')).toBe(
+      false,
+    );
+    expect(accept('{"items":[{"titleKey":"k","functions":["data"],"levelRank":null}]}')).toBe(true);
   });
 });
 
@@ -164,14 +79,14 @@ describe('TitleModelStep (B267 S4)', () => {
     const db = database();
     addVacancy(db, 'exact', 'Chief Technology Officer');
     addVacancy(db, 'unknown', 'Wibble Specialist');
-    const backfill = new SemanticBackfill(db);
-    backfill.step(100);
+    new SemanticBackfill(db).step(100);
     const parser: ModelTitleParser = {
-      model: 'test-model',
-      parse: async (items) =>
-        items.map((item) => ({ titleKey: item.titleKey, functions: ['data'], levelRank: 0 })),
+      parse: async (items) => ({
+        model: 'test-model',
+        results: items.map((item) => answer(item.titleKey)),
+      }),
     };
-    const step = new TitleModelStep(db, parser, { dailyCalls: 10 });
+    const step = new TitleModelStep(db, parser, { dailyCalls: 10, maxWaitMs: 0 });
 
     const report = await step.run();
 
@@ -182,8 +97,8 @@ describe('TitleModelStep (B267 S4)', () => {
         .get(),
     ).toEqual({ parsed_by: 'rules' });
     expect(
-      db.prepare("SELECT parsed_by FROM title_parse WHERE title_key = 'wibble specialist'").get(),
-    ).toEqual({ parsed_by: 'model' });
+      db.prepare("SELECT parsed_by, model FROM title_parse WHERE title_key = 'wibble specialist'").get(),
+    ).toEqual({ parsed_by: 'model', model: 'test-model' });
     expect(
       db
         .prepare(
@@ -193,16 +108,16 @@ describe('TitleModelStep (B267 S4)', () => {
     ).toEqual([{ id: 'unknown', function_code: 'data', level_rank: 0 }]);
   });
 
+  const missing: ModelTitleParser = {
+    // отказ: ответ успешный, но названия в нём нет
+    parse: async () => ({ model: 'test-model', results: [answer('other title')] }),
+  };
+
   it('freezes a key after three refused responses', async () => {
     const db = database();
     addVacancy(db, 'unknown', 'Wibble Specialist');
     new SemanticBackfill(db).step(100);
-    // отказ: ответ успешный, но названия в нём нет
-    const parser: ModelTitleParser = {
-      model: 'test-model',
-      parse: async () => [{ titleKey: 'other title', functions: ['data'], levelRank: 0 }],
-    };
-    const step = new TitleModelStep(db, parser, { dailyCalls: 10, maxBatches: 1 });
+    const step = new TitleModelStep(db, missing, { dailyCalls: 10, maxBatches: 1, maxWaitMs: 0 });
 
     await step.run();
     await step.run();
@@ -218,14 +133,10 @@ describe('TitleModelStep (B267 S4)', () => {
     addVacancy(db, 'one', 'Wibble Specialist');
     addVacancy(db, 'two', 'Zibble Manager');
     new SemanticBackfill(db).step(100);
-    // отказ: ответ успешный, но названия в нём нет
-    const parser: ModelTitleParser = {
-      model: 'test-model',
-      parse: async () => [{ titleKey: 'other title', functions: ['data'], levelRank: 0 }],
-    };
-    const step = new TitleModelStep(db, parser, {
+    const step = new TitleModelStep(db, missing, {
       dailyCalls: 1,
       maxBatches: 3,
+      maxWaitMs: 0,
       now: () => Date.parse('2026-09-26T12:00:00Z'),
     });
 
@@ -237,56 +148,154 @@ describe('TitleModelStep (B267 S4)', () => {
   });
 });
 
-describe('цепочка разбора названий (28.10)', () => {
-  const items = [{ titleKey: 'cto', sampleTitle: 'CTO' }];
-  const parsed = [{ titleKey: 'cto', functions: ['eng'], levelRank: 4 }] as const;
+describe('TitleModelStep through the bulk channel', () => {
+  const dirs: string[] = [];
+  afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
 
-  it('deepseek-v4-flash → glm-5.3-flash, Vertex в цепочке нет (04.11)', () => {
-    const parser = buildModelTitleParser({
-      providerCredentials: { openrouter: 'sk-or-test' },
-      vertex: {
-        projectId: 'p',
-        clientEmail: 'bot@p.iam.gserviceaccount.com',
-        privateKey: 'unused-in-this-test',
-        model: 'gemini-3.8-flash',
-        location: 'global',
-      },
-    }) as QueuedModelTitleParser;
-    expect(parser.stages.map((stage) => stage.model)).toEqual([
-      'deepseek/deepseek-v4-flash',
-      'z-ai/glm-5.3-flash',
-    ]);
-  });
-
-  it('сбой и пустой ответ ведут к следующей ступени', async () => {
-    const third = vi.fn(async () => parsed as never);
-    const parser = new QueuedModelTitleParser([
-      { model: 'a', parse: async () => Promise.reject(new Error('429')) },
-      { model: 'b', parse: async () => [] },
-      { model: 'c', parse: third },
-    ]);
-    expect(await parser.parse(items)).toEqual(parsed);
-    expect(third).toHaveBeenCalledTimes(1);
-  });
-
-  it('ступень chat-completions читает { items } и отбрасывает чужие ключи', async () => {
-    const fetchImpl = vi.fn(async () =>
-      Response.json({
+  it('writes the spend row and stores the answering model, not a chain label', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'title-bulk-'));
+    dirs.push(dir);
+    const transport = vi.fn(async (_url: string, init?: RequestInit) => {
+      const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+      return Response.json({
+        model,
+        provider: 'Novita',
         choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                items: [...parsed, { titleKey: 'alien', functions: ['eng'], levelRank: 0 }],
-              }),
-            },
-          },
+          { message: { content: JSON.stringify({ items: [answer('wibble specialist')] }) } },
         ],
-      }),
-    );
-    const parser = new ChatModelTitleParser(
-      { provider: 'openrouter', apiKey: 'k', model: 'deepseek/deepseek-v4.1-flash' },
-      fetchImpl as unknown as typeof fetch,
-    );
-    expect(await parser.parse(items)).toEqual(parsed);
+        usage: { cost: 0.001, prompt_tokens: 5, completion_tokens: 5 },
+      });
+    });
+    const runtime = createBulkLlmRuntime({
+      databasePath: join(dir, 'app.db'),
+      env: {
+        OPENQAREER_OPENROUTER_API_KEY: 'secret',
+        OPENQAREER_BULK_LLM_ENABLED: 'true',
+        OPENQAREER_BULK_LLM_RUN_USD: '0.1',
+        OPENQAREER_BULK_LLM_DAY_USD: '0.1',
+        OPENQAREER_BULK_LLM_TOTAL_USD: '0.1',
+        OPENQAREER_BULK_LLM_REQUEST_USD: '0.06',
+      },
+      transport: transport as unknown as typeof fetch,
+      delay: async () => undefined,
+    });
+    const db = database();
+    addVacancy(db, 'a', 'Wibble Specialist');
+    new SemanticBackfill(db).step(100);
+    const step = new TitleModelStep(db, new BulkTitleParser(runtime.client!), { maxWaitMs: 0 });
+
+    const report = await step.run();
+
+    const spend = runtime.ledger.db
+      .prepare("SELECT model, provider, status FROM bulk_llm_spend WHERE task = 'title-parse'")
+      .all();
+    runtime.close();
+    expect(report).toMatchObject({ parsed: 1, titles: 1 });
+    expect(spend).toHaveLength(1);
+    expect(spend[0]).toMatchObject({ model: 'deepseek/deepseek-v4-flash', provider: 'Novita' });
+    expect(
+      db.prepare("SELECT model FROM title_parse WHERE title_key = 'wibble specialist'").get(),
+    ).toEqual({ model: 'deepseek/deepseek-v4-flash' });
+  });
+
+  it.each([
+    new BulkChannelUnavailable('all stages cooled'),
+    new Error('Bulk budget exceeded'),
+    new Error('Bulk answer rejected'),
+  ])('a channel failure (%s) leaves failures and frozen alone', async (error) => {
+    const db = database();
+    addVacancy(db, 'a', 'Wibble Specialist');
+    new SemanticBackfill(db).step(100);
+    const client = {
+      complete: vi.fn(async () => Promise.reject(error)),
+    } as unknown as BulkLlmClient;
+    const step = new TitleModelStep(db, new BulkTitleParser(client), { maxWaitMs: 0 });
+
+    const report = await step.run();
+
+    expect(report.failedCall).toBe(true);
+    const row = db
+      .prepare(
+        "SELECT failures, frozen, last_failure FROM title_parse_model_queue WHERE title_key = 'wibble specialist'",
+      )
+      .get() as { failures: number; frozen: number; last_failure: string };
+    expect(row).toMatchObject({ failures: 0, frozen: 0 });
+    expect(row.last_failure).toMatch(/^call:/);
+  });
+});
+
+describe('partial batch timer', () => {
+  function setup(count: number) {
+    const db = database();
+    for (let index = 0; index < count; index += 1) {
+      // digits would be stripped from the title key: spell the index with letters
+      const word = [...String(index)].map((digit) => 'abcdefghij'[Number(digit)]).join('');
+      addVacancy(db, `v${index}`, `Wibble ${word} Specialist`);
+    }
+    new SemanticBackfill(db).step(1_000);
+    const sizes: number[] = [];
+    const parser: ModelTitleParser = {
+      parse: async (items) => {
+        sizes.push(items.length);
+        return { model: 'm', results: items.map((item) => answer(item.titleKey)) };
+      },
+    };
+    const clock = { now: NOW };
+    const make = () =>
+      new TitleModelStep(db, parser, { maxBatches: 5, dailyCalls: 100, now: () => clock.now });
+    return { db, sizes, clock, make };
+  }
+
+  it('holds 5 titles, then sends them after 30 minutes', async () => {
+    const { sizes, clock, make } = setup(5);
+    const step = make();
+
+    const first = await step.run();
+    clock.now += 29 * MINUTE;
+    const second = await step.run();
+    clock.now += MINUTE;
+    const third = await step.run();
+
+    expect(first).toMatchObject({ batches: 0, heldPartial: 5, titles: 0 });
+    expect(second).toMatchObject({ batches: 0, heldPartial: 5 });
+    expect(third).toMatchObject({ batches: 1, titles: 5, heldPartial: 0 });
+    expect(sizes).toEqual([5]);
+  });
+
+  it('sends 40 titles at once', async () => {
+    const { sizes, make } = setup(40);
+    const report = await make().run();
+    expect(sizes).toEqual([40]);
+    expect(report).toMatchObject({ batches: 1, titles: 40, heldPartial: 0 });
+  });
+
+  it('a restart resets the wait', async () => {
+    const { sizes, clock, make } = setup(5);
+    await make().run();
+    clock.now += 29 * MINUTE;
+    const restarted = make();
+    await restarted.run();
+    clock.now += 2 * MINUTE;
+    const held = await restarted.run();
+    expect(sizes).toEqual([]);
+    expect(held).toMatchObject({ batches: 0, heldPartial: 5 });
+    clock.now += 30 * MINUTE;
+    await restarted.run();
+    expect(sizes).toEqual([5]);
+  });
+
+  it('the wait restarts after a partial batch is sent', async () => {
+    const { db, sizes, clock, make } = setup(5);
+    const step = make();
+    await step.run();
+    clock.now += 30 * MINUTE;
+    await step.run();
+    addVacancy(db, 'late', 'Zibble Manager');
+    new SemanticBackfill(db).step(100);
+    await step.run();
+    expect(sizes).toEqual([5]);
+    clock.now += 30 * MINUTE;
+    await step.run();
+    expect(sizes).toEqual([5, 1]);
   });
 });
