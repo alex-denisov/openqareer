@@ -134,6 +134,18 @@ function withCursor(
   return query.length > 0 ? `${path}?${query.join('&')}` : path;
 }
 
+/**
+ * 04.11: a page behind a cursor exists only with that cursor. Its bare address
+ * answers 301 to the first page, so a canonical without the cursor told crawlers
+ * every further page was a copy of the first.
+ */
+function canonicalWithCursor(
+  page: CatalogPage,
+  cursor: ReturnType<typeof decodeCatalogCursor>,
+): CatalogPage {
+  return cursor ? { ...page, canonicalPath: withCursor(page.canonicalPath, cursor) } : page;
+}
+
 function projectedPage(
   page: CatalogEntriesPage,
   requestedPage: number,
@@ -195,7 +207,7 @@ async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: Fa
     return sendDocument(
       reply,
       renderCatalogDocument(
-        projectedPage(projected, requestedPage),
+        canonicalWithCursor(projectedPage(projected, requestedPage), cursor),
         filtersForListings(projectedListings),
       ),
     );
@@ -266,7 +278,8 @@ function handleProjectedListing(
   const summary = published ?? smallListingSummary(listing, projected.items, projected.total);
   if (!summary) return undefined;
   const requestedPage = cursor ? (listing.page ?? 1) : 1;
-  const page = projectedPage(projected, requestedPage, summary, chip);
+  const built = projectedPage(projected, requestedPage, summary, chip);
+  const page = chip ? built : canonicalWithCursor(built, cursor);
   // A chip page counts the chip; the listing itself is the unfiltered total.
   const total = chip ? summary.count : projected.total;
   return sendDocument(
