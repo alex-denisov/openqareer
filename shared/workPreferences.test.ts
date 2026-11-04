@@ -313,6 +313,12 @@ describe('порог зарплаты в рублях в месяц (04.11)', ()
     expect(passes({ from: 1000, currency: 'USD', period: 'month' }, false)).toBe(true);
   });
 
+  it('800 000 тенге без периода — в месяц, а не в год', () => {
+    const tenge = { date: '2026-11-04', rubPerUnit: { KZT: 0.16 } };
+    const lowFloor = { ...profile, salaryFloor: 100_000 };
+    expect(matchesDecisionProfile({ salary: { to: 800_000, currency: 'KZT' } } as never, lowFloor, tenge)).toBe(true);
+  });
+
   it('порог в другой валюте переводится по курсу', () => {
     const inUsd = { ...profile, salaryFloor: 10_000, salaryCurrency: 'USD' };
     expect(passes({ to: 800_000, currency: 'RUR' }, true, inUsd)).toBe(false);

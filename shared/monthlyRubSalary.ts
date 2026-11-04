@@ -17,6 +17,8 @@ export interface SalaryAmounts {
 
 /** Иностранная сумма без периода от этого порога — годовая (225 000 USD, 90 000 EUR). */
 const YEARLY_WITHOUT_PERIOD = 20_000;
+/** …если это не 800 000 тенге: месячная сумма в слабой валюте тоже больше порога (04.11). */
+const YEARLY_WITHOUT_PERIOD_RUB = 1_000_000;
 const MONTHS = 12;
 
 function isRuble(currency: string): boolean {
@@ -31,9 +33,13 @@ export function monthlyRubSalary(
   const amounts = [salary.from, salary.to].filter((value): value is number => Boolean(value));
   if (amounts.length === 0 || salary.period === 'hour') return undefined;
   const ruble = isRuble(currency);
+  const largest = Math.max(...amounts);
   const yearly =
     salary.period === 'year' ||
-    (!ruble && !salary.period && Math.max(...amounts) >= YEARLY_WITHOUT_PERIOD);
+    (!ruble &&
+      !salary.period &&
+      largest >= YEARLY_WITHOUT_PERIOD &&
+      (convertAmount(largest, currency, 'RUB', rates) ?? 0) >= YEARLY_WITHOUT_PERIOD_RUB);
   const monthly = (amount: number | undefined): number | undefined => {
     if (!amount) return undefined;
     const rub = convertAmount(amount, currency, 'RUB', rates);

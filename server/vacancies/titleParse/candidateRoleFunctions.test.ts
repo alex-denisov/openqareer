@@ -64,6 +64,12 @@ describe('роль специалиста в кампании руководит
     expect(withinCampaignLevels(window, row('senior ai consultant', ['ai-ml', 'consulting'], 0))).toBe(true);
   });
 
+  it('роль из двух названий находит любое из них', () => {
+    const both = campaignLevelWindow(['VP of Operations', 'Системный аналитик / Business Analyst'], 'vp');
+    const [code] = Object.keys(both.specialistTitles) as (keyof typeof both.specialistTitles)[];
+    expect(both.specialistTitles[code]).toEqual(['системный аналитик', 'business analyst']);
+  });
+
   it('роль уровня lead и выше по-прежнему открывает ступени своей функции: отбор и ворота согласны', () => {
     const led = campaignLevelWindow(['Chief Technology Officer', 'Head of AI', 'Support Team Lead'], 'c-level');
     expect(withinCampaignLevels(led, row('head of ml', ['ai-ml'], 2))).toBe(true);
@@ -78,7 +84,7 @@ describe('роль специалиста в кампании руководит
   });
 
   it('CIO и ИТ-директор ищут и руководителей ИТ: прежний охват IT Director не теряется', () => {
-    expect(campaignFunctionLevelFloors(['IT Director'], 'c-level')['it-ops']).toBe(2);
+    expect(campaignFunctionLevelFloors(['ИТ-директор'], 'c-level')['it-ops']).toBe(2);
     expect(campaignFunctionLevelFloors(['Chief Information Officer'], 'c-level')['it-ops']).toBe(2);
     expect(campaignFunctionLevelFloors(['Chief Technology Officer'], 'c-level')['eng-mgmt']).toBe(3);
   });

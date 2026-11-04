@@ -2,7 +2,7 @@
   "function": {
     "code": "it-ops",
     "labelEn": "IT Operations",
-    "labelRu": "ИТ-инфраструктура"
+    "labelRu": "Управление ИТ и инфраструктура"
   },
   "families": [
     {
@@ -375,14 +375,15 @@
           "CIO",
           "IT Director",
           "Director of IT",
-          "Director of Information Technology",
-          "Information Technology Director"
+          "Director of Information Technology"
         ],
         "ru": [
           "Директор по информационным технологиям",
           "CIO",
           "ИТ-директор",
-          "Директор по ИТ"
+          "Директор по ИТ",
+          "Начальник департамента ИТ",
+          "Начальник ИТ-департамента"
         ]
       },
       "adjacent": [

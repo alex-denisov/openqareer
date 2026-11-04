@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addStoredVacancyLevels, dropOutsideLevelGate } from './storedVacancyLevels';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
+import { campaignLevelWindow } from './titleParse/candidateRoleFunctions';
 
 function item(): MatchedVacancyItem {
   return {
@@ -58,7 +59,7 @@ describe('dropOutsideLevelGate', () => {
     'ai consultant': { functions: ['ai-ml', 'consulting'], levelRank: 0 },
   };
   const kept = (titles: string[]) =>
-    dropOutsideLevelGate(titles.map(titled), roles, 'vp', (key) => parses[key]).map(
+    dropOutsideLevelGate(titles.map(titled), campaignLevelWindow(roles, 'vp'), 'vp', (key) => parses[key]).map(
       (row) => row.cluster.canonicalTitle,
     );
 
@@ -72,6 +73,15 @@ describe('dropOutsideLevelGate', () => {
 
   it('без известного уровня кандидата ничего не отсекает', () => {
     const rows = [titled('Team Lead C++')];
-    expect(dropOutsideLevelGate(rows, roles, undefined, (key) => parses[key])).toHaveLength(1);
+    expect(
+      dropOutsideLevelGate(rows, campaignLevelWindow(roles, undefined), undefined, (key) => parses[key]),
+    ).toHaveLength(1);
+  });
+
+  it('подбор без функций ролей окно не сужает: рядовая строка у бывшего руководителя остаётся', () => {
+    const rows = [titled('Team Lead C++')];
+    expect(
+      dropOutsideLevelGate(rows, campaignLevelWindow([], 'head'), 'head', (key) => parses[key]),
+    ).toHaveLength(1);
   });
 });

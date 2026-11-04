@@ -149,7 +149,7 @@ const ROLE_TAXONOMY_TECH: readonly RoleFunctionDefinition[] = [
   {
     code: 'it-ops',
     labelEn: 'IT Operations',
-    labelRu: 'ИТ-инфраструктура',
+    labelRu: 'Управление ИТ и инфраструктура',
     anchors: [
       'cio',
       'chief information officer',

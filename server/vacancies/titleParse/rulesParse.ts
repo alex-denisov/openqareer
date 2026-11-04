@@ -526,16 +526,28 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
 }
 
 /**
- * «Руководитель службы» и «Начальник отдела» в словаре — госслужба, но с поддержкой в названии
- * это служба поддержки (04.11: hh 136956781, 138740300 не находились кандидатом по поддержке).
+ * «Руководитель службы» и «Начальник отдела» в словаре — госслужба, но с поддержкой или ИТ в названии
+ * это служба поддержки и ИТ-отдел (04.11: hh 136956781, 138740300; «начальник отдела ит» — public-service).
  */
-function isSupportServiceTitle(variant: OntologyVariant, key: string, normalized: string): boolean {
+function isGenericServiceTitle(variant: OntologyVariant, key: string, normalized: string): boolean {
+  if ((variant.function as string) !== 'public-service' || ONTOLOGY_VARIANTS.exact.has(key)) return false;
+  const functions = pickTopFunctions(findAnchorHits(normalized));
+  return functions.includes('support') || functions.includes('it-ops');
+}
+
+/**
+ * Слова «директор по ит» внутри «директор по ит-инфраструктуре» и «director of it» внутри «director of it
+ * infrastructure» ещё не делают название ролью CIO: это решает `isChiefInformationTitle`.
+ */
+function isPartialCioMatch(variant: OntologyVariant, normalized: string): boolean {
   return (
-    (variant.function as string) === 'public-service' &&
-    !ONTOLOGY_VARIANTS.exact.has(key) &&
-    pickTopFunctions(findAnchorHits(normalized)).includes('support')
+    variant.roleId === 'it-ops.cio' &&
+    !/chief information|\bcio\b|информационным технологиям/u.test(normalized)
   );
 }
+
+/** Начальник отдела руководит им так же, как руководитель отдела: без словаря уровень не назван. */
+const DEPARTMENT_CHIEF = /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
 
 export function rulesParse(title: string): RulesParseResult {
   const normalizedKey = normalizeTitleKey(title);
@@ -551,7 +563,11 @@ export function rulesParse(title: string): RulesParseResult {
       roleId: 'it-ops.cio',
     };
   }
-  if (ontologyVariant && !isSupportServiceTitle(ontologyVariant, normalizedKey, normalized)) {
+  if (
+    ontologyVariant &&
+    !isGenericServiceTitle(ontologyVariant, normalizedKey, normalized) &&
+    !isPartialCioMatch(ontologyVariant, normalized)
+  ) {
     return {
       functions: ontologyFunctions(ontologyVariant, normalizedKey, normalized),
       levelRank: levelRankForOntologyRole(title, ontologyVariant),
@@ -562,8 +578,9 @@ export function rulesParse(title: string): RulesParseResult {
   const specificFunctions = pickTopFunctions(hits);
   const functions =
     specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
+  const level = inferRulesLevel(title);
   return {
     functions,
-    levelRank: LEVEL_RANK[inferRulesLevel(title)],
+    levelRank: level === 'ic' && DEPARTMENT_CHIEF.test(title) ? LEVEL_RANK.head : LEVEL_RANK[level],
   };
 }

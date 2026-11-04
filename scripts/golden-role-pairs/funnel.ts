@@ -6,7 +6,9 @@
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import pairs from './pairs.json';
 import { loadGeoDirectory } from '../../shared/geo/geoDirectory';
+import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import { deriveCandidateTargetLevel } from '../../server/vacancies/candidateLevel';
+import { sameCareerRole } from '../../server/vacancies/careerRoleKey';
 import { careerGeographyOf, withinCareerGeography } from '../../server/vacancies/careerGeography';
 import { LEVEL_RANK } from '../../server/vacancies/levelMatcher';
 import { matchGeographyOf } from '../../server/vacancies/matchGeography';
@@ -77,7 +79,7 @@ const matched = clusters.map((cluster) => ({
 const byRole = matched.filter((item) => item.explanation.roleMatch !== 'none');
 const placed = career ? byRole.filter((item) => withinCareerGeography(item, career)) : byRole;
 const marked = markGeography(placed, (career?.regions ?? []) as never);
-const finished = career ? dropForeignRemote(marked) : marked;
+const finished = [...(career ? dropForeignRemote(marked) : marked)].sort(compareMatchedVacancies);
 
 const parseOf = db.prepare('SELECT functions, level_rank, parsed_by FROM title_parse WHERE title_key = ?');
 const count = (into: Record<string, number>, key: string) => ({ ...into, [key]: (into[key] ?? 0) + 1 });
@@ -103,6 +105,9 @@ const lines = finished.map((item) => {
   if (parsed?.level_rank === 0) functionsAtIc = count(functionsAtIc, parsed.functions);
   return { id: item.cluster.id, title, location: item.cluster.canonicalLocation, level, gate, functions: parsed?.functions, salary: item.cluster.salary };
 });
+const roleRows = Object.fromEntries(
+  roles.map((role) => [role, lines.filter((line) => sameCareerRole(line.title, role)).length]),
+);
 const has = (pattern: RegExp) => lines.filter((line) => pattern.test(line.title)).length;
 process.stdout.write(
   `${JSON.stringify({
@@ -123,6 +128,7 @@ process.stdout.write(
     cto: has(/(?<!\p{L})(cto|chief technology officer|технический директор|технического директора)(?!\p{L})/iu),
     cio: has(/(?<!\p{L})(cio|chief information officer|ит[- ]директор|директор по ит|директор по информационным|it director)(?!\p{L})/iu),
     supportHeads: has(/(поддержк|support|сервис|customer care).*(руковод|директор|head|director|vp|vice)|(руковод|директор|head|director|vp|vice).*(поддержк|support|сервис|customer care)/iu),
+    roleRows,
     functionsAtIc: Object.entries(functionsAtIc).sort((a, b) => b[1] - a[1]).slice(0, 25),
   })}\n`,
 );

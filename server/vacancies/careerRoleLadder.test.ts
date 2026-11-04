@@ -30,6 +30,7 @@ describe('строка роли на «Карьере»: первое лицо �
   it('CIO и «Директор по ИТ» — одна строка: равны по смыслу (владелец 04.11)', () => {
     expect(careerRoleRowKey('Chief Information Officer')).toBe(careerRoleRowKey('Директор по ИТ'));
     expect(careerRoleRowKey('IT Director')).toBe(careerRoleRowKey('ИТ-директор'));
+    expect(careerRoleRowKey('Director of IT')).toBe(careerRoleRowKey('ИТ-директор'));
     expect(careerRoleRowKey('Head of IT')).not.toBe(careerRoleRowKey('ИТ-директор'));
   });
 

@@ -393,13 +393,17 @@ describe('CIO и ИТ-директор — одна роль (04.11)', () => {
     'директор по информационным технологиям',
     'chief information officer',
     'CIO',
-    'it director',
+    'директор ит',
+    'Начальник департамента ИТ',
+    'Начальник ИТ-департамента',
+    'Руководитель ИТ департамента',
+    'ИТ-директор группы компаний',
+    'CIO / ИТ-директор',
     'IT Director',
     'Director of IT',
     'Director of Information Technology',
-    'ИТ-директор группы компаний',
-    'CIO / ИТ-директор',
-    'Senior IT Director',
+    'Global IT Director',
+    'IT Director (EMEA)',
   ])('%s → it-ops, C-level', (title) => {
     const parsed = rulesParse(title);
     expect(parsed.functions[0]).toBe('it-ops');
@@ -407,23 +411,40 @@ describe('CIO и ИТ-директор — одна роль (04.11)', () => {
     expect(parsed.levelRank).toBe(LEVEL_RANK['c-level']);
   });
 
+  it('«Директор по ИТ-инфраструктуре» — не роль CIO, хотя словарь видит в нём «директор по ит»', () => {
+    expect(rulesParse('Директор по ИТ-инфраструктуре').roleId).not.toBe('it-ops.cio');
+    expect(rulesParse('Deputy Chief Information Officer').roleId).toBe('it-ops.cio');
+  });
+
+  it('VP в названии продукта — не вице-президент', () => {
+    expect(rulesParse('Эксперт по АСУТП / Yokogawa Centum VP (технический консультант)').levelRank).toBe(0);
+    expect(rulesParse('VP Engineering').levelRank).toBe(3);
+  });
+
+  it('CTO рядом с ИТ-директором остаётся в eng-mgmt', () => {
+    expect(rulesParse('CTO / ИТ-директор').functions).toEqual(['it-ops', 'eng-mgmt']);
+    expect(rulesParse('Chief Technology Officer').functions).toEqual(['eng-mgmt']);
+  });
+
   it.each([
-    ['Заместитель ИТ-директора', 'it-ops'],
-    ['Deputy IT Director', 'it-ops'],
-    ['Assistant IT Director', 'it-ops'],
-    ['Director of IT Operations', 'it-ops'],
-    ['Директор по ИТ-инфраструктуре', 'it-ops'],
-    ['Операционный директор ИТ', 'ops'],
-    ['Финансовый директор ИТ-компании', 'finance'],
-    ['Директор IT-колледжа', 'education'],
-    ['IT Audit Director', 'audit-risk'],
+    'Заместитель ИТ-директора',
+    'Deputy IT Director',
+    'Assistant IT Director',
+    'Director of IT Operations',
+    'Director of IT Infrastructure',
+    'Директор по ИТ-инфраструктуре',
+    'Операционный директор ИТ',
+    'Директор по IT продажам',
+    'Зам. ИТ директор',
+    'Финансовый директор ИТ-компании',
+    'Директор IT-колледжа',
+    'IT Audit Director',
   ])('%s — не первое лицо ИТ', (title) => {
     expect(rulesParse(title).levelRank).toBeLessThan(LEVEL_RANK['c-level']);
-    void title;
   });
 
   it('руководитель ИТ остаётся ступенью head той же функции', () => {
-    for (const title of ['руководитель it-отдела', 'Руководитель ИТ-отдела', 'head of it', 'руководитель ит-инфраструктуры']) {
+    for (const title of ['руководитель it-отдела', 'Руководитель ИТ-отдела', 'head of it', 'руководитель ит-инфраструктуры', 'начальник отдела ит']) {
       expect(rulesParse(title)).toMatchObject({ functions: ['it-ops'], levelRank: LEVEL_RANK.head });
     }
   });
@@ -436,6 +457,7 @@ describe('CIO и ИТ-директор — одна роль (04.11)', () => {
     ]) {
       expect(rulesParse(title).functions).toEqual(['support']);
     }
+    expect(rulesParse('Начальник отдела технической поддержки').levelRank).toBe(LEVEL_RANK.head);
     expect(rulesParse('Начальник отдела государственной поддержки промышленности').functions).not.toContain('support');
     expect(rulesParse('Руководитель службы').functions).toContain('public-service');
   });

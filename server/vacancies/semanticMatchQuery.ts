@@ -197,17 +197,25 @@ function levelFilterOf(input: SemanticMatchQueryInput, specialistTitles: number)
   return `${level} ${input.gradeRange ? GRADE_FILTER : ''}`;
 }
 
+function specialistTitlesOf(input: SemanticMatchQueryInput, code: FunctionCode): readonly string[] {
+  return input.levelRank === null ? [] : (input.functionSpecialistTitles?.[code] ?? []);
+}
+
+function levelParamsOf(input: SemanticMatchQueryInput, code: FunctionCode): SQLInputValue[] {
+  if (input.levelRank === null) return [];
+  const floor = Math.min(
+    input.functionLevelFloors?.[code] ?? input.levelFloorRank ?? input.levelRank,
+    input.levelRank - 1,
+  );
+  const range = [floor, input.levelRank + 1];
+  const titles = specialistTitlesOf(input, code);
+  return titles.length ? [...range, floor, ...titles] : range;
+}
+
 export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   sql: string;
   params: SQLInputValue[];
 } {
-  const specialistTitlesOf = (code: FunctionCode) =>
-    input.levelRank === null ? [] : (input.functionSpecialistTitles?.[code] ?? []);
-  const levelFloorOf = (code: FunctionCode) =>
-    Math.min(
-      input.functionLevelFloors?.[code] ?? input.levelFloorRank ?? input.levelRank ?? 0,
-      (input.levelRank ?? 0) - 1,
-    );
   const excludedFunctions = excludedFunctionCodesFor(input.functionCodes);
   const excludedFunctionFilter = buildExcludedFunctionFilter(excludedFunctions);
   const geography = buildGeographyFilter(input.geography);
@@ -217,7 +225,7 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   const branches = queryFunctionCodes
     .map((code) =>
       buildFunctionBranch(
-        levelFilterOf(input, specialistTitlesOf(code).length),
+        levelFilterOf(input, specialistTitlesOf(input, code).length),
         excludedFunctionFilter,
         geography.sql,
         input.functionCodes.includes(code),
@@ -242,11 +250,7 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   const params: SQLInputValue[] = [];
   for (const code of queryFunctionCodes) {
     params.push(code);
-    if (input.levelRank !== null) {
-      const titles = specialistTitlesOf(code);
-      params.push(levelFloorOf(code), input.levelRank + 1);
-      if (titles.length) params.push(levelFloorOf(code), ...titles);
-    }
+    params.push(...levelParamsOf(input, code));
     if (input.gradeRange) params.push(input.gradeRange.min, input.gradeRange.max);
     params.push(...excludedFunctions);
     params.push(...geography.params);

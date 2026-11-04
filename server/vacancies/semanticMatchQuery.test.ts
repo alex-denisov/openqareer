@@ -148,6 +148,27 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['senior ai consultant', 'head of consulting']);
   });
 
+  it('названия роли и диапазон грейда вместе: параметры на своих местах', () => {
+    seed('senior ai consultant', 'consulting', 0, 3_000);
+    seed('junior ai consultant', 'consulting', 0, 2_000);
+    seed('консультант 1с', 'consulting', 0, 1_000);
+    database
+      .prepare('INSERT INTO vacancy_grade VALUES (?, ?, ?)')
+      .run('title-junior ai consultant', 1, 1);
+    const { sql, params } = buildSemanticMatchQuery({
+      functionCodes: ['consulting'],
+      levelRank: 3,
+      functionLevelFloors: { consulting: 2 },
+      functionSpecialistTitles: { consulting: ['ai consultant'] },
+      gradeRange: { min: 3, max: 5 },
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+    const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
+    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['senior ai consultant']);
+  });
+
   describe('окно чтения при упоре в предел', () => {
     const read = (limit: number, preferRemote = false) => {
       const { sql, params } = buildSemanticMatchQuery({

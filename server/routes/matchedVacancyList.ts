@@ -26,6 +26,7 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { maskPrivateEmployers } from '../vacancies/privateEmployerMask';
 import type { SeniorityLevel } from '../vacancies/levelMatcher';
 import { dropOutsideLevelGate } from '../vacancies/storedVacancyLevels';
+import { campaignLevelWindow } from '../vacancies/titleParse/candidateRoleFunctions';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import { dropForeignRemote, markGeography } from '../vacancies/vacancyGeography';
 import { matchedRoleCountSteps } from '../vacancies/vacancyRoleCounts';
@@ -192,20 +193,38 @@ function roleLevelCount(rows: readonly MatchedVacancyItem[], roles: readonly str
   return rows.filter((item) => item.explanation.roleMatch !== 'none').length;
 }
 
-function* matchedListSteps(input: MatchedListInput) {
-  const { campaign, candidateStore, candidateId, filters, targetRoles, snapshot } = input;
-  const limits = {
+function readRowLimits(candidateStore: CandidateStore, candidateId: string): MatchedRowLimits {
+  return {
     profile: candidateStore.decisionProfileRepo.get(candidateId),
     decisions: candidateStore.listVacancyDecisions(candidateId),
     rates: getCurrencyRates(),
   };
+}
+
+function* levelGateSteps(
+  finished: readonly MatchedVacancyItem[],
+  input: MatchedListInput,
+): Steps<MatchedVacancyItem[]> {
+  const window = campaignLevelWindow(input.targetRoles, input.targetLevel);
+  const kept: MatchedVacancyItem[] = [];
+  for (let start = 0; start < finished.length; start += FINISH_ROWS_PER_STEP) {
+    const rows = finished.slice(start, start + FINISH_ROWS_PER_STEP);
+    kept.push(
+      ...dropOutsideLevelGate(rows, window, input.targetLevel, (key) =>
+        input.titleParseStore.getByKey(key),
+      ),
+    );
+    yield;
+  }
+  return kept;
+}
+
+function* matchedListSteps(input: MatchedListInput) {
+  const { campaign, candidateStore, candidateId, filters, targetRoles, snapshot } = input;
+  const limits = readRowLimits(candidateStore, candidateId);
   yield;
   const finished = yield* finishMatchedRowSteps(snapshot, targetRoles, campaign, limits);
-  const matched = input.order(
-    dropOutsideLevelGate(finished, targetRoles, input.targetLevel, (key) =>
-      input.titleParseStore.getByKey(key),
-    ),
-  );
+  const matched = input.order(yield* levelGateSteps(finished, input));
   yield;
   const hypotheses = hypothesisRows(input);
   const counts = yield* matchedRoleCountSteps(hypotheses, targetRoles);

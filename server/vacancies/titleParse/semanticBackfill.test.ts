@@ -281,6 +281,7 @@ describe('SemanticBackfill (B267 S2)', () => {
     const titles: readonly [string, string, string, number, string][] = [
       ['v1', 'ИТ директор, Группа', '["it-ops","eng-mgmt"]', 2, 'model'],
       ['v2', 'it director', '["it-ops"]', 2, 'rules'],
+      ['v6', 'начальник отдела ит', '["public-service"]', 1, 'rules'],
       ['v3', 'Руководитель службы технической поддержки', '["public-service"]', 2, 'rules'],
       ['v4', 'Директор по ИТ-инфраструктуре', '["it-ops"]', 2, 'model'],
       ['v5', 'Руководитель отдела поддержки платформ', '["it-ops"]', 2, 'model'],
@@ -295,7 +296,7 @@ describe('SemanticBackfill (B267 S2)', () => {
     }
 
     const first = backfill.step(100);
-    expect(first.ontologyCorrected).toBe(3);
+    expect(first.ontologyCorrected).toBe(4);
     const read = database.prepare('SELECT functions, level_rank FROM title_parse WHERE title_key = ?');
     expect(read.get('ит директор, группа')).toMatchObject({ functions: '["it-ops"]', level_rank: 4 });
     expect(read.get('it director')).toMatchObject({ functions: '["it-ops"]', level_rank: 4 });
@@ -304,6 +305,7 @@ describe('SemanticBackfill (B267 S2)', () => {
       level_rank: 2,
     });
     expect(read.get('директор по ит-инфраструктуре')).toMatchObject({ level_rank: 2 });
+    expect(read.get('начальник отдела ит')).toMatchObject({ functions: '["it-ops"]', level_rank: 2 });
     expect(read.get('руководитель отдела поддержки платформ')).toMatchObject({
       functions: '["it-ops"]',
     });
