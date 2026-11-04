@@ -55,6 +55,7 @@ const RELABEL_CHUNK = 200;
 export class SemanticBackfill {
   private readonly database: DatabaseSync;
   private cursor = '';
+  private missingIds: readonly string[] | null = null;
   private gradeCursor = '';
   /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
   private relabelDone = false;
@@ -76,16 +77,19 @@ export class SemanticBackfill {
   step(chunk: number): SemanticBackfillReport {
     const ontologyCorrected = this.correctByExactOntology();
     const relabeled = this.relabelStale(RELABEL_CHUNK);
+    const caughtUp = this.catchUpMissing(chunk);
     const windowEnd = this.windowEnd(chunk);
     const rows = this.readWindow(windowEnd);
-    const { backfilled, newKeys } = this.writeChunk(rows);
+    const written = this.writeChunk(rows);
+    const backfilled = written.backfilled + caughtUp.backfilled;
+    const newKeys = written.newKeys + caughtUp.newKeys;
     const poolRowsScanned = windowEnd === null ? this.countRemainingRows() : chunk;
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
     const pruned = passFinished ? this.pruneOrphans() : 0;
     this.gradeStep();
     return {
-      scanned: rows.length,
+      scanned: rows.length + caughtUp.backfilled,
       poolRowsScanned,
       backfilled,
       newKeys,
@@ -342,6 +346,38 @@ export class SemanticBackfill {
   countKeys(): number {
     return (this.database.prepare('SELECT count(*) AS n FROM title_parse').get() as { n: number })
       .n;
+  }
+
+  /**
+   * Живые вакансии без строки индекса возвращаются сразу, а не по ходу прохода: проход начинается с
+   * начала при каждом старте, и частые выкаты не давали ему дойти до строк, снятых правкой разбора
+   * (04.11: 7 эталонных вакансий пропали из подбора). Список читается один раз за процесс, около 1 с.
+   */
+  private catchUpMissing(chunk: number): { backfilled: number; newKeys: number } {
+    if (this.missingIds === null) {
+      const rows = this.database
+        .prepare(
+          `SELECT i.id FROM vacancy_pool_index i
+           WHERE i.expired = 0 AND NOT EXISTS (SELECT 1 FROM vacancy_semantic s WHERE s.id = i.id)
+           ORDER BY i.id`,
+        )
+        .all() as { id: string }[];
+      this.missingIds = rows.map((row) => row.id);
+    }
+    if (this.missingIds.length === 0) return { backfilled: 0, newKeys: 0 };
+    const ids = this.missingIds.slice(0, chunk);
+    this.missingIds = this.missingIds.slice(chunk);
+    const read = this.database.prepare(
+      `SELECT i.id, i.published_ms, i.is_remote, json_extract(p.payload, '$.title') AS title
+       FROM vacancy_pool_index i JOIN vacancy_pool p ON p.id = i.id
+       WHERE i.id = ? AND i.expired = 0
+         AND NOT EXISTS (SELECT 1 FROM vacancy_semantic s WHERE s.id = i.id)`,
+    );
+    const rows = ids.flatMap((id) => {
+      const row = read.get(id) as unknown as PoolRow | undefined;
+      return row ? [row] : [];
+    });
+    return this.writeChunk(rows);
   }
 
   /** Последний ключ окна; `null` — окно дошло до конца индекса. */
