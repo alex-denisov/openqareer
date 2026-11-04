@@ -244,6 +244,7 @@ describe('GET /api/v1/candidate/matched-vacancies description preload (B304)', (
     });
     await Promise.all(preloadTasks);
     expect(refreshed.statusCode).toBe(200);
-    expect(matchReads).toBe(2);
+    // PRB-041: the text marks the snapshot stale; the read after it does not wait for a rebuild.
+    expect(matchReads).toBe(1);
   });
 });
