@@ -22,6 +22,12 @@ import type {
 export type { ClusterProjection, MatchCandidateQueryOptions };
 export type { CatalogCursor, CatalogEntriesPage, CatalogEntriesQuery, CatalogEntryRow };
 
+/** Двойник влит в `kept`: `goneIds` исчезают той же транзакцией, что пишет `kept`. */
+export interface ClusterMerge {
+  readonly kept: VacancyCluster;
+  readonly goneIds: readonly string[];
+}
+
 /** Итоги каталога (B485): активные кластеры, конец сведения, время пересчёта. */
 export interface CatalogTotalsRow {
   readonly clusters: number;
@@ -157,6 +163,8 @@ export interface VacancyPoolStore {
    * Устойчивое хранение и инкрементальное обновление кластеров (B221 срез 3).
    */
   saveClusters(clusters: VacancyCluster[]): void;
+  /** Слияния двойников: у каждого запись поглотившего и удаление поглощённых неделимы. */
+  mergeClusters(merges: readonly ClusterMerge[]): void;
   /** Atomically replaces the persisted cluster snapshot, including an empty snapshot. */
   replaceClusters?(clusters: VacancyCluster[]): void;
   loadClusters(): VacancyCluster[];

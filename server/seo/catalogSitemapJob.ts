@@ -7,7 +7,9 @@
  * serves files from memory, like `landing_stats` (B535).
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { VACANCY_CLUSTERS_TABLE } from '../data/sqliteSchema';
 import { salaryMarketSitemapUrls } from './salaryMarketSitemap';
+import { SEARCH_RESTRICTED_JSON_NEEDLES } from './searchRestrictedSources';
 import { listingPath } from '../../shared/vacancyCatalogRoutes';
 import {
   CARD_SEEN_WITHIN_DAYS,
@@ -44,9 +46,17 @@ const DAY_MS = 86_400_000;
 function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
   // The summary job creates the table on its first tick; the sitemap may run before it.
   database.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
+  database.exec(VACANCY_CLUSTERS_TABLE);
+  const restricted = SEARCH_RESTRICTED_JSON_NEEDLES.map(() => 'instr(c.cluster_json, ?) > 0').join(
+    ' OR ',
+  );
   const rows = database
     .prepare(
-      `SELECT path, published_at FROM catalog_entries
+      // No cluster row means the sources are unknown, so the card counts as restricted.
+      `SELECT path, published_at,
+              coalesce((SELECT ${restricted} FROM vacancy_clusters c
+                         WHERE c.id = catalog_entries.cluster_id), 1) AS restricted
+         FROM catalog_entries
         WHERE status = 'active' AND path <> ''
           AND last_seen_ms >= ?
           AND salary_label IS NOT NULL AND salary_label GLOB '*[1-9]*'
@@ -58,14 +68,20 @@ function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
         ORDER BY published_ms DESC, entry_key ASC`,
     )
     .all(
+      ...SEARCH_RESTRICTED_JSON_NEEDLES,
       now.getTime() - CARD_SEEN_WITHIN_DAYS * DAY_MS,
       INDEXED_CARD_SUMMARY_MIN,
       CATALOG_RU_SUMMARY_VERSION,
     ) as Array<{
     path: string;
     published_at: string;
+    restricted: number;
   }>;
-  return rows.map((row) => ({ path: row.path, lastmod: row.published_at.slice(0, 10) }));
+  return rows.map((row) => ({
+    path: row.path,
+    lastmod: row.published_at.slice(0, 10),
+    ...(row.restricted ? { noIndexingApi: true as const } : {}),
+  }));
 }
 
 interface ListingRow extends ListingCount {

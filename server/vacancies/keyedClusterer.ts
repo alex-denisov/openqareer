@@ -1,4 +1,5 @@
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
+import type { ClusterMerge } from './vacancyPoolStore';
 import {
   absorbCluster,
   ClusterIndex,
@@ -21,6 +22,7 @@ export interface KeyedClusterStore {
   loadClustersByKeys(lookups: readonly VacancyClusterLookup[]): VacancyCluster[];
   getCluster(clusterId: string): VacancyCluster | undefined;
   saveClusters(clusters: VacancyCluster[]): void;
+  mergeClusters(merges: readonly ClusterMerge[]): void;
   deleteCluster(clusterId: string): void;
 }
 
@@ -63,7 +65,8 @@ class KeyedSession {
   private readonly loaded = new Map<number, VacancyCluster>();
   private readonly updated = new Set<number>();
   private readonly created: VacancyCluster[] = [];
-  private readonly absorbed = new Set<number>();
+  /** Поглощённая позиция → кто её поглотил. */
+  private readonly absorbed = new Map<number, number>();
   private readonly candidates: number;
 
   constructor(
@@ -118,7 +121,7 @@ class KeyedSession {
       const twin = this.clusterAt(other);
       if (!twin) continue;
       absorbCluster(kept, twin);
-      this.absorbed.add(other);
+      this.absorbed.set(other, target!);
       this.updated.delete(other);
       for (const [member, at] of this.byMember)
         if (at === other) this.byMember.set(member, target!);
@@ -130,20 +133,38 @@ class KeyedSession {
   }
 
   flush(): KeyedClusterResult {
-    const gone = new Set(Array.from(this.absorbed, (position) => this.clusterIds[position]!));
+    const gone = new Set(Array.from(this.absorbed.keys(), (position) => this.clusterIds[position]!));
+    const createdIds = new Set(this.created.map((cluster) => cluster.id));
+    const merges = this.mergesOf(createdIds);
+    const merged = new Set(merges.map((merge) => merge.kept.id));
     const affected = [
       ...Array.from(this.updated, (position) => this.loaded.get(position)!),
       ...this.created.filter((cluster) => !gone.has(cluster.id)),
-    ];
+    ].filter((cluster) => !merged.has(cluster.id));
     if (affected.length > 0) this.store.saveClusters(affected);
-    const createdIds = new Set(this.created.map((cluster) => cluster.id));
-    for (const id of gone) if (!createdIds.has(id)) this.store.deleteCluster(id);
+    if (merges.length > 0) this.store.mergeClusters(merges);
     return {
       updated: this.updated.size,
       created: this.created.length - Array.from(gone).filter((id) => createdIds.has(id)).length,
       absorbed: gone.size,
       candidates: this.candidates,
     };
+  }
+
+  /** Новый поглощённый кластер в базе не появлялся: удалять нечего, поглотивший пишется обычным путём. */
+  private mergesOf(createdIds: ReadonlySet<string>): ClusterMerge[] {
+    const goneByTarget = new Map<number, string[]>();
+    for (const [position, absorber] of this.absorbed) {
+      const id = this.clusterIds[position]!;
+      if (createdIds.has(id)) continue;
+      let target = absorber;
+      while (this.absorbed.has(target)) target = this.absorbed.get(target)!;
+      goneByTarget.set(target, [...(goneByTarget.get(target) ?? []), id]);
+    }
+    return Array.from(goneByTarget, ([target, goneIds]) => ({
+      kept: this.loaded.get(target)!,
+      goneIds,
+    }));
   }
 
   private register(clusterId: string, prepared: PreparedVacancy): number {

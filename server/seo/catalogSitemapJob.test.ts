@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { CATALOG_RU_SUMMARY_VERSION } from './catalogRuSummary';
 import { CatalogRuSummaryStore } from './catalogRuSummaryStore';
-import { VACANCY_CATALOG_ENTRIES_TABLE } from '../data/sqliteSchema';
+import { VACANCY_CATALOG_ENTRIES_TABLE, VACANCY_CLUSTERS_TABLE } from '../data/sqliteSchema';
 import { INDEXED_PLACE_MIN, INDEXED_PLACE_ROLE_MIN, LISTING_RETAIN_DAYS } from './catalogIndexing';
 import { readListingHistory } from './catalogListingHistory';
 import {
@@ -111,6 +111,38 @@ function parseSitemapXml(xml: string): string {
   expect(stack).toEqual([]);
   return root;
 }
+
+describe('source restrictions in the jobs sitemap', () => {
+  function withCluster(db: DatabaseSync, id: string, sourceIds: readonly string[]): void {
+    db.exec(VACANCY_CLUSTERS_TABLE);
+    db.prepare(
+      `INSERT INTO vacancy_clusters (id, fingerprint, title, company, cluster_json, items_count, updated_at)
+       VALUES (?, ?, 't', 'c', ?, 1, 0)`,
+    ).run(
+      `cluster-${id}`,
+      id,
+      JSON.stringify({ sources: sourceIds.map((sourceId) => ({ sourceType: 'x', sourceId })) }),
+    );
+  }
+
+  it('keeps a restricted card in the file and marks it for the Indexing API only', () => {
+    const db = database([{ id: 'hima' }, { id: 'pair' }, { id: 'free' }, { id: 'unknown' }]);
+    withCluster(db, 'hima', ['src-himalayas-api']);
+    withCluster(db, 'pair', ['src-indeed', 'src-himalayas']);
+    withCluster(db, 'free', ['src-indeed']);
+
+    const jobs = computeCatalogSitemaps(db, NOW).find((file) => file.name === 'jobs-1.xml')!;
+
+    expect(jobs.urlCount).toBe(4);
+    expect(locs(jobs.xml)).toHaveLength(4);
+    const marked = (jobs.urls ?? [])
+      .filter((url) => url.noIndexingApi)
+      .map((url) => url.path.split('-').pop());
+    // A card whose cluster row is missing cannot be shown to be free of the restriction.
+    expect(marked.sort()).toEqual(['hima', 'pair', 'unknown']);
+    db.close();
+  });
+});
 
 describe('computeCatalogSitemaps', () => {
   it('splits the sitemap into static, listings and job files', () => {

@@ -56,6 +56,9 @@ function buildVertexStage(
   const tokens = new VertexTokenProvider(vertex, transport);
   return new BulkVertexStage({
     config: vertex,
+    ...(options.delay ? { delay: options.delay } : {}),
+    ...(options.random ? { random: options.random } : {}),
+    ...(options.now ? { now: options.now } : {}),
     gate: createVertexGate({
       ledger,
       config: readVertexCreditConfig(env),

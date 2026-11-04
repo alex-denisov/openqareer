@@ -22,6 +22,14 @@ const REQUEST_TIMEOUT_MS = 60_000;
  * goes to OpenRouter and its reserved-budget bound.
  */
 export const VERTEX_MAX_INPUT_BYTES = 500_000;
+/**
+ * Pauses of a patient call, each from half to the whole of it. 04.11: the median next good answer
+ * came 9 s after a refusal, while a call that moved on got another model and another percent.
+ */
+const REPEAT_PAUSES_MS = [12_000, 30_000];
+/** A repeat starts only inside this time: a full chain still fits the worker's lease of 300 s. */
+const REPEAT_BUDGET_MS = 100_000;
+const REPEATED_FAILURES: ReadonlySet<string | undefined> = new Set(['vertex_429', 'vertex_timeout']);
 
 export interface BulkVertexStageOptions {
   readonly config: VertexConfig;
@@ -29,6 +37,9 @@ export interface BulkVertexStageOptions {
   readonly ledger: Pick<SqliteBulkLlmLedger, 'markGeminiFailure' | 'event'>;
   readonly token: () => Promise<string>;
   readonly transport: typeof fetch;
+  readonly delay?: (ms: number) => Promise<void>;
+  readonly random?: () => number;
+  readonly now?: () => number;
 }
 
 const answerSchema = z.object({
@@ -63,11 +74,32 @@ export class BulkVertexStage {
     maxTokens: number,
     accept: (content: string) => boolean,
   ): Promise<{ result?: BulkLlmResult; failure?: string }> {
+    const now = this.options.now ?? Date.now;
+    const startedAt = now();
+    let outcome = await this.askOnce(input, maxTokens, accept);
+    for (const pause of input.patientVertex ? REPEAT_PAUSES_MS : []) {
+      if (!REPEATED_FAILURES.has(outcome.failure) || now() - startedAt > REPEAT_BUDGET_MS) break;
+      await this.pause(pause);
+      outcome = await this.askOnce(input, maxTokens, accept);
+    }
+    return outcome;
+  }
+
+  private pause(ms: number): Promise<void> {
+    const delay = this.options.delay ?? ((wait: number) => new Promise<void>((resolve) => setTimeout(resolve, wait)));
+    return delay(Math.round(ms * (0.5 + (this.options.random ?? Math.random)() / 2)));
+  }
+
+  private async askOnce(
+    input: BulkLlmInput,
+    maxTokens: number,
+    accept: (content: string) => boolean,
+  ): Promise<{ result?: BulkLlmResult; failure?: string }> {
     const { gate } = this.options;
     if (Buffer.byteLength(input.prefix) + Buffer.byteLength(input.input) > VERTEX_MAX_INPUT_BYTES)
       return { failure: 'vertex_input_too_large' };
     try {
-      gate.admit(input.task);
+      gate.admit(input.task, input.patientVertex === true);
     } catch (error) {
       if (error instanceof VertexSkippedError) return {};
       return { failure: 'vertex_gate' };

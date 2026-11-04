@@ -86,6 +86,67 @@ afterEach(() => {
 });
 
 describe('Google Indexing API notifier', () => {
+  it('does not announce a card from a source that forbids passing it to Google', async () => {
+    const log = testLogger();
+    const { fetcher, published } = google();
+    const { notify } = notifierAt(log, fetcher);
+
+    await notify(database(), [job('allowed'), { ...job('himalayas'), noIndexingApi: true }]);
+
+    expect(published.map((item) => item.url)).toEqual([absolute('allowed')]);
+  });
+
+  it('sends nothing for an announced card once its source is restricted, not even a removal', async () => {
+    const log = testLogger();
+    const { fetcher, published } = google();
+    const { notify, clock } = notifierAt(log, fetcher);
+    const db = database();
+    await notify(db, [job('a')]);
+    published.length = 0;
+
+    await notify(db, [{ ...job('a', '2026-11-02'), noIndexingApi: true }]);
+    clock.now = new Date(clock.now.getTime() + 48 * HOUR_MS);
+    await notify(db, [job('other')]);
+
+    expect(published.map((item) => item.url)).toEqual([absolute('other')]);
+  });
+
+  it('forgets everything sent before the source rule once, so no removal follows', async () => {
+    const log = testLogger();
+    const { fetcher, published } = google();
+    const { notify } = notifierAt(log, fetcher);
+    const db = database();
+    db.exec(
+      `CREATE TABLE catalog_google_indexing_sent (
+         url TEXT PRIMARY KEY, lastmod TEXT NOT NULL, missing_since_ms INTEGER
+       ) STRICT`,
+    );
+    db.prepare('INSERT INTO catalog_google_indexing_sent VALUES (?, ?, ?)').run(
+      absolute('old-himalayas'),
+      '2026-11-01',
+      0,
+    );
+
+    await notify(db, [job('a')]);
+    expect(published).toEqual([
+      expect.objectContaining({ url: absolute('a'), type: 'URL_UPDATED' }),
+    ]);
+    expect(log.entries).toContainEqual({
+      level: 'info',
+      message: 'google-indexing-sent-reset',
+      details: { forgotten: 1 },
+    });
+
+    const logAgain = testLogger();
+    await notifierAt(logAgain, fetcher).notify(db, [job('a')]);
+    expect(logAgain.entries.map((entry) => entry.message)).not.toContain(
+      'google-indexing-sent-reset',
+    );
+    expect(
+      db.prepare('SELECT count(*) AS n FROM catalog_google_indexing_sent').get(),
+    ).toMatchObject({ n: 1 });
+  });
+
   it('logs the failing step, a bounded message and the cause code', async () => {
     const log = testLogger();
     const fetcher = vi.fn<typeof fetch>(async () => {
