@@ -18,7 +18,12 @@ const ROLE_TITLE_PATTERNS: readonly RegExp[] = [
   /^директор(?: |$)|(?:^| )директор$/u,
 ];
 
+/** Источник пишет теги должностей словами через дефис: «Customer-Success-Manager». */
+const HYPHENATED_ROLE_TAG =
+  /^\S+-(?:manager|lead|engineer|developer|architect|analyst|specialist|consultant)$/iu;
+
 export function isRoleTitleLabel(label: string): boolean {
+  if (HYPHENATED_ROLE_TAG.test(label.trim())) return true;
   const normalized = label
     .toLowerCase()
     .replace(/[\s,_-]+/gu, ' ')
