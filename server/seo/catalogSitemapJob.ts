@@ -20,6 +20,7 @@ import {
   recordListingHistory,
   type ListingCount,
 } from './catalogListingHistory';
+import { CATALOG_CARD_ROLLOUT_TABLE_SQL } from './catalogCardRollout';
 import { CATALOG_RU_SUMMARY_VERSION } from './catalogRuSummary';
 import { CATALOG_RU_SUMMARIES_TABLE_SQL } from './catalogRuSummaryStore';
 import { buildSitemapFiles, type SitemapFile, type SitemapUrl } from './sitemapXml';
@@ -38,22 +39,25 @@ const DAY_MS = 86_400_000;
 /**
  * Same rule as `isIndexableCard`, in SQL: live (seen within the window) and
  * passing the quality rules. `GLOB '*[1-9]*'` is `hasKnownSalary`: a stored
- * «0 $» is no salary. No withdrawal date is stored here; a withdrawn vacancy
- * leaves the active set.
+ * «0 $» is no salary. A card in `catalog_card_rollout` needs no salary. No
+ * withdrawal date is stored here; a withdrawn vacancy leaves the active set.
  */
 function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
   // The summary job creates the table on its first tick; the sitemap may run before it.
   database.exec(CATALOG_RU_SUMMARIES_TABLE_SQL);
+  database.exec(CATALOG_CARD_ROLLOUT_TABLE_SQL);
   const rows = database
     .prepare(
       `SELECT path, published_at FROM catalog_entries
         WHERE status = 'active' AND path <> ''
           AND last_seen_ms >= ?
-          AND salary_label IS NOT NULL AND salary_label GLOB '*[1-9]*'
-          AND (length(trim(summary)) >= ?
-               OR EXISTS (SELECT 1 FROM catalog_ru_summaries s
-                           WHERE s.cluster_id = catalog_entries.cluster_id
-                             AND s.status = 'ready' AND s.version = ?))
+          AND (EXISTS (SELECT 1 FROM catalog_card_rollout r
+                        WHERE r.cluster_id = catalog_entries.cluster_id)
+               OR (salary_label IS NOT NULL AND salary_label GLOB '*[1-9]*'
+                   AND (length(trim(summary)) >= ?
+                        OR EXISTS (SELECT 1 FROM catalog_ru_summaries s
+                                    WHERE s.cluster_id = catalog_entries.cluster_id
+                                      AND s.status = 'ready' AND s.version = ?))))
           AND trim(company) <> '' AND role_slug IS NOT NULL
         ORDER BY published_ms DESC, entry_key ASC`,
     )

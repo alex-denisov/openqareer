@@ -8,7 +8,7 @@ import {
   googleEmploymentType,
   readableSkill,
 } from './vacancyCatalogPage';
-import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster, VacancySalary } from '../domain/unifiedVacancy';
 
 function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
   return {
@@ -177,11 +177,40 @@ describe('страница публичного каталога ваканси�
     )!;
     expect(ranged.entry.salaryLabel).toBe('до 150\u00a0000 ₽');
     const posting = ranged.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
-    expect(posting.baseSalary).toEqual({
+    // Google describes a range only with both bounds; «до X» stays in the visible text.
+    expect(posting).not.toHaveProperty('baseSalary');
+  });
+
+  it('передаёт из источника вилку через minValue/maxValue, одно число через value', () => {
+    const markup = (salary: VacancySalary) =>
+      buildVacancyDetail(cluster({ salary }))!.jsonLd['@graph'].find(
+        (node) => node['@type'] === 'JobPosting',
+      )!.baseSalary;
+    expect(markup({ from: 100, to: 200, currency: 'USD', period: 'month' })).toEqual({
       '@type': 'MonetaryAmount',
-      currency: 'RUB',
-      value: { '@type': 'QuantitativeValue', value: 150000, unitText: 'MONTH' },
+      currency: 'USD',
+      value: { '@type': 'QuantitativeValue', minValue: 100, maxValue: 200, unitText: 'MONTH' },
     });
+    expect(markup({ from: 150, to: 150, currency: 'USD', period: 'year' })).toEqual({
+      '@type': 'MonetaryAmount',
+      currency: 'USD',
+      value: { '@type': 'QuantitativeValue', value: 150, unitText: 'YEAR' },
+    });
+    expect(markup({ from: 150, currency: 'USD', period: 'month' })).toBeUndefined();
+  });
+
+  it('карточка из вливания получает JobPosting без зарплаты, пока текст на месте', () => {
+    const admitted = () => true;
+    const text = 'Текст работодателя. '.repeat(10);
+    const card = cluster({ salary: undefined, descriptionSummary: '' });
+    const detail = buildVacancyDetail(card, text, undefined, undefined, undefined, admitted)!;
+    expect(detail.indexable).toBe(true);
+    const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+    expect(posting).not.toHaveProperty('baseSalary');
+    expect(buildVacancyDetail(card, text)!.indexable).toBe(false);
+    expect(
+      buildVacancyDetail(card, 'мало', undefined, undefined, undefined, admitted)!.indexable,
+    ).toBe(false);
   });
 
   it('не размечает JobPosting карточку без вилки или без работодателя', () => {

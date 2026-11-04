@@ -32,7 +32,12 @@ import { renderDescriptionHtml } from './catalogMarkdown';
 import { countryCodeOf } from '../domain/geoCoordinates';
 import { countLabel } from './catalogCopy';
 import { applicantCountries } from './applicantLocations';
-import { isIndexableCard, isIndexableListing, validThroughOf } from '../seo/catalogIndexing';
+import {
+  INDEXED_CARD_SUMMARY_MIN,
+  isIndexableCard,
+  isIndexableListing,
+  validThroughOf,
+} from '../seo/catalogIndexing';
 
 /** Сколько карточек на странице каталога. */
 export const CATALOG_PAGE_SIZE = 24;
@@ -352,6 +357,15 @@ function applicantRequirements(countries: readonly string[]): unknown {
  * with no applicant country gets `undefined`: Google needs at least one
  * Country with TELECOMMUTE, and without TELECOMMUTE a postal address (03.11).
  */
+/** Whether `JobPosting` gets the location Google requires. */
+export function hasPostingLocation(
+  entry: Pick<CatalogEntry, 'location' | 'title'>,
+  isRemote: boolean,
+): boolean {
+  if (isRemote) return applicantCountries(entry.location, entry.title).length > 0;
+  return Boolean(entry.location?.trim());
+}
+
 function postingLocation(
   entry: CatalogEntry,
   isRemote: boolean,
@@ -401,15 +415,15 @@ function baseSalaryOf(raw: VacancySalary | undefined): Record<string, unknown> {
   const code = salary?.currency?.trim().toUpperCase();
   if (!salary?.period || !code || !/^[A-Z]{3}$/u.test(code)) return {};
   const { from, to } = salary;
+  // Google describes a range only with both bounds and says nothing of «от X»: text only.
+  if (from === undefined || to === undefined) return {};
   return {
     baseSalary: {
       '@type': 'MonetaryAmount',
       currency: ISO_CURRENCY[code] ?? code,
       value: {
         '@type': 'QuantitativeValue',
-        ...(from !== undefined && to !== undefined && from !== to
-          ? { minValue: from, maxValue: to }
-          : { value: from ?? to }),
+        ...(from !== to ? { minValue: from, maxValue: to } : { value: from }),
         unitText: SALARY_UNIT[salary.period],
       },
     },
@@ -456,6 +470,19 @@ function jobPosting(
   };
 }
 
+function cardSourceText(
+  entry: CatalogEntry,
+  vacancy: UnifiedVacancy | undefined,
+  fullDescription: string | undefined,
+): string {
+  return catalogSummarySourceText(
+    vacancy?.fullDescription,
+    vacancy?.description,
+    fullDescription,
+    entry.summary,
+  );
+}
+
 /**
  * Карточка вакансии с микроразметкой, или `null`, если адреса у неё нет.
  *
@@ -468,19 +495,16 @@ export function buildVacancyDetail(
   vacancy?: UnifiedVacancy,
   now: Date = new Date(),
   readRuSummary?: RuSummaryReader,
+  isInRollout?: (clusterId: string) => boolean,
 ): VacancyDetail | null {
   const entry = toCatalogEntry(cluster);
   if (!entry) return null;
   // The same text, in the same order, the summary job hashed (`CatalogRuSummaryStore.sourceText`).
+  const sourceText = cardSourceText(entry, vacancy, fullDescription);
   const ru = readRuSummary?.({
     clusterId: cluster.id,
     title: entry.title,
-    description: catalogSummarySourceText(
-      vacancy?.fullDescription,
-      vacancy?.description,
-      fullDescription,
-      entry.summary,
-    ),
+    description: sourceText,
   });
   const description = vacancy
     ? renderUnifiedVacancyView(vacancy)
@@ -490,6 +514,8 @@ export function buildVacancyDetail(
       ...entry,
       ...(vacancy?.archivedAt ? { withdrawnAt: vacancy.archivedAt } : {}),
       hasRuSummary: ru?.described === true,
+      rolloutAdmitted:
+        sourceText.length >= INDEXED_CARD_SUMMARY_MIN && isInRollout?.(cluster.id) === true,
     },
     now,
   );
