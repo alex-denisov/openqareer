@@ -102,7 +102,7 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
 }
 
-function parseServiceAccount(encoded: string) {
+export function parseServiceAccount(encoded: string) {
   try {
     const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
     const parsed = serviceAccountSchema.safeParse(decoded);
