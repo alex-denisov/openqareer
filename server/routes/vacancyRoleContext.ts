@@ -11,6 +11,7 @@ import type { RoleNamingStageFailure } from '../providers/roleNamer';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { buildRoleProposals } from '../vacancies/roleHypotheses';
 import { sameCareerRole } from '../vacancies/careerRoleKey';
+import { withPositionRoles } from '../vacancies/careerRoleLadder';
 import { deriveCandidateTargetLevel } from '../vacancies/candidateLevel';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readCampaign } from './campaignContext';
@@ -208,6 +209,20 @@ function completedCheckTitles(deps: RouteDeps, candidateId: string): string[] {
     .map((run) => run.roleTitle);
 }
 
+function namedWithPositionRoles(
+  named: readonly NamedRole[],
+  campaign: ReturnType<typeof readCampaign>,
+  language: RoleNameLanguage,
+): NamedRole[] {
+  return withPositionRoles({
+    named,
+    positionRoles: campaign.autoRoles,
+    // Роли самого автонабора в опору не идут: их функции кандидат не выбирал.
+    chosenTitles: campaign.roles.origin === 'explicit' ? campaign.roles.value : [],
+    language,
+  });
+}
+
 export async function readRoleContext(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -247,7 +262,7 @@ export async function readRoleContext(
     proposals: withCheckedRoleAliases(
       buildRoleProposals({
         matched,
-        named,
+        named: namedWithPositionRoles(named, campaign, language),
         candidateSkills: confirmedSkills,
         workplaceRefs,
         ...(preferences ? { preferences } : {}),
