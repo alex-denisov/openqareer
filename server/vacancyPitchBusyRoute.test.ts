@@ -65,6 +65,16 @@ describe('POST /pitch while the database is busy', () => {
     expect(response.statusCode).toBe(200);
   });
 
+  it('a lock after the vacancy text was read does not read it again', async () => {
+    const { app, multiSourceEngine } = await createApp([cluster]);
+    const { cookie } = await login(app);
+    const load = vi.spyOn(multiSourceEngine, 'loadVacancyDescription');
+    vi.spyOn(multiSourceEngine, 'getVacancy').mockImplementationOnce(() => { throw busy(); });
+    const response = await app.inject({ method: 'POST', url, headers: { cookie, origin: 'http://localhost:3000' }, payload: { language: 'ru' } });
+    expect(response.statusCode).toBe(200);
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
   it('a refusal before the model stays what it was', async () => {
     const { app } = await createApp([cluster]);
     const { cookie } = await login(app);

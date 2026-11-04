@@ -3,6 +3,7 @@ import { reviewLetterBody, type LetterGateSources } from './letterModelGate';
 
 // Sentences below are the ones prod models wrote for the synthetic QA candidate on 04.11.
 const RU_SOURCES: LetterGateSources = {
+  language: 'ru',
   candidate: ['Склад и логистика для федеральной сети магазинов, команда выросла с 8 до 35 человек.'],
   career: [
     'Руководитель разработки в компании Финтех Лаб (2024–по сей день)',
@@ -13,6 +14,7 @@ const RU_SOURCES: LetterGateSources = {
 };
 
 const EN_SOURCES: LetterGateSources = {
+  language: 'en',
   candidate: ['Worked in warehouse and logistics for a nationwide retail chain as the team grew from 8 to 35 people.'],
   career: [
     'Head of Engineering at Финтех Лаб (2024–present)',
@@ -63,6 +65,37 @@ describe('reviewLetterBody: what a model letter may say', () => {
   it('stops names the profile does not have', () => {
     const body = 'Окончил факультет в МГТУ имени Баумана.';
     expect(reviewLetterBody(body, RU_SOURCES).map((v) => v.rule)).toContain('name');
+  });
+
+  it('checks the first word where it can: Latin in a Russian letter', () => {
+    expect(reviewLetterBody('Google доверил мне логистику.', RU_SOURCES).map((v) => v.rule)).toContain('name');
+    // A name the vacancy or the profile has is fine at the start too.
+    expect(reviewLetterBody('Bjak ищет руководителя операций.', RU_SOURCES)).toEqual([]);
+  });
+
+  it('checks the first word where it can: a name of two or more capitalised words', () => {
+    expect(reviewLetterBody('Яндекс Маркет доверил мне логистику.', RU_SOURCES).map((v) => v.rule)).toContain('name');
+    expect(reviewLetterBody('Goldman Leidos trusted me.', EN_SOURCES).map((v) => v.rule)).toContain('name');
+  });
+
+  it('does not read an ordinary opening as a name', () => {
+    for (const body of [
+      'Dear Leidos Team,',
+      'Currently I work as Head of Engineering at Финтех Лаб.',
+      'At Ритейл Системс I worked on logistics.',
+      'Earlier I was Director of Engineering.',
+    ]) {
+      expect(reviewLetterBody(body, EN_SOURCES)).toEqual([]);
+    }
+    for (const body of ['В Финтех Лаб работаю с 2024 года.', 'Уважаемая команда Bjak!', 'Сейчас работаю в Финтех Лаб.']) {
+      expect(reviewLetterBody(body, RU_SOURCES)).toEqual([]);
+    }
+  });
+
+  it('what stays unchecked: one capitalised word that could open any sentence', () => {
+    // Documented in the PR: without a dictionary «Сбер» and «Работал» look the same to the gate.
+    expect(reviewLetterBody('Сбер доверил мне логистику.', RU_SOURCES)).toEqual([]);
+    expect(reviewLetterBody('Google trusted me with logistics.', EN_SOURCES)).toEqual([]);
   });
 
   it('stops months that are not in the profile', () => {
@@ -139,7 +172,7 @@ describe('reviewLetterBody: what a model letter may say', () => {
       'Я не увеличил выручку на 20%.',
       'Не могу подтвердить: я увеличил выручку на 20%.',
     ]) {
-      const sources = { candidate: [statement], career: [], vacancy: [] };
+      const sources: LetterGateSources = { language: 'ru', candidate: [statement], career: [], vacancy: [] };
       expect(reviewLetterBody('Я увеличил выручку на 20%, I created project Atlas.', sources)).not.toEqual([]);
     }
   });

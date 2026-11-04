@@ -8,6 +8,8 @@
  */
 
 export interface LetterGateSources {
+  /** Язык письма: латиница в начале русской фразы — имя, а в английской — обычное слово. */
+  readonly language: 'en' | 'ru';
   /** Формулировки фактов кандидата на языке письма. */
   readonly candidate: readonly string[];
   /** Места работы: должность, компания, годы. */
@@ -70,13 +72,36 @@ function sameName(word: string, known: string): boolean {
   return common >= 3 && Math.max(word.length, known.length) - common <= 2;
 }
 
-function hasForeignName(sentence: string, known: ReadonlySet<string>): boolean {
+function isKnownName(word: string, known: ReadonlySet<string>): boolean {
+  const lower = word.replace(/’/gu, "'").toLocaleLowerCase().replace(/'s$/u, '');
+  return PLAIN_CAPITALS.has(lower) || known.has(lower) || [...known].some((name) => sameName(lower, name));
+}
+
+const OPENING = /^(\p{L}[\p{L}\p{N}'’]*)(?:\s+(\p{Lu}[\p{L}\p{N}'’]*))?/u;
+/** Служебные слова начала фразы: «At Ритейл Системс» и «В Финтех Лаб» — не имя из двух слов. */
+const OPENING_WORDS = new Set([
+  'at', 'in', 'for', 'with', 'from', 'as', 'by', 'on', 'to', 'my', 'our', 'the', 'this', 'after', 'before', 'while',
+  'during', 'since', 'currently', 'earlier', 'previously', 'now', 'today', 'dear', 'hello', 'hi', 'greetings',
+  'в', 'во', 'на', 'из', 'при', 'для', 'с', 'со', 'до', 'после', 'как', 'мой', 'моя', 'наш', 'сейчас', 'ранее', 'прежде',
+  'уважаемый', 'уважаемая', 'уважаемые', 'добрый', 'здравствуйте',
+]);
+
+/**
+ * Первое слово с заглавной пишут всегда, поэтому имя в нём видно не всегда. Проверяем надёжное:
+ * латиницу в русском письме и начало имени из двух слов. Одно слово без словаря не отличить:
+ * «Сбер доверил» и «Работал над» для проверки одинаковы.
+ */
+function hasForeignOpening(sentence: string, known: ReadonlySet<string>, language: 'en' | 'ru'): boolean {
+  const [, first = '', second] = OPENING.exec(sentence) ?? [];
+  if (!first || isKnownName(first, known)) return false;
+  if (language === 'ru' && /^\p{Script=Latin}/u.test(first)) return true;
+  return Boolean(second) && !OPENING_WORDS.has(first.toLocaleLowerCase()) &&
+    !PLAIN_CAPITALS.has(second!.toLocaleLowerCase());
+}
+
+function hasForeignName(sentence: string, known: ReadonlySet<string>, language: 'en' | 'ru'): boolean {
   const capitals = (sentence.match(WORD) ?? []).slice(1).filter((word) => /^\p{Lu}/u.test(word));
-  return capitals.some((word) => {
-    const lower = word.replace(/’/gu, "'").toLocaleLowerCase().replace(/'s$/u, '');
-    if (PLAIN_CAPITALS.has(lower) || known.has(lower)) return false;
-    return ![...known].some((name) => sameName(lower, name));
-  });
+  return capitals.some((word) => !isKnownName(word, known)) || hasForeignOpening(sentence, known, language);
 }
 
 const MONTH = /(?<!\p{L})(?:январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр|january|february|march|april|june|july|august|september|october|november|december)\p{L}*/giu;
@@ -136,7 +161,7 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     const own = withoutVacancyText(sentence, backing.vacancy);
     const checks: readonly (readonly [LetterGateRule, boolean])[] = [
       ['number', hasForeignNumber(own, profile)],
-      ['name', hasForeignName(sentence, names) || hasForeignMonth(sentence, profileText)],
+      ['name', hasForeignName(sentence, names, sources.language) || hasForeignMonth(sentence, profileText)],
       ['ownership', hasStrengthenedRole(own, owned)],
       ['praise', PRAISE.test(own)],
     ];

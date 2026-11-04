@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { VacancyPitchModal } from './VacancyPitchModal';
+import { PitchMetaBar, VacancyPitchModal } from './VacancyPitchModal';
 import type { VacancyPitchResult } from './vacancyPitchApi';
 
 describe('VacancyPitchModal', () => {
@@ -139,6 +139,26 @@ describe('VacancyPitchModal', () => {
     // Zero forbidden word
     const forbiddenWord = ['\u0434', '\u043E', '\u0441', '\u044C', '\u0435'].join('');
     expect(html).not.toMatch(new RegExp(forbiddenWord, 'i'));
+  });
+});
+
+describe('PitchMetaBar promises only what was checked', () => {
+  const usedFacts = [{ id: 'f1', basis: 'confirmed' as const }];
+
+  it('a template letter keeps its fact count and promise', () => {
+    const html = renderToStaticMarkup(<PitchMetaBar evidenceCount={1} usedFacts={usedFacts} bodySource="template" />);
+    expect(html).toContain('подтверждённых');
+    expect(html).toContain('Ничего не придумано');
+  });
+
+  it('a model letter claims neither: the fact count describes the template it replaced', () => {
+    const notice = 'Черновик написала модель. Прочитайте его перед отправкой.';
+    const html = renderToStaticMarkup(
+      <PitchMetaBar evidenceCount={1} usedFacts={usedFacts} bodySource="model" notices={[notice]} />,
+    );
+    expect(html).toContain(notice);
+    expect(html).not.toContain('подтверждённых');
+    expect(html).not.toContain('Ничего не придумано');
   });
 });
 

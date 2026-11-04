@@ -152,6 +152,16 @@ describe('the note under the letter (G3 L2)', () => {
     expect(notes({})).toBe('');
   });
 
+  it('a model letter shows its note, not the few-facts line the template would have earned', () => {
+    const markup = notes({
+      bodySource: 'model',
+      usedEvidenceIds: [],
+      notices: ['Черновик написала модель. Прочитайте его перед отправкой.'],
+    });
+    expect(markup).toContain('Черновик написала модель');
+    expect(markup).not.toContain('мало подтверждённых');
+  });
+
   it('shows one line even when the server sends several', () => {
     const markup = notes({
       notices: ['Первая.', 'Вторая.'],

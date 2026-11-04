@@ -79,7 +79,7 @@ describe('B528 generated text fact gate', () => {
     expect(Buffer.from(document.contentBase64, 'base64').toString('utf8')).toBe(data.atsCoverLetter);
   });
 
-  it('04.11: a paraphrase of imported facts reaches the letter screen, with no note against it', async () => {
+  it('04.11: a paraphrase of imported facts reaches the letter screen under the note that a model wrote it', async () => {
     const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек. Буду рад обсудить задачи роли.';
     const { app, candidates } = await createApp([sampleCluster], {
       coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test:model' }) },
@@ -100,7 +100,8 @@ describe('B528 generated text fact gate', () => {
     expect(data.atsCoverLetter).toBe(body);
     expect(data.factCheck.status).toBe('checked');
     expect(data.outputFactChecks.emailBody.status).toBe('checked');
-    expect(data.notices).toEqual([]);
+    // The gate does not check what a paraphrase means, so the screen promises no checking.
+    expect(data.notices).toEqual(['Черновик написала модель. Прочитайте его перед отправкой.']);
   });
 
   it('04.11: a stage whose letter fails the gate gives way, a transliterated employer never shows', async () => {
