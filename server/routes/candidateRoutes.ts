@@ -28,6 +28,7 @@ import {
 } from '../domain/resumeImport';
 import { preferStructuredResume } from '../domain/resumeStructuring';
 import { structureWithinBudget } from '../providers/resumeStructurer';
+import { clearResumeRefinement, resumeRefinementOf, startResumeRefinement } from './resumeImportRefinement';
 import { handleImportStructuredResume } from './structuredResumeImportRoute';
 import { registerCandidateExperienceFactRoutes } from './candidateExperienceFactRoutes';
 import { registerExperienceFactRewriteRoutes } from './experienceFactRewriteRoutes';
@@ -41,7 +42,7 @@ import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
 import { resumeStructurerForCandidate, resumeStructurerForRequest } from './resumeLlmAccess';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
-import type { CandidateStore, ResumeReaderProvenance } from '../data/candidateStore';
+import type { CandidateStore, CommittedResumeImport, ResumeReaderProvenance } from '../data/candidateStore';
 import { modelReaderProvenance, rulesReaderProvenance } from '../domain/resumeReaderProvenance';
 import type { RouteDeps } from './deps';
 import { nativeSourceConnectionView } from '../connectors/nativeSourceConnection';
@@ -107,6 +108,53 @@ export function resumeStudioView(
     ),
     reader: stored?.reader ?? null,
   };
+}
+
+function afterResumeImport(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  body: z.infer<typeof resumeImportSchema>,
+  committed: CommittedResumeImport,
+  refineWith: RouteDeps['resumeStructurer'],
+): void {
+  const rebuildRoles = () => {
+    void rebuildCampaignRoles(deps, candidateId, { log: (fields, message) => request.log.info(fields, message) }).catch((error) => {
+      request.log.error({ error }, 'campaign_roles_rebuild_failed');
+    });
+  };
+  rebuildRoles();
+  clearResumeRefinement(candidateId);
+  if (!refineWith) return;
+  startResumeRefinement({
+    deps,
+    log: request.log,
+    candidateId,
+    body,
+    structurer: refineWith,
+    committed,
+    commit: (plan) =>
+      deps.candidateStore.commitResumeImport(
+        candidateId,
+        resumeImportCommit(candidateId, body, plan, modelReaderProvenance(refineWith)),
+      ),
+    afterCommit: rebuildRoles,
+  });
+}
+
+/**
+ * 04.11: a document the rules can read answers at once and the model refines it behind the
+ * answer. Rules that found nothing still wait for the model; a native snapshot keeps its receipt.
+ */
+async function readForImport(deps: RouteDeps, body: z.infer<typeof resumeImportSchema>) {
+  const structurer = resumeStructurerForCandidate(deps);
+  if (!structurer || body.sourceReceipt) {
+    return { read: await readResume(body.text, structurer), refineWith: undefined };
+  }
+  const rules = await readResume(body.text);
+  return carriesProfileSubstance(rules.resume)
+    ? { read: rules, refineWith: structurer }
+    : { read: await readResume(body.text, structurer), refineWith: undefined };
 }
 
 /**
@@ -383,7 +431,7 @@ async function importResumeIntoDossier(
     : 'profile';
   const early = nativeImportShortcut(candidateStore, candidate.id, body, mode);
   if (early) return { data: early.data, meta: { requestId: request.id, ...early.meta } };
-  const read = await readResume(body.text, resumeStructurerForCandidate(deps));
+  const { read, refineWith } = await readForImport(deps, body);
   const plan = planResumeImport(read.resume, { idPrefix: newImportMemoryIdPrefix(randomUUID()) });
   if (plan.evidence.length === 0 || !carriesProfileSubstance(read.resume)) {
     return sendError(
@@ -402,14 +450,13 @@ async function importResumeIntoDossier(
       : candidateStore.commitResumeImport(candidate.id, commit);
   const digest = resumeDocumentDigest(candidate.id, body.source, body.text);
   recordImportCompletedNotification(deps, request, candidate.id, 'resume_import', digest);
-  void rebuildCampaignRoles(deps, candidate.id, { log: (fields, message) => request.log.info(fields, message) }).catch((error) => {
-    request.log.error({ error }, 'campaign_roles_rebuild_failed');
-  });
+  afterResumeImport(deps, request, candidate.id, body, committed, refineWith);
   return {
     data: {
       parsed: read.resume,
       resume: resumeStudioView(candidateStore, candidate.id),
       structuredBy: read.structuredBy,
+      ...(refineWith ? { refinement: 'pending' as const } : {}),
       factCount: committed.evidence.memoryIds.length,
       ...(committed.sourceConnection
         ? { connection: nativeSourceConnectionView(committed.sourceConnection) }
@@ -561,6 +608,16 @@ const handleImportResume: Handler = async (deps, request, reply) => {
   return importResumeIntoDossier(deps, request, reply, body);
 };
 
+const handleGetResumeRefinement: Handler = async (
+  { authService, candidateStore, config },
+  request,
+  reply,
+) => {
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  return { data: resumeRefinementOf(candidate.id), meta: { requestId: request.id } };
+};
+
 const handleGetResume: Handler = async (
   { authService, candidateStore, config },
   request,
@@ -699,6 +756,7 @@ async function registerResumeEndpoints(app: FastifyInstance, deps: RouteDeps): P
     },
     withDeps(deps, handleImportStructuredResume),
   );
+  app.get('/api/v1/candidate/resume/import/refinement', withDeps(deps, handleGetResumeRefinement));
   app.get('/api/v1/candidate/resume', withDeps(deps, handleGetResume));
   app.put(
     '/api/v1/candidate/resume',

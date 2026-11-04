@@ -63,6 +63,8 @@ export interface ResumeImportResult {
   readonly resume: ResumeStudioView;
   /** `model` when the provider structured the document, `rules` on the fallback. */
   readonly structuredBy: 'model' | 'rules';
+  /** 04.11: the answer is the rules read; the model refines the profile behind it. */
+  readonly refinement?: 'pending';
   readonly factCount: number;
   readonly connection?: NativeSourceConnection;
   /** The platform was only connected: the profile comes from another one (23.10.2026). */
@@ -110,6 +112,14 @@ export async function importCandidateResume(input: ResumeImportInput): Promise<R
     }),
   });
   return readData<ResumeImportResult>(response);
+}
+
+export type ResumeRefinement =
+  | { readonly status: 'none' | 'pending' | 'kept' }
+  | { readonly status: 'refined'; readonly parsed: ParsedResume; readonly factCount: number };
+
+export async function getResumeRefinement(): Promise<ResumeRefinement> {
+  return readData<ResumeRefinement>(await apiFetch('/api/v1/candidate/resume/import/refinement'));
 }
 
 export interface StructuredResumeImportInput {

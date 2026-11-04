@@ -1,6 +1,7 @@
 import { extractTextDocument } from '../workspace/documentText';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  getResumeRefinement,
   importCandidateResume,
   type NativeSourceReceipt,
   type NativeSourceConnection,
@@ -57,6 +58,10 @@ const IMPORT_SOURCE: Record<ResumeSource, ResumeImportSource> = {
   text: 'text',
 };
 
+const REFINEMENT_POLL_MS = 4_000;
+/** Чуть дольше фонового потолка модели (120 с). */
+const REFINEMENT_POLLS = 32;
+
 /**
  * Reading a document and putting it into the candidate's dossier is one act.
  *
@@ -73,6 +78,28 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+
+  const followed = useRef<IngestedResume | undefined>(undefined);
+  useEffect(() => () => {
+    followed.current = undefined;
+  }, []);
+  // 04.11: the import answers with the rules read; the model's reading replaces it when it lands.
+  const followRefinement = useCallback(async (stored: IngestedResume) => {
+    followed.current = stored;
+    for (let attempt = 0; attempt < REFINEMENT_POLLS && followed.current === stored; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, REFINEMENT_POLL_MS));
+      if (followed.current !== stored) return;
+      const refinement = await getResumeRefinement().catch(() => ({ status: 'pending' as const }));
+      if (refinement.status === 'pending') continue;
+      if (refinement.status === 'refined' && followed.current === stored) {
+        const { parsed, factCount } = refinement;
+        setResult((current) =>
+          current === stored ? { ...current, parsed, draft: parsedResumeToDraft(parsed), factCount } : current,
+        );
+      }
+      return;
+    }
+  }, []);
 
   const ingest = useCallback(
     // One transaction-shaped state transition; splitting setters would make partial UI state possible.
@@ -128,6 +155,7 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
         } satisfies IngestedResume;
         setResult(stored);
         setNotice(undefined);
+        if (imported.refinement === 'pending') void followRefinement(stored);
         return stored;
       } catch (reason) {
         // The candidate keeps the local reading and the wizard keeps moving;
@@ -149,7 +177,7 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
         return local;
       }
     },
-    [hasAccount],
+    [hasAccount, followRefinement],
   );
 
   const readPdf = useCallback(

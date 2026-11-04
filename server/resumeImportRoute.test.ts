@@ -7,7 +7,7 @@ import type { SqliteBillingRepository } from './billing/sqliteBillingRepository'
 import type { CoachProvider } from './providers/coachProvider';
 import type { ResumeStructurer } from './providers/resumeStructurer';
 import type { ResumeStudioProjection } from './domain/resumeStudio';
-import { parseResumeContent, type ParsedResume } from '../src/features/workspace/resumeParser';
+import { parseResumeContent } from '../src/features/workspace/resumeParser';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -113,6 +113,20 @@ async function createApp(
   };
 }
 
+async function settledResume(app: Awaited<ReturnType<typeof createApp>>['app'], authorization: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const refinement = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/resume/import/refinement',
+      headers: { authorization },
+    });
+    if (refinement.json().data.status !== 'pending') break;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  const resume = await app.inject({ method: 'GET', url: '/api/v1/candidate/resume', headers: { authorization } });
+  return resume.json().data;
+}
+
 function importBody(text = LINKEDIN_MARKDOWN) {
   return { text, source: 'linkedin' as const, fileName: 'linkedin.pdf' };
 }
@@ -164,7 +178,8 @@ describe('POST /api/v1/candidate/resume/import', () => {
     });
 
     expect(imported.statusCode).toBe(200);
-    expect(imported.json().data.resume.reader).toMatchObject({
+    const refined = await settledResume(app, authorization);
+    expect(refined.reader).toMatchObject({
       method: 'model',
       model: 'openai:gpt-5.6-mini',
       promptRevision: 'resume-structuring-v1',
@@ -209,7 +224,7 @@ describe('POST /api/v1/candidate/resume/import', () => {
     });
 
     expect(imported.statusCode).toBe(200);
-    expect(imported.json().data.resume.reader).toMatchObject({ method: 'model' });
+    expect((await settledResume(app, authorization)).reader).toMatchObject({ method: 'model' });
   });
 
   it('records rules rather than inventing a model when no structurer is configured (B184)', async () => {
@@ -597,48 +612,6 @@ describe('POST /api/v1/candidate/resume/import', () => {
       .getSnapshot(candidateId)
       .memory.find((item) => item.id === firstFact.id);
     expect(kept?.statement).toBe('Кандидат уточнил эту формулировку сам.');
-  });
-
-  it('prefers the model reading when a structurer is configured', async () => {
-    const structured: ParsedResume = {
-      fullName: 'Marina Orlova',
-      targetRole: 'VP of Technology',
-      contact: { links: [] },
-      experience: [
-        {
-          title: 'VP of Technology',
-          employer: 'Enterprise Energy IT Services',
-          startDate: '2023-04',
-          endDate: '2025-10',
-          current: false,
-          responsibilities: ['Rebuilt ITIL 4 processes'],
-          achievements: [],
-        },
-      ],
-      skills: ['ITIL'],
-      education: [],
-      courses: [],
-      tests: [],
-      recommendations: [],
-      languages: [],
-      rawText: LINKEDIN_MARKDOWN,
-    };
-    const { app, authorization } = await createApp({
-      structure: async () => structured,
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/api/v1/candidate/resume/import',
-      headers: { authorization },
-      payload: importBody(),
-    });
-
-    expect(response.json().meta ?? {}).toBeDefined();
-    expect(response.json().data.structuredBy).toBe('model');
-    expect(response.json().data.parsed.experience[0].employer).toBe(
-      'Enterprise Energy IT Services',
-    );
   });
 
   it('falls back to the rules parser when the model produces nothing', async () => {
