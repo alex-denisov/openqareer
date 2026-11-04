@@ -16,6 +16,7 @@ import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
+import { describeFailure, unfreezeLiveTitles } from './vacancies/titleParse/titleFreeze';
 import { buildModelTitleParser, TitleModelStep } from './vacancies/titleParse/modelTitleParser';
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
@@ -115,12 +116,31 @@ const worker = new MaintenanceWorker({
     ? {
         titleModel: new TitleModelStep(semanticDatabase, titleModelParser, {
           dailyCalls: readPositiveInteger(process.env.OPENQAREER_TITLE_MODEL_DAILY_CALLS, 2_000),
+          // Потолок вызовов за жизнь процесса (перепрогон после разморозки; 1 вызов = до 40 названий).
+          ...(process.env.OPENQAREER_TITLE_MODEL_RUN_CALLS
+            ? {
+                maxCallsPerRun: readPositiveInteger(
+                  process.env.OPENQAREER_TITLE_MODEL_RUN_CALLS,
+                  Number.MAX_SAFE_INTEGER,
+                ),
+              }
+            : {}),
+          log,
         }),
       }
     : {}),
   ...(linkedinPoolExecutor ? { linkedinPoolExecutor } : {}),
   purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
 });
+
+// Разовая разморозка названий с живыми вакансиями: включается на хосте флагом и после прогона снимается.
+if (process.env.OPENQAREER_TITLE_UNFREEZE === '1') {
+  void unfreezeLiveTitles(semanticDatabase)
+    .then((report) => log.info({ ...report }, 'title-model-unfreeze-done'))
+    .catch((error: unknown) =>
+      log.error({ reason: describeFailure(error) }, 'title-model-unfreeze-failed'),
+    );
+}
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
