@@ -13,6 +13,7 @@ import {
   type RoleAssessmentVacancy,
   type RoleSkillAssessmentRun,
 } from '../domain/roleSkillAssessment';
+import { isRoleTitleLabel } from '../domain/roleTitleLabel';
 import type { ResumeEvidenceImport } from '../data/candidateStore';
 import type { CandidateIdentity } from '../data/candidateStore';
 import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
@@ -498,21 +499,23 @@ export function toAssessmentVacancies(
       cluster.skills.length > 0 || freshness !== 'fresh' || !requirementReader
         ? cluster.skills
         : requirementReader.skillsFor(cluster.id);
-    const requirements = labels.map((label) => {
-      const normalizedSkill = canonicalizeSkill(label).trim();
-      const skillId = normalizeSkillId(normalizedSkill);
-      return {
-        id: `requirement-${stableRefId(cluster.id, skillId)}`,
-        skillId,
-        statement: label.trim(),
-        sourceRefs: sourceRefs.map((source) => ({
-          id: stableRefId(cluster.id, `${source.sourceId}:${skillId}`),
-          vacancyId: cluster.id,
-          observedAt: source.observedAt,
-          sourceName: source.sourceName,
-        })),
-      };
-    });
+    const requirements = labels
+      .filter((label) => !isRoleTitleLabel(label))
+      .map((label) => {
+        const normalizedSkill = canonicalizeSkill(label).trim();
+        const skillId = normalizeSkillId(normalizedSkill);
+        return {
+          id: `requirement-${stableRefId(cluster.id, skillId)}`,
+          skillId,
+          statement: label.trim(),
+          sourceRefs: sourceRefs.map((source) => ({
+            id: stableRefId(cluster.id, `${source.sourceId}:${skillId}`),
+            vacancyId: cluster.id,
+            observedAt: source.observedAt,
+            sourceName: source.sourceName,
+          })),
+        };
+      });
     return [{ id: cluster.id, roleId, status: 'active' as const, freshness, requirements }];
   });
 }
