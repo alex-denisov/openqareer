@@ -202,3 +202,58 @@ describe('месячный потолок в настройке (B580)', () => {
     expect(readBulkLlmConfig(env)?.monthUsd).toBe(0.1);
   });
 });
+
+describe('glm-5.3-flash и причина отказа (04.11)', () => {
+  it('glm получает обязательное рассуждение low, deepseek — выключенное', async () => {
+    const transport = openRouter({ [HEAD]: 500 });
+    const { runtime } = setup(transport);
+    const result = await runtime.client!.complete(req);
+    expect(result.model).toBe(GLM);
+    const reasoning = transport.mock.calls.map(
+      ([, init]) => (JSON.parse(String(init?.body)) as { reasoning: unknown }).reasoning,
+    );
+    expect(reasoning).toEqual([{ enabled: false }, { effort: 'low' }]);
+  });
+
+  it('отказ провайдера хранит его сообщение в журнале, ключей в нём нет', async () => {
+    const transport = vi.fn(async (_url: string, init?: RequestInit) => {
+      const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+      if (model === HEAD) {
+        return Response.json(
+          { error: { message: 'Reasoning is mandatory, sk-abcdefghijklmnop' } },
+          { status: 400 },
+        );
+      }
+      return Response.json({
+        model,
+        provider: 'Host',
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { cost: 0.001, prompt_tokens: 5, completion_tokens: 5 },
+      });
+    });
+    const { runtime } = setup(transport as never);
+    await runtime.client!.complete(req);
+    const row = runtime.ledger.db
+      .prepare("SELECT failure FROM bulk_llm_spend WHERE status='rejected'")
+      .get() as { failure: string };
+    expect(row.failure).toBe('status 400: Reasoning is mandatory, [masked]');
+  });
+
+  it('сбой Vertex и транспорта тоже оставляют причину', async () => {
+    const transport = vi.fn(async () => {
+      throw Object.assign(new Error('t'), { name: 'TimeoutError' });
+    });
+    const { runtime } = setup(transport as never, async () => {
+      throw new Error('Bulk fallback status 503');
+    });
+    await expect(runtime.client!.complete(req)).rejects.toThrow();
+    const rows = runtime.ledger.db
+      .prepare("SELECT model,failure FROM bulk_llm_spend WHERE status='rejected' ORDER BY model")
+      .all() as { model: string; failure: string }[];
+    expect(rows.map((row) => row.failure)).toEqual([
+      'openrouter_timeout',
+      'Bulk fallback status 503',
+      'openrouter_timeout',
+    ]);
+  });
+});

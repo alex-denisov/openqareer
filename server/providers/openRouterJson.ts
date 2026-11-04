@@ -1,4 +1,5 @@
 import { modelRegistry } from './modelRegistry';
+import { openRouterReasoning } from './openRouterReasoning';
 import type { ProviderRoute } from './providerQueue';
 
 /** Запрос JSON у ступени цепочки, говорящей на chat-completions (OpenRouter, OpenAI). */
@@ -34,7 +35,7 @@ export async function requestChatJson(
       response_format: { type: 'json_object' },
       ...(route.provider === 'openai'
         ? { max_completion_tokens: request.maxTokens }
-        : { max_tokens: request.maxTokens, reasoning: { enabled: false } }),
+        : { max_tokens: request.maxTokens, reasoning: openRouterReasoning(route.model) }),
     }),
     signal: AbortSignal.timeout(request.timeoutMs),
   });

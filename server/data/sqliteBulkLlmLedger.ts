@@ -21,6 +21,18 @@ export class SqliteBulkLlmLedger {
     this.db.exec(
       `PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS bulk_llm_spend(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,task TEXT NOT NULL,day TEXT NOT NULL,reserved REAL NOT NULL,cost REAL,model TEXT NOT NULL,provider TEXT NOT NULL,prompt_tokens INTEGER,cached_tokens INTEGER,completion_tokens INTEGER,batch_id TEXT,status TEXT NOT NULL,created_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS bulk_llm_events(id TEXT PRIMARY KEY,kind TEXT NOT NULL,created_at TEXT NOT NULL);`,
     );
+    this.ensureFailureColumn();
+  }
+  /** Why a call was refused (04.11: 1 933 GLM rows `rejected` and no reason anywhere). Instant, repeat is safe. */
+  private ensureFailureColumn() {
+    const columns = this.db.prepare('PRAGMA table_info(bulk_llm_spend)').all() as { name: string }[];
+    if (columns.some((column) => column.name === 'failure')) return;
+    try {
+      this.db.exec('ALTER TABLE bulk_llm_spend ADD COLUMN failure TEXT');
+    } catch (error) {
+      // Another process of the same deploy added it first.
+      if (!(error instanceof Error) || !/duplicate column/u.test(error.message)) throw error;
+    }
   }
   event(kind: string) {
     this.db
@@ -130,10 +142,12 @@ export class SqliteBulkLlmLedger {
         );
     });
   }
-  release(id: string) {
+  release(id: string, failure?: string) {
     this.db
-      .prepare("UPDATE bulk_llm_spend SET cost=0,status='rejected' WHERE id=? AND cost IS NULL")
-      .run(id);
+      .prepare(
+        "UPDATE bulk_llm_spend SET cost=0,status='rejected',failure=? WHERE id=? AND cost IS NULL",
+      )
+      .run(failure ?? null, id);
   }
   pendingBatch(id: string, batchId: string) {
     this.db
