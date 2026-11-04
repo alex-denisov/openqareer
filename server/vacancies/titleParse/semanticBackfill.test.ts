@@ -136,7 +136,7 @@ describe('SemanticBackfill (B267 S2)', () => {
     const second = afterRestart.step(10);
     const final = afterRestart.step(10);
 
-    expect([first.backfilled, second.backfilled, final.backfilled]).toEqual([0, 0, 5]);
+    expect([first.backfilled, second.backfilled, final.backfilled]).toEqual([5, 0, 0]);
     expect([first.poolRowsScanned, second.poolRowsScanned, final.poolRowsScanned]).toEqual([
       10, 10, 5,
     ]);
@@ -273,6 +273,21 @@ describe('SemanticBackfill (B267 S2)', () => {
       function_code: 'sales',
       level_rank: 1,
     });
+  });
+
+  it('вакансия без строки индекса возвращается первым шагом после старта, а не в конце прохода', () => {
+    const database = poolDatabase();
+    const first = new SemanticBackfill(database);
+    for (const id of ['a1', 'a2', 'a3', 'z9']) addVacancy(database, id, `QA Engineer ${id}`);
+    first.step(100);
+    database.exec("DELETE FROM vacancy_semantic WHERE id = 'z9'");
+
+    const restarted = new SemanticBackfill(database);
+    const report = restarted.step(1);
+
+    expect(report.backfilled).toBe(1);
+    const count = database.prepare("SELECT count(*) AS n FROM vacancy_semantic WHERE id = 'z9'").get() as { n: number };
+    expect(count.n).toBeGreaterThan(0);
   });
 
   it('CIO и ИТ-директор приводятся к одной роли, служба поддержки — к поддержке, чужие названия не трогаются (04.11)', () => {
