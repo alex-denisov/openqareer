@@ -359,21 +359,32 @@ export class SqliteVacancyFitStore {
    * One requeue of failed jobs after a parser upgrade. The request time goes back to creation,
    * so pages the candidate opens now stay ahead; a failure under the current revision stays failed.
    */
-  requeueFailedOnce(revision = MECHANICS_REQUEUE_REVISION, now = new Date().toISOString()): number {
+  requeueFailedOnce(revision = MECHANICS_REQUEUE_REVISION, now = new Date().toISOString(), limit = Number.POSITIVE_INFINITY): number {
     return this.requeueFound(
       `status='failed' AND input_cipher<>'' AND COALESCE(requeue_revision,1)<?`, [revision],
-      `requested_at=created_at,requeue_revision=?,`, [revision], now,
+      `requested_at=created_at,requeue_revision=?,`, [revision], now, limit,
     );
+  }
+
+  /** Rows `requeueFailedOnce` has yet to return: a read by status only (an upper bound, no cipher read, no write). */
+  countFailedOnce(revision = MECHANICS_REQUEUE_REVISION): number {
+    const row = this.database.prepare(`SELECT COUNT(*) AS n FROM vacancy_fit_queue WHERE status='failed' AND COALESCE(requeue_revision,1)<?`).get(revision) as { n: number };
+    return row.n;
+  }
+
+  countOrphanedRequirementsTimeouts(): number {
+    const row = this.database.prepare(`SELECT COUNT(*) AS n FROM vacancy_fit_queue WHERE status='failed' AND last_error='requirements_wait_timeout' AND updated_at>=?`).get(ORPHANED_REQUIREMENTS_SINCE) as { n: number };
+    return row.n;
   }
 
   /**
    * 02.11: fits waited on requirement jobs marked completed without a cache row (fixed in the
    * requirements store). Those that ran out of defers since then go back with their request time.
    */
-  requeueOrphanedRequirementsTimeouts(now = new Date().toISOString()): number {
+  requeueOrphanedRequirementsTimeouts(now = new Date().toISOString(), limit = Number.POSITIVE_INFINITY): number {
     return this.requeueFound(
       `status='failed' AND last_error='requirements_wait_timeout' AND input_cipher<>'' AND updated_at>=?`, [ORPHANED_REQUIREMENTS_SINCE],
-      '', [], now,
+      '', [], now, limit,
     );
   }
 
@@ -383,8 +394,11 @@ export class SqliteVacancyFitStore {
    * its 20 s busy timeout on the event loop. The rows are found by a read, which takes no lock in
    * WAL, and written by rowid in small batches that check the condition again.
    */
-  private requeueFound(where: string, whereArgs: readonly SQLInputValue[], set: string, setArgs: readonly SQLInputValue[], now: string): number {
-    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${where}`).all(...whereArgs) as { id: number }[]).map((row) => row.id);
+  private requeueFound(where: string, whereArgs: readonly SQLInputValue[], set: string, setArgs: readonly SQLInputValue[], now: string, limit = Number.POSITIVE_INFINITY): number {
+    if (limit <= 0) return 0;
+    const cap = Number.isFinite(limit) ? ' LIMIT ?' : '';
+    const capArgs = Number.isFinite(limit) ? [Math.floor(limit)] : [];
+    const ids = (this.database.prepare(`SELECT rowid AS id FROM vacancy_fit_queue WHERE ${where} ORDER BY rowid${cap}`).all(...whereArgs, ...capArgs) as { id: number }[]).map((row) => row.id);
     let changed = 0;
     for (let start = 0; start < ids.length; start += REQUEUE_BATCH) {
       const batch = ids.slice(start, start + REQUEUE_BATCH);

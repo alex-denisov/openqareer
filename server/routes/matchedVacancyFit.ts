@@ -474,6 +474,7 @@ export async function requestFitForVacancyIds(
   vacancyIds: readonly string[],
   backgroundRank?: number,
   slicing: { readonly sliceMs?: number; readonly now?: () => number } = {},
+  refreshSlot?: () => boolean,
 ): Promise<void> {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return;
@@ -487,7 +488,10 @@ export async function requestFitForVacancyIds(
       // 02.11 prod profile: the sweep opened every counted row's result to learn it was counted.
       if (backgroundRank !== undefined && runtime.hasCurrentResult(input)) return;
       // 01.11: `refreshing` shows the old version's percent; the sweep queues the current one too.
-      if (!['not_requested', 'failed', 'refreshing'].includes(runtime.view(input).state)) return;
+      const state = runtime.view(input).state;
+      if (!['not_requested', 'failed', 'refreshing'].includes(state)) return;
+      // Only the background precompute passes a slot: a counted row keeps its old percent past the day's ceiling.
+      if (state === 'refreshing' && refreshSlot && !refreshSlot()) return;
       runtime.enqueue(
         input,
         backgroundRank === undefined ? {} : { backgroundRank: backgroundRank + index },

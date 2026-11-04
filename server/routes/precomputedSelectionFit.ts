@@ -40,7 +40,10 @@ export function queuePrecomputedSelectionFit(
     candidateId,
     ids,
     skipText,
-    (chunk, rank) => requestFitForVacancyIds(deps, candidateId, chunk, rank),
+    // 04.11: a new algorithm version turns every counted row into `refreshing`; the background pass
+    // requeues at most the day's ceiling of them. Counting rows and opened cards have no ceiling.
+    (chunk, rank) =>
+      requestFitForVacancyIds(deps, candidateId, chunk, rank, {}, () => deps.vacancyMechanics?.takeFitRefreshSlot() ?? true),
     `${stamp}|${selectionStamp(ids)}`,
   );
 }

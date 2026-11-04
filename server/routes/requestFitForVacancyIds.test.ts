@@ -31,6 +31,23 @@ describe('fit queue for a selection chunk (prod 02.11: 100–450 ms per chunk on
     expect(mechanics.view).toHaveBeenCalledTimes(1);
   });
 
+  it('the background refresh stops at the ceiling; new rows and opened cards never wait for a slot (04.11)', async () => {
+    const states: Record<string, string> = { r1: 'refreshing', r2: 'refreshing', n1: 'not_requested' };
+    const mechanics = {
+      ...runtime(new Set()),
+      view: vi.fn((input: { vacancyId: string }) => ({ state: states[input.vacancyId] })),
+    };
+    const slot = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+    const deps = { vacancyMechanics: mechanics } as never;
+    await requestFitForVacancyIds(deps, 'candidate', ['r1', 'r2', 'n1'], 0, {}, slot);
+    expect(mechanics.enqueue.mock.calls.map(([input]) => input.vacancyId)).toEqual(['r1', 'n1']);
+    expect(slot).toHaveBeenCalledTimes(2);
+    mechanics.enqueue.mockClear();
+    // A card the candidate opened passes no slot: no ceiling.
+    await requestFitForVacancyIds(deps, 'candidate', ['r1', 'r2']);
+    expect(mechanics.enqueue).toHaveBeenCalledTimes(2);
+  });
+
   it('lets queued requests run between rows once a slice is spent (PRB-041: up to 1 s per chunk)', async () => {
     const order: string[] = [];
     const mechanics = {
