@@ -65,6 +65,71 @@ describe('buildRoleSkillDemand', () => {
     expect(buildRoleSkillDemand('CTO', 'cto', lone, [], 5)).toBeNull();
   });
 
+  describe('profile presence', () => {
+    const presence = (required: string, profile: readonly string[]) => {
+      const demand = buildRoleSkillDemand(
+        'CTO',
+        'cto',
+        Array.from({ length: 5 }, (_, i) => vacancy(`p${i}`, [required])),
+        profile,
+        5,
+      );
+      return demand?.skills[0].inProfile;
+    };
+
+    it.each([
+      ['AWS', 'Amazon Web Services (AWS)'],
+      ['AI', 'Artificial Intelligence (AI)'],
+      ['ML', 'Machine Learning (ML)'],
+      ['ИИ', 'Искусственный интеллект (ИИ)'],
+      ['AWS', 'AWS (Amazon Web Services)'],
+      ['Amazon Web Services', 'Amazon Web Services (AWS)'],
+      ['Amazon Web Services (AWS)', 'AWS'],
+      ['Amazon Web Services (AWS)', 'Amazon Web Services'],
+      ['Amazon Web Services (AWS)', 'Amazon Web Services (AWS)'],
+    ])('%s is covered by the profile skill %s', (required, profile) => {
+      expect(presence(required, [profile])).toBe(true);
+    });
+
+    it.each([
+      // A short name is compared whole, never as a piece of a longer word.
+      ['AI', 'Email Marketing'],
+      ['AI', 'Airflow'],
+      ['Go', 'Google Analytics'],
+      // Brackets that are not an abbreviation of the name say nothing about it.
+      ['VBA', 'Excel (VBA)'],
+      ['B2', 'English (B2)'],
+      // One abbreviation, two different skills.
+      ['Project Management (PM)', 'Product Management (PM)'],
+      // Punctuation is the whole difference between these names.
+      ['C++', 'C#'],
+    ])('%s is not covered by the profile skill %s', (required, profile) => {
+      expect(presence(required, [profile])).toBe(false);
+    });
+
+    it('recognizes a dictionary skill inside a longer profile wording', () => {
+      expect(presence('Управление проектами', ['Agile-управление проектами в финтехе'])).toBe(true);
+    });
+  });
+
+  it('never lists a job title as a skill, and the freed places go to real skills', () => {
+    const titles = ['CTO', 'VP-Of-Engineering', 'Director-of-Engineering', 'Head-Of-AI'];
+    const named = Array.from({ length: 12 }, (_, j) => `Tool${String(j).padStart(2, '0')}`);
+    const demand = buildRoleSkillDemand(
+      'CTO',
+      'cto',
+      Array.from({ length: 6 }, (_, i) => vacancy(`t${i}`, [...titles, ...named])),
+      [],
+      5,
+    );
+    expect(demand?.skills.map((skill) => skill.name)).toEqual(named);
+  });
+
+  it('is hidden when only job titles repeat', () => {
+    const titles = Array.from({ length: 6 }, (_, i) => vacancy(`o${i}`, ['CTO']));
+    expect(buildRoleSkillDemand('CTO', 'cto', titles, [], 5)).toBeNull();
+  });
+
   it('keeps only the top skills', () => {
     const wide = Array.from({ length: 6 }, (_, i) =>
       vacancy(

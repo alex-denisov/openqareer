@@ -1,5 +1,9 @@
-import { canonicalizeSkill } from '../connectors/managementSkillsDictionary';
+import {
+  canonicalizeSkill,
+  managementSkillMatcher,
+} from '../connectors/managementSkillsDictionary';
 import type { RoleAssessmentVacancy } from './roleSkillAssessment';
+import { isRoleTitleLabel } from './roleTitleLabel';
 
 /** How many of a role's most requested skills the profile shows (B591). */
 export const ROLE_SKILL_DEMAND_TOP = 12;
@@ -22,10 +26,74 @@ export interface RoleSkillDemand {
   readonly skills: readonly RoleSkillDemandSkill[];
 }
 
+/** `+` and `#` stay: without them C++, C# and C are one skill. */
 function skillKey(name: string): string {
   return canonicalizeSkill(name)
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '');
+    .replace(/[^\p{L}\p{N}+#]+/gu, '');
+}
+
+/** The letters of `short` follow in `full`, starting from its first letter. */
+function abbreviates(short: string, full: string): boolean {
+  if (short.length < 2 || short.length >= full.length || short[0] !== full[0]) return false;
+  let matched = 0;
+  for (const letter of full) {
+    if (letter === short[matched]) matched += 1;
+  }
+  return matched === short.length;
+}
+
+interface NamedAbbreviation {
+  readonly full: string;
+  readonly short: string;
+}
+
+/**
+ * «Amazon Web Services (AWS)» or «AWS (Amazon Web Services)». Other brackets
+ * are not a second name: «Excel (VBA)» says nothing about VBA on its own.
+ */
+function namedAbbreviation(name: string): NamedAbbreviation | null {
+  const match = /^(.+?)\s*\(([^()]+)\)$/u.exec(name.trim());
+  if (!match) return null;
+  const [outer, inner] = [skillKey(match[1]), skillKey(match[2])];
+  const [full, short] = outer.length >= inner.length ? [outer, inner] : [inner, outer];
+  return abbreviates(short, full) ? { full, short } : null;
+}
+
+interface OwnedSkills {
+  readonly texts: readonly string[];
+  readonly names: ReadonlySet<string>;
+  /** Abbreviations from brackets: they answer only a requirement named by the bare abbreviation. */
+  readonly abbreviations: ReadonlySet<string>;
+}
+
+function ownedSkills(profileSkills: readonly string[]): OwnedSkills {
+  const pairs = profileSkills.map(namedAbbreviation);
+  return {
+    texts: profileSkills,
+    names: new Set(
+      [
+        ...profileSkills.map(skillKey),
+        ...pairs.flatMap((pair) => (pair ? [pair.full] : [])),
+      ].filter(Boolean),
+    ),
+    abbreviations: new Set(pairs.flatMap((pair) => (pair ? [pair.short] : []))),
+  };
+}
+
+/**
+ * Keys are compared whole, so «AI» never matches inside «Email». Two bracketed
+ * names sharing an abbreviation stay apart: Project and Product Management (PM).
+ */
+function isOwned(label: string, owned: OwnedSkills): boolean {
+  const key = skillKey(label);
+  const pair = namedAbbreviation(label);
+  const named = pair
+    ? [key, pair.full, pair.short].some((item) => owned.names.has(item))
+    : owned.names.has(key) || owned.abbreviations.has(key);
+  if (named) return true;
+  const dictionary = managementSkillMatcher(label);
+  return dictionary ? owned.texts.some((text) => dictionary.test(text)) : false;
 }
 
 interface Tally {
@@ -40,7 +108,7 @@ function tallyRequirements(sample: readonly RoleAssessmentVacancy[]): Map<string
     for (const requirement of vacancy.requirements) {
       const label = requirement.statement.trim();
       const key = skillKey(label);
-      if (!key || seen.has(key)) continue;
+      if (!key || seen.has(key) || isRoleTitleLabel(label)) continue;
       seen.add(key);
       const tally = tallies.get(key) ?? { labels: new Map<string, number>(), vacancies: 0 };
       tally.vacancies += 1;
@@ -72,14 +140,13 @@ export function buildRoleSkillDemand(
   );
   const unique = [...new Map(sample.map((v) => [v.id, v])).values()];
   if (unique.length < minSample) return null;
-  const owned = new Set(profileSkills.map(skillKey).filter(Boolean));
-  const skills = [...tallyRequirements(unique).entries()]
-    .filter(([, tally]) => tally.vacancies >= MIN_SKILL_VACANCIES)
-    .map(([key, tally]) => ({
-      name: commonestLabel(tally.labels),
-      vacancies: tally.vacancies,
-      inProfile: owned.has(key),
-    }))
+  const owned = ownedSkills(profileSkills);
+  const skills = [...tallyRequirements(unique).values()]
+    .filter((tally) => tally.vacancies >= MIN_SKILL_VACANCIES)
+    .map((tally) => {
+      const name = commonestLabel(tally.labels);
+      return { name, vacancies: tally.vacancies, inProfile: isOwned(name, owned) };
+    })
     .sort((a, b) => b.vacancies - a.vacancies || a.name.localeCompare(b.name))
     .slice(0, ROLE_SKILL_DEMAND_TOP);
   if (skills.length === 0) return null;

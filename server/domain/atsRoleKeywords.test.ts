@@ -88,4 +88,16 @@ describe('requirementLabels', () => {
     } as unknown as VacancyRequirementsResult;
     expect(requirementLabels(result)).toEqual(['Kafka']);
   });
+
+  it('drops job titles: a role and a saved vacancy both read keywords from here', () => {
+    const result = {
+      ...base,
+      requirements: [
+        requirement('1', 'CTO', 'CTO'),
+        requirement('2', 'VP-Of-Engineering', 'VP-Of-Engineering'),
+        requirement('3', 'Опыт работы с Kafka', 'Kafka'),
+      ],
+    } as unknown as VacancyRequirementsResult;
+    expect(requirementLabels(result)).toEqual(['Kafka']);
+  });
 });
