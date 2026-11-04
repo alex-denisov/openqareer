@@ -15,8 +15,9 @@ import { parseVacancy } from './sqliteVacancyPoolStore';
 /**
  * Новая версия правил разбора — новый ключ: проход начнётся сначала.
  * v2 (03.11): «Global» и «Anywhere» целиком — область из любой страны.
+ * v3 (04.11): «work from anywhere» в названии и тексте главнее поля места.
  */
-export const REMOTE_SCOPE_BACKFILL_KEY = 'remote-scope-v2';
+export const REMOTE_SCOPE_BACKFILL_KEY = 'remote-scope-v3';
 
 const STATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS remote_scope_backfill_state (
   key TEXT PRIMARY KEY,
