@@ -190,6 +190,22 @@ describe('summarizeRolesMarket (B445)', () => {
     });
   });
 
+  it('число условий и названия площадок приходят из выборки сервера', () => {
+    expect(
+      summarizeRolesMarket([], {
+        observedAt: '2026-11-04T01:14:52.999Z',
+        sources: ['json_api'],
+        sourceNames: ['hh.ru', 'LinkedIn'],
+        conditionsCount: { withinConditions: 1067, byRoles: 1804 },
+      }),
+    ).toEqual({
+      vacancyTotal: 0,
+      asOf: '04.11',
+      sources: ['Открытый API', 'hh.ru', 'LinkedIn'],
+      conditionsCount: { withinConditions: 1067, byRoles: 1804, asOf: '04.11 04:14' },
+    });
+  });
+
   it('пустые роли дают пустую сводку без даты', () => {
     expect(summarizeRolesMarket([])).toEqual({ vacancyTotal: 0, asOf: null, sources: [] });
   });

@@ -3,7 +3,7 @@
 .career-screen {
   display: flex;
   flex-direction: column;
-  gap: var(--career-space-4);
+  gap: var(--career-space-3);
   inline-size: 100%;
   max-inline-size: 940px;
   padding-block-end: var(--career-space-8);
@@ -35,7 +35,7 @@
   gap: var(--career-space-4);
   padding: var(--career-space-6);
   border: var(--career-border-width) solid var(--career-line-strong);
-  border-radius: var(--career-radius-lg);
+  border-radius: var(--career-radius-md);
   background: var(--career-bg-elevated);
 }
 
@@ -254,11 +254,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--career-space-4);
-}
-
-.career-relocation-box {
-  border-block-start: var(--career-border-width) solid var(--career-line);
-  padding-block-start: var(--career-space-2);
 }
 
 .career-relocation-head {
@@ -508,10 +503,23 @@
   color: var(--career-text);
 }
 
+/* Макет 3, .origin */
 .career-source-stamp {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-1);
   margin: 0;
   font-size: var(--career-text-xs);
-  color: var(--career-text-soft);
+  color: var(--career-text-dim);
+}
+
+.career-source-stamp svg {
+  flex: none;
+}
+
+/* Макет 3: строка высотой со значок (22, inline-svg в макете). */
+.career-market-line {
+  min-block-size: 22px;
 }
 
 /* Скелет и пустые состояния */
@@ -546,7 +554,7 @@
 
 /* 390: своя раскладка — группы-списки и push-экраны */
 .career-screen-mobile {
-  gap: var(--career-space-6);
+  gap: var(--career-space-5);
 }
 
 .career-m-group {
@@ -610,6 +618,12 @@
   font-weight: 600;
 }
 
+/* Макет 3, .pm-main b: подпись условия легче названия роли. */
+.career-m-row > .career-m-row-title,
+.career-m-row-main > .career-m-row-title {
+  font-weight: 500;
+}
+
 /* Макет 3 на 390 (.vm-row): стрелка в строке названия, статус и действие на всю ширину. */
 .career-m-role-main {
   gap: 2px;
@@ -658,8 +672,13 @@
 
 .career-m-action-muted,
 .career-m-value {
+  flex: none;
+  max-inline-size: 60%;
+  overflow: hidden;
   font-size: var(--career-text-sm);
   color: var(--career-text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .career-m-icon {
@@ -671,6 +690,29 @@
   border-radius: 8px;
   background: var(--career-surface-raised);
   color: var(--career-text-soft);
+}
+
+.career-m-foot {
+  margin: 0;
+  padding-inline: var(--career-space-4);
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+}
+
+/* Макет 3, .pm-note */
+.career-m-source {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding-inline: var(--career-space-2);
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+.career-m-source svg {
+  flex: none;
+  margin-block-start: 1px;
 }
 
 .career-m-note {

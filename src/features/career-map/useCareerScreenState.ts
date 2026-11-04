@@ -16,7 +16,7 @@ import {
 import type { EditableConditionField } from './CareerConditionsComponents';
 import type { CareerScreenProps } from './CareerScreen';
 import { mapProposedRolesToCareerRoles, summarizeRolesMarket } from './roleHypothesisAdapter';
-import { rejectRole, useCareerRoles } from './careerRoleStore';
+import { loadCareerRoles, rejectRole, useCareerRoles } from './careerRoleStore';
 import { getDecisionProfile, putDecisionProfile } from '../coach/coachApi';
 import { addCandidateStopCompany, listCandidateStopCompanies } from '../automation/automationApi';
 import type { CandidateDecisionProfile } from '../../../shared/workPreferences';
@@ -141,6 +141,8 @@ function useCareerConditionsState(
         const next = searchConditionsToDecisionProfile(updated, profile);
         await putDecisionProfile(next);
         setProfile(next);
+        // Макет 3: «Подборка пересчитывается при любой правке» — и «N из M» вместе с ней.
+        void loadCareerRoles(true);
       }
       setConditions(updated);
       setEditingField(null);

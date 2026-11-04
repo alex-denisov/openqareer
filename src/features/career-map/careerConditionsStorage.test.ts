@@ -3,6 +3,8 @@ import {
   decisionProfileToSearchConditions,
   formatCompaniesCount,
   formatConditionsFormat,
+  formatGeography,
+  formatGeographyShort,
   searchConditionsToDecisionProfile,
 } from './careerConditionsStorage';
 
@@ -51,5 +53,24 @@ describe('условия поиска из профиля ограничений
     expect(formatCompaniesCount(1)).toBe('1 компания');
     expect(formatCompaniesCount(2)).toBe('2 компании');
     expect(formatCompaniesCount(12)).toBe('12 компаний');
+  });
+});
+
+describe('география в строке условий (макет 3)', () => {
+  it('«удалённо» со строчной внутри списка и с прописной в начале', () => {
+    expect(formatGeography(['Москва', 'Удалённо из РФ', 'ОАЭ'])).toBe(
+      'Москва, удалённо из РФ, ОАЭ',
+    );
+    expect(formatGeography(['Удалённо из РФ', 'Москва'])).toBe('Удалённо из РФ, Москва');
+    expect(formatGeography([])).toBeNull();
+  });
+
+  it('390: коротко, без слова «удалённо» и без повторов', () => {
+    expect(formatGeographyShort(['Москва', 'Удалённо из РФ'])).toBe('Москва, РФ');
+    expect(formatGeographyShort(['Москва', 'Удалённо из РФ', 'ОАЭ'])).toBe('Москва, РФ, ОАЭ');
+    expect(formatGeographyShort(['Россия › Центральный ФО › Москва'])).toBe('Москва');
+    expect(formatGeographyShort(['Удалённо'])).toBe('Удалённо');
+    expect(formatGeographyShort(['РФ', 'Удалённо из РФ'])).toBe('РФ');
+    expect(formatGeographyShort([])).toBeNull();
   });
 });

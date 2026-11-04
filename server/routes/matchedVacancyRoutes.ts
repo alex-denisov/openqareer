@@ -113,6 +113,22 @@ function roleLevelMatchCount(
   return snapshot.filter((item) => item.explanation.roleMatch !== 'none').length;
 }
 
+/** «N из M по ролям» на «Карьере»: числа шапки «Вакансий» из уже прочитанного снимка. */
+export function conditionsMarketCount(
+  snapshot: readonly MatchedVacancyItem[],
+  listed: readonly MatchedVacancyItem[],
+  targetRoles: readonly string[],
+  campaign: Pick<CampaignResolution, 'remoteOnly'>,
+): { readonly withinConditions: number; readonly byRoles: number } {
+  const considered = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
+  return {
+    withinConditions: listed.length,
+    byRoles: roleLevelMatchCount(considered, targetRoles),
+  };
+}
+
 /**
  * PRB-040: каждая страница дочитывания пересчитывала подборку целиком —
  * ~230 мс event loop на четыре записи, сотни страниц на чтение. Посчитанная

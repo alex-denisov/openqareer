@@ -5,7 +5,7 @@ import {
   getCareerStrategy,
   rejectCoachProposal,
 } from '../coach/coachApi';
-import type { RolesSample } from './roleHypothesisAdapter';
+import type { ConditionsCount, RolesSample } from './roleHypothesisAdapter';
 import { getCheckedRoles } from '../skills/roleSkillAssessmentApi';
 
 /** Ключи решений по ролям в хранилище отклонённых предложений консультанта. */
@@ -27,12 +27,23 @@ export interface RoleHypothesesWithDecisions {
   readonly sample: RolesSample | null;
 }
 
+function readConditionsCount(meta: unknown): RolesSample['conditionsCount'] {
+  const value = (meta as { conditionsCount?: Partial<ConditionsCount> } | undefined)
+    ?.conditionsCount;
+  return typeof value?.withinConditions === 'number' && typeof value.byRoles === 'number'
+    ? { withinConditions: value.withinConditions, byRoles: value.byRoles }
+    : undefined;
+}
+
 function readSample(meta: unknown): RolesSample | null {
   const value = (meta as { sample?: Partial<RolesSample> } | undefined)?.sample;
   if (!value) return null;
+  const conditionsCount = readConditionsCount(meta);
   return {
     observedAt: typeof value.observedAt === 'string' ? value.observedAt : null,
     sources: Array.isArray(value.sources) ? value.sources : [],
+    sourceNames: Array.isArray(value.sourceNames) ? value.sourceNames : [],
+    ...(conditionsCount ? { conditionsCount } : {}),
   };
 }
 

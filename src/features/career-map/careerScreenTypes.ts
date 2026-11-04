@@ -86,6 +86,12 @@ export interface RolesMarketSummary {
   readonly vacancyTotal: number;
   readonly asOf: string | null;
   readonly sources: readonly string[];
+  /** «N из M по ролям» — есть, только когда сервер это посчитал. */
+  readonly conditionsCount?: {
+    readonly withinConditions: number;
+    readonly byRoles: number;
+    readonly asOf: string | null;
+  };
 }
 
 export type CareerPushView = 'home' | 'geo' | 'sal' | 'fmt' | 'stop' | `role:${string}`;

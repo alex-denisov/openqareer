@@ -63,9 +63,10 @@ export function calculateRoleWageFork(input: RoleWageInput): RoleWageForkResult 
   };
 }
 
-export function formatVacancyCount(count: number): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
+export function formatVacancyCount(value: number): string {
+  const count = new Intl.NumberFormat('ru-RU').format(value);
+  const mod10 = value % 10;
+  const mod100 = value % 100;
 
   if (mod100 >= 11 && mod100 <= 19) {
     return `${count} вакансий`;

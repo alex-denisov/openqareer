@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { CareerScreen } from './CareerScreen';
-import { RelocationRow } from './CareerConditionsComponents';
+import {
+  ConditionsMarketLine,
+  MarketSourceStamp,
+  RelocationRow,
+} from './CareerConditionsComponents';
 import { DEFAULT_MOCK_ROLES, DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
 import { EMPTY_SEARCH_CONDITIONS } from './careerConditionsStorage';
 
@@ -31,7 +35,63 @@ describe('CareerScreen (B445)', () => {
     expect(html).toContain('aria-label="Изменить: География"');
     expect(html).toContain('Москва, удалённо из РФ');
     expect(html).toContain('2 компании');
-    expect(html).not.toContain('Источник:');
+  });
+
+  it('под ролями строка источника: площадки, число и дата из данных (макет 3)', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} />);
+    expect(html.indexOf('Источник: каталог openqareer')).toBeGreaterThan(
+      html.indexOf('Мои роли на рынке'),
+    );
+    const summary = {
+      vacancyTotal: 87,
+      asOf: '04.11',
+      sources: ['hh.ru (страница поиска)', 'Indeed', 'LinkedIn'],
+      conditionsCount: { withinConditions: 1067, byRoles: 1804, asOf: '04.11 04:14' },
+    };
+    expect(renderToStaticMarkup(<MarketSourceStamp summary={summary} />)).toContain(
+      'Источник: каталог openqareer, hh.ru и LinkedIn · 1\u00a0804 вакансии · 04.11',
+    );
+    expect(renderToStaticMarkup(<MarketSourceStamp summary={summary} isMobile />)).toContain(
+      'Источник: каталог openqareer, hh.ru и LinkedIn, 1\u00a0804 вакансии, 04.11.',
+    );
+  });
+
+  it('строка источника не называет площадку, которой нет в данных, и молчит без вакансий', () => {
+    const summary = { vacancyTotal: 12, asOf: null, sources: ['hh.ru'] };
+    expect(renderToStaticMarkup(<MarketSourceStamp summary={summary} />)).toContain(
+      'Источник: каталог openqareer и hh.ru · 12 вакансий',
+    );
+    expect(
+      renderToStaticMarkup(
+        <MarketSourceStamp summary={{ vacancyTotal: 0, asOf: null, sources: [] }} />,
+      ),
+    ).toBe('');
+  });
+
+  it('строка условий: N из M по ролям, а без подсчёта — честная прежняя фраза', () => {
+    const counted = {
+      vacancyTotal: 87,
+      asOf: '04.11',
+      sources: [],
+      conditionsCount: { withinConditions: 1067, byRoles: 1804, asOf: '04.11 04:14' },
+    };
+    expect(renderToStaticMarkup(<ConditionsMarketLine summary={counted} />)).toContain(
+      'С этими условиями: 1\u00a0067 вакансий из 1\u00a0804 по ролям, 04.11 04:14.',
+    );
+    expect(renderToStaticMarkup(<ConditionsMarketLine summary={counted} isMobile />)).toContain(
+      'С этими условиями 1\u00a0067 вакансий из 1\u00a0804 по ролям, 04.11 04:14. Подборка пересчитывается при любой правке.',
+    );
+    const uncounted = { vacancyTotal: 87, asOf: '04.11', sources: [] };
+    expect(renderToStaticMarkup(<ConditionsMarketLine summary={uncounted} />)).toContain(
+      'Сколько из них проходит эти условия, ещё не посчитано.',
+    );
+    const nothing = {
+      ...counted,
+      conditionsCount: { withinConditions: 0, byRoles: 0, asOf: null },
+    };
+    expect(renderToStaticMarkup(<ConditionsMarketLine summary={nothing} />)).not.toContain(
+      'из 0 по ролям',
+    );
   });
 
   it('раскрытая роль с проверенными навыками — блоки и кнопки по статусу', () => {
@@ -108,6 +168,15 @@ describe('CareerScreen (B445)', () => {
       expect(html).toContain(action);
     }
     expect(html).toContain('сейчас подборка идёт только по России');
+    expect(html.indexOf('Источник: каталог openqareer')).toBeGreaterThan(
+      html.indexOf('Страны и релокация'),
+    );
+  });
+
+  it('390: география короче, чем на 1440, как в макете', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} isMobile />);
+    expect(html).toContain('Москва, РФ');
+    expect(html).not.toContain('Москва, удалённо из РФ');
   });
 
   it('390: push-экран гипотезы с проверкой навыков', () => {
