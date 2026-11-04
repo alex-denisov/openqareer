@@ -39,3 +39,11 @@ describe('geo directory', () => {
     });
   });
 });
+
+describe('«Москва и область» в выборе мест', () => {
+  it('идёт сразу за Москвой и находится по «Московская»', () => {
+    expect(searchGeoPlaces('Мос').map((place) => place.label).slice(0, 2)).toEqual(['Москва', 'Москва и область']);
+    expect(searchGeoPlaces('Московская').map((place) => place.label)).toContain('Москва и область');
+    expect(resolveGeoPlace('Москва и область')?.value).toBe('Москва и область');
+  });
+});

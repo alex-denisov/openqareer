@@ -25,7 +25,7 @@ export interface GeoCity {
   readonly population: number;
 }
 
-export type GeoPlaceKind = 'country' | 'city';
+export type GeoPlaceKind = 'country' | 'region' | 'city';
 
 export interface GeoPlace {
   readonly kind: GeoPlaceKind;
@@ -159,6 +159,15 @@ function cityContext(city: GeoCity): string {
   return [city.country, city.region].filter(Boolean).join(' · ');
 }
 
+/** Значение совпадает с `MOSCOW_AREA_LABEL` в `moscowArea.ts`: тот файл читает этот справочник. */
+const MOSCOW_AREA_PLACE: GeoPlace = {
+  kind: 'region',
+  value: 'Москва и область',
+  label: 'Москва и область',
+  context: 'Москва и Московская область',
+  country: HOME_COUNTRY_LABEL,
+};
+
 const rank = (label: string, needle: string) => (lower(label).startsWith(needle) ? 0 : 1);
 
 /**
@@ -187,7 +196,9 @@ export function searchGeoPlaces(query: string, limit = 20): GeoPlace[] {
       context: cityContext(city),
       country: city.country,
     }));
-  return [...countries, ...cities].slice(0, limit);
+  const area = lower(MOSCOW_AREA_PLACE.context).includes(needle) ? [MOSCOW_AREA_PLACE] : [];
+  // Сам город первым: «Москва» остаётся верхним ответом на «Мос».
+  return [...countries, ...cities.slice(0, 1), ...area, ...cities.slice(1)].slice(0, limit);
 }
 
 /**
@@ -195,6 +206,7 @@ export function searchGeoPlaces(query: string, limit = 20): GeoPlace[] {
  * «Берлин, Германия»). `undefined` — значение не из справочника.
  */
 export function resolveGeoPlace(value: string): GeoPlace | undefined {
+  if (lower(value.trim()) === lower(MOSCOW_AREA_PLACE.value)) return MOSCOW_AREA_PLACE;
   const parts = value
     .split(',')
     .map((part) => part.trim())
