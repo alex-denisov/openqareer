@@ -31,7 +31,7 @@ import {
 } from './catalogRuSummaryStore';
 
 export interface CatalogRuSummaryLimits {
-  /** This step's own cap per UTC day. */
+  /** This step's own cap per UTC day, in OpenRouter money; Vertex has its own (`OPENQAREER_VERTEX_CATALOG_SUMMARY_DAY_USD`). */
   readonly dayUsd: number;
   readonly dayCalls: number;
   /** The channel's caps (`readBulkLlmConfig`): the step yields before them. */
@@ -266,10 +266,12 @@ export function sqliteCatalogRuSummarySpend(database: DatabaseSync): CatalogRuSu
     }
   };
   const total = 'COALESCE(SUM(COALESCE(cost, reserved)), 0)';
+  // `provider='gemini'` (Vertex, 04.11) has its own caps in the Vertex gate; the dollars here are OpenRouter's.
+  const openRouterTotal = `COALESCE(SUM(CASE WHEN provider <> 'gemini' THEN COALESCE(cost, reserved) END), 0)`;
   return {
     task: (day) => {
       const row = read<{ usd: number; calls: number }>(
-        `SELECT ${total} AS usd, count(*) AS calls FROM bulk_llm_spend WHERE task = ? AND day = ?`,
+        `SELECT ${openRouterTotal} AS usd, count(*) AS calls FROM bulk_llm_spend WHERE task = ? AND day = ?`,
         { usd: 0, calls: 0 },
         CATALOG_RU_SUMMARY_TASK,
         day,
@@ -279,7 +281,7 @@ export function sqliteCatalogRuSummarySpend(database: DatabaseSync): CatalogRuSu
     channelDay: (day) =>
       Number(
         read<{ usd: number }>(
-          `SELECT ${total} AS usd FROM bulk_llm_spend WHERE day = ?`,
+          `SELECT ${total} AS usd FROM bulk_llm_spend WHERE day = ? AND provider <> 'gemini'`,
           { usd: 0 },
           day,
         ).usd,
@@ -287,7 +289,7 @@ export function sqliteCatalogRuSummarySpend(database: DatabaseSync): CatalogRuSu
     channelMonth: (monthStart) =>
       Number(
         read<{ usd: number }>(
-          `SELECT ${total} AS usd FROM bulk_llm_spend WHERE day >= ?`,
+          `SELECT ${total} AS usd FROM bulk_llm_spend WHERE day >= ? AND provider <> 'gemini'`,
           { usd: 0 },
           monthStart,
         ).usd,
