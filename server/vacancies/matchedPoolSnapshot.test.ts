@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MatchedPoolSnapshots } from './matchedPoolSnapshot';
+import { VacancyMatchUnavailable } from './vacancyMatchReader';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 
 /**
@@ -264,6 +265,62 @@ describe('MatchedPoolSnapshots: an expired snapshot is served while it rebuilds'
     });
 
     expect(read[0]?.cluster.id).toBe('new');
+  });
+
+  it('a read that has to wait gets the old snapshot when the pool read fails, even past 20 minutes', async () => {
+    const now = { value: 0 };
+    const log = vi.fn();
+    const { snapshots, first } = stored(now, log);
+    const old = await first;
+    now.value = TWENTY;
+    const failure = new VacancyMatchUnavailable('vacancy_match_timeout', 12_000, 1);
+
+    expect(await snapshots.readAsync('one', 'profile', () => Promise.reject(failure))).toBe(old);
+    expect(log).toHaveBeenCalledWith(failure);
+  });
+
+  it('readers joined to a failing rebuild all get the old snapshot', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    const old = await first;
+    now.value = TWENTY;
+    let fail!: (error: Error) => void;
+    const compute = () => new Promise<MatchedVacancyItem[]>((_, reject) => (fail = reject));
+
+    const reads = [
+      snapshots.readAsync('one', 'profile', compute),
+      snapshots.readAsync('one', 'profile', compute),
+    ];
+    await turn();
+    fail(new VacancyMatchUnavailable('vacancy_match_timeout', 12_000, 2));
+
+    expect(await Promise.all(reads)).toEqual([old, old]);
+  });
+
+  it('with no snapshot at all the failure reaches the reader, and the next read tries again', async () => {
+    const now = { value: 0 };
+    const snapshots = new MatchedPoolSnapshots({ clock: () => now.value });
+    const failure = new VacancyMatchUnavailable('vacancy_match_timeout', 12_000, 1);
+
+    await expect(
+      snapshots.readAsync('one', 'profile', () => Promise.reject(failure)),
+    ).rejects.toBe(failure);
+    const read = await snapshots.readAsync('one', 'profile', async () => [item('new')]);
+    expect(read[0]?.cluster.id).toBe('new');
+  });
+
+  it('a full queue gives the old snapshot too, and a typed refusal without one', async () => {
+    const now = { value: 0 };
+    const snapshots = new MatchedPoolSnapshots({ maxEntries: 1, clock: () => now.value });
+    const old = await snapshots.readAsync('one', 'profile', async () => [item('old')]);
+    now.value = TWENTY;
+    void snapshots.readAsync('two', 'profile', () => new Promise(() => undefined));
+    await turn();
+
+    expect(await snapshots.readAsync('one', 'profile', async () => [item('new')])).toBe(old);
+    await expect(
+      snapshots.readAsync('three', 'profile', async () => [item('new')]),
+    ).rejects.toBeInstanceOf(VacancyMatchUnavailable);
   });
 
   it('a pool write during a rebuild keeps its result out, as with any in-flight read', async () => {
