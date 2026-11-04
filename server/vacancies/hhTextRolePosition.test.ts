@@ -26,6 +26,16 @@ function open(): { store: SqliteVacancyPoolStore; path: string } {
   return { store, path };
 }
 
+function targetOwners(path: string): string[] {
+  const raw = new DatabaseSync(path, { readOnly: true });
+  try {
+    const rows = raw.prepare('SELECT candidate_id AS id FROM hh_text_role_targets ORDER BY id').all() as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  } finally {
+    raw.close();
+  }
+}
+
 function hh(n: number, daysAgo: number, fullDescription?: string): UnifiedVacancy {
   const id = `${HH}:${n}`;
   const url = `https://hh.ru/vacancy/${n}`;
@@ -124,6 +134,26 @@ describe('hh role text position (04.11)', () => {
     expect(resting.ids).toEqual([]);
     const later = store.loadHhRoleTextCandidates(resting.position, 5, now + HH_TEXT_ROLE_REST_MS + 1);
     expect(later.ids).toEqual([row.id]);
+  });
+
+  it('forgets the target of a deleted account', () => {
+    const { store, path } = open();
+    const row = hh(1, 1);
+    store.mergeSourceSlice(HH, [row]);
+    classify(path, [[row, 'eng', 3]]);
+    store.recordHhTextRoleTarget('a', ['eng'], null);
+    store.forgetHhTextRoleTarget('a');
+    expect(targetOwners(path)).toEqual([]);
+    expect(store.loadHhRoleTextCandidates(undefined, 5).ids).toEqual([]);
+  });
+
+  it('a new target clears the ones past their term', () => {
+    const { store, path } = open();
+    const now = Date.now();
+    store.recordHhTextRoleTarget('expired', ['eng'], null, now - 15 * 24 * 60 * 60 * 1_000);
+    store.recordHhTextRoleTarget('recent', ['qa'], null, now - 24 * 60 * 60 * 1_000);
+    store.recordHhTextRoleTarget('new', ['eng'], null, now);
+    expect(targetOwners(path)).toEqual(['new', 'recent']);
   });
 
   it('keeps its position in the database, apart from the catalog walk', () => {

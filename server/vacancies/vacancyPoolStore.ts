@@ -234,6 +234,8 @@ export interface VacancyPoolStore {
   loadHhRoleTextCandidates?(position: string | undefined, limit: number): { ids: string[]; position: string };
   loadHhRoleTextPosition?(): string | undefined;
   saveHhRoleTextPosition?(position: string): void;
+  /** Аккаунт удалён: его цель больше не ведёт очередь текста hh (04.11). */
+  forgetHhTextRoleTarget?(candidateId: string): void;
   /** Снятые hh-записи снимают свой кластер; возвращает, сколько снято (02.11). */
   archiveExpiredHhClusters?(limit: number): number;
   /** Живые записи площадки без дочитанного текста, новые первыми (Workday, B535). */
