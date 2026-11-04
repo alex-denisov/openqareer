@@ -16,6 +16,12 @@ const SAMPLING_SEED = 20261102;
 /** Thinking and the answer share one output cap (memory: reasoning effort needs output budget). */
 const THINKING_HEADROOM_TOKENS = 4096;
 const REQUEST_TIMEOUT_MS = 60_000;
+/**
+ * Vertex has no per-request bound of the channel, so the input is bounded here: 500 KB is about
+ * $0.1 a call at the catalog price. The longest percent inputs on prod are ~195 KB; anything larger
+ * goes to OpenRouter and its reserved-budget bound.
+ */
+export const VERTEX_MAX_INPUT_BYTES = 500_000;
 
 export interface BulkVertexStageOptions {
   readonly config: VertexConfig;
@@ -58,6 +64,8 @@ export class BulkVertexStage {
     accept: (content: string) => boolean,
   ): Promise<{ result?: BulkLlmResult; failure?: string }> {
     const { gate } = this.options;
+    if (Buffer.byteLength(input.prefix) + Buffer.byteLength(input.input) > VERTEX_MAX_INPUT_BYTES)
+      return { failure: 'vertex_input_too_large' };
     try {
       gate.admit(input.task);
     } catch (error) {

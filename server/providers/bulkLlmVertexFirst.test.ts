@@ -134,9 +134,21 @@ describe('Vertex first stage of the bulk channel', () => {
 
   it('a large input that OpenRouter would refuse (reserved budget) goes through Vertex', async () => {
     const h = harness({});
-    const result = await h.runtime.client!.complete({ ...req, input: 'x'.repeat(900_000) });
+    const result = await h.runtime.client!.complete({ ...req, input: 'x'.repeat(400_000) });
     expect(result.provider).toBe('vertex');
     expect(h.openRouterCalls).toBe(0);
+    h.runtime.close();
+  });
+
+  it('an input over 500 000 bytes is not sent to Vertex and meets the OpenRouter bound as an ordinary error', async () => {
+    const h = harness({});
+    const error = await h.runtime
+      .client!.complete({ ...req, input: 'x'.repeat(600_000) })
+      .catch((e: unknown) => e);
+    expect(h.vertexCalls).toHaveLength(0);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(BulkChannelUnavailable);
+    expect((error as Error).message).toBe('Request exceeds reserved budget');
     h.runtime.close();
   });
 
@@ -241,7 +253,7 @@ describe('Vertex first stage of the bulk channel', () => {
   it('an ordinary error of body() on an OpenRouter stage after a Vertex refusal behaves as before', async () => {
     const h = harness({ vertex: () => new Response('boom', { status: 500 }) });
     await expect(
-      h.runtime.client!.complete({ ...req, input: 'x'.repeat(900_000) }),
+      h.runtime.client!.complete({ ...req, input: 'x'.repeat(400_000) }),
     ).rejects.toThrow('Request exceeds reserved budget');
     expect(h.vertexCalls).toHaveLength(1);
     h.runtime.close();
