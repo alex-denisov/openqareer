@@ -8,7 +8,7 @@ import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, sourcedRequirements, type VacancyFitInput } from './vacancyFit';
-import { assessmentFailureLine, createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
+import { assessmentFailureLine, createVacancyFitAssessor } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import {
@@ -51,6 +51,8 @@ interface AssessmentOutcome {
   channelDown: boolean;
   returned: boolean;
   invalid: boolean;
+  /** The stage of the chain that gave the answer: the row records it (04.11). */
+  answeredBy: string | null;
 }
 function assessmentFailure(outcome: AssessmentOutcome): string {
   return outcome.staleProfile
@@ -290,17 +292,25 @@ export class VacancyMechanicsRuntime {
       this.waitForChannel(job);
     } else if (hasClient && result.reason === 'assessment_unavailable' && !outcome.returned) {
       this.settleFailure(job, assessmentFailure(outcome), !outcome.staleProfile && job.attempts < 3);
-    } else if (this.fit.complete(job, result, undefined, resolved)) this.stats.completed += 1;
+    } else if (this.fit.complete(job, result, undefined, resolved, outcome.answeredBy)) this.stats.completed += 1;
   }
 
   /** The fit assessor with what happened to its call: the failure class names the row (B562-r). */
   private trackedAssessor(
-    client: VacancyFitBulkClient | null,
+    client: BulkCompletion | null,
     runId: string,
     resolved: VacancyFitInput,
   ) {
-    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, channelDown: false, returned: false, invalid: false };
-    const base = client ? createVacancyFitAssessor(client, runId) : undefined;
+    const outcome: AssessmentOutcome = { staleProfile: false, budgetPaused: false, channelDown: false, returned: false, invalid: false, answeredBy: null };
+    const base = client
+      ? createVacancyFitAssessor({
+          complete: async (request) => {
+            const answer = await client.complete(request);
+            if (answer.provider && answer.model) outcome.answeredBy = `${answer.provider} ${answer.model}`;
+            return answer;
+          },
+        }, runId)
+      : undefined;
     const assessor = base
       ? {
           assess: async (input: Parameters<typeof base.assess>[0]) => {

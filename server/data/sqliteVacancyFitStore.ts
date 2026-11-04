@@ -32,6 +32,8 @@ const LATE_COLUMNS = [
   ['last_error', 'TEXT'],
   ['requeue_revision', 'INTEGER'],
 ] as const;
+/** Which model answered: outside the sealed result, so it never reaches the candidate's screen. */
+const LATE_CACHE_COLUMNS = [['answered_by', 'TEXT']] as const;
 
 const VERIFIED_FIELDS = ['gates', 'assessments', 'status', 'dataState', 'coveragePercent', 'coverage', 'conditionCoverage', 'requiredCoverage', 'reason'] as const;
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
@@ -75,6 +77,7 @@ export class SqliteVacancyFitStore {
     );
     CREATE INDEX IF NOT EXISTS vacancy_fit_latest_candidate ON vacancy_fit_latest(candidate_key);`);
     addLateColumns(database, 'vacancy_fit_queue', LATE_COLUMNS);
+    addLateColumns(database, 'vacancy_fit_cache', LATE_CACHE_COLUMNS);
   }
 
   private candidateKey(candidateId: string): string {
@@ -233,15 +236,21 @@ export class SqliteVacancyFitStore {
     } catch { return undefined; }
   }
 
-  putCache(input: VacancyFitInput, result: VacancyFitResult, now = new Date().toISOString(), algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION): void {
+  putCache(input: VacancyFitInput, result: VacancyFitResult, now = new Date().toISOString(), algorithmVersion = VACANCY_FIT_ALGORITHM_VERSION, answeredBy: string | null = null): void {
     this.validateResult(input, result, VERIFIED_FIELDS, algorithmVersion);
     const key = this.cacheKey(input, algorithmVersion);
-    this.database.prepare(`INSERT INTO vacancy_fit_cache(cache_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)
-      ON CONFLICT(cache_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), key), now);
+    this.database.prepare(`INSERT INTO vacancy_fit_cache(cache_key,candidate_key,result_cipher,updated_at,answered_by) VALUES(?,?,?,?,?)
+      ON CONFLICT(cache_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at,answered_by=excluded.answered_by`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), key), now, answeredBy);
     if (result.status !== 'assessed') return;
     const latest = this.latestKey(input.candidateId, input.vacancyId);
     this.database.prepare(`INSERT INTO vacancy_fit_latest(latest_key,candidate_key,result_cipher,updated_at) VALUES(?,?,?,?)
       ON CONFLICT(latest_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at WHERE excluded.updated_at>=vacancy_fit_latest.updated_at`).run(latest, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), latest), now);
+  }
+
+  /** The model behind a stored result; null when none answered or the row predates this column. */
+  answeredBy(input: VacancyFitInput): string | null {
+    const row = this.database.prepare('SELECT answered_by FROM vacancy_fit_cache WHERE cache_key=?').get(this.cacheKey(input)) as { answered_by: string | null } | undefined;
+    return row?.answered_by ?? null;
   }
 
   /**
@@ -323,7 +332,7 @@ export class SqliteVacancyFitStore {
   }
 
   /** A stale worker cannot publish a result after another worker has reclaimed the lease. */
-  complete(job: VacancyFitJob, result: VacancyFitResult, now = new Date().toISOString(), resolvedInput: VacancyFitInput = job.input): boolean {
+  complete(job: VacancyFitJob, result: VacancyFitResult, now = new Date().toISOString(), resolvedInput: VacancyFitInput = job.input, answeredBy: string | null = null): boolean {
     this.validateResult(resolvedInput, result);
     if (resolvedInput.candidateId !== job.input.candidateId || resolvedInput.vacancyId !== job.input.vacancyId || resolvedInput.description !== job.input.description || JSON.stringify(resolvedInput.facts) !== JSON.stringify(job.input.facts)) throw new Error('vacancy fit resolved input scope mismatch');
     if (this.cacheKey(job.input) !== job.key) return false;
@@ -332,7 +341,7 @@ export class SqliteVacancyFitStore {
       const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='completed',input_cipher='',lease_token=NULL,lease_until=NULL,updated_at=?
         WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(now, job.key, job.leaseToken, now);
       if (Number(update.changes) !== 1) { this.database.exec('COMMIT'); return false; }
-      this.putCache(resolvedInput, result, now);
+      this.putCache(resolvedInput, result, now, VACANCY_FIT_ALGORITHM_VERSION, answeredBy);
       this.database.exec('COMMIT');
       return true;
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
