@@ -1,45 +1,25 @@
 import { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
-import { sendOwnerTelegram } from './bulkLlmRuntime';
+import { maskFailureText, providerFailureText } from './failureReason';
+import { createVertexGate, readVertexCreditConfig, type VertexGate } from './vertexCredit';
 import { vertexCallCostUsd, vertexOutputTokens, type VertexUsageMetadata } from './vertexPricing';
 
 /**
- * Metering and the daily money cap of the Vertex stage (owner 04.11). Candidate chains start with a
- * cheap model; Vertex is the dear last stage and may spend at most this much a UTC day. At the cap the
- * stage is refused (the chain keeps what the cheap stages answered, or ends with its usual error);
- * the background channel and its overrun latch are not involved.
+ * Metering of every Vertex call (owner 04.11): the gate (`vertexCredit.ts`) decides whether Vertex may
+ * be asked, this wrapper books the call. A refusal is a `rejected` row at cost 0 with the masked reason,
+ * an answer is a `settled` row at the catalog price with the thinking tokens. A failed bookkeeping write
+ * never costs the candidate their answer.
  */
-export const DEFAULT_GEMINI_DAY_USD = 1;
-const GEMINI_DAY_ENV = 'OPENQAREER_BULK_GEMINI_DAY_USD';
 const GENERATE_CONTENT = ':generateContent';
 const DEFAULT_MODEL_LABEL = 'gemini';
+/** A candidate waits for the chain: Vertex, the head of it, gets this long before the cheap stages (04.11). */
+export const CANDIDATE_VERTEX_TIMEOUT_MS = 18_000;
+const NO_USAGE = { cost: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
 
-/** The stage is refused: the chain treats it like any failed stage. */
-export class GeminiDayCapError extends Error {
-  constructor(
-    readonly spentUsd: number,
-    readonly capUsd: number,
-  ) {
-    super('gemini day cap reached');
-    this.name = 'GeminiDayCapError';
-  }
-}
+const bookings = new WeakMap<Response, string>();
 
-/** Read once at start; a missing value is the default quietly, a bad one is the default with a journal line. */
-export function readGeminiDayCapUsd(
-  env: Record<string, string | undefined>,
-  warn: (line: string) => void = console.warn,
-): number {
-  const raw = env[GEMINI_DAY_ENV]?.trim();
-  if (raw === undefined || raw === '') return DEFAULT_GEMINI_DAY_USD;
-  const value = Number(raw);
-  if (Number.isFinite(value) && value > 0) return value;
-  warn(`bulk-llm gemini-day-cap-invalid value ignored, default ${DEFAULT_GEMINI_DAY_USD}`);
-  return DEFAULT_GEMINI_DAY_USD;
-}
-
-export interface GeminiBooks {
-  geminiDaySpentUsd(): number;
-  recordGeminiCall: SqliteBulkLlmLedger['recordGeminiCall'];
+/** Id of the `bulk_llm_spend` row an answer was booked to (the caller may mark it unusable). */
+export function vertexBookingId(response: Response): string | undefined {
+  return bookings.get(response);
 }
 
 function modelOf(url: string): string {
@@ -52,103 +32,122 @@ function urlOf(input: Parameters<typeof fetch>[0]): string {
   return input instanceof URL ? input.href : input.url;
 }
 
-/**
- * `fetch` for one mechanic's Vertex calls. Only `generateContent` is counted; the token request passes
- * through. A failed bookkeeping write never costs the candidate their answer.
- */
-export function createMeteredVertexFetch(options: {
-  ledger: GeminiBooks;
-  dayUsd: number;
+function withTimeout(
+  init: RequestInit | undefined,
+  timeoutMs: number | undefined,
+): RequestInit | undefined {
+  if (!timeoutMs) return init;
+  const limit = AbortSignal.timeout(timeoutMs);
+  const signal = init?.signal ? AbortSignal.any([init.signal, limit]) : limit;
+  return { ...init, signal };
+}
+
+export interface MeteredFetchOptions {
+  gate: VertexGate;
   task: string;
-  onCap: (spentUsd: number, capUsd: number) => void;
+  /** Ceiling of one `generateContent` call; unset keeps the caller's own signal. */
+  timeoutMs?: number;
   fetchImpl?: typeof fetch;
-}): typeof fetch {
+}
+
+/**
+ * `fetch` for one mechanic's Vertex calls. A closed gate throws `VertexSkippedError` before any network
+ * call, the token request included.
+ */
+export function createMeteredVertexFetch(options: MeteredFetchOptions): typeof fetch {
   const inner = options.fetchImpl ?? fetch;
+  const { gate, task } = options;
   return async (input, init) => {
     const url = urlOf(input);
+    gate.admit(task);
     if (!url.includes(GENERATE_CONTENT)) return inner(input, init);
-    const spent = options.ledger.geminiDaySpentUsd();
-    if (spent >= options.dayUsd) {
-      options.onCap(spent, options.dayUsd);
-      throw new GeminiDayCapError(spent, options.dayUsd);
+    const model = modelOf(url);
+    let response: Response;
+    try {
+      response = await inner(input, withTimeout(init, options.timeoutMs));
+    } catch (error) {
+      const text = maskFailureText(
+        `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : 'unknown'}`,
+      );
+      record(gate, { task, model, failure: text, rejected: true }, NO_USAGE);
+      gate.failed({ text });
+      throw error;
     }
-    const response = await inner(input, init);
-    if (!response.ok) return response;
-    await book(options, url, response.clone());
+    if (!response.ok) {
+      const text = await providerFailureText(response.clone());
+      record(gate, { task, model, failure: text, rejected: true }, NO_USAGE);
+      gate.failed({ status: response.status, text });
+      return response;
+    }
+    gate.succeeded();
+    await book(gate, task, model, response);
     return response;
   };
 }
 
-async function book(
-  options: Parameters<typeof createMeteredVertexFetch>[0],
-  url: string,
-  copy: Response,
-): Promise<void> {
+function record(
+  gate: VertexGate,
+  input: { task: string; model: string; failure?: string; rejected?: boolean },
+  usage: typeof NO_USAGE,
+): string | undefined {
   try {
-    const body = (await copy.json()) as { usageMetadata?: VertexUsageMetadata };
-    const usage = body.usageMetadata;
-    options.ledger.recordGeminiCall(
-      { task: options.task, model: modelOf(url) },
-      {
-        cost: vertexCallCostUsd(usage),
-        promptTokens: usage?.promptTokenCount ?? 0,
-        cachedTokens: usage?.cachedContentTokenCount ?? 0,
-        completionTokens: vertexOutputTokens(usage),
-      },
-    );
+    return gate.ledger.recordGeminiCall?.(input, usage);
   } catch (error) {
     console.error(
-      `bulk-llm gemini-book-failed task=${options.task} ${error instanceof Error ? error.name : 'unknown'}`,
+      `bulk-llm gemini-book-failed task=${input.task} ${error instanceof Error ? error.name : 'unknown'}`,
     );
+    return undefined;
   }
 }
 
-/** Journal line at every refusal; the owner gets one Telegram message a UTC day. */
-export function geminiCapReporter(
-  env: NodeJS.ProcessEnv,
-  transport: typeof fetch = fetch,
-  firstToday: (kind: string) => boolean = () => true,
-): (spentUsd: number, capUsd: number) => void {
-  return (spentUsd, capUsd) => {
-    console.error(`bulk-llm gemini-day-cap spent=${spentUsd.toFixed(4)} cap=${capUsd.toFixed(4)}`);
-    if (!firstToday('owner_alert_gemini_day_cap')) return;
-    sendOwnerTelegram(
-      env,
-      transport,
-      `openqareer: дорогая модель Gemini израсходовала дневной предел (${spentUsd.toFixed(2)} из ${capUsd.toFixed(2)} долларов). До завтра кандидаты получают ответы дешёвых моделей; если они не справятся, будет обычная ошибка.`,
-    );
-  };
+async function book(
+  gate: VertexGate,
+  task: string,
+  model: string,
+  response: Response,
+): Promise<void> {
+  let usage: VertexUsageMetadata | undefined;
+  try {
+    usage = ((await response.clone().json()) as { usageMetadata?: VertexUsageMetadata })
+      .usageMetadata;
+  } catch {
+    // The body is the caller's to judge; an unreadable one is booked at zero tokens.
+  }
+  const id = record(
+    gate,
+    { task, model },
+    {
+      cost: vertexCallCostUsd(usage),
+      promptTokens: usage?.promptTokenCount ?? 0,
+      cachedTokens: usage?.cachedContentTokenCount ?? 0,
+      completionTokens: vertexOutputTokens(usage),
+    },
+  );
+  if (id) bookings.set(response, id);
 }
 
-const meters = new Map<string, ReturnType<typeof createVertexMeter>>();
+const gates = new Map<string, { gate: VertexGate; ledger: SqliteBulkLlmLedger }>();
 
 /**
  * Metered Vertex `fetch` of one mechanic for the process; undefined without a Vertex account.
- * One ledger connection per database path is shared by all mechanics.
+ * One gate and one ledger connection per database path serve all mechanics of the process, so the
+ * cooling after a refusal is shared by them. Mechanics where a candidate waits get a short ceiling.
  */
 export function meteredVertexFetchFor(
   vertex: unknown,
   databasePath: string,
   task: string,
+  timeoutMs: number | undefined = CANDIDATE_VERTEX_TIMEOUT_MS,
 ): typeof fetch | undefined {
   if (!vertex) return undefined;
-  const meter = meters.get(databasePath) ?? createVertexMeter({ databasePath });
-  meters.set(databasePath, meter);
-  return meter.fetchFor(task);
-}
-
-/** Process-level wiring: one book per process, one fetch per mechanic. */
-export function createVertexMeter(options: {
-  databasePath: string;
-  env?: NodeJS.ProcessEnv;
-  transport?: typeof fetch;
-}): { fetchFor: (task: string) => typeof fetch; close: () => void } {
-  const env = options.env ?? process.env;
-  const ledger = new SqliteBulkLlmLedger(options.databasePath);
-  const dayUsd = readGeminiDayCapUsd(env);
-  const onCap = geminiCapReporter(env, options.transport, (kind) => ledger.firstToday(kind));
-  return {
-    fetchFor: (task) => createMeteredVertexFetch({ ledger, dayUsd, task, onCap }),
-    close: () => ledger.close(),
-  };
+  let entry = gates.get(databasePath);
+  if (!entry) {
+    const ledger = new SqliteBulkLlmLedger(databasePath);
+    entry = {
+      ledger,
+      gate: createVertexGate({ ledger, config: readVertexCreditConfig(process.env) }),
+    };
+    gates.set(databasePath, entry);
+  }
+  return createMeteredVertexFetch({ gate: entry.gate, task, ...(timeoutMs ? { timeoutMs } : {}) });
 }
