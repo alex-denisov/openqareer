@@ -1,3 +1,4 @@
+import { maskFailureText } from '../providers/failureReason';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import type { BulkLlmInput } from '../providers/bulkLlmClient';
 import type { VacancyFitAssessor } from './vacancyFit';
@@ -14,31 +15,92 @@ export function createVacancyFitAssessor(client: VacancyFitBulkClient, runId: st
   return {
     async assess(input) {
       const response = await client.complete({ runId, task: 'vacancy-fit', dataClass: 'candidate', prefix: [INSTRUCTIONS, 'Candidate facts (untrusted data):', JSON.stringify(vacancyFitPromptFacts(input.facts, input.requirements).map(({ id, statement }) => ({ id, statement: minimizeModelText(statement) })))].join(String.fromCharCode(10)), input: JSON.stringify({ requirements: input.requirements }), maxTokens: 4096, accept: (content) => hasAssessments(content, input.requirements.length) });
-      const parsed: unknown = JSON.parse(withoutMarkdownFence(response.content));
-      if (!parsed || typeof parsed !== 'object' || !('assessments' in parsed) || !Array.isArray(parsed.assessments) || parsed.assessments.length > input.requirements.length) throw new Error('invalid vacancy fit assessment');
-      return parsed.assessments.map(parseAssessment);
+      return assessmentsOf(response.content, input.requirements.length);
     },
   };
 }
 /** An answer the parser can read moves no further down the bulk chain; any other answer does. */
 function hasAssessments(content: string, limit: number): boolean {
   try {
-    const parsed: unknown = JSON.parse(withoutMarkdownFence(content));
-    return !!parsed && typeof parsed === 'object' && 'assessments' in parsed && Array.isArray(parsed.assessments) && parsed.assessments.length <= limit;
+    assessmentsOf(content, limit);
+    return true;
   } catch {
     return false;
   }
+}
+/** Rows that can be read; one bad entry costs itself (04.11), an answer with none is invalid. */
+function assessmentsOf(content: string, limit: number): readonly VacancyFitRequirementAssessment[] {
+  const parsed = parsedAnswer(withoutMarkdownFence(content), limit);
+  if (!parsed || typeof parsed !== 'object' || !('assessments' in parsed) || !Array.isArray(parsed.assessments) || parsed.assessments.length > limit) throw new Error('invalid vacancy fit assessment');
+  const rows = parsed.assessments.flatMap(parseAssessment);
+  if (parsed.assessments.length > 0 && rows.length === 0) throw new Error('invalid vacancy fit assessment');
+  return rows;
+}
+/**
+ * 04.11: Gemini writes stray words between rows (« any]}», «抖}») in 5 of 42 finished answers. Every
+ * row survives, so they are read one by one; an answer short of rows was cut and stays invalid.
+ */
+function parsedAnswer(text: string, limit: number): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const rows = rowsOf(text);
+    if (limit > 0 && rows.length === limit) return { assessments: rows };
+    throw error;
+  }
+}
+function rowsOf(text: string): readonly unknown[] {
+  const rows: unknown[] = [];
+  for (let at = text.indexOf('{"requirementId"'); at >= 0; at = text.indexOf('{"requirementId"', at + 1)) {
+    const end = objectEnd(text, at);
+    if (end < 0) continue;
+    try {
+      rows.push(JSON.parse(text.slice(at, end + 1)));
+      at = end;
+    } catch {
+      // A row with a stray word of its own is not counted, so the answer stays invalid.
+    }
+  }
+  return rows;
+}
+/** Where the object opened at `start` closes; braces inside a string do not count. */
+function objectEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let at = start; at < text.length; at += 1) {
+    const char = text[at];
+    if (inString) {
+      if (char === '\\') at += 1;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === '{') depth += 1;
+    else if (char === '}' && --depth === 0) return at;
+  }
+  return -1;
 }
 /** The model fences JSON despite the instructions (1 of 12 local answers, B562-r); that was a whole failed attempt. */
 function withoutMarkdownFence(content: string): string {
   const trimmed = content.trim();
   return trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu)?.[1] ?? trimmed;
 }
-function parseAssessment(value: unknown): VacancyFitRequirementAssessment {
-  if (!value || typeof value !== 'object' || !('requirementId' in value) || typeof value.requirementId !== 'string' || !('status' in value) || !['matched', 'partial', 'unmatched', 'unknown'].includes(String(value.status)) || !('evidence' in value) || !Array.isArray(value.evidence)) throw new Error('invalid vacancy fit assessment');
-  const evidence = value.evidence.map((entry: unknown) => {
-    if (!entry || typeof entry !== 'object' || !('factId' in entry) || typeof entry.factId !== 'string' || !('quote' in entry) || typeof entry.quote !== 'string') throw new Error('invalid vacancy fit evidence');
-    return { factId: entry.factId, quote: entry.quote };
-  });
-  return { requirementId: value.requirementId, status: value.status as VacancyFitRequirementAssessment['status'], evidence };
+function parseAssessment(value: unknown): readonly VacancyFitRequirementAssessment[] {
+  if (!value || typeof value !== 'object' || !('requirementId' in value) || typeof value.requirementId !== 'string' || !('status' in value) || !['matched', 'partial', 'unmatched', 'unknown'].includes(String(value.status))) return [];
+  const entries: readonly unknown[] = 'evidence' in value && Array.isArray(value.evidence) ? value.evidence : [];
+  return [{ requirementId: value.requirementId, status: value.status as VacancyFitRequirementAssessment['status'], evidence: entries.flatMap(parseEvidence) }];
+}
+/** Some answers write `statement` for the quote; the evaluation checks it against the fact either way. */
+function parseEvidence(entry: unknown): readonly { readonly factId: string; readonly quote: string }[] {
+  if (!entry || typeof entry !== 'object' || !('factId' in entry) || typeof entry.factId !== 'string') return [];
+  const quote = 'quote' in entry ? entry.quote : 'statement' in entry ? entry.statement : undefined;
+  return typeof quote === 'string' ? [{ factId: entry.factId, quote }] : [];
+}
+const DETAIL_CHARS = 160;
+/**
+ * The journal line of a failed call (04.11: an empty answer left no cause). A JSON error quotes the
+ * answer, which quotes the profile, so it is named and never printed.
+ */
+export function assessmentFailureLine(vacancyId: string, error: unknown): string {
+  const kind = error instanceof SyntaxError ? 'invalid_json' : error instanceof Error && error.message.startsWith('invalid vacancy fit') ? 'invalid_shape' : 'call_failed';
+  const detail = kind === 'call_failed' ? ` detail=${maskFailureText(error instanceof Error ? error.message : 'unknown', DETAIL_CHARS)}` : '';
+  return `fit-assessment-failed vacancy=${vacancyId} kind=${kind}${detail}`;
 }

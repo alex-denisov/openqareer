@@ -324,3 +324,17 @@ describe('a location line is judged by the search conditions, not the profile ci
     expect(result.conditionBlocks).toHaveLength(1);
   });
 });
+
+describe('quotes are checked one by one (04.11)', () => {
+  it('a wrong quote beside a good one drops only itself', () => {
+    const input = fitInput();
+    const result = evaluateVacancyFit({ ...input, assessments: [{ requirementId: 'r1', status: 'matched', evidence: [{ factId: 'f1', quote: 'not in the fact' }, { factId: 'f1', quote: 'TypeScript services' }] }] });
+    expect(result.assessments.find((item) => item.requirementId === 'r1')).toMatchObject({ status: 'matched', evidence: [{ factId: 'f1', quote: 'TypeScript services' }] });
+  });
+  it('a claim with no quote that holds stays unknown, never met', () => {
+    const input = fitInput();
+    const result = evaluateVacancyFit({ ...input, assessments: [{ requirementId: 'r1', status: 'matched', evidence: [{ factId: 'f1', quote: 'not in the fact' }] }] });
+    expect(result.assessments.find((item) => item.requirementId === 'r1')).toMatchObject({ status: 'unknown', evidence: [] });
+  });
+});
+

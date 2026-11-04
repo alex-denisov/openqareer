@@ -248,8 +248,9 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     const claims = input.assessments?.filter((claim) => claim.requirementId === requirement.id) ?? [];
     const claim = claims.length === 1 ? claims[0] : undefined;
     const cited = Array.isArray(claim?.evidence) ? claim.evidence.filter((entry) => acceptsLocationEvidence(requirement) || !isLocationFact(entry.factId)) : [];
-    if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !cited.length || cited.some((entry) => typeof entry.quote !== 'string' || !entry.quote.trim() || !quotes(factMap.get(entry.factId), entry.quote))) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
-    const evidence = cited.map(({ factId, quote }) => ({ factId, quote }));
+    // 04.11: a wrong quote costs itself; only a claim with no quote that holds becomes unknown.
+    const evidence = cited.filter((entry) => typeof entry.quote === 'string' && entry.quote.trim() && quotes(factMap.get(entry.factId), entry.quote)).map(({ factId, quote }) => ({ factId, quote }));
+    if (!claim || !['matched', 'partial', 'unmatched'].includes(claim.status) || !evidence.length) return { requirementId: requirement.id, status: 'unknown', evidence: [] };
     return { requirementId: requirement.id, status: claim.status, evidence, ...(claim.status !== 'unmatched' && evidence.some((entry) => checkedIds.has(entry.factId)) ? { checked: true } : {}) };
   });
   const assessments = withEvidenceRules(claimed, factMap);

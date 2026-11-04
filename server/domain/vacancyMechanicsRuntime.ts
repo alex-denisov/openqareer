@@ -8,7 +8,7 @@ import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VacancyRequirementsPausedError, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
-import { createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
+import { assessmentFailureLine, createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import {
@@ -282,6 +282,7 @@ export class VacancyMechanicsRuntime {
               outcome.returned = true;
               return assessments;
             } catch (error) {
+              console.warn(assessmentFailureLine(resolved.vacancyId, error));
               if (error instanceof Error && error.message === BULK_BUDGET_EXCEEDED) {
                 outcome.budgetPaused = true;
                 throw error;
