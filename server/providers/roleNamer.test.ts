@@ -284,6 +284,7 @@ describe('buildRoleNamer', () => {
 
     expect(describeRoleNamerQueue(built)).toEqual([
       'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
       'vertex:gemini-3.8-flash',
     ]);
@@ -334,9 +335,7 @@ describe('buildRoleNamer', () => {
   });
 
   it('без ключей ступеней нет вовсе', () => {
-    expect(
-      buildRoleNamer({ providerCredentials: {} }),
-    ).toBeUndefined();
+    expect(buildRoleNamer({ providerCredentials: {} })).toBeUndefined();
   });
 });
 
