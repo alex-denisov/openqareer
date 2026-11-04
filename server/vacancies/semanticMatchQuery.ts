@@ -2,6 +2,7 @@ import type { SQLInputValue } from 'node:sqlite';
 import type { FunctionCode } from '../../shared/roleTaxonomy';
 import type { FreshnessWindow } from './vacancyPoolQuery';
 import type { MatchGeography } from './matchGeography';
+import type { GradeRange } from './titleParse/gradeRange';
 
 /**
  * Смысловой подбор (B267 S3, план §5): равенство по индексу
@@ -19,6 +20,8 @@ export interface SemanticMatchQueryInput {
   readonly functionLevelFloors?: Readonly<Partial<Record<FunctionCode, number>>>;
   /** Города и удалёнка кампании: предел чтения не тратится на чужие города. */
   readonly geography?: MatchGeography;
+  /** Грейд кандидата: строка с непересекающимся диапазоном не идёт; строка без грейда проходит. */
+  readonly gradeRange?: GradeRange | null;
   readonly window: FreshnessWindow;
   readonly preferRemote: boolean;
   readonly limit: number;
@@ -176,15 +179,23 @@ function buildExcludedFunctionFilter(excludedFunctions: readonly string[]): stri
       ) ${buildExcludedTitleFilter(excludedCommercialFunctions)}`;
 }
 
+/** Строка без грейда проходит; поиск по первичному ключу на строку, без цепочки OR по множеству. */
+const GRADE_FILTER = `AND NOT EXISTS (SELECT 1 FROM vacancy_grade g
+        WHERE g.title_key = s.title_key AND (g.grade_max < ? OR g.grade_min > ?))`;
+
+// У источника уровень часто отсутствует даже у релевантной руководящей роли. Неизвестный уровень
+// остаётся видимым и ранжируется объяснением, а не исчезает до того, как кандидат сможет его прочитать.
+function levelFilterOf(input: SemanticMatchQueryInput): string {
+  const level =
+    input.levelRank === null ? '' : 'AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL)';
+  return `${level} ${input.gradeRange ? GRADE_FILTER : ''}`;
+}
+
 export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   sql: string;
   params: SQLInputValue[];
 } {
-  // У источника уровень часто отсутствует даже у релевантной руководящей
-  // роли. Неизвестный уровень остаётся видимым и ранжируется объяснением, а
-  // не исчезает до того, как кандидат сможет его прочитать.
-  const levelFilter =
-    input.levelRank === null ? '' : 'AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL)';
+  const levelFilter = levelFilterOf(input);
   const levelFloorOf = (code: FunctionCode) =>
     Math.min(
       input.functionLevelFloors?.[code] ?? input.levelFloorRank ?? input.levelRank ?? 0,
@@ -225,6 +236,7 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   for (const code of queryFunctionCodes) {
     params.push(code);
     if (input.levelRank !== null) params.push(levelFloorOf(code), input.levelRank + 1);
+    if (input.gradeRange) params.push(input.gradeRange.min, input.gradeRange.max);
     params.push(...excludedFunctions);
     params.push(...geography.params);
     params.push(input.window.fromMs - STALE_SEMANTIC_DATE_SLACK_MS, input.window.toMs);

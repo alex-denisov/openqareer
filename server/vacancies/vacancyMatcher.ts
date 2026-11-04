@@ -5,6 +5,7 @@ import { normalizeTextForComparison } from './vacancyFingerprint';
 import { evaluateLevelMatch, LEVEL_RANK, type SeniorityLevel } from './levelMatcher';
 import { rulesParse } from './titleParse/rulesParse';
 import type { MatchGeography } from './matchGeography';
+import type { GradeRange } from './titleParse/gradeRange';
 import { canonicalizeSkill } from '../connectors/managementSkillsDictionary';
 
 /**
@@ -37,6 +38,8 @@ export interface CandidateMatchProfile {
   semanticRoleFunctions?: readonly FunctionCode[];
   /** Города и удалёнка «Карьеры» — фильтр подбора до предела чтения (аудит 01.11). */
   matchGeography?: MatchGeography;
+  /** Грейд кандидата: сужает окно чтения там, где название вакансии говорит о другом грейде. */
+  gradeRange?: GradeRange;
 }
 
 interface MatchingFactPoint {

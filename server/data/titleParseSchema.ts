@@ -33,6 +33,12 @@ CREATE INDEX IF NOT EXISTS vacancy_semantic_match
   ON vacancy_semantic(function_code, published_ms DESC, id);
 CREATE INDEX IF NOT EXISTS vacancy_semantic_title ON vacancy_semantic(title_key);
 
+CREATE TABLE IF NOT EXISTS vacancy_grade (
+  title_key TEXT PRIMARY KEY,
+  grade_min INTEGER NOT NULL,
+  grade_max INTEGER NOT NULL
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS title_parse_model_queue (
   title_key TEXT PRIMARY KEY,
   eligible INTEGER NOT NULL CHECK (eligible IN (0, 1)),

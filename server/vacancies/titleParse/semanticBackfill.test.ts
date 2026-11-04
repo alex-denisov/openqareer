@@ -38,6 +38,23 @@ function semanticRows(database: DatabaseSync) {
 }
 
 describe('SemanticBackfill (B267 S2)', () => {
+  it('пишет грейд только названиям со словом и не переписывает его на повторном проходе', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Senior Frontend Developer');
+    addVacancy(database, 'v2', 'Frontend Developer');
+    addVacancy(database, 'v3', 'Chief Technology Officer');
+    const backfill = new SemanticBackfill(database);
+    backfill.step(100);
+    backfill.step(100);
+    const read = () => database.prepare('SELECT grade_min, grade_max, title_key FROM vacancy_grade').all();
+    expect(read()).toEqual([expect.objectContaining({ grade_min: 3, grade_max: 5 })]);
+    const changes = () => (database.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+    const before = changes();
+    backfill.step(100);
+    expect(changes() - before).toBeLessThan(10);
+    expect(read()).toHaveLength(1);
+  });
+
   it('разбирает живые записи пула правилами и пишет кеш названий', () => {
     const database = poolDatabase();
     addVacancy(database, 'v1', 'Chief Technology Officer');

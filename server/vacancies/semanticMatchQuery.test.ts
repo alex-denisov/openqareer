@@ -59,6 +59,47 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     expect(detail).toMatch(/SEARCH excluded USING .*\(id=\? AND function_code=\?\)/u);
   });
 
+  describe('диапазон грейда кандидата (04.11)', () => {
+    const grade = (id: string, min: number, max: number) =>
+      database.prepare('INSERT INTO vacancy_grade VALUES (?, ?, ?)').run(`title-${id}`, min, max);
+    const selected = (gradeRange: { min: number; max: number } | null) => {
+      const { sql, params } = buildSemanticMatchQuery({
+        functionCodes: ['eng'],
+        levelRank: 0,
+        gradeRange,
+        window: { fromMs: 0, toMs: 2_000 },
+        preferRemote: false,
+        limit: 50,
+      });
+      return (database.prepare(sql).all(...params) as { payload: string }[]).map(
+        (row) => (JSON.parse(row.payload) as { id: string }).id,
+      );
+    };
+
+    it('убирает непересекающийся грейд, соседний и неизвестный оставляет', () => {
+      seed('junior', 'eng', 0, 1_000);
+      seed('middle', 'eng', 0, 1_001);
+      seed('plain', 'eng', 0, 1_002);
+      grade('junior', 0, 2);
+      grade('middle', 1, 3);
+      expect(selected({ min: 3, max: 5 }).sort()).toEqual(['middle', 'plain']);
+    });
+
+    it('без диапазона кандидата запрос прежний: таблицу грейдов не читает', () => {
+      seed('junior', 'eng', 0, 1_000);
+      grade('junior', 0, 2);
+      expect(selected(null)).toEqual(['junior']);
+      const { sql } = buildSemanticMatchQuery({
+        functionCodes: ['eng'],
+        levelRank: 0,
+        window: { fromMs: 0, toMs: 2_000 },
+        preferRemote: false,
+        limit: 50,
+      });
+      expect(sql).not.toContain('vacancy_grade');
+    });
+  });
+
   it('отдаёт совпавшие функции, отсортированные по свежести, без дублей', () => {
     seed('v-old', 'eng-mgmt', 3, 1_000);
     seed('v-new', 'it-ops', 3, 2_000);
