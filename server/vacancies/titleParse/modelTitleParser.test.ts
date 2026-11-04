@@ -87,14 +87,21 @@ describe('VertexModelTitleParser (B267 S4)', () => {
     const parser = new VertexModelTitleParser(vertex, {
       fetchImpl: async () =>
         vertexResponse([
-          { titleKey: 'vp marketing creative operations', functions: ['marketing', 'ops'], levelRank: 3 },
+          {
+            titleKey: 'vp marketing creative operations',
+            functions: ['marketing', 'ops'],
+            levelRank: 3,
+          },
         ]),
       token: async () => 'token',
     });
 
     await expect(
       parser.parse([
-        { titleKey: 'vp marketing creative operations', sampleTitle: 'VP Marketing Creative & Operations' },
+        {
+          titleKey: 'vp marketing creative operations',
+          sampleTitle: 'VP Marketing Creative & Operations',
+        },
       ]),
     ).resolves.toEqual([
       {
@@ -190,7 +197,11 @@ describe('TitleModelStep (B267 S4)', () => {
     const db = database();
     addVacancy(db, 'unknown', 'Wibble Specialist');
     new SemanticBackfill(db).step(100);
-    const parser: ModelTitleParser = { model: 'test-model', parse: async () => [] };
+    // отказ: ответ успешный, но названия в нём нет
+    const parser: ModelTitleParser = {
+      model: 'test-model',
+      parse: async () => [{ titleKey: 'other title', functions: ['data'], levelRank: 0 }],
+    };
     const step = new TitleModelStep(db, parser, { dailyCalls: 10, maxBatches: 1 });
 
     await step.run();
@@ -207,7 +218,11 @@ describe('TitleModelStep (B267 S4)', () => {
     addVacancy(db, 'one', 'Wibble Specialist');
     addVacancy(db, 'two', 'Zibble Manager');
     new SemanticBackfill(db).step(100);
-    const parser: ModelTitleParser = { model: 'test-model', parse: async () => [] };
+    // отказ: ответ успешный, но названия в нём нет
+    const parser: ModelTitleParser = {
+      model: 'test-model',
+      parse: async () => [{ titleKey: 'other title', functions: ['data'], levelRank: 0 }],
+    };
     const step = new TitleModelStep(db, parser, {
       dailyCalls: 1,
       maxBatches: 3,

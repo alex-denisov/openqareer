@@ -14,6 +14,7 @@ import { MODEL_CHAINS, resolveChain } from '../../providers/modelChains';
 import type { ProviderId } from '../../providers/modelRegistry';
 import { requestChatJson } from '../../providers/openRouterJson';
 import type { ProviderRoute } from '../../providers/providerQueue';
+import { describeFailure, ensureLastFailureColumn } from './titleFreeze';
 
 export interface TitleModelInput {
   readonly titleKey: string;
@@ -231,12 +232,19 @@ export interface TitleModelStepReport {
   readonly frozen: number;
   readonly callsToday: number;
   readonly dailyCapReached: boolean;
+  /** Вызовов с запуска процесса (для потолка прогона) и признак сбоя вызова в этом проходе. */
+  readonly callsRun: number;
+  readonly runCeilingReached: boolean;
+  readonly failedCall: boolean;
   readonly ms: number;
 }
 
 interface TitleModelStepOptions {
   readonly dailyCalls?: number;
   readonly maxBatches?: number;
+  /** Потолок вызовов модели за жизнь процесса: останавливает перепрогон у бюджета. */
+  readonly maxCallsPerRun?: number;
+  readonly log?: { warn(fields: Record<string, unknown>, message: string): void };
   readonly now?: () => number;
 }
 
@@ -244,6 +252,11 @@ export class TitleModelStep {
   private readonly dailyCalls: number;
   private readonly maxBatches: number;
   private readonly now: () => number;
+  private readonly maxCallsPerRun: number;
+  private readonly log: TitleModelStepOptions['log'];
+  private callsRun = 0;
+  private pausedUntil = 0;
+  private consecutiveFailures = 0;
 
   constructor(
     private readonly database: DatabaseSync,
@@ -253,38 +266,68 @@ export class TitleModelStep {
     this.dailyCalls = options.dailyCalls ?? 2_000;
     this.maxBatches = options.maxBatches ?? 3;
     this.now = options.now ?? Date.now;
+    this.maxCallsPerRun = options.maxCallsPerRun ?? Number.POSITIVE_INFINITY;
+    this.log = options.log;
     this.database.exec(MIGRATION_35);
+    ensureLastFailureColumn(this.database);
   }
 
   async run(): Promise<TitleModelStepReport> {
     const startedAt = this.now();
+    if (startedAt < this.pausedUntil) return this.report(0, 0, 0, 0, startedAt, false, 0);
     this.seedQueue(500);
     const daily = this.dailyState();
     let batches = 0;
     let parsed = 0;
     let refused = 0;
     let frozen = 0;
-    while (batches < this.maxBatches && daily.calls + batches < this.dailyCalls) {
+    let failedCall = false;
+    while (
+      batches < this.maxBatches &&
+      daily.calls + batches < this.dailyCalls &&
+      this.callsRun < this.maxCallsPerRun
+    ) {
       const items = this.nextBatch();
       if (items.length === 0) break;
-      const results = await this.tryParse(items);
-      const applied = this.apply(items, results);
+      const outcome = await this.tryParse(items);
       batches += 1;
+      this.callsRun += 1;
+      if (!outcome.ok) {
+        failedCall = true;
+        break;
+      }
+      this.consecutiveFailures = 0;
+      const applied = this.apply(items, outcome.results);
       parsed += applied.parsed;
       refused += applied.refused;
       frozen += applied.frozen;
     }
     if (batches > 0) this.addCalls(daily.day, batches);
-    const callsToday = daily.calls + batches;
+    return this.report(batches, parsed, refused, frozen, startedAt, failedCall, daily.calls);
+  }
+
+  private report(
+    batches: number,
+    parsed: number,
+    refused: number,
+    frozen: number,
+    startedAt: number,
+    failedCall: boolean,
+    dailyBefore: number,
+  ): TitleModelStepReport {
+    const callsToday = dailyBefore + batches;
     const atCap = callsToday >= this.dailyCalls;
-    const dailyCapReached = atCap && this.markCapLogged(daily.day);
+    const day = new Date(this.now()).toISOString().slice(0, 10);
     return {
       batches,
       parsed,
       refused,
       frozen,
       callsToday,
-      dailyCapReached,
+      dailyCapReached: atCap && this.markCapLogged(day),
+      callsRun: this.callsRun,
+      runCeilingReached: this.callsRun >= this.maxCallsPerRun,
+      failedCall,
       ms: this.now() - startedAt,
     };
   }
@@ -317,12 +360,33 @@ export class TitleModelStep {
       .all() as unknown as TitleModelInput[];
   }
 
-  private async tryParse(items: readonly TitleModelInput[]): Promise<readonly TitleModelResult[]> {
+  /** Сбой вызова или пустой ответ на весь батч — не отказ модели: счётчики названий не трогаем. */
+  private async tryParse(
+    items: readonly TitleModelInput[],
+  ): Promise<{ ok: true; results: readonly TitleModelResult[] } | { ok: false }> {
     try {
-      return await this.parser.parse(items);
-    } catch {
-      return [];
+      const results = await this.parser.parse(items);
+      if (results.length > 0) return { ok: true, results };
+      this.failCall(items, new Error('empty or invalid model answer for the whole batch'));
+    } catch (error) {
+      this.failCall(items, error);
     }
+    return { ok: false };
+  }
+
+  private failCall(items: readonly TitleModelInput[], error: unknown): void {
+    const reason = describeFailure(error);
+    this.consecutiveFailures += 1;
+    const delay = Math.min(15 * 60_000, 60_000 * 2 ** (this.consecutiveFailures - 1));
+    this.pausedUntil = this.now() + delay;
+    this.log?.warn(
+      { reason, items: items.length, model: this.parser.model, retryInMs: delay },
+      'title-model-call-failed',
+    );
+    const mark = this.database.prepare(
+      'UPDATE title_parse_model_queue SET last_failure = ? WHERE title_key = ?',
+    );
+    for (const item of items) mark.run(`call: ${reason}`, item.titleKey);
   }
 
   private apply(items: readonly TitleModelInput[], results: readonly TitleModelResult[]) {
@@ -334,7 +398,8 @@ export class TitleModelStep {
     const accept = this.database.prepare('DELETE FROM title_parse_model_queue WHERE title_key = ?');
     const refuse = this.database.prepare(
       `UPDATE title_parse_model_queue SET failures = failures + 1,
-       frozen = CASE WHEN failures + 1 >= 3 THEN 1 ELSE 0 END WHERE title_key = ?`,
+       frozen = CASE WHEN failures + 1 >= 3 THEN 1 ELSE 0 END,
+       last_failure = 'refused: missing from the model answer' WHERE title_key = ?`,
     );
     let parsed = 0;
     let refused = 0;
