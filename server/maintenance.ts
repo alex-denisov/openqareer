@@ -17,7 +17,12 @@ import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecu
 import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
 import { describeFailure, unfreezeLiveTitles } from './vacancies/titleParse/titleFreeze';
-import { buildModelTitleParser, TitleModelStep } from './vacancies/titleParse/modelTitleParser';
+import {
+  BulkTitleParser,
+  DEFAULT_PARTIAL_BATCH_WAIT_MS,
+  TitleModelStep,
+} from './vacancies/titleParse/modelTitleParser';
+import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
@@ -104,11 +109,12 @@ const linkedinPoolExecutor =
         notifyOwner: (message) => notifyOwner(config, message),
       })
     : undefined;
-// Разбор названий по цепочке (B580, 29.10): deepseek-v4-flash → glm-5.3-flash → Vertex.
-const titleModelParser = buildModelTitleParser({
-  providerCredentials: config.providerCredentials,
-  vertex: config.vertex,
-});
+// Разбор названий идёт через фоновый канал (04.11): журнал расхода, повторы и ответившая модель
+// ведёт BulkLlmClient. Канал выключен — шага разбора названий нет.
+const titleBulkRuntime = createBulkLlmRuntime({ databasePath: config.databasePath });
+const titleModelParser = titleBulkRuntime.client
+  ? new BulkTitleParser(titleBulkRuntime.client)
+  : undefined;
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
@@ -125,6 +131,15 @@ const worker = new MaintenanceWorker({
                 maxCallsPerRun: readPositiveInteger(
                   process.env.OPENQAREER_TITLE_MODEL_RUN_CALLS,
                   Number.MAX_SAFE_INTEGER,
+                ),
+              }
+            : {}),
+          // Неполная пачка (меньше 40 названий) ждёт добора, мс; полная уходит сразу.
+          ...(process.env.OPENQAREER_TITLE_MODEL_BATCH_WAIT_MS
+            ? {
+                maxWaitMs: readNonNegativeInteger(
+                  process.env.OPENQAREER_TITLE_MODEL_BATCH_WAIT_MS,
+                  DEFAULT_PARTIAL_BATCH_WAIT_MS,
                 ),
               }
             : {}),
@@ -148,6 +163,11 @@ if (process.env.OPENQAREER_TITLE_UNFREEZE === '1') {
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readNonNegativeInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 let stopSalaryMarketSnapshots: (() => void) | undefined;
@@ -179,6 +199,7 @@ async function shutdown(signal: string): Promise<void> {
     return;
   }
   semanticDatabase.close();
+  titleBulkRuntime.close();
   linkedinPoolRepository?.close();
   composed.close();
   log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');

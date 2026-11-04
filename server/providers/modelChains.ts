@@ -38,7 +38,7 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * ведёт фон на проде; бонусный кредит Vertex конечен.
  *
  * Решение владельца 04.11: всегда начинать с дешёвой модели и повторять в ней, а не идти к самой
- * дорогой. Фон (`bulk`, `titleParsing`) ходит только через OpenRouter: повторы ступени с паузой и
+ * дорогой. Фон (`bulk`, в том числе разбор названий) ходит только через OpenRouter: повторы ступени с паузой и
  * другим закреплённым хостом (`bulkLlmClient.ts`), всё недоступно — работа ждёт в очереди. Причина:
  * 01.11 за час 1 157 вызовов Gemini на $7,81, пока DeepSeek остывал, а glm всегда отвечал 400.
  */
@@ -74,7 +74,6 @@ export const MODEL_CHAINS = {
   skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Структурный JSON без текста для человека: как фон. */
   campaignRoles: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
-  titleParsing: [DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;
 
 export type ModelMechanic = keyof typeof MODEL_CHAINS;

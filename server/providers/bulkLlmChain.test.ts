@@ -92,9 +92,7 @@ describe('фон только через OpenRouter (решение владел
   });
 
   it('Vertex нет ни в одной фоновой цепочке', () => {
-    for (const chain of [MODEL_CHAINS.bulk, MODEL_CHAINS.titleParsing]) {
-      expect(chain.map((stage) => stage.provider)).toEqual(['openrouter', 'openrouter']);
-    }
+    expect(MODEL_CHAINS.bulk.map((stage) => stage.provider)).toEqual(['openrouter', 'openrouter']);
   });
 
   it('deepseek-v4-flash — голова: ответил он, больше никто не зовётся', async () => {
