@@ -8,7 +8,11 @@ import type { VacancyRequirement } from './vacancyRequirements';
 import type { VacancyFitFact } from './vacancyFit';
 import { MAX_FIT_EVIDENCE_BYTES } from './vacancyFitProfileEvidence';
 
-const CORE = /^profile:(?:headline|about|tenure|location|experience)(?::|$)/u;
+/**
+ * 04.11 (138776387): a Russian «английский» shares no word with «English — C1», so languages went
+ * last and were cut. What is short and can only be matched by meaning always travels.
+ */
+const CORE = /^profile:(?:headline|about|tenure|location|experience|language|education|certificate|skill)(?::|$)/u;
 /** Russian and English stems of the same work, so a Russian requirement finds an English bullet. */
 const SAME_MEANING: readonly (readonly string[])[] = [
   ['бюджет', 'budget', 'p&l', 'затрат', 'cost', 'финанс', 'financ'],
@@ -63,15 +67,32 @@ function rankedByRequirement(
   return [...new Set([...interleaved, ...facts])];
 }
 
+/** Words of a statement between spaces, so «Java» is not found inside «JavaScript». */
+const wordsOf = (text: string): string =>
+  ` ${text.toLocaleLowerCase().replace(/[^\p{L}\p{N}&+#]+/gu, ' ').trim()} `;
+
+/**
+ * 04.11: imports keep a profile line and its bullets as separate facts, a fifth of the budget. A
+ * copy carries nothing the longer fact does not; the model cites the longer one.
+ */
+function withoutCopies(facts: readonly VacancyFitFact[]): readonly VacancyFitFact[] {
+  const words = facts.map((fact) => wordsOf(fact.statement));
+  return facts.filter((fact, index) =>
+    CORE.test(fact.id) ||
+    !words.some((other, at) => at !== index && (other === words[index] ? at < index : other.includes(words[index]!))),
+  );
+}
+
 /** Facts for one model call: the whole list when it fits, else core plus the most relevant ones. */
 export function vacancyFitPromptFacts(
   facts: readonly VacancyFitFact[],
   requirements: readonly Pick<VacancyRequirement, 'text'>[],
 ): readonly VacancyFitFact[] {
   if (facts.reduce((sum, fact) => sum + bytesOf(fact), 2) <= MAX_FIT_EVIDENCE_BYTES) return facts;
-  const core = facts.filter((fact) => CORE.test(fact.id));
+  const distinct = withoutCopies(facts);
+  const core = distinct.filter((fact) => CORE.test(fact.id));
   const rest = rankedByRequirement(
-    facts.filter((fact) => !CORE.test(fact.id)),
+    distinct.filter((fact) => !CORE.test(fact.id)),
     requirements,
   );
   let bytes = 2;
