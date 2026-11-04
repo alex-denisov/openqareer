@@ -25,7 +25,7 @@ describe('letter text (B496/B528)', () => {
     expect(pitch.language).toBe('ru');
     expect(pitch.atsCoverLetter).not.toMatch(RAW_FIELD);
     expect(pitch.emailPitch.body).not.toMatch(RAW_FIELD);
-    expect(pitch.atsCoverLetter).toContain('Сейчас работаю на позиции Head of Engineering в компании Финтех Лаб');
+    expect(pitch.atsCoverLetter).toContain('Сейчас работаю на позиции Руководитель разработки в компании Финтех Лаб');
     expect(pitch.usedEvidenceIds).toEqual(expect.arrayContaining(['wp1', 'wp2']));
     for (const notice of pitch.notices) expect(notice).toMatch(/\p{Script=Cyrillic}/u);
   });
@@ -38,11 +38,69 @@ describe('letter text (B496/B528)', () => {
     expect(pitch.language).toBe('en');
     expect(pitch.atsCoverLetter).not.toMatch(RAW_FIELD);
     expect(pitch.atsCoverLetter).not.toMatch(/\p{Script=Cyrillic}{3,}\s*:/u);
-    expect(pitch.atsCoverLetter).toContain('Head of Engineering at "Финтех Лаб"');
-    expect(pitch.atsCoverLetter).toContain('Director of Engineering at "Маркет Софт"');
-    // Кириллица остаётся только в названиях компаний в кавычках (G3b).
-    expect(pitch.atsCoverLetter.replace(/"[^"]*"/gu, '')).not.toMatch(/\p{Script=Cyrillic}/u);
+    expect(pitch.atsCoverLetter).toContain('Head of Engineering at Финтех Лаб');
+    expect(pitch.atsCoverLetter).toContain('Director of Engineering at Маркет Софт');
+    // Кириллица остаётся только в названиях компаний, и без кавычек (G3c).
+    expect(pitch.atsCoverLetter).not.toContain('"');
+    expect(pitch.atsCoverLetter.replace(/Финтех Лаб|Маркет Софт/gu, '')).not.toMatch(/\p{Script=Cyrillic}/u);
     expect(pitch.unconfirmedRequirements).toEqual(['ITIL']);
     for (const notice of pitch.notices) expect(notice).toMatch(/\p{Script=Cyrillic}/u);
+  });
+});
+
+describe('letter text after G3c (04.11)', () => {
+  const leidos = { id: 'v', title: 'Director, Technology Operations', company: 'Leidos' };
+  const vector = { id: 'v', title: 'Руководитель платформы', company: 'Вектор Банк' };
+  const outcome = (statement: string) => [{ ...record('out', statement), domain: 'outcome' }];
+
+  it('every job title of a Russian letter is in Russian', () => {
+    const places = [
+      { employer: 'А', title: 'Head of Engineering', startDate: '2024-01', endDate: null, current: true, evidenceIds: ['a'] },
+      { employer: 'Б', title: 'Director of Product', startDate: '2021-01', endDate: '2023-01', current: false, evidenceIds: ['b'] },
+      { employer: 'В', title: 'VP of Sales', startDate: '2019-01', endDate: '2021-01', current: false, evidenceIds: ['c'] },
+    ];
+    const body = generateVacancyPitch({ vacancy: vector, facts: [], workplaces: places }).emailPitch.body;
+    expect(body).toContain('Руководитель разработки в компании А');
+    expect(body).toContain('Директор по продукту в компании Б');
+    expect(body).toContain('Вице-президент по продажам в компании В');
+  });
+
+  it('an English title with no honest Russian stays as the candidate wrote it', () => {
+    const places = [{ employer: 'А', title: 'Staff Wizard', startDate: '2024-01', endDate: null, current: true, evidenceIds: ['a'] }];
+    expect(generateVacancyPitch({ vacancy: vector, facts: [], workplaces: places }).emailPitch.body).toContain('Staff Wizard в компании А');
+  });
+
+  it('a result reads as an achievement: the outcome first, in lower case after the colon', () => {
+    const body = generateVacancyPitch({
+      vacancy: vector,
+      facts: outcome('Склад и логистика для федеральной сети магазинов, команда выросла с 8 до 35 человек.'),
+    }).emailPitch.body;
+    expect(body).toContain('Из результатов: команда выросла с 8 до 35 человек — склад и логистика для федеральной сети магазинов.');
+  });
+
+  it('a sentence that already says what was done keeps its order', () => {
+    const body = generateVacancyPitch({ vacancy: vector, facts: outcome('Запустил платформу, сократив релизный цикл на 30%.') }).emailPitch.body;
+    expect(body).toContain('Из результатов: запустил платформу, сократив релизный цикл на 30%.');
+    const english = generateVacancyPitch({ vacancy: leidos, facts: outcome('Worked on logistics as the team grew from 8 to 35.') }).emailPitch.body;
+    expect(english).toContain('Among my results: worked on logistics as the team grew from 8 to 35.');
+  });
+
+  it('a name or an acronym keeps its capital after the colon', () => {
+    for (const statement of ['Kubernetes-кластер на 40 команд обслуживал весь банк.', 'CRM внедрена в 12 филиалах.', 'Вектор Банк вырос на 30%.']) {
+      const body = generateVacancyPitch({ vacancy: vector, facts: outcome(statement) }).emailPitch.body;
+      expect(body).toContain(`Из результатов: ${statement}`);
+    }
+  });
+
+  it('the English letter says at Leidos, not at the Leidos team', () => {
+    const body = generateVacancyPitch({ vacancy: leidos, facts: [] }).emailPitch.body;
+    expect(body).toContain("I'm interested in the Director, Technology Operations role at Leidos.");
+    expect(generateVacancyPitch({ vacancy: { id: 'v', title: 'Director', description: 'Lead' }, facts: [] }).emailPitch.body)
+      .toContain("I'm interested in the Director role on your team.");
+  });
+
+  it('employers typed in quotes lose them in the English letter', () => {
+    const places = [{ employer: '«Финтех Лаб»', title: 'Head of Engineering', startDate: '2024-01', endDate: null, current: true, evidenceIds: ['a'] }];
+    expect(generateVacancyPitch({ vacancy: leidos, facts: [], workplaces: places }).emailPitch.body).toContain('at Финтех Лаб (2024');
   });
 });

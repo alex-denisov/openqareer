@@ -39,6 +39,8 @@ export interface VacancyPitchResult {
   readonly notices?: readonly string[];
   /** Vacancy requirements no profile fact confirms, as human labels (G3 L2). */
   readonly unconfirmedRequirements?: readonly string[];
+  /** Who wrote the letter: a model letter's fact count and promises do not apply to it. */
+  readonly bodySource?: 'model' | 'template';
   readonly generatedAt: string;
 }
 

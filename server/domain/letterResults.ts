@@ -1,4 +1,4 @@
-import { hasCyrillic } from './letterLanguage';
+import { hasCyrillic } from './cyrillic';
 
 /**
  * Результаты абзаца «опыт» (G3b, 03.11): под каждым местом экран пишет «Для
@@ -65,6 +65,32 @@ function workplaceResults<T extends LetterResultFact>(
   });
   const outcomeFirst = (fact: T) => (fact.domain === 'outcome' ? 0 : 1);
   return [...bullets].sort((a, b) => outcomeFirst(a) - outcomeFirst(b));
+}
+
+const PAST_ACTION = /(?<!\p{L})\p{L}+(?:л|ла|ли|ло|ed)(?!\p{L})/iu;
+
+/** Первая буква фразы после двоеточия: имя, аббревиатура и чужая азбука остаются как есть. */
+export function lowerLetterStart(
+  text: string,
+  language: LetterLanguage,
+  names: ReadonlySet<string> = new Set(),
+): string {
+  const [word = '', next = ''] = text.split(/\s+/u);
+  const keep = word.length < 2 || /\p{Lu}.*\p{Lu}/u.test(word) || /^\p{Lu}/u.test(next) ||
+    names.has(word) || (language === 'ru') !== hasCyrillic(word.charAt(0));
+  return keep ? text : text.charAt(0).toLocaleLowerCase() + text.slice(1);
+}
+
+/**
+ * «Склад и логистика для сети, команда выросла с 8 до 35» читается как название проекта (G3c):
+ * итог с числом идёт первым, тема за ним. Фраза, которая сама называет действие, не меняется.
+ */
+export function resultFirst(statement: string, language: LetterLanguage): string {
+  const text = statement.trim().replace(/[.;,\s]+$/u, '');
+  const [, head, tail] = /^([^,;]+)[,;]\s+(.+)$/u.exec(text) ?? [];
+  if (!head || !tail || /\d/u.test(head) || !/\d/u.test(tail)) return text;
+  if (OUTCOME_VERB.test(head) || PAST_ACTION.test(head)) return text;
+  return `${tail} — ${lowerLetterStart(head, language)}`;
 }
 
 /** Русские пункты мест, которые английское письмо может процитировать только в переводе. */

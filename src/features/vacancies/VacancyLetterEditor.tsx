@@ -172,7 +172,7 @@ export function LetterNotices({
 }) {
   const notice = pitch.notices?.[0];
   const unconfirmed = pitch.unconfirmedRequirements ?? [];
-  if (pitch.usedEvidenceIds.length === 0) {
+  if (pitch.usedEvidenceIds.length === 0 && pitch.bodySource !== 'model') {
     return (
       <div className="career-letter-notes">
         <p role="status">

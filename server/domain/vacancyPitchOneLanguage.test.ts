@@ -61,12 +61,12 @@ describe('one language per letter (G3 L1)', () => {
       pitch.contactMessage,
     ]) {
       // Employers keep their own script inside quotes (G3b): never transliterated.
-      expect(text.replace(/"[^"]*"/gu, '')).not.toMatch(/\p{Script=Cyrillic}/u);
+      expect(text.replace(/Маркет Софт|Ритейл Системс/gu, '')).not.toMatch(/\p{Script=Cyrillic}/u);
     }
     expect(pitch.emailPitch.body).toContain(
-      'I currently work as Director of Engineering at "Маркет Софт" (2019–present)',
+      'I currently work as Director of Engineering at Маркет Софт (2019–present)',
     );
-    expect(pitch.emailPitch.body).toContain('Head of Engineering at "Ритейл Системс" (2014–2019)');
+    expect(pitch.emailPitch.body).toContain('Head of Engineering at Ритейл Системс (2014–2019)');
     expect(pitch.atsCoverLetter).toContain('Ivan Petrov');
   });
 
@@ -106,7 +106,7 @@ describe('results come from outcomes, not a skills list (G3 L1)', () => {
     const outcome = imported('out', 'Cut the release cycle from 14 to 3 days', 'outcome');
     const pitch = generateVacancyPitch({ vacancy: leidos, facts: [...facts, outcome], workplaces });
     expect(pitch.emailPitch.body).toContain(
-      'Among my results: Cut the release cycle from 14 to 3 days.',
+      'Among my results: cut the release cycle from 14 to 3 days.',
     );
     expect(pitch.emailPitch.body).not.toContain('Kubernetes.');
   });

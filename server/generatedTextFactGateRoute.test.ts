@@ -79,6 +79,57 @@ describe('B528 generated text fact gate', () => {
     expect(Buffer.from(document.contentBase64, 'base64').toString('utf8')).toBe(data.atsCoverLetter);
   });
 
+  it('04.11: a paraphrase of imported facts reaches the letter screen under the note that a model wrote it', async () => {
+    const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек. Буду рад обсудить задачи роли.';
+    const { app, candidates } = await createApp([sampleCluster], {
+      coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test:model' }) },
+    });
+    const { cookie, candidateId } = await login(app);
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'synthetic',
+      entries: [{ memoryId: 'imp0123456789-ach', domain: 'outcome', statement: 'Склад и логистика для сети магазинов, команда выросла с 8 до 35 человек.' }],
+    });
+    const response = await app.inject({
+      method: 'POST', url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' }, payload: { language: 'ru' },
+    });
+    const data = response.json().data;
+    expect(data.bodySource).toBe('model');
+    // The letter screen shows emailPitch.body: a letter only in atsCoverLetter is never seen.
+    expect(data.emailPitch.body).toBe(body);
+    expect(data.atsCoverLetter).toBe(body);
+    expect(data.factCheck.status).toBe('checked');
+    expect(data.outputFactChecks.emailBody.status).toBe('checked');
+    // The gate does not check what a paraphrase means, so the screen promises no checking.
+    expect(data.notices).toEqual(['Черновик написала модель. Прочитайте его перед отправкой.']);
+  });
+
+  it('04.11: a stage whose letter fails the gate gives way, a transliterated employer never shows', async () => {
+    const seen: string[] = [];
+    const { app, candidates } = await createApp([sampleCluster], {
+      coverLetterWriter: {
+        writeCoverLetter: async (input) => {
+          const body = 'Worked at Fintech Lab as Head of Engineering.';
+          seen.push(...(input.review?.(body) ?? []));
+          return { body, stage: 'test:model' };
+        },
+      },
+    });
+    const { cookie, candidateId } = await login(app);
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'synthetic',
+      entries: [{ memoryId: 'imp0123456789-ach', domain: 'outcome', statement: 'Built logistics for a retail chain.' }],
+    });
+    const data = (await app.inject({
+      method: 'POST', url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' }, payload: { language: 'en' },
+    })).json().data;
+    expect(seen).toContain('name');
+    expect(data.bodySource).toBe('template');
+    expect(data.atsCoverLetter).not.toContain('Fintech Lab');
+    expect(data.emailPitch.body).not.toContain('Fintech Lab');
+  });
+
   it.each([
     {
       name: 'confirmed metric with its context',
@@ -131,9 +182,11 @@ describe('B528 generated text fact gate', () => {
       text: 'Я снизил время обработки с 10 до 30 минут.', expected: 'partially_confirmed', source: 'template',
     },
     {
-      name: 'imported proposed evidence remains partial',
+      // 04.11: imported facts are the candidate's own data, the template quotes them too; with the
+      // old rule no candidate with an imported profile could ever get a model letter.
+      name: 'imported proposed evidence supports the letter and stays partial',
       facts: ['Я увеличил выручку на 25%.'], proposed: true,
-      text: 'Я увеличил выручку на 25%.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я увеличил выручку на 25%.', expected: 'partially_confirmed', source: 'model',
     },
     {
       name: 'candidate explicitly cannot confirm a metric',
@@ -187,7 +240,7 @@ describe('B528 generated text fact gate', () => {
     const { cookie, candidateId } = await login(app);
     const owner = options.foreign
       ? candidates.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' }).id : candidateId;
-    const ids = facts.map((_, index) => `import:test:b528-${index}`);
+    const ids = facts.map((_, index) => (options.proposed ? `imp0123456789-b528-${index}` : `import:test:b528-${index}`));
     candidates.importResumeEvidence(owner, {
       sourceLabel: 'synthetic',
       entries: facts.map((statement, index) => ({ memoryId: ids[index], domain: 'outcome', statement })),
@@ -204,7 +257,7 @@ describe('B528 generated text fact gate', () => {
     expect(data.factCheck.claims).toEqual([expect.objectContaining({
       text, status: expected, action: expected === 'confirmed' ? 'none' : 'ask_candidate',
     })]);
-    if (expected === 'confirmed') {
+    if (source === 'model') {
       expect(data.atsCoverLetter).toBe(text);
       expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
     } else {

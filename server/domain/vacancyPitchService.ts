@@ -11,11 +11,14 @@ import {
   hasCyrillic,
   letterEmployerName,
   requirementLabel,
+  russianJobTitle,
 } from './letterLanguage';
 import {
   isResultFact,
   isStructuredRecordStatement,
+  lowerLetterStart,
   orderLetterResults,
+  resultFirst,
   withTranslatedStatements,
 } from './letterResults';
 
@@ -314,14 +317,14 @@ const EN_COPY: Copy = {
     return `${title} — ${candidateName} | ${suffix}`;
   },
   intro: (title, company, tone) => {
-    const target = company ? `the ${company} team` : 'your team';
+    const target = company ? `at ${company}` : 'on your team';
     const opening =
       tone === 'confident'
         ? "I'm submitting my application and would be glad to discuss the role's scope."
         : tone === 'technical'
           ? "I'd be glad to discuss the technical context and the team's expectations."
           : "I'd be glad to learn more about the role's goals and priorities.";
-    return `Hello! I'm interested in the ${title} role at ${target}. ${opening}`;
+    return `Hello! I'm interested in the ${title} role ${target}. ${opening}`;
   },
   targetCompany: (company) => `${company} is a company I want to work for.`,
   evidenceIntro: 'Among my results:',
@@ -397,15 +400,34 @@ interface WorkplacePhrase {
   readonly hasTitle: boolean;
 }
 
-/** В английском письме — только английские должность и компания (G3 L1). */
+/** Письмо на одном языке: и должность на нём, и компания как у кандидата (G3 L1, G3c). */
 function workplaceParts(place: PitchWorkplace, language: PitchLanguage) {
   const title = place.title?.trim() || null;
   const employer = place.employer?.trim() || null;
-  if (language === 'ru') return { title, employer };
+  if (language === 'ru') return { title: title ? russianJobTitle(title) : null, employer };
   return {
     title: title ? englishJobTitle(title) : null,
     employer: employer ? letterEmployerName(employer) : null,
   };
+}
+
+export interface LetterCareerEntry {
+  readonly title?: string;
+  readonly employer?: string;
+  readonly years?: string;
+}
+
+/** Места работы для модели на языке письма: те же должность, компания и годы, что у шаблона. */
+export function letterCareer(
+  workplaces: readonly PitchWorkplace[],
+  language: PitchLanguage,
+): LetterCareerEntry[] {
+  return workplaces.slice(0, 3).flatMap((place) => {
+    const { title, employer } = workplaceParts(place, language);
+    if (!title && !employer) return [];
+    const years = workplacePeriod(place, language).replace(/[()\s]/gu, ' ').trim();
+    return [{ ...(title ? { title } : {}), ...(employer ? { employer } : {}), ...(years ? { years } : {}) }];
+  });
 }
 
 function workplacePhrase(place: PitchWorkplace, language: PitchLanguage): WorkplacePhrase | null {
@@ -468,6 +490,21 @@ function letterResultFacts(
     (language === 'ru' || !hasCyrillic(fact.statement)) && isResultFact(fact));
 }
 
+/**
+ * Факты для письма от модели: на языке письма, без записей профиля и без записей о самих местах
+ * (место уже есть в `letterCareer`). Те же ограничения, что у шаблона.
+ */
+export function letterModelFacts(
+  facts: readonly VacancyPitchInputFact[],
+  workplaces: readonly PitchWorkplace[],
+  language: PitchLanguage,
+): VacancyPitchInputFact[] {
+  const records = new Set(workplaces.flatMap((place) => (place.recordId ? [place.recordId] : [])));
+  return filterUsableFacts(facts).filter((fact) => !records.has(fact.id) &&
+    !isStructuredRecordStatement(fact.statement) &&
+    (language === 'ru' || !hasCyrillic(fact.statement)));
+}
+
 function buildEvidenceParagraph(
   copy: Copy,
   language: PitchLanguage,
@@ -493,7 +530,12 @@ function buildEvidenceParagraph(
   const statements = [metricFact?.statement, ...otherFacts.map((f) => f.statement)].filter(
     (s): s is string => Boolean(s),
   );
-  return [career, `${copy.evidenceIntro} ${joinSentences(statements)}`].filter(Boolean).join(' ');
+  const employers = new Set(workplaces.flatMap((place) => place.employer?.split(/\s+/u) ?? []));
+  const results = statements.map((statement, index) => {
+    const text = resultFirst(statement, language);
+    return index === 0 ? lowerLetterStart(text, language, employers) : text.charAt(0).toLocaleUpperCase() + text.slice(1);
+  });
+  return [career, `${copy.evidenceIntro} ${joinSentences(results)}`].filter(Boolean).join(' ');
 }
 
 /** Факты часто уже кончаются точкой — склейка не должна давать «..» (прод 25.09). */

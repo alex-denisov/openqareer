@@ -299,18 +299,20 @@ function PitchControls({
   );
 }
 
-function PitchMetaBar({
+export function PitchMetaBar({
   evidenceCount,
   usedFacts,
   notices,
+  bodySource,
 }: {
   evidenceCount: number;
   usedFacts?: readonly { id: string; basis: 'confirmed' | 'imported' }[];
   notices?: readonly string[];
+  bodySource?: VacancyPitchResult['bodySource'];
 }) {
   return (
     <div className="career-pitch-meta-bar">
-      <div className="career-pitch-meta-tags">
+      {bodySource === 'model' ? null : <div className="career-pitch-meta-tags">
         <span className="career-pitch-evidence-tag">
           Использовано {pluralizeFacts(evidenceCount)}
           {describeFactBasis(usedFacts)}.
@@ -318,7 +320,7 @@ function PitchMetaBar({
         <span className="career-pitch-safe-tag">
           Ничего не придумано: чего нет в профиле — нет и в тексте.
         </span>
-      </div>
+      </div>}
       {notices && notices.length > 0 ? (
         <div className="career-pitch-notice" role="status">
           {notices.map((notice) => (
@@ -831,6 +833,7 @@ function PitchTop({ c }: { c: ReturnType<typeof usePitchModalController> }) {
           evidenceCount={c.pitch.usedEvidenceIds.length}
           usedFacts={c.pitch.usedFacts}
           notices={c.pitch.notices}
+          bodySource={c.pitch.bodySource}
         />
       ) : null}
     </>
