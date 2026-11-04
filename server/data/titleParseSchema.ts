@@ -39,6 +39,15 @@ CREATE TABLE IF NOT EXISTS vacancy_grade (
   grade_max INTEGER NOT NULL
 ) WITHOUT ROWID;
 
+CREATE TABLE IF NOT EXISTS vacancy_role (
+  title_key TEXT PRIMARY KEY,
+  role_id TEXT,
+  source TEXT NOT NULL,
+  model TEXT,
+  raw_role TEXT,
+  created_ms INTEGER NOT NULL
+) WITHOUT ROWID;
+
 CREATE TABLE IF NOT EXISTS title_parse_model_queue (
   title_key TEXT PRIMARY KEY,
   eligible INTEGER NOT NULL CHECK (eligible IN (0, 1)),
