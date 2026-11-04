@@ -46,6 +46,10 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * Механики, где кандидат ждёт (`campaignRoles`, `roleNames`, `coverLetters`, `linkedinDrafts`): после Vertex голова
  * цепочки стоит дважды — вторая попытка дешёвой ступени до дорогих. Очереди этих механик идут по
  * массиву подряд, без отбрасывания повторов; три попытки не берём, кандидат ждёт.
+ *
+ * Квиз, разбор резюме и пункты резюме (`skillQuizzes`, `resumeParsing`, `experienceBullets`) получили
+ * Vertex первым по тому же решению; ступени после него прежние, потолки в `vertexChatTimeouts.ts`.
+ * Диалог кандидата с консультантом (`coach`, `coachFree`) идёт без Vertex (решение владельца 04.11).
  */
 export const MODEL_CHAINS = {
   /**
@@ -58,14 +62,14 @@ export const MODEL_CHAINS = {
   /** B579: 30 ходов Free в месяц — glm-5.3-flash (замер 28.10: 4/4 хода), запасная deepseek. */
   coachFree: [GLM_FLASH, DEEPSEEK_FLASH],
   /** Разбор резюме: только платные маршруты (решение владельца 28.10). */
-  resumeParsing: [LUNA, DEEPSEEK_FLASH, GLM_FLASH],
+  resumeParsing: [VERTEX, LUNA, DEEPSEEK_FLASH, GLM_FLASH],
   /**
    * Пункты резюме из фактов беседы: текст в профиль кандидата, качество важнее цены,
    * вызов редкий (раз на набор фактов). Замер 29.10 на 65 фактах adenisov.test:
    * luna — 14 чистых пунктов за 36–43 с; glm — 12 пунктов за 63 с, слабее; deepseek
    * v4.1-flash тратит все 16 000 токенов на рассуждение и не отвечает.
    */
-  experienceBullets: [LUNA, GLM_FLASH],
+  experienceBullets: [VERTEX, LUNA, GLM_FLASH],
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */
   bulk: [VERTEX, DEEPSEEK_V4_FLASH, GLM_FLASH],
   /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
@@ -74,9 +78,9 @@ export const MODEL_CHAINS = {
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому
-   * цепочка консультанта, а не фон. Vertex нет: ступени только chat-completions.
+   * цепочка консультанта, а не фон. Vertex первым (04.11), хвост как у консультанта.
    */
-  skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
+  skillQuizzes: [VERTEX, DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Структурный JSON без текста для человека: как фон. */
   campaignRoles: [VERTEX, DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;
