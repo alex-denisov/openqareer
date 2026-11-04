@@ -120,6 +120,32 @@ describe('B209: публичный каталог вакансий', () => {
     const second = await app.inject({ method: 'GET', url: next! });
     expect(second.statusCode).toBe(200);
     expect(second.body).toContain('Страница 2 из 2');
+    // 04.11: голый /page/2 отвечает 301, канонический адрес на него вёл страницу на первую.
+    const escaped = next!.replace(/&/gu, '&amp;');
+    expect(second.body).toContain(
+      `<link rel="canonical" href="https://openqareer.com${escaped}">`,
+    );
+  });
+
+  it('страница списка за курсором канонична со своим курсором', async () => {
+    const app = await appWithPool(
+      Array.from({ length: 30 }, (_, index) => ({
+        ...vacancy(index),
+        location: 'Moscow, Russia',
+      })),
+    );
+    const first = await app.inject({ method: 'GET', url: '/vacancies/moscow' });
+    expect(first.statusCode).toBe(200);
+    const after = /\/vacancies\/moscow\/page\/2\?after=([^"]+)"/u.exec(first.body)?.[1];
+    expect(after).toBeTruthy();
+
+    const second = await app.inject({
+      method: 'GET',
+      url: `/vacancies/moscow/page/2?after=${after}`,
+    });
+    expect(second.body).toContain(
+      `<link rel="canonical" href="https://openqareer.com/vacancies/moscow/page/2?after=${after}">`,
+    );
   });
 
   /**
