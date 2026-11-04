@@ -267,6 +267,19 @@ export class SqliteVacancyFitStore {
   }
 
   /**
+   * 04.11: a job's key holds no requirements and its result's key does, so new requirements under
+   * the same text lose the result while the finished job stops `enqueue`. The caller decides that
+   * the result is really gone; the row goes back with this input, as `retryFailed` does.
+   */
+  reviveCompleted(input: VacancyFitInput, now = new Date().toISOString(), options: FitEnqueueOptions = {}): void {
+    const key = this.cacheKey(input);
+    const requestedAt = requestedAtFor(now, options);
+    this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',input_cipher=?,attempts=0,defers=0,last_error=NULL,
+      lease_token=NULL,lease_until=NULL,requested_at=?,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='completed'`)
+      .run(this.sealedText.seal(JSON.stringify(input), key), requestedAt, now, key, this.candidateKey(input.candidateId));
+  }
+
+  /**
    * One atomic update makes competing workers safe; expired work is retried with a new fencing token.
    * Order: fresh work before work that already waited (deferred or retried), and the most recently
    * requested first — the page the candidate is looking at now. Ordering by created_at alone let one
