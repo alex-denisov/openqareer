@@ -24,6 +24,8 @@ const DEFAULTS = {
 const BILLING_OFF_MS = 6 * 3_600_000;
 const COOL_BASE_MS = 60_000;
 const COOL_MAX_MS = 300_000;
+/** Failures in a row from which a cooling is an outage, not a blip: a patient call stops passing it. */
+const OUTAGE_FAILURES = 4;
 const SKIP_LOG_EVERY_MS = 60_000;
 export const BILLING_OFF_EVENT = 'vertex_billing_off';
 
@@ -150,9 +152,9 @@ export interface VertexGateOptions {
 export interface VertexGate {
   readonly ledger: VertexGateOptions['ledger'];
   /** Why Vertex may not be called now, or undefined. */
-  skipReason(task: string): VertexSkipReason | undefined;
+  skipReason(task: string, patient?: boolean): VertexSkipReason | undefined;
   /** Throws `VertexSkippedError` (and reports it) when Vertex may not be called. */
-  admit(task: string): void;
+  admit(task: string, patient?: boolean): void;
   /** A refusal or a transport failure: billing switches Vertex off for hours, the rest cools it here. */
   failed(failure: { status?: number; text: string }): void;
   succeeded(): void;
@@ -191,11 +193,11 @@ class CreditGate implements VertexGate {
     );
   }
 
-  skipReason(task: string): VertexSkipReason | undefined {
+  skipReason(task: string, patient = false): VertexSkipReason | undefined {
     const { config } = this;
     if (this.now() >= config.untilMs) return 'credit_expired';
     if (this.billingOff()) return 'billing_off';
-    if (this.coolUntil > this.now()) return 'cooling';
+    if (this.coolUntil > this.now() && !(patient && this.failures < OUTAGE_FAILURES)) return 'cooling';
     const spent = this.ledger.vertexSpend({
       sinceIso: config.sinceIso,
       dayStartIso: `${new Date(this.now()).toISOString().slice(0, 10)}T00:00:00.000Z`,
@@ -219,8 +221,8 @@ class CreditGate implements VertexGate {
     }
   }
 
-  admit(task: string) {
-    const reason = this.skipReason(task);
+  admit(task: string, patient = false) {
+    const reason = this.skipReason(task, patient);
     if (!reason) return;
     if (this.now() - this.lastSkipLogAt >= SKIP_LOG_EVERY_MS) {
       this.lastSkipLogAt = this.now();

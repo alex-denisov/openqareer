@@ -268,4 +268,104 @@ describe('Vertex first stage of the bulk channel', () => {
     expect(h.vertexCalls).toHaveLength(1);
     h.runtime.close();
   });
+
+  describe('a task whose answer depends on the model (04.11: one fit input read 33 % on Vertex and 4 % on the fallback)', () => {
+    const steady = { ...req, task: 'vacancy-fit', patientVertex: true, firstLane: 'deepseek/deepseek-v4.1-flash' };
+    const refused = () => new Response('Resource exhausted', { status: 429 });
+
+    it('a short refusal is asked again on Vertex before any other model', async () => {
+      let calls = 0;
+      const h = harness({ vertex: () => (++calls === 1 ? refused() : vertexAnswer()) });
+      const result = await h.runtime.client!.complete(steady);
+      expect(result.provider).toBe('vertex');
+      expect(h.vertexCalls).toHaveLength(2);
+      expect(h.openRouterCalls).toBe(0);
+      h.runtime.close();
+    });
+
+    it('a timeout is asked again too', async () => {
+      let calls = 0;
+      const h = harness({
+        vertex: () => {
+          if (++calls === 1) throw new DOMException('timed out', 'TimeoutError');
+          return vertexAnswer();
+        },
+      });
+      expect((await h.runtime.client!.complete(steady)).provider).toBe('vertex');
+      expect(h.vertexCalls).toHaveLength(2);
+      h.runtime.close();
+    });
+
+    it('after its repeats the next model is the named lane, and the answer says so', async () => {
+      const models: string[] = [];
+      const dir = mkdtempSync(join(tmpdir(), 'bulk-vertex-'));
+      dirs.push(dir);
+      const runtime = createBulkLlmRuntime({
+        databasePath: join(dir, 'app.db'),
+        env: { ...baseEnv },
+        delay: async () => {},
+        random: () => 0,
+        vertex: VERTEX,
+        vertexToken: async () => 'tok',
+        onEvent: () => {},
+        transport: (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          if (String(input).includes('aiplatform.googleapis.com')) return refused();
+          const body = JSON.parse(String(init?.body)) as { model: string };
+          models.push(body.model);
+          return Response.json({
+            model: body.model,
+            provider: 'DeepInfra',
+            choices: [{ message: { content: '{"from":"openrouter"}' } }],
+            usage: { cost: 0.001, prompt_tokens: 50, completion_tokens: 20 },
+          });
+        }) as typeof fetch,
+      });
+      const result = await runtime.client!.complete(steady);
+      expect(models).toEqual(['deepseek/deepseek-v4.1-flash']);
+      expect(result.model).toBe('deepseek/deepseek-v4.1-flash');
+      expect(result.fallbackReason).toBe('vertex_429');
+      runtime.close();
+    });
+
+    it('asks Vertex at most three times in one call', async () => {
+      const h = harness({ vertex: refused });
+      await h.runtime.client!.complete(steady);
+      expect(h.vertexCalls).toHaveLength(3);
+      h.runtime.close();
+    });
+
+    it('a request Vertex rejects as such is not asked again', async () => {
+      const h = harness({ vertex: () => new Response('bad', { status: 400 }) });
+      await h.runtime.client!.complete(steady);
+      expect(h.vertexCalls).toHaveLength(1);
+      h.runtime.close();
+    });
+
+    it('passes a short cooling another call started, so a burst stays on one model', async () => {
+      let calls = 0;
+      const h = harness({ vertex: () => (++calls === 1 ? refused() : vertexAnswer()) });
+      await h.runtime.client!.complete(req);
+      expect(h.openRouterCalls).toBe(1);
+      expect((await h.runtime.client!.complete(steady)).provider).toBe('vertex');
+      h.runtime.close();
+    });
+
+    it('a real outage ends the patience: the cooling holds and no call waits on Vertex', async () => {
+      const h = harness({ vertex: refused });
+      await h.runtime.client!.complete(steady);
+      await h.runtime.client!.complete(steady);
+      const asked = h.vertexCalls.length;
+      await h.runtime.client!.complete(steady);
+      expect(h.vertexCalls).toHaveLength(asked);
+      h.runtime.close();
+    });
+
+    it('every other task keeps one call to Vertex', async () => {
+      const h = harness({ vertex: refused });
+      await h.runtime.client!.complete(req);
+      expect(h.vertexCalls).toHaveLength(1);
+      expect(h.openRouterCalls).toBe(1);
+      h.runtime.close();
+    });
+  });
 });
