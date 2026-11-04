@@ -33,7 +33,7 @@ function vacancy(index: number, overrides: Partial<UnifiedVacancy> = {}): Unifie
       sourceType: 'json_api',
       // Площадка должна быть в реестре: восстановление пула намеренно
       // выбрасывает записи источника, которого продукт не знает.
-      sourceId: 'src-himalayas',
+      sourceId: 'src-remoteok',
       sourceUrl: `https://boards.example.com/job/${index}`,
       // Seen now: an old observation would drop every card out of the
       // indexable set (seo/catalogIndexing).
