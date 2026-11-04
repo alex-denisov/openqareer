@@ -4,6 +4,7 @@ import {
   conditionCoverageWithGeo,
   fitRequirementChips,
   legacySkillChips,
+  requirementVerdict,
 } from './vacancyRequirementChips';
 
 function requirement(id: string, text: string) {
@@ -42,6 +43,42 @@ describe('fitRequirementChips', () => {
       stated: ['SQL'],
       quotes: {},
     });
+  });
+
+  it('an implied soft skill is met in the chips, as in the verdict list (04.11)', () => {
+    const view = {
+      state: 'ready',
+      requirements: [
+        requirement('a', 'Лидерство'),
+        requirement('b', 'Коммуникация'),
+        requirement('c', 'Go'),
+      ],
+      result: {
+        assessments: [
+          { requirementId: 'a', status: 'unknown', evidence: [] },
+          { requirementId: 'b', status: 'partial', evidence: [] },
+          { requirementId: 'c', status: 'unknown', evidence: [] },
+        ],
+        implied: [
+          { requirementId: 'a', role: 'VP of Technology' },
+          { requirementId: 'b', role: 'VP of Technology' },
+        ],
+      },
+    } as unknown as VacancyFitView;
+    expect(fitRequirementChips(view)).toEqual({
+      confirmed: [],
+      unconfirmed: ['Go'],
+      stated: ['Лидерство', 'Коммуникация'],
+      quotes: {},
+    });
+    expect(requirementVerdict(view, 'a')).toEqual({
+      status: 'matched',
+      checked: false,
+      impliedRole: 'VP of Technology',
+      evidence: [],
+    });
+    expect(requirementVerdict(view, 'c').status).toBe('unknown');
+    expect(requirementVerdict(view, 'absent').status).toBe('unknown');
   });
 
   it('lists every counted skill requirement, so the count and the chips agree (02.11)', () => {

@@ -61,15 +61,47 @@ export function isSkillRequirement(requirement: Requirement): boolean {
   return kind === 'experience' || (requirement.skill ?? (kind === undefined || kind === 'other'));
 }
 
+type Assessment = NonNullable<VacancyFitView['result']>['assessments'][number];
+
+export interface RequirementVerdict {
+  readonly status: Assessment['status'];
+  readonly checked: boolean;
+  /** The role a soft skill follows from: it counts as met, whatever the model answered. */
+  readonly impliedRole?: string;
+  readonly evidence: Assessment['evidence'];
+}
+
+/**
+ * The one status of a requirement (04.11): chips, the verdict list and the quiz offer read it, so a
+ * skill «следует из опыта» below is never listed as missing above. Same rule as the server's credit.
+ */
+export function requirementVerdict(
+  view: VacancyFitView | undefined,
+  requirementId: string,
+): RequirementVerdict {
+  const assessment = view?.result?.assessments.find((item) => item.requirementId === requirementId);
+  const impliedRole = view?.result?.implied?.find(
+    (item) => item.requirementId === requirementId,
+  )?.role;
+  return {
+    status: impliedRole ? 'matched' : (assessment?.status ?? 'unknown'),
+    checked: assessment?.checked === true,
+    ...(impliedRole ? { impliedRole } : {}),
+    evidence: assessment?.evidence ?? [],
+  };
+}
+
 /** Requirement id → matched by a skill check (true) or only stated in the profile (false). */
 export function matchedRequirements(
   view: VacancyFitView | undefined,
 ): ReadonlyMap<string, boolean> {
   return new Map(
-    (view?.result?.assessments ?? [])
-      .filter((item) => item.status === 'matched' || item.status === 'partial')
+    (view?.result?.assessments ?? []).flatMap((item) => {
+      const { status, checked } = requirementVerdict(view, item.requirementId);
+      if (status !== 'matched' && status !== 'partial') return [];
       // A partial match is never «confirmed» green, even when a checked fact backs the part.
-      .map((item) => [item.requirementId, item.status === 'matched' && item.checked === true]),
+      return [[item.requirementId, status === 'matched' && checked] as const];
+    }),
   );
 }
 
@@ -86,11 +118,6 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
   const unconfirmed: string[] = [];
   const stated: string[] = [];
   const partial: string[] = [];
-  const partialIds = new Set(
-    (view.result?.assessments ?? [])
-      .filter((item) => item.status === 'partial')
-      .map((item) => item.requirementId),
-  );
   const quotes: Record<string, string> = {};
   const conditions: string[] = [];
   for (const requirement of view.requirements) {
@@ -103,7 +130,7 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
     if (!label) continue;
     seen.add(label.toLocaleLowerCase('ru'));
     const checked = matched.get(requirement.id);
-    if (partialIds.has(requirement.id)) partial.push(label);
+    if (requirementVerdict(view, requirement.id).status === 'partial') partial.push(label);
     else (checked === undefined ? unconfirmed : checked ? confirmed : stated).push(label);
     if (requirement.text.trim() !== label) quotes[label] = requirement.text.trim();
   }

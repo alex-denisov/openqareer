@@ -43,6 +43,24 @@ describe('implied soft skill from experience', () => {
     const facts = [{ id: 'profile:experience:1', statement: 'Head of VIP IT Support — Лаборатория Касперского; 2018-2023; клиенты' }];
     expect(impliedSoftRole(facts, 'Strong ownership')).toBe('Head of VIP IT Support, Лаборатория Касперского');
   });
+  it('names the strongest role, not the first one that mentions leading (04.11)', () => {
+    const facts = [
+      { id: 'profile:experience:1', statement: 'Independent AI Consultant — OptiLab AI; 2025; lead architecture for clients' },
+      { id: 'profile:experience:2', statement: 'VP of Technology & IT Operations — Enterprise Energy; 2023-2025; команда 250; clients' },
+      { id: 'profile:experience:3', statement: 'Head of Technical Support — Cloud; 2019-2023; команда 80; clients' },
+      { id: 'profile:experience:4', statement: 'Co-Founder & COO — Fishance; 2016-2019; команда 30; clients' },
+    ];
+    const strongest = 'VP of Technology & IT Operations, Enterprise Energy';
+    expect(impliedSoftRole(facts, 'Лидерство')).toBe(strongest);
+    expect(impliedSoftRole(facts, 'Verbal communication')).toBe(strongest);
+  });
+  it('an experience role outranks a dossier line with a louder word', () => {
+    const facts = [
+      { id: 'm1', statement: 'Chief of staff duties were discussed in chat' },
+      { id: 'profile:experience:1', statement: 'Head of Support — Acme; 2020' },
+    ];
+    expect(impliedSoftRole(facts, 'Teamwork')).toBe('Head of Support, Acme');
+  });
   it('headline is the last resort: no bar, bracket or entity', () => {
     const role = impliedSoftRole([{ id: 'profile:headline', statement: 'VP of Technology &amp; Operations | Ex-Co-Founder ($50M' }], 'Teamwork');
     expect(role).toBe('VP of Technology & Operations');
