@@ -96,6 +96,12 @@ const ADDITIONAL_ANCHORS: readonly AnchorHit[] = [
   { code: 'support', anchor: 'директор по клиентскому сервису' },
   { code: 'support', anchor: 'руководитель службы поддержки' },
   { code: 'support', anchor: 'службы поддержки' },
+  // 04.11: «поддержка» узнавалась только в устойчивых оборотах, опыт в поддержке терялся.
+  { code: 'support', anchor: 'premium support' },
+  { code: 'support', anchor: 'директор по поддержке' },
+  { code: 'support', anchor: 'директор по технической поддержке' },
+  { code: 'support', anchor: 'технической поддержки' },
+  { code: 'support', anchor: 'департамента поддержки' },
   // «Исполнительный директор» в русских вакансиях — второе лицо, ведущее операционку.
   { code: 'ops', anchor: 'исполнительный директор' },
   { code: 'it-ops', anchor: 'it infrastructure' },

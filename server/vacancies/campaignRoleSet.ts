@@ -77,8 +77,8 @@ const modelRoleSchema = z
 
 const MIN_ROLES = 5;
 const MAX_ROLES = 10;
-/** Roles by position that join every accepted model answer. */
-const STRONGEST_ROLES = 3;
+/** Roles by position that join every accepted model answer: CCO must not push out CTO or COO. */
+const STRONGEST_ROLES = 4;
 
 function candidateRoles(facts: readonly CampaignRoleFact[], profileTitle: string | null): Role[] {
   const functions = new Set<FunctionCode>();
