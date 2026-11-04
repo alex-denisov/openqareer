@@ -26,8 +26,6 @@ interface NativeCoachProviderOptions {
   fetchImpl?: typeof fetch;
   /** Заголовки тоннеля: аутентифицированный шлюз Cloudflare требует свой. */
   extraHeaders?: Record<string, string>;
-  /** Vertex: `Authorization` с токеном сервисного аккаунта вместо ключа AI Studio (04.11). */
-  authHeaders?: () => Promise<Record<string, string>>;
   /**
    * Уровень рассуждения Gemini 3.x, выбранный владельцем вместе с моделью.
    * Не задан — поле не отправляется вовсе: модели до 3.x его отвергают.
@@ -163,12 +161,11 @@ export class NativeCoachProvider implements CoachProvider {
     };
   }
 
-  private async geminiHeaders(idempotencyKey: string): Promise<Record<string, string>> {
+  private geminiHeaders(idempotencyKey: string): Record<string, string> {
     return {
-      ...(this.options.apiKey ? { 'x-goog-api-key': this.options.apiKey } : {}),
+      'x-goog-api-key': this.options.apiKey,
       'x-client-request-id': idempotencyKey,
       ...(this.options.extraHeaders ?? {}),
-      ...((await this.options.authHeaders?.()) ?? {}),
     };
   }
 
@@ -178,7 +175,7 @@ export class NativeCoachProvider implements CoachProvider {
   ): Promise<NativeResponse> {
     const payload = await this.postJson(
       `${trimSlash(this.options.baseUrl)}/models/${encodeURIComponent(this.options.model)}:generateContent`,
-      await this.geminiHeaders(idempotencyKey),
+      this.geminiHeaders(idempotencyKey),
       {
         systemInstruction: { parts: [{ text: careerInstructionsForRole(input.activeRole, input.internalPurpose) }] },
         contents: [

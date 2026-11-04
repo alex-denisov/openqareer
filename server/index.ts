@@ -25,7 +25,6 @@ import { StructuredStageCoachProvider } from './providers/structuredStageCoachPr
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { buildCoachChainProvider } from './providers/modelChains';
-import { buildVertexCoachStage } from './providers/vertexCoachStage';
 import { VERTEX_CHAT_TIMEOUTS_MS } from './providers/vertexChatTimeouts';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
@@ -90,18 +89,6 @@ const buildCoachQueue = (onAttempts: ResilientCoachProviderOptions['onAttempts']
   buildCoachChainProvider({
     credentials: config.providerCredentials ?? {},
     onAttempts,
-    // Vertex первым (04.11): учёт и ворота — в `meteredVertexFetchFor`, задача по цепочке (coach/coachFree).
-    ...(config.vertex
-      ? {
-          vertex: config.vertex,
-          buildVertexStage: (task: 'coach' | 'coachFree', timeoutMs: number) =>
-            buildVertexCoachStage({
-              vertex: config.vertex!,
-              timeoutMs,
-              fetchImpl: meteredVertexFetchFor(config.vertex, config.databasePath, task, timeoutMs)!,
-            }),
-        }
-      : {}),
     buildStage: (route, timeoutMs) =>
       buildCoachProvider({
         ...route,

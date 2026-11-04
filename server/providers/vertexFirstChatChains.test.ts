@@ -4,15 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
-import { CoachProviderError } from './coachProvider';
 import { buildExperienceFactRewriter } from './experienceFactRewriter';
 import { createMeteredVertexFetch } from './meteredVertexFetch';
-import { buildCoachChainProvider, chainStageLabel, MODEL_CHAINS } from './modelChains';
+import { chainStageLabel, MODEL_CHAINS } from './modelChains';
 import { buildResumeStructurer, QueuedResumeStructurer } from './resumeStructurer';
 import { HygienicResumeStructurer } from './hygienicResumeStructurer';
 import { buildSkillQuizModel } from './skillQuizModel';
 import { VERTEX_CHAT_TIMEOUTS_MS } from './vertexChatTimeouts';
-import { buildVertexCoachStage } from './vertexCoachStage';
 import { createVertexGate, type VertexCreditConfig } from './vertexCredit';
 import type { VertexConfig } from './vertexAi';
 
@@ -82,8 +80,8 @@ function metered(
 
 const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
 
-describe('цепочки консультанта, квиза, резюме и пунктов: Vertex первым (04.11)', () => {
-  it.each(['coach', 'coachFree', 'skillQuizzes', 'resumeParsing', 'experienceBullets'] as const)(
+describe('цепочки квиза, резюме и пунктов: Vertex первым, диалог без него (04.11)', () => {
+  it.each(['skillQuizzes', 'resumeParsing', 'experienceBullets'] as const)(
     '%s: Vertex первой ступенью, прочие прежние и в прежнем порядке',
     (mechanic) => {
       const stages = labels(mechanic);
@@ -92,17 +90,21 @@ describe('цепочки консультанта, квиза, резюме и �
     },
   );
 
-  it('хвосты прежние', () => {
-    expect(labels('coach').slice(1)).toEqual([
+  it.each(['coach', 'coachFree'] as const)('%s: диалог кандидата идёт без Vertex', (mechanic) => {
+    expect(labels(mechanic)).not.toContain('vertex');
+  });
+
+  it('цепочки диалога и хвосты прежние', () => {
+    expect(labels('coach')).toEqual([
       'openrouter:deepseek/deepseek-v4.1-flash-1017',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
     ]);
-    expect(labels('coachFree').slice(1)).toEqual([
+    expect(labels('coachFree')).toEqual([
       'openrouter:z-ai/glm-5.3-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
     ]);
-    expect(labels('skillQuizzes').slice(1)).toEqual(labels('coach').slice(1));
+    expect(labels('skillQuizzes').slice(1)).toEqual(labels('coach'));
     expect(labels('resumeParsing').slice(1)).toEqual([
       'openai:gpt-5.6-luna',
       'openrouter:deepseek/deepseek-v4.1-flash',
@@ -114,128 +116,11 @@ describe('цепочки консультанта, квиза, резюме и �
     ]);
   });
 
-  it('потолки Vertex: хода кандидата хватает на следующую ступень', () => {
-    expect(VERTEX_CHAT_TIMEOUTS_MS.coach).toBe(30_000);
-    expect(VERTEX_CHAT_TIMEOUTS_MS.coachFree).toBe(30_000);
+  it('потолки Vertex: кандидату хватает времени на следующую ступень', () => {
     expect(VERTEX_CHAT_TIMEOUTS_MS.skillQuizzes).toBe(25_000);
     // Разбор резюме: 45 с бюджета минус 25 с потолка следующей ступени.
     expect(VERTEX_CHAT_TIMEOUTS_MS.resumeParsing).toBe(20_000);
     expect(VERTEX_CHAT_TIMEOUTS_MS.experienceBullets).toBe(30_000);
-  });
-});
-
-describe('ход консультанта: ступень Vertex', () => {
-  const input = {
-    candidateReference: 'candidate-test-001',
-    dataClass: 'personal' as const,
-    locale: 'ru-RU' as const,
-    phase: 'discovery' as const,
-    messages: [{ id: 'message-1', role: 'user' as const, content: 'Что дальше?' }],
-  };
-  const turnFrom = (model: string) =>
-    ({
-      result: { message: 'ok' } as never,
-      provider: 'openrouter' as const,
-      model,
-      responseId: 'r',
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-    }) as never;
-
-  it('запрос идёт через учёт: задача coach, low-рассуждение, запас токенов, без temperature', async () => {
-    const { gate, ledger } = gateAndLedger();
-    const calls: Call[] = [];
-    const answer = JSON.stringify({ unusable: true });
-    const stage = buildVertexCoachStage({
-      vertex,
-      fetchImpl: metered(gate, 'coach', transport(answer, calls)),
-    });
-    await stage.createTurn(input as never, 'k1').catch(() => undefined);
-    const call = calls[0]!;
-    expect(call.url).toContain('/models/gemini-3.8-flash:generateContent');
-    expect(call.headers.Authorization).toBe('Bearer tok');
-    expect(call.headers['x-goog-api-key']).toBeUndefined();
-    const config = call.body.generationConfig as Record<string, unknown>;
-    expect(config.thinkingConfig).toEqual({ thinkingLevel: 'low' });
-    expect(config.temperature).toBeUndefined();
-    expect(config.maxOutputTokens).toBeGreaterThan(3_200);
-    expect(
-      ledger.db.prepare("SELECT task, status FROM bulk_llm_spend WHERE provider='gemini'").all(),
-    ).toEqual([{ task: 'coach', status: 'settled' }]);
-  });
-
-  it('закрытые ворота: сети нет, ход отвечает следующая ступень, в провенансе Vertex', async () => {
-    const { gate } = gateAndLedger({ untilMs: 1 });
-    const inner = transport('{}');
-    const timeouts: number[] = [];
-    const called: string[] = [];
-    const provider = buildCoachChainProvider({
-      credentials,
-      vertex,
-      now: () => 1_000,
-      buildVertexStage: (task, timeoutMs) => {
-        timeouts.push(timeoutMs);
-        return buildVertexCoachStage({ vertex, fetchImpl: metered(gate, task, inner) });
-      },
-      buildStage: (route) => ({
-        async createTurn() {
-          called.push(route.model);
-          return turnFrom(route.model);
-        },
-      }),
-    });
-    const output = await provider.createTurn(input as never, '11111111-1111-4111-8111-111111111111');
-    expect(inner).not.toHaveBeenCalled();
-    expect(called).toEqual(['deepseek/deepseek-v4.1-flash-1017']);
-    expect(output.routing?.attempts[0]).toMatchObject({
-      model: 'vertex:gemini-3.8-flash',
-      status: 'failed',
-    });
-    // Очереди платного хода и Free строятся сразу, потолок у обеих 30 с.
-    expect(timeouts).toEqual([30_000, 30_000]);
-  });
-
-  it('тайм-аут Vertex: следующая ступень отвечает в том же ходе', async () => {
-    const { gate, ledger } = gateAndLedger();
-    const hanging = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : String(input);
-      if (url.includes('oauth2')) return Response.json({ access_token: 'tok', expires_in: 3600 });
-      return new Promise<Response>((_resolve, reject) => {
-        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
-      });
-    });
-    const provider = buildCoachChainProvider({
-      credentials,
-      vertex,
-      buildVertexStage: (task) =>
-        buildVertexCoachStage({ vertex, fetchImpl: metered(gate, task, hanging as never, 30) }),
-      buildStage: (route) => ({ createTurn: async () => turnFrom(route.model) }),
-    });
-    const output = await provider.createTurn(input as never, '22222222-2222-4222-8222-222222222222');
-    expect(output.model).toBe('deepseek/deepseek-v4.1-flash-1017');
-    expect(
-      ledger.db.prepare("SELECT status FROM bulk_llm_spend WHERE provider='gemini'").all(),
-    ).toEqual([{ status: 'rejected' }]);
-  });
-
-  it('ход Free идёт по цепочке Free, задача coachFree', async () => {
-    const tasks: string[] = [];
-    const provider = buildCoachChainProvider({
-      credentials,
-      vertex,
-      buildVertexStage: (task) => ({
-          createTurn: async () => {
-            tasks.push(task);
-            throw new CoachProviderError('provider_unavailable', 503, true);
-          },
-        }),
-      buildStage: (route) => ({ createTurn: async () => turnFrom(route.model) }),
-    });
-    const output = await provider.createTurn(
-      { ...input, modelTier: 'free' } as never,
-      '33333333-3333-4333-8333-333333333333',
-    );
-    expect(tasks).toEqual(['coachFree']);
-    expect(output.model).toBe('z-ai/glm-5.3-flash');
   });
 });
 

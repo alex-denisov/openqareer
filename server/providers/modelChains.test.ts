@@ -6,18 +6,16 @@ import { isMutableModelAlias } from './modelRegistry';
 const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
 
 describe('цепочки моделей по механикам (28.10)', () => {
-  it('консультант платных тарифов: Vertex → deepseek-v4.1-flash-1017 → deepseek-v4.1-flash → luna (B580, 04.11)', () => {
+  it('консультант платных тарифов: deepseek-v4.1-flash-1017 → deepseek-v4.1-flash → luna (B580)', () => {
     expect(labels('coach')).toEqual([
-      'vertex',
       'openrouter:deepseek/deepseek-v4.1-flash-1017',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
     ]);
   });
 
-  it('консультант Free: Vertex, затем glm-5.3-flash с запасной deepseek-v4.1-flash (B579, 04.11)', () => {
+  it('консультант Free: glm-5.3-flash с запасной deepseek-v4.1-flash (B579)', () => {
     expect(labels('coachFree')).toEqual([
-      'vertex',
       'openrouter:z-ai/glm-5.3-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
     ]);
@@ -75,7 +73,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
   });
 
   it('квиз по навыку профиля идёт по цепочке консультанта (блок A, пакет 3)', () => {
-    expect(labels('skillQuizzes')).toEqual(labels('coach'));
+    expect(labels('skillQuizzes')).toEqual(['vertex', ...labels('coach')]);
   });
 
   it.each(Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>)(
@@ -101,10 +99,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
       nvidia: 'nvapi-test-key-long-enough',
       anthropic: 'sk-ant-test-key-long-enough',
     });
-    // Vertex не маршрут с ключом: его строит `resolveChain` из сервисного аккаунта.
-    expect(routes.map((route) => `${route.provider}:${route.model}`)).toEqual(
-      labels('coach').slice(1),
-    );
+    expect(routes.map((route) => `${route.provider}:${route.model}`)).toEqual(labels('coach'));
   });
 
   it('ступень без ключа пропускается, остальные сохраняют порядок', () => {
