@@ -85,6 +85,7 @@ export async function createNetworkEnv() {
   const engine = {
     getMatchedVacanciesAsync: async () => [matchedVacancy('cluster-nw', NORTHWIND)],
     restore: () => ({ clusters: 0, sources: 0 }),
+    forgetHhTextRoleTarget: () => undefined,
   } as never;
   const app = await buildApp({
     config: { ...baseConfig, databasePath },
