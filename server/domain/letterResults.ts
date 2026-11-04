@@ -1,4 +1,4 @@
-import { hasCyrillic } from './letterLanguage';
+import { hasCyrillic } from './cyrillic';
 
 /**
  * Результаты абзаца «опыт» (G3b, 03.11): под каждым местом экран пишет «Для

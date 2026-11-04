@@ -1,4 +1,5 @@
 import { ontology } from '../../shared/roleOntology';
+import { hasCyrillic } from './cyrillic';
 
 /**
  * Письмо пишется на одном языке (G3 L1, 03.11). Шаблон не зовёт модель,
@@ -13,7 +14,6 @@ import { ontology } from '../../shared/roleOntology';
  * - имя кандидата — транслитерацией, как в загранпаспорте.
  */
 
-const CYRILLIC = /\p{Script=Cyrillic}/u;
 
 const LATIN: Readonly<Record<string, string>> = {
   а: 'a',
@@ -51,9 +51,7 @@ const LATIN: Readonly<Record<string, string>> = {
   я: 'ya',
 };
 
-export function hasCyrillic(text: string): boolean {
-  return CYRILLIC.test(text);
-}
+export { hasCyrillic };
 
 /** Транслитерация с сохранением регистра: «Маркет Софт» → «Market Soft». */
 export function latinize(text: string): string {
