@@ -17,6 +17,23 @@ const vertex = {
 const input = { facts: [], candidates: [] };
 const roles = Array.from({ length: 5 }, (_, index) => ({ id: `r${index}` }));
 
+describe('просьба к модели ролей (этап 1, 04.11)', () => {
+  it('просит ступени каждой линии карьеры, а не одну роль на линию', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ roles }) } }] })),
+    );
+    const model = new ChatCampaignRoleModel(
+      { provider: 'openrouter', model: 'm', apiKey: 'k', baseUrl: 'https://example.test/v1' } as never,
+      fetchImpl as unknown as typeof fetch,
+    );
+    await model.propose(input);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.stringify(JSON.parse(String(init.body)));
+    expect(body).toContain('ступени');
+    expect(body).toContain('ступень выше');
+  });
+});
+
 describe('цепочка ролей кампании (28.10)', () => {
   it('deepseek-v4-flash → glm-5.3-flash → Vertex (B580)', () => {
     const model = buildCampaignRoleModel({
