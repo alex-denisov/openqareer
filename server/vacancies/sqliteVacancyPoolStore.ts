@@ -1,5 +1,11 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
+import {
+  prunePoolInBatches,
+  pruneClustersInBatches,
+  type PruneLimits,
+  type PruneReport,
+} from './poolPruneBatches';
 import { CATALOG_LISTINGS_TABLE, CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
@@ -252,7 +258,8 @@ export type PoolWriteEvent =
       readonly transactions: number;
       readonly maxTransactionMs: number;
       readonly totalMs: number;
-    };
+    }
+  | ({ readonly kind: 'prune' } & PruneReport);
 
 export interface SqliteVacancyPoolStoreOptions {
   readonly databasePath: string;
@@ -1539,84 +1546,35 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return Number(result.changes) === 1;
   }
 
-  private pruneStaleVacancies(oldestPublishedAt: string): void {
-    const oldestMs = Date.parse(oldestPublishedAt);
-    if (!Number.isFinite(oldestMs)) return;
-    // A full-table DELETE made the first post-deploy restore hold the event
-    // loop for minutes on the production pool. Each restart may retire a
-    // bounded batch; the indexed pool read remains available throughout.
-    this.database
-      .prepare(
-        `DELETE FROM vacancy_pool
-          WHERE id IN (
-            SELECT i.id
-              FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_fresh
-             WHERE i.expired = 0
-               AND i.published_ms IS NOT NULL
-               AND i.published_ms < ?
-             LIMIT 1000
-          )`,
-      )
-      .run(oldestMs);
-  }
-
-  private pruneUnknownSources(knownSourceIds: readonly string[]): void {
-    const placeholders = knownSourceIds.map(() => '?').join(', ');
-    this.database
-      .prepare(
-        `DELETE FROM vacancy_pool
-          WHERE rowid IN (
-            SELECT rowid FROM vacancy_pool
-             WHERE source_id NOT IN (${placeholders})
-             LIMIT 1000
-          )`,
-      )
-      .run(...knownSourceIds);
-  }
-
-  private pruneOrphanIndexes(): void {
-    // Индекс следует за таблицей: строка без записи — это не запись.
-    this.database.exec(`
-      DELETE FROM vacancy_pool_index
-       WHERE rowid IN (
-         SELECT i.rowid FROM vacancy_pool_index i
-         LEFT JOIN vacancy_pool p ON p.id = i.id
-         WHERE p.id IS NULL LIMIT 1000
-       )`);
-    this.database.exec(`
-      DELETE FROM vacancy_cluster_input
-       WHERE rowid IN (
-         SELECT c.rowid FROM vacancy_cluster_input c
-         LEFT JOIN vacancy_pool_index i ON i.id = c.id
-         WHERE i.id IS NULL LIMIT 1000
-       )`);
-  }
-
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
+    if (knownSourceIds.length > 0) {
+      const report = prunePoolInBatches(
+        this.database,
+        knownSourceIds,
+        oldestPublishedAt,
+        this.pruneLimits(),
+      );
+      this.onWrite?.({ kind: 'prune', ...report });
+      return;
+    }
     this.inTransaction(() => {
-      this.pruneStaleVacancies(oldestPublishedAt);
-      const placeholders = knownSourceIds.map(() => '?').join(', ');
-      if (knownSourceIds.length === 0) {
-        this.database.exec('DELETE FROM vacancy_pool');
-        this.database.exec('DELETE FROM vacancy_pool_index');
-        this.database.exec('DELETE FROM vacancy_cluster_input');
-        this.database.exec('DELETE FROM vacancy_clusters');
-        this.database.exec('DELETE FROM catalog_entries');
-        this.database.exec('DELETE FROM catalog_entries_seen');
-        this.database.exec(
-          `UPDATE catalog_projection_state
-              SET cursor_rowid = 0, completed = 1, updated_at = ${Date.now()}
-            WHERE id = 1`,
-        );
-        this.database.exec('DELETE FROM vacancy_source_state');
-        return;
-      }
-      this.pruneUnknownSources(knownSourceIds);
-      this.pruneOrphanIndexes();
-      this.database
-        .prepare(`DELETE FROM vacancy_source_state WHERE source_id NOT IN (${placeholders})`)
-        .run(...knownSourceIds);
+      this.database.exec('DELETE FROM vacancy_pool');
+      this.database.exec('DELETE FROM vacancy_pool_index');
+      this.database.exec('DELETE FROM vacancy_cluster_input');
+      this.database.exec('DELETE FROM vacancy_clusters');
+      this.database.exec('DELETE FROM catalog_entries');
+      this.database.exec('DELETE FROM catalog_entries_seen');
+      this.database.exec(
+        `UPDATE catalog_projection_state
+            SET cursor_rowid = 0, completed = 1, updated_at = ${Date.now()}
+          WHERE id = 1`,
+      );
+      this.database.exec('DELETE FROM vacancy_source_state');
     });
+  }
+
+  private pruneLimits(): PruneLimits {
+    return { chunkRows: this.writeChunkSize, budgetMs: this.writeBudgetMs };
   }
 
   private prepareClusterUpsert() {
@@ -2723,27 +2681,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     // `updated_at` is a cheap numeric snapshot freshness guard; exact
     // lastSeenAt reconciliation belongs to the bounded maintenance pass, never
     // to the readiness path.
-    // Keep each startup pass bounded. The next scheduled maintenance pass can
-    // continue from the indexed order without turning readiness into a full
-    // table operation.
-    const result = this.database
-      .prepare(
-        `DELETE FROM vacancy_clusters
-          WHERE rowid IN (
-            SELECT rowid FROM vacancy_clusters WHERE updated_at < ? LIMIT 1000
-          )`,
-      )
-      .run(cutoffMs);
-    // Ключи без кластера — не соседи; чистятся той же порцией (B230).
-    this.database.exec(
-      `DELETE FROM vacancy_cluster_keys
-        WHERE cluster_id IN (
-          SELECT k.cluster_id FROM vacancy_cluster_keys k
-          LEFT JOIN vacancy_clusters c ON c.id = k.cluster_id
-          WHERE c.id IS NULL LIMIT 1000
-        )`,
+    const { clusters, report } = pruneClustersInBatches(
+      this.database,
+      cutoffMs,
+      this.pruneLimits(),
     );
-    return Number(result.changes);
+    this.onWrite?.({ kind: 'prune', ...report });
+    return clusters;
   }
 
   upsertCluster(cluster: VacancyCluster): void {

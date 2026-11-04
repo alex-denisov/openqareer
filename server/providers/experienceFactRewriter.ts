@@ -17,7 +17,9 @@ import {
   type FactRewriteModelOutput,
   type FactRewriteRequest,
 } from '../domain/experienceFactRewrite';
-import { chainRoutes, MODEL_CHAINS } from './modelChains';
+import { MODEL_CHAINS, resolveChain } from './modelChains';
+import type { VertexConfig } from './vertexAi';
+import { VertexJsonClient } from './vertexJson';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import {
   assertOpenRouterModelForPersonalData,
@@ -192,21 +194,38 @@ export class QueuedExperienceFactRewriter implements ExperienceFactRewriter {
 
 export function buildExperienceFactRewriter(config: {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
+  readonly vertex?: VertexConfig;
+  /** Учётный `fetch` механики `experienceBullets`; без него ступень Vertex не строится. */
+  readonly vertexFetch?: typeof fetch;
   readonly onStageFailure?: (model: string, error: unknown) => void;
 }): ExperienceFactRewriter | undefined {
-  const routes = chainRoutes(MODEL_CHAINS.experienceBullets, config.providerCredentials ?? {});
-  if (routes.length === 0) return undefined;
+  const stages = resolveChain(
+    MODEL_CHAINS.experienceBullets,
+    config.providerCredentials ?? {},
+    config.vertexFetch ? config.vertex : undefined,
+  );
+  if (stages.length === 0) return undefined;
   return new QueuedExperienceFactRewriter(
-    routes.map(
-      (route) =>
-        new LlmExperienceFactRewriter({
-          apiKey: route.apiKey,
-          model: route.model,
-          baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-          structuredOutput:
-            modelRegistry[route.provider].models.find((item) => item.id === route.model)
-              ?.structuredOutput ?? true,
-        }),
+    stages.map((stage) =>
+      stage.kind === 'vertex'
+        ? // Vertex первым (04.11): те же промпты, схемы и проверки ответа, транспорт через учёт.
+          new LlmExperienceFactRewriter({
+            apiKey: '',
+            model: stage.vertex.model,
+            client: new VertexJsonClient(stage.vertex, config.vertexFetch!).asChatClient(),
+          })
+        : new LlmExperienceFactRewriter({
+            apiKey: stage.route.apiKey,
+            model: stage.route.model,
+            baseUrl:
+              stage.route.provider === 'openai'
+                ? undefined
+                : modelRegistry[stage.route.provider].baseUrl,
+            structuredOutput:
+              modelRegistry[stage.route.provider].models.find(
+                (item) => item.id === stage.route.model,
+              )?.structuredOutput ?? true,
+          }),
     ),
     config.onStageFailure,
   );

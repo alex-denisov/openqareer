@@ -5,8 +5,14 @@ import { createBulkLlmRuntime } from '../server/providers/bulkLlmRuntime';
 import { runVacancyMechanicsStep } from '../server/domain/vacancyMechanicsLoop';
 import { formatVacancyMechanicsStats } from '../server/domain/vacancyMechanicsStats';
 import { vacancyMechanicsLanes } from '../server/domain/vacancyMechanicsLanes';
+import { createJsonLineLog } from '../server/maintenance/jsonLineLog';
+import { watchWriteHolds } from '../server/observability/sqliteWriteHolds';
 
 const BATCH_LOG_MS = 60_000;
+const log = createJsonLineLog();
+watchWriteHolds((hold) =>
+  log.warn({ ...hold, heldMs: Math.round(hold.heldMs) }, 'write-lock-held-long'),
+);
 const WORKER_LANES = vacancyMechanicsLanes(process.env);
 
 const path = process.env.OPENQAREER_DATABASE_PATH;

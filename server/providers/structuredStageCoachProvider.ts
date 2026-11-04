@@ -101,6 +101,7 @@ export class StructuredStageCoachProvider implements CoachProvider {
           runId: `structured-stage:${idempotencyKey}`.slice(0, 128),
           task: 'structured-stage',
           dataClass: 'candidate',
+          withoutVertex: true,
           prefix: INSTRUCTIONS,
           input: JSON.stringify(stageData(input)),
           maxTokens: 4096,

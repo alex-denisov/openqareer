@@ -29,8 +29,9 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('разбор резюме — только платные маршруты, luna первой', () => {
+  it('разбор резюме: Vertex, затем только платные маршруты, luna первой', () => {
     expect(labels('resumeParsing')).toEqual([
+      'vertex',
       'openai:gpt-5.6-luna',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',
@@ -72,7 +73,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
   });
 
   it('квиз по навыку профиля идёт по цепочке консультанта (блок A, пакет 3)', () => {
-    expect(labels('skillQuizzes')).toEqual(labels('coach'));
+    expect(labels('skillQuizzes')).toEqual(['vertex', ...labels('coach')]);
   });
 
   it.each(Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>)(

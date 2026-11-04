@@ -330,6 +330,33 @@ function askToRepeatMatch(
   );
 }
 
+function sendStorageBusy(
+  error: unknown,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): FastifyReply {
+  // База занята обслуживателем дольше busy_timeout (PRB-043): это не поломка,
+  // а очередь на запись — кандидату честно называем причину и просим
+  // повторить через секунды, а не «позже».
+  // PRB-041: 503 за 237 мс — это не ожидание busy_timeout; без стека путь не назвать.
+  request.log.warn(
+    {
+      errorCode: getErrorCode(error),
+      errcode: (error as Error & { errcode?: number }).errcode,
+      ...errorDiagnostics(error),
+    },
+    'request-waited-out-db-lock',
+  );
+  return sendError(
+    reply,
+    request,
+    503,
+    'storage_busy',
+    'Хранилище занято обновлением вакансий. Повторите через несколько секунд.',
+    true,
+  );
+}
+
 function handleRouteError(
   error: unknown,
   request: FastifyRequest,
@@ -356,20 +383,7 @@ function handleRouteError(
     return sendPayloadTooLarge(request, reply);
   }
 
-  if (isSqliteBusy(error)) {
-    // База занята обслуживателем дольше busy_timeout (PRB-043): это не поломка,
-    // а очередь на запись — кандидату честно называем причину и просим
-    // повторить через секунды, а не «позже».
-    request.log.warn({ errorCode: getErrorCode(error) }, 'request-waited-out-db-lock');
-    return sendError(
-      reply,
-      request,
-      503,
-      'storage_busy',
-      'Хранилище занято обновлением вакансий. Повторите через несколько секунд.',
-      true,
-    );
-  }
+  if (isSqliteBusy(error)) return sendStorageBusy(error, request, reply);
   if (error instanceof VacancyMatchUnavailable) return askToRepeatMatch(error, request, reply);
   request.log.error(
     {

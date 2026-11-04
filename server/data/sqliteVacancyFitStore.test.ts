@@ -16,6 +16,69 @@ function setup() {
 }
 const now = '2026-10-18T10:00:00.000Z';
 
+describe('a recount of one candidate (04.11)', () => {
+  // As on prod: the sweep queues the input without requirements, the worker stores under the input with them.
+  function counted(store: SqliteVacancyFitStore, candidateId = 'candidate-a') {
+    const resolved = input(candidateId);
+    const queued = { ...resolved, requirements: [] };
+    store.enqueue(queued, now);
+    const claimed = store.claim({ now })!;
+    expect(store.complete(claimed, evaluateVacancyFit(resolved, now), now, resolved)).toBe(true);
+    return { queued, resolved };
+  }
+
+  it('the result and its finished job go together, so the row is asked again and its percent stays on screen', () => {
+    const { database, store } = setup();
+    const { queued, resolved } = counted(store);
+    const other = input('candidate-b');
+    store.putCache(other, evaluateVacancyFit(other, now), now);
+    expect(store.cacheKey(queued)).not.toBe(store.cacheKey(resolved));
+
+    expect(store.assessedResults('candidate-a')).toEqual([{ key: store.cacheKey(resolved), vacancyId: 'vacancy', percent: 100, updatedAt: now }]);
+    expect(store.forgetResult(queued, resolved)).toEqual({ result: true, job: true });
+
+    expect(store.getCache(resolved)).toBeUndefined();
+    expect(store.enqueue(queued, now).status).toBe('pending');
+    expect(store.getPreviousCache(resolved)?.coveragePercent).toBe(100);
+    expect(store.getCache(other)?.coveragePercent).toBe(100);
+    database.close();
+  });
+  it('a row whose result is already gone still loses its finished job: the first batch of 04.11', () => {
+    const { database, store } = setup();
+    const { queued, resolved } = counted(store);
+    store.forgetResult(queued, resolved);
+    store.enqueue(queued, now);
+    const claimed = store.claim({ now })!;
+    store.complete(claimed, evaluateVacancyFit(resolved, now), now, resolved);
+    database.prepare('DELETE FROM vacancy_fit_cache').run();
+    expect(store.forgetResult(queued, resolved)).toEqual({ result: false, job: true });
+    expect(store.enqueue(queued, now).status).toBe('pending');
+    database.close();
+  });
+  it('leaves a job still waiting or failed and only assessed rows are listed', () => {
+    const { database, store } = setup();
+    const row = input();
+    const waiting = { ...row, requirements: [] };
+    store.enqueue(waiting, now);
+    store.putCache(row, evaluateVacancyFit(row, now), now);
+    expect(store.forgetResult(waiting, row)).toEqual({ result: true, job: false });
+    expect(store.getJobState(waiting)).toBe('pending');
+    const blocked = { ...input('candidate-c'), gates: { ...input().gates, role: { status: 'blocked', reason: 'x' } } } as VacancyFitInput;
+    store.putCache(blocked, evaluateVacancyFit(blocked, now), now);
+    expect(store.assessedResults('candidate-c')).toEqual([]);
+    database.close();
+  });
+  it('lists the newest result of a vacancy: an older profile is not read anyway', () => {
+    const { database, store } = setup();
+    const row = input();
+    store.putCache(row, evaluateVacancyFit(row, now), now);
+    const newer = { ...row, facts: [{ ...row.facts[0]!, statement: `${row.facts[0]!.statement} more` }] };
+    store.putCache(newer, evaluateVacancyFit(newer, now), '2026-10-19T10:00:00.000Z');
+    expect(store.assessedResults('candidate-a').map((item) => item.updatedAt)).toEqual(['2026-10-19T10:00:00.000Z']);
+    database.close();
+  });
+});
+
 describe('duties of the text (04.11)', () => {
   it('a row stored before the rule still reads, with its verdicts, and asks the model nothing', () => {
     const { database, store } = setup();
