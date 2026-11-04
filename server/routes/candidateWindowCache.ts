@@ -12,22 +12,10 @@ export function createCandidateWindowCache<V>(
 ) {
   const entries = new Map<string, { key: string; at: number; value: V }>();
   const candidateOf = (key: string) => key.slice(0, key.indexOf('|'));
-  const holds = (key: string, options: { readonly continuing?: boolean } = {}): boolean => {
-    const entry = entries.get(candidateOf(key));
-    if (!entry || entry.key !== key) return false;
-    return Boolean(options.continuing) || now() - entry.at < windowMs;
-  };
   return {
-    /** Would `read` with these arguments serve the stored value instead of computing? */
-    holds,
-    /**
-     * `continuing`: a later page of a read that already began. It keeps the list
-     * the read started with past the window; recomputing it mid-read blocked the
-     * event loop 0.4–3.8 s about once a minute on prod (02.11).
-     */
-    read(key: string, compute: () => V, options: { readonly continuing?: boolean } = {}): V {
+    read(key: string, compute: () => V): V {
       const entry = entries.get(candidateOf(key));
-      if (entry && holds(key, options)) return entry.value;
+      if (entry && entry.key === key && now() - entry.at < windowMs) return entry.value;
       const value = compute();
       entries.set(candidateOf(key), { key, at: now(), value });
       return value;

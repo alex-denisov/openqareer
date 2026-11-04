@@ -14,6 +14,7 @@ import { ATS_BOARD_SOURCES } from './atsBoardSources';
 import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
 import { vacancySourceRegistryView } from './vacancySourceRegistry';
 import { regionOfVacancy } from './vacancyGeography';
+import { filterInSteps, mapInSteps, runSteps, type Steps } from './yieldingSteps';
 
 export function matchedVacancyRegion(item: MatchedVacancyItem) {
   return regionOfVacancy({
@@ -64,9 +65,9 @@ function sourceFacets(
 }
 
 /** B446-r: одно место — одна запись с числом, а не строка на вакансию. */
-function placeFacets(items: readonly MatchedVacancyItem[]): MatchedVacancyPlaceFacet[] {
+function* placeFacetSteps(items: readonly MatchedVacancyItem[]): Steps<MatchedVacancyPlaceFacet[]> {
   const places = new Map<string, MatchedVacancyPlaceFacet>();
-  for (const item of items) {
+  const addPlace = (item: MatchedVacancyItem): void => {
     const location = item.cluster.canonicalLocation?.trim() || undefined;
     const country = item.cluster.companyFeatures?.country?.trim() || undefined;
     const isRemote = Boolean(item.cluster.isRemote);
@@ -74,7 +75,7 @@ function placeFacets(items: readonly MatchedVacancyItem[]): MatchedVacancyPlaceF
     const known = places.get(key);
     if (known) {
       places.set(key, { ...known, count: known.count + 1 });
-      continue;
+      return;
     }
     const region = matchedVacancyRegion(item);
     places.set(key, {
@@ -84,7 +85,8 @@ function placeFacets(items: readonly MatchedVacancyItem[]): MatchedVacancyPlaceF
       ...(region ? { region } : {}),
       count: 1,
     });
-  }
+  };
+  yield* mapInSteps(items, addPlace);
   return [...places.values()];
 }
 
@@ -178,28 +180,50 @@ export function buildMatchedVacancyFacets(
   readLevel?: MatchedVacancyLevelReader,
   registry: readonly MatchedVacancySourceDefinition[] = [],
 ): MatchedVacancyFacets {
+  return runSteps(matchedVacancyFacetSteps(items, targetRoles, readLevel, registry));
+}
+
+function* roleFacetSteps(
+  items: readonly MatchedVacancyItem[],
+  targetRoles: readonly string[],
+): Steps<MatchedVacancyFacets['roles']> {
+  const counted: Array<{ role: string; count: number }> = [];
+  for (const role of targetRoles) {
+    const rows = yield* filterInSteps(
+      items,
+      (item) =>
+        item.explanation.roleMatch !== 'none' && sameCareerRole(item.cluster.canonicalTitle, role),
+    );
+    if (rows.length > 0) counted.push({ role, count: rows.length });
+  }
+  return counted.sort((a, b) => b.count - a.count || a.role.localeCompare(b.role));
+}
+
+export function* matchedVacancyFacetSteps(
+  items: readonly MatchedVacancyItem[],
+  targetRoles: readonly string[] = [],
+  readLevel?: MatchedVacancyLevelReader,
+  registry: readonly MatchedVacancySourceDefinition[] = [],
+): Steps<MatchedVacancyFacets> {
+  const regions = yield* mapInSteps(items, matchedVacancyRegion);
+  const levels = yield* mapInSteps(items, (item) => matchedVacancyLevel(item, readLevel));
+  const roles = yield* roleFacetSteps(items, targetRoles);
+  const sources = sourceFacets(items, registry);
+  yield;
+  const sourceGroups = sourceGroupsFor(items, registry);
+  yield;
+  const places = yield* placeFacetSteps(items);
   return {
     total: items.length,
-    regions: counted(items.flatMap((item) => matchedVacancyRegion(item) ?? [])).map(
-      ({ value: id, count }) => ({ id, count }),
-    ),
+    regions: counted(regions.flatMap((region) => region ?? [])).map(({ value: id, count }) => ({
+      id,
+      count,
+    })),
     remote: items.filter((item) => item.cluster.isRemote).length,
-    levels: counted(items.map((item) => matchedVacancyLevel(item, readLevel))).map(
-      ({ value: level, count }) => ({ level, count }),
-    ),
-    roles: targetRoles
-      .map((role) => ({
-        role,
-        count: items.filter(
-          (item) =>
-            item.explanation.roleMatch !== 'none' &&
-            sameCareerRole(item.cluster.canonicalTitle, role),
-        ).length,
-      }))
-      .filter(({ count }) => count > 0)
-      .sort((a, b) => b.count - a.count || a.role.localeCompare(b.role)),
-    sources: sourceFacets(items, registry),
-    sourceGroups: sourceGroupsFor(items, registry),
-    places: placeFacets(items),
+    levels: counted(levels).map(({ value: level, count }) => ({ level, count })),
+    roles,
+    sources,
+    sourceGroups,
+    places,
   };
 }

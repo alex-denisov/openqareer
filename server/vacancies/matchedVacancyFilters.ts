@@ -10,6 +10,7 @@ import {
   matchedVacancyRegion,
   type MatchedVacancyLevelReader,
 } from './matchedVacancyFacets';
+import { filterInSteps, runSteps, type Steps } from './yieldingSteps';
 import '../../shared/geo/serverGeoDirectory';
 
 const repeated = <T extends z.ZodTypeAny>(schema: T) =>
@@ -60,6 +61,16 @@ export function filterMatchedVacancies(
   readLevel?: MatchedVacancyLevelReader,
   knownSourceIds: readonly string[] = [],
 ): MatchedVacancyItem[] {
+  return runSteps(matchedVacancyFilterSteps(items, filters, targetRoles, readLevel, knownSourceIds));
+}
+
+export function* matchedVacancyFilterSteps(
+  items: readonly MatchedVacancyItem[],
+  filters: MatchedVacancyFilters,
+  targetRoles: readonly string[],
+  readLevel?: MatchedVacancyLevelReader,
+  knownSourceIds: readonly string[] = [],
+): Steps<MatchedVacancyItem[]> {
   const sourceIds = new Set([
     ...knownSourceIds,
     ...items.flatMap((item) => item.cluster.sources.map((source) => source.sourceId)),
@@ -70,7 +81,8 @@ export function filterMatchedVacancies(
   z.array(z.string().refine((role) => targetRoles.includes(role), 'Неизвестная роль')).parse(
     filters.role,
   );
-  return items.filter(
+  return yield* filterInSteps(
+    items,
     (item) =>
       (!filters.region.length ||
         filters.region.some((region) => region === matchedVacancyRegion(item))) &&
