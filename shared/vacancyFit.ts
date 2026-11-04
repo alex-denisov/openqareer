@@ -102,6 +102,8 @@ export interface VacancyFitResult {
    * as met in the percent; the stored assessments stay as the model gave them, so no model call repeats.
    */
   readonly implied?: readonly { readonly requirementId: string; readonly role: string }[];
+  /** Lines of the text that say what the job will ask (04.11): kept with their verdicts, never counted. */
+  readonly duties?: readonly string[];
   /**
    * 03.11: location lines (an onsite city, a format) the search conditions cover. Met whatever the
    * profile city says; the stored assessments stay as the model gave them, like `implied`.

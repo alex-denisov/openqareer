@@ -5,6 +5,7 @@ import { isResumeEvidenceEligible, type ResumeEvidenceCandidate } from './resume
 import { isImportedMemoryId } from './resumeImport';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { impliedSoftRole, isCompensationLine, isSoftRequirementText } from './vacancyRequirementKind';
+import { vacancyDutyIds } from './vacancyRequirementDuty';
 import { vacancySourceText, type VacancyRequirement } from './vacancyRequirements';
 
 export interface VacancyFitFact extends ResumeEvidenceCandidate {
@@ -51,6 +52,12 @@ function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequiremen
  * («Высшее образование») made «100 %, 1 из 1». 3 hides 29 % of model-labelled vacancies (155 of 540).
  */
 export const MIN_SKILL_REQUIREMENTS = MIN_FIT_SKILL_REQUIREMENTS;
+
+/** Duties of the text, unless too few real requirements would be left to give a percent. */
+function countedDuties(description: string, requirements: readonly VacancyRequirement[]): ReadonlySet<string> {
+  const duties = vacancyDutyIds(description, requirements);
+  return requirements.filter((item) => isSkillRequirement(item) && !duties.has(item.id)).length >= MIN_SKILL_REQUIREMENTS ? duties : new Set();
+}
 
 /** Experience and model skills count; conditions (education, language, format, permit) do not. */
 export function isSkillRequirement(requirement: VacancyRequirement): boolean {
@@ -253,9 +260,10 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   // Неподтверждённые ворота не прячут процент (почти у всех профилей регион, формат и право на работу
   // не подтверждены), а остаются в результате как «неизвестно» и снижают потолок процента.
   const unknownGate = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status !== 'matched');
-  const skillIds = new Set(requirements.filter(isSkillRequirement).map((item) => item.id));
+  const duties = countedDuties(input.description, requirements);
+  const skillIds = new Set(requirements.filter((item) => isSkillRequirement(item) && !duties.has(item.id)).map((item) => item.id));
   const skills = assessments.filter((item) => skillIds.has(item.requirementId));
-  const conditions = assessments.filter((item) => !skillIds.has(item.requirementId));
+  const conditions = assessments.filter((item) => !skillIds.has(item.requirementId) && !duties.has(item.requirementId));
   const reason = blocked ? 'blocked_gate' : !requirements.length ? 'no_requirements' : skills.length < MIN_SKILL_REQUIREMENTS ? 'too_few_skills'
     : !facts.length ? 'no_eligible_facts' : !answered && !skills.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
   const required = new Set(requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor)).map((item) => item.id));
@@ -272,7 +280,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
     coveragePercent: percent(skills),
     requiredCoverage: { matched: requiredSkills.filter((item) => item.status === 'matched').length, total: requiredSkills.length, percent: percent(requiredSkills) },
-    ...(implied.length ? { implied } : {}), ...(placed.size ? { placeCovered: [...placed] } : {}),
+    ...(implied.length ? { implied } : {}), ...(duties.size ? { duties: [...duties] } : {}), ...(placed.size ? { placeCovered: [...placed] } : {}),
     coverage: count(skills), conditionCoverage: count(conditions), conditionBlocks: conditionBlocks(requirements, assessments, placed),
     // Unanswered keeps no claims: read back from the store it must stay unanswered, not 0 %.
     assessments: reason === 'assessment_unavailable' && !answered ? [] : assessments, reason,
@@ -284,7 +292,9 @@ export async function assessVacancyFit(input: VacancyFitInput, assessor?: Vacanc
   const prerequisite = evaluateVacancyFit({ ...input, assessments: undefined });
   if (prerequisite.reason !== 'assessment_unavailable' || !assessor) return prerequisite;
   try {
-    const assessments = await assessor.assess({ requirements: sourcedRequirements(input), facts: eligibleFacts(input) });
+    const sourced = sourcedRequirements(input);
+    const duties = countedDuties(input.description, sourced);
+    const assessments = await assessor.assess({ requirements: sourced.filter((item) => !duties.has(item.id)), facts: eligibleFacts(input) });
     return evaluateVacancyFit({ ...input, assessments });
   } catch {
     return prerequisite;
