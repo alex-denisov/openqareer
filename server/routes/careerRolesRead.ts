@@ -1,6 +1,7 @@
 import type { FastifyRequest } from 'fastify';
 import type { ProposedRole } from '../../shared/roleProposals';
 import { readCampaign } from './campaignContext';
+import { masterResumeDocument, withResumeCoverage } from './careerRoleResumeCoverage';
 import { careerRolesWithCandidateChoices } from './careerRoleSync';
 import type { RouteDeps } from './deps';
 import { conditionsMarketCount, finishMatchedVacancies } from './matchedVacancyRoutes';
@@ -34,7 +35,10 @@ export async function readCareerRoleContext(
   );
   return {
     context,
-    roles: careerRolesWithCandidateChoices(deps, candidateId, context, listed),
+    roles: withResumeCoverage(
+      careerRolesWithCandidateChoices(deps, candidateId, context, listed),
+      masterResumeDocument(deps, candidateId),
+    ),
     conditionsCount: conditionsMarketCount(context.matched, listed, targetRoles, campaign),
   };
 }
