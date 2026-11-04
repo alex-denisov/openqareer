@@ -1,4 +1,5 @@
 import type { SeniorityLevel } from '../levelMatcher';
+import { isChiefInformationTitle } from './chiefInformationTitle';
 
 /**
  * Уровень должности для `rulesParse` (B267 S1). Отдельная от `evaluateLevelMatch`
@@ -151,7 +152,7 @@ function hasDirectorMarker(normalized: string): boolean {
 /** Заголовок нормализуется до нижнего регистра с пробелами по краям для якорей с пробелами внутри. */
 export function inferRulesLevel(title: string): SeniorityLevel {
   const normalized = ` ${title.toLowerCase()} `;
-  if (containsAny(normalized, C_LEVEL_MARKERS)) return 'c-level';
+  if (containsAny(normalized, C_LEVEL_MARKERS) || isChiefInformationTitle(title)) return 'c-level';
   if (containsAny(normalized, VP_MARKERS)) return 'vp';
   if (isHeadOnlyMarker(normalized) || hasDirectorMarker(normalized)) return 'head';
   if (containsAny(normalized, LEAD_MARKERS) || SENIOR_X_MANAGER.test(normalized)) return 'lead';

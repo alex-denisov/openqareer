@@ -267,12 +267,10 @@
           "Head of IT Operations",
           "IT Operations Manager",
           "Head of Infrastructure",
-          "IT Director",
           "Director of IT Operations"
         ],
         "ru": [
           "Руководитель ИТ-инфраструктуры",
-          "ИТ-директор",
           "Начальник отдела эксплуатации"
         ]
       },
@@ -374,11 +372,17 @@
       "variants": {
         "en": [
           "Chief Information Officer",
-          "CIO"
+          "CIO",
+          "IT Director",
+          "Director of IT",
+          "Director of Information Technology",
+          "Information Technology Director"
         ],
         "ru": [
           "Директор по информационным технологиям",
-          "CIO"
+          "CIO",
+          "ИТ-директор",
+          "Директор по ИТ"
         ]
       },
       "adjacent": [

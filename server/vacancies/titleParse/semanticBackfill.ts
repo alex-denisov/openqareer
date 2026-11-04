@@ -5,6 +5,7 @@ import { normalizeTitleKey } from './normalizeTitleKey';
 import { LEVEL_RANK } from '../levelMatcher';
 import { isSeniorManagerLead } from './rulesLevel';
 import { gradeRangeOfTitle } from './gradeRange';
+import { isChiefInformationTitle } from './chiefInformationTitle';
 import { exactOntologyTitleKeys, rulesParse } from './rulesParse';
 
 /**
@@ -110,10 +111,44 @@ export class SemanticBackfill {
     const corrections = [
       ...ontology,
       ...this.seniorManagerCorrections().filter((correction) => !exactKeys.has(correction.key)),
+      ...this.oneRoleCorrections().filter((correction) => !exactKeys.has(correction.key)),
     ];
     if (corrections.length === 0) return 0;
     this.applyCorrections(corrections);
     return corrections.length;
+  }
+
+  /**
+   * Владелец 04.11: CIO и ИТ-директор — одна роль, служба поддержки — поддержка. Версия словаря не
+   * меняется: пересчитываются только эти названия. Модельный разбор поддержки не трогается, запись
+   * идёт лишь при расхождении, поэтому повторный проход не пишет в базу.
+   */
+  private oneRoleCorrections(): { key: string; functions: string; levelRank: number | null }[] {
+    const rows = this.database
+      .prepare(
+        `SELECT title_key, sample_title, functions, level_rank, parsed_by FROM title_parse
+         WHERE (parsed_by = 'rules' AND title_key LIKE '%поддержк%')
+           OR ((title_key LIKE '%директор%' OR title_key LIKE '%director%')
+             AND (title_key LIKE '%it%' OR title_key LIKE '%ит%'
+               OR title_key LIKE '%информац%' OR title_key LIKE '%information%'))`,
+      )
+      .all() as {
+      title_key: string;
+      sample_title: string;
+      functions: string;
+      level_rank: number | null;
+      parsed_by: string;
+    }[];
+    return rows.flatMap((row) => {
+      const chief = isChiefInformationTitle(row.sample_title);
+      if (!chief && !(row.parsed_by === 'rules' && row.title_key.includes('поддержк'))) return [];
+      const parsed = rulesParse(row.sample_title);
+      const functions = JSON.stringify(parsed.functions);
+      const same = functions === row.functions && parsed.levelRank === row.level_rank;
+      return (chief || parsed.functions.includes('support')) && !same
+        ? [{ key: row.title_key, functions, levelRank: parsed.levelRank }]
+        : [];
+    });
   }
 
   private exactOntologyCorrections(): {

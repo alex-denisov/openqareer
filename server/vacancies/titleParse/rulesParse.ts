@@ -2,6 +2,7 @@ import { ROLE_TAXONOMY, type FunctionCode } from '../../../shared/roleTaxonomy';
 import { ontology, type OntologyLevel } from '../../../shared/roleOntology';
 import { LEVEL_RANK } from '../levelMatcher';
 import { hasRulesLevelMarker, inferRulesLevel } from './rulesLevel';
+import { isChiefInformationTitle } from './chiefInformationTitle';
 import { normalizeTitleKey } from './normalizeTitleKey';
 
 /**
@@ -130,6 +131,10 @@ const ADDITIONAL_ANCHORS: readonly AnchorHit[] = [
   { code: 'it-ops', anchor: 'начальник it отдела' },
   { code: 'it-ops', anchor: 'руководитель ит отдела' },
   { code: 'it-ops', anchor: 'руководитель it отдела' },
+  { code: 'it-ops', anchor: 'it-отдела' },
+  { code: 'it-ops', anchor: 'ит-отдела' },
+  { code: 'it-ops', anchor: 'it-департамента' },
+  { code: 'it-ops', anchor: 'ит-департамента' },
   { code: 'it-ops', anchor: 'ит лидер' },
   { code: 'it-ops', anchor: 'начальник отдела эксплуатации' },
   { code: 'it-ops', anchor: 'руководитель отдела эксплуатации' },
@@ -520,11 +525,33 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
     .map(([code]) => code);
 }
 
+/**
+ * «Руководитель службы» и «Начальник отдела» в словаре — госслужба, но с поддержкой в названии
+ * это служба поддержки (04.11: hh 136956781, 138740300 не находились кандидатом по поддержке).
+ */
+function isSupportServiceTitle(variant: OntologyVariant, key: string, normalized: string): boolean {
+  return (
+    (variant.function as string) === 'public-service' &&
+    !ONTOLOGY_VARIANTS.exact.has(key) &&
+    pickTopFunctions(findAnchorHits(normalized)).includes('support')
+  );
+}
+
 export function rulesParse(title: string): RulesParseResult {
   const normalizedKey = normalizeTitleKey(title);
   const ontologyVariant = findOntologyVariant(normalizedKey);
   const normalized = ` ${title.toLowerCase()} `;
-  if (ontologyVariant) {
+  if (isChiefInformationTitle(title)) {
+    const others = pickTopFunctions(findAnchorHits(normalized)).filter(
+      (code) => code !== 'it-ops' && (code !== 'eng-mgmt' || /\bcto\b|chief tech|технический/iu.test(title)),
+    );
+    return {
+      functions: (['it-ops', ...others] as FunctionCode[]).slice(0, 2),
+      levelRank: LEVEL_RANK['c-level'],
+      roleId: 'it-ops.cio',
+    };
+  }
+  if (ontologyVariant && !isSupportServiceTitle(ontologyVariant, normalizedKey, normalized)) {
     return {
       functions: ontologyFunctions(ontologyVariant, normalizedKey, normalized),
       levelRank: levelRankForOntologyRole(title, ontologyVariant),

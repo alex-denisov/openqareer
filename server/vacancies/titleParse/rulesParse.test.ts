@@ -382,3 +382,61 @@ describe('опыт в поддержке узнаётся не только в �
     expect(rulesParse('Business Support Manager').functions).not.toContain('support');
   });
 });
+
+describe('CIO и ИТ-директор — одна роль (04.11)', () => {
+  it.each([
+    'ит директор',
+    'ИТ-директор',
+    'IT-директор',
+    'директор по ит',
+    'Директор по IT',
+    'директор по информационным технологиям',
+    'chief information officer',
+    'CIO',
+    'it director',
+    'IT Director',
+    'Director of IT',
+    'Director of Information Technology',
+    'ИТ-директор группы компаний',
+    'CIO / ИТ-директор',
+    'Senior IT Director',
+  ])('%s → it-ops, C-level', (title) => {
+    const parsed = rulesParse(title);
+    expect(parsed.functions[0]).toBe('it-ops');
+    expect(parsed.functions).not.toContain('eng-mgmt');
+    expect(parsed.levelRank).toBe(LEVEL_RANK['c-level']);
+  });
+
+  it.each([
+    ['Заместитель ИТ-директора', 'it-ops'],
+    ['Deputy IT Director', 'it-ops'],
+    ['Assistant IT Director', 'it-ops'],
+    ['Director of IT Operations', 'it-ops'],
+    ['Директор по ИТ-инфраструктуре', 'it-ops'],
+    ['Операционный директор ИТ', 'ops'],
+    ['Финансовый директор ИТ-компании', 'finance'],
+    ['Директор IT-колледжа', 'education'],
+    ['IT Audit Director', 'audit-risk'],
+  ])('%s — не первое лицо ИТ', (title) => {
+    expect(rulesParse(title).levelRank).toBeLessThan(LEVEL_RANK['c-level']);
+    void title;
+  });
+
+  it('руководитель ИТ остаётся ступенью head той же функции', () => {
+    for (const title of ['руководитель it-отдела', 'Руководитель ИТ-отдела', 'head of it', 'руководитель ит-инфраструктуры']) {
+      expect(rulesParse(title)).toMatchObject({ functions: ['it-ops'], levelRank: LEVEL_RANK.head });
+    }
+  });
+
+  it('служба технической поддержки — поддержка, а не госслужба', () => {
+    for (const title of [
+      'Руководитель службы технической поддержки',
+      'руководитель службы клиентской технической поддержки',
+      'Начальник отдела технической поддержки',
+    ]) {
+      expect(rulesParse(title).functions).toEqual(['support']);
+    }
+    expect(rulesParse('Начальник отдела государственной поддержки промышленности').functions).not.toContain('support');
+    expect(rulesParse('Руководитель службы').functions).toContain('public-service');
+  });
+});

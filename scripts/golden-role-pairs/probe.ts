@@ -13,7 +13,7 @@ import { LEVEL_RANK } from '../../server/vacancies/levelMatcher';
 import { matchGeographyOf } from '../../server/vacancies/matchGeography';
 import { buildSemanticMatchQuery } from '../../server/vacancies/semanticMatchQuery';
 import {
-  campaignFunctionLevelFloors,
+  campaignLevelWindow,
   campaignLevelFloor,
   candidateRoleFunctionCodes,
 } from '../../server/vacancies/titleParse/candidateRoleFunctions';
@@ -38,11 +38,13 @@ interface Profile {
 function selection(profile: Profile, geographic: boolean) {
   const targetLevel = deriveCandidateTargetLevel({ targetRoles: profile.roles, experience: [] });
   const geography = geographic && profile.geography ? matchGeographyOf(profile.geography as never) : undefined;
+  const levelWindow = campaignLevelWindow(profile.roles, targetLevel);
   const { sql, params } = buildSemanticMatchQuery({
     functionCodes: candidateRoleFunctionCodes(profile.roles),
     levelRank: targetLevel ? LEVEL_RANK[targetLevel] : null,
     levelFloorRank: campaignLevelFloor(profile.roles, targetLevel),
-    functionLevelFloors: campaignFunctionLevelFloors(profile.roles, targetLevel),
+    functionLevelFloors: levelWindow.floors,
+    functionSpecialistTitles: levelWindow.specialistTitles,
     ...(geography ? { geography } : {}),
     window: { fromMs: nowMs - WINDOW_DAYS * DAY_MS, toMs: nowMs },
     preferRemote: false,

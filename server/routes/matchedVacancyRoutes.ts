@@ -19,6 +19,7 @@ import type { CampaignResolution } from '../vacancies/campaign';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { maskPrivateEmployers } from '../vacancies/privateEmployerMask';
 import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { buildMatchedVacancyPage, planMatchedVacancyPages } from '../vacancies/matchedVacancyPage';
 import { createHash } from 'node:crypto';
 import { createCandidateWindowCache } from './candidateWindowCache';
@@ -41,7 +42,7 @@ import {
 } from '../vacancies/matchedPoolContext';
 import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
-import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
+import { addStoredVacancyLevels, dropOutsideLevelGate } from '../vacancies/storedVacancyLevels';
 import { matchedCatalogSummary, type CatalogTotals } from '../vacancies/matchedCatalogSummary';
 import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
@@ -98,6 +99,7 @@ export function finishMatchedVacancies(
   const withinProfile = filterVacanciesByDecisionProfile(
     roleFiltered,
     candidateStore.decisionProfileRepo.get(candidateId),
+    getCurrencyRates(),
   );
   return maskPrivateEmployers(
     applyVacancyDecisions(withinProfile, candidateStore.listVacancyDecisions(candidateId)),
@@ -192,6 +194,7 @@ function computeMatchedList(
   campaign: CampaignResolution,
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
+  targetLevel: ReturnType<typeof readTargetLevel>,
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
@@ -199,7 +202,12 @@ function computeMatchedList(
   catalogTotals?: () => CatalogTotals | undefined,
 ): MatchedList {
   const matched = decorate(
-    finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId),
+    dropOutsideLevelGate(
+      finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId),
+      targetRoles,
+      targetLevel,
+      (key) => titleParseStore.getByKey(key),
+    ),
   );
   const hypothesisSnapshot = campaign.remoteOnly
     ? snapshot.filter((item) => item.cluster.isRemote)
@@ -265,6 +273,7 @@ function buildMatchedResponse(
         campaign,
         candidateStore,
         candidateId,
+        targetLevel,
         titleParseStore,
         filters,
         sourceRegistry,

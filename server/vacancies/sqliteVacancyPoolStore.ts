@@ -33,7 +33,7 @@ import {
   type StoredHhSampleQuery,
 } from './storedHhSampleQuery';
 import {
-  campaignFunctionLevelFloors,
+  campaignLevelWindow,
   campaignLevelFloor,
   candidateRoleFunctionCodes,
 } from './titleParse/candidateRoleFunctions';
@@ -675,14 +675,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   ): { sql: string; params: SQLInputValue[] } {
     const levelFloorRank = campaignLevelFloor(candidate.targetRoles, candidate.targetLevel);
     this.noteHhTextRoleTarget(candidate.candidateId, functionCodes, levelFloorRank ?? null);
+    const levelWindow = campaignLevelWindow(candidate.targetRoles, candidate.targetLevel);
     return buildSemanticMatchQuery({
       functionCodes,
       levelRank: candidate.targetLevel ? LEVEL_RANK[candidate.targetLevel] : null,
       levelFloorRank,
-      functionLevelFloors: campaignFunctionLevelFloors(
-        candidate.targetRoles,
-        candidate.targetLevel,
-      ),
+      functionLevelFloors: levelWindow.floors,
+      functionSpecialistTitles: levelWindow.specialistTitles,
       ...(candidate.matchGeography ? { geography: candidate.matchGeography } : {}),
       ...(candidate.gradeRange ? { gradeRange: candidate.gradeRange } : {}),
       window,

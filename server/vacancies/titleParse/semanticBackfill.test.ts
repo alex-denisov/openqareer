@@ -275,6 +275,43 @@ describe('SemanticBackfill (B267 S2)', () => {
     });
   });
 
+  it('CIO и ИТ-директор приводятся к одной роли, служба поддержки — к поддержке, чужие названия не трогаются (04.11)', () => {
+    const database = poolDatabase();
+    const backfill = new SemanticBackfill(database);
+    const titles: readonly [string, string, string, number, string][] = [
+      ['v1', 'ИТ директор, Группа', '["it-ops","eng-mgmt"]', 2, 'model'],
+      ['v2', 'it director', '["it-ops"]', 2, 'rules'],
+      ['v3', 'Руководитель службы технической поддержки', '["public-service"]', 2, 'rules'],
+      ['v4', 'Директор по ИТ-инфраструктуре', '["it-ops"]', 2, 'model'],
+      ['v5', 'Руководитель отдела поддержки платформ', '["it-ops"]', 2, 'model'],
+    ];
+    const insert = database.prepare(
+      `INSERT INTO title_parse (title_key, sample_title, functions, level_rank, role_label, parsed_by, model, taxonomy_version, priority, parsed_at)
+       VALUES (?, ?, ?, ?, NULL, ?, NULL, 3, 0, 0)`,
+    );
+    for (const [id, title, functions, rank, by] of titles) {
+      addVacancy(database, id, title);
+      insert.run(title.toLowerCase(), title, functions, rank, by);
+    }
+
+    const first = backfill.step(100);
+    expect(first.ontologyCorrected).toBe(3);
+    const read = database.prepare('SELECT functions, level_rank FROM title_parse WHERE title_key = ?');
+    expect(read.get('ит директор, группа')).toMatchObject({ functions: '["it-ops"]', level_rank: 4 });
+    expect(read.get('it director')).toMatchObject({ functions: '["it-ops"]', level_rank: 4 });
+    expect(read.get('руководитель службы технической поддержки')).toMatchObject({
+      functions: '["support"]',
+      level_rank: 2,
+    });
+    expect(read.get('директор по ит-инфраструктуре')).toMatchObject({ level_rank: 2 });
+    expect(read.get('руководитель отдела поддержки платформ')).toMatchObject({
+      functions: '["it-ops"]',
+    });
+
+    const restarted = new SemanticBackfill(database);
+    expect(restarted.step(100).ontologyCorrected).toBe(0);
+  });
+
   it('Senior Manager с маркером Head остаётся Head, функции модели не меняются', () => {
     const database = poolDatabase();
     addVacancy(database, 'v1', 'Senior Manager, Head of Payments');

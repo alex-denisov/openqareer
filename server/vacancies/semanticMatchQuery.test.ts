@@ -131,6 +131,23 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['ai-junior', 'support-head']);
   });
 
+  it('рядовая строка ниже порога проходит, только если в названии роль кандидата', () => {
+    seed('senior ai consultant', 'consulting', 0, 3_000);
+    seed('консультант 1с', 'consulting', 0, 2_000);
+    seed('head of consulting', 'consulting', 2, 1_000);
+    const { sql, params } = buildSemanticMatchQuery({
+      functionCodes: ['consulting'],
+      levelRank: 3,
+      functionLevelFloors: { consulting: 2 },
+      functionSpecialistTitles: { consulting: ['ai consultant'] },
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+    const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
+    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['senior ai consultant', 'head of consulting']);
+  });
+
   describe('окно чтения при упоре в предел', () => {
     const read = (limit: number, preferRemote = false) => {
       const { sql, params } = buildSemanticMatchQuery({
