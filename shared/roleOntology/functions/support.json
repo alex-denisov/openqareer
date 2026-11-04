@@ -318,7 +318,8 @@
           "Senior Support Specialist",
           "Support Supervisor",
           "Technical Support Lead",
-          "Customer Service Team Lead"
+          "Customer Service Team Lead",
+          "Premium Support Lead"
         ],
         "ru": [
           "Руководитель группы поддержки",
@@ -326,7 +327,8 @@
           "Старший специалист поддержки",
           "Супервайзер службы поддержки",
           "Руководитель технической поддержки",
-          "Руководитель команды клиентского сервиса"
+          "Руководитель команды клиентского сервиса",
+          "Руководитель группы технической поддержки"
         ]
       },
       "adjacent": [
@@ -406,7 +408,12 @@
           "Director of Customer Service",
           "Head of Customer Success",
           "Customer Experience Director",
-          "Support Department Head"
+          "Support Department Head",
+          "Director of Customer Support",
+          "Director of Technical Support",
+          "Head of Technical Support",
+          "Technical Support Director",
+          "Head of Support"
         ],
         "ru": [
           "Руководитель службы поддержки",
@@ -414,7 +421,11 @@
           "Директор по поддержке клиентов",
           "Руководитель клиентского успеха",
           "Директор по работе с клиентами",
-          "Начальник отдела поддержки"
+          "Начальник отдела поддержки",
+          "Директор по технической поддержке",
+          "Директор по поддержке",
+          "Директор службы поддержки",
+          "Начальник департамента поддержки"
         ]
       },
       "adjacent": [
@@ -456,7 +467,13 @@
           "VP of Support",
           "Vice President, Customer Experience",
           "Senior Vice President, Customer Operations",
-          "VP Client Services"
+          "VP Client Services",
+          "VP Customer Support",
+          "VP of Customer Support",
+          "Vice President of Customer Support",
+          "VP Customer Operations",
+          "VP of Customer Operations",
+          "Vice President of Customer Operations"
         ],
         "ru": [
           "Вице-президент по клиентскому сервису",

@@ -180,6 +180,11 @@ export function rankFallbackRoles(input: RankInput): RankedRole[] {
   const targetRank = LEVEL_RANK[input.targetLevel];
   const positions = positionSupport(input, targetRank);
   const byFunction = factsByFunction(input.facts);
+  const heldFunctions = new Set(
+    [input.profileTitle ?? '', ...input.facts.filter(isPosition).map((fact) => fact.statement)].flatMap(
+      (text) => rulesParse(text).functions as readonly string[],
+    ),
+  );
   const roles = new Map(
     [
       ...[...positions.values()].map((entry) => entry.role),
@@ -188,6 +193,10 @@ export function rankFallbackRoles(input: RankInput): RankedRole[] {
   );
   const ranked = [...roles.values()]
     .filter((role) => !input.dismissed.has(role.id))
+    // A neighbour in a function with no position and no fact is another job: a CCO is not a CMO.
+    .filter(
+      (role) => heldFunctions.has(role.function) || byFunction.has(role.function as FunctionCode),
+    )
     .map((role) => {
       const facts = byFunction.get(role.function as FunctionCode) ?? [];
       const held = positions.get(role.id);

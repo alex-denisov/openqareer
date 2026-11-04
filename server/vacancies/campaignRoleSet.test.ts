@@ -312,8 +312,8 @@ describe('buildCampaignRoleSet (B267 S5)', () => {
       expect(ids).toEqual(expect.arrayContaining(['eng-mgmt.cto', 'it-ops.cio', ...modelAnswer]));
       expect(result.roles.filter((role) => role.kind === 'primary').map((role) => role.id)).toEqual(['it-ops.vp']);
       expect(result.model).toBe('gemini-test+rules');
-      // COO is already in the answer, so of the three strongest two are added.
-      expect(logged).toContainEqual([{ kept: 6, added: 2 }, 'campaign-role-model-topped-up']);
+      // COO is already in the answer, so of the four strongest three are added.
+      expect(logged).toContainEqual([{ kept: 6, added: 3 }, 'campaign-role-model-topped-up']);
     });
 
     it('роль, убранная кандидатом, не добавляется', async () => {

@@ -365,3 +365,20 @@ describe('функция поддержки клиентов (покрытие 0
     expect(rulesParse(title).functions).toContain('support');
   });
 });
+
+describe('опыт в поддержке узнаётся не только в устойчивых оборотах (04.11)', () => {
+  it.each([
+    ['Директор по технической поддержке', 'support.head'],
+    ['Директор по поддержке', 'support.head'],
+    ['Premium Support Lead', 'support.lead'],
+    ['VP Customer Support', 'support.vp'],
+    ['Vice President of Customer Operations', 'support.vp'],
+    ['Начальник департамента поддержки программных решений', 'support.head'],
+  ])('%s → %s', (title, roleId) => {
+    expect(rulesParse(title)).toMatchObject({ roleId, functions: expect.arrayContaining(['support']) });
+  });
+
+  it('чужая «поддержка» остаётся своей функцией', () => {
+    expect(rulesParse('Business Support Manager').functions).not.toContain('support');
+  });
+});
