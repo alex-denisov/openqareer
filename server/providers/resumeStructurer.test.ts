@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { FragmentedResumeStructurer } from './resumeStructurer';
 import { LlmResumeStructurer, QueuedResumeStructurer, buildResumeStructurer } from './resumeStructurer';
 import { HygienicResumeStructurer } from './hygienicResumeStructurer';
 
@@ -141,7 +142,7 @@ describe('buildResumeStructurer', () => {
       providerCredentials: { openai: 'sk-test-key', openrouter: 'sk-or-test-key' },
     });
     expect(built).toBeInstanceOf(HygienicResumeStructurer);
-    const inner = (built as HygienicResumeStructurer).inner as QueuedResumeStructurer;
+    const inner = ((built as HygienicResumeStructurer).inner as FragmentedResumeStructurer).whole as QueuedResumeStructurer;
     expect(inner).toBeInstanceOf(QueuedResumeStructurer);
     expect(inner.stages.map((stage) => stage.provenance?.model)).toEqual([
       'gpt-5.6-luna',

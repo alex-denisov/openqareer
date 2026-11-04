@@ -10,6 +10,7 @@ import {
 import type { ParsedResume } from '../../src/features/workspace/resumeParser';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import { HygienicResumeStructurer } from './hygienicResumeStructurer';
+import { mergeResumeFragments, RESUME_CONTINUED_TITLE, splitResumeIntoFragments } from './resumeFragments';
 import { chainRoutes, MODEL_CHAINS } from './modelChains';
 import { assertOpenRouterModelForPersonalData, isOpenRouterBaseUrl, openRouterRouting } from './openRouterPrivacy';
 
@@ -80,6 +81,8 @@ export interface LlmResumeStructurerOptions {
   timeoutMs?: number;
   structuredOutput?: boolean;
   client?: ChatCompletionClient;
+  /** Extra rules after the shared prompt; a fragment of a long resume needs them. */
+  extraInstructions?: string;
 }
 
 /**
@@ -92,12 +95,16 @@ export class LlmResumeStructurer implements ResumeStructurer {
   private readonly client: ChatCompletionClient;
   private readonly model: string;
   private readonly structuredOutput: boolean;
+  private readonly instructions: string;
   readonly provenance: Readonly<{ model: string; promptRevision: string }>;
 
   constructor(options: LlmResumeStructurerOptions) {
     this.model = options.model;
     this.provenance = { model: options.model, promptRevision: RESUME_STRUCTURING_PROMPT_REVISION };
     this.structuredOutput = options.structuredOutput ?? true;
+    this.instructions = options.extraInstructions
+      ? `${RESUME_STRUCTURING_INSTRUCTIONS}\n${options.extraInstructions}`
+      : RESUME_STRUCTURING_INSTRUCTIONS;
     // A resume is personal data: on OpenRouter it is never collected (28.10).
     this.openRouter = isOpenRouterBaseUrl(options.baseUrl);
     this.client =
@@ -118,7 +125,7 @@ export class LlmResumeStructurer implements ResumeStructurer {
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
-          { role: 'system', content: RESUME_STRUCTURING_INSTRUCTIONS },
+          { role: 'system', content: this.instructions },
           {
             role: 'user',
             content: `<resume-document>\n${source}\n</resume-document>`,
@@ -235,6 +242,73 @@ function hasContent(parsed: ParsedResume): boolean {
  * Returns `undefined` when no stage has a credential, so a deployment without
  * a provider key keeps working on the deterministic parser alone.
  */
+export const RESUME_FRAGMENT_INSTRUCTIONS = `This is one fragment of a longer resume; other fragments are read separately.
+- Extract only what this fragment holds; leave everything else null or empty.
+- If the fragment ends with a job heading that has no dates and no bullets, leave that job out.
+- If the fragment starts with bullets whose job heading is not in it, return them as one experience entry with the title "${RESUME_CONTINUED_TITLE}".`;
+
+/**
+ * A long resume read in parallel fragments: answer length sets the wait, and one whole answer on
+ * 16 000 characters does not fit the stage ceiling. Each fragment walks the chain on its own. One
+ * fragment without an answer fails the whole read, because the rules floor beats a resume with a
+ * silent gap in it.
+ */
+export class FragmentedResumeStructurer implements ResumeStructurer {
+  constructor(
+    readonly whole: ResumeStructurer,
+    private readonly fragment: ResumeStructurer,
+  ) {}
+
+  get provenance(): ResumeStructurer['provenance'] {
+    return this.lastReader?.provenance ?? this.whole.provenance;
+  }
+
+  private lastReader: ResumeStructurer | undefined;
+
+  async structure(sourceText: string): Promise<ParsedResume | null> {
+    const fragments = splitResumeIntoFragments(sourceText.slice(0, MAX_SOURCE_CHARACTERS));
+    if (fragments.length === 1) {
+      this.lastReader = this.whole;
+      return this.whole.structure(sourceText);
+    }
+    const parts = await Promise.all(fragments.map((text) => this.fragment.structure(text)));
+    if (parts.some((part) => part === null)) return null;
+    this.lastReader = this.fragment;
+    return mergeResumeFragments(parts as ParsedResume[], sourceText);
+  }
+}
+
+/** A fragment may hold only skills or only a contact block; only a fragment with nothing in it is a refusal (#428). */
+export class FragmentChainStructurer implements ResumeStructurer {
+  private answered: ResumeStructurer | undefined;
+
+  constructor(readonly stages: readonly ResumeStructurer[]) {}
+
+  get provenance(): ResumeStructurer['provenance'] {
+    return (this.answered ?? this.stages[0])?.provenance;
+  }
+
+  async structure(sourceText: string): Promise<ParsedResume | null> {
+    for (const stage of this.stages) {
+      const parsed = await stage.structure(sourceText).catch(() => null);
+      if (parsed !== null && carriesAnyFact(parsed)) {
+        this.answered = stage;
+        return parsed;
+      }
+    }
+    return null;
+  }
+}
+
+function carriesAnyFact(parsed: ParsedResume): boolean {
+  return (
+    hasPlaces(parsed) ||
+    hasContent(parsed) ||
+    [parsed.fullName, parsed.targetRole, parsed.about, parsed.contact.email, parsed.contact.phone].some(Boolean) ||
+    [parsed.courses, parsed.tests, parsed.recommendations, parsed.languages].some((list) => (list?.length ?? 0) > 0)
+  );
+}
+
 export function buildResumeStructurer(
   config: ResumeStructurerConfig,
 ): ResumeStructurer | undefined {
@@ -242,20 +316,24 @@ export function buildResumeStructurer(
   if (routes.length === 0) return undefined;
   // Чистка стоит на самой сборке: разобранное резюме кандидат правит в
   // «Студии» и уносит в отклики, и пути мимо неё быть не должно (B210).
+  const stage = (extraInstructions?: string) =>
+    routes.map(
+      (route) =>
+        new LlmResumeStructurer({
+          apiKey: route.apiKey,
+          model: route.model,
+          baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+          timeoutMs: RESUME_STAGE_TIMEOUT_MS,
+          structuredOutput:
+            modelRegistry[route.provider].models.find((item) => item.id === route.model)
+              ?.structuredOutput ?? true,
+          ...(extraInstructions ? { extraInstructions } : {}),
+        }),
+    );
   return new HygienicResumeStructurer({
-    inner: new QueuedResumeStructurer(
-      routes.map(
-        (route) =>
-          new LlmResumeStructurer({
-            apiKey: route.apiKey,
-            model: route.model,
-            baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-            timeoutMs: RESUME_STAGE_TIMEOUT_MS,
-            structuredOutput:
-              modelRegistry[route.provider].models.find((item) => item.id === route.model)
-                ?.structuredOutput ?? true,
-          }),
-      ),
+    inner: new FragmentedResumeStructurer(
+      new QueuedResumeStructurer(stage()),
+      new FragmentChainStructurer(stage(RESUME_FRAGMENT_INSTRUCTIONS)),
     ),
   });
 }
