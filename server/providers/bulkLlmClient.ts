@@ -4,6 +4,7 @@ import { MODEL_CHAINS } from './modelChains';
 import type { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import { maskFailureText, providerFailureText } from './failureReason';
 import { openRouterReasoning } from './openRouterReasoning';
+import type { BulkVertexStage } from './bulkVertexStage';
 /** The ledger refused a reservation: a spend limit, not a provider or answer failure (B556). */
 export const BULK_BUDGET_EXCEEDED = 'Bulk budget exceeded';
 
@@ -54,6 +55,8 @@ export interface BulkLlmClientOptions {
   /** [0, 1): the jitter of a repeat's pause; tests fix it. */
   random?: () => number;
   onEvent?: (event: BulkLlmChannelEvent) => void;
+  /** Vertex Gemini, the first stage while the credit lasts (04.11); absent without a service account. */
+  vertex?: BulkVertexStage;
 }
 /** A stage that had an outage is probed again no more often than this (27.10 incident). */
 export const PRIMARY_RETRY_AFTER_MS = 10 * 60_000;
@@ -170,6 +173,7 @@ export class BulkLlmClient {
     private readonly options: BulkLlmClientOptions = {},
   ) {
     this.stages = MODEL_CHAINS.bulk.flatMap((stage) => {
+      if (stage.provider === 'vertex') return [];
       const lane = config.lanes.find((item) => item.model === stage.model);
       return lane ? [lane] : [];
     });
@@ -259,15 +263,22 @@ export class BulkLlmClient {
     throw new Error('Unreachable');
   }
   /**
-   * The bulk chain (`MODEL_CHAINS.bulk`, owner 04.11): deepseek-v4-flash, then glm-5.3-flash. A failed
+   * The bulk chain (`MODEL_CHAINS.bulk`, owner 04.11): Vertex Gemini while the credit lasts, then deepseek-v4-flash, then glm-5.3-flash. A failed
    * call repeats on the stage with a pause and the next pinned host before the next stage is asked.
    * No stage left: `BulkChannelUnavailable`, the job waits. A spend cap or an uncertain charge stops at once.
    */
   async complete(input: BulkLlmInput): Promise<BulkLlmResult> {
-    this.validate(input);
+    const maxTokens = this.validate(input);
     if (this.stages.length === 0) throw new Error('Bulk chain has no stages');
     const startedAt = this.now();
     const accept = input.accept ?? isJsonAnswer;
+    // First stage (04.11): Vertex under its own gate. Its refusal, skip or unusable answer is silent
+    // here: OpenRouter is asked next and only its stages can make the channel unavailable.
+    const vertex = await this.options.vertex?.ask(input, maxTokens, accept);
+    if (vertex?.result) {
+      this.unavailableSince = undefined;
+      return vertex.result;
+    }
     let failure: BulkStageError | undefined;
     let rejected: Error | undefined;
     for (const lane of this.openStages()) {
@@ -276,7 +287,10 @@ export class BulkLlmClient {
       if (outcome.result) {
         this.unavailableSince = undefined;
         const fallbackReason =
-          failure?.reason ?? outcome.failure?.reason ?? (rejected || outcome.rejected ? 'answer_rejected' : undefined);
+          failure?.reason ??
+          outcome.failure?.reason ??
+          (rejected || outcome.rejected ? 'answer_rejected' : undefined) ??
+          vertex?.failure;
         return fallbackReason ? { ...outcome.result, fallbackReason } : outcome.result;
       }
       rejected = outcome.rejected ?? rejected;

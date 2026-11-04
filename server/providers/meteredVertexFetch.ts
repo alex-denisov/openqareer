@@ -48,6 +48,8 @@ export interface MeteredFetchOptions {
   /** Ceiling of one `generateContent` call; unset keeps the caller's own signal. */
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** The caller has passed the gate for this call already (it fetched a token first). */
+  preAdmitted?: boolean;
 }
 
 /**
@@ -59,7 +61,7 @@ export function createMeteredVertexFetch(options: MeteredFetchOptions): typeof f
   const { gate, task } = options;
   return async (input, init) => {
     const url = urlOf(input);
-    gate.admit(task);
+    if (!options.preAdmitted) gate.admit(task);
     if (!url.includes(GENERATE_CONTENT)) return inner(input, init);
     const model = modelOf(url);
     let response: Response;
@@ -107,15 +109,21 @@ async function book(
   response: Response,
 ): Promise<void> {
   let usage: VertexUsageMetadata | undefined;
+  let booked = model;
   try {
-    usage = ((await response.clone().json()) as { usageMetadata?: VertexUsageMetadata })
-      .usageMetadata;
+    const body = (await response.clone().json()) as {
+      usageMetadata?: VertexUsageMetadata;
+      modelVersion?: unknown;
+    };
+    usage = body.usageMetadata;
+    // The journal names the model that really answered (a dated revision of the pinned one).
+    if (typeof body.modelVersion === 'string' && body.modelVersion) booked = body.modelVersion.slice(0, 100);
   } catch {
     // The body is the caller's to judge; an unreadable one is booked at zero tokens.
   }
   const id = record(
     gate,
-    { task, model },
+    { task, model: booked },
     {
       cost: vertexCallCostUsd(usage),
       promptTokens: usage?.promptTokenCount ?? 0,
