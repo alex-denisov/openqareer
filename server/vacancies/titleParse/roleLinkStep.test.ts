@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 import { MIGRATION_35 } from '../../data/sqliteSchema';
-import { ROLE_LINK_MODEL_TITLES, RoleLinkStep } from './roleLinkStep';
+import { ROLE_LINK_MODEL_TITLES, ROLE_LINK_SPEND_CAP_USD, RoleLinkStep } from './roleLinkStep';
 
 function databaseWith(titles: readonly [string, string][]) {
   const database = new DatabaseSync(':memory:');
@@ -21,26 +21,44 @@ function databaseWith(titles: readonly [string, string][]) {
 }
 
 const roleOf = (database: DatabaseSync, key: string) =>
-  database.prepare('SELECT role_id, source, raw_role FROM vacancy_role WHERE title_key = ?').get(key);
+  database
+    .prepare('SELECT role_id, source, raw_role FROM vacancy_role WHERE title_key = ?')
+    .get(key);
 
 const answer = (items: unknown) => ({
-  complete: vi.fn(async () => ({ content: JSON.stringify({ items }), model: 'gemini-test' })),
+  complete: vi.fn(async () => ({
+    content: JSON.stringify({ items }),
+    model: 'gemini-test',
+    provider: 'gemini',
+  })),
 });
 
 describe('связь названия с ролью (малая партия)', () => {
   it('правила пишут роль без модели, модель получает только неизвестные', async () => {
-    const database = databaseWith([['it-директор', '["it-ops"]'], ['странная служба ит', '["it-ops"]']]);
+    const database = databaseWith([
+      ['it-директор', '["it-ops"]'],
+      ['странная служба ит', '["it-ops"]'],
+    ]);
     const client = answer([{ titleKey: 'странная служба ит', roleId: 'it-ops.head' }]);
     const report = await new RoleLinkStep(database, client as never).run();
 
     expect(report).toMatchObject({ rules: 1, linked: 1, failed: false });
-    expect(roleOf(database, 'it-директор')).toMatchObject({ role_id: 'it-ops.cio', source: 'rules' });
-    expect(roleOf(database, 'странная служба ит')).toMatchObject({ role_id: 'it-ops.head', source: 'model' });
+    expect(roleOf(database, 'it-директор')).toMatchObject({
+      role_id: 'it-ops.cio',
+      source: 'rules',
+    });
+    expect(roleOf(database, 'странная служба ит')).toMatchObject({
+      role_id: 'it-ops.head',
+      source: 'model',
+    });
     expect(JSON.stringify(client.complete.mock.calls[0])).not.toContain('it-директор');
   });
 
   it('ответ вне закрытого списка не становится ролью, но сохраняется для разбора', async () => {
-    const database = databaseWith([['странная служба ит', '["it-ops"]'], ['другая служба ит', '["it-ops"]']]);
+    const database = databaseWith([
+      ['странная служба ит', '["it-ops"]'],
+      ['другая служба ит', '["it-ops"]'],
+    ]);
     const client = answer([
       { titleKey: 'странная служба ит', roleId: 'придуманная.роль' },
       { titleKey: 'другая служба ит', roleId: null },
@@ -48,14 +66,19 @@ describe('связь названия с ролью (малая партия)', 
     const report = await new RoleLinkStep(database, client as never).run();
 
     expect(report).toMatchObject({ outsideList: 1, noRole: 1, linked: 0 });
-    expect(roleOf(database, 'странная служба ит')).toMatchObject({ role_id: null, raw_role: 'придуманная.роль' });
+    expect(roleOf(database, 'странная служба ит')).toMatchObject({
+      role_id: null,
+      raw_role: 'придуманная.роль',
+    });
   });
 
   it('список ролей только из функций названий пачки', async () => {
     const database = databaseWith([['странная служба ит', '["it-ops"]']]);
     const client = answer([{ titleKey: 'странная служба ит', roleId: null }]);
     await new RoleLinkStep(database, client as never).run();
-    const input = JSON.parse((client.complete.mock.calls[0] as never as [{ input: string }])[0].input) as {
+    const input = JSON.parse(
+      (client.complete.mock.calls[0] as never as [{ input: string }])[0].input,
+    ) as {
       roles: { id: string }[];
     };
     expect(input.roles.length).toBeGreaterThan(0);
@@ -65,12 +88,92 @@ describe('связь названия с ролью (малая партия)', 
   it('у потолка партии модель больше не зовётся', async () => {
     const database = databaseWith([['странная служба ит', '["it-ops"]']]);
     const insert = database.prepare(
-      `INSERT INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms) VALUES (?, NULL, 'model', 'm', NULL, 0)`,
+      `INSERT INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms) VALUES (?, NULL, 'model', 'gemini-test', NULL, 0)`,
     );
     for (let index = 0; index < ROLE_LINK_MODEL_TITLES; index += 1) insert.run(`k${index}`);
     const client = answer([]);
     await new RoleLinkStep(database, client as never).run();
     expect(client.complete).not.toHaveBeenCalled();
+  });
+
+  it('зовёт только Vertex: нет ответа, значит нет строки', async () => {
+    const database = databaseWith([['странная служба ит', '["it-ops"]']]);
+    const client = answer([{ titleKey: 'странная служба ит', roleId: null }]);
+    await new RoleLinkStep(database, client as never).run();
+    expect(
+      (client.complete.mock.calls[0] as never as [{ onlyVertex: boolean }])[0].onlyVertex,
+    ).toBe(true);
+  });
+
+  it('«нет роли» от другой модели спрашивается заново', async () => {
+    const database = databaseWith([['странная служба ит', '["it-ops"]']]);
+    database
+      .prepare(
+        `INSERT INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms) VALUES (?, NULL, 'model', 'deepseek/deepseek-v4-flash', NULL, 0)`,
+      )
+      .run('странная служба ит');
+    const client = answer([{ titleKey: 'странная служба ит', roleId: 'it-ops.head' }]);
+    await new RoleLinkStep(database, client as never).run();
+    expect(roleOf(database, 'странная служба ит')).toMatchObject({
+      role_id: 'it-ops.head',
+      source: 'model',
+    });
+  });
+
+  it('название без функции не идёт в модель, а старая связь снимается', async () => {
+    const database = databaseWith([
+      ['senior director', '["it-ops"]'],
+      ['странная служба ит', '["it-ops"]'],
+    ]);
+    database
+      .prepare(
+        `INSERT INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms) VALUES ('head', 'audit-risk.compliance-lead', 'model', 'gemini-test', NULL, 0)`,
+      )
+      .run();
+    const client = answer([{ titleKey: 'странная служба ит', roleId: null }]);
+    const report = await new RoleLinkStep(database, client as never).run();
+    expect(report.noFunction).toBe(1);
+    expect(roleOf(database, 'senior director')).toMatchObject({
+      role_id: null,
+      source: 'no-function',
+    });
+    expect(roleOf(database, 'head')).toMatchObject({ role_id: null, source: 'no-function' });
+    expect(JSON.stringify(client.complete.mock.calls[0])).not.toContain('senior director');
+  });
+
+  it('главный бухгалтер уходит из рядового и получает свою роль', async () => {
+    const database = databaseWith([['главный бухгалтер', '["finance"]']]);
+    database
+      .prepare(
+        `INSERT INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms) VALUES ('главный бухгалтер', 'finance.accountant.ic', 'model', 'gemini-test', NULL, 0)`,
+      )
+      .run();
+    await new RoleLinkStep(database, answer([]) as never).run();
+    expect(roleOf(database, 'главный бухгалтер')).toMatchObject({
+      role_id: 'finance.chief-accountant.head',
+      source: 'rules',
+    });
+  });
+
+  it('на стадии прохода потолок задаёт расход, а не число названий', async () => {
+    const database = databaseWith([['странная служба ит', '["it-ops"]']]);
+    database.exec(`CREATE TABLE bulk_llm_spend (task TEXT, cost REAL)`);
+    const spend = database.prepare(
+      `INSERT INTO bulk_llm_spend (task, cost) VALUES ('role-link', ?)`,
+    );
+    spend.run(ROLE_LINK_SPEND_CAP_USD - 1);
+    const insert = database.prepare(
+      `INSERT INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms) VALUES (?, NULL, 'model', 'gemini-test', NULL, 0)`,
+    );
+    for (let index = 0; index < ROLE_LINK_MODEL_TITLES; index += 1) insert.run(`k${index}`);
+    const client = answer([{ titleKey: 'странная служба ит', roleId: null }]);
+    const step = new RoleLinkStep(database, client as never, undefined, Date.now, 'pass');
+    await step.run();
+    expect(client.complete).toHaveBeenCalledOnce();
+
+    spend.run(1);
+    await step.run();
+    expect(client.complete).toHaveBeenCalledOnce();
   });
 
   it('сбой канала не пишет строк, и название спросят снова', async () => {

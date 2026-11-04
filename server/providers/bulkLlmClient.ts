@@ -31,6 +31,8 @@ export interface BulkLlmInput {
   patientVertex?: boolean;
   /** The model asked first after Vertex, ahead of the chain; one of `BULK_LANE_PINS`. */
   firstLane?: string;
+  /** Only the answer of Vertex counts: when it gives none the call fails and nothing later is asked. */
+  onlyVertex?: boolean;
   /**
    * Whether an answer is usable; an unusable one moves the call to the next stage of the chain.
    * Default: the answer is JSON (every bulk task asks for JSON).
@@ -294,6 +296,7 @@ export class BulkLlmClient {
       this.unavailableSince = undefined;
       return vertex.result;
     }
+    if (input.onlyVertex) throw new Error(`Vertex gave no answer: ${vertex?.failure ?? 'no_stage'}`);
     let failure: BulkStageError | undefined;
     let rejected: Error | undefined;
     for (const lane of this.stagesFor(input)) {

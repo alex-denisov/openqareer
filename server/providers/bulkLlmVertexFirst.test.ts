@@ -217,6 +217,15 @@ describe('Vertex first stage of the bulk channel', () => {
     h.runtime.close();
   });
 
+  it('a call marked onlyVertex fails instead of asking the next stage (04.11)', async () => {
+    const h = harness({}, { OPENQAREER_VERTEX_CREDIT_UNTIL: '2020-01-01' });
+    await expect(h.runtime.client!.complete({ ...req, onlyVertex: true })).rejects.toThrow(
+      /Vertex gave no answer/,
+    );
+    expect(h.openRouterCalls).toBe(0);
+    h.runtime.close();
+  });
+
   it('a closed gate makes no network call at all, token included', async () => {
     const h = harness({}, { OPENQAREER_VERTEX_CREDIT_UNTIL: '2020-01-01' });
     const result = await h.runtime.client!.complete(req);
