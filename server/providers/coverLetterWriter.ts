@@ -379,6 +379,8 @@ export interface CoverLetterWriterConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
   /** Gemini на Vertex — последняя ступень цепочки, когда настроен (B580, 29.10). */
   readonly vertex?: VertexConfig;
+  /** Metered `fetch` of the Vertex stage (04.11): books the call and enforces the daily cap. */
+  readonly vertexFetch?: typeof fetch;
 }
 
 /**
@@ -396,15 +398,16 @@ export function buildCoverLetterWriter(
   if (stages.length === 0) return undefined;
   return new QueuedCoverLetterWriter(
     stages.map((stage) =>
-      stage.kind === 'vertex' ? vertexCoverLetterWriter(stage.vertex) : writerForRoute(stage.route),
+      stage.kind === 'vertex' ? vertexCoverLetterWriter(stage.vertex, config.vertexFetch) : writerForRoute(stage.route),
     ),
     stages.map((stage) => stage.label),
   );
 }
 
-function vertexCoverLetterWriter(vertex: VertexConfig): CoverLetterWriter {
-  const tokens = new VertexTokenProvider(vertex);
+function vertexCoverLetterWriter(vertex: VertexConfig, fetchImpl?: typeof fetch): CoverLetterWriter {
+  const tokens = new VertexTokenProvider(vertex, fetchImpl);
   return new GeminiCoverLetterWriter({
+    ...(fetchImpl ? { fetchImpl } : {}),
     apiKey: '',
     model: vertex.model,
     stage: `vertex:${vertex.model}`,

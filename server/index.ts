@@ -23,6 +23,7 @@ import type {
 import type { ProviderUsage } from './providers/coachProvider';
 import { StructuredStageCoachProvider } from './providers/structuredStageCoachProvider';
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
+import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { buildCoachChainProvider } from './providers/modelChains';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
@@ -228,6 +229,7 @@ const app = await buildApp({
   roleNamer: buildRoleNamer({
     providerCredentials: config.providerCredentials,
     vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'roleNames'),
     // Названные роли переживают рестарт: без хранилища каждый деплой снова звал
     // модель и упирался в исчерпанную бесплатную квоту (INC-035, B191).
     cacheStore: roleNamingCache,
@@ -235,12 +237,14 @@ const app = await buildApp({
   campaignRoleModel: buildCampaignRoleModel({
     providerCredentials: config.providerCredentials,
     vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'campaignRoles'),
   }),
   skillQuizModel: buildSkillQuizModel({ providerCredentials: config.providerCredentials }),
   // Письмо пишет модель по своей цепочке, шаблон остаётся запасом (B266, пункт 7).
   coverLetterWriter: buildCoverLetterWriter({
     providerCredentials: config.providerCredentials,
     vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'coverLetters'),
   }),
   serveStatic: process.env.NODE_ENV === 'production',
 });

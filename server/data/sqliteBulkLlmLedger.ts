@@ -55,7 +55,7 @@ export class SqliteBulkLlmLedger {
       (
         this.db
           .prepare(
-            `SELECT COALESCE(SUM(COALESCE(cost,reserved)),0) AS total FROM bulk_llm_spend WHERE ${where}`,
+            `SELECT COALESCE(SUM(COALESCE(cost,reserved)),0) AS total FROM bulk_llm_spend WHERE ${where} AND provider<>'gemini'`,
           )
           .get(...values) as { total: number }
       ).total,
@@ -173,7 +173,7 @@ export class SqliteBulkLlmLedger {
     this.expireStaleHolds();
     const row = this.db
       .prepare(
-        'SELECT COALESCE(SUM(CASE WHEN day>=? THEN cost ELSE 0 END),0) spent,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) held FROM bulk_llm_spend',
+        'SELECT COALESCE(SUM(CASE WHEN day>=? THEN cost ELSE 0 END),0) spent,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) held FROM bulk_llm_spend WHERE provider<>\'gemini\'',
       )
       .get(monthStart()) as { spent: number; held: number };
     return {
@@ -187,7 +187,7 @@ export class SqliteBulkLlmLedger {
         : 0,
       runs: this.db
         .prepare(
-          'SELECT run_id,COALESCE(SUM(cost),0) spentUsd,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) heldUsd FROM bulk_llm_spend GROUP BY run_id ORDER BY MAX(created_at) DESC LIMIT 50',
+          'SELECT run_id,COALESCE(SUM(cost),0) spentUsd,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) heldUsd FROM bulk_llm_spend WHERE provider<>\'gemini\' GROUP BY run_id ORDER BY MAX(created_at) DESC LIMIT 50',
         )
         .all()
         .map((row) => ({
@@ -211,6 +211,46 @@ export class SqliteBulkLlmLedger {
         .prepare('SELECT kind,created_at FROM bulk_llm_events ORDER BY created_at DESC LIMIT 30')
         .all(),
     };
+  }
+  /**
+   * Vertex calls of the candidate chains (04.11) keep their own books: `provider='gemini'` rows are
+   * left out of every OpenRouter sum above, so they never close the channel or touch its latch.
+   */
+  geminiDaySpentUsd(day = new Date().toISOString().slice(0, 10)): number {
+    return Number(
+      (
+        this.db
+          .prepare(
+            "SELECT COALESCE(SUM(COALESCE(cost,reserved)),0) AS total FROM bulk_llm_spend WHERE provider='gemini' AND day=?",
+          )
+          .get(day) as { total: number }
+      ).total,
+    );
+  }
+  /** One finished Vertex call, written already settled (no hold: the cap is checked before the call). */
+  recordGeminiCall(
+    input: { task: string; model: string },
+    usage: { cost: number; promptTokens: number; cachedTokens: number; completionTokens: number },
+  ) {
+    const now = new Date().toISOString();
+    const day = now.slice(0, 10);
+    this.db
+      .prepare(
+        "INSERT INTO bulk_llm_spend(id,run_id,task,day,reserved,cost,model,provider,prompt_tokens,cached_tokens,completion_tokens,status,created_at) VALUES(?,?,?,?,?,?,?,'gemini',?,?,?,'settled',?)",
+      )
+      .run(
+        randomUUID(),
+        `gemini-${day}`,
+        input.task,
+        day,
+        usage.cost,
+        usage.cost,
+        input.model,
+        usage.promptTokens,
+        usage.cachedTokens,
+        usage.completionTokens,
+        now,
+      );
   }
   close() {
     this.db.close();

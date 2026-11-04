@@ -135,6 +135,8 @@ export class QueuedCampaignRoleModel implements CampaignRoleModel {
 export function buildCampaignRoleModel(config: {
   providerCredentials?: Partial<Record<ProviderId, string>>;
   vertex?: VertexConfig;
+  /** Metered `fetch` of the Vertex stage (04.11): books the call and enforces the daily cap. */
+  vertexFetch?: typeof fetch;
 }): CampaignRoleModel | undefined {
   const stages = resolveChain(
     MODEL_CHAINS.campaignRoles,
@@ -145,7 +147,7 @@ export function buildCampaignRoleModel(config: {
   return new QueuedCampaignRoleModel(
     stages.map((stage) =>
       stage.kind === 'vertex'
-        ? new VertexCampaignRoleModel(stage.vertex)
+        ? new VertexCampaignRoleModel(stage.vertex, config.vertexFetch)
         : new ChatCampaignRoleModel(stage.route),
     ),
   );

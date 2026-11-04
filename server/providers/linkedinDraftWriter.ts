@@ -204,8 +204,9 @@ export function buildLinkedinDraftWriter(config: CoverLetterWriterConfig): Linke
   return new QueuedLinkedinDraftWriter(
     stages.map((stage) => {
       if (stage.kind === 'vertex') {
-        const tokens = new VertexTokenProvider(stage.vertex);
+        const tokens = new VertexTokenProvider(stage.vertex, config.vertexFetch);
         return new GeminiLinkedinDraftWriter({
+          ...(config.vertexFetch ? { fetchImpl: config.vertexFetch } : {}),
           apiKey: '',
           model: stage.vertex.model,
           baseUrl: vertexPublisherBaseUrl(stage.vertex),
