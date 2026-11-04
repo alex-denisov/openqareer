@@ -15,6 +15,7 @@ import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirector
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
+import { RoleLinkStep } from './vacancies/titleParse/roleLinkStep';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
 import { describeFailure, unfreezeLiveTitles } from './vacancies/titleParse/titleFreeze';
 import {
@@ -38,6 +39,7 @@ import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
+import { pauseClusterWrite } from './vacancies/clusterWritePause';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -58,6 +60,8 @@ const composed = composeVacancyEngine({
   // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:
   // контракт B230 проверяется по `journalctl`, а не по 500 на входе (PRB-043).
   onPoolWrite: logPoolWrites(log),
+  // HTTP ждёт запись на главном потоке: между транзакциями кластеров ему нужен зазор.
+  clusterWritePause: pauseClusterWrite,
 });
 // Своё соединение для разметки смыслового индекса (B267 S2): короткие
 // транзакции порциями, WAL и busy_timeout как у остальных писателей пула.
@@ -123,6 +127,10 @@ const titleModelParser = titleBulkRuntime.client
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
+  // Откат малой партии связи с ролью: OPENQAREER_ROLE_LINK_OFF=1 останавливает вызовы модели.
+  ...(titleBulkRuntime.client && process.env.OPENQAREER_ROLE_LINK_OFF !== '1'
+    ? { roleLink: new RoleLinkStep(semanticDatabase, titleBulkRuntime.client, log) }
+    : {}),
   titleParse: new SemanticBackfill(semanticDatabase, (reason) =>
     log.error({ reason }, 'title-grade-step-failed'),
   ),

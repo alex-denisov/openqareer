@@ -33,6 +33,7 @@ import { countryCodeOf } from '../domain/geoCoordinates';
 import { countLabel } from './catalogCopy';
 import { applicantCountries } from './applicantLocations';
 import { isIndexableCard, isIndexableListing, validThroughOf } from '../seo/catalogIndexing';
+import { hasSearchRestrictedSource } from '../seo/searchRestrictedSources';
 
 /** Сколько карточек на странице каталога. */
 export const CATALOG_PAGE_SIZE = 24;
@@ -499,9 +500,8 @@ export function buildVacancyDetail(
   const language = textLanguage(
     vacancy?.fullDescription || vacancy?.description || fullDescription || entry.summary,
   );
-  const posting = indexable
-    ? jobPosting(cluster, entry, description, vacancy, language)
-    : undefined;
+  const markable = indexable && !hasSearchRestrictedSource(cluster.sources);
+  const posting = markable ? jobPosting(cluster, entry, description, vacancy, language) : undefined;
 
   return {
     entry,

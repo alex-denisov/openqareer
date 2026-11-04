@@ -1725,6 +1725,7 @@ export class MultiSourceVacancyEngine {
       loadClusterRepresentatives,
       getCluster,
       saveClusters: (clusters) => pool.saveClusters(clusters),
+      mergeClusters: (merges) => pool.mergeClusters(merges),
       deleteCluster: (id) => pool.deleteCluster(id),
     };
   }

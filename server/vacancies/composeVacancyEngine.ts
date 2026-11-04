@@ -38,6 +38,8 @@ export interface ComposeVacancyEngineOptions {
   readonly recluster?: ReclusterMode;
   /** Свидетель транзакций записи пула — журнал обслуживателя (PRB-043 срез 2). */
   readonly onPoolWrite?: (event: PoolWriteEvent) => void;
+  /** Ожидание между транзакциями записи кластеров: только у фонового процесса. */
+  readonly clusterWritePause?: () => void;
   /** Подбор по смыслу вместо LIKE (B267 S3); по умолчанию старое поведение. */
   readonly matchMode?: 'legacy' | 'semantic';
 }
@@ -73,6 +75,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
   const pool = new SqliteVacancyPoolStore({
     databasePath: options.databasePath,
     ...(options.onPoolWrite ? { onWrite: options.onPoolWrite } : {}),
+    ...(options.clusterWritePause ? { clusterWritePause: options.clusterWritePause } : {}),
     ...(options.matchMode ? { matchMode: options.matchMode } : {}),
   });
   // Настройки веера обхода hh.ru: набор ролей выбирает владелец, отметка
