@@ -21,9 +21,12 @@ export function withPositionRoles(input: {
   readonly chosenTitles: readonly string[];
   readonly language: RoleNameLanguage;
 }): NamedRole[] {
-  const grounded = [...input.chosenTitles, ...input.named.map((role) => role.title)];
-  const functions = new Set(grounded.flatMap(careerRoleFunctions));
-  const rows = new Set(grounded.map(careerRoleRowKey));
+  const namedTitles = input.named.map((role) => role.title);
+  const functions = new Set([...input.chosenTitles, ...namedTitles].flatMap(careerRoleFunctions));
+  // Только с названными: в `chosenTitles` лежат и сохранённые роли «Карьеры», среди них прошлый
+  // вывод этой функции. Сверка с ними убирала роль через чтение, и список мигал 13 ↔ 11 (04.11).
+  // Роли, выбранные самим кандидатом, снимает `careerRolesWithCandidateChoices`.
+  const rows = new Set(namedTitles.map(careerRoleRowKey));
   const added = input.positionRoles.flatMap<NamedRole>((role) => {
     const title = input.language === 'ru' ? role.titleRu : role.title;
     const row = careerRoleRowKey(title);

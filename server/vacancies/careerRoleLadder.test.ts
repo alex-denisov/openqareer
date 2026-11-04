@@ -114,6 +114,20 @@ describe('роли по должностям доходят до «Карьер�
     ).toEqual([]);
   });
 
+  it('сохранённая роль не выпадает на следующем чтении: список не мигает (04.11)', () => {
+    const read = (savedTitles: readonly string[]) =>
+      withPositionRoles({
+        named: [{ title: 'Директор по ИТ', reason: 'вёл ИТ', evidenceRefs: ['memory:2'] }],
+        positionRoles: [CTO, CIO],
+        chosenTitles: [...chosen, ...savedTitles],
+        language: 'en',
+      }).map((role) => role.title);
+    const first = read([]);
+    expect(first).toEqual(['Директор по ИТ', 'Chief Technology Officer', 'Chief Information Officer']);
+    expect(read(first)).toEqual(first);
+    expect(read(read(first))).toEqual(first);
+  });
+
   it('не меняет переданные списки', () => {
     const named = Object.freeze([]) as readonly never[];
     const positionRoles = Object.freeze([CTO]);
