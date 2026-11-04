@@ -321,7 +321,7 @@
   background: var(--career-warning-soft);
 }
 
-/* 29.10: нет в профиле — контур без заливки. */
+/* 29.10: не подтверждено — контур без заливки. */
 .vacancies-screen-skill-chip.is-missing {
   border-color: var(--career-line-strong);
   color: var(--career-text-dim);

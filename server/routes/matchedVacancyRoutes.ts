@@ -1,4 +1,4 @@
-import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readSortedFilters } from './matchedVacancySort';
@@ -14,36 +14,27 @@ import { attachMarketSalaryEstimates } from '../vacancies/marketSalary/attachMar
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { performance } from 'node:perf_hooks';
-import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { CampaignResolution } from '../vacancies/campaign';
-import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
-import { maskPrivateEmployers } from '../vacancies/privateEmployerMask';
-import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
-import { getCurrencyRates } from '../currency/cbrRates';
-import { buildMatchedVacancyPage, planMatchedVacancyPages } from '../vacancies/matchedVacancyPage';
-import { createHash } from 'node:crypto';
-import { createCandidateWindowCache } from './candidateWindowCache';
-import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
+import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import {
-  buildMatchedVacancyFacets,
-  matchedVacancySourceRegistry,
-} from '../vacancies/matchedVacancyFacets';
-import type { MatchedVacancySourceDefinition } from '../vacancies/matchedVacancyFacets';
+  finishMatchedRows,
+  readMatchedList,
+  type MatchedList,
+  type MatchedListInput,
+} from './matchedVacancyList';
+import type { StaleListServed } from './staleListCache';
+import { matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
 import {
   filterMatchedVacancies,
   type MatchedVacancyFilters,
 } from '../vacancies/matchedVacancyFilters';
-import { dropForeignRemote, markGeography } from '../vacancies/vacancyGeography';
-import { withinCareerGeography } from '../vacancies/careerGeography';
 import {
   markMatchedVacanciesStale,
   readMatchedSnapshot,
   readMatchProfile,
 } from '../vacancies/matchedPoolContext';
-import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
-import { addStoredVacancyLevels, dropOutsideLevelGate } from '../vacancies/storedVacancyLevels';
-import { matchedCatalogSummary, type CatalogTotals } from '../vacancies/matchedCatalogSummary';
+import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
 import {
@@ -52,7 +43,6 @@ import {
   vacanciesToWarm,
   withShownPageFitViews,
   withWantedCompanyOrder,
-  type MatchedOrder,
 } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, candidatePlan, withDeps } from './helpers';
@@ -76,34 +66,11 @@ export function finishMatchedVacancies(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
 ): MatchedVacancyItem[] {
-  const remoteFiltered = campaign.remoteOnly
-    ? snapshot.filter((item) => item.cluster.isRemote)
-    : snapshot;
-  const career = campaign.careerGeography;
-  // CPO 26.10: подборка идёт по городам и форматам «Карьеры», если они заданы.
-  const geographyAndRemote = career
-    ? remoteFiltered.filter((item) => withinCareerGeography(item, career))
-    : remoteFiltered;
-  const marked = markGeography(
-    targetRoles.length > 0
-      ? geographyAndRemote.filter((item) => item.explanation.roleMatch !== 'none')
-      : geographyAndRemote,
-    [
-      ...(campaign.regions.value as CandidateRegion[]),
-      ...((campaign.suggestedRegions ?? []) as CandidateRegion[]),
-    ],
-  );
-  // Подборка по «Карьере»: удалёнка из другой страны — вне условий кандидата.
-  const roleFiltered = career ? dropForeignRemote(marked) : marked;
-  // B384: жёсткие ограничения профиля — теми же функциями, что на клиенте; O(размер подборки).
-  const withinProfile = filterVacanciesByDecisionProfile(
-    roleFiltered,
-    candidateStore.decisionProfileRepo.get(candidateId),
-    getCurrencyRates(),
-  );
-  return maskPrivateEmployers(
-    applyVacancyDecisions(withinProfile, candidateStore.listVacancyDecisions(candidateId)),
-  );
+  return finishMatchedRows(snapshot, targetRoles, campaign, {
+    profile: candidateStore.decisionProfileRepo.get(candidateId),
+    decisions: candidateStore.listVacancyDecisions(candidateId),
+    rates: getCurrencyRates(),
+  });
 }
 
 /** Снимок подбора уже отобран по уровню; роль — тот же признак, что в списке (B485). */
@@ -131,158 +98,15 @@ export function conditionsMarketCount(
   };
 }
 
-/**
- * PRB-040: каждая страница дочитывания пересчитывала подборку целиком —
- * ~230 мс event loop на четыре записи, сотни страниц на чтение. Посчитанная
- * подборка живёт одно окно; страница — срез. Ключ несёт всё, из чего она
- * считается: снимок пула, фильтры, решения и ограничения кандидата.
- */
-const MATCHED_LIST_WINDOW_MS = 60_000;
-const matchedListCache = createCandidateWindowCache<MatchedList>(MATCHED_LIST_WINDOW_MS);
-const snapshotIds = new WeakMap<readonly MatchedVacancyItem[], number>();
-let nextSnapshotId = 0;
-
-function snapshotId(snapshot: readonly MatchedVacancyItem[]): number {
-  const known = snapshotIds.get(snapshot);
-  if (known !== undefined) return known;
-  nextSnapshotId += 1;
-  snapshotIds.set(snapshot, nextSnapshotId);
-  return nextSnapshotId;
-}
-
-interface MatchedList {
-  readonly filtered: readonly MatchedVacancyItem[];
-  readonly pageOffsets: readonly number[];
-  readonly facets: ReturnType<typeof buildMatchedVacancyFacets> & {
-    catalogSummary?: ReturnType<typeof matchedCatalogSummary>;
-  };
-  readonly campaignWithHypotheses: ReturnType<typeof readCampaign>;
-}
-
-function matchedListKey(
-  snapshot: readonly MatchedVacancyItem[],
-  campaign: CampaignResolution,
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-  filters: MatchedVacancyFilters,
-  order?: {
-    (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[];
-    readonly cacheKey?: string;
-  },
-): string {
-  const fingerprint = createHash('sha256')
-    .update(
-      JSON.stringify([
-        { ...filters, offset: 0 },
-        order?.cacheKey ?? '',
-        campaign.regions.value,
-        campaign.suggestedRegions ?? [],
-        campaign.remoteOnly,
-        campaign.careerGeography ?? null,
-        candidateStore.decisionProfileRepo.get(candidateId) ?? null,
-        candidateStore.listVacancyDecisions(candidateId),
-      ]),
-    )
-    .digest('hex')
-    .slice(0, 16);
-  return `${candidateId}|${snapshotId(snapshot)}|${fingerprint}`;
-}
-
-function computeMatchedList(
-  snapshot: readonly MatchedVacancyItem[],
-  targetRoles: string[],
-  campaign: CampaignResolution,
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-  targetLevel: ReturnType<typeof readTargetLevel>,
-  titleParseStore: RouteDeps['titleParseStore'],
-  filters: MatchedVacancyFilters,
-  sourceRegistry: readonly MatchedVacancySourceDefinition[],
-  decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[],
-  catalogTotals?: () => CatalogTotals | undefined,
-): MatchedList {
-  const matched = decorate(
-    dropOutsideLevelGate(
-      finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId),
-      targetRoles,
-      targetLevel,
-      (key) => titleParseStore.getByKey(key),
-    ),
-  );
-  const hypothesisSnapshot = campaign.remoteOnly
-    ? snapshot.filter((item) => item.cluster.isRemote)
-    : snapshot;
-  const counts = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
-  const readLevel = (item: MatchedVacancyItem) =>
-    titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
-  const facets = buildMatchedVacancyFacets(matched, targetRoles, readLevel, sourceRegistry);
-  const filtered = filterMatchedVacancies(
-    matched,
-    filters,
-    targetRoles,
-    readLevel,
-    sourceRegistry.map(({ id }) => id),
-  );
-  const catalogSummary = matchedCatalogSummary(
-    catalogTotals?.(),
-    roleLevelMatchCount(hypothesisSnapshot, targetRoles),
-    {
-      selectionTotal: filtered.length,
-      fitCounted: filtered.filter((item) => vacancyFitPercent(item.explanation.fitView) !== null)
-        .length,
-    },
-  );
-  return {
-    filtered,
-    pageOffsets: planMatchedVacancyPages(filtered),
-    facets: catalogSummary ? { ...facets, catalogSummary } : facets,
-    campaignWithHypotheses: readCampaign(candidateStore, candidateId, counts),
-  };
-}
-
-interface MatchedResponseOptions {
-  readonly decorate?: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[];
-  readonly catalogTotals?: () => CatalogTotals | undefined;
-  /** B580: how many rows by relevance the background sweep counts (Free: 300). */
-  readonly fitLimit?: number;
-}
-const keepOrder = (items: readonly MatchedVacancyItem[]) => [...items];
-
 function buildMatchedResponse(
-  snapshot: readonly MatchedVacancyItem[],
-  targetRoles: string[],
-  campaign: CampaignResolution,
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
+  list: MatchedList,
+  served: StaleListServed,
   targetLevel: ReturnType<typeof readTargetLevel>,
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
-  sourceRegistry: readonly MatchedVacancySourceDefinition[],
-  options: MatchedResponseOptions = {},
+  fitLimit: number,
 ) {
-  const { decorate = keepOrder, catalogTotals, fitLimit = Number.POSITIVE_INFINITY } = options;
   const pageAndExplanationsStartedAt = performance.now();
-  let listCached = true;
-  const list = matchedListCache.read(
-    matchedListKey(snapshot, campaign, candidateStore, candidateId, filters, decorate),
-    () => {
-      listCached = false;
-      return computeMatchedList(
-        snapshot,
-        targetRoles,
-        campaign,
-        candidateStore,
-        candidateId,
-        targetLevel,
-        titleParseStore,
-        filters,
-        sourceRegistry,
-        decorate,
-        catalogTotals,
-      );
-    },
-    { continuing: filters.offset > 0 },
-  );
   const page = buildMatchedVacancyPage(list.filtered, filters.offset, undefined, list.pageOffsets);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt), titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
@@ -294,7 +118,8 @@ function buildMatchedResponse(
     facets: filters.offset === 0 ? list.facets : undefined,
     ...fitWorkIds(list.filtered, filters.offset, fitLimit),
     campaignWithHypotheses: list.campaignWithHypotheses,
-    listCached,
+    listCached: served !== 'built',
+    listServed: served,
     pageAndExplanationsMs,
     titleParseAndLevelsMs: elapsedMs(titleParseStartedAt),
   };
@@ -321,6 +146,7 @@ function logMatchedTiming(
       titleParseAndLevelsMs: response.titleParseAndLevelsMs,
       pageAndExplanationsMs: response.pageAndExplanationsMs,
       listCached: response.listCached,
+      listServed: response.listServed,
       enrichmentsMs: elapsedMs(requestStartedAt),
     },
     'matched-vacancies-timing',
@@ -423,68 +249,55 @@ function preloadTopMatchedDescriptions(
     });
 }
 
-/** PRB-041: a list the cache will not serve is ordered from percents read here, in slices. */
-async function prepareListOrder(
-  listKey: string,
-  continuing: boolean,
-  snapshot: readonly MatchedVacancyItem[],
-  order: MatchedOrder,
-): Promise<{ readonly prepareMs: number; readonly prepareRows: number }> {
-  if (matchedListCache.holds(listKey, { continuing })) return { prepareMs: 0, prepareRows: 0 };
-  const startedAt = performance.now();
-  const prepareRows = await order.prepare(snapshot);
-  return { prepareMs: elapsedMs(startedAt), prepareRows };
-}
+type MatchedPageRead = Omit<MatchedListInput, 'snapshot' | 'geography' | 'catalogTotals'> & {
+  readonly confirmedSkills: string[];
+  readonly targetLevel: ReturnType<typeof readTargetLevel>;
+};
 
 async function readMatchedPage(
   engine: RouteDeps['multiSourceEngine'],
-  candidateStore: RouteDeps['candidateStore'],
-  candidateId: string,
-  confirmedSkills: string[],
-  targetRoles: string[],
-  targetLevel: ReturnType<typeof readTargetLevel>,
-  campaign: CampaignResolution,
-  titleParseStore: RouteDeps['titleParseStore'],
-  filters: MatchedVacancyFilters,
-  sourceRegistry: readonly MatchedVacancySourceDefinition[],
-  decorate: MatchedOrder,
-  fitLimit = Number.POSITIVE_INFINITY,
+  read: MatchedPageRead,
+  log: FastifyRequest['log'],
+  fitLimit: number,
 ) {
   // The profile reads before this ran in one piece with the request start (prod 03.11).
   await yieldToEventLoop();
   const startedAt = performance.now();
+  const geography = matchGeographyOf(read.campaign.careerGeography);
   const snapshot = await readMatchedSnapshot(
     engine,
-    candidateId,
-    confirmedSkills,
-    targetRoles,
-    targetLevel,
-    matchGeographyOf(campaign.careerGeography),
+    read.candidateId,
+    read.confirmedSkills,
+    read.targetRoles,
+    read.targetLevel,
+    geography,
   );
   const snapshotMs = elapsedMs(startedAt);
-  const listKey = matchedListKey(snapshot, campaign, candidateStore, candidateId, filters, decorate);
-  const prepared = await prepareListOrder(listKey, filters.offset > 0, snapshot, decorate);
+  const catalogTotals =
+    typeof engine.getCatalogTotals === 'function'
+      ? { catalogTotals: () => engine.getCatalogTotals!() }
+      : {};
+  const { list, served } = await readMatchedList(
+    { ...read, snapshot, geography, ...catalogTotals },
+    log,
+  );
+  const built = served === 'built';
   return {
     response: buildMatchedResponse(
-      snapshot,
-      targetRoles,
-      campaign,
-      candidateStore,
-      candidateId,
-      targetLevel,
-      titleParseStore,
-      filters,
-      sourceRegistry,
-      {
-        decorate,
-        fitLimit,
-        ...(typeof engine.getCatalogTotals === 'function'
-          ? { catalogTotals: () => engine.getCatalogTotals!() }
-          : {}),
-      },
+      list,
+      served,
+      read.targetLevel,
+      read.titleParseStore,
+      read.filters,
+      fitLimit,
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
-    readSteps: { snapshotMs, ...prepared },
+    readSteps: {
+      snapshotMs,
+      prepareMs: built ? list.prepareMs : 0,
+      prepareRows: built ? list.prepareRows : 0,
+      listMs: built ? list.listMs : 0,
+    },
   };
 }
 
@@ -572,16 +385,13 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
   const fitLimit = selectionFitLimit(candidatePlan(deps, candidate.id));
   const { response: orderedPage, semanticQueryAndSqlMs, readSteps } = await readMatchedPage(
     multiSourceEngine,
-    candidateStore,
-    candidate.id,
-    confirmedSkills,
-    targetRoles,
-    targetLevel,
-    campaign,
-    titleParseStore,
-    filters,
-    sourceRegistry,
-    withWantedCompanyOrder(deps, candidate.id, sort, request.log),
+    {
+      candidateStore, confirmedSkills, targetRoles, targetLevel,
+      campaign, titleParseStore, filters, sourceRegistry,
+      candidateId: candidate.id,
+      order: withWantedCompanyOrder(deps, candidate.id, sort, request.log),
+    },
+    request.log,
     fitLimit,
   );
   const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, { offset, fitLimit, request });

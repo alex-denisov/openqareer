@@ -3,7 +3,7 @@ import type { VacancyFitView } from '../../../shared/vacancyFit';
 export interface RequirementChips {
   /** Green: confirmed by a skill check (owner 29.10). */
   readonly confirmed: readonly string[];
-  /** Outline: not in the profile. */
+  /** Outline: not confirmed; the model could not tell, or the profile says otherwise (04.11). */
   readonly unconfirmed: readonly string[];
   /** Yellow: stated in the profile but not checked; counts half. */
   readonly stated?: readonly string[];
@@ -91,6 +91,14 @@ export function requirementVerdict(
   };
 }
 
+/** The skill lines the percent counted: a duty of the text (04.11) keeps its row but never counts. */
+export function countedSkillRequirements(view: VacancyFitView | undefined): readonly Requirement[] {
+  const duties = new Set(view?.result?.duties ?? []);
+  return (view?.requirements ?? []).filter(
+    (item) => isSkillRequirement(item) && !duties.has(item.id),
+  );
+}
+
 /** Requirement id → matched by a skill check (true) or only stated in the profile (false). */
 export function matchedRequirements(
   view: VacancyFitView | undefined,
@@ -120,7 +128,9 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
   const partial: string[] = [];
   const quotes: Record<string, string> = {};
   const conditions: string[] = [];
+  const duties = new Set(view.result?.duties ?? []);
   for (const requirement of view.requirements) {
+    if (duties.has(requirement.id)) continue;
     if (!isSkillRequirement(requirement)) {
       const condition = requirementChipLabel(requirement);
       if (condition && !conditions.includes(condition)) conditions.push(condition);

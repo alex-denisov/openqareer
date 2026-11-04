@@ -47,4 +47,12 @@ describe('VacancyFitVerdicts', () => {
   it('shows an implied skill as met with the role it follows from', () => {
     expect(row('Лидерство')).toContain('есть в профиле, следует из опыта: VP of Technology');
   });
+
+  it('leaves out a duty of the text: the list is what the percent counted (04.11)', () => {
+    const withDuty = {
+      ...view,
+      result: { ...view.result, duties: ['a'] },
+    } as unknown as VacancyFitView;
+    expect(renderToStaticMarkup(<VacancyFitVerdicts view={withDuty} />)).not.toContain('Kafka');
+  });
 });

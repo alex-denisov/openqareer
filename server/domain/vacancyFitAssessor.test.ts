@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createVacancyFitAssessor } from './vacancyFitAssessor';
+import { assessmentFailureLine, createVacancyFitAssessor } from './vacancyFitAssessor';
 
 describe('bounded candidate-data assessor adapter', () => {
   it('uses pinned bulk client candidate path and parses exact evidence', async () => {
@@ -49,3 +49,67 @@ describe('bounded candidate-data assessor adapter', () => {
     ]);
   });
 });
+
+describe('one bad entry does not lose the whole answer (04.11)', () => {
+  const requirements = ['a', 'b', 'c', 'd'].map((id) => ({ id, text: id, sourceQuote: id, origin: 'explicit', importance: 'high', kind: 'other', hard: false, stopFactor: false })) as never;
+  const answer = (content: unknown) => createVacancyFitAssessor({ complete: async () => ({ content: typeof content === 'string' ? content : JSON.stringify(content) }) }, 'run').assess({ requirements, facts: [] });
+
+  it('takes `statement` for a missing quote: the evaluation still checks it against the fact', async () => {
+    const rows = await answer({ assessments: [{ requirementId: 'a', status: 'matched', evidence: [{ factId: 'f', statement: 'Led teams' }] }] });
+    expect(rows).toEqual([{ requirementId: 'a', status: 'matched', evidence: [{ factId: 'f', quote: 'Led teams' }] }]);
+  });
+  it('drops a bad evidence entry and a bad row, keeps the rest', async () => {
+    const rows = await answer({ assessments: [
+      { requirementId: 'a', status: 'matched', evidence: [{ factId: 'f' }, { factId: 'f', quote: 'Led teams' }] },
+      { requirementId: 'b', status: 'yes', evidence: [] },
+      { status: 'matched', evidence: [] },
+      { requirementId: 'c', status: 'unknown' },
+    ] });
+    expect(rows).toEqual([
+      { requirementId: 'a', status: 'matched', evidence: [{ factId: 'f', quote: 'Led teams' }] },
+      { requirementId: 'c', status: 'unknown', evidence: [] },
+    ]);
+  });
+  it('an answer with no usable row is invalid and moves down the chain', async () => {
+    let accepted: boolean | undefined;
+    const assessor = createVacancyFitAssessor({ complete: async (input) => {
+      const content = JSON.stringify({ assessments: [{ status: 'matched' }] });
+      accepted = input.accept?.(content);
+      return { content };
+    } }, 'run');
+    await expect(assessor.assess({ requirements, facts: [] })).rejects.toThrow('invalid vacancy fit assessment');
+    expect(accepted).toBe(false);
+  });
+});
+
+describe('the journal says why a call failed (04.11)', () => {
+  it('names the failure and never prints the answer a JSON error quotes', () => {
+    let error: unknown;
+    try { JSON.parse('{"quote": "PRIVATE профиль'); } catch (caught) { error = caught; }
+    const line = assessmentFailureLine('v1', error);
+    expect(line).toBe('fit-assessment-failed vacancy=v1 kind=invalid_json');
+    expect(line).not.toContain('PRIVATE');
+  });
+  it('keeps the provider status and masks a key', () => {
+    const line = assessmentFailureLine('v1', new Error(`status 429: quota key=${'x'.repeat(40)} ${'y'.repeat(400)}`));
+    expect(line).toContain('kind=call_failed detail=status 429: quota');
+    expect(line).not.toContain('x'.repeat(40));
+    expect(line.length).toBeLessThan(220);
+  });
+});
+
+describe('stray words inside the JSON (04.11: 5 of 42 Vertex answers, all finished normally)', () => {
+  const requirements = ['a', 'b'].map((id) => ({ id, text: id, sourceQuote: id, origin: 'explicit', importance: 'high', kind: 'other', hard: false, stopFactor: false })) as never;
+  const answer = (content: string) => createVacancyFitAssessor({ complete: async () => ({ content }) }, 'run').assess({ requirements, facts: [] });
+  const row = (id: string) => `{"requirementId":"${id}","status":"matched","evidence":[{"factId":"f","quote":"a } brace"}]}`;
+
+  it('reads every row when all of them survive', async () => {
+    const rows = await answer(`{"assessments":[${row('a')} syndromes: [], ${row('b')} any]}`);
+    expect(rows.map((item) => item.requirementId)).toEqual(['a', 'b']);
+    expect(rows[0]!.evidence[0]!.quote).toBe('a } brace');
+  });
+  it('a cut answer stays invalid: the missing rows would read as gaps', async () => {
+    await expect(answer(`{"assessments":[${row('a')}, {"requirementId":"b","sta`)).rejects.toThrow(SyntaxError);
+  });
+});
+

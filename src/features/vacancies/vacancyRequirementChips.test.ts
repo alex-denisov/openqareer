@@ -278,3 +278,14 @@ describe('conditionCoverageWithGeo', () => {
     });
   });
 });
+
+describe('duties of the text (04.11)', () => {
+  it('a duty is left out of the chips: the card lists what the percent counted', () => {
+    const requirement = (id: string, label: string) => ({ id, text: label, label, skill: true, kind: 'other' });
+    const view = {
+      requirements: [requirement('a', 'Выезды к клиентам'), requirement('b', 'Salesforce')],
+      result: { assessments: [{ requirementId: 'a', status: 'unknown', evidence: [] }, { requirementId: 'b', status: 'unknown', evidence: [] }], duties: ['a'] },
+    } as unknown as Parameters<typeof fitRequirementChips>[0];
+    expect(fitRequirementChips(view)?.unconfirmed).toEqual(['Salesforce']);
+  });
+});

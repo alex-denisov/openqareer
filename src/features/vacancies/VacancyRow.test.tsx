@@ -380,7 +380,8 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     const html = render({ item: withFit, layout: 'screen', isSelected: true });
     expect(html).toContain('Есть в профиле');
     expect(html).toContain('Частично');
-    expect(html).toContain('Нет в профиле');
+    expect(html).toContain('Не подтверждено');
+    expect(html).not.toContain('Нет в профиле');
     expect(html).toMatch(/Бюджетирование[^]*есть в профиле[^]*IT budget management/u);
     expect(html).toMatch(/SAP[^]*частично[^]*ERP rollout/u);
     expect(html).toContain('Посчитано всего по 3 требованиям');
