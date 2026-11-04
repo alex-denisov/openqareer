@@ -1,5 +1,6 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { sameCareerRole } from './careerRoleKey';
+import { filterInSteps, runSteps, type Steps } from './yieldingSteps';
 
 /**
  * Вакансий на роль кампании — вход порога значимости (`annotateRoleHypotheses`,
@@ -12,11 +13,19 @@ export function countMatchedVacanciesByRole(
   matched: readonly MatchedVacancyItem[],
   roles: readonly string[],
 ): Record<string, number> {
+  return runSteps(matchedRoleCountSteps(matched, roles));
+}
+
+export function* matchedRoleCountSteps(
+  matched: readonly MatchedVacancyItem[],
+  roles: readonly string[],
+): Steps<Record<string, number>> {
   const counts: Record<string, number> = {};
   for (const role of roles) {
-    counts[role] = matched.filter((item) =>
+    const rows = yield* filterInSteps(matched, (item) =>
       sameCareerRole(item.cluster.canonicalTitle, role),
-    ).length;
+    );
+    counts[role] = rows.length;
   }
   return counts;
 }

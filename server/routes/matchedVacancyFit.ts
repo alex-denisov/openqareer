@@ -88,12 +88,17 @@ export function withVacancyFitOrder(
     prepared = true;
     return rows;
   };
-  return Object.assign(order, { prepare });
+  return Object.assign(order, { prepare, fitStamp: stamp });
 }
 
 /** Порядок подборки и то, от чего он зависит помимо выдачи (ключ кэша списка). */
 export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[]) & {
+  /** What the candidate chose about the order: a change is seen at once, never served from the old list. */
   readonly cacheKey: string;
+  /** What landed from the sweep: a change rebuilds the list behind the reader. */
+  readonly dataKey: string;
+  /** The profile the percents were counted for. */
+  readonly fitStamp: string;
   /** Reads the percents the order needs without holding the event loop; call before the order. Resolves to the rows read. */
   readonly prepare: (items: readonly MatchedVacancyItem[]) => Promise<number>;
 };
@@ -109,18 +114,18 @@ export function withWantedCompanyOrder(
   log?: FitOrderLog,
 ): MatchedOrder {
   const byFit = withVacancyFitOrder(deps, candidateId, sort, log);
-  if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '' });
+  if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '', dataKey: '' });
   const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
   // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
+  const cacheKey = [...wanted].sort().join(',');
   // 01.11: a result that landed must reach the ordered list too, not wait out the list window.
-  const scored = deps.vacancyMechanics?.cachedVacancyIds(candidateId).size ?? 0;
-  const cacheKey = [...wanted].sort().join(',') + (scored > 0 ? `|${scored}` : '');
+  const dataKey = String(deps.vacancyMechanics?.cachedVacancyIds(candidateId).size ?? 0);
   return Object.assign(
     (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
       wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
         compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
       ),
-    { cacheKey, prepare: byFit.prepare },
+    { cacheKey, dataKey, prepare: byFit.prepare, fitStamp: byFit.fitStamp },
   );
 }
 

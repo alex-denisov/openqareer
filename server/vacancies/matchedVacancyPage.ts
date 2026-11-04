@@ -7,6 +7,7 @@ import { isKnownCountry } from '../domain/geoCoordinates';
 import { getCompanyRegistry } from '../domain/companyRegistry';
 import { lookupLocationCoordinates } from '../domain/geoCoordinates';
 import type { Company } from '../domain/company';
+import { runSteps, type Steps } from './yieldingSteps';
 
 /**
  * Подбор отдаётся страницами, помещающимися в один ответ.
@@ -205,6 +206,13 @@ export function planMatchedVacancyPages(
   all: readonly MatchedVacancyItem[],
   budgetBytes: number = MATCHED_PAGE_BYTE_BUDGET,
 ): number[] {
+  return runSteps(matchedPagePlanSteps(all, budgetBytes));
+}
+
+export function* matchedPagePlanSteps(
+  all: readonly MatchedVacancyItem[],
+  budgetBytes: number = MATCHED_PAGE_BYTE_BUDGET,
+): Steps<number[]> {
   const offsets: number[] = [0];
   let start = 0;
 
@@ -216,6 +224,7 @@ export function planMatchedVacancyPages(
     if (taken === 0) break;
     start += taken;
     if (start < all.length) offsets.push(start);
+    yield;
   }
 
   return offsets;
