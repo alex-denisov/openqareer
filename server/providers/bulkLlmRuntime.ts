@@ -9,6 +9,31 @@ const OWNER_ALERTS = {
     'openqareer: фоновые модели недоступны больше 30 минут. Задачи ждут в очереди и досчитаются сами после восстановления.',
 } as const;
 
+/** One Telegram message to the owner; no token or chat id means silence. Failures reach the journal only. */
+export function sendOwnerTelegram(
+  env: NodeJS.ProcessEnv,
+  transport: typeof fetch,
+  text: string,
+): void {
+  const token = env.OPENQAREER_TELEGRAM_BOT_TOKEN?.trim();
+  const chatId = env.OPENQAREER_TELEGRAM_OWNER_CHAT_ID?.trim();
+  if (!token || !chatId) return;
+  transport(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text }),
+    signal: AbortSignal.timeout(10_000),
+  })
+    .then((response) => {
+      if (!response.ok) console.error(`bulk-llm owner alert status ${response.status}`);
+    })
+    .catch((error: unknown) => {
+      console.error(
+        `bulk-llm owner alert failed: ${error instanceof Error ? error.name : 'unknown'}`,
+      );
+    });
+}
+
 /**
  * Journal lines for a channel switch and a Telegram message to the owner when the channel cannot
  * work (27.10: 9 hours of 402 went unnoticed). `firstToday` keeps each to one message a UTC day
@@ -25,23 +50,8 @@ export function channelEventReporter(
       return;
     }
     console.error(`bulk-llm ${event.kind} reason=${event.reason}`);
-    const token = env.OPENQAREER_TELEGRAM_BOT_TOKEN?.trim();
-    const chatId = env.OPENQAREER_TELEGRAM_OWNER_CHAT_ID?.trim();
-    if (!token || !chatId || !firstToday(`owner_alert_${event.kind}`)) return;
-    transport(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: OWNER_ALERTS[event.kind] }),
-      signal: AbortSignal.timeout(10_000),
-    })
-      .then((response) => {
-        if (!response.ok) console.error(`bulk-llm owner alert status ${response.status}`);
-      })
-      .catch((error: unknown) => {
-        console.error(
-          `bulk-llm owner alert failed: ${error instanceof Error ? error.name : 'unknown'}`,
-        );
-      });
+    if (!firstToday(`owner_alert_${event.kind}`)) return;
+    sendOwnerTelegram(env, transport, OWNER_ALERTS[event.kind]);
   };
 }
 
@@ -63,8 +73,7 @@ export function createBulkLlmRuntime(options: {
           now: options.now,
           random: options.random,
           onEvent:
-            options.onEvent ??
-            channelEventReporter(env, fetch, (kind) => ledger.firstToday(kind)),
+            options.onEvent ?? channelEventReporter(env, fetch, (kind) => ledger.firstToday(kind)),
         })
       : null,
     ledger,
