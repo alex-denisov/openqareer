@@ -1,4 +1,5 @@
 import type { SeniorityLevel } from '../levelMatcher';
+import { isChiefInformationTitle } from './chiefInformationTitle';
 
 /**
  * Уровень должности для `rulesParse` (B267 S1). Отдельная от `evaluateLevelMatch`
@@ -116,9 +117,16 @@ function containsAny(normalizedTitle: string, markers: readonly string[]): boole
   });
 }
 
+/** «VP» в названии продукта или исследования: Yokogawa Centum VP, We-RISE VP Study. */
+const NOT_A_VICE_PRESIDENT = /centum vp|vp study/gu;
+
+function normalizedForMarkers(title: string): string {
+  return ` ${title.toLowerCase().replace(NOT_A_VICE_PRESIDENT, ' ')} `;
+}
+
 /** Отличает явно названный уровень от штатного IC-фолбэка. */
 export function hasRulesLevelMarker(title: string): boolean {
-  const normalized = ` ${title.toLowerCase()} `;
+  const normalized = normalizedForMarkers(title);
   return (
     SENIOR_X_MANAGER.test(normalized) ||
     [C_LEVEL_MARKERS, VP_MARKERS, HEAD_MARKERS, LEAD_MARKERS].some((markers) =>
@@ -150,8 +158,8 @@ function hasDirectorMarker(normalized: string): boolean {
 
 /** Заголовок нормализуется до нижнего регистра с пробелами по краям для якорей с пробелами внутри. */
 export function inferRulesLevel(title: string): SeniorityLevel {
-  const normalized = ` ${title.toLowerCase()} `;
-  if (containsAny(normalized, C_LEVEL_MARKERS)) return 'c-level';
+  const normalized = normalizedForMarkers(title);
+  if (containsAny(normalized, C_LEVEL_MARKERS) || isChiefInformationTitle(title)) return 'c-level';
   if (containsAny(normalized, VP_MARKERS)) return 'vp';
   if (isHeadOnlyMarker(normalized) || hasDirectorMarker(normalized)) return 'head';
   if (containsAny(normalized, LEAD_MARKERS) || SENIOR_X_MANAGER.test(normalized)) return 'lead';

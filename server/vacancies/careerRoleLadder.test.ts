@@ -27,8 +27,11 @@ const CIO = auto(
 );
 
 describe('строка роли на «Карьере»: первое лицо отдельно от директора (04.11)', () => {
-  it('CIO и «Директор по ИТ» — разные строки', () => {
-    expect(careerRoleRowKey('Chief Information Officer')).not.toBe(careerRoleRowKey('Директор по ИТ'));
+  it('CIO и «Директор по ИТ» — одна строка: равны по смыслу (владелец 04.11)', () => {
+    expect(careerRoleRowKey('Chief Information Officer')).toBe(careerRoleRowKey('Директор по ИТ'));
+    expect(careerRoleRowKey('IT Director')).toBe(careerRoleRowKey('ИТ-директор'));
+    expect(careerRoleRowKey('Director of IT')).toBe(careerRoleRowKey('ИТ-директор'));
+    expect(careerRoleRowKey('Head of IT')).not.toBe(careerRoleRowKey('ИТ-директор'));
   });
 
   it('CTO и VP of Engineering — разные строки', () => {
@@ -43,7 +46,7 @@ describe('строка роли на «Карьере»: первое лицо �
   });
 
   it('ниже первого лица ключ строки совпадает с ключом роли', () => {
-    for (const title of ['Директор по ИТ', 'Head of AI', 'VP of Engineering']) {
+    for (const title of ['Head of IT', 'Head of AI', 'VP of Engineering']) {
       expect(careerRoleRowKey(title)).toBe(careerRoleKey(title));
     }
   });
@@ -123,7 +126,7 @@ describe('роли по должностям доходят до «Карьер�
         language: 'en',
       }).map((role) => role.title);
     const first = read([]);
-    expect(first).toEqual(['Директор по ИТ', 'Chief Technology Officer', 'Chief Information Officer']);
+    expect(first).toEqual(['Директор по ИТ', 'Chief Technology Officer']);
     expect(read(first)).toEqual(first);
     expect(read(read(first))).toEqual(first);
   });

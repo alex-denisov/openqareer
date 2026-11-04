@@ -212,7 +212,7 @@ describe('роли рынка — только в направлениях оп�
 });
 
 describe('CTO и CIO рядом с выбранными ролями той же функции (04.11)', () => {
-  const titles = ['VP of Engineering / Technology', 'Директор по ИТ'];
+  const titles = ['VP of Engineering / Technology', 'VP of IT'];
   const chosen = { roles: titles, regions: [], revision: 1, updatedAt: 'x' };
   const top = [role('Технический директор (CTO)'), role('Директор по информационным технологиям (CIO)')];
 
@@ -223,6 +223,17 @@ describe('CTO и CIO рядом с выбранными ролями той же
       { proposals: top, matched: [], confirmedSkills: [] } as unknown as RoleContext,
     );
     expect(shown.map((item) => item.title)).toEqual([...titles, ...top.map((item) => item.title)]);
+  });
+
+  it('CIO не дублирует выбранного директора по ИТ: одна роль', () => {
+    const shown = careerRolesWithCandidateChoices(
+      {
+        candidateStore: fakeStore({ campaign: { ...chosen, roles: ['Директор по ИТ'] } }) as never,
+      },
+      'c1',
+      { proposals: top, matched: [], confirmedSkills: [] } as unknown as RoleContext,
+    );
+    expect(shown.map((item) => item.title)).toEqual(['Директор по ИТ', top[0].title]);
   });
 
   it('сохраняются в роли подбора', () => {

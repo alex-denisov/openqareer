@@ -33,9 +33,21 @@
     {
       "id": "adenisov-test-live",
       "label": "VP Technology / Operations / Support (adenisov.test)",
+      "searchLocations": ["Москва", "ОАЭ", "Удалённо из РФ"],
       "roles": ["VP of Engineering / Technology", "Chief Operating Officer", "Head of IT Service Management", "Chief Technology Officer", "Head of Customer Support", "VP of Operations", "Head of AI", "AI Solutions Architect", "Chief Information Officer", "IT Director", "Customer Support Director", "AI Consultant", "Transformation Director"],
       "geography": { "places": ["Москва", "ОАЭ"], "remote": true, "remoteRegions": ["ru"] },
       "must": [
+        ["src-hh-search:137069507", "ИТ директор"],
+        ["src-hh-search:136175866", "Директор по ИТ"],
+        ["src-hh-search:139134709", "Директор по информационным технологиям"],
+        ["src-hh-search:138293717", "Chief Information Officer"],
+        ["src-hh-search:139025591", "IT Director"],
+        ["src-linkedin-guest:4483455980", "Director of IT"],
+        ["src-hh-search:136728162", "Руководитель IT-отдела"],
+        ["src-linkedin-guest:4487224990", "Head of IT"],
+        ["src-hh-search:136956781", "Руководитель службы клиентской технической поддержки"],
+        ["src-hh-search:138740300", "Руководитель службы технической поддержки"],
+        ["src-hh-search:138526146", "Руководитель отдела технической поддержки и аналитики"],
         ["src-hh-search:137435454", "Технический директор (CTO), EYES OF WONDER"],
         ["src-hh-search:138955968", "Support Team Lead, EYES OF WONDER"],
         ["src-linkedin-guest:4484520225", "Vice President of Customer Support"],
@@ -50,6 +62,9 @@
         ["src-indeed:62df8d3ea99b67fc", "Chief information officer (CIO)"]
       ],
       "mustNot": [
+        ["src-hh-search:131862060", "Консультант 1С"],
+        ["src-hh-search:138210400", "Консультант по ВИП-обслуживанию в ювелирный бутик"],
+        ["src-himalayas-api:https://himalayas.app/companies/softtest-pays-pty-ltd/jobs/software-developer", "Software Developer"],
         ["src-hh-search:129774047", "Продавец-консультант автомобилей"],
         ["src-hh-search:130473537", "Начинающий специалист технической поддержки"],
         ["src-himalayas-api:https://himalayas.app/companies/jonas-software-uk-europe/jobs/business-support-administrator", "Business Support Administrator"],

@@ -446,7 +446,7 @@ describe('GET /candidate/today', () => {
 });
 
 describe('GET /candidate/matched-vacancies level explanation', () => {
-  it('uses the stored title parse to classify a vacancy when title rules cannot', async () => {
+  it('stored title parse says a role is below the window: the row does not reach the list', async () => {
     const titleParseStore = new SqliteTitleParseStore({ databasePath: ':memory:' });
     titleParseStore.insertIfMissing({
       titleKey: normalizeTitleKey('Инженер данных 1'),
@@ -475,6 +475,6 @@ describe('GET /candidate/matched-vacancies level explanation', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().meta.candidateLevel).toBe('vp');
     expect(getByKey).toHaveBeenCalledWith('инженер данных');
-    expect(response.json().data[0].explanation.levelMatch).toBe('below');
+    expect(response.json().data).toEqual([]);
   });
 });

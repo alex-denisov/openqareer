@@ -1,4 +1,5 @@
 import type { VacancyLevelMatch } from '../../shared/vacancyMatchOrder';
+import { isChiefInformationTitle } from './titleParse/chiefInformationTitle';
 import { normalizeTextForComparison } from './vacancyFingerprint';
 
 /**
@@ -104,7 +105,7 @@ function containsMarker(normalizedTitle: string, marker: string): boolean {
  */
 export function inferSeniorityLevel(title: string): SeniorityLevel | undefined {
   const norm = ` ${normalizeTextForComparison(title)} `;
-  if (hasCxOTitle(norm)) return 'c-level';
+  if (hasCxOTitle(norm) || isChiefInformationTitle(title)) return 'c-level';
   for (const { level, markers } of LEVEL_MARKERS) {
     if (markers.some((marker) => containsMarker(norm, marker))) {
       return level;

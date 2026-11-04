@@ -2,8 +2,8 @@ import type { RouteDeps } from './deps';
 import { legacyVacancyFitProfileStamp, previousVacancyFitProfileStamp, roleScopedVacancyFitProfileStamp, vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readCampaign } from './campaignContext';
 import { readTargetLevel } from './vacancyRoleContext';
-import { evaluateLevelMatch } from '../vacancies/levelMatcher';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
+import { campaignLevelMatch, campaignLevelWindow } from '../vacancies/titleParse/candidateRoleFunctions';
 import { regionOfVacancy } from '../vacancies/vacancyGeography';
 import { withinCareerGeography, type CareerGeography } from '../vacancies/careerGeography';
 import { isResumeEvidenceEligible } from '../domain/resumeEvidenceEligibility';
@@ -108,8 +108,10 @@ function buildVacancyFitContextReader(
   const checkedFactIds = skillCheckFactIds(deps, candidateId);
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const targetLevel = readTargetLevel(deps.candidateStore, candidateId, campaign.roles.value);
+  const levelWindow = campaignLevelWindow(campaign.roles.value, targetLevel);
   return (target: NonNullable<ReturnType<typeof readVacancyFitTarget>>, requirements: readonly VacancyRequirement[]): VacancyFitInput => {
-  const level = evaluateLevelMatch(targetLevel, target.title, deps.titleParseStore.getByKey(normalizeTitleKey(target.title))?.levelRank);
+  // Ворота и отбор судят по одному окну: роль «Head of AI» в кампании C-level не «ниже цели».
+  const level = campaignLevelMatch(levelWindow, targetLevel, target.title, deps.titleParseStore.getByKey(normalizeTitleKey(target.title)));
   const region = regionOfVacancy({ location: target.location, country: target.country });
   const eligible = facts.filter(isResumeEvidenceEligible);
   const location = (target.country ?? target.location ?? '').toLocaleLowerCase();

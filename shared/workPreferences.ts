@@ -26,6 +26,8 @@
  * смысл всех сохранённых результатов.
  */
 
+import { convertAmount, type CurrencyRates } from './currencyRates';
+import { monthlyRubSalary, type SalaryAmounts } from './monthlyRubSalary';
 import { pluralRu } from './pluralRu';
 import { z } from 'zod';
 
@@ -517,21 +519,21 @@ export function sanitizeForThirdPartyExport<T extends Record<string, unknown>>(p
   return result;
 }
 
+/**
+ * Порог и зарплата сравниваются в рублях в месяц: 15 000 USD не меньше 600 000 ₽ (04.11). Почасовая
+ * ставка, валюта без курса и вакансия без суммы подборку не режут: сравнивать не с чем.
+ */
 function matchesSalaryFloor(
-  salary: { readonly from?: number; readonly to?: number; readonly currency?: string } | undefined,
+  salary: SalaryAmounts | undefined,
   salaryFloor: number | undefined,
-  _currency?: string,
+  currency: string | undefined,
+  rates: CurrencyRates | undefined,
 ): boolean {
-  if (!salaryFloor || salaryFloor <= 0) return true;
-  // Пустые поля не режут подборку: вакансия без указанной зарплаты не исключается вслепую.
-  if (!salary || (salary.from === undefined && salary.to === undefined)) {
-    return true;
-  }
-  const maxCompensation = salary.to ?? salary.from;
-  if (maxCompensation !== undefined && maxCompensation < salaryFloor) {
-    return false;
-  }
-  return true;
+  if (!salaryFloor || salaryFloor <= 0 || !salary) return true;
+  const monthly = monthlyRubSalary(salary, rates);
+  const floor = convertAmount(salaryFloor, currency ?? 'RUB', 'RUB', rates);
+  const maxCompensation = monthly?.to ?? monthly?.from;
+  return maxCompensation === undefined || floor === undefined || maxCompensation >= floor;
 }
 
 function matchesWorkFormat(
@@ -549,14 +551,15 @@ function matchesWorkFormat(
 export function matchesDecisionProfile(
   cluster: {
     readonly isRemote?: boolean;
-    readonly salary?: { readonly from?: number; readonly to?: number; readonly currency?: string };
+    readonly salary?: SalaryAmounts;
     readonly companyFeatures?: { readonly country?: string };
     readonly canonicalLocation?: string;
   },
   profile?: CandidateDecisionProfile | null,
+  rates?: CurrencyRates,
 ): boolean {
   if (!profile) return true;
-  if (!matchesSalaryFloor(cluster.salary, profile.salaryFloor, profile.salaryCurrency)) {
+  if (!matchesSalaryFloor(cluster.salary, profile.salaryFloor, profile.salaryCurrency, rates)) {
     return false;
   }
   if (!matchesWorkFormat(cluster.isRemote, profile.workFormats)) {
@@ -569,14 +572,14 @@ export function filterVacanciesByDecisionProfile<
   T extends {
     readonly cluster: {
       readonly isRemote?: boolean;
-      readonly salary?: { readonly from?: number; readonly to?: number; readonly currency?: string };
+      readonly salary?: SalaryAmounts;
       readonly companyFeatures?: { readonly country?: string };
       readonly canonicalLocation?: string;
     };
   },
->(items: readonly T[], profile?: CandidateDecisionProfile | null): T[] {
+>(items: readonly T[], profile?: CandidateDecisionProfile | null, rates?: CurrencyRates): T[] {
   if (!profile) return [...items];
-  return items.filter((item) => matchesDecisionProfile(item.cluster, profile));
+  return items.filter((item) => matchesDecisionProfile(item.cluster, profile, rates));
 }
 
 export function loadDecisionProfile(storage?: { getItem(key: string): string | null }): CandidateDecisionProfile {

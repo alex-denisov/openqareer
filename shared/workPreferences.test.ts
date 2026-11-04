@@ -9,6 +9,7 @@ import {
   type CandidateDecisionProfile,
   DEFAULT_DECISION_PROFILE,
   filterVacanciesByDecisionProfile,
+  matchesDecisionProfile,
   sanitizeForThirdPartyExport,
   isDecisionProfileConfidential,
 } from './workPreferences';
@@ -280,3 +281,47 @@ describe('Candidate Decision Profile & Hard Constraints (US-03.3 / B384)', () =>
   });
 });
 
+
+describe('порог зарплаты в рублях в месяц (04.11)', () => {
+  const rates = { date: '2026-11-04', rubPerUnit: { USD: 90, EUR: 100 } };
+  const profile = { ...DEFAULT_DECISION_PROFILE, salaryFloor: 600_000, salaryCurrency: 'RUB' };
+  const passes = (salary: Record<string, unknown> | undefined, withRates = true, floor = profile) =>
+    matchesDecisionProfile({ salary } as never, floor, withRates ? rates : undefined);
+
+  it('15 000 USD в месяц выше порога 600 000 ₽', () => {
+    expect(passes({ from: 15_000, currency: 'USD', period: 'month' })).toBe(true);
+    expect(passes({ from: 15_000, currency: 'USD' })).toBe(true);
+  });
+
+  it('годовая сумма делится на 12', () => {
+    expect(passes({ from: 120_000, currency: 'USD', period: 'year' })).toBe(true);
+    expect(passes({ to: 60_000, currency: 'USD', period: 'year' })).toBe(false);
+    expect(passes({ to: 3_600_000, currency: 'RUR', period: 'year' })).toBe(false);
+  });
+
+  it('рубли сравниваются как раньше', () => {
+    expect(passes({ from: 300_000, to: 500_000, currency: 'RUR' })).toBe(false);
+    expect(passes({ from: 300_000, to: 700_000, currency: 'RUR' })).toBe(true);
+    expect(passes({ from: 300_000, to: 500_000 })).toBe(false);
+  });
+
+  it('то, что нельзя сравнить, не режет подборку', () => {
+    expect(passes(undefined)).toBe(true);
+    expect(passes({ currency: 'USD' })).toBe(true);
+    expect(passes({ from: 20, currency: 'USD', period: 'hour' })).toBe(true);
+    expect(passes({ from: 1000, currency: 'XXX', period: 'month' })).toBe(true);
+    expect(passes({ from: 1000, currency: 'USD', period: 'month' }, false)).toBe(true);
+  });
+
+  it('800 000 тенге без периода — в месяц, а не в год', () => {
+    const tenge = { date: '2026-11-04', rubPerUnit: { KZT: 0.16 } };
+    const lowFloor = { ...profile, salaryFloor: 100_000 };
+    expect(matchesDecisionProfile({ salary: { to: 800_000, currency: 'KZT' } } as never, lowFloor, tenge)).toBe(true);
+  });
+
+  it('порог в другой валюте переводится по курсу', () => {
+    const inUsd = { ...profile, salaryFloor: 10_000, salaryCurrency: 'USD' };
+    expect(passes({ to: 800_000, currency: 'RUR' }, true, inUsd)).toBe(false);
+    expect(passes({ to: 950_000, currency: 'RUR' }, true, inUsd)).toBe(true);
+  });
+});

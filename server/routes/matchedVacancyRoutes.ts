@@ -1,3 +1,4 @@
+import { getCurrencyRates } from '../currency/cbrRates';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readSortedFilters } from './matchedVacancySort';
@@ -68,6 +69,7 @@ export function finishMatchedVacancies(
   return finishMatchedRows(snapshot, targetRoles, campaign, {
     profile: candidateStore.decisionProfileRepo.get(candidateId),
     decisions: candidateStore.listVacancyDecisions(candidateId),
+    rates: getCurrencyRates(),
   });
 }
 

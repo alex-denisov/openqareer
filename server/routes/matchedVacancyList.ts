@@ -6,7 +6,9 @@ import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
 import { vacancyFitPercent } from '../../shared/vacancyFitPercent';
 import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
+import type { CurrencyRates } from '../../shared/currencyRates';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
+import { getCurrencyRates } from '../currency/cbrRates';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { withinCareerGeography } from '../vacancies/careerGeography';
@@ -22,6 +24,9 @@ import {
 import { matchedPagePlanSteps } from '../vacancies/matchedVacancyPage';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { maskPrivateEmployers } from '../vacancies/privateEmployerMask';
+import type { SeniorityLevel } from '../vacancies/levelMatcher';
+import { dropOutsideLevelGate } from '../vacancies/storedVacancyLevels';
+import { campaignLevelWindow } from '../vacancies/titleParse/candidateRoleFunctions';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import { dropForeignRemote, markGeography } from '../vacancies/vacancyGeography';
 import { matchedRoleCountSteps } from '../vacancies/vacancyRoleCounts';
@@ -39,6 +44,8 @@ const FINISH_ROWS_PER_STEP = 25;
 export interface MatchedRowLimits {
   readonly profile: DecisionProfile;
   readonly decisions: ReturnType<CandidateStore['listVacancyDecisions']>;
+  /** Курс ЦБ для порога зарплаты: без него иностранная сумма подборку не режет. */
+  readonly rates?: CurrencyRates;
 }
 
 /** Row by row except the order; the steps below rely on that when they finish the rows in pieces. */
@@ -65,7 +72,11 @@ export function finishMatchedRows(
   // Подборка по «Карьере»: удалёнка из другой страны — вне условий кандидата.
   const roleFiltered = career ? dropForeignRemote(marked) : marked;
   // B384: жёсткие ограничения профиля — теми же функциями, что на клиенте; O(размер подборки).
-  const withinProfile = filterVacanciesByDecisionProfile(roleFiltered, limits.profile);
+  const withinProfile = filterVacanciesByDecisionProfile(
+    roleFiltered,
+    limits.profile,
+    limits.rates,
+  );
   return maskPrivateEmployers(applyVacancyDecisions(withinProfile, limits.decisions));
 }
 
@@ -107,7 +118,7 @@ export interface MatchedListInput {
   readonly snapshot: readonly MatchedVacancyItem[];
   readonly targetRoles: string[];
   readonly confirmedSkills: readonly string[];
-  readonly targetLevel: unknown;
+  readonly targetLevel: SeniorityLevel | undefined;
   readonly geography: unknown;
   readonly campaign: CampaignResolution;
   readonly candidateStore: CandidateStore;
@@ -182,15 +193,38 @@ function roleLevelCount(rows: readonly MatchedVacancyItem[], roles: readonly str
   return rows.filter((item) => item.explanation.roleMatch !== 'none').length;
 }
 
-function* matchedListSteps(input: MatchedListInput) {
-  const { campaign, candidateStore, candidateId, filters, targetRoles, snapshot } = input;
-  const limits = {
+function readRowLimits(candidateStore: CandidateStore, candidateId: string): MatchedRowLimits {
+  return {
     profile: candidateStore.decisionProfileRepo.get(candidateId),
     decisions: candidateStore.listVacancyDecisions(candidateId),
+    rates: getCurrencyRates(),
   };
+}
+
+function* levelGateSteps(
+  finished: readonly MatchedVacancyItem[],
+  input: MatchedListInput,
+): Steps<MatchedVacancyItem[]> {
+  const window = campaignLevelWindow(input.targetRoles, input.targetLevel);
+  const kept: MatchedVacancyItem[] = [];
+  for (let start = 0; start < finished.length; start += FINISH_ROWS_PER_STEP) {
+    const rows = finished.slice(start, start + FINISH_ROWS_PER_STEP);
+    kept.push(
+      ...dropOutsideLevelGate(rows, window, input.targetLevel, (key) =>
+        input.titleParseStore.getByKey(key),
+      ),
+    );
+    yield;
+  }
+  return kept;
+}
+
+function* matchedListSteps(input: MatchedListInput) {
+  const { campaign, candidateStore, candidateId, filters, targetRoles, snapshot } = input;
+  const limits = readRowLimits(candidateStore, candidateId);
   yield;
   const finished = yield* finishMatchedRowSteps(snapshot, targetRoles, campaign, limits);
-  const matched = input.order(finished);
+  const matched = input.order(yield* levelGateSteps(finished, input));
   yield;
   const hypotheses = hypothesisRows(input);
   const counts = yield* matchedRoleCountSteps(hypotheses, targetRoles);

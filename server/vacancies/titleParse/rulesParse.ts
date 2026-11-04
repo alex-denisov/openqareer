@@ -2,6 +2,7 @@ import { ROLE_TAXONOMY, type FunctionCode } from '../../../shared/roleTaxonomy';
 import { ontology, type OntologyLevel } from '../../../shared/roleOntology';
 import { LEVEL_RANK } from '../levelMatcher';
 import { hasRulesLevelMarker, inferRulesLevel } from './rulesLevel';
+import { isChiefInformationTitle } from './chiefInformationTitle';
 import { normalizeTitleKey } from './normalizeTitleKey';
 
 /**
@@ -130,6 +131,10 @@ const ADDITIONAL_ANCHORS: readonly AnchorHit[] = [
   { code: 'it-ops', anchor: 'начальник it отдела' },
   { code: 'it-ops', anchor: 'руководитель ит отдела' },
   { code: 'it-ops', anchor: 'руководитель it отдела' },
+  { code: 'it-ops', anchor: 'it-отдела' },
+  { code: 'it-ops', anchor: 'ит-отдела' },
+  { code: 'it-ops', anchor: 'it-департамента' },
+  { code: 'it-ops', anchor: 'ит-департамента' },
   { code: 'it-ops', anchor: 'ит лидер' },
   { code: 'it-ops', anchor: 'начальник отдела эксплуатации' },
   { code: 'it-ops', anchor: 'руководитель отдела эксплуатации' },
@@ -520,11 +525,49 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
     .map(([code]) => code);
 }
 
+/**
+ * «Руководитель службы» и «Начальник отдела» в словаре — госслужба, но с поддержкой или ИТ в названии
+ * это служба поддержки и ИТ-отдел (04.11: hh 136956781, 138740300; «начальник отдела ит» — public-service).
+ */
+function isGenericServiceTitle(variant: OntologyVariant, key: string, normalized: string): boolean {
+  if ((variant.function as string) !== 'public-service' || ONTOLOGY_VARIANTS.exact.has(key)) return false;
+  const functions = pickTopFunctions(findAnchorHits(normalized));
+  return functions.includes('support') || functions.includes('it-ops');
+}
+
+/**
+ * Слова «директор по ит» внутри «директор по ит-инфраструктуре» и «director of it» внутри «director of it
+ * infrastructure» ещё не делают название ролью CIO: это решает `isChiefInformationTitle`.
+ */
+function isPartialCioMatch(variant: OntologyVariant, normalized: string): boolean {
+  return (
+    variant.roleId === 'it-ops.cio' &&
+    !/chief information|\bcio\b|информационным технологиям/u.test(normalized)
+  );
+}
+
+/** Начальник отдела руководит им так же, как руководитель отдела: без словаря уровень не назван. */
+const DEPARTMENT_CHIEF = /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
+
 export function rulesParse(title: string): RulesParseResult {
   const normalizedKey = normalizeTitleKey(title);
   const ontologyVariant = findOntologyVariant(normalizedKey);
   const normalized = ` ${title.toLowerCase()} `;
-  if (ontologyVariant) {
+  if (isChiefInformationTitle(title)) {
+    const others = pickTopFunctions(findAnchorHits(normalized)).filter(
+      (code) => code !== 'it-ops' && (code !== 'eng-mgmt' || /\bcto\b|chief tech|технический/iu.test(title)),
+    );
+    return {
+      functions: (['it-ops', ...others] as FunctionCode[]).slice(0, 2),
+      levelRank: LEVEL_RANK['c-level'],
+      roleId: 'it-ops.cio',
+    };
+  }
+  if (
+    ontologyVariant &&
+    !isGenericServiceTitle(ontologyVariant, normalizedKey, normalized) &&
+    !isPartialCioMatch(ontologyVariant, normalized)
+  ) {
     return {
       functions: ontologyFunctions(ontologyVariant, normalizedKey, normalized),
       levelRank: levelRankForOntologyRole(title, ontologyVariant),
@@ -535,8 +578,9 @@ export function rulesParse(title: string): RulesParseResult {
   const specificFunctions = pickTopFunctions(hits);
   const functions =
     specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
+  const level = inferRulesLevel(title);
   return {
     functions,
-    levelRank: LEVEL_RANK[inferRulesLevel(title)],
+    levelRank: level === 'ic' && DEPARTMENT_CHIEF.test(title) ? LEVEL_RANK.head : LEVEL_RANK[level],
   };
 }

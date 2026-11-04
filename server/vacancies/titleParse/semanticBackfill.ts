@@ -5,6 +5,7 @@ import { normalizeTitleKey } from './normalizeTitleKey';
 import { LEVEL_RANK } from '../levelMatcher';
 import { isSeniorManagerLead } from './rulesLevel';
 import { gradeRangeOfTitle } from './gradeRange';
+import { isChiefInformationTitle } from './chiefInformationTitle';
 import { exactOntologyTitleKeys, rulesParse } from './rulesParse';
 
 /**
@@ -110,10 +111,53 @@ export class SemanticBackfill {
     const corrections = [
       ...ontology,
       ...this.seniorManagerCorrections().filter((correction) => !exactKeys.has(correction.key)),
+      ...this.oneRoleCorrections().filter((correction) => !exactKeys.has(correction.key)),
     ];
     if (corrections.length === 0) return 0;
     this.applyCorrections(corrections);
     return corrections.length;
+  }
+
+  /**
+   * Владелец 04.11: CIO, ИТ-директор и IT Director — одна роль, служба поддержки — поддержка, отдел ИТ — не госслужба, Centum VP — не вице-президент. Версия словаря не
+   * меняется: пересчитываются только эти названия. Модельный разбор поддержки не трогается, запись
+   * идёт лишь при расхождении, поэтому повторный проход не пишет в базу.
+   */
+  private oneRoleCorrections(): { key: string; functions: string; levelRank: number | null }[] {
+    const rows = this.database
+      .prepare(
+        `SELECT title_key, sample_title, functions, level_rank, parsed_by FROM title_parse
+         WHERE (parsed_by = 'rules' AND title_key LIKE '%поддержк%')
+           OR (parsed_by = 'rules' AND title_key LIKE '%centum vp%')
+           OR (parsed_by = 'rules' AND functions LIKE '%public-service%'
+             AND (title_key LIKE '% it%' OR title_key LIKE '% ит%'))
+           OR ((title_key LIKE '%директор%' OR title_key LIKE '%департамент%' OR title_key LIKE '%director%'
+               OR title_key LIKE '%chief information%')
+             AND (title_key LIKE '%it%' OR title_key LIKE '%ит%'
+               OR title_key LIKE '%информац%' OR title_key LIKE '%information%'))`,
+      )
+      .all() as {
+      title_key: string;
+      sample_title: string;
+      functions: string;
+      level_rank: number | null;
+      parsed_by: string;
+    }[];
+    return rows.flatMap((row) => {
+      const chief = isChiefInformationTitle(row.sample_title);
+      const service = row.parsed_by === 'rules' && !row.functions.includes('"support"');
+      const product = row.parsed_by === 'rules' && row.title_key.includes('centum vp');
+      if (!chief && !service && !product) return [];
+      const parsed = rulesParse(row.sample_title);
+      const functions = JSON.stringify(parsed.functions);
+      const same = functions === row.functions && parsed.levelRank === row.level_rank;
+      const fixed =
+        parsed.functions.includes('support') ||
+        (row.functions.includes('public-service') && parsed.functions.includes('it-ops'));
+      return (chief || fixed || product) && !same
+        ? [{ key: row.title_key, functions, levelRank: parsed.levelRank }]
+        : [];
+    });
   }
 
   private exactOntologyCorrections(): {

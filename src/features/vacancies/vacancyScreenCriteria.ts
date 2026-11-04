@@ -192,7 +192,7 @@ export function filterByScreenState(
   rates?: CurrencyRates,
 ): MatchedVacancyItem[] {
   void now;
-  return filterVacanciesByDecisionProfile(items, loadDecisionProfile()).filter((item) =>
+  return filterVacanciesByDecisionProfile(items, loadDecisionProfile(), rates).filter((item) =>
     matchesScreenCriteria(item, state, items, rates),
   );
 }

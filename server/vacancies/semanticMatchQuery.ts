@@ -18,6 +18,8 @@ export interface SemanticMatchQueryInput {
   readonly levelFloorRank?: number | null;
   /** Своя нижняя граница у функции; функция вне списка берёт `levelFloorRank`. */
   readonly functionLevelFloors?: Readonly<Partial<Record<FunctionCode, number>>>;
+  /** Роли специалиста кампании: ниже порога функции проходит строка с таким названием. */
+  readonly functionSpecialistTitles?: Readonly<Partial<Record<FunctionCode, readonly string[]>>>;
   /** Города и удалёнка кампании: предел чтения не тратится на чужие города. */
   readonly geography?: MatchGeography;
   /** Грейд кандидата: строка с непересекающимся диапазоном не идёт; строка без грейда проходит. */
@@ -185,22 +187,35 @@ const GRADE_FILTER = `AND NOT EXISTS (SELECT 1 FROM vacancy_grade g
 
 // У источника уровень часто отсутствует даже у релевантной руководящей роли. Неизвестный уровень
 // остаётся видимым и ранжируется объяснением, а не исчезает до того, как кандидат сможет его прочитать.
-function levelFilterOf(input: SemanticMatchQueryInput): string {
+function levelFilterOf(input: SemanticMatchQueryInput, specialistTitles: number): string {
+  const specialists = Array.from({ length: specialistTitles }, () => 'instr(s.title_key, ?) > 0');
+  const named = specialists.length ? ` OR (s.level_rank < ? AND (${specialists.join(' OR ')}))` : '';
   const level =
-    input.levelRank === null ? '' : 'AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL)';
+    input.levelRank === null
+      ? ''
+      : `AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL${named})`;
   return `${level} ${input.gradeRange ? GRADE_FILTER : ''}`;
+}
+
+function specialistTitlesOf(input: SemanticMatchQueryInput, code: FunctionCode): readonly string[] {
+  return input.levelRank === null ? [] : (input.functionSpecialistTitles?.[code] ?? []);
+}
+
+function levelParamsOf(input: SemanticMatchQueryInput, code: FunctionCode): SQLInputValue[] {
+  if (input.levelRank === null) return [];
+  const floor = Math.min(
+    input.functionLevelFloors?.[code] ?? input.levelFloorRank ?? input.levelRank,
+    input.levelRank - 1,
+  );
+  const range = [floor, input.levelRank + 1];
+  const titles = specialistTitlesOf(input, code);
+  return titles.length ? [...range, floor, ...titles] : range;
 }
 
 export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   sql: string;
   params: SQLInputValue[];
 } {
-  const levelFilter = levelFilterOf(input);
-  const levelFloorOf = (code: FunctionCode) =>
-    Math.min(
-      input.functionLevelFloors?.[code] ?? input.levelFloorRank ?? input.levelRank ?? 0,
-      (input.levelRank ?? 0) - 1,
-    );
   const excludedFunctions = excludedFunctionCodesFor(input.functionCodes);
   const excludedFunctionFilter = buildExcludedFunctionFilter(excludedFunctions);
   const geography = buildGeographyFilter(input.geography);
@@ -210,7 +225,7 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   const branches = queryFunctionCodes
     .map((code) =>
       buildFunctionBranch(
-        levelFilter,
+        levelFilterOf(input, specialistTitlesOf(input, code).length),
         excludedFunctionFilter,
         geography.sql,
         input.functionCodes.includes(code),
@@ -235,7 +250,7 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   const params: SQLInputValue[] = [];
   for (const code of queryFunctionCodes) {
     params.push(code);
-    if (input.levelRank !== null) params.push(levelFloorOf(code), input.levelRank + 1);
+    params.push(...levelParamsOf(input, code));
     if (input.gradeRange) params.push(input.gradeRange.min, input.gradeRange.max);
     params.push(...excludedFunctions);
     params.push(...geography.params);

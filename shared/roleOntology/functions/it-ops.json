@@ -2,7 +2,7 @@
   "function": {
     "code": "it-ops",
     "labelEn": "IT Operations",
-    "labelRu": "ИТ-инфраструктура"
+    "labelRu": "Управление ИТ и инфраструктура"
   },
   "families": [
     {
@@ -267,12 +267,10 @@
           "Head of IT Operations",
           "IT Operations Manager",
           "Head of Infrastructure",
-          "IT Director",
           "Director of IT Operations"
         ],
         "ru": [
           "Руководитель ИТ-инфраструктуры",
-          "ИТ-директор",
           "Начальник отдела эксплуатации"
         ]
       },
@@ -374,11 +372,18 @@
       "variants": {
         "en": [
           "Chief Information Officer",
-          "CIO"
+          "CIO",
+          "IT Director",
+          "Director of IT",
+          "Director of Information Technology"
         ],
         "ru": [
           "Директор по информационным технологиям",
-          "CIO"
+          "CIO",
+          "ИТ-директор",
+          "Директор по ИТ",
+          "Начальник департамента ИТ",
+          "Начальник ИТ-департамента"
         ]
       },
       "adjacent": [
