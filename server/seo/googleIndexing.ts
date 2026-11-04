@@ -418,7 +418,7 @@ function resetSentOnce(database: DatabaseSync, log: GoogleIndexingLog, nowMs: nu
 
 /** A card whose source became restricted gets no further notification, not even a removal. */
 function forgetRestricted(database: DatabaseSync, cards: readonly SitemapUrl[]): void {
-  const restricted = cards.filter((item) => item.noIndexingApi);
+  const restricted = cards.filter((item) => item.searchRestricted);
   if (restricted.length === 0) return;
   const remove = database.prepare('DELETE FROM catalog_google_indexing_sent WHERE url = ?');
   inTransaction(database, () => {
@@ -437,7 +437,7 @@ async function runCycle(
   const cards = vacancyCards(urls);
   // A sitemap without a single card is a failed read: nothing here says the cards are gone.
   if (cards.length === 0) return;
-  const current = currentCards(cards.filter((item) => !item.noIndexingApi));
+  const current = currentCards(cards.filter((item) => !item.searchRestricted));
   database.exec(STATE_TABLES_SQL);
   resetSentOnce(database, log, now.getTime());
   forgetRestricted(database, cards);

@@ -46,7 +46,10 @@ function absoluteUrl(path: string): string {
 
 function currentFingerprints(urls: readonly SitemapUrl[]): Map<string, string | null> {
   const result = new Map<string, string | null>();
-  for (const item of urls) result.set(absoluteUrl(item.path), item.lastmod ?? null);
+  for (const item of urls) {
+    // Restricted by the source's terms: not sent, and `forgetRemoved` drops it silently.
+    if (!item.searchRestricted) result.set(absoluteUrl(item.path), item.lastmod ?? null);
+  }
   return result;
 }
 

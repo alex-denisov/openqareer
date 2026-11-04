@@ -136,7 +136,7 @@ describe('source restrictions in the jobs sitemap', () => {
     expect(jobs.urlCount).toBe(4);
     expect(locs(jobs.xml)).toHaveLength(4);
     const marked = (jobs.urls ?? [])
-      .filter((url) => url.noIndexingApi)
+      .filter((url) => url.searchRestricted)
       .map((url) => url.path.split('-').pop());
     // A card whose cluster row is missing cannot be shown to be free of the restriction.
     expect(marked.sort()).toEqual(['hima', 'pair', 'unknown']);

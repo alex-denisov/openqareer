@@ -80,7 +80,7 @@ function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
   return rows.map((row) => ({
     path: row.path,
     lastmod: row.published_at.slice(0, 10),
-    ...(row.restricted ? { noIndexingApi: true as const } : {}),
+    ...(row.restricted ? { searchRestricted: true as const } : {}),
   }));
 }
 

@@ -91,7 +91,7 @@ describe('Google Indexing API notifier', () => {
     const { fetcher, published } = google();
     const { notify } = notifierAt(log, fetcher);
 
-    await notify(database(), [job('allowed'), { ...job('himalayas'), noIndexingApi: true }]);
+    await notify(database(), [job('allowed'), { ...job('himalayas'), searchRestricted: true }]);
 
     expect(published.map((item) => item.url)).toEqual([absolute('allowed')]);
   });
@@ -104,7 +104,7 @@ describe('Google Indexing API notifier', () => {
     await notify(db, [job('a')]);
     published.length = 0;
 
-    await notify(db, [{ ...job('a', '2026-11-02'), noIndexingApi: true }]);
+    await notify(db, [{ ...job('a', '2026-11-02'), searchRestricted: true }]);
     clock.now = new Date(clock.now.getTime() + 48 * HOUR_MS);
     await notify(db, [job('other')]);
 
