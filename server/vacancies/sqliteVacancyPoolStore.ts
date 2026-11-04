@@ -33,6 +33,7 @@ import {
   type StoredHhSampleQuery,
 } from './storedHhSampleQuery';
 import {
+  campaignFunctionLevelFloors,
   campaignLevelFloor,
   candidateRoleFunctionCodes,
 } from './titleParse/candidateRoleFunctions';
@@ -678,6 +679,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       functionCodes,
       levelRank: candidate.targetLevel ? LEVEL_RANK[candidate.targetLevel] : null,
       levelFloorRank,
+      functionLevelFloors: campaignFunctionLevelFloors(
+        candidate.targetRoles,
+        candidate.targetLevel,
+      ),
       ...(candidate.matchGeography ? { geography: candidate.matchGeography } : {}),
       window,
       preferRemote,
@@ -2006,8 +2011,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   loadHhRoleTextPosition(): string | undefined {
-    const row = this.database.prepare('SELECT position FROM hh_text_role_position WHERE id = 1').get() as
-      { position: string } | undefined;
+    const row = this.database
+      .prepare('SELECT position FROM hh_text_role_position WHERE id = 1')
+      .get() as { position: string } | undefined;
     return row?.position;
   }
 

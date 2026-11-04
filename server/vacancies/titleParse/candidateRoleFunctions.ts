@@ -34,3 +34,27 @@ export function campaignLevelFloor(
     .filter((rank): rank is number => rank !== null);
   return Math.min(LEVEL_RANK[targetLevel] - 1, ...roleRanks);
 }
+
+/**
+ * Тот же порог, но своя ступень у каждой функции. «AI Consultant» без указания
+ * уровня имеет ранг 0, и общий порог открывал младшие вакансии всем функциям
+ * кандидата: у VP с девятью ролями 26 тыс. строк вместо 2 тыс., и окно чтения
+ * забивала удалёнка младших уровней (04.11, из 184 вакансий роли оставалось 33).
+ */
+export function campaignFunctionLevelFloors(
+  targetRoles: readonly string[],
+  targetLevel: SeniorityLevel | undefined,
+): Partial<Record<FunctionCode, number>> {
+  if (!targetLevel) return {};
+  const floors: Partial<Record<FunctionCode, number>> = {};
+  for (const role of targetRoles) {
+    const { functions, levelRank } = rulesParse(role);
+    for (const code of functions) {
+      floors[code] = Math.min(
+        floors[code] ?? LEVEL_RANK[targetLevel] - 1,
+        levelRank ?? LEVEL_RANK[targetLevel] - 1,
+      );
+    }
+  }
+  return floors;
+}

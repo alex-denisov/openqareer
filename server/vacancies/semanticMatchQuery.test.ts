@@ -74,6 +74,62 @@ describe('buildSemanticMatchQuery (B267 S3)', () => {
     expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['v-new', 'v-old']);
   });
 
+  it('порог уровня считается на функцию: младшая роль одной функции не открывает остальные', () => {
+    seed('ai-junior', 'ai-ml', 0, 3_000);
+    seed('support-junior', 'support', 0, 2_000);
+    seed('support-head', 'support', 2, 1_000);
+    const { sql, params } = buildSemanticMatchQuery({
+      functionCodes: ['ai-ml', 'support'],
+      levelRank: 3,
+      functionLevelFloors: { 'ai-ml': 0, support: 2 },
+      window: { fromMs: 0, toMs: 5_000 },
+      preferRemote: false,
+      limit: 50,
+    });
+    const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
+    expect(rows.map((row) => JSON.parse(row.payload).id)).toEqual(['ai-junior', 'support-head']);
+  });
+
+  describe('окно чтения при упоре в предел', () => {
+    const read = (limit: number, preferRemote = false) => {
+      const { sql, params } = buildSemanticMatchQuery({
+        functionCodes: ['eng', 'eng-mgmt'],
+        levelRank: 3,
+        window: { fromMs: 0, toMs: 100_000 },
+        preferRemote,
+        limit,
+      });
+      const rows = database.prepare(sql).all(...params) as Array<{ payload: string }>;
+      return rows.map((row) => JSON.parse(row.payload).id as string);
+    };
+
+    beforeEach(() => {
+      for (let i = 0; i < 10; i += 1) seed(`mass-${i}`, 'eng', 3, 50_000 + i, 1);
+      seed('small-old', 'eng-mgmt', 3, 1_000);
+      seed('small-older', 'eng-mgmt', 3, 500);
+    });
+
+    it('массовая функция не вытесняет маленькую, даже новыми удалёнными строками', () => {
+      const ids = read(4, true);
+      expect(ids).toHaveLength(4);
+      expect(ids).toEqual(expect.arrayContaining(['small-old', 'small-older']));
+    });
+
+    it('неиспользованная доля маленькой функции переходит массовой', () => {
+      const ids = read(6);
+      expect(ids.filter((id) => id.startsWith('mass-'))).toHaveLength(4);
+      expect(ids.filter((id) => id.startsWith('small-'))).toHaveLength(2);
+    });
+
+    it('ниже предела набор и порядок прежние: сначала новые', () => {
+      expect(read(50)).toEqual([
+        ...Array.from({ length: 10 }, (_, i) => `mass-${9 - i}`),
+        'small-old',
+        'small-older',
+      ]);
+    });
+  });
+
   it('вне окна уровня (соседняя+1 ступень) запись не попадает в выдачу', () => {
     seed('v-close', 'eng-mgmt', 2, 1_000);
     seed('v-far', 'eng-mgmt', 0, 2_000);

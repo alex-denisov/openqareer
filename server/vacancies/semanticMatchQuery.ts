@@ -15,6 +15,8 @@ export interface SemanticMatchQueryInput {
   readonly levelRank: number | null;
   /** Нижняя граница окна уровня; без неё — ступень ниже `levelRank`. */
   readonly levelFloorRank?: number | null;
+  /** Своя нижняя граница у функции; функция вне списка берёт `levelFloorRank`. */
+  readonly functionLevelFloors?: Readonly<Partial<Record<FunctionCode, number>>>;
   /** Города и удалёнка кампании: предел чтения не тратится на чужие города. */
   readonly geography?: MatchGeography;
   readonly window: FreshnessWindow;
@@ -47,8 +49,9 @@ function buildFunctionBranch(
   excludedFunctionFilter: string,
   geographyFilter: string,
   isTargetFunction: boolean,
+  placeOrder: string,
 ): string {
-  return `SELECT * FROM (
+  return `SELECT *, ROW_NUMBER() OVER (ORDER BY ${placeOrder}p DESC) AS place FROM (
     SELECT s.id AS id, s.published_ms AS p, i.is_remote AS remote,
       ${isTargetFunction ? 1 : 0} AS target
     FROM vacancy_semantic s INDEXED BY vacancy_semantic_match
@@ -182,14 +185,17 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   // не исчезает до того, как кандидат сможет его прочитать.
   const levelFilter =
     input.levelRank === null ? '' : 'AND (s.level_rank BETWEEN ? AND ? OR s.level_rank IS NULL)';
-  const levelFloor = Math.min(
-    input.levelFloorRank ?? input.levelRank ?? 0,
-    (input.levelRank ?? 0) - 1,
-  );
+  const levelFloorOf = (code: FunctionCode) =>
+    Math.min(
+      input.functionLevelFloors?.[code] ?? input.levelFloorRank ?? input.levelRank ?? 0,
+      (input.levelRank ?? 0) - 1,
+    );
   const excludedFunctions = excludedFunctionCodesFor(input.functionCodes);
   const excludedFunctionFilter = buildExcludedFunctionFilter(excludedFunctions);
   const geography = buildGeographyFilter(input.geography);
   const queryFunctionCodes = queryFunctionCodesFor(input.functionCodes);
+  const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';
+  const remoteSelectionOrder = input.preferRemote ? `${remoteOrder} DESC, ` : '';
   const branches = queryFunctionCodes
     .map((code) =>
       buildFunctionBranch(
@@ -197,17 +203,20 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
         excludedFunctionFilter,
         geography.sql,
         input.functionCodes.includes(code),
+        remoteSelectionOrder,
       ),
     )
     .join('\nUNION ALL\n');
-  const remoteOrder = '(CASE WHEN remote = 1 THEN 1 ELSE 0 END)';
-  const remoteSelectionOrder = input.preferRemote ? 'r DESC, ' : '';
+  // Предел делится по очереди между функциями: строка берётся по её месту внутри
+  // своей функции. Сплошная сортировка по удалёнке и дате отдавала окно массовой
+  // функции (04.11: 4000 из 4000 удалённых, у роли руководителя 33 строки из 184).
+  // Ниже предела набор тот же, а порядок задаёт внешний ORDER BY.
   const sql = `WITH candidates AS (${branches}),
     selected AS (
-      SELECT id, max(p) AS p, max(${remoteOrder}) AS r, max(target) AS t
+      SELECT id, max(p) AS p, max(${remoteOrder}) AS r, max(target) AS t, min(place) AS place
       FROM candidates
       GROUP BY id
-      ORDER BY t DESC, ${remoteSelectionOrder}p DESC
+      ORDER BY t DESC, place ASC, p DESC
       LIMIT ?
     ) SELECT c.cluster_json AS payload FROM selected sel
       JOIN vacancy_cluster_input c ON c.id = sel.id
@@ -215,7 +224,7 @@ export function buildSemanticMatchQuery(input: SemanticMatchQueryInput): {
   const params: SQLInputValue[] = [];
   for (const code of queryFunctionCodes) {
     params.push(code);
-    if (input.levelRank !== null) params.push(levelFloor, input.levelRank + 1);
+    if (input.levelRank !== null) params.push(levelFloorOf(code), input.levelRank + 1);
     params.push(...excludedFunctions);
     params.push(...geography.params);
     params.push(input.window.fromMs - STALE_SEMANTIC_DATE_SLACK_MS, input.window.toMs);
