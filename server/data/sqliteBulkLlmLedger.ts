@@ -22,6 +22,17 @@ export class SqliteBulkLlmLedger {
       `PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS bulk_llm_spend(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,task TEXT NOT NULL,day TEXT NOT NULL,reserved REAL NOT NULL,cost REAL,model TEXT NOT NULL,provider TEXT NOT NULL,prompt_tokens INTEGER,cached_tokens INTEGER,completion_tokens INTEGER,batch_id TEXT,status TEXT NOT NULL,created_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS bulk_llm_events(id TEXT PRIMARY KEY,kind TEXT NOT NULL,created_at TEXT NOT NULL);`,
     );
     this.ensureFailureColumn();
+    this.ensureVertexIndexes();
+  }
+  /**
+   * The Vertex gate sums `provider='gemini'` rows by `created_at` and looks events up by kind on every
+   * call. `IF NOT EXISTS` on an existing index is instant; the first build covers a table of
+   * ~100 000 rows (about 5 000 a day), not the 3.8 GB database.
+   */
+  private ensureVertexIndexes() {
+    this.db.exec(
+      'CREATE INDEX IF NOT EXISTS bulk_llm_spend_provider_created ON bulk_llm_spend(provider, created_at); CREATE INDEX IF NOT EXISTS bulk_llm_events_kind_created ON bulk_llm_events(kind, created_at);',
+    );
   }
   /** Why a call was refused (04.11: 1 933 GLM rows `rejected` and no reason anywhere). Instant, repeat is safe. */
   private ensureFailureColumn() {
@@ -227,19 +238,60 @@ export class SqliteBulkLlmLedger {
       ).total,
     );
   }
-  /** One finished Vertex call, written already settled (no hold: the cap is checked before the call). */
+  /**
+   * Vertex spend for the gate in one pass: `creditUsd` from `sinceIso`, `dayUsd` and `taskDayUsd` from
+   * the start of the UTC day (`dayStartIso`). Rows are compared by `created_at` (ISO with `T`).
+   */
+  vertexSpend(options: { sinceIso: string; dayStartIso: string; task?: string }): {
+    creditUsd: number;
+    dayUsd: number;
+    taskDayUsd: number;
+  } {
+    const lower = options.sinceIso < options.dayStartIso ? options.sinceIso : options.dayStartIso;
+    const row = this.db
+      .prepare(
+        `SELECT
+          COALESCE(SUM(CASE WHEN created_at>=? THEN COALESCE(cost,reserved) END),0) AS credit,
+          COALESCE(SUM(CASE WHEN created_at>=? THEN COALESCE(cost,reserved) END),0) AS day,
+          COALESCE(SUM(CASE WHEN created_at>=? AND task=? THEN COALESCE(cost,reserved) END),0) AS taskDay
+        FROM bulk_llm_spend WHERE provider='gemini' AND created_at>=?`,
+      )
+      .get(options.sinceIso, options.dayStartIso, options.dayStartIso, options.task ?? '', lower) as {
+      credit: number;
+      day: number;
+      taskDay: number;
+    };
+    return {
+      creditUsd: Number(row.credit),
+      dayUsd: Number(row.day),
+      taskDayUsd: Number(row.taskDay),
+    };
+  }
+  /** True when an event of this kind was written at or after `sinceIso` (by any process). */
+  eventSince(kind: string, sinceIso: string): boolean {
+    return (
+      this.db
+        .prepare('SELECT 1 AS hit FROM bulk_llm_events WHERE kind=? AND created_at>=? LIMIT 1')
+        .get(kind, sinceIso) !== undefined
+    );
+  }
+  /**
+   * One finished Vertex call, written at once (no hold: the gate checks the caps before the call).
+   * A refusal is `rejected` with cost 0 and the masked reason; an answer is `settled`. Returns the row id.
+   */
   recordGeminiCall(
-    input: { task: string; model: string },
+    input: { task: string; model: string; failure?: string; rejected?: boolean },
     usage: { cost: number; promptTokens: number; cachedTokens: number; completionTokens: number },
-  ) {
+  ): string {
     const now = new Date().toISOString();
     const day = now.slice(0, 10);
+    const id = randomUUID();
     this.db
       .prepare(
-        "INSERT INTO bulk_llm_spend(id,run_id,task,day,reserved,cost,model,provider,prompt_tokens,cached_tokens,completion_tokens,status,created_at) VALUES(?,?,?,?,?,?,?,'gemini',?,?,?,'settled',?)",
+        "INSERT INTO bulk_llm_spend(id,run_id,task,day,reserved,cost,model,provider,prompt_tokens,cached_tokens,completion_tokens,status,created_at,failure) VALUES(?,?,?,?,?,?,?,'gemini',?,?,?,?,?,?)",
       )
       .run(
-        randomUUID(),
+        id,
         `gemini-${day}`,
         input.task,
         day,
@@ -249,8 +301,15 @@ export class SqliteBulkLlmLedger {
         usage.promptTokens,
         usage.cachedTokens,
         usage.completionTokens,
+        input.rejected ? 'rejected' : 'settled',
         now,
+        input.failure ?? null,
       );
+    return id;
+  }
+  /** The money was spent and the answer was unusable: the row keeps its cost and says why. */
+  markGeminiFailure(id: string, failure: string) {
+    this.db.prepare("UPDATE bulk_llm_spend SET failure=? WHERE id=? AND provider='gemini'").run(failure, id);
   }
   close() {
     this.db.close();
