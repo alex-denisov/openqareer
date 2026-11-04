@@ -66,6 +66,25 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(tasks).toEqual(['requirements:Background']);
   });
 
+  it('the row keeps which model answered it, outside the result the candidate sees (04.11: 4 % from DeepSeek looked like Vertex)', async () => {
+    const runtime = setup(); const source = input();
+    const client = fitClient(async () => ({ content: '{"assessments":[]}', provider: 'StreamLake', model: 'deepseek/deepseek-v4-flash' }));
+    runtime.enqueue(source);
+    await runtime.runNext(client);
+    const requirements = runtime.requirements.getLatest(source.vacancyId, vacancyDescriptionHash(source.description))!.requirements;
+    const resolved = { ...source, requirements };
+    expect(runtime.fit.answeredBy(resolved)).toBe('StreamLake deepseek/deepseek-v4-flash');
+    expect(JSON.stringify(runtime.view(source))).not.toContain('deepseek');
+  });
+
+  it('a row counted with no model names none', async () => {
+    const runtime = setup(); const source = input();
+    runtime.enqueue(source);
+    await runtime.runNext(null);
+    const requirements = runtime.requirements.getLatest(source.vacancyId, vacancyDescriptionHash(source.description))!.requirements;
+    expect(runtime.fit.answeredBy({ ...source, requirements })).toBeNull();
+  });
+
   it('enqueues idempotently, extracts in worker and caches an honest unavailable result without a model instead of a fabricated percentage', async () => {
     const runtime = setup(); const source = input();
     runtime.enqueue(source); runtime.enqueue(source);
