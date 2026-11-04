@@ -21,6 +21,14 @@ export const CATALOG_LISTING_HISTORY_TABLE_SQL = `CREATE TABLE IF NOT EXISTS cat
   PRIMARY KEY (place_slug, role_slug)
 ) STRICT, WITHOUT ROWID`;
 
+/** Written by `catalogSearchEvidence`; a listing may be here and not in the history above. */
+export const CATALOG_LISTING_SEARCH_EVIDENCE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_listing_search_evidence (
+  place_slug TEXT NOT NULL,
+  role_slug TEXT NOT NULL DEFAULT '',
+  last_impression_at TEXT NOT NULL,
+  PRIMARY KEY (place_slug, role_slug)
+) STRICT, WITHOUT ROWID`;
+
 export interface ListingCount {
   readonly place: string;
   readonly role?: string;
@@ -66,31 +74,50 @@ export function recordListingHistory(
   }
 }
 
-/** Empty when the maintenance process has not created the table yet. */
-export function readListingHistory(database: DatabaseSync): Map<string, ListingIndexHistory> {
-  const exists = database
-    .prepare(
-      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalog_listing_history'",
-    )
-    .get();
-  if (!exists) return new Map();
+function tableExists(database: DatabaseSync, name: string): boolean {
+  return Boolean(
+    database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name),
+  );
+}
+
+function readImpressions(database: DatabaseSync): Map<string, string> {
+  if (!tableExists(database, 'catalog_listing_search_evidence')) return new Map();
   const rows = database
-    .prepare(
-      'SELECT place_slug, role_slug, first_qualified_at, last_qualified_at FROM catalog_listing_history',
-    )
-    .all() as Array<{
-    place_slug: string;
-    role_slug: string;
-    first_qualified_at: string | null;
-    last_qualified_at: string | null;
-  }>;
+    .prepare('SELECT place_slug, role_slug, last_impression_at FROM catalog_listing_search_evidence')
+    .all() as Array<{ place_slug: string; role_slug: string; last_impression_at: string }>;
   return new Map(
     rows.map((row) => [
       listingHistoryKey(row.place_slug, row.role_slug || undefined),
-      {
-        ...(row.first_qualified_at ? { firstQualifiedAt: row.first_qualified_at } : {}),
-        ...(row.last_qualified_at ? { lastQualifiedAt: row.last_qualified_at } : {}),
-      },
+      row.last_impression_at,
     ]),
   );
+}
+
+/** Empty when the maintenance process has not created the tables yet. */
+export function readListingHistory(database: DatabaseSync): Map<string, ListingIndexHistory> {
+  const impressions = readImpressions(database);
+  const rows = tableExists(database, 'catalog_listing_history')
+    ? (database
+        .prepare(
+          'SELECT place_slug, role_slug, first_qualified_at, last_qualified_at FROM catalog_listing_history',
+        )
+        .all() as Array<{
+        place_slug: string;
+        role_slug: string;
+        first_qualified_at: string | null;
+        last_qualified_at: string | null;
+      }>)
+    : [];
+  const history = new Map<string, ListingIndexHistory>(
+    [...impressions].map(([key, lastImpressionAt]) => [key, { lastImpressionAt }]),
+  );
+  for (const row of rows) {
+    const key = listingHistoryKey(row.place_slug, row.role_slug || undefined);
+    history.set(key, {
+      ...(row.first_qualified_at ? { firstQualifiedAt: row.first_qualified_at } : {}),
+      ...(row.last_qualified_at ? { lastQualifiedAt: row.last_qualified_at } : {}),
+      ...history.get(key),
+    });
+  }
+  return history;
 }

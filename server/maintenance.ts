@@ -32,6 +32,7 @@ import { SqliteVacancyDemandStore } from './vacancies/vacancyDemandStore';
 import { scheduleSalaryMarketSnapshots } from './salaryMarket/salaryMarketSchedule';
 import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
 import { scheduleCurrencyRatesJob } from './currency/cbrRatesSchedule';
+import { scheduleCatalogSearchEvidence } from './seo/catalogSearchEvidence';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
@@ -177,6 +178,7 @@ function readNonNegativeInteger(value: string | undefined, fallback: number): nu
 let stopSalaryMarketSnapshots: (() => void) | undefined;
 let stopCatalogRuSummaries: (() => void) | undefined;
 let stopOpenRouterBalance: (() => void) | undefined;
+let stopCatalogSearchEvidence: (() => void) | undefined;
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;
 async function shutdown(signal: string): Promise<void> {
@@ -185,6 +187,7 @@ async function shutdown(signal: string): Promise<void> {
   stopSalaryMarketSnapshots?.();
   stopCatalogRuSummaries?.();
   stopOpenRouterBalance?.();
+  stopCatalogSearchEvidence?.();
   log.info({ signal }, 'maintenance-shutdown-started');
   // `restoreAsync` reads the large SQLite pool in bounded chunks, but a
   // single restore can still take more than the old systemd stop window on
@@ -225,6 +228,12 @@ try {
   stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
   scheduleCatalogSitemapJob(semanticDatabase, log);
+  // 04.11: listings with impressions in Google keep `index` below their threshold.
+  stopCatalogSearchEvidence = scheduleCatalogSearchEvidence(
+    semanticDatabase,
+    process.env.OPENQAREER_GSC_SERVICE_ACCOUNT_B64,
+    log,
+  );
   // 03.11: Russian card summaries through the bulk channel, newest indexable cards first.
   stopCatalogRuSummaries = scheduleCatalogRuSummaryJob(semanticDatabase, config.databasePath, log);
   // 04.11: hourly OpenRouter balance check, one Telegram alert per UTC day below the threshold.

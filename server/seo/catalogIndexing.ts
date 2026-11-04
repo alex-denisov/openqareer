@@ -131,6 +131,8 @@ export function isIndexablePage(page: number): boolean {
 export interface ListingIndexHistory {
   readonly firstQualifiedAt?: string;
   readonly lastQualifiedAt?: string;
+  /** Last daily read of Search Console that showed impressions (`catalogSearchEvidence`). */
+  readonly lastImpressionAt?: string;
 }
 
 export function listingQualifies(total: number, hasRole: boolean): boolean {
@@ -139,8 +141,8 @@ export function listingQualifies(total: number, hasRole: boolean): boolean {
 
 /**
  * Whether a place (or place+role) listing with `total` vacancies asks to be
- * indexed: at its threshold, or — once indexed — for `LISTING_RETAIN_DAYS`
- * after it last met it, while it has at least one vacancy.
+ * indexed: at its threshold, or for `LISTING_RETAIN_DAYS` after it last met it
+ * or last had impressions in Google, while it has at least one vacancy.
  */
 export function isIndexableListing(
   total: number,
@@ -149,9 +151,8 @@ export function isIndexableListing(
   now: Date = new Date(),
 ): boolean {
   if (listingQualifies(total, hasRole)) return true;
-  return (
-    total >= 1 &&
-    history?.lastQualifiedAt !== undefined &&
-    withinDays(history.lastQualifiedAt, LISTING_RETAIN_DAYS, now)
+  if (total < 1) return false;
+  return [history?.lastQualifiedAt, history?.lastImpressionAt].some(
+    (at) => at !== undefined && withinDays(at, LISTING_RETAIN_DAYS, now),
   );
 }
