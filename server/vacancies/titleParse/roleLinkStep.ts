@@ -3,20 +3,30 @@ import { z } from 'zod';
 import { ontology } from '../../../shared/roleOntology';
 import { MIGRATION_35 } from '../../data/sqliteSchema';
 import type { BulkLlmClient } from '../../providers/bulkLlmClient';
+import { hasNoRoleToLink } from './roleLinkTitles';
 import { rulesParse } from './rulesParse';
 import { describeFailure } from './titleFreeze';
 
 /**
  * Связь названия с ролью словаря (владелец 04.11): правила, затем модель на неизвестных с закрытым
- * списком ролей функций названия. Подбор таблицу `vacancy_role` пока не читает. Это малая партия:
- * точность смотрят глазами до массового прохода, поэтому потолок названий на модели задан в коде.
+ * списком ролей функций названия. Подбор таблицу `vacancy_role` пока не читает.
+ *
+ * Стадии идут по очереди, переключает их правка кода: `sample` — потолок названий, редкие из хвоста,
+ * точность смотрят глазами; `pass` — все ключи руководителей, частые первыми, под потолком расхода.
  */
-export const ROLE_LINK_MODEL_TITLES = 200;
+export type RoleLinkStage = 'sample' | 'pass';
+export const ROLE_LINK_STAGE: RoleLinkStage = 'sample';
+export const ROLE_LINK_MODEL_TITLES = 400;
+export const ROLE_LINK_SPEND_CAP_USD = 10;
+const TAIL_MAX_VACANCIES = 2;
 const BATCH = 40;
-const MAX_CALLS_PER_PROCESS = 12;
-const CANDIDATES = 600;
+const SAMPLE_CALLS_PER_PROCESS = 12;
+/** Чтение очереди занимает секунды на проде: одно на много пачек, а не на каждый такт. */
+const SAMPLE_QUEUE = 600;
+const PASS_QUEUE = 3_000;
 const ROLE_LINK_TASK = 'role-link';
 const ROLE_LINK_MAX_TOKENS = 4_096;
+const SOURCE_NO_FUNCTION = 'no-function';
 
 const ROLE_LINK_PROMPT = `
 Сопоставь каждое название вакансии с одной ролью из списка roles. Верни JSON-объект {"items": [...]}
@@ -35,6 +45,8 @@ interface Candidate {
 
 export interface RoleLinkReport {
   readonly rules: number;
+  /** Без функции в названии или без своей роли: модель их не получает. */
+  readonly noFunction: number;
   readonly linked: number;
   readonly noRole: number;
   /** Ответ не из закрытого списка: остаётся без роли, сам ответ хранится для разбора. */
@@ -42,7 +54,14 @@ export interface RoleLinkReport {
   readonly failed: boolean;
 }
 
-const EMPTY_REPORT: RoleLinkReport = { rules: 0, linked: 0, noRole: 0, outsideList: 0, failed: false };
+const EMPTY_REPORT: RoleLinkReport = {
+  rules: 0,
+  noFunction: 0,
+  linked: 0,
+  noRole: 0,
+  outsideList: 0,
+  failed: false,
+};
 
 function functionsOf(candidate: Candidate): readonly string[] {
   try {
@@ -73,27 +92,54 @@ function decodeAnswers(content: string, keys: ReadonlySet<string>) {
   });
 }
 
+/** Ответ не с Gemini (партия 04.11: DeepSeek на 40 из 40 сказал «нет роли») спрашивается заново. */
+const STALE = `(r.source = 'model' AND r.role_id IS NULL AND r.model NOT LIKE 'gemini%')`;
+
 export class RoleLinkStep {
   private calls = 0;
+  private prepared = false;
+  private queue: readonly Candidate[] = [];
 
   constructor(
     private readonly database: DatabaseSync,
     private readonly client: Pick<BulkLlmClient, 'complete'>,
     private readonly log?: { warn(fields: Record<string, unknown>, message: string): void },
     private readonly now: () => number = Date.now,
+    private readonly stage: RoleLinkStage = ROLE_LINK_STAGE,
   ) {
     this.database.exec(MIGRATION_35);
   }
 
   private modelTitlesDone(): number {
     const row = this.database
-      .prepare(`SELECT count(*) AS n FROM vacancy_role WHERE source = 'model'`)
+      .prepare(
+        `SELECT count(*) AS n FROM vacancy_role WHERE source = 'model' AND model LIKE 'gemini%'`,
+      )
       .get() as { n: number };
     return row.n;
   }
 
-  /** Частые названия руководителей без связи: на них виден выигрыш подбора. */
-  private candidates(): Candidate[] {
+  private spentUsd(): number {
+    const ledger = this.database
+      .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bulk_llm_spend'`)
+      .get();
+    if (!ledger) return 0;
+    const row = this.database
+      .prepare(`SELECT coalesce(sum(cost), 0) AS usd FROM bulk_llm_spend WHERE task = ?`)
+      .get(ROLE_LINK_TASK) as { usd: number };
+    return row.usd;
+  }
+
+  /** Сколько названий ещё можно отдать модели на этой стадии. */
+  private modelRoom(): number {
+    if (this.stage === 'pass') return this.spentUsd() < ROLE_LINK_SPEND_CAP_USD ? BATCH : 0;
+    if (this.calls >= SAMPLE_CALLS_PER_PROCESS) return 0;
+    return Math.min(BATCH, ROLE_LINK_MODEL_TITLES - this.modelTitlesDone());
+  }
+
+  /** Названия руководителей без связи; ответы не с Gemini первыми. */
+  private readQueue(): Candidate[] {
+    const sample = this.stage === 'sample';
     return this.database
       .prepare(
         `SELECT p.title_key, p.sample_title, p.functions
@@ -101,14 +147,24 @@ export class RoleLinkStep {
                WHERE level_rank >= 2 GROUP BY title_key) s
          JOIN title_parse p ON p.title_key = s.title_key
          LEFT JOIN vacancy_role r ON r.title_key = s.title_key
-         WHERE r.title_key IS NULL
-         ORDER BY s.n DESC, s.title_key
+         WHERE ${
+           sample
+             ? `${STALE} OR (r.title_key IS NULL AND s.n <= ${TAIL_MAX_VACANCIES})`
+             : `${STALE} OR r.title_key IS NULL`
+         }
+         ORDER BY ${STALE} DESC, ${sample ? 'random()' : 's.n DESC, s.title_key'}
          LIMIT ?`,
       )
-      .all(CANDIDATES) as unknown as Candidate[];
+      .all(sample ? SAMPLE_QUEUE : PASS_QUEUE) as unknown as Candidate[];
   }
 
-  private write(key: string, roleId: string | null, source: string, model: string | null, raw: string | null) {
+  private write(
+    key: string,
+    roleId: string | null,
+    source: string,
+    model: string | null,
+    raw: string | null,
+  ): void {
     this.database
       .prepare(
         `INSERT OR REPLACE INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms)
@@ -117,15 +173,54 @@ export class RoleLinkStep {
       .run(key, roleId, source, model, raw, this.now());
   }
 
-  private linkByRules(candidates: readonly Candidate[]): Candidate[] {
-    return candidates.filter((candidate) => {
-      const roleId = rulesParse(candidate.sample_title).roleId;
-      if (roleId) this.write(candidate.title_key, roleId, 'rules', null, null);
-      return !roleId;
-    });
+  /**
+   * Разовая уборка партии 04.11: главные бухгалтеры ушли в рядового бухгалтера, пока своей роли не
+   * было; названия без функции получили роль наугад.
+   */
+  private cleanUp(): void {
+    const accountants = this.database
+      .prepare(
+        `SELECT title_key FROM vacancy_role WHERE role_id = 'finance.accountant.ic' AND title_key LIKE 'главный бухгалтер%'`,
+      )
+      .all() as unknown as { title_key: string }[];
+    for (const { title_key: key } of accountants) {
+      this.write(key, rulesParse(key).roleId ?? null, 'rules', null, null);
+    }
+    const linked = this.database
+      .prepare(`SELECT title_key FROM vacancy_role WHERE source = 'model'`)
+      .all() as unknown as { title_key: string }[];
+    for (const { title_key: key } of linked) {
+      if (hasNoRoleToLink(key)) this.write(key, null, SOURCE_NO_FUNCTION, null, null);
+    }
   }
 
-  private async askModel(batch: readonly Candidate[]): Promise<Omit<RoleLinkReport, 'rules' | 'failed'>> {
+  /** Правила и названия без функции не тратят вызов: модель получает только остаток. */
+  private settleWithoutModel(candidates: readonly Candidate[]): {
+    readonly unknown: Candidate[];
+    readonly rules: number;
+    readonly noFunction: number;
+  } {
+    const unknown: Candidate[] = [];
+    let rules = 0;
+    let noFunction = 0;
+    for (const candidate of candidates) {
+      const roleId = rulesParse(candidate.sample_title).roleId;
+      if (roleId) {
+        this.write(candidate.title_key, roleId, 'rules', null, null);
+        rules += 1;
+      } else if (hasNoRoleToLink(candidate.title_key)) {
+        this.write(candidate.title_key, null, SOURCE_NO_FUNCTION, null, null);
+        noFunction += 1;
+      } else {
+        unknown.push(candidate);
+      }
+    }
+    return { unknown, rules, noFunction };
+  }
+
+  private async askModel(
+    batch: readonly Candidate[],
+  ): Promise<Pick<RoleLinkReport, 'linked' | 'noRole' | 'outsideList'>> {
     const roles = rolesFor(batch);
     const allowed = new Set(roles.map((role) => role.id));
     const keys = new Set(batch.map((candidate) => candidate.title_key));
@@ -139,6 +234,7 @@ export class RoleLinkStep {
         titles: batch.map((item) => ({ titleKey: item.title_key, title: item.sample_title })),
       }),
       maxTokens: ROLE_LINK_MAX_TOKENS,
+      onlyVertex: true,
       accept: (content) => decodeAnswers(content, keys).length > 0,
     });
     const counts = { linked: 0, noRole: 0, outsideList: 0 };
@@ -152,20 +248,33 @@ export class RoleLinkStep {
     return counts;
   }
 
+  private refillQueue(): Pick<RoleLinkReport, 'rules' | 'noFunction'> {
+    if (this.queue.length > 0) return { rules: 0, noFunction: 0 };
+    const { unknown, rules, noFunction } = this.settleWithoutModel(this.readQueue());
+    this.queue = unknown;
+    return { rules, noFunction };
+  }
+
   async run(): Promise<RoleLinkReport> {
-    const left = ROLE_LINK_MODEL_TITLES - this.modelTitlesDone();
-    if (left <= 0 || this.calls >= MAX_CALLS_PER_PROCESS) return EMPTY_REPORT;
-    const candidates = this.candidates();
-    const unknown = this.linkByRules(candidates);
-    const rules = candidates.length - unknown.length;
-    const batch = unknown.slice(0, Math.min(BATCH, left));
-    if (batch.length === 0) return { ...EMPTY_REPORT, rules };
+    if (this.modelRoom() <= 0) return EMPTY_REPORT;
+    if (!this.prepared) {
+      this.cleanUp();
+      this.prepared = true;
+    }
+    const settled = this.refillQueue();
+    const room = this.modelRoom();
+    const batch = this.queue.slice(0, room);
+    if (batch.length === 0) return { ...EMPTY_REPORT, ...settled };
     this.calls += 1;
     try {
-      return { ...EMPTY_REPORT, rules, ...(await this.askModel(batch)) };
+      const answered = await this.askModel(batch);
+      // Название без ответа в пачке вернётся при следующем чтении очереди.
+      this.queue = this.queue.slice(batch.length);
+      return { ...EMPTY_REPORT, ...settled, ...answered };
     } catch (error) {
+      // Нет ответа Gemini: строк нет, ключи остаются в очереди.
       this.log?.warn({ reason: describeFailure(error) }, 'role-link-call-failed');
-      return { ...EMPTY_REPORT, rules, failed: true };
+      return { ...EMPTY_REPORT, ...settled, failed: true };
     }
   }
 }

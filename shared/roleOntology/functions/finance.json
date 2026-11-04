@@ -81,6 +81,10 @@
         {
           "roleId": "finance.controller.lead",
           "kind": "level-up"
+        },
+        {
+          "roleId": "finance.chief-accountant.head",
+          "kind": "level-up"
         }
       ]
     },
@@ -290,6 +294,47 @@
         },
         {
           "roleId": "finance.controller.lead",
+          "kind": "level-up"
+        }
+      ]
+    },
+    {
+      "id": "finance.chief-accountant.head",
+      "function": "finance",
+      "family": "finance.core",
+      "titleEn": "Chief Accountant",
+      "titleRu": "Главный бухгалтер",
+      "levels": [
+        "head"
+      ],
+      "variants": {
+        "en": [
+          "Chief Accountant",
+          "Head of Accounting",
+          "Accounting Director",
+          "Director of Accounting"
+        ],
+        "ru": [
+          "Главный бухгалтер",
+          "Главбух",
+          "Руководитель бухгалтерии"
+        ]
+      },
+      "adjacent": [
+        {
+          "roleId": "finance.accountant.ic",
+          "kind": "level-down"
+        },
+        {
+          "roleId": "finance.controller.lead",
+          "kind": "sibling-family"
+        },
+        {
+          "roleId": "finance.head",
+          "kind": "level-up"
+        },
+        {
+          "roleId": "finance.cfo",
           "kind": "level-up"
         }
       ]

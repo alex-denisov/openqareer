@@ -537,7 +537,10 @@ export class MaintenanceWorker {
     this.roleLinkRunning = true;
     try {
       const report = await this.roleLink.run();
-      if (report.rules + report.linked + report.noRole + report.outsideList > 0 || report.failed) {
+      if (
+        report.rules + report.noFunction + report.linked + report.noRole + report.outsideList > 0 ||
+        report.failed
+      ) {
         this.log.info({ ...report }, 'role-link-step');
       }
     } catch (error: unknown) {
