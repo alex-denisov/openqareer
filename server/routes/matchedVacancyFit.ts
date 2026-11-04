@@ -496,7 +496,8 @@ export async function requestFitForVacancyIds(
       const state = runtime.view(input).state;
       if (!['not_requested', 'failed', 'refreshing'].includes(state)) return;
       // Only the background precompute passes a slot: a counted row keeps its old percent past the day's ceiling.
-      if (state === 'refreshing' && refreshSlot && !refreshSlot()) return;
+      // 04.11: a row with its job held spent a slot on every sweep and queued nothing.
+      if (state === 'refreshing' && refreshSlot && (runtime.fitJobHoldsKey(input) || !refreshSlot())) return;
       runtime.enqueue(
         input,
         backgroundRank === undefined ? {} : { backgroundRank: backgroundRank + index },

@@ -36,6 +36,7 @@ describe('fit queue for a selection chunk (prod 02.11: 100–450 ms per chunk on
     const mechanics = {
       ...runtime(new Set()),
       view: vi.fn((input: { vacancyId: string }) => ({ state: states[input.vacancyId] })),
+      fitJobHoldsKey: vi.fn(() => false),
     };
     const slot = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
     const deps = { vacancyMechanics: mechanics } as never;
@@ -46,6 +47,18 @@ describe('fit queue for a selection chunk (prod 02.11: 100–450 ms per chunk on
     // A card the candidate opened passes no slot: no ceiling.
     await requestFitForVacancyIds(deps, 'candidate', ['r1', 'r2']);
     expect(mechanics.enqueue).toHaveBeenCalledTimes(2);
+  });
+
+  it('a refreshing row whose job holds the key spends no slot: no job would come of it (04.11)', async () => {
+    const mechanics = {
+      ...runtime(new Set()),
+      view: vi.fn(() => ({ state: 'refreshing' })),
+      fitJobHoldsKey: vi.fn((input: { vacancyId: string }) => input.vacancyId === 'held'),
+    };
+    const slot = vi.fn(() => true);
+    await requestFitForVacancyIds({ vacancyMechanics: mechanics } as never, 'candidate', ['held', 'free'], 0, {}, slot);
+    expect(slot).toHaveBeenCalledTimes(1);
+    expect(mechanics.enqueue.mock.calls.map(([input]) => input.vacancyId)).toEqual(['free']);
   });
 
   it('lets queued requests run between rows once a slice is spent (PRB-041: up to 1 s per chunk)', async () => {

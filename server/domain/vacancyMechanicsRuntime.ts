@@ -153,6 +153,11 @@ export class VacancyMechanicsRuntime {
     if (!input.description.trim() || extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) return false;
     return this.fit.hasCache({ ...input, requirements: extracted.requirements });
   }
+  /** `enqueue` would create no job: one is waiting, or a finished one holds this input's key. */
+  fitJobHoldsKey(input: VacancyFitInput): boolean {
+    const state = this.fit.getJobState(input);
+    return state !== undefined && state !== 'failed';
+  }
   /** `backgroundRank` (B580): the selection sweep queues below every page the candidate looks at. */
   enqueue(input: VacancyFitInput, options: FitEnqueueOptions = {}) {
     const requirementInput = { vacancyId: input.vacancyId, description: input.description };
