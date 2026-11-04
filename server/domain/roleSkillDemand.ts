@@ -2,6 +2,7 @@ import {
   canonicalizeSkill,
   managementSkillMatcher,
 } from '../connectors/managementSkillsDictionary';
+import { isSoftSkill } from './atsRoleKeywords';
 import type { RoleAssessmentVacancy } from './roleSkillAssessment';
 import { isRoleTitleLabel } from './roleTitleLabel';
 
@@ -108,7 +109,7 @@ function tallyRequirements(sample: readonly RoleAssessmentVacancy[]): Map<string
     for (const requirement of vacancy.requirements) {
       const label = requirement.statement.trim();
       const key = skillKey(label);
-      if (!key || seen.has(key) || isRoleTitleLabel(label)) continue;
+      if (!key || seen.has(key) || isRoleTitleLabel(label) || isSoftSkill(label)) continue;
       seen.add(key);
       const tally = tallies.get(key) ?? { labels: new Map<string, number>(), vacancies: 0 };
       tally.vacancies += 1;

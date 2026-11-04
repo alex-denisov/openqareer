@@ -24,7 +24,8 @@ const SOFT_SKILL_PATTERNS: readonly RegExp[] = [
   /attention to detail|внимательност|ответственност|self-motivat|проактивн|инициативн/iu,
 ];
 
-const isSoftSkill = (label: string) => SOFT_SKILL_PATTERNS.some((pattern) => pattern.test(label));
+export const isSoftSkill = (label: string): boolean =>
+  SOFT_SKILL_PATTERNS.some((pattern) => pattern.test(label));
 
 export interface RoleKeywords {
   readonly keywords: readonly string[];

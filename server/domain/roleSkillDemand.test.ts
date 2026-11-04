@@ -125,6 +125,24 @@ describe('buildRoleSkillDemand', () => {
     expect(demand?.skills.map((skill) => skill.name)).toEqual(named);
   });
 
+  it('never lists a personal quality: a resume shows those through achievements', () => {
+    const demand = buildRoleSkillDemand(
+      'CTO',
+      'cto',
+      Array.from({ length: 6 }, (_, i) =>
+        vacancy(`q${i}`, [
+          'Communication skills',
+          'Деловая коммуникация',
+          'Problem solving',
+          'Kafka',
+        ]),
+      ),
+      [],
+      5,
+    );
+    expect(demand?.skills.map((skill) => skill.name)).toEqual(['Kafka']);
+  });
+
   it('is hidden when only job titles repeat', () => {
     const titles = Array.from({ length: 6 }, (_, i) => vacancy(`o${i}`, ['CTO']));
     expect(buildRoleSkillDemand('CTO', 'cto', titles, [], 5)).toBeNull();
