@@ -58,13 +58,6 @@ export function matchedSnapshotKey(
   return gradeRange ? `${placed}:g${gradeRange.min}-${gradeRange.max}` : placed;
 }
 
-/**
- * Пилот диапазонов грейдов (этап 1, 04.11): сначала для adenisov.test. Для всех — отдельной правкой,
- * после защиты от массовых пересчётов: новые строки в окне подбора ставят процент в очередь.
- * Снимок обновляется обычным сбросом, а не по мере заполнения `vacancy_grade`.
- */
-const GRADE_RANGE_PILOT: ReadonlySet<string> = new Set(['81d104dc-b165-4042-a1f9-ee4f316ecbfd']);
-
 type RecentTitlesReader = (candidateId: string) => readonly string[];
 const recentTitlesReaders = new WeakMap<RouteDeps['multiSourceEngine'], RecentTitlesReader>();
 
@@ -76,12 +69,15 @@ export function setMatchedRecentTitlesReader(
   recentTitlesReaders.set(engine, reader);
 }
 
+/**
+ * Диапазон грейда кандидата (этап 1, 04.11). Снимок обновляется обычным сбросом, а не по мере
+ * заполнения `vacancy_grade`.
+ */
 function gradeRangeOf(
   engine: RouteDeps['multiSourceEngine'],
   candidateId: string,
   targetRoles: readonly string[],
 ): GradeRange | null {
-  if (!GRADE_RANGE_PILOT.has(candidateId)) return null;
   return candidateGradeRange({
     targetRoles,
     recentTitles: recentTitlesReaders.get(engine)?.(candidateId) ?? [],
@@ -114,7 +110,13 @@ export function peekMatchedVacancies(
   if (!snapshots) return undefined;
   return snapshots.peek(
     candidateId,
-    matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel, geography),
+    matchedSnapshotKey(
+      confirmedSkills,
+      targetRoles,
+      targetLevel,
+      geography,
+      gradeRangeOf(engine, candidateId, targetRoles),
+    ),
   );
 }
 

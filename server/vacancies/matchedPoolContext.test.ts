@@ -4,6 +4,7 @@ import {
   markMatchedVacanciesStale,
   peekMatchedVacancies,
   readMatchedSnapshot,
+  setMatchedRecentTitlesReader,
 } from './matchedPoolContext';
 import type { MatchGeography } from './matchGeography';
 import type { RouteDeps } from '../routes/deps';
@@ -39,6 +40,44 @@ describe('peekMatchedVacancies (B230)', () => {
     const peeked = peekMatchedVacancies(engine, 'candidate-1', ['skill'], ['Product Manager'], 'head');
 
     expect(peeked).toBeUndefined();
+  });
+});
+
+describe('диапазон грейда в подборе (этап 1, 04.11)', () => {
+  function recordingEngine() {
+    const calls: { gradeRange?: unknown }[] = [];
+    const engine = {
+      getMatchedVacanciesAsync: async (input: { gradeRange?: unknown }) => {
+        calls.push(input);
+        return [{ vacancy: { id: 'a' } }];
+      },
+    } as unknown as RouteDeps['multiSourceEngine'];
+    return { engine, calls };
+  }
+
+  it('слово в роли сужает подбор любого кандидата', async () => {
+    const { engine, calls } = recordingEngine();
+    await readMatchedSnapshot(engine, 'candidate-1', ['skill'], ['Senior Frontend Developer'], 'ic');
+    expect(calls[0].gradeRange).toEqual({ min: 3, max: 5 });
+  });
+
+  it('без слова в ролях берёт последние места', async () => {
+    const { engine, calls } = recordingEngine();
+    setMatchedRecentTitlesReader(engine, () => ['Senior Developer', 'Developer', 'Junior Developer']);
+    await readMatchedSnapshot(engine, 'candidate-1', ['skill'], ['Frontend Developer'], 'ic');
+    expect(calls[0].gradeRange).toEqual({ min: 3, max: 5 });
+  });
+
+  it('без слова нигде подбор не сужается', async () => {
+    const { engine, calls } = recordingEngine();
+    await readMatchedSnapshot(engine, 'candidate-1', ['skill'], ['Frontend Developer'], 'ic');
+    expect(calls[0].gradeRange).toBeUndefined();
+  });
+
+  it('«Сегодня» находит снимок кандидата с диапазоном', async () => {
+    const { engine } = recordingEngine();
+    const written = await readMatchedSnapshot(engine, 'candidate-1', ['skill'], ['Senior Developer'], 'ic');
+    expect(peekMatchedVacancies(engine, 'candidate-1', ['skill'], ['Senior Developer'], 'ic')).toBe(written);
   });
 });
 
