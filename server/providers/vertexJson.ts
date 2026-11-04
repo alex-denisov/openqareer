@@ -9,6 +9,8 @@ export interface VertexJsonRequest {
   readonly user: string;
   /** Room for the answer; the thinking headroom is added on top. */
   readonly answerTokens: number;
+  /** JSON schema of the answer; without it the model picks the shape itself. */
+  readonly responseSchema?: unknown;
 }
 
 /**
@@ -43,6 +45,7 @@ export class VertexJsonClient {
           contents: [{ role: 'user', parts: [{ text: request.user }] }],
           generationConfig: {
             responseMimeType: 'application/json',
+            ...(request.responseSchema ? { responseJsonSchema: request.responseSchema } : {}),
             maxOutputTokens: request.answerTokens + VERTEX_THINKING_HEADROOM_TOKENS,
             thinkingConfig: { thinkingLevel: 'low' },
           },
@@ -75,6 +78,7 @@ export class VertexJsonClient {
               system,
               user,
               answerTokens: Number.isFinite(cap) && cap > 0 ? cap : 8_000,
+              responseSchema: schemaOf(request.response_format),
             });
             return { choices: [{ message: { content } }] };
           },
@@ -82,4 +86,8 @@ export class VertexJsonClient {
       },
     };
   }
+}
+
+function schemaOf(format: unknown): unknown {
+  return (format as { json_schema?: { schema?: unknown } } | undefined)?.json_schema?.schema;
 }

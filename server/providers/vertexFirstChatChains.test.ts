@@ -177,10 +177,11 @@ describe('квиз, пункты: ступень Vertex', () => {
       droppedFactIds: [],
       unmatchedFactIds: [],
     };
+    const calls: Call[] = [];
     const built = buildExperienceFactRewriter({
       providerCredentials: credentials,
       vertex,
-      vertexFetch: metered(gate, 'experienceBullets', transport(JSON.stringify(answer))),
+      vertexFetch: metered(gate, 'experienceBullets', transport(JSON.stringify(answer), calls)),
     })!;
     const output = await built.rewrite({
       places: [
@@ -190,6 +191,9 @@ describe('квиз, пункты: ступень Vertex', () => {
     } as never);
     expect(output).toEqual(answer);
     expect(built.provenance?.model).toBe('gemini-3.8-flash');
+    // Without the schema the model picks the shape itself: 04.11 the resume lost its places of work.
+    const config = calls[0]!.body.generationConfig as Record<string, unknown>;
+    expect(config.responseJsonSchema).toMatchObject({ type: 'object' });
     expect(ledger.db.prepare("SELECT task FROM bulk_llm_spend WHERE provider='gemini'").all()).toEqual([
       { task: 'experienceBullets' },
     ]);
