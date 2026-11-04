@@ -15,6 +15,7 @@ import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirector
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
+import { RoleLinkStep } from './vacancies/titleParse/roleLinkStep';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
 import { describeFailure, unfreezeLiveTitles } from './vacancies/titleParse/titleFreeze';
 import {
@@ -123,6 +124,10 @@ const titleModelParser = titleBulkRuntime.client
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
+  // Откат малой партии связи с ролью: OPENQAREER_ROLE_LINK_OFF=1 останавливает вызовы модели.
+  ...(titleBulkRuntime.client && process.env.OPENQAREER_ROLE_LINK_OFF !== '1'
+    ? { roleLink: new RoleLinkStep(semanticDatabase, titleBulkRuntime.client, log) }
+    : {}),
   titleParse: new SemanticBackfill(semanticDatabase, (reason) =>
     log.error({ reason }, 'title-grade-step-failed'),
   ),

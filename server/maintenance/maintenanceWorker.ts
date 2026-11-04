@@ -1,3 +1,4 @@
+import type { RoleLinkStep } from '../vacancies/titleParse/roleLinkStep';
 import { CATALOG_TOTALS_REFRESH_MS } from '../vacancies/matchedCatalogSummary';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
@@ -94,6 +95,8 @@ export interface TitleParseStep {
   countKeys(): number;
 }
 
+const ROLE_LINK_INTERVAL_MS = 60_000;
+
 export interface TitleModelStep {
   run(): Promise<{
     batches: number;
@@ -178,12 +181,14 @@ export class MaintenanceWorker {
   private readonly manualInFlight = new Set<string>();
   private readonly titleParse?: TitleParseStep;
   private readonly titleModel?: TitleModelStep;
+  private readonly roleLink?: RoleLinkStep;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   private readonly purgeRecruiters?: () => number;
   private readonly now: () => number;
   private orphanRestUntil = 0;
   private catalogTotalsAt = Number.NEGATIVE_INFINITY;
   private titleModelRunning = false;
+  private roleLinkRunning = false;
   private lastTitleModelLogAt = 0;
   private lastTitleParseProgressAt = Date.now();
   private lastTitleParseStepAt = Date.now();
@@ -204,6 +209,7 @@ export class MaintenanceWorker {
     readHeap?: () => HeapReading;
     titleParse?: TitleParseStep;
     titleModel?: TitleModelStep;
+    roleLink?: RoleLinkStep;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
     now?: () => number;
@@ -212,6 +218,7 @@ export class MaintenanceWorker {
     this.engine = options.engine;
     this.titleParse = options.titleParse;
     this.titleModel = options.titleModel;
+    this.roleLink = options.roleLink;
     this.linkedinPoolExecutor = options.linkedinPoolExecutor;
     this.purgeRecruiters = options.purgeRecruiters;
     this.log = options.log;
@@ -524,6 +531,25 @@ export class MaintenanceWorker {
     this.lastTitleParseProgressAt = now;
   }
 
+  /** Малая партия связи с ролью: одна пачка за такт, пока не упрётся в потолок. */
+  async runRoleLinkStep(): Promise<void> {
+    if (this.stopped || !this.roleLink || this.roleLinkRunning) return;
+    this.roleLinkRunning = true;
+    try {
+      const report = await this.roleLink.run();
+      if (report.rules + report.linked + report.noRole + report.outsideList > 0 || report.failed) {
+        this.log.info({ ...report }, 'role-link-step');
+      }
+    } catch (error: unknown) {
+      this.log.error(
+        { errorName: errorName(error), errorMessage: errorMessage(error) },
+        'role-link-step-failed',
+      );
+    } finally {
+      this.roleLinkRunning = false;
+    }
+  }
+
   /** До трёх батчей Vertex; один запуск не пересекается со следующим тиком. */
   async runTitleModelStep(): Promise<void> {
     if (this.stopped || !this.titleModel || this.titleModelRunning) return;
@@ -634,6 +660,9 @@ export class MaintenanceWorker {
     every(TITLE_PARSE_PROGRESS_INTERVAL_MS, () => this.reportTitleParseProgress());
     every(this.intervals.titleModelMs, () =>
       this.track(this.runTitleModelStep(), 'title-model-step-failed', undefined),
+    );
+    every(ROLE_LINK_INTERVAL_MS, () =>
+      this.track(this.runRoleLinkStep(), 'role-link-step-failed', undefined),
     );
     if (this.linkedinPoolExecutor) {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
