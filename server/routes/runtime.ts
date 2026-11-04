@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { errorDiagnostics } from '../observability/errorDiagnostics';
+import { isSqliteBusy } from '../data/sqliteBusyRetry';
 import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -297,16 +298,6 @@ function respondKnownError(
   return null;
 }
 
-/** `SQLITE_BUSY` (errcode 5) из node:sqlite после истечения busy_timeout. */
-export function isSqliteBusy(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const details = error as Error & { code?: string; errcode?: number; errstr?: string };
-  return (
-    details.code === 'ERR_SQLITE_ERROR' &&
-    (details.errcode === 5 || /database is locked/iu.test(details.errstr ?? error.message))
-  );
-}
-
 const VACANCY_MATCH_RETRY_SECONDS = 5;
 
 /** PRB-041: with no snapshot to fall back on the reader is asked to repeat, not told of a fault. */
@@ -329,6 +320,8 @@ function askToRepeatMatch(
     true,
   );
 }
+
+export { isSqliteBusy };
 
 function sendStorageBusy(
   error: unknown,
