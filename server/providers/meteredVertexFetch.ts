@@ -64,6 +64,8 @@ export function createMeteredVertexFetch(options: MeteredFetchOptions): typeof f
     if (!options.preAdmitted) gate.admit(task);
     if (!url.includes(GENERATE_CONTENT)) return inner(input, init);
     const model = modelOf(url);
+    const startedAt = Date.now();
+    const elapsed = () => Date.now() - startedAt;
     let response: Response;
     try {
       response = await inner(input, withTimeout(init, options.timeoutMs));
@@ -71,25 +73,25 @@ export function createMeteredVertexFetch(options: MeteredFetchOptions): typeof f
       const text = maskFailureText(
         `${error instanceof Error ? error.name : 'Error'}: ${error instanceof Error ? error.message : 'unknown'}`,
       );
-      record(gate, { task, model, failure: text, rejected: true }, NO_USAGE);
+      record(gate, { task, model, failure: text, rejected: true, durationMs: elapsed() }, NO_USAGE);
       gate.failed({ text });
       throw error;
     }
     if (!response.ok) {
       const text = await providerFailureText(response.clone());
-      record(gate, { task, model, failure: text, rejected: true }, NO_USAGE);
+      record(gate, { task, model, failure: text, rejected: true, durationMs: elapsed() }, NO_USAGE);
       gate.failed({ status: response.status, text });
       return response;
     }
     gate.succeeded();
-    await book(gate, task, model, response);
+    await book(gate, task, model, response, elapsed());
     return response;
   };
 }
 
 function record(
   gate: VertexGate,
-  input: { task: string; model: string; failure?: string; rejected?: boolean },
+  input: { task: string; model: string; failure?: string; rejected?: boolean; durationMs?: number },
   usage: typeof NO_USAGE,
 ): string | undefined {
   try {
@@ -107,6 +109,7 @@ async function book(
   task: string,
   model: string,
   response: Response,
+  durationMs: number,
 ): Promise<void> {
   let usage: VertexUsageMetadata | undefined;
   let booked = model;
@@ -124,7 +127,7 @@ async function book(
   }
   const id = record(
     gate,
-    { task, model: booked },
+    { task, model: booked, durationMs },
     {
       cost: vertexCallCostUsd(usage),
       promptTokens: usage?.promptTokenCount ?? 0,
