@@ -708,6 +708,11 @@ export class MultiSourceVacancyEngine {
     };
   }
 
+  /** An account is gone: its campaign target no longer steers the hh text queue. */
+  public forgetHhTextRoleTarget(candidateId: string): void {
+    this.pool.forgetHhTextRoleTarget?.(candidateId);
+  }
+
   /** Refreshes only the bounded source-state registry; it never hydrates pool rows. */
   public refreshPersistedSourceState(): void {
     this.restoreSourceStates();

@@ -12,6 +12,7 @@ import { AuthService } from './authService';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import type { CandidateFootprintAudit } from '../../shared/candidateFootprint';
+import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 
 /**
  * B089 — the administrator directory. The owner asked for an admin account and
@@ -556,6 +557,7 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
       .get(candidateUser.candidateId) as { c: number };
     expect(candBefore.c).toBe(1);
 
+    const forgetHhTarget = vi.spyOn(MultiSourceVacancyEngine.prototype, 'forgetHhTextRoleTarget');
     const deleteResponse = await app.inject({
       method: 'DELETE',
       url: `/api/v1/admin/users/${candidateUser.id}`,
@@ -564,6 +566,7 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
 
     expect(deleteResponse.statusCode).toBe(200);
     expect(deleteResponse.json()).toEqual({ data: { success: true }, meta: expect.any(Object) });
+    expect(forgetHhTarget).toHaveBeenCalledWith(candidateUser.candidateId);
 
     // Direct DB check after deletion: candidate and user are gone, and audit record describes dossier deletion
     const candAfter = db

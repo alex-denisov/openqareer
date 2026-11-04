@@ -2050,6 +2050,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            level_floor = excluded.level_floor, updated_ms = excluded.updated_ms`,
       )
       .run(candidateId, JSON.stringify([...codes].sort()), floor, nowMs);
+    // Past its term a target no longer steers the queue; the row has no reason to stay.
+    this.database
+      .prepare('DELETE FROM hh_text_role_targets WHERE updated_ms < ?')
+      .run(nowMs - HH_TEXT_TARGET_TTL_MS);
+  }
+
+  /** Аккаунт удалён: цель кандидата уходит вместе с ним. */
+  forgetHhTextRoleTarget(candidateId: string): void {
+    this.recordHhTextRoleTarget(candidateId, [], null);
+    this.hhTextTargetNoted.delete(candidateId);
   }
 
   /** Подбор кандидата считался: его цель ведёт очередь текста hh. Пишет раз в час на цель. */

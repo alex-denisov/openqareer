@@ -85,6 +85,7 @@ async function setup(
   const engine = {
     getMatchedVacanciesAsync: async () => [...items],
     restore: () => ({ clusters: 0, sources: 0 }),
+    forgetHhTextRoleTarget: () => undefined,
     ...engineExtra,
   } as never;
   const app = await createApp(successProvider, undefined, undefined, {

@@ -139,6 +139,7 @@ async function handleDeleteUser(deps: RouteDeps, request: FastifyRequest, reply:
       cancelFootprintRunForCandidate(user.candidateId);
       deps.candidateReputationRepo?.deleteFootprintAuditsByCandidateId(user.candidateId);
       forgetMemberNetwork(deps, user.candidateId, request.log);
+      deps.multiSourceEngine.forgetHhTextRoleTarget(user.candidateId);
     }
     return { data: { success: true }, meta: { requestId: request.id } };
   } catch (err: unknown) {

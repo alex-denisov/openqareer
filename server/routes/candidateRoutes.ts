@@ -310,6 +310,7 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
   deps.vacancyMechanics?.deleteCandidate(candidate.id);
+  deps.multiSourceEngine.forgetHhTextRoleTarget(candidate.id);
   candidateStore.deleteCandidate(candidate.id);
   recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
   recruiterContactsRepo?.deleteJobsByCandidateId(candidate.id);
