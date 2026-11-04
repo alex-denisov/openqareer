@@ -75,7 +75,11 @@ describe('StructuredStageCoachProvider (B564)', () => {
       { provider: 'openrouter', model: 'deepseek/deepseek-v4-flash', status: 'succeeded' },
     ]);
     const input = bulk.complete.mock.calls[0]![0];
-    expect(input).toMatchObject({ task: 'structured-stage', dataClass: 'candidate' });
+    expect(input).toMatchObject({
+      task: 'structured-stage',
+      dataClass: 'candidate',
+      withoutVertex: true,
+    });
     expect(JSON.parse(input.input)).toMatchObject({
       stageContext: { task: 'Generate profile suggestions' },
       messages: [{ id: 'answer-1', content: 'Отвечал за операции.' }],

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BulkCompletion } from '../domain/measuredBulkClient';
+import type { BulkLlmInput } from '../providers/bulkLlmClient';
 import { extractCandidateFacts, splitAnswer } from './candidateFactExtractor';
 
 const MESSAGE_ID = 'message-1';
@@ -31,6 +32,32 @@ describe('splitAnswer', () => {
 });
 
 describe('extractCandidateFacts', () => {
+  it('never asks Vertex: the facts are read during the dialogue (owner 04.11)', async () => {
+    const seen: BulkLlmInput[] = [];
+    const bulk: BulkCompletion = {
+      async complete(input) {
+        seen.push(input);
+        return {
+          content: JSON.stringify({ facts: [] }),
+          model: 'deepseek/deepseek-v4-flash',
+          provider: 'DeepSeek',
+          usage: { cost: 0, promptTokens: 1, cachedTokens: 0, completionTokens: 1 },
+        };
+      },
+    };
+    await extractCandidateFacts({
+      bulk,
+      messageId: 'm',
+      answer:
+        'Руководил командой из двенадцати инженеров и вывел платёжный сервис на рынок за девять месяцев работы.'.repeat(
+          3,
+        ),
+      runId: 'r',
+    });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((input) => input.withoutVertex === true)).toBe(true);
+  });
+
   it('asks the bulk model once per part, in parallel, and keeps every sourced fact', async () => {
     const answer =
       'Выручка выросла с 230 до 920 миллионов рублей. '.repeat(40) +
@@ -127,11 +154,22 @@ describe('extractCandidateFacts', () => {
   it('skips a fact the profile already has in other words, and keeps names letter for letter (26.10)', async () => {
     const bulk = bulkAnswering(() => ({
       facts: [
-        { kind: 'fact', domain: 'responsibility', statement: 'Точно было 254 человека в направлении' },
-        { kind: 'fact', domain: 'responsibility', statement: 'Нанял команду из прошлого коллектива в ВКТех' },
+        {
+          kind: 'fact',
+          domain: 'responsibility',
+          statement: 'Точно было 254 человека в направлении',
+        },
+        {
+          kind: 'fact',
+          domain: 'responsibility',
+          statement: 'Нанял команду из прошлого коллектива в ВКТех',
+        },
       ],
     }));
-    const answer = 'Ну, 256 человек – примерная цифра, но точно было 254. Нанял команду из прошлого коллектива в ВКТех. '.repeat(3);
+    const answer =
+      'Ну, 256 человек – примерная цифра, но точно было 254. Нанял команду из прошлого коллектива в ВКТех. '.repeat(
+        3,
+      );
     const result = await extractCandidateFacts({
       bulk,
       messageId: MESSAGE_ID,

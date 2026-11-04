@@ -206,6 +206,17 @@ describe('Vertex first stage of the bulk channel', () => {
     h.runtime.close();
   });
 
+  it('a consultant step marked withoutVertex goes straight to OpenRouter (owner 04.11)', async () => {
+    const h = harness({});
+    const result = await h.runtime.client!.complete({ ...req, withoutVertex: true });
+    expect(result.content).toBe('{"from":"openrouter"}');
+    expect(result.fallbackReason).toBeUndefined();
+    expect(h.vertexCalls).toEqual([]);
+    expect(h.tokenCalls).toBe(0);
+    expect(h.openRouterCalls).toBe(1);
+    h.runtime.close();
+  });
+
   it('a closed gate makes no network call at all, token included', async () => {
     const h = harness({}, { OPENQAREER_VERTEX_CREDIT_UNTIL: '2020-01-01' });
     const result = await h.runtime.client!.complete(req);
