@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { RouteDeps } from '../routes/deps';
 import type { deriveCandidateTargetLevel } from './candidateLevel';
-import { MatchedPoolSnapshots } from './matchedPoolSnapshot';
+import { MatchedPoolSnapshots, type MatchedPoolReadOptions } from './matchedPoolSnapshot';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import { matchGeographyKey, type MatchGeography } from './matchGeography';
 
@@ -98,6 +98,22 @@ export function invalidateAllMatchedVacancies(engine: RouteDeps['multiSourceEngi
   matchedPoolSnapshots.get(engine)?.invalidateAll();
 }
 
+function snapshotsOf(engine: RouteDeps['multiSourceEngine']): MatchedPoolSnapshots {
+  const known = matchedPoolSnapshots.get(engine);
+  if (known) return known;
+  const created = new MatchedPoolSnapshots();
+  matchedPoolSnapshots.set(engine, created);
+  return created;
+}
+
+/** A rebuild behind an expired snapshot has no request to fail: its failure goes here. */
+export function setMatchedSnapshotFailureLog(
+  engine: RouteDeps['multiSourceEngine'],
+  log: (error: unknown) => void,
+): void {
+  snapshotsOf(engine).setRebuildFailureLog(log);
+}
+
 export function readMatchedSnapshot(
   engine: RouteDeps['multiSourceEngine'],
   candidateId: string,
@@ -105,13 +121,9 @@ export function readMatchedSnapshot(
   targetRoles: string[],
   targetLevel: ReturnType<typeof deriveCandidateTargetLevel>,
   geography?: MatchGeography,
+  options: MatchedPoolReadOptions = {},
 ): Promise<MatchedVacancyItem[]> {
-  let snapshots = matchedPoolSnapshots.get(engine);
-  if (!snapshots) {
-    snapshots = new MatchedPoolSnapshots();
-    matchedPoolSnapshots.set(engine, snapshots);
-  }
-  return snapshots.readAsync(
+  return snapshotsOf(engine).readAsync(
     candidateId,
     matchedSnapshotKey(confirmedSkills, targetRoles, targetLevel, geography),
     () =>
@@ -124,5 +136,6 @@ export function readMatchedSnapshot(
         ...(targetLevel ? { targetLevel } : {}),
         ...(geography ? { matchGeography: geography } : {}),
       }),
+    options,
   );
 }
