@@ -98,3 +98,18 @@ describe('the journal says why a call failed (04.11)', () => {
   });
 });
 
+describe('stray words inside the JSON (04.11: 5 of 42 Vertex answers, all finished normally)', () => {
+  const requirements = ['a', 'b'].map((id) => ({ id, text: id, sourceQuote: id, origin: 'explicit', importance: 'high', kind: 'other', hard: false, stopFactor: false })) as never;
+  const answer = (content: string) => createVacancyFitAssessor({ complete: async () => ({ content }) }, 'run').assess({ requirements, facts: [] });
+  const row = (id: string) => `{"requirementId":"${id}","status":"matched","evidence":[{"factId":"f","quote":"a } brace"}]}`;
+
+  it('reads every row when all of them survive', async () => {
+    const rows = await answer(`{"assessments":[${row('a')} syndromes: [], ${row('b')} any]}`);
+    expect(rows.map((item) => item.requirementId)).toEqual(['a', 'b']);
+    expect(rows[0]!.evidence[0]!.quote).toBe('a } brace');
+  });
+  it('a cut answer stays invalid: the missing rows would read as gaps', async () => {
+    await expect(answer(`{"assessments":[${row('a')}, {"requirementId":"b","sta`)).rejects.toThrow(SyntaxError);
+  });
+});
+

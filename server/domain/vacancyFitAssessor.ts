@@ -30,11 +30,53 @@ function hasAssessments(content: string, limit: number): boolean {
 }
 /** Rows that can be read; one bad entry costs itself (04.11), an answer with none is invalid. */
 function assessmentsOf(content: string, limit: number): readonly VacancyFitRequirementAssessment[] {
-  const parsed: unknown = JSON.parse(withoutMarkdownFence(content));
+  const parsed = parsedAnswer(withoutMarkdownFence(content), limit);
   if (!parsed || typeof parsed !== 'object' || !('assessments' in parsed) || !Array.isArray(parsed.assessments) || parsed.assessments.length > limit) throw new Error('invalid vacancy fit assessment');
   const rows = parsed.assessments.flatMap(parseAssessment);
   if (parsed.assessments.length > 0 && rows.length === 0) throw new Error('invalid vacancy fit assessment');
   return rows;
+}
+/**
+ * 04.11: Gemini writes stray words between rows (« any]}», «抖}») in 5 of 42 finished answers. Every
+ * row survives, so they are read one by one; an answer short of rows was cut and stays invalid.
+ */
+function parsedAnswer(text: string, limit: number): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const rows = rowsOf(text);
+    if (limit > 0 && rows.length === limit) return { assessments: rows };
+    throw error;
+  }
+}
+function rowsOf(text: string): readonly unknown[] {
+  const rows: unknown[] = [];
+  for (let at = text.indexOf('{"requirementId"'); at >= 0; at = text.indexOf('{"requirementId"', at + 1)) {
+    const end = objectEnd(text, at);
+    if (end < 0) continue;
+    try {
+      rows.push(JSON.parse(text.slice(at, end + 1)));
+      at = end;
+    } catch {
+      // A row with a stray word of its own is not counted, so the answer stays invalid.
+    }
+  }
+  return rows;
+}
+/** Where the object opened at `start` closes; braces inside a string do not count. */
+function objectEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let at = start; at < text.length; at += 1) {
+    const char = text[at];
+    if (inString) {
+      if (char === '\\') at += 1;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === '{') depth += 1;
+    else if (char === '}' && --depth === 0) return at;
+  }
+  return -1;
 }
 /** The model fences JSON despite the instructions (1 of 12 local answers, B562-r); that was a whole failed attempt. */
 function withoutMarkdownFence(content: string): string {
