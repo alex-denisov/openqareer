@@ -68,7 +68,24 @@ function experienceLabel(statement: string): string {
   return tidyRole((statement.split(';')[0] ?? '').replace(/\s+[—–]\s+/u, ', '));
 }
 
-interface RoleCandidate { readonly label: string; readonly client: boolean; readonly leading: boolean }
+interface RoleCandidate { readonly label: string; readonly client: boolean; readonly leading: boolean; readonly experience: boolean; readonly rank: number; readonly team: number }
+
+const C_LEVEL = /(?<!\p{L})C[A-Z]O(?!\p{L})/u;
+const TOP_ROLE = /(?<!\p{L})(?:chief|vice president|vp|svp|генеральн\S*)(?!\p{L})/iu;
+const SENIOR_ROLE = /(?<!\p{L})(?:head of|director|директор\S*|руководител\S*|начальник\S*)(?!\p{L})/iu;
+const TEAM_SIZE = /команда\s+(\d+)/iu;
+
+/** The title before the first `;` says how senior a role is: a description only mentions leading. */
+function titleRank(statement: string): number {
+  const title = statement.split(';')[0] ?? '';
+  if (C_LEVEL.test(title) || TOP_ROLE.test(title)) return 3;
+  if (SENIOR_ROLE.test(title)) return 2;
+  return LEADING_ROLE.test(title) ? 1 : 0;
+}
+
+/** 04.11: «OptiLab AI» came first and stood for leadership, while VP with 250 people sat below it. */
+const stronger = (left: RoleCandidate, right: RoleCandidate): number =>
+  Number(right.experience) - Number(left.experience) || right.rank - left.rank || right.team - left.team;
 
 function roleCandidate(fact: ImpliedRoleFact): RoleCandidate | undefined {
   if (fact.id === 'profile:headline') return undefined;
@@ -76,8 +93,9 @@ function roleCandidate(fact: ImpliedRoleFact): RoleCandidate | undefined {
   const leading = matched(fact.statement, LEADING_ROLE);
   const client = matched(fact.statement, CLIENT_WORK);
   if (!leading && !client) return undefined;
-  if (isExperience) return { label: experienceLabel(fact.statement), client: Boolean(client), leading: Boolean(leading) };
-  return { label: tidyRole((leading ?? client) as string), client: Boolean(client), leading: Boolean(leading) };
+  const strength = { client: Boolean(client), leading: Boolean(leading), experience: Boolean(isExperience), rank: titleRank(fact.statement), team: Number(fact.statement.match(TEAM_SIZE)?.[1] ?? 0) };
+  if (isExperience) return { label: experienceLabel(fact.statement), ...strength };
+  return { label: tidyRole((leading ?? client) as string), ...strength };
 }
 
 /** The headline names a role only when no experience fact exists; "A | B ($50M" is cut before the bar and the bracket. */
@@ -93,14 +111,14 @@ export interface ImpliedRoleFact { readonly id?: string; readonly statement: str
 /**
  * Soft skills follow from experience: a leading role or work with clients and management (03.11).
  * The role comes from experience facts (title and employer): for communication and client
- * requirements the one tied to clients, support or leadership, otherwise the first leading one.
+ * requirements the strongest one tied to clients, support or leadership, otherwise the strongest leading one.
  * The profile headline is the last resort, only when there is no experience fact at all.
  */
 export function impliedSoftRole(facts: readonly (ImpliedRoleFact | string)[], requirementText = ''): string | undefined {
   const list = facts.map((fact): ImpliedRoleFact => (typeof fact === 'string' ? { statement: fact } : fact));
   const candidates = list.map(roleCandidate).filter((item): item is RoleCandidate => item !== undefined && item.label !== '');
   const wantsClient = CLIENT_REQUIREMENT.test(requirementText);
-  const pick = (test: (item: RoleCandidate) => boolean) => candidates.find(test)?.label;
+  const pick = (test: (item: RoleCandidate) => boolean) => candidates.filter(test).sort(stronger)[0]?.label;
   const best = wantsClient ? pick((item) => item.client && item.leading) ?? pick((item) => item.client) ?? pick((item) => item.leading) : pick((item) => item.leading) ?? pick((item) => item.client);
   if (best) return best;
   if (list.some((fact) => fact.id?.startsWith('profile:experience'))) return undefined;
