@@ -6,6 +6,8 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import type { OwnerTelegramConfig } from '../notifications/ownerTelegram';
+import { checkIndexCoverage } from './catalogIndexCoverage';
 import {
   computeCatalogSitemaps,
   readCatalogSitemaps,
@@ -58,7 +60,11 @@ function errorName(error: unknown): string {
 }
 
 /** Maintenance process only: the listings query groups the whole catalog. */
-export function scheduleCatalogSitemapJob(database: DatabaseSync, log: SitemapLog): () => void {
+export function scheduleCatalogSitemapJob(
+  database: DatabaseSync,
+  log: SitemapLog,
+  telegram: OwnerTelegramConfig = {},
+): () => void {
   const notifyIndexNow = createIndexNowNotifier(process.env.INDEXNOW_KEY, log);
   const notifyGoogle = createGoogleIndexingNotifier(
     process.env.OPENQAREER_GSC_SERVICE_ACCOUNT_B64,
@@ -73,6 +79,7 @@ export function scheduleCatalogSitemapJob(database: DatabaseSync, log: SitemapLo
       const now = new Date();
       const files = computeCatalogSitemaps(database, now);
       writeCatalogSitemaps(database, files, now);
+      await checkIndexCoverage({ database, files, telegram, log, now });
       const urls = files.flatMap((file) => file.urls ?? []);
       await notifyIndexNow(database, urls);
       await notifyGoogle(database, urls);

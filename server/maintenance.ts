@@ -227,7 +227,7 @@ try {
   scheduleCurrencyRatesJob(semanticDatabase, log);
   stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
-  scheduleCatalogSitemapJob(semanticDatabase, log);
+  scheduleCatalogSitemapJob(semanticDatabase, log, config);
   // 04.11: listings with impressions in Google keep `index` below their threshold.
   stopCatalogSearchEvidence = scheduleCatalogSearchEvidence(
     semanticDatabase,
