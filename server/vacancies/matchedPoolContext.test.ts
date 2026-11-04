@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { peekMatchedVacancies, readMatchedSnapshot } from './matchedPoolContext';
+import {
+  invalidateMatchedVacancies,
+  markMatchedVacanciesStale,
+  peekMatchedVacancies,
+  readMatchedSnapshot,
+} from './matchedPoolContext';
+import type { MatchGeography } from './matchGeography';
 import type { RouteDeps } from '../routes/deps';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 
@@ -33,5 +39,64 @@ describe('peekMatchedVacancies (B230)', () => {
     const peeked = peekMatchedVacancies(engine, 'candidate-1', ['skill'], ['Product Manager'], 'head');
 
     expect(peeked).toBeUndefined();
+  });
+});
+
+/** PRB-041: a text landing in the shared pool never hides what the candidate just changed. */
+describe('a shared text write and the candidate own changes', () => {
+  const item = (id: string) => ({ cluster: { id } }) as unknown as MatchedVacancyItem;
+  const BERLIN: MatchGeography = { cityNames: ['Berlin'], remote: true, remoteAreas: [] };
+
+  function countingEngine() {
+    let reads = 0;
+    return {
+      getMatchedVacanciesAsync: async () => [item(`read-${(reads += 1)}`)],
+    } as unknown as RouteDeps['multiSourceEngine'];
+  }
+  const read = (
+    engine: RouteDeps['multiSourceEngine'],
+    change: {
+      skills?: string[];
+      roles?: string[];
+      level?: 'lead' | 'head';
+      geography?: MatchGeography;
+    } = {},
+  ) =>
+    readMatchedSnapshot(
+      engine,
+      'candidate-1',
+      change.skills ?? ['skill'],
+      change.roles ?? ['Role'],
+      change.level ?? 'lead',
+      change.geography,
+    );
+
+  it('the same inputs keep the served snapshot after a text write', async () => {
+    const engine = countingEngine();
+    const before = await read(engine);
+    markMatchedVacanciesStale(engine);
+    expect(await read(engine)).toBe(before);
+  });
+
+  it.each([
+    ['a profile skill', { skills: ['skill', 'new'] }],
+    ['a role', { roles: ['Other role'] }],
+    ['a level', { level: 'head' as const }],
+    ['a region', { geography: BERLIN }],
+  ])('a changed %s reads fresh right after a text write', async (_name, change) => {
+    const engine = countingEngine();
+    const before = await read(engine);
+    markMatchedVacanciesStale(engine);
+    const after = await read(engine, change);
+    expect(after).not.toBe(before);
+    expect(after[0]?.cluster.id).toBe('read-2');
+  });
+
+  it('a saved campaign with the same inputs reads fresh right after a text write', async () => {
+    const engine = countingEngine();
+    await read(engine);
+    markMatchedVacanciesStale(engine);
+    invalidateMatchedVacancies(engine, 'candidate-1');
+    expect((await read(engine))[0]?.cluster.id).toBe('read-2');
   });
 });

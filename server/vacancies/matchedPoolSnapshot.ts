@@ -29,17 +29,26 @@ const DEFAULT_TTL_MS = 10 * 60_000;
  */
 const DEFAULT_MAX_AGE_MS = 20 * 60_000;
 
+/**
+ * PRB-041: a rebuild costs one large selection 7–8 s of the match reader (prod 04.11); once per
+ * 5 min is the same order as the worker's texts, which wait for the 10-minute window anyway.
+ */
+const DEFAULT_MIN_STALE_REBUILD_MS = 5 * 60_000;
+
 /** Больше снимков одновременно не держим: это верхняя граница памяти. */
 const DEFAULT_MAX_ENTRIES = 200;
 
 interface Snapshot {
   readonly items: MatchedVacancyItem[];
   readonly storedAt: number;
+  /** The shared-write count this list was read after; an older count marks it stale. */
+  readonly poolWrites: number;
 }
 
 export interface MatchedPoolSnapshotsOptions {
   readonly ttlMs?: number;
   readonly maxAgeMs?: number;
+  readonly minStaleRebuildMs?: number;
   readonly maxEntries?: number;
   readonly clock?: () => number;
   readonly onRebuildFailed?: (error: unknown) => void;
@@ -53,9 +62,10 @@ export interface MatchedPoolReadOptions {
 export class MatchedPoolSnapshots {
   private readonly entries = new Map<string, Snapshot>();
   private readonly pending = new Map<string, Promise<MatchedVacancyItem[]>>();
-  private generation = 0;
+  private poolWrites = 0;
   private readonly ttlMs: number;
   private readonly maxAgeMs: number;
+  private readonly minStaleRebuildMs: number;
   private onRebuildFailed: ((error: unknown) => void) | undefined;
   private readonly maxEntries: number;
   private readonly clock: () => number;
@@ -63,6 +73,7 @@ export class MatchedPoolSnapshots {
   constructor(options: MatchedPoolSnapshotsOptions = {}) {
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
     this.maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+    this.minStaleRebuildMs = options.minStaleRebuildMs ?? DEFAULT_MIN_STALE_REBUILD_MS;
     this.onRebuildFailed = options.onRebuildFailed;
     this.maxEntries = Math.max(1, options.maxEntries ?? DEFAULT_MAX_ENTRIES);
     this.clock = options.clock ?? Date.now;
@@ -76,23 +87,35 @@ export class MatchedPoolSnapshots {
     return this.entries.size;
   }
 
-  /** Смена кампании меняет смысл подбора, поэтому старые ключи кандидата не ждут TTL. */
+  /**
+   * Смена кампании меняет смысл подбора, поэтому старые ключи кандидата не ждут TTL. A rebuild
+   * still running for the candidate belongs to the old campaign and is dropped too.
+   */
   deleteCandidate(candidateId: string): void {
-    const prefix = `${this.generation} ${candidateId} `;
+    const prefix = `${candidateId} `;
     for (const key of this.entries.keys()) {
       if (key.startsWith(prefix)) this.entries.delete(key);
     }
+    for (const key of this.pending.keys()) {
+      if (key.startsWith(prefix)) this.pending.delete(key);
+    }
   }
 
-  /** Shared pool writes affect every candidate's ranking and explanations. */
-  invalidateAll(): void {
-    this.generation += 1;
-    this.entries.clear();
-    this.pending.clear();
+  /**
+   * A shared pool write (hh text) can change ranking for every candidate, but nobody's list is
+   * wrong: readers keep the old snapshot and it is rebuilt behind them, once per interval.
+   */
+  markAllStale(): void {
+    this.poolWrites += 1;
   }
 
   private key(candidateId: string, profileKey: string): string {
-    return `${this.generation} ${candidateId} ${profileKey}`;
+    return `${candidateId} ${profileKey}`;
+  }
+
+  private isCurrent(stored: Snapshot, age: number): boolean {
+    if (age >= this.ttlMs) return false;
+    return stored.poolWrites === this.poolWrites || age < this.minStaleRebuildMs;
   }
 
   /**
@@ -110,10 +133,10 @@ export class MatchedPoolSnapshots {
     const key = this.key(candidateId, profileKey);
     const now = this.clock();
     const stored = this.entries.get(key);
-    if (stored && now - stored.storedAt < this.ttlMs) return stored.items;
+    if (stored && this.isCurrent(stored, now - stored.storedAt)) return stored.items;
 
     const items = compute();
-    this.entries.set(key, { items, storedAt: now });
+    this.entries.set(key, { items, storedAt: now, poolWrites: this.poolWrites });
     this.evict(now);
     return items;
   }
@@ -141,7 +164,7 @@ export class MatchedPoolSnapshots {
     const key = this.key(candidateId, profileKey);
     const stored = this.entries.get(key);
     const age = stored ? this.clock() - stored.storedAt : Number.POSITIVE_INFINITY;
-    if (stored && age < this.ttlMs) return stored.items;
+    if (stored && this.isCurrent(stored, age)) return stored.items;
     if (stored && age < this.maxAgeMs && !options.awaitRebuild) {
       this.rebuildBehind(key, compute);
       return stored.items;
@@ -162,19 +185,19 @@ export class MatchedPoolSnapshots {
     key: string,
     compute: () => Promise<MatchedVacancyItem[]>,
   ): Promise<MatchedVacancyItem[]> {
-    const generation = this.generation;
-    const computation = Promise.resolve()
+    const poolWrites = this.poolWrites;
+    const computation: Promise<MatchedVacancyItem[]> = Promise.resolve()
       .then(compute)
       .then((items) => {
-        if (generation === this.generation) {
+        if (this.pending.get(key) === computation) {
           const now = this.clock();
-          this.entries.set(key, { items, storedAt: now });
+          this.entries.set(key, { items, storedAt: now, poolWrites });
           this.evict(now);
         }
         return items;
       })
       .finally(() => {
-        this.pending.delete(key);
+        if (this.pending.get(key) === computation) this.pending.delete(key);
       });
     this.pending.set(key, computation);
     return computation;

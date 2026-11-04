@@ -93,9 +93,9 @@ export function invalidateMatchedVacancies(
   matchedPoolSnapshots.get(engine)?.deleteCandidate(candidateId);
 }
 
-/** A shared pool enrichment can change ranking for every candidate. */
-export function invalidateAllMatchedVacancies(engine: RouteDeps['multiSourceEngine']): void {
-  matchedPoolSnapshots.get(engine)?.invalidateAll();
+/** A shared pool enrichment can change ranking for every candidate; reads keep the old list. */
+export function markMatchedVacanciesStale(engine: RouteDeps['multiSourceEngine']): void {
+  matchedPoolSnapshots.get(engine)?.markAllStale();
 }
 
 function snapshotsOf(engine: RouteDeps['multiSourceEngine']): MatchedPoolSnapshots {

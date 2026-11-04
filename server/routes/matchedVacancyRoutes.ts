@@ -35,7 +35,7 @@ import {
 import { dropForeignRemote, markGeography } from '../vacancies/vacancyGeography';
 import { withinCareerGeography } from '../vacancies/careerGeography';
 import {
-  invalidateAllMatchedVacancies,
+  markMatchedVacanciesStale,
   readMatchedSnapshot,
   readMatchProfile,
 } from '../vacancies/matchedPoolContext';
@@ -394,7 +394,7 @@ function preloadTopMatchedDescriptions(
     .preloadVacancyDescriptions(vacancyIds, vacancyIds.length)
     .then((summary) => {
       requestFit(clusterIds);
-      if (summary.loaded > 0) invalidateAllMatchedVacancies(engine);
+      if (summary.loaded > 0) markMatchedVacanciesStale(engine);
       request.log.info({ event: 'hh-description-preload', ...summary }, 'hh-description-preload');
     })
     .catch(() => {
