@@ -25,6 +25,8 @@ export interface BulkLlmInput {
   prefix: string;
   input: string;
   maxTokens?: number;
+  /** A step of the candidate's dialogue with the consultant: no Vertex, OpenRouter only (owner 04.11). */
+  withoutVertex?: boolean;
   /**
    * Whether an answer is usable; an unusable one moves the call to the next stage of the chain.
    * Default: the answer is JSON (every bulk task asks for JSON).
@@ -274,7 +276,9 @@ export class BulkLlmClient {
     const accept = input.accept ?? isJsonAnswer;
     // First stage (04.11): Vertex under its own gate. Its refusal, skip or unusable answer is silent
     // here: OpenRouter is asked next and only its stages can make the channel unavailable.
-    const vertex = await this.options.vertex?.ask(input, maxTokens, accept);
+    const vertex = input.withoutVertex
+      ? undefined
+      : await this.options.vertex?.ask(input, maxTokens, accept);
     if (vertex?.result) {
       this.unavailableSince = undefined;
       return vertex.result;

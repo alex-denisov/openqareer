@@ -91,6 +91,7 @@ async function askPart(bulk: BulkCompletion, part: string, runId: string) {
       runId,
       task: 'candidate-facts',
       dataClass: 'candidate',
+      withoutVertex: true,
       prefix: PREFIX,
       input: part,
       maxTokens: 2_048,
