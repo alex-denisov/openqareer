@@ -1,4 +1,5 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
+import { VacancyMatchUnavailable } from './vacancyMatchReader';
 
 /**
  * Один снимок подбора на одно чтение пула.
@@ -169,10 +170,27 @@ export class MatchedPoolSnapshots {
       this.rebuildBehind(key, compute);
       return stored.items;
     }
-    const running = this.pending.get(key);
-    if (running) return running;
-    if (this.pending.size >= this.maxEntries) throw new Error('vacancy_match_queue_full');
-    return this.computeInto(key, compute);
+    return this.awaitCompute(key, compute, stored);
+  }
+
+  /** PRB-041: a failed pool read falls back to any snapshot still held, however old. */
+  private async awaitCompute(
+    key: string,
+    compute: () => Promise<MatchedVacancyItem[]>,
+    stored: Snapshot | undefined,
+  ): Promise<MatchedVacancyItem[]> {
+    try {
+      const running = this.pending.get(key);
+      if (running) return await running;
+      if (this.pending.size >= this.maxEntries) {
+        throw new VacancyMatchUnavailable('vacancy_match_queue_full', 0, this.pending.size);
+      }
+      return await this.computeInto(key, compute);
+    } catch (error) {
+      if (!stored) throw error;
+      this.onRebuildFailed?.(error);
+      return stored.items;
+    }
   }
 
   /** At most one per key; a full queue or a failure leaves the old snapshot in place. */

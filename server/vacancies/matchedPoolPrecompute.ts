@@ -9,6 +9,7 @@ import {
   readMatchProfile,
   setMatchedSnapshotFailureLog,
 } from './matchedPoolContext';
+import { VacancyMatchUnavailable } from './vacancyMatchReader';
 
 const RECENT_VISIT_MS = 14 * 24 * 60 * 60 * 1_000;
 const DEFAULT_PAUSE_MS = 50;
@@ -57,7 +58,12 @@ export class MatchedPoolPrecompute {
     this.log = options.log;
     setMatchedSnapshotFailureLog(options.engine, (error) =>
       this.log?.error(
-        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        {
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+          ...(error instanceof VacancyMatchUnavailable
+            ? { reason: error.message, waitedMs: error.waitedMs, pendingReads: error.pendingReads }
+            : {}),
+        },
         'matched-snapshot-rebuild-failed',
       ),
     );

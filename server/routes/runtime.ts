@@ -26,6 +26,7 @@ import { CareerCommandPolicyError } from '../orchestration/careerCommandPlanner'
 import type { ServerConfig } from '../config';
 import { sendError } from './helpers';
 import { rateLimitMessage, retryAfterSeconds } from './rateLimitMessage';
+import { VacancyMatchUnavailable } from '../vacancies/vacancyMatchReader';
 
 const ADMIN_DOCUMENT = 'admin.html';
 const ENTRY_DOCUMENT = 'index.html';
@@ -306,6 +307,29 @@ export function isSqliteBusy(error: unknown): boolean {
   );
 }
 
+const VACANCY_MATCH_RETRY_SECONDS = 5;
+
+/** PRB-041: with no snapshot to fall back on the reader is asked to repeat, not told of a fault. */
+function askToRepeatMatch(
+  error: VacancyMatchUnavailable,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): FastifyReply {
+  request.log.warn(
+    { reason: error.message, waitedMs: error.waitedMs, pendingReads: error.pendingReads },
+    'vacancy-match-unavailable',
+  );
+  reply.header('retry-after', VACANCY_MATCH_RETRY_SECONDS);
+  return sendError(
+    reply,
+    request,
+    503,
+    'vacancy_match_busy',
+    'Подбор вакансий сейчас считается. Повторите через несколько секунд.',
+    true,
+  );
+}
+
 function handleRouteError(
   error: unknown,
   request: FastifyRequest,
@@ -346,6 +370,7 @@ function handleRouteError(
       true,
     );
   }
+  if (error instanceof VacancyMatchUnavailable) return askToRepeatMatch(error, request, reply);
   request.log.error(
     {
       errorName: error instanceof Error ? error.name : 'UnknownError',

@@ -15,6 +15,21 @@ process.on('message', ({ id, sql, params }) => {
 
 type Row = { payload: string };
 
+/**
+ * The pool could not be read right now (PRB-041): a timeout, a dead reader or a full queue. Nothing
+ * is wrong with the request, so it is answered with a repeat, never as a server fault.
+ */
+export class VacancyMatchUnavailable extends Error {
+  constructor(
+    reason: string,
+    readonly waitedMs: number,
+    readonly pendingReads: number,
+  ) {
+    super(reason);
+    this.name = 'VacancyMatchUnavailable';
+  }
+}
+
 /** What the pool store needs from a reader; tests inject a synchronous stand-in. */
 export interface MatchRowReader {
   read(sql: string, params: SQLInputValue[]): Promise<Row[]>;
@@ -24,6 +39,7 @@ type Pending = {
   resolve: (rows: Row[]) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
+  sentAt: number;
 };
 
 /** One bounded reader isolates slow SQLite/disk work from auth and HTTP. */
@@ -49,15 +65,19 @@ export class VacancyMatchReader implements MatchRowReader {
   }
 
   read(sql: string, params: SQLInputValue[]): Promise<Row[]> {
-    if (this.closed) return Promise.reject(new Error('vacancy_match_reader_closed'));
+    if (this.closed) {
+      return Promise.reject(new VacancyMatchUnavailable('vacancy_match_reader_closed', 0, 0));
+    }
     if (this.pending.size >= this.maxPending) {
-      return Promise.reject(new Error('vacancy_match_reader_busy'));
+      return Promise.reject(
+        new VacancyMatchUnavailable('vacancy_match_reader_busy', 0, this.pending.size),
+      );
     }
     const worker = this.worker ?? this.startWorker();
     return new Promise((resolve, reject) => {
       const id = ++this.sequence;
       const timer = setTimeout(() => this.stopWorker('vacancy_match_timeout'), this.timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { resolve, reject, timer, sentAt: Date.now() });
       worker.ref();
       worker.send?.({ id, sql, params });
     });
@@ -91,9 +111,11 @@ export class VacancyMatchReader implements MatchRowReader {
   private stopWorker(reason: string): void {
     const worker = this.worker;
     this.worker = undefined;
+    const now = Date.now();
+    const pendingReads = this.pending.size;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
-      pending.reject(new Error(reason));
+      pending.reject(new VacancyMatchUnavailable(reason, now - pending.sentAt, pendingReads));
     }
     this.pending.clear();
     // SIGKILL interrupts running native SQLite too; a Promise timeout alone

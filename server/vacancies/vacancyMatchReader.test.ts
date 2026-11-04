@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
-import { VacancyMatchReader } from './vacancyMatchReader';
+import { VacancyMatchReader, VacancyMatchUnavailable } from './vacancyMatchReader';
 
 const cleanup: Array<() => void> = [];
 afterEach(() => cleanup.splice(0).reverse().forEach((close) => close()));
@@ -39,6 +39,29 @@ describe('isolated matching reader', () => {
     expect(await worker.read("SELECT 'restarted' AS payload", [])).toEqual([{ payload: 'restarted' }]);
     worker.close();
     await expect(worker.read('SELECT 1 AS payload', [])).rejects.toThrow('vacancy_match_reader_closed');
+  });
+
+  it('a timeout names how long each read waited and how many were waiting', async () => {
+    const worker = reader(300, 4);
+    const long = worker.read('WITH RECURSIVE numbers(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM numbers WHERE x<1000000000) SELECT sum(x) AS payload FROM numbers', []);
+    const queued = worker.read('SELECT 1 AS payload', []);
+    const [first, second] = await Promise.allSettled([long, queued]);
+    worker.close();
+    for (const outcome of [first, second]) {
+      const error = (outcome as PromiseRejectedResult).reason as VacancyMatchUnavailable;
+      expect(error).toBeInstanceOf(VacancyMatchUnavailable);
+      expect(error.message).toBe('vacancy_match_timeout');
+      expect(error.pendingReads).toBe(2);
+      expect(error.waitedMs).toBeGreaterThanOrEqual(250);
+    }
+  });
+
+  it('a read that failed in SQL stays an ordinary failure, not a busy pool', async () => {
+    const worker = reader();
+    const failure = await worker.read('SELECT nope FROM missing', []).catch((error: unknown) => error);
+    worker.close();
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(VacancyMatchUnavailable);
   });
 
   it('can start its isolated process before the first SQL request', async () => {
