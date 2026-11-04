@@ -8,7 +8,7 @@ import { ontology } from '../../shared/roleOntology';
  *   годятся: они сводят разные уровни к одной роли и делали директора «Head of
  *   Engineering». Должность без честного перевода опускается;
  * - компания — как её написал кандидат: латиница остаётся, кириллица остаётся в
- *   своём написании в кавычках. Транслит («Fintekh Lab») рекрутер читает как
+ *   своём написании без кавычек (G3c). Транслит («Fintekh Lab») рекрутер читает как
  *   ошибку, а английского названия компании в профиле нет;
  * - имя кандидата — транслитерацией, как в загранпаспорте.
  */
@@ -155,10 +155,60 @@ export function englishJobTitle(title: string): string | null {
   return CANONICAL_TITLES.get(key) ?? composedTitle(key);
 }
 
-/** Компания в английском письме: как написал кандидат, кириллица — в кавычках. */
+/** Компания в английском письме: как написал кандидат, кириллица без кавычек. */
 export function letterEmployerName(name: string): string {
   if (!hasCyrillic(name)) return name;
-  return `"${name.replace(/^["«„“\s]+|["»“”\s]+$/gu, '')}"`;
+  return name.replace(/^["«„“\s]+|["»“”\s]+$/gu, '');
+}
+
+/** Формы области для русского письма: дательный («по разработке») и родительный («разработки»). */
+function russianArea(english: string): { readonly dative: string; readonly genitive: string } | null {
+  if (english === 'it') return { dative: 'ИТ', genitive: 'ИТ' };
+  const wanted = english === 'development' ? 'engineering' : english;
+  const forms = Object.entries(TITLE_AREAS)
+    .filter(([, area]) => area.toLocaleLowerCase() === wanted)
+    .map(([form]) => form);
+  const [dative] = forms;
+  const genitive = forms.at(-1);
+  return dative && genitive ? { dative, genitive } : null;
+}
+
+const RUSSIAN_HEADS: readonly (readonly [RegExp, (area: { dative: string; genitive: string }) => string])[] = [
+  [/^(?:vice president|vp) of /u, (area) => `Вице-президент по ${area.dative}`],
+  [/^deputy director of /u, (area) => `Заместитель директора по ${area.dative}`],
+  [/^deputy head of /u, (area) => `Заместитель руководителя ${area.genitive}`],
+  [/^director of /u, (area) => `Директор по ${area.dative}`],
+  [/^head of /u, (area) => `Руководитель ${area.genitive}`],
+];
+
+/** Канонические английские названия ролей → русские, только однозначные. */
+function buildRussianTitleIndex(): ReadonlyMap<string, string | null> {
+  const index = new Map<string, string | null>();
+  for (const role of ontology.roles) {
+    const key = titleKey(role.titleEn);
+    const russian = role.titleRu.replace(/\([^)]*\)/gu, '').trim();
+    const known = index.get(key);
+    index.set(key, known === undefined || known === russian ? russian : null);
+  }
+  return index;
+}
+
+const RUSSIAN_TITLES = buildRussianTitleIndex();
+
+/**
+ * Должность для русского письма. Сначала «глава + область»: каноническая роль уточняла бы то, чего
+ * кандидат не писал («Head of Engineering» — не обязательно «отдела»). Честного перевода нет —
+ * остаётся написание кандидата: в русском письме латиница понятна, выдумка нет.
+ */
+export function russianJobTitle(title: string): string {
+  if (hasCyrillic(title)) return title;
+  const key = titleKey(title);
+  for (const [head, compose] of RUSSIAN_HEADS) {
+    if (!head.test(key)) continue;
+    const area = russianArea(key.replace(head, ''));
+    if (area) return compose(area);
+  }
+  return RUSSIAN_TITLES.get(key) ?? title;
 }
 
 /** Имя кандидата для английского письма. */

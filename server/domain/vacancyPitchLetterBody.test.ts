@@ -55,8 +55,8 @@ describe('rule 1: results come from the confirmed facts of the workplaces', () =
 
   it('puts the translated outcome into the experience paragraph of an English letter', () => {
     const pitch = letter({ translations: new Map([['ach-3-1', OUTCOME_EN]]) });
-    expect(pitch.emailPitch.body).toContain(`Among my results: ${OUTCOME_EN}`);
-    expect(pitch.atsCoverLetter).toContain(OUTCOME_EN);
+    expect(pitch.emailPitch.body).toContain('Among my results: built warehouse and logistics systems for a federal retail chain; the team grew from 8 to 35.');
+    expect(pitch.atsCoverLetter).toContain('built warehouse and logistics systems for a federal retail chain; the team grew from 8 to 35.');
     expect(pitch.usedEvidenceIds).toContain('ach-3-1');
   });
 
@@ -65,9 +65,9 @@ describe('rule 1: results come from the confirmed facts of the workplaces', () =
     expect(pitch.emailPitch.body).not.toContain('St Petersburg');
   });
 
-  it('a Russian letter quotes the bullet as written', () => {
+  it('a Russian letter names the outcome first, in lower case after the colon', () => {
     const pitch = letter({ vacancy: { id: 'v', title: 'Директор по ИТ', company: 'Вектор' } });
-    expect(pitch.emailPitch.body).toContain('Из результатов: Склад и логистика для федеральной сети магазинов');
+    expect(pitch.emailPitch.body).toContain('Из результатов: команда выросла с 8 до 35 человек — склад и логистика для федеральной сети магазинов.');
     expect(pitch.emailPitch.body).not.toContain('Санкт-Петербург —');
   });
 
@@ -81,14 +81,14 @@ describe('rule 1: results come from the confirmed facts of the workplaces', () =
 describe('rule 2: employer names are kept as the candidate wrote them', () => {
   it('a Latin name stays as written, a Cyrillic one stays in its script inside quotes', () => {
     expect(letterEmployerName('Fintech Lab')).toBe('Fintech Lab');
-    expect(letterEmployerName('Маркет Софт')).toBe('"Маркет Софт"');
-    expect(letterEmployerName('"Ромашка"')).toBe('"Ромашка"');
-    expect(letterEmployerName('«Ромашка»')).toBe('"Ромашка"');
+    expect(letterEmployerName('Маркет Софт')).toBe('Маркет Софт');
+    expect(letterEmployerName('"Ромашка"')).toBe('Ромашка');
+    expect(letterEmployerName('«Ромашка»')).toBe('Ромашка');
   });
 
   it('the English letter never transliterates an employer', () => {
     const body = letter().emailPitch.body;
-    expect(body).toContain('at "Финтех Лаб" (2024–present)');
+    expect(body).toContain('at Финтех Лаб (2024–present)');
     expect(body).not.toMatch(/Fintekh|Riteyl|Market Soft/u);
     const latin = letter({ workplaces: [{ ...workplaces[0]!, employer: 'Fintech Lab' }] });
     expect(latin.emailPitch.body).toContain('Head of Engineering at Fintech Lab (2024–present)');
@@ -97,21 +97,21 @@ describe('rule 2: employer names are kept as the candidate wrote them', () => {
 
 describe('rule 3: a workplace without a title reads without a dangling «at»', () => {
   it('uses the profile title when it can be translated', () => {
-    expect(letter().emailPitch.body).toContain('Head of Engineering at "Ритейл Системс" (2014–2021)');
+    expect(letter().emailPitch.body).toContain('Head of Engineering at Ритейл Системс (2014–2021)');
   });
 
   it('a place with no title says where the candidate worked', () => {
     const untitled = [workplaces[0]!, workplaces[1]!, { ...workplaces[2]!, title: null }];
     const body = letter({ workplaces: untitled }).emailPitch.body;
     expect(body).toContain(
-      'before that, I was Director of Engineering at "Маркет Софт" (2021–2023) and worked at "Ритейл Системс" (2014–2021).',
+      'before that, I was Director of Engineering at Маркет Софт (2021–2023) and worked at Ритейл Системс (2014–2021).',
     );
     expect(body).not.toMatch(/(?:that,|\),) at /u);
   });
 
   it('the current place without a title still reads as a sentence', () => {
     const body = letter({ workplaces: [{ ...workplaces[0]!, title: 'Специалист по чему-то' }] }).emailPitch.body;
-    expect(body).toContain('I currently work at "Финтех Лаб" (2024–present).');
+    expect(body).toContain('I currently work at Финтех Лаб (2024–present).');
   });
 });
 
@@ -135,7 +135,7 @@ describe('rule 4: titles are translated faithfully, never to a different level',
 
   it('the Leidos letter names the real titles', () => {
     const body = letter().emailPitch.body;
-    expect(body).toContain('I currently work as Head of Engineering at "Финтех Лаб" (2024–present)');
-    expect(body).toContain('Director of Engineering at "Маркет Софт" (2021–2023)');
+    expect(body).toContain('I currently work as Head of Engineering at Финтех Лаб (2024–present)');
+    expect(body).toContain('Director of Engineering at Маркет Софт (2021–2023)');
   });
 });

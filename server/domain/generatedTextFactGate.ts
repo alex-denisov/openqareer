@@ -1,3 +1,4 @@
+import { resultFirst } from './letterResults';
 import type { VacancyPitchInputFact, VacancyPitchResponse } from './vacancyPitchService';
 
 export type GeneratedClaimStatus =
@@ -61,7 +62,9 @@ function quantities(text: string): string[] {
 function containsClaim(fact: string, claim: string): boolean {
   // Fail closed on paraphrases: shared numbers alone do not prove causality,
   // personal ownership, units, or the direction of a before/after comparison.
-  return normalized(fact) === normalized(claim);
+  // The template's own «итог — тема» order (G3c) is the same fact, not a paraphrase.
+  const wanted = normalized(claim);
+  return normalized(fact) === wanted || normalized(resultFirst(fact, 'ru')) === wanted || normalized(resultFirst(fact, 'en')) === wanted;
 }
 
 function checkClaim(text: string, facts: readonly VacancyPitchInputFact[]): GeneratedClaimCheck {

@@ -71,8 +71,8 @@ describe('G3b: results of the places in the English letter', () => {
   it('quotes the translated outcome and keeps the employer as written', async () => {
     const data = await letterFor(translator(() => OUTCOME_EN));
     expect(data.language).toBe('en');
-    expect(data.emailPitch.body).toContain(`Among my results: ${OUTCOME_EN}`);
-    expect(data.emailPitch.body).toContain('Most recently I worked as Head of Engineering at "Ритейл Системс" (2014–2021).');
+    expect(data.emailPitch.body).toContain(`Among my results: ${OUTCOME_EN.charAt(0).toLowerCase()}${OUTCOME_EN.slice(1)}`);
+    expect(data.emailPitch.body).toContain('Most recently I worked as Head of Engineering at Ритейл Системс (2014–2021).');
     expect(data.usedEvidenceIds).toContain('ach-3-1');
     expect(data.outputFactChecks.emailBody.status).not.toBe('needs_confirmation');
   });
