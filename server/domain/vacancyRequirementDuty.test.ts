@@ -28,6 +28,9 @@ describe('duties apart from requirements', () => {
     const text = 'Responsibilities\n- Own the budget\nRequired skills and tools\n- Budget models in Excel';
     expect([...vacancyDutyIds(text, [line('a', 'Own the budget'), line('b', 'Budget models in Excel')])]).toEqual(['a']);
   });
+  it.each(['The mandate', 'Your first priorities:', 'As our VP Sales, EMEA you will:', 'In your first year, you will focus on:', 'How you will contribute'])('reads «%s» as a list of duties', (heading) => {
+    expect(vacancyDutyIds(`${heading}\n- Own the budget`, [line('a', 'Own the budget')]).size).toBe(1);
+  });
   it('a condition is never a duty', () => {
     expect(vacancyDutyIds(TEXT, [line('a', 'Lead a team of 12+ partners', { kind: 'workFormat', skill: false })]).size).toBe(0);
   });
