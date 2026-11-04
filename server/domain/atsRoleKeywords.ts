@@ -1,4 +1,5 @@
 import { canonicalizeSkill } from '../connectors/managementSkillsDictionary';
+import { isRoleTitleLabel } from './roleTitleLabel';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import type { VacancyRequirementsResult } from './vacancyRequirements';
 
@@ -38,7 +39,7 @@ export function requirementLabels(result: VacancyRequirementsResult): string[] {
     .flatMap((requirement) =>
       requirement.skill && requirement.label ? [requirement.label.trim()] : [],
     );
-  return [...new Set(labels)];
+  return [...new Set(labels)].filter((label) => !isRoleTitleLabel(label));
 }
 
 function keyOf(canonical: string): string {
