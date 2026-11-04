@@ -3,6 +3,7 @@ import {
   acceptModelBody,
   COVER_LETTER_REASONING_TOKENS,
   failureDetail,
+  hasLetterInput,
   serializeInput,
   thrownFailure,
   type CoverLetterOutcome,
@@ -53,7 +54,7 @@ export class GeminiCoverLetterWriter implements CoverLetterWriter {
   }
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
-    if (input.facts.length === 0) return {};
+    if (!hasLetterInput(input)) return {};
     const stage = this.options.stage ?? this.options.model;
     try {
       const response = await this.send(input, this.options.retriesOn429 ?? 0);

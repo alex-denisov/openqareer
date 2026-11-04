@@ -16,6 +16,7 @@ import { rankPitchFacts, type PitchFactRankingContext } from '../domain/pitchFac
 import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
+import { openRouterReasoning } from './openRouterReasoning';
 import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
@@ -78,11 +79,26 @@ export interface CoverLetterVacancy {
   readonly targetCompany?: true;
 }
 
+/** Место работы на языке письма: модель пишет должность и компанию дословно. */
+export interface CoverLetterCareerEntry {
+  readonly title?: string;
+  readonly employer?: string;
+  readonly years?: string;
+}
+
 export interface CoverLetterWriteInput {
   readonly facts: readonly CoverLetterFact[];
+  readonly career?: readonly CoverLetterCareerEntry[];
   readonly vacancy: CoverLetterVacancy;
   readonly language: PitchLanguage;
   readonly tone: PitchTone;
+  /** Названия нарушенных правил письма; очередь отдаёт отклонённое письмо следующей ступени. */
+  readonly review?: (body: string) => readonly string[];
+}
+
+/** Спрашивать модель не о чем: это не отказ провайдера. */
+export function hasLetterInput(input: CoverLetterWriteInput): boolean {
+  return input.facts.length > 0 || (input.career?.length ?? 0) > 0;
 }
 
 export type CoverLetterFailureKind =
@@ -112,8 +128,15 @@ export interface CoverLetterWriter {
  *
  * Было 25 с (B266); задача C46 (B251/B267 S6) требует p50 < 10 с. Честный
  * переход на шаблон при таймауте остаётся тем же путём — не новой ошибкой.
+ *
+ * Замер с прода 04.11: Vertex 2,8–7,6 с, DeepSeek без рассуждения 1,0–2,5 с, luna 3,3–4,5 с. При сроке
+ * 9 с и потолке ступени 50 с одна медленная первая ступень съедала весь срок, поэтому у ступеней свои
+ * потолки, а общего срока хватает на Vertex и повтор: быстрый случай p50 по-прежнему меньше 10 с.
  */
-export const COVER_LETTER_BUDGET_MS = 9_000;
+export const COVER_LETTER_BUDGET_MS = 12_000;
+const VERTEX_LETTER_STAGE_MS = 7_500;
+const OPENROUTER_LETTER_STAGE_MS = 4_500;
+const OPENAI_LETTER_STAGE_MS = 6_000;
 
 export async function withinTimeBudget(
   writing: Promise<CoverLetterOutcome>,
@@ -236,6 +259,7 @@ export function serializeInput(input: CoverLetterWriteInput): string {
       ...(input.vacancy.targetCompany ? { targetCompany: true } : {}),
     },
     ...(input.vacancy.recipient ? { recipient: input.vacancy.recipient } : {}),
+    ...(input.career?.length ? { career: input.career } : {}),
     facts: rankedFacts.slice(0, MAX_FACTS).map((fact) => ({
       ref: fact.ref,
       statement: fact.statement.slice(0, MAX_STATEMENT),
@@ -299,8 +323,7 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
   }
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
-    // Фактов нет — спрашивать модель не о чем, это не отказ провайдера.
-    if (input.facts.length === 0) return {};
+    if (!hasLetterInput(input)) return {};
     try {
       if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
       const response = await this.client.chat.completions.create({
@@ -310,6 +333,8 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
           { role: 'user', content: serializeInput(input) },
         ],
         ...outputLimit(this.provider, this.thinkingLevel),
+        // Прод 04.11: deepseek-v4.1-flash тратил на рассуждение 1 847 из 1 500 токенов и не отвечал.
+        ...(this.openRouter ? { reasoning: openRouterReasoning(this.model) } : {}),
         ...(this.structuredOutput
           ? {
               response_format: { type: 'json_schema', json_schema: COVER_LETTER_JSON_SCHEMA },
@@ -341,6 +366,7 @@ function writerForRoute(route: ProviderRoute): LlmCoverLetterWriter {
     provider: route.provider,
     stage: `${route.provider}:${route.model}`,
     baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
+    timeoutMs: route.provider === 'openai' ? OPENAI_LETTER_STAGE_MS : OPENROUTER_LETTER_STAGE_MS,
     structuredOutput: definition?.structuredOutput ?? false,
     thinkingLevel: definition?.thinkingLevel,
     requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
@@ -355,6 +381,15 @@ function logStageFailure(failure: CoverLetterFailure): void {
   console.warn(JSON.stringify({ event: 'cover-letter-stage-refused', ...failure }));
 }
 
+/** В журнал уходят только названия правил: письмо — текст кандидата. */
+function reviewed(outcome: CoverLetterOutcome, input: CoverLetterWriteInput): CoverLetterOutcome {
+  if (!outcome.body) return outcome;
+  const rules = input.review?.(outcome.body) ?? [];
+  if (rules.length === 0) return outcome;
+  const detail = `letter_gate:${[...new Set(rules)].join(',')}`;
+  return { failure: { stage: outcome.stage ?? 'unknown', kind: 'unusable_response', detail } };
+}
+
 /** Очередь ступеней письма: молчание одной — повод спросить следующую. */
 export class QueuedCoverLetterWriter implements CoverLetterWriter {
   constructor(
@@ -366,7 +401,8 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
     let lastFailure: CoverLetterFailure | undefined;
     for (const stage of this.stages) {
-      const outcome = await stage.writeCoverLetter(input);
+      const written = await stage.writeCoverLetter(input);
+      const outcome = reviewed(written, input);
       if (outcome.body) return outcome;
       if (outcome.failure) this.onStageFailure(outcome.failure);
       lastFailure = outcome.failure ?? lastFailure;
@@ -415,5 +451,6 @@ function vertexCoverLetterWriter(vertex: VertexConfig, fetchImpl?: typeof fetch)
     authHeaders: async () => ({ Authorization: `Bearer ${await tokens.token()}` }),
     thinkingLevel: 'low',
     retriesOn429: 1,
+    timeoutMs: VERTEX_LETTER_STAGE_MS,
   });
 }

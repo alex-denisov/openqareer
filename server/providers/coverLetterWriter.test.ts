@@ -385,6 +385,67 @@ describe('QueuedCoverLetterWriter', () => {
   });
 });
 
+describe('Письмо на проде 04.11: ступени и проверка письма', () => {
+  it('у OpenRouter выключает рассуждение: оно съедало весь потолок вывода', async () => {
+    const fake = client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' }));
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'deepseek/deepseek-v4.1-flash',
+      provider: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      client: fake,
+    });
+    await writer.writeCoverLetter(input);
+    expect(vi.mocked(fake.chat.completions.create).mock.calls[0]?.[0]).toMatchObject({
+      reasoning: { enabled: false },
+    });
+  });
+
+  it('у OpenAI поле reasoning не отправляет', async () => {
+    const fake = client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' }));
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', provider: 'openai', client: fake });
+    await writer.writeCoverLetter(input);
+    expect(vi.mocked(fake.chat.completions.create).mock.calls[0]?.[0]).not.toHaveProperty('reasoning');
+  });
+
+  it('письмо, остановленное проверкой, отдаёт очередь следующей ступени', async () => {
+    const failures: unknown[] = [];
+    const queue = new QueuedCoverLetterWriter(
+      [
+        { writeCoverLetter: async () => ({ body: 'Плохое письмо.', stage: 'a' }) },
+        { writeCoverLetter: async () => ({ body: 'Хорошее письмо.', stage: 'b' }) },
+      ],
+      [],
+      (failure) => failures.push(failure),
+    );
+    const outcome = await queue.writeCoverLetter({
+      ...input,
+      review: (body) => (body.startsWith('Плохое') ? ['number'] : []),
+    });
+    expect(outcome).toMatchObject({ body: 'Хорошее письмо.', stage: 'b' });
+    // Only rule names reach the journal: the letter is the candidate's text.
+    expect(failures).toEqual([{ stage: 'a', kind: 'unusable_response', detail: 'letter_gate:number' }]);
+  });
+
+  it('пишет письмо, когда есть только места работы', async () => {
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'm',
+      client: client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' })),
+    });
+    const career = [{ title: 'Руководитель разработки', employer: 'Финтех Лаб', years: '2024–по сей день' }];
+    await expect(writer.writeCoverLetter({ ...input, facts: [], career })).resolves.toMatchObject({
+      body: 'Здравствуйте! Я подхожу на роль.',
+    });
+  });
+
+  it('отдаёт модели места работы отдельным списком', () => {
+    const career = [{ title: 'Руководитель разработки', employer: 'Финтех Лаб', years: '2024–по сей день' }];
+    expect(JSON.parse(serializeInput({ ...input, career })).career).toEqual(career);
+    expect(JSON.parse(serializeInput(input))).not.toHaveProperty('career');
+  });
+});
+
 describe('withinTimeBudget (B266)', () => {
   it('gives up on a writer that has not answered within the budget', async () => {
     const hanging = new Promise<CoverLetterOutcome>(() => {});

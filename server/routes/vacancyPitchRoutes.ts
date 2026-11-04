@@ -5,8 +5,11 @@ import {
   detectVacancyLanguage,
   filterUsablePitchFacts,
   generateVacancyPitch,
+  letterCareer,
+  letterModelFacts,
   type PitchLanguage,
   type PitchTone,
+  type PitchWorkplace,
   type VacancyPitchInputFact,
 } from '../domain/vacancyPitchService';
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
@@ -25,7 +28,8 @@ import {
   withDeps,
 } from './helpers';
 import { pitchRankingContext } from './pitchRankingContext';
-import { checkGeneratedTextFacts, checkPitchOutputFacts, generatedTextFactNotices, type GeneratedTextFactCheck } from '../domain/generatedTextFactGate';
+import { checkGeneratedTextFacts, checkPitchOutputFacts, generatedTextFactNotices, type GeneratedClaimCheck, type GeneratedTextFactCheck } from '../domain/generatedTextFactGate';
+import { reviewLetterBody, type LetterGateSources, type LetterGateViolation } from '../domain/letterModelGate';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -72,6 +76,9 @@ const approvedLetterSnapshotSchema = z.object({
   includedWorkplaceIds: z.array(z.string().trim().min(1).max(200)).max(100),
 });
 
+/** Перевод результатов идёт до письма: модель цитирует и проверка сверяет один и тот же текст. */
+const LETTER_TRANSLATION_BUDGET_MS = 5_000;
+
 /**
  * Раскладка времени письма на составляющие: сборка контекста (снимок
  * кандидата + разбор роли кампании) отдельно от ожидания провайдера. Только
@@ -86,21 +93,53 @@ function logPitchTiming(entry: {
   console.info(JSON.stringify({ event: 'vacancy-pitch-timing', ...entry }));
 }
 
-function toUsableCoverLetterFacts(facts: readonly VacancyPitchInputFact[]) {
-  return filterUsablePitchFacts(facts).map((fact) => ({
-    ref: fact.id,
-    statement: fact.statement,
-    domain: fact.domain,
-    createdAt: fact.createdAt,
-    updatedAt: fact.updatedAt,
-    status: fact.status,
-  }));
-}
-
 /** B422: письмо знает, что кандидат отметил компанию «Хочу в эту компанию». */
 function isWantedCompany(deps: RouteDeps, candidateId: string, company: string | undefined): boolean {
   if (!company) return false;
   return wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId).has(candidateCompanyKey(company));
+}
+
+interface LetterWritingRequest {
+  readonly vacancy: {
+    title: string;
+    company?: string;
+    description?: string;
+    requiredSkills: readonly string[];
+    recipient?: { name?: string; role?: string };
+  };
+  /** Факты с переведёнными формулировками: письмо и проверка видят один текст. */
+  readonly facts: readonly VacancyPitchInputFact[];
+  readonly workplaces: readonly PitchWorkplace[];
+  readonly language: PitchLanguage;
+  readonly tone: PitchTone;
+  readonly rankingContext: PitchFactRankingContext | undefined;
+  readonly contextMs: number;
+}
+
+function letterGateSources(request: LetterWritingRequest): LetterGateSources {
+  const { vacancy, facts, workplaces, language } = request;
+  return {
+    candidate: filterUsablePitchFacts(facts).map((fact) => fact.statement),
+    career: letterCareer(workplaces, language).map((place) =>
+      [place.title, place.employer, place.years].filter(Boolean).join(' ')),
+    vacancy: [vacancy.title, vacancy.company, vacancy.recipient?.name, vacancy.recipient?.role, ...vacancy.requiredSkills]
+      .flatMap((part) => (part ? [part] : [])),
+  };
+}
+
+/** Сводка для кандидата: прежний разбор утверждений и всё, что остановила проверка письма. */
+function letterFactCheck(
+  body: string,
+  facts: readonly VacancyPitchInputFact[],
+  violations: readonly LetterGateViolation[],
+): GeneratedTextFactCheck {
+  const check = checkGeneratedTextFacts(body, facts);
+  if (violations.length === 0) return { ...check, status: 'checked' };
+  const known = new Set(check.claims.map((claim) => claim.text));
+  const added = [...new Set(violations.map((violation) => violation.sentence))]
+    .filter((sentence) => !known.has(sentence))
+    .map((text): GeneratedClaimCheck => ({ text, status: 'not_in_profile', evidenceIds: [], action: 'ask_candidate' }));
+  return { ...check, status: 'needs_confirmation', claims: [...check.claims, ...added] };
 }
 
 /** Model writing is bounded; the deterministic template remains the fallback. */
@@ -108,23 +147,28 @@ async function writeCoverLetterBody(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
-  vacancy: {
-    title: string;
-    company?: string;
-    description?: string;
-    requiredSkills: readonly string[];
-    recipient?: { name?: string; role?: string };
-  },
-  facts: readonly VacancyPitchInputFact[],
-  language: PitchLanguage,
-  tone: PitchTone,
-  rankingContext: PitchFactRankingContext | undefined,
-  contextMs: number,
+  letter: LetterWritingRequest,
 ): Promise<{ body?: string; stage?: string; factCheck?: GeneratedTextFactCheck }> {
   const { coverLetterWriter } = deps;
   if (!coverLetterWriter) return {};
+  const { vacancy, facts, workplaces, language, tone, rankingContext, contextMs } = letter;
+  const sources = letterGateSources(letter);
+  let refused: GeneratedTextFactCheck | undefined;
+  const review = (body: string): string[] => {
+    const violations = reviewLetterBody(body, sources);
+    if (violations.length > 0) refused = letterFactCheck(body, facts, violations);
+    return violations.map((violation) => violation.rule);
+  };
   const writing = coverLetterWriter.writeCoverLetter({
-    facts: toUsableCoverLetterFacts(facts),
+    facts: letterModelFacts(facts, workplaces, language).map((fact) => ({
+      ref: fact.id,
+      statement: fact.statement,
+      domain: fact.domain,
+      createdAt: fact.createdAt,
+      updatedAt: fact.updatedAt,
+      status: fact.status,
+    })),
+    career: letterCareer(workplaces, language),
     vacancy: {
       title: vacancy.title,
       ...(vacancy.company ? { company: vacancy.company } : {}),
@@ -136,6 +180,7 @@ async function writeCoverLetterBody(
     },
     language,
     tone,
+    review,
   });
   const providerStart = Date.now();
   const outcome = await withinTimeBudget(writing, COVER_LETTER_BUDGET_MS);
@@ -148,11 +193,11 @@ async function writeCoverLetterBody(
     totalMs: contextMs + providerMs,
     ...(stage ? { stage } : {}),
   });
-  if (!outcome.body) return {};
-  const factCheck = checkGeneratedTextFacts(outcome.body, facts);
-  return factCheck.status === 'checked'
-    ? { body: outcome.body, stage: outcome.stage, factCheck }
-    : { factCheck };
+  if (!outcome.body) return refused ? { factCheck: refused } : {};
+  // A writer outside the queue answers here: nothing unchecked reaches the candidate.
+  const violations = reviewLetterBody(outcome.body, sources);
+  const factCheck = letterFactCheck(outcome.body, facts, violations);
+  return violations.length === 0 ? { body: outcome.body, stage: outcome.stage, factCheck } : { factCheck };
 }
 
 function resolvePitchVacancy(
@@ -231,12 +276,11 @@ async function writeVacancyPitch(
   const language = body?.language ?? detectVacancyLanguage(vacancy);
   const workplaces = candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id)));
   const contextMs = Date.now() - contextStart;
-  // G3b: the model letter and the translation of the places' results share one budget.
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
-  const [translations, written] = await Promise.all([
-    translateLetterFacts(deps.experienceFactRewriter, toTranslate, COVER_LETTER_BUDGET_MS),
-    writeCoverLetterBody(deps, request, candidateId, vacancy, facts, language, tone, rankingContext, contextMs),
-  ]);
+  const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
+  const written = await writeCoverLetterBody(deps, request, candidateId, {
+    vacancy, facts: withTranslatedStatements(facts, translations), workplaces, language, tone, rankingContext, contextMs,
+  });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
   }
@@ -253,8 +297,17 @@ async function writeVacancyPitch(
     translations,
   });
   const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
-  const outputFactChecks = checkPitchOutputFacts(pitch, atsCoverLetter, withTranslatedStatements(facts, translations));
-  return { pitch, written, atsCoverLetter, candidateWorkplaces, outputFactChecks };
+  const templateChecks = checkPitchOutputFacts(pitch, atsCoverLetter, withTranslatedStatements(facts, translations));
+  // The letter screen shows emailPitch.body: the model letter has to be there, not only in the ATS field.
+  return written.body && written.factCheck
+    ? {
+        pitch: { ...pitch, emailPitch: { ...pitch.emailPitch, body: written.body } },
+        written,
+        atsCoverLetter,
+        candidateWorkplaces,
+        outputFactChecks: { ...templateChecks, emailBody: written.factCheck, atsCoverLetter: written.factCheck },
+      }
+    : { pitch, written, atsCoverLetter, candidateWorkplaces, outputFactChecks: templateChecks };
 }
 
 function saveGeneratedCoverLetter(
@@ -321,8 +374,11 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
       outputFactChecks: result.outputFactChecks,
       ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
       // One note under the letter (G3 L2, mockup 9); the fact gate's goes first (B528).
+      // A model letter passed its gate; notes about the template it replaced would not apply.
       notices: [...generatedTextFactNotices(
-        result.pitch.language, Object.values(result.outputFactChecks), result.written.factCheck,
+        result.pitch.language,
+        result.written.body ? [] : Object.values(result.outputFactChecks),
+        result.written.factCheck,
       ), ...result.pitch.notices].slice(0, 1),
       bodySource: result.written.body ? ('model' as const) : ('template' as const),
       ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
