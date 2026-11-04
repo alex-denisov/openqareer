@@ -500,8 +500,8 @@ export function buildVacancyDetail(
   const language = textLanguage(
     vacancy?.fullDescription || vacancy?.description || fullDescription || entry.summary,
   );
-  const mayMarkUp = indexable && !hasSearchRestrictedSource(cluster.sources);
-  const posting = mayMarkUp ? jobPosting(cluster, entry, description, vacancy, language) : undefined;
+  const markable = indexable && !hasSearchRestrictedSource(cluster.sources);
+  const posting = markable ? jobPosting(cluster, entry, description, vacancy, language) : undefined;
 
   return {
     entry,
