@@ -55,6 +55,17 @@ describe('SemanticBackfill (B267 S2)', () => {
     expect(read()).toHaveLength(1);
   });
 
+  it('сбой прохода грейдов уходит в журнал и не останавливает индексацию', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Senior Frontend Developer');
+    const failures: string[] = [];
+    const backfill = new SemanticBackfill(database, (reason) => failures.push(reason));
+    database.exec('DROP TABLE IF EXISTS vacancy_grade');
+    const report = backfill.step(100);
+    expect(failures.join()).toContain('vacancy_grade');
+    expect(report.backfilled).toBeGreaterThan(0);
+  });
+
   it('разбирает живые записи пула правилами и пишет кеш названий', () => {
     const database = poolDatabase();
     addVacancy(database, 'v1', 'Chief Technology Officer');

@@ -24,7 +24,7 @@ describe('gradeRangeOfTitle', () => {
     expect(gradeRangeOfTitle('Middle/Senior Developer')).toEqual({ min: 1, max: 5 });
   });
 
-  it.each(['Frontend Developer', 'Бухгалтер', 'Lead generation specialist', 'Internal auditor', 'Seniority analyst'])(
+  it.each(['Frontend Developer', 'Бухгалтер', 'Lead generation specialist', 'Internal auditor', 'Seniority analyst', 'Middle East Sales Manager', 'Middle Office Analyst'])(
     'без слова грейда диапазона нет: %s',
     (title) => {
       expect(gradeRangeOfTitle(title)).toBeNull();

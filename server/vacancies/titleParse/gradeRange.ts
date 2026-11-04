@@ -20,7 +20,7 @@ const GRADES: readonly { readonly pattern: RegExp; readonly range: GradeRange }[
     ),
     range: { min: 0, max: 2 },
   },
-  { pattern: word('middle|mid[- ]level|мидл'), range: { min: 1, max: 3 } },
+  { pattern: word('middle(?! (?:east|office))|mid[- ]level|мидл'), range: { min: 1, max: 3 } },
   { pattern: word('senior|sr\\.?|старш\\p{L}*'), range: { min: 3, max: 5 } },
   { pattern: word('lead(?! gen)|principal|ведущ\\p{L}*'), range: { min: 3, max: 6 } },
   { pattern: word('главн\\p{L}*'), range: { min: 4, max: 7 } },

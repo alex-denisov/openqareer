@@ -59,7 +59,10 @@ export class SemanticBackfill {
   private relabelDone = false;
   private ontologyCorrectionDone = false;
 
-  constructor(database: DatabaseSync) {
+  constructor(
+    database: DatabaseSync,
+    private readonly onGradeError?: (reason: string) => void,
+  ) {
     this.database = database;
     this.database.exec(MIGRATION_35);
   }
@@ -72,7 +75,6 @@ export class SemanticBackfill {
   step(chunk: number): SemanticBackfillReport {
     const ontologyCorrected = this.correctByExactOntology();
     const relabeled = this.relabelStale(RELABEL_CHUNK);
-    this.gradeTitles(GRADE_CHUNK);
     const windowEnd = this.windowEnd(chunk);
     const rows = this.readWindow(windowEnd);
     const { backfilled, newKeys } = this.writeChunk(rows);
@@ -80,6 +82,7 @@ export class SemanticBackfill {
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
     const pruned = passFinished ? this.pruneOrphans() : 0;
+    this.gradeStep();
     return {
       scanned: rows.length,
       poolRowsScanned,
@@ -236,6 +239,15 @@ export class SemanticBackfill {
     return stale.length;
   }
 
+  /** Сбой грейдов уходит в журнал и не останавливает индексацию вакансий. */
+  private gradeStep(): void {
+    try {
+      this.gradeTitles(GRADE_CHUNK);
+    } catch (error) {
+      this.onGradeError?.(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   /**
    * Грейд по слову в названии. Хранятся только названия со словом: без него строка подбор не сужает.
    * Запись идёт лишь при изменении, поэтому повторный проход не пишет в базу.
@@ -264,7 +276,8 @@ export class SemanticBackfill {
     const changes = rows.flatMap((row) => {
       const range =
         row.rank === null || row.rank <= GRADE_MAX_LEVEL_RANK ? gradeRangeOfTitle(row.title) : null;
-      return (range?.min ?? null) === row.min && (range?.max ?? null) === row.max ? [] : [{ key: row.key, range }];
+      const same = (range?.min ?? null) === row.min && (range?.max ?? null) === row.max;
+      return same ? [] : [{ key: row.key, range }];
     });
     if (changes.length === 0) return 0;
     this.database.exec('BEGIN');

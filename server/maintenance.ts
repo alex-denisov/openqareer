@@ -111,7 +111,9 @@ const titleModelParser = buildModelTitleParser({
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
-  titleParse: new SemanticBackfill(semanticDatabase),
+  titleParse: new SemanticBackfill(semanticDatabase, (reason) =>
+    log.error({ reason }, 'title-grade-step-failed'),
+  ),
   ...(titleModelParser
     ? {
         titleModel: new TitleModelStep(semanticDatabase, titleModelParser, {
