@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { maskFailureText } from '../../providers/failureReason';
 
 const MAX_REASON = 200;
 
@@ -6,13 +7,7 @@ const MAX_REASON = 200;
 export function describeFailure(error: unknown): string {
   const name = error instanceof Error ? error.name : 'NonError';
   const raw = error instanceof Error ? error.message : String(error);
-  const masked = raw
-    .replace(/\s+/g, ' ')
-    .replace(/(bearer|basic)\s+\S+/gi, '$1 [masked]')
-    .replace(/\b(sk|key|ya29|AIza|eyJ)[\w.-]{8,}/g, '[masked]')
-    .replace(/([?&](?:key|token|api_key)=)[^&\s]+/gi, '$1[masked]')
-    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[masked]');
-  return `${name}: ${masked}`.slice(0, MAX_REASON);
+  return maskFailureText(`${name}: ${raw}`, MAX_REASON);
 }
 
 /** Добавляет nullable `last_failure`; ADD COLUMN без значения по умолчанию таблицу не переписывает. Повтор безопасен. */

@@ -3,6 +3,8 @@ import type { BulkLlmConfig, BulkOpenRouterLane } from './bulkLlmConfig';
 import { MODEL_CHAINS } from './modelChains';
 import type { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import type { BulkFallback } from './bulkGeminiFallback';
+import { maskFailureText, providerFailureText } from './failureReason';
+import { openRouterReasoning } from './openRouterReasoning';
 /** The ledger refused a reservation: a spend limit, not a provider or answer failure (B556). */
 /** Margin over the Vertex list-price bound for its hold (B580). */
 const VERTEX_HOLD_MARGIN = 1.25;
@@ -197,7 +199,7 @@ export class BulkLlmClient {
       // 02.11: one fit input gave 25 % and 58 %. Every pinned host takes `temperature`; not every
       // one takes `seed` (streamlake), and `require_parameters` would drop it.
       temperature: 0,
-      reasoning: { enabled: false },
+      reasoning: openRouterReasoning(lane.model),
       usage: { include: true },
       provider: {
         // Список закреплённых провайдеров по порядку: цена или лимит одного не останавливают работу.
@@ -291,14 +293,13 @@ export class BulkLlmClient {
       response = await this.request('/chat/completions', body);
     } catch (error) {
       // No answer came back: nothing was billed, so the hold is freed at once.
-      this.ledger.release(id);
-      this.ledger.event('completion_failed_or_unknown');
       const reason = transportReason('openrouter', error);
+      this.ledger.release(id, reason);
+      this.ledger.event('completion_failed_or_unknown');
       throw new BulkStageError(reason, true, error instanceof Error ? error.message : reason);
     }
     if (!response.ok) {
-      this.ledger.release(id);
-      await response.body?.cancel();
+      this.ledger.release(id, await providerFailureText(response));
       throw new BulkStageError(
         `openrouter_${response.status}`,
         isOutage(response.status),
@@ -360,7 +361,7 @@ export class BulkLlmClient {
         maxTokens,
       });
     } catch (error) {
-      this.ledger.release(id);
+      this.ledger.release(id, maskFailureText(error instanceof Error ? error.message : 'vertex failure'));
       throw vertexStageError(error);
     }
     this.ledger.settle(id, answer.usage, { model: answer.model, provider: vertex.provider });

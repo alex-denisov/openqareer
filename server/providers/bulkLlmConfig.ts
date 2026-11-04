@@ -12,8 +12,8 @@ export interface BulkOpenRouterLane {
 
 /**
  * Hosts and price caps of each OpenRouter model of the bulk chain (catalog 28.10). A cap is the
- * catalog list price: a host dearer than it is never chosen. Every host supports disabled
- * reasoning and `max_tokens`, so `require_parameters` keeps the request on them.
+ * catalog list price: a host dearer than it is never chosen. Every host supports `reasoning` and
+ * `max_tokens`, so `require_parameters` keeps the request on them (`openRouterReasoning`).
  */
 export const BULK_LANE_PINS: Readonly<Record<string, Omit<BulkOpenRouterLane, 'model'>>> = {
   // Хосты и потолок цены, с которыми фон работал на проде с 19.10 (B580).

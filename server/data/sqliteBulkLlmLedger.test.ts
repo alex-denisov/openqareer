@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BulkLlmConfig } from '../providers/bulkLlmConfig';
 import { SqliteBulkLlmLedger } from './sqliteBulkLlmLedger';
@@ -88,5 +89,24 @@ describe('перерасход одной модели не останавлив
     const ledger = new SqliteBulkLlmLedger(join(dir, 'ledger.db'));
     ledger.event('cost_exceeds_reservation');
     expect(ledger.reserve(call, roomy)).not.toBeNull();
+  });
+});
+
+describe('причина отказа в журнале (04.11)', () => {
+  it('старая таблица без столбца получает его, повторное открытие не падает', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'bulk-ledger-'));
+    const path = join(dir, 'ledger.db');
+    const old = new DatabaseSync(path);
+    old.exec(
+      'CREATE TABLE bulk_llm_spend(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,task TEXT NOT NULL,day TEXT NOT NULL,reserved REAL NOT NULL,cost REAL,model TEXT NOT NULL,provider TEXT NOT NULL,prompt_tokens INTEGER,cached_tokens INTEGER,completion_tokens INTEGER,batch_id TEXT,status TEXT NOT NULL,created_at TEXT NOT NULL)',
+    );
+    old.close();
+    new SqliteBulkLlmLedger(path).close();
+    const ledger = new SqliteBulkLlmLedger(path);
+    const id = ledger.reserve(call, limits)!;
+    ledger.release(id, 'status 400: no');
+    expect(ledger.reservation(id)).toMatchObject({ status: 'rejected', cost: 0, failure: 'status 400: no' });
+    ledger.close();
+    rmSync(dir, { recursive: true, force: true });
   });
 });
