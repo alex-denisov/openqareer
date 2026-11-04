@@ -115,6 +115,7 @@ export function clusterProjectionOf(vacancy: UnifiedVacancy): UnifiedVacancy {
 function remoteScopeOf(vacancy: UnifiedVacancy): string | undefined {
   if (vacancy.isRemote !== true) return undefined;
   return extractRemoteScope({
+    title: vacancy.title,
     location: vacancy.location,
     description: vacancy.fullDescription ?? vacancy.description,
   });

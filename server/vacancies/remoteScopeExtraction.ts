@@ -1,5 +1,6 @@
 import { GLOBAL_REMOTE_SCOPE } from '../../shared/remoteScope';
 import { areasIn } from './placeNames';
+import { saysWorkFromAnywhere } from './remoteScopeWorldwideText';
 import { locationAreas } from './vacancyPlace';
 
 /**
@@ -9,9 +10,11 @@ import { locationAreas } from './vacancyPlace';
  * Remote»); голое «Remote» уточняет текст: «anywhere in the US», «must be
  * based in the UK», «UAE-based remote», «из любой точки России». Страна,
  * названная вне такой фразы («клиенты в США»), область не сужает. Ничего не
- * названо — `global`: работать можно откуда угодно.
+ * названо — `global`: работать можно откуда угодно. Текст «work from anywhere»
+ * главнее поля места (`remoteScopeWorldwideText`).
  */
 export interface RemoteScopeInput {
+  readonly title?: string;
   readonly location?: string;
   readonly description?: string;
 }
@@ -69,6 +72,7 @@ function serialize(areas: readonly string[]): string {
 export function extractRemoteScope(input: RemoteScopeInput): string {
   const location = input.location?.trim() ?? '';
   if (GLOBAL_MARK.test(location) || isGlobalPlace(location)) return GLOBAL_REMOTE_SCOPE;
+  if (saysWorkFromAnywhere(input.title ?? '', input.description ?? '')) return GLOBAL_REMOTE_SCOPE;
   const fromLocation = locationAreas(location);
   if (fromLocation.length > 0) return serialize(fromLocation);
   return serialize(descriptionAreas(input.description ?? ''));

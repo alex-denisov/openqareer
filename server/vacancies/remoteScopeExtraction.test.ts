@@ -119,3 +119,67 @@ describe('location shapes seen on prod (03.11 sample)', () => {
     expect(extractRemoteScope({ location })).toBe(expected);
   });
 });
+
+describe('text that opens the role to the world outranks the location (04.11, Xapo)', () => {
+  const gibraltar = { location: 'Gibraltar' };
+
+  it('the title says it', () => {
+    expect(
+      extractRemoteScope({
+        ...gibraltar,
+        title: 'Financial Controller (Remote - Work from Anywhere)',
+      }),
+    ).toBe('global');
+    expect(
+      extractRemoteScope({ location: 'Bahamas', title: 'Travel Coordinator Work From Anywhere' }),
+    ).toBe('global');
+  });
+
+  it('the text opens with it', () => {
+    expect(
+      extractRemoteScope({
+        ...gibraltar,
+        title: 'Chief Customer Officer',
+        description:
+          'Work from anywhere, impact everywhere. Diversity is at the heart of who we are.',
+      }),
+    ).toBe('global');
+  });
+
+  it('the text states it as the place of work', () => {
+    const scopeOf = (description: string) =>
+      extractRemoteScope({ location: 'United States', title: 'Account Manager', description });
+    expect(scopeOf('Great team. Location: Remote (Work from Anywhere) Schedule: Full-Time')).toBe(
+      'global',
+    );
+    expect(scopeOf('Benefits: - 100% Remote Role (Work from anywhere) - Salary in USD')).toBe(
+      'global',
+    );
+    expect(
+      scopeOf('This 100% remote position allows you to work anywhere. Flexible schedule.'),
+    ).toBe('global');
+    expect(scopeOf('You may work remotely from anywhere in the world.')).toBe('global');
+  });
+
+  it('a benefit or a slogan in the middle of the text does not open it', () => {
+    const scopeOf = (description: string) =>
+      extractRemoteScope({ location: 'United States', title: 'Consultant', description });
+    expect(
+      scopeOf('As a Work Anywhere company, we support your flexibility to work from home.'),
+    ).toBe('US');
+    expect(scopeOf('Perks: Work From Anywhere opportunity for 60 days per year.')).toBe('US');
+    expect(scopeOf('Benefits - 100 days working from anywhere - work remotely.')).toBe('US');
+    expect(scopeOf('Passionate about securing the Work from Anywhere era.')).toBe('US');
+    expect(scopeOf('Flexible schedules. Work from anywhere options. 401(k).')).toBe('US');
+    expect(scopeOf('Work from anywhere in the world for up to 45 days per year.')).toBe('US');
+  });
+
+  it('a named place after the phrase still limits it', () => {
+    expect(
+      extractRemoteScope({
+        location: 'Germany',
+        title: 'Engineer - work from anywhere in Germany',
+      }),
+    ).toBe('DE');
+  });
+});
