@@ -15,10 +15,27 @@ describe('summarizeRoleSample (B445)', () => {
         item('2026-10-20T08:00:00.000Z', ['hh', 'linkedin']),
         item('2026-10-21T09:00:00.000Z', ['hh']),
       ]),
-    ).toEqual({ observedAt: '2026-10-21T09:00:00.000Z', sources: ['hh', 'linkedin'] });
+    ).toEqual({
+      observedAt: '2026-10-21T09:00:00.000Z',
+      sources: ['hh', 'linkedin'],
+      sourceNames: ['hh.ru', 'linkedin'],
+    });
   });
 
   it('пустая выборка — без даты и без площадок', () => {
-    expect(summarizeRoleSample([])).toEqual({ observedAt: null, sources: [] });
+    expect(summarizeRoleSample([])).toEqual({ observedAt: null, sources: [], sourceNames: [] });
+  });
+
+  it('называет площадку по имени: тип json_api площадку не называет', () => {
+    const named = {
+      cluster: {
+        lastSeenAt: '2026-11-04T00:00:00.000Z',
+        sources: [
+          { sourceType: 'json_api', sourceName: 'hh.ru (страница поиска)' },
+          { sourceType: 'json_api', sourceName: 'LinkedIn' },
+        ],
+      },
+    } as unknown as MatchedVacancyItem;
+    expect(summarizeRoleSample([named]).sourceNames).toEqual(['hh.ru', 'LinkedIn']);
   });
 });

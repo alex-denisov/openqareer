@@ -3,12 +3,13 @@ import type { ProposedRole } from '../../shared/roleProposals';
 import { readCampaign } from './campaignContext';
 import { careerRolesWithCandidateChoices } from './careerRoleSync';
 import type { RouteDeps } from './deps';
-import { finishMatchedVacancies } from './matchedVacancyRoutes';
+import { conditionsMarketCount, finishMatchedVacancies } from './matchedVacancyRoutes';
 import { readRoleContext, type RoleContext } from './vacancyRoleContext';
 
 export interface CareerRolesRead {
   readonly context: RoleContext;
   readonly roles: ProposedRole[];
+  readonly conditionsCount: ReturnType<typeof conditionsMarketCount>;
 }
 
 /**
@@ -23,9 +24,10 @@ export async function readCareerRoleContext(
   const context = await readRoleContext(deps, request, candidateId);
   if (!context) return null;
   const campaign = readCampaign(deps.candidateStore, candidateId);
+  const targetRoles = [...campaign.roles.value];
   const listed = finishMatchedVacancies(
     context.matched,
-    [...campaign.roles.value],
+    targetRoles,
     campaign,
     deps.candidateStore,
     candidateId,
@@ -33,6 +35,7 @@ export async function readCareerRoleContext(
   return {
     context,
     roles: careerRolesWithCandidateChoices(deps, candidateId, context, listed),
+    conditionsCount: conditionsMarketCount(context.matched, listed, targetRoles, campaign),
   };
 }
 

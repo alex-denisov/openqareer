@@ -54,10 +54,7 @@ export function CareerRoleOffer(): ReactElement | null {
   return (
     <section className="career-expert-proposal" aria-label={title} data-testid="career-role-offer">
       <p className="career-expert-proposal-title">{title}</p>
-      <p>
-        Подборка пересчитается, в ней появится {formatVacancyCount(role.vacancyCount)}
-        {role.observedDate ? ` (срез ${role.observedDate})` : ''}.
-      </p>
+      <p>Подборка пересчитается, в ней появится {formatVacancyCount(role.vacancyCount)}.</p>
       {store.actionError ? (
         <p className="career-expert-proposal-error" role="alert">
           {store.actionError}

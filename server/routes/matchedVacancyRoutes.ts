@@ -113,6 +113,22 @@ function roleLevelMatchCount(
   return snapshot.filter((item) => item.explanation.roleMatch !== 'none').length;
 }
 
+/** «N из M по ролям» на «Карьере»: числа шапки «Вакансий» из уже прочитанного снимка. */
+export function conditionsMarketCount(
+  snapshot: readonly MatchedVacancyItem[],
+  listed: readonly MatchedVacancyItem[],
+  targetRoles: readonly string[],
+  campaign: Pick<CampaignResolution, 'remoteOnly'>,
+): { readonly withinConditions: number; readonly byRoles: number } {
+  const considered = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
+  return {
+    withinConditions: listed.length,
+    byRoles: roleLevelMatchCount(considered, targetRoles),
+  };
+}
+
 /**
  * PRB-040: каждая страница дочитывания пересчитывала подборку целиком —
  * ~230 мс event loop на четыре записи, сотни страниц на чтение. Посчитанная
@@ -259,7 +275,8 @@ function buildMatchedResponse(
     { continuing: filters.offset > 0 },
   );
   const page = buildMatchedVacancyPage(list.filtered, filters.offset, undefined, list.pageOffsets);
-  const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt), titleParseStartedAt = performance.now();
+  const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt),
+    titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
     titleParseStore.getByKey(key),
   );
@@ -437,7 +454,14 @@ async function readMatchedPage(
     matchGeographyOf(campaign.careerGeography),
   );
   const snapshotMs = elapsedMs(startedAt);
-  const listKey = matchedListKey(snapshot, campaign, candidateStore, candidateId, filters, decorate);
+  const listKey = matchedListKey(
+    snapshot,
+    campaign,
+    candidateStore,
+    candidateId,
+    filters,
+    decorate,
+  );
   const prepared = await prepareListOrder(listKey, filters.offset > 0, snapshot, decorate);
   return {
     response: buildMatchedResponse(
@@ -521,7 +545,8 @@ async function finishMatchedPage(
 }
 
 const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
-  const deps = withRequestScopedCandidateReads(backgroundDeps), requestStartedAt = performance.now();
+  const deps = withRequestScopedCandidateReads(backgroundDeps),
+    requestStartedAt = performance.now();
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
   const cold = !observedMatchEngines.has(multiSourceEngine);
   observedMatchEngines.add(multiSourceEngine);
@@ -545,7 +570,11 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
   await deps.vacancyMechanics?.warmCachedVacancyIds?.(candidate.id);
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
   const fitLimit = selectionFitLimit(candidatePlan(deps, candidate.id));
-  const { response: orderedPage, semanticQueryAndSqlMs, readSteps } = await readMatchedPage(
+  const {
+    response: orderedPage,
+    semanticQueryAndSqlMs,
+    readSteps,
+  } = await readMatchedPage(
     multiSourceEngine,
     candidateStore,
     candidate.id,
@@ -559,7 +588,11 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     withWantedCompanyOrder(deps, candidate.id, sort, request.log),
     fitLimit,
   );
-  const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, { offset, fitLimit, request });
+  const page = await finishMatchedPage(deps, backgroundDeps, candidate.id, orderedPage, {
+    offset,
+    fitLimit,
+    request,
+  });
   logMatchedTiming(
     request,
     config.matchMode ?? 'legacy',

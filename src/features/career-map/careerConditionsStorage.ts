@@ -82,6 +82,31 @@ export function formatConditionsFormat(format: SearchConditionsDraft['format']):
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+const REMOTE_PLACE = /^удал[её]нно/iu;
+const PATH_SEPARATOR = ' › ';
+
+/** Макет 3: «Москва, удалённо из РФ». Прописная только у первого слова строки. */
+export function formatGeography(selected: readonly string[]): string | null {
+  if (selected.length === 0) return null;
+  return selected
+    .map((place, index) =>
+      index > 0 && REMOTE_PLACE.test(place)
+        ? place.charAt(0).toLocaleLowerCase('ru') + place.slice(1)
+        : place,
+    )
+    .join(', ');
+}
+
+/** Макет 3 на 390: «Москва, РФ» — значение в одну строку рядом с подписью. */
+export function formatGeographyShort(selected: readonly string[]): string | null {
+  if (selected.length === 0) return null;
+  const short = selected.map((place) => {
+    const remote = /^удал[её]нно\s+из\s+(.+)$/iu.exec(place);
+    return remote ? remote[1] : (place.split(PATH_SEPARATOR).at(-1) ?? place);
+  });
+  return [...new Set(short)].join(', ');
+}
+
 export function formatSalaryFloor(amount: number | null): string | null {
   return amount === null ? null : `${amount.toLocaleString('ru-RU').replace(/\u00A0/g, ' ')} ₽`;
 }

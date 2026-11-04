@@ -117,7 +117,7 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
     };
   }
 
-  const { context, roles } = read;
+  const { context, roles, conditionsCount } = read;
   try {
     persistCareerRoles(deps, candidate.id, roles);
   } catch (error) {
@@ -136,6 +136,7 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
       roleNaming: { stage: context.namedBy, language: context.language },
       roleDecisions: readRoleDecisions(deps, candidate.id),
       sample: summarizeRoleSample(context.matched),
+      conditionsCount,
     },
   };
 };

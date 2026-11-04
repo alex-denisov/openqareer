@@ -7,6 +7,7 @@ import {
   CareerInlineGeoEditor,
   CareerInlineSalaryEditor,
   CareerInlineStopListEditor,
+  MarketSourceStamp,
   SectionInfoToggle,
   type EditableConditionField,
 } from './CareerConditionsComponents';
@@ -191,6 +192,7 @@ function CareerRolesSection({
           ))}
         </div>
       )}
+      <MarketSourceStamp summary={state.summary} />
     </section>
   );
 }

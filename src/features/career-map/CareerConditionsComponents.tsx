@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle,
   Circle,
+  Clock,
   FunnelSimple,
   Globe,
   Info,
@@ -17,8 +18,11 @@ import type { RolesMarketSummary, SearchConditionsDraft } from './careerScreenTy
 import {
   formatCompaniesCount,
   formatConditionsFormat,
+  formatGeography,
+  formatGeographyShort,
   formatSalaryFloor,
 } from './careerConditionsStorage';
+import { formatVacancyCount } from './careerWageFork';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import { useGeoDirectory } from '../geo/useGeoDirectory';
 import { CareerGeoCombobox, normalizeGeoSelection } from './CareerGeoCombobox';
@@ -313,10 +317,17 @@ export interface ConditionRow {
   readonly value: string | null;
 }
 
-export function conditionRows(conditions: SearchConditionsDraft): readonly ConditionRow[] {
+export function conditionRows(
+  conditions: SearchConditionsDraft,
+  { short = false }: { readonly short?: boolean } = {},
+): readonly ConditionRow[] {
   const geo = conditions.geography.selected;
   return [
-    { field: 'geo', label: 'География', value: geo.length > 0 ? geo.join(', ') : null },
+    {
+      field: 'geo',
+      label: 'География',
+      value: short ? formatGeographyShort(geo) : formatGeography(geo),
+    },
     {
       field: 'sal',
       label: 'Зарплата от',
@@ -360,16 +371,76 @@ function ConditionsChipList({
   );
 }
 
-/** Сводка вакансий по ролям: число и дата из данных ролей, «N из M» — только когда посчитано. */
-export function ConditionsMarketLine({ summary }: { summary: RolesMarketSummary }): ReactElement {
+const groupedCount = new Intl.NumberFormat('ru-RU');
+
+function uncountedMarketLine(summary: RolesMarketSummary): string {
+  return summary.vacancyTotal > 0
+    ? `Вакансий по ролям: ${summary.vacancyTotal}${summary.asOf ? `, срез ${summary.asOf}` : ''}. Сколько из них проходит эти условия, ещё не посчитано.`
+    : 'Число вакансий с этими условиями ещё не посчитано.';
+}
+
+/** Сводка вакансий по ролям: «N из M» — те же числа, что в шапке «Вакансий», когда посчитаны. */
+export function ConditionsMarketLine({
+  summary,
+  isMobile = false,
+}: {
+  summary: RolesMarketSummary;
+  isMobile?: boolean;
+}): ReactElement {
+  const count = summary.conditionsCount;
+  const counted =
+    count && count.byRoles > 0
+      ? `${formatVacancyCount(count.withinConditions)} из ${groupedCount.format(count.byRoles)} по ролям${count.asOf ? `, ${count.asOf}` : ''}.`
+      : null;
+  if (isMobile) {
+    return (
+      <p className="career-m-foot">
+        {counted
+          ? `С этими условиями ${counted} Подборка пересчитывается при любой правке.`
+          : uncountedMarketLine(summary)}
+      </p>
+    );
+  }
   return (
-    <p className="career-role-meta career-meta-icon">
+    <p className="career-role-meta career-meta-icon career-market-line">
       <FunnelSimple size={16} aria-hidden />
-      <span>
-        {summary.vacancyTotal > 0
-          ? `Вакансий по ролям: ${summary.vacancyTotal}${summary.asOf ? `, срез ${summary.asOf}` : ''}. Сколько из них проходит эти условия, ещё не посчитано.`
-          : 'Число вакансий с этими условиями ещё не посчитано.'}
-      </span>
+      <span>{counted ? `С этими условиями: ${counted}` : uncountedMarketLine(summary)}</span>
+    </p>
+  );
+}
+
+/** Площадки, которые строка источника называет; остальные входят в «каталог openqareer». */
+const NAMED_PLATFORMS = ['hh.ru', 'LinkedIn'] as const;
+
+function namedSources(sources: readonly string[]): string {
+  const platforms = NAMED_PLATFORMS.filter((platform) =>
+    sources.some((source) => source.startsWith(platform)),
+  );
+  const names = ['каталог openqareer', ...platforms];
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} и ${names.at(-1)}` : names[0];
+}
+
+/** Макет 3: откуда числа экрана. Площадка названа, только если она есть в данных кандидата. */
+export function MarketSourceStamp({
+  summary,
+  isMobile = false,
+}: {
+  summary: RolesMarketSummary;
+  isMobile?: boolean;
+}): ReactElement | null {
+  const total = summary.conditionsCount?.byRoles || summary.vacancyTotal;
+  if (total === 0) return null;
+  const parts = [namedSources(summary.sources), formatVacancyCount(total)];
+  if (summary.asOf) parts.push(summary.asOf);
+  return isMobile ? (
+    <p className="career-m-source">
+      <Clock size={16} aria-hidden />
+      <span>Источник: {parts.join(', ')}.</span>
+    </p>
+  ) : (
+    <p className="career-source-stamp">
+      <Clock size={14} aria-hidden />
+      <span>Источник: {parts.join(' · ')}</span>
     </p>
   );
 }

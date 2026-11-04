@@ -23,6 +23,7 @@ import {
 import {
   conditionRows,
   ConditionsMarketLine,
+  MarketSourceStamp,
   type EditableConditionField,
 } from './CareerConditionsComponents';
 import { formatVacancyCount } from './careerWageFork';
@@ -166,15 +167,10 @@ function MobileConditionsGroup({
   conditions,
   summary,
   onEditField,
-  onOpenRelocation,
-  relocationEnabled = conditions.geography.isRelocationEnabled,
 }: {
   conditions: SearchConditionsDraft;
   summary: RolesMarketSummary;
   onEditField: (field: Exclude<EditableConditionField, null>) => void;
-  onOpenRelocation: () => void;
-  /** Согласие анкеты релокации — то же состояние, что в самом разделе (B445-r1); null — ещё не прочитано. */
-  relocationEnabled?: boolean | null;
 }): ReactElement {
   return (
     <section className="career-m-group" aria-labelledby="m-cond-h">
@@ -182,7 +178,7 @@ function MobileConditionsGroup({
         Условия поиска
       </h3>
       <ul className="career-m-list">
-        {conditionRows(conditions).map((row) => (
+        {conditionRows(conditions, { short: true }).map((row) => (
           <li key={row.field}>
             <button type="button" className="career-m-row" onClick={() => onEditField(row.field)}>
               <span className="career-m-icon">{CONDITION_ICONS[row.field]}</span>
@@ -195,8 +191,7 @@ function MobileConditionsGroup({
           </li>
         ))}
       </ul>
-      <ConditionsMarketLine summary={summary} />
-      <MobileRelocationRow enabled={relocationEnabled} onOpen={onOpenRelocation} />
+      <ConditionsMarketLine summary={summary} isMobile />
     </section>
   );
 }
@@ -224,9 +219,14 @@ export function MobileCareerHome({
         conditions={conditions}
         summary={summary}
         onEditField={(field) => onPush(field)}
-        onOpenRelocation={onOpenRelocation}
-        relocationEnabled={relocationEnabled}
       />
+      <section className="career-m-group" aria-label="Страны и релокация">
+        <MobileRelocationRow
+          enabled={relocationEnabled ?? conditions.geography.isRelocationEnabled}
+          onOpen={onOpenRelocation}
+        />
+      </section>
+      <MarketSourceStamp summary={summary} isMobile />
     </div>
   );
 }

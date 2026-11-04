@@ -1,3 +1,4 @@
+import { catalogSnapshotLabel } from '../vacancies/VacanciesScreenSummary';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type {
   CareerRoleModel,
@@ -229,6 +230,14 @@ export function mapProposedRolesToCareerRoles(
 export interface RolesSample {
   readonly observedAt: string | null;
   readonly sources: readonly string[];
+  readonly sourceNames?: readonly string[];
+  readonly conditionsCount?: ConditionsCount;
+}
+
+/** Числа шапки «Вакансий»: подборка с условиями кандидата и все вакансии по ролям и уровню. */
+export interface ConditionsCount {
+  readonly withinConditions: number;
+  readonly byRoles: number;
 }
 
 export function summarizeRolesMarket(
@@ -246,7 +255,16 @@ export function summarizeRolesMarket(
       ...new Set([
         ...roles.flatMap((role) => role.sources),
         ...(sample?.sources ?? []).map(sourceLabel),
+        ...(sample?.sourceNames ?? []),
       ]),
     ],
+    ...(sample?.conditionsCount
+      ? {
+          conditionsCount: {
+            ...sample.conditionsCount,
+            asOf: catalogSnapshotLabel(sample.observedAt ?? undefined) ?? null,
+          },
+        }
+      : {}),
   };
 }
