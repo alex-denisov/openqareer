@@ -241,7 +241,7 @@ describe('цепочка разбора названий (28.10)', () => {
   const items = [{ titleKey: 'cto', sampleTitle: 'CTO' }];
   const parsed = [{ titleKey: 'cto', functions: ['eng'], levelRank: 4 }] as const;
 
-  it('deepseek-v4-flash → glm-5.3-flash → Vertex (B580)', () => {
+  it('deepseek-v4-flash → glm-5.3-flash, Vertex в цепочке нет (04.11)', () => {
     const parser = buildModelTitleParser({
       providerCredentials: { openrouter: 'sk-or-test' },
       vertex: {
@@ -255,7 +255,6 @@ describe('цепочка разбора названий (28.10)', () => {
     expect(parser.stages.map((stage) => stage.model)).toEqual([
       'deepseek/deepseek-v4-flash',
       'z-ai/glm-5.3-flash',
-      'gemini-3.8-flash',
     ]);
   });
 

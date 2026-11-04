@@ -2,11 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BULK_BUDGET_EXCEEDED, type BulkLlmClient, type BulkLlmInput } from '../providers/bulkLlmClient';
+import { BULK_BUDGET_EXCEEDED, BulkChannelUnavailable, type BulkLlmClient, type BulkLlmInput } from '../providers/bulkLlmClient';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { evaluateVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { extractVacancyRequirements, vacancyDescriptionHash } from './vacancyRequirements';
 import { LEGACY_VACANCY_FIT_ALGORITHM_VERSIONS } from '../../shared/vacancyFit';
+import { vacancyFitStage } from '../../shared/vacancyFitPercent';
 /** 02.11: one quote backs at most two requirements, so the fake model cites a distinct one each. */
 const DISTINCT_QUOTES = ['services', 'ervices', 'rvices'];
 
@@ -267,6 +268,60 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(await runtime.runNext(client)).toBe(false);
     expect(complete).toHaveBeenCalledTimes(1);
     expect(runtime.view(source).result).toBeUndefined();
+  });
+
+  describe('сбой всех ступеней канала (04.11)', () => {
+    function counted(): { source: VacancyFitInput; healthy: BulkLlmClient } {
+      const source: VacancyFitInput = { ...input(), description: 'Requirements\n- TypeScript experience required\n- Node services\n- SQL queries', gates: {
+        role: { status: 'matched', reason: 'confirmed' }, level: { status: 'matched', reason: 'confirmed' },
+        region: { status: 'matched', reason: 'confirmed' }, workFormat: { status: 'matched', reason: 'confirmed' }, workAuthorization: { status: 'matched', reason: 'confirmed' },
+      } };
+      const healthy = fitClient((request) => {
+        const { requirements } = JSON.parse(request.input) as { requirements: { id: string }[] };
+        return { content: JSON.stringify({ assessments: requirements.map(({ id }, i) => ({ requirementId: id, status: 'matched', evidence: [{ factId: 'private-fact', quote: DISTINCT_QUOTES[i % 3] }] })) }) };
+      });
+      return { source, healthy };
+    }
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('на вызове процента: «считаем», попытки не тратятся, после восстановления считается сам', async () => {
+      const runtime = setup(); const { source, healthy } = counted();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(Date.parse('2026-11-04T10:00:00.000Z'));
+      runtime.enqueue(source);
+      const down = vi.fn(async (request: BulkLlmInput) => {
+        if (request.task === 'vacancy-requirements') return healthy.complete(request);
+        throw new BulkChannelUnavailable('openrouter_503');
+      });
+      await runtime.runNext({ complete: down } as unknown as BulkLlmClient);
+      expect(vacancyFitStage(runtime.view(source))).toBe('counting');
+      expect(runtime.takeStats()).toMatchObject({ channelPaused: 1, failed: 0, retried: 0 });
+      // A minute of no claims, not a latch: nothing is called.
+      down.mockClear();
+      await runtime.runNext({ complete: down } as unknown as BulkLlmClient);
+      expect(down).not.toHaveBeenCalled();
+      const row = runtime.database.prepare('SELECT status,attempts FROM vacancy_fit_queue').get() as { status: string; attempts: number };
+      expect(row).toEqual({ status: 'pending', attempts: 0 });
+      vi.setSystemTime(Date.parse('2026-11-04T10:06:00.000Z'));
+      await runtime.runNext(healthy);
+      expect(runtime.view(source).state).toBe('ready');
+    });
+
+    it('на требованиях: задача ждёт в очереди, процент не падает, после восстановления готов', async () => {
+      const runtime = setup(); const { source, healthy } = counted();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(Date.parse('2026-11-04T10:00:00.000Z'));
+      runtime.enqueue(source);
+      const down = vi.fn(async () => { throw new BulkChannelUnavailable('openrouter_timeout'); });
+      await runtime.runNext({ complete: down } as unknown as BulkLlmClient);
+      expect(vacancyFitStage(runtime.view(source))).toBe('counting');
+      const job = runtime.database.prepare('SELECT status FROM vacancy_requirements_jobs').get() as { status: string };
+      expect(job.status).toBe('queued');
+      expect(runtime.takeStats().failed).toBe(0);
+      vi.setSystemTime(Date.parse('2026-11-04T10:06:00.000Z'));
+      for (let step = 0; step < 3; step += 1) await runtime.runNext(healthy);
+      expect(runtime.view(source).state).toBe('ready');
+    });
   });
 
   it('does not freeze a transient assessment failure into a ready cached unknown', async () => {

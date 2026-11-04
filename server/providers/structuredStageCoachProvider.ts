@@ -1,6 +1,5 @@
 import type { CoachTurnInput } from '../domain/coach';
 import type { BulkCompletion } from '../domain/measuredBulkClient';
-import { BULK_FALLBACK_PROVIDER } from './bulkGeminiFallback';
 import { chainStageLabel, MODEL_CHAINS } from './modelChains';
 import type { ProviderId } from './modelRegistry';
 import {
@@ -116,7 +115,7 @@ export class StructuredStageCoachProvider implements CoachProvider {
         }),
         this.stageTimeoutMs,
       );
-      const provider = bulkProvider(response.provider);
+      const provider: ProviderId = 'openrouter';
       const output = bulkResult(input, response.content, response.model, idempotencyKey, provider);
       if (options?.accept && !options.accept(output.result)) {
         attempts.push({ provider, model: response.model, status: 'failed', code: 'provider_output_invalid' });
@@ -134,11 +133,6 @@ export class StructuredStageCoachProvider implements CoachProvider {
 
 /** The bulk chain as one attempt in the step's provenance: its stages are journaled by the worker. */
 const BULK_CHAIN_LABEL = MODEL_CHAINS.bulk.map(chainStageLabel).join(' → ');
-
-/** The Vertex stage answers as `gemini`; every other bulk stage lives behind OpenRouter. */
-function bulkProvider(provider: string): ProviderId {
-  return provider === BULK_FALLBACK_PROVIDER ? 'gemini' : 'openrouter';
-}
 
 function stageData(input: CoachTurnInput) {
   let stageContext: unknown = input.stageContext ?? null;
