@@ -117,7 +117,8 @@ async function book(
     };
     usage = body.usageMetadata;
     // The journal names the model that really answered (a dated revision of the pinned one).
-    if (typeof body.modelVersion === 'string' && body.modelVersion) booked = body.modelVersion.slice(0, 100);
+    if (typeof body.modelVersion === 'string' && body.modelVersion)
+      booked = body.modelVersion.slice(0, 100);
   } catch {
     // The body is the caller's to judge; an unreadable one is booked at zero tokens.
   }

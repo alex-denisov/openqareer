@@ -49,7 +49,7 @@ const openRouterAnswer = () =>
 
 interface Harness {
   runtime: ReturnType<typeof createBulkLlmRuntime>;
-  vertexCalls: Array<{ url: string; body: Record<string, any> }>;
+  vertexCalls: Array<{ url: string; body: { generationConfig: { maxOutputTokens: number } } }>;
   openRouterCalls: number;
   tokenCalls: number;
   events: BulkLlmChannelEvent[];
@@ -100,7 +100,11 @@ describe('Vertex first stage of the bulk channel', () => {
   it('answers from Vertex, books a gemini row with thoughts and asks OpenRouter nothing', async () => {
     const h = harness({});
     const result = await h.runtime.client!.complete({ ...req, maxTokens: 1000 });
-    expect(result).toMatchObject({ content: '{"ok":true}', provider: 'vertex', model: 'gemini-3.8-flash-001' });
+    expect(result).toMatchObject({
+      content: '{"ok":true}',
+      provider: 'vertex',
+      model: 'gemini-3.8-flash-001',
+    });
     expect(result.fallbackReason).toBeUndefined();
     expect(h.openRouterCalls).toBe(0);
     const config = h.vertexCalls[0]!.body.generationConfig;
@@ -111,7 +115,9 @@ describe('Vertex first stage of the bulk channel', () => {
     });
     expect(config.maxOutputTokens).toBeGreaterThan(1000);
     const row = h.runtime.ledger.db
-      .prepare('SELECT task,provider,model,status,failure,prompt_tokens,completion_tokens,cost FROM bulk_llm_spend')
+      .prepare(
+        'SELECT task,provider,model,status,failure,prompt_tokens,completion_tokens,cost FROM bulk_llm_spend',
+      )
       .get() as Record<string, unknown>;
     expect(row).toMatchObject({
       task: 'requirements',
@@ -135,7 +141,10 @@ describe('Vertex first stage of the bulk channel', () => {
   });
 
   it('Vertex spend above the channel day cap neither closes the channel nor touches the latch', async () => {
-    const h = harness({}, { OPENQAREER_VERTEX_CREDIT_USD: '1000', OPENQAREER_VERTEX_DAY_USD: '1000' });
+    const h = harness(
+      {},
+      { OPENQAREER_VERTEX_CREDIT_USD: '1000', OPENQAREER_VERTEX_DAY_USD: '1000' },
+    );
     for (let index = 0; index < 40; index += 1) {
       h.runtime.ledger.recordGeminiCall(
         { task: 'x', model: 'gemini-3.8-flash' },
@@ -165,7 +174,9 @@ describe('Vertex first stage of the bulk channel', () => {
     expect(h.vertexCalls).toHaveLength(1);
     expect(h.openRouterCalls).toBe(2);
     expect(
-      h.runtime.ledger.db.prepare("SELECT status,cost,failure FROM bulk_llm_spend WHERE provider='gemini'").all(),
+      h.runtime.ledger.db
+        .prepare("SELECT status,cost,failure FROM bulk_llm_spend WHERE provider='gemini'")
+        .all(),
     ).toEqual([expect.objectContaining({ status: 'rejected', cost: 0 })]);
     h.runtime.close();
   });

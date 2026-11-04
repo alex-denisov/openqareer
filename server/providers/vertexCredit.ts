@@ -56,7 +56,8 @@ export function readVertexCreditConfig(
   env: Record<string, string | undefined>,
   warn: (line: string) => void = console.warn,
 ): VertexCreditConfig {
-  const bad = (key: string) => warn(`bulk-llm vertex-credit-invalid key=${key} value ignored, default used`);
+  const bad = (key: string) =>
+    warn(`bulk-llm vertex-credit-invalid key=${key} value ignored, default used`);
   const money = (key: string, fallback: number): number => {
     const raw = env[key]?.trim();
     if (raw === undefined || raw === '') return fallback;
@@ -86,12 +87,7 @@ export function readVertexCreditConfig(
 }
 
 export type VertexSkipReason =
-  | 'credit_spent'
-  | 'credit_expired'
-  | 'day_cap'
-  | 'task_day_cap'
-  | 'billing_off'
-  | 'cooling';
+  'credit_spent' | 'credit_expired' | 'day_cap' | 'task_day_cap' | 'billing_off' | 'cooling';
 
 /** The stage is not asked: the chain treats it like any failed stage. */
 export class VertexSkippedError extends Error {
@@ -108,16 +104,22 @@ const BILLING_WORDS = /\b(billing|credits?|prepayment|budget)\b/iu;
  * names billing; 429 or RESOURCE_EXHAUSTED that names billing, credit, prepayment or budget.
  * Everything else, a plain quota 429 or a permission 403 included, is an ordinary refusal.
  */
-export function classifyVertexFailure(status: number | undefined, text: string): 'billing' | 'ordinary' {
+export function classifyVertexFailure(
+  status: number | undefined,
+  text: string,
+): 'billing' | 'ordinary' {
   if (status === 402) return 'billing';
-  if (status === 403 && (/BILLING_DISABLED/u.test(text) || BILLING_WORDS.test(text))) return 'billing';
+  if (status === 403 && (/BILLING_DISABLED/u.test(text) || BILLING_WORDS.test(text)))
+    return 'billing';
   const exhausted = status === 429 || /RESOURCE_EXHAUSTED/u.test(text);
   return exhausted && BILLING_WORDS.test(text) ? 'billing' : 'ordinary';
 }
 
 /** Refusals that say Vertex itself is unwell: they cool it. A 400 is the caller's request, not Vertex. */
 function coolsStage(status: number | undefined): boolean {
-  return status === undefined || status === 403 || status === 408 || status === 429 || status >= 500;
+  return (
+    status === undefined || status === 403 || status === 408 || status === 429 || status >= 500
+  );
 }
 
 const ALERTS: Partial<Record<VertexSkipReason, string>> = {
@@ -157,29 +159,46 @@ export interface VertexGate {
 }
 
 export function createVertexGate(options: VertexGateOptions): VertexGate {
-  const { ledger, config } = options;
-  const env = options.env ?? process.env;
-  const now = options.now ?? Date.now;
-  const log = options.log ?? ((line: string) => console.warn(line));
-  let coolUntil = 0;
-  let failures = 0;
-  let billingOffUntil = 0;
-  let lastSkipLogAt = Number.NEGATIVE_INFINITY;
+  return new CreditGate(options);
+}
 
-  const dayStartIso = () => `${new Date(now()).toISOString().slice(0, 10)}T00:00:00.000Z`;
+class CreditGate implements VertexGate {
+  readonly ledger: VertexGateOptions['ledger'];
+  private readonly config: VertexCreditConfig;
+  private readonly env: NodeJS.ProcessEnv;
+  private readonly transport: typeof fetch;
+  private readonly now: () => number;
+  private readonly log: (line: string) => void;
+  private coolUntil = 0;
+  private failures = 0;
+  private billingOffUntil = 0;
+  private lastSkipLogAt = Number.NEGATIVE_INFINITY;
 
-  function billingOff(): boolean {
-    if (billingOffUntil > now()) return true;
-    return ledger.eventSince(BILLING_OFF_EVENT, new Date(now() - BILLING_OFF_MS).toISOString());
+  constructor(options: VertexGateOptions) {
+    this.ledger = options.ledger;
+    this.config = options.config;
+    this.env = options.env ?? process.env;
+    this.transport = options.transport ?? fetch;
+    this.now = options.now ?? Date.now;
+    this.log = options.log ?? ((line: string) => console.warn(line));
   }
 
-  function skipReason(task: string): VertexSkipReason | undefined {
-    if (now() >= config.untilMs) return 'credit_expired';
-    if (billingOff()) return 'billing_off';
-    if (coolUntil > now()) return 'cooling';
-    const spent = ledger.vertexSpend({
+  private billingOff(): boolean {
+    if (this.billingOffUntil > this.now()) return true;
+    return this.ledger.eventSince(
+      BILLING_OFF_EVENT,
+      new Date(this.now() - BILLING_OFF_MS).toISOString(),
+    );
+  }
+
+  skipReason(task: string): VertexSkipReason | undefined {
+    const { config } = this;
+    if (this.now() >= config.untilMs) return 'credit_expired';
+    if (this.billingOff()) return 'billing_off';
+    if (this.coolUntil > this.now()) return 'cooling';
+    const spent = this.ledger.vertexSpend({
       sinceIso: config.sinceIso,
-      dayStartIso: dayStartIso(),
+      dayStartIso: `${new Date(this.now()).toISOString().slice(0, 10)}T00:00:00.000Z`,
       task,
     });
     if (spent.creditUsd >= config.creditUsd) return 'credit_spent';
@@ -189,50 +208,56 @@ export function createVertexGate(options: VertexGateOptions): VertexGate {
     return undefined;
   }
 
-  function alertOnce(kind: string, text: string) {
+  private alertOnce(kind: string, text: string) {
     try {
-      if (!ledger.firstToday(`owner_alert_${kind}`)) return;
-      sendOwnerTelegram(env, options.transport ?? fetch, text);
+      if (!this.ledger.firstToday(`owner_alert_${kind}`)) return;
+      sendOwnerTelegram(this.env, this.transport, text);
     } catch (error) {
-      console.error(`bulk-llm vertex-alert-failed ${error instanceof Error ? error.name : 'unknown'}`);
+      console.error(
+        `bulk-llm vertex-alert-failed ${error instanceof Error ? error.name : 'unknown'}`,
+      );
     }
   }
 
-  function admit(task: string) {
-    const reason = skipReason(task);
+  admit(task: string) {
+    const reason = this.skipReason(task);
     if (!reason) return;
-    if (now() - lastSkipLogAt >= SKIP_LOG_EVERY_MS) {
-      lastSkipLogAt = now();
-      log(`bulk-llm vertex-skip reason=${reason}`);
+    if (this.now() - this.lastSkipLogAt >= SKIP_LOG_EVERY_MS) {
+      this.lastSkipLogAt = this.now();
+      this.log(`bulk-llm vertex-skip reason=${reason}`);
     }
     const alert = ALERTS[reason];
-    if (alert) alertOnce(`vertex_${reason}`, alert);
+    if (alert) this.alertOnce(`vertex_${reason}`, alert);
     throw new VertexSkippedError(reason);
   }
 
-  function failed(failure: { status?: number; text: string }) {
+  failed(failure: { status?: number; text: string }) {
     const text = maskFailureText(failure.text);
     if (classifyVertexFailure(failure.status, text) === 'billing') {
-      billingOffUntil = now() + BILLING_OFF_MS;
-      log(`bulk-llm vertex-billing-off reason=${text}`);
-      try {
-        ledger.event(BILLING_OFF_EVENT);
-      } catch (error) {
-        console.error(`bulk-llm vertex-billing-event-failed ${error instanceof Error ? error.name : 'unknown'}`);
-      }
-      alertOnce('vertex_billing_off', BILLING_ALERT);
+      this.switchBillingOff(text);
       return;
     }
-    if (failure.status === 403) log(`bulk-llm vertex-forbidden reason=${text}`);
+    if (failure.status === 403) this.log(`bulk-llm vertex-forbidden reason=${text}`);
     if (!coolsStage(failure.status)) return;
-    failures += 1;
-    coolUntil = now() + Math.min(COOL_BASE_MS * 2 ** (failures - 1), COOL_MAX_MS);
+    this.failures += 1;
+    this.coolUntil = this.now() + Math.min(COOL_BASE_MS * 2 ** (this.failures - 1), COOL_MAX_MS);
   }
 
-  function succeeded() {
-    failures = 0;
-    coolUntil = 0;
+  private switchBillingOff(text: string) {
+    this.billingOffUntil = this.now() + BILLING_OFF_MS;
+    this.log(`bulk-llm vertex-billing-off reason=${text}`);
+    try {
+      this.ledger.event(BILLING_OFF_EVENT);
+    } catch (error) {
+      console.error(
+        `bulk-llm vertex-billing-event-failed ${error instanceof Error ? error.name : 'unknown'}`,
+      );
+    }
+    this.alertOnce('vertex_billing_off', BILLING_ALERT);
   }
 
-  return { ledger, skipReason, admit, failed, succeeded };
+  succeeded() {
+    this.failures = 0;
+    this.coolUntil = 0;
+  }
 }

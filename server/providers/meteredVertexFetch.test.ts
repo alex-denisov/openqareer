@@ -56,7 +56,9 @@ describe('обёртка вызова Vertex', () => {
   };
   const rows = (ledger: SqliteBulkLlmLedger) =>
     ledger.db
-      .prepare('SELECT task,provider,model,status,cost,failure,prompt_tokens,completion_tokens FROM bulk_llm_spend')
+      .prepare(
+        'SELECT task,provider,model,status,cost,failure,prompt_tokens,completion_tokens FROM bulk_llm_spend',
+      )
       .all() as Record<string, unknown>[];
 
   it('успех: строка settled с механикой, моделью, токенами и мыслями', async () => {
@@ -64,7 +66,11 @@ describe('обёртка вызова Vertex', () => {
     const inner = vi.fn(async () =>
       answer({ promptTokenCount: 1000, candidatesTokenCount: 200, thoughtsTokenCount: 100 }),
     );
-    const metered = createMeteredVertexFetch({ gate, task: 'roleNames', fetchImpl: inner as never });
+    const metered = createMeteredVertexFetch({
+      gate,
+      task: 'roleNames',
+      fetchImpl: inner as never,
+    });
     const response = await metered(URL, { method: 'POST' });
     expect(
       ((await response.json()) as { usageMetadata: { promptTokenCount: number } }).usageMetadata
@@ -92,11 +98,15 @@ describe('обёртка вызова Vertex', () => {
       { cost: 2, promptTokens: 1, cachedTokens: 0, completionTokens: 1 },
     );
     const inner = vi.fn();
-    const metered = createMeteredVertexFetch({ gate, task: 'roleNames', fetchImpl: inner as never });
+    const metered = createMeteredVertexFetch({
+      gate,
+      task: 'roleNames',
+      fetchImpl: inner as never,
+    });
     await expect(metered(URL, { method: 'POST' })).rejects.toBeInstanceOf(VertexSkippedError);
-    await expect(metered('https://oauth2.googleapis.com/token', { method: 'POST' })).rejects.toBeInstanceOf(
-      VertexSkippedError,
-    );
+    await expect(
+      metered('https://oauth2.googleapis.com/token', { method: 'POST' }),
+    ).rejects.toBeInstanceOf(VertexSkippedError);
     expect(inner).not.toHaveBeenCalled();
     expect(rows(ledger)).toHaveLength(1);
   });
@@ -105,9 +115,14 @@ describe('обёртка вызова Vertex', () => {
     const { ledger, gate } = open();
     const inner = vi.fn(
       async () =>
-        new Response(JSON.stringify({ error: { message: 'Quota. Bearer abcdef123456 key=AIzaSyAAAAAAAAAAAAAA' } }), {
-          status: 429,
-        }),
+        new Response(
+          JSON.stringify({
+            error: { message: 'Quota. Bearer abcdef123456 key=AIzaSyAAAAAAAAAAAAAA' },
+          }),
+          {
+            status: 429,
+          },
+        ),
     );
     const metered = createMeteredVertexFetch({ gate, task: 'bulk', fetchImpl: inner as never });
     const response = await metered(URL, { method: 'POST' });
@@ -127,7 +142,9 @@ describe('обёртка вызова Vertex', () => {
       gate,
       task: 'bulk',
       fetchImpl: (async () =>
-        new Response(JSON.stringify({ error: { message: 'BILLING_DISABLED' } }), { status: 403 })) as never,
+        new Response(JSON.stringify({ error: { message: 'BILLING_DISABLED' } }), {
+          status: 403,
+        })) as never,
     });
     await metered(URL, { method: 'POST' });
     expect(ledger.eventSince('vertex_billing_off', '2000-01-01T00:00:00.000Z')).toBe(true);

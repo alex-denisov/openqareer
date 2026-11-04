@@ -202,7 +202,9 @@ describe('ворота Vertex', () => {
     const fourth = wait();
     nowRef.t += fourth;
     const fifth = wait();
-    expect([first, second, third, fourth, fifth]).toEqual([60_000, 120_000, 240_000, 300_000, 300_000]);
+    expect([first, second, third, fourth, fifth]).toEqual([
+      60_000, 120_000, 240_000, 300_000, 300_000,
+    ]);
     nowRef.t += fifth;
     gate.succeeded();
     gate.failed({ status: 500, text: 'status 500: boom' });
@@ -237,7 +239,8 @@ describe('ворота Vertex', () => {
     for (let index = 0; index < 5; index += 1) {
       expect(() => gate.admit('bulk')).toThrow(VertexSkippedError);
     }
-    const lines = () => log.mock.calls.filter((call) => String(call[0]).startsWith('bulk-llm vertex-skip'));
+    const lines = () =>
+      log.mock.calls.filter((call) => String(call[0]).startsWith('bulk-llm vertex-skip'));
     expect(lines()).toHaveLength(1);
     expect(String(lines()[0]?.[0])).toContain('reason=credit_spent');
     nowRef.t += 61_000;

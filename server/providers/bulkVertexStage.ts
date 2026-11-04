@@ -57,7 +57,7 @@ export class BulkVertexStage {
     maxTokens: number,
     accept: (content: string) => boolean,
   ): Promise<{ result?: BulkLlmResult; failure?: string }> {
-    const { config, gate } = this.options;
+    const { gate } = this.options;
     try {
       gate.admit(input.task);
     } catch (error) {
@@ -74,36 +74,41 @@ export class BulkVertexStage {
     }
     let response: Response;
     try {
-      const metered = createMeteredVertexFetch({
-        gate,
-        task: input.task,
-        timeoutMs: REQUEST_TIMEOUT_MS,
-        fetchImpl: this.options.transport,
-        preAdmitted: true,
-      });
-      response = await metered(
-        `${vertexPublisherBaseUrl(config)}/models/${encodeURIComponent(config.model)}:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: input.prefix }] },
-            contents: [{ role: 'user', parts: [{ text: input.input }] }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: 0,
-              maxOutputTokens: maxTokens + THINKING_HEADROOM_TOKENS,
-              thinkingConfig: { thinkingLevel: 'low' },
-              seed: SAMPLING_SEED,
-            },
-          }),
-        },
-      );
+      response = await this.send(input, maxTokens, token);
     } catch (error) {
       return error instanceof VertexSkippedError ? {} : { failure: failureReason(error) };
     }
     if (!response.ok) return { failure: `vertex_${response.status}` };
     return this.read(response, accept);
+  }
+
+  private send(input: BulkLlmInput, maxTokens: number, token: string): Promise<Response> {
+    const { config, gate } = this.options;
+    const metered = createMeteredVertexFetch({
+      gate,
+      task: input.task,
+      timeoutMs: REQUEST_TIMEOUT_MS,
+      fetchImpl: this.options.transport,
+      preAdmitted: true,
+    });
+    return metered(
+      `${vertexPublisherBaseUrl(config)}/models/${encodeURIComponent(config.model)}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: input.prefix }] },
+          contents: [{ role: 'user', parts: [{ text: input.input }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0,
+            maxOutputTokens: maxTokens + THINKING_HEADROOM_TOKENS,
+            thinkingConfig: { thinkingLevel: 'low' },
+            seed: SAMPLING_SEED,
+          },
+        }),
+      },
+    );
   }
 
   private async read(

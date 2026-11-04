@@ -30,7 +30,10 @@ function gateAndLedger(patch: Partial<VertexCreditConfig> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'vfirst-'));
   dirs.push(dir);
   const ledger = new SqliteBulkLlmLedger(join(dir, 'l.db'));
-  return { ledger, gate: createVertexGate({ ledger, config: { ...config, ...patch }, env: {}, log: vi.fn() }) };
+  return {
+    ledger,
+    gate: createVertexGate({ ledger, config: { ...config, ...patch }, env: {}, log: vi.fn() }),
+  };
 }
 const fallbackStage = { writeDraft: vi.fn(async () => ({ text: 'Текст второй ступени.' })) };
 
@@ -50,15 +53,22 @@ describe('Vertex первым в механиках, где кандидат ж�
       apiKey: '',
       model: 'gemini-3.8-flash',
       baseUrl: `${BASE}`,
-      fetchImpl: createMeteredVertexFetch({ gate, task: 'linkedinDrafts', timeoutMs: 30, fetchImpl: hanging }),
+      fetchImpl: createMeteredVertexFetch({
+        gate,
+        task: 'linkedinDrafts',
+        timeoutMs: 30,
+        fetchImpl: hanging,
+      }),
     });
     const startedAt = Date.now();
-    const result = await new QueuedLinkedinDraftWriter([vertex, fallbackStage], 5_000).writeDraft(input);
+    const result = await new QueuedLinkedinDraftWriter([vertex, fallbackStage], 5_000).writeDraft(
+      input,
+    );
     expect(result.text).toBe('Текст второй ступени.');
     expect(Date.now() - startedAt).toBeLessThan(2_000);
-    expect(ledger.db.prepare("SELECT status FROM bulk_llm_spend WHERE provider='gemini'").all()).toEqual([
-      { status: 'rejected' },
-    ]);
+    expect(
+      ledger.db.prepare("SELECT status FROM bulk_llm_spend WHERE provider='gemini'").all(),
+    ).toEqual([{ status: 'rejected' }]);
   });
 
   it('закрытые ворота: сети нет, следующая ступень отвечает', async () => {
@@ -68,7 +78,11 @@ describe('Vertex первым в механиках, где кандидат ж�
       apiKey: '',
       model: 'gemini-3.8-flash',
       baseUrl: BASE,
-      fetchImpl: createMeteredVertexFetch({ gate, task: 'linkedinDrafts', fetchImpl: inner as never }),
+      fetchImpl: createMeteredVertexFetch({
+        gate,
+        task: 'linkedinDrafts',
+        fetchImpl: inner as never,
+      }),
       authHeaders: async () => ({ Authorization: 'Bearer t' }),
     });
     const result = await new QueuedLinkedinDraftWriter([vertex, fallbackStage]).writeDraft(input);
@@ -78,12 +92,18 @@ describe('Vertex первым в механиках, где кандидат ж�
 
   it('429 у Vertex: повтор не ходит в сеть второй раз (охлаждение), ступень отказывает', async () => {
     const { gate } = gateAndLedger();
-    const inner = vi.fn(async () => new Response('{"error":{"message":"Resource exhausted"}}', { status: 429 }));
+    const inner = vi.fn(
+      async () => new Response('{"error":{"message":"Resource exhausted"}}', { status: 429 }),
+    );
     const vertex = new GeminiLinkedinDraftWriter({
       apiKey: '',
       model: 'gemini-3.8-flash',
       baseUrl: BASE,
-      fetchImpl: createMeteredVertexFetch({ gate, task: 'linkedinDrafts', fetchImpl: inner as never }),
+      fetchImpl: createMeteredVertexFetch({
+        gate,
+        task: 'linkedinDrafts',
+        fetchImpl: inner as never,
+      }),
       authHeaders: async () => ({ Authorization: 'Bearer t' }),
     });
     const startedAt = Date.now();
@@ -95,7 +115,11 @@ describe('Vertex первым в механиках, где кандидат ж�
 
   it('роли кампании: исключение ворот ведёт к следующей ступени', async () => {
     const { gate } = gateAndLedger({ untilMs: 1 });
-    const metered = createMeteredVertexFetch({ gate, task: 'campaignRoles', fetchImpl: vi.fn() as never });
+    const metered = createMeteredVertexFetch({
+      gate,
+      task: 'campaignRoles',
+      fetchImpl: vi.fn() as never,
+    });
     const roles = Array.from({ length: 6 }, (_, index) => ({ title: `Роль ${index}` }));
     const vertexStage = {
       name: 'vertex',
