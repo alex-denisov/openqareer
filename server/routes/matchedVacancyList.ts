@@ -135,12 +135,13 @@ export interface MatchedListInput {
  * четыре записи, сотни страниц на чтение. Посчитанная подборка живёт одно окно; страница — срез.
  *
  * PRB-041: past the window the old list answers and a new one is built behind it. The age limit
- * bounds that: order and totals may lag up to 5 minutes (the floor between rebuilds of a stale
- * snapshot, #393), the percent and state of a shown row are read fresh on every page, and a rebuild
- * that keeps failing cannot pin an old list. A reader back after a longer pause waits for a new one.
+ * bounds that: order and totals may lag up to 10 minutes (two background passes, so a pass that
+ * runs late still finds its list valid), the percent and state of a shown row are read fresh on
+ * every page, and a rebuild that keeps failing cannot pin an old list. A reader back after a longer
+ * pause waits for a new one.
  */
 const MATCHED_LIST_WINDOW_MS = 60_000;
-const MATCHED_LIST_MAX_AGE_MS = 5 * 60_000;
+const MATCHED_LIST_MAX_AGE_MS = 10 * 60_000;
 const matchedListCache = createStaleListCache<MatchedList>({
   windowMs: MATCHED_LIST_WINDOW_MS,
   maxAgeMs: MATCHED_LIST_MAX_AGE_MS,
@@ -299,4 +300,12 @@ export async function readMatchedList(
     },
   );
   return { list: value, served };
+}
+
+/**
+ * PRB-041 (prod 04.11): a reader back after a break waited 8-12 s on 1800 rows for the list this
+ * builds. The background pass builds it first, under the address the read will look for.
+ */
+export function warmMatchedListCache(input: MatchedListInput): Promise<MatchedList | undefined> {
+  return matchedListCache.warm(matchedListAddress(input), () => buildMatchedList(input));
 }

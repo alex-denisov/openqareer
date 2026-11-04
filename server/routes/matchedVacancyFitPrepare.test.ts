@@ -164,6 +164,31 @@ describe('fit order reads percents before the page is built (PRB-041: reader.rea
     expect(enqueue).toHaveBeenCalledTimes(STALE_REFIT_LIMIT);
   });
 
+  it('a background build queues nothing: no reader is waiting for these rows', async () => {
+    const enqueue = vi.fn();
+    const view = vi.fn(() => ({ state: 'refreshing', requirements: [] }));
+    const base = deps({}, { enqueue, view, cachedVacancyIds: () => new Set(['a']) });
+
+    await withVacancyFitOrder(base, 'prepare-background', FIT, undefined, 'background').prepare([item('a')]);
+    await turns();
+
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(view).toHaveBeenCalledWith(expect.anything(), { queueRequirements: false });
+  });
+
+  it('a read after a background build still queues the rows the build left alone', async () => {
+    const enqueue = vi.fn();
+    const view = vi.fn(() => ({ state: 'refreshing', requirements: [] }));
+    const base = deps({}, { enqueue, view, cachedVacancyIds: () => new Set(['a']) });
+
+    await withVacancyFitOrder(base, 'prepare-after-background', FIT, undefined, 'background').prepare([item('a')]);
+    await withVacancyFitOrder(base, 'prepare-after-background', FIT).prepare([item('a')]);
+    await turns();
+
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(view).toHaveBeenLastCalledWith(expect.anything(), { queueRequirements: true });
+  });
+
   it('a failed queue write goes to the log and does not touch the order', async () => {
     const warn = vi.fn();
     const enqueue = vi.fn(() => {

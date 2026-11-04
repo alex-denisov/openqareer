@@ -31,6 +31,9 @@ export type CampaignRoleRefresher = (
   log: (fields: Record<string, unknown>, message: string) => void,
 ) => Promise<void>;
 
+/** Builds the candidate's list before they read it (PRB-041): set by the app with its route deps. */
+export type MatchedListWarmer = (candidateId: string, log: Logger | undefined) => Promise<void>;
+
 export interface MatchedPoolPrecomputeOptions {
   readonly candidateStore: CandidateStore;
   readonly engine: MultiSourceVacancyEngine;
@@ -50,6 +53,7 @@ export class MatchedPoolPrecompute {
   private log: Logger | undefined;
   private requestFit: PrecomputedFitRequester | undefined;
   private refreshRoles: CampaignRoleRefresher | undefined;
+  private warmList: MatchedListWarmer | undefined;
   /** Each candidate is checked once per process: new facts rebuild roles on their own routes. */
   private readonly rolesChecked = new Set<string>();
   private readonly pauseMs: number;
@@ -94,6 +98,10 @@ export class MatchedPoolPrecompute {
 
   setCampaignRoleRefresher(refreshRoles: CampaignRoleRefresher): void {
     this.refreshRoles = refreshRoles;
+  }
+
+  setListWarmer(warmList: MatchedListWarmer): void {
+    this.warmList = warmList;
   }
 
   run(): Promise<void> {
@@ -169,6 +177,13 @@ export class MatchedPoolPrecompute {
       this.log?.error(
         { errorName: error instanceof Error ? error.name : 'UnknownError' },
         'matched-precompute-fit-failed',
+      );
+    });
+    // Awaited, unlike the sweep: lists are built one candidate at a time, on the HTTP event loop.
+    await this.warmList?.(candidateId, this.log).catch((error: unknown) => {
+      this.log?.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'matched-list-warm-failed',
       );
     });
   }

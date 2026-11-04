@@ -90,6 +90,12 @@ export function createStaleListCache<V>(options: {
       if (!readOptions.continuing) rebuildBehind(address, compute, readOptions);
       return { value: held.value, served: 'stale' };
     },
+    /** A list built with no reader waiting. A reader on another choice keeps theirs until it ages out. */
+    async warm(address: StaleListAddress, compute: () => Promise<V>): Promise<V | undefined> {
+      const held = entries.get(address.candidateId);
+      if (held && held.choice !== address.choice && now() - held.at < maxAgeMs) return undefined;
+      return build(address, compute);
+    },
     size: () => entries.size,
   };
 }
