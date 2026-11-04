@@ -210,3 +210,26 @@ describe('роли рынка — только в направлениях оп�
     expect(record.mock.calls[0]?.[0]).toEqual(['head of ai']);
   });
 });
+
+describe('CTO и CIO рядом с выбранными ролями той же функции (04.11)', () => {
+  const titles = ['VP of Engineering / Technology', 'Директор по ИТ'];
+  const chosen = { roles: titles, regions: [], revision: 1, updatedAt: 'x' };
+  const top = [role('Технический директор (CTO)'), role('Директор по информационным технологиям (CIO)')];
+
+  it('показываются отдельными строками', () => {
+    const shown = careerRolesWithCandidateChoices(
+      { candidateStore: fakeStore({ campaign: chosen }) as never },
+      'c1',
+      { proposals: top, matched: [], confirmedSkills: [] } as unknown as RoleContext,
+    );
+    expect(shown.map((item) => item.title)).toEqual([...titles, ...top.map((item) => item.title)]);
+  });
+
+  it('сохраняются в роли подбора', () => {
+    const store = fakeStore({ campaign: chosen });
+    persistCareerRoles({ candidateStore: store as never }, 'c1', top);
+    expect(store.saveCandidateWorkspace.mock.calls[0]?.[1].campaign?.careerRoles?.map((item) => item.title)).toEqual(
+      top.map((item) => item.title),
+    );
+  });
+});

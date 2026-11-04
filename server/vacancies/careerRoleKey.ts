@@ -1,3 +1,4 @@
+import { ontology } from '../../shared/roleOntology';
 import { titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
 import { titleKey } from '../../shared/poolRoleHypotheses';
 import { rulesParse } from './titleParse/rulesParse';
@@ -24,6 +25,8 @@ const MAX_CACHED_KEYS = 50_000;
 const LEADERSHIP_RANK = 2;
 /** VP и выше — первое лицо функции. */
 const TOP_RANK = 3;
+/** C-level: своя строка «Карьеры», хотя вакансии считаются вместе с VP и директором функции. */
+const CHIEF_RANK = 4;
 
 /** «Директор» функции, а не руководитель внутри неё и не помощник директора. */
 const DIRECTOR = /(?<!\p{L})(?:director|директор)(?!\p{L})/iu;
@@ -68,6 +71,35 @@ export function careerRoleKey(title: string): string | null {
   const key = keyOf(trimmed);
   if (keys.size >= MAX_CACHED_KEYS) keys.clear();
   keys.set(trimmed, key);
+  return key;
+}
+
+const rowKeys = new Map<string, string | null>();
+
+function rowKeyOf(title: string): string | null {
+  const parsed = rulesParse(title);
+  const primary = parsed.roleId?.split('.')[0] ?? parsed.functions[0];
+  // «Операционный директор» разбирается ниже COO, но словарь считает его той же ролью.
+  const chief =
+    parsed.levelRank === CHIEF_RANK ||
+    (parsed.roleId ? ontology.rolesById.get(parsed.roleId)?.levels.includes('c-level') : false);
+  return primary && chief && !UNMERGED_FUNCTIONS.has(primary) ? `${primary}:chief` : careerRoleKey(title);
+}
+
+/**
+ * Ключ строки списка ролей. CTO рядом с VP of Engineering и CIO рядом с директором по ИТ — разные
+ * позиции для кандидата, которого на них собеседуют (владелец 04.11, уточняет решение 27.10).
+ * Вакансия относится к роли по `sameCareerRole`, как и раньше: счёт и фильтр «Роли» не меняются.
+ * Для названия, которого нет в словаре, — `null`, как у `careerRoleKey`.
+ */
+export function careerRoleRowKey(title: string): string | null {
+  const trimmed = title.trim();
+  if (!trimmed) return null;
+  const known = rowKeys.get(trimmed);
+  if (known !== undefined) return known;
+  const key = rowKeyOf(trimmed);
+  if (rowKeys.size >= MAX_CACHED_KEYS) rowKeys.clear();
+  rowKeys.set(trimmed, key);
   return key;
 }
 

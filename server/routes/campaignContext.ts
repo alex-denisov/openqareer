@@ -1,5 +1,5 @@
 import { candidateWorkspaceSchema } from '../domain/candidateWorkspace';
-import { careerRoleKey } from '../vacancies/careerRoleKey';
+import { careerRoleRowKey } from '../vacancies/careerRoleKey';
 import {
   resolveCampaign,
   type CampaignResolution,
@@ -58,7 +58,7 @@ export function readCampaign(
     evidenceByRef: new Map(memory.map((fact) => [`memory:${fact.id}`, fact.statement])),
     rejectedRoleIds: rejectedCareerRoleIds(candidateStore, candidateId),
     roleIdOf: careerRoleId,
-    roleKeyOf: careerRoleKey,
+    roleKeyOf: careerRoleRowKey,
     careerGeography: careerGeographyOf(decisionProfile),
     ...(decisionProfile?.salaryCurrency ? { salaryCurrency: decisionProfile.salaryCurrency } : {}),
     ...(vacancyCountsByRole ? { vacancyCountsByRole } : {}),

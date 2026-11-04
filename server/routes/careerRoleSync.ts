@@ -1,7 +1,7 @@
 import { careerRoleId, type ProposedRole } from '../../shared/roleProposals';
 import { roleWorkFamily } from '../../shared/roleWorkFamilies';
 import type { CareerRoleRef } from '../vacancies/campaign';
-import { careerRoleFunctions, careerRoleKey } from '../vacancies/careerRoleKey';
+import { careerRoleFunctions, careerRoleRowKey } from '../vacancies/careerRoleKey';
 import { searchTermsForRoles } from '../vacancies/vacancyDemandTerms';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { confirmChosenTitle } from '../vacancies/roleHypotheses';
@@ -17,7 +17,7 @@ const MAX_CAREER_ROLES = 20;
 
 /** Ключ одной роли: функция и уровень, а без словаря — id по названию. */
 function sameRoleKey(title: string): string {
-  return careerRoleKey(title) ?? careerRoleId(title);
+  return careerRoleRowKey(title) ?? careerRoleId(title);
 }
 
 /**
