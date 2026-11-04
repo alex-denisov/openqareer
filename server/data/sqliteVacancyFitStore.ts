@@ -33,7 +33,7 @@ const LATE_COLUMNS = [
   ['requeue_revision', 'INTEGER'],
 ] as const;
 /** Which model answered: outside the sealed result, so it never reaches the candidate's screen. */
-const LATE_CACHE_COLUMNS = [['answered_by', 'TEXT']] as const;
+const LATE_CACHE_COLUMNS = [['answered_by', 'TEXT'], ['fallback_recount_at', 'TEXT']] as const;
 
 const VERIFIED_FIELDS = ['gates', 'assessments', 'status', 'dataState', 'coveragePercent', 'coverage', 'conditionCoverage', 'requiredCoverage', 'reason'] as const;
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
@@ -251,6 +251,28 @@ export class SqliteVacancyFitStore {
   answeredBy(input: VacancyFitInput): string | null {
     const row = this.database.prepare('SELECT answered_by FROM vacancy_fit_cache WHERE cache_key=?').get(this.cacheKey(input)) as { answered_by: string | null } | undefined;
     return row?.answered_by ?? null;
+  }
+
+  /** Rows a model other than Vertex answered and no pass has taken (05.11). Only these few rows are opened. */
+  fallbackRows(): readonly { readonly key: string; readonly candidateId: string; readonly vacancyId: string }[] {
+    const rows = this.database.prepare(`SELECT cache_key, result_cipher FROM vacancy_fit_cache
+      WHERE answered_by IS NOT NULL AND answered_by NOT LIKE 'vertex %' AND fallback_recount_at IS NULL ORDER BY rowid`).all() as { cache_key: string; result_cipher: string }[];
+    return rows.flatMap((row) => {
+      try {
+        const { candidateId, vacancyId } = JSON.parse(this.sealedText.open(row.result_cipher, row.cache_key)) as VacancyFitResult;
+        return [{ key: row.cache_key, candidateId, vacancyId }];
+      } catch { return []; /* a damaged row names no vacancy */ }
+    });
+  }
+
+  /** Written before the call: a marked row is never asked again, whatever becomes of the call. */
+  markFallbackRecount(key: string, now = new Date().toISOString()): void {
+    this.database.prepare('UPDATE vacancy_fit_cache SET fallback_recount_at=? WHERE cache_key=?').run(now, key);
+  }
+
+  /** The gate let no call out: nothing was asked, so the row keeps its turn. */
+  releaseFallbackRecount(key: string): void {
+    this.database.prepare('UPDATE vacancy_fit_cache SET fallback_recount_at=NULL WHERE cache_key=?').run(key);
   }
 
   /**
