@@ -25,6 +25,17 @@ describe('managementSkillsDictionary', () => {
       expect(canonicalizeSkill('Cross-functional Team Leadership')).toBe('Управление командой');
     });
 
+    it('maps another grammatical form to the same skill', () => {
+      expect(canonicalizeSkill('Управление командами')).toBe('Управление командой');
+      expect(canonicalizeSkill('Руководство командами')).toBe('Управление командой');
+      expect(canonicalizeSkill('Управление проектом')).toBe('Управление проектами');
+    });
+
+    it('does not widen a longer requirement to the dictionary skill', () => {
+      expect(canonicalizeSkill('Управление командой продаж')).toBe('Управление командой продаж');
+      expect(canonicalizeSkill('Лидерство и переговоры')).toBe('Лидерство и переговоры');
+    });
+
     it('maps P&L synonyms to canonical Управление P&L', () => {
       expect(canonicalizeSkill('P&L')).toBe('Управление P&L');
       expect(canonicalizeSkill('p&l')).toBe('Управление P&L');
