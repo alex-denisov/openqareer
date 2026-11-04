@@ -15,6 +15,11 @@ describe('topRoleKeywords', () => {
     expect(result.keywords.filter((item) => /команд|team/iu.test(item))).toHaveLength(1);
   });
 
+  it('counts another grammatical form of a dictionary skill as the same keyword', () => {
+    const result = topRoleKeywords([['Управление командой'], ['Управление командами']]);
+    expect(result.keywords).toEqual(['Управление командой']);
+  });
+
   it('drops keywords seen in fewer than two vacancies', () => {
     const result = topRoleKeywords([['Kafka', 'Rare'], ['Kafka'], ['Go']]);
     expect(result.keywords).toEqual(['Kafka']);

@@ -132,7 +132,10 @@ for (const entry of MANAGEMENT_SKILLS_DICTIONARY) {
  */
 export function canonicalizeSkill(skill: string): string {
   const norm = normalizeTextForComparison(skill);
-  return SYNONYM_TO_CANONICAL.get(norm) ?? skill.trim();
+  const known = SYNONYM_TO_CANONICAL.get(norm);
+  if (known) return known;
+  const label = skill.trim();
+  return WHOLE_LABEL_PATTERNS.find((item) => item.regex.test(label))?.canonical ?? label;
 }
 
 interface CompiledPattern {
@@ -154,6 +157,18 @@ const COMPILED_PATTERNS: CompiledPattern[] = MANAGEMENT_SKILLS_DICTIONARY.map((e
   const regex = new RegExp(`(?<=^|[^\\p{L}\\p{N}])(?:${unionPattern})(?=$|[^\\p{L}\\p{N}])`, 'ui');
   return { canonical: entry.canonical, regex };
 });
+
+/**
+ * Другая форма навыка словаря: «Управление командами» — это «Управление командой».
+ * Шаблон должен покрыть название целиком, иначе «Управление командой продаж»
+ * превратилось бы в общий навык.
+ */
+const WHOLE_LABEL_PATTERNS: CompiledPattern[] = MANAGEMENT_SKILLS_DICTIONARY.filter(
+  (entry) => entry.textPatterns?.length,
+).map((entry) => ({
+  canonical: entry.canonical,
+  regex: new RegExp(`^(?:${(entry.textPatterns ?? []).join('|')})$`, 'ui'),
+}));
 
 /**
  * Извлекает управленческие требования из текста описания вакансии,
