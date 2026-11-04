@@ -25,6 +25,8 @@ import { StructuredStageCoachProvider } from './providers/structuredStageCoachPr
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
 import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { buildCoachChainProvider } from './providers/modelChains';
+import { buildVertexCoachStage } from './providers/vertexCoachStage';
+import { VERTEX_CHAT_TIMEOUTS_MS } from './providers/vertexChatTimeouts';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
 import { buildEmailVerificationSender } from './auth/emailVerificationEmail';
@@ -88,6 +90,18 @@ const buildCoachQueue = (onAttempts: ResilientCoachProviderOptions['onAttempts']
   buildCoachChainProvider({
     credentials: config.providerCredentials ?? {},
     onAttempts,
+    // Vertex первым (04.11): учёт и ворота — в `meteredVertexFetchFor`, задача по цепочке (coach/coachFree).
+    ...(config.vertex
+      ? {
+          vertex: config.vertex,
+          buildVertexStage: (task: 'coach' | 'coachFree', timeoutMs: number) =>
+            buildVertexCoachStage({
+              vertex: config.vertex!,
+              timeoutMs,
+              fetchImpl: meteredVertexFetchFor(config.vertex, config.databasePath, task, timeoutMs)!,
+            }),
+        }
+      : {}),
     buildStage: (route, timeoutMs) =>
       buildCoachProvider({
         ...route,
@@ -217,10 +231,24 @@ const app = await buildApp({
   careerCommandExecutor,
   resumeStructurer: buildResumeStructurer({
     providerCredentials: config.providerCredentials,
+    vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(
+      config.vertex,
+      config.databasePath,
+      'resumeParsing',
+      VERTEX_CHAT_TIMEOUTS_MS.resumeParsing,
+    ),
   }),
   // Пункты резюме из фактов беседы; в журнал — только модель и причина отказа.
   experienceFactRewriter: buildExperienceFactRewriter({
     providerCredentials: config.providerCredentials,
+    vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(
+      config.vertex,
+      config.databasePath,
+      'experienceBullets',
+      VERTEX_CHAT_TIMEOUTS_MS.experienceBullets,
+    ),
     onStageFailure: (model, error) =>
       process.stdout.write(
         `${JSON.stringify({ level: 40, time: Date.now(), msg: 'experience-fact-rewrite-stage-failed', model, reason: error instanceof Error ? error.message.slice(0, 200) : 'unknown' })}\n`,
@@ -239,7 +267,16 @@ const app = await buildApp({
     vertex: config.vertex,
     vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'campaignRoles'),
   }),
-  skillQuizModel: buildSkillQuizModel({ providerCredentials: config.providerCredentials }),
+  skillQuizModel: buildSkillQuizModel({
+    providerCredentials: config.providerCredentials,
+    vertex: config.vertex,
+    vertexFetch: meteredVertexFetchFor(
+      config.vertex,
+      config.databasePath,
+      'skillQuizzes',
+      VERTEX_CHAT_TIMEOUTS_MS.skillQuizzes,
+    ),
+  }),
   // Письмо пишет модель по своей цепочке, шаблон остаётся запасом (B266, пункт 7).
   coverLetterWriter: buildCoverLetterWriter({
     providerCredentials: config.providerCredentials,

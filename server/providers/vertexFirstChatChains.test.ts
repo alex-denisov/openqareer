@@ -1,0 +1,345 @@
+import { generateKeyPairSync } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
+import { CoachProviderError } from './coachProvider';
+import { buildExperienceFactRewriter } from './experienceFactRewriter';
+import { createMeteredVertexFetch } from './meteredVertexFetch';
+import { buildCoachChainProvider, chainStageLabel, MODEL_CHAINS } from './modelChains';
+import { buildResumeStructurer, QueuedResumeStructurer } from './resumeStructurer';
+import { HygienicResumeStructurer } from './hygienicResumeStructurer';
+import { buildSkillQuizModel } from './skillQuizModel';
+import { VERTEX_CHAT_TIMEOUTS_MS } from './vertexChatTimeouts';
+import { buildVertexCoachStage } from './vertexCoachStage';
+import { createVertexGate, type VertexCreditConfig } from './vertexCredit';
+import type { VertexConfig } from './vertexAi';
+
+const dirs: string[] = [];
+afterEach(() => dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
+
+const creditConfig: VertexCreditConfig = {
+  creditUsd: 1000,
+  sinceIso: '2020-01-01T00:00:00.000Z',
+  untilMs: Date.parse('2099-01-01T00:00:00Z'),
+  dayUsd: 1000,
+  catalogSummaryDayUsd: 1000,
+};
+const { privateKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+});
+const vertex: VertexConfig = {
+  projectId: 'p',
+  clientEmail: 'sa@p.iam.gserviceaccount.com',
+  privateKey,
+  model: 'gemini-3.8-flash',
+  location: 'global',
+};
+const credentials = { openai: 'sk-openai-test-key-long-enough', openrouter: 'sk-or-test-key-long-enough' };
+
+function gateAndLedger(patch: Partial<VertexCreditConfig> = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'vchat-'));
+  dirs.push(dir);
+  const ledger = new SqliteBulkLlmLedger(join(dir, 'l.db'));
+  return {
+    ledger,
+    gate: createVertexGate({ ledger, config: { ...creditConfig, ...patch }, env: {}, log: vi.fn() }),
+  };
+}
+
+type Call = { url: string; headers: Record<string, string>; body: Record<string, unknown> };
+
+/** Transport under the meter: the OAuth endpoint answers a token, `generateContent` answers `text`. */
+function transport(text: string | (() => Response), calls: Call[] = []) {
+  return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes('oauth2')) return Response.json({ access_token: 'tok', expires_in: 3600 });
+    calls.push({
+      url,
+      headers: init?.headers as Record<string, string>,
+      body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    });
+    if (typeof text !== 'string') return text();
+    return Response.json({
+      candidates: [{ content: { parts: [{ text }] } }],
+      usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+      modelVersion: 'gemini-3.8-flash',
+    });
+  });
+}
+
+function metered(
+  gate: ReturnType<typeof gateAndLedger>['gate'],
+  task: string,
+  inner: ReturnType<typeof transport>,
+  timeoutMs = 5_000,
+) {
+  return createMeteredVertexFetch({ gate, task, timeoutMs, fetchImpl: inner as never });
+}
+
+const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
+
+describe('цепочки консультанта, квиза, резюме и пунктов: Vertex первым (04.11)', () => {
+  it.each(['coach', 'coachFree', 'skillQuizzes', 'resumeParsing', 'experienceBullets'] as const)(
+    '%s: Vertex первой ступенью, прочие прежние и в прежнем порядке',
+    (mechanic) => {
+      const stages = labels(mechanic);
+      expect(stages[0]).toBe('vertex');
+      expect(stages.filter((label) => label === 'vertex')).toHaveLength(1);
+    },
+  );
+
+  it('хвосты прежние', () => {
+    expect(labels('coach').slice(1)).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash-1017',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openai:gpt-5.6-luna',
+    ]);
+    expect(labels('coachFree').slice(1)).toEqual([
+      'openrouter:z-ai/glm-5.3-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+    ]);
+    expect(labels('skillQuizzes').slice(1)).toEqual(labels('coach').slice(1));
+    expect(labels('resumeParsing').slice(1)).toEqual([
+      'openai:gpt-5.6-luna',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:z-ai/glm-5.3-flash',
+    ]);
+    expect(labels('experienceBullets').slice(1)).toEqual([
+      'openai:gpt-5.6-luna',
+      'openrouter:z-ai/glm-5.3-flash',
+    ]);
+  });
+
+  it('потолки Vertex: хода кандидата хватает на следующую ступень', () => {
+    expect(VERTEX_CHAT_TIMEOUTS_MS.coach).toBe(30_000);
+    expect(VERTEX_CHAT_TIMEOUTS_MS.coachFree).toBe(30_000);
+    expect(VERTEX_CHAT_TIMEOUTS_MS.skillQuizzes).toBe(25_000);
+    // Разбор резюме: 45 с бюджета минус 25 с потолка следующей ступени.
+    expect(VERTEX_CHAT_TIMEOUTS_MS.resumeParsing).toBe(20_000);
+    expect(VERTEX_CHAT_TIMEOUTS_MS.experienceBullets).toBe(30_000);
+  });
+});
+
+describe('ход консультанта: ступень Vertex', () => {
+  const input = {
+    candidateReference: 'candidate-test-001',
+    dataClass: 'personal' as const,
+    locale: 'ru-RU' as const,
+    phase: 'discovery' as const,
+    messages: [{ id: 'message-1', role: 'user' as const, content: 'Что дальше?' }],
+  };
+  const turnFrom = (model: string) =>
+    ({
+      result: { message: 'ok' } as never,
+      provider: 'openrouter' as const,
+      model,
+      responseId: 'r',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    }) as never;
+
+  it('запрос идёт через учёт: задача coach, low-рассуждение, запас токенов, без temperature', async () => {
+    const { gate, ledger } = gateAndLedger();
+    const calls: Call[] = [];
+    const answer = JSON.stringify({ unusable: true });
+    const stage = buildVertexCoachStage({
+      vertex,
+      fetchImpl: metered(gate, 'coach', transport(answer, calls)),
+    });
+    await stage.createTurn(input as never, 'k1').catch(() => undefined);
+    const call = calls[0]!;
+    expect(call.url).toContain('/models/gemini-3.8-flash:generateContent');
+    expect(call.headers.Authorization).toBe('Bearer tok');
+    expect(call.headers['x-goog-api-key']).toBeUndefined();
+    const config = call.body.generationConfig as Record<string, unknown>;
+    expect(config.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(config.temperature).toBeUndefined();
+    expect(config.maxOutputTokens).toBeGreaterThan(3_200);
+    expect(
+      ledger.db.prepare("SELECT task, status FROM bulk_llm_spend WHERE provider='gemini'").all(),
+    ).toEqual([{ task: 'coach', status: 'settled' }]);
+  });
+
+  it('закрытые ворота: сети нет, ход отвечает следующая ступень, в провенансе Vertex', async () => {
+    const { gate } = gateAndLedger({ untilMs: 1 });
+    const inner = transport('{}');
+    const timeouts: number[] = [];
+    const called: string[] = [];
+    const provider = buildCoachChainProvider({
+      credentials,
+      vertex,
+      now: () => 1_000,
+      buildVertexStage: (task, timeoutMs) => {
+        timeouts.push(timeoutMs);
+        return buildVertexCoachStage({ vertex, fetchImpl: metered(gate, task, inner) });
+      },
+      buildStage: (route) => ({
+        async createTurn() {
+          called.push(route.model);
+          return turnFrom(route.model);
+        },
+      }),
+    });
+    const output = await provider.createTurn(input as never, '11111111-1111-4111-8111-111111111111');
+    expect(inner).not.toHaveBeenCalled();
+    expect(called).toEqual(['deepseek/deepseek-v4.1-flash-1017']);
+    expect(output.routing?.attempts[0]).toMatchObject({
+      model: 'vertex:gemini-3.8-flash',
+      status: 'failed',
+    });
+    // Очереди платного хода и Free строятся сразу, потолок у обеих 30 с.
+    expect(timeouts).toEqual([30_000, 30_000]);
+  });
+
+  it('тайм-аут Vertex: следующая ступень отвечает в том же ходе', async () => {
+    const { gate, ledger } = gateAndLedger();
+    const hanging = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : String(input);
+      if (url.includes('oauth2')) return Response.json({ access_token: 'tok', expires_in: 3600 });
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      });
+    });
+    const provider = buildCoachChainProvider({
+      credentials,
+      vertex,
+      buildVertexStage: (task) =>
+        buildVertexCoachStage({ vertex, fetchImpl: metered(gate, task, hanging as never, 30) }),
+      buildStage: (route) => ({ createTurn: async () => turnFrom(route.model) }),
+    });
+    const output = await provider.createTurn(input as never, '22222222-2222-4222-8222-222222222222');
+    expect(output.model).toBe('deepseek/deepseek-v4.1-flash-1017');
+    expect(
+      ledger.db.prepare("SELECT status FROM bulk_llm_spend WHERE provider='gemini'").all(),
+    ).toEqual([{ status: 'rejected' }]);
+  });
+
+  it('ход Free идёт по цепочке Free, задача coachFree', async () => {
+    const tasks: string[] = [];
+    const provider = buildCoachChainProvider({
+      credentials,
+      vertex,
+      buildVertexStage: (task) => ({
+          createTurn: async () => {
+            tasks.push(task);
+            throw new CoachProviderError('provider_unavailable', 503, true);
+          },
+        }),
+      buildStage: (route) => ({ createTurn: async () => turnFrom(route.model) }),
+    });
+    const output = await provider.createTurn(
+      { ...input, modelTier: 'free' } as never,
+      '33333333-3333-4333-8333-333333333333',
+    );
+    expect(tasks).toEqual(['coachFree']);
+    expect(output.model).toBe('z-ai/glm-5.3-flash');
+  });
+});
+
+describe('квиз, разбор резюме, пункты: ступень Vertex', () => {
+  const quiz = {
+    questions: Array.from({ length: 8 }, (_, index) => ({
+      question: `Что выберете в ситуации ${index}?`,
+      options: ['Первое', 'Второе', 'Третье', 'Четвёртое'],
+      correctOptionIndex: index % 4,
+      explanation: 'Так принято в практике.',
+    })),
+  };
+
+  it('квиз: ответ Vertex принят, задача skillQuizzes', async () => {
+    const { gate, ledger } = gateAndLedger();
+    const calls: Call[] = [];
+    const model = buildSkillQuizModel({
+      providerCredentials: credentials,
+      vertex,
+      vertexFetch: metered(gate, 'skillQuizzes', transport(JSON.stringify(quiz), calls)),
+    })!;
+    const questions = await model.generate({ skill: 'Excel', level: 'middle' });
+    expect(questions).toHaveLength(8);
+    const config = calls[0]!.body.generationConfig as Record<string, unknown>;
+    expect(config.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(config.maxOutputTokens).toBe(6_000 + 4_096);
+    expect(ledger.db.prepare("SELECT task FROM bulk_llm_spend WHERE provider='gemini'").all()).toEqual([
+      { task: 'skillQuizzes' },
+    ]);
+  });
+
+  it('квиз: негодный ответ Vertex ведёт к следующей ступени без ошибки', async () => {
+    const { gate } = gateAndLedger();
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes('aiplatform')) return Response.json({ candidates: [{ content: { parts: [{ text: '{"questions":[]}' }] } }] });
+      return Response.json({ choices: [{ message: { content: JSON.stringify(quiz) } }] });
+    });
+    const real = globalThis.fetch;
+    globalThis.fetch = fetchImpl as never;
+    try {
+      const model = buildSkillQuizModel({
+        providerCredentials: credentials,
+        vertex,
+        vertexFetch: metered(gate, 'skillQuizzes', transport('{"questions":[]}')),
+      })!;
+      await expect(model.generate({ skill: 'Excel', level: 'middle' })).resolves.toHaveLength(8);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
+  it('резюме: Vertex первая ступень структуратора, провенанс называет модель', () => {
+    const { gate } = gateAndLedger();
+    const built = buildResumeStructurer({
+      providerCredentials: credentials,
+      vertex,
+      vertexFetch: metered(gate, 'resumeParsing', transport('{}')),
+    });
+    const inner = (built as HygienicResumeStructurer).inner as QueuedResumeStructurer;
+    expect(inner.stages.map((stage) => stage.provenance?.model)).toEqual([
+      'gemini-3.8-flash',
+      'gpt-5.6-luna',
+      'deepseek/deepseek-v4.1-flash',
+      'z-ai/glm-5.3-flash',
+    ]);
+  });
+
+  it('резюме: закрытые ворота дают null ступени, сети нет', async () => {
+    const { gate } = gateAndLedger({ untilMs: 1 });
+    const inner = transport('{}');
+    const built = buildResumeStructurer({
+      providerCredentials: credentials,
+      vertex,
+      vertexFetch: metered(gate, 'resumeParsing', inner),
+    });
+    const stage = ((built as HygienicResumeStructurer).inner as QueuedResumeStructurer).stages[0]!;
+    await expect(stage.structure('Опыт работы: '.repeat(10))).resolves.toBeNull();
+    expect(inner).not.toHaveBeenCalled();
+  });
+
+  it('пункты: Vertex первая ступень, ответ читается теми же проверками', async () => {
+    const { gate, ledger } = gateAndLedger();
+    const answer = {
+      places: [
+        { experienceId: 'exp-1', bullets: [{ text: 'Сократил тикеты на 40%.', sourceFactIds: ['f-1'] }] },
+      ],
+      droppedFactIds: [],
+      unmatchedFactIds: [],
+    };
+    const built = buildExperienceFactRewriter({
+      providerCredentials: credentials,
+      vertex,
+      vertexFetch: metered(gate, 'experienceBullets', transport(JSON.stringify(answer))),
+    })!;
+    const output = await built.rewrite({
+      places: [
+        { experienceId: 'exp-1', employer: 'Cloud', title: 'Head', period: '2020', existingBullets: [], language: 'ru' },
+      ],
+      facts: [{ id: 'f-1', domain: 'outcome', statement: 'Тикетов стало на 40% меньше.' }],
+    } as never);
+    expect(output).toEqual(answer);
+    expect(built.provenance?.model).toBe('gemini-3.8-flash');
+    expect(ledger.db.prepare("SELECT task FROM bulk_llm_spend WHERE provider='gemini'").all()).toEqual([
+      { task: 'experienceBullets' },
+    ]);
+  });
+});

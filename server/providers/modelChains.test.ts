@@ -6,16 +6,18 @@ import { isMutableModelAlias } from './modelRegistry';
 const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
 
 describe('цепочки моделей по механикам (28.10)', () => {
-  it('консультант платных тарифов: deepseek-v4.1-flash-1017 → deepseek-v4.1-flash → luna (B580)', () => {
+  it('консультант платных тарифов: Vertex → deepseek-v4.1-flash-1017 → deepseek-v4.1-flash → luna (B580, 04.11)', () => {
     expect(labels('coach')).toEqual([
+      'vertex',
       'openrouter:deepseek/deepseek-v4.1-flash-1017',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
     ]);
   });
 
-  it('консультант Free: glm-5.3-flash с запасной deepseek-v4.1-flash (B579)', () => {
+  it('консультант Free: Vertex, затем glm-5.3-flash с запасной deepseek-v4.1-flash (B579, 04.11)', () => {
     expect(labels('coachFree')).toEqual([
+      'vertex',
       'openrouter:z-ai/glm-5.3-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
     ]);
@@ -29,8 +31,9 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('разбор резюме — только платные маршруты, luna первой', () => {
+  it('разбор резюме: Vertex, затем только платные маршруты, luna первой', () => {
     expect(labels('resumeParsing')).toEqual([
+      'vertex',
       'openai:gpt-5.6-luna',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',
@@ -98,7 +101,10 @@ describe('цепочки моделей по механикам (28.10)', () => 
       nvidia: 'nvapi-test-key-long-enough',
       anthropic: 'sk-ant-test-key-long-enough',
     });
-    expect(routes.map((route) => `${route.provider}:${route.model}`)).toEqual(labels('coach'));
+    // Vertex не маршрут с ключом: его строит `resolveChain` из сервисного аккаунта.
+    expect(routes.map((route) => `${route.provider}:${route.model}`)).toEqual(
+      labels('coach').slice(1),
+    );
   });
 
   it('ступень без ключа пропускается, остальные сохраняют порядок', () => {

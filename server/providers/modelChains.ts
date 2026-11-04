@@ -7,6 +7,7 @@ import {
 } from './resilientCoachProvider';
 import { queueStageTimeoutMs } from './stageTimeout';
 import type { VertexConfig } from './vertexAi';
+import { VERTEX_CHAT_TIMEOUTS_MS } from './vertexChatTimeouts';
 
 /**
  * Ступень цепочки механики: провайдер с ключом и его модель либо Gemini на
@@ -30,7 +31,7 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * несколько ступеней, одна модель без запасной — это отказы. Бесплатных
  * маршрутов нет ни в одной: за две недели они не завершили ни одного хода.
  *
- * Порядок ступеней — по замеру 28.10 на реальных входах хода консультанта:
+ * Порядок ступеней после Vertex — по замеру 28.10 на реальных входах хода консультанта (история):
  * gpt-5.6-luna 4/4, deepseek-v4.1-flash 3/4, glm-5.3-flash 4/4.
  *
  * Решение владельца 04.11: Vertex Gemini — ПЕРВАЯ ступень, пока идёт стартовый кредит Vertex (сгорает
@@ -43,6 +44,10 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * пока DeepSeek остывал, а glm всегда отвечал 400. Кредит конечен, поэтому после срока цепочки
  * работают без Vertex.
  *
+ * Консультант, Free, квиз, разбор резюме и пункты резюме (`coach`, `coachFree`, `skillQuizzes`,
+ * `resumeParsing`, `experienceBullets`) получили Vertex первым по тому же решению 04.11; их ступени после
+ * него прежние, порядок и замеры 28–29.10 не менялись. Потолки ступени Vertex — `vertexChatTimeouts.ts`.
+ *
  * Механики, где кандидат ждёт (`campaignRoles`, `roleNames`, `coverLetters`, `linkedinDrafts`): после Vertex голова
  * цепочки стоит дважды — вторая попытка дешёвой ступени до дорогих. Очереди этих механик идут по
  * массиву подряд, без отбрасывания повторов; три попытки не берём, кандидат ждёт.
@@ -51,21 +56,21 @@ export const MODEL_CHAINS = {
   /**
    * Ход консультанта, его роли, сводка беседы, тренажёр интервью, запас служебных шагов.
    * B580 (решение владельца 29.10): платные тарифы — deepseek-v4.1-flash-1017 с запасной
-   * deepseek-v4.1-flash; luna последней — обе первые ступени идут через OpenRouter, и его
+   * deepseek-v4.1-flash, с 04.11 перед ними Vertex; luna последней — обе первые ступени идут через OpenRouter, и его
    * авария не должна оставить ход без ответа.
    */
-  coach: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
+  coach: [VERTEX, DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** B579: 30 ходов Free в месяц — glm-5.3-flash (замер 28.10: 4/4 хода), запасная deepseek. */
-  coachFree: [GLM_FLASH, DEEPSEEK_FLASH],
+  coachFree: [VERTEX, GLM_FLASH, DEEPSEEK_FLASH],
   /** Разбор резюме: только платные маршруты (решение владельца 28.10). */
-  resumeParsing: [LUNA, DEEPSEEK_FLASH, GLM_FLASH],
+  resumeParsing: [VERTEX, LUNA, DEEPSEEK_FLASH, GLM_FLASH],
   /**
    * Пункты резюме из фактов беседы: текст в профиль кандидата, качество важнее цены,
    * вызов редкий (раз на набор фактов). Замер 29.10 на 65 фактах adenisov.test:
    * luna — 14 чистых пунктов за 36–43 с; glm — 12 пунктов за 63 с, слабее; deepseek
    * v4.1-flash тратит все 16 000 токенов на рассуждение и не отвечает.
    */
-  experienceBullets: [LUNA, GLM_FLASH],
+  experienceBullets: [VERTEX, LUNA, GLM_FLASH],
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */
   bulk: [VERTEX, DEEPSEEK_V4_FLASH, GLM_FLASH],
   /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
@@ -74,9 +79,9 @@ export const MODEL_CHAINS = {
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому
-   * цепочка консультанта, а не фон. Vertex нет: ступени только chat-completions.
+   * цепочка консультанта, а не фон. Vertex первым (04.11), как у консультанта.
    */
-  skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
+  skillQuizzes: [VERTEX, DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Структурный JSON без текста для человека: как фон. */
   campaignRoles: [VERTEX, DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;
@@ -135,17 +140,21 @@ export function resolveChain(
  * Очередь консультанта по его цепочке: каждая ступень получает свой потолок,
  * последняя — длинный (ей некому уступить ход), отказ ступени ведёт к следующей.
  * Ход Free (`modelTier: 'free'`, B579) идёт по цепочке `coachFree`.
+ * Ступень Vertex (04.11) строит `buildVertexStage` с учётным `fetch` под задачей механики
+ * (`coach` или `coachFree`); без настроенного Vertex или без строителя ступень пропускается.
  */
 export function buildCoachChainProvider(options: {
   credentials: Partial<Record<ProviderId, string>>;
   buildStage: (route: ProviderRoute, timeoutMs: number) => CoachProvider;
+  vertex?: VertexConfig;
+  buildVertexStage?: (task: 'coach' | 'coachFree', timeoutMs: number) => CoachProvider;
   onAttempts?: ResilientCoachProviderOptions['onAttempts'];
   now?: () => number;
 }): CoachProvider {
-  const paid = buildChainQueue(MODEL_CHAINS.coach, options);
+  const paid = buildChainQueue('coach', MODEL_CHAINS.coach, options);
   // Без ключа OpenRouter у Free нет ступеней: ход идёт по платной цепочке, сервер стартует.
   const free = chainRoutes(MODEL_CHAINS.coachFree, options.credentials).length
-    ? buildChainQueue(MODEL_CHAINS.coachFree, options)
+    ? buildChainQueue('coachFree', MODEL_CHAINS.coachFree, options)
     : paid;
   return {
     createTurn: (input, idempotencyKey, turnOptions) =>
@@ -154,16 +163,30 @@ export function buildCoachChainProvider(options: {
 }
 
 function buildChainQueue(
+  task: 'coach' | 'coachFree',
   chain: readonly ChainStage[],
   options: Parameters<typeof buildCoachChainProvider>[0],
 ): ResilientCoachProvider {
-  const routes = chainRoutes(chain, options.credentials);
+  const stages = resolveChain(chain, options.credentials, options.vertex).filter(
+    (stage) => stage.kind === 'route' || options.buildVertexStage,
+  );
+  const routeCount = stages.filter((stage) => stage.kind === 'route').length;
+  let routeIndex = 0;
   return new ResilientCoachProvider({
-    routes: routes.map((route, index) => ({
-      id: route.provider,
-      model: route.model,
-      provider: options.buildStage(route, queueStageTimeoutMs(index, routes.length)),
-    })),
+    routes: stages.map((stage) => {
+      if (stage.kind === 'vertex') {
+        const timeoutMs = VERTEX_CHAT_TIMEOUTS_MS[task];
+        // Журнал и отчёт хода называют ступень `vertex:<модель>`, как `chainStageLabel`.
+        return { id: 'gemini', model: stage.label, provider: options.buildVertexStage!(task, timeoutMs) };
+      }
+      const timeoutMs = queueStageTimeoutMs(routeIndex, routeCount);
+      routeIndex += 1;
+      return {
+        id: stage.route.provider,
+        model: stage.route.model,
+        provider: options.buildStage(stage.route, timeoutMs),
+      };
+    }),
     maxAttempts: chain.length,
     ...(options.onAttempts ? { onAttempts: options.onAttempts } : {}),
     ...(options.now ? { now: options.now } : {}),
