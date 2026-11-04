@@ -148,7 +148,11 @@ jobs:
 
   e2e-webkit:
     name: Browser tests (WebKit)
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
+    # The image ships WebKit's system libraries: no apt, no mirror to stall. Not
+    # macOS: hosted macOS runners ran out on busy evenings, the job waited 15 min
+    # for one, GitHub cancelled it unstarted and the deploy was skipped.
+    container: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
     timeout-minutes: 20
     steps:
       - name: Check out exact commit
@@ -163,7 +167,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      # macOS ships WebKit's system libraries: no apt, no mirror to stall.
+      # No-op while the image matches the lockfile, downloads WebKit if it falls behind.
       - name: Install Playwright WebKit
         run: npx playwright install webkit
 

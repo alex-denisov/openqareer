@@ -2,8 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 // Параллельные агенты в разных worktree задают свой порт, чтобы не делить превью.
 const port = Number(process.env.E2E_PORT ?? 4173);
-// WebKit specs (the .app renders in WKWebView) run in their own macOS CI job:
-// WebKit's apt deps on Ubuntu runners stall and failed the Chromium shards.
+// WebKit specs (the .app renders in WKWebView) run in their own CI job, in the
+// Playwright image: WebKit's apt deps on bare Ubuntu runners stall and failed the
+// Chromium shards.
 const WEBKIT_SPECS = ['**/*-b446r.spec.ts', '**/*-b549r.spec.ts'];
 const webkitOnly = process.env.E2E_WEBKIT === 'only';
 const webkitSkipped = process.env.E2E_WEBKIT === 'skip';
