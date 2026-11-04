@@ -102,6 +102,55 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
 }
 
+/** Marks a failure of the token request, so the journal can tell it from the rest of a cycle. */
+class TokenStepError extends Error {
+  constructor(readonly original: unknown) {
+    super('token step failed');
+  }
+}
+
+async function tokenStep(tokens: VertexTokenProvider): Promise<string> {
+  try {
+    return await tokens.token();
+  } catch (error: unknown) {
+    throw new TokenStepError(error);
+  }
+}
+
+const FAILURE_MESSAGE_LIMIT = 200;
+/** Redaction runs before the cut: a cut first could leave part of a secret too short to match. */
+const SECRET_PATTERNS: readonly RegExp[] = [
+  /-----BEGIN[\s\S]*?(?:-----END[^-]*-----|$)/gu,
+  /\b(?:Bearer\s+|assertion=)\S+/giu,
+  /\bya29\.\S+/gu,
+  /[A-Za-z0-9+/_.=-]{32,}/gu,
+];
+
+function safeMessage(message: string): string {
+  return SECRET_PATTERNS.reduce(
+    (text, pattern) => text.replace(pattern, '[redacted]'),
+    message,
+  ).slice(0, FAILURE_MESSAGE_LIMIT);
+}
+
+function causeCodeOf(error: Error): string | undefined {
+  const code = (error.cause as { code?: unknown } | undefined)?.code;
+  return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/u.test(code) ? code : undefined;
+}
+
+/** Journal fields of a failed cycle (04.11: the name alone left four `TypeError`s unexplained). */
+function cycleFailureDetails(error: unknown): Record<string, unknown> {
+  const isToken = error instanceof TokenStepError;
+  const failure = isToken ? error.original : error;
+  const causeCode = failure instanceof Error ? causeCodeOf(failure) : undefined;
+  return {
+    errorName: errorName(failure),
+    step: isToken ? 'token' : 'cycle',
+    ...(failure instanceof Error ? { message: safeMessage(failure.message) } : {}),
+    ...(causeCode ? { causeCode } : {}),
+  };
+}
+
 export function parseServiceAccount(encoded: string) {
   try {
     const decoded: unknown = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
@@ -358,7 +407,7 @@ async function runCycle(
       ? await sendBatch(database, batch, startBudget, {
           fetcher,
           log,
-          token: await tokens.token(),
+          token: await tokenStep(tokens),
         })
       : { budget: startBudget, updated: 0, deleted: 0, sample: [] };
   log.info(
@@ -403,7 +452,7 @@ export function createGoogleIndexingNotifier(
     try {
       await runCycle(database, urls, tokens, log, fetcher, clock());
     } catch (error: unknown) {
-      log.error({ errorName: errorName(error) }, 'google-indexing-failed');
+      log.error(cycleFailureDetails(error), 'google-indexing-failed');
     }
   };
 }

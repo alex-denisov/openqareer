@@ -86,6 +86,70 @@ afterEach(() => {
 });
 
 describe('Google Indexing API notifier', () => {
+  it('logs the failing step, a bounded message and the cause code', async () => {
+    const log = testLogger();
+    const fetcher = vi.fn<typeof fetch>(async () => {
+      throw new TypeError('fetch failed', { cause: { code: 'ECONNRESET' } });
+    });
+    const { notify } = notifierAt(log, fetcher);
+
+    await notify(database(), [job('a')]);
+
+    expect(log.entries).toEqual([
+      {
+        level: 'error',
+        message: 'google-indexing-failed',
+        details: {
+          errorName: 'TypeError',
+          step: 'token',
+          message: 'fetch failed',
+          causeCode: 'ECONNRESET',
+        },
+      },
+    ]);
+  });
+
+  it('never logs the key, the token or the assertion from an error message', async () => {
+    const secrets = [
+      PEM,
+      KEY,
+      'ya29.a0AfB_byC-secret-access-token',
+      'eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJib3QifQ.c2lnbmF0dXJl',
+    ];
+    for (const secret of secrets) {
+      const log = testLogger();
+      const fetcher = vi.fn<typeof fetch>(async () => {
+        throw new Error(`request failed: Bearer ${secret} assertion=${secret} ${'x '.repeat(200)}`);
+      });
+      const { notify } = notifierAt(log, fetcher);
+
+      await notify(database(), [job('a')]);
+
+      const written = JSON.stringify(log.entries);
+      for (const part of secret.split('\n').filter((line) => line.length > 8)) {
+        expect(written).not.toContain(part);
+      }
+      expect(String(log.entries[0]?.details.message).length).toBeLessThanOrEqual(200);
+    }
+  });
+
+  it('names the cycle step when the failure is not the token', async () => {
+    const log = testLogger();
+    const { fetcher } = google();
+    const { notify } = notifierAt(log, fetcher);
+    const closed = new DatabaseSync(':memory:');
+    closed.close();
+
+    await notify(closed, [job('a')]);
+
+    expect(log.entries[0]).toMatchObject({
+      level: 'error',
+      message: 'google-indexing-failed',
+      details: { step: 'cycle', message: expect.any(String) },
+    });
+    expect(log.entries[0]?.details).not.toHaveProperty('causeCode');
+  });
+
   it('logs one line and stays off without a key', async () => {
     const log = testLogger();
     const { fetcher } = google();
