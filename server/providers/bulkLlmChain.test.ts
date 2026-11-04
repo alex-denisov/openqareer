@@ -71,7 +71,7 @@ const rows = (runtime: ReturnType<typeof setup>['runtime']) =>
     .prepare('SELECT model,status,failure FROM bulk_llm_spend ORDER BY created_at,rowid')
     .all() as { model: string; status: string; failure: string | null }[];
 
-describe('фон только через OpenRouter (решение владельца 04.11)', () => {
+describe('фон: Vertex первым, затем OpenRouter (решение владельца 04.11)', () => {
   it('OpenRouter-ступени цепочки — deepseek-v4-flash, затем glm-5.3-flash, с закреплёнными хостами', () => {
     expect(bulkOpenRouterLanes()).toEqual([
       {
@@ -91,8 +91,12 @@ describe('фон только через OpenRouter (решение владел
     ]);
   });
 
-  it('Vertex нет ни в одной фоновой цепочке', () => {
-    expect(MODEL_CHAINS.bulk.map((stage) => stage.provider)).toEqual(['openrouter', 'openrouter']);
+  it('Vertex - первая ступень фоновой цепочки, за ним две ступени OpenRouter', () => {
+    expect(MODEL_CHAINS.bulk.map((stage) => stage.provider)).toEqual([
+      'vertex',
+      'openrouter',
+      'openrouter',
+    ]);
   });
 
   it('deepseek-v4-flash — голова: ответил он, больше никто не зовётся', async () => {

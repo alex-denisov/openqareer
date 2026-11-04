@@ -35,17 +35,18 @@ describe('просьба к модели ролей (этап 1, 04.11)', () => 
 });
 
 describe('цепочка ролей кампании (28.10)', () => {
-  it('deepseek-v4-flash → glm-5.3-flash → Vertex (B580)', () => {
+  it('Vertex → deepseek-v4-flash дважды → glm-5.3-flash (04.11)', () => {
     const model = buildCampaignRoleModel({
       providerCredentials: { openrouter: 'sk-or-test', openai: 'sk-openai-test' },
       vertex,
     }) as QueuedCampaignRoleModel;
 
-    expect(model.stages.at(-1)).toBeInstanceOf(VertexCampaignRoleModel);
+    expect(model.stages[0]).toBeInstanceOf(VertexCampaignRoleModel);
     expect(model.stages.map((stage) => stage.name)).toEqual([
+      'gemini-3.8-flash',
+      'deepseek/deepseek-v4-flash',
       'deepseek/deepseek-v4-flash',
       'z-ai/glm-5.3-flash',
-      'gemini-3.8-flash',
     ]);
   });
 

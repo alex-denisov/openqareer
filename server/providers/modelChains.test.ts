@@ -23,6 +23,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
 
   it('фоновая обработка только через OpenRouter (решение владельца 04.11)', () => {
     expect(labels('bulk')).toEqual([
+      'vertex',
       'openrouter:deepseek/deepseek-v4-flash',
       'openrouter:z-ai/glm-5.3-flash',
     ]);
@@ -36,18 +37,38 @@ describe('цепочки моделей по механикам (28.10)', () => 
     ]);
   });
 
-  it('тексты для человека: deepseek-v4.1-flash → luna → Vertex', () => {
+  it('тексты для человека: Vertex первым, дешёвая ступень дважды, потом luna (04.11)', () => {
     for (const mechanic of ['roleNames', 'coverLetters', 'linkedinDrafts'] as const) {
       expect(labels(mechanic)).toEqual([
+        'vertex',
+        'openrouter:deepseek/deepseek-v4.1-flash',
         'openrouter:deepseek/deepseek-v4.1-flash',
         'openai:gpt-5.6-luna',
-        'vertex',
       ]);
     }
   });
 
-  it('роли кампании ещё держат Vertex последней', () => {
-    expect(labels('campaignRoles')).toEqual([...labels('bulk'), 'vertex']);
+  it('роли кампании: Vertex первым, потом голова дважды и glm', () => {
+    expect(labels('campaignRoles')).toEqual([
+      'vertex',
+      'openrouter:deepseek/deepseek-v4-flash',
+      ...labels('bulk').slice(1),
+    ]);
+  });
+
+  it('Vertex стоит только первым и один раз, за ним голова повторена ровно один раз', () => {
+    for (const mechanic of [
+      'roleNames',
+      'coverLetters',
+      'linkedinDrafts',
+      'campaignRoles',
+    ] as const) {
+      const stages = labels(mechanic);
+      expect(stages.filter((label) => label === 'vertex')).toEqual(['vertex']);
+      expect(stages[0]).toBe('vertex');
+      expect(stages[1]).toBe(stages[2]);
+      expect(stages.filter((label) => label === stages[1])).toHaveLength(2);
+    }
   });
 
   it('квиз по навыку профиля идёт по цепочке консультанта (блок A, пакет 3)', () => {
@@ -57,9 +78,12 @@ describe('цепочки моделей по механикам (28.10)', () => 
   it.each(Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>)(
     '%s: не меньше двух ступеней, без бесплатных, мёртвых и дорогих маршрутов',
     (mechanic) => {
-      const chain = labels(mechanic);
+      const chain = labels(mechanic).filter((label) => label !== 'vertex');
       expect(chain.length).toBeGreaterThanOrEqual(2);
-      expect(new Set(chain).size).toBe(chain.length);
+      // Повтор допустим только в голове (повтор дешёвой ступени, 04.11), не в середине цепочки.
+      expect(new Set(chain.slice(chain[0] === chain[1] ? 1 : 0)).size).toBe(
+        chain.length - (chain[0] === chain[1] ? 1 : 0),
+      );
       for (const label of chain) {
         expect(label).not.toMatch(/:free$|openrouter\/free|^gemini:|^anthropic:|claude-fable/u);
         expect(isMutableModelAlias(label.slice(label.indexOf(':') + 1))).toBe(false);
@@ -178,7 +202,10 @@ describe('очередь консультанта по цепочке', () => {
       }),
     });
 
-    await provider.createTurn({ ...input, modelTier: 'free' }, '55555555-5555-4555-8555-555555555555');
+    await provider.createTurn(
+      { ...input, modelTier: 'free' },
+      '55555555-5555-4555-8555-555555555555',
+    );
 
     expect(called).toEqual(['gpt-5.6-luna']);
   });

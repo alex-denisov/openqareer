@@ -85,6 +85,7 @@ describe('GeminiCoverLetterWriter (B266)', () => {
 
     expect(writer.descriptors).toEqual([
       'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
     ]);
   });

@@ -81,6 +81,7 @@ import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
 
 import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
+import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { currentVacancyFitProfileValidator } from './domain/vacancyFitProfileStamp';
 import { VacancyMechanicsRuntime } from './domain/vacancyMechanicsRuntime';
 import { registerVacancyFitRoutes } from './routes/vacancyFitRoutes';
@@ -527,6 +528,7 @@ function createCandidateDraftDeps(
       buildLinkedinDraftWriter({
         providerCredentials: config.providerCredentials,
         vertex: config.vertex,
+        vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'linkedinDrafts'),
       }),
   };
 }

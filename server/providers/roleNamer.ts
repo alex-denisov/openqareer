@@ -521,6 +521,8 @@ export interface RoleNamerConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
   /** Gemini на Vertex — последняя ступень цепочки называния, когда настроен (B580, 29.10). */
   readonly vertex?: VertexConfig;
+  /** Metered `fetch` of the Vertex stage (04.11): books the call and enforces the daily cap. */
+  readonly vertexFetch?: typeof fetch;
   /** Хранилище названных ролей: без него кэш теряется при каждом деплое (B191). */
   readonly cacheStore?: RoleNamingCacheStore;
 }
@@ -542,7 +544,7 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
     new HygienicRoleNamer({
       inner: new QueuedRoleNamer(
         stages.map((stage) =>
-          stage.kind === 'vertex' ? vertexRoleNamer(stage.vertex) : routeRoleNamer(stage.route),
+          stage.kind === 'vertex' ? vertexRoleNamer(stage.vertex, config.vertexFetch) : routeRoleNamer(stage.route),
         ),
         stages.map((stage) => stage.label),
       ),
@@ -551,9 +553,10 @@ export function buildRoleNamer(config: RoleNamerConfig): RoleNamer | undefined {
   );
 }
 
-function vertexRoleNamer(vertex: VertexConfig): RoleNamer {
-  const tokens = new VertexTokenProvider(vertex);
+function vertexRoleNamer(vertex: VertexConfig, fetchImpl?: typeof fetch): RoleNamer {
+  const tokens = new VertexTokenProvider(vertex, fetchImpl);
   return new GeminiRoleNamer({
+    ...(fetchImpl ? { fetchImpl } : {}),
     apiKey: '',
     model: vertex.model,
     stage: `vertex:${vertex.model}`,

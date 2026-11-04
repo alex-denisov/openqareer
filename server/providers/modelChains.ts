@@ -33,14 +33,19 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * Порядок ступеней — по замеру 28.10 на реальных входах хода консультанта:
  * gpt-5.6-luna 4/4, deepseek-v4.1-flash 3/4, glm-5.3-flash 4/4.
  *
- * B580 (решение владельца 29.10): Vertex — последняя ступень везде. Его вызов
- * по каталогу $0,0066 против $0,0002 у deepseek-v4-flash, который с 19.10
- * ведёт фон на проде; бонусный кредит Vertex конечен.
+ * Решение владельца 04.11: Vertex Gemini — ПЕРВАЯ ступень, пока идёт стартовый кредит Vertex (сгорает
+ * около 09.11); ступени после него прежние (DeepSeek и GLM с повторами). Все вызовы Vertex идут через
+ * одни ворота (`vertexCredit.ts`): общий потолок по журналу, дневной предел, срок кредита, отключение
+ * на 6 часов при отказе биллинга и охлаждение при обычных сбоях. Закрытые ворота или отказ Vertex —
+ * ступень не ответила, работа идёт дальше по цепочке, фон не останавливается (28.10: один вызов Vertex
+ * над резервом закрыл фон на часы). Прежде Vertex был последней ступенью (B580, 29.10): его вызов по
+ * каталогу $0,0066 против $0,0002 у deepseek-v4-flash; 01.11 за час 1 157 вызовов Gemini на $7,81,
+ * пока DeepSeek остывал, а glm всегда отвечал 400. Кредит конечен, поэтому после срока цепочки
+ * работают без Vertex.
  *
- * Решение владельца 04.11: всегда начинать с дешёвой модели и повторять в ней, а не идти к самой
- * дорогой. Фон (`bulk`, в том числе разбор названий) ходит только через OpenRouter: повторы ступени с паузой и
- * другим закреплённым хостом (`bulkLlmClient.ts`), всё недоступно — работа ждёт в очереди. Причина:
- * 01.11 за час 1 157 вызовов Gemini на $7,81, пока DeepSeek остывал, а glm всегда отвечал 400.
+ * Механики, где кандидат ждёт (`campaignRoles`, `roleNames`, `coverLetters`, `linkedinDrafts`): после Vertex голова
+ * цепочки стоит дважды — вторая попытка дешёвой ступени до дорогих. Очереди этих механик идут по
+ * массиву подряд, без отбрасывания повторов; три попытки не берём, кандидат ждёт.
  */
 export const MODEL_CHAINS = {
   /**
@@ -62,18 +67,18 @@ export const MODEL_CHAINS = {
    */
   experienceBullets: [LUNA, GLM_FLASH],
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */
-  bulk: [DEEPSEEK_V4_FLASH, GLM_FLASH],
+  bulk: [VERTEX, DEEPSEEK_V4_FLASH, GLM_FLASH],
   /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
-  roleNames: [DEEPSEEK_FLASH, LUNA, VERTEX],
-  coverLetters: [DEEPSEEK_FLASH, LUNA, VERTEX],
-  linkedinDrafts: [DEEPSEEK_FLASH, LUNA, VERTEX],
+  roleNames: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
+  coverLetters: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
+  linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому
    * цепочка консультанта, а не фон. Vertex нет: ступени только chat-completions.
    */
   skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Структурный JSON без текста для человека: как фон. */
-  campaignRoles: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
+  campaignRoles: [VERTEX, DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;
 
 export type ModelMechanic = keyof typeof MODEL_CHAINS;

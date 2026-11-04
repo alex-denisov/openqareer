@@ -1,6 +1,12 @@
 import { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import { BulkLlmClient, type BulkLlmChannelEvent } from './bulkLlmClient';
 import { readBulkLlmConfig } from './bulkLlmConfig';
+import { BulkVertexStage } from './bulkVertexStage';
+import { readVertexConfig, VertexTokenProvider, type VertexConfig } from './vertexAi';
+import { createVertexGate, readVertexCreditConfig } from './vertexCredit';
+import { sendOwnerTelegram } from './ownerTelegram';
+
+export { sendOwnerTelegram };
 
 const OWNER_ALERTS = {
   balance_exhausted:
@@ -25,24 +31,42 @@ export function channelEventReporter(
       return;
     }
     console.error(`bulk-llm ${event.kind} reason=${event.reason}`);
-    const token = env.OPENQAREER_TELEGRAM_BOT_TOKEN?.trim();
-    const chatId = env.OPENQAREER_TELEGRAM_OWNER_CHAT_ID?.trim();
-    if (!token || !chatId || !firstToday(`owner_alert_${event.kind}`)) return;
-    transport(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: OWNER_ALERTS[event.kind] }),
-      signal: AbortSignal.timeout(10_000),
-    })
-      .then((response) => {
-        if (!response.ok) console.error(`bulk-llm owner alert status ${response.status}`);
-      })
-      .catch((error: unknown) => {
-        console.error(
-          `bulk-llm owner alert failed: ${error instanceof Error ? error.name : 'unknown'}`,
-        );
-      });
+    if (!firstToday(`owner_alert_${event.kind}`)) return;
+    sendOwnerTelegram(env, transport, OWNER_ALERTS[event.kind]);
   };
+}
+
+/** Vertex first stage of the channel (04.11); no service account, no stage, and no network for it. */
+function buildVertexStage(
+  options: Parameters<typeof createBulkLlmRuntime>[0],
+  env: NodeJS.ProcessEnv,
+  ledger: SqliteBulkLlmLedger,
+): BulkVertexStage | undefined {
+  let vertex: VertexConfig | null | undefined = options.vertex;
+  if (vertex === undefined) {
+    try {
+      vertex = readVertexConfig(env) ?? null;
+    } catch (error) {
+      console.error(`bulk-llm vertex-config-invalid ${error instanceof Error ? error.name : 'unknown'}`);
+      vertex = null;
+    }
+  }
+  if (!vertex) return undefined;
+  const transport = options.transport ?? fetch;
+  const tokens = new VertexTokenProvider(vertex, transport);
+  return new BulkVertexStage({
+    config: vertex,
+    gate: createVertexGate({
+      ledger,
+      config: readVertexCreditConfig(env),
+      env,
+      transport,
+      ...(options.now ? { now: options.now } : {}),
+    }),
+    ledger,
+    token: options.vertexToken ?? (() => tokens.token()),
+    transport,
+  });
 }
 
 export function createBulkLlmRuntime(options: {
@@ -53,18 +77,23 @@ export function createBulkLlmRuntime(options: {
   now?: () => number;
   random?: () => number;
   onEvent?: (event: BulkLlmChannelEvent) => void;
+  /** Service account of Vertex; undefined reads it from the env, null means no Vertex stage. */
+  vertex?: VertexConfig | null;
+  /** Access token of Vertex; tests fix it, the default signs one with the service account. */
+  vertexToken?: () => Promise<string>;
 }) {
   const env = options.env ?? process.env;
   const config = readBulkLlmConfig(env);
   const ledger = new SqliteBulkLlmLedger(options.databasePath);
+  const vertexStage = buildVertexStage(options, env, ledger);
   return {
     client: config
       ? new BulkLlmClient(config, ledger, options.transport, options.delay, {
           now: options.now,
           random: options.random,
+          ...(vertexStage ? { vertex: vertexStage } : {}),
           onEvent:
-            options.onEvent ??
-            channelEventReporter(env, fetch, (kind) => ledger.firstToday(kind)),
+            options.onEvent ?? channelEventReporter(env, fetch, (kind) => ledger.firstToday(kind)),
         })
       : null,
     ledger,

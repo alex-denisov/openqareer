@@ -283,14 +283,15 @@ describe('buildRoleNamer', () => {
     });
 
     expect(describeRoleNamerQueue(built)).toEqual([
+      'vertex:gemini-3.8-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
-      'vertex:gemini-3.8-flash',
     ]);
     expect(namedRoleHygieneIsWired(built)).toBe(true);
   });
 
-  it('ставит Vertex последним, когда он настроен (B580, решение владельца 29.10)', () => {
+  it('ставит Vertex первым, когда он настроен (решение владельца 04.11)', () => {
     const built = buildRoleNamer({
       providerCredentials: { openrouter: 'k' },
       vertex: {
@@ -302,7 +303,7 @@ describe('buildRoleNamer', () => {
       },
     });
 
-    expect(describeRoleNamerQueue(built).at(-1)).toBe('vertex:gemini-3.8-flash');
+    expect(describeRoleNamerQueue(built)[0]).toBe('vertex:gemini-3.8-flash');
   });
 
   it('ступень Gemini передаёт thinkingLevel и заголовок доступа Vertex', async () => {
@@ -334,9 +335,7 @@ describe('buildRoleNamer', () => {
   });
 
   it('без ключей ступеней нет вовсе', () => {
-    expect(
-      buildRoleNamer({ providerCredentials: {} }),
-    ).toBeUndefined();
+    expect(buildRoleNamer({ providerCredentials: {} })).toBeUndefined();
   });
 });
 

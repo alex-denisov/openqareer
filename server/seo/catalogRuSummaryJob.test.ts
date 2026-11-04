@@ -246,13 +246,17 @@ describe('catalog Russian summary job', () => {
     const spend = sqliteCatalogRuSummarySpend(database);
     expect(spend.task('2026-11-03')).toEqual({ usd: 0, calls: 0 });
     database.exec(
-      'CREATE TABLE bulk_llm_spend(id TEXT PRIMARY KEY, run_id TEXT, task TEXT, day TEXT, reserved REAL, cost REAL)',
+      'CREATE TABLE bulk_llm_spend(id TEXT PRIMARY KEY, run_id TEXT, task TEXT, day TEXT, reserved REAL, cost REAL, provider TEXT)',
     );
     database.exec(`INSERT INTO bulk_llm_spend VALUES
-      ('1','r','catalog-ru-summary','2026-11-03',0.01,0.0005),
-      ('2','r','vacancy-fit','2026-11-03',0.01,NULL),
-      ('3','r','vacancy-fit','2026-11-01',0.01,2)`);
-    expect(spend.task('2026-11-03')).toEqual({ usd: 0.0005, calls: 1 });
+      ('1','r','catalog-ru-summary','2026-11-03',0.01,0.0005,'openrouter'),
+      ('2','r','vacancy-fit','2026-11-03',0.01,NULL,'openrouter'),
+      ('3','r','vacancy-fit','2026-11-01',0.01,2,'openrouter'),
+      ('4','r','catalog-ru-summary','2026-11-03',3,3,'gemini'),
+      ('5','r','vacancy-fit','2026-11-03',3,3,'gemini')`);
+    // Vertex money (provider gemini) is counted by the Vertex gate, not by the 0.5 dollar cap of
+    // OpenRouter nor by the channel's day and month caps; its calls still count towards the pace.
+    expect(spend.task('2026-11-03')).toEqual({ usd: 0.0005, calls: 2 });
     expect(spend.channelDay('2026-11-03')).toBeCloseTo(0.0105);
     expect(spend.channelMonth('2026-11-01')).toBeCloseTo(2.0105);
   });
