@@ -203,15 +203,29 @@ export class QueuedResumeStructurer implements ResumeStructurer {
   }
 
   async structure(sourceText: string): Promise<ParsedResume | null> {
+    let partial: { stage: ResumeStructurer; parsed: ParsedResume } | undefined;
     for (const stage of this.stages) {
       const parsed = await stage.structure(sourceText).catch(() => null);
-      if (parsed !== null) {
+      if (parsed === null) continue;
+      if (hasPlaces(parsed)) {
         this.answered = stage;
         return parsed;
       }
+      if (!partial && hasContent(parsed)) partial = { stage, parsed };
     }
-    return null;
+    // A resume with no places in any answer (a student's) keeps what was read.
+    this.answered = partial?.stage;
+    return partial?.parsed ?? null;
   }
+}
+
+/** A polite answer without places of work fails the stage: the candidate would get a profile with no experience (04.11). */
+function hasPlaces(parsed: ParsedResume): boolean {
+  return (parsed.experience?.length ?? 0) > 0;
+}
+
+function hasContent(parsed: ParsedResume): boolean {
+  return (parsed.skills?.length ?? 0) > 0 || (parsed.education?.length ?? 0) > 0;
 }
 
 /**
