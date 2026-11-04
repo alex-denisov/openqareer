@@ -230,6 +230,10 @@ export interface VacancyPoolStore {
   /** Позиция обхода текста hh между перезапусками воркера (02.11). */
   loadHhTextCursor?(): string | undefined;
   saveHhTextCursor?(cursor: string | undefined): void;
+  /** Строки ролей кампаний: своя позиция, первая на каждом такте (04.11). */
+  loadHhRoleTextCandidates?(position: string | undefined, limit: number): { ids: string[]; position: string };
+  loadHhRoleTextPosition?(): string | undefined;
+  saveHhRoleTextPosition?(position: string): void;
   /** Снятые hh-записи снимают свой кластер; возвращает, сколько снято (02.11). */
   archiveExpiredHhClusters?(limit: number): number;
   /** Живые записи площадки без дочитанного текста, новые первыми (Workday, B535). */

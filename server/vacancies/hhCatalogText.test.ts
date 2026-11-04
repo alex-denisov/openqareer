@@ -1,7 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
@@ -20,31 +19,6 @@ afterEach(() => {
   stores.splice(0).forEach((store) => store.close());
   directories.splice(0).forEach((directory) => rmSync(directory, { recursive: true, force: true }));
 });
-
-function openSqliteAt(): { store: SqliteVacancyPoolStore; path: string } {
-  const directory = mkdtempSync(join(tmpdir(), 'hh-catalog-text-'));
-  directories.push(directory);
-  const path = join(directory, 'pool.db');
-  const store = new SqliteVacancyPoolStore({ databasePath: path });
-  stores.push(store);
-  return { store, path };
-}
-
-/** What the maintenance worker writes for a parsed title (B267 S2). */
-function classifyRows(
-  path: string,
-  rows: Array<[id: string, functionCode: string, levelRank: number, publishedAt: string]>,
-): void {
-  const writer = new DatabaseSync(path);
-  const insert = writer.prepare(
-    `INSERT INTO vacancy_semantic (id, function_code, level_rank, title_key, published_ms, is_remote)
-     VALUES (?, ?, ?, ?, ?, 0)`,
-  );
-  for (const [id, code, level, publishedAt] of rows) {
-    insert.run(id, code, level, id, Date.parse(publishedAt));
-  }
-  writer.close();
-}
 
 function openSqlite(): SqliteVacancyPoolStore {
   const directory = mkdtempSync(join(tmpdir(), 'hh-catalog-text-'));
@@ -380,42 +354,7 @@ describe('hh text priority queue (01.11)', () => {
   });
 });
 
-describe('02.11: role rows first, position survives a restart, hidden text and gone clusters', () => {
-  it('walks hh rows of active campaigns\' functions and level (the selection\'s matcher) first', () => {
-    const { store, path } = openSqliteAt();
-    const cto = { ...hh(1, 3), title: 'Технический директор' };
-    const cio = { ...hh(2, 20), title: 'IT-директор' };
-    const junior = { ...hh(3, 1), title: 'Младший разработчик' };
-    const barista = { ...hh(4, 0), title: 'Бариста' };
-    const catalog = { ...hh(5, 2), title: 'Курьер' };
-    store.mergeSourceSlice(HH, [cto, cio, junior, barista, catalog]);
-    store.saveClusters([catalog].map(clusterOf));
-    classifyRows(path, [
-      [cto.id, 'engineering', 6, cto.publishedAt],
-      [cio.id, 'engineering', 6, cio.publishedAt],
-      [junior.id, 'engineering', 1, junior.publishedAt],
-      [barista.id, 'hospitality', 1, barista.publishedAt],
-    ]);
-    store.recordHhTextRoleTarget('cand', ['engineering'], 4);
-    const seen: string[] = [];
-    let cursor: string | undefined;
-    for (let page = 0; page < 10; page += 1) {
-      const batch = store.loadHhTextCandidates(cursor, 1);
-      seen.push(...batch.ids);
-      cursor = batch.cursor;
-      if (!cursor) break;
-    }
-    expect(seen.slice(0, 3)).toEqual([cto.id, cio.id, catalog.id]);
-  });
-
-  it('without a recorded campaign target the walk starts at the catalog', () => {
-    const store = openSqlite();
-    const catalog = hh(5, 2);
-    store.mergeSourceSlice(HH, [catalog]);
-    store.saveClusters([catalog].map(clusterOf));
-    expect(store.loadHhTextCandidates(undefined, 1).ids).toEqual([catalog.id]);
-  });
-
+describe('02.11: position survives a restart, hidden text and gone clusters', () => {
   it('keeps the walk position in the database for the next worker', () => {
     const store = openSqlite();
     expect(store.loadHhTextCursor()).toBeUndefined();

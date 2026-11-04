@@ -1095,7 +1095,12 @@ export class MultiSourceVacancyEngine {
             this.rights.get(HH_SEARCH_SOURCE_ID) === 'live'
           );
         },
-        // 02.11: rows whose title matches a candidate's role go before the catalog and the pool.
+        // 04.11: rows of candidates' roles have their own position, first on every tick.
+        loadRoleCandidates: (limit) => {
+          const position = pool.loadHhRoleTextPosition?.();
+          return pool.loadHhRoleTextCandidates?.(position, limit) ?? { ids: [], position: position ?? '' };
+        },
+        saveRolePosition: (position) => pool.saveHhRoleTextPosition?.(position),
         loadHhTextCandidates: (cursor, limit) =>
           pool.loadHhTextCandidates!(cursor, limit),
         loadSavedCursor: () => pool.loadHhTextCursor?.(),

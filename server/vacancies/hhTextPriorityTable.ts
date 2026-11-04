@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS hh_text_state (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   cursor TEXT
 ) STRICT;
+CREATE TABLE IF NOT EXISTS hh_text_role_position (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  position TEXT NOT NULL
+) STRICT;
 `;
 
 /** Строк одной подборки за запись: больше, чем у самого широкого тарифа в приоритете. */

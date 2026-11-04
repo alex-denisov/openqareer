@@ -4,6 +4,7 @@ import { CATALOG_LISTINGS_TABLE, CATALOG_TOTALS_TABLE } from './catalogTotalsTab
 import { expireClusterSources } from './clusterExpiry';
 import { CLUSTER_TEXT_PENDING_TABLE } from './clusterTextPendingTable';
 import { HH_TEXT_PRIORITY_MAX_IDS, HH_TEXT_PRIORITY_TABLE } from './hhTextPriorityTable';
+import { loadRoleTextPage, type HhRoleTextPage, type HhTextRoleTarget } from './hhTextRolePosition';
 import { normalizeSalaryLabel } from './catalogCopy';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -1964,21 +1965,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * `HH_TEXT_SCAN_LIMIT` строк, чтобы тик не стал полным чтением пула.
    */
   loadHhTextCandidates(cursor: string | undefined, limit: number): HhTextCandidates {
-    const targets = this.hhTextRoleTargets();
-    const parsed = parseHhTextCursor(cursor);
-    // Без целей кампаний фаза ролей пуста: обход сразу идёт по каталогу.
-    const position: HhTextPosition =
-      parsed.phase === 'role' && targets.length === 0 ? nextHhTextPhase(parsed)! : parsed;
     const want = Math.max(1, Math.min(Math.trunc(limit), 100));
     const ids: string[] = [];
     let scanned = 0;
-    let at: HhTextPosition | undefined = position;
+    let at: HhTextPosition | undefined = parseHhTextCursor(cursor);
     while (at && ids.length < want) {
-      const role = at.phase === 'role';
-      if (scanned >= (role ? HH_TEXT_ROLE_SCAN_LIMIT : HH_TEXT_SCAN_LIMIT)) break;
-      const rows = role
-        ? this.hhTextRolePage(at, HH_TEXT_ROLE_PAGE, targets)
-        : this.hhTextPage(at, HH_TEXT_PAGE);
+      if (scanned >= HH_TEXT_SCAN_LIMIT) break;
+      const rows = this.hhTextPage(at, HH_TEXT_PAGE);
       if (rows.length === 0) {
         at = nextHhTextPhase(at);
         continue;
@@ -1986,46 +1979,45 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       for (const row of rows) {
         scanned += 1;
         at = { phase: at.phase, ms: row.ms, key: row.key };
-        const wanted = role ? this.hhNeedsText(row.id) : 'need' in row && row.need === 1;
-        if (wanted) ids.push(row.id);
+        if (row.need === 1) ids.push(row.id);
         if (ids.length >= want) break;
       }
     }
     return { ids, ...(at ? { cursor: formatHhTextCursor(at) } : {}) };
   }
 
-  /**
-   * 02.11: the role phase walks what the selection would match — hh rows whose parsed title
-   * (`vacancy_semantic`) has an active campaign's function and a level at or above its floor,
-   * newest first. The 36 demand phrases it used before missed 1 265 of the owner's 1 313
-   * short rows («технический директор», «исполнительный директор (CEO)»).
-   */
-  private hhTextRolePage(
-    at: HhTextPosition,
-    size: number,
-    targets: readonly HhTextRoleTarget[],
-  ): Array<{ id: string; ms: number; key: string }> {
-    const clauses = targets.map(
-      (target) =>
-        `(s.function_code IN (${target.codes.map(() => '?').join(', ')})` +
-        (target.floor === null ? ')' : ' AND (s.level_rank >= ? OR s.level_rank IS NULL))'),
-    );
-    const params = targets.flatMap((target) =>
-      target.floor === null ? [...target.codes] : [...target.codes, target.floor],
-    );
-    const rows = this.database
+  /** Строки ролей активных кампаний: своя позиция, воркер берёт её первой (04.11). */
+  loadHhRoleTextCandidates(
+    position: string | undefined,
+    limit: number,
+    nowMs: number = Date.now(),
+  ): HhRoleTextPage {
+    const targets = this.hhTextRoleTargets(nowMs);
+    if (targets.length === 0) return { ids: [], position: position ?? '' };
+    return loadRoleTextPage({
+      database: this.database,
+      sourceId: HH_SEARCH_SOURCE_ID,
+      targets,
+      position,
+      limit: Math.max(1, Math.min(Math.trunc(limit), 100)),
+      nowMs,
+      needsText: (id) => this.hhNeedsText(id),
+    });
+  }
+
+  loadHhRoleTextPosition(): string | undefined {
+    const row = this.database.prepare('SELECT position FROM hh_text_role_position WHERE id = 1').get() as
+      { position: string } | undefined;
+    return row?.position;
+  }
+
+  saveHhRoleTextPosition(position: string): void {
+    this.database
       .prepare(
-        `SELECT DISTINCT s.id AS id, s.published_ms AS ms
-           FROM vacancy_semantic s
-           JOIN vacancy_pool_index i ON i.id = s.id
-          WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 0
-            AND (${clauses.join(' OR ')})
-            AND (s.published_ms < ? OR (s.published_ms = ? AND s.id > ?))
-          ORDER BY s.published_ms DESC, s.id ASC
-          LIMIT ?`,
+        `INSERT INTO hh_text_role_position (id, position) VALUES (1, ?)
+         ON CONFLICT(id) DO UPDATE SET position = excluded.position`,
       )
-      .all(...params, at.ms, at.ms, at.key, size) as Array<{ id: string; ms: number }>;
-    return rows.map((row) => ({ id: row.id, ms: row.ms, key: row.id }));
+      .run(position);
   }
 
   /**
@@ -3068,31 +3060,24 @@ export interface HhTextCandidates {
 }
 
 interface HhTextPosition {
-  /** 02.11: rows of candidates' roles, then the public catalog, then the rest of the pool. */
-  readonly phase: 'role' | 'catalog' | 'pool';
+  /** The public catalog, then the rest of the pool; candidates' roles have their own position (04.11). */
+  readonly phase: 'catalog' | 'pool';
   readonly ms: number;
   readonly key: string;
 }
 
 const HH_TEXT_PAGE = 200;
 const HH_TEXT_SCAN_LIMIT = 2_000;
-const HH_TEXT_ROLE_PAGE = 2_000;
-const HH_TEXT_ROLE_SCAN_LIMIT = 50_000;
 /** Цели кампаний, чей подбор считался за последние 14 дней: активные кампании. */
 const HH_TEXT_TARGET_TTL_MS = 14 * 24 * 60 * 60 * 1_000;
 const HH_TEXT_MAX_TARGETS = 50;
 const HH_TEXT_TARGET_REFRESH_MS = 60 * 60 * 1_000;
 
-interface HhTextRoleTarget {
-  readonly codes: readonly string[];
-  readonly floor: number | null;
-}
-
 /** Живая hh-запись, которой нужен текст: не снята, текста нет, работодатель его не скрыл. */
 const HH_NEEDS_TEXT = `p.expired_at IS NULL AND
       length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0 AND
       coalesce(json_extract(p.payload, '$.descriptionHidden'), 0) = 0`;
-const HH_TEXT_PHASES = ['role', 'catalog', 'pool'] as const;
+const HH_TEXT_PHASES = ['catalog', 'pool'] as const;
 
 function nextHhTextPhase(at: HhTextPosition): HhTextPosition | undefined {
   const phase = HH_TEXT_PHASES[HH_TEXT_PHASES.indexOf(at.phase) + 1];
@@ -3100,7 +3085,7 @@ function nextHhTextPhase(at: HhTextPosition): HhTextPosition | undefined {
 }
 
 function parseHhTextCursor(cursor: string | undefined): HhTextPosition {
-  const start: HhTextPosition = { phase: 'role', ms: Number.MAX_SAFE_INTEGER, key: '' };
+  const start: HhTextPosition = { phase: 'catalog', ms: Number.MAX_SAFE_INTEGER, key: '' };
   if (!cursor) return start;
   const [phase, ms, ...key] = cursor.split('|');
   const parsedMs = Number(ms);
