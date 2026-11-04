@@ -9,13 +9,20 @@ import type { ExperienceFactRewriter } from './providers/experienceFactRewriter'
 const ORIGIN = 'http://localhost:3000';
 const CLOUD = 'exp-cloud';
 
+/** Заглушки модели находят факты по тексту: порядок фактов в запросе тест не задаёт. */
+function factsOf(request: FactRewriteRequest) {
+  const starting = (start: string) =>
+    request.facts.find((fact) => fact.statement.startsWith(start))!;
+  return { team: starting('Команда'), load: starting('следил'), fragment: starting('Стало') };
+}
+
 function rewriterAnswering(): ExperienceFactRewriter & { calls: FactRewriteRequest[] } {
   const calls: FactRewriteRequest[] = [];
   return {
     calls,
     rewrite: vi.fn(async (request: FactRewriteRequest) => {
       calls.push(request);
-      const [team, load, fragment] = request.facts;
+      const { team, load, fragment } = factsOf(request);
       return {
         places: [
           {
@@ -23,12 +30,12 @@ function rewriterAnswering(): ExperienceFactRewriter & { calls: FactRewriteReque
             bullets: [
               {
                 text: 'Расширил команду поддержки с 4 до 11 инженеров, следя за нагрузкой каждого.',
-                sourceFactIds: [team!.id, load!.id],
+                sourceFactIds: [team.id, load.id],
               },
             ],
           },
         ],
-        droppedFactIds: [fragment!.id],
+        droppedFactIds: [fragment.id],
         unmatchedFactIds: [],
       };
     }),
@@ -66,11 +73,18 @@ async function candidateWithFacts(
     ],
   };
   store.saveResumeDraft(candidateId, draft, []);
+  // Память идёт по `created_at, id`. Факты одной миллисекунды упорядочивает id, поэтому здесь
+  // время одно, а id идут обратно порядку добавления: так порядок фактов в запросе не совпадает
+  // с порядком в тесте при каждом прогоне, а не изредка, как было со случайными id.
+  vi.useFakeTimers({ now: Date.now(), toFake: ['Date'] });
   const facts = [
     'Команда расширилась с четырех до одиннадцати',
     'следил за персональной нагрузкой каждого сотрудника',
     'Стало семь',
-  ].map((statement) => store.addManualExperienceFact(candidateId, randomUUID(), statement));
+  ].map((statement, index) =>
+    store.addManualExperienceFact(candidateId, `${9 - index}${randomUUID().slice(1)}`, statement),
+  );
+  vi.useRealTimers();
   const headers = { authorization, origin: ORIGIN };
   return { app, headers, candidateId, store, facts };
 }
@@ -187,15 +201,13 @@ describe('consultant rewrite of conversation facts (29.10)', () => {
     const rewriter: ExperienceFactRewriter = {
       rewrite: async (request) => {
         calls.push(request);
-        const [team, load] = request.facts;
+        const { team, load } = factsOf(request);
         const text =
           calls.length === 1
             ? 'Расширил команду поддержки с 4 до 11 инженеров, добавив 3 сотрудников.'
             : 'Расширил команду поддержки с 4 до 11 инженеров, следя за нагрузкой каждого.';
         return {
-          places: [
-            { experienceId: CLOUD, bullets: [{ text, sourceFactIds: [team!.id, load!.id] }] },
-          ],
+          places: [{ experienceId: CLOUD, bullets: [{ text, sourceFactIds: [team.id, load.id] }] }],
         };
       },
     };
@@ -251,12 +263,12 @@ describe('consultant rewrite of conversation facts (29.10)', () => {
     const rewriter: ExperienceFactRewriter = {
       rewrite: async (request) => {
         rewrites.push(request);
-        const [team, load] = request.facts;
+        const { team, load } = factsOf(request);
         return {
           places: [
             {
               experienceId: CLOUD,
-              bullets: [{ text: english, sourceFactIds: [team!.id, load!.id] }],
+              bullets: [{ text: english, sourceFactIds: [team.id, load.id] }],
             },
           ],
         };
