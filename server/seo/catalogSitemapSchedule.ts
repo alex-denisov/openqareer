@@ -7,6 +7,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { OwnerTelegramConfig } from '../notifications/ownerTelegram';
+import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
 import {
   computeCatalogSitemaps,
@@ -59,6 +60,18 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
 }
 
+/** A failed step leaves the set as it is and never stops the sitemap files. */
+function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): void {
+  try {
+    const cap = cardRolloutDailyCap(process.env.OPENQAREER_CARD_ROLLOUT_DAILY_CAP);
+    const started = Date.now();
+    const report = admitCardRollout(database, now, cap);
+    log.info({ ...report, cap, ms: Date.now() - started }, 'catalog-card-rollout');
+  } catch (error: unknown) {
+    log.error({ errorName: errorName(error) }, 'catalog-card-rollout-failed');
+  }
+}
+
 /** Maintenance process only: the listings query groups the whole catalog. */
 export function scheduleCatalogSitemapJob(
   database: DatabaseSync,
@@ -77,6 +90,7 @@ export function scheduleCatalogSitemapJob(
     const started = Date.now();
     try {
       const now = new Date();
+      runCardRollout(database, log, now);
       const files = computeCatalogSitemaps(database, now);
       writeCatalogSitemaps(database, files, now);
       await checkIndexCoverage({ database, files, telegram, log, now });
