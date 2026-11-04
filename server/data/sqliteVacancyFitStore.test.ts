@@ -16,6 +16,51 @@ function setup() {
 }
 const now = '2026-10-18T10:00:00.000Z';
 
+describe('a recount of one candidate (04.11)', () => {
+  it('the result and its finished job go together, so the row is asked again and its percent stays on screen', () => {
+    const { database, store } = setup();
+    const row = input();
+    const job = store.enqueue(row, now);
+    const claimed = store.claim({ now })!;
+    expect(store.complete(claimed, evaluateVacancyFit(row, now), now)).toBe(true);
+    const other = input('candidate-b');
+    store.putCache(other, evaluateVacancyFit(other, now), now);
+
+    const found = store.assessedResults('candidate-a');
+    expect(found).toEqual([{ key: job.key, vacancyId: 'vacancy', percent: 100, updatedAt: now }]);
+    expect(store.forgetResults('candidate-a', found.map((item) => item.key))).toBe(1);
+
+    expect(store.getCache(row)).toBeUndefined();
+    expect(store.enqueue(row, now).status).toBe('pending');
+    expect(store.getPreviousCache(row)?.coveragePercent).toBe(100);
+    expect(store.getCache(other)?.coveragePercent).toBe(100);
+    database.close();
+  });
+  it('touches only this candidate, only assessed rows, and no job still waiting or failed', () => {
+    const { database, store } = setup();
+    const row = input();
+    const job = store.enqueue(row, now);
+    store.putCache(row, evaluateVacancyFit(row, now), now);
+    expect(store.forgetResults('candidate-b', [job.key])).toBe(0);
+    expect(store.getCache(row)).toBeDefined();
+    expect(store.forgetResults('candidate-a', [job.key])).toBe(1);
+    expect(store.getJobState(row)).toBe('pending');
+    const blocked = { ...input('candidate-c'), gates: { ...input().gates, role: { status: 'blocked', reason: 'x' } } } as VacancyFitInput;
+    store.putCache(blocked, evaluateVacancyFit(blocked, now), now);
+    expect(store.assessedResults('candidate-c')).toEqual([]);
+    database.close();
+  });
+  it('lists the newest result of a vacancy: an older profile is not read anyway', () => {
+    const { database, store } = setup();
+    const row = input();
+    store.putCache(row, evaluateVacancyFit(row, now), now);
+    const newer = { ...row, facts: [{ ...row.facts[0]!, statement: `${row.facts[0]!.statement} more` }] };
+    store.putCache(newer, evaluateVacancyFit(newer, now), '2026-10-19T10:00:00.000Z');
+    expect(store.assessedResults('candidate-a').map((item) => item.updatedAt)).toEqual(['2026-10-19T10:00:00.000Z']);
+    database.close();
+  });
+});
+
 describe('duties of the text (04.11)', () => {
   it('a row stored before the rule still reads, with its verdicts, and asks the model nothing', () => {
     const { database, store } = setup();

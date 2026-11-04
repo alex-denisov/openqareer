@@ -410,6 +410,43 @@ export class SqliteVacancyFitStore {
     return changed;
   }
 
+  /** The newest assessed result of each vacancy of one candidate: what `forgetResults` is given. */
+  assessedResults(candidateId: string): readonly { readonly key: string; readonly vacancyId: string; readonly percent: number | null; readonly updatedAt: string }[] {
+    const rows = this.database.prepare('SELECT cache_key, result_cipher, updated_at FROM vacancy_fit_cache WHERE candidate_key = ?')
+      .iterate(this.candidateKey(candidateId)) as Iterable<{ cache_key: string; result_cipher: string; updated_at: string }>;
+    const newest = new Map<string, { readonly key: string; readonly vacancyId: string; readonly percent: number | null; readonly updatedAt: string }>();
+    for (const row of rows) {
+      const result = JSON.parse(this.sealedText.open(row.result_cipher, row.cache_key)) as VacancyFitResult;
+      if (result.algorithmVersion !== VACANCY_FIT_ALGORITHM_VERSION) continue;
+      const known = newest.get(result.vacancyId);
+      if (known && known.updatedAt >= row.updated_at) continue;
+      if (result.reason === 'assessed') newest.set(result.vacancyId, { key: row.cache_key, vacancyId: result.vacancyId, percent: result.coveragePercent ?? null, updatedAt: row.updated_at });
+      else newest.delete(result.vacancyId);
+    }
+    return [...newest.values()];
+  }
+
+  /**
+   * One candidate's recount without a version change, which would recount everyone (04.11). A
+   * finished job goes with its result: left alone it stops `enqueue` and the percent hangs (02.11).
+   * A job still waiting or failed stays, and `vacancy_fit_latest` keeps the percent on screen.
+   */
+  forgetResults(candidateId: string, keys: readonly string[]): number {
+    const candidateKey = this.candidateKey(candidateId);
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const cache = this.database.prepare('DELETE FROM vacancy_fit_cache WHERE cache_key=? AND candidate_key=?');
+      const job = this.database.prepare("DELETE FROM vacancy_fit_queue WHERE cache_key=? AND candidate_key=? AND status='completed'");
+      let forgotten = 0;
+      for (const key of keys) {
+        forgotten += Number(cache.run(key, candidateKey).changes);
+        job.run(key, candidateKey);
+      }
+      this.database.exec('COMMIT');
+      return forgotten;
+    } catch (error) { this.database.exec('ROLLBACK'); throw error; }
+  }
+
   deleteCandidate(candidateId: string): void {
     const key = this.candidateKey(candidateId);
     this.database.exec('BEGIN IMMEDIATE');
