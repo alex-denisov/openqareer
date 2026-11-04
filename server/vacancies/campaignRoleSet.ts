@@ -92,6 +92,17 @@ function candidateRoles(facts: readonly CampaignRoleFact[], profileTitle: string
   return [...new Map([...direct, ...adjacent].map((role) => [role.id, role])).values()];
 }
 
+/** Модели хватает названий и уровней: варианты и связи занимали 114 КБ из 143 (04.11). */
+function modelCandidates(roles: readonly Role[]): CampaignRoleModelInput['candidates'] {
+  return roles.map(({ id, function: code, titleEn, titleRu, levels }) => ({
+    id,
+    function: code,
+    titleEn,
+    titleRu,
+    levels,
+  }));
+}
+
 function inferredLevel(
   facts: readonly CampaignRoleFact[],
   profileTitle: string | null,
@@ -246,7 +257,7 @@ export async function buildCampaignRoleSet(input: {
   const level = inferredLevel(input.facts, input.profileTitle ?? null);
   const raw =
     input.model && candidates.length > 0
-      ? await input.model.propose({ facts: input.facts, candidates }).catch((error: unknown) => {
+      ? await input.model.propose({ facts: input.facts, candidates: modelCandidates(candidates) }).catch((error: unknown) => {
           input.log?.(
             {
               errorName: error instanceof Error ? error.name : 'UnknownError',

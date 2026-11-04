@@ -10,6 +10,8 @@ const SYSTEM_PROMPT = `
 Верни JSON-массив с полями id, level, kind (primary|adjacent), evidenceRefs и reason.
 Выбирай id только из candidates. level — только ic, lead, head, vp или c-level.
 Массив evidenceRefs у каждой роли должен быть непустым и ссылаться только на переданные facts.
+Покажи ступени каждой линии карьеры, а не по одной роли на линию: если у кандидата есть должность в функции уровня head или выше, возьми эту ступень и ступень выше, когда она есть в candidates.
+Линии выбирай по должностям из facts: одно упоминание темы линией не считается.
 `;
 
 const RESPONSE_SCHEMA = {

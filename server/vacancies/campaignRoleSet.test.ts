@@ -1,7 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { StoredMemory } from '../data/candidateStore';
-import { buildCampaignRoleSet, type CampaignRoleModel } from './campaignRoleSet';
+import {
+  buildCampaignRoleSet,
+  type CampaignRoleModel,
+  type CampaignRoleModelInput,
+} from './campaignRoleSet';
 import { campaignRoleFacts } from './rebuildCampaignRoles';
 
 /** adenisov.test memory on prod 03.11 (owner's own data, sensitive rows left out). */
@@ -14,6 +18,42 @@ const facts = [
   { ref: 'memory:vp', statement: 'VP Engineering: led platform and engineering' },
   { ref: 'memory:coo', statement: 'COO: owned operations and delivery' },
 ] as const;
+
+describe('что уходит в модель ролей (этап 1, 04.11)', () => {
+  it('у роли только id, функция, названия и уровни: варианты и связи не отправляются', async () => {
+    let sent: CampaignRoleModelInput | undefined;
+    await buildCampaignRoleSet({
+      facts,
+      profileTitle: facts[0].statement,
+      model: {
+        propose: async (input) => {
+          sent = input;
+          return [];
+        },
+      },
+    });
+    expect(sent?.candidates.length).toBeGreaterThan(0);
+    for (const role of sent?.candidates ?? []) {
+      expect(Object.keys(role).sort()).toEqual(['function', 'id', 'levels', 'titleEn', 'titleRu']);
+    }
+  });
+
+  it('профиль adenisov.test умещается в 60 КБ вместо 143', async () => {
+    let size = 0;
+    await buildCampaignRoleSet({
+      facts: campaignRoleFacts(ownerMemory),
+      profileTitle: 'VP of Technology',
+      model: {
+        propose: async (input) => {
+          size = JSON.stringify(input).length;
+          return [];
+        },
+      },
+    });
+    expect(size).toBeGreaterThan(0);
+    expect(size).toBeLessThan(60_000);
+  });
+});
 
 describe('buildCampaignRoleSet (B267 S5)', () => {
   it('на фиктивной модели принимает 5–10 ролей только из кандидатного набора', async () => {
