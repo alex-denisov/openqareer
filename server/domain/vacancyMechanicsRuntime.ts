@@ -100,10 +100,10 @@ export class VacancyMechanicsRuntime {
     this.fit = new SqliteVacancyFitStore(this.database, new SealedText(encryptionKey));
     ensureMassRecountTable(this.database);
   }
-  view(input: VacancyFitInput): VacancyFitView {
+  view(input: VacancyFitInput, { queueRequirements = true }: { readonly queueRequirements?: boolean } = {}): VacancyFitView {
     const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
     // B510: a shown vacancy without model labels jumps ahead of the background upgrade.
-    if (input.description.trim() && extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) {
+    if (queueRequirements && input.description.trim() && extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) {
       this.requirements.enqueue({ vacancyId: input.vacancyId, description: input.description }, { titleStrategyPriority: SHOWN_PAGE_PRIORITY });
     }
     // Until the worker answers, the rules give the chips; the state below stays honest.

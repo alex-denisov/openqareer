@@ -1,4 +1,5 @@
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
+import { warmMatchedList } from './routes/matchedListWarm';
 import { rebuildCampaignRoles } from './vacancies/rebuildCampaignRoles';
 import { registerEventLoopWatch } from './observability/eventLoopWatch';
 import { redactRequestUrlForLogs } from './observability/redactRequestUrl';
@@ -451,6 +452,9 @@ function withPrecomputedFit<T extends RouteDeps>(deps: T): T {
   );
   deps.matchedPoolPrecompute?.setCampaignRoleRefresher?.((candidateId, log) =>
     rebuildCampaignRoles(deps, candidateId, { log }),
+  );
+  deps.matchedPoolPrecompute?.setListWarmer?.((candidateId, log) =>
+    warmMatchedList(deps, candidateId, log),
   );
   return deps;
 }

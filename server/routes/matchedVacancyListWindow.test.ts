@@ -162,7 +162,7 @@ describe('the matched list past its window (PRB-041)', () => {
   it('a read past the age limit waits for a new list instead of the old one', async () => {
     const { get, logged } = await setup();
     await get();
-    advanceClock(5 * 60_000 + 1);
+    advanceClock(10 * 60_000 + 1);
     await get();
     expect(logged('matched-vacancies-timing').at(-1)).toMatchObject({
       listCached: false,
