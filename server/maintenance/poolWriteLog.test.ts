@@ -9,6 +9,31 @@ describe('logPoolWrites (PRB-043 срез 2)', () => {
     return { lines, observe: logPoolWrites(log) };
   }
 
+  it('пишет итог прохода очистки: сколько снято, самая долгая транзакция и время поиска', () => {
+    const { lines, observe } = capture();
+    observe({
+      kind: 'prune',
+      scope: 'pool',
+      removed: 1000,
+      transactions: 11,
+      maxTransactionMs: 42.4,
+      readMs: 4470.6,
+      totalMs: 4900.2,
+    });
+    expect(lines).toEqual([
+      expect.objectContaining({
+        level: 30,
+        msg: 'pool-pruned',
+        scope: 'pool',
+        removed: 1000,
+        transactions: 11,
+        maxTransactionMs: 42,
+        readMs: 4471,
+        totalMs: 4900,
+      }),
+    ]);
+  });
+
   it('пишет итог замены среза одной строкой с числом транзакций и самой долгой', () => {
     const { lines, observe } = capture();
     observe({
