@@ -173,6 +173,17 @@ function keywordEvidenceForRequirement(
   return { requirement, matches };
 }
 
+/** Требования, которые резюме подтверждает той же проверкой, что и блок ключевых слов. */
+export function requirementsCoveredByResume(
+  document: ResumeDocument,
+  requirements: readonly string[],
+): string[] {
+  const factSources = documentFactSources(document);
+  return requirements.filter(
+    (requirement) => keywordEvidenceForRequirement(requirement, factSources).matches.length > 0,
+  );
+}
+
 function keywordDimension(
   document: ResumeDocument,
   requirements: readonly string[],

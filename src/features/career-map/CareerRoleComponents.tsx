@@ -104,7 +104,7 @@ export function RoleStageStepper({ status }: { status: RoleStatus }): ReactEleme
 }
 
 const CONFIRMED_BY: Readonly<Record<ConfirmedRoleItem['source'], string>> = {
-  profile: 'есть в навыках профиля',
+  profile: 'есть в профиле',
   check: 'подтверждено проверкой навыков',
 };
 
