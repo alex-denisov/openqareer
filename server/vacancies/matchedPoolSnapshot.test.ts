@@ -86,29 +86,6 @@ describe('MatchedPoolSnapshots', () => {
     expect(second[0].cluster.id).toBe('b');
   });
 
-  it('invalidates shared vacancy snapshots for every candidate, including in-flight reads', async () => {
-    const snapshots = new MatchedPoolSnapshots();
-    let finishOldRead!: (items: MatchedVacancyItem[]) => void;
-    const oldRead = snapshots.readAsync(
-      'cand-1',
-      'profile',
-      () => new Promise((resolve) => (finishOldRead = resolve)),
-    );
-    await Promise.resolve();
-    snapshots.read('cand-2', 'profile', () => [item('stale-two')]);
-
-    snapshots.invalidateAll();
-    const refreshed = await snapshots.readAsync('cand-2', 'profile', async () => [
-      item('fresh-two'),
-    ]);
-    finishOldRead([item('stale-one')]);
-    await oldRead;
-
-    expect(snapshots.peek('cand-2', 'profile')).toBe(refreshed);
-    expect(snapshots.peek('cand-1', 'profile')).toBeUndefined();
-    expect(refreshed[0]?.cluster.id).toBe('fresh-two');
-  });
-
   it('память не растёт без предела: старые снимки вытесняются', () => {
     let now = 0;
     const snapshots = new MatchedPoolSnapshots({ maxEntries: 2, clock: () => now });
@@ -322,21 +299,160 @@ describe('MatchedPoolSnapshots: an expired snapshot is served while it rebuilds'
       snapshots.readAsync('three', 'profile', async () => [item('new')]),
     ).rejects.toBeInstanceOf(VacancyMatchUnavailable);
   });
+});
 
-  it('a pool write during a rebuild keeps its result out, as with any in-flight read', async () => {
+/**
+ * PRB-041 (prod 04.11): one candidate's text preload wiped the snapshots of all six active
+ * candidates, so the next read of each waited 7–8 s, and nothing old was left to serve.
+ */
+describe('MatchedPoolSnapshots: a shared text write marks snapshots stale', () => {
+  const item = (id: string) => ({ cluster: { id } }) as unknown as MatchedVacancyItem;
+  const TEN = 10 * 60_000;
+  const FIVE = 5 * 60_000;
+  const turn = () => new Promise((resolve) => setImmediate(resolve));
+
+  async function stored(now: { value: number }) {
+    const snapshots = new MatchedPoolSnapshots({
+      ttlMs: TEN,
+      minStaleRebuildMs: FIVE,
+      clock: () => now.value,
+    });
+    await snapshots.readAsync('one', 'profile', async () => [item('old')]);
+    return snapshots;
+  }
+
+  it('keeps serving the snapshot without a rebuild until the minimum interval passed', async () => {
     const now = { value: 0 };
-    const { snapshots, first } = stored(now);
-    await first;
+    const snapshots = await stored(now);
+    const compute = vi.fn(async () => [item('new')]);
+
+    snapshots.markAllStale();
+    now.value = FIVE - 1;
+    const read = await snapshots.readAsync('one', 'profile', compute);
+    await turn();
+
+    expect(read[0]?.cluster.id).toBe('old');
+    expect(compute).not.toHaveBeenCalled();
+  });
+
+  it('past the interval serves the old snapshot at once and rebuilds it behind the read', async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+    const compute = vi.fn(async () => [item('new')]);
+
+    snapshots.markAllStale();
+    now.value = FIVE;
+    const read = await snapshots.readAsync('one', 'profile', compute);
+    expect(read[0]?.cluster.id).toBe('old');
+    await turn();
+
+    expect(compute).toHaveBeenCalledTimes(1);
+    expect(snapshots.peek('one', 'profile')?.[0]?.cluster.id).toBe('new');
+  });
+
+  it('writes in a row cost one rebuild per interval, not one per write', async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+    const compute = vi.fn(async () => [item('new')]);
+
+    for (let minute = 1; minute <= 9; minute += 1) {
+      now.value = minute * 60_000;
+      snapshots.markAllStale();
+      await snapshots.readAsync('one', 'profile', compute);
+      await turn();
+    }
+
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  it('a snapshot not marked stale is not rebuilt before its own window ends', async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+    const compute = vi.fn(async () => [item('new')]);
+
+    now.value = TEN - 1;
+    await snapshots.readAsync('one', 'profile', compute);
+    await turn();
+
+    expect(compute).not.toHaveBeenCalled();
+  });
+
+  it('the 20-minute limit still holds: a marked snapshot that old is rebuilt on the read', async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+
+    snapshots.markAllStale();
+    now.value = 20 * 60_000;
+    const read = await snapshots.readAsync('one', 'profile', async () => [item('new')]);
+
+    expect(read[0]?.cluster.id).toBe('new');
+  });
+
+  it('a write during a rebuild leaves its result stale: the next interval reads the write', async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
     now.value = TEN + 1;
     let finish!: (items: MatchedVacancyItem[]) => void;
     await snapshots.readAsync('one', 'profile', () => new Promise((done) => (finish = done)));
     await turn();
 
-    snapshots.invalidateAll();
+    snapshots.markAllStale();
     finish([item('before-write')]);
     await turn();
 
-    const read = await snapshots.readAsync('one', 'profile', async () => [item('after-write')]);
-    expect(read[0]?.cluster.id).toBe('after-write');
+    const compute = vi.fn(async () => [item('after-write')]);
+    expect((await snapshots.readAsync('one', 'profile', compute))[0]?.cluster.id).toBe(
+      'before-write',
+    );
+    now.value = TEN + 1 + FIVE;
+    await snapshots.readAsync('one', 'profile', compute);
+    await turn();
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  it('the /today peek keeps a marked snapshot: no empty queue because a text landed', async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+
+    snapshots.markAllStale();
+
+    expect(snapshots.peek('one', 'profile')?.[0]?.cluster.id).toBe('old');
+  });
+
+  it("a candidate's own action still reads fresh, marked or not", async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+
+    snapshots.markAllStale();
+    snapshots.deleteCandidate('one');
+    const read = await snapshots.readAsync('one', 'profile', async () => [item('own-edit')]);
+
+    expect(read[0]?.cluster.id).toBe('own-edit');
+  });
+
+  it("a rebuild already running never lands over a candidate's own action", async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+    now.value = TEN + 1;
+    let finish!: (items: MatchedVacancyItem[]) => void;
+    await snapshots.readAsync('one', 'profile', () => new Promise((done) => (finish = done)));
+    await turn();
+
+    snapshots.deleteCandidate('one');
+    const read = await snapshots.readAsync('one', 'profile', async () => [item('own-edit')]);
+    finish([item('before-edit')]);
+    await turn();
+
+    expect(read[0]?.cluster.id).toBe('own-edit');
+    expect(snapshots.peek('one', 'profile')?.[0]?.cluster.id).toBe('own-edit');
+  });
+
+  it("another candidate's own action leaves this candidate's snapshot alone", async () => {
+    const now = { value: 0 };
+    const snapshots = await stored(now);
+
+    snapshots.deleteCandidate('two');
+
+    expect(snapshots.peek('one', 'profile')?.[0]?.cluster.id).toBe('old');
   });
 });
