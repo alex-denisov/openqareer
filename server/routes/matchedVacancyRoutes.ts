@@ -398,6 +398,19 @@ function preloadTopMatchedDescriptions(
     });
 }
 
+/** PRB-041: a list the cache will not serve is ordered from percents read here, in slices. */
+async function prepareListOrder(
+  listKey: string,
+  continuing: boolean,
+  snapshot: readonly MatchedVacancyItem[],
+  order: MatchedOrder,
+): Promise<{ readonly prepareMs: number; readonly prepareRows: number }> {
+  if (matchedListCache.holds(listKey, { continuing })) return { prepareMs: 0, prepareRows: 0 };
+  const startedAt = performance.now();
+  const prepareRows = await order.prepare(snapshot);
+  return { prepareMs: elapsedMs(startedAt), prepareRows };
+}
+
 async function readMatchedPage(
   engine: RouteDeps['multiSourceEngine'],
   candidateStore: RouteDeps['candidateStore'],
@@ -423,11 +436,9 @@ async function readMatchedPage(
     targetLevel,
     matchGeographyOf(campaign.careerGeography),
   );
-  // PRB-041: a list the cache will not serve is ordered from percents read here, in slices.
+  const snapshotMs = elapsedMs(startedAt);
   const listKey = matchedListKey(snapshot, campaign, candidateStore, candidateId, filters, decorate);
-  if (!matchedListCache.holds(listKey, { continuing: filters.offset > 0 })) {
-    await decorate.prepare(snapshot);
-  }
+  const prepared = await prepareListOrder(listKey, filters.offset > 0, snapshot, decorate);
   return {
     response: buildMatchedResponse(
       snapshot,
@@ -448,6 +459,7 @@ async function readMatchedPage(
       },
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
+    readSteps: { snapshotMs, ...prepared },
   };
 }
 
@@ -533,7 +545,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
   await deps.vacancyMechanics?.warmCachedVacancyIds?.(candidate.id);
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
   const fitLimit = selectionFitLimit(candidatePlan(deps, candidate.id));
-  const { response: orderedPage, semanticQueryAndSqlMs } = await readMatchedPage(
+  const { response: orderedPage, semanticQueryAndSqlMs, readSteps } = await readMatchedPage(
     multiSourceEngine,
     candidateStore,
     candidate.id,
@@ -556,7 +568,7 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     semanticQueryAndSqlMs,
     page.response,
     requestStartedAt,
-    page.steps,
+    { ...readSteps, ...page.steps },
   );
 
   return matchedVacancyResponse(page.response, request.id, targetLevel, sort);

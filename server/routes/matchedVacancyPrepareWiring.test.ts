@@ -61,8 +61,10 @@ describe('the matched route reads percents ahead of the page build (PRB-041)', (
       { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
       [],
     );
+    const lines: string[] = [];
     const app = await buildApp({
-      config,
+      config: { ...config, logLevel: 'info' },
+      logDestination: { write: (line: string) => lines.push(line) },
       coachProvider: successProvider,
       candidateStore,
       authService: noSessions,
@@ -82,9 +84,17 @@ describe('the matched route reads percents ahead of the page build (PRB-041)', (
 
     expect((await get(0)).statusCode).toBe(200);
     expect(prepares).toEqual(['prepare:40']);
+    const timings = () =>
+      lines.map((line) => JSON.parse(line)).filter((line) => line.msg === 'matched-vacancies-timing');
+    expect(timings()[0]).toMatchObject({
+      snapshotMs: expect.any(Number),
+      prepareMs: expect.any(Number),
+      prepareRows: 0,
+    });
 
     expect((await get(20)).statusCode).toBe(200);
     expect((await get(0)).statusCode).toBe(200);
     expect(prepares).toEqual(['prepare:40']);
+    expect(timings().at(-1)).toMatchObject({ prepareMs: 0, prepareRows: 0 });
   });
 });

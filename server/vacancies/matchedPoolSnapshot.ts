@@ -22,6 +22,13 @@ import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
  */
 const DEFAULT_TTL_MS = 10 * 60_000;
 
+/**
+ * PRB-041 (prod 03.11): the first read past the window waited 5–6 s for the rebuild, on whichever
+ * offset came first. Until this age it gets the old snapshot and the rebuild runs behind it; the
+ * key still carries the profile, so a candidate's own edit never reads the old list.
+ */
+const DEFAULT_MAX_AGE_MS = 20 * 60_000;
+
 /** Больше снимков одновременно не держим: это верхняя граница памяти. */
 const DEFAULT_MAX_ENTRIES = 200;
 
@@ -32,8 +39,15 @@ interface Snapshot {
 
 export interface MatchedPoolSnapshotsOptions {
   readonly ttlMs?: number;
+  readonly maxAgeMs?: number;
   readonly maxEntries?: number;
   readonly clock?: () => number;
+  readonly onRebuildFailed?: (error: unknown) => void;
+}
+
+export interface MatchedPoolReadOptions {
+  /** For a background pass: its next candidate waits for the rebuild instead of running beside it. */
+  readonly awaitRebuild?: boolean;
 }
 
 export class MatchedPoolSnapshots {
@@ -41,13 +55,21 @@ export class MatchedPoolSnapshots {
   private readonly pending = new Map<string, Promise<MatchedVacancyItem[]>>();
   private generation = 0;
   private readonly ttlMs: number;
+  private readonly maxAgeMs: number;
+  private onRebuildFailed: ((error: unknown) => void) | undefined;
   private readonly maxEntries: number;
   private readonly clock: () => number;
 
   constructor(options: MatchedPoolSnapshotsOptions = {}) {
     this.ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
+    this.maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+    this.onRebuildFailed = options.onRebuildFailed;
     this.maxEntries = Math.max(1, options.maxEntries ?? DEFAULT_MAX_ENTRIES);
     this.clock = options.clock ?? Date.now;
+  }
+
+  setRebuildFailureLog(log: (error: unknown) => void): void {
+    this.onRebuildFailed = log;
   }
 
   get size(): number {
@@ -114,14 +136,33 @@ export class MatchedPoolSnapshots {
     candidateId: string,
     profileKey: string,
     compute: () => Promise<MatchedVacancyItem[]>,
+    options: MatchedPoolReadOptions = {},
   ): Promise<MatchedVacancyItem[]> {
-    const generation = this.generation;
     const key = this.key(candidateId, profileKey);
     const stored = this.entries.get(key);
-    if (stored && this.clock() - stored.storedAt < this.ttlMs) return stored.items;
+    const age = stored ? this.clock() - stored.storedAt : Number.POSITIVE_INFINITY;
+    if (stored && age < this.ttlMs) return stored.items;
+    if (stored && age < this.maxAgeMs && !options.awaitRebuild) {
+      this.rebuildBehind(key, compute);
+      return stored.items;
+    }
     const running = this.pending.get(key);
     if (running) return running;
     if (this.pending.size >= this.maxEntries) throw new Error('vacancy_match_queue_full');
+    return this.computeInto(key, compute);
+  }
+
+  /** At most one per key; a full queue or a failure leaves the old snapshot in place. */
+  private rebuildBehind(key: string, compute: () => Promise<MatchedVacancyItem[]>): void {
+    if (this.pending.has(key) || this.pending.size >= this.maxEntries) return;
+    this.computeInto(key, compute).catch((error: unknown) => this.onRebuildFailed?.(error));
+  }
+
+  private computeInto(
+    key: string,
+    compute: () => Promise<MatchedVacancyItem[]>,
+  ): Promise<MatchedVacancyItem[]> {
+    const generation = this.generation;
     const computation = Promise.resolve()
       .then(compute)
       .then((items) => {
@@ -141,7 +182,7 @@ export class MatchedPoolSnapshots {
 
   private evict(now: number): void {
     for (const [key, entry] of this.entries) {
-      if (now - entry.storedAt >= this.ttlMs) this.entries.delete(key);
+      if (now - entry.storedAt >= Math.max(this.ttlMs, this.maxAgeMs)) this.entries.delete(key);
     }
     // Порядок обхода `Map` — порядок вставки: вытесняется самый старый снимок.
     while (this.entries.size > this.maxEntries) {

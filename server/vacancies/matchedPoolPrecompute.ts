@@ -7,6 +7,7 @@ import {
   invalidateMatchedVacancies,
   readMatchedSnapshot,
   readMatchProfile,
+  setMatchedSnapshotFailureLog,
 } from './matchedPoolContext';
 
 const RECENT_VISIT_MS = 14 * 24 * 60 * 60 * 1_000;
@@ -54,6 +55,12 @@ export class MatchedPoolPrecompute {
 
   constructor(private readonly options: MatchedPoolPrecomputeOptions) {
     this.log = options.log;
+    setMatchedSnapshotFailureLog(options.engine, (error) =>
+      this.log?.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'matched-snapshot-rebuild-failed',
+      ),
+    );
     this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
     this.now = options.now ?? Date.now;
   }
@@ -143,6 +150,7 @@ export class MatchedPoolPrecompute {
       targetRoles,
       targetLevel,
       matchGeographyOf(campaign.careerGeography),
+      { awaitRebuild: true },
     );
     // The sweep runs in chunks on its own: the next candidate's snapshot does not wait for it.
     void this.requestFit?.(candidateId, snapshot).catch((error: unknown) => {

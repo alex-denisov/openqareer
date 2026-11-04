@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MatchedPoolSnapshots } from './matchedPoolSnapshot';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 
@@ -161,5 +161,125 @@ describe('MatchedPoolSnapshots', () => {
     expect(
       (await snapshots.readAsync('one', 'changed', async () => [item('changed')]))[0].cluster.id,
     ).toBe('changed');
+  });
+});
+
+/**
+ * PRB-041 (prod 03.11): the first read after the 10-minute window waited 5–6 s for the rebuild.
+ * Offsets landed on it at random; the event loop was free, the reader was not.
+ */
+describe('MatchedPoolSnapshots: an expired snapshot is served while it rebuilds', () => {
+  const item = (id: string) => ({ cluster: { id } }) as unknown as MatchedVacancyItem;
+  const TEN = 10 * 60_000;
+  const TWENTY = 20 * 60_000;
+  const turn = () => new Promise((resolve) => setImmediate(resolve));
+
+  function stored(now: { value: number }, log?: (error: unknown) => void) {
+    const snapshots = new MatchedPoolSnapshots({
+      ttlMs: TEN,
+      clock: () => now.value,
+      ...(log ? { onRebuildFailed: log } : {}),
+    });
+    return { snapshots, first: snapshots.readAsync('one', 'profile', async () => [item('old')]) };
+  }
+
+  it('serves the old snapshot at once and starts exactly one rebuild', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    const old = await first;
+    now.value = TEN + 1;
+    let finish!: (items: MatchedVacancyItem[]) => void;
+    const rebuild = vi.fn(() => new Promise<MatchedVacancyItem[]>((done) => (finish = done)));
+
+    expect(await snapshots.readAsync('one', 'profile', rebuild)).toBe(old);
+    expect(await snapshots.readAsync('one', 'profile', rebuild)).toBe(old);
+    await turn();
+    expect(rebuild).toHaveBeenCalledTimes(1);
+
+    finish([item('new')]);
+    await turn();
+    const next = await snapshots.readAsync('one', 'profile', rebuild);
+    expect(next[0]?.cluster.id).toBe('new');
+    expect(rebuild).toHaveBeenCalledTimes(1);
+  });
+
+  it('a changed profile key never gets the old snapshot', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    await first;
+    now.value = TEN + 1;
+
+    const changed = await snapshots.readAsync('one', 'changed', async () => [item('changed')]);
+
+    expect(changed[0]?.cluster.id).toBe('changed');
+  });
+
+  it('a snapshot of 20 minutes or older is rebuilt on the read', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    await first;
+    now.value = TWENTY;
+
+    const read = await snapshots.readAsync('one', 'profile', async () => [item('rebuilt')]);
+
+    expect(read[0]?.cluster.id).toBe('rebuilt');
+  });
+
+  it('another candidate storing a snapshot does not evict an expired one still being served', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    const old = await first;
+    now.value = TEN + 1;
+    await snapshots.readAsync('two', 'profile', async () => [item('two')]);
+
+    expect(await snapshots.readAsync('one', 'profile', async () => [item('new')])).toBe(old);
+  });
+
+  it('a failed rebuild is logged, the old snapshot stays and the next read tries again', async () => {
+    const now = { value: 0 };
+    const log = vi.fn();
+    const { snapshots, first } = stored(now, log);
+    const old = await first;
+    now.value = TEN + 1;
+    const failure = new Error('pool busy');
+
+    expect(await snapshots.readAsync('one', 'profile', () => Promise.reject(failure))).toBe(old);
+    await turn();
+    expect(log).toHaveBeenCalledWith(failure);
+
+    const retry = vi.fn(async () => [item('new')]);
+    expect(await snapshots.readAsync('one', 'profile', retry)).toBe(old);
+    await turn();
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('a caller that asks to wait gets the rebuilt snapshot, as the precompute round does', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    await first;
+    now.value = TEN + 1;
+
+    const read = await snapshots.readAsync('one', 'profile', async () => [item('new')], {
+      awaitRebuild: true,
+    });
+
+    expect(read[0]?.cluster.id).toBe('new');
+  });
+
+  it('a pool write during a rebuild keeps its result out, as with any in-flight read', async () => {
+    const now = { value: 0 };
+    const { snapshots, first } = stored(now);
+    await first;
+    now.value = TEN + 1;
+    let finish!: (items: MatchedVacancyItem[]) => void;
+    await snapshots.readAsync('one', 'profile', () => new Promise((done) => (finish = done)));
+    await turn();
+
+    snapshots.invalidateAll();
+    finish([item('before-write')]);
+    await turn();
+
+    const read = await snapshots.readAsync('one', 'profile', async () => [item('after-write')]);
+    expect(read[0]?.cluster.id).toBe('after-write');
   });
 });

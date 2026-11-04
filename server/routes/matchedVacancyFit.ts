@@ -30,7 +30,7 @@ export const STALE_REFIT_LIMIT = 50;
 type FitViews = ReadonlyMap<string, VacancyFitView>;
 const fitViewsCache = createCandidateWindowCache<FitViews>(FIT_ORDER_WINDOW_MS);
 const refreshingFitViews = new Set<string>();
-const preparingFitViews = new Map<string, Promise<void>>();
+const preparingFitViews = new Map<string, Promise<number>>();
 
 /** Where a failed background write of the fit order goes (the request's logger on the route). */
 interface FitOrderLog {
@@ -83,9 +83,10 @@ export function withVacancyFitOrder(
     fitViewsCache.write(key, patched);
     return orderByFit(items, patched, sort, money);
   };
-  const prepare = async (items: readonly MatchedVacancyItem[]): Promise<void> => {
-    if (reader) await prepareFitViews(key, reader, items);
+  const prepare = async (items: readonly MatchedVacancyItem[]): Promise<number> => {
+    const rows = reader ? await prepareFitViews(key, reader, items) : 0;
     prepared = true;
+    return rows;
   };
   return Object.assign(order, { prepare });
 }
@@ -93,8 +94,8 @@ export function withVacancyFitOrder(
 /** Порядок подборки и то, от чего он зависит помимо выдачи (ключ кэша списка). */
 export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[]) & {
   readonly cacheKey: string;
-  /** Reads the percents the order needs without holding the event loop; call before the order. */
-  readonly prepare: (items: readonly MatchedVacancyItem[]) => Promise<void>;
+  /** Reads the percents the order needs without holding the event loop; call before the order. Resolves to the rows read. */
+  readonly prepare: (items: readonly MatchedVacancyItem[]) => Promise<number>;
 };
 
 /**
@@ -213,7 +214,7 @@ function prepareFitViews(
   key: string,
   reader: FitViewReader,
   items: readonly MatchedVacancyItem[],
-): Promise<void> {
+): Promise<number> {
   const running = preparingFitViews.get(key);
   if (running) return running;
   const work = readViewsAhead(key, reader, items).finally(() => preparingFitViews.delete(key));
@@ -225,18 +226,20 @@ async function readViewsAhead(
   key: string,
   reader: FitViewReader,
   items: readonly MatchedVacancyItem[],
-): Promise<void> {
+): Promise<number> {
   const known = fitViewsCache.peek(key);
   if (!known) {
-    fitViewsCache.write(key, await reader.readYielding(reader.scoredIds(items)));
-    return;
+    const views = await reader.readYielding(reader.scoredIds(items));
+    fitViewsCache.write(key, views);
+    return views.size;
   }
   if (known.stale) void refreshFitViews(key, reader, items);
   const landed = viewsLandedSince(known.value, reader.scoredIds(items));
-  if (landed.length === 0) return;
+  if (landed.length === 0) return 0;
   const read = await reader.readYielding(landed);
   // A background refresh may have written while this read yielded; its views stay.
   fitViewsCache.write(key, new Map([...(fitViewsCache.peek(key)?.value ?? known.value), ...read]));
+  return read.size;
 }
 
 const HH_CLUSTER_PREFIX = 'cluster-src-hh-search:';

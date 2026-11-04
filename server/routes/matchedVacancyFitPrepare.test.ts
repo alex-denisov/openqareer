@@ -107,6 +107,15 @@ describe('fit order reads percents before the page is built (PRB-041: reader.rea
     expect(targetReads).toEqual([]);
   });
 
+  it('prepare says how many rows it read, so the phase log can tell a slow read from a long one', async () => {
+    const pool = ['a', 'b'].map(item);
+    const scored = { a: 10, b: 20 };
+    const fit = () => withVacancyFitOrder(deps(scored), 'prepare-rows', FIT);
+
+    expect(await fit().prepare(pool)).toBe(2);
+    expect(await fit().prepare(pool)).toBe(0);
+  });
+
   it('a row still counting is not read again in the page build after prepare', async () => {
     const pool = [item('a')];
     const counting = () =>
