@@ -38,6 +38,8 @@ export interface SitemapUrl {
   readonly path: string;
   /** `YYYY-MM-DD`; omitted when we have no honest modification date. */
   readonly lastmod?: string;
+  /** Stays in the file; only the Indexing API skips it (`searchRestrictedSources`). */
+  readonly noIndexingApi?: true;
 }
 
 export interface SitemapFile {
