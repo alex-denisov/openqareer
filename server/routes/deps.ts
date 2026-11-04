@@ -64,7 +64,7 @@ export interface RouteDeps {
     'prioritizeCampaign'
   > &
     Partial<
-      Pick<import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute, 'setFitRequester' | 'setCampaignRoleRefresher'>
+      Pick<import('../vacancies/matchedPoolPrecompute').MatchedPoolPrecompute, 'setFitRequester' | 'setCampaignRoleRefresher' | 'setListWarmer'>
     >;
   /** Роли кандидатов — запросы к площадкам вакансий (27.10). */
   vacancyDemand?: import('../vacancies/vacancyDemandStore').VacancyDemandStore;

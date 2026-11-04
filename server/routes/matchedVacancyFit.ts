@@ -38,6 +38,13 @@ interface FitOrderLog {
 }
 
 /**
+ * `background` builds the order with no reader waiting: it only reads. Queueing belongs to a read:
+ * every 5 minutes for every recent candidate it would pass the day's ceiling on recounts (04.11)
+ * and put absent candidates' rows ahead of the shown ones.
+ */
+export type FitOrderUse = 'read' | 'background';
+
+/**
  * Runs before pagination, so a cached match on a later page can move to the front.
  *
  * PRB-040: точный разбор всех вакансий с результатом стоил на проде ~4 с
@@ -55,9 +62,10 @@ export function withVacancyFitOrder(
   candidateId: string,
   sort: VacancySort = DEFAULT_VACANCY_SORT,
   log?: FitOrderLog,
+  use: FitOrderUse = 'read',
 ) {
   const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
-  const reader = createFitViewReader(deps, candidateId, log);
+  const reader = createFitViewReader(deps, candidateId, log, use);
   const stamp = reader
     ? vacancyFitProfileStamp(
         deps.candidateStore.getSnapshot(candidateId),
@@ -112,8 +120,9 @@ export function withWantedCompanyOrder(
   candidateId: string,
   sort: VacancySort = DEFAULT_VACANCY_SORT,
   log?: FitOrderLog,
+  use: FitOrderUse = 'read',
 ): MatchedOrder {
-  const byFit = withVacancyFitOrder(deps, candidateId, sort, log);
+  const byFit = withVacancyFitOrder(deps, candidateId, sort, log, use);
   if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '', dataKey: '' });
   const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
   // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
@@ -159,7 +168,8 @@ interface FitViewReader {
 function createFitViewReader(
   deps: RouteDeps,
   candidateId: string,
-  log?: FitOrderLog,
+  log: FitOrderLog | undefined,
+  use: FitOrderUse,
 ): FitViewReader | undefined {
   const runtime = deps.vacancyMechanics;
   if (!runtime) return undefined;
@@ -169,7 +179,7 @@ function createFitViewReader(
     const target = readVacancyFitTarget(deps, id);
     if (!target) return undefined;
     const input = context(target, []);
-    const view = runtime.view(input);
+    const view = runtime.view(input, { queueRequirements: use === 'read' });
     const compact = compactFitView(
       geoBlocks(target, textStillLoading(id, target.description, view, target.fullText, target.textHidden)),
     );
@@ -178,11 +188,13 @@ function createFitViewReader(
   };
   const collect = (rows: readonly (ReturnType<typeof readRow>)[]) => {
     const present = rows.flatMap((row) => (row ? [row] : []));
-    requeueStaleRows(
-      runtime,
-      present.flatMap((row) => (row.staleInput ? [row.staleInput] : [])),
-      log,
-    );
+    if (use === 'read') {
+      requeueStaleRows(
+        runtime,
+        present.flatMap((row) => (row.staleInput ? [row.staleInput] : [])),
+        log,
+      );
+    }
     return new Map(present.map((row) => [row.id, row.view]));
   };
   return {

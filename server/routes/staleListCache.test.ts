@@ -150,3 +150,27 @@ describe('list window: an expired list answers at once, a new one is built behin
     expect(cache.size()).toBe(2);
   });
 });
+
+describe('a list built ahead of the reader (PRB-041)', () => {
+  it('stores the list, and a read inside the window gets it without a build', async () => {
+    const { cache } = setup();
+    await cache.warm(at(), async () => 'warmed');
+
+    const compute = vi.fn(async () => 'read');
+    expect(await cache.read(at(), compute)).toEqual({ value: 'warmed', served: 'fresh' });
+    expect(compute).not.toHaveBeenCalled();
+  });
+
+  it('leaves a reader on another choice their list until it ages out', async () => {
+    const { clock, cache } = setup();
+    await cache.read(at('d1', 'filtered'), async () => 'filtered');
+
+    const compute = vi.fn(async () => 'default');
+    await cache.warm(at('d1', 'default'), compute);
+    expect(compute).not.toHaveBeenCalled();
+
+    clock.now = MAX_AGE;
+    await cache.warm(at('d1', 'default'), compute);
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+});
