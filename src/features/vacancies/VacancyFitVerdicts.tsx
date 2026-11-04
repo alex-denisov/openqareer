@@ -1,6 +1,6 @@
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 import {
-  isSkillRequirement,
+  countedSkillRequirements,
   requirementChipLabel,
   requirementVerdict,
 } from './vacancyRequirementChips';
@@ -18,7 +18,7 @@ const VERDICT = {
  * candidate can check a 100 % themselves instead of trusting the number.
  */
 export function VacancyFitVerdicts({ view }: { readonly view?: VacancyFitView }) {
-  const rows = (view?.requirements ?? []).filter(isSkillRequirement);
+  const rows = countedSkillRequirements(view);
   if (!view?.result || rows.length === 0) return null;
   return (
     <section className="vacancy-fit-verdicts" aria-label="На чём основан процент">

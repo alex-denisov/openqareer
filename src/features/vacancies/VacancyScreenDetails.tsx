@@ -473,7 +473,7 @@ function VacancySkillChips({
   // 02.11: states are text, not colour only — each group is named and counted; missing first (29.10).
   return (
     <ul className="vacancies-screen-skill-chips">
-      <ChipGroup title="Нет в профиле" count={missing.length}>
+      <ChipGroup title="Не подтверждено" count={missing.length}>
         {missing.map((skill) => (
           <MissingVacancySkillChip
             key={`unconfirmed-${skill}`}
@@ -558,7 +558,7 @@ function MissingVacancySkillChip({
   const icon = (
     <>
       <Circle size={14} aria-hidden="true" />
-      <span className="career-sr-only">Нет в профиле: </span>
+      <span className="career-sr-only">Не подтверждено: </span>
     </>
   );
   const label = <span title={quote}>{skill}</span>;

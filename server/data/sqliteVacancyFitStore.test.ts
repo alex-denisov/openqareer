@@ -16,6 +16,30 @@ function setup() {
 }
 const now = '2026-10-18T10:00:00.000Z';
 
+describe('duties of the text (04.11)', () => {
+  it('a row stored before the rule still reads, with its verdicts, and asks the model nothing', () => {
+    const { database, store } = setup();
+    const lines = ['Own the budget', 'Run the audits', 'Budget models', 'Excel', 'SQL'];
+    const description = `Responsibilities\n- ${lines[0]}\n- ${lines[1]}\nRequired skills\n- ${lines[2]}\n- ${lines[3]}\n- ${lines[4]}`;
+    const row: VacancyFitInput = {
+      ...input(), description,
+      requirements: lines.map((text, index) => ({ id: `r${index}`, text, sourceQuote: text, origin: 'explicit', importance: 'high', kind: 'other', hard: false, stopFactor: false, skill: true })),
+      assessments: lines.map((_, index) => ({ requirementId: `r${index}`, status: index < 2 ? 'unknown' : 'matched', evidence: index < 2 ? [] : [{ factId: 'f1', quote: 'TypeScript' }] })),
+    };
+    const stored = evaluateVacancyFit(row, now);
+    store.putCache(row, stored, now);
+    const key = (database.prepare('SELECT cache_key FROM vacancy_fit_cache').get() as { cache_key: string }).cache_key;
+    const { duties: _duties, ...before } = stored;
+    const old = JSON.stringify({ ...before, coveragePercent: 60, coverage: { ...before.coverage, total: 5 } });
+    database.prepare('UPDATE vacancy_fit_cache SET result_cipher = ?').run(new SealedText(Buffer.alloc(32, 7)).seal(old, key));
+    const read = store.getCache(row);
+    expect(read?.coveragePercent).toBe(100);
+    expect(read?.duties).toEqual(['r0', 'r1']);
+    expect(read?.assessments).toHaveLength(5);
+    database.close();
+  });
+});
+
 describe('encrypted persistent vacancy fit cache and queue', () => {
   it('isolates tenants and invalidates changed profiles, descriptions and gate outcomes', () => {
     const { database, store } = setup();
