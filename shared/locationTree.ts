@@ -9,6 +9,7 @@ import {
   US_STATES,
 } from './locationGazetteer';
 import { geoCity, geoCountry } from './geo/geoDirectory';
+import { isInMoscowArea, isMoscowAreaSelection, MOSCOW_PART_CITIES } from './geo/moscowArea';
 
 /**
  * Дерево «страна › регион › город» для фильтра «Локации» (B547).
@@ -263,6 +264,14 @@ export function toggleLocationNode(
   return collapseUp(added, node, tree);
 }
 
+/** Часть Москвы подходит и под выбор самой Москвы; узел дерева у неё свой. */
+function selectionKeys(path: LocationPath): string[] {
+  const keys = locationPathKeys(path);
+  const partOfMoscow =
+    path.country === HOME_COUNTRY && path.city !== undefined && MOSCOW_PART_CITIES.includes(path.city);
+  return partOfMoscow ? [...keys, ...locationPathKeys({ ...path, city: 'Москва' })] : keys;
+}
+
 /** Ключ выбора или старый текстовый выбор (подстрока места). */
 export function matchesLocationSelection(
   place: VacancyPlaceInput,
@@ -270,10 +279,15 @@ export function matchesLocationSelection(
 ): boolean {
   if (!selected.length) return true;
   const path = parseVacancyLocation(place);
-  const keys = path ? locationPathKeys(path) : [];
+  const keys = path ? selectionKeys(path) : [];
   const location = lower(place.location ?? '');
+  // «Московская область» без города справочник не читает как место.
+  const areaCity = path ? (path.country === HOME_COUNTRY ? path.city : undefined) : location.split(',')[0]?.trim();
   return selected.some(
-    (value) => keys.includes(value) || (!!location && location.includes(lower(value))),
+    (value) =>
+      keys.includes(value) ||
+      (isMoscowAreaSelection(value) && isInMoscowArea(areaCity)) ||
+      (!!location && location.includes(lower(value))),
   );
 }
 
