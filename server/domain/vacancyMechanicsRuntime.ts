@@ -11,6 +11,10 @@ import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor, type VacancyFitBulkClient } from './vacancyFitAssessor';
 import { BULK_BUDGET_EXCEEDED, type BulkLlmClient } from '../providers/bulkLlmClient';
 import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
+import {
+  addMassRecount, ensureMassRecountTable, massRecountAllowance, massRecountLimit, massRecountQueued, takeMassRecountSlot, utcDay,
+  MASS_FIT_DAY_LIMIT, MASS_FIT_REFRESH_DAY_LIMIT, MASS_REQUIREMENTS_DAY_LIMIT, type MassRecountKind,
+} from '../data/massRecountDaily';
 import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacancyMechanicsStats';
 
 /** Requirements a fit job is waiting for jump ahead of title-strategy work (priority 1). */
@@ -62,6 +66,18 @@ export function workerDayRunId(workerId: string, now = new Date()): string {
   return `${workerId}:${now.toISOString().slice(0, 10)}`;
 }
 
+interface MassRecountOptions {
+  readonly now?: number;
+  readonly limits?: { readonly requirements?: number; readonly fit?: number };
+  readonly log?: { info(line: string): void; warn(line: string): void };
+}
+
+/** One info line per kind at every start (also at zero); a warning when the ceiling holds rows back. */
+function logMassRecount(log: NonNullable<MassRecountOptions['log']>, kind: MassRecountKind, requeued: number, remaining: number, limit: number, dayTotal: number): void {
+  log.info(`mass-recount kind=${kind} requeued=${requeued} remaining=${remaining} limit=${limit}`);
+  if (remaining > 0 && dayTotal >= limit) log.warn(`mass-recount-ceiling kind=${kind} queued=${dayTotal} limit=${limit} remaining=${remaining}`);
+}
+
 export class VacancyMechanicsRuntime {
   readonly database: DatabaseSync;
   readonly requirements: SqliteVacancyRequirementsStore;
@@ -74,6 +90,7 @@ export class VacancyMechanicsRuntime {
     applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
     this.requirements = new SqliteVacancyRequirementsStore(this.database);
     this.fit = new SqliteVacancyFitStore(this.database, new SealedText(encryptionKey));
+    ensureMassRecountTable(this.database);
   }
   view(input: VacancyFitInput): VacancyFitView {
     const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
@@ -137,10 +154,37 @@ export class VacancyMechanicsRuntime {
     this.fit.retryFailed(input, undefined, options);
     return this.fit.enqueue(input, undefined, options);
   }
-  /** Worker start: one requeue of model failures recorded under an older parser revision (B522). */
-  requeueAfterParserUpgrade(): { requirements: number; fit: number; labels: number } {
-    const fit = this.fit.requeueFailedOnce() + this.fit.requeueOrphanedRequirementsTimeouts();
-    return { requirements: this.requirements.requeueModelFailures(), fit, labels: this.requirements.enqueueLabelUpgrades() };
+  /**
+   * Worker start: one requeue of model failures recorded under an older parser revision (B522),
+   * capped per UTC day in the database (the worker restarts on every push). Rows over the ceiling
+   * stay where they are and are picked up by the first start of a later day.
+   */
+  requeueAfterParserUpgrade(options: MassRecountOptions = {}): { requirements: number; fit: number; labels: number } {
+    const day = utcDay(options.now);
+    const log = options.log ?? console;
+    const limits = {
+      requirements: options.limits?.requirements ?? massRecountLimit('OPENQAREER_MASS_REQUIREMENTS_DAY_LIMIT', MASS_REQUIREMENTS_DAY_LIMIT),
+      fit: options.limits?.fit ?? massRecountLimit('OPENQAREER_MASS_FIT_DAY_LIMIT', MASS_FIT_DAY_LIMIT),
+    };
+    const requirementsLeft = massRecountAllowance(this.database, 'requirements', limits.requirements, day);
+    const failures = this.requirements.requeueModelFailures(undefined, options.now, requirementsLeft);
+    const labels = this.requirements.enqueueLabelUpgrades(options.now, requirementsLeft - failures);
+    addMassRecount(this.database, 'requirements', day, failures + labels);
+    const fitLeft = massRecountAllowance(this.database, 'fit', limits.fit, day);
+    const nowIso = options.now === undefined ? undefined : new Date(options.now).toISOString();
+    const failed = this.fit.requeueFailedOnce(undefined, nowIso, fitLeft);
+    const orphaned = this.fit.requeueOrphanedRequirementsTimeouts(nowIso, fitLeft - failed);
+    const fit = failed + orphaned;
+    addMassRecount(this.database, 'fit', day, fit);
+    const requirementsRemaining = this.requirements.countModelFailures() + this.requirements.countLabelUpgradeCandidates();
+    const total = (kind: MassRecountKind) => massRecountQueued(this.database, kind, day);
+    logMassRecount(log, 'requirements', failures + labels, requirementsRemaining, limits.requirements, total('requirements'));
+    logMassRecount(log, 'fit', fit, this.fit.countFailedOnce() + this.fit.countOrphanedRequirementsTimeouts(), limits.fit, total('fit'));
+    return { requirements: failures, fit, labels };
+  }
+  /** The background refresh of counted rows (a new algorithm version): true while the day's ceiling has room. */
+  takeFitRefreshSlot(limit = massRecountLimit('OPENQAREER_MASS_FIT_REFRESH_DAY_LIMIT', MASS_FIT_REFRESH_DAY_LIMIT)): boolean {
+    return takeMassRecountSlot(this.database, 'fit_refresh', limit);
   }
   /** Counters since the previous call: the worker writes one journal line per batch. */
   takeStats(): VacancyMechanicsStats {

@@ -85,10 +85,12 @@ export class SqliteVacancyRequirementsStore {
    * lowest priority, so shown pages and fit dependencies go first. Idempotent; the B522 budget
    * still caps the daily spend.
    */
-  enqueueLabelUpgrades(now = Date.now()): number {
-    const rows = this.db.prepare(`SELECT input_json FROM vacancy_requirements_jobs WHERE status='completed'`).all() as Array<{ input_json: string }>;
+  enqueueLabelUpgrades(now = Date.now(), limit = Number.POSITIVE_INFINITY): number {
     let queued = 0;
-    for (const row of rows) {
+    if (limit <= 0) return queued;
+    // One row at a time: the scan ends at the ceiling instead of reading every completed job.
+    for (const row of this.db.prepare(`SELECT input_json FROM vacancy_requirements_jobs WHERE status='completed'`).iterate() as Iterable<{ input_json: string }>) {
+      if (queued >= limit) break;
       const input = JSON.parse(row.input_json) as VacancyRequirementsInput;
       if (input.extractorVersion && input.extractorVersion === VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) continue;
       const current = { vacancyId: input.vacancyId, ...(input.clusterId ? { clusterId: input.clusterId } : {}), description: input.description };
@@ -210,12 +212,28 @@ export class SqliteVacancyRequirementsStore {
    * revision go back once, at most at the shown-page priority (1.5). Later failures carry the current
    * revision and are never requeued by this again.
    */
-  requeueModelFailures(revision = MECHANICS_REQUEUE_REVISION, now = Date.now()): number {
+  requeueModelFailures(revision = MECHANICS_REQUEUE_REVISION, now = Date.now(), limit = Number.POSITIVE_INFINITY): number {
+    if (limit <= 0) return 0;
+    const cap = Number.isFinite(limit) ? Math.floor(limit) : -1;
     const update = this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='queued',attempts=0,available_at=0,
       lease_token=NULL,lease_until=NULL,priority=MIN(priority,?),requeue_revision=?,updated_at=?
-      WHERE status='failed' AND last_error IN ('requirements_model_invalid','requirements_model_unavailable')
-        AND COALESCE(requeue_revision,1)<?`).run(REQUEUE_PRIORITY, revision, now, revision);
+      WHERE id IN (SELECT id FROM vacancy_requirements_jobs WHERE status='failed'
+          AND last_error IN ('requirements_model_invalid','requirements_model_unavailable')
+          AND COALESCE(requeue_revision,1)<? ORDER BY id LIMIT ?)`).run(REQUEUE_PRIORITY, revision, now, revision, cap);
     return Number(update.changes);
+  }
+
+  /** Model failures and label upgrades still to return: reads only (labels: an upper bound, rows already upgraded stay counted). */
+  countModelFailures(revision = MECHANICS_REQUEUE_REVISION): number {
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM vacancy_requirements_jobs WHERE status='failed'
+      AND last_error IN ('requirements_model_invalid','requirements_model_unavailable') AND COALESCE(requeue_revision,1)<?`).get(revision) as { n: number };
+    return row.n;
+  }
+
+  countLabelUpgradeCandidates(): number {
+    const current = `%"extractorVersion":"${VACANCY_REQUIREMENTS_EXTRACTOR_VERSION}"%`;
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM vacancy_requirements_jobs WHERE status='completed' AND input_json NOT LIKE ?`).get(current) as { n: number };
+    return row.n;
   }
 
   private assertLease(job: VacancyRequirementsJob, now: number): void {
