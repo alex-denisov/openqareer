@@ -41,6 +41,10 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * дорогой. Фон (`bulk`, в том числе разбор названий) ходит только через OpenRouter: повторы ступени с паузой и
  * другим закреплённым хостом (`bulkLlmClient.ts`), всё недоступно — работа ждёт в очереди. Причина:
  * 01.11 за час 1 157 вызовов Gemini на $7,81, пока DeepSeek остывал, а glm всегда отвечал 400.
+ *
+ * Механики, где кандидат ждёт (`campaignRoles`, `roleNames`, `coverLetters`, `linkedinDrafts`): голова
+ * цепочки стоит дважды — вторая попытка дешёвой ступени до дорогих. Очереди этих механик идут по
+ * массиву подряд, без отбрасывания повторов; три попытки не берём, кандидат ждёт.
  */
 export const MODEL_CHAINS = {
   /**
@@ -64,16 +68,16 @@ export const MODEL_CHAINS = {
   /** Требования вакансий, процент соответствия, факты кандидата, служебные шаги. */
   bulk: [DEEPSEEK_V4_FLASH, GLM_FLASH],
   /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
-  roleNames: [DEEPSEEK_FLASH, LUNA, VERTEX],
-  coverLetters: [DEEPSEEK_FLASH, LUNA, VERTEX],
-  linkedinDrafts: [DEEPSEEK_FLASH, LUNA, VERTEX],
+  roleNames: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA, VERTEX],
+  coverLetters: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA, VERTEX],
+  linkedinDrafts: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA, VERTEX],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому
    * цепочка консультанта, а не фон. Vertex нет: ступени только chat-completions.
    */
   skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Структурный JSON без текста для человека: как фон. */
-  campaignRoles: [DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
+  campaignRoles: [DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH, VERTEX],
 } as const satisfies Record<string, readonly ChainStage[]>;
 
 export type ModelMechanic = keyof typeof MODEL_CHAINS;
