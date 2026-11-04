@@ -1,4 +1,5 @@
 import { geoCityNames, geoCountryNames } from '../../shared/geo/geoDirectory';
+import { moscowPlaceSpellings } from '../../shared/geo/moscowArea';
 import { remoteScopeAreasOf } from '../../shared/remoteScope';
 import type { CareerGeography } from './careerGeography';
 
@@ -30,6 +31,8 @@ export function matchGeographyOf(
   if (!career || career.places.length === 0) return undefined;
   const perPlace = career.places.map((place) => {
     const last = place.split(PATH_SEPARATOR).at(-1)?.trim();
+    const moscow = moscowPlaceSpellings(last);
+    if (moscow) return moscow;
     const city = geoCityNames(last);
     // Страна рядом с городом не снимает фильтр: без него окно чтения делится
     // на весь мир и вытесняет города из условий (03.11: +«ОАЭ» — 402 → 230).

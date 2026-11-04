@@ -4,6 +4,7 @@ import {
   matchesLocationSelection,
   parseVacancyLocation,
 } from '../../shared/locationTree';
+import { isMoscowAreaSelection, MOSCOW_AREA_LABEL } from '../../shared/geo/moscowArea';
 import type { CandidateDecisionProfile } from '../../shared/workPreferences';
 import { parseRemoteScope, remoteScopeAllows } from '../../shared/remoteScope';
 import { regionOfVacancy } from './vacancyGeography';
@@ -34,6 +35,7 @@ const HOME_COUNTRY_MARK = /(^|[^\p{L}])(рф|росси)/iu;
 const REMOTE_FORMATS = new Set(['remote_home', 'remote_abroad']);
 
 function placeKey(entry: string): string {
+  if (isMoscowAreaSelection(entry)) return MOSCOW_AREA_LABEL;
   const path = parseVacancyLocation({ location: entry });
   return path ? (locationPathKeys(path).at(-1) ?? entry) : entry;
 }
@@ -51,6 +53,7 @@ export function careerGeographyOf(
     (profile?.workFormats ?? []).some((format) => REMOTE_FORMATS.has(format));
   const regions = new Set<CandidateRegion>();
   for (const entry of placeEntries) {
+    if (isMoscowAreaSelection(entry)) regions.add('ru');
     const region = regionOfVacancy({
       location: entry,
       country: parseVacancyLocation({ location: entry })?.country,
