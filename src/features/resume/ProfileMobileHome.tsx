@@ -1,5 +1,4 @@
 import { ProfileEmptyStart } from './ProfileEmptyStart';
-import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 import { walkReadCount } from './profileProvenance';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { useState } from 'react';
@@ -190,27 +189,23 @@ export function ProfileMobileSources({
   readonly showTitle?: boolean;
 }) {
   const progress = linkedinImportProgressView(useLinkedInImportProgress());
-  const storedWalk = importedSources?.find((item) => item.walk)?.walk;
   return (
-    <>
-      <ProfileImportFailureNote variant="mobile" onReimport={onSelect} storedWalk={storedWalk} />
-      <ProfileMobileGroup title={showTitle ? 'Источники' : undefined}>
-        {(['linkedin', 'hh'] as const).map((platform) => {
-          const source = importedSources?.find((item) => item.platform === platform);
-          return (
-            <ProfileMobileRow
-              key={platform}
-              icon={platform === 'linkedin' ? LinkedinLogo : FileText}
-              title={platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
-              detail={mobileSourceDetail(platform, source, progress)}
-              value={profileMobileDate(source?.lastImportedAt)}
-              onClick={onSelect}
-            />
-          );
-        })}
-        <ProfileMobileRow icon={Plus} title="Добавить источник" onClick={onSelect} />
-      </ProfileMobileGroup>
-    </>
+    <ProfileMobileGroup title={showTitle ? 'Источники' : undefined}>
+      {(['linkedin', 'hh'] as const).map((platform) => {
+        const source = importedSources?.find((item) => item.platform === platform);
+        return (
+          <ProfileMobileRow
+            key={platform}
+            icon={platform === 'linkedin' ? LinkedinLogo : FileText}
+            title={platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
+            detail={mobileSourceDetail(platform, source, progress)}
+            value={profileMobileDate(source?.lastImportedAt)}
+            onClick={onSelect}
+          />
+        );
+      })}
+      <ProfileMobileRow icon={Plus} title="Добавить источник" onClick={onSelect} />
+    </ProfileMobileGroup>
   );
 }
 
