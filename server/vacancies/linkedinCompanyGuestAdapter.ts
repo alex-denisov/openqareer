@@ -14,6 +14,7 @@ export const LINKEDIN_GROUP_B_TARGETS: readonly LinkedinCompanyTarget[] = [
   { slug: 'astound-commerce', company: 'Astound Commerce', organizationId: '2403308' },
   { slug: 'indrive', company: 'inDrive', organizationId: '11847304' },
   { slug: 'wallarm', company: 'Wallarm', organizationId: '4871419' },
+  { slug: 'datadome', company: 'DataDome', organizationId: '10398947' },
 ] as const;
 
 const GUEST_HEADERS = {

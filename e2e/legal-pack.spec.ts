@@ -21,7 +21,7 @@ test.describe('published legal pack', () => {
 
       expect(response?.status()).toBe(200);
       await expect(page.getByRole('heading', { level: 1, name: doc.heading })).toBeVisible();
-      await expect(page.locator('.legal-meta')).toContainText('Редакция 1.0');
+      await expect(page.locator('.legal-meta')).toContainText('Редакция 1.1');
 
       const canonical = await page.locator('link[rel="canonical"]').getAttribute('href');
       expect(canonical).toBe(`https://openqareer.com/legal/${doc.slug}`);
