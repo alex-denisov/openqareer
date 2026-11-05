@@ -37,6 +37,12 @@ describe('production asset delivery', () => {
     expect(caddyfile).toContain('resp_headers delete');
   });
 
+  it('keeps the HTTP redirect in an explicit block, out of the Googlebot log', () => {
+    expect(caddyfile).toMatch(
+      /^http:\/\/openqareer\.com \{\n\tredir https:\/\/openqareer\.com\{uri\} 308\n\}$/mu,
+    );
+  });
+
   it('sends www to the apex with the path and query kept (03.11: www was NXDOMAIN)', () => {
     expect(caddyfile).toMatch(
       /^www\.openqareer\.com \{\s*redir https:\/\/openqareer\.com\{uri\} permanent\s*\}$/mu,
