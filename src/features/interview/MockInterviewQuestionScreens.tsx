@@ -6,6 +6,7 @@ import {
   CheckCircle,
   Circle,
   CircleNotch,
+  CaretRight,
   Clock,
   Lightbulb,
   Microphone,
@@ -79,6 +80,7 @@ function QuestionDockActions({ flow, busy }: { readonly flow: Flow; readonly bus
         disabled={busy}
         onClick={() => void flow.stop()}
       >
+        <Clock aria-hidden="true" className="career-mock-icon" />
         Остановиться
       </button>
       <button
@@ -87,6 +89,7 @@ function QuestionDockActions({ flow, busy }: { readonly flow: Flow; readonly bus
         disabled={busy}
         onClick={() => void flow.skip()}
       >
+        <ArrowRight aria-hidden="true" className="career-mock-icon" />
         Пропустить
       </button>
     </div>
@@ -459,32 +462,40 @@ function ReviewActions({
     <div className="career-mock-action-row career-mock-review-actions">
       <button
         type="button"
-        className="career-btn career-btn-primary"
+        className="career-btn career-btn-primary career-mock-result-again"
         disabled={flow.operation !== null}
         onClick={() => void flow.next()}
       >
         <ArrowRight aria-hidden="true" className="career-mock-icon" />
         Следующий вопрос
       </button>
-      <button
-        type="button"
-        className="career-btn career-btn-secondary"
-        disabled={flow.operation !== null}
-        onClick={flow.tryAgain}
-      >
-        <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
-        Ответить ещё раз
-      </button>
-      {storyId ? (
+      <div className="career-mock-result-rows">
         <button
           type="button"
-          className="career-btn career-btn-ghost"
-          onClick={() => props.onOpenStarStories(() => flow.retryLoad())}
+          className="career-btn career-btn-secondary"
+          disabled={flow.operation !== null}
+          onClick={flow.tryAgain}
         >
-          <PencilSimple aria-hidden="true" className="career-mock-icon" />
-          Править STAR-историю
+          <span className="career-mock-row-icon is-desktop" aria-hidden="true">
+            <ArrowClockwise className="career-mock-icon" />
+          </span>
+          Ответить ещё раз
+          <CaretRight aria-hidden="true" className="career-mock-icon career-mock-row-chev" />
         </button>
-      ) : null}
+        {storyId ? (
+          <button
+            type="button"
+            className="career-btn career-btn-ghost"
+            onClick={() => props.onOpenStarStories(() => flow.retryLoad())}
+          >
+            <span className="career-mock-row-icon is-desktop" aria-hidden="true">
+              <PencilSimple className="career-mock-icon" />
+            </span>
+            Править STAR-историю
+            <CaretRight aria-hidden="true" className="career-mock-icon career-mock-row-chev" />
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -515,20 +526,25 @@ function CriteriaList({
 }) {
   const labels = CRITERIA_LABELS[questionType];
   return (
-    <ul className="career-mock-criteria" aria-label="Критерии">
-      {Object.entries(evaluation.criteria).map(([key, criterion]) => (
-        <li key={key}>
-          <CriterionIcon points={criterion.points} />
-          <div>
-            <div className="career-mock-criterion-title">
-              <strong>{labels[key] ?? key}</strong>
-              <CriterionStatus points={criterion.points} />
+    <>
+      <h3 className="career-mock-criteria-cap" aria-hidden="true">
+        Критерии
+      </h3>
+      <ul className="career-mock-criteria" aria-label="Критерии">
+        {Object.entries(evaluation.criteria).map(([key, criterion]) => (
+          <li key={key}>
+            <CriterionIcon points={criterion.points} />
+            <div>
+              <div className="career-mock-criterion-title">
+                <strong>{labels[key] ?? key}</strong>
+                <CriterionStatus points={criterion.points} />
+              </div>
+              <p>{criterion.reason}</p>
             </div>
-            <p>{criterion.reason}</p>
-          </div>
-        </li>
-      ))}
-    </ul>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -542,7 +558,14 @@ function CriterionIcon({ points }: { readonly points: 0 | 1 | 2 }) {
 
 export function CriterionStatus({ points }: { readonly points: 0 | 1 | 2 }) {
   const status = points === 2 ? 'Есть' : points === 1 ? 'Частично' : 'Нет';
-  return <span className={`career-mock-status career-mock-status--${points}`}>{status}</span>;
+  return (
+    <span className={`career-mock-status career-mock-status--${points}`}>
+      <span className="career-mock-status-icon" aria-hidden="true">
+        <CriterionIcon points={points} />
+      </span>
+      {status}
+    </span>
+  );
 }
 
 function ModelFeedback({ message }: { readonly message: string }) {

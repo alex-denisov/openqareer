@@ -136,7 +136,7 @@ export function MobileStateHero({ flow }: { readonly flow: MockInterviewFlow }) 
   return (
     <div className="career-mock-mobile-hero">
       <h2>{title}</h2>
-      <p>{withoutPosition(withoutPosition(sessionSummary(flow), position), 'Мок-интервью завершено')}</p>
+      <p>{heroSummary(flow, position)}</p>
       {session.status === 'completed' ? (
         <span className="career-mock-result-status">
           <CheckCircle aria-hidden="true" className="career-mock-icon" />
@@ -145,6 +145,15 @@ export function MobileStateHero({ flow }: { readonly flow: MockInterviewFlow }) 
       ) : null}
     </div>
   );
+}
+
+/** Макет 14 на 390: заголовок уже назвал состояние, подпись его не повторяет. */
+function heroSummary(flow: MockInterviewFlow, position: string): string {
+  const summary = sessionSummary(flow);
+  if (flow.screen === 'review' && flow.session?.status !== 'completed') {
+    return summary.replace(': разбор ответа. Оценка', ' · оценка');
+  }
+  return withoutPosition(withoutPosition(summary, position), 'Мок-интервью завершено');
 }
 
 function withoutPosition(summary: string, position: string): string {
