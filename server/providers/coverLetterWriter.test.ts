@@ -2,6 +2,8 @@ import { COVER_LETTER_MAX_CHARS } from '../domain/coverLetterWriting';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatCompletionClient } from './roleNamer';
 import {
+  buildEnabledCoverLetterWriter,
+  LETTER_MODEL_ENABLED,
   LlmCoverLetterWriter,
   QueuedCoverLetterWriter,
   serializeInput,
@@ -469,5 +471,18 @@ describe('B422: компания «Хочу» в письме', () => {
     const plain = JSON.parse(serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme' } }));
     expect(marked.vacancy.targetCompany).toBe(true);
     expect(plain.vacancy).not.toHaveProperty('targetCompany');
+  });
+});
+
+describe('letter model switch (D-F9)', () => {
+  const credentials = { providerCredentials: { openrouter: { apiKey: 'test-key' } } } as never;
+
+  it('prod asks no model for a letter while the switch is off', () => {
+    expect(LETTER_MODEL_ENABLED).toBe(false);
+    expect(buildEnabledCoverLetterWriter(credentials)).toBeUndefined();
+  });
+
+  it('the same wiring brings the chain back when step 2 turns it on', () => {
+    expect(buildEnabledCoverLetterWriter(credentials, true)).toBeDefined();
   });
 });
