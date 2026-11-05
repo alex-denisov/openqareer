@@ -6,6 +6,39 @@ import {
 } from './sqliteCompanyDirectoryRepository';
 
 describe('SqliteCompanyDirectoryRepository', () => {
+  it('marks ATS boards answering 404 dormant on an already seeded database, once', () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCompanyDirectoryRepository(db);
+    const base = {
+      companyName: 'X',
+      websiteUrl: null,
+      careersUrl: null,
+      linkedinUrl: null,
+      linkedinOrgId: null,
+      sourceType: 'ats_direct',
+      status: 'active',
+      geo: null,
+      industry: null,
+      domainGroup: null,
+      notes: null,
+      createdAt: '2026-11-05T10:00:00Z',
+      updatedAt: '2026-11-05T10:00:00Z',
+    } as const;
+    repo.upsertBatch([
+      { ...base, companyKey: 'postman', atsProvider: 'greenhouse', atsSlug: 'postman' },
+      { ...base, companyKey: 'postman-moved', atsProvider: 'ashby', atsSlug: 'postman' },
+      { ...base, companyKey: 'datagrail', atsProvider: 'greenhouse', atsSlug: 'datagrail' },
+    ]);
+
+    const reopened = new SqliteCompanyDirectoryRepository(db);
+    const statusOf = (key: string): string | undefined =>
+      reopened.listCompanies({}).find((company) => company.companyKey === key)?.status;
+
+    expect(statusOf('postman')).toBe('dormant');
+    expect(statusOf('postman-moved')).toBe('active');
+    expect(statusOf('datagrail')).toBe('active');
+  });
+
   function makeRepo(): SqliteCompanyDirectoryRepository {
     const db = new DatabaseSync(':memory:');
     return new SqliteCompanyDirectoryRepository(db);
