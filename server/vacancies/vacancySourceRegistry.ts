@@ -56,11 +56,13 @@ const SOURCE_REGISTRY = [
     name: 'Зарплата.ру',
     market: 'Регионы РФ & Remote',
     category: 'Агрегаторы и API',
-    transport: 'public_api',
-    searchCoverage: 'Региональные IT и управляющие позиции',
+    transport: 'terms_forbidden',
+    searchCoverage:
+      'Недоступна: условия площадки запрещают автоматический сбор, RSS закрыт robots.txt',
     attributionUrl: 'https://zarplata.ru/',
-    documentationUrl: 'https://zarplata.ru/api',
-    reviewedAt: '2026-08-17',
+    documentationUrl: 'https://www.zarplata.ru/zp_terms',
+    reviewedAt: '2026-11-05',
+    declaredAccess: 'official_access_required',
   },
   {
     id: 'src-trudvsem',
