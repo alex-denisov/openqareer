@@ -140,10 +140,7 @@ describe('разговор о вакансии (B608)', () => {
 
   it('модель читает только разговор этой вакансии', async () => {
     const { seen } = await twoVacancies();
-    // Сводка закрытого разговора читает его целиком: это не ответ кандидату.
-    const second = seen.filter(
-      (input) => !input.internalPurpose && said(input.messages).includes('Вопрос про вторую вакансию'),
-    );
+    const second = seen.filter((input) => said(input.messages).includes('Вопрос про вторую вакансию'));
     expect(second.length).toBeGreaterThan(0);
     second.forEach((input) => expect(said(input.messages)).toEqual(['Вопрос про вторую вакансию']));
   });
