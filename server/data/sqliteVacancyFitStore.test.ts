@@ -16,6 +16,37 @@ function setup() {
 }
 const now = '2026-10-18T10:00:00.000Z';
 
+describe('rows a fallback model answered (05.11)', () => {
+  const stored = (store: SqliteVacancyFitStore, vacancyId: string, answeredBy: string | null) => {
+    const row = { ...input(), vacancyId };
+    store.putCache(row, evaluateVacancyFit(row, now), now, undefined, answeredBy);
+    return row;
+  };
+
+  it('lists only rows of another model that carry no mark, with their candidate and vacancy', () => {
+    const { database, store } = setup();
+    const fallback = stored(store, 'fallback', 'DeepInfra deepseek/deepseek-v4.1-flash');
+    stored(store, 'vertex', 'vertex gemini-3.8-flash');
+    stored(store, 'unknown', null);
+    expect(store.fallbackRows()).toEqual([{ key: store.cacheKey(fallback), candidateId: 'candidate-a', vacancyId: 'fallback' }]);
+    database.close();
+  });
+
+  it('a mark takes the row out for good, a release returns it, and a new answer keeps the mark', () => {
+    const { database, store } = setup();
+    const fallback = stored(store, 'fallback', 'StreamLake deepseek/deepseek-v4-flash');
+    const key = store.cacheKey(fallback);
+    store.markFallbackRecount(key, now);
+    expect(store.fallbackRows()).toEqual([]);
+    store.releaseFallbackRecount(key);
+    expect(store.fallbackRows()).toHaveLength(1);
+    store.markFallbackRecount(key, now);
+    store.putCache(fallback, evaluateVacancyFit(fallback, now), now, undefined, 'StreamLake deepseek/deepseek-v4-flash');
+    expect(store.fallbackRows()).toEqual([]);
+    database.close();
+  });
+});
+
 describe('a recount of one candidate (04.11)', () => {
   // As on prod: the sweep queues the input without requirements, the worker stores under the input with them.
   function counted(store: SqliteVacancyFitStore, candidateId = 'candidate-a') {
