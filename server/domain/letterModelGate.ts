@@ -111,7 +111,7 @@ function hasForeignMonth(sentence: string, backing: string): boolean {
   return (sentence.match(MONTH) ?? []).some((month) => !backing.includes(month.toLocaleLowerCase()));
 }
 
-const ACTION = /(?<!\p{L})(?:созда|основал|основат|возглав|руковод|разработал|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|утро|реализова|организова|управлял|масштабир|вырастил|нарастил|координир|курир|(?:led|leading|directing|managing|founded|founder|created|built|launched|increased|reduced|cut|achieved|implemented|authored|doubled|managed|delivered|scaled|expanded|organized|coordinated|oversaw|headed|spearheaded|directed|drove)(?!\p{L}))/giu;
+const ACTION = /(?<!\p{L})(?:созда|основал|основат|возглав|руковод|разработал|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|утро|реализова|организова|управлял|масштабир|вырастил|нарастил|координир|курир|(?:led|leading|directing|managing|founded|founder|created|built|launched|increased|reduced|cut|achieved|implemented|authored|doubled|managed|delivered|scaled|expanded|organized|coordinated|oversaw|headed|spearheaded|directed|drove|scaling|building|creating|launching|increasing|reducing|cutting|achieving|implementing|doubling|delivering|expanding|organizing|coordinating|overseeing|heading|spearheading|driving|growing)(?!\p{L}))/giu;
 const FIRST_PERSON_GREW = /(?<!\p{L})(?:i|we)\s+(?:\p{L}+\s+)?grew(?!\p{L})/iu;
 /** Перед глаголом кандидата — начало фразы, «я» или союз; иначе действие совершил кто-то другой. */
 const OWN_ACTOR = /(?:^|[,;:—–(.]\s*|(?<!\p{L})(?:я|мы|и|i|we|and)\s+)$/iu;
@@ -120,14 +120,22 @@ function actionsOf(text: string): string[] {
   return (text.match(ACTION) ?? []).map((action) => action.toLocaleLowerCase());
 }
 
+/** Действия, совершённые самим автором фразы: «команда выросла» и «заказчик создал» сюда не входят. */
+function statedActions(statement: string): string[] {
+  return [...statement.matchAll(ACTION)]
+    .filter((match) => OWN_ACTOR.test(statement.slice(0, match.index)))
+    .map(([action]) => action.toLocaleLowerCase());
+}
+
 /** Какие личные действия профиль называет сам: должность считается, чужой глагол нет. */
 function ownedActions(sources: LetterGateSources): Set<string> {
-  const stated = sources.candidate.flatMap((statement) =>
-    [...statement.matchAll(ACTION)]
-      .filter((match) => OWN_ACTOR.test(statement.slice(0, match.index)))
-      .map(([action]) => action.toLocaleLowerCase()),
-  );
-  return new Set([...stated, ...sources.career.flatMap(actionsOf)]);
+  return new Set([...sources.candidate.flatMap(statedActions), ...sources.career.flatMap(actionsOf)]);
+}
+
+/** Перевод не меняет субъект: где факт не называет личного действия, его нет и в переводе (G3d, письмо 6). */
+export function addsPersonalAction(source: string, translation: string): boolean {
+  if (FIRST_PERSON_GREW.test(translation)) return true;
+  return statedActions(source).length === 0 && statedActions(translation).length > 0;
 }
 
 function hasStrengthenedRole(sentence: string, owned: ReadonlySet<string>): boolean {
