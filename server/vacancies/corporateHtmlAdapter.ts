@@ -102,6 +102,33 @@ export const CORPORATE_HTML_ENDPOINTS: readonly CorporateHtmlEndpoint[] = [
       };
     },
   },
+  {
+    id: 'faceapp',
+    company: 'FaceApp',
+    url: 'https://www.faceapp.com/careers/',
+    baseUrl: 'https://www.faceapp.com',
+    cardRegex: /<a\b[^>]*href="(\/careers\/[a-z0-9-]+)"[^>]*data-testid="careers-card"[^>]*>([\s\S]*?)<\/a>/gi,
+    parseCard: (match, endpoint) => {
+      const relHref = match[1] ?? '';
+      const cardHtml = match[2] ?? '';
+      const titleMatch = cardHtml.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+      const title = titleMatch ? cleanHtmlText(titleMatch[1] ?? '') : '';
+      if (!title || !relHref) return null;
+
+      const subMatch = cardHtml.match(/<p[^>]*>([\s\S]*?)<\/p>/i);
+      const subText = subMatch ? cleanHtmlText(subMatch[1] ?? '') : '';
+      const externalId = relHref.replace(/^\/careers\//, '').replace(/[^a-z0-9_-]/g, '_');
+
+      return {
+        externalId,
+        title,
+        url: `${endpoint.baseUrl}${relHref}`,
+        location: subText.split('/')[0]?.trim() || 'Limassol (Cyprus)',
+        isRemote: /remote/i.test(subText),
+        description: `${title} — ${subText}`,
+      };
+    },
+  },
 ] as const;
 
 function parseHtmlCards(

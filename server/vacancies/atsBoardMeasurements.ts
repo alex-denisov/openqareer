@@ -14,6 +14,38 @@ import type { MeasuredAtsBoard } from './atsBoardSources';
  */
 export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
   {
+    company: 'Telnyx',
+    provider: 'greenhouse',
+    board: 'telnyx54',
+    jobs: 60,
+    observedAt: '2026-11-05',
+    lists: ['veselova'],
+  },
+  {
+    company: 'Luminai',
+    provider: 'ashby',
+    board: 'luminai',
+    jobs: 15,
+    observedAt: '2026-11-05',
+    lists: ['veselova'],
+  },
+  {
+    company: 'Truv',
+    provider: 'lever',
+    board: 'truv',
+    jobs: 11,
+    observedAt: '2026-11-05',
+    lists: ['veselova'],
+  },
+  {
+    company: 'Kodland',
+    provider: 'recruitee',
+    board: 'kodland',
+    jobs: 75,
+    observedAt: '2026-11-05',
+    lists: ['veselova'],
+  },
+  {
     company: 'Personio',
     provider: 'personio',
     board: 'personio',
