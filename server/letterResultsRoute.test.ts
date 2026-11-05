@@ -23,7 +23,7 @@ const leidos: VacancyCluster = {
   vacanciesCount: 1,
 };
 const OUTCOME = 'Склад и логистика для федеральной сети магазинов, команда выросла с 8 до 35 человек.';
-const OUTCOME_EN = 'Built warehouse and logistics systems for a federal retail chain; the team grew from 8 to 35.';
+const OUTCOME_EN = 'Warehouse and logistics for a federal retail chain; the team grew from 8 to 35.';
 
 function translator(answer: (request: BulletTranslationRequest) => string) {
   return {
@@ -71,10 +71,17 @@ describe('G3b: results of the places in the English letter', () => {
   it('quotes the translated outcome and keeps the employer as written', async () => {
     const data = await letterFor(translator(() => OUTCOME_EN));
     expect(data.language).toBe('en');
-    expect(data.emailPitch.body).toContain(`Among my results: ${OUTCOME_EN.charAt(0).toLowerCase()}${OUTCOME_EN.slice(1)}`);
+    expect(data.emailPitch.body).toContain('Among my results: the team grew from 8 to 35 — warehouse and logistics for a federal retail chain.');
     expect(data.emailPitch.body).toContain('Most recently I worked as Head of Engineering at Ритейл Системс (2014–2021).');
     expect(data.usedEvidenceIds).toContain('ach-3-1');
     expect(data.outputFactChecks.emailBody.status).not.toBe('needs_confirmation');
+  });
+
+  it('G3d letter 6: a translation that adds a personal action is dropped, the letter has no result', async () => {
+    const data = await letterFor(translator(() => 'Managed warehouse and logistics for a federal retail chain, scaling the team from 8 to 35 people.'));
+    expect(data.bodySource).toBe('template');
+    expect(data.emailPitch.body).not.toContain('Among my results');
+    expect(data.emailPitch.body).not.toMatch(/managed|scaling/iu);
   });
 
   it('a translation that invents a number is dropped, the letter has no result', async () => {
@@ -86,6 +93,23 @@ describe('G3b: results of the places in the English letter', () => {
 
 describe('translateLetterFacts', () => {
   const fact = { id: 'ach-3-1', statement: OUTCOME, domain: 'outcome' };
+
+  it('the subject stays: the team grew never becomes something the candidate did', async () => {
+    for (const text of [
+      'Managed warehouse and logistics for a federal retail chain, scaling the team from 8 to 35 people.',
+      'Built warehouse and logistics for a federal retail chain; the team grew from 8 to 35.',
+      'Warehouse and logistics for a federal retail chain, growing the team from 8 to 35.',
+    ]) {
+      clearLetterFactTranslationCache();
+      expect(await translateLetterFacts(translator(() => text), [fact], 1_000)).toEqual(new Map());
+    }
+  });
+
+  it('a personal action the fact states may be translated', async () => {
+    const own = { id: 'own', statement: 'Сократил срок выполнения заказа с 12 до 7 дней.', domain: 'outcome' };
+    const text = 'Reduced order lead time from 12 to 7 days.';
+    expect(await translateLetterFacts(translator(() => text), [own], 1_000)).toEqual(new Map([['own', text]]));
+  });
 
   it('remembers a checked translation and does not ask again', async () => {
     const rewriter = translator(() => OUTCOME_EN);

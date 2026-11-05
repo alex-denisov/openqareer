@@ -12,21 +12,28 @@ const check = (texts: string[]): GeneratedTextFactCheck => ({
   })),
 });
 
-describe('generatedTextFactNotices: one notice in the candidate language', () => {
+describe('generatedTextFactNotices: one notice in the language of the letter', () => {
   const claims = Array.from({ length: 14 }, (_, i) => `I led team ${i + 1}.`);
 
-  it('an English letter still gets Russian notices, one line for all unconfirmed claims', () => {
+  it('an English letter gets an English notice, one line for all unconfirmed claims', () => {
     const notices = generatedTextFactNotices('en', [check(claims), check(claims.slice(0, 3))]);
     expect(notices).toHaveLength(1);
     expect(notices[0]).not.toMatch(/Can you confirm|\?/u);
-    expect(notices[0]).toMatch(/^Перед отправкой сверьте с профилем 14 утверждений/u);
-    expect(notices[0]).toContain('«I led team 1.»');
-    expect(notices[0]).toContain('и ещё 11');
+    expect(notices[0]).toMatch(/^Before sending, check 14 claims against your profile/u);
+    expect(notices[0]).toContain('"I led team 1."');
+    expect(notices[0]).toContain('and 11 more');
+    expect(notices[0]).not.toMatch(/\p{Script=Cyrillic}/u);
   });
 
-  it('the model fallback notice is Russian too', () => {
-    const notices = generatedTextFactNotices('en', [], check(['x']));
-    expect(notices).toEqual([expect.stringMatching(/^В сгенерированном письме/u)]);
+  it('a Russian letter keeps its Russian notice', () => {
+    const [notice] = generatedTextFactNotices('ru', [check(claims)]);
+    expect(notice).toMatch(/^Перед отправкой сверьте с профилем 14 утверждений/u);
+    expect(notice).toContain('и ещё 11');
+  });
+
+  it('the model fallback notice follows the letter too', () => {
+    expect(generatedTextFactNotices('en', [], check(['x']))).toEqual([expect.stringMatching(/^The generated letter/u)]);
+    expect(generatedTextFactNotices('ru', [], check(['x']))).toEqual([expect.stringMatching(/^В сгенерированном письме/u)]);
   });
 
   it('nothing unconfirmed — no notices', () => {

@@ -262,7 +262,7 @@ describe('B528 generated text fact gate', () => {
       expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
     } else {
       expect(data.atsCoverLetter).not.toBe(text);
-      expect(data.notices).toContain('В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.');
+      expect(data.notices).toEqual([expect.stringMatching(/^The generated letter had claims/u)]);
     }
   });
 

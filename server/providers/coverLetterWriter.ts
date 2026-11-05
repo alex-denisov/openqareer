@@ -440,6 +440,21 @@ export function buildCoverLetterWriter(
   );
 }
 
+/**
+ * D-F9, 05.11: 7 писем модели из 10 на проде исказили опыт кандидата (приписанная работа, усиленная
+ * роль), и текст идёт от его имени. Пока выключено: письмо пишет шаблон, модель не вызывается.
+ * Включать только после вычитки CPO.
+ */
+export const LETTER_MODEL_ENABLED = false;
+
+/** То, что получает прод: без цепочки маршрут пишет письмо шаблоном и не тратит ни денег, ни времени. */
+export function buildEnabledCoverLetterWriter(
+  config: CoverLetterWriterConfig,
+  enabled: boolean = LETTER_MODEL_ENABLED,
+): CoverLetterWriter | undefined {
+  return enabled ? buildCoverLetterWriter(config) : undefined;
+}
+
 function vertexCoverLetterWriter(vertex: VertexConfig, fetchImpl?: typeof fetch): CoverLetterWriter {
   const tokens = new VertexTokenProvider(vertex, fetchImpl);
   return new GeminiCoverLetterWriter({

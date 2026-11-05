@@ -174,6 +174,7 @@ describe('the note under the letter (G3 L2)', () => {
 
   it('counts unconfirmed requirements and lists their human labels on demand', () => {
     const markup = notes({
+      language: 'ru',
       unconfirmedRequirements: ['Director of technology', 'Technology director'],
     });
     expect(markup).toContain(
@@ -181,9 +182,17 @@ describe('the note under the letter (G3 L2)', () => {
     );
     expect(markup).toContain('<li>Director of technology</li>');
     expect(markup).not.toMatch(/\p{L}+-\p{Lu}\p{Ll}+/u);
-    expect(notes({ unconfirmedRequirements: ['Kafka'] })).toContain(
+    expect(notes({ language: 'ru', unconfirmedRequirements: ['Kafka'] })).toContain(
       '1 требование вакансии не подтверждено',
     );
+  });
+
+  it('the note under an English letter is in English', () => {
+    expect(notes({ unconfirmedRequirements: ['Kafka', 'Go'] })).toContain('2 vacancy requirements are not confirmed');
+    expect(notes({ unconfirmedRequirements: ['Kafka'] })).toContain('1 vacancy requirement is not confirmed');
+    const fewFacts = notes({ usedEvidenceIds: [] });
+    expect(fewFacts).toContain('too few confirmed facts');
+    expect(fewFacts).not.toContain('мало подтверждённых');
   });
 });
 

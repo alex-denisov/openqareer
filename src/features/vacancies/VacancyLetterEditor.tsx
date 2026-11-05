@@ -138,7 +138,12 @@ export function LetterEditor({
   );
 }
 
-function requirementsNote(count: number): string {
+function requirementsNote(count: number, language: VacancyPitchResult['language']): string {
+  if (language === 'en') {
+    return count === 1
+      ? '1 vacancy requirement is not confirmed by profile facts'
+      : `${count} vacancy requirements are not confirmed by profile facts`;
+  }
   const last = count % 10;
   const tens = count % 100;
   const few = last >= 2 && last <= 4 && (tens < 12 || tens > 14);
@@ -146,10 +151,16 @@ function requirementsNote(count: number): string {
   return `${count} ${few ? 'требования' : 'требований'} вакансии не подтверждены фактами профиля`;
 }
 
-function UnconfirmedRequirementsNote({ labels }: { readonly labels: readonly string[] }) {
+function UnconfirmedRequirementsNote({
+  labels,
+  language,
+}: {
+  readonly labels: readonly string[];
+  readonly language: VacancyPitchResult['language'];
+}) {
   return (
     <details className="career-letter-requirements">
-      <summary>{requirementsNote(labels.length)}</summary>
+      <summary>{requirementsNote(labels.length, language)}</summary>
       <ul>
         {labels.map((label) => (
           <li key={label}>{label}</li>
@@ -176,7 +187,11 @@ export function LetterNotices({
     return (
       <div className="career-letter-notes">
         <p role="status">
-          <span>В профиле мало подтверждённых фактов: письмо не добавляет достижения без источника.</span>
+          <span>
+            {pitch.language === 'en'
+              ? 'The profile has too few confirmed facts: the letter adds no achievements without a source.'
+              : 'В профиле мало подтверждённых фактов: письмо не добавляет достижения без источника.'}
+          </span>
           {onGatherFacts ? (
             <button type="button" className="career-btn is-sm is-ghost" onClick={onGatherFacts}>
               <ChatCircleText size={16} aria-hidden="true" />
@@ -190,7 +205,7 @@ export function LetterNotices({
   if (!notice && unconfirmed.length === 0) return null;
   return (
     <div className="career-letter-notes">
-      {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} />}
+      {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} language={pitch.language} />}
     </div>
   );
 }
