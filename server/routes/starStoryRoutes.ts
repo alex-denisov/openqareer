@@ -59,7 +59,7 @@ function storyView(story: StoredStarStory, factById: ReadonlyMap<string, StarSto
   };
 }
 
-function loadFacts(deps: RouteDeps, candidateId: string): readonly StarStoryFactView[] {
+export function loadFacts(deps: RouteDeps, candidateId: string): readonly StarStoryFactView[] {
   // Candidate snapshot only; this does not read or join the vacancy pool.
   return eligibleFacts(deps.candidateStore.getSnapshot(candidateId).memory);
 }

@@ -171,6 +171,7 @@ function candidateEvidenceRefs(input: CoachTurnInput): string[] {
     ...(input.knowledgeContext?.confirmedFacts.map((fact) => fact.ref) ?? []),
     ...(input.knowledgeContext?.documents.map((document) => document.ref) ?? []),
     ...(input.knowledgeContext?.openQuestions.map((question) => question.ref) ?? []),
+    ...(input.knowledgeContext?.starStories?.map((story) => story.ref) ?? []),
   ];
 }
 

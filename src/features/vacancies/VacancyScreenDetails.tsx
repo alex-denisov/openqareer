@@ -1,4 +1,6 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import { vacancyScreenObject } from '../journey/consultantScreenObjects';
+import { usePublishConsultantObject } from '../journey/consultantScreenTopic';
 import { vacancyFitPercent } from '../../../shared/vacancyFitPercent';
 import {
   ArrowSquareOut,
@@ -390,6 +392,7 @@ export function VacancyScreenRequirementChips({
   const readingRequirements = useFitDetail(cluster.id, fitView);
   const fromFit = fitRequirementChips(fitView);
   usePublishQuizOffer(cluster, fitView);
+  usePublishConsultantObject(useMemo(() => vacancyScreenObject(cluster.id), [cluster.id]));
   const chips =
     fromFit ?? (readingRequirements ? NO_CHIPS : legacyChips(legacyOf(explanation, cluster)));
   const hasRequirements = chipCount(chips) > 0;

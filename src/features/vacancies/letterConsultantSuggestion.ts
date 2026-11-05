@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { StarStoryView } from '../../../shared/starStories';
 import { getStarStories } from '../interview/starStoriesApi';
+import { usePublishConsultantLetterDraft } from '../journey/consultantScreenTopic';
 import {
   usePublishConsultantSuggestion,
   type ConsultantScreenSuggestion,
@@ -100,6 +101,7 @@ export function useLetterConsultantSuggestion(draft: LetterDraftPort, frozen: bo
       .catch(() => setStories([]));
     return () => controller.abort();
   }, []);
+  usePublishConsultantLetterDraft(draft.text);
   const edit =
     frozen || draft.loading ? null : letterStarEdit(draft.text, stories, draft.pitch?.language);
   usePublishConsultantSuggestion(

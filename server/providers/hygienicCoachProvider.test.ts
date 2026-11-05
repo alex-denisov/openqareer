@@ -72,3 +72,41 @@ describe('потоковый текст ответа тоже без невид�
     expect(seen).toEqual(['Ваш', '']);
   });
 });
+
+describe('метки контекста в ответе консультанта (B511 Д6)', () => {
+  const answer = (message: string, nextQuestion: string | null = null) =>
+    providerReturning({
+      result: { message, nextQuestion, memoryCandidates: [{ sourceMessageIds: ['memory:abc'] }] },
+      provider: 'openai',
+      model: 'gpt',
+      responseId: 'r1',
+      usage: {},
+    });
+
+  it('чистит message и nextQuestion, а ссылки в служебных полях не трогает', async () => {
+    const provider = new HygienicCoachProvider({ inner: answer('Это НЕИЗВЕСТНО (memory:abc).', 'Что в stageContext?') });
+    const { result } = await provider.createTurn(input, 'key');
+    expect(result.message).toBe('Это неизвестно.');
+    expect(result.nextQuestion).not.toContain('stageContext');
+    expect(result.memoryCandidates[0]?.sourceMessageIds).toEqual(['memory:abc']);
+  });
+
+  it('потоковый текст чистится так же', async () => {
+    const seen: string[] = [];
+    const inner = {
+      createTurn: async (_input: unknown, _key: unknown, options?: { onMessageText?: (text: string) => void }) => {
+        options?.onMessageText?.('Пока НЕИЗВЕСТНО');
+        return { result: { message: 'Пока НЕИЗВЕСТНО', nextQuestion: null }, provider: 'openai', model: 'gpt', responseId: 'r', usage: {} };
+      },
+    } as unknown as CoachProvider;
+    await new HygienicCoachProvider({ inner }).createTurn(input, 'key', { onMessageText: (text) => seen.push(text) });
+    expect(seen).toEqual(['Пока неизвестно']);
+  });
+
+  it('шаг сервера с JSON в message не трогается', async () => {
+    const provider = new HygienicCoachProvider({ inner: answer('{"status":"НЕИЗВЕСТНО","ref":"memory:abc"}') });
+    const stageInput = { dataClass: 'personal', internalPurpose: 'structured-stage' } as unknown as CoachTurnInput;
+    const { result } = await provider.createTurn(stageInput, 'key');
+    expect(result.message).toBe('{"status":"НЕИЗВЕСТНО","ref":"memory:abc"}');
+  });
+});

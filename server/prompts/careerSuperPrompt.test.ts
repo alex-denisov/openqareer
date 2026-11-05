@@ -4,11 +4,21 @@ import { CAREER_SUPER_PROMPT, CAREER_SUPER_PROMPT_REVISION } from './careerSuper
 describe('career super-prompt', () => {
   it('is versioned and protects truth, evidence and candidate control', () => {
     expect(CAREER_SUPER_PROMPT_REVISION).toMatch(/^career-v\d+\.\d+-\d{4}-\d{2}-\d{2}$/);
-    expect(CAREER_SUPER_PROMPT).toContain('ФАКТ');
-    expect(CAREER_SUPER_PROMPT).toContain('ГИПОТЕЗА');
-    expect(CAREER_SUPER_PROMPT).toContain('НЕИЗВЕСТНО');
+    const lower = CAREER_SUPER_PROMPT.toLowerCase();
+    expect(lower).toContain('факт');
+    expect(lower).toContain('гипотез');
+    expect(lower).toContain('чего не знаешь');
     expect(CAREER_SUPER_PROMPT).toContain('источник');
     expect(CAREER_SUPER_PROMPT).toContain('подтвердить, исправить или удалить');
+  });
+
+  it('keeps evidence classes internal and checks stories before saying data is missing (B511 Д6)', () => {
+    const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
+    expect(CAREER_SUPER_PROMPT).not.toMatch(/(?<!\p{L})ФАКТ(?!\p{L})|ГИПОТЕЗА|НЕИЗВЕСТНО/u);
+    expect(compact).toContain('knowledgeContext.starStories');
+    expect(compact).toContain('Не пиши готовую фразу');
+    expect(compact).toContain('Черновик письма');
+    expect(compact).toContain('имена полей контекста');
   });
 
   it('requires one reasoned next action without invented market claims', () => {
@@ -42,6 +52,6 @@ describe('career super-prompt', () => {
     const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
     expect(compact).toContain('Не пересказывай и не цитируй профиль кандидата');
     expect(compact).toContain('не проси кандидата прислать её текст');
-    expect(CAREER_SUPER_PROMPT_REVISION).toBe('career-v1.3-2026-10-28');
+    expect(CAREER_SUPER_PROMPT_REVISION).toBe('career-v1.4-2026-11-05');
   });
 });

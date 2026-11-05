@@ -35,11 +35,15 @@ export function ExpertHistoryRow({
 export function ExpertVisibleLine({
   subjectKind,
   hasMarketQuery,
+  hasLetterDraft,
 }: {
   readonly subjectKind?: string;
   readonly hasMarketQuery: boolean;
+  readonly hasLetterDraft?: boolean;
 }) {
   return (
-    <p className="consultant-visible-line">{visibleContextLine({ subjectKind, hasMarketQuery })}</p>
+    <p className="consultant-visible-line">
+      {visibleContextLine({ subjectKind, hasMarketQuery, hasLetterDraft })}
+    </p>
   );
 }
