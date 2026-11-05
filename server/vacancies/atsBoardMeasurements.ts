@@ -2745,4 +2745,28 @@ export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
     observedAt: '2026-11-05',
     lists: ['company-directory-2026-11-05'],
   },
+  {
+    company: 'EUROPEAN DYNAMICS',
+    provider: 'workable',
+    board: 'european-dynamics',
+    jobs: 192,
+    observedAt: '2026-11-05',
+    lists: ['hirehi'],
+  },
+  {
+    company: 'Veeam Software',
+    provider: 'greenhouse',
+    board: 'veeamsoftware',
+    jobs: 206,
+    observedAt: '2026-11-05',
+    lists: ['hirehi'],
+  },
+  {
+    company: 'emagine',
+    provider: 'ashby',
+    board: 'emagine',
+    jobs: 32,
+    observedAt: '2026-11-05',
+    lists: ['hirehi'],
+  },
 ];

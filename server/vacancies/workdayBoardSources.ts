@@ -161,6 +161,30 @@ export const MEASURED_WORKDAY_TENANTS: readonly MeasuredWorkdayTenant[] = [
     jobs: 113,
     observedAt: '2026-09-14',
   },
+  {
+    company: 'Airbus',
+    tenant: 'ag',
+    host: 'ag.wd3.myworkdayjobs.com',
+    site: 'Airbus',
+    jobs: 2000,
+    observedAt: '2026-11-05',
+  },
+  {
+    company: 'Medtronic',
+    tenant: 'medtronic',
+    host: 'medtronic.wd1.myworkdayjobs.com',
+    site: 'MedtronicCareers',
+    jobs: 1033,
+    observedAt: '2026-11-05',
+  },
+  {
+    company: 'RELX',
+    tenant: 'relx',
+    host: 'relx.wd3.myworkdayjobs.com',
+    site: 'RELX',
+    jobs: 787,
+    observedAt: '2026-11-05',
+  },
 ];
 
 /** Карьерный сайт меняется медленно, как и доска ATS: дважды в сутки. */

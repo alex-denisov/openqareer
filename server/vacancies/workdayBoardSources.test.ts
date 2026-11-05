@@ -126,8 +126,8 @@ describe('workdayBoardSources', () => {
     expect(getUnresolvedWorkdayCompanyStatus('UnknownCorp')).toBeUndefined();
   });
 
-  it('verifies that all 13 measured Workday tenants have valid urls, live status, and verified measurements', () => {
-    expect(MEASURED_WORKDAY_TENANTS).toHaveLength(13);
+  it('verifies that all measured Workday tenants have valid urls, live status, and verified measurements', () => {
+    expect(MEASURED_WORKDAY_TENANTS).toHaveLength(16);
 
     for (const tenant of MEASURED_WORKDAY_TENANTS) {
       expect(tenant.company).toBeTruthy();
