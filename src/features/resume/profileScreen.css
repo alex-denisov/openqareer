@@ -798,6 +798,8 @@
   color: var(--career-success);
 }
 
+/* B586: without a banner the failed segment itself has to read as failed. */
+.career-profile-screen-import-live-list .is-failed,
 .career-profile-screen-import-live-list .is-failed svg {
   color: var(--career-warning);
 }

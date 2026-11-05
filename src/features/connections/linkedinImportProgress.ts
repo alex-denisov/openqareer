@@ -75,29 +75,10 @@ const listeners = new Set<() => void>();
 
 /** One walk at a time per window, so a module-level store is enough to reach the profile screen. */
 export function applyLinkedInImportProgress(event: LinkedInImportProgressEvent): void {
-  const failureBefore = failure;
-  if (event.type === 'start') failure = null;
-  if (event.type === 'failed') failure = { key: event.key, label: STAGE_LABELS[event.key] };
   const next = reduceLinkedInImportProgress(current, event);
-  if (next === current && failure === failureBefore) return;
+  if (next === current) return;
   current = next;
   listeners.forEach((listener) => listener());
-}
-
-export interface LinkedInImportFailure {
-  readonly key: LinkedInImportStageKey;
-  readonly label: string;
-}
-
-/** Last walk's unread section; kept after the walk ends so the profile can say so. */
-let failure: LinkedInImportFailure | null = null;
-
-export function linkedinImportFailure(): LinkedInImportFailure | null {
-  return failure;
-}
-
-export function useLinkedInImportFailure(): LinkedInImportFailure | null {
-  return useSyncExternalStore(subscribe, linkedinImportFailure, () => null);
 }
 
 function subscribe(listener: () => void): () => void {
