@@ -242,8 +242,8 @@ function SourcesBody({
     .filter((source) => !needle || [source.name, source.id, source.type, source.targetUrl]
       .some((value) => value.toLocaleLowerCase('ru-RU').includes(needle)))
     .filter((source) => status === 'all' ||
-      (status === 'healthy' && source.lastStatus === 'healthy') ||
-      (status === 'attention' && (source.lastStatus === 'degraded' || source.lastStatus === 'error')) ||
+      (status === 'healthy' && source.lastStatus === 'healthy' && !source.health?.liveness.pausedBecause) ||
+      (status === 'attention' && (source.lastStatus === 'degraded' || source.lastStatus === 'error' || Boolean(source.health?.liveness.pausedBecause))) ||
       (status === 'unmeasured' && !source.lastStatus))
     .sort((left, right) => {
       const order = sortBy === 'active'
@@ -288,7 +288,22 @@ function SourcesBody({
   );
 }
 
-function SourceStatusBadge({ status }: { status?: AdminVacancySource['lastStatus'] }) {
+const PAUSE_LABELS = {
+  no_fresh_vacancies: 'Приостановлен: нет свежих вакансий',
+  links_not_opening: 'Приостановлен: ссылки не открываются',
+} as const;
+
+function SourceStatusBadge({ status, pausedBecause }: {
+  status?: AdminVacancySource['lastStatus'];
+  pausedBecause?: AdminSourceHealth['liveness']['pausedBecause'];
+}) {
+  if (pausedBecause) {
+    return (
+      <span className="admin-badge is-warning">
+        <Warning size={14} /> {PAUSE_LABELS[pausedBecause]}
+      </span>
+    );
+  }
   if (status === 'healthy') {
     return (
       <span className="admin-badge is-success">
@@ -364,7 +379,7 @@ export function SourceCard({
     <article className="admin-source-card">
       <button className="admin-source-row" type="button" aria-expanded={expanded} onClick={onToggle}>
         <span className="admin-source-row__name"><strong>{source.name}</strong><small>{source.type.toUpperCase()}</small></span>
-        <SourceStatusBadge status={source.lastStatus} />
+        <SourceStatusBadge status={source.lastStatus} pausedBecause={source.health?.liveness.pausedBecause} />
         <span className="admin-source-row__metric"><strong><CheckCircle size={14} aria-hidden="true" /> {source.itemsActiveTotal}</strong><small>активных</small></span>
         <span className="admin-source-row__metric"><strong><Database size={14} aria-hidden="true" /> {source.itemsFoundTotal}</strong><small>найдено</small></span>
         <span className="admin-source-row__metric"><strong><ClockCounterClockwise size={14} aria-hidden="true" /> {source.lastSyncAt ? new Date(source.lastSyncAt).toLocaleDateString('ru-RU') : '—'}</strong><small>последний опрос</small></span>

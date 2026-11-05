@@ -32,7 +32,6 @@ import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLa
 import { factCountLabel } from './profileSourceLabels';
 import { ProfileSourceDialog } from './ProfileSourceDialog';
 import { linkedinReimportAction } from '../connections/linkedinReimport';
-import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 import {
   formatPhoneInput,
   getContactEmailError,
@@ -771,11 +770,6 @@ function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
       ) : null}
       <ProfileCoverageDetails draft={props.draft} />
       <ProfileImportLive
-        onReimport={linkedinReimportAction(props.connections, props.onOpenConnections)}
-        storedWalk={props.importedSources?.find((source) => source.walk)?.walk}
-      />
-      <ProfileImportFailureNote
-        variant="desktop"
         onReimport={linkedinReimportAction(props.connections, props.onOpenConnections)}
         storedWalk={props.importedSources?.find((source) => source.walk)?.walk}
       />

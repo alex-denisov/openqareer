@@ -83,6 +83,9 @@ export function ImportLiveBlock({
   return <WalkBand view={liveBand(view)} onReimport={onReimport} />;
 }
 
+/** B586: a failed section has no banner, its segment carries the reason. */
+const FAILED_STAGE_REASON = 'Раздел не прочитан: сайт не ответил. Остальные разделы сохранены.';
+
 const STATUS_TEXT: Record<ImportWalkSectionStatus, string> = {
   read: ', прочитано',
   pending: ', ожидает',
@@ -167,6 +170,7 @@ function WalkBand({
                   ? 'is-failed'
                   : undefined
             }
+            title={stage.status === 'failed' ? FAILED_STAGE_REASON : undefined}
           >
             <StageIcon status={stage.status} active={index === activeIndex} />
             {stage.label}

@@ -54,7 +54,10 @@ describe('ProfileImportLive', () => {
     expect(running).toContain('LinkedIn: читаем разделы, 3 из 7');
     expect(running).toContain('Импортировать заново');
     expect(running).toMatch(/<li class="is-done">.*места работы/u);
-    expect(running).toMatch(/<li class="is-failed">.*языки/u);
+    expect(running).toMatch(
+      /<li class="is-failed" title="Раздел не прочитан: сайт не ответил[^"]*">.*языки/u,
+    );
+    expect(running).not.toContain('role="alert"');
     expect(running).toContain('контакты');
     const done = renderToStaticMarkup(
       <ProfileImportLive
