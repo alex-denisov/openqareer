@@ -31,7 +31,14 @@ export const STALE_REFIT_LIMIT = 50;
 type FitViews = ReadonlyMap<string, VacancyFitView>;
 const fitViewsCache = createCandidateWindowCache<FitViews>(FIT_ORDER_WINDOW_MS);
 const refreshingFitViews = new Set<string>();
-const preparingFitViews = new Map<string, Promise<number>>();
+
+/** What `prepare` read, kept by the build itself: the shared cache entry may belong to another stamp by then. */
+interface PreparedFitViews {
+  readonly rows: number;
+  readonly views: FitViews;
+}
+const NOTHING_PREPARED: PreparedFitViews = { rows: 0, views: new Map() };
+const preparingFitViews = new Map<string, Promise<PreparedFitViews>>();
 
 /** Where a failed background write of the fit order goes (the request's logger on the route). */
 interface FitOrderLog {
@@ -78,8 +85,11 @@ export function withVacancyFitOrder(
   const reader = createFitViewReader(deps, candidateId, log, use);
   const stamp = reader ? fitProfileStamp(deps, candidateId) : 'none';
   const key = `${candidateId}|${stamp}`;
-  let prepared = false;
+  let prepared: FitViews | undefined;
   const order = (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] => {
+    // PRB-041 (prod 05.11, 2170 ms): the cache holds one profile per candidate, so a build under
+    // the other stamp could take the entry between `prepare` and here: never read again in one piece.
+    if (prepared) return orderByFit(items, fitViewsCache.peek(key)?.value ?? prepared, sort, money, relevance);
     const known = fitViewsCache.peek(key);
     if (!known) {
       const views = reader
@@ -88,7 +98,6 @@ export function withVacancyFitOrder(
       fitViewsCache.write(key, views);
       return orderByFit(items, views, sort, money, relevance);
     }
-    if (prepared) return orderByFit(items, known.value, sort, money, relevance);
     if (known.stale && reader) void refreshFitViews(key, reader, items);
     const landed = reader ? viewsLandedSince(known.value, reader.scoredIds(items)) : [];
     if (landed.length === 0) return orderByFit(items, known.value, sort, money, relevance);
@@ -97,9 +106,9 @@ export function withVacancyFitOrder(
     return orderByFit(items, patched, sort, money, relevance);
   };
   const prepare = async (items: readonly MatchedVacancyItem[]): Promise<number> => {
-    const rows = reader ? await prepareFitViews(key, reader, items) : 0;
+    const { rows, views } = reader ? await prepareFitViews(key, reader, items) : NOTHING_PREPARED;
     if (relevance) await readRolesYielding(items, relevance);
-    prepared = true;
+    prepared = views;
     return rows;
   };
   return Object.assign(order, { prepare, fitStamp: stamp });
@@ -270,7 +279,7 @@ function prepareFitViews(
   key: string,
   reader: FitViewReader,
   items: readonly MatchedVacancyItem[],
-): Promise<number> {
+): Promise<PreparedFitViews> {
   const running = preparingFitViews.get(key);
   if (running) return running;
   const work = readViewsAhead(key, reader, items).finally(() => preparingFitViews.delete(key));
@@ -282,20 +291,21 @@ async function readViewsAhead(
   key: string,
   reader: FitViewReader,
   items: readonly MatchedVacancyItem[],
-): Promise<number> {
+): Promise<PreparedFitViews> {
   const known = fitViewsCache.peek(key);
   if (!known) {
     const views = await reader.readYielding(reader.scoredIds(items));
     fitViewsCache.write(key, views);
-    return views.size;
+    return { rows: views.size, views };
   }
   if (known.stale) void refreshFitViews(key, reader, items);
   const landed = viewsLandedSince(known.value, reader.scoredIds(items));
-  if (landed.length === 0) return 0;
+  if (landed.length === 0) return { rows: 0, views: known.value };
   const read = await reader.readYielding(landed);
   // A background refresh may have written while this read yielded; its views stay.
-  fitViewsCache.write(key, new Map([...(fitViewsCache.peek(key)?.value ?? known.value), ...read]));
-  return read.size;
+  const views = new Map([...(fitViewsCache.peek(key)?.value ?? known.value), ...read]);
+  fitViewsCache.write(key, views);
+  return { rows: read.size, views };
 }
 
 const HH_CLUSTER_PREFIX = 'cluster-src-hh-search:';
