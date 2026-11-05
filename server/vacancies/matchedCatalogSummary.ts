@@ -4,6 +4,7 @@ import type { MatchedVacancyCatalogSummary } from '../../shared/matchedVacancyFa
 export interface CatalogTotals {
   readonly clusters: number;
   readonly updatedAt?: string;
+  readonly computedAt?: string;
 }
 
 /** Итоги пересчитывает обслуживание после волны, не чаще раза в 15 минут. */

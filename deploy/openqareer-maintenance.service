@@ -25,7 +25,9 @@ TimeoutStopSec=300s
 KillMode=mixed
 UMask=0027
 
-MemoryMax=2G
+# Прод 05.11: при 2G страничный кэш базы вытеснялся, и один полный проход читал
+# диск 20-46 с вместо 3 с. Кучу отдельно держит --max-old-space-size.
+MemoryMax=5G
 MemorySwapMax=0
 Nice=10
 IOSchedulingClass=best-effort

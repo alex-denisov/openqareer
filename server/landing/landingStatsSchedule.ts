@@ -5,6 +5,7 @@
  */
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
 import { setLandingStats } from './landingStatsCache';
 import {
   computeCatalogSources,
@@ -34,7 +35,7 @@ function errorName(error: unknown): string {
 
 /** Maintenance process only: the counts scan the whole pool index. */
 export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): () => void {
-  const run = () => {
+  const run = (): boolean => {
     const started = Date.now();
     try {
       const now = new Date();
@@ -48,18 +49,18 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
         { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
         'landing-stats-written',
       );
+      return true;
     } catch (error: unknown) {
       log.error({ errorName: errorName(error), ms: Date.now() - started }, 'landing-stats-failed');
+      return false;
     }
   };
-  const first = setTimeout(run, JOB_FIRST_RUN_MS);
-  const every = setInterval(run, JOB_INTERVAL_MS);
-  first.unref();
-  every.unref();
-  return () => {
-    clearTimeout(first);
-    clearInterval(every);
-  };
+  return schedulePersistedJob(database, log, {
+    job: 'landing-stats',
+    firstRunMs: JOB_FIRST_RUN_MS,
+    intervalMs: JOB_INTERVAL_MS,
+    run,
+  });
 }
 
 /** Web server: a primary-key read of one row, then the cache is replaced. */
