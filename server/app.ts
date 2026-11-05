@@ -52,6 +52,7 @@ import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReput
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
 import { SqliteNetworkIndexRepository } from './data/sqliteNetworkIndexRepository';
+import { SqliteCompanyDirectoryRepository } from './data/sqliteCompanyDirectoryRepository';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
 import { registerCandidateFootprintRoutes } from './routes/candidateFootprintRoutes';
 import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
@@ -127,6 +128,7 @@ interface BuildAppOptions {
   capabilityConsentStore?: SqliteCapabilityConsentStore;
   candidateCompanyWantsRepo?: SqliteCandidateCompanyWantsRepository;
   networkIndexRepo?: SqliteNetworkIndexRepository;
+  companyDirectoryRepo?: SqliteCompanyDirectoryRepository;
   candidateActionRepository?: SqliteCandidateActionRepository;
   candidateActionExecutor?: CandidateActionExecutor;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
@@ -385,6 +387,9 @@ function createCandidateRepositories(options: BuildAppOptions) {
     candidateActionRepository:
       options.candidateActionRepository ??
       new SqliteCandidateActionRepository({ databasePath: config.databasePath }),
+    companyDirectoryRepo:
+      options.companyDirectoryRepo ??
+      new SqliteCompanyDirectoryRepository({ databasePath: config.databasePath }),
   };
 }
 
@@ -551,11 +556,18 @@ function attachMarketSalaryStore(
 
 /** Repositories the app opened itself; ones passed in belong to the caller (tests). */
 function closeOwnedCandidateRepos(
-  options: Pick<BuildAppOptions, 'candidateCompanyWantsRepo' | 'networkIndexRepo'>,
-  deps: Pick<RouteDeps, 'candidateCompanyWantsRepo' | 'networkIndexRepo'>,
+  options: Pick<
+    BuildAppOptions,
+    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo'
+  >,
+  deps: Pick<
+    RouteDeps,
+    'candidateCompanyWantsRepo' | 'networkIndexRepo' | 'companyDirectoryRepo'
+  >,
 ): void {
   if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
   if (!options.networkIndexRepo) deps.networkIndexRepo?.close();
+  if (!options.companyDirectoryRepo) deps.companyDirectoryRepo?.close();
 }
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {

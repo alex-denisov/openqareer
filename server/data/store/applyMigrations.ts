@@ -48,6 +48,7 @@ import { MIGRATION_41 as MIGRATION_EXECUTIVE_REQUEST } from '../executiveRequest
 import { MIGRATION_47 as MIGRATION_ROLE_SKILL_ASSESSMENT } from '../roleSkillAssessmentSchema';
 import { MIGRATION_48 as MIGRATION_STAR_STORIES } from '../starStoriesSchema';
 import { MIGRATION_49 as MIGRATION_INTERVIEW_SIMULATOR } from '../interviewSimulatorSchema';
+import { COMPANY_DIRECTORY_MIGRATION } from '../companyDirectorySchema';
 
 export const MIGRATIONS = [
   MIGRATION_1,
@@ -104,6 +105,7 @@ export const MIGRATIONS = [
   MIGRATION_ADAPTATION_APPLICATIONS,
   SEO_GOAL_MIGRATION,
   MIGRATION_TARIFF_QUOTAS,
+  COMPANY_DIRECTORY_MIGRATION,
 ] as const;
 
 export function applyMigrations(
