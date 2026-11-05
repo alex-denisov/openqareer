@@ -176,12 +176,8 @@ export function LetterEditor({
   );
 }
 
-function requirementsNote(count: number, language: VacancyPitchResult['language']): string {
-  if (language === 'en') {
-    return count === 1
-      ? '1 vacancy requirement is not confirmed by profile facts'
-      : `${count} vacancy requirements are not confirmed by profile facts`;
-  }
+/** Сноску читает кандидат, поэтому она на русском при любом языке письма. */
+function requirementsNote(count: number): string {
   const last = count % 10;
   const tens = count % 100;
   const few = last >= 2 && last <= 4 && (tens < 12 || tens > 14);
@@ -190,16 +186,10 @@ function requirementsNote(count: number, language: VacancyPitchResult['language'
   return `${count} ${few ? 'требования' : 'требований'} вакансии не подтверждены фактами профиля`;
 }
 
-function UnconfirmedRequirementsNote({
-  labels,
-  language,
-}: {
-  readonly labels: readonly string[];
-  readonly language: VacancyPitchResult['language'];
-}) {
+function UnconfirmedRequirementsNote({ labels }: { readonly labels: readonly string[] }) {
   return (
     <details className="career-letter-requirements">
-      <summary>{requirementsNote(labels.length, language)}</summary>
+      <summary>{requirementsNote(labels.length)}</summary>
       <ul>
         {labels.map((label) => (
           <li key={label}>{label}</li>
@@ -244,11 +234,7 @@ export function LetterNotices({
   if (!notice && unconfirmed.length === 0) return null;
   return (
     <div className="career-letter-notes">
-      {notice ? (
-        <p>{notice}</p>
-      ) : (
-        <UnconfirmedRequirementsNote labels={unconfirmed} language={pitch.language} />
-      )}
+      {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} />}
     </div>
   );
 }

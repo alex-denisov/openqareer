@@ -154,3 +154,27 @@ describe('notes under the letter (G3 L2)', () => {
     expect(pitch.unconfirmedRequirements).toEqual(['T-SQL', 'CI-CD', 'Node.js']);
   });
 });
+
+describe('имя отправителя письма', () => {
+  it('отдаёт имя, которым подписано письмо, на языке письма', () => {
+    const vacancy = { id: 'v', title: 'Head of Platform' };
+    const name = 'Андрей Лебедев';
+    expect(generateVacancyPitch({ vacancy, candidateName: name, facts, language: 'ru' }).senderName).toBe(name);
+    expect(generateVacancyPitch({ vacancy, candidateName: name, facts, language: 'en' }).senderName).toBe('Andrey Lebedev');
+  });
+
+  it('выделяет имя и при обратном порядке, а неизвестное имя не угадывает', () => {
+    const vacancy = { id: 'v', title: 'Head of Platform' };
+    const first = (candidateName: string, language: 'ru' | 'en') =>
+      generateVacancyPitch({ vacancy, candidateName, facts, language }).senderFirstName;
+    expect(first('Андрей Лебедев', 'ru')).toBe('Андрей');
+    expect(first('Лебедев Андрей', 'ru')).toBe('Андрей');
+    expect(first('Лебедев Андрей', 'en')).toBe('Andrey');
+    expect(first('Ли Вэй', 'ru')).toBeUndefined();
+  });
+
+  it('не подставляет заглушку, когда имени в резюме нет', () => {
+    const pitch = generateVacancyPitch({ vacancy: { id: 'v', title: 'Head of Platform' }, facts, language: 'ru' });
+    expect(pitch.senderName).toBeUndefined();
+  });
+});
