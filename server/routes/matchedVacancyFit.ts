@@ -1,5 +1,6 @@
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
+import { compareFitRelevance, exactRoleTest, type ExactRoleTest } from './matchedFitRelevance';
 import {
   compareFitDirected,
   compareMoney,
@@ -70,7 +71,9 @@ export function withVacancyFitOrder(
   sort: VacancySort = DEFAULT_VACANCY_SORT,
   log?: FitOrderLog,
   use: FitOrderUse = 'read',
+  isExact?: ExactRoleTest,
 ) {
+  const relevance = sort.by === 'fit' && sort.dir === 'desc' ? isExact : undefined;
   const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
   const reader = createFitViewReader(deps, candidateId, log, use);
   const stamp = reader ? fitProfileStamp(deps, candidateId) : 'none';
@@ -83,18 +86,19 @@ export function withVacancyFitOrder(
         ? reader.read(reader.scoredIds(items))
         : new Map<string, VacancyFitView>();
       fitViewsCache.write(key, views);
-      return orderByFit(items, views, sort, money);
+      return orderByFit(items, views, sort, money, relevance);
     }
-    if (prepared) return orderByFit(items, known.value, sort, money);
+    if (prepared) return orderByFit(items, known.value, sort, money, relevance);
     if (known.stale && reader) void refreshFitViews(key, reader, items);
     const landed = reader ? viewsLandedSince(known.value, reader.scoredIds(items)) : [];
-    if (landed.length === 0) return orderByFit(items, known.value, sort, money);
+    if (landed.length === 0) return orderByFit(items, known.value, sort, money, relevance);
     const patched = new Map([...known.value, ...reader!.read(landed)]);
     fitViewsCache.write(key, patched);
-    return orderByFit(items, patched, sort, money);
+    return orderByFit(items, patched, sort, money, relevance);
   };
   const prepare = async (items: readonly MatchedVacancyItem[]): Promise<number> => {
     const rows = reader ? await prepareFitViews(key, reader, items) : 0;
+    if (relevance) await readRolesYielding(items, relevance);
     prepared = true;
     return rows;
   };
@@ -124,8 +128,15 @@ export function matchedOrderChoiceKeys(
 ): Pick<MatchedOrder, 'cacheKey' | 'fitStamp'> {
   return {
     fitStamp: deps.vacancyMechanics ? fitProfileStamp(deps, candidateId) : 'none',
-    cacheKey: sort.by === 'fit' ? wantedCacheKey(deps, candidateId) : '',
+    cacheKey: sort.by === 'fit' ? fitChoiceKey(deps, candidateId) : '',
   };
+}
+
+/** A stored list built by an older rule must not be served again: part of the list's `choice`. */
+const FIT_ORDER_RULE = 'role-v1';
+
+function fitChoiceKey(deps: RouteDeps, candidateId: string): string {
+  return `${FIT_ORDER_RULE}|${wantedCacheKey(deps, candidateId)}`;
 }
 
 function wantedCacheKey(deps: RouteDeps, candidateId: string): string {
@@ -142,18 +153,22 @@ export function withWantedCompanyOrder(
   sort: VacancySort = DEFAULT_VACANCY_SORT,
   log?: FitOrderLog,
   use: FitOrderUse = 'read',
+  targetRoles: readonly string[] = [],
 ): MatchedOrder {
-  const byFit = withVacancyFitOrder(deps, candidateId, sort, log, use);
+  const isExact = targetRoles.length > 0 ? exactRoleTest(targetRoles) : undefined;
+  const byFit = withVacancyFitOrder(deps, candidateId, sort, log, use, isExact);
   if (sort.by !== 'fit') return Object.assign(byFit, { cacheKey: '', dataKey: '' });
   const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
   // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
-  const cacheKey = [...wanted].sort().join(',');
+  const cacheKey = fitChoiceKey(deps, candidateId);
   // 01.11: a result that landed must reach the ordered list too, not wait out the list window.
   const dataKey = String(deps.vacancyMechanics?.cachedVacancyIds(candidateId).size ?? 0);
   return Object.assign(
     (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
       wantedCompaniesBreakTies(byFit(items), wanted, (left, right) =>
-        compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
+        isExact && sort.dir === 'desc'
+          ? compareFitRelevance(rankedRow(left), rankedRow(right), isExact)
+          : compareFitDirected(left.explanation.fitView, right.explanation.fitView, sort.dir),
       ),
     { cacheKey, dataKey, prepare: byFit.prepare, fitStamp: byFit.fitStamp },
   );
@@ -202,12 +217,15 @@ function createFitViewReader(
     const input = context(target, []);
     const view = runtime.view(input, { queueRequirements: use === 'read' });
     const compact = compactFitView(
-      geoBlocks(target, textStillLoading(id, target.description, view, target.fullText, target.textHidden)),
+      geoBlocks(
+        target,
+        textStillLoading(id, target.description, view, target.fullText, target.textHidden),
+      ),
     );
     const stale = view.state === 'not_requested' || view.state === 'refreshing';
     return { id, view: compact, staleInput: stale ? input : undefined };
   };
-  const collect = (rows: readonly (ReturnType<typeof readRow>)[]) => {
+  const collect = (rows: readonly ReturnType<typeof readRow>[]) => {
     const present = rows.flatMap((row) => (row ? [row] : []));
     if (use === 'read') {
       requeueStaleRows(
@@ -331,11 +349,31 @@ async function refreshFitViews(
   }
 }
 
+function rankedRow(item: MatchedVacancyItem) {
+  return { title: item.cluster.canonicalTitle, view: item.explanation.fitView };
+}
+
+const ROLE_ROWS_PER_TURN = 50;
+
+/** A first read of a title parses it; the event loop gets its turn between portions (PRB-041). */
+async function readRolesYielding(
+  items: readonly MatchedVacancyItem[],
+  isExact: ExactRoleTest,
+): Promise<void> {
+  for (let start = 0; start < items.length; start += ROLE_ROWS_PER_TURN) {
+    items
+      .slice(start, start + ROLE_ROWS_PER_TURN)
+      .forEach((item) => isExact(item.cluster.canonicalTitle));
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
 function orderByFit(
   items: readonly MatchedVacancyItem[],
   views: FitViews,
   sort: VacancySort,
   money?: MoneyReader,
+  isExact?: ExactRoleTest,
 ): MatchedVacancyItem[] {
   const decorated = items.map((item) => {
     const fitView = views.get(item.cluster.id);
@@ -343,6 +381,13 @@ function orderByFit(
       ? { ...item, explanation: explanationWithFitView(item.explanation, fitView) }
       : item;
   });
+  if (isExact) {
+    return decorated.sort(
+      (left, right) =>
+        compareFitRelevance(rankedRow(left), rankedRow(right), isExact) ||
+        compareMatchedVacancies(left, right),
+    );
+  }
   if (sort.by !== 'money' || !money) {
     return decorated.sort((left, right) => compareFitOrder(left, right, sort));
   }
@@ -530,7 +575,12 @@ export async function requestFitForVacancyIds(
       if (!['not_requested', 'failed', 'refreshing'].includes(state)) return;
       // Only the background precompute passes a slot: a counted row keeps its old percent past the day's ceiling.
       // 04.11: a row with its job held spent a slot on every sweep and queued nothing.
-      if (state === 'refreshing' && refreshSlot && (runtime.fitJobHoldsKey(input) || !refreshSlot())) return;
+      if (
+        state === 'refreshing' &&
+        refreshSlot &&
+        (runtime.fitJobHoldsKey(input) || !refreshSlot())
+      )
+        return;
       runtime.enqueue(input, {
         ...(backgroundRank === undefined ? {} : { backgroundRank: backgroundRank + index }),
         // `refreshing` has just spent its slot above.

@@ -162,8 +162,8 @@ describe('B422: компании «Хочу» в порядке подборки
       by: 'fit',
       dir: 'desc',
     }).cacheKey;
-    expect(none).toBe('');
-    expect(marked).toBe(candidateCompanyKey('Acme'));
+    expect(none).toBe('role-v1|');
+    expect(marked).toBe(`role-v1|${candidateCompanyKey('Acme')}`);
   });
 
   it('«Деньги» отметку не учитывают и ставят вакансии без денег последними', () => {
