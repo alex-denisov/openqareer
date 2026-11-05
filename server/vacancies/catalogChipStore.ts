@@ -18,6 +18,7 @@ import {
   type CatalogChip,
   type ChipCounts,
 } from './catalogChips';
+import { pauseClusterWrite } from './clusterWritePause';
 import type { CatalogCursor } from './vacancyCatalogProjection';
 
 const TABLES_SQL = `CREATE TABLE IF NOT EXISTS catalog_chip_counts (
@@ -54,6 +55,22 @@ interface SourceRow {
   title: string;
   summary: string;
   published_ms: number;
+}
+
+type ChipWrite = () => void;
+
+const CHIP_WRITE_BUDGET_MS = 100;
+
+export interface ChipWriteOptions {
+  readonly budgetMs?: number;
+  readonly pause?: () => void;
+}
+
+export interface ChipWriteReport {
+  readonly entriesAdded: number;
+  readonly entriesRemoved: number;
+  readonly countsChanged: number;
+  readonly transactions: number;
 }
 
 function tableExists(database: DatabaseSync, name: string): boolean {
@@ -102,28 +119,107 @@ export function computeCatalogChips(database: DatabaseSync, nowMs: number): Chip
   return { counts, entries };
 }
 
-/** Both tables replaced in one transaction. */
-export function writeCatalogChips(database: DatabaseSync, snapshot: ChipSnapshot, now: Date): void {
-  database.exec(TABLES_SQL);
-  const count = database.prepare(
-    'INSERT INTO catalog_chip_counts (list_key, payload, computed_at) VALUES (?, ?, ?)',
-  );
-  const entry = database.prepare(
+const entryId = (row: ChipEntry): string =>
+  `${row.listKey}\0${row.chip}\0${row.publishedMs}\0${row.entryKey}`;
+
+/** Новые строки идут первыми: сохранённая запись не пропадает у читателя ни на одном коммите. */
+function entryWrites(database: DatabaseSync, snapshot: ChipSnapshot) {
+  const stored = database
+    .prepare(
+      `SELECT list_key AS listKey, chip, published_ms AS publishedMs, entry_key AS entryKey
+         FROM catalog_chip_entries`,
+    )
+    .iterate() as Iterable<ChipEntry>;
+  const insert = database.prepare(
     'INSERT OR IGNORE INTO catalog_chip_entries (list_key, chip, published_ms, entry_key) VALUES (?, ?, ?, ?)',
   );
-  database.exec('BEGIN');
-  try {
-    database.exec('DELETE FROM catalog_chip_counts; DELETE FROM catalog_chip_entries');
-    const at = now.toISOString();
-    for (const [key, value] of snapshot.counts) count.run(key, JSON.stringify(value), at);
-    for (const row of snapshot.entries) {
-      entry.run(row.listKey, row.chip, row.publishedMs, row.entryKey);
+  const remove = database.prepare(
+    `DELETE FROM catalog_chip_entries
+      WHERE list_key = ? AND chip = ? AND published_ms = ? AND entry_key = ?`,
+  );
+  const missing = new Map<string, ChipEntry>();
+  for (const row of snapshot.entries) missing.set(entryId(row), row);
+  const removed: ChipEntry[] = [];
+  for (const row of stored) if (!missing.delete(entryId(row))) removed.push(row);
+  const write =
+    (statement: typeof insert) =>
+    (row: ChipEntry): ChipWrite =>
+    () => {
+      statement.run(row.listKey, row.chip, row.publishedMs, row.entryKey);
+    };
+  return { added: Array.from(missing.values(), write(insert)), removed: removed.map(write(remove)) };
+}
+
+function countWrites(database: DatabaseSync, snapshot: ChipSnapshot, at: string): ChipWrite[] {
+  const stored = database
+    .prepare('SELECT list_key AS listKey, payload FROM catalog_chip_counts')
+    .all() as unknown as { listKey: string; payload: string }[];
+  const payloads = new Map(stored.map((row) => [row.listKey, row.payload]));
+  const upsert = database.prepare(
+    `INSERT INTO catalog_chip_counts (list_key, payload, computed_at) VALUES (?, ?, ?)
+       ON CONFLICT (list_key) DO UPDATE SET payload = excluded.payload, computed_at = excluded.computed_at`,
+  );
+  const remove = database.prepare('DELETE FROM catalog_chip_counts WHERE list_key = ?');
+  const changed = Array.from(snapshot.counts, ([key, value]) => [key, JSON.stringify(value)] as const)
+    .filter(([key, payload]) => payloads.get(key) !== payload)
+    .map(([key, payload]): ChipWrite => () => void upsert.run(key, payload, at));
+  const gone = stored
+    .filter((row) => !snapshot.counts.has(row.listKey))
+    .map((row): ChipWrite => () => void remove.run(row.listKey));
+  return [...changed, ...gone];
+}
+
+function writeInPortions(
+  database: DatabaseSync,
+  writes: readonly ChipWrite[],
+  { budgetMs, pause }: Required<ChipWriteOptions>,
+): number {
+  let position = 0;
+  let transactions = 0;
+  while (position < writes.length) {
+    if (position > 0) pause();
+    database.exec('BEGIN IMMEDIATE');
+    try {
+      const startedAt = performance.now();
+      do {
+        writes[position]!();
+        position += 1;
+      } while (position < writes.length && performance.now() - startedAt < budgetMs);
+      database.exec('COMMIT');
+      transactions += 1;
+    } catch (error) {
+      database.exec('ROLLBACK');
+      throw error;
     }
-    database.exec('COMMIT');
-  } catch (error) {
-    database.exec('ROLLBACK');
-    throw error;
   }
+  return transactions;
+}
+
+/**
+ * Пишет только разницу со снимком короткими транзакциями (PRB-041): полная
+ * перезапись 274 тыс. строк держала блокировку до 3,7 с и останавливала чтения
+ * HTTP. Во время записи страница может на секунды показать смесь старых и новых
+ * строк; список и так отстаёт до получаса. Прерванный проход доделает следующий.
+ */
+export function writeCatalogChips(
+  database: DatabaseSync,
+  snapshot: ChipSnapshot,
+  now: Date,
+  { budgetMs = CHIP_WRITE_BUDGET_MS, pause = pauseClusterWrite }: ChipWriteOptions = {},
+): ChipWriteReport {
+  database.exec(TABLES_SQL);
+  const { added, removed } = entryWrites(database, snapshot);
+  const counts = countWrites(database, snapshot, now.toISOString());
+  const transactions = writeInPortions(database, [...added, ...removed, ...counts], {
+    budgetMs,
+    pause,
+  });
+  return {
+    entriesAdded: added.length,
+    entriesRemoved: removed.length,
+    countsChanged: counts.length,
+    transactions,
+  };
 }
 
 /** Web request path: one row by primary key; empty until maintenance writes. */

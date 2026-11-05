@@ -42,7 +42,8 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
       writeLandingStats(database, stats, now);
       writeCatalogSources(database, computeCatalogSources(database), now);
       writeCatalogSalaryStats(database, computeCatalogSalaryStats(database), now);
-      writeCatalogChips(database, computeCatalogChips(database, now.getTime()), now);
+      const chips = writeCatalogChips(database, computeCatalogChips(database, now.getTime()), now);
+      log.info({ ...chips }, 'catalog-chips-written');
       log.info(
         { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
         'landing-stats-written',
