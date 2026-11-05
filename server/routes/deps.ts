@@ -113,4 +113,6 @@ export interface RouteDeps {
   candidateActionRepository?: import('../candidate/sqliteCandidateActionRepository').SqliteCandidateActionRepository;
   /** Исполнитель подтверждённых пакетов действий кандидата (B261). */
   candidateActionExecutor?: import('../candidate/candidateActionExecutor').CandidateActionExecutor;
+  /** Справочник компаний с корпоративными сайтами, карьерными страницами и LinkedIn (рефералы / найм). */
+  companyDirectoryRepo?: import('../data/sqliteCompanyDirectoryRepository').SqliteCompanyDirectoryRepository;
 }

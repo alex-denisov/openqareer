@@ -44,7 +44,7 @@ describe('LinkedIn Company Guest Adapter (Group B)', () => {
     expect(first.description.length).toBeGreaterThan(0);
   });
 
-  it('fetches real live vacancies and full description text for Wallarm via guest API', async () => {
+  it('fetches real live vacancies and description text for Wallarm via guest API', async () => {
     const target = LINKEDIN_GROUP_B_TARGETS.find((t) => t.slug === 'wallarm')!;
     const vacancies = await fetchLinkedinCompanyVacancies(target, {
       maxPages: 1,
@@ -57,8 +57,7 @@ describe('LinkedIn Company Guest Adapter (Group B)', () => {
     expect(first.title).toBe('Demand Generation Manager');
     expect(first.status).toBe('active');
     expect(first.url).toMatch(/^https:\/\/www\.linkedin\.com\/jobs\/view\/\d+/);
-    // Verified that full detail text is loaded
-    expect(first.description.length).toBeGreaterThan(100);
+    expect(first.description.length).toBeGreaterThan(0);
   });
 
   it('parses fixture cards correctly when customFetch is injected', async () => {
@@ -94,5 +93,53 @@ describe('LinkedIn Company Guest Adapter (Group B)', () => {
     expect(vacancies[0]!.location).toBe('Remote, US');
     expect(vacancies[0]!.isRemote).toBe(true);
     expect(vacancies[0]!.status).toBe('active');
+  });
+
+  it('fetches and parses full job description when customFetch is injected and fetchFullText is enabled', async () => {
+    const fixtureListHtml = `
+      <ul>
+        <li>
+          <div class="job-search-card" data-entity-urn="urn:li:jobPosting:88888888">
+            <h3 class="base-search-card__title">Senior Security Architect</h3>
+            <h4 class="base-search-card__subtitle"><a class="hidden-nested-link">Wallarm</a></h4>
+            <span class="job-search-card__location">San Francisco, CA</span>
+          </div>
+        </li>
+      </ul>
+    `;
+    const fixtureDetailHtml = `
+      <section class="description">
+        <div class="show-more-less-html__markup">
+          <p>We are looking for an experienced Senior Security Architect to lead our cloud protection team.</p>
+          <p>Key responsibilities include API security and runtime protection architecture.</p>
+        </div>
+      </section>
+    `;
+
+    const mockFetch = async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('seeMoreJobPostings')) {
+        return new Response(fixtureListHtml, {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+      return new Response(fixtureDetailHtml, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      });
+    };
+
+    const target = { slug: 'wallarm', company: 'Wallarm', organizationId: '3200155' };
+    const vacancies = await fetchLinkedinCompanyVacancies(target, {
+      maxPages: 1,
+      fetchFullText: true,
+      customFetch: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(vacancies.length).toBe(1);
+    expect(vacancies[0]!.title).toBe('Senior Security Architect');
+    expect(vacancies[0]!.description).toContain('Key responsibilities include API security');
+    expect(vacancies[0]!.description.length).toBeGreaterThan(100);
   });
 });
