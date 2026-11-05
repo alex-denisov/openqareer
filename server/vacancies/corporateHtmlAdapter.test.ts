@@ -5,10 +5,23 @@ import {
 } from './corporateHtmlAdapter';
 
 describe('Corporate HTML Generic Adapter', () => {
-  it('registers Kaspersky and Veeam as declarative endpoints', () => {
+  it('registers Kaspersky, Veeam, and FaceApp as declarative endpoints', () => {
     const ids = CORPORATE_HTML_ENDPOINTS.map((e) => e.id);
     expect(ids).toContain('kaspersky');
     expect(ids).toContain('veeam');
+    expect(ids).toContain('faceapp');
+  });
+
+  it('fetches live FaceApp vacancies via generic HTML adapter', async () => {
+    const endpoint = CORPORATE_HTML_ENDPOINTS.find((e) => e.id === 'faceapp')!;
+    const vacancies = await fetchCorporateHtmlVacancies(endpoint);
+
+    expect(vacancies.length).toBeGreaterThan(0);
+    const first = vacancies[0]!;
+    expect(first.company).toBe('FaceApp');
+    expect(first.status).toBe('active');
+    expect(first.url).toMatch(/^https:\/\/www\.faceapp\.com\/careers\//);
+    expect(first.provenance.sourceId).toBe('src-faceapp');
   });
 
   it('fetches live Kaspersky vacancies via generic HTML adapter', async () => {

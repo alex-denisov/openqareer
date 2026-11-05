@@ -14,6 +14,38 @@ import type { MeasuredAtsBoard } from './atsBoardSources';
  */
 export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
   {
+    company: 'Telnyx',
+    provider: 'greenhouse',
+    board: 'telnyx54',
+    jobs: 60,
+    observedAt: '2026-11-05',
+    lists: ['veselova'],
+  },
+  {
+    company: 'Luminai',
+    provider: 'ashby',
+    board: 'luminai',
+    jobs: 15,
+    observedAt: '2026-11-05',
+    lists: ['veselova'],
+  },
+  {
+    company: 'Truv',
+    provider: 'lever',
+    board: 'truv',
+    jobs: 11,
+    observedAt: '2026-11-05',
+    lists: ['buildin', 'veselova'],
+  },
+  {
+    company: 'Kodland',
+    provider: 'recruitee',
+    board: 'kodland',
+    jobs: 75,
+    observedAt: '2026-11-05',
+    lists: ['buildin', 'veselova'],
+  },
+  {
     company: 'Personio',
     provider: 'personio',
     board: 'personio',
@@ -1278,14 +1310,6 @@ export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
     lists: ['notion'],
   },
   {
-    company: 'Truv',
-    provider: 'lever',
-    board: 'truv',
-    jobs: 12,
-    observedAt: '2026-09-05',
-    lists: ['buildin'],
-  },
-  {
     company: 'Xsolla',
     provider: 'lever',
     board: 'xsolla',
@@ -1324,14 +1348,6 @@ export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
     jobs: 1,
     observedAt: '2026-09-05',
     lists: ['buildin', 'drive'],
-  },
-  {
-    company: 'Kodland',
-    provider: 'recruitee',
-    board: 'kodland',
-    jobs: 60,
-    observedAt: '2026-09-05',
-    lists: ['buildin'],
   },
   {
     company: 'OLX',

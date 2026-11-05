@@ -12,6 +12,7 @@ import { VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, vacancyDescriptionHash } from '
 import { createBulkLlmRuntime } from '../server/providers/bulkLlmRuntime';
 import { createVacancyFitContextReader, readVacancyFitTarget } from '../server/routes/vacancyFitContext';
 import { MultiSourceVacancyEngine } from '../server/vacancies/multiSourceVacancyEngine';
+import { SqliteVacancyPoolStore } from '../server/vacancies/sqliteVacancyPoolStore';
 import { SqliteTitleParseStore } from '../server/vacancies/titleParse/sqliteTitleParseStore';
 
 const path = process.env.OPENQAREER_DATABASE_PATH!;
@@ -23,7 +24,7 @@ const requirements = new SqliteVacancyRequirementsStore(database);
 const deps = {
   candidateStore: new SqliteCandidateStore({ databasePath: path, encryptionKey: key }),
   titleParseStore: new SqliteTitleParseStore({ databasePath: path }),
-  multiSourceEngine: new MultiSourceVacancyEngine({ fetcher: async () => [] } as never),
+  multiSourceEngine: new MultiSourceVacancyEngine({ pool: new SqliteVacancyPoolStore({ databasePath: path }), fetcher: async () => [] } as never),
 } as never;
 const contexts = new Map<string, ReturnType<typeof createVacancyFitContextReader>>();
 const contextOf = (candidateId: string) => contexts.get(candidateId) ?? contexts.set(candidateId, createVacancyFitContextReader(deps, candidateId)).get(candidateId)!;
