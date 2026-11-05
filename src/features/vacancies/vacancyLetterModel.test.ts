@@ -18,6 +18,31 @@ describe('vacancy letter model', () => {
     expect(letterBodyForCircle(3, pitch)).toBe('Здравствуйте, команда');
   });
 
+  it('signs the letter as the mockup does: full name when cold, first name to a contact', () => {
+    const pitch = {
+      contactMessage: 'Мария, добрый день',
+      emailPitch: { subject: 'Отклик', body: 'Здравствуйте, команда' },
+      senderName: ' Андрей Лебедев ',
+      senderFirstName: 'Андрей',
+    };
+
+    expect(letterBodyForCircle(3, pitch)).toBe('Здравствуйте, команда\n\nАндрей Лебедев');
+    expect(letterBodyForCircle(1, pitch)).toBe('Мария, добрый день\n\nАндрей');
+    expect(letterBodyForCircle(2, pitch)).toBe('Мария, добрый день\n\nАндрей');
+  });
+
+  it('keeps the full name for a contact when the first name is unknown', () => {
+    const pitch = { emailPitch: { body: 'Добрый день' }, senderName: 'Ли Вэй' };
+
+    expect(letterBodyForCircle(1, pitch)).toBe('Добрый день\n\nЛи Вэй');
+  });
+
+  it('leaves the letter unsigned when the resume has no name', () => {
+    const pitch = { emailPitch: { body: 'Здравствуйте, команда' }, senderName: '  ' };
+
+    expect(letterBodyForCircle(3, pitch)).toBe('Здравствуйте, команда');
+  });
+
   it('maps a path recipient to the pitch generator input without inventing contact data', () => {
     expect(
       recipientForConnectionPath({

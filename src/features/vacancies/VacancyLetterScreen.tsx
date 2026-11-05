@@ -330,7 +330,9 @@ function LetterDraftContent({
   readonly frozen: boolean;
   readonly onGatherFacts?: () => void;
 }) {
-  const senderName = useCandidateDisplayName();
+  const accountName = useCandidateDisplayName();
+  // Письмо подписано именем из резюме; имя аккаунта только на случай, когда его там нет.
+  const senderName = state.draft.pitch?.senderName?.trim() || accountName;
   if (!state.draft.pitch && !state.draft.error) return null;
   const editorFrozen = frozen || state.draft.loading;
   return (

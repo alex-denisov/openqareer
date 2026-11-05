@@ -111,6 +111,7 @@
 .career-letter-circle-tab > strong {
   color: var(--career-text);
   font-size: var(--career-text-sm);
+  font-weight: 600;
 }
 
 .career-letter-circle-tab-summary {

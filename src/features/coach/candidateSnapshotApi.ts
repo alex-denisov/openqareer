@@ -105,13 +105,19 @@ export async function getCandidate(): Promise<CandidateSnapshot> {
 /** Снимок вместе с диалогом — его просит только панель эксперта. */
 export async function getCandidateWithMessages(
   stage?: CoachTurnStage,
-  companyKey?: string,
+  thread?: ConsultantThread,
 ): Promise<CandidateSnapshot> {
   const [snapshot, messages] = await Promise.all([
     getCandidate(),
-    getCandidateMessages(stage, companyKey),
+    getCandidateMessages(stage, thread),
   ]);
   return { ...snapshot, messages };
+}
+
+/** Разговор одного объекта; без него панель читает весь этап. */
+export interface ConsultantThread {
+  readonly kind: 'company' | 'vacancy';
+  readonly id: string;
 }
 
 export interface CandidateMessagePage {
@@ -122,10 +128,10 @@ export interface CandidateMessagePage {
 export async function getCandidateMessagePage(
   offset = 0,
   stage?: CoachTurnStage,
-  companyKey?: string,
+  thread?: ConsultantThread,
 ): Promise<CandidateMessagePage> {
   const stageQuery = `${stage ? `&stage=${encodeURIComponent(stage)}` : ''}${
-    companyKey ? `&company=${encodeURIComponent(companyKey)}` : ''
+    thread ? `&${thread.kind}=${encodeURIComponent(thread.id)}` : ''
   }`;
   const response = await apiFetch(
     `/api/v1/candidate/me/messages?offset=${encodeURIComponent(String(offset))}${stageQuery}`,
@@ -150,13 +156,13 @@ export async function getCandidateMessagePage(
 /** Весь диалог кандидата — страницами, как и всё, что не влезает в ответ. */
 export async function getCandidateMessages(
   stage?: CoachTurnStage,
-  companyKey?: string,
+  thread?: ConsultantThread,
 ): Promise<CandidateSnapshot['messages']> {
   const items: CandidateSnapshot['messages'] = [];
   let offset: number | null = 0;
   let pages = 0;
   while (offset !== null && pages < 60) {
-    const page: CandidateMessagePage = await getCandidateMessagePage(offset, stage, companyKey);
+    const page: CandidateMessagePage = await getCandidateMessagePage(offset, stage, thread);
     if (page.items.length === 0) break;
     items.push(...page.items);
     offset = page.nextOffset;
