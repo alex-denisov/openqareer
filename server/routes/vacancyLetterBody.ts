@@ -35,7 +35,7 @@ export interface LetterWritingRequest {
     requiredSkills: readonly string[];
     recipient?: { name?: string; role?: string };
   };
-  /** Факты с переведёнными формулировками: письмо и проверка видят один текст. */
+  /** Исходные факты: письмо модель пишет на нужном языке сама. */
   readonly facts: readonly VacancyPitchInputFact[];
   readonly workplaces: readonly PitchWorkplace[];
   readonly language: PitchLanguage;
@@ -79,14 +79,9 @@ export function modelLetterNotice(language: PitchLanguage): string {
 function letterGateSources(request: LetterWritingRequest): LetterGateSources {
   const { vacancy, facts, workplaces, language } = request;
   const usable = filterUsablePitchFacts(facts);
-  const places = letterFactPlaces(workplaces, language).map(({ employer, factIds }) => ({
-    employer,
-    statements: usable.filter((fact) => factIds.includes(fact.id)).map((fact) => fact.statement),
-  }));
   return {
     language,
     candidate: usable.map((fact) => fact.statement),
-    places,
     career: letterCareer(workplaces, language).map((place) =>
       [place.title, place.employer, place.years].filter(Boolean).join(' '),
     ),
@@ -128,7 +123,7 @@ function writerInput(
   const { vacancy, facts, workplaces, language, tone, rankingContext, targetCompany } = letter;
   const places = letterFactPlaces(workplaces, language);
   return {
-    facts: letterModelFacts(facts, workplaces, language).map((fact) => ({
+    facts: letterModelFacts(facts, workplaces).map((fact) => ({
       ref: fact.id,
       workplace: places.find((place) => place.factIds.includes(fact.id))?.employer ?? null,
       statement: fact.statement,

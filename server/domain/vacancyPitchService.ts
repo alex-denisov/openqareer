@@ -509,12 +509,10 @@ function letterResultFacts(
 export function letterModelFacts(
   facts: readonly VacancyPitchInputFact[],
   workplaces: readonly PitchWorkplace[],
-  language: PitchLanguage,
 ): VacancyPitchInputFact[] {
   const records = new Set(workplaces.flatMap((place) => (place.recordId ? [place.recordId] : [])));
   return filterUsableFacts(facts).filter((fact) => !records.has(fact.id) &&
-    !isStructuredRecordStatement(fact.statement) &&
-    (language === 'ru' || !hasCyrillic(fact.statement)));
+    !isStructuredRecordStatement(fact.statement));
 }
 
 function buildEvidenceParagraph(
@@ -669,6 +667,12 @@ function buildAtsCoverLetter(
     copy.ats.signOff,
     candidateName,
   ].join('\n');
+}
+
+/** Модель пишет только текст: обращение и подпись ставит система, так их нельзя выдумать или забыть. */
+export function frameModelLetter(body: string, language: PitchLanguage, company: string | undefined, candidateName: string | undefined): string {
+  const { greeting, signOff } = copyFor(language).ats;
+  return [greeting(company), '', body, '', signOff, ...(candidateName ? [candidateName] : [])].join('\n');
 }
 
 function buildContactMessage(

@@ -355,7 +355,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
   it('uses the model letter and reports its stage when the writer succeeds', async () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async () => ({
-        body: 'Здравствуйте! Пишу по вакансии от модели.',
+        body: 'Пишу по вакансии от модели.',
         stage: 'openai:gpt-test',
       }),
     };
@@ -378,7 +378,8 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const data = response.json().data;
     expect(data.bodySource).toBe('model');
     expect(data.stage).toBe('openai:gpt-test');
-    expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели.');
+    // The model writes only the text: the system adds the greeting and the sign-off.
+    expect(data.atsCoverLetter.startsWith('Уважаемая команда CloudScale Inc!\n\nПишу по вакансии от модели.\n\nС уважением,')).toBe(true);
   });
 
   it('gives the model the full vacancy text but detects the language from the summary', async () => {

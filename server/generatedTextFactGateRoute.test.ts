@@ -96,8 +96,8 @@ describe('B528 generated text fact gate', () => {
     const data = response.json().data;
     expect(data.bodySource).toBe('model');
     // The letter screen shows emailPitch.body: a letter only in atsCoverLetter is never seen.
-    expect(data.emailPitch.body).toBe(body);
-    expect(data.atsCoverLetter).toBe(body);
+    expect(data.emailPitch.body).toContain(body);
+    expect(data.atsCoverLetter).toContain(body);
     expect(data.factCheck.status).toBe('checked');
     expect(data.outputFactChecks.emailBody.status).toBe('checked');
     // The gate does not check what a paraphrase means, so the screen promises no checking.
@@ -134,7 +134,7 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'confirmed metric with its context',
       facts: ['Я увеличил выручку на 20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'confirmed', source: 'model',
+      text: 'Я увеличил выручку на 20%.', expected: 'confirmed', source: 'model', language: 'ru',
     },
     {
       name: 'same number with a different unit',
@@ -174,7 +174,7 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'before and after in one confirmed fact',
       facts: ['Я снизил время обработки с 30 до 10 минут.'],
-      text: 'Я снизил время обработки с 30 до 10 минут.', expected: 'confirmed', source: 'model',
+      text: 'Я снизил время обработки с 30 до 10 минут.', expected: 'confirmed', source: 'model', language: 'ru',
     },
     {
       name: 'reversed direction is not confirmed',
@@ -186,7 +186,7 @@ describe('B528 generated text fact gate', () => {
       // old rule no candidate with an imported profile could ever get a model letter.
       name: 'imported proposed evidence supports the letter and stays partial',
       facts: ['Я увеличил выручку на 25%.'], proposed: true,
-      text: 'Я увеличил выручку на 25%.', expected: 'partially_confirmed', source: 'model',
+      text: 'Я увеличил выручку на 25%.', expected: 'partially_confirmed', source: 'model', language: 'ru',
     },
     {
       name: 'candidate explicitly cannot confirm a metric',
@@ -216,7 +216,7 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'explicit project ownership',
       facts: ['Я создал проект Atlas.'],
-      text: 'Я создал проект Atlas.', expected: 'confirmed', source: 'model',
+      text: 'Я создал проект Atlas.', expected: 'confirmed', source: 'model', language: 'ru',
     },
     {
       name: 'excluded evidence cannot support generation',
@@ -249,7 +249,7 @@ describe('B528 generated text fact gate', () => {
     const response = await app.inject({
       method: 'POST', url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' },
-      payload: { language: 'en', ...(options.excluded ? { excludedEvidenceIds: ids } : {}) },
+      payload: { language: options.language ?? 'en', ...(options.excluded ? { excludedEvidenceIds: ids } : {}) },
     });
     expect(response.statusCode).toBe(200);
     const data = response.json().data;
@@ -258,7 +258,7 @@ describe('B528 generated text fact gate', () => {
       text, status: expected, action: expected === 'confirmed' ? 'none' : 'ask_candidate',
     })]);
     if (source === 'model') {
-      expect(data.atsCoverLetter).toBe(text);
+      expect(data.atsCoverLetter).toContain(text);
       expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
     } else {
       expect(data.atsCoverLetter).not.toBe(text);

@@ -14,7 +14,7 @@ function geminiReply(body: string, finishReason = 'STOP') {
     async () =>
       new Response(
         JSON.stringify({
-          candidates: [{ finishReason, content: { parts: [{ text: JSON.stringify({ body }) }] } }],
+          candidates: [{ finishReason, content: { parts: [{ text: body }] } }],
         }),
         { status: 200 },
       ),
@@ -78,13 +78,12 @@ describe('GeminiCoverLetterWriter (B266)', () => {
     expect(outcome.failure?.detail).not.toContain('secret');
   });
 
-  it('цепочка письма: deepseek-v4.1-flash → luna, Gemini AI Studio (402) в ней нет (28.10)', () => {
+  it('цепочка письма без Vertex: DeepSeek, затем luna; Gemini AI Studio (402) в ней нет', () => {
     const writer = buildCoverLetterWriter({
       providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' },
     }) as unknown as { descriptors: readonly string[] };
 
     expect(writer.descriptors).toEqual([
-      'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openai:gpt-5.6-luna',
     ]);

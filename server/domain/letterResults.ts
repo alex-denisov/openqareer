@@ -95,30 +95,16 @@ export function resultFirst(statement: string, language: LetterLanguage): string
   return `${tail} — ${lowerLetterStart(head, language)}`;
 }
 
-/** Сколько результатов без места переводить для модели: она выбирает 1–2 доказательства из этого списка. */
-const UNBOUND_RESULT_LIMIT = 4;
-
-/**
- * Русские пункты, которые английское письмо может использовать только в переводе. Шаблон цитирует
- * пункты мест; модели нужны и результаты без места, иначе ей не из чего выбирать (письма 2 и 4, G3d).
- */
+/** Русские пункты мест, которые шаблон английского письма может цитировать только в переводе. */
 export function letterFactsToTranslate<T extends LetterResultFact>(
   facts: readonly T[],
   workplaces: readonly LetterResultWorkplace[],
   language: LetterLanguage,
-  forModel = false,
 ): T[] {
   if (language !== 'en') return [];
-  const bound = workplaceResults(facts, workplaces)
+  return workplaceResults(facts, workplaces)
     .filter((fact) => hasCyrillic(fact.statement))
     .slice(0, WORKPLACE_RESULT_LIMIT);
-  if (!forModel) return bound;
-  const records = recordIds(workplaces);
-  const taken = new Set(bound.map((fact) => fact.id));
-  const others = facts
-    .filter((fact) => !taken.has(fact.id) && !records.has(fact.id) && hasCyrillic(fact.statement) && isResultFact(fact))
-    .slice(0, UNBOUND_RESULT_LIMIT);
-  return [...bound, ...others];
 }
 
 /** Факты с переведёнными формулировками: письмо и проверка фактов видят один текст. */

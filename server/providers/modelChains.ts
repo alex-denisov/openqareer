@@ -43,7 +43,7 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * пока DeepSeek остывал, а glm всегда отвечал 400. Кредит конечен, поэтому после срока цепочки
  * работают без Vertex.
  *
- * Механики, где кандидат ждёт (`campaignRoles`, `roleNames`, `coverLetters`, `linkedinDrafts`): после Vertex голова
+ * Механики, где кандидат ждёт (`campaignRoles`, `roleNames`, `linkedinDrafts`): после Vertex голова
  * цепочки стоит дважды — вторая попытка дешёвой ступени до дорогих. Очереди этих механик идут по
  * массиву подряд, без отбрасывания повторов; три попытки не берём, кандидат ждёт.
  *
@@ -75,9 +75,8 @@ export const MODEL_CHAINS = {
   bulk: [VERTEX, DEEPSEEK_V4_FLASH, GLM_FLASH],
   /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
   roleNames: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
-  coverLetters: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
-  /** Сверка письма с профилем: дешёвая модель без размышления, Vertex не нужен (D-F9, 05.11). */
-  letterChecks: [DEEPSEEK_FLASH, LUNA],
+  /** Решение владельца 05.11, замер живых писем: DeepSeek пишет лучше всех, Gemini быстрая запасная. */
+  coverLetters: [DEEPSEEK_FLASH, VERTEX, LUNA],
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому

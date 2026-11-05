@@ -52,7 +52,7 @@ describe('LlmCoverLetterWriter', () => {
       apiKey: 'k',
       model: 'm',
       stage: 'openai:m',
-      client: client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' })),
+      client: client('Здравствуйте! Я подхожу на роль.'),
     });
 
     await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
@@ -66,9 +66,7 @@ describe('LlmCoverLetterWriter', () => {
       apiKey: 'k',
       model: 'm',
       client: client(
-        JSON.stringify({
-          body: 'I led platform modernization. Delivery became predictable. Most recently as VP of Technology & IT Operations,',
-        }),
+        'I led platform modernization. Delivery became predictable. Most recently as VP of Technology & IT Operations,',
         'length',
       ),
     });
@@ -83,7 +81,7 @@ describe('LlmCoverLetterWriter', () => {
       apiKey: 'k',
       model: 'm',
       client: client(
-        JSON.stringify({ body: 'I led platform modernization. Most recently as VP,' }),
+        'I led platform modernization. Most recently as VP,',
         'length',
       ),
     });
@@ -96,9 +94,7 @@ describe('LlmCoverLetterWriter', () => {
   it('считает оборванным текст без точки в конце, даже если провайдер ответил stop', async () => {
     // Прод 25.09: бесплатный nemotron закрыл JSON посреди фразы с finish_reason stop.
     const cut = client(
-      JSON.stringify({
-        body: 'I am writing about the CTO role. My career spans operations and technology. It aligns with the focus of the',
-      }),
+      'I am writing about the CTO role. My career spans operations and technology. It aligns with the focus of the',
     );
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: cut });
 
@@ -109,9 +105,7 @@ describe('LlmCoverLetterWriter', () => {
 
   it('отдаёт очереди следующего провайдера одно оборванное предложение', async () => {
     const cut = client(
-      JSON.stringify({
-        body: 'I am writing to express my interest in the role. My career aligns closely with the focus of the',
-      }).replace('role. ', 'role, '),
+      'I am writing to express my interest in the role, my career aligns closely with the focus of the',
     );
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: cut });
 
@@ -126,7 +120,7 @@ describe('LlmCoverLetterWriter', () => {
     const writer = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'm',
-      client: client(JSON.stringify({ body: long })),
+      client: client(long),
     });
 
     const outcome = await writer.writeCoverLetter(input);
@@ -135,8 +129,8 @@ describe('LlmCoverLetterWriter', () => {
     expect(outcome.body).toMatch(/times\.$/u);
   });
 
-  it('падает в шаблон, когда ответ не JSON', async () => {
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: client('не json') });
+  it('падает в шаблон, когда ответ пуст', async () => {
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: client('   ') });
     const outcome = await writer.writeCoverLetter(input);
     expect(outcome.body).toBeUndefined();
     expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
@@ -146,7 +140,7 @@ describe('LlmCoverLetterWriter', () => {
     const writer = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'm',
-      client: client(JSON.stringify({ body: 'Здравствуйте, [Имя компании]!' })),
+      client: client('Здравствуйте, [Имя компании]!'),
     });
     const outcome = await writer.writeCoverLetter(input);
     expect(outcome.body).toBeUndefined();
@@ -158,7 +152,7 @@ describe('LlmCoverLetterWriter', () => {
       apiKey: 'k',
       model: 'm',
       client: client(
-        JSON.stringify({ body: 'Данные взяты из импорта резюме и подбора вакансий.' }),
+        'Данные взяты из импорта резюме и подбора вакансий.',
       ),
     });
     const outcome = await writer.writeCoverLetter(input);
@@ -181,24 +175,42 @@ describe('LlmCoverLetterWriter', () => {
   });
 
   it('не зовёт модель, когда фактов нет', async () => {
-    const stub = client(JSON.stringify({ body: 'x' }));
+    const stub = client('x');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
     await writer.writeCoverLetter({ ...input, facts: [] });
     expect(stub.chat.completions.create).not.toHaveBeenCalled();
   });
 
+  it('убирает строку обращения: его добавит система', async () => {
+    const writer = new LlmCoverLetterWriter({
+      apiKey: 'k',
+      model: 'm',
+      client: client('Здравствуйте!\n\nЯ подхожу на роль. Это видно по опыту.'),
+    });
+    await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
+      body: 'Я подхожу на роль. Это видно по опыту.',
+    });
+  });
+
+  it('не просит у модели JSON', async () => {
+    const stub = client('Письмо.');
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', provider: 'openrouter', client: stub });
+    await writer.writeCoverLetter(input);
+    expect(vi.mocked(stub.chat.completions.create).mock.calls[0]?.[0]).not.toHaveProperty('response_format');
+  });
+
   it('передаёт язык в инструкцию модели', async () => {
-    const stub = client(JSON.stringify({ body: 'Hello! I fit the role.' }));
+    const stub = client('Hello! I fit the role.');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
     await writer.writeCoverLetter({ ...input, language: 'en' });
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
-    expect(call.messages[0].content).toContain('английском');
+    expect(call.messages[0].content).toContain('Язык письма: английский');
   });
 
   it('для OpenAI задаёт современный лимит завершения', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const stub = client('Письмо.');
     const writer = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'gpt-5.6-luna',
@@ -210,17 +222,16 @@ describe('LlmCoverLetterWriter', () => {
 
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as Record<string, unknown>;
-    expect(call.max_completion_tokens).toBeGreaterThanOrEqual(1_500);
+    expect(call.max_completion_tokens).toBe(6_000);
     expect(call).not.toHaveProperty('max_tokens');
   });
 
-  it('для рассуждающей модели OpenRouter резервирует общий бюджет ответа', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+  it('у OpenRouter рассуждение и письмо делят общий бюджет ответа', async () => {
+    const stub = client('Письмо.');
     const writer = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
       provider: 'openrouter',
-      thinkingLevel: 'high',
       client: stub,
     });
 
@@ -228,27 +239,26 @@ describe('LlmCoverLetterWriter', () => {
 
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as Record<string, unknown>;
-    expect(call.max_tokens).toBeGreaterThanOrEqual(4_096);
+    expect(call.max_tokens).toBe(6_000);
     expect(call).not.toHaveProperty('max_completion_tokens');
   });
 
-  it('отправляет не больше 7 лучших фактов (C46: меньше контекста — быстрее ответ)', async () => {
+  it('отправляет не больше 30 лучших фактов: на семи письма выходили обрывочными (05.11)', async () => {
     const many = Array.from({ length: 60 }, (_, i) => ({
       ref: `memory:${i}`,
       statement: `Факт номер ${i}`,
     }));
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const stub = client('Письмо.');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
     await writer.writeCoverLetter({ ...input, facts: many });
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
-    const sent = JSON.parse(call.messages[1].content) as { facts: unknown[] };
-    expect(sent.facts.length).toBe(7);
+    expect(call.messages[1].content.match(/- Факт номер/gu)).toHaveLength(30);
   });
 
   it('перед лимитом ставит опыт по роли выше сертификатов', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const stub = client('Письмо.');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
     await writer.writeCoverLetter({
       ...input,
@@ -280,16 +290,13 @@ describe('LlmCoverLetterWriter', () => {
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
-    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
-    expect(sent.facts.slice(0, 3).map((fact) => fact.ref)).toEqual([
-      'imp-c-exp-1',
-      'imp-c-ach-1-1',
-      'imp-c-exp-2',
-    ]);
+    const sent = call.messages[1].content;
+    expect(sent.indexOf('Led product transformation')).toBeLessThan(sent.indexOf('ITIL 4 Foundation'));
+    expect(sent.indexOf('VP Product & Operations')).toBeLessThan(sent.indexOf('ITIL 4 Foundation'));
   });
 
   it('передаёт модели evidenceRefs выбранной роли первыми', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const stub = client('Письмо.');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
     await writer.writeCoverLetter({
       ...input,
@@ -312,13 +319,13 @@ describe('LlmCoverLetterWriter', () => {
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
-    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
+    const sent = call.messages[1].content;
 
-    expect(sent.facts[0]?.ref).toBe('memory:evidence');
+    expect(sent.indexOf('VP of Technology & Operations')).toBeLessThan(sent.indexOf('Led Technology transformation'));
   });
 
   it('ставит подтверждённый факт раньше импортированного в промпте (C46)', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+    const stub = client('Письмо.');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
     await writer.writeCoverLetter({
       ...input,
@@ -330,12 +337,12 @@ describe('LlmCoverLetterWriter', () => {
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
-    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
-    expect(sent.facts.map((fact) => fact.ref)).toEqual(['conf-skill', 'imp-skill']);
+    const sent = call.messages[1].content;
+    expect(sent.indexOf('Terraform infrastructure')).toBeLessThan(sent.indexOf('Kafka pipeline design'));
   });
 
-  it('промпт несёт требования вакансии и evidenceRefs фактов (C46)', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
+  it('промпт несёт требования вакансии и факты (C46)', async () => {
+    const stub = client('Письмо.');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
     await writer.writeCoverLetter({
       ...input,
@@ -344,12 +351,9 @@ describe('LlmCoverLetterWriter', () => {
     const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
       messages: Array<{ role: string; content: string }>;
     };
-    const sent = JSON.parse(call.messages[1].content) as {
-      vacancy: { requirements: string[] };
-      facts: Array<{ ref: string }>;
-    };
-    expect(sent.vacancy.requirements).toEqual(['TypeScript', 'Kubernetes']);
-    expect(sent.facts.map((fact) => fact.ref)).toEqual(['memory:1', 'memory:2']);
+    const sent = call.messages[1].content;
+    expect(sent).toContain('Требования: TypeScript, Kubernetes');
+    expect(sent).toContain('- Увеличил пропускную способность API в 4 раза');
   });
 });
 
@@ -358,13 +362,13 @@ describe('QueuedCoverLetterWriter', () => {
     const first = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'first',
-      client: client('не json'),
+      client: client(null),
     });
     const second = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'second',
       stage: 'openai:second',
-      client: client(JSON.stringify({ body: 'Письмо от второй ступени.' })),
+      client: client('Письмо от второй ступени.'),
     });
     const queue = new QueuedCoverLetterWriter([first, second]);
     await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({
@@ -378,7 +382,7 @@ describe('QueuedCoverLetterWriter', () => {
       apiKey: 'k',
       model: 'first',
       stage: 'openai:first',
-      client: client('не json'),
+      client: client(null),
     });
     const queue = new QueuedCoverLetterWriter([first]);
     const outcome = await queue.writeCoverLetter(input);
@@ -388,8 +392,8 @@ describe('QueuedCoverLetterWriter', () => {
 });
 
 describe('Письмо на проде 04.11: ступени и проверка письма', () => {
-  it('у OpenRouter выключает рассуждение: оно съедало весь потолок вывода', async () => {
-    const fake = client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' }));
+  it('у OpenRouter просит короткое рассуждение: письмо с ним живее и связнее (05.11)', async () => {
+    const fake = client('Здравствуйте! Я подхожу на роль.');
     const writer = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'deepseek/deepseek-v4.1-flash',
@@ -399,12 +403,12 @@ describe('Письмо на проде 04.11: ступени и проверка
     });
     await writer.writeCoverLetter(input);
     expect(vi.mocked(fake.chat.completions.create).mock.calls[0]?.[0]).toMatchObject({
-      reasoning: { enabled: false },
+      reasoning: { effort: 'low' },
     });
   });
 
   it('у OpenAI поле reasoning не отправляет', async () => {
-    const fake = client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' }));
+    const fake = client('Здравствуйте! Я подхожу на роль.');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', provider: 'openai', client: fake });
     await writer.writeCoverLetter(input);
     expect(vi.mocked(fake.chat.completions.create).mock.calls[0]?.[0]).not.toHaveProperty('reasoning');
@@ -433,7 +437,7 @@ describe('Письмо на проде 04.11: ступени и проверка
     const writer = new LlmCoverLetterWriter({
       apiKey: 'k',
       model: 'm',
-      client: client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' })),
+      client: client('Здравствуйте! Я подхожу на роль.'),
     });
     const career = [{ title: 'Руководитель разработки', employer: 'Финтех Лаб', years: '2024–по сей день' }];
     await expect(writer.writeCoverLetter({ ...input, facts: [], career })).resolves.toMatchObject({
@@ -443,8 +447,8 @@ describe('Письмо на проде 04.11: ступени и проверка
 
   it('отдаёт модели места работы отдельным списком', () => {
     const career = [{ title: 'Руководитель разработки', employer: 'Финтех Лаб', years: '2024–по сей день' }];
-    expect(JSON.parse(serializeInput({ ...input, career })).career).toEqual(career);
-    expect(JSON.parse(serializeInput(input))).not.toHaveProperty('career');
+    expect(serializeInput({ ...input, career })).toContain('- Руководитель разработки, Финтех Лаб, 2024–по сей день');
+    expect(serializeInput(input)).not.toContain('Места работы:');
   });
 });
 
@@ -465,12 +469,10 @@ describe('withinTimeBudget (B266)', () => {
 describe('B422: компания «Хочу» в письме', () => {
   it('передаёт модели отметку кандидата, только если она есть', () => {
     const base = { facts: [], language: 'ru', tone: 'technical' } as const;
-    const marked = JSON.parse(
-      serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme', targetCompany: true } }),
-    );
-    const plain = JSON.parse(serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme' } }));
-    expect(marked.vacancy.targetCompany).toBe(true);
-    expect(plain.vacancy).not.toHaveProperty('targetCompany');
+    const marked = serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme', targetCompany: true } });
+    const plain = serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme' } });
+    expect(marked).toContain('хочет работать именно в этой компании');
+    expect(plain).not.toContain('хочет работать именно в этой компании');
   });
 });
 
@@ -499,14 +501,21 @@ describe('serializeInput: what the model reads for a letter (05.11)', () => {
   };
 
   it('gives the vacancy text, clean and bounded', () => {
-    const { vacancy } = JSON.parse(serializeInput(input));
-    expect(vacancy.description.startsWith('Run operating reviews.')).toBe(true);
-    expect(vacancy.description.length).toBe(3_600);
+    const text = serializeInput(input);
+    expect(text).toContain('Run operating reviews.');
+    expect(text.match(/x/gu)).toHaveLength(3_600 - 'Run operating reviews. '.length);
   });
 
-  it('says for each fact which workplace it belongs to, and null when none', () => {
-    const { facts } = JSON.parse(serializeInput(input));
-    expect(facts.find((fact: { ref: string }) => fact.ref === 'a').workplace).toBe('Ритейл Системс');
-    expect(facts.find((fact: { ref: string }) => fact.ref === 'b').workplace).toBeNull();
+  it('puts a fact under its workplace and the rest under «компания не указана»', () => {
+    const career = [{ title: 'Директор', employer: 'Ритейл Системс', years: '2014–2021' }];
+    const text = serializeInput({ ...input, career });
+    expect(text).toContain('- Директор, Ритейл Системс, 2014–2021. Команда выросла с 8 до 35');
+    const free = text.slice(text.indexOf('компания не указана'));
+    expect(free).toContain('- Единая система KPI');
+    expect(free).not.toContain('Команда выросла');
+  });
+
+  it('is plain text, not JSON', () => {
+    expect(serializeInput(input).startsWith('ВАКАНСИЯ')).toBe(true);
   });
 });

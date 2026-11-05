@@ -128,15 +128,11 @@ describe('letterFactsToTranslate: an English letter from a Russian profile', () 
   const facts = [fact('rec', 'Руководитель, 2014'), fact('a', 'Срок сократился с 12 до 7 дней'), fact('b', 'Единая система KPI для пяти направлений'), fact('c', 'Already in English 5')];
   const places = [{ recordId: 'rec', evidenceIds: ['rec', 'a'] }];
 
-  it('the template translates only workplace results', () => {
+  it('translates only workplace results: the model writes in the letter language itself', () => {
     expect(letterFactsToTranslate(facts, places, 'en').map((item) => item.id)).toEqual(['a']);
   });
 
-  it('the model also gets results without a workplace to choose from', () => {
-    expect(letterFactsToTranslate(facts, places, 'en', true).map((item) => item.id)).toEqual(['a', 'b']);
-  });
-
   it('a Russian letter translates nothing', () => {
-    expect(letterFactsToTranslate(facts, places, 'ru', true)).toEqual([]);
+    expect(letterFactsToTranslate(facts, places, 'ru')).toEqual([]);
   });
 });

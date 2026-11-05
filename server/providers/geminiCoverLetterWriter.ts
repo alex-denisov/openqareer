@@ -1,7 +1,7 @@
-import { COVER_LETTER_JSON_SCHEMA, coverLetterInstructions } from '../domain/coverLetterWriting';
+import { coverLetterInstructions } from '../domain/coverLetterWriting';
 import {
   acceptModelBody,
-  COVER_LETTER_REASONING_TOKENS,
+  COVER_LETTER_OUTPUT_TOKENS,
   failureDetail,
   hasLetterInput,
   serializeInput,
@@ -10,7 +10,6 @@ import {
   type CoverLetterWriteInput,
   type CoverLetterWriter,
 } from './coverLetterWriter';
-import { geminiResponseSchema } from './geminiSchema';
 import { PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 import { retryOn429 } from './vertexAi';
 
@@ -107,9 +106,7 @@ function requestBody(input: CoverLetterWriteInput, thinkingLevel?: 'low' | 'high
     systemInstruction: { parts: [{ text: coverLetterInstructions(input.language, input.tone) }] },
     contents: [{ role: 'user', parts: [{ text: serializeInput(input) }] }],
     generationConfig: {
-      responseMimeType: 'application/json',
-      responseJsonSchema: geminiResponseSchema(COVER_LETTER_JSON_SCHEMA.schema),
-      maxOutputTokens: COVER_LETTER_REASONING_TOKENS,
+      maxOutputTokens: COVER_LETTER_OUTPUT_TOKENS,
       ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
     },
   };

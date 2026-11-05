@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   detectVacancyLanguage,
   filterUsablePitchFacts,
+  frameModelLetter,
   generateVacancyPitch,
 } from '../domain/vacancyPitchService';
 import { retryOnSqliteBusy } from '../data/sqliteBusyRetry';
@@ -183,12 +184,15 @@ async function writeVacancyPitch(
 ) {
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
   const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, contextMs } = context;
-  const toTranslate = letterFactsToTranslate(facts, workplaces, language, Boolean(deps.coverLetterWriter));
-  const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
+  const toTranslate = letterFactsToTranslate(facts, workplaces, language);
+  // Модель сама пишет на языке письма из исходных фактов; перевод нужен шаблону и идёт рядом, без лишнего ожидания.
+  const [translations, written] = await Promise.all([
+    translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS),
+    writeCoverLetterBody(deps.coverLetterWriter, request, {
+      vacancy: { ...vacancy, description: vacancy.letterText }, facts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
+    }),
+  ]);
   const translatedFacts = withTranslatedStatements(facts, translations);
-  const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {
-    vacancy: { ...vacancy, description: vacancy.letterText }, facts: translatedFacts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
-  });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
   }
@@ -204,12 +208,13 @@ async function writeVacancyPitch(
     workplaces,
     translations,
   });
-  const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
+  const modelLetter = written.body && frameModelLetter(written.body, language, vacancy.company, candidateName);
+  const atsCoverLetter = modelLetter || pitch.atsCoverLetter;
   const templateChecks = checkPitchOutputFacts(pitch, atsCoverLetter, translatedFacts);
   // The letter screen shows emailPitch.body: the model letter has to be there, not only in the ATS field.
-  return written.body && written.factCheck
+  return modelLetter && written.factCheck
     ? {
-        pitch: { ...pitch, emailPitch: { ...pitch.emailPitch, body: written.body } },
+        pitch: { ...pitch, emailPitch: { ...pitch.emailPitch, body: modelLetter } },
         written,
         atsCoverLetter,
         candidateWorkplaces,
