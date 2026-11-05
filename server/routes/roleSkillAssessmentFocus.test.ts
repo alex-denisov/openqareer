@@ -91,6 +91,19 @@ const requirement = (id: string, text: string) => ({
   stopFactor: false,
 });
 
+/** Texts as prod stores them; `Budget…` is the real requirement of the owner's 05.11 refusal. */
+const MARKED_REQUIREMENTS = [
+  {
+    ...requirement(
+      'r3',
+      'Demonstrated success in managing budgets, forecasting financial performance, and conducting profit & loss analysis.',
+    ),
+    label: 'Budget and P&L management',
+  },
+  { ...requirement('r4', 'Experience with systems languages'), label: 'C++ & Rust' },
+  requirement('r5', 'Deep understanding of data-driven decision making processes for review.'),
+];
+
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
   for (const app of apps.splice(0)) await app.close();
@@ -118,9 +131,9 @@ async function rig(poolSize = 8, withStrategy = true) {
     },
     vacancyMechanics: {
       requirements: {
-        getLatest: (id: string) =>
+        getLatestOrLegacy: (id: string) =>
           id === 'fixture-vacancy-0'
-            ? { requirements: [requirement('r1', 'SQL analytics'), requirement('r2', 'Kafka')] }
+            ? { requirements: [requirement('r1', 'SQL analytics'), requirement('r2', 'Kafka'), ...MARKED_REQUIREMENTS] }
             : null,
       },
     },
@@ -145,6 +158,17 @@ async function rig(poolSize = 8, withStrategy = true) {
 }
 
 describe('role skill check focused on a vacancy (B552)', () => {
+  it.each([
+    ['the stored model name with «&»', 'Budget and P&L management', 'Budget and P&L management'],
+    ['a stored name with «+» and «&»', 'C++ & Rust', 'C++ & Rust'],
+    ['a chip cut to 40 characters', 'Deep understanding of data-driven decis…', 'Deep understanding of data-driven decision making processes for review.'],
+  ])('accepts what the card sends: %s', async (_name, sent, used) => {
+    const { start } = await rig();
+    const response = await start({ vacancyId: 'fixture-vacancy-0', skills: [sent] });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.run.focus.skills).toEqual([used]);
+  });
+
   it('builds cases only for the vacancy skills and says «мало данных» for the rest', async () => {
     const { start } = await rig();
     const response = await start({
@@ -191,7 +215,7 @@ describe('role skill check focused on a vacancy (B552)', () => {
 
   it('rejects a skill that is not a requirement of this vacancy', async () => {
     const { start } = await rig();
-    const response = await start({ vacancyId: 'fixture-vacancy-0', skills: ['Rust'] });
+    const response = await start({ vacancyId: 'fixture-vacancy-0', skills: ['Haskell'] });
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('focus_skill_not_in_vacancy');
   });

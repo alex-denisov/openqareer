@@ -381,7 +381,13 @@ function CareerWorkspaceShellContent({
     [activeView],
   );
 
-  useVacancySkillCheckRequests(openRoleSkillAssessment);
+  // The check from a vacancy runs under that vacancy's role, not the first role of the strategy.
+  useVacancySkillCheckRequests(
+    useCallback(
+      (request: SkillCheckFocus) => openRoleSkillAssessment(request, request.roleTitle),
+      [openRoleSkillAssessment],
+    ),
+  );
 
   const openSkillQuizBank = useCallback(() => {
     setRoleSkillAssessmentOpen(false);
@@ -918,7 +924,7 @@ function CareerWorkspaceShellContent({
               mobileExpanded={expertSheetExpanded}
               onToggleMobileExpanded={() => setExpertSheetExpanded((expanded) => !expanded)}
               onProposalCountChange={setPendingProposalCount}
-              onStartSkillCheck={openRoleSkillAssessment}
+              onStartSkillCheck={(focus) => openRoleSkillAssessment(focus, focus.roleTitle)}
               onChooseRole={() => navigate('career')}
               onIdentityChange={resetForAccount}
               onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}

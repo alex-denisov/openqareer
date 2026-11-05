@@ -94,6 +94,7 @@ for (const project of ['desktop-1440', 'mobile-390'] as const) {
     );
     await page.getByRole('button', { name: 'Начать проверку' }).click();
     expect((await started).postDataJSON()).toMatchObject({
+      role: expect.any(String),
       focus: { vacancyId: expect.any(String), skills: ['Kafka', 'Kubernetes'] },
     });
     await expect(check).toContainText(
