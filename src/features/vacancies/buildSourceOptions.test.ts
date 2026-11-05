@@ -66,3 +66,21 @@ describe('buildSourceOptions with pool sources', () => {
     });
   });
 });
+
+describe('buildSourceOptions: одна площадка — одна строка (Д2)', () => {
+  it('сводит каналы одной площадки в строку с чистым именем и всеми id', () => {
+    const options = buildSourceOptions(
+      facets([
+        { sourceId: 'src-himalayas', name: 'Himalayas', count: 30 },
+        { sourceId: 'src-himalayas-api', name: 'Himalayas (JSON API)', count: 12 },
+      ]),
+      [],
+    );
+    expect(options).toHaveLength(1);
+    expect(options[0]).toMatchObject({
+      name: 'Himalayas',
+      count: 42,
+      sourceIds: ['src-himalayas', 'src-himalayas-api'],
+    });
+  });
+});

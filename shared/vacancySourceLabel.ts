@@ -24,13 +24,19 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * B446-r (A8): пометка канала в скобках («hh.ru (страница поиска)») —
- * внутреннее различие сбора; кандидату площадка та же, «hh.ru».
+ * B446-r (A8), Д2: пометка в скобках («Himalayas (JSON API)», «hh.ru (страница
+ * поиска)», «LinkedIn (пул аккаунтов)») — внутреннее различие сбора; кандидат
+ * видит площадку. Единственное место, где имя источника чистится для показа;
+ * ключи и имена реестра не меняются, админка показывает их как есть.
  */
-const INTERNAL_CHANNEL_NOTE = /\s*\(страница поиска\)\s*$/u;
+const INTERNAL_NOTE = /\s*\([^)]*\)\s*$/u;
+
+export function vacancySourceDisplayName(name: string): string {
+  return name.replace(INTERNAL_NOTE, '').trim() || name.trim();
+}
 
 export function vacancySourceLabel(source: NamedVacancySource): string {
-  const name = source.sourceName?.replace(INTERNAL_CHANNEL_NOTE, '').trim();
+  const name = source.sourceName ? vacancySourceDisplayName(source.sourceName) : '';
   if (name) return name;
   return SOURCE_TYPE_LABELS[source.sourceType] ?? source.sourceType;
 }

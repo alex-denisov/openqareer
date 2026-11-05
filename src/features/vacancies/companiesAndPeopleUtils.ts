@@ -1,3 +1,4 @@
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import type {
   CandidateCompanyOpportunity,
   CandidateCompanySource,
@@ -87,7 +88,7 @@ const GENITIVE_SOURCE_LABELS: Readonly<Record<string, string>> = {
 
 /** «данные с hh.ru и LinkedIn, 06.10.2026»: one mention per platform, dated by the latest one. */
 export function companySourceSummary(sources: readonly CandidateCompanySource[]): string | null {
-  const names = [...new Set(sources.map((source) => source.name.trim()).filter(Boolean))];
+  const names = [...new Set(sources.map((source) => vacancySourceDisplayName(source.name)).filter(Boolean))];
   if (names.length === 0) return null;
   const latest = sources
     .map((source) => Date.parse(source.observedAt))

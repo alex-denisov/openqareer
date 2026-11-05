@@ -1,14 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { LetterScreenState } from './vacancyLetterController';
 import { useVacancyLetterController } from './vacancyLetterController';
-import { ArrowLeft, ArrowSquareOut, CircleNotch, WarningCircle } from '@phosphor-icons/react';
+import {
+  ArrowLeft,
+  ArrowSquareOut,
+  CaretRight,
+  CircleNotch,
+  WarningCircle,
+} from '@phosphor-icons/react';
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { ConnectionContactsDialog } from '../outreach/ConnectionContactsDialog';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { usePageTitleOverride } from '../shell/pageTitleOverride';
 import { useCandidateDisplayName } from '../shell/candidateDisplayName';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
-import { CircleTabs } from './VacancyLetterCircles';
+import { circleSummary, CircleTabs } from './VacancyLetterCircles';
 import { LetterCardHeading, LetterDestination } from './VacancyLetterDestination';
 import { LetterActions } from './VacancyLetterActions';
 import {
@@ -23,7 +30,9 @@ import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import { useLetterConsultantSuggestion } from './letterConsultantSuggestion';
 import { VacancyLetterMobileBar } from './VacancyLetterMobileBar';
 import { useCompactViewport } from './useCompactViewport';
+import { useKeyboardInset } from './useLetterViewport';
 import './vacancy-letter.css';
+import './vacancy-letter-mobile.css';
 
 export interface VacancyLetterTarget {
   readonly id: string;
@@ -40,7 +49,12 @@ type OpenExpert = (
   stage: CoachTurnStage,
   subject?: CoachTurnSubject,
   subjectTitle?: string,
+  initialPrompt?: string,
+  options?: { readonly focusInput?: boolean },
 ) => void;
+
+/** Д4: with the panel already open the tap changes nothing else, so the cursor is the answer. */
+export const askEditsOptions = { focusInput: true } as const;
 
 const CIRCLES_TIP =
   'Данные о связях берутся из импортированных контактов. Шанс ответа не показываем: откликов пока мало.';
@@ -121,7 +135,14 @@ function useLetterPageActions(vacancy: VacancyLetterTarget, onOpenExpert?: OpenE
       ? () => openExpertFor('profile', 'Факты для письма: ' + vacancy.canonicalTitle)
       : undefined,
     onAskEdits: onOpenExpert
-      ? () => openExpertFor('vacancies', 'Правки письма: ' + vacancy.canonicalTitle)
+      ? () =>
+          onOpenExpert(
+            'vacancies',
+            { kind: 'vacancy', id: vacancy.id },
+            'Правки письма: ' + vacancy.canonicalTitle,
+            undefined,
+            askEditsOptions,
+          )
       : undefined,
     onOpenConsultant: onOpenExpert
       ? () => openExpertFor('vacancies', 'Письмо: ' + vacancy.canonicalTitle)
@@ -145,12 +166,21 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
   const frozen = Boolean(state.approval.saved);
   // Макет 9 при 390: «Назад» и консультант — в шапке экрана, в карточке вакансии «Назад» нет.
   const compact = useCompactViewport();
+  const keyboardInset = useKeyboardInset(compact);
   return (
-    <section className="career-letter-screen" aria-labelledby="career-letter-title">
+    <section
+      className="career-letter-screen"
+      aria-labelledby="career-letter-title"
+      style={
+        keyboardInset
+          ? ({ '--career-letter-keyboard': `${keyboardInset}px` } as CSSProperties)
+          : undefined
+      }
+    >
       {compact ? (
         <VacancyLetterMobileBar onBack={onBack} onOpenConsultant={actions.onOpenConsultant} />
       ) : null}
-      <VacancyCard vacancy={vacancy} onBack={compact ? undefined : onBack} />
+      <VacancyCard vacancy={vacancy} compact={compact} onBack={compact ? undefined : onBack} />
       <section className="career-letter-fork" aria-labelledby="career-letter-fork-title">
         <div className="career-letter-sub-head">
           <h2 id="career-letter-fork-title">Как откликнуться: три круга связей</h2>
@@ -254,6 +284,7 @@ function LetterCard({
   readonly onOpenResume?: () => void;
 }) {
   const { circle } = state.circle;
+  const compact = useCompactViewport();
   const pitchReady =
     Boolean(state.draft.pitch && state.draft.text.trim()) &&
     !state.draft.loading &&
@@ -266,7 +297,11 @@ function LetterCard({
       role="tabpanel"
       aria-labelledby={`career-letter-tab-${circle}`}
     >
-      <LetterCardHeading circle={circle} approved={frozen} />
+      <LetterCardHeading
+        circle={circle}
+        approved={frozen}
+        summary={compact && !state.circles.loading ? circleSummary(state.circle.result) : undefined}
+      />
       <LetterDestinationSlot
         state={state}
         frozen={frozen}
@@ -344,15 +379,40 @@ function LetterBackButton({ onBack }: { readonly onBack: () => void }) {
   );
 }
 
+/** Макет 9 при 390: «Открыть вакансию» — строка списка, а не кнопка. */
+function OpenVacancyRow({ url }: { readonly url: string }) {
+  return (
+    <button
+      type="button"
+      className="career-letter-open-row"
+      onClick={() => void openExternalLink(url)}
+    >
+      <span className="career-letter-row-icon">
+        <ArrowSquareOut size={18} aria-hidden="true" />
+      </span>
+      <strong>Открыть вакансию</strong>
+      <CaretRight size={14} aria-hidden="true" />
+    </button>
+  );
+}
+
 function VacancyCard({
   vacancy,
+  compact,
   onBack,
 }: {
   readonly vacancy: VacancyLetterTarget;
+  readonly compact: boolean;
   readonly onBack?: () => void;
 }) {
   const location = vacancy.canonicalLocation ?? 'Локация не указана';
-  const sources = vacancy.sources.map((source) => source.sourceName).filter(Boolean);
+  const sources = [
+    ...new Set(
+      vacancy.sources.flatMap((source) =>
+        source.sourceName ? [vacancySourceDisplayName(source.sourceName)] : [],
+      ),
+    ),
+  ];
   return (
     <section className="career-letter-vacancy" aria-label="Вакансия">
       {onBack ? <LetterBackButton onBack={onBack} /> : null}
@@ -368,7 +428,8 @@ function VacancyCard({
           <p>{vacancy.descriptionSummary.trim() || 'Описание вакансии не указано.'}</p>
         </details>
       </div>
-      {vacancy.primaryUrl ? (
+      {vacancy.primaryUrl && compact ? <OpenVacancyRow url={vacancy.primaryUrl} /> : null}
+      {vacancy.primaryUrl && !compact ? (
         <button
           type="button"
           className="career-btn career-btn-secondary"
@@ -377,7 +438,8 @@ function VacancyCard({
           <ArrowSquareOut size={16} aria-hidden="true" />
           Открыть вакансию
         </button>
-      ) : (
+      ) : null}
+      {vacancy.primaryUrl ? null : (
         <p className="career-letter-muted">Ссылка на вакансию не указана.</p>
       )}
     </section>

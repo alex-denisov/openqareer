@@ -7,6 +7,7 @@ import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
 import { VacancyQuizProposal, type SkillCheckFocus } from '../vacancies/VacancyQuizProposal';
 import { CompaniesContactProposal } from '../vacancies/CompaniesAndPeopleProposal';
 import { useEffect, useRef, useState } from 'react';
+import { useFocusRequest } from './useFocusRequest';
 import {
   STAGE_TITLE,
   STAGE_INITIAL_REPLICA,
@@ -77,6 +78,8 @@ interface CareerExpertPanelProps {
   initialPrompt?: string;
   /** A new value sends `initialPrompt` once the session is ready (G5 A2). */
   sendRequest?: number;
+  /** A new value moves focus to the input, even when the panel is already open (Д4). */
+  focusRequest?: number;
   initialUser: AuthUser | null;
   loadingSession?: boolean;
   initialSnapshot?: CandidateSnapshot;
@@ -109,6 +112,7 @@ export function CareerExpertPanel({
   subjectTitle,
   initialPrompt,
   sendRequest,
+  focusRequest,
   initialUser,
   loadingSession = false,
   initialSnapshot,
@@ -293,6 +297,8 @@ export function CareerExpertPanel({
     panelMounted.current = true;
     return () => returnFocusTo?.focus();
   }, [onClose, collapsed, overlay]);
+  // After the effect above: on a phone the sheet opens with focus on «Закрыть», the request wins.
+  useFocusRequest(inputRef, focusRequest, !loadingSnapshot && !collapsed);
   useEffect(() => {
     setUser(initialUser);
   }, [initialUser]);

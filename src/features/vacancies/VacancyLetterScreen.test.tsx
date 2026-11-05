@@ -122,7 +122,9 @@ describe('VacancyLetterScreen (mockup 9)', () => {
 
   it('shows workplaces as one line with the real fact count', () => {
     const markup = html();
-    expect(markup).toContain('Предложено консультантом');
+    // Решение CPO: места отмечает правило «есть подтверждённые факты», а не консультант и не вакансия.
+    expect(markup).toContain('Отмечены места с фактами');
+    expect(markup).not.toContain('Предложено консультантом');
     expect(markup).toContain('Head of Engineering, 2021 — сейчас');
     expect(markup).toContain('Для письма доступно: 2 подтверждённых факта из этого места');
     expect(markup).not.toContain('2 факта<');
@@ -212,5 +214,19 @@ describe('letter helpers', () => {
         evidenceIds: [],
       }),
     ).toBe('2014 — 2017');
+  });
+
+  it('names the board, not how the source is read (Д2)', () => {
+    state.current = makeState();
+    const markup = renderToStaticMarkup(
+      <CandidateDisplayNameContext.Provider value={null}>
+        <VacancyLetterScreen
+          vacancy={{ ...vacancy, sources: [{ sourceName: 'Himalayas (JSON API)' }, { sourceName: 'Himalayas' }] }}
+          onBack={vi.fn()}
+        />
+      </CandidateDisplayNameContext.Provider>,
+    );
+    expect(markup).toContain('· Himalayas</p>');
+    expect(markup).not.toContain('JSON API');
   });
 });

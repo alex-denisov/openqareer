@@ -4,6 +4,7 @@
  * comes from the card's own label and names its source; the model never states it.
  */
 import type { CatalogRuSummary } from '../seo/catalogRuSummary';
+import { vacancySourceDisplayName } from '../../shared/vacancySourceLabel';
 import { escapeHtml } from './catalogHtml';
 
 export interface RuSummaryCard {
@@ -17,8 +18,7 @@ function fact(label: string, value: string | undefined): string {
 
 function salaryFact(card: RuSummaryCard): string | undefined {
   if (!card.salaryLabel) return undefined;
-  // «Himalayas (JSON API)», «hh.ru (страница поиска)»: the reader sees the board, not how we read it.
-  const source = card.sourceName?.replace(/\s*\([^)]*\)\s*$/u, '').trim();
+  const source = card.sourceName ? vacancySourceDisplayName(card.sourceName) : '';
   return source ? `${card.salaryLabel} — по данным ${source}` : card.salaryLabel;
 }
 

@@ -1,3 +1,4 @@
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Funnel } from '@phosphor-icons/react';
 import {
@@ -25,6 +26,8 @@ interface VacancySourceCatalogFilterProps {
 
 interface SourceOption {
   readonly sourceId: string;
+  /** Every channel of this board: the row selects them together. */
+  readonly sourceIds: readonly string[];
   readonly name: string;
   readonly count: number;
   readonly groupId: MatchedVacancySourceGroupId | null;
@@ -79,11 +82,30 @@ export function useSourceCatalog() {
   return { sources, poolSources, loading, failed };
 }
 
-const sourceNameKey = (name: string) =>
-  name
-    .replace(/\s*\([^)]*\)\s*$/u, '')
-    .trim()
-    .toLocaleLowerCase();
+const sourceNameKey = (name: string) => vacancySourceDisplayName(name).toLocaleLowerCase();
+
+/** Д2: каналы одной площадки («Himalayas» и «Himalayas (JSON API)») — одна строка с их общим счётом. */
+function mergeBoards(options: readonly Omit<SourceOption, 'sourceIds'>[]): SourceOption[] {
+  const boards = new Map<string, SourceOption>();
+  for (const option of options) {
+    const key = sourceNameKey(option.name);
+    const board = boards.get(key);
+    boards.set(
+      key,
+      board
+        ? {
+            ...board,
+            sourceIds: [...board.sourceIds, option.sourceId],
+            count: board.count + option.count,
+            groupId: board.groupId ?? option.groupId,
+            market: board.market ?? option.market,
+            searchableText: `${board.searchableText} ${option.searchableText}`,
+          }
+        : { ...option, name: vacancySourceDisplayName(option.name), sourceIds: [option.sourceId] },
+    );
+  }
+  return [...boards.values()];
+}
 
 /**
  * B446-r (W7): id реестра и id источника выдачи расходятся («indeed» и
@@ -115,13 +137,13 @@ export function buildSourceOptions(
     .filter(({ sourceId }) => !used.has(sourceId))
     .map(({ sourceId, name, count, groupId }) => ({
       sourceId,
-      name: name.replace(/\s*\(страница поиска\)$/u, ''),
+      name,
       count,
       groupId: groupId ?? null,
       searchableText: [sourceId, name].join(' ').toLocaleLowerCase(),
     }));
   const fromPool = poolOnlyOptions(poolSources, catalog, [...fromCatalog, ...fromFacets]);
-  return [...fromCatalog, ...fromFacets, ...fromPool]
+  return mergeBoards([...fromCatalog, ...fromFacets, ...fromPool])
     .map((option, index) => ({ option, index }))
     .sort((a, b) => b.option.count - a.option.count || a.index - b.index)
     .map(({ option }) => option);
@@ -139,8 +161,8 @@ function isRegistrySource(
 function poolOnlyOptions(
   poolSources: readonly CatalogSourceEntry[],
   catalog: readonly VacancySourceRegistryEntry[],
-  known: readonly SourceOption[],
-): SourceOption[] {
+  known: readonly Omit<SourceOption, 'sourceIds'>[],
+): Omit<SourceOption, 'sourceIds'>[] {
   const ids = new Set(known.map((option) => option.sourceId));
   const names = new Set(known.map((option) => sourceNameKey(option.name)));
   return poolSources
@@ -247,7 +269,7 @@ function CategoryAllRow({
   readonly name: string;
   readonly view: ReturnType<typeof useSourceFilterView>;
 }) {
-  const ids = view.filtered.map(({ sourceId }) => sourceId);
+  const ids = view.filtered.flatMap(({ sourceIds }) => sourceIds);
   const chosen = ids.filter((id) => view.selected.includes(id)).length;
   return (
     <li className="vacancy-location-node">
@@ -292,8 +314,8 @@ function SourceOptionList({
           <SourceRow
             key={source.sourceId}
             source={source}
-            selected={view.selected.includes(source.sourceId)}
-            onToggle={() => view.toggleSource(source.sourceId)}
+            selected={isBoardSelected(source, view.selected)}
+            onToggle={() => view.toggleSource(source.sourceIds)}
           />
         ))}
       </ul>
@@ -358,15 +380,17 @@ function SourceFooter({
   );
 }
 
+function isBoardSelected(source: SourceOption, selected: readonly string[]): boolean {
+  return source.sourceIds.every((id) => selected.includes(id));
+}
+
 function updateSelectedSource(
   onChange: VacancySourceCatalogFilterProps['onChange'],
-  sourceId: string,
+  sourceIds: readonly string[],
 ): void {
   onChange((previous) => ({
     ...previous,
-    sources: previous.sources?.includes(sourceId)
-      ? previous.sources.filter((id) => id !== sourceId)
-      : [...(previous.sources ?? []), sourceId],
+    sources: selectionAfterToggle(previous.sources ?? [], sourceIds),
   }));
 }
 
@@ -399,14 +423,14 @@ function useSourceFilterView(
   const visible = filtered.slice(0, visibleCount);
   const selected = props.state.sources ?? [];
   const allVisibleSelected =
-    filtered.length > 0 && filtered.every(({ sourceId }) => selected.includes(sourceId));
-  const toggleSource = (sourceId: string) => updateSelectedSource(props.onChange, sourceId);
+    filtered.length > 0 && filtered.every((source) => isBoardSelected(source, selected));
+  const toggleSource = (ids: readonly string[]) => updateSelectedSource(props.onChange, ids);
   const toggleVisibleSources = () => {
     props.onChange((previous) => ({
       ...previous,
       sources: selectionAfterToggle(
         previous.sources ?? [],
-        filtered.map(({ sourceId }) => sourceId),
+        filtered.flatMap(({ sourceIds }) => sourceIds),
       ),
     }));
   };
@@ -426,7 +450,7 @@ function useSourceFilterView(
     selectAll: () =>
       props.onChange((previous) => ({
         ...previous,
-        sources: options.map(({ sourceId }) => sourceId),
+        sources: options.flatMap(({ sourceIds }) => sourceIds),
       })),
     showMore: () => setVisibleCount((count) => count + 20),
     resetVisibleCount: () => setVisibleCount(20),

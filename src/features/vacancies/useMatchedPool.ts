@@ -1,3 +1,4 @@
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import type { VacancySort } from '../../../shared/vacancySort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
@@ -223,10 +224,10 @@ function sourceFailureContext(
   source: Awaited<ReturnType<typeof getVacancySources>>[number],
 ): string {
   if (source.health.status === 'official_access_required') {
-    return `Поиск ${source.name} без официального доступа недоступен. Вакансии общего подбора могут поступать из разрешённого регулярного сбора.`;
+    return `Поиск ${vacancySourceDisplayName(source.name)} без официального доступа недоступен. Вакансии общего подбора могут поступать из разрешённого регулярного сбора.`;
   }
   if (source.health.status === 'degraded') {
-    return `${source.name}: источник отвечает с ошибками.`;
+    return `${vacancySourceDisplayName(source.name)}: источник отвечает с ошибками.`;
   }
-  return `${source.name}: источник сейчас не отвечает.`;
+  return `${vacancySourceDisplayName(source.name)}: источник сейчас не отвечает.`;
 }

@@ -1,5 +1,7 @@
+import { useRef } from 'react';
 import {
   CaretDown,
+  Check,
   ChatCircleText,
   CircleNotch,
   Sparkle,
@@ -9,6 +11,8 @@ import type { LetterDraftState } from './vacancyLetterController';
 import type { CandidateWorkplaceForLetter, ConnectionCircleNumber } from './vacancyLetterApi';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
 import { LetterInfoTip } from './VacancyLetterInfoTip';
+import { useCompactViewport } from './useCompactViewport';
+import { useAutoGrowTextarea } from './useLetterViewport';
 
 type PitchTone = NonNullable<VacancyPitchPayload['tone']>;
 type PitchLanguage = NonNullable<VacancyPitchPayload['language']>;
@@ -19,11 +23,52 @@ const TONE_OPTIONS: readonly { readonly id: PitchTone; readonly label: string }[
   { id: 'technical', label: 'Технический' },
 ];
 
+const LANGUAGE_OPTIONS: readonly { readonly id: 'auto' | PitchLanguage; readonly label: string }[] =
+  [
+    { id: 'auto', label: 'Определить по вакансии' },
+    { id: 'ru', label: 'Русский' },
+    { id: 'en', label: 'English' },
+  ];
+
 const CHANNEL_LABEL: Readonly<Record<ConnectionCircleNumber, string>> = {
   1: 'сообщение знакомому',
   2: 'просьба представить',
   3: 'письмо к отклику',
 };
+
+function LetterSelect<Value extends string>({
+  label,
+  value,
+  frozen,
+  options,
+  onChange,
+}: {
+  readonly label: string;
+  readonly value: Value;
+  readonly frozen: boolean;
+  readonly options: readonly { readonly id: Value; readonly label: string }[];
+  readonly onChange: (value: Value) => void;
+}) {
+  return (
+    <label>
+      {label}
+      <span className="career-letter-select">
+        <select
+          value={value}
+          disabled={frozen}
+          onChange={(event) => onChange(event.currentTarget.value as Value)}
+        >
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <CaretDown className="career-letter-select-caret" size={16} aria-hidden="true" />
+      </span>
+    </label>
+  );
+}
 
 export function LetterSettings({
   language,
@@ -40,38 +85,21 @@ export function LetterSettings({
 }) {
   return (
     <div className="career-letter-settings">
-      <label>
-        Язык
-        <span className="career-letter-select">
-          <select
-            value={language}
-            disabled={frozen}
-            onChange={(event) => onLanguage(event.currentTarget.value as 'auto' | PitchLanguage)}
-          >
-            <option value="auto">Определить по вакансии</option>
-            <option value="ru">Русский</option>
-            <option value="en">English</option>
-          </select>
-          <CaretDown className="career-letter-select-caret" size={16} aria-hidden="true" />
-        </span>
-      </label>
-      <label>
-        Тон
-        <span className="career-letter-select">
-          <select
-            value={tone}
-            disabled={frozen}
-            onChange={(event) => onTone(event.currentTarget.value as PitchTone)}
-          >
-            {TONE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <CaretDown className="career-letter-select-caret" size={16} aria-hidden="true" />
-        </span>
-      </label>
+      <h3 className="career-letter-cap">Письмо</h3>
+      <LetterSelect
+        label="Язык"
+        value={language}
+        frozen={frozen}
+        options={LANGUAGE_OPTIONS}
+        onChange={onLanguage}
+      />
+      <LetterSelect
+        label="Тон"
+        value={tone}
+        frozen={frozen}
+        options={TONE_OPTIONS}
+        onChange={onTone}
+      />
     </div>
   );
 }
@@ -116,14 +144,18 @@ export function LetterEditor({
   readonly frozen: boolean;
   readonly onEdit: () => void;
 }) {
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const compact = useCompactViewport();
+  useAutoGrowTextarea(areaRef, draft.text);
   return (
     <div className="career-letter-editor">
       <label htmlFor="career-letter-body">Текст письма</label>
       <textarea
         id="career-letter-body"
+        ref={areaRef}
         value={draft.text}
         readOnly={frozen}
-        rows={12}
+        rows={compact ? 2 : 12}
         onChange={(event) => {
           onEdit();
           draft.setText(event.currentTarget.value);
@@ -131,8 +163,14 @@ export function LetterEditor({
       />
       <p className="career-letter-meta">
         <span>{wordCount(draft.text)} слов</span>
-        <span>Длина подобрана под канал: {CHANNEL_LABEL[circle]}</span>
-        {senderName ? <span>От имени: {senderName}</span> : null}
+        <span>
+          {compact ? 'длина' : 'Длина'} подобрана под канал: {CHANNEL_LABEL[circle]}
+        </span>
+        {senderName ? (
+          <span>
+            {compact ? 'от' : 'От'} имени: {senderName}
+          </span>
+        ) : null}
       </p>
     </div>
   );
@@ -147,7 +185,8 @@ function requirementsNote(count: number, language: VacancyPitchResult['language'
   const last = count % 10;
   const tens = count % 100;
   const few = last >= 2 && last <= 4 && (tens < 12 || tens > 14);
-  if (last === 1 && tens !== 11) return `${count} требование вакансии не подтверждено фактами профиля`;
+  if (last === 1 && tens !== 11)
+    return `${count} требование вакансии не подтверждено фактами профиля`;
   return `${count} ${few ? 'требования' : 'требований'} вакансии не подтверждены фактами профиля`;
 }
 
@@ -205,7 +244,11 @@ export function LetterNotices({
   if (!notice && unconfirmed.length === 0) return null;
   return (
     <div className="career-letter-notes">
-      {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} language={pitch.language} />}
+      {notice ? (
+        <p>{notice}</p>
+      ) : (
+        <UnconfirmedRequirementsNote labels={unconfirmed} language={pitch.language} />
+      )}
     </div>
   );
 }
@@ -227,6 +270,14 @@ export function factsLabel(count: number): string {
   const word = last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? 'факта' : 'фактов';
   return `${count} подтверждённых ${word}`;
 }
+
+/**
+ * Отметки ставит правило: все места с подтверждёнными фактами (`useWorkplaceSelection`).
+ * Ни консультант, ни сравнение с вакансией в выборе не участвуют — о них подпись не говорит.
+ */
+const WORKPLACES_CHIP = 'Отмечены места с фактами';
+const WORKPLACES_FOOT =
+  'Отмечены все места с подтверждёнными фактами. Снимите отметку: письмо пересоберётся без этого места.';
 
 function WorkplaceRow({
   workplace,
@@ -261,6 +312,7 @@ function WorkplaceRow({
               : `Для письма доступно: ${factsLabel(count)} из этого места`}
           </small>
         </span>
+        <Check className="career-letter-job-tick" size={20} aria-hidden="true" />
       </label>
     </li>
   );
@@ -286,7 +338,7 @@ export function WorkplaceList({
         <h3>Места работы в письме</h3>
         <span className="career-letter-chip is-hyp">
           <Sparkle size={14} aria-hidden="true" />
-          Предложено консультантом
+          {WORKPLACES_CHIP}
         </span>
         <LetterInfoTip text="Отмеченные места работы войдут в письмо. Снимите или поставьте галочку: текст письма пересоберётся. Источник: Профиль, Опыт." />
       </div>
@@ -307,6 +359,7 @@ export function WorkplaceList({
           ))}
         </ul>
       )}
+      {workplaces.length > 0 ? <p className="career-letter-foot">{WORKPLACES_FOOT}</p> : null}
     </section>
   );
 }
