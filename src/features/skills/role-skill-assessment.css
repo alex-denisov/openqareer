@@ -252,7 +252,7 @@
   flex: 0 0 auto;
   width: var(--career-space-5);
   height: var(--career-space-5);
-  margin: 0;
+  margin: var(--career-space-1) 0 0;
   accent-color: var(--career-accent);
 }
 
@@ -459,10 +459,6 @@
   border-radius: var(--career-radius-md);
   padding: var(--career-space-3);
   background: var(--career-surface);
-}
-
-.career-role-assessment-suggestion input {
-  margin-top: var(--career-space-1);
 }
 
 .career-role-assessment-suggestion-number {
