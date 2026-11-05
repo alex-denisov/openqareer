@@ -15,7 +15,7 @@ import { describeFailure } from './titleFreeze';
  * точность смотрят глазами; `pass` — все ключи руководителей, частые первыми, под потолком расхода.
  */
 export type RoleLinkStage = 'sample' | 'pass';
-export const ROLE_LINK_STAGE: RoleLinkStage = 'sample';
+export const ROLE_LINK_STAGE: RoleLinkStage = 'pass';
 export const ROLE_LINK_MODEL_TITLES = 400;
 export const ROLE_LINK_SPEND_CAP_USD = 10;
 const TAIL_MAX_VACANCIES = 2;

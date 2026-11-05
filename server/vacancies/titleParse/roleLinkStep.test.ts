@@ -92,7 +92,7 @@ describe('связь названия с ролью (малая партия)', 
     );
     for (let index = 0; index < ROLE_LINK_MODEL_TITLES; index += 1) insert.run(`k${index}`);
     const client = answer([]);
-    await new RoleLinkStep(database, client as never).run();
+    await new RoleLinkStep(database, client as never, undefined, Date.now, 'sample').run();
     expect(client.complete).not.toHaveBeenCalled();
   });
 
