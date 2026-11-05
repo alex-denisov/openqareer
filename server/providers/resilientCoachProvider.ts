@@ -77,6 +77,7 @@ export class ResilientCoachProvider implements CoachProvider {
     const trace = new AttemptTrace(this.now);
     let executed = 0;
     let lastError: CoachProviderError | undefined;
+    let held: CoachProviderResult | undefined;
 
     for (const route of this.routes) {
       if (this.isCooling(route)) {
@@ -86,7 +87,7 @@ export class ResilientCoachProvider implements CoachProvider {
       if (executed >= this.maxAttempts) break;
       const budgetMs = remainingBudget(options.deadlineAt, this.now());
       if (budgetMs !== undefined && budgetMs < MIN_STAGE_BUDGET_MS)
-        return this.fail(trace, turnDeadlineError());
+        return this.settle(trace, turnDeadlineError(), held);
       executed += 1;
       const startedAt = this.now();
       const stream = new StageStream(options.onMessageText);
@@ -101,15 +102,15 @@ export class ResilientCoachProvider implements CoachProvider {
           trace.add(attemptOf(route, 'failed', 'provider_output_invalid'), startedAt);
           continue;
         }
+        if (options.prefer && !options.prefer(output.result)) {
+          stream.reset();
+          held ??= output;
+          lastError = new CoachProviderError('provider_output_invalid', 502, true);
+          trace.add(attemptOf(route, 'failed', 'provider_output_invalid'), startedAt);
+          continue;
+        }
         trace.add(attemptOf(route, 'succeeded'), startedAt);
-        this.onAttempts?.(trace.timed(), output.usage);
-        return {
-          ...output,
-          routing: {
-            fallbackUsed: trace.attempts.some((attempt) => attempt.status !== 'succeeded'),
-            attempts: trace.attempts,
-          },
-        };
+        return this.answered(trace, output);
       } catch (error) {
         stream.reset();
         if (!(error instanceof CoachProviderError)) throw error;
@@ -126,7 +127,27 @@ export class ResilientCoachProvider implements CoachProvider {
       }
     }
 
-    return this.fail(trace, lastError);
+    return this.settle(trace, lastError, held);
+  }
+
+  private answered(trace: AttemptTrace, output: CoachProviderResult): CoachProviderResult {
+    this.onAttempts?.(trace.timed(), output.usage);
+    return {
+      ...output,
+      routing: {
+        fallbackUsed: trace.attempts.some((attempt) => attempt.status !== 'succeeded'),
+        attempts: trace.attempts,
+      },
+    };
+  }
+
+  /** Нет лучшего ответа: остаётся придержанный, а без него ход падает. */
+  private settle(
+    trace: AttemptTrace,
+    lastError: CoachProviderError | undefined,
+    held: CoachProviderResult | undefined,
+  ): CoachProviderResult {
+    return held ? this.answered(trace, held) : this.fail(trace, lastError);
   }
 
   private isCooling(route: ProviderRoute): boolean {

@@ -33,7 +33,20 @@ describe('STAR-истории в контексте хода консульта�
         action: 'действие Кризис в команде',
         result: 'Сервис вырос с 91 до 97%',
         confirmed: true,
+        topicMatch: true,
       },
+    ]);
+  });
+
+  it('topicMatch отмечает только историю по теме реплики, а общие слова темой не считает', () => {
+    const { starStories } = starStoriesForTurn(
+      [story('s1', 'Кризис в команде', ''), story('s2', 'История про письмо и вакансию', '')],
+      [],
+      'Добавь в письмо историю про кризис для этой вакансии',
+    );
+    expect(starStories.map((item) => [item.title, item.topicMatch])).toEqual([
+      ['Кризис в команде', true],
+      ['История про письмо и вакансию', false],
     ]);
   });
 

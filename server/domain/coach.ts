@@ -292,6 +292,7 @@ const knowledgeContextSchema = z.object({
         action: z.string().max(600),
         result: z.string().max(600),
         confirmed: z.boolean(),
+        topicMatch: z.boolean(),
       }),
     )
     .max(6)

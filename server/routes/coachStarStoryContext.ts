@@ -7,6 +7,10 @@ const OTHER_STORY_TITLES = 30;
 const STORY_FIELD_CHARS = 600;
 const STEM_CHARS = 5;
 const MIN_WORD_CHARS = 4;
+/** Эти слова есть почти в любой реплике об отклике: тему они не задают. */
+const GENERAL_STEMS: ReadonlySet<string> = new Set([
+  'истор', 'письм', 'вакан', 'резюм', 'добав', 'фразу', 'фраза', 'этой', 'этот',
+]);
 
 export interface TurnStarStory {
   readonly ref: string;
@@ -17,6 +21,8 @@ export interface TurnStarStory {
   readonly result: string;
   /** Числа результата есть в связанных фактах профиля: то же правило, что на экране историй. */
   readonly confirmed: boolean;
+  /** Совпала с темой реплики: такую историю модель не вправе назвать отсутствующей. */
+  readonly topicMatch: boolean;
 }
 
 export interface TurnStarStories {
@@ -28,7 +34,10 @@ export interface TurnStarStories {
 function stems(text: string): ReadonlySet<string> {
   const words = text.toLocaleLowerCase('ru-RU').match(/[\p{L}\p{N}]+/gu) ?? [];
   return new Set(
-    words.filter((word) => word.length >= MIN_WORD_CHARS).map((word) => word.slice(0, STEM_CHARS)),
+    words
+      .filter((word) => word.length >= MIN_WORD_CHARS)
+      .map((word) => word.slice(0, STEM_CHARS))
+      .filter((stem) => !GENERAL_STEMS.has(stem)),
   );
 }
 
@@ -37,7 +46,7 @@ function topicScore(story: StoredStarStory, query: ReadonlySet<string>): number 
   return [...query].filter((stem) => text.has(stem)).length;
 }
 
-function toTurnStory(story: StoredStarStory, confirmed: boolean): TurnStarStory {
+function toTurnStory(story: StoredStarStory, confirmed: boolean, topicMatch: boolean): TurnStarStory {
   const { situation, task, action, result } = story.fields;
   const clip = (value: string) => value.slice(0, STORY_FIELD_CHARS);
   return {
@@ -48,6 +57,7 @@ function toTurnStory(story: StoredStarStory, confirmed: boolean): TurnStarStory 
     action: clip(action),
     result: clip(result),
     confirmed,
+    topicMatch,
   };
 }
 
@@ -79,7 +89,7 @@ export function starStoriesForTurn(
   return {
     starStories: ranked
       .slice(0, STAR_STORIES_IN_TURN)
-      .map(({ story, confirmed }) => toTurnStory(story, confirmed)),
+      .map(({ story, confirmed, score }) => toTurnStory(story, confirmed, score > 0)),
     otherStoryTitles: ranked
       .slice(STAR_STORIES_IN_TURN, STAR_STORIES_IN_TURN + OTHER_STORY_TITLES)
       .map(({ story }) => story.title),
