@@ -44,6 +44,13 @@ interface FitOrderLog {
  */
 export type FitOrderUse = 'read' | 'background';
 
+function fitProfileStamp(deps: RouteDeps, candidateId: string): string {
+  return vacancyFitProfileStamp(
+    deps.candidateStore.getSnapshot(candidateId),
+    deps.candidateStore.getCandidateWorkspace(candidateId),
+  );
+}
+
 /**
  * Runs before pagination, so a cached match on a later page can move to the front.
  *
@@ -66,12 +73,7 @@ export function withVacancyFitOrder(
 ) {
   const money = sort.by === 'money' ? createMoneyReader(deps) : undefined;
   const reader = createFitViewReader(deps, candidateId, log, use);
-  const stamp = reader
-    ? vacancyFitProfileStamp(
-        deps.candidateStore.getSnapshot(candidateId),
-        deps.candidateStore.getCandidateWorkspace(candidateId),
-      )
-    : 'none';
+  const stamp = reader ? fitProfileStamp(deps, candidateId) : 'none';
   const key = `${candidateId}|${stamp}`;
   let prepared = false;
   const order = (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] => {
@@ -110,6 +112,25 @@ export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVac
   /** Reads the percents the order needs without holding the event loop; call before the order. Resolves to the rows read. */
   readonly prepare: (items: readonly MatchedVacancyItem[]) => Promise<number>;
 };
+
+/**
+ * The parts of an order that decide a list's `choice`, without opening the stored results that
+ * `dataKey` counts (`cachedVacancyIds` opens them all in one call on a new process).
+ */
+export function matchedOrderChoiceKeys(
+  deps: RouteDeps,
+  candidateId: string,
+  sort: VacancySort,
+): Pick<MatchedOrder, 'cacheKey' | 'fitStamp'> {
+  return {
+    fitStamp: deps.vacancyMechanics ? fitProfileStamp(deps, candidateId) : 'none',
+    cacheKey: sort.by === 'fit' ? wantedCacheKey(deps, candidateId) : '',
+  };
+}
+
+function wantedCacheKey(deps: RouteDeps, candidateId: string): string {
+  return [...wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId)].sort().join(',');
+}
 
 /**
  * 28.10: «по совпадению» ведёт процент; вакансии компаний «Хочу» поднимаются только

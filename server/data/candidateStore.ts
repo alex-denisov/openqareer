@@ -896,6 +896,8 @@ export interface CandidateStore {
   ): CandidateInterviewSubject | null;
   exportCandidate(candidateId: string): CandidateExport;
   deleteCandidate(candidateId: string): boolean;
+  /** PRB-055: the last list of a candidate between processes; absent where nothing outlives one. */
+  readonly sealedMatchedLists?: import('./sealedMatchedListStore').SealedMatchedListStore;
   close(): void;
 }
 
