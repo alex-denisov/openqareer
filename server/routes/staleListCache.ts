@@ -96,6 +96,8 @@ export function createStaleListCache<V>(options: {
       if (held && held.choice !== address.choice && now() - held.at < maxAgeMs) return undefined;
       return build(address, compute);
     },
+    holds: (candidateId: string) => entries.has(candidateId),
+    clear: () => entries.clear(),
     size: () => entries.size,
   };
 }

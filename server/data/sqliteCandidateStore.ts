@@ -41,6 +41,7 @@ import {
 import { createSqliteCandidateStoreExecutiveRequestMethods } from './sqliteCandidateStoreExecutiveRequestMethods';
 import { createSqliteCandidateStoreExportMethods } from './sqliteCandidateStoreExportMethods';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
+import { SealedMatchedListStore } from './sealedMatchedListStore';
 import { SealedText } from './sealedText';
 import type { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import type { SqliteMarketRepository } from './sqliteMarketRepository';
@@ -158,6 +159,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare getLinkedInLanguageImport: CandidateStore['getLinkedInLanguageImport'];
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
+  readonly sealedMatchedLists: SealedMatchedListStore;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
   private readonly marketRepository: SqliteMarketRepository;
   private readonly resumeRepository: SqliteResumeRepository;
@@ -180,6 +182,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.database = openCandidateDatabase(options.databasePath);
     this.snapshotMemo = new SnapshotMemo(this.database, { foreignCommitGraceMs: options.snapshotForeignCommitGraceMs });
     this.sealedText = new SealedText(options.encryptionKey);
+    this.sealedMatchedLists = new SealedMatchedListStore(this.database, this.sealedText);
     ({
       assessmentsRepository: this.assessmentsRepository,
       marketRepository: this.marketRepository,
@@ -813,9 +816,7 @@ export class SqliteCandidateStore implements CandidateStore {
       this.consultantHistory.deleteAllIndexes(candidateId);
       return this.database.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
     });
-    if (result.changes === 1) {
-      this.database.exec('PRAGMA wal_checkpoint(TRUNCATE)');
-    }
+    if (result.changes === 1) this.database.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     return result.changes === 1;
   }
 

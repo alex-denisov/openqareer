@@ -21,7 +21,10 @@ import {
   readMatchedList,
   type MatchedList,
   type MatchedListInput,
+  readSealedMatchedList,
 } from './matchedVacancyList';
+import { rebuildBehindSealedList } from './matchedListWarm';
+import type { SealedMatchedList, SealedPage } from './sealedMatchedList';
 import type { StaleListServed } from './staleListCache';
 import { matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
 import {
@@ -43,6 +46,7 @@ import {
   vacanciesToWarm,
   withShownPageFitViews,
   withWantedCompanyOrder,
+  matchedOrderChoiceKeys,
 } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, candidatePlan, withDeps } from './helpers';
@@ -126,13 +130,18 @@ function buildMatchedResponse(
   };
 }
 
+type ShownPage = Pick<
+  ReturnType<typeof buildMatchedResponse>,
+  'data' | 'page' | 'facets' | 'campaignWithHypotheses' | 'listCached' | 'pageAndExplanationsMs' | 'titleParseAndLevelsMs'
+> & { readonly listServed: StaleListServed | 'sealed' };
+
 function logMatchedTiming(
   request: FastifyRequest,
   mode: 'legacy' | 'semantic',
   cold: boolean,
   candidateCampaignMs: number,
   semanticQueryAndSqlMs: number,
-  response: ReturnType<typeof buildMatchedResponse>,
+  response: ShownPage,
   requestStartedAt: number,
   steps: Readonly<Record<string, number>> = {},
 ): void {
@@ -303,7 +312,7 @@ async function readMatchedPage(
 }
 
 function matchedVacancyResponse(
-  response: ReturnType<typeof buildMatchedResponse>,
+  response: ShownPage,
   requestId: string,
   targetLevel: ReturnType<typeof readTargetLevel>,
   sort: VacancySort = DEFAULT_VACANCY_SORT,
@@ -377,6 +386,79 @@ async function prepareMatchedRead(
   return { targetLevel, fitLimit, order, warmFitIdsMs, orderSetupMs: setup.finish(log) };
 }
 
+interface SealedRead {
+  readonly candidateId: string;
+  readonly filters: MatchedVacancyFilters;
+  readonly confirmedSkills: readonly string[];
+  readonly targetRoles: string[];
+  readonly campaign: ReturnType<typeof readCampaign>;
+  readonly sort: VacancySort;
+  readonly startTiming: {
+    readonly mode: 'legacy' | 'semantic';
+    readonly cold: boolean;
+    readonly candidateCampaignMs: number;
+    readonly beforeCampaignMs: number;
+    readonly requestStartedAt: number;
+  };
+}
+
+/** The page as a built list would give it; rows and percents are read live, no fit work starts. */
+async function sealedResponse(
+  deps: RouteDeps,
+  candidateId: string,
+  sealed: SealedMatchedList,
+  page: SealedPage,
+  targetLevel: ReturnType<typeof readTargetLevel>,
+): Promise<ShownPage> {
+  const levels = addStoredVacancyLevels([...page.items], targetLevel, (key) => deps.titleParseStore.getByKey(key));
+  const shown = await withShownPageFitViews(deps, candidateId, levels);
+  return {
+    data: withMarketSalary(deps, shown),
+    page: {
+      items: [...page.items],
+      total: sealed.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+      ...(page.offset === 0 ? { pageOffsets: sealed.pageOffsets } : {}),
+    },
+    facets: page.offset === 0 ? sealed.facets : undefined,
+    campaignWithHypotheses: sealed.campaignWithHypotheses,
+    listCached: true,
+    listServed: 'sealed',
+    pageAndExplanationsMs: 0,
+    titleParseAndLevelsMs: 0,
+  };
+}
+
+/** PRB-055: what a new process answers before the stored results and the pool are touched. */
+async function answerFromSealedList(
+  deps: RouteDeps,
+  backgroundDeps: RouteDeps,
+  read: SealedRead,
+  request: FastifyRequest,
+) {
+  const { candidateId, filters, startTiming } = read;
+  const startedAt = performance.now();
+  const targetLevel = readTargetLevel(deps.candidateStore, candidateId, read.targetRoles);
+  const geography = matchGeographyOf(read.campaign.careerGeography);
+  const order = matchedOrderChoiceKeys(deps, candidateId, read.sort);
+  let sealed: SealedMatchedList | undefined;
+  try {
+    sealed = readSealedMatchedList({ ...read, candidateStore: deps.candidateStore, targetLevel, geography, order });
+  } catch (error) {
+    // A row that does not open is a cold read, not a failed one.
+    request.log.warn({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'matched-list-unseal-failed');
+  }
+  const page = sealed?.pages.find(({ offset }) => offset === filters.offset);
+  if (!sealed || !page) return undefined;
+  const sealedReadMs = elapsedMs(startedAt);
+  const response = await sealedResponse(deps, candidateId, sealed, page, targetLevel);
+  rebuildBehindSealedList(backgroundDeps, candidateId, request.query, request.log);
+  const { mode, cold, candidateCampaignMs, beforeCampaignMs, requestStartedAt } = startTiming;
+  logMatchedTiming(request, mode, cold, candidateCampaignMs, sealedReadMs, response, requestStartedAt, { beforeCampaignMs, sealedReadMs });
+  return matchedVacancyResponse(response, request.id, targetLevel, read.sort);
+}
+
 const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
   const deps = withRequestScopedCandidateReads(backgroundDeps), requestStartedAt = performance.now();
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
@@ -399,6 +481,10 @@ const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) =
     filterMatchedVacancies([], filters, targetRoles, undefined, knownSourceIds);
     return unconfirmedCandidateMatchResponse(request.id, offset, campaign, sourceRegistry);
   }
+
+  const startTiming = { mode: config.matchMode ?? 'legacy', cold, candidateCampaignMs, beforeCampaignMs, requestStartedAt } as const;
+  const sealedAnswer = await answerFromSealedList(deps, backgroundDeps, { candidateId: candidate.id, filters, confirmedSkills, targetRoles, campaign, sort, startTiming }, request);
+  if (sealedAnswer) return sealedAnswer;
 
   const { targetLevel, fitLimit, order, ...setupSteps } = await prepareMatchedRead(deps, candidate.id, targetRoles, sort, request.log);
   const { response: orderedPage, semanticQueryAndSqlMs, readSteps } = await readMatchedPage(

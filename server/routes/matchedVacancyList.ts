@@ -34,6 +34,12 @@ import { runStepsYielding, type Steps } from '../vacancies/yieldingSteps';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
 import type { MatchedOrder } from './matchedVacancyFit';
+import {
+  sealedListAnswering,
+  sealedListText,
+  SEALED_MATCHED_LIST_ENABLED,
+  type SealedMatchedList,
+} from './sealedMatchedList';
 import { createStaleListCache, type StaleListAddress, type StaleListServed } from './staleListCache';
 
 type CandidateStore = RouteDeps['candidateStore'];
@@ -141,7 +147,7 @@ export interface MatchedListInput {
  * pause waits for a new one.
  */
 const MATCHED_LIST_WINDOW_MS = 60_000;
-const MATCHED_LIST_MAX_AGE_MS = 10 * 60_000;
+export const MATCHED_LIST_MAX_AGE_MS = 10 * 60_000;
 const matchedListCache = createStaleListCache<MatchedList>({
   windowMs: MATCHED_LIST_WINDOW_MS,
   maxAgeMs: MATCHED_LIST_MAX_AGE_MS,
@@ -157,10 +163,23 @@ function snapshotId(snapshot: readonly MatchedVacancyItem[]): number {
   return nextSnapshotId;
 }
 
+/** The inputs of `choice`: a stored list is checked against them before the pool is read at all. */
+export type MatchedListChoiceInput = Pick<
+  MatchedListInput,
+  | 'campaign'
+  | 'candidateStore'
+  | 'candidateId'
+  | 'filters'
+  | 'targetRoles'
+  | 'confirmedSkills'
+  | 'targetLevel'
+  | 'geography'
+> & { readonly order: Pick<MatchedOrder, 'cacheKey' | 'fitStamp'> };
+
 /** `choice` holds all the candidate decides: what the pool or the sweep did goes to `data`. */
-function matchedListAddress(input: MatchedListInput): StaleListAddress {
+export function matchedListChoice(input: MatchedListChoiceInput): string {
   const { campaign, candidateStore, candidateId, filters, order } = input;
-  const choice = createHash('sha256')
+  return createHash('sha256')
     .update(
       JSON.stringify([
         { ...filters, offset: 0 },
@@ -180,7 +199,14 @@ function matchedListAddress(input: MatchedListInput): StaleListAddress {
     )
     .digest('hex')
     .slice(0, 16);
-  return { candidateId, choice, data: `${snapshotId(input.snapshot)}|${order.dataKey}` };
+}
+
+function matchedListAddress(input: MatchedListInput): StaleListAddress {
+  return {
+    candidateId: input.candidateId,
+    choice: matchedListChoice(input),
+    data: `${snapshotId(input.snapshot)}|${input.order.dataKey}`,
+  };
 }
 
 function hypothesisRows(input: MatchedListInput): readonly MatchedVacancyItem[] {
@@ -280,23 +306,64 @@ async function buildMatchedList(input: MatchedListInput): Promise<MatchedList> {
   };
 }
 
+interface SealLog {
+  info(fields: Record<string, unknown>, message: string): void;
+  error(fields: Record<string, unknown>, message: string): void;
+}
+
+const errorName = (error: unknown): string =>
+  error instanceof Error ? error.name : 'UnknownError';
+
+/** A failed write costs the next process a cold read, never this one its list. */
+export function sealMatchedList(
+  input: MatchedListInput,
+  choice: string,
+  list: MatchedList,
+  builtAt: number,
+  log: SealLog | undefined,
+  enabled: boolean = SEALED_MATCHED_LIST_ENABLED,
+): void {
+  if (!enabled) return;
+  try {
+    const text = sealedListText(list, choice);
+    if (!text) return;
+    const written = input.candidateStore.sealedMatchedLists?.write(input.candidateId, builtAt, text);
+    if (written) log?.info({ ...written, bytes: text.length, rows: list.filtered.length }, 'matched-list-sealed');
+  } catch (error) {
+    log?.error({ errorName: errorName(error) }, 'matched-list-seal-failed');
+  }
+}
+
+/** Every finished build is one write, so the table is written no oftener than the list is rebuilt. */
+function buildAndSeal(
+  input: MatchedListInput,
+  choice: string,
+  log: SealLog | undefined,
+): () => Promise<MatchedList> {
+  return async () => {
+    // The moment the list cache dates a build from: a stored list ages exactly like a held one.
+    const builtAt = Date.now();
+    const list = await buildMatchedList(input);
+    sealMatchedList(input, choice, list, builtAt, log);
+    return list;
+  };
+}
+
 /** The list for this read. A rebuild outlives the request that started it, hence its own log. */
 export async function readMatchedList(
   input: MatchedListInput,
   log: FastifyRequest['log'],
 ): Promise<{ readonly list: MatchedList; readonly served: StaleListServed }> {
+  const address = matchedListAddress(input);
   const { value, served } = await matchedListCache.read(
-    matchedListAddress(input),
-    () => buildMatchedList(input),
+    address,
+    buildAndSeal(input, address.choice, log),
     {
       continuing: input.filters.offset > 0,
       onRebuilt: ({ prepareMs, prepareRows, listMs, filtered }) =>
         log.info({ prepareMs, prepareRows, listMs, rows: filtered.length }, 'matched-list-rebuilt'),
       onRebuildFailed: (error) =>
-        log.warn(
-          { errorName: error instanceof Error ? error.name : 'UnknownError' },
-          'matched-list-rebuild-failed',
-        ),
+        log.warn({ errorName: errorName(error) }, 'matched-list-rebuild-failed'),
     },
   );
   return { list: value, served };
@@ -306,6 +373,33 @@ export async function readMatchedList(
  * PRB-041 (prod 04.11): a reader back after a break waited 8-12 s on 1800 rows for the list this
  * builds. The background pass builds it first, under the address the read will look for.
  */
-export function warmMatchedListCache(input: MatchedListInput): Promise<MatchedList | undefined> {
-  return matchedListCache.warm(matchedListAddress(input), () => buildMatchedList(input));
+export function warmMatchedListCache(
+  input: MatchedListInput,
+  log?: SealLog,
+): Promise<MatchedList | undefined> {
+  const address = matchedListAddress(input);
+  return matchedListCache.warm(address, buildAndSeal(input, address.choice, log));
+}
+
+/**
+ * PRB-055 (prod 05.11): the first read of a new process cost 6-16 s of its own and 19-22 s beside
+ * the warm pass. This answers it from the last list of the previous process, under the conditions
+ * of a held one: same `choice`, same age limit. Only a process with no list of this candidate asks:
+ * once one is built, the usual read takes over.
+ */
+export function readSealedMatchedList(
+  input: MatchedListChoiceInput,
+  { enabled = SEALED_MATCHED_LIST_ENABLED, now = Date.now() }: { enabled?: boolean; now?: number } = {},
+): SealedMatchedList | undefined {
+  if (!enabled || matchedListCache.holds(input.candidateId)) return undefined;
+  const row = input.candidateStore.sealedMatchedLists?.read(
+    input.candidateId,
+    now - MATCHED_LIST_MAX_AGE_MS,
+  );
+  return row ? sealedListAnswering(row.text, matchedListChoice(input)) : undefined;
+}
+
+/** Tests: what a new process starts with. */
+export function forgetMatchedListsForTests(): void {
+  matchedListCache.clear();
 }
