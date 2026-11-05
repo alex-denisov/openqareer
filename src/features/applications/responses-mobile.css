@@ -210,7 +210,7 @@
   }
 
   .career-responses-filter-text {
-    min-block-size: var(--career-target-min);
+    min-block-size: 40px;
     border: 0;
     padding: 0 var(--career-space-4);
     color: var(--career-text-soft);

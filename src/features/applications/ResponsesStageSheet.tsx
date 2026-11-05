@@ -58,7 +58,8 @@ export function FilterOptionSheet({
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    listRef.current?.querySelector<HTMLInputElement>('input:checked')?.focus();
+    // The sheet takes focus, as the filter sheet does: no highlighted radio on open (макет 5).
+    listRef.current?.closest('dialog')?.focus();
   }, []);
   return (
     <div className="career-responses-stage-sheet">
