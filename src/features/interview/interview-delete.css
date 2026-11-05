@@ -63,7 +63,7 @@
   background: var(--career-danger-soft);
 }
 
-.career-star-story-card-actions {
+.career-star-story-card-header > .career-star-story-card-actions {
   display: flex;
   flex-shrink: 0;
   align-items: flex-start;
@@ -85,4 +85,10 @@
 .career-mock-help-delete {
   margin-block-start: var(--career-space-2);
   margin-inline-start: calc(var(--career-space-3) * -1);
+}
+
+.career-star-story-card-actions .career-btn.career-interview-delete-open {
+  inline-size: var(--career-target-min);
+  min-inline-size: var(--career-target-min);
+  padding-inline: 0;
 }

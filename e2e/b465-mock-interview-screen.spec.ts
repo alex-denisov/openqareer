@@ -222,6 +222,10 @@ async function createStarStoryFromSimulator(page: Page): Promise<void> {
   await editor.getByLabel('Результат').fill('Цикл релиза стал короче.');
   await editor.getByRole('button', { name: 'Сохранить историю' }).click();
   await expect(storiesDialog.getByText('Сокращение цикла релиза')).toBeVisible();
+  const trash = await storiesDialog
+    .getByRole('button', { name: /^Удалить историю/u })
+    .boundingBox();
+  expect([trash?.width, trash?.height]).toEqual([44, 44]);
   await storiesDialog.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
 }
 
@@ -303,6 +307,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
         .fill('Автоматизировал проверки и ускорил выпуск обновлений.');
       await page.getByRole('button', { name: 'Отправить ответ' }).click();
       await expect(page.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Следующий вопрос' })).toBeInViewport();
       await checkAndCapture(page, `${width}-review`, true);
       await page.getByRole('button', { name: 'Ответить ещё раз' }).click();
       await expect(page.getByLabel('Ваш ответ')).toHaveValue(
@@ -317,6 +322,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
         '1 вопрос, оценено по критериям',
       );
       await expect(page.getByRole('button', { name: 'Записать в дневник' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Пройти заново' })).toBeInViewport();
       await checkAndCapture(page, `${width}-partial-result`, true);
       await expectRecommendationOpensStory(page);
       await page.getByRole('button', { name: 'Пройти заново' }).click();
@@ -333,8 +339,12 @@ test('runs text and voice interview screens through a partial result at 1440 and
       await checkAndCapture(page, `${width}-no-speech`);
       await page.getByRole('button', { name: 'Начать запись' }).click();
       await enterSpeechText(page, 'Сократил цикл релиза с 14 до 3 дней.');
+      await expect(page.locator('.career-mock-wave:visible')).toBeVisible();
+      await expect(
+        page.getByRole('button', { name: /Начать заново|Отменить запись/u }),
+      ).toBeVisible();
       await checkAndCapture(page, `${width}-voice-transcript`);
-      await page.getByRole('button', { name: 'Закончить ответ' }).click();
+      await page.getByRole('button', { name: /Закончить ответ|Отправить голосом/u }).click();
       await expect(page.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
     } finally {
       await context.close();
@@ -640,7 +650,7 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
   }
 });
 
-test('B465 diary saves review, retries lost response and reopens after reload at 1440 and 390', async ({
+test('B465 diary saves result, retries lost response and reopens after reload at 1440 and 390', async ({
   browser,
 }, info) => {
   test.skip(info.project.name !== 'desktop-1440', 'This flow checks both viewports.');
@@ -677,6 +687,10 @@ test('B465 diary saves review, retries lost response and reopens after reload at
           'В проекте моя задача была ускорить релизы. Я автоматизировал проверки, результат — меньше ручных операций.',
         );
       await page.getByRole('button', { name: 'Отправить ответ' }).click();
+      await expect(page.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Записать в дневник' })).toHaveCount(0);
+      await finishWithPartialAnswers(page);
+      await resumeAndFinish(page);
       await page.getByRole('button', { name: 'Записать в дневник', exact: true }).click();
       await expect(page.getByRole('alert')).toContainText('Не удалось подтвердить');
       await page.getByRole('button', { name: 'Повторить запись в дневник' }).click();
@@ -690,9 +704,6 @@ test('B465 diary saves review, retries lost response and reopens after reload at
       await checkAndCapture(page, `${width}-diary-saved`, true);
       await page.reload({ waitUntil: 'domcontentloaded' });
       await openPreparationDialog(page, width);
-      await startSimulator(page);
-      const resume = page.getByRole('button', { name: /Продолжить с вопроса/u });
-      if (await resume.isVisible()) await resume.click();
       await page.getByRole('button', { name: 'Записать в дневник', exact: true }).click();
       await expect(
         page.getByRole('status').filter({ hasText: 'Запись сохранена в карьерном дневнике.' }),

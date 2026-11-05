@@ -22,6 +22,11 @@ export function QuestionProgress({ session, title }: {
   );
 }
 
+/** 390, строка записи: «0:07» как в макете. */
+export function formatElapsedShort(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
+}
+
 export function formatElapsed(seconds: number): string {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
   const remainder = (seconds % 60).toString().padStart(2, '0');

@@ -3,9 +3,12 @@ import { useState } from 'react';
 import {
   ArrowClockwise,
   ArrowRight,
+  CaretRight,
   CheckCircle,
   Circle,
+  FileText,
   Info,
+  ListChecks,
   Notebook,
   Trash,
   WarningCircle,
@@ -109,6 +112,9 @@ function TopicList({ topics }: { readonly topics: ReturnType<typeof presentInter
                 <span
                   className={`career-mock-status career-mock-status--${STATUS_POINTS[topic.status]}`}
                 >
+                  <span className="career-mock-status-icon" aria-hidden="true">
+                    <TopicIcon status={topic.status} />
+                  </span>
                   {topic.status}
                 </span>
               </div>
@@ -169,11 +175,19 @@ function RecommendationList({
         <ul className="career-mock-recommendation-list">
           {recommendations.map((item) => (
             <li key={item.text}>
+              <span className="career-mock-row-icon" aria-hidden="true">
+                <FileText className="career-mock-icon" />
+              </span>
               <div className="career-mock-recommendation-text">
                 <strong>{item.text}</strong>
                 <span>{item.detail}</span>
               </div>
-              <RecommendationButton action={item.action} busy={busy} onRun={onRun} />
+              <RecommendationButton
+                action={item.action}
+                subject={item.text}
+                busy={busy}
+                onRun={onRun}
+              />
             </li>
           ))}
         </ul>
@@ -192,10 +206,12 @@ const RECOMMENDATION_LABELS: Readonly<Record<RecommendationAction, string>> = {
 
 function RecommendationButton({
   action,
+  subject,
   busy,
   onRun,
 }: {
   readonly action: RecommendationAction;
+  readonly subject: string;
   readonly busy: boolean;
   readonly onRun: (action: RecommendationAction) => void;
 }) {
@@ -204,11 +220,15 @@ function RecommendationButton({
     <button
       type="button"
       className={`career-btn career-btn-sm ${primary ? 'career-btn-secondary' : 'career-btn-ghost'}`}
+      aria-label={`${RECOMMENDATION_LABELS[action]}: ${subject}`}
       disabled={busy}
       onClick={() => onRun(action)}
     >
-      {primary ? <ArrowRight aria-hidden="true" className="career-mock-icon" /> : null}
-      {RECOMMENDATION_LABELS[action]}
+      {primary ? (
+        <ArrowRight aria-hidden="true" className="career-mock-icon career-mock-row-desktop" />
+      ) : null}
+      <span className="career-mock-row-desktop">{RECOMMENDATION_LABELS[action]}</span>
+      <CaretRight aria-hidden="true" className="career-mock-icon career-mock-row-chev" />
     </button>
   );
 }
@@ -232,31 +252,52 @@ function ResultActions({
     <div className="career-mock-result-actions">
       <button
         type="button"
-        className="career-btn career-btn-primary"
+        className="career-btn career-btn-primary career-mock-result-again"
         disabled={busy}
         onClick={onStartAgain}
       >
         <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
         Пройти заново
       </button>
-      {diary ? (
-        <DiaryPortButton session={session} diary={diary} />
-      ) : (
-        <InterviewDiaryAction key={session.id} sessionId={session.id} />
-      )}
-      <button type="button" className="career-btn career-btn-ghost" onClick={onBack}>
-        К подготовке
-      </button>
-      <button
-        type="button"
-        className="career-btn career-interview-delete-open"
-        disabled={busy}
-        onClick={onDelete}
-      >
-        <Trash aria-hidden="true" className="career-mock-icon" />
-        Удалить тренировку
-      </button>
+      <div className="career-mock-result-rows">
+        {diary ? (
+          <DiaryPortButton session={session} diary={diary} />
+        ) : (
+          <InterviewDiaryAction key={session.id} sessionId={session.id} />
+        )}
+        <button type="button" className="career-btn career-btn-ghost" onClick={onBack}>
+          <span className="career-mock-row-icon" aria-hidden="true">
+            <ListChecks className="career-mock-icon" />
+          </span>
+          К подготовке
+          <CaretRight aria-hidden="true" className="career-mock-icon career-mock-row-chev" />
+        </button>
+        <DeleteTrainingRow busy={busy} onDelete={onDelete} />
+      </div>
     </div>
+  );
+}
+
+function DeleteTrainingRow({
+  busy,
+  onDelete,
+}: {
+  readonly busy: boolean;
+  readonly onDelete: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="career-btn career-interview-delete-open"
+      disabled={busy}
+      onClick={onDelete}
+    >
+      <span className="career-mock-row-icon is-desktop" aria-hidden="true">
+        <Trash className="career-mock-icon" />
+      </span>
+      Удалить тренировку
+      <CaretRight aria-hidden="true" className="career-mock-icon career-mock-row-chev" />
+    </button>
   );
 }
 
@@ -290,8 +331,11 @@ function DiaryPortButton({
         aria-busy={writing}
         onClick={() => void writeDiary()}
       >
-        <Notebook aria-hidden="true" className="career-mock-icon" />
+        <span className="career-mock-row-icon is-desktop" aria-hidden="true">
+          <Notebook className="career-mock-icon" />
+        </span>
         {writing ? 'Сохраняем' : 'Записать в дневник'}
+        <CaretRight aria-hidden="true" className="career-mock-icon career-mock-row-chev" />
       </button>
       {diaryError ? <InlineError error={diaryError} /> : null}
     </>
