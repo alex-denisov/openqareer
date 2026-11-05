@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { LetterScreenState } from './vacancyLetterController';
 import { VacancyLetterScreen, type VacancyLetterTarget } from './VacancyLetterScreen';
-import { factsLabel, LetterNotices, workplaceRange } from './VacancyLetterEditor';
+import { factsLabel, LetterNotices, wordCountLabel, workplaceRange } from './VacancyLetterEditor';
 import type { VacancyPitchResult } from './vacancyPitchApi';
 import { CandidateDisplayNameContext } from '../shell/candidateDisplayName';
 
@@ -129,7 +129,7 @@ describe('VacancyLetterScreen (mockup 9)', () => {
 
   it('writes one meta line and keeps the server notices inside the card', () => {
     const markup = html();
-    expect(markup).toMatch(/<span>6(<!-- -->)? слов<\/span>/u);
+    expect(markup).toContain('<span>6 слов</span>');
     expect(markup).toContain('Длина подобрана под канал: сообщение знакомому');
     expect(markup).toContain('От имени: Андрей Лебедев');
     expect(markup).not.toContain('опирается только на выбранные факты');
@@ -215,6 +215,19 @@ describe('the note under the letter (G3 L2)', () => {
     const fewFacts = notes({ usedEvidenceIds: [] });
     expect(fewFacts).toContain('too few confirmed facts');
     expect(fewFacts).not.toContain('мало подтверждённых');
+  });
+});
+
+describe('letter word counter', () => {
+  it.each([
+    [1, '1 слово'],
+    [2, '2 слова'],
+    [5, '5 слов'],
+    [11, '11 слов'],
+    [21, '21 слово'],
+    [94, '94 слова'],
+  ])('declines %i', (count, label) => {
+    expect(wordCountLabel(count)).toBe(label);
   });
 });
 

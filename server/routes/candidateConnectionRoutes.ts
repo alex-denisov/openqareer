@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { matchGeographyOf } from '../vacancies/matchGeography';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { letterDeliveryChannel } from '../../shared/recruiterChannel';
 import type { RecruiterContact, RecruiterSourceReceipt } from '../../shared/recruiterContact';
 import {
   buildConnectionCircles,
@@ -555,6 +556,7 @@ function toConnectionRecruiter(contact: RecruiterContact): ConnectionCirclePerso
     roleTitle: contact.roleTitle,
     companyName: contact.companyName,
     linkedinUrl: contact.linkedinUrl,
+    deliveryChannel: letterDeliveryChannel(contact.channels ?? []),
     workplaces: metadata?.workplaces ?? [],
   };
 }

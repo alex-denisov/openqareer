@@ -279,6 +279,43 @@
     border-block-start: var(--career-border-width) solid var(--career-line);
   }
 
+  /* Макет 9 при 390: вся строка резюме нажимается, справа шеврон, как у «Открыть вакансию». */
+  .career-letter-dest-row:has(.career-letter-dest-open) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .career-letter-dest-row .career-letter-dest-actions:has(.career-letter-dest-open) {
+    grid-column: 3;
+  }
+
+  .career-letter-dest-actions .career-letter-dest-open {
+    justify-content: flex-end;
+    min-inline-size: max(44px, var(--career-target-min));
+    min-block-size: max(44px, var(--career-target-min));
+    padding: 0;
+    border: 0;
+    color: var(--career-text-dim);
+  }
+
+  .career-letter-dest-actions .career-letter-dest-open:hover {
+    background-color: transparent;
+  }
+
+  .career-letter-dest-open::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .career-letter-dest-open-icon,
+  .career-letter-dest-open-label {
+    display: none;
+  }
+
+  .career-letter-dest-actions .career-letter-dest-open-caret {
+    display: block;
+  }
+
   .career-letter-dest-icon {
     display: inline-grid;
     place-items: center;

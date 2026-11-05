@@ -479,6 +479,36 @@
   gap: var(--career-space-1);
 }
 
+/* Макет 9: «Открыть» без рамки и фона, цель касания 44 за счёт прозрачной рамки. */
+.career-letter-dest-actions .career-letter-dest-open {
+  gap: var(--career-space-2);
+  min-block-size: max(44px, var(--career-target-min));
+  padding: 0 var(--career-space-3);
+  border: 6px solid transparent;
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  background-clip: padding-box;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.career-letter-dest-actions .career-letter-dest-open:hover {
+  background-color: color-mix(in oklch, var(--career-text) 8%, transparent);
+  color: var(--career-text);
+}
+
+.career-letter-dest-open-icon {
+  flex: none;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+}
+
+.career-letter-dest-open-caret {
+  display: none;
+}
+
 .career-letter-dest-picker {
   padding-block-end: var(--career-space-2);
 }
