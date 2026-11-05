@@ -139,14 +139,14 @@ export function buildHhApplicationPackage(
 
   const topExperience = draft.experience[0];
   const experienceHighlight = topExperience
-    ? `На позиции ${topExperience.title} в ${topExperience.employer} я отвечал за ключевые результаты и развитие направления.`
+    ? `На позиции ${topExperience.title} в ${topExperience.employer} в зоне моей ответственности были ключевые результаты и развитие направления.`
     : '';
 
   const coverLetter = [
     `Здравствуйте!`,
     `Меня заинтересовала позиция ${vacancy.title} в компании ${vacancy.company}.`,
     `${keySkillsText} ${experienceHighlight}`,
-    `Буду рад обсудить задачи команды и мой возможный вклад на интервью.`,
+    `Предлагаю обсудить задачи команды и мой возможный вклад на интервью.`,
     `С уважением,`,
     draft.candidate.fullName || 'Кандидат',
   ].filter(Boolean).join('\n\n');

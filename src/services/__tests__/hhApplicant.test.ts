@@ -104,6 +104,9 @@ describe('hhApplicant', () => {
     expect(pkg.vacancyId).toBe('vac-101');
     expect(pkg.coverLetter).toContain('Fintech Unicorn');
     expect(pkg.coverLetter).toContain('Head of Engineering');
+    // There is no gender field and it must not be guessed from a name.
+    expect(pkg.coverLetter).not.toMatch(/(?:буду рад|готов обсудить|я отвечал)/iu);
+    expect(pkg.coverLetter).toContain('Предлагаю обсудить задачи команды и мой возможный вклад на интервью.');
     expect(pkg.answers).toHaveLength(1);
     expect(pkg.status).toBe('ready_to_submit');
   });
