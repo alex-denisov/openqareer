@@ -178,6 +178,29 @@ const handleUpdateStarStory: Handler = async (deps, request, reply) => {
   };
 };
 
+const handleDeleteStarStory: Handler = async (deps, request, reply) => {
+  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  const id = starStoryIdSchema.parse((request.params as { id: string }).id);
+  if (!deps.candidateStore.starStoriesRepo.delete(candidate.id, id))
+    return sendError(
+      reply,
+      request,
+      404,
+      'star_story_not_found',
+      'STAR-история не найдена.',
+      false,
+    );
+  return { data: { deleted: true }, meta: { requestId: request.id } };
+};
+
 function userFacingSourceError(code: string): string {
   return code === 'star_story_result_needs_source'
     ? 'Числа в результате должны совпадать с выбранным подтверждённым фактом.'
@@ -201,4 +224,5 @@ export function registerStarStoryRoutes(app: FastifyInstance, deps: RouteDeps): 
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
     withDeps(deps, handleUpdateStarStory),
   );
+  app.delete('/api/v1/candidate/star-stories/:id', withDeps(deps, handleDeleteStarStory));
 }

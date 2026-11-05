@@ -101,6 +101,11 @@ export async function transitionInterviewSession(
   return data.session;
 }
 
+export async function deleteInterviewSession(id: string): Promise<void> {
+  const response = await apiFetch(`${INTERVIEW_URL}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  await readDataObject<{ readonly deleted: boolean }>(response);
+}
+
 export async function submitInterviewAnswer(
   id: string,
   input: {

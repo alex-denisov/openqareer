@@ -27,6 +27,13 @@ export async function updateStarStory(
   });
 }
 
+export async function deleteStarStory(id: string): Promise<void> {
+  const response = await apiFetch(`${STAR_STORIES_URL}/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+  await readDataObject<{ readonly deleted: boolean }>(response);
+}
+
 async function mutateStarStory(
   url: string,
   method: 'POST' | 'PATCH',

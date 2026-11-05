@@ -1,0 +1,88 @@
+.career-interview-delete-confirm {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-danger);
+  border-radius: var(--career-radius-md);
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+}
+
+.career-interview-delete-confirm h3,
+.career-interview-delete-confirm p {
+  margin: 0;
+}
+
+.career-interview-delete-confirm h3 {
+  font-size: var(--career-text-md);
+}
+
+.career-interview-delete-confirm p {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+
+.career-interview-delete-confirm .career-interview-delete-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+  color: var(--career-danger);
+}
+
+.career-interview-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.career-btn.career-interview-delete-go {
+  border-color: var(--career-danger);
+  color: var(--career-danger);
+  background: transparent;
+}
+
+.career-btn.career-interview-delete-go:hover {
+  border-color: var(--career-danger);
+  color: var(--career-danger);
+  background: var(--career-danger-soft);
+}
+
+/* Тихая кнопка удаления: красной становится только под курсором, цель не меньше 44. */
+.career-btn.career-interview-delete-open {
+  min-block-size: var(--career-target-min);
+  min-inline-size: var(--career-target-min);
+  border-color: transparent;
+  color: var(--career-text-soft);
+  background: transparent;
+}
+
+.career-btn.career-interview-delete-open:hover {
+  border-color: transparent;
+  color: var(--career-danger);
+  background: var(--career-danger-soft);
+}
+
+.career-star-story-card-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+}
+
+.career-mock-exit-layer > .career-interview-delete-confirm {
+  inline-size: 100%;
+  max-inline-size: calc(var(--career-expert-panel-width) * 2);
+  padding: var(--career-space-6);
+}
+
+.career-star-stories-item {
+  display: grid;
+  gap: var(--career-space-3);
+  min-width: 0;
+}
+
+.career-mock-help-delete {
+  margin-block-start: var(--career-space-2);
+  margin-inline-start: calc(var(--career-space-3) * -1);
+}
