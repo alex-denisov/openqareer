@@ -1,3 +1,4 @@
+import { isDateOnlyInstant } from '../../../shared/interviewDate';
 import { dativeNameRu } from './dativeNameRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { NavigationOptions } from '../shell/pathIndicator';
@@ -32,9 +33,9 @@ function formatWeekdayTime(iso: string, timezone?: string): string {
   const date = new Date(iso);
   const weekday = new Intl.DateTimeFormat('ru-RU', {
     weekday: 'long',
-    ...(timezone ? { timeZone: timezone } : {}),
+    ...(isDateOnlyInstant(iso) ? { timeZone: 'UTC' } : timezone ? { timeZone: timezone } : {}),
   }).format(date);
-  return `${weekday}, ${formatHm(iso, timezone)}`;
+  return isDateOnlyInstant(iso) ? weekday : `${weekday}, ${formatHm(iso, timezone)}`;
 }
 
 export function newVacanciesBasis(

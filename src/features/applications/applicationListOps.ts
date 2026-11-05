@@ -1,3 +1,4 @@
+import { stageShowsInterview } from '../../../shared/interviewDate';
 import type { ApplicationView } from './applicationsApi';
 import { APPLICATION_VERSION_CONFLICT_CODE } from './applicationsApi';
 import { CoachApiError } from '../coach/apiClient';
@@ -23,7 +24,14 @@ export function optimisticStagePatch(
   patch: Partial<Pick<ApplicationView, 'stage'>>,
 ): readonly ApplicationView[] {
   return list.map((application) =>
-    application.id === id ? { ...application, ...patch } : application,
+    application.id === id
+      ? {
+          ...application,
+          ...patch,
+          nearestInterview:
+            patch.stage && !stageShowsInterview(patch.stage) ? null : application.nearestInterview,
+        }
+      : application,
   );
 }
 

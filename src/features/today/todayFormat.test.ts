@@ -252,3 +252,18 @@ describe('B542: reminder names the person, as in mockup 1', () => {
     expect(dativeNameRu('John Smith')).toBe('John Smith');
   });
 });
+
+describe('nextInterviewBasis, date without a time (B511 Д8)', () => {
+  it('names the weekday and no invented time', () => {
+    const basis = nextInterviewBasis(
+      {
+        at: '2026-12-01T00:00:00.000Z',
+        company: 'Гринкод',
+        title: 'CTO',
+        round: 1,
+      } as Parameters<typeof nextInterviewBasis>[0],
+      'Europe/Moscow',
+    );
+    expect(basis).toBe('Гринкод · раунд 1 · вторник');
+  });
+});

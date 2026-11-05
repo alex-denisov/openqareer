@@ -102,3 +102,20 @@ describe('responseNextStep', () => {
     expect(text).not.toContain('Письмо не собрано');
   });
 });
+
+describe('interview pill (B511 Д8)', () => {
+  it('invents no time for a date without one', () => {
+    expect(
+      responseStatusPill({
+        ...base,
+        stage: 'interview',
+        nearestInterview: {
+          id: 'i',
+          scheduledAt: '2026-12-01T00:00:00.000Z',
+          prepStatus: 'none',
+          round: 1,
+        },
+      }).label,
+    ).toBe('Интервью 01.12');
+  });
+});
