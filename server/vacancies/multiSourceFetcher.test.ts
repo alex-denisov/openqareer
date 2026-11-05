@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildMultiSourceFetcher } from './multiSourceFetcher';
-import type { VacancySourceConfig } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 
 const refuse = () => {
   throw new Error('the fetcher must not reach any platform in this test');
@@ -422,5 +422,45 @@ describe('multi-source fetcher: Glassdoor Cloudflare 403 challenge fallback (B21
       method: 'POST',
       body: expect.objectContaining({ operationName: 'JobSearchResultsQuery' }),
     });
+  });
+
+  it('parses an arbitrary career_site via generic corporate adapter (JSON-LD / semantic cards)', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(
+        `<!DOCTYPE html><html><head>
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "JobPosting",
+            "title": "Lead Platform Engineer",
+            "identifier": { "@type": "PropertyValue", "value": "DH-404" },
+            "datePosted": "2026-11-05",
+            "url": "https://careers.deliveryhero.com/job/lead-platform-engineer",
+            "jobLocation": { "@type": "Place", "address": { "addressLocality": "Berlin, Germany" } }
+          }
+          </script>
+        </head><body>Careers</body></html>`,
+        { status: 200, headers: { 'content-type': 'text/html' } },
+      ),
+    );
+
+    const fetcher = buildMultiSourceFetcher(refuse, refuse);
+    const customCorporate: VacancySourceConfig = {
+      id: 'src-corp-deliveryhero',
+      name: 'Delivery Hero',
+      type: 'career_site',
+      enabled: true,
+      targetUrl: 'https://careers.deliveryhero.com',
+      refreshIntervalMinutes: 180,
+      itemsFoundTotal: 0,
+      itemsActiveTotal: 0,
+    };
+
+    const vacancies = (await fetcher(customCorporate)) as UnifiedVacancy[];
+    expect(vacancies).toHaveLength(1);
+    expect(vacancies[0].title).toBe('Lead Platform Engineer');
+    expect(vacancies[0].company).toBe('Delivery Hero');
+    expect(vacancies[0].location).toBe('Berlin, Germany');
+    expect(vacancies[0].url).toBe('https://careers.deliveryhero.com/job/lead-platform-engineer');
   });
 });

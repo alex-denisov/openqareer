@@ -38,6 +38,7 @@ import {
   LINKEDIN_GROUP_B_TARGETS,
   fetchLinkedinCompanyVacancies,
 } from './linkedinCompanyGuestAdapter';
+import { fetchGenericCorporateVacancies } from './genericCorporateSiteAdapter';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -536,6 +537,7 @@ async function fetchHhSearchBatch(coordinator?: HhCrawlCoordinator): Promise<Sou
   };
 }
 
+// eslint-disable-next-line max-lines-per-function -- разбиение в B602
 async function fetchJsonOrCareerSite(
   source: VacancySourceConfig,
   options: { query?: string } | undefined,
@@ -575,6 +577,9 @@ async function fetchJsonOrCareerSite(
   }
   if (source.type === 'career_site' && source.id === BAYT_SOURCE_ID) {
     return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
+  }
+  if (source.type === 'career_site') {
+    return fetchGenericCorporateVacancies(source, deps.fetchWithStealth);
   }
   if (source.type === 'json_api') {
     if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
