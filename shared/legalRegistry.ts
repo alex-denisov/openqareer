@@ -10,7 +10,7 @@
  * Stored records keep the version they accepted; only registration reads this
  * value, there is no re-acceptance flow and login does not check it.
  */
-export const LEGAL_PACK_VERSION = '1.1';
+export const LEGAL_PACK_VERSION = '1.2';
 export const LEGAL_PACK_PUBLISHED_AT = '2026-11-05';
 
 /** What a consent record stores, so a record always names the exact text. */
