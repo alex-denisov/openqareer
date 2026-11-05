@@ -206,7 +206,6 @@ test('captures loading, empty, error, many, partial and open-role states at 1440
 });
 
 async function beginDialogue(page: Page): Promise<void> {
-  await page.getByLabel('Согласен передать ответы модели для проверки по критериям.').check();
   await page.getByRole('button', { name: 'Начать проверку' }).click();
 }
 

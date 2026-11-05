@@ -325,7 +325,7 @@ export async function startRun(rig: Awaited<ReturnType<typeof createRig>>) {
     method: 'POST',
     url: START_PATH,
     headers: mutationHeaders(rig),
-    payload: { consent: true },
+    payload: {},
   });
   expect(response.statusCode).toBe(200);
   return runFrom(response);

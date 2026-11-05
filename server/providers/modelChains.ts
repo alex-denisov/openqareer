@@ -47,9 +47,10 @@ const GLM_FLASH = { provider: 'openrouter', model: 'z-ai/glm-5.3-flash' } as con
  * цепочки стоит дважды — вторая попытка дешёвой ступени до дорогих. Очереди этих механик идут по
  * массиву подряд, без отбрасывания повторов; три попытки не берём, кандидат ждёт.
  *
- * Квиз и пункты резюме (`skillQuizzes`, `experienceBullets`) получили
- * Vertex первым по тому же решению; ступени после него прежние, потолки в `vertexChatTimeouts.ts`.
- * Диалог кандидата с консультантом (`coach`, `coachFree`) идёт без Vertex (решение владельца 04.11).
+ * Пункты резюме (`experienceBullets`) получили Vertex первым по тому же решению; ступени после него
+ * прежние, потолок в `vertexChatTimeouts.ts`.
+ * Диалог кандидата с консультантом (`coach`, `coachFree`) идёт без Vertex (решение владельца 04.11),
+ * квиз (`skillQuizzes`) тоже (решение владельца 05.11).
  */
 export const MODEL_CHAINS = {
   /**
@@ -78,9 +79,10 @@ export const MODEL_CHAINS = {
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому
-   * цепочка консультанта, а не фон. Vertex первым (04.11), хвост как у консультанта.
+   * цепочка консультанта, а не фон. Без Vertex (решение владельца 05.11): кандидат ждёт,
+   * замер 13,1 с на Vertex против 6,0 с на DeepSeek.
    */
-  skillQuizzes: [VERTEX, DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
+  skillQuizzes: [DEEPSEEK_1017, DEEPSEEK_FLASH, LUNA],
   /** Структурный JSON без текста для человека: как фон. */
   campaignRoles: [VERTEX, DEEPSEEK_V4_FLASH, DEEPSEEK_V4_FLASH, GLM_FLASH],
 } as const satisfies Record<string, readonly ChainStage[]>;

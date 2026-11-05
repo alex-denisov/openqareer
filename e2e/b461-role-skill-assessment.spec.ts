@@ -114,7 +114,6 @@ async function checkNoHorizontalOverflow(page: Page): Promise<void> {
 }
 
 async function resumeSavedDialogue(page: Page): Promise<void> {
-  await page.getByLabel('Согласен передать ответы модели для проверки по критериям.').check();
   await page.getByRole('button', { name: 'Начать проверку' }).click();
   await expect(page.getByLabel('Ваш ответ')).toBeVisible();
   await page
@@ -235,9 +234,7 @@ async function refreshStaleResult(page: Page, width: number): Promise<void> {
   await openSkillCheckFromProfile(page, page.viewportSize()?.width ?? 1440);
   await expect(page.getByText('Результат устарел.', { exact: false })).toBeVisible();
   await capture(page, `${width}-stale-result`);
-  const consent = page.getByLabel('Согласен передать ответы модели для новой проверки.');
-  await expect(page.getByRole('button', { name: 'Освежить навыки' })).toBeDisabled();
-  await consent.check();
+  await expect(page.getByRole('checkbox', { name: /Согласен передать/ })).toHaveCount(0);
   await page.getByRole('button', { name: 'Освежить навыки' }).click();
   await expect(page.getByLabel('Ваш ответ')).toBeVisible();
 }

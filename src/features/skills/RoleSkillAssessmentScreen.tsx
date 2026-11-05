@@ -378,9 +378,7 @@ function renderFocusStart(props: AssessmentContentProps) {
   return (
     <FocusStartCard
       focus={focus}
-      consent={state.consent}
       busy={state.busy}
-      onConsent={(consent) => actions.patch({ consent })}
       onStart={() => void actions.start()}
       onLater={onClose}
     />
@@ -398,11 +396,9 @@ function LoadedAssessmentContent(props: AssessmentContentProps) {
       <div className="career-role-assessment-start">
         <StartState
           current={state.current}
-          consent={state.consent}
           busy={state.busy}
           howItWorksOpen={state.howItWorksOpen}
           onToggleHowItWorks={() => actions.patch({ howItWorksOpen: !state.howItWorksOpen })}
-          onConsent={(consent) => actions.patch({ consent })}
           onStart={() => void actions.start()}
           onLater={onClose}
         />
@@ -627,11 +623,9 @@ function CompletedAssessmentContent({
       <ResultState
         run={run}
         stale={Boolean(state.current?.state === 'result' && state.current.stale)}
-        consent={state.consent}
         busy={state.busy}
         reviewingCase={Boolean(state.focusedCaseId)}
         focusedSkillId={state.focusedSkillId}
-        onConsent={(consent) => actions.patch({ consent })}
         onRefresh={() => void actions.start()}
         onOpenOpportunities={onOpenOpportunities}
         onOpenRoles={onClose}

@@ -11,7 +11,6 @@ export interface RoleSkillAssessmentUiState {
   loading: boolean;
   busy: boolean;
   error?: string;
-  consent: boolean;
   howItWorksOpen: boolean;
   dialogueAnswer: string;
   suggestionDrafts: Record<string, SuggestionDecision>;
@@ -37,7 +36,6 @@ export const initialRoleSkillAssessmentState: RoleSkillAssessmentUiState = {
   current: null,
   loading: true,
   busy: false,
-  consent: false,
   howItWorksOpen: true,
   dialogueAnswer: '',
   suggestionDrafts: {},

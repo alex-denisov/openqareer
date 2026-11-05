@@ -4,12 +4,10 @@ import {
   type GeneratedQuestion,
   type SkillQuizLevel,
 } from '../domain/generatedSkillQuiz';
-import { MODEL_CHAINS, resolveChain } from './modelChains';
+import { chainRoutes, MODEL_CHAINS } from './modelChains';
 import type { ProviderId } from './modelRegistry';
 import { requestChatJson } from './openRouterJson';
 import type { ProviderRoute } from './providerQueue';
-import type { VertexConfig } from './vertexAi';
-import { VertexJsonClient } from './vertexJson';
 
 /**
  * Вопросы квиза по навыку профиля (блок A, пакет 3). В запросе только
@@ -39,6 +37,10 @@ export class ChatSkillQuizModel implements SkillQuizModel {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
+  get label(): string {
+    return `${this.route.provider}:${this.route.model}`;
+  }
+
   async generate(input: { skill: string; level: SkillQuizLevel }): Promise<GeneratedQuestion[]> {
     const answer = await requestChatJson(
       this.route,
@@ -56,42 +58,38 @@ export class ChatSkillQuizModel implements SkillQuizModel {
   }
 }
 
-/** Ступень квиза на Gemini Vertex (04.11): тот же промпт и проверка ответа, транспорт через учёт. */
-export class VertexSkillQuizModel implements SkillQuizModel {
-  private readonly client: VertexJsonClient;
-
-  constructor(vertex: VertexConfig, fetchImpl: typeof fetch) {
-    this.client = new VertexJsonClient(vertex, fetchImpl);
-  }
-
-  async generate(input: { skill: string; level: SkillQuizLevel }): Promise<GeneratedQuestion[]> {
-    const text = await this.client.complete({
-      system: SYSTEM_PROMPT,
-      user: JSON.stringify({ skill: input.skill, level: input.level }),
-      answerTokens: ANSWER_TOKENS,
-    });
-    let answer: unknown;
-    try {
-      answer = JSON.parse(text);
-    } catch {
-      throw new Error('skill quiz stage vertex returned no JSON');
-    }
-    const questions = parseGeneratedQuestions(answer);
-    if (!questions) throw new Error('skill quiz stage vertex returned no valid quiz');
-    return questions;
-  }
+/** Запись журнала: какая ступень ответила и за сколько. Данных кандидата и навыка в ней нет. */
+export interface SkillQuizStageEvent {
+  readonly stage: string;
+  readonly outcome: 'answered' | 'failed';
+  readonly elapsedMs: number;
+  readonly reason?: string;
 }
 
 /** Сбой или негодный ответ ступени ведёт к следующей. */
 export class QueuedSkillQuizModel implements SkillQuizModel {
-  constructor(private readonly stages: readonly SkillQuizModel[]) {}
+  constructor(
+    private readonly stages: ReadonlyArray<SkillQuizModel & { readonly label?: string }>,
+    private readonly onStage?: (event: SkillQuizStageEvent) => void,
+  ) {}
 
   async generate(input: { skill: string; level: SkillQuizLevel }): Promise<GeneratedQuestion[]> {
     let lastError: unknown = new Error('skill quiz chain is empty');
     for (const stage of this.stages) {
+      const startedAt = Date.now();
+      const report = (outcome: SkillQuizStageEvent['outcome'], reason?: string) =>
+        this.onStage?.({
+          stage: stage.label ?? 'unknown',
+          outcome,
+          elapsedMs: Date.now() - startedAt,
+          ...(reason ? { reason } : {}),
+        });
       try {
-        return await stage.generate(input);
+        const questions = await stage.generate(input);
+        report('answered');
+        return questions;
       } catch (error) {
+        report('failed', error instanceof Error ? error.message.slice(0, 200) : 'unknown');
         lastError = error;
       }
     }
@@ -99,21 +97,13 @@ export class QueuedSkillQuizModel implements SkillQuizModel {
   }
 }
 
-/** Цепочка квиза: Vertex первым (когда настроен), затем ступени chat-completions с ключом. */
+/** Цепочка квиза: ступени chat-completions с ключом. Vertex убран 05.11: 13,1 с против 6,0 с у DeepSeek. */
 export function buildSkillQuizModel(config: {
   providerCredentials?: Partial<Record<ProviderId, string>>;
-  vertex?: VertexConfig;
-  /** Учётный `fetch` механики `skillQuizzes`; без него ступень Vertex не строится. */
-  vertexFetch?: typeof fetch;
+  onStage?: (event: SkillQuizStageEvent) => void;
 }): SkillQuizModel | undefined {
-  const stages = resolveChain(
-    MODEL_CHAINS.skillQuizzes,
-    config.providerCredentials ?? {},
-    config.vertexFetch ? config.vertex : undefined,
-  ).flatMap((stage): SkillQuizModel[] =>
-    stage.kind === 'route'
-      ? [new ChatSkillQuizModel(stage.route)]
-      : [new VertexSkillQuizModel(stage.vertex, config.vertexFetch!)],
+  const stages = chainRoutes(MODEL_CHAINS.skillQuizzes, config.providerCredentials ?? {}).map(
+    (route) => new ChatSkillQuizModel(route),
   );
-  return stages.length > 0 ? new QueuedSkillQuizModel(stages) : undefined;
+  return stages.length > 0 ? new QueuedSkillQuizModel(stages, config.onStage) : undefined;
 }

@@ -41,11 +41,9 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
           skills: [],
           cases: [],
         }}
-        consent={false}
         busy={false}
         howItWorksOpen={true}
         onToggleHowItWorks={() => undefined}
-        onConsent={() => undefined}
         onStart={() => undefined}
         onLater={() => undefined}
       />,

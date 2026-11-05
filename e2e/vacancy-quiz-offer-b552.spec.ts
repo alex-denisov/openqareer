@@ -88,7 +88,6 @@ for (const project of ['desktop-1440', 'mobile-390'] as const) {
     const check = page.getByTestId('role-skill-assessment');
     await expect(check).toBeVisible();
     await expect(check).toContainText('подтвердить Kafka и Kubernetes');
-    await page.getByLabel('Согласен передать ответы модели для проверки по критериям.').check();
     const started = page.waitForRequest(
       (request) =>
         request.url().endsWith('/role-skill-assessments/start') && request.method() === 'POST',

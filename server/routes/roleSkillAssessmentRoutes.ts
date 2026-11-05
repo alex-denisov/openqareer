@@ -47,7 +47,8 @@ import {
 
 const roleSchema = z.string().trim().min(1).max(200);
 const startSchema = z
-  .object({ consent: z.literal(true), role: roleSchema.optional(), focus: focusSchema.optional() })
+  // `consent` is ignored: open tabs and installed .app builds still send it until they update (05.11).
+  .object({ consent: z.boolean().optional(), role: roleSchema.optional(), focus: focusSchema.optional() })
   .strict();
 const currentQuerySchema = z.object({ role: roleSchema.optional() });
 
@@ -340,7 +341,6 @@ export function createInitialAssessmentRun(
     roleTitle: context.roleTitle,
     roleVersion: context.roleVersion,
     status: 'dialogue',
-    consentedAt: now,
     startedAt: now,
     updatedAt: now,
     completedAt: null,

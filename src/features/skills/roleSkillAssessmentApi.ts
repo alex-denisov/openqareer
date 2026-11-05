@@ -71,7 +71,6 @@ export async function startRoleSkillAssessment(
   focus?: RoleSkillAssessmentFocusRequest,
 ): Promise<RoleSkillAssessmentCurrent> {
   return post('/api/v1/candidate/role-skill-assessments/start', {
-    consent: true,
     ...(roleTitle ? { role: roleTitle } : {}),
     ...(focus ? { focus: { vacancyId: focus.vacancyId, skills: [...focus.skills] } } : {}),
   });
