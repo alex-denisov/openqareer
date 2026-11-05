@@ -668,7 +668,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await page.getByLabel('Язык').selectOption('en');
     const requirements = page.locator('.career-letter-requirements');
     await expect(requirements.locator('summary')).toHaveText(
-      '2 vacancy requirements are not confirmed by profile facts',
+      '2 требования вакансии не подтверждены фактами профиля',
     );
     await requirements.locator('summary').click();
     await expect(requirements.getByRole('listitem')).toHaveText([

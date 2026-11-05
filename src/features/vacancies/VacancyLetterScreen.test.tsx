@@ -111,6 +111,22 @@ describe('VacancyLetterScreen (mockup 9)', () => {
     expect(card).not.toContain('Попросить правки у консультанта');
   });
 
+  it('says the letter is from the name it is signed with, not the account name', () => {
+    state.current = makeState();
+    const base = state.current as unknown as { draft: { pitch: object } };
+    state.current = {
+      ...state.current,
+      draft: { ...base.draft, pitch: { ...base.draft.pitch, senderName: 'Андрей Лебедев' } },
+    } as unknown as LetterScreenState;
+    const markup = renderToStaticMarkup(
+      <CandidateDisplayNameContext.Provider value="QA Пилот">
+        <VacancyLetterScreen vacancy={vacancy} onBack={vi.fn()} onOpenExpert={vi.fn()} />
+      </CandidateDisplayNameContext.Provider>,
+    );
+    expect(markup).toContain('От имени: Андрей Лебедев');
+    expect(markup).not.toContain('QA Пилот');
+  });
+
   it('writes one meta line and keeps the server notices inside the card', () => {
     const markup = html();
     expect(markup).toMatch(/<span>6(<!-- -->)? слов<\/span>/u);
@@ -189,9 +205,13 @@ describe('the note under the letter (G3 L2)', () => {
     );
   });
 
-  it('the note under an English letter is in English', () => {
-    expect(notes({ unconfirmedRequirements: ['Kafka', 'Go'] })).toContain('2 vacancy requirements are not confirmed');
-    expect(notes({ unconfirmedRequirements: ['Kafka'] })).toContain('1 vacancy requirement is not confirmed');
+  it('the requirements note stays in Russian under an English letter: the candidate reads it', () => {
+    expect(notes({ unconfirmedRequirements: ['Kafka', 'Go'] })).toContain(
+      '2 требования вакансии не подтверждены',
+    );
+    expect(notes({ unconfirmedRequirements: ['Kafka'] })).toContain(
+      '1 требование вакансии не подтверждено',
+    );
     const fewFacts = notes({ usedEvidenceIds: [] });
     expect(fewFacts).toContain('too few confirmed facts');
     expect(fewFacts).not.toContain('мало подтверждённых');
@@ -221,7 +241,10 @@ describe('letter helpers', () => {
     const markup = renderToStaticMarkup(
       <CandidateDisplayNameContext.Provider value={null}>
         <VacancyLetterScreen
-          vacancy={{ ...vacancy, sources: [{ sourceName: 'Himalayas (JSON API)' }, { sourceName: 'Himalayas' }] }}
+          vacancy={{
+            ...vacancy,
+            sources: [{ sourceName: 'Himalayas (JSON API)' }, { sourceName: 'Himalayas' }],
+          }}
           onBack={vi.fn()}
         />
       </CandidateDisplayNameContext.Provider>,

@@ -1,3 +1,4 @@
+import { PERSON_FIRST_NAMES } from '../../shared/personFirstNames';
 import { stripHiddenMarkers } from '../../shared/textHygiene';
 import { isImportedMemoryId } from './resumeImport';
 import {
@@ -116,6 +117,10 @@ export interface VacancyPitchResponse {
   readonly coveredRequirements: readonly string[];
   /** Требования без подтверждающего факта, подписями для человека (G3 L2). */
   readonly unconfirmedRequirements: readonly string[];
+  /** Имя из резюме, как оно написано в письме; нет имени — нет и подписи. */
+  readonly senderName?: string;
+  /** Только имя для письма знакомому; нет, если имя не распознано. */
+  readonly senderFirstName?: string;
   readonly language: PitchLanguage;
   /**
    * Состояние «мало фактов» уходит сюда, а не
@@ -732,6 +737,19 @@ function buildUsedFacts(
   return Array.from(usedIds).map((id) => ({ id, basis: basisById.get(id) ?? 'imported' }));
 }
 
+function letterSender(
+  ownName: string | undefined,
+  language: PitchLanguage,
+): Pick<VacancyPitchResponse, 'senderName' | 'senderFirstName'> {
+  if (!ownName) return {};
+  const inLetter = (name: string): string => (language === 'en' ? englishProperName(name) : name);
+  const firstName = ownName.split(/\s+/u).find((part) => PERSON_FIRST_NAMES.has(part));
+  return {
+    senderName: inLetter(ownName),
+    ...(firstName ? { senderFirstName: inLetter(firstName) } : {}),
+  };
+}
+
 export function generateVacancyPitch(options: GenerateVacancyPitchOptions): VacancyPitchResponse {
   const { vacancy, tone = 'executive' } = options;
   const language = options.language ?? detectVacancyLanguage(vacancy);
@@ -772,6 +790,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
     usedFacts: buildUsedFacts(usedEvidenceIds, usableFacts),
     coveredRequirements: requirements.matched,
     unconfirmedRequirements: requirements.missing.map(requirementLabel),
+    ...letterSender(ownName, language),
     language,
     notices,
     generatedAt: new Date().toISOString(),
