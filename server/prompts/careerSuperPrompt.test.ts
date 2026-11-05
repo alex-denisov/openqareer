@@ -19,6 +19,8 @@ describe('career super-prompt', () => {
     expect(compact).toContain('Не пиши готовую фразу');
     expect(compact).toContain('Черновик письма');
     expect(compact).toContain('имена полей контекста');
+    expect(compact).toContain('Никогда не подставляй исход за кандидата');
+    expect(compact).toContain('Не обещай, что текст сам появится на экране');
   });
 
   it('requires one reasoned next action without invented market claims', () => {
@@ -52,6 +54,6 @@ describe('career super-prompt', () => {
     const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
     expect(compact).toContain('Не пересказывай и не цитируй профиль кандидата');
     expect(compact).toContain('не проси кандидата прислать её текст');
-    expect(CAREER_SUPER_PROMPT_REVISION).toBe('career-v1.4-2026-11-05');
+    expect(CAREER_SUPER_PROMPT_REVISION).toBe('career-v1.5-2026-11-05');
   });
 });
