@@ -537,6 +537,7 @@ async function fetchHhSearchBatch(coordinator?: HhCrawlCoordinator): Promise<Sou
   };
 }
 
+// eslint-disable-next-line max-lines-per-function -- разбиение в B602
 async function fetchJsonOrCareerSite(
   source: VacancySourceConfig,
   options: { query?: string } | undefined,

@@ -53,10 +53,11 @@ interface ExtractedRawJob {
 /**
  * Стратегия 1: разбор Schema.org / JSON-LD JobPosting (Google Jobs standard).
  */
+// eslint-disable-next-line max-lines-per-function -- разбиение в B602
 export function extractJsonLdJobs(html: string, baseUrl: string): ExtractedRawJob[] {
   const jobs: ExtractedRawJob[] = [];
   const scriptRegex =
-    /<script\b[^>]*type=[\'\"]application\/ld\+json[\'\"][^>]*>([\s\S]*?)<\/script>/gi;
+    /<script\b[^>]*type=['"]application\/ld\+json['"][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = scriptRegex.exec(html)) !== null) {
@@ -149,6 +150,7 @@ export function extractNextDataJobs(html: string, baseUrl: string): ExtractedRaw
             const maybeSlug = String(rec.slug || rec.url || rec.link || rec.id || '');
             if (maybeTitle && (maybeSlug || rec.id) && !IGNORE_TITLE_REGEX.test(maybeTitle)) {
               let fullUrl = maybeSlug;
+              // eslint-disable-next-line max-depth -- разбиение в B602
               if (!fullUrl.startsWith('http')) {
                 fullUrl = resolveUrl(maybeSlug.startsWith('/') ? maybeSlug : `/jobs/${maybeSlug}`, baseUrl);
               }
@@ -189,7 +191,7 @@ export function extractSemanticHtmlJobs(html: string, baseUrl: string): Extracte
 
   // Ищем теги <a ... href=".../job/...">Заголовок</a>
   const linkRegex =
-    /<a\b([^>]*href=[\'\"]([^\"\']*(?:\/job\/|\/jobs\/|\/vacancy\/|\/vacancies\/|\/position\/|\/positions\/|\/opening\/|\/openings\/)[^\"\']*)[\'\"][^>]*)>([\s\S]*?)<\/a>/gi;
+    /<a\b([^>]*href=['"]([^"']*(?:\/job\/|\/jobs\/|\/vacancy\/|\/vacancies\/|\/position\/|\/positions\/|\/opening\/|\/openings\/)[^"']*)['"][^>]*)>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = linkRegex.exec(html)) !== null) {
@@ -291,6 +293,7 @@ export function detectEmbeddedAts(html: string): {
  * Универсальный коннектор к корпоративным сайтам (Generic Corporate Site Adapter).
  * Автоматически парсит вакансии с любого корпоративного сайта через 4 каскадные стратегии.
  */
+// eslint-disable-next-line max-lines-per-function -- разбиение в B602
 export async function fetchGenericCorporateVacancies(
   source: VacancySourceConfig,
   fetchStealth?: typeof fetchWithStealthFallback,
