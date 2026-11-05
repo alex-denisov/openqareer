@@ -203,6 +203,61 @@ export function extractNextDataJobs(html: string, baseUrl: string): ExtractedRaw
   }
 }
 
+function extractComeetJobs(html: string, baseUrl: string): ExtractedRawJob[] {
+  if (!html.includes('comeet-position-name')) return [];
+  const jobs: ExtractedRawJob[] = [];
+  const seenUrls = new Set<string>();
+  const items = Array.from(html.matchAll(/<li[^>]*class="[^"]*all-loc[^"]*"[^>]*>([\s\S]*?)<\/li>/gi));
+  for (const item of items) {
+    const raw = item[1];
+    const titleMatch = raw.match(/class="comeet-position-name">([\s\S]*?)<\/div>/);
+    const linkMatch = raw.match(/href=["']([^"']+)["']/);
+    const locMatch = raw.match(/class="location_name">([\s\S]*?)<\/div>/);
+    if (!titleMatch || !linkMatch) continue;
+    const title = cleanText(titleMatch[1]);
+    if (!title || IGNORE_TITLE_REGEX.test(title)) continue;
+    const rawUrl = linkMatch[1].replace(/^\/\//, 'https://');
+    const fullUrl = resolveUrl(rawUrl, baseUrl);
+    if (seenUrls.has(fullUrl)) continue;
+    seenUrls.add(fullUrl);
+    const loc = locMatch ? cleanText(locMatch[1]) : undefined;
+    jobs.push({
+      externalId: fullUrl.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40),
+      title,
+      url: fullUrl,
+      location: loc,
+      isRemote: /remote/i.test(title) || /remote/i.test(loc ?? ''),
+      description: title,
+    });
+  }
+  return jobs;
+}
+
+function extractTildaCardJobs(html: string, baseUrl: string): ExtractedRawJob[] {
+  if (!html.includes('t-card__title')) return [];
+  const jobs: ExtractedRawJob[] = [];
+  const seenUrls = new Set<string>();
+  const matches = Array.from(html.matchAll(/<div class="[^"]*t-card__title[^"]*"[^>]*>([\s\S]*?)<\/div>/gi));
+  for (const m of matches) {
+    const raw = m[1];
+    const title = cleanText(raw);
+    if (!title || title.length < 3 || IGNORE_TITLE_REGEX.test(title)) continue;
+    const linkMatch = raw.match(/href=["']([^"']+)["']/);
+    const anchor = linkMatch ? linkMatch[1] : `#${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const fullUrl = resolveUrl(anchor, baseUrl);
+    if (seenUrls.has(fullUrl)) continue;
+    seenUrls.add(fullUrl);
+    jobs.push({
+      externalId: fullUrl.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40),
+      title,
+      url: fullUrl,
+      isRemote: /remote/i.test(title),
+      description: title,
+    });
+  }
+  return jobs;
+}
+
 /**
  * Стратегия 3: Семантический разбор ссылок на вакансии в HTML
  */
@@ -248,6 +303,13 @@ export function extractSemanticHtmlJobs(html: string, baseUrl: string): Extracte
       isRemote: /remote/i.test(title),
       description: title,
     });
+  }
+
+  if (jobs.length === 0) {
+    const comeet = extractComeetJobs(html, baseUrl);
+    if (comeet.length > 0) return comeet;
+    const tilda = extractTildaCardJobs(html, baseUrl);
+    if (tilda.length > 0) return tilda;
   }
 
   return jobs;
@@ -345,6 +407,7 @@ const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
  * Стратегия 4: Обнаружение встроенных ATS в адресе страницы или внутри HTML.
  */
 export function detectEmbeddedAts(textToScan: string): DetectedAts | null {
+  if (!textToScan || typeof textToScan !== 'string') return null;
   for (const matcher of ATS_MATCHERS) {
     const match = matcher(textToScan);
     if (match) return match;

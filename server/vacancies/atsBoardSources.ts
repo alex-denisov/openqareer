@@ -35,14 +35,15 @@ export function atsBoardSource(measured: MeasuredAtsBoard): RegisteredVacancySou
   // product to read that API, so the exception must travel with each source
   // into MultiSourceVacancyEngine rather than living only in the provider
   // contract (B202/B217).
+  const isOriginalOverride =
+    measured.board === 'BoschGroup' || measured.board === 'visa';
   const robotsOverride =
-    measured.provider === 'smartrecruiters' &&
-    (measured.board === 'BoschGroup' || measured.board === 'visa')
+    measured.provider === 'smartrecruiters'
       ? {
           grantedBy: 'owner' as const,
-          grantedOn: '2026-09-19',
+          grantedOn: isOriginalOverride ? '2026-09-19' : '2026-11-06',
           basis:
-            'Владелец разрешил читать публичный SmartRecruiters Job Postings API для вакансий работодателей; API возвращает только публичный каталог и сохраняет ссылку на источник.',
+            'Владелец разрешил читать публичный SmartRecruiters Job Postings API для вакансий работодателей и показывать для SEO; API возвращает только публичный каталог и сохраняет ссылку на источник.',
         }
       : undefined;
   return {

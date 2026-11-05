@@ -2228,4 +2228,28 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
       note: 'Lloyds Banking Group corporate portal via genericCorporateSiteAdapter. Live sample: \'Finance Production Assistant\' (https://lbg.wd3.myworkdayjobs.com/job/Bristol/Finance-Production-Assistant_164135-1)',
     },
   ],
+  'src-mayflower': [
+    {
+      items: 48,
+      observedAt: '2026-11-06',
+      route: 'eu-prod',
+      note: 'Mayflower corporate portal via genericCorporateSiteAdapter Next.js __NEXT_DATA__. Live sample: \'Process & Intake Analyst\' (https://mayflower.work/jobs/2815685)',
+    },
+  ],
+  'src-sleepdoctor': [
+    {
+      items: 4,
+      observedAt: '2026-11-06',
+      route: 'eu-prod',
+      note: 'SleepDoctor corporate portal via genericCorporateSiteAdapter Tilda cards. Live sample: \'Senior QA Automation Engineer (remote or Yerevan)\' (https://sleepdoctor.fr/en/careers#rec410830278)',
+    },
+  ],
+  'src-zesty': [
+    {
+      items: 5,
+      observedAt: '2026-11-06',
+      route: 'eu-prod',
+      note: 'Zesty corporate portal via genericCorporateSiteAdapter Comeet positions. Live sample: \'Business Development Representative\' (https://zesty.co/careers/co/tel-aviv/4C.378/business-development-representative/all)',
+    },
+  ],
 };

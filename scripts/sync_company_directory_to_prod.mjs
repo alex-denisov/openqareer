@@ -27,13 +27,13 @@ const upsertStmt = db.prepare(\`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(company_key) DO UPDATE SET
     company_name = excluded.company_name,
-    website_url = COALESCE(excluded.website_url, company_directory.website_url),
-    careers_url = COALESCE(excluded.careers_url, company_directory.careers_url),
-    linkedin_url = COALESCE(excluded.linkedin_url, company_directory.linkedin_url),
+    website_url = excluded.website_url,
+    careers_url = excluded.careers_url,
+    linkedin_url = excluded.linkedin_url,
     linkedin_org_id = COALESCE(excluded.linkedin_org_id, company_directory.linkedin_org_id),
     source_type = excluded.source_type,
-    ats_provider = COALESCE(excluded.ats_provider, company_directory.ats_provider),
-    ats_slug = COALESCE(excluded.ats_slug, company_directory.ats_slug),
+    ats_provider = excluded.ats_provider,
+    ats_slug = excluded.ats_slug,
     status = excluded.status,
     geo = COALESCE(excluded.geo, company_directory.geo),
     industry = COALESCE(excluded.industry, company_directory.industry),
@@ -45,6 +45,7 @@ const upsertStmt = db.prepare(\`
 console.log("Starting SQLite transaction on /var/lib/openqareer/openqareer.db...");
 db.exec("BEGIN TRANSACTION;");
 try {
+  db.exec("DELETE FROM company_directory WHERE company_key IN ('foundation', 'human');");
   for (const c of companies) {
     upsertStmt.run(
       c.companyKey,
