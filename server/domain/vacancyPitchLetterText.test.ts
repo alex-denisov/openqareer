@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { checkGeneratedTextFacts } from './generatedTextFactGate';
+import { resultFirst } from './letterResults';
 import { generateVacancyPitch, type VacancyPitchInputFact } from './vacancyPitchService';
 
 const record = (id: string, statement: string): VacancyPitchInputFact => ({
@@ -102,5 +104,79 @@ describe('letter text after G3c (04.11)', () => {
   it('employers typed in quotes lose them in the English letter', () => {
     const places = [{ employer: '«Финтех Лаб»', title: 'Head of Engineering', startDate: '2024-01', endDate: null, current: true, evidenceIds: ['a'] }];
     expect(generateVacancyPitch({ vacancy: leidos, facts: [], workplaces: places }).emailPitch.body).toContain('at Финтех Лаб (2024');
+  });
+});
+
+describe('resultFirst: one readable phrase from the same facts (05.11)', () => {
+  it('names a shared subject once and adds no action of the candidate', () => {
+    expect(resultFirst('Отдел продаж упаковки для пищевых производств, отдел вырос с 6 до 22 менеджеров.', 'ru'))
+      .toBe('Отдел продаж упаковки для пищевых производств вырос с 6 до 22 менеджеров');
+    expect(resultFirst('Department of packaging sales, the department grew from 6 to 22 managers', 'en'))
+      .toBe('Department of packaging sales grew from 6 to 22 managers');
+  });
+
+  it('keeps a different subject as it was', () => {
+    expect(resultFirst('Склад и логистика для сети, команда выросла с 8 до 35 человек', 'ru')).toBe('команда выросла с 8 до 35 человек — склад и логистика для сети');
+  });
+
+  it('keeps a dependent tail behind its subject', () => {
+    const fact = 'Warehouse and logistics for a nationwide retail chain, with the team growing from 8 to 35 people';
+    expect(resultFirst(fact, 'en')).toBe(fact);
+    for (const other of ['Warehouse for a chain, growing the team from 8 to 35', 'Warehouse for a chain, which cut delivery to 7 days']) {
+      expect(resultFirst(other, 'en')).toBe(other);
+    }
+  });
+});
+
+describe('the template letter does not depend on the candidate\'s gender (05.11)', () => {
+  const place = (employer: string, title: string, startDate: string, endDate: string | null, evidenceIds: string[]) => ({
+    employer, title, startDate, endDate, current: endDate === null, recordId: employer, evidenceIds: [employer, ...evidenceIds],
+  });
+  const fact = (id: string, statement: string, domain = 'outcome'): VacancyPitchInputFact => ({
+    id, statement, kind: 'fact', domain, sourceMessageIds: ['m'], status: 'confirmed',
+  } as unknown as VacancyPitchInputFact);
+  const profiles = [
+    {
+      name: 'Алексей Иванов',
+      vacancy: { id: 'it', title: 'Руководитель разработки/Head of Engineering', company: 'Телеком-Сервис', description: 'Платформа для ЖКХ.', requiredSkills: [] },
+      facts: [fact('it', 'Склад и логистика для федеральной сети магазинов, команда выросла с 8 до 35 человек.')],
+      workplaces: [place('Финтех Лаб', 'Head of Engineering', '2024-01', null, []), place('Ритейл Системс', 'Руководитель разработки', '2014-01', '2021-12', ['it'])],
+      results: ['команда выросла с 8 до 35 человек', 'склад и логистика для федеральной сети магазинов'],
+    },
+    {
+      name: 'Марина Соколова',
+      vacancy: { id: 'sales', title: 'Руководитель отдела продаж', company: 'АГМ Партс', description: 'Запасные части для сельхозтехники.', requiredSkills: [] },
+      facts: [fact('sales', 'Отдел продаж упаковки для пищевых производств, отдел вырос с 6 до 22 менеджеров.')],
+      workplaces: [place('УралПак', 'Директор по продажам', '2020-03', null, ['sales'])],
+      results: ['Из результатов: отдел продаж упаковки для пищевых производств вырос с 6 до 22 менеджеров.'],
+    },
+  ];
+
+  for (const profile of profiles) {
+    it(`${profile.name}: no gendered phrase in any tone or text, no fact lost`, () => {
+      for (const tone of ['executive', 'confident', 'technical'] as const) {
+        const pitch = generateVacancyPitch({ vacancy: profile.vacancy, candidateName: profile.name, facts: profile.facts, tone, language: 'ru', workplaces: profile.workplaces });
+        const texts = [pitch.emailPitch.body, pitch.atsCoverLetter, pitch.linkedInNote, pitch.contactMessage];
+        for (const text of texts) expect(text).not.toMatch(/(?:буду рад|готов обсудить|рад знакомству)/iu);
+        // Our own wording asks the candidate to confirm nothing.
+        const asked = texts.flatMap((text) => checkGeneratedTextFacts(text, profile.facts).claims).filter((claim) => claim.action === 'ask_candidate');
+        expect(asked.filter((claim) => /(?:хочу|предлагаю|направляю)/iu.test(claim.text))).toEqual([]);
+        for (const result of profile.results) expect(pitch.emailPitch.body).toContain(result);
+        expect(pitch.emailPitch.body).toContain(profile.workplaces[0]?.employer);
+      }
+    });
+  }
+
+  it('the executive wording is the agreed one', () => {
+    const { emailPitch } = generateVacancyPitch({ vacancy: profiles[1]!.vacancy, candidateName: 'Марина Соколова', facts: profiles[1]!.facts, language: 'ru', workplaces: profiles[1]!.workplaces });
+    expect(emailPitch.body).toContain('Хочу узнать больше о целях и приоритетах роли.');
+    expect(emailPitch.body).toContain('Предлагаю обсудить цели роли и приоритеты бизнеса на коротком звонке.');
+  });
+
+  it('the English letter signs in Latin and keeps its wording', () => {
+    const pitch = generateVacancyPitch({ vacancy: { id: 'en', title: 'Director, IT Operations', company: 'HealthEdge', description: 'Service management.', requiredSkills: [] }, candidateName: 'Алексей Иванов', facts: [], language: 'en', workplaces: profiles[0]!.workplaces });
+    expect(pitch.atsCoverLetter).toContain('Aleksey Ivanov');
+    expect(pitch.atsCoverLetter).not.toContain('Алексей');
+    expect(pitch.emailPitch.body).toContain("I'd be glad to learn more about the role's goals and priorities.");
   });
 });
