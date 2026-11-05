@@ -5,8 +5,8 @@ import {
 } from './linkedinCompanyGuestAdapter';
 
 describe('LinkedIn Company Guest Adapter (Group B)', () => {
-  it('registers all 6 active Group B companies with confirmed organization IDs', () => {
-    expect(LINKEDIN_GROUP_B_TARGETS.length).toBe(6);
+  it('registers all active LinkedIn Guest companies with confirmed organization IDs', () => {
+    expect(LINKEDIN_GROUP_B_TARGETS.length).toBe(7);
     const slugs = LINKEDIN_GROUP_B_TARGETS.map((t) => t.slug);
     expect(slugs).toContain('ringcentral');
     expect(slugs).toContain('cloudlinux');
@@ -14,6 +14,20 @@ describe('LinkedIn Company Guest Adapter (Group B)', () => {
     expect(slugs).toContain('astound-commerce');
     expect(slugs).toContain('indrive');
     expect(slugs).toContain('wallarm');
+    expect(slugs).toContain('datadome');
+  });
+
+  it('fetches real live vacancies for DataDome via guest API without authorization', async () => {
+    const target = LINKEDIN_GROUP_B_TARGETS.find((t) => t.slug === 'datadome')!;
+    const vacancies = await fetchLinkedinCompanyVacancies(target, { maxPages: 1 });
+
+    expect(vacancies.length).toBeGreaterThan(0);
+    const first = vacancies[0]!;
+    expect(first.company).toBe('DataDome');
+    expect(first.status).toBe('active');
+    expect(first.url).toMatch(/^https:\/\/www\.linkedin\.com\/jobs\/view\/\d+/);
+    expect(first.provenance.sourceId).toBe('src-linkedin-datadome');
+    expect(first.title.length).toBeGreaterThan(0);
   });
 
   it('fetches real live vacancies for RingCentral via guest API without authorization', async () => {
