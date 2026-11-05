@@ -27,8 +27,8 @@ type Issue = z.infer<typeof issuesSchema>['issues'][number];
 /** Ни рассуждение, ни длинный вывод здесь не нужны: замер 05.11 дал 1,1 с при максимуме 1,7 с. */
 const CALL_MS = 5_000;
 const CALL_TOKENS = 1_500;
-const MIN_SENTENCES = 3;
 const UNAVAILABLE = { detail: 'letter_claims:unavailable' } as const;
+const UNFIXED = { detail: 'letter_claims:unfixed' } as const;
 
 function jsonOf(content: string | null | undefined): unknown {
   if (!content) return null;
@@ -39,6 +39,10 @@ function jsonOf(content: string | null | undefined): unknown {
   }
 }
 
+function fixesEveryIssue(fixes: readonly LetterFix[], issues: readonly Issue[]): boolean {
+  return issues.every((issue) => fixes.some((fix) => fix.n === issue.n && fix.text.trim().length > 0));
+}
+
 export interface LetterClaimCheckOptions {
   readonly apiKey: string;
   readonly model: string;
@@ -47,7 +51,10 @@ export interface LetterClaimCheckOptions {
   readonly client?: ChatCompletionClient;
 }
 
-/** Письмо → проверка → правка названных предложений → проверка правки → удаление того, что не подтвердилось. */
+/**
+ * Письмо → проверка → правка названных предложений → проверка правки. Правка не подтвердилась: письмо отдаётся
+ * следующей ступени. Предложения не удаляются: три письма из 20 потеряли связность (D-F9, 05.11).
+ */
 export class LlmLetterClaimCheck implements LetterClaimCheck {
   private readonly client: ChatCompletionClient;
   private readonly openRouter: boolean;
@@ -73,18 +80,16 @@ export class LlmLetterClaimCheck implements LetterClaimCheck {
     if (issues.length === 0) return { body, flagged: 0 };
     const fixes = await this.fix(sentences, issues, profile);
     if (!fixes) return UNAVAILABLE;
+    if (!fixesEveryIssue(fixes, issues)) return UNFIXED;
     const fixedBody = applyLetterFixes(body, sentences, fixes);
     const fixedSentences = sentencesOf(fixedBody);
-    if (fixedSentences.length < MIN_SENTENCES) return { detail: 'letter_claims:too_short' };
-    const changed = new Set(fixes.map((fix) => fix.text.trim()));
-    const recheck = fixedSentences.flatMap((sentence, index) => (changed.has(sentence) ? [index + 1] : []));
-    if (recheck.length === 0) return { body: fixedBody, flagged: issues.length };
+    // Правка могла разбить предложение на два: проверяется всё, чего не было в исходном письме.
+    const original = new Set(sentences);
+    const recheck = fixedSentences.flatMap((sentence, index) => (original.has(sentence) ? [] : [index + 1]));
+    if (recheck.length === 0) return UNFIXED;
     const left = await this.check(fixedSentences, recheck, profile);
     if (!left) return UNAVAILABLE;
-    // Правка опять не подтвердилась: предложение уходит, письмо и его голос остаются.
-    const cleaned = applyLetterFixes(fixedBody, fixedSentences, left.map((issue) => ({ n: issue.n, text: '' })));
-    if (sentencesOf(cleaned).length < MIN_SENTENCES) return { detail: 'letter_claims:too_short' };
-    return { body: cleaned, flagged: issues.length };
+    return left.length === 0 ? { body: fixedBody, flagged: issues.length } : UNFIXED;
   }
 
   private async check(sentences: readonly string[], wanted: readonly number[], profile: string): Promise<Issue[] | null> {

@@ -100,8 +100,12 @@ describe('B528 generated text fact gate', () => {
     expect(data.atsCoverLetter).toContain(body);
     expect(data.factCheck.status).toBe('checked');
     expect(data.outputFactChecks.emailBody.status).toBe('checked');
-    // The gate does not check what a paraphrase means, so the screen promises no checking.
-    expect(data.notices).toEqual(['Черновик написала модель. Прочитайте его перед отправкой.']);
+    // The candidate reads the note; it never travels with the letter the employer gets.
+    for (const sent of [data.emailPitch.body, data.atsCoverLetter]) {
+      expect(sent).not.toContain('Черновик написала модель');
+      expect(sent).not.toContain('Сверьте с профилем');
+    }
+    expect(data.notices).toEqual(['Черновик написала модель. Сверьте с профилем места работы, цифры и что делали лично.']);
   });
 
   it('04.11: a stage whose letter fails the gate gives way, a transliterated employer never shows', async () => {

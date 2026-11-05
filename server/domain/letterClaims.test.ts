@@ -12,6 +12,17 @@ describe('claimSentenceNumbers: what the model check reads', () => {
     expect(pick(['Срок сократился с 12 до 7 дней.', 'Ритейл Системс научил многому.'])).toEqual([1, 2]);
   });
 
+  it('takes a generalization about experience, even without an action or a first person', () => {
+    expect(pick([
+      'По опыту, подготовка к аудиту ломается на воспроизводимости.',
+      'Reporting to a board is familiar ground.',
+      'That has been the work for the last decade.',
+      'Most of my career has been on that side.',
+      'Готов применить опыт внедрения CRM.',
+      "I'd bring years of this to your team.",
+    ])).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
   it('leaves opinions about the employer and plans alone', () => {
     expect(pick([
       'Обычно ломается на стыках.',
@@ -30,9 +41,8 @@ describe('applyLetterFixes', () => {
     expect(applyLetterFixes(body, ['Первое.', 'Второе.', 'Третье.'], [{ n: 2, text: 'Другое.' }])).toBe('Первое. Другое.\n\nТретье.');
   });
 
-  it('removes a sentence with an empty fix and a paragraph left empty', () => {
-    expect(applyLetterFixes(body, ['Первое.', 'Второе.', 'Третье.'], [{ n: 3, text: '' }])).toBe('Первое. Второе.');
-    expect(applyLetterFixes(body, ['Первое.', 'Второе.', 'Третье.'], [{ n: 1, text: '' }])).toBe('Второе.\n\nТретье.');
+  it('takes the fix literally, a dollar sign included', () => {
+    expect(applyLetterFixes(body, ['Первое.', 'Второе.', 'Третье.'], [{ n: 1, text: "$& и $' остались." }])).toBe("$& и $' остались. Второе.\n\nТретье.");
   });
 
   it('ignores a number the letter does not have', () => {

@@ -66,15 +66,11 @@ function logPitchTiming(entry: {
   console.info(JSON.stringify({ event: 'vacancy-pitch-timing', ...entry }));
 }
 
-const MODEL_LETTER_NOTICE: Readonly<Record<PitchLanguage, string>> = {
-  ru: 'Черновик написала модель. Прочитайте его перед отправкой.',
-  en: 'This draft was written by a model. Please read it before sending.',
-};
-
-/** Проверка письма не оценивает смысл пересказа, поэтому экран обещает не проверку, а чтение. */
-export function modelLetterNotice(language: PitchLanguage): string {
-  return MODEL_LETTER_NOTICE[language];
-}
+/**
+ * Читает кандидат, а не работодатель: поэтому по-русски и у английского письма. Проверка ловит не всё, поэтому
+ * экран называет, что сверить, и не обещает проверенного текста.
+ */
+export const MODEL_LETTER_NOTICE = 'Черновик написала модель. Сверьте с профилем места работы, цифры и что делали лично.';
 
 function letterGateSources(request: LetterWritingRequest): LetterGateSources {
   const { vacancy, facts, workplaces, language } = request;
@@ -164,9 +160,10 @@ export async function writeCoverLetterBody(
     return violations.map((violation) => violation.rule);
   };
   const providerStart = Date.now();
+  // Кандидат ждёт и сборку контекста: срок считается от начала запроса, а не от вызова модели.
   const outcome = await withinTimeBudget(
     writer.writeCoverLetter(writerInput(letter, review)),
-    COVER_LETTER_BUDGET_MS,
+    Math.max(0, COVER_LETTER_BUDGET_MS - letter.contextMs),
   );
   const providerMs = Date.now() - providerStart;
   if (outcome.failure) request.log.warn(outcome.failure, 'cover-letter-stage-failed');

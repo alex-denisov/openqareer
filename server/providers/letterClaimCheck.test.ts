@@ -58,26 +58,32 @@ describe('LlmLetterClaimCheck', () => {
     await expect(check(client).settle(BODY, input)).resolves.toEqual({ body: BODY, flagged: 0 });
   });
 
-  it('removes a sentence whose fix fails the check again, the letter stays', async () => {
-    const client = replies(
-      '{"issues":[{"n":3,"kind":"actor","why":"x"}]}',
-      '{"fixes":[{"n":3,"text":"Я снова вырастил команду."}]}',
-      '{"issues":[{"n":3,"kind":"actor","why":"секрет"}]}',
-    );
-    const body = 'Обычно ломается на стыках. Ещё одно мнение. Я вырастил команду с 8 до 35 человек. Предлагаю созвониться.';
-    await expect(check(client).settle(body, input)).resolves.toEqual({
-      body: 'Обычно ломается на стыках. Ещё одно мнение. Предлагаю созвониться.',
-      flagged: 1,
-    });
-  });
-
-  it('refuses a letter left too short after the removal', async () => {
+  it('refuses the letter when the fix fails the check again: no sentence is removed', async () => {
     const client = replies(
       '{"issues":[{"n":2,"kind":"actor","why":"x"}]}',
       '{"fixes":[{"n":2,"text":"Я снова вырастил команду."}]}',
       '{"issues":[{"n":2,"kind":"actor","why":"секрет"}]}',
     );
-    await expect(check(client).settle(BODY, input)).resolves.toEqual({ detail: 'letter_claims:too_short' });
+    await expect(check(client).settle(BODY, input)).resolves.toEqual({ detail: 'letter_claims:unfixed' });
+  });
+
+  it('refuses the letter when the model has nothing to fix it with', async () => {
+    const empty = replies('{"issues":[{"n":2,"kind":"actor","why":"x"}]}', '{"fixes":[{"n":2,"text":""}]}');
+    await expect(check(empty).settle(BODY, input)).resolves.toEqual({ detail: 'letter_claims:unfixed' });
+    const missing = replies('{"issues":[{"n":2,"kind":"actor","why":"x"}]}', '{"fixes":[]}');
+    await expect(check(missing).settle(BODY, input)).resolves.toEqual({ detail: 'letter_claims:unfixed' });
+    const same = replies('{"issues":[{"n":2,"kind":"actor","why":"x"}]}', '{"fixes":[{"n":2,"text":"Я вырастил команду с 8 до 35 человек."}]}');
+    await expect(check(same).settle(BODY, input)).resolves.toEqual({ detail: 'letter_claims:unfixed' });
+  });
+
+  it('checks a fix that came back as two sentences', async () => {
+    const client = replies(
+      '{"issues":[{"n":2,"kind":"actor","why":"x"}]}',
+      '{"fixes":[{"n":2,"text":"Команда выросла. Я её вырастил."}]}',
+      '{"issues":[{"n":3,"kind":"actor","why":"секрет"}]}',
+    );
+    await expect(check(client).settle(BODY, input)).resolves.toEqual({ detail: 'letter_claims:unfixed' });
+    expect(client.calls()[2]).toContain('Проверь только предложения: 2, 3.');
   });
 
   it('refuses a letter when the check gives no answer: unchecked text is not shown', async () => {
@@ -88,11 +94,6 @@ describe('LlmLetterClaimCheck', () => {
   it('refuses a letter when the fix gives no answer', async () => {
     const client = replies('{"issues":[{"n":2,"kind":"actor","why":"x"}]}', new Error('down'));
     await expect(check(client).settle(BODY, input)).resolves.toEqual({ detail: 'letter_claims:unavailable' });
-  });
-
-  it('refuses a letter left with less than two sentences', async () => {
-    const client = replies('{"issues":[{"n":2,"kind":"actor","why":"x"}]}', '{"fixes":[{"n":2,"text":""}]}');
-    await expect(check(client).settle('Я вырос. Я вырастил команду.', input)).resolves.toEqual({ detail: 'letter_claims:too_short' });
   });
 });
 

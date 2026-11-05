@@ -114,9 +114,10 @@ export interface CoverLetterWriter {
 /**
  * Общий срок на письмо: по его истечении идёт шаблон. Потолки взяты из замера 05.11, а не заданы заранее:
  * DeepSeek low p50 10,7 с, 7 из 8 писем до 16 с; Gemini low максимум 5,5 с; luna максимум 7,5 с.
- * Срока хватает на DeepSeek с проверкой и правкой (ещё три вызова по 1–2 с) и на Gemini после него.
+ * Срока хватает на DeepSeek с проверкой и правкой (ещё три вызова по 1–2 с) и на luna после него.
+ * При сроке 30 с письмо дошло до 27,8 с: три ступени сложились, и согласованные 24 с не держал никто.
  */
-export const COVER_LETTER_BUDGET_MS = 30_000;
+export const COVER_LETTER_BUDGET_MS = 24_000;
 const VERTEX_LETTER_STAGE_MS = 6_000;
 const OPENROUTER_LETTER_STAGE_MS = 16_000;
 const OPENAI_LETTER_STAGE_MS = 8_000;
@@ -409,10 +410,7 @@ export interface CoverLetterWriterConfig {
   readonly vertexFetch?: typeof fetch;
 }
 
-/**
- * Цепочка письма (решение владельца 05.11): DeepSeek, затем Gemini, затем luna на случай, когда кредит
- * Vertex кончился; шаблон остаётся запасом за ней.
- */
+/** Цепочка письма: DeepSeek, затем luna; шаблон остаётся запасом за ней. */
 export function buildCoverLetterWriter(
   config: CoverLetterWriterConfig,
 ): CoverLetterWriter | undefined {

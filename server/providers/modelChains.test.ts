@@ -48,10 +48,9 @@ describe('цепочки моделей по механикам (28.10)', () => 
     }
   });
 
-  it('письмо: DeepSeek, потом Gemini, потом luna (решение владельца 05.11)', () => {
+  it('письмо: DeepSeek, потом luna, без Gemini (D-F9, 05.11)', () => {
     expect(labels('coverLetters')).toEqual([
       'openrouter:deepseek/deepseek-v4.1-flash',
-      'vertex',
       'openai:gpt-5.6-luna',
     ]);
   });

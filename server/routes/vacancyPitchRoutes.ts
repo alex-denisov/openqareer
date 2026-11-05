@@ -8,7 +8,7 @@ import {
   generateVacancyPitch,
 } from '../domain/vacancyPitchService';
 import { retryOnSqliteBusy } from '../data/sqliteBusyRetry';
-import { modelLetterNotice, writeCoverLetterBody } from './vacancyLetterBody';
+import { MODEL_LETTER_NOTICE, writeCoverLetterBody } from './vacancyLetterBody';
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
@@ -299,7 +299,7 @@ async function prepareVacancyPitch(deps: RouteDeps, request: FastifyRequest, rep
 /** Одно примечание под письмом (G3 L2, макет 9): письму модели — что его написала модель. */
 function letterNotices(result: Awaited<ReturnType<typeof writeVacancyPitch>>): string[] {
   const { pitch, written, outputFactChecks } = result;
-  if (written.body) return [modelLetterNotice(pitch.language)];
+  if (written.body) return [MODEL_LETTER_NOTICE];
   return [
     ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks), written.factCheck),
     ...pitch.notices,
