@@ -198,6 +198,38 @@ describe('encrypted persistent vacancy fit cache and queue', () => {
     expect([...store.cachedVacancyIds('candidate-a')]).toEqual(['vacancy-2']);
     database.close();
   });
+  it('a row another process writes between the two reads does not open every stored result (prod 05.11: 3.1 s of the loop)', () => {
+    const { database } = setup();
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    const store = new SqliteVacancyFitStore(database, sealed);
+    const stored = Array.from({ length: 20 }, (_, index) => ({ ...input(), vacancyId: `vacancy-${index}` }));
+    for (const fit of stored) store.putCache(fit, evaluateVacancyFit(fit), now);
+    store.cachedVacancyIds('candidate-a');
+    const opened = vi.spyOn(sealed, 'open');
+    const late = { ...input(), vacancyId: 'vacancy-late' };
+    const worker = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));
+    const prepare = database.prepare.bind(database);
+    const spy = vi.spyOn(database, 'prepare').mockImplementation((sql: string) => {
+      const statement = prepare(sql);
+      if (!sql.includes('COUNT(*)')) return statement;
+      spy.mockRestore();
+      const stat = statement.get.bind(statement);
+      statement.get = ((...args: never[]) => {
+        const row = stat(...args);
+        worker.putCache(late, evaluateVacancyFit(late), now);
+        return row;
+      }) as typeof statement.get;
+      return statement;
+    });
+
+    expect(store.cachedVacancyIds('candidate-a').size).toBe(20);
+    expect(opened).not.toHaveBeenCalled();
+
+    expect(store.cachedVacancyIds('candidate-a').has('vacancy-late')).toBe(true);
+    expect(opened).toHaveBeenCalledTimes(1);
+    database.close();
+  });
+
   it('hands the same id set to every read until a row lands (PRB-041: each page copied thousands of ids)', () => {
     const { database } = setup();
     const store = new SqliteVacancyFitStore(database, new SealedText(Buffer.alloc(32, 7)));

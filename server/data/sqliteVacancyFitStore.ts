@@ -151,8 +151,10 @@ export class SqliteVacancyFitStore {
     // Prod 02.11: every list page opened every stored result (seconds of CPU on the event loop).
     // Rows are only added or replaced (a new rowid); only a delete forces a full read.
     const since = known && known.last <= stat.last ? known.last : 0;
-    const rows = this.database.prepare('SELECT cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ?')
-      .all(candidateKey, since) as { cache_key: string; result_cipher: string }[];
+    // Prod 05.11: bound by `stat`, or a row another process writes between the two reads looks like
+    // a delete below and opens every stored result on the loop (3.1 s, twice this day). It lands next read.
+    const rows = this.database.prepare('SELECT cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ? AND rowid > ? AND rowid <= ?')
+      .all(candidateKey, since, stat.last) as { cache_key: string; result_cipher: string }[];
     // Counts that do not add up mean a row was deleted: read all of them again.
     if (since > 0 && known && known.count + rows.length !== stat.count) {
       this.cachedIdsMemo.delete(candidateKey);
