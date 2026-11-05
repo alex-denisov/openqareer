@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { clusterBatchByKeys, detachVacanciesByKeys } from './keyedClusterer';
+import { DEFAULT_KEYED_BATCH_SIZE } from './multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { clusterVacancies } from './vacancyDeduplicator';
 
@@ -122,30 +123,32 @@ function partition(clusters: readonly VacancyCluster[]): string[] {
 }
 
 describe('keyed clustering golden (B230)', () => {
-  it('batches through loadClustersByKeys produce the same partition as a full rebuild', () => {
-    const records = fixture();
-    expect(records.length).toBeGreaterThan(1500);
-    const full = clusterVacancies(records);
+  it.each([150, DEFAULT_KEYED_BATCH_SIZE])(
+    'batches of %i produce the same partition as a full rebuild',
+    (batchSize) => {
+      const records = fixture();
+      expect(records.length).toBeGreaterThan(1500);
+      const full = clusterVacancies(records);
 
-    const store = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
-    const batchSize = 150;
-    let created = 0;
-    let updated = 0;
-    for (let offset = 0; offset < records.length; offset += batchSize) {
-      const result = clusterBatchByKeys(store, records.slice(offset, offset + batchSize));
-      created += result.created;
-      updated += result.updated;
-    }
-    const keyed = store.loadClusters();
+      const store = new SqliteVacancyPoolStore({ databasePath: ':memory:' });
+      let created = 0;
+      let updated = 0;
+      for (let offset = 0; offset < records.length; offset += batchSize) {
+        const result = clusterBatchByKeys(store, records.slice(offset, offset + batchSize));
+        created += result.created;
+        updated += result.updated;
+      }
+      const keyed = store.loadClusters();
 
-    expect(keyed.length).toBe(full.length);
-    expect(partition(keyed)).toEqual(partition(full));
-    expect(created).toBe(full.length);
-    expect(updated).toBeGreaterThan(0);
-    // Каждый кластер нашёл себя по ключам, а не только по основателю.
-    expect(store.countClusters()).toBe(full.length);
-    store.close();
-  });
+      expect(keyed.length).toBe(full.length);
+      expect(partition(keyed)).toEqual(partition(full));
+      expect(created).toBe(full.length);
+      expect(updated).toBeGreaterThan(0);
+      // Каждый кластер нашёл себя по ключам, а не только по основателю.
+      expect(store.countClusters()).toBe(full.length);
+      store.close();
+    },
+  );
 
   it('re-observing the same records adds no clusters and no memberships', () => {
     const records = fixture().slice(0, 600);

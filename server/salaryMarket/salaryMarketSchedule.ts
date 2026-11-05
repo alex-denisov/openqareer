@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
 import { computeSalaryMarketSnapshots, writeSalaryMarketSnapshots } from './salaryMarketSnapshot';
 
 interface SnapshotLog {
@@ -11,24 +12,24 @@ export function scheduleSalaryMarketSnapshots(
   database: DatabaseSync,
   log: SnapshotLog,
 ): () => void {
-  const run = () => {
+  const run = (): boolean => {
     try {
       const snapshots = computeSalaryMarketSnapshots(database, new Date());
       writeSalaryMarketSnapshots(database, snapshots);
       log.info({ roles: snapshots.length }, 'salary-market-snapshots-written');
+      return true;
     } catch (error: unknown) {
       log.error(
         { errorName: error instanceof Error ? error.name : 'UnknownError' },
         'salary-market-snapshots-failed',
       );
+      return false;
     }
   };
-  const first = setTimeout(run, 4 * 60_000);
-  const every = setInterval(run, 24 * 60 * 60_000);
-  first.unref();
-  every.unref();
-  return () => {
-    clearTimeout(first);
-    clearInterval(every);
-  };
+  return schedulePersistedJob(database, log, {
+    job: 'salary-market-snapshots',
+    firstRunMs: 4 * 60_000,
+    intervalMs: 24 * 60 * 60_000,
+    run,
+  });
 }

@@ -3,6 +3,7 @@
  * every salaried live vacancy, so it never runs on the web server.
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { schedulePersistedJob } from '../../maintenance/persistedJobSchedule';
 import {
   computeMarketSalaryEstimates,
   writeMarketSalaryEstimates,
@@ -20,7 +21,7 @@ export function scheduleMarketSalaryEstimateJob(
   database: DatabaseSync,
   log: EstimateLog,
 ): () => void {
-  const run = () => {
+  const run = (): boolean => {
     const started = Date.now();
     try {
       const estimates = computeMarketSalaryEstimates(database);
@@ -29,6 +30,7 @@ export function scheduleMarketSalaryEstimateJob(
         { ms: Date.now() - started, keys: estimates.size },
         'market-salary-estimates-written',
       );
+      return true;
     } catch (error: unknown) {
       log.error(
         {
@@ -37,14 +39,13 @@ export function scheduleMarketSalaryEstimateJob(
         },
         'market-salary-estimates-failed',
       );
+      return false;
     }
   };
-  const first = setTimeout(run, FIRST_RUN_MS);
-  const every = setInterval(run, INTERVAL_MS);
-  first.unref();
-  every.unref();
-  return () => {
-    clearTimeout(first);
-    clearInterval(every);
-  };
+  return schedulePersistedJob(database, log, {
+    job: 'market-salary-estimates',
+    firstRunMs: FIRST_RUN_MS,
+    intervalMs: INTERVAL_MS,
+    run,
+  });
 }
