@@ -1289,3 +1289,10 @@
     border-radius: 18px;
   }
 }
+
+.vacancies-fit-order-note {
+  margin: 0;
+  padding-inline: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
