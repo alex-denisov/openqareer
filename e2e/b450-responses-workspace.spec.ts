@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
 import { createMockInterviewSimulatorFixture } from './fixtures/mockInterviewSimulator';
 import { captureCareerHarness } from './helpers/capture-career-harness';
 
@@ -1231,6 +1231,30 @@ test.describe('B450 responses workspace', () => {
     await expect(selected).toContainText('Сайт не подтвердил отправку');
   });
 
+  test('строки «О компании» без иконок: текст с края секции, как в макете 5', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name === 'mobile-390', 'На 390 у строк своя плитка с иконкой');
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page.locator('.career-responses-card-body').first().click();
+
+    const dossier = page.locator('.career-responses-selected__dossier');
+    const contact = dossier.locator('p.career-responses-contact');
+    await expect(contact).toBeVisible();
+    const left = async (target: Locator) => (await target.boundingBox())?.x;
+    const edge = await left(dossier.getByRole('heading', { name: 'О компании' }));
+    const rowTexts = dossier.locator('.career-responses-selected__row-text');
+    await expect(rowTexts).toHaveCount(2);
+    expect(await left(rowTexts.nth(0))).toBe(edge);
+    expect(await left(rowTexts.nth(1))).toBe(edge);
+    expect(await left(contact.locator('span'))).toBe(edge);
+    await expect(dossier.locator('.career-responses-selected__row-icon:visible')).toHaveCount(0);
+    await expect(contact.locator('> svg')).toBeHidden();
+  });
+
   test('LinkedIn без квитанции сообщает, что доставка не подтверждена', async ({
     page,
   }, testInfo) => {
@@ -1399,7 +1423,9 @@ test.describe('B511 «Отклики» 390 push screens', () => {
     await page.getByRole('menuitem', { name: 'Ищу путь' }).click();
     await expect.poll(() => calls.companyBulkExecute).toMatchObject({ action: 'set_stage' });
     await push.getByRole('button', { name: 'Убрать из «Хочу»' }).click();
-    await expect(push.getByRole('alertdialog', { name: 'Подтверждение' })).toBeVisible();
+    const confirm = push.getByRole('alertdialog', { name: 'Подтверждение' });
+    await expect(confirm).toContainText('Этап и следующий шаг по ним удалятся');
+    await expect(confirm).not.toContainText('Оповещения');
     await push.getByRole('button', { name: 'Отмена' }).click();
 
     await push.getByRole('button', { name: 'Открыть 3 вакансии' }).click();

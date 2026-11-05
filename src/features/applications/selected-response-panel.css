@@ -145,6 +145,19 @@
   border-block-start: var(--career-border-width) solid var(--career-line);
 }
 
+/* Mockup 5 `.check-row`: no leading icon, the text starts at the section edge. 390 keeps its tile. */
+@media (min-width: 40.0625rem) {
+  .career-responses-selected__rows.is-plain .career-responses-selected__row,
+  .career-responses-selected__rows.is-plain > p.career-responses-contact {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .career-responses-selected__rows.is-plain .career-responses-selected__row-icon,
+  .career-responses-selected__rows.is-plain > p.career-responses-contact > svg {
+    display: none;
+  }
+}
+
 .career-responses-selected__actions {
   display: flex;
   flex-wrap: wrap;
@@ -178,13 +191,6 @@
   font-size: var(--career-text-sm);
   font-weight: 600;
   text-align: start;
-}
-
-/* Same icon box as the rows above it, so the text columns line up (Д14). */
-.career-responses-selected__rows > p.career-responses-contact > svg {
-  inline-size: 1rem;
-  block-size: 1rem;
-  color: var(--career-text-soft);
 }
 
 .career-responses-selected__rows > form.career-responses-contact {
