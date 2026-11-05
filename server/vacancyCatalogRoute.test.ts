@@ -120,22 +120,24 @@ describe('B209: публичный каталог вакансий', () => {
     const second = await app.inject({ method: 'GET', url: next! });
     expect(second.statusCode).toBe(200);
     expect(second.body).toContain('Страница 2 из 2');
-    // 04.11: голый /page/2 отвечает 301, канонический адрес на него вёл страницу на первую.
-    const escaped = next!.replace(/&/gu, '&amp;');
-    expect(second.body).toContain(
-      `<link rel="canonical" href="https://openqareer.com${escaped}">`,
-    );
+    // Курсор сдвигается с каждой новой вакансией: это ссылка для обхода, а не адрес для индекса.
+    expect(second.body).toContain('<link rel="canonical" href="https://openqareer.com/vacancies">');
+    expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
   });
 
-  it('страница списка за курсором канонична со своим курсором', async () => {
+  it('страница списка за курсором не индексируется, но ведёт дальше к карточкам', async () => {
     const app = await appWithPool(
-      Array.from({ length: 30 }, (_, index) => ({
+      Array.from({ length: 60 }, (_, index) => ({
         ...vacancy(index),
         location: 'Moscow, Russia',
       })),
     );
     const first = await app.inject({ method: 'GET', url: '/vacancies/moscow' });
     expect(first.statusCode).toBe(200);
+    expect(first.body).not.toContain('noindex');
+    expect(first.body).toContain(
+      '<link rel="canonical" href="https://openqareer.com/vacancies/moscow">',
+    );
     const after = /\/vacancies\/moscow\/page\/2\?after=([^"]+)"/u.exec(first.body)?.[1];
     expect(after).toBeTruthy();
 
@@ -143,9 +145,17 @@ describe('B209: публичный каталог вакансий', () => {
       method: 'GET',
       url: `/vacancies/moscow/page/2?after=${after}`,
     });
+    expect(second.statusCode).toBe(200);
+    expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
     expect(second.body).toContain(
-      `<link rel="canonical" href="https://openqareer.com/vacancies/moscow/page/2?after=${after}">`,
+      '<link rel="canonical" href="https://openqareer.com/vacancies/moscow">',
     );
+    expect(second.body).toContain('/vacancies/job/');
+    expect(second.body).toMatch(/\/vacancies\/moscow\/page\/3\?after=/u);
+    // Устаревший курсор отвечает так же, а голый адрес по-прежнему ведёт на первую страницу.
+    const bare = await app.inject({ method: 'GET', url: '/vacancies/moscow/page/2' });
+    expect(bare.statusCode).toBe(301);
+    expect(bare.headers.location).toBe('/vacancies/moscow');
   });
 
   /**
