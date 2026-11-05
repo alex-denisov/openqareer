@@ -6,7 +6,7 @@ import { extractCandidateFacts, type ExtractedFacts } from '../coach/candidateFa
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { STAGE_TO_PHASE, type MarketObservation } from '../domain/coach';
+import { STAGE_TO_PHASE, type CoachTurnInput, type MarketObservation } from '../domain/coach';
 import { checkGeneratedTextFacts } from '../domain/generatedTextFactGate';
 import { selectCoachPhase } from '../orchestration/coachPhaseRouter';
 import { CoachProviderError, type CoachProvider } from '../providers/coachProvider';
@@ -27,7 +27,9 @@ import { requireTariffQuota } from './tariffQuotaGuard';
 import { recordNotificationFromSource } from './notificationRepositoryAccess';
 import { registerRoleSkillAssessmentRoutes } from './roleSkillAssessmentRoutes';
 import { coachTurnRequestSchema, coachProposalRejectRequestSchema } from './schemas';
-import { buildCoachSubjectContext } from './coachSubjectContext';
+import { buildCoachSubjectContext, withLetterDraft } from './coachSubjectContext';
+import { starStoriesForTurn } from './coachStarStoryContext';
+import { loadFacts } from './starStoryRoutes';
 import {
   evaluateSkillQuiz,
   buildSkillVerificationFact,
@@ -373,7 +375,7 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     );
   }
   const key = parsedKey.data;
-  const body = coachTurnRequestSchema.parse(request.body);
+  const { screenDraft, ...body } = coachTurnRequestSchema.parse(request.body);
   if (body.subject?.kind === 'adaptation' && body.content.length > 7000) return sendError(reply, request, 400, 'adaptation_message_too_long', 'Сократите вопрос до 7000 символов.', false);
   if (body.subject?.kind === 'adaptation' && body.stage !== 'diary') {
     return sendError(reply, request, 400, 'adaptation_stage_required', 'Откройте обсуждение из карьерного дневника.', false);
@@ -388,7 +390,7 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     if (context === null) {
       return sendError(reply, request, 404, 'subject_not_found', 'Объект не найден.', false);
     }
-    stageContext = context;
+    stageContext = body.subject.kind === 'vacancy' ? withLetterDraft(context, screenDraft) : context;
   }
 
   if (!requireTariffQuota(deps, request, reply, candidate.id, 'coach_turns', key)) return undefined;
@@ -396,12 +398,32 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   if (adaptationContext) body.content = labelAdaptationMessage(deps, candidate.id, key, adaptationContext, body.content);
   const started = candidateStore.startTurn(candidate.id, key, { ...body, phase, stageContext });
   if (body.stage === 'diary' && started.state === 'ready') started.input.knowledgeContext = scopeAdaptationKnowledge(started.input.knowledgeContext, stageContext ?? '');
+  if (started.state === 'ready' && !body.isService && body.stage !== 'diary') {
+    started.input.knowledgeContext = withStarStories(deps, request, candidate.id, body.content, started.input.knowledgeContext);
+  }
   if (started.state === 'ready' && candidatePlan(deps, candidate.id) === 'free') started.input.modelTier = 'free';
   if (started.state === 'ready' && !body.subject) started.input.careerContext = readCareerContext(deps, request, candidate.id);
   // A chosen vacancy is the topic itself: its turn needs no live market sample (block C R5).
   const marketQuery = body.subject?.kind === 'vacancy' ? undefined : body.marketQuery;
   return continueStartedTurn(deps, request, reply, candidate.id, key, started, marketQuery);
 };
+
+/** Истории кандидата — подсказка консультанту; их сбой не роняет ход. */
+function withStarStories(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  content: string,
+  knowledge: NonNullable<CoachTurnInput['knowledgeContext']>,
+): NonNullable<CoachTurnInput['knowledgeContext']> {
+  try {
+    const stories = deps.candidateStore.starStoriesRepo.list(candidateId);
+    return { ...knowledge, ...starStoriesForTurn(stories, loadFacts(deps, candidateId), content) };
+  } catch (error) {
+    request.log.warn({ error }, 'coach_star_stories_failed');
+    return knowledge;
+  }
+}
 
 /** Контекст «Карьеры» — подсказка консультанту; его сбой не роняет ход. */
 function readCareerContext(deps: RouteDeps, request: FastifyRequest, candidateId: string) {

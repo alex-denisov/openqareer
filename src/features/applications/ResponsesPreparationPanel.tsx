@@ -111,12 +111,9 @@ function DesktopPreparation({
       <StarStoriesCard stories={stories} onEdit={onEditStory} onOpenAll={onOpenAllStories} />
       <MockInterviewCard
         interviews={prep.interviews}
-        selected={prep.selectedInterview}
-        selectedId={prep.interviewId}
         stress={prep.stress}
-        onSelect={prep.setInterviewId}
         onStress={prep.setStress}
-        onStart={() => prep.setPreparationOpen(true)}
+        onStart={(id) => prep.startMockWith(id, prep.stress)}
       />
       <DebriefCard applications={interviewsNeedingDebrief(prep.interviews)} onRefresh={onRefresh} />
       {prep.selectedInterview ? (

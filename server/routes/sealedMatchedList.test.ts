@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app';
 import { apps, config, noSessions, stores, successProvider } from '../appTestHarness';
+import { VacancyMechanicsRuntime } from '../domain/vacancyMechanicsRuntime';
 import { SealedText } from '../data/sealedText';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
@@ -49,6 +50,7 @@ async function sealedApp(rows = pool(40)) {
   const engine = {
     rows,
     calls: 0,
+    getActiveCluster: (id: string) => engine.rows.find((item) => item.cluster.id === id)?.cluster,
     getMatchedVacanciesAsync: vi.fn(async () => {
       engine.calls += 1;
       return engine.rows;
@@ -269,6 +271,46 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     await read('offset=7');
 
     expect(reading).not.toHaveBeenCalled();
+  });
+
+  it('a row with no result on a sealed page is queued: the list is not read again by itself', async () => {
+    vi.spyOn(VacancyMechanicsRuntime.prototype, 'view').mockReturnValue({ state: 'not_requested', requirements: [] } as never);
+    const enqueue = vi.spyOn(VacancyMechanicsRuntime.prototype, 'enqueue').mockReturnValue(undefined as never);
+    const { read } = await sealedApp();
+    await read();
+    forgetMatchedListsForTests();
+    enqueue.mockClear();
+
+    const sealed = await read();
+
+    expect(sealed.timing.listServed).toBe('sealed');
+    await vi.waitFor(() =>
+      expect(new Set(enqueue.mock.calls.map(([input]) => (input as { vacancyId: string }).vacancyId))).toEqual(new Set(sealed.ids)),
+    );
+  });
+
+  it('a percent still being counted shows as counted now, not as the stored list had it', async () => {
+    const view = vi.spyOn(VacancyMechanicsRuntime.prototype, 'view').mockReturnValue({ state: 'not_requested', requirements: [] } as never);
+    vi.spyOn(VacancyMechanicsRuntime.prototype, 'enqueue').mockReturnValue(undefined as never);
+    const { read, app, candidate } = await sealedApp();
+    await read();
+    forgetMatchedListsForTests();
+    view.mockReturnValue({ state: 'queued', requirements: [] } as never);
+
+    const response = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies?offset=0',
+      headers: { authorization: `Bearer ${candidate.accessToken}` },
+    });
+
+    const states = (response.json() as { data: { explanation: { fitView: { state: string } } }[] }).data.map((item) => item.explanation.fitView.state);
+    expect(new Set(states)).toEqual(new Set(['queued']));
+  });
+
+  it('the journal names how long the sealed list is', async () => {
+    const { read } = await sealedApp();
+    await read();
+    forgetMatchedListsForTests();
+    expect((await read()).timing).toMatchObject({ listServed: 'sealed', sealedRows: 40 });
   });
 
   it('an older build does not replace a newer one', async () => {

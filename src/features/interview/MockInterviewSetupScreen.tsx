@@ -1,4 +1,4 @@
-import { ArrowRight, Info } from '@phosphor-icons/react';
+import { ArrowRight, Info, Trash } from '@phosphor-icons/react';
 import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import { formatInterviewMoment, presentInterviewLength, presentQuestionScopeCaption } from './interviewSimulatorPresentation';
 import type { MockInterviewSimulatorProps } from './mockInterviewSimulatorTypes';
@@ -6,6 +6,7 @@ import { InlineError } from './MockInterviewSupport';
 import { SourcePanel } from './MockInterviewSourcePanel';
 import type { MockInterviewFlow } from './useMockInterviewController';
 import { questionTypesForScope } from './useMockInterviewControllerActions';
+import './interview-delete.css';
 
 type Flow = MockInterviewFlow;
 
@@ -20,7 +21,7 @@ export function SetupScreen({ flow, props }: { readonly flow: Flow; readonly pro
         <h2 className="career-mock-section-title">Как будем тренироваться</h2>
         {hasResumableSession ? <CurrentSessionCard flow={flow} /> : null}
         <TrainingOptions flow={flow} disabled={!canStart} />
-        <HowToAnswer />
+        <HowToAnswer onDelete={flow.session ? flow.deleteTraining.ask : undefined} />
         <div className="career-mock-action-row">
           <button
             type="button"
@@ -125,11 +126,23 @@ function RadioOptions({ legend, name, value, disabled, options, onChange }: {
   );
 }
 
-function HowToAnswer() {
+function HowToAnswer({ onDelete }: { readonly onDelete?: () => void }) {
   return (
     <aside className="career-mock-help" role="note">
       <Info aria-hidden="true" className="career-mock-icon" />
-      <p>Подсказки и таймера нет. Пропущенный вопрос не оценивается. Ответы и разбор хранятся в вашем профиле, их можно удалить.</p>
+      <div>
+        <p>Подсказки и таймера нет. Пропущенный вопрос не оценивается. Ответы и разбор хранятся в вашем профиле, их можно удалить.</p>
+        {onDelete ? (
+          <button
+            type="button"
+            className="career-btn career-btn-sm career-interview-delete-open career-mock-help-delete"
+            onClick={onDelete}
+          >
+            <Trash aria-hidden="true" className="career-mock-icon" />
+            Удалить тренировку
+          </button>
+        ) : null}
+      </div>
     </aside>
   );
 }

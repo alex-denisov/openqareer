@@ -43,6 +43,18 @@ describe('replaceApplication', () => {
 });
 
 describe('optimisticStagePatch', () => {
+  it('drops the interview at once when the stage leaves «Интервью»', () => {
+    const slot = {
+      id: 'i',
+      scheduledAt: '2026-12-01T00:00:00.000Z',
+      prepStatus: 'none',
+      round: 1,
+    } as const;
+    const list = [{ ...card('a'), stage: 'interview' as const, nearestInterview: slot }];
+    expect(optimisticStagePatch(list, 'a', { stage: 'saved' })[0].nearestInterview).toBeNull();
+    expect(optimisticStagePatch(list, 'a', { stage: 'offer' })[0].nearestInterview).toEqual(slot);
+  });
+
   it('moves one card to a new stage without touching siblings', () => {
     const list = [card('a'), card('b')];
     const result = optimisticStagePatch(list, 'a', { stage: 'applied' });

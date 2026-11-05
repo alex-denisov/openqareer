@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { InterviewAnswerMode } from './interviewSimulatorApi';
 import { useMockInterviewSession } from './useMockInterviewSession';
 import { useSpeechTranscription } from './useSpeechTranscription';
+import { useMockInterviewDeleteTraining } from './useMockInterviewDeleteTraining';
 import {
   useMockInterviewAnswerActions,
   useMockInterviewExitActions,
@@ -50,8 +51,10 @@ export function useMockInterviewController(
     model, speech, currentQuestionAnswer, screen, draft, exitConfirmation, setExitConfirmation, setScreen, onBackToPreparation,
   });
 
+  const deleteTraining = useMockInterviewDeleteTraining({ model, speech, setDraft, setScreen });
+
   return {
-    ...model, speech, screen, setScreen, mode, setMode, questionScope, setQuestionScope,
+    ...model, deleteTraining, speech, screen, setScreen, mode, setMode, questionScope, setQuestionScope,
     stressMode, setStressMode, draft, setDraft, currentQuestion, answerStartedAt,
     exitConfirmation, setExitConfirmation, ...setupActions, ...answerActions,
     ...exitActions, stop: progressActions.stop,

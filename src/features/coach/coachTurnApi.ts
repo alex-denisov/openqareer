@@ -10,6 +10,8 @@ export async function sendCoachTurn(input: {
   messageId?: string;
   stage?: CoachTurnStage;
   subject?: CoachTurnSubject;
+  /** Текст письма с экрана: только вместе с вакансией этого письма. */
+  screenDraft?: string;
   isService?: boolean;
   /** 29.10: the reply so far while it is written; `''` means start over. */
   onMessageText?: (text: string) => void;
@@ -29,6 +31,7 @@ export async function sendCoachTurn(input: {
         marketQuery: input.marketQuery,
         stage: input.stage,
         subject: input.subject,
+        screenDraft: input.screenDraft,
         isService: input.isService,
       }),
     });

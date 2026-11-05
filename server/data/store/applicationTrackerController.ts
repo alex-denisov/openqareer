@@ -1,3 +1,4 @@
+import { interviewDayIsOver, stageShowsInterview } from '../../../shared/interviewDate';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   SqliteApplicationRepository,
@@ -170,8 +171,25 @@ export class ApplicationTrackerController {
           ...(input.scheduledAt ? { occurredAt: input.scheduledAt } : {}),
         });
       }
+      const parked = stageShowsInterview(application.stage)
+        ? null
+        : this.upcomingInterview(applicationId);
+      if (parked && input.scheduledAt) {
+        const moved = this.interviews.patch(applicationId, parked.id, { scheduledAt: input.scheduledAt });
+        if (moved) return moved;
+      }
       return this.interviews.create(applicationId, input);
     });
+  }
+
+  /** The slot a rollback left stored: a return to «Интервью» moves it, keeping its notes. */
+  private upcomingInterview(applicationId: string): StoredApplicationInterview | null {
+    const now = new Date().toISOString();
+    return (
+      this.interviews
+        .list(applicationId)
+        .find((row) => row.scheduledAt && !interviewDayIsOver(row.scheduledAt, now)) ?? null
+    );
   }
 
   patchInterview(

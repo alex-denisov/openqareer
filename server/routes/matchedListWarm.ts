@@ -58,7 +58,7 @@ export async function warmMatchedList(
     titleParseStore,
     filters,
     sourceRegistry: matchedVacancySourceRegistry(engine.getSources?.() ?? []),
-    order: withWantedCompanyOrder(deps, candidateId, sort, orderLog, 'background'),
+    order: withWantedCompanyOrder(deps, candidateId, sort, orderLog, 'background', targetRoles),
     ...(typeof engine.getCatalogTotals === 'function'
       ? { catalogTotals: () => engine.getCatalogTotals!() }
       : {}),

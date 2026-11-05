@@ -181,4 +181,119 @@ describe('candidate STAR story routes', () => {
     expect(candidateStore.deleteCandidate(ownerId)).toBe(true);
     expect(candidateStore.starStoriesRepo.list(ownerId)).toEqual([]);
   });
+
+  describe('удаление истории', () => {
+    async function createStory(app: Awaited<ReturnType<typeof setup>>['app'], auth: string, factId: string) {
+      const created = await app.inject({
+        method: 'POST',
+        url: URL,
+        headers: { authorization: auth, ...ORIGIN },
+        payload: storyInput([factId]),
+      });
+      return created.json().data.id as string;
+    }
+
+    it('удаляет свою историю, повторное удаление даёт 404', async () => {
+      const { app, ownerAuth, factId } = await setup();
+      const id = await createStory(app, ownerAuth, factId);
+
+      const removed = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const again = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const list = await app.inject({
+        method: 'GET',
+        url: URL,
+        headers: { authorization: ownerAuth },
+      });
+
+      expect(removed.statusCode).toBe(200);
+      expect(removed.json().data).toEqual({ deleted: true });
+      expect(again.statusCode).toBe(404);
+      expect(again.json().error.code).toBe('star_story_not_found');
+      expect(list.json().data.stories).toEqual([]);
+    });
+
+    it('чужая история даёт 404 и остаётся на месте', async () => {
+      const { app, ownerAuth, otherAuth, factId, candidateStore, ownerId } = await setup();
+      const id = await createStory(app, ownerAuth, factId);
+
+      const foreign = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${id}`,
+        headers: { authorization: otherAuth, ...ORIGIN },
+      });
+
+      expect(foreign.statusCode).toBe(404);
+      expect(foreign.json().error.code).toBe('star_story_not_found');
+      expect(candidateStore.starStoriesRepo.get(ownerId, id)?.id).toBe(id);
+    });
+
+    it('без входа 401, с чужого источника отказ: история остаётся', async () => {
+      const { app, ownerAuth, factId, candidateStore, ownerId } = await setup();
+      const id = await createStory(app, ownerAuth, factId);
+
+      const anonymous = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${id}`,
+        headers: ORIGIN,
+      });
+      const crossSite = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${id}`,
+        headers: { origin: 'https://evil.example' },
+      });
+
+      expect(anonymous.statusCode).toBe(401);
+      expect(crossSite.statusCode).toBe(403);
+      expect(candidateStore.starStoriesRepo.get(ownerId, id)?.id).toBe(id);
+    });
+
+    it('освобождает место в пределе историй', async () => {
+      const { app, ownerAuth, factId, candidateStore, ownerId } = await setup();
+      const createdAt = new Date().toISOString();
+      for (let index = 0; index < 100; index += 1) {
+        candidateStore.starStoriesRepo.create(ownerId, `seed-${index}`, storyInput([factId]), createdAt);
+      }
+
+      await app.inject({
+        method: 'DELETE',
+        url: `${URL}/seed-0`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const created = await app.inject({
+        method: 'POST',
+        url: URL,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+        payload: storyInput([factId]),
+      });
+
+      expect(created.statusCode).toBe(201);
+    });
+
+    it('не удаляет факт профиля и выпадает из выгрузки кандидата', async () => {
+      const { app, ownerAuth, factId, candidateStore, ownerId } = await setup();
+      const id = await createStory(app, ownerAuth, factId);
+
+      await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const list = await app.inject({
+        method: 'GET',
+        url: URL,
+        headers: { authorization: ownerAuth },
+      });
+
+      expect(list.json().data.facts.map((fact: { id: string }) => fact.id)).toContain(factId);
+      expect(candidateStore.exportCandidate(ownerId)?.starStories).toEqual([]);
+    });
+  });
 });

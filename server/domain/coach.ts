@@ -281,6 +281,22 @@ const knowledgeContextSchema = z.object({
       }),
     )
     .max(12),
+  // B511 Д6: истории кандидата видны модели; экран письма предлагает из них фразу.
+  starStories: z
+    .array(
+      z.object({
+        ref: z.string().regex(/^star:[^\s]{1,160}$/u),
+        title: z.string().trim().min(1).max(160),
+        situation: z.string().max(600),
+        task: z.string().max(600),
+        action: z.string().max(600),
+        result: z.string().max(600),
+        confirmed: z.boolean(),
+      }),
+    )
+    .max(6)
+    .optional(),
+  otherStoryTitles: z.array(z.string().trim().min(1).max(160)).max(30).optional(),
   consultantHistory: z
     .object({
       summaries: z

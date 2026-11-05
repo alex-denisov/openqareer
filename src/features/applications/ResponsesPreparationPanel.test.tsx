@@ -127,11 +127,21 @@ describe('ResponsesPreparationPanel', () => {
     );
   });
 
-  it('shows the response select only with more than one interview', async () => {
-    await render([interview('a1', 'Арка Холдинг', null)]);
-    expect(host.querySelector('select.career-select')).toBeNull();
-    await render([interview('a1', 'Арка Холдинг', null), interview('a2', 'Вектор Банк', null)]);
-    expect(host.querySelector('.career-select-wrap select.career-select')).not.toBeNull();
+  it('gives every interview its own start button instead of a select (B511 Д9)', async () => {
+    await render([
+      interview('a1', 'Арка Холдинг', '2999-02-01T10:00:00Z'),
+      interview('a2', 'Вектор Банк', '2999-01-01T10:00:00Z'),
+    ]);
+    expect(host.querySelector('select')).toBeNull();
+    const starts = Array.from(host.querySelectorAll<HTMLButtonElement>('.career-prep-start'));
+    expect(starts.map((node) => node.getAttribute('aria-label'))).toEqual([
+      expect.stringContaining('Вектор Банк'),
+      expect.stringContaining('Арка Холдинг'),
+    ]);
+    expect(starts.map((node) => node.classList.contains('career-btn-primary'))).toEqual([
+      true,
+      false,
+    ]);
   });
 
   it('opens the debrief dialog from «Заполнить» and skips future interviews', async () => {

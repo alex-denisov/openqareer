@@ -1,3 +1,4 @@
+import { pluralWordRu } from '../../../shared/pluralRu';
 import { useCallback, useState } from 'react';
 import { CaretDown, CaretRight, Check, Path, Plus, Trash, Upload } from '@phosphor-icons/react';
 import type {
@@ -63,7 +64,8 @@ function MobileOverview({
       ) : (
         <div className="career-company-wants-sum">
           <p>
-            <b className="career-company-wants-num">{total}</b> компаний ·{' '}
+            <b className="career-company-wants-num">{total}</b>{' '}
+            {pluralWordRu(total, ['компания', 'компании', 'компаний'])} ·{' '}
             <span className="career-company-wants-num">{controller.page?.counts.new ?? 0}</span> с
             новыми вакансиями
           </p>

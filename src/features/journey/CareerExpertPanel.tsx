@@ -45,7 +45,12 @@ import { waitForCoachAnalysis } from '../coach/coachResultDelivery';
 import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import { starterPromptsForStage } from './starterPrompts';
 import { useConsultantScreenSuggestion } from './consultantScreenSuggestion';
-import { useConsultantScreenTopic } from './consultantScreenTopic';
+import {
+  useConsultantLetterDraft,
+  useConsultantScreenObject,
+  useConsultantScreenTopic,
+} from './consultantScreenTopic';
+import { screenTurnFor, sendScreenAwareTurn } from './consultantScreenObjects';
 import { ConsultantScreenSuggestionCard } from './ConsultantScreenSuggestionCard';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
@@ -155,6 +160,9 @@ export function CareerExpertPanel({
   const [decisionProposalCount, setDecisionProposalCount] = useState(0);
   const screenSuggestion = useConsultantScreenSuggestion(stage);
   const screenTopic = useConsultantScreenTopic(stage);
+  const screenObject = useConsultantScreenObject(stage);
+  const readLetterDraft = useConsultantLetterDraft();
+  const visibleSubject = screenTurnFor(subject, screenObject, '').subject;
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   // 29.10: the consultant's reply while it is written; the saved turn replaces it.
   const [streamingReply, setStreamingReply] = useState<string>();
@@ -390,18 +398,22 @@ export function CareerExpertPanel({
       const { idempotencyKey, messageId } = pendingOperation.current;
       replyStream.current?.abort();
       replyStream.current = new AbortController();
-      const result = await sendCoachTurn({
-        content: clean,
-        marketQuery: query,
-        stage,
-        subject,
-        idempotencyKey,
-        messageId,
-        onMessageText: (text) => {
-          if (currentContext.current === operationContext) setStreamingReply(text);
+      const result = await sendScreenAwareTurn(
+        sendCoachTurn,
+        {
+          content: clean,
+          marketQuery: query,
+          stage,
+          idempotencyKey,
+          messageId,
+          onMessageText: (text: string) => {
+            if (currentContext.current === operationContext) setStreamingReply(text);
+          },
+          streamSignal: replyStream.current.signal,
         },
-        streamSignal: replyStream.current.signal,
-      });
+        subject,
+        screenTurnFor(subject, screenObject, readLetterDraft()),
+      );
       if (currentContext.current !== operationContext) return false;
       pendingOperation.current = undefined;
       setLiveResult(result);
@@ -578,8 +590,9 @@ export function CareerExpertPanel({
         className={`career-expert-conversation${historyOpen ? ' consultant-history-is-open' : ''}`}
       >
         <ExpertVisibleLine
-          subjectKind={subject?.kind}
+          subjectKind={visibleSubject?.kind}
           hasMarketQuery={Boolean(marketQuery?.trim())}
+          hasLetterDraft={screenObject?.sendsLetterDraft}
         />
         {historyOpen ? (
           <section
@@ -706,7 +719,7 @@ export function CareerExpertPanel({
                   text={
                     intakeMode
                       ? 'Начнём с источника. Подключите LinkedIn или hh.ru, загрузите резюме или просто расскажите, чем занимаетесь.'
-                      : (screenTopic?.intro ?? STAGE_INITIAL_REPLICA[stage])
+                      : (screenTopic?.intro ?? screenObject?.intro ?? STAGE_INITIAL_REPLICA[stage])
                   }
                 />
               </article>
@@ -721,7 +734,7 @@ export function CareerExpertPanel({
                   prompts={
                     intakeMode
                       ? ['С чего начать?', 'Что вы читаете в LinkedIn?', 'Можно без LinkedIn?']
-                      : (screenTopic?.prompts ?? starterPromptsForStage(stage))
+                      : (screenTopic?.prompts ?? screenObject?.prompts ?? starterPromptsForStage(stage))
                   }
                   variantClass={intakeMode ? 'career-expert-starters' : undefined}
                   ariaLabel="Темы для начала"
@@ -833,7 +846,10 @@ export function CareerExpertPanel({
                 if (event.target.value.trim()) setQuickRepliesDismissed(true);
                 if (!event.target.value.trim()) setVoiceDraft(false);
               }}
-              placeholder={subject?.kind === 'company' ? 'Спросите про компании и людей' : 'Спросите по этому разделу'}
+              placeholder={
+                screenObject?.placeholder ??
+                (subject?.kind === 'company' ? 'Спросите про компании и людей' : 'Спросите по этому разделу')
+              }
               rows={1}
               disabled={sending || voiceTextLocked}
             />

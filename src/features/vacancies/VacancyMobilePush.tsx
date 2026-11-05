@@ -1,5 +1,7 @@
 import { VacancyFitBlock } from './VacancyFitMark';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { vacancyScreenObject } from '../journey/consultantScreenObjects';
+import { usePublishConsultantObject } from '../journey/consultantScreenTopic';
 import { vacancyMoneySummary } from './VacancyMoneyCell';
 import type { VacancyRowProps } from './VacancyRow';
 import { companyPathActions } from './VacancyCompanyPathPanel';
@@ -330,6 +332,9 @@ function usePageTop(page: PushPage) {
  *  vacancy as a push screen with its own back stack instead of expanding. */
 export function VacancyMobilePush(props: VacancyMobilePushProps) {
   const [stack, setStack] = useState<readonly PushPage[]>(['job']);
+  // «Путь к компании» и шаги дальше — всё та же вакансия: консультант помнит её на каждой странице.
+  const vacancyId = props.item.cluster.id;
+  usePublishConsultantObject(useMemo(() => vacancyScreenObject(vacancyId), [vacancyId]));
   const page = stack.at(-1) ?? 'job';
   const circles = useVacancyPathCircles(
     props.item.cluster.id,

@@ -1,3 +1,4 @@
+import { interviewDayIsOver, stageShowsInterview } from '../../shared/interviewDate';
 import { computeApplicationTurn, type ApplicationTurn } from '../../shared/applicationTurn';
 import { computeFollowUpStatus, type FollowUpStatus } from '../../shared/followUpPolicy';
 import type {
@@ -59,7 +60,8 @@ export function deriveApplicationFields(
     coverLetter: input.materials.some((material) => material.role === 'cover_letter'),
     resume: input.materials.some((material) => material.role === 'resume'),
   };
-  const nearestInterview = pickNearestInterview(input.interviews, now);
+  const visibleInterviews = stageShowsInterview(input.application.stage) ? input.interviews : [];
+  const nearestInterview = pickNearestInterview(visibleInterviews, now);
   const isFollowUpStage =
     FOLLOW_UP_ACTIVE_STAGES.has(input.application.stage) ||
     (input.application.stage === 'interview' && Boolean(input.application.followUpDueAt));
@@ -94,7 +96,7 @@ export function deriveApplicationFields(
         }
       : null,
     ...deliveryReceiptEvidence(input.events),
-    interviewScheduledAt: interviewScheduleDates(input.interviews),
+    interviewScheduledAt: interviewScheduleDates(visibleInterviews),
   };
 }
 
@@ -154,7 +156,7 @@ function pickNearestInterview(
   now: string,
 ): StoredApplicationInterview | null {
   const upcoming = interviews
-    .filter((interview) => interview.scheduledAt && interview.scheduledAt >= now)
+    .filter((interview) => interview.scheduledAt && !interviewDayIsOver(interview.scheduledAt, now))
     .sort((a, b) => (a.scheduledAt as string).localeCompare(b.scheduledAt as string));
   return upcoming[0] ?? null;
 }
@@ -166,7 +168,10 @@ function needsPrepSoon(interview: StoredApplicationInterview | null, now: string
   );
 }
 
-function recordedApplicationStages(application: StoredApplication, events: readonly StoredApplicationEvent[]) {
+function recordedApplicationStages(
+  application: StoredApplication,
+  events: readonly StoredApplicationEvent[],
+) {
   const stages = new Set<ApplicationStage>([application.stage]);
   if (application.archivePreviousStage) stages.add(application.archivePreviousStage);
   const appliedDates: string[] = [];
@@ -174,7 +179,11 @@ function recordedApplicationStages(application: StoredApplication, events: reado
     if (event.kind !== 'stage') continue;
     if (event.fromStage) stages.add(event.fromStage);
     if (event.toStage) stages.add(event.toStage);
-    if (event.toStage === 'applied' && Number.isFinite(Date.parse(event.occurredAt))) appliedDates.push(event.occurredAt);
+    if (event.toStage === 'applied' && Number.isFinite(Date.parse(event.occurredAt)))
+      appliedDates.push(event.occurredAt);
   }
-  return { reachedStages: APPLICATION_STAGES.filter((stage) => stages.has(stage)), appliedAt: appliedDates.sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null };
+  return {
+    reachedStages: APPLICATION_STAGES.filter((stage) => stages.has(stage)),
+    appliedAt: appliedDates.sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null,
+  };
 }

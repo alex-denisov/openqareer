@@ -1,4 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { letterScreenObject } from '../journey/consultantScreenObjects';
+import { usePublishConsultantObject } from '../journey/consultantScreenTopic';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import type { VacancyLetterTarget } from './VacancyLetterScreen';
@@ -30,5 +32,10 @@ export function useVacancyLetterRoute() {
     [],
   );
   const close = useCallback(() => setRequest(null), []);
+  // Открытое письмо для панели: о какой вакансии ход и что подсказывать (B511 Д5).
+  const vacancyId = request?.vacancy.id;
+  usePublishConsultantObject(
+    useMemo(() => (vacancyId ? letterScreenObject(vacancyId) : null), [vacancyId]),
+  );
   return { request, openFromRow, openFromCompany, close };
 }

@@ -11,7 +11,9 @@ import { ArrowLeft, Notebook, Plus, X } from '@phosphor-icons/react';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { apiErrorMessage } from '../coach/apiClient';
 import { useModalAccessibility } from './interviewModalAccessibility';
-import { createStarStory, getStarStories, updateStarStory } from './starStoriesApi';
+import { createStarStory, deleteStarStory, getStarStories, updateStarStory } from './starStoriesApi';
+import { InterviewDeleteConfirm } from './InterviewDeleteConfirm';
+import { toInterviewUiError } from './mockInterviewSessionUtils';
 import type {
   StarStoriesSnapshot,
   StarStoryView,
@@ -105,6 +107,58 @@ interface StarStoriesModalState {
   addStory: () => void;
   editStory: (story: StarStoryView) => void;
   retryLoad: () => void;
+  removal: StoryRemoval;
+}
+
+interface StoryRemoval {
+  readonly storyId: string | null;
+  readonly busy: boolean;
+  readonly error: string | null;
+  readonly ask: (storyId: string) => void;
+  readonly cancel: () => void;
+  readonly confirm: () => Promise<void>;
+}
+
+/** История, удалённая на другом устройстве, для этого окна тоже удалена. */
+function useStoryRemoval(
+  setSnapshot: (update: (current: StarStoriesSnapshot | null) => StarStoriesSnapshot | null) => void,
+): StoryRemoval {
+  const [storyId, setStoryId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ask = useCallback((id: string) => {
+    setError(null);
+    setStoryId(id);
+  }, []);
+  const cancel = useCallback(() => setStoryId(null), []);
+  const confirm = async () => {
+    if (!storyId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteStarStory(storyId);
+    } catch (reason) {
+      const failure = toInterviewUiError(reason, 'Не удалось удалить историю. Попробуйте ещё раз.');
+      if (failure.code !== 'star_story_not_found') {
+        setError(failure.message);
+        setBusy(false);
+        return;
+      }
+    }
+    setSnapshot((current) => withoutStory(current, storyId));
+    setBusy(false);
+    setStoryId(null);
+  };
+  return { storyId, busy, error, ask, cancel, confirm };
+}
+
+function withoutStory(
+  current: StarStoriesSnapshot | null,
+  storyId: string,
+): StarStoriesSnapshot | null {
+  return current
+    ? { ...current, stories: current.stories.filter((story) => story.id !== storyId) }
+    : current;
 }
 
 function useStarStoriesModalState(isOpen: boolean, initial?: StarStoryView): StarStoriesModalState {
@@ -140,6 +194,7 @@ function useStarStoriesModalState(isOpen: boolean, initial?: StarStoryView): Sta
     setEditorOpen(true);
   }, []);
   const retryLoad = useCallback(() => setReloadToken((current) => current + 1), []);
+  const removal = useStoryRemoval(setSnapshot);
   return {
     snapshot,
     loading,
@@ -153,6 +208,7 @@ function useStarStoriesModalState(isOpen: boolean, initial?: StarStoryView): Sta
     addStory,
     editStory,
     retryLoad,
+    removal,
   };
 }
 
@@ -245,6 +301,7 @@ function StarStoriesPortalContent({
       onRetry={state.retryLoad}
       onAdd={state.addStory}
       onEdit={state.editStory}
+      removal={state.removal}
       onAskConsultant={onAskConsultant}
     />
   );
@@ -390,6 +447,7 @@ function StarStoriesContent({
   onRetry,
   onAdd,
   onEdit,
+  removal,
   onAskConsultant,
 }: {
   snapshot: StarStoriesSnapshot | null;
@@ -398,6 +456,7 @@ function StarStoriesContent({
   onRetry: () => void;
   onAdd: () => void;
   onEdit: (story: StarStoryView) => void;
+  removal: StoryRemoval;
   onAskConsultant?: () => void;
 }) {
   if (loading)
@@ -411,7 +470,7 @@ function StarStoriesContent({
   return snapshot.stories.length === 0 ? (
     <EmptyStarStories onAdd={onAdd} onAskConsultant={onAskConsultant} />
   ) : (
-    <StarStoriesList stories={snapshot.stories} onAdd={onAdd} onEdit={onEdit} />
+    <StarStoriesList stories={snapshot.stories} onAdd={onAdd} onEdit={onEdit} removal={removal} />
   );
 }
 
@@ -457,10 +516,12 @@ function StarStoriesList({
   stories,
   onAdd,
   onEdit,
+  removal,
 }: {
   stories: readonly StarStoryView[];
   onAdd: () => void;
   onEdit: (story: StarStoryView) => void;
+  removal: StoryRemoval;
 }) {
   return (
     <div className="career-star-stories-list">
@@ -475,7 +536,24 @@ function StarStoriesList({
         <Plus size={16} aria-hidden="true" /> Добавить историю
       </button>
       {stories.map((story) => (
-        <StarStoryCard key={story.id} story={story} onEdit={() => onEdit(story)} />
+        <div className="career-star-stories-item" key={story.id}>
+          <StarStoryCard
+            story={story}
+            onEdit={() => onEdit(story)}
+            onDelete={() => removal.ask(story.id)}
+          />
+          {removal.storyId === story.id ? (
+            <InterviewDeleteConfirm
+              title={`Удалить историю «${story.title}»?`}
+              detail="История исчезнет из списка и новых тренировок, вернуть её нельзя. Факты профиля останутся. В пройденной тренировке и записи дневника остаётся её название: их можно удалить отдельно."
+              confirmLabel="Удалить историю"
+              busy={removal.busy}
+              error={removal.error}
+              onCancel={removal.cancel}
+              onConfirm={() => void removal.confirm()}
+            />
+          ) : null}
+        </div>
       ))}
     </div>
   );

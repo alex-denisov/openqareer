@@ -289,6 +289,7 @@ function FunnelControls({
         needsActionCount={workspace.needsActionCount}
         actionOnly={workspace.actionOnly}
         onSummaryFilter={workspace.applySummaryFilter}
+        loadedAll={workspace.poolStatus === 'ready'}
       />
     </>
   );
