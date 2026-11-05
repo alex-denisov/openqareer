@@ -26,6 +26,17 @@ describe('production asset delivery', () => {
     expect(caddyfile).toContain('trusted_proxies static 107.172.153.202/32');
   });
 
+  it('logs only Googlebot responses, without headers, with a size and age limit', () => {
+    expect(caddyfile).toMatch(/@notGooglebot not client_ip .*66\.249\.76\.0\/23/u);
+    expect(caddyfile).toContain('log_skip @notGooglebot');
+    expect(caddyfile).toContain('output file /var/log/caddy/googlebot-access.log');
+    expect(caddyfile).toContain('roll_size 10MiB');
+    expect(caddyfile).toContain('roll_keep 5');
+    expect(caddyfile).toContain('roll_keep_for 336h');
+    expect(caddyfile).toContain('request>headers delete');
+    expect(caddyfile).toContain('resp_headers delete');
+  });
+
   it('sends www to the apex with the path and query kept (03.11: www was NXDOMAIN)', () => {
     expect(caddyfile).toMatch(
       /^www\.openqareer\.com \{\s*redir https:\/\/openqareer\.com\{uri\} permanent\s*\}$/mu,
