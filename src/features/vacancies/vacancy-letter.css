@@ -8,35 +8,43 @@
   gap: var(--career-space-4);
   min-inline-size: 0;
   padding-block: var(--career-space-3) var(--career-space-6);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
 }
 
-.career-letter-back {
+.career-letter-vacancy .career-letter-back {
   flex: 0 0 auto;
+  inline-size: max(44px, var(--career-target-min));
   min-inline-size: max(44px, var(--career-target-min));
   min-block-size: max(44px, var(--career-target-min));
-  border-radius: var(--career-radius-circle);
+  padding: 0;
+  border-color: color-mix(in oklch, var(--career-text) 16%, transparent);
+  border-radius: 50%;
+  background: color-mix(in oklch, var(--career-text) 8%, transparent);
+  color: var(--career-text);
 }
 
 .career-letter-vacancy,
 .career-letter-card {
   display: grid;
-  gap: var(--career-space-3);
+  gap: var(--career-space-5);
   min-inline-size: 0;
-  padding: var(--career-space-4);
-  border: var(--career-border-width) solid var(--career-line);
+  padding: var(--career-space-6);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-md);
-  background: var(--career-surface);
+  background: var(--career-bg-elevated);
 }
 
 .career-letter-vacancy {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: start;
+  gap: var(--career-space-1) var(--career-space-3);
 }
 
 .career-letter-vacancy-copy {
   display: grid;
-  gap: var(--career-space-1);
   min-inline-size: 0;
+  padding-block-start: 2px;
 }
 
 .career-letter-vacancy h2,
@@ -46,6 +54,8 @@
   margin: 0;
   color: var(--career-text);
   font-size: var(--career-text-md);
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .career-letter-vacancy p,
@@ -71,9 +81,9 @@
   gap: var(--career-space-2);
   min-inline-size: 0;
   min-block-size: max(44px, var(--career-target-min));
-  padding: var(--career-space-2) var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
   border: var(--career-border-width) solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
+  border-radius: 10px;
   background: var(--career-surface);
   color: var(--career-text);
   font: inherit;
@@ -116,10 +126,16 @@
 .career-letter-description summary {
   display: flex;
   align-items: center;
+  gap: var(--career-space-2);
   min-block-size: max(44px, var(--career-target-min));
   color: var(--career-accent);
   cursor: pointer;
-  font-size: var(--career-text-xs);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.career-letter-description[open] summary svg {
+  transform: rotate(90deg);
 }
 
 .career-letter-description summary:focus-visible {
@@ -327,8 +343,9 @@
   color: var(--career-text);
 }
 
+/* Макет 9: на широком экране то же самое говорит метка «Черновик, ничего не отправлено». */
 .career-letter-footnote {
-  max-inline-size: 70ch;
+  display: none;
 }
 
 .career-letter-error {
@@ -369,7 +386,7 @@
   min-inline-size: 0;
   padding: var(--career-space-4);
   border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-md);
+  border-radius: 10px;
   background: var(--career-surface);
 }
 
@@ -406,14 +423,12 @@
   display: grid;
   gap: var(--career-space-3);
   min-inline-size: 0;
-  padding-block-start: var(--career-space-3);
-  border-block-start: var(--career-border-width) solid var(--career-line);
 }
 
 .career-letter-dest-list,
 .career-letter-workplaces ul {
   display: grid;
-  gap: 0;
+  gap: var(--career-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -425,7 +440,10 @@
   align-items: center;
   gap: var(--career-space-3);
   min-inline-size: 0;
-  padding-block: var(--career-space-2);
+  min-block-size: max(44px, var(--career-target-min));
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: 10px;
 }
 
 .career-letter-dest-icon {
@@ -435,7 +453,7 @@
 
 .career-letter-dest-copy {
   display: grid;
-  gap: var(--career-space-1);
+  gap: 2px;
   min-inline-size: 0;
   overflow-wrap: anywhere;
 }
@@ -471,9 +489,13 @@
 
 .career-letter-editor textarea {
   font-size: var(--career-text-sm);
-  line-height: 1.6;
+  line-height: 1.5;
   inline-size: 100%;
   min-inline-size: 0;
+  min-block-size: 270px;
+  padding: var(--career-space-3);
+  border-color: var(--career-line-strong);
+  border-radius: 10px;
   box-sizing: border-box;
   resize: vertical;
 }
@@ -534,11 +556,17 @@
   gap: var(--career-space-3);
   min-inline-size: 0;
   min-block-size: max(44px, var(--career-target-min));
-  padding-block: var(--career-space-2);
+  padding-block: var(--career-space-4) var(--career-space-2);
+}
+
+/* Макет 9: строка места — 44 px с галочкой по центру, подпись под ней. */
+.career-shell .career-letter-workplaces input[type='checkbox'] {
+  margin-block: 10px;
 }
 
 .career-letter-job-copy {
   min-inline-size: 0;
+  padding-block-start: 11.5px;
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
   overflow-wrap: anywhere;
@@ -546,7 +574,7 @@
 
 .career-letter-job-copy small {
   display: block;
-  margin-block-start: var(--career-space-1);
+  margin-block-start: 13.5px;
 }
 
 @media (max-width: 40rem) {

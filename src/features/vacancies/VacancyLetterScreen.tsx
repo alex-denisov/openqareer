@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { LetterScreenState } from './vacancyLetterController';
 import { useVacancyLetterController } from './vacancyLetterController';
 import {
-  ArrowLeft,
   ArrowSquareOut,
+  CaretLeft,
   CaretRight,
   CircleNotch,
   WarningCircle,
@@ -374,7 +374,7 @@ function LetterBackButton({ onBack }: { readonly onBack: () => void }) {
       onClick={onBack}
       aria-label="Назад к вакансиям"
     >
-      <ArrowLeft size={18} aria-hidden="true" />
+      <CaretLeft size={18} aria-hidden="true" />
     </button>
   );
 }
@@ -393,6 +393,18 @@ function OpenVacancyRow({ url }: { readonly url: string }) {
       <strong>Открыть вакансию</strong>
       <CaretRight size={14} aria-hidden="true" />
     </button>
+  );
+}
+
+function VacancyDescription({ summary }: { readonly summary: string }) {
+  return (
+    <details className="career-letter-description">
+      <summary>
+        <CaretRight size={14} aria-hidden="true" />
+        Показать описание
+      </summary>
+      <p>{summary.trim() || 'Описание вакансии не указано.'}</p>
+    </details>
   );
 }
 
@@ -423,10 +435,7 @@ function VacancyCard({
           {vacancy.isRemote === true ? 'Удалённо' : 'Формат не указан'}
           {sources.length ? ' · ' + sources.join(', ') : ''}
         </p>
-        <details className="career-letter-description">
-          <summary>Показать описание</summary>
-          <p>{vacancy.descriptionSummary.trim() || 'Описание вакансии не указано.'}</p>
-        </details>
+        <VacancyDescription summary={vacancy.descriptionSummary} />
       </div>
       {vacancy.primaryUrl && compact ? <OpenVacancyRow url={vacancy.primaryUrl} /> : null}
       {vacancy.primaryUrl && !compact ? (
