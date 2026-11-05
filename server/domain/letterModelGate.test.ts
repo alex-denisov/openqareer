@@ -334,3 +334,38 @@ describe('reviewLetterBody: correct sentences stay', () => {
     expect(rulesOf('Первый разговор о том, как ActAI ведёт обзоры.', sources)).toEqual([]);
   });
 });
+
+describe('reviewLetterBody: gaps found in review, 05.11', () => {
+  it('a sentence with a personal past verb is a claim even when it mentions a role', () => {
+    expect(rulesOf('В роли директора основал отдел.', RU_PLACES)).toContain('ownership');
+  });
+
+  it('a reflexive verb of personal achievement stays a claim', () => {
+    expect(rulesOf('Я добился роста отдела.', RU_PLACES)).toContain('ownership');
+  });
+
+  it('«не просто» and «not only» do not negate the claim', () => {
+    expect(rulesOf('Я не просто создал отдел.', RU_PLACES)).toContain('ownership');
+    expect(rulesOf('I not only led the unit.', EN_PLACES)).toContain('ownership');
+  });
+
+  it('ordinary phrases are not taken for text about the input', () => {
+    expect(rulesOf('Я кандидат наук.', RU_PLACES)).not.toContain('meta');
+    expect(rulesOf('Это важно в данных условиях.', RU_PLACES)).not.toContain('meta');
+    expect(rulesOf('The first topic is the data platform.', EN_PLACES)).not.toContain('meta');
+    expect(rulesOf('В данных нет этого опыта.', RU_PLACES)).toContain('meta');
+  });
+
+  it('«there is» in any form is not a reference to a workplace', () => {
+    for (const body of ["There's a fact: fulfilment time fell from 12 to 7 days.", "There isn't a fact: fulfilment time fell from 12 to 7 days."]) {
+      expect(rulesOf(body, EN_PLACES)).not.toContain('place');
+    }
+  });
+
+  it('a name from the vacancy text backs what is said about the role, not the career', () => {
+    const sources = { ...RU_PLACES, vacancyText: 'Мы партнёры Google и строим склады.' };
+    expect(rulesOf('Работал с Google.', sources)).toContain('name');
+    expect(rulesOf('Я работал с Google.', sources)).toContain('name');
+    expect(rulesOf('Вашей роли важна работа с Google.', sources)).not.toContain('name');
+  });
+});

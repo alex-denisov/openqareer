@@ -68,7 +68,7 @@ function workplaceResults<T extends LetterResultFact>(
 }
 
 /** «with the team growing…» держится на теме: вынесенное вперёд, оно ломает фразу (прод 05.11). */
-const DEPENDENT_TAIL = /^(?:with|as|while|when|где|при|когда)\s/iu;
+const DEPENDENT_TAIL = /^(?:with|as|while|when|which|that|growing|где|при|когда|что|который|которая|которые)\s/iu;
 const PAST_ACTION = /(?<!\p{L})\p{L}+(?:л|ла|ли|ло|ed)(?!\p{L})/iu;
 
 /** Первая буква фразы после двоеточия: имя, аббревиатура и чужая азбука остаются как есть. */

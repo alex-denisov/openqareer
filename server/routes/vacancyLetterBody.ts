@@ -93,11 +93,11 @@ function letterGateSources(request: LetterWritingRequest): LetterGateSources {
     vacancy: [
       vacancy.title,
       vacancy.company,
-      vacancy.description,
       vacancy.recipient?.name,
       vacancy.recipient?.role,
       ...vacancy.requiredSkills,
     ].flatMap((part) => (part ? [part] : [])),
+    vacancyText: vacancy.description,
   };
 }
 

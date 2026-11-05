@@ -78,7 +78,11 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
   return wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId).has(candidateCompanyKey(company));
 }
 
-/** Письму нужна задача роли: она в полном тексте вакансии, а не в выжимке кластера (05.11). */
+/**
+ * Модели письма нужна задача роли: она в полном тексте вакансии, а не в выжимке кластера (05.11).
+ * Язык и порядок фактов шаблона по-прежнему считаются по `description`: иначе одна кириллическая
+ * строка в конце английской вакансии переводила бы письмо на русский.
+ */
 function longestText(...texts: readonly (string | undefined)[]): string | undefined {
   const present = texts.map((text) => text?.trim() ?? '').filter(Boolean);
   return present.length ? present.reduce((long, text) => (text.length > long.length ? text : long)) : undefined;
@@ -95,6 +99,8 @@ function resolvePitchVacancy(
     title: body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
     company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
     description:
+      body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+    letterText:
       body?.vacancy?.description ?? longestText(poolVacancy?.fullDescription, poolVacancy?.description) ?? cluster?.descriptionSummary,
     requiredSkills:
       body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
@@ -181,7 +187,7 @@ async function writeVacancyPitch(
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
   const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {
-    vacancy, facts: translatedFacts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
+    vacancy: { ...vacancy, description: vacancy.letterText }, facts: translatedFacts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');

@@ -381,6 +381,62 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели.');
   });
 
+  it('gives the model the full vacancy text but detects the language from the summary', async () => {
+    const seen: CoverLetterWriteInput[] = [];
+    const writer: CoverLetterWriter = {
+      writeCoverLetter: async (input) => {
+        seen.push(input);
+        return { failure: { stage: 'openai:gpt-test', kind: 'timeout' } };
+      },
+    };
+    const fullDescription = 'The role owns delivery of the platform. Контакт: Анна.';
+    const hhCluster: VacancyCluster = {
+      ...sampleCluster,
+      id: 'cluster-src-hh-search:9002',
+      descriptionSummary: 'Platform delivery role',
+      skills: [],
+    };
+    const { app, candidates, poolStore } = await createApp([hhCluster], { coverLetterWriter: writer });
+    poolStore.mergeSourceSlice('src-hh-search', [
+      {
+        id: 'src-hh-search:9002',
+        fingerprint: 'src-hh-search:9002',
+        title: 'Senior Platform Engineer',
+        company: 'CloudScale Inc',
+        description: 'Short snippet',
+        fullDescription,
+        requiredSkills: [],
+        isRemote: true,
+        url: 'https://hh.ru/vacancy/9002',
+        publishedAt: '2026-09-17T00:00:00.000Z',
+        status: 'active',
+        provenance: {
+          sourceType: 'json_api',
+          sourceId: 'src-hh-search',
+          sourceUrl: 'https://hh.ru/vacancy/9002',
+          observedAt: '2026-09-17T00:00:00.000Z',
+        },
+      },
+    ]);
+    const { cookie, candidateId } = await login(app);
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [{ memoryId: 'mem-202', domain: 'skill', statement: 'Skilled in TypeScript and Node.js' }],
+    });
+    candidates.reviewMemories(candidateId, ['mem-202'], 'confirm');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-src-hh-search%3A9002/pitch',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(seen[0]?.language).toBe('en');
+    expect(seen[0]?.vacancy.description).toBe(fullDescription);
+  });
+
   it('falls back to the template letter when the writer fails', async () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async () => ({ failure: { stage: 'openai:gpt-test', kind: 'timeout' } }),

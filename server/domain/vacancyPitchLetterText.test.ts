@@ -112,6 +112,12 @@ describe('resultFirst: a dependent tail stays behind its subject (05.11)', () =>
     expect(resultFirst(fact, 'en')).toBe(fact);
   });
 
+  it('keeps other dependent tails in place', () => {
+    for (const fact of ['Warehouse for a chain, growing the team from 8 to 35', 'Warehouse for a chain, which cut delivery to 7 days', 'Склад для сети, что сократило срок до 7 дней']) {
+      expect(resultFirst(fact, 'en')).toBe(fact);
+    }
+  });
+
   it('still moves an independent result forward', () => {
     expect(resultFirst('Склад и логистика для сети, команда выросла с 8 до 35 человек', 'ru')).toBe('команда выросла с 8 до 35 человек — склад и логистика для сети');
   });

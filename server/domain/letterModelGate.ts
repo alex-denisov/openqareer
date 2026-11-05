@@ -14,8 +14,10 @@ export interface LetterGateSources {
   readonly candidate: readonly string[];
   /** Места работы: должность, компания, годы. */
   readonly career: readonly string[];
-  /** Текст вакансии подтверждает имена, но не то, что сделал кандидат. */
+  /** Название, компания, получатель и навыки вакансии: цитируются как есть и подтверждают имена. */
   readonly vacancy: readonly string[];
+  /** Полный текст вакансии подтверждает имена только во фразах о роли, но не в рассказе о своём прошлом. */
+  readonly vacancyText?: string;
   /** Какие факты подтверждены каким местом работы: чужой результат месту не приписывается. */
   readonly places?: readonly LetterGatePlace[];
 }
@@ -125,13 +127,16 @@ const OWN_ACTOR = /(?:^|[,;:—–(.]\s*|(?<!\p{L})(?:я|мы|и|i|we|and)\s+)$/
 
 /** «Срок сократился» называет итог, а не автора; прод 05.11: такие фразы уводили верное письмо в шаблон. */
 const REFLEXIVE_ENDING = /^\p{L}*(?:ся|сь)(?!\p{L})/iu;
-const NEGATED = /(?:(?<!\p{L})(?:не|ни|not|never)|n['’]t)(?:\s+\p{L}+)?\s+$/iu;
+const NEGATED = /(?:(?<!\p{L})(?:не|ни|not|never)|n['’]t)(?:\s+(?!(?:только|просто|only|just)(?!\p{L}))\p{L}+)?\s+$/iu;
+/** «Добился» — личное достижение, хотя глагол возвратный. */
+const PERSONAL_REFLEXIVE = /^добил/iu;
+const PAST_CLAIM = /^\p{L}*(?:л|ла|ли|ло|ed)(?!\p{L})|^(?:led|built|cut|drove|grew|oversaw)(?!\p{L})/iu;
 
 function claimedActions(text: string): RegExpMatchArray[] {
   return [...text.matchAll(ACTION)].filter((match) => {
     const start = match.index ?? 0;
     const rest = text.slice(start);
-    return !REFLEXIVE_ENDING.test(rest) && !NEGATED.test(text.slice(0, start));
+    return (PERSONAL_REFLEXIVE.test(rest) || !REFLEXIVE_ENDING.test(rest)) && !NEGATED.test(text.slice(0, start));
   });
 }
 
@@ -162,7 +167,16 @@ const READER_JOB = /(?<!\p{L})(?:role|job|position|you|your|requires|needs|ро�
 
 /** Письмо начинается с задачи читателя: «роль требует строить» — не заслуга кандидата. */
 function isAboutReaderJob(sentence: string): boolean {
-  return READER_JOB.test(sentence) && !FIRST_PERSON.test(sentence);
+  if (!READER_JOB.test(sentence) || FIRST_PERSON.test(sentence)) return false;
+  // Русская фраза обходится без «я»: «в роли директора построил отдел» — заслуга, а не задача читателя.
+  return !claimedActions(sentence).some((match) => PAST_CLAIM.test(sentence.slice(match.index ?? 0)));
+}
+
+/** Прошлое время от первого лица: о нём говорит только профиль, а не текст вакансии. */
+const OWN_PAST = /(?<!\p{L})(?:\p{L}{3,}(?:ал|ил|ял|ел)(?:а|и)?|(?:i|we)\s+(?:\p{L}+\s+)?(?:\p{L}+ed|was|were|led|built|ran))(?!\p{L})/iu;
+
+function isOwnPastClaim(sentence: string): boolean {
+  return OWN_PAST.test(sentence) && !isAboutReaderJob(sentence);
 }
 
 function hasStrengthenedRole(sentence: string, owned: ReadonlySet<string>): boolean {
@@ -190,8 +204,8 @@ function affirmedSentences(statement: string): string[] {
 }
 
 const YEAR_IN_TEXT = /(?<![\p{L}\p{N}])(?:19|20)\d{2}(?![\p{L}\p{N}])/gu;
-const META = /(?<!\p{L})(?:кандидат\p{L}*|в фактах|в данных|по фактам|the candidate|the facts|the data|the input)(?!\p{L})/iu;
-const THERE = /(?<!\p{L})(?:там(?!,?\s+где)|there(?!\s+(?:is|are|was|were|will|has|have)(?!\p{L})))(?!\p{L})/iu;
+const META = /(?<!\p{L})(?:кандидат\p{L}*(?!\s+\p{L}*\s*наук)|в фактах|в данных(?=\s+(?:нет|не)(?!\p{L}))|по фактам|the candidate|the facts|the input)(?!\p{L})/iu;
+const THERE = /(?<!\p{L})(?:там(?!,?\s+где)|there(?!['’])(?!\s+(?:is|are|was|were|will|has|have)(?:n['’]t)?(?!\p{L})))(?!\p{L})/iu;
 const BIOGRAPHY_PLACES = 3;
 const BIOGRAPHY_YEARS = 2;
 const FACT_WORD_MIN = 4;
@@ -259,11 +273,13 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
   const owned = ownedActions(backing);
   const profileText = profile.join(' ').toLocaleLowerCase();
   const names = new Set([...profile, ...backing.vacancy].flatMap(wordsOf));
+  const namesWithText = new Set([...names, ...wordsOf(sources.vacancyText ?? '')]);
   return sentencesOf(body).flatMap((sentence) => {
+    const known = isOwnPastClaim(sentence) ? names : namesWithText;
     const own = withoutVacancyText(sentence, backing.vacancy);
     const checks: readonly (readonly [LetterGateRule, boolean])[] = [
       ['number', hasForeignNumber(own, profile)],
-      ['name', hasForeignName(sentence, names, sources.language) || hasForeignMonth(sentence, profileText)],
+      ['name', hasForeignName(sentence, known, sources.language) || hasForeignMonth(sentence, profileText)],
       ['ownership', hasStrengthenedRole(own, owned)],
       ['praise', PRAISE.test(own)],
       ['meta', META.test(own)],
