@@ -67,7 +67,17 @@ function workplaceResults<T extends LetterResultFact>(
   return [...bullets].sort((a, b) => outcomeFirst(a) - outcomeFirst(b));
 }
 
+/** «with the team growing…» держится на теме: вынесенное вперёд, оно ломает фразу (прод 05.11). */
+const DEPENDENT_TAIL = /^(?:with|as|while|when|which|that|growing|где|при|когда|что|который|которая|которые)\s/iu;
 const PAST_ACTION = /(?<!\p{L})\p{L}+(?:л|ла|ли|ло|ed)(?!\p{L})/iu;
+
+/** «Отдел продаж упаковки, отдел вырос с 6 до 22» говорит об одном подлежащем: оно называется один раз. */
+function mergedSubject(head: string, tail: string): string | null {
+  const [, subject, rest] = /^(?:the\s+)?(\p{L}+)\s+(.+)$/iu.exec(tail) ?? [];
+  const first = /^(?:the\s+)?(\p{L}+)/iu.exec(head)?.[1];
+  if (!subject || !rest || !first) return null;
+  return first.toLocaleLowerCase() === subject.toLocaleLowerCase() ? `${head} ${rest}` : null;
+}
 
 /** Первая буква фразы после двоеточия: имя, аббревиатура и чужая азбука остаются как есть. */
 export function lowerLetterStart(
@@ -89,7 +99,9 @@ export function resultFirst(statement: string, language: LetterLanguage): string
   const text = statement.trim().replace(/[.;,\s]+$/u, '');
   const [, head, tail] = /^([^,;]+)[,;]\s+(.+)$/u.exec(text) ?? [];
   if (!head || !tail || /\d/u.test(head) || !/\d/u.test(tail)) return text;
-  if (OUTCOME_VERB.test(head) || PAST_ACTION.test(head)) return text;
+  const merged = mergedSubject(head, tail);
+  if (merged) return merged;
+  if (OUTCOME_VERB.test(head) || PAST_ACTION.test(head) || DEPENDENT_TAIL.test(tail)) return text;
   return `${tail} — ${lowerLetterStart(head, language)}`;
 }
 
