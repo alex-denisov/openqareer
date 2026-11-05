@@ -632,9 +632,11 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     name: 'Bayt',
     type: 'career_site',
     accessClass: 'open_web',
-    market: 'Middle East / Gulf / International (Bayt HTML & Obscura Stealth)',
-    addressStatus: 'live',
-    enabled: true,
+    market: 'Middle East / Gulf / International',
+    addressStatus: 'robots_forbidden',
+    enabled: false,
+    disabledReason:
+      'robots.txt закрывает страницы списков, сайт отвечает 403 честному агенту (замер 2026-11-05), 0 строк с 21.09. Подмена браузера запрещена; нужен договор с площадкой.',
     targetUrl: 'https://www.bayt.com/en/international/jobs/',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
@@ -661,8 +663,10 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'json_api',
     accessClass: 'api',
     market: 'Индия, APAC (API поиска Naukri, механика JobSpy)',
-    addressStatus: 'live',
-    enabled: true,
+    addressStatus: 'needs_browser_session',
+    enabled: false,
+    disabledReason:
+      'Анти-бот площадки закрыл прод: сайт отвечает 403, API обрывает соединение (замер 2026-11-05). За 7 дней ни одной вакансии; обходить защиту нельзя.',
     targetUrl: 'https://www.naukri.com/jobapi/v3/search',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
@@ -675,7 +679,9 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'api',
     market: 'Бангладеш, Южная Азия (API поиска BDJobs, механика JobSpy)',
     addressStatus: 'live',
-    enabled: true,
+    enabled: false,
+    disabledReason:
+      '0 вакансий за 7 дней, разрешения на браузерный заголовок нет (решение 2026-11-05).',
     targetUrl:
       'https://gateway.bdjobs.com/recruitment-account-test/api/JobSearch/GetJobSearch?isPro=1&rpp=20&pg=1',
     refreshIntervalMinutes: 60,

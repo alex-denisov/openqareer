@@ -13,10 +13,14 @@ export interface RequestTimeoutOptions {
   clock?: () => number;
   graceMs?: number;
   lagMs?: number;
+  /** How many late timers in a row may be forgiven before the request is aborted anyway. */
+  maxGraces?: number;
 }
 
 const DEFAULT_GRACE_MS = 10_000;
 const DEFAULT_LAG_MS = 2_000;
+// 05.11: the loop was blocked 48 % of the time, so one grace often landed in the next stall.
+const DEFAULT_MAX_GRACES = 5;
 
 export async function withRequestTimeout<T>(
   timeoutMs: number,
@@ -27,14 +31,16 @@ export async function withRequestTimeout<T>(
   const graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
   const lagMs = options.lagMs ?? DEFAULT_LAG_MS;
   const controller = new AbortController();
-  const startedAt = clock();
-  let graced = false;
+  const maxGraces = options.maxGraces ?? DEFAULT_MAX_GRACES;
+  let expectedAt = clock() + timeoutMs;
+  let graces = 0;
   let timer: ReturnType<typeof setTimeout>;
 
   const onTimer = () => {
-    const lateBy = clock() - startedAt - timeoutMs;
-    if (!graced && lateBy >= lagMs) {
-      graced = true;
+    const firedAt = clock();
+    if (firedAt - expectedAt >= lagMs && graces < maxGraces) {
+      graces += 1;
+      expectedAt = firedAt + graceMs;
       timer = setTimeout(onTimer, graceMs);
       return;
     }
@@ -47,4 +53,14 @@ export async function withRequestTimeout<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * `fetch failed` alone cannot tell a refused connection from a connect timer
+ * that fired after a stall: the reason is in `cause`, so it goes into the journal.
+ */
+export function failureMessage(reason: unknown): string {
+  if (!(reason instanceof Error)) return String(reason);
+  const cause = (reason as Error & { cause?: { code?: unknown } }).cause;
+  return typeof cause?.code === 'string' ? `${reason.message} (${cause.code})` : reason.message;
 }

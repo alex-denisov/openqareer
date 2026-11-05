@@ -109,12 +109,14 @@ async function fetchTelegramChannel(source: VacancySourceConfig): Promise<Unifie
   const channelMatch = source.targetUrl.match(/t\.me\/(?:s\/)?([a-zA-Z0-9_]+)/i);
   const channelName = channelMatch ? channelMatch[1] : source.id.replace(/^src-tg-/, '');
   try {
-    const res = await fetch(`https://t.me/s/${channelName}`, {
-      headers: { ...FETCH_HEADERS, Accept: 'text/html,application/xhtml+xml' },
-      signal: AbortSignal.timeout(8_000),
+    const html = await withRequestTimeout(8_000, async (signal) => {
+      const res = await fetch(`https://t.me/s/${channelName}`, {
+        headers: { ...FETCH_HEADERS, Accept: 'text/html,application/xhtml+xml' },
+        signal,
+      });
+      if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+      return res.text();
     });
-    if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
-    const html = await res.text();
     const vacancies = parseTelegramChannelHtml(html, {
       channelName,
       sourceId: source.id,
@@ -400,12 +402,14 @@ async function fetchCrossoverSource(source: VacancySourceConfig): Promise<Source
     { sitemapUrl: source.targetUrl, kontentUrl: CROSSOVER_KONTENT_URL },
     {
       fetchText: async (url) => {
-        const res = await fetch(url, {
-          headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
-          signal: AbortSignal.timeout(JSON_SOURCE_TIMEOUT_MS),
+        return withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, async (signal) => {
+          const res = await fetch(url, {
+            headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
+            signal,
+          });
+          if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+          return res.text();
         });
-        if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
-        return res.text();
       },
       fetchJson: async (url) => (await fetchJsonPayload({ url })).payload,
       observedAt,
@@ -434,15 +438,17 @@ async function fetchRssFeed(
 ): Promise<UnifiedVacancy[]> {
   try {
     const url = withQuery(source, options?.query);
-    const res = await fetch(url, {
-      headers: {
-        ...FETCH_HEADERS,
-        Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-      },
-      signal: AbortSignal.timeout(15_000),
+    const xml = await withRequestTimeout(15_000, async (signal) => {
+      const res = await fetch(url, {
+        headers: {
+          ...FETCH_HEADERS,
+          Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+        },
+        signal,
+      });
+      if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+      return res.text();
     });
-    if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
-    const xml = await res.text();
     const observedAt = new Date().toISOString();
     return parseRssJobFeed(xml, {
       sourceId: source.id,

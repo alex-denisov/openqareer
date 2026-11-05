@@ -345,7 +345,7 @@ describe('JobSpy adapters (pure parsers)', () => {
 });
 
 describe('Registry & adapter wiring integration', () => {
-  it('registers all 3 sources in DEFAULT_VACANCY_SOURCES with active/live status', () => {
+  it('registers all 3 sources in DEFAULT_VACANCY_SOURCES with their current status', () => {
     const naukri = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-naukri');
     const bdjobs = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-bdjobs');
     const ziprecruiter = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-ziprecruiter');
@@ -353,14 +353,14 @@ describe('Registry & adapter wiring integration', () => {
     expect(naukri).toBeDefined();
     expect(naukri?.type).toBe('json_api');
     expect(naukri?.accessClass).toBe('api');
-    expect(naukri?.addressStatus).toBe('live');
-    expect(naukri?.enabled).toBe(true);
+    expect(naukri?.addressStatus).toBe('needs_browser_session') // anti-bot 05.11;
+    expect(naukri?.enabled).toBe(false);
 
     expect(bdjobs).toBeDefined();
     expect(bdjobs?.type).toBe('json_api');
     expect(bdjobs?.accessClass).toBe('api');
     expect(bdjobs?.addressStatus).toBe('live');
-    expect(bdjobs?.enabled).toBe(true);
+    expect(bdjobs?.enabled).toBe(false); // 05.11
 
     expect(ziprecruiter).toBeDefined();
     expect(ziprecruiter?.type).toBe('json_api');
@@ -801,8 +801,8 @@ describe('Glassdoor & Bayt registry & wiring integration', () => {
     expect(bayt).toBeDefined();
     expect(bayt?.type).toBe('career_site');
     expect(bayt?.accessClass).toBe('open_web');
-    expect(bayt?.addressStatus).toBe('live');
-    expect(bayt?.enabled).toBe(true);
+    expect(bayt?.addressStatus).toBe('robots_forbidden');
+    expect(bayt?.enabled).toBe(false); // 05.11
   });
 
   it('wires adapters into hasJsonAdapter and normalizeJsonSource', () => {

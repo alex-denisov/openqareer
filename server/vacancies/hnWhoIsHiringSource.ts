@@ -1,3 +1,4 @@
+import { withRequestTimeout } from './requestTimeout';
 import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { decodeFeedEntities } from '../connectors/feedText';
 import {
@@ -430,16 +431,17 @@ export async function fetchHnWhoIsHiring(
   const fetchJson =
     typeof nowMsOrDeps === 'object' && nowMsOrDeps?.fetchJson
       ? nowMsOrDeps.fetchJson
-      : async (url: string) => {
-          const res = await fetch(url, {
-            headers: { 'User-Agent': 'OpenQareer/1.0 (HN WhoIsHiring Scraper)' },
-            signal: AbortSignal.timeout(HN_FETCH_TIMEOUT_MS),
+      : (url: string) =>
+          withRequestTimeout(HN_FETCH_TIMEOUT_MS, async (signal) => {
+            const res = await fetch(url, {
+              headers: { 'User-Agent': 'OpenQareer/1.0 (HN WhoIsHiring Scraper)' },
+              signal,
+            });
+            if (!res.ok) {
+              throw new Error(`hn_api_error: ${res.status} ${res.statusText}`);
+            }
+            return res.json();
           });
-          if (!res.ok) {
-            throw new Error(`hn_api_error: ${res.status} ${res.statusText}`);
-          }
-          return res.json();
-        };
 
   const storyId = await findHnWhoIsHiringStoryId(fetchJson);
   const observedAt = new Date(nowMs).toISOString();
