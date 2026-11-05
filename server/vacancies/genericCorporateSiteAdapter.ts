@@ -1,32 +1,40 @@
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
-import { buildJsonVacancy, fromIso } from './jsonVacancyRecord';
+import { buildJsonVacancy, fromIso, fromLooseDate } from './jsonVacancyRecord';
+import { parseDouCompanyVacanciesHtml } from './douVacanciesAdapter';
 import { withRequestTimeout } from './requestTimeout';
 import { fetchWithStealthFallback } from './jobspyAdapters';
 
-const CORPORATE_FETCH_TIMEOUT_MS = 25_000;
-
-const USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const CORPORATE_FETCH_TIMEOUT_MS = 15_000;
 
 const BROWSER_HEADERS: Record<string, string> = {
-  'User-Agent': USER_AGENT,
-  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'User-Agent':
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7',
   'Accept-Language': 'en-US,en;q=0.9,ru;q=0.8',
   'Cache-Control': 'no-cache',
-  Pragma: 'no-cache',
 };
 
 function cleanText(text: string): string {
   return text
-    .replace(/<[^>]+>/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function extractStringValue(val: unknown): string {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    return String(obj.rendered || obj.en || obj.name || obj.title || obj.text || '');
+  }
+  return String(val);
 }
 
 function resolveUrl(relativeOrAbsolute: string, baseUrl: string): string {
@@ -50,13 +58,55 @@ interface ExtractedRawJob {
   readonly publishedAt?: string;
 }
 
+function parseJsonLdLocation(jobLocation: unknown): string {
+  if (typeof jobLocation === 'object' && jobLocation !== null) {
+    const loc = jobLocation as Record<string, unknown>;
+    const address = (loc.address || {}) as Record<string, unknown>;
+    return [address.addressLocality, address.addressRegion, address.addressCountry]
+      .map((p) => (typeof p === 'string' ? p : ''))
+      .filter(Boolean)
+      .join(', ');
+  }
+  return typeof jobLocation === 'string' ? jobLocation : '';
+}
+
+function parseJsonLdJobItem(item: Record<string, unknown>, baseUrl: string): ExtractedRawJob | null {
+  const type = String(item['@type'] || '');
+  if (!/JobPosting/i.test(type)) return null;
+
+  const title = cleanText(String(item.title || ''));
+  if (!title || IGNORE_TITLE_REGEX.test(title)) return null;
+
+  const url = String(item.url || item.sameAs || baseUrl);
+  const resolved = resolveUrl(url, baseUrl);
+  const location = parseJsonLdLocation(item.jobLocation);
+  const isRemote =
+    /remote/i.test(location) ||
+    /remote/i.test(title) ||
+    /telecommute/i.test(String(item.jobLocationType || ''));
+
+  const desc = cleanText(String(item.description || title));
+  const extId =
+    String(item.identifier?.value || item.identifier || '') ||
+    resolved.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40);
+
+  return {
+    externalId: extId,
+    title,
+    url: resolved,
+    location: location || undefined,
+    isRemote,
+    description: desc,
+    publishedAt: item.datePosted ? String(item.datePosted) : undefined,
+  };
+}
+
 /**
  * Стратегия 1: разбор Schema.org / JSON-LD JobPosting (Google Jobs standard).
  */
 export function extractJsonLdJobs(html: string, baseUrl: string): ExtractedRawJob[] {
   const jobs: ExtractedRawJob[] = [];
-  const scriptRegex =
-    /<script\b[^>]*type=[\'\"]application\/ld\+json[\'\"][^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptRegex = /<script\b[^>]*type=['"]application\/ld\+json['"][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = scriptRegex.exec(html)) !== null) {
@@ -73,50 +123,8 @@ export function extractJsonLdJobs(html: string, baseUrl: string): ExtractedRawJo
 
       for (const item of items) {
         if (!item || typeof item !== 'object') continue;
-        const type = String(item['@type'] || '');
-        if (!/JobPosting/i.test(type)) continue;
-
-        const title = cleanText(String(item.title || ''));
-        if (!title || IGNORE_TITLE_REGEX.test(title)) continue;
-
-        const url = String(item.url || item.sameAs || baseUrl);
-        const resolved = resolveUrl(url, baseUrl);
-
-        let location = '';
-        if (typeof item.jobLocation === 'object' && item.jobLocation !== null) {
-          const loc = item.jobLocation as Record<string, unknown>;
-          const address = (loc.address || {}) as Record<string, unknown>;
-          const parts = [
-            address.addressLocality,
-            address.addressRegion,
-            address.addressCountry,
-          ]
-            .map((p) => (typeof p === 'string' ? p : ''))
-            .filter(Boolean);
-          location = parts.join(', ');
-        } else if (typeof item.jobLocation === 'string') {
-          location = item.jobLocation;
-        }
-
-        const isRemote =
-          /remote/i.test(location) ||
-          /remote/i.test(title) ||
-          /telecommute/i.test(String(item.jobLocationType || ''));
-
-        const desc = cleanText(String(item.description || title));
-        const extId =
-          String(item.identifier?.value || item.identifier || '') ||
-          resolved.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40);
-
-        jobs.push({
-          externalId: extId,
-          title,
-          url: resolved,
-          location: location || undefined,
-          isRemote,
-          description: desc,
-          publishedAt: item.datePosted ? String(item.datePosted) : undefined,
-        });
+        const job = parseJsonLdJobItem(item as Record<string, unknown>, baseUrl);
+        if (job) jobs.push(job);
       }
     } catch {
       // Игнорируем невалидный JSON
@@ -124,6 +132,34 @@ export function extractJsonLdJobs(html: string, baseUrl: string): ExtractedRawJo
   }
 
   return jobs;
+}
+
+function parseNextDataItem(item: unknown, baseUrl: string): ExtractedRawJob | null {
+  if (!item || typeof item !== 'object') return null;
+  const rec = item as Record<string, unknown>;
+  const rawTitle = extractStringValue(rec.title || rec.name || rec.jobTitle || '');
+  const maybeTitle = cleanText(rawTitle);
+  const maybeSlug = String(rec.slug || rec.url || rec.link || rec.id || '');
+  if (
+    !maybeTitle ||
+    maybeTitle.includes('[object Object]') ||
+    (!maybeSlug && !rec.id) ||
+    IGNORE_TITLE_REGEX.test(maybeTitle)
+  ) {
+    return null;
+  }
+  const fullUrl = maybeSlug.startsWith('http')
+    ? maybeSlug
+    : resolveUrl(maybeSlug.startsWith('/') ? maybeSlug : `/jobs/${maybeSlug}`, baseUrl);
+  const loc = String(rec.location || rec.city || rec.locationName || '');
+  return {
+    externalId: String(rec.id || rec.slug || fullUrl.slice(-32)),
+    title: cleanText(maybeTitle),
+    url: fullUrl,
+    location: loc || undefined,
+    isRemote: /remote/i.test(loc) || /remote/i.test(maybeTitle),
+    description: cleanText(String(rec.description || maybeTitle)),
+  };
 }
 
 /**
@@ -143,32 +179,14 @@ export function extractNextDataJobs(html: string, baseUrl: string): ExtractedRaw
       if (depth > 8 || !obj || typeof obj !== 'object') return;
       if (Array.isArray(obj)) {
         for (const item of obj) {
-          if (item && typeof item === 'object') {
-            const rec = item as Record<string, unknown>;
-            const maybeTitle = String(rec.title || rec.name || rec.jobTitle || '');
-            const maybeSlug = String(rec.slug || rec.url || rec.link || rec.id || '');
-            if (maybeTitle && (maybeSlug || rec.id) && !IGNORE_TITLE_REGEX.test(maybeTitle)) {
-              let fullUrl = maybeSlug;
-              if (!fullUrl.startsWith('http')) {
-                fullUrl = resolveUrl(maybeSlug.startsWith('/') ? maybeSlug : `/jobs/${maybeSlug}`, baseUrl);
-              }
-              const loc = String(rec.location || rec.city || rec.locationName || '');
-              jobs.push({
-                externalId: String(rec.id || rec.slug || fullUrl.slice(-32)),
-                title: cleanText(maybeTitle),
-                url: fullUrl,
-                location: loc || undefined,
-                isRemote: /remote/i.test(loc) || /remote/i.test(maybeTitle),
-                description: cleanText(String(rec.description || maybeTitle)),
-              });
-            }
-          }
+          const job = parseNextDataItem(item, baseUrl);
+          if (job) jobs.push(job);
         }
-      } else {
-        for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
-          if (/jobs|vacancies|openings|positions|dataMap|data|items/i.test(key)) {
-            searchInObject(val, depth + 1);
-          }
+        return;
+      }
+      for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
+        if (/jobs|vacancies|openings|positions|dataMap|data|items/i.test(key)) {
+          searchInObject(val, depth + 1);
         }
       }
     };
@@ -187,9 +205,8 @@ export function extractSemanticHtmlJobs(html: string, baseUrl: string): Extracte
   const jobs: ExtractedRawJob[] = [];
   const seenUrls = new Set<string>();
 
-  // Ищем теги <a ... href=".../job/...">Заголовок</a>
   const linkRegex =
-    /<a\b([^>]*href=[\'\"]([^\"\']*(?:\/job\/|\/jobs\/|\/vacancy\/|\/vacancies\/|\/position\/|\/positions\/|\/opening\/|\/openings\/)[^\"\']*)[\'\"][^>]*)>([\s\S]*?)<\/a>/gi;
+    /<a\b([^>]*href=['"]([^"']*(?:\/job\/|\/jobs\/|\/vacancy\/|\/vacancies\/|\/position\/|\/positions\/|\/opening\/|\/openings\/)[^"']*)['"][^>]*)>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = linkRegex.exec(html)) !== null) {
@@ -206,10 +223,7 @@ export function extractSemanticHtmlJobs(html: string, baseUrl: string): Extracte
       continue;
     }
 
-    // Извлекаем чистый текст заголовка
     let title = cleanText(innerHtml);
-
-    // Если внутри был тег h1-h5 или p/span с заголовком
     const headingMatch = innerHtml.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
     if (headingMatch?.[1]) {
       title = cleanText(headingMatch[1]);
@@ -234,57 +248,408 @@ export function extractSemanticHtmlJobs(html: string, baseUrl: string): Extracte
   return jobs;
 }
 
-/**
- * Стратегия 4: Обнаружение встроенных ATS (Workday, Greenhouse, Ashby, Lever) в коде страницы
- */
-export function detectEmbeddedAts(html: string): {
-  readonly provider: 'greenhouse' | 'lever' | 'ashby' | 'workday';
+export type DetectedAtsProvider =
+  | 'greenhouse'
+  | 'lever'
+  | 'ashby'
+  | 'workday'
+  | 'workable'
+  | 'smartrecruiters'
+  | 'dou';
+
+export interface DetectedAts {
+  readonly provider: DetectedAtsProvider;
   readonly endpointUrl: string;
-} | null {
-  // Workday
-  const workdayMatch = html.match(
-    /https?:\/\/([a-z0-9_-]+\.wd\d+\.myworkdayjobs\.com)\/([a-z0-9_-]+)/i,
-  );
-  if (workdayMatch) {
-    const host = workdayMatch[1];
-    const site = workdayMatch[2];
+  readonly orgId?: string;
+}
+
+const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
+  (text) => {
+    const m = text.match(/https?:\/\/([a-z0-9_-]+\.wd\d+\.myworkdayjobs\.com)\/([a-z0-9_-]+)/i);
+    if (!m) return null;
+    const [host, site] = [m[1], m[2]];
     const tenant = host.split('.')[0];
     return {
       provider: 'workday',
       endpointUrl: `https://${host}/wday/cxs/${tenant}/${site}/jobs`,
+      orgId: `${tenant}/${site}`,
     };
-  }
-
-  // Greenhouse
-  const ghMatch = html.match(
-    /(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io)\/([a-z0-9_-]+)/i,
-  );
-  if (ghMatch?.[1] && !/embed|api|v1/i.test(ghMatch[1])) {
+  },
+  (text) => {
+    const m = text.match(
+      /(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|job-boards\.eu\.greenhouse\.io)\/([a-z0-9_-]+)/i,
+    );
+    if (!m?.[1] || /embed|api|v1/i.test(m[1])) return null;
     return {
       provider: 'greenhouse',
-      endpointUrl: `https://boards-api.greenhouse.io/v1/boards/${ghMatch[1]}/jobs`,
+      endpointUrl: `https://boards-api.greenhouse.io/v1/boards/${m[1]}/jobs`,
+      orgId: m[1],
     };
-  }
-
-  // Ashby
-  const ashbyMatch = html.match(/jobs\.ashbyhq\.com\/([a-z0-9_.-]+)/i);
-  if (ashbyMatch?.[1]) {
+  },
+  (text) => {
+    const m = text.match(/jobs\.ashbyhq\.com\/([a-z0-9_.-]+)/i);
+    if (!m?.[1]) return null;
     return {
       provider: 'ashby',
-      endpointUrl: `https://api.ashbyhq.com/posting-api/job-board/${ashbyMatch[1]}`,
+      endpointUrl: `https://api.ashbyhq.com/posting-api/job-board/${m[1]}`,
+      orgId: m[1],
     };
-  }
-
-  // Lever
-  const leverMatch = html.match(/jobs\.lever\.co\/([a-z0-9_-]+)/i);
-  if (leverMatch?.[1]) {
+  },
+  (text) => {
+    const m = text.match(/(?:jobs\.lever\.co|jobs\.eu\.lever\.co)\/([a-z0-9_-]+)/i);
+    if (!m?.[1]) return null;
+    const isEu = /jobs\.eu\.lever\.co/i.test(text);
     return {
       provider: 'lever',
-      endpointUrl: `https://api.lever.co/v0/postings/${leverMatch[1]}`,
+      endpointUrl: isEu
+        ? `https://api.eu.lever.co/v0/postings/${m[1]}?mode=json`
+        : `https://api.lever.co/v0/postings/${m[1]}?mode=json`,
+      orgId: m[1],
     };
-  }
+  },
+  (text) => {
+    const m = text.match(/apply\.workable\.com\/(?:[a-z]{2}\/)?([a-z0-9_-]+)/i);
+    if (!m?.[1] || /api|j|widget|assets/i.test(m[1])) return null;
+    return {
+      provider: 'workable',
+      endpointUrl: `https://apply.workable.com/api/v1/widget/accounts/${m[1]}?details=true`,
+      orgId: m[1],
+    };
+  },
+  (text) => {
+    const m = text.match(/jobs\.smartrecruiters\.com\/([a-z0-9_-]+)/i);
+    if (!m?.[1]) return null;
+    return {
+      provider: 'smartrecruiters',
+      endpointUrl: `https://api.smartrecruiters.com/v1/companies/${m[1]}/postings`,
+      orgId: m[1],
+    };
+  },
+  (text) => {
+    const m = text.match(/jobs\.dou\.ua\/companies\/([a-z0-9_-]+)\/vacancies/i);
+    if (!m?.[1]) return null;
+    return {
+      provider: 'dou',
+      endpointUrl: `https://jobs.dou.ua/companies/${m[1]}/vacancies/`,
+      orgId: m[1],
+    };
+  },
+];
 
+/**
+ * Стратегия 4: Обнаружение встроенных ATS в адресе страницы или внутри HTML.
+ */
+export function detectEmbeddedAts(textToScan: string): DetectedAts | null {
+  for (const matcher of ATS_MATCHERS) {
+    const match = matcher(textToScan);
+    if (match) return match;
+  }
   return null;
+}
+
+async function fetchWorkdayAts(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const wdRes = await fetch(ats.endpointUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: '' }),
+  });
+  if (!wdRes.ok) return [];
+  const json = await wdRes.json();
+  const postings = json.jobPostings || [];
+  if (!Array.isArray(postings) || postings.length === 0) return [];
+  return postings.map((job: Record<string, unknown>) => {
+    const bullets = Array.isArray(job.bulletFields) ? job.bulletFields : [];
+    const extId = String(bullets[0] || job.title || '');
+    const title = String(job.title || 'Specialist');
+    const relPath = String(job.externalPath || '');
+    const jobUrl = ats.endpointUrl.split('/wday/')[0] + relPath;
+    const location = Array.isArray(job.locationsText)
+      ? job.locationsText.join(', ')
+      : String(job.locationsText || '');
+
+    return buildJsonVacancy({
+      sourceId: source.id,
+      context: { observedAt, sourceName: `${source.name} (Workday)`, sourceUrl: jobUrl },
+      externalId: extId || jobUrl.slice(-32),
+      title,
+      company: source.name,
+      location: location || undefined,
+      isRemote: /remote/i.test(location) || /remote/i.test(title),
+      description: title,
+      skills: [],
+      url: jobUrl,
+      publishedAt: observedAt,
+    });
+  });
+}
+
+async function fetchGreenhouseAts(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const ghUrl = ats.endpointUrl.includes('?') ? ats.endpointUrl : `${ats.endpointUrl}?content=true`;
+  const ghRes = await fetch(ghUrl);
+  if (!ghRes.ok) return [];
+  const json = await ghRes.json();
+  const jobs = json.jobs || [];
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
+  return jobs.map((job: Record<string, unknown>) => {
+    const title = String(job.title || '');
+    const extId = String(job.id || '');
+    const jobUrl = String(job.absolute_url || '');
+    const loc =
+      typeof job.location === 'object' && job.location !== null
+        ? String((job.location as Record<string, unknown>).name || '')
+        : '';
+
+    return buildJsonVacancy({
+      sourceId: source.id,
+      context: { observedAt, sourceName: `${source.name} (Greenhouse)`, sourceUrl: jobUrl },
+      externalId: extId,
+      title,
+      company: source.name,
+      location: loc || undefined,
+      isRemote: /remote/i.test(loc) || /remote/i.test(title),
+      description: title,
+      skills: [],
+      url: jobUrl,
+      publishedAt: String(job.updated_at || observedAt),
+    });
+  });
+}
+
+async function fetchAshbyAts(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const ashbyRes = await fetch(ats.endpointUrl);
+  if (!ashbyRes.ok) return [];
+  const json = await ashbyRes.json();
+  const jobs = json.jobs || [];
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
+  return jobs.map((job: Record<string, unknown>) => {
+    const title = String(job.title || '');
+    const extId = String(job.id || '');
+    const jobUrl = String(job.jobUrl || job.applyUrl || `${source.targetUrl}#${extId}`);
+    const loc = String(job.location || '');
+    const isRemote = Boolean(job.isRemote) || /remote/i.test(loc) || /remote/i.test(title);
+    const desc = String(job.descriptionPlain || job.descriptionHtml || title);
+
+    return buildJsonVacancy({
+      sourceId: source.id,
+      context: { observedAt, sourceName: `${source.name} (Ashby)`, sourceUrl: jobUrl },
+      externalId: extId,
+      title,
+      company: source.name,
+      location: loc || undefined,
+      isRemote,
+      description: desc,
+      skills: [],
+      url: jobUrl,
+      publishedAt: String(job.publishedAt || observedAt),
+    });
+  });
+}
+
+async function fetchLeverAts(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const leverRes = await fetch(ats.endpointUrl);
+  if (!leverRes.ok) return [];
+  const jobs = await leverRes.json();
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
+  return jobs.map((job: Record<string, unknown>) => {
+    const title = String(job.text || '');
+    const extId = String(job.id || '');
+    const jobUrl = String(job.hostedUrl || job.applyUrl || `${source.targetUrl}#${extId}`);
+    const cats =
+      job.categories && typeof job.categories === 'object'
+        ? (job.categories as Record<string, unknown>)
+        : {};
+    const loc = String(cats.location || '');
+    const isRemote = /remote/i.test(loc) || /remote/i.test(title);
+    const desc = String(job.descriptionPlain || job.description || title);
+
+    return buildJsonVacancy({
+      sourceId: source.id,
+      context: { observedAt, sourceName: `${source.name} (Lever)`, sourceUrl: jobUrl },
+      externalId: extId,
+      title,
+      company: source.name,
+      location: loc || undefined,
+      isRemote,
+      description: desc,
+      skills: [],
+      url: jobUrl,
+      publishedAt: job.createdAt ? fromLooseDate(job.createdAt) : observedAt,
+    });
+  });
+}
+
+async function fetchWorkableAts(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const workableRes = await fetch(ats.endpointUrl);
+  if (!workableRes.ok) return [];
+  const json = await workableRes.json();
+  const jobs = json.jobs || [];
+  if (!Array.isArray(jobs) || jobs.length === 0) return [];
+  return jobs.map((job: Record<string, unknown>) => {
+    const title = String(job.title || '');
+    const extId = String(job.shortcode || job.id || '');
+    const jobUrl = String(job.url || job.shortlink || `${source.targetUrl}#${extId}`);
+    const loc = [job.city, job.region, job.country].filter(Boolean).join(', ');
+    const isRemote = Boolean(job.telecommuting) || /remote/i.test(loc) || /remote/i.test(title);
+    const descParts = [job.description, job.requirements, job.benefits].filter(Boolean).map(String);
+    const desc = descParts.join('\n\n') || title;
+
+    return buildJsonVacancy({
+      sourceId: source.id,
+      context: { observedAt, sourceName: `${source.name} (Workable)`, sourceUrl: jobUrl },
+      externalId: extId,
+      title,
+      company: source.name,
+      location: loc || undefined,
+      isRemote,
+      description: desc,
+      skills: [],
+      url: jobUrl,
+      publishedAt: String(job.published_on || job.created_at || observedAt),
+    });
+  });
+}
+
+async function fetchSmartRecruitersAts(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const srRes = await fetch(ats.endpointUrl);
+  if (!srRes.ok) return [];
+  const json = await srRes.json();
+  const content = json.content || [];
+  if (!Array.isArray(content) || content.length === 0) return [];
+  return content.map((job: Record<string, unknown>) => {
+    const title = String(job.name || '');
+    const extId = String(job.id || '');
+    const jobUrl = `https://jobs.smartrecruiters.com/${ats.orgId}/${extId}`;
+    const locObj =
+      job.location && typeof job.location === 'object'
+        ? (job.location as Record<string, unknown>)
+        : {};
+    const loc = [locObj.city, locObj.region, locObj.country].filter(Boolean).join(', ');
+    const isRemote = Boolean(locObj.remote) || /remote/i.test(loc) || /remote/i.test(title);
+
+    return buildJsonVacancy({
+      sourceId: source.id,
+      context: { observedAt, sourceName: `${source.name} (SmartRecruiters)`, sourceUrl: jobUrl },
+      externalId: extId,
+      title,
+      company: source.name,
+      location: loc || undefined,
+      isRemote,
+      description: title,
+      skills: [],
+      url: jobUrl,
+      publishedAt: String(job.releasedDate || observedAt),
+    });
+  });
+}
+
+async function fetchFromAtsProvider(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+  html?: string,
+): Promise<UnifiedVacancy[]> {
+  switch (ats.provider) {
+    case 'workday':
+      return fetchWorkdayAts(ats, source, observedAt);
+    case 'greenhouse':
+      return fetchGreenhouseAts(ats, source, observedAt);
+    case 'ashby':
+      return fetchAshbyAts(ats, source, observedAt);
+    case 'lever':
+      return fetchLeverAts(ats, source, observedAt);
+    case 'workable':
+      return fetchWorkableAts(ats, source, observedAt);
+    case 'smartrecruiters':
+      return fetchSmartRecruitersAts(ats, source, observedAt);
+    case 'dou':
+      if (html) {
+        return parseDouCompanyVacanciesHtml(html, {
+          company: source.name,
+          companySlug: ats.orgId || 'company',
+          sourceUrl: source.targetUrl,
+          observedAt,
+        });
+      }
+      return [];
+    default:
+      return [];
+  }
+}
+
+async function fetchCorporateHtml(
+  targetUrl: string,
+  fetchStealth?: typeof fetchWithStealthFallback,
+): Promise<string> {
+  try {
+    const res = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, async (signal) => {
+      return fetch(targetUrl, { headers: BROWSER_HEADERS, signal });
+    });
+    if (res.ok) return await res.text();
+    if (fetchStealth) {
+      const stealthRes = await fetchStealth(targetUrl, { headers: BROWSER_HEADERS });
+      if (stealthRes.status >= 200 && stealthRes.status < 300) return stealthRes.body;
+    }
+  } catch {
+    if (fetchStealth) {
+      try {
+        const stealthRes = await fetchStealth(targetUrl, { headers: BROWSER_HEADERS });
+        if (stealthRes.status >= 200 && stealthRes.status < 300) return stealthRes.body;
+      } catch {
+        return '';
+      }
+    }
+  }
+  return '';
+}
+
+function mapRawJobsToUnified(
+  rawJobs: ExtractedRawJob[],
+  source: VacancySourceConfig,
+  observedAt: string,
+): UnifiedVacancy[] {
+  return rawJobs.map((raw) =>
+    buildJsonVacancy({
+      sourceId: source.id,
+      context: {
+        observedAt,
+        sourceName: `${source.name} Careers`,
+        sourceUrl: raw.url,
+      },
+      externalId: raw.externalId,
+      title: raw.title,
+      company: source.name,
+      location: raw.location,
+      isRemote: raw.isRemote ?? /remote/i.test(raw.location ?? ''),
+      description: raw.description || raw.title,
+      skills: [],
+      url: raw.url,
+      publishedAt: raw.publishedAt ? fromIso(raw.publishedAt) : observedAt,
+    }),
+  );
 }
 
 /**
@@ -298,193 +663,37 @@ export async function fetchGenericCorporateVacancies(
   const targetUrl = source.targetUrl;
   const observedAt = new Date().toISOString();
 
-  let html = '';
-  try {
-    const res = await withRequestTimeout(CORPORATE_FETCH_TIMEOUT_MS, async (signal) => {
-      return fetch(targetUrl, {
-        headers: BROWSER_HEADERS,
-        signal,
-      });
-    });
-
-    if (res.ok) {
-      html = await res.text();
-    } else if (fetchStealth) {
-      const stealthRes = await fetchStealth(targetUrl, { headers: BROWSER_HEADERS });
-      if (stealthRes.status >= 200 && stealthRes.status < 300) {
-        html = stealthRes.body;
-      }
-    }
-  } catch {
-    if (fetchStealth) {
-      try {
-        const stealthRes = await fetchStealth(targetUrl, { headers: BROWSER_HEADERS });
-        if (stealthRes.status >= 200 && stealthRes.status < 300) {
-          html = stealthRes.body;
-        }
-      } catch {
-        return [];
-      }
+  const directAts = detectEmbeddedAts(targetUrl);
+  if (directAts && directAts.provider !== 'dou') {
+    try {
+      const atsJobs = await fetchFromAtsProvider(directAts, source, observedAt);
+      if (atsJobs.length > 0) return atsJobs;
+    } catch {
+      // При ошибке прямого API пробуем загрузить HTML
     }
   }
 
+  const html = await fetchCorporateHtml(targetUrl, fetchStealth);
   if (!html) return [];
 
-  // Стратегия 4: Проверяем, не ведет ли корпоративный сайт на ATS
-  const embeddedAts = detectEmbeddedAts(html);
+  const embeddedAts = detectEmbeddedAts(targetUrl + '\n' + html);
   if (embeddedAts) {
     try {
-      if (embeddedAts.provider === 'workday') {
-        const wdRes = await fetch(embeddedAts.endpointUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appliedFacets: {}, limit: 20, offset: 0, searchText: '' }),
-        });
-        if (wdRes.ok) {
-          const json = await wdRes.json();
-          const postings = json.jobPostings || [];
-          if (Array.isArray(postings) && postings.length > 0) {
-            return postings.map((job: Record<string, unknown>) => {
-              const bullets = Array.isArray(job.bulletFields) ? job.bulletFields : [];
-              const extId = String(bullets[0] || job.title || '');
-              const title = String(job.title || 'Specialist');
-              const relPath = String(job.externalPath || '');
-              const jobUrl = embeddedAts.endpointUrl.split('/wday/')[0] + relPath;
-              const location = Array.isArray(job.locationsText)
-                ? job.locationsText.join(', ')
-                : String(job.locationsText || '');
-
-              return buildJsonVacancy({
-                sourceId: source.id,
-                context: {
-                  observedAt,
-                  sourceName: `${source.name} (Workday)`,
-                  sourceUrl: jobUrl,
-                },
-                externalId: extId || jobUrl.slice(-32),
-                title,
-                company: source.name,
-                location: location || undefined,
-                isRemote: /remote/i.test(location) || /remote/i.test(title),
-                description: title,
-                skills: [],
-                url: jobUrl,
-                publishedAt: observedAt,
-              });
-            });
-          }
-        }
-      } else if (embeddedAts.provider === 'greenhouse') {
-        const ghRes = await fetch(embeddedAts.endpointUrl);
-        if (ghRes.ok) {
-          const json = await ghRes.json();
-          const jobs = json.jobs || [];
-          if (Array.isArray(jobs) && jobs.length > 0) {
-            return jobs.map((job: Record<string, unknown>) => {
-              const title = String(job.title || '');
-              const extId = String(job.id || '');
-              const jobUrl = String(job.absolute_url || '');
-              const loc = typeof job.location === 'object' && job.location !== null
-                ? String((job.location as Record<string, unknown>).name || '')
-                : '';
-
-              return buildJsonVacancy({
-                sourceId: source.id,
-                context: {
-                  observedAt,
-                  sourceName: `${source.name} (Greenhouse)`,
-                  sourceUrl: jobUrl,
-                },
-                externalId: extId,
-                title,
-                company: source.name,
-                location: loc || undefined,
-                isRemote: /remote/i.test(loc) || /remote/i.test(title),
-                description: title,
-                skills: [],
-                url: jobUrl,
-                publishedAt: String(job.updated_at || observedAt),
-              });
-            });
-          }
-        }
-      }
+      const atsJobs = await fetchFromAtsProvider(embeddedAts, source, observedAt, html);
+      if (atsJobs.length > 0) return atsJobs;
     } catch {
-      // При ошибке ATS переходим к следующим стратегиям разбора HTML
+      // Переходим к следующим стратегиям разбора HTML
     }
   }
 
-  // Стратегия 1: JSON-LD JobPosting
   const jsonLdJobs = extractJsonLdJobs(html, targetUrl);
-  if (jsonLdJobs.length > 0) {
-    return jsonLdJobs.map((raw) =>
-      buildJsonVacancy({
-        sourceId: source.id,
-        context: {
-          observedAt,
-          sourceName: `${source.name} Careers`,
-          sourceUrl: raw.url,
-        },
-        externalId: raw.externalId,
-        title: raw.title,
-        company: source.name,
-        location: raw.location,
-        isRemote: raw.isRemote ?? /remote/i.test(raw.location ?? ''),
-        description: raw.description || raw.title,
-        skills: [],
-        url: raw.url,
-        publishedAt: raw.publishedAt ? fromIso(raw.publishedAt) : observedAt,
-      }),
-    );
-  }
+  if (jsonLdJobs.length > 0) return mapRawJobsToUnified(jsonLdJobs, source, observedAt);
 
-  // Стратегия 2: Next.js __NEXT_DATA__
   const nextDataJobs = extractNextDataJobs(html, targetUrl);
-  if (nextDataJobs.length > 0) {
-    return nextDataJobs.map((raw) =>
-      buildJsonVacancy({
-        sourceId: source.id,
-        context: {
-          observedAt,
-          sourceName: `${source.name} Careers`,
-          sourceUrl: raw.url,
-        },
-        externalId: raw.externalId,
-        title: raw.title,
-        company: source.name,
-        location: raw.location,
-        isRemote: raw.isRemote ?? /remote/i.test(raw.location ?? ''),
-        description: raw.description || raw.title,
-        skills: [],
-        url: raw.url,
-        publishedAt: raw.publishedAt ? fromIso(raw.publishedAt) : observedAt,
-      }),
-    );
-  }
+  if (nextDataJobs.length > 0) return mapRawJobsToUnified(nextDataJobs, source, observedAt);
 
-  // Стратегия 3: Семантические HTML-карточки
   const semanticJobs = extractSemanticHtmlJobs(html, targetUrl);
-  if (semanticJobs.length > 0) {
-    return semanticJobs.map((raw) =>
-      buildJsonVacancy({
-        sourceId: source.id,
-        context: {
-          observedAt,
-          sourceName: `${source.name} Careers`,
-          sourceUrl: raw.url,
-        },
-        externalId: raw.externalId,
-        title: raw.title,
-        company: source.name,
-        location: raw.location,
-        isRemote: raw.isRemote ?? /remote/i.test(raw.location ?? ''),
-        description: raw.description || raw.title,
-        skills: [],
-        url: raw.url,
-        publishedAt: observedAt,
-      }),
-    );
-  }
+  if (semanticJobs.length > 0) return mapRawJobsToUnified(semanticJobs, source, observedAt);
 
   return [];
 }

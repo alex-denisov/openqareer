@@ -537,16 +537,9 @@ async function fetchHhSearchBatch(coordinator?: HhCrawlCoordinator): Promise<Sou
   };
 }
 
-async function fetchJsonOrCareerSite(
+function fetchNamedCorporateEndpoint(
   source: VacancySourceConfig,
-  options: { query?: string } | undefined,
-  deps: MultiSourceFetcherDeps,
-  sleep: (ms: number) => Promise<void>,
-  now: () => number,
-): Promise<UnifiedVacancy[] | SourceReading> {
-  if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
-    return fetchYcWorkAtStartup(source);
-  }
+): Promise<UnifiedVacancy[] | SourceReading> | null {
   const jsonEndpoint = CORPORATE_JSON_ENDPOINTS.find(
     (e) => source.id === `src-${e.id}` || source.id === e.id,
   );
@@ -574,6 +567,23 @@ async function fetchJsonOrCareerSite(
   if (linkedinTarget) {
     return fetchLinkedinCompanyVacancies(linkedinTarget);
   }
+
+  return null;
+}
+
+async function fetchJsonOrCareerSite(
+  source: VacancySourceConfig,
+  options: { query?: string } | undefined,
+  deps: MultiSourceFetcherDeps,
+  sleep: (ms: number) => Promise<void>,
+  now: () => number,
+): Promise<UnifiedVacancy[] | SourceReading> {
+  if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
+    return fetchYcWorkAtStartup(source);
+  }
+  const named = fetchNamedCorporateEndpoint(source);
+  if (named) return named;
+
   if (source.type === 'career_site' && source.id === BAYT_SOURCE_ID) {
     return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
   }
