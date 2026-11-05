@@ -163,4 +163,27 @@ describe('SqliteCompanyDirectoryRepository', () => {
 
     repo.close();
   });
+
+  it('гарантирует полноту данных всех компаний: website, careers, linkedin, geo, industry, domainGroup', () => {
+    const repo = new SqliteCompanyDirectoryRepository({
+      databasePath: ':memory:',
+      autoSeed: true,
+    });
+
+    const all = repo.listCompanies();
+    expect(all.length).toBeGreaterThan(1000);
+
+    const incomplete = all.filter(
+      (c) =>
+        !c.websiteUrl ||
+        !c.careersUrl ||
+        !c.linkedinUrl ||
+        !c.geo ||
+        !c.industry ||
+        !c.domainGroup,
+    );
+
+    expect(incomplete).toHaveLength(0);
+    repo.close();
+  });
 });
