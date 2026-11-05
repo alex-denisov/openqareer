@@ -16,3 +16,11 @@ export function isFinishedReply(message: string): boolean {
 export function preferFinishedReply(result: { readonly message: string }): boolean {
   return isFinishedReply(result.message);
 }
+
+const ASKS_IN_TEXT =
+  /\?|(?<!\p{L})(?:расскажите|вспомните|назовите|уточните|напишите|ответьте|скажите|опишите|пришлите)(?!\p{L})/iu;
+
+/** Шаг один: реплика уже что-то просит, значит второй вопрос под ней только повторяет её. */
+export function withoutSecondAsk(message: string, nextQuestion: string | null): string | null {
+  return nextQuestion !== null && ASKS_IN_TEXT.test(message) ? null : nextQuestion;
+}

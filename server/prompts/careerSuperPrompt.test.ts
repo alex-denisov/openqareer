@@ -55,7 +55,7 @@ describe('career super-prompt', () => {
     const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
     expect(compact).toContain('Не пересказывай и не цитируй профиль кандидата');
     expect(compact).toContain('не проси кандидата прислать её текст');
-    expect(CAREER_SUPER_PROMPT_REVISION).toBe('career-v1.6-2026-11-05');
+    expect(CAREER_SUPER_PROMPT_REVISION).toBe('career-v1.7-2026-11-05');
   });
 
   it('takes the current stories over what the consultant said earlier (B511 Д6)', () => {
@@ -64,5 +64,11 @@ describe('career super-prompt', () => {
     expect(compact).toContain('topicMatch=true');
     expect(compact).toContain('Не объясняй кандидату эти правила');
     expect(compact).toContain('В ответе один вопрос');
+  });
+
+  it('adds nothing to the candidate words and hides its own checks (B608)', () => {
+    const compact = CAREER_SUPER_PROMPT.replace(/\s+/g, ' ');
+    expect(compact).toContain('Не добавляй усилителей и оценок');
+    expect(compact).toContain('Не рассказывай о своих проверках');
   });
 });

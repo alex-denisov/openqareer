@@ -8,6 +8,7 @@ import {
   LETTER_OBJECT_INTRO,
   VACANCY_OBJECT_INTRO,
   applicationScreenObject,
+  consultantThread,
   letterScreenObject,
   screenTurnFor,
   sendScreenAwareTurn,
@@ -20,6 +21,7 @@ import {
   usePublishConsultantLetterDraft,
   usePublishConsultantObject,
 } from './consultantScreenTopic';
+import { latestTurnOfThread } from './consultantHistory';
 import { visibleContextLine } from './expertSheetView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -216,5 +218,28 @@ describe('строка «Видит»', () => {
     expect(visibleContextLine({ subjectKind: 'vacancy', hasMarketQuery: false })).toBe(
       'Видит: профиль, эту вакансию',
     );
+  });
+});
+
+describe('разговор панели привязан к вакансии (B608)', () => {
+  it('вакансия и компания дают свой разговор, остальное читает весь этап', () => {
+    expect(consultantThread({ kind: 'vacancy', id: 'c-1' })).toEqual({ kind: 'vacancy', id: 'c-1' });
+    expect(consultantThread({ kind: 'company', id: 'c-2' })).toEqual({ kind: 'company', id: 'c-2' });
+    expect(consultantThread({ kind: 'application', id: 'a-1' })).toBeUndefined();
+    expect(consultantThread(undefined)).toBeUndefined();
+  });
+
+  it('предложения берутся только из хода этого разговора', () => {
+    const done = (key: string, message: string) => ({
+      idempotencyKey: key,
+      status: 'completed',
+      result: { message },
+    });
+    const turns = [done('rxo', 'Ответ про RXO'), done('sber', 'Ответ про Сбербанк')];
+    const messages = [{ role: 'assistant', content: 'Ответ про RXO' }];
+    const thread = { kind: 'vacancy', id: 'rxo' } as const;
+    expect(latestTurnOfThread(turns, messages, thread)?.idempotencyKey).toBe('rxo');
+    expect(latestTurnOfThread(turns, [], thread)).toBeUndefined();
+    expect(latestTurnOfThread(turns, [], undefined)?.idempotencyKey).toBe('sber');
   });
 });

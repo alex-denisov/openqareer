@@ -109,4 +109,17 @@ describe('метки контекста в ответе консультанта
     const { result } = await provider.createTurn(stageInput, 'key');
     expect(result.message).toBe('{"status":"НЕИЗВЕСТНО","ref":"memory:abc"}');
   });
+
+  it.each([
+    ['просьба в тексте (E3)', 'Расскажите суть: что за офис и чем закончилось.', 'Что это был за офис?', null],
+    ['вопрос в тексте (F5)', 'Состоялась ли сделка? Без этого фразы не будет.', 'Была ли сделка?', null],
+    ['просьба после двоеточия (F10)', 'Чтобы понять, откуда «треть», вспомните: где это было.', 'Где это было?', null],
+    ['текст ничего не спрашивает', 'Поставьте результат в начало письма.', 'За какой срок вырос сервис?', 'За какой срок вырос сервис?'],
+  ])('следующий вопрос не повторяет текст: %s', async (_label, message, nextQuestion, expected) => {
+    const provider = new HygienicCoachProvider({
+      inner: providerReturning({ result: { message, nextQuestion }, usage: {} }),
+    });
+    const { result } = await provider.createTurn(input, 'key');
+    expect(result.nextQuestion).toBe(expected);
+  });
 });
