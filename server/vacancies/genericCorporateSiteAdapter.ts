@@ -3,6 +3,7 @@ import { buildJsonVacancy, fromIso, fromLooseDate } from './jsonVacancyRecord';
 import { parseDouCompanyVacanciesHtml } from './douVacanciesAdapter';
 import { withRequestTimeout } from './requestTimeout';
 import { fetchWithStealthFallback } from './jobspyAdapters';
+import { htmlToFeedText } from '../connectors/feedText';
 
 const CORPORATE_FETCH_TIMEOUT_MS = 15_000;
 
@@ -15,16 +16,13 @@ const BROWSER_HEADERS: Record<string, string> = {
 };
 
 function cleanText(text: string): string {
-  return text
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
-    .trim();
+  if (!text) return '';
+  return htmlToFeedText(text).replace(/\s+/gu, ' ').trim();
+}
+
+function cleanDescription(text: string): string {
+  if (!text) return '';
+  return htmlToFeedText(text).trim();
 }
 
 function extractStringValue(val: unknown): string {
@@ -85,7 +83,7 @@ function parseJsonLdJobItem(item: Record<string, unknown>, baseUrl: string): Ext
     /remote/i.test(title) ||
     /telecommute/i.test(String(item.jobLocationType || ''));
 
-  const desc = cleanText(String(item.description || title));
+  const desc = cleanDescription(String(item.description || title));
   const ident = item.identifier;
   const identValue =
     typeof ident === 'object' && ident !== null
@@ -163,7 +161,7 @@ function parseNextDataItem(item: unknown, baseUrl: string): ExtractedRawJob | nu
     url: fullUrl,
     location: loc || undefined,
     isRemote: /remote/i.test(loc) || /remote/i.test(maybeTitle),
-    description: cleanText(String(rec.description || maybeTitle)),
+    description: cleanDescription(String(rec.description || rec.content || maybeTitle)),
   };
 }
 
@@ -233,6 +231,20 @@ function extractComeetJobs(html: string, baseUrl: string): ExtractedRawJob[] {
   return jobs;
 }
 
+function extractTildaDescription(html: string, anchor: string, fallback: string): string {
+  if (!anchor.startsWith('#rec')) return fallback;
+  const recId = anchor.slice(1);
+  const startIdx = html.indexOf(`id="${recId}"`);
+  if (startIdx === -1) return fallback;
+  const tagEnd = html.indexOf('>', startIdx);
+  if (tagEnd === -1) return fallback;
+  const chunk = html.slice(tagEnd + 1, tagEnd + 4000);
+  const nextRec = chunk.indexOf('class="r t-rec', 50);
+  const recHtml = nextRec !== -1 ? chunk.slice(0, nextRec) : chunk;
+  const clean = cleanDescription(recHtml);
+  return clean.length > fallback.length ? clean : fallback;
+}
+
 function extractTildaCardJobs(html: string, baseUrl: string): ExtractedRawJob[] {
   if (!html.includes('t-card__title')) return [];
   const jobs: ExtractedRawJob[] = [];
@@ -247,12 +259,13 @@ function extractTildaCardJobs(html: string, baseUrl: string): ExtractedRawJob[] 
     const fullUrl = resolveUrl(anchor, baseUrl);
     if (seenUrls.has(fullUrl)) continue;
     seenUrls.add(fullUrl);
+    const desc = extractTildaDescription(html, anchor, title);
     jobs.push({
       externalId: fullUrl.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40),
       title,
       url: fullUrl,
-      isRemote: /remote/i.test(title),
-      description: title,
+      isRemote: /remote/i.test(title) || /remote/i.test(desc),
+      description: desc,
     });
   }
   return jobs;
@@ -322,6 +335,7 @@ export type DetectedAtsProvider =
   | 'workday'
   | 'workable'
   | 'smartrecruiters'
+  | 'recruitee'
   | 'dou';
 
 export interface DetectedAts {
@@ -390,6 +404,16 @@ const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
       provider: 'smartrecruiters',
       endpointUrl: `https://api.smartrecruiters.com/v1/companies/${m[1]}/postings`,
       orgId: m[1],
+    };
+  },
+  (text) => {
+    const m = text.match(/(?:([a-z0-9_-]+)\.recruitee\.com|recruitee\.com\/([a-z0-9_-]+))/i);
+    const slug = m?.[1] || m?.[2];
+    if (!slug || /api|assets|static|blog/i.test(slug)) return null;
+    return {
+      provider: 'recruitee',
+      endpointUrl: `https://${slug}.recruitee.com/api/offers/`,
+      orgId: slug,
     };
   },
   (text) => {
@@ -467,13 +491,14 @@ async function fetchGreenhouseAts(
   const jobs = json.jobs || [];
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
   return jobs.map((job: Record<string, unknown>) => {
-    const title = String(job.title || '');
+    const title = cleanText(String(job.title || ''));
     const extId = String(job.id || '');
     const jobUrl = String(job.absolute_url || '');
     const loc =
       typeof job.location === 'object' && job.location !== null
         ? String((job.location as Record<string, unknown>).name || '')
         : '';
+    const desc = cleanDescription(String(job.content || title));
 
     return buildJsonVacancy({
       sourceId: source.id,
@@ -483,7 +508,7 @@ async function fetchGreenhouseAts(
       company: source.name,
       location: loc || undefined,
       isRemote: /remote/i.test(loc) || /remote/i.test(title),
-      description: title,
+      description: desc,
       skills: [],
       url: jobUrl,
       publishedAt: String(job.updated_at || observedAt),
@@ -502,12 +527,12 @@ async function fetchAshbyAts(
   const jobs = json.jobs || [];
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
   return jobs.map((job: Record<string, unknown>) => {
-    const title = String(job.title || '');
+    const title = cleanText(String(job.title || ''));
     const extId = String(job.id || '');
     const jobUrl = String(job.jobUrl || job.applyUrl || `${source.targetUrl}#${extId}`);
     const loc = String(job.location || '');
     const isRemote = Boolean(job.isRemote) || /remote/i.test(loc) || /remote/i.test(title);
-    const desc = String(job.descriptionPlain || job.descriptionHtml || title);
+    const desc = cleanDescription(String(job.descriptionPlain || job.descriptionHtml || title));
 
     return buildJsonVacancy({
       sourceId: source.id,
@@ -535,7 +560,7 @@ async function fetchLeverAts(
   const jobs = await leverRes.json();
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
   return jobs.map((job: Record<string, unknown>) => {
-    const title = String(job.text || '');
+    const title = cleanText(String(job.text || ''));
     const extId = String(job.id || '');
     const jobUrl = String(job.hostedUrl || job.applyUrl || `${source.targetUrl}#${extId}`);
     const cats =
@@ -544,7 +569,14 @@ async function fetchLeverAts(
         : {};
     const loc = String(cats.location || '');
     const isRemote = /remote/i.test(loc) || /remote/i.test(title);
-    const desc = String(job.descriptionPlain || job.description || title);
+    const descBody = String(job.descriptionPlain || job.description || '');
+    const lists = Array.isArray(job.lists)
+      ? job.lists
+          .map((l: Record<string, unknown>) => `${cleanText(String(l.text || ''))}:\n${cleanDescription(String(l.content || ''))}`)
+          .join('\n\n')
+      : '';
+    const fullDesc = [descBody, lists].filter(Boolean).join('\n\n') || title;
+    const desc = cleanDescription(fullDesc);
 
     return buildJsonVacancy({
       sourceId: source.id,
@@ -573,13 +605,13 @@ async function fetchWorkableAts(
   const jobs = json.jobs || [];
   if (!Array.isArray(jobs) || jobs.length === 0) return [];
   return jobs.map((job: Record<string, unknown>) => {
-    const title = String(job.title || '');
+    const title = cleanText(String(job.title || ''));
     const extId = String(job.shortcode || job.id || '');
     const jobUrl = String(job.url || job.shortlink || `${source.targetUrl}#${extId}`);
     const loc = [job.city, job.region, job.country].filter(Boolean).join(', ');
     const isRemote = Boolean(job.telecommuting) || /remote/i.test(loc) || /remote/i.test(title);
     const descParts = [job.description, job.requirements, job.benefits].filter(Boolean).map(String);
-    const desc = descParts.join('\n\n') || title;
+    const desc = cleanDescription(descParts.join('\n\n') || title);
 
     return buildJsonVacancy({
       sourceId: source.id,
@@ -597,6 +629,65 @@ async function fetchWorkableAts(
   });
 }
 
+async function fetchRecruiteeAts(
+  ats: DetectedAts,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const res = await fetch(ats.endpointUrl);
+  if (!res.ok) return [];
+  const json = await res.json();
+  const offers = json.offers || [];
+  if (!Array.isArray(offers) || offers.length === 0) return [];
+  return offers.map((job: Record<string, unknown>) => {
+    const title = cleanText(String(job.title || ''));
+    const extId = String(job.id || job.slug || '');
+    const jobUrl = String(job.careers_url || job.careers_apply_url || `${source.targetUrl}#${extId}`);
+    const loc = String(job.location || job.city || '');
+    const isRemote = Boolean(job.remote) || /remote/i.test(loc) || /remote/i.test(title);
+    const descParts = [job.description, job.requirements].filter(Boolean).map(String);
+    const desc = cleanDescription(descParts.join('\n\n') || title);
+
+    return buildJsonVacancy({
+      sourceId: source.id,
+      context: { observedAt, sourceName: `${source.name} (Recruitee)`, sourceUrl: jobUrl },
+      externalId: extId,
+      title,
+      company: source.name,
+      location: loc || undefined,
+      isRemote,
+      description: desc,
+      skills: [],
+      url: jobUrl,
+      publishedAt: job.published_at ? fromLooseDate(String(job.published_at)) : observedAt,
+    });
+  });
+}
+
+async function fetchSmartRecruitersDetail(orgId: string, extId: string): Promise<string> {
+  try {
+    const res = await fetch(`https://api.smartrecruiters.com/v1/companies/${orgId}/postings/${extId}`);
+    if (!res.ok) return '';
+    const json = await res.json();
+    const sections =
+      json.jobAd && typeof json.jobAd === 'object'
+        ? (json.jobAd.sections as Record<string, unknown>)
+        : {};
+    return ['companyDescription', 'jobDescription', 'qualifications', 'additionalInformation']
+      .map((k) => {
+        const sec = sections[k] as Record<string, unknown> | undefined;
+        if (!sec?.text) return '';
+        const body = cleanDescription(String(sec.text));
+        const head = cleanText(String(sec.title || ''));
+        return head && body ? `${head}\n${body}` : body;
+      })
+      .filter(Boolean)
+      .join('\n\n');
+  } catch {
+    return '';
+  }
+}
+
 async function fetchSmartRecruitersAts(
   ats: DetectedAts,
   source: VacancySourceConfig,
@@ -607,8 +698,9 @@ async function fetchSmartRecruitersAts(
   const json = await srRes.json();
   const content = json.content || [];
   if (!Array.isArray(content) || content.length === 0) return [];
-  return content.map((job: Record<string, unknown>) => {
-    const title = String(job.name || '');
+  const results: UnifiedVacancy[] = [];
+  for (const job of content) {
+    const title = cleanText(String(job.name || ''));
     const extId = String(job.id || '');
     const jobUrl = `https://jobs.smartrecruiters.com/${ats.orgId}/${extId}`;
     const locObj =
@@ -617,21 +709,28 @@ async function fetchSmartRecruitersAts(
         : {};
     const loc = [locObj.city, locObj.region, locObj.country].filter(Boolean).join(', ');
     const isRemote = Boolean(locObj.remote) || /remote/i.test(loc) || /remote/i.test(title);
-
-    return buildJsonVacancy({
-      sourceId: source.id,
-      context: { observedAt, sourceName: `${source.name} (SmartRecruiters)`, sourceUrl: jobUrl },
-      externalId: extId,
-      title,
-      company: source.name,
-      location: loc || undefined,
-      isRemote,
-      description: title,
-      skills: [],
-      url: jobUrl,
-      publishedAt: String(job.releasedDate || observedAt),
-    });
-  });
+    let desc = title;
+    if (ats.orgId && extId) {
+      const detail = await fetchSmartRecruitersDetail(ats.orgId, extId);
+      if (detail) desc = detail;
+    }
+    results.push(
+      buildJsonVacancy({
+        sourceId: source.id,
+        context: { observedAt, sourceName: `${source.name} (SmartRecruiters)`, sourceUrl: jobUrl },
+        externalId: extId,
+        title,
+        company: source.name,
+        location: loc || undefined,
+        isRemote,
+        description: desc,
+        skills: [],
+        url: jobUrl,
+        publishedAt: String(job.releasedDate || observedAt),
+      }),
+    );
+  }
+  return results;
 }
 
 async function fetchFromAtsProvider(
@@ -653,6 +752,8 @@ async function fetchFromAtsProvider(
       return fetchWorkableAts(ats, source, observedAt);
     case 'smartrecruiters':
       return fetchSmartRecruitersAts(ats, source, observedAt);
+    case 'recruitee':
+      return fetchRecruiteeAts(ats, source, observedAt);
     case 'dou':
       if (html) {
         return parseDouCompanyVacanciesHtml(html, {
@@ -712,7 +813,7 @@ function mapRawJobsToUnified(
       company: source.name,
       location: raw.location,
       isRemote: raw.isRemote ?? /remote/i.test(raw.location ?? ''),
-      description: raw.description || raw.title,
+      description: cleanDescription(raw.description || raw.title),
       skills: [],
       url: raw.url,
       publishedAt: raw.publishedAt ? fromIso(raw.publishedAt) : observedAt,
