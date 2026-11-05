@@ -566,7 +566,7 @@ function VacanciesScreenContent({
           screenState.setViewMode((current) => (current === 'list' ? 'map' : 'list'))
         }
         viewMode={screenState.viewMode}
-        byFit={effectiveVacancySort(board.state.sort, input.serverSort).by === 'fit'}
+        sort={effectiveVacancySort(board.state.sort, input.serverSort)}
       />
       <CompanySelectionFilterChip
         companyName={board.state.companyName}
