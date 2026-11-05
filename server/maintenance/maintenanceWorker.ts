@@ -51,6 +51,7 @@ export interface MaintenanceEngine {
   readonly clusterKeysReady: boolean;
   /** B485: итоги каталога для сводки подборки после сведения пула. */
   refreshCatalogTotals?(observedAt: string): unknown;
+  getCatalogTotals?(): { readonly computedAt?: string } | undefined;
   readonly poolSize: number;
 }
 
@@ -186,7 +187,8 @@ export class MaintenanceWorker {
   private readonly purgeRecruiters?: () => number;
   private readonly now: () => number;
   private orphanRestUntil = 0;
-  private catalogTotalsAt = Number.NEGATIVE_INFINITY;
+  /** Время последнего расчёта итогов; `undefined`, пока не прочитано из базы. */
+  private catalogTotalsAt: number | undefined;
   private titleModelRunning = false;
   private roleLinkRunning = false;
   private lastTitleModelLogAt = 0;
@@ -304,6 +306,7 @@ export class MaintenanceWorker {
   refreshCatalogTotals(): void {
     if (this.stopped || typeof this.engine.refreshCatalogTotals !== 'function') return;
     const now = this.now();
+    this.catalogTotalsAt ??= this.storedCatalogTotalsAt();
     if (now - this.catalogTotalsAt < CATALOG_TOTALS_REFRESH_MS) return;
     this.catalogTotalsAt = now;
     const startedAt = Date.now();
@@ -320,6 +323,15 @@ export class MaintenanceWorker {
         'vacancy-catalog-totals-failed',
       );
     }
+  }
+
+  /**
+   * Прод 05.11: полный проход по кластерам идёт 30-50 с одним куском, а шёл ещё и
+   * после каждого старта. Свежие итоги в базе переживают перезапуск.
+   */
+  private storedCatalogTotalsAt(): number {
+    const computedAt = Date.parse(this.engine.getCatalogTotals?.()?.computedAt ?? '');
+    return Number.isFinite(computedAt) ? computedAt : Number.NEGATIVE_INFINITY;
   }
 
   private reportWave(outcomes: SourceSyncOutcome[]): SyncWaveReport {

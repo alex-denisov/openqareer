@@ -776,6 +776,36 @@ describe('MaintenanceWorker catalog totals (B485)', () => {
     expect(log.entries).toEqual([{ level: 'info', msg: 'vacancy-catalog-totals-written' }]);
   });
 
+  it('старт со свежими итогами в базе их не пересчитывает, а срок идёт от расчёта', () => {
+    let now = Date.parse('2026-11-05T20:10:00.000Z');
+    const refresh = vi.fn().mockReturnValue({ clusters: 10 });
+    const engine = {
+      refreshCatalogTotals: refresh,
+      getCatalogTotals: () => ({ computedAt: '2026-11-05T20:00:00.000Z' }),
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log: silentLog(), now: () => now });
+    worker.refreshCatalogTotals();
+    expect(refresh).not.toHaveBeenCalled();
+    now = Date.parse('2026-11-05T20:15:00.000Z');
+    worker.refreshCatalogTotals();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['просроченные', { computedAt: '2026-11-05T19:00:00.000Z' }],
+    ['с испорченным временем', { computedAt: 'не дата' }],
+    ['отсутствующие', undefined],
+  ])('%s итоги в базе пересчитываются сразу', (_name, stored) => {
+    const now = Date.parse('2026-11-05T20:10:00.000Z');
+    const refresh = vi.fn().mockReturnValue({ clusters: 10 });
+    const engine = {
+      refreshCatalogTotals: refresh,
+      getCatalogTotals: () => stored,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    new MaintenanceWorker({ engine, log: silentLog(), now: () => now }).refreshCatalogTotals();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+
   it('сбой пересчёта итогов пишется в журнал и не роняет волну', async () => {
     const log = silentLog();
     const engine = {
