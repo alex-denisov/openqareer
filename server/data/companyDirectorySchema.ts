@@ -22,6 +22,19 @@
 
 export const COMPANY_DIRECTORY_TABLE = 'company_directory';
 
+/**
+ * ATS boards that answered 404 on 2026-11-05. The seed only fills an empty
+ * table, so an existing database learns about them through this update.
+ */
+export const COMPANY_DIRECTORY_DEAD_ATS_BOARDS_MIGRATION = `
+UPDATE ${COMPANY_DIRECTORY_TABLE} SET status = 'dormant', updated_at = '2026-11-05T10:00:00Z'
+WHERE status = 'active' AND (ats_provider, ats_slug) IN (
+  VALUES ('greenhouse', 'amplitude'), ('recruitee', 'google'), ('recruitee', 'olx'),
+         ('greenhouse', 'outschool'), ('pinpoint', 'pinpoint'), ('greenhouse', 'postman'),
+         ('recruitee', 'samsung'), ('greenhouse', 'wayve')
+);
+`;
+
 export const COMPANY_DIRECTORY_MIGRATION = `
 CREATE TABLE IF NOT EXISTS ${COMPANY_DIRECTORY_TABLE} (
   company_key TEXT PRIMARY KEY,

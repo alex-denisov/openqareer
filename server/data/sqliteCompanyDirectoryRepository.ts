@@ -2,7 +2,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
-import { COMPANY_DIRECTORY_MIGRATION, COMPANY_DIRECTORY_TABLE } from './companyDirectorySchema';
+import {
+  COMPANY_DIRECTORY_DEAD_ATS_BOARDS_MIGRATION,
+  COMPANY_DIRECTORY_MIGRATION,
+  COMPANY_DIRECTORY_TABLE,
+} from './companyDirectorySchema';
 import defaultCompanyDirectorySeed from './companyDirectorySeed.json';
 
 export type CompanySourceType = 'corporate_portal' | 'ats_direct' | 'linkedin_guest';
@@ -130,6 +134,7 @@ export class SqliteCompanyDirectoryRepository {
       this.database = options;
       this.ownsDatabase = false;
       this.database.exec(COMPANY_DIRECTORY_MIGRATION);
+      this.database.exec(COMPANY_DIRECTORY_DEAD_ATS_BOARDS_MIGRATION);
     } else {
       if (options.databasePath !== ':memory:') {
         mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -140,6 +145,7 @@ export class SqliteCompanyDirectoryRepository {
       applySqliteBusyTimeout(this.database);
       this.database.exec('PRAGMA foreign_keys = ON;');
       this.database.exec(COMPANY_DIRECTORY_MIGRATION);
+      this.database.exec(COMPANY_DIRECTORY_DEAD_ATS_BOARDS_MIGRATION);
 
       if (options.autoSeed ?? true) {
         this.seedDefaultsIfEmpty();
