@@ -57,6 +57,7 @@ const VACANCY = {
   canonicalCompany: 'Компания',
   skills: [],
 };
+const OTHER_VACANCY = { ...VACANCY, id: 'cluster-v2', canonicalCompany: 'Другая компания' };
 
 async function harness() {
   const seen: CoachTurnInput[] = [];
@@ -91,7 +92,7 @@ async function harness() {
     candidateStore: store,
     authService: noSessions,
     serveStatic: false,
-    multiSourceVacancyEngine: { getActiveCluster: (id: string) => (id === VACANCY.id ? VACANCY : undefined) },
+    multiSourceVacancyEngine: { getActiveCluster: (id: string) => [VACANCY, OTHER_VACANCY].find((item) => item.id === id) },
   } as unknown as Parameters<typeof buildApp>[0]);
   apps.push(app);
   stores.push(store);
@@ -114,8 +115,57 @@ async function harness() {
       },
       '2026-11-01T00:00:00.000Z',
     );
-  return { seen, seenOptions, turn, addStory };
+  const messages = async (query: string) =>
+    (
+      await app.inject({
+        method: 'GET',
+        url: `/api/v1/candidate/me/messages?${query}`,
+        headers: { authorization, origin: 'http://localhost:3000' },
+      })
+    ).json().data as { role: string; content: string }[];
+  return { seen, seenOptions, turn, addStory, messages };
 }
+
+describe('разговор о вакансии (B608)', () => {
+  async function twoVacancies() {
+    const context = await harness();
+    const about = (id: string, content: string) =>
+      context.turn({ content, stage: 'vacancies', subject: { kind: 'vacancy', id } });
+    await about(VACANCY.id, 'Вопрос про первую вакансию');
+    await about(OTHER_VACANCY.id, 'Вопрос про вторую вакансию');
+    return context;
+  }
+  const said = (rows: readonly { role: string; content: string }[]) =>
+    rows.filter((row) => row.role === 'user').map((row) => row.content);
+
+  it('модель читает только разговор этой вакансии', async () => {
+    const { seen } = await twoVacancies();
+    // Сводка закрытого разговора читает его целиком: это не ответ кандидату.
+    const second = seen.filter(
+      (input) => !input.internalPurpose && said(input.messages).includes('Вопрос про вторую вакансию'),
+    );
+    expect(second.length).toBeGreaterThan(0);
+    second.forEach((input) => expect(said(input.messages)).toEqual(['Вопрос про вторую вакансию']));
+  });
+
+  it('лента вакансии отдаёт только её реплики, разговор другой остаётся на месте', async () => {
+    const { messages } = await twoVacancies();
+    const vacancy = (id: string) => `stage=vacancies&vacancy=${encodeURIComponent(id)}`;
+    expect(said(await messages(vacancy(VACANCY.id)))).toEqual(['Вопрос про первую вакансию']);
+    expect(said(await messages(vacancy(OTHER_VACANCY.id)))).toEqual(['Вопрос про вторую вакансию']);
+    expect(said(await messages('stage=vacancies'))).toEqual([
+      'Вопрос про первую вакансию',
+      'Вопрос про вторую вакансию',
+    ]);
+  });
+
+  it('ход без вакансии по-прежнему читает весь этап', async () => {
+    const { seen, turn } = await twoVacancies();
+    await turn({ content: 'Что подобрать ещё?', stage: 'vacancies' });
+    const general = seen.find((input) => said(input.messages).includes('Что подобрать ещё?'));
+    expect(said(general?.messages ?? [])).toHaveLength(3);
+  });
+});
 
 describe('контекст хода консультанта', () => {
   it('ход получает STAR-историю кандидата, и она доходит до модели', async () => {

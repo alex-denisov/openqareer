@@ -1,4 +1,5 @@
 import { CoachApiError } from '../coach/apiClient';
+import type { ConsultantThread } from '../coach/candidateSnapshotApi';
 import type { CoachTurnSubject } from '../coach/coachApi';
 import type { ConsultantScreenObject } from './consultantScreenTopic';
 
@@ -45,6 +46,13 @@ export function applicationScreenObject(applicationId: string): ConsultantScreen
     stages: ['responses'],
     subject: { kind: 'application', id: applicationId },
   };
+}
+
+/** Свой разговор есть у компании и у вакансии; остальные объекты живут в ленте этапа. */
+export function consultantThread(subject: CoachTurnSubject | undefined): ConsultantThread | undefined {
+  return subject?.kind === 'company' || subject?.kind === 'vacancy'
+    ? { kind: subject.kind, id: subject.id }
+    : undefined;
 }
 
 export interface ScreenTurn {
