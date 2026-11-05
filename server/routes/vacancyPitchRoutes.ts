@@ -78,6 +78,12 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
   return wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId).has(candidateCompanyKey(company));
 }
 
+/** Письму нужна задача роли: она в полном тексте вакансии, а не в выжимке кластера (05.11). */
+function longestText(...texts: readonly (string | undefined)[]): string | undefined {
+  const present = texts.map((text) => text?.trim() ?? '').filter(Boolean);
+  return present.length ? present.reduce((long, text) => (text.length > long.length ? text : long)) : undefined;
+}
+
 function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancyId: string,
@@ -89,7 +95,7 @@ function resolvePitchVacancy(
     title: body?.vacancy?.title ?? cluster?.canonicalTitle ?? poolVacancy?.title,
     company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
     description:
-      body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+      body?.vacancy?.description ?? longestText(poolVacancy?.fullDescription, poolVacancy?.description) ?? cluster?.descriptionSummary,
     requiredSkills:
       body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
     responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
@@ -171,7 +177,7 @@ async function writeVacancyPitch(
 ) {
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
   const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, contextMs } = context;
-  const toTranslate = letterFactsToTranslate(facts, workplaces, language);
+  const toTranslate = letterFactsToTranslate(facts, workplaces, language, Boolean(deps.coverLetterWriter));
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
   const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {

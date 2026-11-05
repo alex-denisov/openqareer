@@ -486,3 +486,27 @@ describe('letter model switch (D-F9)', () => {
     expect(buildEnabledCoverLetterWriter(credentials, true)).toBeDefined();
   });
 });
+
+describe('serializeInput: what the model reads for a letter (05.11)', () => {
+  const input = {
+    facts: [
+      { ref: 'a', statement: 'Команда выросла с 8 до 35', workplace: 'Ритейл Системс' },
+      { ref: 'b', statement: 'Единая система KPI' },
+    ],
+    vacancy: { title: 'VP', description: `<p>Run   operating reviews.</p>${'x'.repeat(5_000)}` },
+    language: 'ru' as const,
+    tone: 'executive' as const,
+  };
+
+  it('gives the vacancy text, clean and bounded', () => {
+    const { vacancy } = JSON.parse(serializeInput(input));
+    expect(vacancy.description.startsWith('Run operating reviews.')).toBe(true);
+    expect(vacancy.description.length).toBe(3_600);
+  });
+
+  it('says for each fact which workplace it belongs to, and null when none', () => {
+    const { facts } = JSON.parse(serializeInput(input));
+    expect(facts.find((fact: { ref: string }) => fact.ref === 'a').workplace).toBe('Ритейл Системс');
+    expect(facts.find((fact: { ref: string }) => fact.ref === 'b').workplace).toBeNull();
+  });
+});

@@ -241,6 +241,8 @@ class CreditGate implements VertexGate {
     }
     if (failure.status === 403) this.log(`bulk-llm vertex-forbidden reason=${text}`);
     if (!coolsStage(failure.status)) return;
+    // 05.11: Vertex остывал после отказа без причины в журнале, и её нельзя было установить.
+    if (failure.status !== 403) this.log(`bulk-llm vertex-refused status=${failure.status ?? 'none'} reason=${text}`);
     this.failures += 1;
     this.coolUntil = this.now() + Math.min(COOL_BASE_MS * 2 ** (this.failures - 1), COOL_MAX_MS);
   }

@@ -67,6 +67,8 @@ function workplaceResults<T extends LetterResultFact>(
   return [...bullets].sort((a, b) => outcomeFirst(a) - outcomeFirst(b));
 }
 
+/** «with the team growing…» держится на теме: вынесенное вперёд, оно ломает фразу (прод 05.11). */
+const DEPENDENT_TAIL = /^(?:with|as|while|when|где|при|когда)\s/iu;
 const PAST_ACTION = /(?<!\p{L})\p{L}+(?:л|ла|ли|ло|ed)(?!\p{L})/iu;
 
 /** Первая буква фразы после двоеточия: имя, аббревиатура и чужая азбука остаются как есть. */
@@ -89,20 +91,34 @@ export function resultFirst(statement: string, language: LetterLanguage): string
   const text = statement.trim().replace(/[.;,\s]+$/u, '');
   const [, head, tail] = /^([^,;]+)[,;]\s+(.+)$/u.exec(text) ?? [];
   if (!head || !tail || /\d/u.test(head) || !/\d/u.test(tail)) return text;
-  if (OUTCOME_VERB.test(head) || PAST_ACTION.test(head)) return text;
+  if (OUTCOME_VERB.test(head) || PAST_ACTION.test(head) || DEPENDENT_TAIL.test(tail)) return text;
   return `${tail} — ${lowerLetterStart(head, language)}`;
 }
 
-/** Русские пункты мест, которые английское письмо может процитировать только в переводе. */
+/** Сколько результатов без места переводить для модели: она выбирает 1–2 доказательства из этого списка. */
+const UNBOUND_RESULT_LIMIT = 4;
+
+/**
+ * Русские пункты, которые английское письмо может использовать только в переводе. Шаблон цитирует
+ * пункты мест; модели нужны и результаты без места, иначе ей не из чего выбирать (письма 2 и 4, G3d).
+ */
 export function letterFactsToTranslate<T extends LetterResultFact>(
   facts: readonly T[],
   workplaces: readonly LetterResultWorkplace[],
   language: LetterLanguage,
+  forModel = false,
 ): T[] {
   if (language !== 'en') return [];
-  return workplaceResults(facts, workplaces)
+  const bound = workplaceResults(facts, workplaces)
     .filter((fact) => hasCyrillic(fact.statement))
     .slice(0, WORKPLACE_RESULT_LIMIT);
+  if (!forModel) return bound;
+  const records = recordIds(workplaces);
+  const taken = new Set(bound.map((fact) => fact.id));
+  const others = facts
+    .filter((fact) => !taken.has(fact.id) && !records.has(fact.id) && hasCyrillic(fact.statement) && isResultFact(fact))
+    .slice(0, UNBOUND_RESULT_LIMIT);
+  return [...bound, ...others];
 }
 
 /** Факты с переведёнными формулировками: письмо и проверка фактов видят один текст. */

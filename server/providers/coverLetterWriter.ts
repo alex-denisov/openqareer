@@ -17,6 +17,7 @@ import type { ChatCompletionClient } from './roleNamer';
 import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
 import { openRouterReasoning } from './openRouterReasoning';
+import { LlmLetterFactVerifier, letterCheckStage, type LetterFactVerifier } from './letterFactVerifier';
 import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
@@ -37,6 +38,8 @@ const MAX_STATEMENT = 400;
 const MAX_TITLE = 200;
 const MAX_REQUIREMENT = 120;
 const MAX_REQUIREMENTS = 20;
+/** Хватает на задачи и требования: дальше в текстах вакансий идут условия и юридический текст. */
+const MAX_DESCRIPTION = 3_600;
 
 /** Письмо должно влезть и без рассуждения, и после JSON-обёртки. */
 export const COVER_LETTER_ANSWER_TOKENS = 1_500;
@@ -62,6 +65,8 @@ export interface CoverLetterFact {
   readonly updatedAt?: string;
   /** Кандидат подтвердил факт или он ещё ждёт подтверждения (C46, ранжирование фактов). */
   readonly status?: 'proposed' | 'confirmed' | 'corrected';
+  /** Компания, к которой факт привязан в профиле; `null` — места нет, приписывать нельзя. */
+  readonly workplace?: string | null;
 }
 
 export interface CoverLetterVacancy {
@@ -247,12 +252,18 @@ export function acceptModelBody(
   return body ? { body, stage } : { failure: { stage, kind: 'unusable_response' } };
 }
 
+function vacancyText(description: string | undefined): string {
+  return (description ?? '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, MAX_DESCRIPTION);
+}
+
 export function serializeInput(input: CoverLetterWriteInput): string {
+  const description = vacancyText(input.vacancy.description);
   const rankedFacts = rankPitchFacts(input.facts, input.vacancy, input.vacancy.rankingContext);
   return JSON.stringify({
     vacancy: {
       title: input.vacancy.title.slice(0, MAX_TITLE),
       ...(input.vacancy.company ? { company: input.vacancy.company.slice(0, MAX_TITLE) } : {}),
+      ...(description ? { description } : {}),
       requirements: (input.vacancy.requirements ?? [])
         .slice(0, MAX_REQUIREMENTS)
         .map((requirement) => requirement.slice(0, MAX_REQUIREMENT)),
@@ -263,6 +274,7 @@ export function serializeInput(input: CoverLetterWriteInput): string {
     facts: rankedFacts.slice(0, MAX_FACTS).map((fact) => ({
       ref: fact.ref,
       statement: fact.statement.slice(0, MAX_STATEMENT),
+      workplace: fact.workplace ?? null,
     })),
   });
 }
@@ -390,24 +402,40 @@ function reviewed(outcome: CoverLetterOutcome, input: CoverLetterWriteInput): Co
   return { failure: { stage: outcome.stage ?? 'unknown', kind: 'unusable_response', detail } };
 }
 
+const CHECK_UNAVAILABLE = 'letter_check_unavailable';
+
 /** Очередь ступеней письма: молчание одной — повод спросить следующую. */
 export class QueuedCoverLetterWriter implements CoverLetterWriter {
   constructor(
     private readonly stages: readonly CoverLetterWriter[],
     readonly descriptors: readonly string[] = [],
     private readonly onStageFailure: (failure: CoverLetterFailure) => void = logStageFailure,
+    private readonly verifier?: LetterFactVerifier,
   ) {}
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
     let lastFailure: CoverLetterFailure | undefined;
     for (const stage of this.stages) {
       const written = await stage.writeCoverLetter(input);
-      const outcome = reviewed(written, input);
+      const outcome = await this.verified(reviewed(written, input), input);
       if (outcome.body) return outcome;
       if (outcome.failure) this.onStageFailure(outcome.failure);
+      // Без второй проверки письма модели кандидату не показываем: следующая ступень её тоже не пройдёт.
+      if (outcome.failure?.detail?.startsWith(CHECK_UNAVAILABLE)) return { failure: outcome.failure };
       lastFailure = outcome.failure ?? lastFailure;
     }
     return lastFailure ? { failure: lastFailure } : {};
+  }
+
+  private async verified(outcome: CoverLetterOutcome, input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
+    if (!outcome.body || !this.verifier) return outcome;
+    const stage = outcome.stage ?? 'unknown';
+    const verdict = await this.verifier.verify(outcome.body, input);
+    if (verdict.status === 'supported') return outcome;
+    const detail = verdict.status === 'rejected'
+      ? `letter_check:${verdict.rules.join(',')}`
+      : `${CHECK_UNAVAILABLE}:${verdict.detail}`;
+    return { failure: { stage, kind: 'unusable_response', detail } };
   }
 }
 
@@ -437,6 +465,11 @@ export function buildCoverLetterWriter(
       stage.kind === 'vertex' ? vertexCoverLetterWriter(stage.vertex, config.vertexFetch) : writerForRoute(stage.route),
     ),
     stages.map((stage) => stage.label),
+    logStageFailure,
+    new LlmLetterFactVerifier(
+      resolveChain(MODEL_CHAINS.letterChecks, config.providerCredentials ?? {}, undefined).flatMap((stage) =>
+        stage.kind === 'route' ? [letterCheckStage(stage.route)] : []),
+    ),
   );
 }
 

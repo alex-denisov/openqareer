@@ -430,6 +430,18 @@ export function letterCareer(
   });
 }
 
+/** Какие факты подтверждены каким местом: запись о самом месте результатом не считается. */
+export function letterFactPlaces(
+  workplaces: readonly PitchWorkplace[],
+  language: PitchLanguage,
+): { readonly employer: string; readonly factIds: readonly string[] }[] {
+  return workplaces.flatMap((place) => {
+    const { employer } = workplaceParts(place, language);
+    if (!employer) return [];
+    return [{ employer, factIds: place.evidenceIds.filter((id) => id !== place.recordId) }];
+  });
+}
+
 function workplacePhrase(place: PitchWorkplace, language: PitchLanguage): WorkplacePhrase | null {
   const { title, employer } = workplaceParts(place, language);
   if (!title && !employer) return null;

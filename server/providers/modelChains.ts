@@ -76,6 +76,8 @@ export const MODEL_CHAINS = {
   /** Тексты, которые читает человек: дешёвая ступень первой, luna — запас по качеству. */
   roleNames: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   coverLetters: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
+  /** Сверка письма с профилем: дешёвая модель без размышления, Vertex не нужен (D-F9, 05.11). */
+  letterChecks: [DEEPSEEK_FLASH, LUNA],
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому

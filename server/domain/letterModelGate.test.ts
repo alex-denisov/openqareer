@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { reviewLetterBody, type LetterGateSources } from './letterModelGate';
+import { REVIEWED_LETTERS } from './letterReviewedCases.fixture';
 
 // Sentences below are the ones prod models wrote for the synthetic QA candidate on 04.11.
 const RU_SOURCES: LetterGateSources = {
@@ -198,5 +199,138 @@ describe('reviewLetterBody: what a model letter may say', () => {
   it('names a violation by its sentence and no more than once per rule and sentence', () => {
     const violations = reviewLetterBody('Выросла до 50 и 60 человек. Всё хорошо.', RU_SOURCES);
     expect(violations).toEqual([{ rule: 'number', sentence: 'Выросла до 50 и 60 человек.' }]);
+  });
+});
+
+const RU_PLACES: LetterGateSources = {
+  language: 'ru',
+  candidate: [
+    'Склад и логистика для федеральной сети магазинов, команда выросла с 8 до 35 человек',
+    'Построение операционной модели и управление изменениями',
+    'Единая система KPI для пяти направлений',
+    'Сокращение срока выполнения заказа с 12 до 7 дней',
+    'Уровень сервиса вырос с 91 до 97 %',
+  ],
+  career: [
+    'Руководитель разработки Финтех Лаб 2024–по сей день',
+    'Директор по разработке Маркет Софт 2021–2023',
+    'Руководитель разработки Ритейл Системс 2014–2021',
+  ],
+  vacancy: ['VP Operations', 'Bjak'],
+  places: [
+    { employer: 'Финтех Лаб', statements: [] },
+    { employer: 'Маркет Софт', statements: [] },
+    { employer: 'Ритейл Системс', statements: ['Склад и логистика для федеральной сети магазинов, команда выросла с 8 до 35 человек'] },
+  ],
+};
+const EN_PLACES: LetterGateSources = {
+  language: 'en',
+  candidate: [
+    'Warehouse and logistics for a nationwide retail chain, the team grew from 8 to 35 people',
+    'Building the operating model and change management',
+    'Order fulfilment time cut from 12 to 7 days',
+  ],
+  career: ['Head of Engineering Финтех Лаб 2024–present', 'Director of Engineering Маркет Софт 2021–2023', 'Head of Engineering Ритейл Системс 2014–2021'],
+  vacancy: ['VP, Operations', 'Bjak'],
+  places: [
+    { employer: 'Финтех Лаб', statements: [] },
+    { employer: 'Маркет Софт', statements: [] },
+    { employer: 'Ритейл Системс', statements: ['Warehouse and logistics for a nationwide retail chain, the team grew from 8 to 35 people'] },
+  ],
+};
+const rulesOf = (body: string, sources: LetterGateSources) => reviewLetterBody(body, sources).map((v) => v.rule);
+
+describe('reviewLetterBody: the letters CPO read on 05.11', () => {
+  for (const { letter, language, body } of REVIEWED_LETTERS) {
+    it(`letter ${letter} never reaches the candidate`, () => {
+      expect(reviewLetterBody(body, language === 'ru' ? RU_PLACES : EN_PLACES)).not.toEqual([]);
+    });
+  }
+});
+
+describe('reviewLetterBody: a result stays with its workplace', () => {
+  it('stops a number from another place or from no place', () => {
+    expect(rulesOf('В Маркет Софт срок выполнения заказа сократился с 12 до 7 дней.', RU_PLACES)).toContain('place');
+    expect(rulesOf('В Ритейл Системс уровень сервиса вырос с 91 до 97 %.', RU_PLACES)).toContain('place');
+  });
+
+  it('lets through a number bound to the named place', () => {
+    expect(rulesOf('В Ритейл Системс команда выросла с 8 до 35 человек.', RU_PLACES)).toEqual([]);
+  });
+
+  it('follows «там» and «there» to the place named before', () => {
+    const body = 'Работал в Маркет Софт. Там срок выполнения заказа сократился с 12 до 7 дней.';
+    expect(rulesOf(body, RU_PLACES)).toContain('place');
+    expect(rulesOf('The work at Маркет Софт mattered. There fulfilment time fell from 12 to 7 days.', EN_PLACES)).toContain('place');
+  });
+
+  it('«там» with no place before it names nothing the letter can back', () => {
+    expect(rulesOf('Там команда выросла с 8 до 35 человек.', RU_PLACES)).toContain('place');
+  });
+
+  it('«там, где» and «there is» are not a reference to a workplace', () => {
+    expect(rulesOf('Это важно там, где срок выполнения заказа сократился с 12 до 7 дней.', RU_PLACES)).not.toContain('place');
+    expect(rulesOf('There is a fact: fulfilment time fell from 12 to 7 days.', EN_PLACES)).not.toContain('place');
+  });
+
+  it('a record about the place itself is not a fact moved to it', () => {
+    const sources = { ...RU_PLACES, candidate: [...RU_PLACES.candidate, 'Опыт работы\nМесто: Ритейл Системс'] };
+    expect(rulesOf('В Ритейл Системс команда выросла с 8 до 35 человек.', sources)).toEqual([]);
+  });
+
+  it('stops a fact without a number moved to another place', () => {
+    const body = 'В Финтех Лаб занимаюсь операционной моделью и управлением изменениями.';
+    expect(rulesOf(body, RU_PLACES)).toContain('place');
+  });
+});
+
+describe('reviewLetterBody: type of letter', () => {
+  it('stops a list of all workplaces', () => {
+    const body = 'Работал в Финтех Лаб. До этого был в Маркет Софт. Ещё раньше в Ритейл Системс.';
+    expect(rulesOf(body, RU_PLACES)).toContain('biography');
+  });
+
+  it('stops a chronology of years', () => {
+    expect(rulesOf('С 2014 по 2021 год работал в разработке.', RU_PLACES)).toContain('biography');
+  });
+
+  it('lets a letter name the places that prove something', () => {
+    const body = 'В Ритейл Системс команда выросла с 8 до 35 человек. Единая система KPI для пяти направлений появилась в другой работе.';
+    expect(rulesOf(body, RU_PLACES)).not.toContain('biography');
+  });
+
+  it('stops text that shows how the letter was built', () => {
+    for (const body of ['Кандидату можно доверить эту задачу.', 'В фактах не указан опыт ITIL.', 'The candidate brings evidence.', 'The facts do not show ITIL.']) {
+      expect(rulesOf(body, body.startsWith('The') ? EN_PLACES : RU_PLACES)).toContain('meta');
+    }
+  });
+});
+
+describe('reviewLetterBody: correct sentences stay', () => {
+  it('a result that names no actor is not a personal claim', () => {
+    expect(rulesOf('Срок выполнения заказа сократился с 12 до 7 дней.', RU_PLACES)).toEqual([]);
+    expect(rulesOf('Уровень сервиса вырос с 91 до 97 %.', RU_PLACES)).toEqual([]);
+  });
+
+  it('what the candidate did not do is not a claim', () => {
+    expect(rulesOf('Я не управлял сетями в энергетике.', RU_PLACES)).not.toContain('ownership');
+    expect(rulesOf('I have not led a technology organization through a merger.', EN_PLACES)).not.toContain('ownership');
+  });
+
+  it('a sentence about the reader\'s job is not a claim about the candidate', () => {
+    expect(rulesOf('The role requires building owners and timelines.', EN_PLACES)).not.toContain('ownership');
+    expect(rulesOf('Роль требует управлять приоритетами группы.', RU_PLACES)).not.toContain('ownership');
+    expect(rulesOf('My role was scaling owners and timelines.', EN_PLACES)).toContain('ownership');
+  });
+
+  it('a negative situation in a fact does not void the rest of that fact', () => {
+    const fact = 'Склад не успевал за заказами: заказ шёл 12 дней. Я внедрил разбор просрочек. Срок сократился с 12 до 7 дней.';
+    const sources: LetterGateSources = { language: 'ru', candidate: [fact], career: [], vacancy: [] };
+    expect(rulesOf('Я внедрил разбор просрочек, и срок сократился с 12 до 7 дней.', sources)).toEqual([]);
+  });
+
+  it('a name from the vacancy text is not foreign', () => {
+    const sources = { ...RU_PLACES, vacancy: [...RU_PLACES.vacancy, 'Группе ActAI нужна операционная модель.'] };
+    expect(rulesOf('Первый разговор о том, как ActAI ведёт обзоры.', sources)).toEqual([]);
   });
 });

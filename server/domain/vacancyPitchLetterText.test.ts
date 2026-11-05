@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { letterFactsToTranslate, resultFirst } from './letterResults';
 import { generateVacancyPitch, type VacancyPitchInputFact } from './vacancyPitchService';
 
 const record = (id: string, statement: string): VacancyPitchInputFact => ({
@@ -102,5 +103,34 @@ describe('letter text after G3c (04.11)', () => {
   it('employers typed in quotes lose them in the English letter', () => {
     const places = [{ employer: '«Финтех Лаб»', title: 'Head of Engineering', startDate: '2024-01', endDate: null, current: true, evidenceIds: ['a'] }];
     expect(generateVacancyPitch({ vacancy: leidos, facts: [], workplaces: places }).emailPitch.body).toContain('at Финтех Лаб (2024');
+  });
+});
+
+describe('resultFirst: a dependent tail stays behind its subject (05.11)', () => {
+  it('keeps the order of an English fact with a participle tail', () => {
+    const fact = 'Warehouse and logistics for a nationwide retail chain, with the team growing from 8 to 35 people';
+    expect(resultFirst(fact, 'en')).toBe(fact);
+  });
+
+  it('still moves an independent result forward', () => {
+    expect(resultFirst('Склад и логистика для сети, команда выросла с 8 до 35 человек', 'ru')).toBe('команда выросла с 8 до 35 человек — склад и логистика для сети');
+  });
+});
+
+describe('letterFactsToTranslate: an English letter from a Russian profile', () => {
+  const fact = (id: string, statement: string) => ({ id, statement, domain: 'outcome' });
+  const facts = [fact('rec', 'Руководитель, 2014'), fact('a', 'Срок сократился с 12 до 7 дней'), fact('b', 'Единая система KPI для пяти направлений'), fact('c', 'Already in English 5')];
+  const places = [{ recordId: 'rec', evidenceIds: ['rec', 'a'] }];
+
+  it('the template translates only workplace results', () => {
+    expect(letterFactsToTranslate(facts, places, 'en').map((item) => item.id)).toEqual(['a']);
+  });
+
+  it('the model also gets results without a workplace to choose from', () => {
+    expect(letterFactsToTranslate(facts, places, 'en', true).map((item) => item.id)).toEqual(['a', 'b']);
+  });
+
+  it('a Russian letter translates nothing', () => {
+    expect(letterFactsToTranslate(facts, places, 'ru', true)).toEqual([]);
   });
 });
