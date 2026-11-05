@@ -27,7 +27,9 @@ async function resolveSlug(slug: string, context: BrowserContext): Promise<strin
     const content = await page.content();
 
     const matches = Array.from(
-      content.matchAll(/urn:li:(?:organization|fsd_company|company):\(?(\d+)/gu),
+      content.matchAll(
+        /(?:urn:li:(?:organization|fsd_company|company):\(?|currentCompany%22%3A%22|currentCompany%3A)(\d+)/gu,
+      ),
     ).map((m) => m[1]);
 
     if (matches.length > 0) {

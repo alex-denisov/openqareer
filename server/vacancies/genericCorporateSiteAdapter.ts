@@ -86,9 +86,14 @@ function parseJsonLdJobItem(item: Record<string, unknown>, baseUrl: string): Ext
     /telecommute/i.test(String(item.jobLocationType || ''));
 
   const desc = cleanText(String(item.description || title));
-  const extId =
-    String(item.identifier?.value || item.identifier || '') ||
-    resolved.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40);
+  const ident = item.identifier;
+  const identValue =
+    typeof ident === 'object' && ident !== null
+      ? String((ident as Record<string, unknown>).value || '')
+      : typeof ident === 'string'
+        ? ident
+        : '';
+  const extId = identValue || resolved.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40);
 
   return {
     externalId: extId,
