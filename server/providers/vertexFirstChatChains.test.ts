@@ -7,7 +7,6 @@ import { SqliteBulkLlmLedger } from '../data/sqliteBulkLlmLedger';
 import { buildExperienceFactRewriter } from './experienceFactRewriter';
 import { createMeteredVertexFetch } from './meteredVertexFetch';
 import { chainStageLabel, MODEL_CHAINS } from './modelChains';
-import { buildSkillQuizModel } from './skillQuizModel';
 import { VERTEX_CHAT_TIMEOUTS_MS } from './vertexChatTimeouts';
 import { createVertexGate, type VertexCreditConfig } from './vertexCredit';
 import type { VertexConfig } from './vertexAi';
@@ -78,17 +77,14 @@ function metered(
 
 const labels = (mechanic: keyof typeof MODEL_CHAINS) => MODEL_CHAINS[mechanic].map(chainStageLabel);
 
-describe('цепочки квиза и пунктов: Vertex первым, диалог и разбор резюме без него (04.11)', () => {
-  it.each(['skillQuizzes', 'experienceBullets'] as const)(
-    '%s: Vertex первой ступенью, прочие прежние и в прежнем порядке',
-    (mechanic) => {
-      const stages = labels(mechanic);
-      expect(stages[0]).toBe('vertex');
-      expect(stages.filter((label) => label === 'vertex')).toHaveLength(1);
-    },
-  );
+describe('цепочка пунктов: Vertex первым; диалог, разбор резюме и квиз без него (05.11)', () => {
+  it('experienceBullets: Vertex первой ступенью, прочие прежние и в прежнем порядке', () => {
+    const stages = labels('experienceBullets');
+    expect(stages[0]).toBe('vertex');
+    expect(stages.filter((label) => label === 'vertex')).toHaveLength(1);
+  });
 
-  it.each(['coach', 'coachFree', 'resumeParsing'] as const)('%s: без Vertex', (mechanic) => {
+  it.each(['coach', 'coachFree', 'resumeParsing', 'skillQuizzes'] as const)('%s: без Vertex', (mechanic) => {
     expect(labels(mechanic)).not.toContain('vertex');
   });
 
@@ -102,7 +98,7 @@ describe('цепочки квиза и пунктов: Vertex первым, ди
       'openrouter:z-ai/glm-5.3-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
     ]);
-    expect(labels('skillQuizzes').slice(1)).toEqual(labels('coach'));
+    expect(labels('skillQuizzes')).toEqual(labels('coach'));
     expect(labels('resumeParsing')).toEqual([
       'openai:gpt-5.6-luna',
       'openrouter:deepseek/deepseek-v4.1-flash',
@@ -115,59 +111,11 @@ describe('цепочки квиза и пунктов: Vertex первым, ди
   });
 
   it('потолки Vertex: кандидату хватает времени на следующую ступень', () => {
-    expect(VERTEX_CHAT_TIMEOUTS_MS.skillQuizzes).toBe(25_000);
     expect(VERTEX_CHAT_TIMEOUTS_MS.experienceBullets).toBe(30_000);
   });
 });
 
 describe('квиз, пункты: ступень Vertex', () => {
-  const quiz = {
-    questions: Array.from({ length: 8 }, (_, index) => ({
-      question: `Что выберете в ситуации ${index}?`,
-      options: ['Первое', 'Второе', 'Третье', 'Четвёртое'],
-      correctOptionIndex: index % 4,
-      explanation: 'Так принято в практике.',
-    })),
-  };
-
-  it('квиз: ответ Vertex принят, задача skillQuizzes', async () => {
-    const { gate, ledger } = gateAndLedger();
-    const calls: Call[] = [];
-    const model = buildSkillQuizModel({
-      providerCredentials: credentials,
-      vertex,
-      vertexFetch: metered(gate, 'skillQuizzes', transport(JSON.stringify(quiz), calls)),
-    })!;
-    const questions = await model.generate({ skill: 'Excel', level: 'middle' });
-    expect(questions).toHaveLength(8);
-    const config = calls[0]!.body.generationConfig as Record<string, unknown>;
-    expect(config.thinkingConfig).toEqual({ thinkingLevel: 'low' });
-    expect(config.maxOutputTokens).toBe(6_000 + 4_096);
-    expect(ledger.db.prepare("SELECT task FROM bulk_llm_spend WHERE provider='gemini'").all()).toEqual([
-      { task: 'skillQuizzes' },
-    ]);
-  });
-
-  it('квиз: негодный ответ Vertex ведёт к следующей ступени без ошибки', async () => {
-    const { gate } = gateAndLedger();
-    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
-      if (String(url).includes('aiplatform')) return Response.json({ candidates: [{ content: { parts: [{ text: '{"questions":[]}' }] } }] });
-      return Response.json({ choices: [{ message: { content: JSON.stringify(quiz) } }] });
-    });
-    const real = globalThis.fetch;
-    globalThis.fetch = fetchImpl as never;
-    try {
-      const model = buildSkillQuizModel({
-        providerCredentials: credentials,
-        vertex,
-        vertexFetch: metered(gate, 'skillQuizzes', transport('{"questions":[]}')),
-      })!;
-      await expect(model.generate({ skill: 'Excel', level: 'middle' })).resolves.toHaveLength(8);
-    } finally {
-      globalThis.fetch = real;
-    }
-  });
-
   it('пункты: Vertex первая ступень, ответ читается теми же проверками', async () => {
     const { gate, ledger } = gateAndLedger();
     const answer = {

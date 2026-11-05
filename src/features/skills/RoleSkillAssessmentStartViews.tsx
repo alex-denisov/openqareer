@@ -222,20 +222,16 @@ export function EmptyState({
 
 export function StartState({
   current,
-  consent,
   busy,
   howItWorksOpen,
   onToggleHowItWorks,
-  onConsent,
   onStart,
   onLater,
 }: {
   current: Extract<RoleSkillAssessmentCurrent, { state: 'ready' }>;
-  consent: boolean;
   busy: boolean;
   howItWorksOpen: boolean;
   onToggleHowItWorks: () => void;
-  onConsent: (value: boolean) => void;
   onStart: () => void;
   onLater: () => void;
 }) {
@@ -248,15 +244,7 @@ export function StartState({
       </p>
       <HowItWorks open={howItWorksOpen} onToggle={onToggleHowItWorks} />
       <StartNotice />
-      <label className="career-role-assessment-consent">
-        <input
-          type="checkbox"
-          checked={consent}
-          onChange={(event) => onConsent(event.currentTarget.checked)}
-        />
-        <span>Согласен передать ответы модели для проверки по критериям.</span>
-      </label>
-      <StartAction consent={consent} busy={busy} onStart={onStart} onLater={onLater} />
+      <StartAction busy={busy} onStart={onStart} onLater={onLater} />
     </section>
   );
 }
@@ -330,12 +318,10 @@ function StartNotice() {
 }
 
 export function StartAction({
-  consent,
   busy,
   onStart,
   onLater,
 }: {
-  consent: boolean;
   busy: boolean;
   onStart: () => void;
   onLater: () => void;
@@ -345,7 +331,7 @@ export function StartAction({
       <button
         className="career-primary-button"
         type="button"
-        disabled={!consent || busy}
+        disabled={busy}
         onClick={onStart}
       >
         <ArrowRight size={17} aria-hidden="true" /> {busy ? 'Готовим проверку…' : 'Начать проверку'}

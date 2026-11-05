@@ -69,7 +69,7 @@ export class RoleSkillAssessmentActions {
   };
 
   start = async (): Promise<void> => {
-    if (!this.state.consent || this.busyRef.current) return;
+    if (this.busyRef.current) return;
     this.setBusy(true);
     this.patch({ error: undefined });
     try {
@@ -77,7 +77,6 @@ export class RoleSkillAssessmentActions {
         type: 'current',
         current: await startRoleSkillAssessment(this.roleTitle, this.focus),
       });
-      this.patch({ consent: false });
     } catch (reason) {
       this.patch({ error: apiErrorMessage(reason, 'Не удалось начать проверку.') });
     } finally {

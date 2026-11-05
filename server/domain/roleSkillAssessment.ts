@@ -224,7 +224,8 @@ const roleSkillAssessmentRunSchema = z
     roleTitle: z.string().trim().min(1).max(200),
     roleVersion: z.number().int().positive(),
     status: z.enum(['dialogue', 'suggestions', 'cases', 'complete', 'model_error']),
-    consentedAt: z.string().datetime(),
+    /** Only on runs started while the screen still asked for the checkbox (removed 05.11). */
+    consentedAt: z.string().datetime().optional(),
     startedAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     completedAt: z.string().datetime().nullable(),

@@ -56,16 +56,12 @@ export function FocusInsufficientState({
 /** A previous check is on screen; the offer starts a new one for these skills. */
 export function FocusStartCard({
   focus,
-  consent,
   busy,
-  onConsent,
   onStart,
   onLater,
 }: {
   focus: SkillCheckFocus;
-  consent: boolean;
   busy: boolean;
-  onConsent: (value: boolean) => void;
   onStart: () => void;
   onLater: () => void;
 }) {
@@ -75,15 +71,7 @@ export function FocusStartCard({
       <p className="career-role-assessment-lead">
         Около 20 минут: короткий диалог и кейсы по этим навыкам из вакансий роли.
       </p>
-      <label className="career-role-assessment-consent">
-        <input
-          type="checkbox"
-          checked={consent}
-          onChange={(event) => onConsent(event.currentTarget.checked)}
-        />
-        <span>Согласен передать ответы модели для проверки по критериям.</span>
-      </label>
-      <StartAction consent={consent} busy={busy} onStart={onStart} onLater={onLater} />
+      <StartAction busy={busy} onStart={onStart} onLater={onLater} />
     </section>
   );
 }

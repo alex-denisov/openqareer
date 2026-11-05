@@ -248,23 +248,11 @@
   line-height: 1.55;
 }
 
-.career-role-assessment-consent {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-3);
-  min-height: var(--career-target-min);
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-  line-height: 1.45;
-  cursor: pointer;
-}
-
-.career-role-assessment-consent input,
 .career-role-assessment-suggestion input {
   flex: 0 0 auto;
   width: var(--career-space-5);
   height: var(--career-space-5);
-  margin: 0;
+  margin: var(--career-space-1) 0 0;
   accent-color: var(--career-accent);
 }
 
@@ -471,10 +459,6 @@
   border-radius: var(--career-radius-md);
   padding: var(--career-space-3);
   background: var(--career-surface);
-}
-
-.career-role-assessment-suggestion input {
-  margin-top: var(--career-space-1);
 }
 
 .career-role-assessment-suggestion-number {

@@ -52,7 +52,7 @@ describe('role for the skill check without «Стратегия»', () => {
       method: 'POST',
       url: START_PATH,
       headers: mutationHeaders(rig, rig.otherCandidate),
-      payload: { consent: true },
+      payload: {},
     });
 
     expect(started.statusCode).toBe(200);

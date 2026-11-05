@@ -247,15 +247,13 @@ const app = await buildApp({
     vertex: config.vertex,
     vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'campaignRoles'),
   }),
+  // В журнал: какая ступень ответила на вопросы квиза и за сколько.
   skillQuizModel: buildSkillQuizModel({
     providerCredentials: config.providerCredentials,
-    vertex: config.vertex,
-    vertexFetch: meteredVertexFetchFor(
-      config.vertex,
-      config.databasePath,
-      'skillQuizzes',
-      VERTEX_CHAT_TIMEOUTS_MS.skillQuizzes,
-    ),
+    onStage: (event) =>
+      process.stdout.write(
+        `${JSON.stringify({ level: event.outcome === 'answered' ? 30 : 40, time: Date.now(), msg: 'skill-quiz-stage', ...event })}\n`,
+      ),
   }),
   // Письмо пишет модель по своей цепочке, шаблон остаётся запасом (B266, пункт 7).
   coverLetterWriter: buildEnabledCoverLetterWriter({

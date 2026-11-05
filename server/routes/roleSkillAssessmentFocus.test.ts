@@ -139,7 +139,7 @@ async function rig(poolSize = 8, withStrategy = true) {
       method: 'POST',
       url: START_PATH,
       headers: { authorization: `Bearer ${candidate.accessToken}`, origin: ORIGIN },
-      payload: { consent: true, ...(role ? { role } : {}), focus },
+      payload: { ...(role ? { role } : {}), focus },
     });
   return { start };
 }

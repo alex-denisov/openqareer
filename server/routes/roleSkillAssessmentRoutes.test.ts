@@ -22,6 +22,19 @@ import {
 } from './roleSkillAssessmentRouteTestRig';
 
 describe('B461 role skill assessment routes', () => {
+  it('starts without any consent field and records no consent for the new run', async () => {
+    const rig = await createRig(8);
+    const started = await rig.app.inject({
+      method: 'POST',
+      url: START_PATH,
+      headers: headersFor(rig.candidate),
+      payload: {},
+    });
+    expect(started.statusCode).toBe(200);
+    expect(runFrom(started).consentedAt).toBeUndefined();
+    expect(rig.provider.createTurn).not.toHaveBeenCalled();
+  });
+
   it('requires candidate auth and CSRF, then enforces the 7/8 fresh-vacancy boundary', async () => {
     const rig = await createRig(7);
     const unauthorized = await rig.app.inject({
@@ -43,15 +56,7 @@ describe('B461 role skill assessment routes', () => {
     });
     expect(csrfRejected.statusCode).toBe(403);
 
-    const consentRejected = await rig.app.inject({
-      method: 'POST',
-      url: START_PATH,
-      headers: headersFor(rig.candidate),
-      payload: { consent: false },
-    });
-    expect(consentRejected.statusCode).toBeGreaterThanOrEqual(400);
-    expect(rig.provider.createTurn).not.toHaveBeenCalled();
-
+    // An open tab or an installed .app still sends the old field; it no longer decides anything.
     const tooFew = await rig.app.inject({
       method: 'POST',
       url: START_PATH,
@@ -340,7 +345,7 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
       method: 'POST',
       url: START_PATH,
       headers: mutationHeaders(rig),
-      payload: { consent: true, role: OTHER_ROLE },
+      payload: { role: OTHER_ROLE },
     });
     expect(started.statusCode).toBe(200);
     expect(runFrom(started).roleTitle).toBe(OTHER_ROLE);
@@ -367,7 +372,7 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
       method: 'POST',
       url: START_PATH,
       headers: mutationHeaders(rig),
-      payload: { consent: true, role: OTHER_ROLE },
+      payload: { role: OTHER_ROLE },
     });
     const run = runFrom(started);
     const before = await rig.app.inject({
@@ -405,7 +410,7 @@ describe('B445 skill check for the role pressed on «Карьера»', () => {
       method: 'POST',
       url: START_PATH,
       headers: mutationHeaders(rig),
-      payload: { consent: true, role: OTHER_ROLE },
+      payload: { role: OTHER_ROLE },
     });
     const run = runFrom(started);
     const [first, second, ...rest] = run.skills;

@@ -74,7 +74,6 @@ function createAssessmentRun(): RoleSkillAssessmentRun {
     roleTitle: assessmentRole,
     roleVersion: 1,
     status: 'dialogue',
-    consentedAt: now,
     startedAt: now,
     updatedAt: now,
     completedAt: null,

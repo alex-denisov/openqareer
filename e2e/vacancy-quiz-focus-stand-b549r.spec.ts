@@ -28,7 +28,6 @@ test('B549-r stand: «Пройти квиз по Kafka и Kubernetes» → the c
 
   const check = page.getByTestId('role-skill-assessment');
   await expect(check).not.toContainText('Требований пока недостаточно');
-  await page.getByLabel('Согласен передать ответы модели для проверки по критериям.').check();
   const started = page.waitForResponse((response) =>
     response.url().endsWith('/role-skill-assessments/start'),
   );

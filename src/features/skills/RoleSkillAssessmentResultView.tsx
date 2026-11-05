@@ -12,11 +12,9 @@ const GRADE_LABELS = {
 export function ResultState(props: {
   run: AssessmentRun;
   stale: boolean;
-  consent: boolean;
   busy: boolean;
   reviewingCase?: boolean;
   focusedSkillId?: string;
-  onConsent: (value: boolean) => void;
   onRefresh: () => void;
   onOpenOpportunities: () => void;
   onOpenRoles: () => void;
@@ -66,14 +64,6 @@ function ResultSummary(props: Parameters<typeof ResultState>[0] & { openRole: bo
         {props.run.readiness.confirmedCount} из 5 навыков подтверждены.{' '}
         {resultExplanation(props.run.readiness.missingKeySkillIds, props.openRole)}
       </p>
-      <label className="career-role-assessment-consent">
-        <input
-          type="checkbox"
-          checked={props.consent}
-          onChange={(event) => props.onConsent(event.currentTarget.checked)}
-        />
-        <span>Согласен передать ответы модели для новой проверки.</span>
-      </label>
       {!props.reviewingCase ? <ResultActions {...props} /> : null}
     </div>
   );
@@ -91,7 +81,7 @@ function ResultActions(props: Parameters<typeof ResultState>[0] & { openRole: bo
     <button
       className={props.openRole ? 'career-quiet-button' : 'career-primary-button'}
       type="button"
-      disabled={props.busy || !props.consent}
+      disabled={props.busy}
       onClick={props.onRefresh}
     >
       Освежить навыки
