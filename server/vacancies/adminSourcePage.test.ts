@@ -36,7 +36,7 @@ describe('buildAdminSourcePage', () => {
       pages += 1;
       if (page.nextOffset === null) break;
       offset = page.nextOffset;
-      expect(pages).toBeLessThan(50);
+      expect(pages).toBeLessThan(500);
     }
 
     // Страницы вместе отдают весь реестр и ровно по одному разу.

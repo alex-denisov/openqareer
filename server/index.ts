@@ -41,6 +41,7 @@ import { SqliteRoleNamingCache } from './data/sqliteRoleNamingCache';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
+import { SqliteCompanyDirectoryRepository } from './data/sqliteCompanyDirectoryRepository';
 import { buildRecruiterVacancyInput } from './outreach/recruiterIntelligenceInput';
 import { runRecruiterIntelligenceJobs } from './outreach/recruiterIntelligenceWorker';
 import { SqliteLinkedinPoolRepository } from './linkedinPool/sqliteLinkedinPoolRepository';
@@ -169,6 +170,9 @@ const candidateReputationRepo = new SqliteCandidateReputationRepository({
 const searchConsentRepo = new SqliteSearchConsentRepository({
   databasePath: config.databasePath,
 });
+const companyDirectoryRepo = new SqliteCompanyDirectoryRepository({
+  databasePath: config.databasePath,
+});
 const linkedinPool = new SqliteLinkedinPoolRepository({
   databasePath: config.databasePath,
   encryptionKey: config.dataEncryptionKey,
@@ -200,6 +204,7 @@ const app = await buildApp({
   recruiterContactsRepo,
   candidateReputationRepo,
   searchConsentRepo,
+  companyDirectoryRepo,
   linkedinPool,
   linkedinRemoteLogin,
   matchedPoolPrecompute,
@@ -393,6 +398,7 @@ async function shutdown(signal: string): Promise<void> {
   recruiterContactsRepo.close();
   candidateReputationRepo.close();
   searchConsentRepo.close();
+  companyDirectoryRepo.close();
   linkedinPool.close();
   process.exit(0);
 }
