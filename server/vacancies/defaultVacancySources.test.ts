@@ -90,6 +90,10 @@ describe('registry of vacancy sources', () => {
       .sort();
     expect(overridden).toEqual([
       'ats-smartrecruiters-BoschGroup',
+      'ats-smartrecruiters-Exinity',
+      'ats-smartrecruiters-grintern',
+      'ats-smartrecruiters-improvado',
+      'ats-smartrecruiters-kadmos',
       'ats-smartrecruiters-visa',
       'remotive',
       'src-indeed',
