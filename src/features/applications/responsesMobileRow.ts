@@ -1,3 +1,4 @@
+import { formatInterviewDay, formatInterviewWhen } from '../../../shared/interviewDate';
 import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import { needsResend } from './responseCardFace';
@@ -39,7 +40,7 @@ export function mobileDueDate(
     const date = new Date(interviewAt);
     return {
       dateTime: interviewAt,
-      label: sameLocalDay(date, now) ? 'сегодня' : shortDate(interviewAt),
+      label: sameLocalDay(date, now) ? 'сегодня' : (formatInterviewDay(interviewAt) ?? ''),
     };
   }
   const dueAt = application.followUp?.dueAt;
@@ -57,18 +58,6 @@ function datedLabel(label: string, value: string | null | undefined): string {
   return date ? label + ' ' + date : label;
 }
 
-function formatInterviewDateTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? ''
-    : date.toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-}
-
 export function mobileStatusLabel(application: ApplicationView): string {
   const stage = application.stage;
   if (stage === 'saved') return 'Черновик';
@@ -83,7 +72,7 @@ export function mobileStatusLabel(application: ApplicationView): string {
   if (stage === 'interview') {
     // The stage-change date is not the interview date (B511 G3b item 4): without a
     // slot the row says so, in the same words as the 1440 status pill.
-    const when = formatInterviewDateTime(application.nearestInterview?.scheduledAt ?? '');
+    const when = formatInterviewWhen(application.nearestInterview?.scheduledAt);
     return when ? 'Интервью ' + when : 'Интервью, дата не указана';
   }
   const labels = {

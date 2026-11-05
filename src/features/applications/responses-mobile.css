@@ -153,66 +153,46 @@
     block-size: var(--career-space-5);
   }
 
+  /* Макет 5 `filters` / `stagef`: a sheet from the bottom. A <dialog> keeps its own
+     `inset-block-start: 0`, which beats the bottom edge until it is reset. */
   .career-responses-filter-dialog {
     position: fixed;
     inset-inline: 0;
-    inset-block-end: 0;
+    inset-block: auto 0;
     inline-size: 100%;
     max-inline-size: none;
     max-block-size: calc(100dvh - var(--career-space-4));
     overflow: auto;
     margin: 0;
-    border: var(--career-border-width) solid var(--career-line-strong);
-    border-block-end: 0;
-    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
-    padding: var(--career-space-5);
+    border: 0;
+    border-radius: 28px 28px 0 0;
+    padding: var(--career-space-2) var(--career-space-4)
+      calc(max(env(safe-area-inset-bottom), 34px) + var(--career-space-5));
     color: var(--career-text);
-    background: var(--career-surface-raised);
+    background: var(--career-bg-elevated);
+    box-shadow: inset 0 1px 0 color-mix(in oklch, white 14%, transparent);
+  }
+
+  .career-responses-filter-dialog:focus {
+    outline: none;
   }
 
   .career-responses-filter-dialog::backdrop {
-    background: var(--career-bg);
-    opacity: 0.72;
+    background: color-mix(in oklch, black 50%, transparent);
   }
 
-  .career-responses-filter-dialog form {
-    display: grid;
-    gap: var(--career-space-4);
-  }
-
-  .career-responses-filter-dialog h2 {
-    margin: 0;
-    color: var(--career-text);
-    font-size: var(--career-text-lg);
-    font-weight: 600;
-  }
-
-  .career-responses-filter-fields {
+  .career-responses-filter-dialog form,
+  .career-responses-stage-sheet {
     display: grid;
     gap: var(--career-space-3);
   }
 
-  .career-responses-filter-field {
-    display: grid;
-    gap: var(--career-space-2);
-    min-inline-size: 0;
-  }
-
-  .career-responses-filter-field label {
-    color: var(--career-text-soft);
-    font-size: var(--career-text-xs);
-  }
-
-  .career-responses-filter-field select {
-    inline-size: 100%;
-    min-inline-size: 0;
-    min-block-size: var(--career-target-min);
-    border: var(--career-border-width) solid var(--career-line-strong);
-    border-radius: var(--career-radius-sm);
-    padding-inline: var(--career-space-3);
-    color: var(--career-text);
-    background: var(--career-surface);
-    font: inherit;
+  .career-responses-filter-grab {
+    inline-size: 36px;
+    block-size: 5px;
+    margin: var(--career-space-1) auto;
+    border-radius: 3px;
+    background: color-mix(in oklch, white 24%, transparent);
   }
 
   .career-responses-filter-head {
@@ -222,40 +202,76 @@
     gap: var(--career-space-2);
   }
 
-  .career-responses-filter-head .career-btn {
+  .career-responses-filter-dialog h2 {
+    margin: 0;
+    color: var(--career-text);
+    font-size: var(--career-text-lg);
+    font-weight: 700;
+  }
+
+  .career-responses-filter-text {
     min-block-size: var(--career-target-min);
+    border: 0;
+    padding: 0 var(--career-space-4);
+    color: var(--career-text-soft);
+    background: none;
+    font: inherit;
+    font-size: var(--career-text-md);
+    cursor: pointer;
   }
 
-  .career-responses-filter-actions {
+  .career-responses-filter-show {
+    min-block-size: 50px;
+    border: 0;
+    border-radius: 25px;
+    padding: 0 var(--career-space-5);
+    color: var(--career-bg);
+    background: var(--career-accent);
+    font: inherit;
+    font-size: var(--career-text-md);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .career-responses-filter-list,
+  .career-responses-stage-options {
     display: grid;
+    margin: 0;
+    border-radius: 20px;
+    padding: 0;
+    overflow: hidden;
+    background: var(--career-surface);
   }
 
-  .career-responses-filter-actions .career-btn {
-    min-block-size: calc(var(--career-target-min) + var(--career-space-1));
-    border-radius: var(--career-radius-pill);
-  }
-
-  /* Макет 5 `filters` / `stagef`: grouped rows and the «Этап» radio sheet. */
   .career-responses-filter-row,
   .career-responses-stage-option {
+    position: relative;
     display: grid;
     align-items: center;
     gap: var(--career-space-3);
     inline-size: 100%;
     min-inline-size: 0;
-    min-block-size: var(--career-target-min);
-    border: var(--career-border-width) solid var(--career-line);
-    border-radius: var(--career-radius-md);
-    padding: var(--career-space-3) var(--career-space-4);
+    min-block-size: 56px;
+    border: 0;
+    padding: var(--career-space-2) var(--career-space-4);
     color: var(--career-text);
-    background: var(--career-surface);
+    background: transparent;
     font: inherit;
     text-align: start;
     cursor: pointer;
   }
 
+  .career-responses-filter-row + .career-responses-filter-row::before,
+  .career-responses-stage-option + .career-responses-stage-option::before {
+    content: '';
+    position: absolute;
+    inset-inline: 56px 0;
+    inset-block-start: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
   .career-responses-filter-row {
-    grid-template-columns: var(--career-space-8) minmax(0, 1fr) auto var(--career-space-4);
+    grid-template-columns: var(--career-space-8) minmax(0, 1fr) auto 14px;
   }
 
   .career-responses-filter-row-icon {
@@ -263,76 +279,73 @@
     place-items: center;
     inline-size: var(--career-space-8);
     block-size: var(--career-space-8);
-    border-radius: var(--career-radius-sm);
+    border-radius: 9px;
     color: var(--career-text-soft);
-    background: var(--career-surface-raised);
+    background: color-mix(in oklch, white 7%, transparent);
   }
 
-  .career-responses-filter-row-icon svg,
+  .career-responses-filter-row-icon svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+
   .career-responses-filter-row-caret {
-    inline-size: var(--career-space-4);
-    block-size: var(--career-space-4);
-    color: var(--career-text-soft);
+    inline-size: 14px;
+    block-size: 14px;
+    color: var(--career-text-dim);
   }
 
-  .career-responses-filter-row-label {
-    font-weight: 600;
+  .career-responses-filter-row-label,
+  .career-responses-stage-option-label {
+    font-size: var(--career-text-md);
+    font-weight: 500;
   }
 
   .career-responses-filter-row-value,
   .career-responses-stage-option-count {
     color: var(--career-text-soft);
     font-size: var(--career-text-sm);
+    white-space: nowrap;
   }
 
-  .career-responses-stage-sheet {
-    display: grid;
-    gap: var(--career-space-4);
+  .career-responses-stage-option {
+    grid-template-columns: 20px minmax(0, 1fr) auto;
   }
 
-  .career-responses-stage-options {
-    display: grid;
-    margin: 0;
-    border: var(--career-border-width) solid var(--career-line);
-    border-radius: var(--career-radius-md);
-    padding: 0;
-    overflow: hidden;
-    background: var(--career-surface);
-  }
-
-  .career-responses-stage-options .career-responses-stage-option {
-    display: grid;
-    grid-template-columns: 18px minmax(0, 1fr) auto;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .career-responses-stage-option + .career-responses-stage-option {
-    border-block-start: var(--career-border-width) solid var(--career-line);
-  }
-
-  /* The shell draws the radio itself (career-shell.css); only keep it at its own size. */
-  .career-responses-stage-options .career-responses-stage-option input[type='radio'] {
+  /* Макет 5 `.om-rd`: a thin ring, a dot when chosen; replaces the shell's radio here. */
+  .career-responses-filter-dialog .career-responses-stage-option input[type='radio'] {
     grid-column: 1;
     grid-row: 1;
-    inline-size: 18px;
-    block-size: 18px;
+    inline-size: 20px;
+    block-size: 20px;
+    min-inline-size: 0;
     min-block-size: 0;
+    margin: 0;
+    border: 0;
+    padding: 0;
+    border-radius: 50%;
+    appearance: none;
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px color-mix(in oklch, white 30%, transparent);
   }
 
-  .career-responses-stage-options .career-responses-stage-option-label {
+  .career-responses-filter-dialog .career-responses-stage-option input[type='radio']::after {
+    display: none;
+  }
+
+  .career-responses-filter-dialog .career-responses-stage-option input[type='radio']:checked {
+    background: radial-gradient(circle, var(--career-accent) 0 5px, transparent 6px);
+    box-shadow: inset 0 0 0 1.5px var(--career-accent);
+  }
+
+  .career-responses-stage-option-label {
     grid-column: 2;
     grid-row: 1;
   }
 
-  .career-responses-stage-options .career-responses-stage-option-count {
+  .career-responses-stage-option-count {
     grid-column: 3;
     grid-row: 1;
-  }
-
-  .career-responses-stage-option-label {
-    font-weight: 500;
   }
 
   /* Макет 5 `proc` / `learn`: push intro, grouped lists with label left and value right. */

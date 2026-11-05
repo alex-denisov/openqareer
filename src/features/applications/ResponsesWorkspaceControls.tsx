@@ -1,19 +1,16 @@
 import {
   useEffect,
-  useRef,
   useState,
-  type Dispatch,
-  type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
-  type SetStateAction,
 } from 'react';
-import { CaretDown, Kanban, MagnifyingGlass, Rows, SlidersHorizontal } from '@phosphor-icons/react';
+import { CaretDown, Kanban, MagnifyingGlass, Rows } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
 import { getCandidateCompanyPage } from '../vacancies/candidateCompaniesApi';
 import { humanSourceLabel } from './sourceLabels';
-import { STAGE_SHEET_TITLE_ID, StageSheet, StageSheetRow } from './ResponsesStageSheet';
+import { ResponsesFilterSheet, type FilterStageItem } from './ResponsesFilterSheet';
+import type { ResponsesPeriod } from './responsesFilterDraft';
 import type { ResponsesSortMode } from './responsesFiltering';
 
 export type ResponsesWorkspaceSection = 'funnel' | 'company-wants' | 'preparation' | 'offers';
@@ -292,6 +289,8 @@ interface ResponsesFilterControlsProps {
   readonly needsActionCount?: number;
   readonly actionOnly?: boolean;
   readonly onSummaryFilter?: (filter: ResponsesSummaryFilter) => void;
+  /** Every row of the applied period is loaded: «Показать N» can count them. */
+  readonly loadedAll?: boolean;
 }
 
 export function ResponsesFilterControls(props: ResponsesFilterControlsProps) {
@@ -309,7 +308,20 @@ export function ResponsesFilterControls(props: ResponsesFilterControlsProps) {
         <SelectWrap>
           <SortFilter value={props.sortMode} onChange={props.onSortChange} />
         </SelectWrap>
-        <MobileFilterDialog props={props} channels={channels} />
+        <ResponsesFilterSheet
+          applications={props.applications}
+          channels={channels}
+          query={props.query}
+          search={props.search}
+          sortMode={props.sortMode}
+          period={props.period}
+          loadedAll={props.loadedAll ?? false}
+          stageItems={filterStageItems(props)}
+          currentStage={currentStageKey(props)}
+          onQueryChange={props.onQueryChange}
+          onSortChange={props.onSortChange}
+          onPeriodChange={props.onPeriodChange}
+        />
       </div>
       <ResponsesViewSwitch view={props.view} onChange={props.onViewChange} />
     </div>
@@ -326,19 +338,15 @@ function SelectWrap({ children }: { readonly children: ReactNode }) {
   );
 }
 
-interface MobileFilterDraft {
-  readonly stage: string;
-  readonly channel: string;
-  readonly period: ResponsesPeriod;
-  readonly sortMode: ResponsesSortMode;
+function filterStageItems(props: ResponsesFilterControlsProps): readonly FilterStageItem[] {
+  const { onSummaryFilter } = props;
+  if (!onSummaryFilter) return [];
+  return mobileStageItems(props).map((item) => ({
+    key: item.label,
+    count: String(item.count),
+    apply: () => onSummaryFilter(item.filter),
+  }));
 }
-
-const DEFAULT_MOBILE_FILTER_DRAFT: MobileFilterDraft = {
-  stage: 'все',
-  channel: '',
-  period: '30',
-  sortMode: 'step',
-};
 
 function mobileStageItems(props: ResponsesFilterControlsProps): readonly SummaryItem[] {
   return buildSummaryItems(props.stageCounts, props.needsActionCount ?? 0, false);
@@ -351,238 +359,6 @@ function currentStageKey(props: ResponsesFilterControlsProps): string {
     (item) => !item.filter.actionOnly && JSON.stringify([...item.filter.stage].sort()) === stages,
   );
   return match?.label ?? 'все';
-}
-
-function createMobileFilterDraft(props: ResponsesFilterControlsProps): MobileFilterDraft {
-  return {
-    stage: currentStageKey(props),
-    channel: props.query.channel?.[0] ?? '',
-    period: props.period,
-    sortMode: props.sortMode,
-  };
-}
-
-function trapDialogTab(
-  event: ReactKeyboardEvent<HTMLDialogElement>,
-  dialog: HTMLDialogElement | null,
-) {
-  if (event.key !== 'Tab' || !dialog) return;
-  const focusable = Array.from(
-    dialog.querySelectorAll<HTMLElement>(
-      'button:not(:disabled), select:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
-    ),
-  );
-  if (focusable.length === 0) return;
-  const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
-  if (activeIndex < 0 || (event.shiftKey && activeIndex === 0)) {
-    event.preventDefault();
-    focusable[event.shiftKey ? focusable.length - 1 : 0]?.focus();
-  } else if (!event.shiftKey && activeIndex === focusable.length - 1) {
-    event.preventDefault();
-    focusable[0]?.focus();
-  }
-}
-
-function useMobileFilterDialog(props: ResponsesFilterControlsProps) {
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [draft, setDraft] = useState(() => createMobileFilterDraft(props));
-  const [stageSheetOpen, setStageSheetOpen] = useState(false);
-  const open = () => {
-    setDraft(createMobileFilterDraft(props));
-    setStageSheetOpen(false);
-    dialogRef.current?.showModal();
-    setIsOpen(true);
-  };
-  const close = () => dialogRef.current?.close();
-  const handleClose = () => {
-    setIsOpen(false);
-    window.requestAnimationFrame(() => triggerRef.current?.focus());
-  };
-  const handleTabTrap = (event: ReactKeyboardEvent<HTMLDialogElement>) => {
-    trapDialogTab(event, dialogRef.current);
-  };
-  const apply = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const stageItem = mobileStageItems(props).find((item) => item.label === draft.stage);
-    if (props.onSummaryFilter && stageItem && draft.stage !== currentStageKey(props)) {
-      props.onSummaryFilter(stageItem.filter);
-    }
-    props.onQueryChange({ channel: draft.channel ? [draft.channel] : [], offset: 0 });
-    props.onPeriodChange(draft.period);
-    props.onSortChange(draft.sortMode);
-    close();
-  };
-  return {
-    triggerRef,
-    dialogRef,
-    isOpen,
-    draft,
-    setDraft,
-    stageSheetOpen,
-    setStageSheetOpen,
-    open,
-    close,
-    handleClose,
-    handleTabTrap,
-    apply,
-  };
-}
-
-function MobileFilterDialog({
-  props,
-  channels,
-}: {
-  readonly props: ResponsesFilterControlsProps;
-  readonly channels: readonly string[];
-}) {
-  const state = useMobileFilterDialog(props);
-  return (
-    <>
-      <button
-        ref={state.triggerRef}
-        type="button"
-        className="career-responses-filters-trigger"
-        aria-haspopup="dialog"
-        aria-expanded={state.isOpen}
-        aria-controls="career-responses-filter-dialog"
-        onClick={state.open}
-      >
-        <SlidersHorizontal aria-hidden="true" />
-        <span>Фильтры</span>
-      </button>
-      <dialog
-        ref={state.dialogRef}
-        id="career-responses-filter-dialog"
-        className="career-responses-filter-dialog"
-        aria-labelledby={
-          state.stageSheetOpen ? STAGE_SHEET_TITLE_ID : 'career-responses-filter-title'
-        }
-        aria-modal="true"
-        onClose={state.handleClose}
-        onKeyDown={state.handleTabTrap}
-      >
-        {state.stageSheetOpen ? (
-          <MobileStageSheet props={props} state={state} />
-        ) : (
-          <MobileFilterForm props={props} state={state} channels={channels} />
-        )}
-      </dialog>
-    </>
-  );
-}
-
-function MobileFilterFields({
-  draft,
-  setDraft,
-  channels,
-}: {
-  readonly draft: MobileFilterDraft;
-  readonly setDraft: Dispatch<SetStateAction<MobileFilterDraft>>;
-  readonly channels: readonly string[];
-}) {
-  return (
-    <div className="career-responses-filter-fields">
-      <div className="career-responses-filter-field">
-        <label htmlFor="career-responses-filter-channel">Канал</label>
-        <ChannelFilter
-          id="career-responses-filter-channel"
-          query={{ channel: draft.channel ? [draft.channel] : [] }}
-          channels={channels}
-          onChange={(query) =>
-            setDraft((current) => ({ ...current, channel: query.channel?.[0] ?? '' }))
-          }
-        />
-      </div>
-      <div className="career-responses-filter-field">
-        <label htmlFor="career-responses-filter-period">Период</label>
-        <PeriodFilter
-          id="career-responses-filter-period"
-          value={draft.period}
-          onChange={(period) => setDraft((current) => ({ ...current, period }))}
-        />
-      </div>
-      <div className="career-responses-filter-field">
-        <label htmlFor="career-responses-filter-sort">Сортировка</label>
-        <SortFilter
-          id="career-responses-filter-sort"
-          value={draft.sortMode}
-          onChange={(sortMode) => setDraft((current) => ({ ...current, sortMode }))}
-        />
-      </div>
-    </div>
-  );
-}
-
-function MobileFilterForm({
-  props,
-  state,
-  channels,
-}: {
-  readonly props: ResponsesFilterControlsProps;
-  readonly state: ReturnType<typeof useMobileFilterDialog>;
-  readonly channels: readonly string[];
-}) {
-  return (
-    <form onSubmit={state.apply}>
-      <header className="career-responses-filter-head">
-        <h2 id="career-responses-filter-title">Фильтры</h2>
-        <button
-          type="button"
-          className="career-btn career-btn-ghost career-btn-sm"
-          onClick={() => state.setDraft(DEFAULT_MOBILE_FILTER_DRAFT)}
-        >
-          Сбросить
-        </button>
-      </header>
-      {props.onSummaryFilter ? (
-        <StageSheetRow value={state.draft.stage} onOpen={() => state.setStageSheetOpen(true)} />
-      ) : null}
-      <MobileFilterFields draft={state.draft} setDraft={state.setDraft} channels={channels} />
-      <MobileFilterActions />
-    </form>
-  );
-}
-
-/** «Этап» sheet replaces the filter sheet; a pick returns to it with the draft updated. */
-function MobileStageSheet({
-  props,
-  state,
-}: {
-  readonly props: ResponsesFilterControlsProps;
-  readonly state: ReturnType<typeof useMobileFilterDialog>;
-}) {
-  const backToFilters = () => {
-    state.setStageSheetOpen(false);
-    window.requestAnimationFrame(() =>
-      state.dialogRef.current?.querySelector<HTMLElement>('[data-stage-row]')?.focus(),
-    );
-  };
-  return (
-    <StageSheet
-      items={mobileStageItems(props).map((item) => ({
-        key: item.label,
-        count: String(item.count),
-      }))}
-      value={state.draft.stage}
-      onPick={(stage) => {
-        state.setDraft((current) => ({ ...current, stage }));
-        backToFilters();
-      }}
-      onClose={backToFilters}
-    />
-  );
-}
-
-function MobileFilterActions() {
-  return (
-    <footer className="career-responses-filter-actions">
-      <button type="submit" className="career-btn career-btn-primary">
-        Показать
-      </button>
-    </footer>
-  );
 }
 
 function SearchFilter({
@@ -695,7 +471,7 @@ function SortFilter({
   );
 }
 
-export type ResponsesPeriod = '7' | '30' | '90' | 'all';
+export type { ResponsesPeriod };
 
 function availableChannels(applications: readonly ApplicationView[]): string[] {
   return Array.from(

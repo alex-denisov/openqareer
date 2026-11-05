@@ -219,4 +219,172 @@ describe('candidate interview simulator routes', () => {
     expect(started.json().data.session.questions[0].sourceFactIds).toEqual([]);
     expect(started.json().data.session.mode).toBe('voice');
   });
+
+  describe('удаление тренировки', () => {
+    async function startSession(app: Awaited<ReturnType<typeof setup>>['app'], auth: string) {
+      const started = await app.inject({
+        method: 'POST',
+        url: URL,
+        headers: { authorization: auth, ...ORIGIN },
+        payload: { mode: 'text', roleTitle: 'Руководитель инженерной команды' },
+      });
+      return started.json().data.session as { id: string; version: number; questions: { id: string; storyId: string | null }[] };
+    }
+
+    it('удаляет свою тренировку: текущей нет, новая начинается без замены', async () => {
+      const { app, ownerAuth } = await setup();
+      const session = await startSession(app, ownerAuth);
+
+      const removed = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const current = await app.inject({
+        method: 'GET',
+        url: `${URL}/current`,
+        headers: { authorization: ownerAuth },
+      });
+      const byId = await app.inject({
+        method: 'GET',
+        url: `${URL}/${session.id}`,
+        headers: { authorization: ownerAuth },
+      });
+      const again = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const restarted = await app.inject({
+        method: 'POST',
+        url: URL,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+        payload: { mode: 'text', roleTitle: 'Руководитель инженерной команды' },
+      });
+
+      expect(removed.statusCode).toBe(200);
+      expect(removed.json().data).toEqual({ deleted: true });
+      expect(current.json().data.session).toBeNull();
+      expect(byId.statusCode).toBe(404);
+      expect(again.statusCode).toBe(404);
+      expect(again.json().error.code).toBe('interview_session_not_found');
+      expect(restarted.statusCode).toBe(201);
+    });
+
+    it('чужая тренировка даёт 404 и остаётся на месте', async () => {
+      const { app, ownerAuth, otherAuth, candidateStore, ownerId } = await setup();
+      const session = await startSession(app, ownerAuth);
+
+      const foreign = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: { authorization: otherAuth, ...ORIGIN },
+      });
+
+      expect(foreign.statusCode).toBe(404);
+      expect(foreign.json().error.code).toBe('interview_session_not_found');
+      expect(candidateStore.interviewSimulatorRepo.get(ownerId, session.id)?.id).toBe(session.id);
+    });
+
+    it('без входа 401, с чужого источника отказ: тренировка остаётся', async () => {
+      const { app, ownerAuth, candidateStore, ownerId } = await setup();
+      const session = await startSession(app, ownerAuth);
+
+      const anonymous = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: ORIGIN,
+      });
+      const crossSite = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: { origin: 'https://evil.example' },
+      });
+
+      expect(anonymous.statusCode).toBe(401);
+      expect(crossSite.statusCode).toBe(403);
+      expect(candidateStore.interviewSimulatorRepo.get(ownerId, session.id)?.id).toBe(session.id);
+    });
+
+    it('запись в дневнике остаётся отдельной копией и удаляется отдельно', async () => {
+      const { app, ownerAuth, candidateStore, ownerId } = await setup();
+      const session = await startSession(app, ownerAuth);
+      const saved = await app.inject({
+        method: 'PUT',
+        url: `/api/v1/candidate/career-diary/interview-practices/${session.id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+
+      await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+
+      expect(saved.statusCode).toBe(201);
+      expect(candidateStore.careerDiaryRepo.getInterviewPractice(ownerId, session.id)?.id).toBe(session.id);
+      expect(candidateStore.exportCandidate(ownerId)?.interviewSession).toBeNull();
+    });
+
+    it('ответ в полёте не воскрешает удалённую тренировку', async () => {
+      const { app, ownerAuth, candidateStore, ownerId } = await setup();
+      const session = await startSession(app, ownerAuth);
+      await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+
+      const answered = await app.inject({
+        method: 'POST',
+        url: `${URL}/${session.id}/answers`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+        payload: { expectedVersion: session.version, questionId: session.questions[0]!.id, answer: 'Ответ', elapsedSeconds: 5 },
+      });
+
+      expect(answered.statusCode).toBe(404);
+      expect(candidateStore.interviewSimulatorRepo.getCurrent(ownerId)).toBeNull();
+    });
+
+    it('тренировка и дневник читаются после удаления истории, на которую ссылается вопрос', async () => {
+      const { app, ownerAuth } = await setup();
+      const session = await startSession(app, ownerAuth);
+      const withStory = session.questions.find((question) => question.storyId);
+      expect(withStory?.storyId).toBe('story-release');
+      await app.inject({
+        method: 'PUT',
+        url: `/api/v1/candidate/career-diary/interview-practices/${session.id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+
+      const removed = await app.inject({
+        method: 'DELETE',
+        url: '/api/v1/candidate/star-stories/story-release',
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const current = await app.inject({
+        method: 'GET',
+        url: `${URL}/current`,
+        headers: { authorization: ownerAuth },
+      });
+      const diary = await app.inject({
+        method: 'GET',
+        url: `/api/v1/candidate/career-diary/interview-practices/${session.id}`,
+        headers: { authorization: ownerAuth },
+      });
+      const restarted = await app.inject({
+        method: 'DELETE',
+        url: `${URL}/${session.id}`,
+        headers: { authorization: ownerAuth, ...ORIGIN },
+      });
+      const fresh = await startSession(app, ownerAuth);
+
+      expect(removed.statusCode).toBe(200);
+      expect(current.statusCode).toBe(200);
+      expect(current.json().data.session.id).toBe(session.id);
+      expect(diary.statusCode).toBe(200);
+      expect(restarted.statusCode).toBe(200);
+      expect(fresh.questions.every((question) => question.storyId === null)).toBe(true);
+    });
+  });
 });

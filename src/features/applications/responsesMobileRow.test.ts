@@ -173,3 +173,26 @@ describe('mobileNextStep', () => {
     });
   });
 });
+
+describe('date without a time (B511 Д8)', () => {
+  const slot = {
+    id: 'i',
+    scheduledAt: '2026-12-01T00:00:00.000Z',
+    prepStatus: 'none',
+    round: 1,
+  } as const;
+
+  it('labels the row with the day only', () => {
+    expect(mobileStatusLabel(application({ stage: 'interview', nearestInterview: slot }))).toBe(
+      'Интервью 01.12',
+    );
+  });
+
+  it('keeps the time when one was chosen', () => {
+    const at = new Date(2026, 11, 1, 14, 0).toISOString();
+    const label = mobileStatusLabel(
+      application({ stage: 'interview', nearestInterview: { ...slot, scheduledAt: at } }),
+    );
+    expect(label).toBe('Интервью 01.12, 14:00');
+  });
+});

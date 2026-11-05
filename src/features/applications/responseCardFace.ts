@@ -1,3 +1,4 @@
+import { formatInterviewDay, formatInterviewWhen } from '../../../shared/interviewDate';
 import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 
@@ -44,11 +45,7 @@ export function formatDayMonth(value: string | null | undefined): string | null 
 }
 
 export function formatDayMonthTime(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  return `${formatDayMonth(value)}, ${time}`;
+  return formatInterviewWhen(value);
 }
 
 function withDate(label: string, date: string | null): string {
@@ -139,12 +136,12 @@ function interviewStep(input: FaceInput, due: string | null): ResponseNextStep {
   const interview = input.nearestInterview;
   if (interview && interview.prepStatus !== 'ready') {
     return {
-      text: withDate('Подготовиться к интервью', formatDayMonth(interview.scheduledAt)),
+      text: withDate('Подготовиться к интервью', formatInterviewDay(interview.scheduledAt)),
       yours: true,
     };
   }
   if (interview)
-    return { text: withDate('Интервью', formatDayMonth(interview.scheduledAt)), yours: false };
+    return { text: withDate('Интервью', formatInterviewDay(interview.scheduledAt)), yours: false };
   if (input.whoseTurn === 'candidate') return { text: 'Заполнить дебриф', yours: true };
   return { text: due ? `Ждать ответа до ${due}` : 'Ждать ответа компании', yours: false };
 }

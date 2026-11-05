@@ -1,6 +1,6 @@
+import { formatInterviewDay, formatInterviewWhen } from '../../../shared/interviewDate';
 import type { ReactNode } from 'react';
 import {
-  CaretDown,
   CaretRight,
   LinkSimple,
   ListChecks,
@@ -174,29 +174,36 @@ export function applicationLabel(application: ApplicationView): string {
   return `${application.vacancy?.company ?? 'Компания не указана'}, ${title}`;
 }
 
+/** Nearest first: an interview without a date goes last. */
+function byInterviewDate(left: ApplicationView, right: ApplicationView): number {
+  const leftAt = left.nearestInterview?.scheduledAt ?? null;
+  const rightAt = right.nearestInterview?.scheduledAt ?? null;
+  if (leftAt === rightAt) return 0;
+  if (leftAt === null) return 1;
+  if (rightAt === null) return -1;
+  return leftAt.localeCompare(rightAt);
+}
+
 export function MockInterviewCard(props: {
   readonly interviews: readonly ApplicationView[];
-  readonly selected?: ApplicationView;
-  readonly selectedId: string;
   readonly stress: boolean;
-  readonly onSelect: (id: string) => void;
   readonly onStress: (value: boolean) => void;
-  readonly onStart: () => void;
+  readonly onStart: (id: string) => void;
 }) {
-  const { selected } = props;
+  const interviews = [...props.interviews].sort(byInterviewDate);
   return (
     <SectionCard id="responses-interviews-title" title="Мок-интервью">
-      {props.interviews.length > 1 ? (
-        <InterviewSelect
-          interviews={props.interviews}
-          value={props.selectedId}
-          onChange={props.onSelect}
-        />
-      ) : null}
-      {selected ? (
-        <MockInterviewRow application={selected} onStart={props.onStart} />
-      ) : (
+      {interviews.length === 0 ? (
         <p role="status">В выбранном периоде нет откликов с назначенным этапом интервью.</p>
+      ) : (
+        interviews.map((application, index) => (
+          <MockInterviewRow
+            key={application.id}
+            application={application}
+            primary={index === 0}
+            onStart={() => props.onStart(application.id)}
+          />
+        ))
       )}
       <StressOption checked={props.stress} onChange={props.onStress} />
       <p className="career-prep-foot">
@@ -208,9 +215,11 @@ export function MockInterviewCard(props: {
 
 function MockInterviewRow({
   application,
+  primary,
   onStart,
 }: {
   readonly application: ApplicationView;
+  readonly primary: boolean;
   readonly onStart: () => void;
 }) {
   return (
@@ -223,7 +232,8 @@ function MockInterviewRow({
       </div>
       <button
         type="button"
-        className="career-btn career-btn-primary career-prep-start"
+        className={`career-btn career-prep-start ${primary ? 'career-btn-primary' : 'career-btn-secondary'}`}
+        aria-label={`Начать мок-интервью: ${applicationLabel(application)}`}
         onClick={onStart}
       >
         <Microphone aria-hidden="true" /> Начать мок-интервью
@@ -248,36 +258,6 @@ export function StressOption({
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
       <span className="career-checkbox-text">Стресс-режим: перебивания и жёсткие уточнения</span>
-    </label>
-  );
-}
-
-function InterviewSelect({
-  interviews,
-  value,
-  onChange,
-}: {
-  readonly interviews: readonly ApplicationView[];
-  readonly value: string;
-  readonly onChange: (id: string) => void;
-}) {
-  return (
-    <label className="career-prep-select-field">
-      <span>Отклик</span>
-      <span className="career-select-wrap">
-        <select
-          className="career-select"
-          value={value}
-          onChange={(event) => onChange(event.currentTarget.value)}
-        >
-          {interviews.map((application) => (
-            <option key={application.id} value={application.id}>
-              {applicationLabel(application)}
-            </option>
-          ))}
-        </select>
-        <CaretDown className="career-select-caret" aria-hidden="true" />
-      </span>
     </label>
   );
 }
@@ -347,20 +327,9 @@ function DebriefRow({
 }
 
 export function formatDateTime(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'дата не указана'
-    : date.toLocaleString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+  return formatInterviewWhen(value) ?? 'дата не указана';
 }
 
 export function formatDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? ''
-    : date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+  return formatInterviewDay(value) ?? '';
 }

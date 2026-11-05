@@ -113,6 +113,14 @@ export class SqliteInterviewSimulatorRepository {
     return result.changes === 1 ? this.get(candidateId, next.id) : null;
   }
 
+  /** Только своя строка: чужой id не совпадёт с candidate_id и вернёт false. */
+  delete(candidateId: string, id: string): boolean {
+    const result = this.database
+      .prepare('DELETE FROM candidate_interview_sessions WHERE candidate_id = ? AND id = ?')
+      .run(candidateId, id);
+    return result.changes === 1;
+  }
+
   private seal(candidateId: string, session: InterviewSession): string {
     const associatedData = interviewSessionAssociatedData(
       candidateId,

@@ -1,4 +1,5 @@
 import { useEscapeLayer } from '../shell/escapeLayers';
+import { InterviewDeleteConfirm } from './InterviewDeleteConfirm';
 import { useMockInterviewController } from './useMockInterviewController';
 import type { MockInterviewSimulatorProps } from './mockInterviewSimulatorTypes';
 import { ResultScreen } from './MockInterviewResultScreen';
@@ -54,6 +55,19 @@ export function MockInterviewSimulator(props: MockInterviewSimulatorProps) {
           onStay={() => flow.setExitConfirmation(false)}
           onLeave={flow.confirmReturnToPreparation}
         />
+      ) : null}
+      {flow.deleteTraining.open ? (
+        <div className="career-mock-exit-layer">
+          <InterviewDeleteConfirm
+            title="Удалить тренировку?"
+            detail="Ответы и разбор удалятся из профиля, вернуть их нельзя. Запись в дневнике, если вы её сохранили, останется: её можно удалить в дневнике."
+            confirmLabel="Удалить тренировку"
+            busy={flow.deleteTraining.busy}
+            error={flow.deleteTraining.error}
+            onCancel={flow.deleteTraining.cancel}
+            onConfirm={() => void flow.deleteTraining.confirm()}
+          />
+        </div>
       ) : null}
     </div>
   );

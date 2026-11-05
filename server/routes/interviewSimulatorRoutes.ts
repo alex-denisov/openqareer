@@ -351,6 +351,19 @@ const handleTransition: Handler = async (deps, request, reply) => {
   return { data: { session: sessionView(saved) }, meta: { requestId: request.id } };
 };
 
+/** Запись в дневнике остаётся: это отдельная копия, у неё своё удаление. */
+const handleDeleteSession: Handler = async (deps, request, reply) => {
+  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
+  if (!candidate) return undefined;
+  const parsedId = sessionIdSchema.safeParse((request.params as { id?: unknown }).id);
+  if (!parsedId.success) return sendError(reply, request, 400, 'invalid_interview_id', 'Проверьте идентификатор тренировки.', false);
+  if (!deps.candidateStore.interviewSimulatorRepo.delete(candidate.id, parsedId.data)) {
+    return sendError(reply, request, 404, 'interview_session_not_found', 'Тренировка не найдена.', false);
+  }
+  return { data: { deleted: true }, meta: { requestId: request.id } };
+};
+
 export function registerInterviewSimulatorRoutes(app: FastifyInstance, deps: RouteDeps): void {
   registerInterviewDiaryRoutes(app, deps);
   app.get(`${URL}/current`, withDeps(deps, handleGetCurrent));
@@ -370,4 +383,5 @@ export function registerInterviewSimulatorRoutes(app: FastifyInstance, deps: Rou
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
     withDeps(deps, handleTransition),
   );
+  app.delete(`${URL}/:id`, withDeps(deps, handleDeleteSession));
 }

@@ -180,7 +180,10 @@
   text-align: start;
 }
 
+/* Same icon box as the rows above it, so the text columns line up (Д14). */
 .career-responses-selected__rows > p.career-responses-contact > svg {
+  inline-size: 1rem;
+  block-size: 1rem;
   color: var(--career-text-soft);
 }
 
