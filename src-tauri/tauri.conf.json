@@ -6,8 +6,8 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "scripts/download-sing-box-sidecars.sh && npm run build && node scripts/build-update-manifest.mjs --check-signing",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "scripts/download-sing-box-sidecars.sh && npm run build && npx tsx scripts/build-desktop-dist.ts && node scripts/build-update-manifest.mjs --check-signing",
+    "frontendDist": "../dist-desktop"
   },
   "app": {
     "windows": [
@@ -19,7 +19,8 @@
         "minHeight": 600,
         "center": true,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "backgroundColor": "#090d12"
       }
     ],
     "security": {
