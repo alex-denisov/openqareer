@@ -197,6 +197,17 @@ describe('дневник уходит с разбора на итог', () => {
     );
   });
 
+  it('390: разбор по макету: подпись с номером вопроса, подпись «Критерии», значок статуса, строки', async () => {
+    await open(session('active', answered, 'text'));
+    await click('Продолжить с вопроса 1');
+    expect(document.querySelector('.career-mock-mobile-hero p')?.textContent).toMatch(
+      /^Вопрос 1 из \d+ · оценка/u,
+    );
+    expect(document.querySelector('.career-mock-criteria-cap')?.textContent).toBe('Критерии');
+    expect(button('Следующий вопрос')?.classList).toContain('career-mock-result-again');
+    expect(button('Ответить ещё раз')?.closest('.career-mock-result-rows')).not.toBeNull();
+  });
+
   it('на итоге «Записать в дневник» есть', async () => {
     await open(session('completed', answered, 'text'));
     expect(button('Записать в дневник')).toBeDefined();

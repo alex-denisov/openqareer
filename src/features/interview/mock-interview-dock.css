@@ -284,11 +284,17 @@
     -webkit-line-clamp: 2;
   }
 
+  /* Полоса доходит до низа прокрутки: отступ контейнера иначе оставляет под ней просвет с текстом. */
+  .career-mock-review-panel {
+    overflow: clip;
+  }
+
   .career-mock-review-panel .career-mock-review-actions {
     position: sticky;
     z-index: 1;
-    inset-block-end: 0;
-    padding-block: var(--career-space-2);
+    inset-block-end: calc(var(--career-space-8) * -1);
+    margin-block-end: calc(var(--career-space-8) * -1);
+    padding-block: var(--career-space-2) calc(var(--career-space-2) + var(--career-space-8));
     background: inherit;
   }
 
@@ -501,16 +507,17 @@
     inset: 0;
   }
 
-  .career-mock-result-panel .career-mock-result-actions {
+  .career-mock-result-panel .career-mock-result-actions,
+  .career-mock-review-panel .career-mock-review-actions {
     display: contents;
   }
 
-  .career-mock-result-panel .career-btn.career-mock-result-again {
+  /* Отступ прокрутки уже освобождает место под навигацию: положение как в макете. */
+  .career-mock-panel .career-btn.career-mock-result-again,
+  .career-mock-setup-panel .career-btn.career-mock-primary {
     position: sticky;
     z-index: 1;
-    inset-block-end: calc(
-      var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom)
-    );
+    inset-block-end: var(--career-space-3);
     inline-size: 100%;
     min-block-size: 50px;
     border: 0;
@@ -556,7 +563,8 @@
 }
 
 .career-mock-status-icon,
-.career-mock-result-status {
+.career-mock-result-status,
+.career-mock-criteria-cap {
   display: none;
 }
 
@@ -610,36 +618,63 @@
     font-weight: 600;
   }
 
-  .career-mock-topic-list ul.career-mock-criteria {
+  .career-mock-review-panel.career-mock-review-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .career-mock-review-panel .career-mock-answer-quote {
+    justify-self: end;
+    max-inline-size: 86%;
+    padding: var(--career-space-3) var(--career-space-4);
+    border-radius: 18px 18px 6px 18px;
+    background: var(--career-accent-soft);
+  }
+
+  .career-mock-review-panel .career-mock-answer-quote h3 {
+    display: none;
+  }
+
+  .career-mock-criteria-cap.career-mock-criteria-cap {
+    display: block;
+    margin: 0;
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  :is(.career-mock-topic-list, .career-mock-review-panel) ul.career-mock-criteria {
     overflow: hidden;
     border-radius: var(--career-radius-md);
     background: var(--career-surface);
   }
 
-  .career-mock-topic-list ul.career-mock-criteria > li {
+  :is(.career-mock-topic-list, .career-mock-review-panel) ul.career-mock-criteria > li {
     grid-template-columns: minmax(0, 1fr);
     padding: var(--career-space-3) var(--career-space-4);
   }
 
-  .career-mock-topic-list ul.career-mock-criteria > li > .career-mock-criterion-icon {
+  :is(.career-mock-topic-list, .career-mock-review-panel) ul.career-mock-criteria > li > .career-mock-criterion-icon {
     display: none;
   }
 
-  .career-mock-topic-list ul.career-mock-criteria > li > div {
+  :is(.career-mock-topic-list, .career-mock-review-panel) ul.career-mock-criteria > li > div {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .career-mock-topic-list ul.career-mock-criteria .career-mock-criterion-title {
+  :is(.career-mock-topic-list, .career-mock-review-panel) ul.career-mock-criteria .career-mock-criterion-title {
     display: contents;
   }
 
-  .career-mock-topic-list ul.career-mock-criteria li p {
+  :is(.career-mock-topic-list, .career-mock-review-panel) ul.career-mock-criteria li p {
     margin-block-start: var(--career-space-1);
   }
 
-  .career-mock-topic-list ul.career-mock-criteria .career-mock-status {
+  :is(.career-mock-topic-list, .career-mock-review-panel) ul.career-mock-criteria .career-mock-status {
     order: 1;
     display: inline-flex;
     align-items: center;
