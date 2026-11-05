@@ -29,6 +29,8 @@ export interface ExpertPanelConfig {
   /** Set when the opener asked to send `initialPrompt` at once («Обсудить», G5 A2);
    *  a new value per request, so the same question can be asked twice. */
   sendRequest?: number;
+  /** A new value moves focus to the consultant's input, even when the panel is already open (Д4). */
+  focusRequest?: number;
 }
 
 export interface OpenExpertOptions {
@@ -36,9 +38,12 @@ export interface OpenExpertOptions {
   readonly send?: boolean;
   /** Only switch the consultant's context (tab, selected company); the panel stays as it is. */
   readonly contextOnly?: boolean;
+  /** Put the cursor into the consultant's input: the opener expects the candidate to type now. */
+  readonly focusInput?: boolean;
 }
 
 let expertSendRequest = 0;
+let expertFocusRequest = 0;
 
 export function openExpertPanel(
   setConfig: Dispatch<SetStateAction<ExpertPanelConfig>>,
@@ -66,6 +71,7 @@ export function openExpertPanel(
   }
   setAccountOpen(false);
   const sendRequest = options?.send && initialPrompt ? ++expertSendRequest : undefined;
+  const focusRequest = options?.focusInput ? ++expertFocusRequest : undefined;
   setExpanded(isCompactViewport);
   const nextStage = stage ?? stageForView(activeView);
   setConfig((previous) =>
@@ -74,8 +80,8 @@ export function openExpertPanel(
     !subjectTitle &&
     previous.stage === nextStage &&
     previous.subject?.kind === 'adaptation'
-      ? { ...previous, open: true, initialPrompt, sendRequest }
-      : { open: true, stage: nextStage, subject, subjectTitle, initialPrompt, sendRequest },
+      ? { ...previous, open: true, initialPrompt, sendRequest, focusRequest }
+      : { open: true, stage: nextStage, subject, subjectTitle, initialPrompt, sendRequest, focusRequest },
   );
 }
 

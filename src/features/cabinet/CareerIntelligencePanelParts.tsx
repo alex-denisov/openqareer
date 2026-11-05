@@ -1,3 +1,4 @@
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import { ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import {
   CoachApiError,
@@ -21,7 +22,7 @@ export function SourceAttribution({ source }: { source: VacancySourceRegistryEnt
       target="_blank"
       rel="noreferrer"
     >
-      Источник: {source.name}
+      Источник: {vacancySourceDisplayName(source.name)}
     </a>
   );
 }

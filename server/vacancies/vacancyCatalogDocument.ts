@@ -13,6 +13,7 @@
  * идёт только через `escapeHtml`, а микроразметка — ещё и через экранирование
  * закрывающего тега.
  */
+import { vacancySourceDisplayName } from '../../shared/vacancySourceLabel';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import { employerLabel } from '../../shared/employerLabel';
@@ -316,7 +317,7 @@ function aboutBox(entry: CatalogEntry, employer: string): string {
     `<dt>Опубликована</dt><dd>${escapeHtml(formatDate(entry.publishedAt))}</dd>` +
     `<dt>Проверена</dt><dd>${escapeHtml(formatDate(entry.lastSeenAt))}</dd>` +
     (entry.sourceName
-      ? `<dt>Источник</dt><dd>${escapeHtml(entry.sourceName.replace(/\s*\(страница поиска\)$/u, ''))}</dd>`
+      ? `<dt>Источник</dt><dd>${escapeHtml(vacancySourceDisplayName(entry.sourceName))}</dd>`
       : '') +
     (entry.sourceCount > 1
       ? `<dt>Площадок с этой вакансией</dt><dd>${entry.sourceCount}</dd>`

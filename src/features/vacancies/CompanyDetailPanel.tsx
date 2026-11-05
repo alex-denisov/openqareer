@@ -1,3 +1,4 @@
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Target } from '@phosphor-icons/react';
 import type {
@@ -156,7 +157,7 @@ function CompanyVacancyCard({
       <span>
         {[
           companyLocationLabel(vacancy.location),
-          `${vacancy.sourceName}, ${formatObservedDate(vacancy.sourceDate)}`,
+          `${vacancySourceDisplayName(vacancy.sourceName)}, ${formatObservedDate(vacancy.sourceDate)}`,
         ]
           .filter(Boolean)
           .join(' · ')}

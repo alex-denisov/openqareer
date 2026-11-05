@@ -61,8 +61,12 @@ function DraftLetterActions({
       </button>
       {onAskEdits ? (
         <button type="button" className="career-btn career-btn-secondary" onClick={onAskEdits}>
-          <ChatCircleText size={16} aria-hidden="true" />
-          Попросить правки
+          <span className="career-letter-row-icon">
+            <ChatCircleText size={16} aria-hidden="true" />
+          </span>
+          <span>
+            Попросить правки<span className="career-letter-ask-tail"> у консультанта</span>
+          </span>
         </button>
       ) : (
         <span className="career-letter-muted">Консультант недоступен из этого раздела.</span>

@@ -1,3 +1,4 @@
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import { useEffect, useMemo, useState } from 'react';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { getVacancySources } from '../coach/coachApi';
@@ -27,7 +28,7 @@ export function VacancySourceHealthNotice({
               sourceIdSet.has(source.id) &&
               (source.health.status === 'degraded' || source.health.status === 'unavailable'),
           )
-          .map((source) => source.name.trim())
+          .map((source) => vacancySourceDisplayName(source.name))
           .filter(Boolean);
         if (active) setSourceNames(affected);
       })

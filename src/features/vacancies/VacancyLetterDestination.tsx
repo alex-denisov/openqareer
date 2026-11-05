@@ -41,13 +41,17 @@ export function circleHeadingText(circle: ConnectionCircleNumber): string {
 export function LetterCardHeading({
   circle,
   approved,
+  summary,
 }: {
   readonly circle: ConnectionCircleNumber;
   readonly approved: boolean;
+  /** Макет 9 при 390: под заголовком круга — то, что на 1440 стоит в карточке круга. */
+  readonly summary?: string;
 }) {
   return (
-    <div className="career-letter-card-head">
+    <div className={`career-letter-card-head${approved ? ' is-approved' : ''}`}>
       <h2>{CIRCLE_HEADINGS[circle]}</h2>
+      {summary ? <p className="career-letter-card-summary">{summary}</p> : null}
       <span className="career-letter-chip is-dim">
         {approved ? <Check size={14} aria-hidden="true" /> : <Clock size={14} aria-hidden="true" />}
         {approved ? 'Одобрено, ничего не отправлено' : 'Черновик, ничего не отправлено'}
@@ -297,6 +301,29 @@ export interface LetterDestinationProps {
   readonly onOpenResume?: () => void;
 }
 
+function ResumeAndResponseRows({ onOpenResume }: { readonly onOpenResume?: () => void }) {
+  return (
+    <>
+      <DestinationRow
+        icon={<FileText size={18} />}
+        title="Резюме под вакансию"
+        note="Резюме не прикреплено к этому черновику. Факты письма не заменяют резюме."
+      >
+        {onOpenResume ? (
+          <button type="button" className="career-btn is-sm is-ghost" onClick={onOpenResume}>
+            Открыть
+          </button>
+        ) : null}
+      </DestinationRow>
+      <DestinationRow
+        icon={<PaperPlaneTilt size={18} />}
+        title="Отклик с письмом"
+        note="После одобрения заявка с письмом появится в «Откликах». Ничего не отправляется автоматически."
+      />
+    </>
+  );
+}
+
 export function LetterDestination(props: LetterDestinationProps) {
   const { circle, result, path, frozen, onShowPaths, onOpenContacts, onOpenResume } = props;
   const isEmpty = result?.state !== 'available' || result.paths.length === 0 || !path;
@@ -327,23 +354,12 @@ export function LetterDestination(props: LetterDestinationProps) {
             onOpenContacts={onOpenContacts}
           />
         ) : null}
-        <DestinationRow
-          icon={<FileText size={18} />}
-          title="Резюме под вакансию"
-          note="Резюме не прикреплено к этому черновику. Факты письма не заменяют резюме."
-        >
-          {onOpenResume ? (
-            <button type="button" className="career-btn is-sm is-ghost" onClick={onOpenResume}>
-              Открыть
-            </button>
-          ) : null}
-        </DestinationRow>
-        <DestinationRow
-          icon={<PaperPlaneTilt size={18} />}
-          title="Отклик с письмом"
-          note="После одобрения заявка с письмом появится в «Откликах». Ничего не отправляется автоматически."
-        />
+        <ResumeAndResponseRows onOpenResume={onOpenResume} />
       </ul>
+      {/* Макет 9 при 390: без (i), пояснение — подпись под списком. */}
+      <p className="career-letter-foot career-letter-dest-foot">
+        {DESTINATION_TIPS[circle]} Шанс ответа не показываем: откликов пока мало.
+      </p>
     </div>
   );
 }

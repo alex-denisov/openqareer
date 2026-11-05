@@ -1,0 +1,513 @@
+/*
+ * Д10: «Письмо» при 390 по макету 9. Тот же DOM, что на 1440: карточки расходятся в
+ * сгруппированные списки на фоне экрана. Значения сняты с макета (`.pm-*`, `.om-*`).
+ */
+.career-letter-cap,
+.career-letter-foot,
+.career-letter-card-summary,
+.career-letter-job-tick,
+.career-letter-ask-tail,
+.career-letter-open-row {
+  display: none;
+}
+
+.career-letter-row-icon {
+  display: contents;
+}
+
+@media (max-width: 760px) {
+  .career-letter-screen {
+    --career-letter-list-radius: 20px;
+    --career-letter-cap-inset: var(--career-space-4);
+    gap: 20px;
+    padding-inline: var(--career-space-4);
+    padding-block: 0 var(--career-space-8);
+    line-height: 1.5;
+  }
+
+  .career-letter-screen > .career-letter-mobile-bar {
+    margin-inline: calc(-1 * var(--career-space-4));
+  }
+
+  /* Шапка вакансии */
+  .career-letter-vacancy,
+  .career-letter-card,
+  .career-letter-fork {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .career-letter-vacancy {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding-inline: 0;
+  }
+
+  .career-letter-vacancy-copy {
+    padding-inline: var(--career-space-1);
+  }
+
+  .career-letter-vacancy h2,
+  .career-letter-card-head h2 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  .career-letter-vacancy p,
+  .career-letter-card-summary {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+    line-height: 1.5;
+  }
+
+  .career-letter-row-icon {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: 9px;
+    background: color-mix(in oklch, white 7%, transparent);
+    color: var(--career-text-soft);
+  }
+
+  .career-letter-open-row,
+  .career-letter-action-row .career-btn-secondary {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--career-space-3);
+    inline-size: 100%;
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+    border: 0;
+    border-radius: var(--career-letter-list-radius);
+    background: var(--career-surface);
+    color: var(--career-text);
+    font: inherit;
+    font-size: var(--career-text-md);
+    font-weight: 500;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .career-letter-open-row strong {
+    flex: 1;
+    font-weight: 500;
+  }
+
+  .career-letter-open-row > svg:last-child {
+    flex: none;
+    color: var(--career-text-dim);
+  }
+
+  .career-letter-ask-tail {
+    display: inline;
+  }
+
+  /* Круги: сегмент прилипает под шапкой */
+  .career-letter-fork {
+    display: contents;
+  }
+
+  /* Заголовка над сегментом в макете нет; для чтения с экрана он остаётся. */
+  .career-letter-fork > .career-letter-sub-head {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .career-letter-circles {
+    position: sticky;
+    inset-block-start: calc(var(--career-mobile-topbar-height) + var(--career-space-2));
+    z-index: 6;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 19px;
+    background: color-mix(in oklch, var(--career-bg-elevated) 48%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 12%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 18%, transparent),
+      0 6px 20px color-mix(in oklch, black 30%, transparent);
+    backdrop-filter: blur(16px);
+  }
+
+  /* Плашка 32 по макету, цель касания 44: кнопка шире плашки по высоте, поля сегмента её вмещают. */
+  .career-letter-circle-tab {
+    position: relative;
+    display: block;
+    block-size: 44px;
+    margin-block: -6px;
+    padding: 0 var(--career-space-1);
+    border: 0;
+    border-radius: 16px;
+    background: transparent;
+    color: var(--career-text-soft);
+    text-align: center;
+  }
+
+  .career-letter-circle-tab::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    inset-block: 6px;
+    border-radius: 16px;
+  }
+
+  .career-letter-circle-tab[aria-selected='true'] {
+    border: 0;
+    background: transparent;
+  }
+
+  .career-letter-circle-tab[aria-selected='true']::before {
+    background: color-mix(in oklch, white 14%, transparent);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 16%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 22%, transparent);
+  }
+
+  .career-letter-circle-tab-label {
+    position: relative;
+  }
+
+  .career-letter-circle-tab-label {
+    display: inline;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 500;
+  }
+
+  .career-letter-circle-tab[aria-selected='true'] .career-letter-circle-tab-label {
+    color: var(--career-text);
+  }
+
+  .career-letter-circle-tab-label svg,
+  .career-letter-circle-tab > strong,
+  .career-letter-circle-tab-summary {
+    display: none;
+  }
+
+  /* Карточка круга */
+  .career-letter-card {
+    gap: var(--career-space-4);
+  }
+
+  .career-letter-card-head {
+    display: grid;
+    gap: var(--career-space-1);
+    padding-inline: var(--career-space-1);
+  }
+
+  .career-letter-card-summary {
+    display: block;
+    margin: 0;
+  }
+
+  .career-letter-card-head:not(.is-approved) .career-letter-chip {
+    display: none;
+  }
+
+  .career-letter-block {
+    gap: var(--career-space-2);
+    padding-block-start: 0;
+    border-block-start: 0;
+  }
+
+  .career-letter-block .career-letter-sub-head {
+    padding-inline: var(--career-letter-cap-inset);
+  }
+
+  .career-letter-block .career-letter-sub-head h3,
+  .career-letter-cap {
+    margin: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: 0.02em;
+  }
+
+  .career-letter-block .career-letter-info-tip,
+  .career-letter-workplaces .career-letter-chip {
+    display: none;
+  }
+
+  .career-letter-foot,
+  .career-letter-meta {
+    display: block;
+    margin: 0;
+    padding-inline: var(--career-letter-cap-inset);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+    line-height: 1.5;
+  }
+
+  .career-letter-meta span + span::before {
+    content: ' · ';
+  }
+
+  /* Куда и что отправим */
+  .career-letter-dest-list,
+  .career-letter-workplaces ul {
+    overflow: hidden;
+    border-radius: var(--career-letter-list-radius);
+    background: var(--career-surface);
+  }
+
+  .career-letter-dest-row {
+    position: relative;
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+  }
+
+  .career-letter-dest-row + .career-letter-dest-row::before {
+    content: '';
+    position: absolute;
+    inset-inline: 56px 0;
+    inset-block-start: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-letter-dest-icon {
+    display: inline-grid;
+    place-items: center;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: 9px;
+    background: color-mix(in oklch, white 7%, transparent);
+  }
+
+  .career-letter-dest-copy {
+    gap: 0;
+  }
+
+  .career-letter-dest-copy strong {
+    font-size: var(--career-text-md);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .career-letter-dest-copy small {
+    font-size: var(--career-text-xs);
+    line-height: 1.5;
+  }
+
+  .career-letter-dest-picker {
+    padding-inline: var(--career-space-4);
+  }
+
+  /* Письмо: язык, тон и текст — один список */
+  .career-letter-settings {
+    display: block;
+  }
+
+  .career-letter-cap {
+    display: block;
+    padding-inline: var(--career-letter-cap-inset);
+    padding-block-end: var(--career-space-2);
+  }
+
+  .career-letter-settings label {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-4);
+    min-block-size: 52px;
+    padding: var(--career-space-1) var(--career-space-4);
+    background: var(--career-surface);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+  }
+
+  .career-letter-cap + label {
+    border-radius: var(--career-letter-list-radius) var(--career-letter-list-radius) 0 0;
+  }
+
+  .career-letter-settings label + label::before,
+  .career-letter-editor::before {
+    content: '';
+    position: absolute;
+    inset-inline: var(--career-space-4) 0;
+    inset-block-start: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-letter-select {
+    flex: 1;
+  }
+
+  .career-shell .career-letter-settings select {
+    block-size: max(44px, var(--career-target-min));
+    padding-block: 0;
+    padding-inline: 0 calc(var(--career-space-2) + 16px);
+    border: 0;
+    background: transparent;
+    color: var(--career-text);
+    font-size: var(--career-text-md);
+    text-align: end;
+    text-align-last: end;
+  }
+
+  .career-letter-select-caret {
+    inset-inline-end: 0;
+  }
+
+  /* gap карточки между настройками и полем убран: это одна группа */
+  .career-letter-settings + .career-letter-editor,
+  .career-letter-settings + .career-letter-loading + .career-letter-editor {
+    margin-block-start: calc(-1 * var(--career-space-4));
+  }
+
+  .career-letter-editor {
+    position: relative;
+    gap: var(--career-space-2);
+  }
+
+  .career-letter-editor label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .career-shell .career-letter-editor textarea {
+    display: block;
+    overflow: hidden;
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 0 0 var(--career-letter-list-radius) var(--career-letter-list-radius);
+    background: var(--career-surface);
+    color: var(--career-text);
+    font-size: var(--career-text-md);
+    line-height: 1.5;
+    resize: none;
+  }
+
+  .career-letter-notes {
+    padding-inline: var(--career-letter-cap-inset);
+  }
+
+  /* Места работы: галка справа, вся строка — цель */
+  .career-letter-workplaces .career-letter-sub-head {
+    display: block;
+  }
+
+  .career-letter-workplaces li {
+    position: relative;
+    border-block-end: 0;
+  }
+
+  .career-letter-workplaces li + li::before {
+    content: '';
+    position: absolute;
+    inset-inline: var(--career-space-4) 0;
+    inset-block-start: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-letter-workplaces li label {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-3);
+    min-block-size: 50px;
+    padding: var(--career-space-3) var(--career-space-4);
+    cursor: pointer;
+  }
+
+  .career-letter-workplaces li label:has(input:focus-visible) {
+    outline: 2px solid var(--career-accent);
+    outline-offset: -2px;
+    border-radius: var(--career-letter-list-radius);
+  }
+
+  .career-shell .career-letter-workplaces input[type='checkbox'] {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    min-inline-size: 0;
+    min-block-size: 0;
+    max-inline-size: none;
+    max-block-size: none;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .career-letter-job-copy {
+    flex: 1;
+    color: var(--career-text);
+    font-size: var(--career-text-md);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .career-letter-job-copy strong {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  .career-letter-job-copy small {
+    margin-block-start: 0;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  .career-letter-job-tick {
+    display: block;
+    flex: none;
+    color: var(--career-accent);
+    visibility: hidden;
+  }
+
+  .career-letter-workplaces input:checked ~ .career-letter-job-tick {
+    visibility: visible;
+  }
+
+  /* «Одобрить» прилипает над меню или над клавиатурой. Край прилипания — внутренний отступ
+     `.career-main`, он уже равен меню с safe-area плюс 16 px, поэтому без клавиатуры сдвиг 0. */
+  .career-letter-actions,
+  .career-letter-action-row {
+    display: contents;
+  }
+
+  .career-letter-action-row .career-btn-primary {
+    position: sticky;
+    inset-block-end: max(
+      0px,
+      calc(
+        var(--career-letter-keyboard, 0px) + var(--career-space-2) -
+          var(--career-mobile-nav-height) - var(--career-space-4)
+      )
+    );
+    z-index: 7;
+    inline-size: 100%;
+    min-block-size: 50px;
+    border-radius: 25px;
+    font-size: var(--career-text-md);
+    font-weight: 600;
+    box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
+  }
+
+  .career-letter-footnote {
+    padding-inline: var(--career-letter-cap-inset);
+    color: var(--career-text-dim);
+    line-height: 1.5;
+  }
+
+  .career-letter-actions > [role='alert'] {
+    margin: 0;
+    padding-inline: var(--career-letter-cap-inset);
+    color: var(--career-danger);
+    font-size: var(--career-text-xs);
+  }
+}

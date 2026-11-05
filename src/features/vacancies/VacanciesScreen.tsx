@@ -1,3 +1,4 @@
+import type { OpenExpertOptions } from '../shell/CareerWorkspaceShellHelpers';
 import { effectiveVacancySort, vacancySortProps, type VacancySortProps } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -101,7 +102,7 @@ export interface VacanciesScreenProps {
     subject?: CoachTurnSubject,
     subjectTitle?: string,
     initialPrompt?: string,
-    options?: { readonly send?: boolean; readonly contextOnly?: boolean },
+    options?: OpenExpertOptions,
   ) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;

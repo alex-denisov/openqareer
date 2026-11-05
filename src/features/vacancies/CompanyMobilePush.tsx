@@ -1,3 +1,4 @@
+import { vacancySourceDisplayName } from '../../../shared/vacancySourceLabel';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { PushConsultantButton } from '../shell/PushConsultantButton';
 import {
@@ -169,7 +170,7 @@ function VacancyGroup({ props }: { readonly props: CompanyMobilePushProps }) {
             title={vacancy.title}
             sub={[
               companyLocationLabel(vacancy.location),
-              `${vacancy.sourceName}, ${formatObservedDate(vacancy.sourceDate)}`,
+              `${vacancySourceDisplayName(vacancy.sourceName)}, ${formatObservedDate(vacancy.sourceDate)}`,
             ]
               .filter(Boolean)
               .join(' · ')}

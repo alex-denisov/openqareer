@@ -180,7 +180,7 @@ describe('документ публичного каталога (B209)', () => 
         }),
       )!,
     );
-    expect(html).toContain('<dt>Источник</dt><dd>Remotive (Global Remote)</dd>');
+    expect(html).toContain('<dt>Источник</dt><dd>Remotive</dd>');
     // Без имени в реестре площадка не выдумывается.
     const nameless = renderVacancyDocument(buildVacancyDetail(cluster())!);
     expect(nameless).not.toContain('<dt>Источник</dt>');

@@ -582,7 +582,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await captureState(page, testInfo, 'pitch-loading');
     await releasePitch(state);
     await waitForLetter(page);
-    await expect(page.getByText(/Длина подобрана под канал/u)).toBeVisible();
+    await expect(page.getByText(/длина подобрана под канал/iu)).toBeVisible();
     await captureState(page, testInfo, 'high-facts');
   });
 
@@ -870,6 +870,8 @@ test.describe('B449 — письмо под вакансию', () => {
         }),
       );
     expect(dimensions.length).toBeGreaterThan(0);
-    expect(dimensions.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+    // Д10: (i) при 390 заменены подписью и не рисуются (display: none, размер 0).
+    const shown = dimensions.filter(({ width, height }) => width > 0 || height > 0);
+    expect(shown.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
   });
 });

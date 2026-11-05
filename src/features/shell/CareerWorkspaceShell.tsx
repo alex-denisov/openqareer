@@ -919,6 +919,7 @@ function CareerWorkspaceShellContent({
               subjectTitle={expertConfig.subjectTitle}
               initialPrompt={expertConfig.initialPrompt}
               sendRequest={expertConfig.sendRequest}
+              focusRequest={expertConfig.focusRequest}
               initialUser={session ?? null}
               loadingSession={sessionPending}
               mobileExpanded={expertSheetExpanded}
