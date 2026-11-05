@@ -9,29 +9,48 @@ import { createHash } from 'node:crypto';
 import { normalizeTextForComparison } from './vacancyFingerprint';
 
 const ATS_URL_REGEX =
-  /(https?:\/\/(?:boards\.greenhouse\.io|jobs\.lever\.co|jobs\.ashbyhq\.com|apply\.workable\.com|[a-z0-9-]+\.recruitee\.com)\/[^\s"')]+)/i;
+  /(https?:\/\/(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|api\.eu\.lever\.co|jobs\.ashbyhq\.com|apply\.workable\.com|[a-z0-9-]+\.recruitee\.com|[a-z0-9-]+\.pinpointhq\.com|[a-z0-9-]+\.myworkdayjobs\.com)\/[^\s"')]+)/i;
 
 export function getSourcePriority(provenance: VacancyProvenance): number {
+  // 1. Direct employer career sites and ATS boards (Priority: 100)
+  // Whether delivered via direct scraping, JSON API, RSS (e.g. company career RSS), or ATS adapter
   if (
+    provenance.sourceId.startsWith('ats-') ||
     provenance.sourceId.startsWith('ats_') ||
     provenance.sourceType === 'career_site' ||
-    provenance.sourceType === 'direct'
+    provenance.sourceType === 'direct' ||
+    provenance.sourceId === 'src-tradingview' ||
+    ATS_URL_REGEX.test(provenance.sourceUrl)
   ) {
-    return 10;
+    return 100;
   }
-  if (provenance.sourceType === 'hh' || provenance.sourceType === 'browser_session') {
-    return 8;
+
+  // 2. Telegram / Social community channels (Priority: 20)
+  // Telegram has lower priority than job boards/aggregators because it is mostly NDA, secondary reposts, grey market, or closed hiring
+  if (
+    provenance.sourceType === 'telegram' ||
+    provenance.sourceId.startsWith('src-tg-') ||
+    provenance.sourceId.startsWith('tg-')
+  ) {
+    return 20;
   }
-  if (provenance.sourceType === 'remotive' || provenance.sourceType === 'json_api') {
-    return 6;
+
+  // 3. Job Boards and Aggregators (Priority: 50)
+  // hh.ru, LinkedIn, Glassdoor, Naukri, Monster, ZipRecruiter, Remotive, WeWorkRemotely, TheMuse, BDJobs, Bayt, Wellfound, etc.
+  // All job boards/aggregators are equal: below direct employer sites (100) and above Telegram (20).
+  if (
+    provenance.sourceType === 'hh' ||
+    provenance.sourceType === 'hh_search' ||
+    provenance.sourceType === 'browser_session' ||
+    provenance.sourceType === 'linkedin_crawler' ||
+    provenance.sourceType === 'remotive' ||
+    provenance.sourceType === 'json_api' ||
+    provenance.sourceType === 'rss'
+  ) {
+    return 50;
   }
-  if (provenance.sourceType === 'rss') {
-    return 4;
-  }
-  if (provenance.sourceType === 'telegram') {
-    return 2;
-  }
-  return 1;
+
+  return 10;
 }
 
 function normalizeRoleTitle(title: string): string {

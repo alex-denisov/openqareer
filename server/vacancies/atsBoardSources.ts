@@ -36,7 +36,8 @@ export function atsBoardSource(measured: MeasuredAtsBoard): RegisteredVacancySou
   // into MultiSourceVacancyEngine rather than living only in the provider
   // contract (B202/B217).
   const robotsOverride =
-    measured.provider === 'smartrecruiters'
+    measured.provider === 'smartrecruiters' &&
+    (measured.board === 'BoschGroup' || measured.board === 'visa')
       ? {
           grantedBy: 'owner' as const,
           grantedOn: '2026-09-19',

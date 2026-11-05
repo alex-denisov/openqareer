@@ -76,4 +76,14 @@ describe('classifyTelegramPost', () => {
   it('пост без единого признака остаётся неизвестным и вакансией не считается', () => {
     expect(classifyTelegramPost('Всем привет, как дела? Пятница!')).toBe('unknown');
   });
+
+  it('узнаёт англоязычные структурированные посты (Company, Location, Job type)', () => {
+    const post = `Senior 3D Environment Artist\nCompany: 4A Games\nExperience level: Middle\nSalary: Negotiable\nJob type: Full time\nLocation: #Malta #Ukraine`;
+    expect(classifyTelegramPost(post)).toBe('vacancy');
+  });
+
+  it('узнаёт короткие карточки с прямой ссылкой на вакансию и условиями', () => {
+    const post = `Customer Success Engineer в vCluster Labs:\nhttps://www.remocate.app/jobs/customer-success-engineer-vcluster-labs\nМожно работать удалённо. Зарплата в валюте.\nПри отклике укажите, что нашли вакансию на Remocate.`;
+    expect(classifyTelegramPost(post)).toBe('vacancy');
+  });
 });

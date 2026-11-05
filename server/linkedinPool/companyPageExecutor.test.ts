@@ -815,3 +815,4 @@ describe('LinkedinPoolCompanyPageExecutor persistent profile (B373)', () => {
     expect(fake.context.addCookies).toHaveBeenCalled();
   });
 });
+

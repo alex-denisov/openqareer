@@ -306,6 +306,55 @@ describe('B205: Cross-source deduplication across five platforms into one card',
     expect(card.skills).toContain('Design Systems');
   });
 
+  it('direct employer ATS (with hyphen ats-) outranks aggregator hh.ru as canonical primaryUrl', () => {
+    const hhVacancy: UnifiedVacancy = {
+      id: 'src-hh-search:998877',
+      fingerprint: 'fp-playrix-c-dev',
+      title: 'C++ Game Developer',
+      company: 'Playrix',
+      location: 'Удаленно',
+      isRemote: true,
+      description: 'Playrix ищет C++ Game Developer для развития топовых казуальных игр.',
+      url: 'https://hh.ru/vacancy/998877',
+      requiredSkills: ['C++'],
+      provenance: {
+        sourceType: 'hh',
+        sourceId: 'src-hh-search',
+        sourceName: 'HeadHunter',
+        sourceUrl: 'https://hh.ru/vacancy/998877',
+        observedAt: '2026-09-01T10:00:00.000Z',
+      },
+      publishedAt: '2026-09-01T09:00:00.000Z',
+      status: 'active',
+    };
+
+    const directAtsVacancy: UnifiedVacancy = {
+      id: 'ats-greenhouse-playrix:554433',
+      fingerprint: 'fp-playrix-c-dev-direct',
+      title: 'Senior C++ Game Developer',
+      company: 'Playrix',
+      location: 'Remote, Cyprus / Worldwide',
+      isRemote: true,
+      description: 'Playrix is looking for a Senior C++ Game Developer.',
+      url: 'https://job-boards.greenhouse.io/playrix/jobs/554433',
+      requiredSkills: ['C++'],
+      provenance: {
+        sourceType: 'json_api',
+        sourceId: 'ats-greenhouse-playrix',
+        sourceName: 'Playrix Careers',
+        sourceUrl: 'https://job-boards.greenhouse.io/playrix/jobs/554433',
+        observedAt: '2026-09-01T11:00:00.000Z',
+      },
+      publishedAt: '2026-09-01T08:00:00.000Z',
+      status: 'active',
+    };
+
+    const clusters = clusterVacancies([hhVacancy, directAtsVacancy]);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]!.primaryUrl).toBe('https://job-boards.greenhouse.io/playrix/jobs/554433');
+    expect(clusters[0]!.canonicalCompany).toBe('Playrix');
+  });
+
   it('calculates reprint and authenticity share per source for B200', async () => {
     const { calculateSourceAuthenticity } = await import('./vacancyDeduplicator');
     const clusters = clusterVacancies([

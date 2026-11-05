@@ -188,4 +188,16 @@ describe('extractTelegramJobHeader', () => {
       extractTelegramJobHeader(['Senior Unity / Full-Stack Developer C#', 'Задачи:']).title,
     ).toBe('Senior Unity / Full-Stack Developer C#');
   });
+
+  it('reads labelled employer when company name is on the following line', () => {
+    const header = extractTelegramJobHeader([
+      'Senior 3D Character Artist',
+      'Company:',
+      '4A Games',
+      'Experience level: Senior',
+      'Salary: Negotiable',
+    ]);
+    expect(header.title).toBe('Senior 3D Character Artist');
+    expect(header.company).toBe('4A Games');
+  });
 });

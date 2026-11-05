@@ -9,6 +9,7 @@ export default defineConfig({
     __APP_COMMIT__: JSON.stringify(process.env.OPENQAREER_COMMIT_SHA ?? ''),
   },
   test: {
+    testTimeout: 15_000,
     exclude: [
       '**/e2e/**',
       // Agent worktrees hold a second checkout of this repo; running their

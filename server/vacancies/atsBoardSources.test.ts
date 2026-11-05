@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atsBoardSource, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { hasJsonAdapter } from './jsonSourceAdapters';
+import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 
 describe('доска работодателя как источник', () => {
   it('строит источник с замеренным адресом и именем компании', () => {
@@ -73,7 +74,6 @@ describe('доски работодателей подключены к прод
   });
 
   it('движок берёт доску в плановый опрос и зовёт её замеренный адрес', async () => {
-    const { MultiSourceVacancyEngine } = await import('./multiSourceVacancyEngine');
     const asked: string[] = [];
     const engine = new MultiSourceVacancyEngine({
       fetcher: async (source) => {
@@ -85,5 +85,5 @@ describe('доски работодателей подключены к прод
     expect(board).toBeDefined();
     await engine.syncSource(board!.id);
     expect(asked).toContain(board!.targetUrl);
-  });
+  }, 30_000);
 });

@@ -98,7 +98,7 @@ function pageOf(url: string, name: string): number {
  */
 const THEMUSE_MAX_PAGE = 99;
 const THEMUSE_LEVELS = ['Internship', 'Entry Level', 'Mid Level', 'Senior Level', 'Management'];
-const THEMUSE_PAGES_PER_SYNC = 200;
+const THEMUSE_PAGES_PER_SYNC = 25;
 const THEMUSE_INTERVAL_MINUTES = 30;
 
 interface ThemuseQuery {
@@ -122,7 +122,7 @@ function themuseUrl(targetUrl: string, query: ThemuseQuery, page: number): strin
 
 const themuse: PagingPlan = {
   pagesPerSync: THEMUSE_PAGES_PER_SYNC,
-  delayMs: 400,
+  delayMs: 600,
   first: (targetUrl, nowMs) => {
     const queries = themuseQueries(targetUrl);
     const tick = Math.floor(nowMs / (THEMUSE_INTERVAL_MINUTES * 60_000));
@@ -174,7 +174,7 @@ const amazon: PagingPlan = {
   first: (targetUrl) => ({ url: withParam(targetUrl, 'offset', '0') }),
   next: (previous, payload) => {
     const offset = pageOf(previous.url, 'offset');
-    const limit = pageOf(previous.url, 'result_limit') || 100;
+    const limit = pageOf(previous.url, 'result_limit') || 30;
     const hits = numeric(record(payload).hits) ?? 0;
     const jobs = asArray(record(payload).jobs) ?? [];
     if (jobs.length === 0 || offset + limit >= hits) return null;
@@ -263,7 +263,7 @@ function microsoftRequest(url: string, page: number, state: FreshWindowState): P
 
 const microsoft: PagingPlan = {
   pagesPerSync: MICROSOFT_PAGES_PER_SYNC,
-  delayMs: 1_500,
+  delayMs: 2_500,
   first: (targetUrl, nowMs) => {
     const startPage = rotatingWindowStart(
       nowMs,
@@ -433,8 +433,8 @@ function workdayRequest(url: string, offset: number, total: number): PagedReques
 }
 
 const workday: PagingPlan = {
-  pagesPerSync: 100,
-  delayMs: 400,
+  pagesPerSync: 25,
+  delayMs: 500,
   first: (targetUrl) => workdayRequest(targetUrl, 0, 0),
   next: (previous, payload) => {
     const state = record(previous.state);
@@ -589,6 +589,8 @@ function bdjobsFirstRequest(targetUrl: string): PagedRequest {
   const url = new URL(targetUrl);
   if (!url.searchParams.has('hidJobSearch')) url.searchParams.set('hidJobSearch', 'jobsearch');
   if (!url.searchParams.has('txtKeyword')) url.searchParams.set('txtKeyword', 'software engineer');
+  if (!url.searchParams.has('isPro')) url.searchParams.set('isPro', '1');
+  if (!url.searchParams.has('rpp')) url.searchParams.set('rpp', '20');
   if (!url.searchParams.has('pg')) url.searchParams.set('pg', '1');
   return {
     url: url.toString(),

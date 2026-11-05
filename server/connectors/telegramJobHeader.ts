@@ -65,11 +65,17 @@ function cleanEmployer(raw: string): string {
 
 /** `Компания: X` — the one form the channels do label, on its own line or mid-sentence. */
 function readLabelledEmployer(lines: string[]): string {
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const own = line.match(/^(?:компания|company|работодатель)\s*[:\-—]\s*(.+)$/iu);
     if (own) {
       const value = cleanEmployer(own[1]);
       if (value) return value;
+    }
+    const standalone = line.match(/^(?:компания|company|работодатель)\s*[:\-—]?$/iu);
+    if (standalone && i + 1 < lines.length) {
+      const nextVal = cleanEmployer(lines[i + 1]);
+      if (nextVal) return nextVal;
     }
   }
   const inline = lines

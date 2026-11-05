@@ -2,6 +2,11 @@ import { readLinkedinPage } from './linkedinPageReader';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Browser, BrowserContext, Page } from 'playwright';
+import {
+  LinkedinOrganicNavigator,
+  type OrganicNavigatorPage,
+  type WarmupFeedOutcome,
+} from './linkedinOrganicNavigator';
 import { RECRUITER_TITLE, parseLinkedinCompanySearchPageHtml } from './companyPageParser';
 import {
   parseLinkedinCompanyIdFromPageHtml,
@@ -97,6 +102,10 @@ export interface LinkedinPoolExecutorDependencies {
   readonly wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly planDay?: typeof planDay;
   readonly decide?: typeof decide;
+  readonly enableOrganicWarmup?: boolean;
+  readonly organicNavigatorFactory?: (page: Page) => {
+    warmupFeed: (options?: { maxPosts?: number; likeProbability?: number }) => Promise<WarmupFeedOutcome>;
+  };
 }
 
 export interface LinkedinPoolExecutorExa {
@@ -144,6 +153,10 @@ export class LinkedinPoolCompanyPageExecutor {
   private readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   private readonly planDayFn?: typeof planDay;
   private readonly decideFn?: typeof decide;
+  private readonly enableOrganicWarmup: boolean;
+  private readonly organicNavigatorFactory?: (page: Page) => {
+    warmupFeed: (options?: { maxPosts?: number; likeProbability?: number }) => Promise<WarmupFeedOutcome>;
+  };
   private pauseController?: AbortController;
   private lockedProfileDirectory?: string;
   private activeBrowser?: Browser;
@@ -169,6 +182,10 @@ export class LinkedinPoolCompanyPageExecutor {
     this.wait = dependencies.wait ?? abortableWait;
     this.planDayFn = dependencies.planDay;
     this.decideFn = dependencies.decide;
+    this.enableOrganicWarmup =
+      dependencies.enableOrganicWarmup ??
+      (process.env.OPENQAREER_LINKEDIN_ORGANIC_WARMUP === 'true');
+    this.organicNavigatorFactory = dependencies.organicNavigatorFactory;
     if (this.config.enabled) {
       ensureCompanyRecruitersSchema(this.database);
       ensureJobSearchSchema(this.database);
@@ -344,6 +361,8 @@ export class LinkedinPoolCompanyPageExecutor {
   ): Promise<LinkedinPoolExecutorReport> {
     const page = await this.openPage(accountId, cookies, timezone);
     if (page === 'busy') return report('account_not_ready');
+    const warmupReport = await this.performOrganicWarmupIfEnabled(page);
+    if (warmupReport) return warmupReport;
     const read = await this.readPage(
       page,
       linkedinJobSearchUrl(query.term, query.location),
@@ -416,6 +435,35 @@ export class LinkedinPoolCompanyPageExecutor {
     return undefined;
   }
 
+  /**
+   * B314: Органический прогрев ленты перед чтением целевой страницы в режиме warmup.
+   * При чекпоинте/капче — немедленный Fail-Closed и оповещение владельца через Telegram.
+   */
+  private async performOrganicWarmupIfEnabled(
+    page: Page,
+  ): Promise<LinkedinPoolExecutorReport | undefined> {
+    if (!this.enableOrganicWarmup) return undefined;
+    if (!this.config.enabled || this.config.mode !== 'warmup') return undefined;
+
+    const navigator = this.organicNavigatorFactory
+      ? this.organicNavigatorFactory(page)
+      : new LinkedinOrganicNavigator(page as unknown as OrganicNavigatorPage, {
+          random: this.random,
+        });
+
+    try {
+      const outcome = await navigator.warmupFeed();
+      if (outcome.status === 'checkpoint') {
+        await page.close().catch(() => undefined);
+        return this.blockForReauth('challenge_required');
+      }
+    } catch (error) {
+      await page.close().catch(() => undefined);
+      return { ...report('transient_failure'), reason: describeFailure(error) };
+    }
+    return undefined;
+  }
+
   private async collectCompany(
     accountId: string,
     companyName: string,
@@ -430,6 +478,8 @@ export class LinkedinPoolCompanyPageExecutor {
     if (profileDirectory === 'busy') return report('account_not_ready');
     recordLinkedinExecutorCompanyAttempt(this.database, accountId, hash, this.now());
     const page = await this.launchPage(profileDirectory, cookies, timezone);
+    const warmupReport = await this.performOrganicWarmupIfEnabled(page);
+    if (warmupReport) return warmupReport;
     const searchUrl = linkedinCompanySearchUrl(companyName);
     const search = await this.readPage(page, searchUrl, 'company_search', hash);
     if (search.status !== 'ready') return this.handlePageFailure(search, 1);
@@ -606,14 +656,17 @@ export class LinkedinPoolCompanyPageExecutor {
     );
     if (!changed) return { ...report('needs_reauth'), reason };
     const reasonCopy: Record<typeof reason, string> = {
-      challenge_required: 'LinkedIn запросил проверку',
+      challenge_required: 'LinkedIn запросил проверку (капча / чекпоинт)',
       expired: 'сессия LinkedIn истекла',
       login_required: 'нужен ручной вход в LinkedIn',
       platform_restricted: 'LinkedIn ограничил запрос',
       unexpected_page: 'получена неожиданная страница LinkedIn',
     };
     const outcome = await this.notifyOwner(
-      `Сбор остановлен: ${reasonCopy[reason]}. Аккаунт пула ждёт ручной проверки; автоматического переключения нет.`,
+      `⚠️ LinkedIn Pool: требуется действие человека\n` +
+      `Аккаунт: ${config.accountId}\n` +
+      `Причина: ${reasonCopy[reason]} (${reason})\n` +
+      `Что сделать: Откройте сессию аккаунта в десктопном приложении и пройдите проверку вручную.`,
     );
     return { ...report('needs_reauth'), reason, notification: outcome.status };
   }

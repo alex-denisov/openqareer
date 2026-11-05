@@ -36,6 +36,9 @@ describe('ats board source id', () => {
     expect(atsBoardEndpoint('lever', 'ledger')).toBe(
       'https://api.lever.co/v0/postings/ledger?mode=json',
     );
+    expect(atsBoardEndpoint('lever', 'eu-olx')).toBe(
+      'https://api.eu.lever.co/v0/postings/olx?mode=json',
+    );
     expect(atsBoardEndpoint('ashby', 'ramp')).toBe(
       'https://api.ashbyhq.com/posting-api/job-board/ramp',
     );
@@ -115,6 +118,27 @@ describe('ats board adapters', () => {
       observedAt: OBSERVED_AT,
     });
     expect(vacancy?.publishedAt).toBe(new Date('2026-08-01T06:05:10-04:00').toISOString());
+  });
+
+  it('Greenhouse: отдаёт приоритет updated_at над first_published для свежих вакансий (Airtable)', () => {
+    const [vacancy] = normalizeAtsBoard(
+      'ats-greenhouse-airtable',
+      {
+        jobs: [
+          {
+            id: 8425211002,
+            absolute_url: 'https://job-boards.greenhouse.io/airtable/jobs/8425211002',
+            title: 'Software Engineer',
+            company_name: 'Airtable',
+            location: { name: 'San Francisco, CA' },
+            first_published: '2026-02-01T10:00:00Z',
+            updated_at: '2026-10-15T12:00:00Z',
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT, sourceName: 'Airtable' },
+    );
+    expect(vacancy?.publishedAt).toBe('2026-10-15T12:00:00.000Z');
   });
 
   it('берёт работодателя Lever из реестра: лента его не публикует', () => {

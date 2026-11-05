@@ -18,14 +18,14 @@ export interface HhTextRateConfig {
 }
 
 export const HH_TEXT_RATE_DEFAULTS: HhTextRateConfig = {
-  startRatePerSec: 2,
+  startRatePerSec: 1,
   minRatePerSec: 1,
-  maxRatePerSec: 10,
-  stepPerSec: 1,
+  maxRatePerSec: 3,
+  stepPerSec: 0.5,
   windowMs: 10 * 60 * 1_000,
   minSamples: 20,
   maxServerErrorShare: 0.02,
-  maxInFlight: 8,
+  maxInFlight: 2,
 };
 
 export type HhTextOutcome = 'ok' | 'refusal' | 'server_error';
