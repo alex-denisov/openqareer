@@ -105,6 +105,12 @@ openqareer.com {
 	}
 }
 
+# 05.11: Caddy's automatic HTTP redirect wrote every visitor to the Googlebot log,
+# past log_skip. An explicit block keeps the same 308 and has no log of its own.
+http://openqareer.com {
+	redir https://openqareer.com{uri} 308
+}
+
 # 03.11: typed and linked www addresses had no record at all. One 301 to the
 # apex keeps the path and query, so the old link lands on the same page.
 www.openqareer.com {
