@@ -1,3 +1,4 @@
+import { plainCoachText } from '../../shared/coachPlainText';
 import { sanitizeHiddenMarkersDeep, stripHiddenMarkers } from '../../shared/textHygiene';
 import type { CoachTurnInput } from '../domain/coach';
 import type { CoachProvider, CoachProviderResult, CoachTurnOptions } from './coachProvider';
@@ -26,15 +27,37 @@ export class HygienicCoachProvider implements CoachProvider {
     idempotencyKey: string,
     options?: CoachTurnOptions,
   ): Promise<CoachProviderResult> {
-    const answer = await this.inner.createTurn(input, idempotencyKey, cleanStream(options));
-    const result = sanitizeHiddenMarkersDeep(answer.result);
+    // Шаг сервера возвращает JSON в message: его метки — данные, а не текст кандидату.
+    const forCandidate = !input.internalPurpose;
+    const answer = await this.inner.createTurn(input, idempotencyKey, cleanStream(options, forCandidate));
+    const sanitized = sanitizeHiddenMarkersDeep(answer.result);
+    const result = forCandidate ? withPlainReply(sanitized) : sanitized;
     return result === answer.result ? answer : { ...answer, result };
   }
 }
 
 /** The streamed reply reaches the candidate before the result does: it is cleaned the same way (29.10). */
-function cleanStream(options: CoachTurnOptions | undefined): CoachTurnOptions | undefined {
+function cleanStream(
+  options: CoachTurnOptions | undefined,
+  forCandidate: boolean,
+): CoachTurnOptions | undefined {
   const sink = options?.onMessageText;
   if (!sink) return options;
-  return { ...options, onMessageText: (text) => sink(stripHiddenMarkers(text)) };
+  return {
+    ...options,
+    onMessageText: (text) => {
+      const clean = stripHiddenMarkers(text);
+      sink(forCandidate ? plainCoachText(clean) : clean);
+    },
+  };
+}
+
+/** Текст, который читает кандидат: служебные метки контекста сюда не проходят (B511 Д6). */
+function withPlainReply(result: CoachProviderResult['result']): CoachProviderResult['result'] {
+  const plain = (text: unknown) => (typeof text === 'string' ? plainCoachText(text) : text);
+  const message = plain(result.message) as string;
+  const nextQuestion = plain(result.nextQuestion) as string | null;
+  return message === result.message && nextQuestion === result.nextQuestion
+    ? result
+    : { ...result, message, nextQuestion };
 }

@@ -26,10 +26,11 @@ const SUBJECT_LABEL: Readonly<Record<string, string>> = {
 export function visibleContextLine(input: {
   readonly subjectKind?: string;
   readonly hasMarketQuery: boolean;
+  readonly hasLetterDraft?: boolean;
 }): string {
   const subject = input.subjectKind ? SUBJECT_LABEL[input.subjectKind] : undefined;
   const parts = subject
-    ? ['профиль', subject]
+    ? ['профиль', subject, ...(input.hasLetterDraft ? ['письмо'] : [])]
     : ['профиль', 'условия поиска', ...(input.hasMarketQuery ? ['рынок'] : [])];
   return `Видит: ${parts.join(', ')}`;
 }

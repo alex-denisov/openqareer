@@ -388,6 +388,8 @@ export const coachTurnRequestSchema = z.object({
   marketQuery: z.string().trim().min(2).max(200).optional(),
   stage: coachTurnStageSchema.optional(),
   subject: coachTurnSubjectSchema.optional(),
+  /** Текст письма с экрана (макет 9): без него консультант гадает, что в письме. */
+  screenDraft: z.string().max(8_000).optional(),
   isService: z.boolean().optional(),
 });
 

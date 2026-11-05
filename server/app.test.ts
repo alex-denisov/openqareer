@@ -153,7 +153,7 @@ describe('OpenQareer API boundary', () => {
         ],
       },
       qualityFloor: 'gpt-5.6-sol',
-      promptRevision: 'career-v1.3-2026-10-28',
+      promptRevision: 'career-v1.4-2026-11-05',
     });
   });
 

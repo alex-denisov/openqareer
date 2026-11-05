@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { applicationScreenObject } from '../journey/consultantScreenObjects';
+import { usePublishConsultantObject } from '../journey/consultantScreenTopic';
 import type { ApplicationView } from './applicationsApi';
 import { formatDayMonthTime } from './responseCardFace';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
@@ -44,6 +46,7 @@ export function ResponseMockInterviewSuggestion({
 }) {
   const [open, setOpen] = useState(false);
   usePublishConsultantSuggestion(responseMockInterviewSuggestion(application, () => setOpen(true)));
+  usePublishConsultantObject(useMemo(() => applicationScreenObject(application.id), [application.id]));
   if (!open) return null;
   return (
     <InterviewPrepModal

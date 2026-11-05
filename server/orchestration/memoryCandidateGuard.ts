@@ -22,6 +22,8 @@ function citableSources(input: CoachTurnInput): Map<string, string> {
   for (const document of knowledge?.documents ?? []) sources.set(document.ref, document.excerpt);
   for (const question of knowledge?.openQuestions ?? [])
     sources.set(question.ref, question.statement);
+  for (const story of knowledge?.starStories ?? [])
+    sources.set(story.ref, [story.situation, story.task, story.action, story.result].join(' '));
   return sources;
 }
 
