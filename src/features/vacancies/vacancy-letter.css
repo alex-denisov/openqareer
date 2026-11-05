@@ -209,7 +209,8 @@
   min-block-size: var(--career-space-5);
   max-inline-size: var(--career-space-5);
   max-block-size: var(--career-space-5);
-  margin: 0;
+  /* Макет 9: строка места — 44 px с галочкой по центру, подпись под ней. */
+  margin: 10px 0;
   padding: 0;
   border: 0;
 }
@@ -557,11 +558,6 @@
   min-inline-size: 0;
   min-block-size: max(44px, var(--career-target-min));
   padding-block: var(--career-space-4) var(--career-space-2);
-}
-
-/* Макет 9: строка места — 44 px с галочкой по центру, подпись под ней. */
-.career-shell .career-letter-workplaces input[type='checkbox'] {
-  margin-block: 10px;
 }
 
 .career-letter-job-copy {
