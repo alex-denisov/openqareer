@@ -17,6 +17,7 @@ on:
       - '.github/workflows/desktop-release.yml'
       - 'src-tauri/**'
       - 'scripts/build-update-manifest.mjs'
+      - 'scripts/build-desktop-dist.ts'
       - 'deploy/openqareer-desktop-publish'
   workflow_dispatch:
     inputs:
@@ -37,7 +38,7 @@ env:
   # Everything the desktop bundle is built from; server-only changes ship no release.
   APP_PATHS: >-
     src shared src-tauri public index.html package.json package-lock.json
-    vite.config.ts tsconfig.json scripts/download-sing-box-sidecars.sh
+    vite.config.ts tsconfig.json scripts/download-sing-box-sidecars.sh scripts/build-desktop-dist.ts
 
 jobs:
   plan:
@@ -213,6 +214,9 @@ jobs:
           OPENQAREER_COMMIT_SHA: ${{ env.RELEASE_SHA }}
           VITE_OPENQAREER_RELEASE: ${{ env.RELEASE_SHA }}
         run: npm run build
+
+      - name: Build the desktop web folder
+        run: npx tsx scripts/build-desktop-dist.ts
 
       # beforeBuildCommand is a POSIX chain for macOS; its steps already ran above.
       - name: Build and sign the installer

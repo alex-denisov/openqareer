@@ -9,6 +9,7 @@ on:
     paths:
       - 'src-tauri/**'
       - 'scripts/download-sing-box-sidecars.sh'
+      - 'scripts/build-desktop-dist.ts'
       - '.github/workflows/desktop-windows.yml'
   workflow_dispatch:
 
@@ -56,6 +57,9 @@ jobs:
         env:
           VITE_OPENQAREER_RELEASE: ${{ github.sha }}
         run: npm run build
+
+      - name: Build the desktop web folder
+        run: npx tsx scripts/build-desktop-dist.ts
 
       - name: Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
