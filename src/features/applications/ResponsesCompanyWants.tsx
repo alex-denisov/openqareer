@@ -361,7 +361,8 @@ export function Feedback({ controller }: { readonly controller: CompanyWantsCont
       {pending ? (
         <div className="career-company-wants-confirm" role="alertdialog" aria-label="Подтверждение">
           <span>
-            Убрать из «Хочу» компаний: {pending.items.length}? Оповещения по ним прекратятся.
+            Убрать из «Хочу» компаний: {pending.items.length}? Этап и следующий шаг по ним удалятся,
+            а их вакансии перестанут подниматься в подборке.
           </span>
           <button
             type="button"
