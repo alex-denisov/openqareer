@@ -136,7 +136,13 @@ export function MobileStateHero({ flow }: { readonly flow: MockInterviewFlow }) 
   return (
     <div className="career-mock-mobile-hero">
       <h2>{title}</h2>
-      <p>{withoutPosition(sessionSummary(flow), position)}</p>
+      <p>{withoutPosition(withoutPosition(sessionSummary(flow), position), 'Мок-интервью завершено')}</p>
+      {session.status === 'completed' ? (
+        <span className="career-mock-result-status">
+          <CheckCircle aria-hidden="true" className="career-mock-icon" />
+          Завершено
+        </span>
+      ) : null}
     </div>
   );
 }

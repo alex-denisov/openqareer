@@ -6,17 +6,18 @@ import {
   CheckCircle,
   Circle,
   CircleNotch,
+  Clock,
   Lightbulb,
   Microphone,
   PaperPlaneTilt,
   PencilSimple,
+  Trash,
   WarningCircle,
 } from '@phosphor-icons/react';
-import { InterviewDiaryAction } from './InterviewDiaryAction';
 import type { SpeechIssue } from './browserSpeechRecognition';
 import type { InterviewQuestionView } from './interviewSimulatorApi';
 import type { MockInterviewSimulatorProps } from './mockInterviewSimulatorTypes';
-import { formatElapsed, QuestionProgress } from './MockInterviewProgress';
+import { formatElapsed, formatElapsedShort, QuestionProgress } from './MockInterviewProgress';
 import { SourcePanel } from './MockInterviewSourcePanel';
 import { MissingQuestion, SessionError } from './MockInterviewSupport';
 import './mock-interview-dock.css';
@@ -213,6 +214,7 @@ export function VoiceScreen({ flow, props }: ScreenProps) {
     <div className="career-mock-layout career-mock-voice-layout">
       <main className="career-mock-panel career-mock-question-panel">
         <QuestionProgress session={flow.session} title="Запись ответа" />
+        <VoiceDockActions flow={flow} />
         <p className="career-mock-question-prompt">{question.prompt}</p>
         <RecordingStatus voice={voice} />
         <VoiceTranscript voice={voice} />
@@ -225,9 +227,67 @@ export function VoiceScreen({ flow, props }: ScreenProps) {
           onRestart={flow.startVoice}
           onText={flow.switchToText}
         />
+        <VoiceDock
+          voice={voice}
+          busy={flow.operation !== null}
+          onFinish={finish}
+          onRestart={flow.startVoice}
+          onCancel={flow.cancelVoice}
+        />
       </main>
       <QuestionSourcePanel flow={flow} props={props} />
     </div>
+  );
+}
+
+/** 390, макет 14: «Ответить текстом» и «Остановиться» чипами над вопросом. */
+function VoiceDockActions({ flow }: { readonly flow: Flow }) {
+  const busy = flow.operation !== null;
+  return (
+    <div className="career-mock-dock-acts" role="group" aria-label="Действия с записью">
+      <button type="button" className="career-mock-dock-chip" disabled={busy} onClick={flow.switchToText}>
+        <PencilSimple aria-hidden="true" className="career-mock-icon" />
+        Ответить текстом
+      </button>
+      <button
+        type="button"
+        className="career-mock-dock-chip"
+        disabled={busy}
+        onClick={() => void flow.stop()}
+      >
+        <Clock aria-hidden="true" className="career-mock-icon" />
+        Остановиться
+      </button>
+    </div>
+  );
+}
+
+/** Красная точка макета: пока идёт запись, она же останавливает запись, ответ не отправляется. */
+function RecordingDot({ voice }: { readonly voice: SpeechTranscription }) {
+  if (voice.state !== 'recording') {
+    return <span className="career-mock-recording-dot" aria-hidden="true" />;
+  }
+  return (
+    <button
+      type="button"
+      className="career-mock-recording-stop"
+      aria-label="Остановить запись"
+      title="Остановить запись"
+      onClick={voice.stop}
+    >
+      <span className="career-mock-recording-dot" aria-hidden="true" />
+    </button>
+  );
+}
+
+/** Волна показывает, что запись идёт; уровень звука не меряем: второй захват микрофона мешает распознаванию на телефонах. */
+function RecordingWave({ bars }: { readonly bars: number }) {
+  return (
+    <span className="career-mock-wave" aria-hidden="true">
+      {Array.from({ length: bars }, (_, index) => (
+        <i key={index} />
+      ))}
+    </span>
   );
 }
 
@@ -235,9 +295,58 @@ function RecordingStatus({ voice }: { readonly voice: SpeechTranscription }) {
   const recording = voice.state === 'recording';
   return (
     <div className={`career-mock-recording${recording ? ' is-recording' : ''}`} role="status">
-      <span className="career-mock-recording-dot" aria-hidden="true" />
+      <RecordingDot voice={voice} />
       <strong>{recording ? 'Идёт запись' : 'Запись остановлена'}</strong>
       <span>{formatElapsed(voice.elapsedSeconds)}</span>
+      {recording ? <RecordingWave bars={24} /> : null}
+    </div>
+  );
+}
+
+function restartLabel(voice: SpeechTranscription): string {
+  return voice.state === 'recording' || voice.transcript.trim() ? 'Начать заново' : 'Начать запись';
+}
+
+/** 390, макет 14: строка записи над навигацией — корзина, время, волна, отправка. */
+function VoiceDock({
+  voice,
+  busy,
+  onFinish,
+  onRestart,
+  onCancel,
+}: {
+  readonly voice: SpeechTranscription;
+  readonly busy: boolean;
+  readonly onFinish: () => void;
+  readonly onRestart: () => void;
+  readonly onCancel: () => void;
+}) {
+  const recording = voice.state === 'recording';
+  return (
+    <div className="career-mock-voice-dock">
+      <button type="button" className="career-mock-dock-round is-danger" aria-label="Отменить запись" onClick={onCancel}>
+        <Trash aria-hidden="true" className="career-mock-icon" />
+      </button>
+      <span className="career-mock-voice-dock-time" role="status">
+        <RecordingDot voice={voice} />
+        {recording ? 'Запись' : 'Остановлена'} <b>{formatElapsedShort(voice.elapsedSeconds)}</b>
+      </span>
+      {recording ? (
+        <RecordingWave bars={14} />
+      ) : (
+        <button type="button" className="career-mock-dock-round is-quiet" aria-label={restartLabel(voice)} onClick={onRestart}>
+          <Microphone aria-hidden="true" className="career-mock-icon" />
+        </button>
+      )}
+      <button
+        type="button"
+        className="career-mock-dock-round is-send"
+        aria-label="Отправить голосом"
+        disabled={busy || !voice.transcript.trim()}
+        onClick={onFinish}
+      >
+        <PaperPlaneTilt aria-hidden="true" className="career-mock-icon" />
+      </button>
     </div>
   );
 }
@@ -306,16 +415,10 @@ function VoiceActions({
         <Check aria-hidden="true" className="career-mock-icon" />
         Закончить ответ
       </button>
-      {voice.state === 'recording' ? (
-        <button type="button" className="career-btn career-btn-ghost" onClick={voice.stop}>
-          Остановить запись
-        </button>
-      ) : (
-        <button type="button" className="career-btn career-btn-ghost" onClick={onRestart}>
-          <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
-          {voice.transcript.trim() ? 'Начать заново' : 'Начать запись'}
-        </button>
-      )}
+      <button type="button" className="career-btn career-btn-ghost" onClick={onRestart}>
+        <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
+        {restartLabel(voice)}
+      </button>
       <button type="button" className="career-btn career-btn-ghost" onClick={onText}>
         <PencilSimple aria-hidden="true" className="career-mock-icon" />
         Ответить текстом
@@ -338,7 +441,6 @@ export function ReviewScreen({ flow, props }: ScreenProps) {
           <p>«{answer.text}»</p>
         </section>
         <CriteriaList questionType={question.type} evaluation={answer.evaluation} />
-        <InterviewDiaryAction key={`${session.id}:${session.version}`} sessionId={session.id} />
         {answer.evaluation.feedback ? <ModelFeedback message={answer.evaluation.feedback} /> : null}
         {flow.error ? <SessionError flow={flow} /> : null}
         <ReviewActions flow={flow} props={props} storyId={question.storyId} />

@@ -92,6 +92,12 @@ export function useMockInterviewAnswerActions(options: QuestionActionOptions) {
     options.setScreen('question');
   }, [options]);
 
+  const cancelVoice = useCallback(() => {
+    options.speech.reset();
+    options.setDraft('');
+    options.setScreen('question');
+  }, [options]);
+
   const tryAgain = useCallback(() => {
     if (options.currentQuestionAnswer) options.setDraft(options.currentQuestionAnswer);
     options.answerStartedAt.current = Date.now();
@@ -100,7 +106,7 @@ export function useMockInterviewAnswerActions(options: QuestionActionOptions) {
     options.model.clearError();
   }, [options]);
 
-  return { answerElapsedSeconds, submitAnswer, startVoice, switchToText, tryAgain };
+  return { answerElapsedSeconds, submitAnswer, startVoice, switchToText, cancelVoice, tryAgain };
 }
 
 interface ProgressActionOptions {

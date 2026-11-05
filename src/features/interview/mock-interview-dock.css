@@ -189,3 +189,469 @@
     display: none;
   }
 }
+
+/* Экран голоса по макету 14. 1440: волна в строке записи, точка останавливает запись. */
+.career-mock-voice-dock {
+  display: none;
+}
+
+.career-mock-recording-stop {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Видимая точка 8–10 px, цель нажатия 44. */
+.career-mock-recording-stop::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  transform: translate(-50%, -50%);
+}
+
+.career-mock-recording .career-mock-recording-dot {
+  display: block;
+  inline-size: 10px;
+  block-size: 10px;
+}
+
+.career-mock-wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  block-size: 32px;
+  margin-inline-start: auto;
+}
+
+.career-mock-wave i {
+  display: block;
+  inline-size: 3px;
+  block-size: 30%;
+  border-radius: 2px;
+  background: var(--career-accent);
+  animation: career-mock-wave-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.career-mock-wave i:nth-child(3n) {
+  block-size: 80%;
+  animation-delay: -0.3s;
+}
+
+.career-mock-wave i:nth-child(3n + 1) {
+  block-size: 55%;
+  animation-delay: -0.6s;
+}
+
+.career-mock-wave i:nth-child(5n) {
+  block-size: 100%;
+  animation-delay: -0.9s;
+}
+
+@keyframes career-mock-wave-pulse {
+  from {
+    transform: scaleY(1);
+  }
+
+  to {
+    transform: scaleY(0.6);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-mock-wave i {
+    animation: none;
+  }
+}
+
+/* Строки итога на 390: на 1440 значков и стрелок нет. */
+.career-mock-row-icon,
+.career-mock-row-chev {
+  display: none;
+}
+
+@media (min-width: 761px) {
+  /* Д11: дневник ушёл на итог, ответ короче; «Следующий вопрос» виден при любой длине разбора. */
+  .career-mock-review-panel .career-mock-answer-quote p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .career-mock-review-panel .career-mock-review-actions {
+    position: sticky;
+    z-index: 1;
+    inset-block-end: 0;
+    padding-block: var(--career-space-2);
+    background: inherit;
+  }
+
+  /* Макет 14 voice: карточка по содержимому, кнопки сразу под распознанным. */
+  .career-mock-voice-layout .career-mock-question-panel {
+    min-block-size: 0;
+  }
+
+  .career-mock-result-rows {
+    display: contents;
+  }
+
+  .career-mock-row-icon.is-desktop {
+    display: contents;
+  }
+}
+
+@media (max-width: 760px) {
+  .career-mock-voice-layout .career-mock-progress-block h2,
+  .career-mock-voice-layout .career-mock-recording,
+  .career-mock-voice-layout .career-mock-voice-actions {
+    display: none;
+  }
+
+  .career-mock-voice-layout .career-mock-question-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .career-mock-dock-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-2);
+  }
+
+  .career-mock-voice-layout .career-mock-transcript {
+    display: grid;
+    gap: var(--career-space-3);
+    min-block-size: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .career-mock-voice-layout .career-mock-transcript .career-mock-transcript-label {
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-dim);
+  }
+
+  .career-mock-voice-layout .career-mock-transcript p:last-child {
+    justify-self: end;
+    max-inline-size: 86%;
+    padding: var(--career-space-3) var(--career-space-4);
+    border-radius: 18px 18px 6px 18px;
+    background: var(--career-accent-soft);
+    line-height: 1.4;
+  }
+
+  .career-mock-voice-dock {
+    position: fixed;
+    z-index: 10001;
+    inset-inline: var(--career-space-4);
+    inset-block-end: calc(
+      var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom)
+    );
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-3);
+    padding: var(--career-space-2);
+    border-radius: 22px;
+    background: var(--career-surface);
+    box-shadow:
+      0 8px 24px color-mix(in oklch, black 40%, transparent),
+      inset 0 0 0 1px var(--career-line);
+  }
+
+  .career-mock-dock-round {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    inline-size: 36px;
+    block-size: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    cursor: pointer;
+  }
+
+  .career-mock-dock-round::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+  }
+
+  .career-mock-dock-round.is-danger {
+    color: var(--career-danger);
+  }
+
+  .career-mock-dock-round.is-quiet {
+    margin-inline-start: auto;
+    color: var(--career-text);
+    background: color-mix(in oklch, var(--career-text) 12%, transparent);
+  }
+
+  .career-mock-dock-round.is-send {
+    color: var(--career-accent-ink);
+    background: var(--career-accent);
+  }
+
+  .career-mock-dock-round.is-send:disabled {
+    opacity: 0.48;
+    cursor: not-allowed;
+  }
+
+  .career-mock-voice-dock-time {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-2);
+    font-size: var(--career-text-sm);
+    white-space: nowrap;
+  }
+
+  .career-mock-voice-dock-time .career-mock-recording-dot {
+    display: block;
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background: var(--career-danger);
+  }
+
+  .career-mock-voice-dock .career-mock-wave {
+    flex: 1;
+    min-inline-size: 0;
+    block-size: 28px;
+    margin-inline-start: 0;
+  }
+
+  .career-mock-voice-dock .career-mock-wave i {
+    flex: 1;
+    inline-size: auto;
+    background: var(--career-text-soft);
+  }
+
+  .career-mock-dialog:has(.career-mock-voice-layout) .career-mock-content {
+    padding-block-end: calc(var(--career-mobile-nav-height) + 140px + env(safe-area-inset-bottom));
+  }
+
+  /* Д12: итог строками, «Пройти заново» закреплена над навигацией. */
+  .career-mock-result-layout .career-mock-result-panel {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .career-mock-recommendations .career-mock-recommendation-list {
+    gap: 0;
+    overflow: hidden;
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .career-mock-recommendations .career-mock-recommendation-list li {
+    position: relative;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: var(--career-space-3) var(--career-space-4);
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-mock-recommendation-list li:first-child {
+    border-block-start: 0;
+  }
+
+  .career-mock-row-icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: var(--career-radius-sm);
+    color: var(--career-text-soft);
+    background: color-mix(in oklch, var(--career-text) 8%, transparent);
+  }
+
+  .career-mock-row-chev {
+    display: block;
+    flex: none;
+    margin-inline-start: auto;
+    color: var(--career-text-dim);
+  }
+
+  .career-mock-row-desktop {
+    display: none;
+  }
+
+  /* Вся строка нажимается: кнопка растянута на строку, видна только стрелка. */
+  .career-mock-recommendation-list .career-btn.career-btn,
+  .career-mock-recommendation-list .career-btn.career-btn:hover {
+    position: static;
+    min-block-size: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+
+  .career-mock-recommendation-list .career-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .career-mock-result-panel .career-mock-result-actions {
+    display: contents;
+  }
+
+  .career-mock-result-panel .career-btn.career-mock-result-again {
+    position: sticky;
+    z-index: 1;
+    inset-block-end: calc(
+      var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom)
+    );
+    inline-size: 100%;
+    min-block-size: 50px;
+    border: 0;
+    border-radius: 25px;
+    box-shadow: 0 8px 24px color-mix(in oklch, black 40%, transparent);
+    font-size: var(--career-text-md);
+    font-weight: 600;
+  }
+
+  .career-mock-result-rows {
+    display: grid;
+    overflow: hidden;
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .career-mock-result-rows > div {
+    display: contents;
+  }
+
+  .career-mock-result-rows .career-btn.career-btn {
+    justify-content: flex-start;
+    gap: var(--career-space-3);
+    inline-size: 100%;
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+    border: 0;
+    border-radius: 0;
+    color: var(--career-text);
+    background: transparent;
+    font-size: var(--career-text-md);
+    font-weight: 600;
+  }
+
+  .career-mock-result-rows .career-btn + .career-btn,
+  .career-mock-result-rows > div + .career-btn {
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-mock-result-rows .career-mock-row-chev {
+    margin-inline-start: auto;
+  }
+}
+
+.career-mock-status-icon,
+.career-mock-result-status {
+  display: none;
+}
+
+/* Макет 14 на 390: шкала во всю ширину без счётчика, чипы 32 с целью 44. */
+@media (max-width: 760px) {
+  .career-mock-panel .career-mock-progress-block {
+    display: block;
+  }
+
+  .career-mock-progress-block .career-mock-progress-count {
+    display: flex;
+    font-size: 0;
+  }
+
+  .career-mock-progress-count .career-mock-progress {
+    flex: 1;
+    inline-size: auto;
+  }
+
+  .career-mock-dialog .career-mock-dock-chip {
+    position: relative;
+    min-block-size: 32px;
+    font-size: var(--career-text-xs);
+  }
+
+  .career-mock-dialog .career-mock-dock-chip::after {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+
+  /* Итог: статус под заголовком, темы панелью, статус темы строкой со значком. */
+  .career-mock-result-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-1);
+    margin-block-start: var(--career-space-3);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  .career-mock-result-status .career-mock-icon {
+    color: var(--career-success);
+  }
+
+  .career-mock-result-panel .career-mock-topic-head h2,
+  .career-mock-result-panel .career-mock-recommendations h2 {
+    padding-inline: var(--career-space-4);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  .career-mock-topic-list ul.career-mock-criteria {
+    overflow: hidden;
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .career-mock-topic-list ul.career-mock-criteria > li {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--career-space-3) var(--career-space-4);
+  }
+
+  .career-mock-topic-list ul.career-mock-criteria > li > .career-mock-criterion-icon {
+    display: none;
+  }
+
+  .career-mock-topic-list ul.career-mock-criteria > li > div {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .career-mock-topic-list ul.career-mock-criteria .career-mock-criterion-title {
+    display: contents;
+  }
+
+  .career-mock-topic-list ul.career-mock-criteria li p {
+    margin-block-start: var(--career-space-1);
+  }
+
+  .career-mock-topic-list ul.career-mock-criteria .career-mock-status {
+    order: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-1);
+    margin-block-start: var(--career-space-2);
+    padding: 0;
+    border: 0;
+    background: none;
+    font-size: var(--career-text-xs);
+  }
+
+  .career-mock-status-icon {
+    display: inline-flex;
+  }
+}
