@@ -6,6 +6,12 @@ import type {
   RoleSkillRequirementSummary,
   RoleSkillSourceRef,
 } from '../domain/roleSkillAssessment';
+import {
+  extractVacancyRequirements,
+  vacancyDescriptionHash,
+  type VacancyRequirement,
+} from '../domain/vacancyRequirements';
+import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
 import type { RouteDeps } from './deps';
 import { readVacancyFitTarget } from './vacancyFitContext';
 
@@ -29,7 +35,7 @@ export type AssessmentFocusRequest = z.infer<typeof focusSchema>;
 export interface ValidatedFocus {
   readonly vacancyId: string;
   readonly vacancyTitle: string;
-  /** Requirement texts of the vacancy, as the fit analysis extracted them. */
+  /** The skills as the card names them: the chip name, else the requirement text. */
   readonly skills: readonly string[];
 }
 
@@ -44,6 +50,43 @@ export type FocusValidation =
 
 const key = (value: string) => value.trim().toLocaleLowerCase('ru-RU');
 
+/** The chip keeps 40 characters of a requirement without a short name; same rule as the card. */
+const CHIP_TEXT_LIMIT = 40;
+const chipText = (text: string): string =>
+  text.length <= CHIP_TEXT_LIMIT ? text : `${text.slice(0, CHIP_TEXT_LIMIT - 1).trimEnd()}…`;
+
+/** Every spelling the card can send for a requirement → the name the check uses. */
+export function focusSkillNames(
+  requirements: readonly VacancyRequirement[],
+): ReadonlyMap<string, string> {
+  const names = new Map<string, string>();
+  for (const item of requirements.map(labelVacancyRequirement)) {
+    const text = item.text.trim();
+    const name = item.label?.trim() || text;
+    for (const form of [name, text, chipText(text)]) {
+      if (form && !names.has(key(form))) names.set(key(form), name);
+    }
+  }
+  return names;
+}
+
+/** The requirements the vacancy card shows (`VacancyMechanicsRuntime.view`): same row, same fallback. */
+function shownRequirements(
+  deps: RouteDeps,
+  vacancyId: string,
+  description: string,
+): readonly VacancyRequirement[] {
+  const store = deps.vacancyMechanics?.requirements;
+  const current = store?.getLatestOrLegacy(vacancyId, vacancyDescriptionHash(description));
+  // The card may have been read from another text of the vacancy; its names stay valid too.
+  const latest = store?.getLatestOrLegacy(vacancyId);
+  const stored = [...(current?.requirements ?? []), ...(latest?.requirements ?? [])];
+  if (stored.length > 0) return stored;
+  return description.trim()
+    ? extractVacancyRequirements({ vacancyId, description }).requirements
+    : [];
+}
+
 /** Every focus skill must be a requirement of this vacancy; anything else is rejected. */
 export function validateFocus(deps: RouteDeps, request: AssessmentFocusRequest): FocusValidation {
   const target = readVacancyFitTarget(deps, request.vacancyId);
@@ -54,26 +97,27 @@ export function validateFocus(deps: RouteDeps, request: AssessmentFocusRequest):
       code: 'focus_vacancy_not_found',
       message: 'Вакансия не найдена.',
     };
-  const extracted = deps.vacancyMechanics?.requirements.getLatest(request.vacancyId);
-  if (!extracted || extracted.requirements.length === 0)
+  const requirements = shownRequirements(deps, request.vacancyId, target.description);
+  if (requirements.length === 0)
     return {
       ok: false,
       status: 409,
       code: 'focus_requirements_unavailable',
       message: 'Требования этой вакансии ещё не разобраны.',
     };
-  const byKey = new Map(extracted.requirements.map((item) => [key(item.text), item.text.trim()]));
+  const names = focusSkillNames(requirements);
   const skills: string[] = [];
   for (const skill of request.skills) {
-    const text = byKey.get(key(skill));
-    if (!text)
+    // A repeated chip name ends in « · 2» on the card.
+    const name = names.get(key(skill.replace(/ · \d+$/u, '')));
+    if (!name)
       return {
         ok: false,
         status: 400,
         code: 'focus_skill_not_in_vacancy',
         message: `«${skill}» нет среди требований этой вакансии.`,
       };
-    if (!skills.includes(text)) skills.push(text);
+    if (!skills.includes(name)) skills.push(name);
   }
   return { ok: true, focus: { vacancyId: request.vacancyId, vacancyTitle: target.title, skills } };
 }

@@ -72,6 +72,9 @@ async function readFocusSample(
         roleNote: `Кейсы по вакансиям роли «${role}» из ваших гипотез; результат относится к выбранной роли «${selectedRole}».`,
       };
   }
+  // The check opened from the vacancy runs under the vacancy's own title: nothing to explain.
+  if (titleKey(selectedRole) === titleKey(focus.vacancyTitle))
+    return { roleTitle: selectedRole, matched: selected.vacancies, roleNote: null };
   return {
     roleTitle: selectedRole,
     matched: selected.vacancies,
