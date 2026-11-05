@@ -360,24 +360,6 @@
     "updatedAt": "2026-11-05T10:00:00Z"
   },
   {
-    "companyKey": "ace",
-    "companyName": "Ace",
-    "websiteUrl": "https://ace.com",
-    "careersUrl": "https://recruitee.com/ace",
-    "linkedinUrl": "https://www.linkedin.com/company/ace/jobs/",
-    "linkedinOrgId": null,
-    "sourceType": "ats_direct",
-    "atsProvider": "recruitee",
-    "atsSlug": "ace",
-    "status": "active",
-    "geo": "USA",
-    "industry": "Other",
-    "domainGroup": "HR, Recruitment, Operations",
-    "notes": "Источник: строка 428 Veselova.csv (Категория HR, Recruitment, Operations, Geo USA). Автоматический поиск привязал recruitee/ace и ace.com; требует решения владельца.",
-    "createdAt": "2026-11-05T10:00:00Z",
-    "updatedAt": "2026-11-05T10:00:00Z"
-  },
-  {
     "companyKey": "acquia",
     "companyName": "Acquia",
     "websiteUrl": "https://acquia.com",

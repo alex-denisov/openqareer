@@ -45,7 +45,7 @@ const upsertStmt = db.prepare(\`
 console.log("Starting SQLite transaction on /var/lib/openqareer/openqareer.db...");
 db.exec("BEGIN TRANSACTION;");
 try {
-  db.exec("DELETE FROM company_directory WHERE company_key IN ('foundation', 'human');");
+  db.exec("DELETE FROM company_directory WHERE company_key IN ('foundation', 'human', 'ace');");
   for (const c of companies) {
     upsertStmt.run(
       c.companyKey,
