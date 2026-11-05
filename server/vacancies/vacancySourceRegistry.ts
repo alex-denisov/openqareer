@@ -46,10 +46,11 @@ const SOURCE_REGISTRY = [
     market: 'Россия и СНГ',
     category: 'Агрегаторы и API',
     transport: 'public_api',
-    searchCoverage: 'Вакансии крупных корпоративных и технологических работодателей',
+    searchCoverage: 'Недоступна: площадка не используется, API работает только по ключу',
     attributionUrl: 'https://superjob.ru/',
     documentationUrl: 'https://api.superjob.ru',
-    reviewedAt: '2026-08-17',
+    reviewedAt: '2026-11-05',
+    declaredAccess: 'official_access_required',
   },
   {
     id: 'src-zarplata',
