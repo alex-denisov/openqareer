@@ -42,7 +42,7 @@ export interface RoleContext {
  * fit-dot «уровень» обязан мерить его заявленную цель, а не только прошлое.
  */
 export function readTargetLevel(
-  candidateStore: RouteDeps['candidateStore'],
+  candidateStore: Pick<RouteDeps['candidateStore'], 'getSnapshot' | 'getCandidateWorkspace'>,
   candidateId: string,
   targetRoles: readonly string[],
 ) {
