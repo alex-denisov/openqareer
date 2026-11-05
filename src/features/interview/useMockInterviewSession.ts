@@ -18,6 +18,10 @@ export function useMockInterviewSession() {
     failedOperation: operations.failedOperation,
     clearError: operations.clearError,
     retryLoad: loader.retryLoad,
+    forgetSession: () => {
+      loader.setSession(null);
+      operations.clearError();
+    },
     ...mutations,
   };
 }

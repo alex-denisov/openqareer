@@ -93,6 +93,14 @@ export class SqliteStarStoriesRepository {
     return result.changes === 1 ? this.get(candidateId, id) : null;
   }
 
+  /** Только своя строка: чужой id не совпадёт с candidate_id и вернёт false. */
+  delete(candidateId: string, id: string): boolean {
+    const result = this.database
+      .prepare('DELETE FROM candidate_star_stories WHERE candidate_id = ? AND id = ?')
+      .run(candidateId, id);
+    return result.changes === 1;
+  }
+
   private seal(candidateId: string, id: string, input: StarStoryWriteInput): string {
     return this.sealedText.seal(JSON.stringify(input), starStoryAssociatedData(candidateId, id));
   }

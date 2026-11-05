@@ -7,6 +7,7 @@ import {
   Circle,
   Info,
   Notebook,
+  Trash,
   WarningCircle,
 } from '@phosphor-icons/react';
 import { useMarkTrainerResult } from '../journey/consultantScreenSuggestion';
@@ -64,6 +65,7 @@ export function ResultScreen({
           diary={props.onWriteDiary}
           onStartAgain={() => flow.setScreen('setup')}
           onBack={props.onBackToPreparation}
+          onDelete={flow.deleteTraining.ask}
         />
       </main>
       <SourcePanel
@@ -217,12 +219,14 @@ function ResultActions({
   diary,
   onStartAgain,
   onBack,
+  onDelete,
 }: {
   readonly session: InterviewSessionView;
   readonly busy: boolean;
   readonly diary?: InterviewDiaryPort;
   readonly onStartAgain: () => void;
   readonly onBack: () => void;
+  readonly onDelete: () => void;
 }) {
   return (
     <div className="career-mock-result-actions">
@@ -242,6 +246,15 @@ function ResultActions({
       )}
       <button type="button" className="career-btn career-btn-ghost" onClick={onBack}>
         К подготовке
+      </button>
+      <button
+        type="button"
+        className="career-btn career-interview-delete-open"
+        disabled={busy}
+        onClick={onDelete}
+      >
+        <Trash aria-hidden="true" className="career-mock-icon" />
+        Удалить тренировку
       </button>
     </div>
   );
