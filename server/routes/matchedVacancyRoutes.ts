@@ -177,6 +177,25 @@ function fitWorkIds(items: readonly MatchedVacancyItem[], offset: number, fitLim
  * Не задерживает ответ списка: верх и лучшие непосчитанные строки дочитываются сразу, вся
  * подборка — фоном по релевантности (CPO 28.10), расчёт ставится после текста.
  */
+const fitFailureLog = (request: FastifyRequest) => (rows: number) => (error: unknown) =>
+  request.log.warn(
+    { errorName: error instanceof Error ? error.name : 'UnknownError', rows },
+    'fit-request-failed',
+  );
+
+/** B580: on Free a page past the first 300 rows is counted card by card, when opened. */
+function startShownPageFit(
+  deps: RouteDeps,
+  candidateId: string,
+  data: readonly MatchedVacancyItem[],
+  offset: number,
+  fitLimit: number,
+  request: FastifyRequest,
+): void {
+  const shown = data.slice(0, Math.max(0, fitLimit - offset));
+  void requestFitForShownPage(deps, candidateId, shown).catch(fitFailureLog(request)(shown.length));
+}
+
 function startFitWork(
   deps: RouteDeps,
   candidateId: string,
@@ -190,14 +209,8 @@ function startFitWork(
   { offset, fitLimit }: { readonly offset: number; readonly fitLimit: number },
   request: FastifyRequest,
 ): void {
-  const logFailure = (rows: number) => (error: unknown) =>
-    request.log.warn(
-      { errorName: error instanceof Error ? error.name : 'UnknownError', rows },
-      'fit-request-failed',
-    );
-  // B580: on Free a page past the first 300 rows is counted card by card, when opened.
-  const shown = response.data.slice(0, Math.max(0, fitLimit - offset));
-  void requestFitForShownPage(deps, candidateId, shown).catch(logFailure(shown.length));
+  const logFailure = fitFailureLog(request);
+  startShownPageFit(deps, candidateId, response.data, offset, fitLimit, request);
   const engine = deps.multiSourceEngine;
   const requestFit = (ids: readonly string[]) => {
     void requestFitForVacancyIds(deps, candidateId, ids).catch(logFailure(ids.length));
@@ -402,7 +415,7 @@ interface SealedRead {
   };
 }
 
-/** The page as a built list would give it; rows and percents are read live, no fit work starts. */
+/** The page as a built list would give it; percents and salary are read live. */
 async function sealedResponse(
   deps: RouteDeps,
   candidateId: string,
@@ -454,9 +467,12 @@ async function answerFromSealedList(
   if (!sealed || !page) return undefined;
   const sealedReadMs = elapsedMs(startedAt);
   const response = await sealedResponse(deps, candidateId, sealed, page, targetLevel);
+  // The list is not read again by itself: a row with no result has to be queued from this answer.
+  // Only the shown page: the sweeps of `startFitWork` open the stored results, and the next read has them.
+  startShownPageFit(backgroundDeps, candidateId, response.data, page.offset, selectionFitLimit(candidatePlan(deps, candidateId)), request);
   rebuildBehindSealedList(backgroundDeps, candidateId, request.query, request.log);
   const { mode, cold, candidateCampaignMs, beforeCampaignMs, requestStartedAt } = startTiming;
-  logMatchedTiming(request, mode, cold, candidateCampaignMs, sealedReadMs, response, requestStartedAt, { beforeCampaignMs, sealedReadMs });
+  logMatchedTiming(request, mode, cold, candidateCampaignMs, sealedReadMs, response, requestStartedAt, { beforeCampaignMs, sealedReadMs, sealedRows: sealed.total });
   return matchedVacancyResponse(response, request.id, targetLevel, read.sort);
 }
 
