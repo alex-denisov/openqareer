@@ -20,6 +20,7 @@ describe('career super-prompt', () => {
     expect(compact).toContain('Черновик письма');
     expect(compact).toContain('имена полей контекста');
     expect(compact).toContain('Никогда не подставляй исход за кандидата');
+    expect(compact).toContain('один абзац примерно до 60 слов');
     expect(compact).toContain('Не обещай, что текст сам появится на экране');
   });
 
