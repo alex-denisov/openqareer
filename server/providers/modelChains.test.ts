@@ -82,7 +82,13 @@ describe('цепочки моделей по механикам (28.10)', () => 
     expect(labels('skillQuizzes')).toEqual(labels('coach'));
   });
 
-  it.each(Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>)(
+  it('сверка письма: одна быстрая ступень, её отказ снимает письмо (05.11)', () => {
+    expect(labels('letterChecks')).toEqual(['openrouter:deepseek/deepseek-v4.1-flash']);
+  });
+
+  it.each(
+    (Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>).filter((mechanic) => mechanic !== 'letterChecks'),
+  )(
     '%s: не меньше двух ступеней, без бесплатных, мёртвых и дорогих маршрутов',
     (mechanic) => {
       const chain = labels(mechanic).filter((label) => label !== 'vertex');

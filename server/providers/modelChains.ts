@@ -77,6 +77,8 @@ export const MODEL_CHAINS = {
   roleNames: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /** Решение владельца 05.11, замер живых писем: DeepSeek пишет лучше всех, Gemini быстрая запасная. */
   coverLetters: [DEEPSEEK_FLASH, VERTEX, LUNA],
+  /** Узкая сверка письма с профилем и точечная правка: без рассуждения 1 с и $0,0003 (замер 05.11). */
+  letterChecks: [DEEPSEEK_FLASH],
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому

@@ -462,6 +462,26 @@ describe('Письмо на проде 04.11: ступени и проверка
   });
 });
 
+describe('QueuedCoverLetterWriter: the overall budget', () => {
+  it('asks no further stage after the budget is spent', async () => {
+    vi.useFakeTimers();
+    try {
+      const late = vi.fn(async () => ({ body: 'Поздно.', stage: 'b' }));
+      const slow = {
+        writeCoverLetter: async () => {
+          vi.setSystemTime(Date.now() + 31_000);
+          return { failure: { stage: 'a', kind: 'timeout' as const } };
+        },
+      };
+      const queue = new QueuedCoverLetterWriter([slow, { writeCoverLetter: late }], [], () => {});
+      await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({ failure: { stage: 'a' } });
+      expect(late).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('withinTimeBudget (B266)', () => {
   it('gives up on a writer that has not answered within the budget', async () => {
     const hanging = new Promise<CoverLetterOutcome>(() => {});

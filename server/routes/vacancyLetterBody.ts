@@ -85,6 +85,7 @@ function letterGateSources(request: LetterWritingRequest): LetterGateSources {
     career: letterCareer(workplaces, language).map((place) =>
       [place.title, place.employer, place.years].filter(Boolean).join(' '),
     ),
+    employers: workplaces.flatMap((place) => (place.employer ? [place.employer] : [])),
     vacancy: [
       vacancy.title,
       vacancy.company,

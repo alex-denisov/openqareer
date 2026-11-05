@@ -8,6 +8,7 @@ import {
 } from '../domain/vacancyPitchService';
 import { rankPitchFacts, type PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { ChatCompletionClient } from './roleNamer';
+import { LlmLetterClaimCheck, type LetterClaimCheck } from './letterClaimCheck';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
 import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
@@ -113,9 +114,9 @@ export interface CoverLetterWriter {
 /**
  * Общий срок на письмо: по его истечении идёт шаблон. Потолки взяты из замера 05.11, а не заданы заранее:
  * DeepSeek low p50 10,7 с, 7 из 8 писем до 16 с; Gemini low максимум 5,5 с; luna максимум 7,5 с.
- * Срока хватает на DeepSeek и Gemini; luna успевает, только если Gemini отказала сразу (кредит кончился).
+ * Срока хватает на DeepSeek с проверкой и правкой (ещё три вызова по 1–2 с) и на Gemini после него.
  */
-export const COVER_LETTER_BUDGET_MS = 24_000;
+export const COVER_LETTER_BUDGET_MS = 30_000;
 const VERTEX_LETTER_STAGE_MS = 6_000;
 const OPENROUTER_LETTER_STAGE_MS = 16_000;
 const OPENAI_LETTER_STAGE_MS = 8_000;
@@ -245,7 +246,7 @@ function vacancySection(input: CoverLetterWriteInput): string[] {
   ];
 }
 
-function profileSection(input: CoverLetterWriteInput): string[] {
+export function profileSection(input: CoverLetterWriteInput): string[] {
   const ranked = rankPitchFacts(input.facts, input.vacancy, input.vacancy.rankingContext)
     .slice(0, MAX_FACTS)
     .map((fact) => ({ ...fact, statement: fact.statement.slice(0, MAX_STATEMENT) }));
@@ -372,12 +373,26 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
     private readonly stages: readonly CoverLetterWriter[],
     readonly descriptors: readonly string[] = [],
     private readonly onStageFailure: (failure: CoverLetterFailure) => void = logStageFailure,
+    private readonly claims?: LetterClaimCheck,
   ) {}
+
+  private async settled(stage: CoverLetterWriter, input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
+    const outcome = reviewed(await stage.writeCoverLetter(input), input);
+    if (!outcome.body || !this.claims) return outcome;
+    const result = await this.claims.settle(outcome.body, input);
+    if ('detail' in result) {
+      return { failure: { stage: outcome.stage ?? 'unknown', kind: 'unusable_response', detail: result.detail } };
+    }
+    return reviewed({ ...outcome, body: result.body }, input);
+  }
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
     let lastFailure: CoverLetterFailure | undefined;
+    const startedAt = Date.now();
     for (const stage of this.stages) {
-      const outcome = reviewed(await stage.writeCoverLetter(input), input);
+      // Кандидат уже получил шаблон: за письмо, которое никто не увидит, не платим.
+      if (Date.now() - startedAt >= COVER_LETTER_BUDGET_MS) break;
+      const outcome = await this.settled(stage, input);
       if (outcome.body) return outcome;
       if (outcome.failure) this.onStageFailure(outcome.failure);
       lastFailure = outcome.failure ?? lastFailure;
@@ -406,13 +421,22 @@ export function buildCoverLetterWriter(
     config.providerCredentials ?? {},
     config.vertex,
   );
-  if (stages.length === 0) return undefined;
+  const checkRoute = resolveChain(MODEL_CHAINS.letterChecks, config.providerCredentials ?? {}, undefined)
+    .flatMap((stage) => (stage.kind === 'route' ? [stage.route] : []))[0];
+  // Без проверки письмо пишет шаблон: непроверенный текст от имени кандидата не показываем.
+  if (stages.length === 0 || !checkRoute) return undefined;
   return new QueuedCoverLetterWriter(
     stages.map((stage) =>
       stage.kind === 'vertex' ? vertexCoverLetterWriter(stage.vertex, config.vertexFetch) : writerForRoute(stage.route),
     ),
     stages.map((stage) => stage.label),
     logStageFailure,
+    new LlmLetterClaimCheck({
+      apiKey: checkRoute.apiKey,
+      model: checkRoute.model,
+      stage: `${checkRoute.provider}:${checkRoute.model}`,
+      baseUrl: modelRegistry[checkRoute.provider].baseUrl,
+    }),
   );
 }
 

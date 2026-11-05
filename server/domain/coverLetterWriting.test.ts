@@ -28,8 +28,23 @@ describe('coverLetterInstructions', () => {
     }
   });
 
-  it('an English letter carries no Cyrillic', () => {
-    expect(coverLetterInstructions('en', 'executive')).toContain('Кириллицы в письме быть не должно');
-    expect(coverLetterInstructions('ru', 'executive')).not.toContain('Кириллицы в письме быть не должно');
+  it('keeps the actor, the completion and the place as the fact has them', () => {
+    const text = coverLetterInstructions('ru', 'executive');
+    for (const phrase of ['Действующее лицо', '«команда выросла»', 'не становится «перевёл»', 'компания не указана']) {
+      expect(text).toContain(phrase);
+    }
+  });
+
+  it('forbids experience by analogy with the vacancy and added links, keeps opinions', () => {
+    const text = coverLetterInstructions('ru', 'executive');
+    for (const phrase of ['по аналогии с вакансией', 'распределённые команды', 'which is where I learned', 'это мнение автора']) {
+      expect(text).toContain(phrase);
+    }
+  });
+
+  it('an English letter never invents a Latin employer name', () => {
+    const text = coverLetterInstructions('en', 'executive');
+    expect(text).toContain('Названия компаний не переводи и не транслитерируй');
+    expect(coverLetterInstructions('ru', 'executive')).not.toContain('не транслитерируй');
   });
 });

@@ -14,6 +14,8 @@ export interface LetterGateSources {
   readonly candidate: readonly string[];
   /** Места работы: должность, компания, годы. */
   readonly career: readonly string[];
+  /** Работодатели как их написал кандидат: кириллица в английском письме здесь допустима. */
+  readonly employers?: readonly string[];
   /** Название, компания, получатель и навыки вакансии: цитируются как есть и подтверждают имена. */
   readonly vacancy: readonly string[];
   /** Полный текст вакансии подтверждает имена только во фразах о роли, но не в рассказе о своём прошлом. */
@@ -177,12 +179,27 @@ function withoutVacancyText(sentence: string, vacancy: readonly string[]): strin
 const CYRILLIC = /\p{Script=Cyrillic}/u;
 
 /**
- * Английское письмо из русского профиля пересказывает его своими словами: «CEO», «Board», «Moscow» и
- * латинское имя работодателя в профиле не найти. Здесь имена не сверяются, а единицы чисел сравниваются
- * без подписи («2 млрд ₽» и «2bn RUB»). Кириллица в таком письме — всегда ошибка.
+ * Английское письмо из русского профиля пересказывает его своими словами: «CEO», «Board» и «Moscow» в профиле
+ * не найти. Поэтому здесь сверяются не все заглавные, а только то, что читается как компания, и единицы чисел
+ * сравниваются без подписи («2 млрд ₽» и «2bn RUB»).
  */
 function isTranslatedLetter(sources: LetterGateSources): boolean {
   return sources.language === 'en' && [...sources.candidate, ...sources.career].some((text) => CYRILLIC.test(text));
+}
+
+const COMPANY_AFTER_AT = /(?<!\p{L})at\s+(\p{Lu}[\p{L}\p{N}&'’-]*)/giu;
+const CAPITAL_PAIR = /(?<![\p{L}\p{N}])(\p{Lu}[\p{Ll}]+)\s+(\p{Lu}[\p{Ll}]+)(?![\p{L}\p{N}])/gu;
+
+/** Перевод названия выдумывает компанию: «Ритейл Системс» под именем «Retail Systems» никто не найдёт. */
+function hasInventedCompany(sentence: string, known: ReadonlySet<string>): boolean {
+  const unknown = (word: string): boolean => !isKnownName(word, known);
+  return [...sentence.matchAll(COMPANY_AFTER_AT)].some(([, name]) => /^\p{Lu}/u.test(name ?? '') && unknown(name ?? '')) ||
+    [...sentence.matchAll(CAPITAL_PAIR)].some(([, first = '', second = '']) =>
+      !OPENING_WORDS.has(first.toLocaleLowerCase()) && unknown(first) && unknown(second));
+}
+
+function withoutEmployers(sentence: string, employers: readonly string[]): string {
+  return employers.reduce((text, employer) => text.split(employer).join(' '), sentence);
 }
 
 const BARE_NUMBER = /(?<![\p{L}\p{N}])\d+(?:[.,]\d+)?/gu;
@@ -211,8 +228,10 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     const known = ownPast ? names : namesWithText;
     const checks: readonly (readonly [LetterGateRule, boolean])[] = [
       ['number', translated ? hasForeignBareNumber(own, backing) : hasForeignNumber(own, backing)],
-      ['name', !translated && (hasForeignName(sentence, known, sources.language) || hasForeignMonth(sentence, profileText))],
-      ['language', sources.language === 'en' && CYRILLIC.test(sentence)],
+      ['name', translated
+        ? hasInventedCompany(sentence, known)
+        : hasForeignName(sentence, known, sources.language) || hasForeignMonth(sentence, profileText)],
+      ['language', sources.language === 'en' && CYRILLIC.test(withoutEmployers(sentence, sources.employers ?? []))],
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });

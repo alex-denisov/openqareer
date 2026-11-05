@@ -187,20 +187,37 @@ describe('reviewLetterBody: the vacancy text backs the role, not the career', ()
 describe('reviewLetterBody: an English letter from a Russian profile', () => {
   const sources: LetterGateSources = {
     ...EN_SOURCES,
+    employers: ['Финтех Лаб', 'Ритейл Системс'],
     candidate: ['Бюджет 2 млрд ₽, команда выросла с 8 до 35 человек.'],
   };
 
-  it('accepts a Latin employer, ordinary capitals and a translated unit', () => {
-    expect(reviewLetterBody('At Fintech Lab in Moscow I reported to the CEO.', sources)).toEqual([]);
+  it('accepts ordinary capitals, a translated unit and an employer as the candidate wrote it', () => {
+    expect(reviewLetterBody('In Moscow I reported to the CEO.', sources)).toEqual([]);
     expect(reviewLetterBody('I ran a 2 bn RUB budget.', sources)).toEqual([]);
+    expect(reviewLetterBody('I work at Финтех Лаб.', sources)).toEqual([]);
+    expect(reviewLetterBody('I work at a fintech company.', sources)).toEqual([]);
+  });
+
+  it('stops a translated employer: the company does not exist under that name', () => {
+    expect(reviewLetterBody('I work at Fintech Lab today.', sources).map((v) => v.rule)).toEqual(['name']);
+    expect(reviewLetterBody('Fintech Lab is where I run payments.', sources).map((v) => v.rule)).toEqual(['name']);
+  });
+
+  it('takes the Latin spelling the profile has', () => {
+    const own = { ...sources, career: ['Head of Engineering Финтех Лаб (Fintech Lab) 2024'], employers: ['Финтех Лаб (Fintech Lab)'] };
+    expect(reviewLetterBody('I work at Fintech Lab today.', own)).toEqual([]);
+  });
+
+  it('a Latin name from the vacancy after «at» is about the reader', () => {
+    expect(reviewLetterBody('The hard part at Leidos is continuity.', sources)).toEqual([]);
   });
 
   it('stops a number the profile does not have', () => {
     expect(reviewLetterBody('I ran a 3 bn RUB budget.', sources).map((v) => v.rule)).toEqual(['number']);
   });
 
-  it('stops Cyrillic left in the letter', () => {
-    expect(reviewLetterBody('I worked at Финтех Лаб.', sources).map((v) => v.rule)).toEqual(['language']);
+  it('stops Cyrillic that is not the employer', () => {
+    expect(reviewLetterBody('I led the отдел there.', sources).map((v) => v.rule)).toEqual(['language']);
   });
 });
 

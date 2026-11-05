@@ -672,7 +672,8 @@ function buildAtsCoverLetter(
 /** Модель пишет только текст: обращение и подпись ставит система, так их нельзя выдумать или забыть. */
 export function frameModelLetter(body: string, language: PitchLanguage, company: string | undefined, candidateName: string | undefined): string {
   const { greeting, signOff } = copyFor(language).ats;
-  return [greeting(company), '', body, '', signOff, ...(candidateName ? [candidateName] : [])].join('\n');
+  const name = candidateName && language === 'en' ? englishProperName(candidateName) : candidateName;
+  return [greeting(company), '', body, '', signOff, ...(name ? [name] : [])].join('\n');
 }
 
 function buildContactMessage(
