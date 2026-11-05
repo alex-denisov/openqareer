@@ -92,6 +92,11 @@ describe('reviewLetterBody: what a model letter may say', () => {
     }
   });
 
+  it('does not read a conjunction before a known name as a two-word name', () => {
+    const sources = { ...RU_SOURCES, vacancy: [...RU_SOURCES.vacancy, 'DevOps'] };
+    expect(reviewLetterBody('Если DevOps не связаны метриками, релизы падают.', sources)).toEqual([]);
+  });
+
   it('what stays unchecked: one capitalised word that could open any sentence', () => {
     // Documented in the PR: without a dictionary «Сбер» and «Работал» look the same to the gate.
     expect(reviewLetterBody('Сбер доверил мне логистику.', RU_SOURCES)).toEqual([]);
@@ -148,6 +153,13 @@ describe('reviewLetterBody: what a model letter may say', () => {
     const fact = 'Склад не успевал за заказами: заказ шёл 12 дней. Срок сократился с 12 до 7 дней.';
     const sources: LetterGateSources = { language: 'ru', candidate: [fact], career: [], vacancy: [] };
     expect(reviewLetterBody('Срок сократился с 12 до 7 дней.', sources)).toEqual([]);
+  });
+
+  it('a range shares its percent sign: 91 to 97 % backs 91 %', () => {
+    const sources = { ...RU_SOURCES, candidate: ['Повышение уровня сервиса с 91 до 97 %.'] };
+    expect(reviewLetterBody('Уровень сервиса вырос с 91% до 97%.', sources)).toEqual([]);
+    expect(reviewLetterBody('Уровень сервиса вырос с 91 до 97 %.', sources)).toEqual([]);
+    expect(reviewLetterBody('Уровень сервиса вырос с 90% до 97%.', sources).map((v) => v.rule)).toContain('number');
   });
 
   it('names a violation by its sentence and no more than once per rule and sentence', () => {

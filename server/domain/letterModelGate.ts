@@ -34,8 +34,11 @@ const UNIT_NAMES: Readonly<Record<string, string>> = {
 };
 
 /** Единица неотделима от числа: 40 млн не доказывают 40 %, а $40 и 40$ — одно и то же. */
+/** В диапазоне знак процента общий: «с 91 до 97 %» значит и 91 %, и 97 %. */
+const PERCENT_RANGE = /(\d+(?:[.,]\d+)?)(\s*(?:до|to)\s*\d+(?:[.,]\d+)?\s*%)/giu;
+
 function quantities(text: string): string[] {
-  return [...text.matchAll(QUANTITY)].map(([, sign, before, value, after]) => {
+  return [...text.replace(PERCENT_RANGE, '$1%$2').matchAll(QUANTITY)].map(([, sign, before, value, after]) => {
     const raw = (after ?? before ?? '').toLocaleLowerCase();
     const unit = raw.startsWith('руб') ? 'руб' : UNIT_NAMES[raw] ?? raw;
     return `${sign ? '-' : ''}${(value ?? '').replace(',', '.')}${unit}`;
@@ -86,6 +89,7 @@ const OPENING_WORDS = new Set([
   'during', 'since', 'currently', 'earlier', 'previously', 'now', 'today', 'dear', 'hello', 'hi', 'greetings',
   'в', 'во', 'на', 'из', 'при', 'для', 'с', 'со', 'до', 'после', 'как', 'мой', 'моя', 'наш', 'сейчас', 'ранее', 'прежде',
   'уважаемый', 'уважаемая', 'уважаемые', 'добрый', 'здравствуйте',
+  'если', 'когда', 'чтобы', 'пока', 'хотя', 'где', 'зато', 'но', 'и', 'а', 'if', 'when', 'where', 'but', 'and', 'although',
 ]);
 
 /**

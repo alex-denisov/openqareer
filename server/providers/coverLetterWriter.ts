@@ -288,8 +288,10 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
   private readonly model: string;
   private readonly stage: string;
   private readonly provider: ProviderId;
+  private readonly timeoutMs: number;
 
   constructor(options: LlmCoverLetterWriterOptions) {
+    this.timeoutMs = options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS;
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.provider = options.provider ?? 'openai';
@@ -301,13 +303,15 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
       (new OpenAI({
         apiKey: options.apiKey,
         ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
-        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        timeout: this.timeoutMs,
         maxRetries: PROVIDER_STAGE_MAX_RETRIES,
       }) as unknown as ChatCompletionClient);
   }
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
     if (!hasLetterInput(input)) return {};
+    // Таймаут клиента кончается на заголовках, а OpenRouter шлёт их сразу: письма шли и 22 с при потолке 16 (05.11).
+    const deadline = AbortSignal.timeout(this.timeoutMs);
     try {
       if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
       const response = await this.client.chat.completions.create({
@@ -319,7 +323,7 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
         ...outputLimit(this.provider),
         ...(this.openRouter ? { reasoning: LETTER_REASONING } : {}),
         ...openRouterRouting({ personal: this.openRouter, requireParameters: false }),
-      });
+      }, { signal: deadline });
       const choice = response.choices[0] as
         ((typeof response.choices)[number] & { finish_reason?: string | null }) | undefined;
       return acceptModelBody(
@@ -328,6 +332,7 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
         this.stage,
       );
     } catch (error) {
+      if (deadline.aborted) return { failure: { stage: this.stage, kind: 'timeout' } };
       return { failure: thrownFailure(this.stage, error, this.apiKey) };
     }
   }

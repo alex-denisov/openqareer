@@ -174,6 +174,16 @@ describe('LlmCoverLetterWriter', () => {
     expect(outcome.failure).toMatchObject({ stage: 'openai:m', kind: 'timeout' });
   });
 
+  it('потолок ступени обрывает и чтение тела ответа: заголовки OpenRouter приходят сразу (05.11)', async () => {
+    const hanging: ChatCompletionClient = {
+      chat: { completions: { create: (_request, options) => new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener('abort', () => reject(new Error('Request was aborted.')));
+      }) } },
+    };
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', stage: 'openrouter:m', timeoutMs: 20, client: hanging });
+    await expect(writer.writeCoverLetter(input)).resolves.toEqual({ failure: { stage: 'openrouter:m', kind: 'timeout' } });
+  });
+
   it('не зовёт модель, когда фактов нет', async () => {
     const stub = client('x');
     const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
