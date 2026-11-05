@@ -40,11 +40,15 @@ const HIRING_VERBS = [
 const VACANCY_SECTIONS = [
   /обязанност/iu,
   /компания:/iu,
+  /company:/i,
   /формат( работы)?:/iu,
   /занятость:/iu,
+  /job type:/i,
   /локация:/iu,
+  /location:/i,
   /график:/iu,
   /уровень:/iu,
+  /experience( level)?:/i,
   /требовани/iu,
   /услови[яй]/iu,
   /задачи:/iu,
@@ -59,6 +63,9 @@ const VACANCY_SECTIONS = [
   /requirements/i,
   /what you.ll do/i,
   /we offer/i,
+  /salary:/i,
+  /отклик:/iu,
+  /контакты:/iu,
 ];
 
 const SALARY = /(?:зарплат|оплата|доход|salary|compensation|от\s*\d[\d\s]{3,}|\d[\d\s]{3,}\s*(?:₽|руб|\$|€))/iu;
@@ -125,8 +132,12 @@ export function classifyTelegramPost(text: string): TelegramPostType {
   const hiring = HIRING_VERBS.some((rx) => rx.test(clean));
   // Объявление о работе узнаётся по структуре: два раздела подряд — это уже
   // вакансия, даже если глагола найма в тексте нет.
+  const jobLink = /(?:https?:\/\/[^\s]+(?:\/jobs?\/|\/vacancy\/|\/vacancies\/)[^\s]*)/i.test(clean);
   const looksLikeVacancy =
-    hiring || structure >= 2 || (structure >= 1 && SALARY.test(clean) && APPLY_CONTACT.test(clean));
+    hiring ||
+    structure >= 2 ||
+    (structure >= 1 && SALARY.test(clean) && APPLY_CONTACT.test(clean)) ||
+    (jobLink && (SALARY.test(clean) || structure >= 1 || /(?:удалённо|удаленка|remote|relocation|релокация)/iu.test(clean)));
 
   // Пост о себе проверяется раньше структуры объявления: «условия работы
   // обсуждаемы» и «под ваши требования» — слова кандидата, а не работодателя,

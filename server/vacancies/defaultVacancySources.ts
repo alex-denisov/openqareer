@@ -2,6 +2,8 @@ import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
+import { DEFAULT_TELEGRAM_RELOCATION_SOURCES } from './defaultTelegramRelocationSources';
+import { DEFAULT_CORPORATE_SOURCES } from './defaultCorporateSources';
 
 
 /**
@@ -440,9 +442,9 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     market: 'Мир (карьерный сайт Amazon)',
     addressStatus: 'live',
     enabled: true,
-    // `sort=recent`: 20 страниц по 100 за опрос — свежие две тысячи; хвост до
+    // `sort=recent`: 20 страниц по 30 за опрос; хвост до
     // потолка 10 000 доходит частичными чтениями (B216).
-    targetUrl: 'https://www.amazon.jobs/en/search.json?result_limit=100&sort=recent',
+    targetUrl: 'https://www.amazon.jobs/en/search.json?result_limit=30&sort=recent',
     refreshIntervalMinutes: 120,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
@@ -483,7 +485,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     enabled: true,
     targetUrl:
       'https://apply.careers.microsoft.com/api/pcsx/search?domain=microsoft.com&query=&num=10&sort_by=timestamp',
-    refreshIntervalMinutes: 240,
+    refreshIntervalMinutes: 720,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },
@@ -597,15 +599,15 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
   },
   {
     id: 'src-aijobs',
-    name: 'aijobs.net',
+    name: 'aijobs.net (foorilla)',
     type: 'rss',
     accessClass: 'open_web',
-    market: 'Удалённо, мир',
+    market: 'Удалённо, мир (Foorilla / aijobs)',
     addressStatus: 'address_lost',
     enabled: false,
     disabledReason:
-      'Адрес ленты не найден: /feed/, /rss/, /api/jobs/ и /sitemap.xml отдают одну и ту же оболочку приложения в 10 836 байт со всех трёх маршрутов (2026-09-05). Площадка названа владельцем и остаётся в реестре, пока адрес не найден вручную.',
-    targetUrl: 'https://aijobs.net/feed/',
+      'aijobs.net выполнил 301-редирект на foorilla.com, где вакансии переведены на закрытый платный API (PRO+ / Stripe) без открытой RSS/JSON ленты.',
+    targetUrl: 'https://foorilla.com/hiring/',
     refreshIntervalMinutes: 120,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
@@ -674,7 +676,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     market: 'Бангладеш, Южная Азия (API поиска BDJobs, механика JobSpy)',
     addressStatus: 'live',
     enabled: true,
-    targetUrl: 'https://gateway.bdjobs.com/v1/api/jobsearch',
+    targetUrl:
+      'https://gateway.bdjobs.com/recruitment-account-test/api/JobSearch/GetJobSearch?isPro=1&rpp=20&pg=1',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
@@ -731,6 +734,8 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
  */
 export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
   ...PLATFORM_SOURCES,
+  ...DEFAULT_TELEGRAM_RELOCATION_SOURCES,
+  ...DEFAULT_CORPORATE_SOURCES,
   ...ATS_BOARD_SOURCES,
   ...WORKDAY_BOARD_SOURCES,
 ];

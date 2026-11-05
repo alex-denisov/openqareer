@@ -108,6 +108,8 @@ export function naukriQueryParams(keyword: string, pageNo = 1): Record<string, s
 
 /** BDJobs API gateway endpoint (механика JobSpy). */
 export const BDJOBS_SEARCH_URL = 'https://gateway.bdjobs.com/v1/api/jobsearch';
+export const BDJOBS_ACTIVE_API_URL =
+  'https://gateway.bdjobs.com/recruitment-account-test/api/JobSearch/GetJobSearch?isPro=1&rpp=20&pg=1';
 
 export function bdjobsHeaders(): Record<string, string> {
   return {

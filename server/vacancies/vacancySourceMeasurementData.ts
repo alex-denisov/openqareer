@@ -185,6 +185,94 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
       note: 'Пять публичных role pages с production VM: jobs, product, recruiting/HR, sales и operations; robots Allow: /. Включён только для bounded source wave по решению владельца.',
     },
   ],
+  'src-epam': [
+    {
+      items: 4111,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'Открытый REST API careers.epam.com/api/jobs/v2/search/careers-i18n с заголовком Referer. 4111 активных вакансий прямого работодателя.',
+    },
+  ],
+  'src-playrix': [
+    {
+      items: 29,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'POST https://playrix.com/api/v1/index.php?action=job/getList. 29 активных вакансий прямого работодателя.',
+    },
+  ],
+  'src-preply': [
+    {
+      items: 117,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'Next.js pageProps.jobs на preply.com/en/careers. 117 активных вакансий прямого работодателя.',
+    },
+  ],
+  'src-kaspersky': [
+    {
+      items: 13,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'HTML портал careers.kaspersky.com/vacancies. 13 активных вакансий прямого работодателя.',
+    },
+  ],
+  'src-veeam': [
+    {
+      items: 3,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'HTML каталог careers.veeam.com/vacancies. 3 активных вакансий прямого работодателя.',
+    },
+  ],
+  'src-linkedin-ringcentral': [
+    {
+      items: 10,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'LinkedIn Guest API search?f_C=60868. 10 активных вакансий RingCentral на первой странице.',
+    },
+  ],
+  'src-linkedin-cloudlinux': [
+    {
+      items: 5,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'LinkedIn Guest API search?f_C=632769. 5 активных вакансий CloudLinux.',
+    },
+  ],
+  'src-linkedin-ciklum': [
+    {
+      items: 6,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'LinkedIn Guest API search?f_C=9183. 6 активных вакансий Ciklum.',
+    },
+  ],
+  'src-linkedin-astound-commerce': [
+    {
+      items: 3,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'LinkedIn Guest API search?f_C=2403308. 3 активных вакансий Astound Commerce.',
+    },
+  ],
+  'src-linkedin-indrive': [
+    {
+      items: 2,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'LinkedIn Guest API search?f_C=11847304. 2 активных вакансий inDrive.',
+    },
+  ],
+  'src-linkedin-wallarm': [
+    {
+      items: 1,
+      observedAt: '2026-11-05',
+      route: 'eu-prod',
+      note: 'LinkedIn Guest API search?f_C=4871419. 1 активная вакансия Wallarm (Demand Generation Manager).',
+    },
+  ],
   'src-crossover': [
     {
       items: 99,
@@ -252,6 +340,84 @@ export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasure
   'src-tg-marketing': [
     { items: 20, observedAt: '2026-09-05', route: 'eu-prod' },
     { items: 20, observedAt: '2026-08-30', route: 'ru-owner' },
+  ],
+  'src-tg-opento-cyprus': [
+    { items: 19, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-young-relocate': [
+    { items: 19, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-youritjob': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-relocats': [
+    { items: 15, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-svoijobs': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-rabotavserbii': [
+    { items: 12, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-remote-jobs-relocate': [
+    { items: 12, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-kudavalera': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-evacuatejobs': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-remotejobss': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-relocateme': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-israjobs': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-gdjobs': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-gamedevjobs': [
+    { items: 19, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-devjobs': [
+    { items: 19, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-it-vakansii-udalenka': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-young-june': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-young-gamedev': [
+    { items: 18, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-young-intern': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-yuniorapp': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-python-work1': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-ingamejob-art': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-designer-ru': [
+    { items: 17, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-dartlang-jobs': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tg-jvmjobs': [
+    { items: 15, observedAt: '2026-11-04', route: 'eu-prod' },
+  ],
+  'src-tradingview': [
+    { items: 20, observedAt: '2026-11-04', route: 'eu-prod' },
   ],
   'src-tg-react': [
     { items: 20, observedAt: '2026-09-05', route: 'eu-prod' },

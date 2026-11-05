@@ -22,6 +22,22 @@ import { baytHeaders } from './jobspyEndpoints';
 import type { LinkedinCrawlerDeps } from '../crawler/linkedinIngestRunner';
 import { withRequestTimeout } from './requestTimeout';
 import { fetchYcWorkAtStartup, YC_WORK_AT_STARTUP_SOURCE_ID } from './ycWorkAtStartupSource';
+import {
+  CORPORATE_JSON_ENDPOINTS,
+  fetchCorporateJsonApiVacancies,
+} from './corporateJsonApiAdapter';
+import {
+  NEXT_DATA_CAREER_ENDPOINTS,
+  fetchNextDataVacancies,
+} from './nextDataCareerAdapter';
+import {
+  CORPORATE_HTML_ENDPOINTS,
+  fetchCorporateHtmlVacancies,
+} from './corporateHtmlAdapter';
+import {
+  LINKEDIN_GROUP_B_TARGETS,
+  fetchLinkedinCompanyVacancies,
+} from './linkedinCompanyGuestAdapter';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -523,6 +539,33 @@ async function fetchJsonOrCareerSite(
 ): Promise<UnifiedVacancy[] | SourceReading> {
   if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
     return fetchYcWorkAtStartup(source);
+  }
+  const jsonEndpoint = CORPORATE_JSON_ENDPOINTS.find(
+    (e) => source.id === `src-${e.id}` || source.id === e.id,
+  );
+  if (jsonEndpoint) {
+    return fetchCorporateJsonApiVacancies(jsonEndpoint);
+  }
+
+  const nextDataEndpoint = NEXT_DATA_CAREER_ENDPOINTS.find(
+    (e) => source.id === `src-${e.id}` || source.id === e.id,
+  );
+  if (nextDataEndpoint) {
+    return fetchNextDataVacancies(nextDataEndpoint);
+  }
+
+  const htmlEndpoint = CORPORATE_HTML_ENDPOINTS.find(
+    (e) => source.id === `src-${e.id}` || source.id === e.id,
+  );
+  if (htmlEndpoint) {
+    return fetchCorporateHtmlVacancies(htmlEndpoint);
+  }
+
+  const linkedinTarget = LINKEDIN_GROUP_B_TARGETS.find(
+    (t) => source.id === `src-linkedin-${t.slug}`,
+  );
+  if (linkedinTarget) {
+    return fetchLinkedinCompanyVacancies(linkedinTarget);
   }
   if (source.type === 'career_site' && source.id === BAYT_SOURCE_ID) {
     return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);

@@ -98,8 +98,14 @@ export const ATS_PROVIDERS: readonly AtsProviderContract[] = [
   {
     provider: 'lever',
     name: 'Lever',
-    endpoint: (board) => `https://api.lever.co/v0/postings/${board}?mode=json`,
-    boardUrl: (board) => `https://jobs.lever.co/${board}`,
+    endpoint: (board) =>
+      board.startsWith('eu-') || board.startsWith('eu/')
+        ? `https://api.eu.lever.co/v0/postings/${board.slice(3)}?mode=json`
+        : `https://api.lever.co/v0/postings/${board}?mode=json`,
+    boardUrl: (board) =>
+      board.startsWith('eu-') || board.startsWith('eu/')
+        ? `https://jobs.eu.lever.co/${board.slice(3)}`
+        : `https://jobs.lever.co/${board}`,
     crawlPermission: 'allowed',
     robotsNote: 'Allow: / при Crawl-delay: 1 (замер 2026-09-05)',
     measuredAt: '2026-09-05',
@@ -260,7 +266,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         description: text(job.content) || text(job.title),
         skills: departments,
         url: text(job.absolute_url),
-        publishedAt: fromIso(job.first_published ?? job.updated_at),
+        publishedAt: fromIso(job.updated_at ?? job.first_published),
       });
     }),
 

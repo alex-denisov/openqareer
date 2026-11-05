@@ -105,7 +105,7 @@ export function recordLinkedinExecutorPageAttempt(
 
 /** Короткая служебная запись журнала исполнителя (без текстов страниц и профилей). */
 export const JOB_SEARCH_EMPTY_NOTE = 'job-search-empty';
-const JOB_SEARCH_EMPTY_PAUSE_MS = 24 * 60 * 60_000;
+const JOB_SEARCH_EMPTY_PAUSE_MS = 2 * 60 * 60_000;
 
 /** Две пустые страницы поиска подряд: разметка, вероятно, не совпала — чтение вакансий стоит сутки. */
 export function isJobSearchPausedAsEmpty(database: DatabaseSync, accountId: string, now: Date): boolean {

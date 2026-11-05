@@ -50,21 +50,33 @@ function classText(card: string, className: string): string {
 }
 
 export function parseLinkedinJobSearchPageHtml(html: string): LinkedinJobCard[] {
-  const chunks = html.split(/<li\b[^>]*data-occludable-job-id=/i).slice(1);
+  const chunks = html.split(/<(?:li|div)\b[^>]*(?:data-occludable-job-id|data-job-id)=/i).slice(1);
   const seen = new Set<string>();
   const cards: LinkedinJobCard[] = [];
   for (const chunk of chunks) {
-    const jobId = /^"(\d{5,20})"/.exec(chunk)?.[1];
+    const jobId =
+      /^"(\d{5,20})"/.exec(chunk)?.[1] ||
+      /data-(?:occludable-)?job-id=["'](\d{5,20})["']/i.exec(chunk)?.[1] ||
+      /\/jobs\/view\/(\d{5,20})/i.exec(chunk)?.[1];
     if (!jobId || seen.has(jobId)) continue;
-    const title = classText(chunk, 'job-card-container__link') || classText(chunk, 'job-card-list__title');
+    const title =
+      classText(chunk, 'job-card-container__link') ||
+      classText(chunk, 'job-card-list__title') ||
+      classText(chunk, 'base-search-card__title');
     if (!title) continue;
     seen.add(jobId);
     const published = /<time[^>]*datetime="([^"]+)"/i.exec(chunk)?.[1];
     cards.push({
       jobId,
       title,
-      company: classText(chunk, 'artdeco-entity-lockup__subtitle'),
-      location: classText(chunk, 'job-card-container__metadata-wrapper'),
+      company:
+        classText(chunk, 'artdeco-entity-lockup__subtitle') ||
+        classText(chunk, 'job-card-container__primary-description') ||
+        classText(chunk, 'base-search-card__subtitle'),
+      location:
+        classText(chunk, 'job-card-container__metadata-wrapper') ||
+        classText(chunk, 'job-card-container__metadata-item') ||
+        classText(chunk, 'job-search-card__location'),
       url: `https://www.linkedin.com/jobs/view/${jobId}`,
       ...(published ? { publishedAt: published.slice(0, 40) } : {}),
     });

@@ -134,30 +134,39 @@ function parseBdjobsDate(job: JsonRecord): string {
   return iso !== UNKNOWN_PUBLISHED_AT ? iso : fromLooseDate(raw);
 }
 
+function pickFirstField(job: Record<string, unknown>, keys: readonly string[]): string {
+  for (const k of keys) {
+    const val = text(job[k]);
+    if (val) return val;
+  }
+  return '';
+}
+
 function parseBdjobsJob(
   item: unknown,
   context: JsonAdapterContext,
   sourceId: string,
 ): UnifiedVacancy {
   const job = record(item);
-  const externalId = text(job.JobId) || text(job.job_id) || text(job.jobid) || text(job.id);
-  const title = text(job.JobTitle) || text(job.job_title) || text(job.jobtitle) || text(job.title);
-  const company =
-    text(job.CompnayName) ||
-    text(job.CompanyName) ||
-    text(job.company_name) ||
-    text(job.companyname) ||
-    text(job.company);
+  const externalId = pickFirstField(job, ['JobId', 'Jobid', 'job_id', 'jobid', 'id']);
+  const title = pickFirstField(job, ['JobTitle', 'jobTitle', 'job_title', 'jobtitle', 'title']);
+  const company = pickFirstField(job, [
+    'companyName',
+    'CompnayName',
+    'CompanyName',
+    'company_name',
+    'companyname',
+    'company',
+  ]);
   const location =
-    text(job.JobLocation) || text(job.job_location) || text(job.location) || undefined;
+    pickFirstField(job, ['jobLocation', 'JobLocation', 'job_location', 'location']) || undefined;
   const url =
-    text(job.url) ||
-    text(job.job_url) ||
+    pickFirstField(job, ['url', 'job_url']) ||
     (externalId ? `https://jobs.bdjobs.com/jobdetails.asp?id=${externalId}` : '');
-  const workplace = text(job.JobWorkPlace) || text(job.job_workplace);
+  const workplace = pickFirstField(job, ['JobWorkPlace', 'job_workplace']);
   const isRemote =
     /remote|home/i.test(workplace) || /remote/i.test(title) || /remote/i.test(location ?? '');
-  const skillsRaw = text(job.SkillsRequired) || text(job.skills_required);
+  const skillsRaw = pickFirstField(job, ['SkillsRequired', 'skills_required']);
   const skills = skillsRaw
     ? skillsRaw
         .split(',')
@@ -173,9 +182,9 @@ function parseBdjobsJob(
     company,
     location,
     isRemote,
-    description: text(job.JobDescription) || text(job.job_description) || title,
+    description: pickFirstField(job, ['JobDescription', 'job_description']) || title,
     skills,
-    employmentType: text(job.JobNature) || text(job.job_nature) || undefined,
+    employmentType: pickFirstField(job, ['JobNature', 'job_nature']) || undefined,
     salary: parseBdjobsSalary(job),
     url,
     publishedAt: parseBdjobsDate(job),
@@ -537,10 +546,10 @@ export function normalizeBaytHtml(
 /** Detects Cloudflare 403 or anti-bot challenge signatures. */
 export function isCloudflareChallenge(status: number, body?: string): boolean {
   if (status === 403) return true;
-  if (status === 503 && body && /cf-chl|cloudflare|just a moment/i.test(body)) {
+  if (body && /recaptcha required|cf-chl|cloudflare|just a moment|challenge-platform|cf-turnstile/i.test(body)) {
     return true;
   }
-  if (body && /challenge-platform|cf-turnstile|cf-chl|just a moment\.\.\./i.test(body)) {
+  if (status === 406 && body && /recaptcha|captcha/i.test(body)) {
     return true;
   }
   return false;
