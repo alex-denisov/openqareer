@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
+  ArrowSquareOut,
+  CaretRight,
   Check,
   Clock,
   FileText,
@@ -13,6 +15,7 @@ import type {
   ConnectionCirclePath,
   ConnectionCircleResult,
 } from './vacancyLetterApi';
+import { letterRecipientTitle } from './letterDeliveryPlace';
 import { circleSummary, strengthLabel } from './VacancyLetterCircles';
 import { LetterInfoTip } from './VacancyLetterInfoTip';
 
@@ -238,6 +241,7 @@ interface RecipientRowProps {
   readonly circle: ConnectionCircleNumber;
   readonly result?: ConnectionCircleResult;
   readonly path: ConnectionCirclePath;
+  readonly vacancyUrl: string;
   readonly frozen: boolean;
   readonly onSelectPath: (pathId: string) => void;
   readonly onOpenContacts: () => void;
@@ -247,6 +251,7 @@ function RecipientRow({
   circle,
   result,
   path,
+  vacancyUrl,
   frozen,
   onSelectPath,
   onOpenContacts,
@@ -260,7 +265,7 @@ function RecipientRow({
     <>
       <DestinationRow
         icon={<Icon size={18} />}
-        title={(circle === 2 ? 'Через кого: ' : 'Кому: ') + name}
+        title={letterRecipientTitle(circle, path, name, vacancyUrl)}
         note={pathNote(path)}
       >
         <RecipientActions
@@ -294,6 +299,7 @@ export interface LetterDestinationProps {
   readonly circle: ConnectionCircleNumber;
   readonly result?: ConnectionCircleResult;
   readonly path?: ConnectionCirclePath;
+  readonly vacancyUrl: string;
   readonly frozen: boolean;
   readonly onSelectPath: (pathId: string) => void;
   readonly onShowPaths: () => void;
@@ -310,8 +316,15 @@ function ResumeAndResponseRows({ onOpenResume }: { readonly onOpenResume?: () =>
         note="Резюме не прикреплено к этому черновику. Факты письма не заменяют резюме."
       >
         {onOpenResume ? (
-          <button type="button" className="career-btn is-sm is-ghost" onClick={onOpenResume}>
-            Открыть
+          <button
+            type="button"
+            className="career-btn is-sm is-ghost career-letter-dest-open"
+            aria-label="Открыть резюме под вакансию"
+            onClick={onOpenResume}
+          >
+            <ArrowSquareOut className="career-letter-dest-open-icon" aria-hidden="true" />
+            <span className="career-letter-dest-open-label">Открыть</span>
+            <CaretRight className="career-letter-dest-open-caret" size={14} aria-hidden="true" />
           </button>
         ) : null}
       </DestinationRow>
@@ -349,6 +362,7 @@ export function LetterDestination(props: LetterDestinationProps) {
             circle={circle}
             result={result}
             path={path}
+            vacancyUrl={props.vacancyUrl}
             frozen={frozen}
             onSelectPath={props.onSelectPath}
             onOpenContacts={onOpenContacts}

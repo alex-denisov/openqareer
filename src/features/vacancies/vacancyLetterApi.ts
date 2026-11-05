@@ -1,3 +1,4 @@
+import type { LetterDeliveryChannel } from '../../../shared/recruiterChannel';
 import { apiFetch, readData } from '../coach/apiClient';
 export type LetterLanguage = 'ru' | 'en';
 export type LetterTone = 'executive' | 'confident' | 'technical';
@@ -7,9 +8,7 @@ export type ConnectionCircleState = 'available' | 'none' | 'unknown';
 export type ConnectionCircleStrength = 'direct' | 'strong' | 'weak' | 'unknown';
 export type ConnectionCircleSource = 'manual' | 'linkedin_import' | 'work_history' | 'cold';
 export type ConnectionCircleNextStep =
-  | 'write_known_contact'
-  | 'ask_for_introduction'
-  | 'cold_application';
+  'write_known_contact' | 'ask_for_introduction' | 'cold_application';
 
 export interface ConnectionCircleWorkplace {
   readonly companyName: string;
@@ -23,6 +22,7 @@ export interface ConnectionCirclePerson {
   readonly roleTitle: string | null;
   readonly companyName: string | null;
   readonly linkedinUrl?: string | null;
+  readonly deliveryChannel?: LetterDeliveryChannel | null;
   readonly workplaces?: readonly ConnectionCircleWorkplace[];
 }
 
