@@ -374,8 +374,15 @@ describe('Hacker News Who is hiring source', () => {
 });
 
 describe('JobSpy sources in default registry', () => {
-  it('registers Naukri and BDJobs as enabled sources with measurements', () => {
-    for (const id of ['src-naukri', 'src-bdjobs']) {
+  it('keeps Naukri off with a named reason while its anti-bot closes the product route', () => {
+    const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === 'src-naukri');
+    expect(source?.enabled).toBe(false);
+    expect(source?.addressStatus).toBe('needs_browser_session');
+    expect(source?.disabledReason).toContain('Анти-бот');
+  });
+
+  it('registers BDJobs as an enabled source with measurements', () => {
+    for (const id of ['src-bdjobs']) {
       const source = DEFAULT_VACANCY_SOURCES.find((s) => s.id === id);
       expect(source).toBeDefined();
       expect(source?.type).toBe('json_api');

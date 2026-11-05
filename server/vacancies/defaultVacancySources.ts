@@ -661,8 +661,10 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'json_api',
     accessClass: 'api',
     market: 'Индия, APAC (API поиска Naukri, механика JobSpy)',
-    addressStatus: 'live',
-    enabled: true,
+    addressStatus: 'needs_browser_session',
+    enabled: false,
+    disabledReason:
+      'Анти-бот площадки закрыл прод: сайт отвечает 403, API обрывает соединение (замер 2026-11-05). За 7 дней ни одной вакансии; обходить защиту нельзя.',
     targetUrl: 'https://www.naukri.com/jobapi/v3/search',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
