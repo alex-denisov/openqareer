@@ -136,15 +136,18 @@ function withCursor(
 }
 
 /**
- * 04.11: a page behind a cursor exists only with that cursor. Its bare address
- * answers 301 to the first page, so a canonical without the cursor told crawlers
- * every further page was a copy of the first.
+ * A page behind a cursor is a crawl path to the cards, not a page for the index:
+ * the cursor moves with every new vacancy and any old one still renders, so each
+ * address would be a separate unstable URL (05.11, reverses the self-canonical of
+ * #423). `noindex, follow` keeps the links; a redirect would lose them and break a
+ * reader's next page. The first page is canonical because the bare /page/N is a 301.
  */
-function canonicalWithCursor(
+function cursorPageView(
   page: CatalogPage,
   cursor: ReturnType<typeof decodeCatalogCursor>,
+  firstPagePath: string,
 ): CatalogPage {
-  return cursor ? { ...page, canonicalPath: withCursor(page.canonicalPath, cursor) } : page;
+  return cursor ? { ...page, canonicalPath: firstPagePath, indexable: false } : page;
 }
 
 function projectedPage(
@@ -208,7 +211,7 @@ async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: Fa
     return sendDocument(
       reply,
       renderCatalogDocument(
-        canonicalWithCursor(projectedPage(projected, requestedPage), cursor),
+        cursorPageView(projectedPage(projected, requestedPage), cursor, CATALOG_ROOT),
         filtersForListings(projectedListings),
       ),
     );
@@ -280,7 +283,7 @@ function handleProjectedListing(
   if (!summary) return undefined;
   const requestedPage = cursor ? (listing.page ?? 1) : 1;
   const built = projectedPage(projected, requestedPage, summary, chip);
-  const page = chip ? built : canonicalWithCursor(built, cursor);
+  const page = chip ? built : cursorPageView(built, cursor, summary.path);
   // A chip page counts the chip; the listing itself is the unfiltered total.
   const total = chip ? summary.count : projected.total;
   return sendDocument(
@@ -288,7 +291,8 @@ function handleProjectedListing(
     renderCatalogDocument(
       {
         ...page,
-        indexable: !chip && isIndexableListing(total, Boolean(listing.role), history, new Date()),
+        indexable:
+          !chip && !cursor && isIndexableListing(total, Boolean(listing.role), history, new Date()),
       },
       filtersForListings(projectedListings, {
         place: listing.place,
@@ -349,7 +353,11 @@ function handleRelocation(
   return sendDocument(
     reply,
     renderCatalogDocument(
-      projectedPage(projected, cursor ? (listing.page ?? 1) : 1, summary),
+      cursorPageView(
+        projectedPage(projected, cursor ? (listing.page ?? 1) : 1, summary),
+        cursor,
+        summary.path,
+      ),
       filtersForListings(listings),
     ),
   );
