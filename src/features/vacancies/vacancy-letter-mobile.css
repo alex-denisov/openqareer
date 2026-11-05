@@ -289,8 +289,9 @@
   }
 
   .career-letter-dest-actions .career-letter-dest-open {
-    min-inline-size: 0;
-    min-block-size: 0;
+    justify-content: flex-end;
+    min-inline-size: max(44px, var(--career-target-min));
+    min-block-size: max(44px, var(--career-target-min));
     padding: 0;
     border: 0;
     color: var(--career-text-dim);
