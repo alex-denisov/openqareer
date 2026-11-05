@@ -214,6 +214,8 @@ const messagesQuerySchema = z.object({
   stage: coachTurnStageSchema.optional(),
   /** Лента выбранной компании на «Компании и люди» (28.10). */
   company: z.string().trim().min(1).max(200).optional(),
+  /** Разговор об открытой вакансии: под письмом и карточкой не видно других (B608). */
+  vacancy: z.string().trim().min(1).max(200).optional(),
 });
 
 const handleGetSnapshot: Handler = async (
@@ -279,11 +281,11 @@ const handleGetMessages: Handler = async (
 ) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const { offset, stage, company } = messagesQuerySchema.parse(request.query);
+  const { offset, stage, company, vacancy } = messagesQuerySchema.parse(request.query);
   const messages = candidateStore.getMessages(
     candidate.id,
     stage,
-    company ? { kind: 'company', id: company } : undefined,
+    messageThread(company, vacancy),
   );
   const page = buildMessagePage(messages, offset);
   return {
@@ -296,6 +298,11 @@ const handleGetMessages: Handler = async (
     },
   };
 };
+
+function messageThread(company?: string, vacancy?: string) {
+  if (vacancy) return { kind: 'vacancy' as const, id: vacancy };
+  return company ? { kind: 'company' as const, id: company } : undefined;
+}
 
 const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, candidateReputationRepo, recruiterContactsRepo, config } =

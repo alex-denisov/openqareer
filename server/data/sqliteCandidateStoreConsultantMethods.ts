@@ -107,7 +107,11 @@ function decorateTurn(
     closedConversations: tasks,
     input: {
       ...started.input,
-      messages: history.activeMessages(candidateId, currentConversationId),
+      // Разговор этапа смешал бы вакансии: у вакансии лента своя (B608).
+      messages:
+        request.subject?.kind === 'vacancy'
+          ? started.input.messages
+          : history.activeMessages(candidateId, currentConversationId),
       knowledgeContext: history.buildHistoryContext(candidateId, stage, request.content, started.input.knowledgeContext),
     },
   };

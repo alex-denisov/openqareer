@@ -94,6 +94,11 @@
 
 @media (max-width: 40rem) {
   .career-cabinet-view-responses .career-responses-filterbar {
+    --career-responses-bar-height: 32px;
+    --career-responses-bar-bleed: calc(
+      (var(--career-responses-bar-height) - var(--career-target-min)) / 2
+    );
+
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
@@ -103,11 +108,15 @@
     display: none;
   }
 
+  /* Mockup 5 `.om-search`: 32 px on screen. The input over it keeps the 44 px tap area. */
   .career-cabinet-view-responses .career-responses-search {
     position: relative;
     display: grid;
     grid-column: 1;
     min-inline-size: 0;
+    block-size: var(--career-responses-bar-height);
+    border-radius: 16px;
+    background: var(--career-surface);
   }
 
   .career-cabinet-view-responses .career-responses-search > svg {
@@ -128,8 +137,20 @@
   }
 
   .career-cabinet-view-responses .career-responses-filterbar .career-responses-search-mobile {
+    position: absolute;
+    inset-block: var(--career-responses-bar-bleed);
+    inset-inline: 0;
     display: block;
-    padding-inline-start: calc(var(--career-space-3) * 2 + var(--career-space-4));
+    padding-block: 0;
+    /* The mockup's text starts after the icon, its gap and the input's default 2 px padding. */
+    padding-inline: calc(
+        var(--career-space-3) + var(--career-space-4) + var(--career-space-2) + 2px
+      )
+      var(--career-space-3);
+    border: 0;
+    border-radius: 16px;
+    background: transparent;
+    font-size: var(--career-text-md);
   }
 
   .career-cabinet-view-responses .career-responses-filters-trigger {
@@ -137,20 +158,39 @@
     align-items: center;
     justify-content: center;
     gap: var(--career-space-2);
+    position: relative;
+    isolation: isolate;
     min-inline-size: var(--career-target-min);
     min-block-size: var(--career-target-min);
-    border: var(--career-border-width) solid var(--career-line-strong);
-    border-radius: var(--career-radius-pill);
+    margin-block: var(--career-responses-bar-bleed);
+    border: 0;
     padding-inline: var(--career-space-3);
     color: var(--career-text);
-    background: var(--career-surface);
+    background: none;
     font: inherit;
+    font-size: var(--career-text-xs);
+    font-weight: 500;
     cursor: pointer;
   }
 
+  /* Mockup 5 `.vm-filter`: the 32 px glass pill inside the 44 px button. */
+  .career-cabinet-view-responses .career-responses-filters-trigger::before {
+    content: '';
+    position: absolute;
+    inset-block: calc(var(--career-responses-bar-bleed) * -1);
+    inset-inline: 0;
+    z-index: -1;
+    border-radius: 16px;
+    background: color-mix(in oklch, var(--career-bg-elevated) 55%, transparent);
+    backdrop-filter: blur(20px) saturate(1.7);
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 14%, transparent),
+      inset 0 1px 0 color-mix(in oklch, white 18%, transparent);
+  }
+
   .career-responses-filters-trigger svg {
-    inline-size: var(--career-space-5);
-    block-size: var(--career-space-5);
+    inline-size: 18px;
+    block-size: 18px;
   }
 
   /* Макет 5 `filters` / `stagef`: a sheet from the bottom. A <dialog> keeps its own
