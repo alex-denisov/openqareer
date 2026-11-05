@@ -21,7 +21,8 @@ export class SqliteBulkLlmLedger {
     this.db.exec(
       `PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS bulk_llm_spend(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,task TEXT NOT NULL,day TEXT NOT NULL,reserved REAL NOT NULL,cost REAL,model TEXT NOT NULL,provider TEXT NOT NULL,prompt_tokens INTEGER,cached_tokens INTEGER,completion_tokens INTEGER,batch_id TEXT,status TEXT NOT NULL,created_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS bulk_llm_events(id TEXT PRIMARY KEY,kind TEXT NOT NULL,created_at TEXT NOT NULL);`,
     );
-    this.ensureFailureColumn();
+    this.ensureColumn('failure', 'TEXT');
+    this.ensureColumn('duration_ms', 'INTEGER');
     this.ensureVertexIndexes();
   }
   /**
@@ -34,12 +35,16 @@ export class SqliteBulkLlmLedger {
       'CREATE INDEX IF NOT EXISTS bulk_llm_spend_provider_created ON bulk_llm_spend(provider, created_at); CREATE INDEX IF NOT EXISTS bulk_llm_events_kind_created ON bulk_llm_events(kind, created_at);',
     );
   }
-  /** Why a call was refused (04.11: 1 933 GLM rows `rejected` and no reason anywhere). Instant, repeat is safe. */
-  private ensureFailureColumn() {
+  /**
+   * `failure`: why a call was refused (04.11: 1 933 GLM rows `rejected` and no reason anywhere).
+   * `duration_ms`: how long a Vertex call took (04.11: timeouts rose at night and nothing showed why).
+   * Instant, repeat is safe.
+   */
+  private ensureColumn(name: string, type: string) {
     const columns = this.db.prepare('PRAGMA table_info(bulk_llm_spend)').all() as { name: string }[];
-    if (columns.some((column) => column.name === 'failure')) return;
+    if (columns.some((column) => column.name === name)) return;
     try {
-      this.db.exec('ALTER TABLE bulk_llm_spend ADD COLUMN failure TEXT');
+      this.db.exec(`ALTER TABLE bulk_llm_spend ADD COLUMN ${name} ${type}`);
     } catch (error) {
       // Another process of the same deploy added it first.
       if (!(error instanceof Error) || !/duplicate column/u.test(error.message)) throw error;
@@ -280,7 +285,7 @@ export class SqliteBulkLlmLedger {
    * A refusal is `rejected` with cost 0 and the masked reason; an answer is `settled`. Returns the row id.
    */
   recordGeminiCall(
-    input: { task: string; model: string; failure?: string; rejected?: boolean },
+    input: { task: string; model: string; failure?: string; rejected?: boolean; durationMs?: number },
     usage: { cost: number; promptTokens: number; cachedTokens: number; completionTokens: number },
   ): string {
     const now = new Date().toISOString();
@@ -288,7 +293,7 @@ export class SqliteBulkLlmLedger {
     const id = randomUUID();
     this.db
       .prepare(
-        "INSERT INTO bulk_llm_spend(id,run_id,task,day,reserved,cost,model,provider,prompt_tokens,cached_tokens,completion_tokens,status,created_at,failure) VALUES(?,?,?,?,?,?,?,'gemini',?,?,?,?,?,?)",
+        "INSERT INTO bulk_llm_spend(id,run_id,task,day,reserved,cost,model,provider,prompt_tokens,cached_tokens,completion_tokens,status,created_at,failure,duration_ms) VALUES(?,?,?,?,?,?,?,'gemini',?,?,?,?,?,?,?)",
       )
       .run(
         id,
@@ -304,6 +309,7 @@ export class SqliteBulkLlmLedger {
         input.rejected ? 'rejected' : 'settled',
         now,
         input.failure ?? null,
+        input.durationMs ?? null,
       );
     return id;
   }

@@ -5,6 +5,7 @@
  * каталог, и поисковик его не увидит. HTML собирается на запросе, потому что
  * пул меняется каждый час, а сборка неизменяема.
  */
+import { isCardInRollout } from '../seo/catalogCardRolloutReader';
 import { readCatalogRuSummary } from '../seo/catalogRuSummaryReader';
 import { searchIndexFor } from '../vacancies/vacancyCatalogSearch';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -421,6 +422,7 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
           full,
           new Date(),
           ruSummaryReader(deps),
+          (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
         )
       : null;
     if (detail) return sendDocument(reply, renderVacancyDocument(detail));
@@ -445,6 +447,7 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
         full,
         new Date(),
         ruSummaryReader(deps),
+        (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
       )
     : null;
 

@@ -9,7 +9,7 @@ import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
-import { buildCoverLetterWriter } from './providers/coverLetterWriter';
+import { buildEnabledCoverLetterWriter } from './providers/coverLetterWriter';
 import { buildExperienceFactRewriter } from './providers/experienceFactRewriter';
 import { BudgetedCoachProvider } from './providers/budgetedCoachProvider';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
@@ -258,7 +258,7 @@ const app = await buildApp({
     ),
   }),
   // Письмо пишет модель по своей цепочке, шаблон остаётся запасом (B266, пункт 7).
-  coverLetterWriter: buildCoverLetterWriter({
+  coverLetterWriter: buildEnabledCoverLetterWriter({
     providerCredentials: config.providerCredentials,
     vertex: config.vertex,
     vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'coverLetters'),

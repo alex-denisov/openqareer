@@ -105,27 +105,37 @@ export function checkPitchOutputFacts(
 
 const SHOWN_CLAIMS = 3;
 
-/** Notices are for the candidate, not the letter: always in Russian, one line
- *  for all unconfirmed claims instead of a question per sentence (26.10).
- *  The route keeps only the first one: the letter screen shows one note (G3 L2). */
+const MODEL_REFUSED_NOTICE: Readonly<Record<'en' | 'ru', string>> = {
+  ru: 'В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.',
+  en: 'The generated letter had claims that need confirming, so a letter built from your profile facts is shown instead. Check the facts before sending.',
+};
+
+function unresolvedClaimsNotice(language: 'en' | 'ru', claims: readonly string[]): string {
+  const rest = claims.length - SHOWN_CLAIMS;
+  const shown = claims.slice(0, SHOWN_CLAIMS);
+  if (language === 'en') {
+    const noun = claims.length === 1 ? 'claim' : 'claims';
+    const quoted = shown.map((text) => `"${text}"`).join(', ');
+    return `Before sending, check ${claims.length} ${noun} against your profile: ${quoted}${rest > 0 ? ` and ${rest} more` : ''}.`;
+  }
+  const quoted = shown.map((text) => `«${text}»`).join(', ');
+  return `Перед отправкой сверьте с профилем ${claims.length} ${claimWord(claims.length)}: ${quoted}${rest > 0 ? ` и ещё ${rest}` : ''}.`;
+}
+
+/** The note stands under the letter, so it speaks the letter's language; one line for all unconfirmed
+ *  claims instead of a question per sentence (26.10). The route keeps only the first one (G3 L2). */
 export function generatedTextFactNotices(
-  _letterLanguage: 'en' | 'ru',
+  letterLanguage: 'en' | 'ru',
   outputChecks: readonly GeneratedTextFactCheck[],
   modelCheck?: GeneratedTextFactCheck,
 ): string[] {
   const notices: string[] = [];
-  if (modelCheck?.status === 'needs_confirmation') {
-    notices.push('В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.');
-  }
+  if (modelCheck?.status === 'needs_confirmation') notices.push(MODEL_REFUSED_NOTICE[letterLanguage]);
   const unresolved = Array.from(new Set(outputChecks.flatMap((check) => check.claims)
     .filter((claim) => claim.action === 'ask_candidate')
     .map((claim) => claim.text.trim())
     .filter(Boolean)));
-  if (unresolved.length) {
-    const shown = unresolved.slice(0, SHOWN_CLAIMS).map((text) => `«${text}»`).join(', ');
-    const rest = unresolved.length - SHOWN_CLAIMS;
-    notices.push(`Перед отправкой сверьте с профилем ${unresolved.length} ${claimWord(unresolved.length)}: ${shown}${rest > 0 ? ` и ещё ${rest}` : ''}.`);
-  }
+  if (unresolved.length) notices.push(unresolvedClaimsNotice(letterLanguage, unresolved));
   return notices;
 }
 

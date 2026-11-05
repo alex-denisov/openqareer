@@ -518,7 +518,7 @@ function buildEvidenceParagraph(
   if (facts.length === 0) {
     // The "too few facts" state is not letter content — it goes to `notices`
     // and the paragraph is simply omitted (B266).
-    if (!career) notices.push(RU_COPY.noticeNoFacts);
+    if (!career) notices.push(copy.noticeNoFacts);
     return career;
   }
   const metricFact = useRanking

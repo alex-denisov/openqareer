@@ -36,6 +36,14 @@ describe('isIndexableCard', () => {
     expect(isIndexableCard({ ...valuable, title: 'Щебень' }, NOW)).toBe(false);
   });
 
+  it('indexes a card admitted by the rollout: salary and snippet are no longer required', () => {
+    const admitted = { ...valuable, salaryLabel: undefined, summary: '', rolloutAdmitted: true };
+    expect(isIndexableCard(admitted, NOW)).toBe(true);
+    expect(isIndexableCard({ ...admitted, company: ' ' }, NOW)).toBe(false);
+    expect(isIndexableCard({ ...admitted, title: 'Щебень' }, NOW)).toBe(false);
+    expect(isIndexableCard({ ...admitted, lastSeenAt: daysAgo(15) }, NOW)).toBe(false);
+  });
+
   it('drops a card whose source passed no job text, so JobPosting would hold only the title', () => {
     expect(isIndexableCard({ ...valuable, summary: '' }, NOW)).toBe(false);
     // 03.11: our Russian summary of the loaded text counts as the description.

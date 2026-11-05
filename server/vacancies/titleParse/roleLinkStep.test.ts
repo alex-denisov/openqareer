@@ -92,7 +92,7 @@ describe('связь названия с ролью (малая партия)', 
     );
     for (let index = 0; index < ROLE_LINK_MODEL_TITLES; index += 1) insert.run(`k${index}`);
     const client = answer([]);
-    await new RoleLinkStep(database, client as never).run();
+    await new RoleLinkStep(database, client as never, undefined, Date.now, 'sample').run();
     expect(client.complete).not.toHaveBeenCalled();
   });
 
@@ -172,6 +172,45 @@ describe('связь названия с ролью (малая партия)', 
     expect(client.complete).toHaveBeenCalledOnce();
 
     spend.run(1);
+    await step.run();
+    expect(client.complete).toHaveBeenCalledOnce();
+  });
+
+  it('отказы подряд удваивают паузу до потолка и не тратят предел вызовов', async () => {
+    const database = databaseWith([['странная служба ит', '["it-ops"]']]);
+    const refuse = vi.fn(async () => Promise.reject(new Error('cooling')));
+    let clock = 0;
+    const step = new RoleLinkStep(
+      database,
+      { complete: refuse } as never,
+      { warn: vi.fn() },
+      () => clock,
+    );
+    const attemptsAt = (minutes: readonly number[]) =>
+      minutes.reduce(async (done, minute) => {
+        await done;
+        clock = minute * 60_000;
+        await step.run();
+      }, Promise.resolve() as Promise<void>);
+
+    await attemptsAt([0, 1, 2, 3, 5, 6, 9]);
+    // 0, затем пауза 2 мин (2), 4 мин (6), 8 мин (следующая на 14).
+    expect(refuse).toHaveBeenCalledTimes(3);
+
+    await attemptsAt([14, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 390]);
+    expect(refuse).toHaveBeenCalledTimes(17);
+  });
+
+  it('после ответа следующая пачка не раньше чем через 2 минуты', async () => {
+    const database = databaseWith([
+      ['странная служба ит', '["it-ops"]'],
+      ['другая служба ит', '["it-ops"]'],
+    ]);
+    const client = answer([{ titleKey: 'странная служба ит', roleId: null }]);
+    let clock = 0;
+    const step = new RoleLinkStep(database, client as never, undefined, () => clock);
+    await step.run();
+    clock = 60_000;
     await step.run();
     expect(client.complete).toHaveBeenCalledOnce();
   });

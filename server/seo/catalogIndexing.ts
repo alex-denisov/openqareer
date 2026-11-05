@@ -15,6 +15,10 @@
  * 24.10 and impressions fell 259 → 30 a day. A card now stays indexed while it
  * is live (seen recently, `validThrough` ahead); measured on prod 03.11:
  * 3 115 → 8 430 cards.
+ *
+ * 05.11: salary is no longer a condition (Google only recommends `baseSalary`).
+ * A card without one enters gradually (`catalogCardRollout.ts`); cards the
+ * salary rule already indexes stay, so the set never shrinks on the switch.
  */
 import { catalogRoleOf } from '../vacancies/vacancyCatalogFacets';
 
@@ -68,6 +72,8 @@ export interface IndexableCardFields {
   readonly withdrawnAt?: string;
   /** Our own Russian summary exists (`catalogRuSummary.ts`): the card counts as described. */
   readonly hasRuSummary?: boolean;
+  /** Admitted by the gradual rollout, and the page has its text. */
+  readonly rolloutAdmitted?: boolean;
 }
 
 /** A salary label with a real amount: «0 $» is an unknown salary, not a salary. */
@@ -81,9 +87,11 @@ export function hasKnownSalary(label: string | undefined): boolean {
  * more line, not a rewrite.
  */
 const CARD_QUALITY_RULES: ReadonlyArray<(entry: IndexableCardFields) => boolean> = [
-  (entry) => hasKnownSalary(entry.salaryLabel),
-  // 03.11: hh.ru search rows carry no snippet, but a Russian summary of the loaded text describes the card.
-  (entry) => entry.hasRuSummary === true || entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN,
+  (entry) =>
+    entry.rolloutAdmitted === true ||
+    (hasKnownSalary(entry.salaryLabel) &&
+      // 03.11: hh.ru search rows carry no snippet, but a Russian summary of the loaded text describes the card.
+      (entry.hasRuSummary === true || entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN)),
   (entry) => entry.company.trim().length > 0,
   (entry) => catalogRoleOf(entry) !== null,
 ];

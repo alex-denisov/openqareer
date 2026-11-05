@@ -1,13 +1,20 @@
-import type { BulletTranslationOutput, BulletTranslationRequest } from './experienceBulletLanguage';
+import {
+  BULLET_TRANSLATION_PROMPT_REVISION,
+  type BulletTranslationOutput,
+  type BulletTranslationRequest,
+} from './experienceBulletLanguage';
 import { checkedBullet } from './experienceFactRewrite';
+import { addsPersonalAction } from './letterModelGate';
 import type { LetterResultFact } from './letterResults';
 
 /**
  * Перевод пунктов мест работы для английского письма (G3b, 03.11). Шаблон
  * не переводит свободный текст, поэтому зовём тот же переводчик, что и для
- * пунктов «Опыта»: он не усиливает утверждения, а `checkedBullet` не пропускает
- * чисел, которых нет в факте. Неудача — не ошибка: письмо выйдет без
- * результата, как раньше, но никогда с русским текстом или выдумкой.
+ * пунктов «Опыта». `checkedBullet` не пропускает чисел, которых нет в факте,
+ * `addsPersonalAction` — личного действия, которого факт не называет: перевод
+ * «команда выросла» как «scaling the team» дошёл до письма (G3d, письмо 6).
+ * Неудача — не ошибка: письмо выйдет без результата, как раньше, но никогда
+ * с русским текстом или выдумкой.
  */
 
 export interface LetterFactTranslator {
@@ -17,12 +24,17 @@ export interface LetterFactTranslator {
 const CACHE_LIMIT = 500;
 const cache = new Map<string, string>();
 
+/** Новая редакция переводчика не отдаёт переводов старой. */
+function cacheKey(statement: string): string {
+  return `${BULLET_TRANSLATION_PROMPT_REVISION}:${statement}`;
+}
+
 function remember(statement: string, text: string): void {
   if (cache.size >= CACHE_LIMIT) {
     const oldest = cache.keys().next().value;
     if (oldest !== undefined) cache.delete(oldest);
   }
-  cache.set(statement, text);
+  cache.set(cacheKey(statement), text);
 }
 
 function expiresIn(budgetMs: number): { promise: Promise<null>; cancel: () => void } {
@@ -41,7 +53,7 @@ export async function translateLetterFacts(
 ): Promise<ReadonlyMap<string, string>> {
   const known = new Map(
     facts.flatMap((fact) => {
-      const text = cache.get(fact.statement);
+      const text = cache.get(cacheKey(fact.statement));
       return text ? [[fact.id, text] as const] : [];
     }),
   );
@@ -75,7 +87,7 @@ function checkedTranslations(
       const text = answers.get(fact.id);
       if (!text) return [];
       const checked = checkedBullet({ text, sourceFactIds: ['0'] }, new Map([['0', fact.statement]]), 'en');
-      if (!checked) return [];
+      if (!checked || addsPersonalAction(fact.statement, checked.text)) return [];
       remember(fact.statement, checked.text);
       return [[fact.id, checked.text] as const];
     }),

@@ -91,6 +91,27 @@ describe('обёртка вызова Vertex', () => {
     expect(vertexBookingId(response)).toBeTypeOf('string');
   });
 
+  it('журнал пишет длительность и ответа, и отказа', async () => {
+    const { ledger, gate } = open({ creditUsd: 1 });
+    const answered = createMeteredVertexFetch({
+      gate,
+      task: 'ok',
+      fetchImpl: (async () => new Response('{}', { status: 200 })) as never,
+    });
+    await answered(URL, { method: 'POST' });
+    const timedOut = createMeteredVertexFetch({
+      gate,
+      task: 'late',
+      fetchImpl: (async () => Promise.reject(new Error('aborted'))) as never,
+    });
+    await expect(timedOut(URL, { method: 'POST' })).rejects.toThrow('aborted');
+    const durations = ledger.db
+      .prepare('SELECT task, duration_ms FROM bulk_llm_spend ORDER BY task')
+      .all() as { task: string; duration_ms: number | null }[];
+    expect(durations.map((row) => row.task)).toEqual(['late', 'ok']);
+    expect(durations.every((row) => typeof row.duration_ms === 'number')).toBe(true);
+  });
+
   it('пропуск воротами: сети нет, строк нет, бросает VertexSkippedError', async () => {
     const { ledger, gate } = open({ creditUsd: 1 });
     ledger.recordGeminiCall(
