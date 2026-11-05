@@ -47,6 +47,7 @@ import {
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, candidatePlan, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
+import { startOrderSetupTiming } from './orderSetupTiming';
 import { withRequestScopedCandidateReads } from './requestScopedCandidateReads';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 
@@ -368,11 +369,12 @@ async function prepareMatchedRead(
 ) {
   const warmStartedAt = performance.now();
   await deps.vacancyMechanics?.warmCachedVacancyIds?.(candidateId);
-  const warmFitIdsMs = elapsedMs(warmStartedAt), orderSetupStartedAt = performance.now();
-  const targetLevel = readTargetLevel(deps.candidateStore, candidateId, [...targetRoles]);
-  const fitLimit = selectionFitLimit(candidatePlan(deps, candidateId));
-  const order = withWantedCompanyOrder(deps, candidateId, sort, log);
-  return { targetLevel, fitLimit, order, warmFitIdsMs, orderSetupMs: elapsedMs(orderSetupStartedAt) };
+  const warmFitIdsMs = elapsedMs(warmStartedAt);
+  const setup = startOrderSetupTiming(deps.candidateStore);
+  const targetLevel = readTargetLevel(setup.store, candidateId, [...targetRoles]);
+  const fitLimit = setup.step('planMs', () => selectionFitLimit(candidatePlan(deps, candidateId)));
+  const order = setup.step('orderMs', () => withWantedCompanyOrder(deps, candidateId, sort, log));
+  return { targetLevel, fitLimit, order, warmFitIdsMs, orderSetupMs: setup.finish(log) };
 }
 
 const handleMatchedVacancies: Handler = async (backgroundDeps, request, reply) => {
