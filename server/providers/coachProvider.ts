@@ -42,6 +42,11 @@ export interface CoachTurnOptions {
    */
   readonly accept?: (result: CoachProviderResult['result']) => boolean;
   /**
+   * Softer than `accept`: an answer it dislikes sends the turn to the next route, but stays the
+   * answer when no route does better. A candidate's turn must not fail over a weak reply.
+   */
+  readonly prefer?: (result: CoachProviderResult['result']) => boolean;
+  /**
    * 28.10 (владелец): ход в диалоге делится на ответ консультанта (`reply`) и
    * фоновый разбор эксперта и стратега (`analysis`) с предложениями и треком.
    */

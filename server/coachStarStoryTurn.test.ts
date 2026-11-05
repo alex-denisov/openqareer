@@ -7,7 +7,8 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { serializeCoachInput } from './domain/coachInputSerialization';
 import type { CoachTurnInput } from './domain/coach';
 import { coachTurnInputSchema } from './domain/coach';
-import type { CoachProvider } from './providers/coachProvider';
+import { preferFinishedReply } from './providers/coachReplyShape';
+import type { CoachProvider, CoachTurnOptions } from './providers/coachProvider';
 
 const config: ServerConfig = {
   host: '127.0.0.1',
@@ -59,9 +60,11 @@ const VACANCY = {
 
 async function harness() {
   const seen: CoachTurnInput[] = [];
+  const seenOptions: (CoachTurnOptions | undefined)[] = [];
   const provider: CoachProvider = {
-    async createTurn(input) {
+    async createTurn(input, _key, options) {
       seen.push(input);
+      seenOptions.push(options);
       return {
         provider: 'openai',
         model: 'gpt-5.6-sol',
@@ -111,7 +114,7 @@ async function harness() {
       },
       '2026-11-01T00:00:00.000Z',
     );
-  return { seen, turn, addStory };
+  return { seen, seenOptions, turn, addStory };
 }
 
 describe('контекст хода консультанта', () => {
@@ -126,10 +129,18 @@ describe('контекст хода консультанта', () => {
     expect(serializeCoachInput(seen[0] as CoachTurnInput)).toContain('Кризис в команде');
   });
 
+  it('ход просит у очереди моделей законченную реплику', async () => {
+    const { seenOptions, turn } = await harness();
+    await turn({ content: 'Что поправить в письме?', stage: 'vacancies' });
+    expect(seenOptions[0]?.prefer).toBe(preferFinishedReply);
+  });
+
   it('без историй поле пустое: модель не получает выдуманного', async () => {
     const { seen, turn } = await harness();
     await turn({ content: 'Есть ли история про кризис?', stage: 'vacancies' });
-    expect(seen[0]?.knowledgeContext?.starStories ?? []).toEqual([]);
+    expect(seen[0]?.knowledgeContext?.starStories).toEqual([]);
+    // Пустой список виден модели: это текущее состояние, а не отсутствие данных.
+    expect(serializeCoachInput(seen[0] as CoachTurnInput)).toContain('"starStories":[]');
   });
 
   it('служебный ход и дневник истории не получают', async () => {

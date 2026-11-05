@@ -12,6 +12,63 @@ const input: CoachTurnInput = {
 };
 
 describe('ResilientCoachProvider', () => {
+  it('asks the next route for a better reply, but keeps the first one when none is better', async () => {
+    const answering = (id: 'openrouter' | 'openai'): CoachProvider => ({
+      async createTurn() {
+        return result(id);
+      },
+    });
+    const provider = new ResilientCoachProvider({
+      routes: [
+        { id: 'openrouter', provider: answering('openrouter') },
+        { id: 'openai', provider: answering('openai') },
+      ],
+      now: () => 1_000,
+    });
+
+    const better = await provider.createTurn(input, '11111111-1111-4111-8111-111111111111', {
+      prefer: (answer) => answer.message.includes('openai'),
+    });
+    const kept = await provider.createTurn(input, '22222222-2222-4222-8222-222222222222', {
+      prefer: () => false,
+    });
+
+    expect(better.provider).toBe('openai');
+    expect(better.routing?.fallbackUsed).toBe(true);
+    expect(kept.provider).toBe('openrouter');
+    expect(kept.routing?.attempts.map((attempt) => attempt.status)).toEqual(['failed', 'failed']);
+  });
+
+  it('keeps the weak reply when the next route fails: the turn must not get worse', async () => {
+    const provider = new ResilientCoachProvider({
+      routes: [
+        {
+          id: 'openrouter',
+          provider: {
+            async createTurn() {
+              return result('openrouter');
+            },
+          },
+        },
+        {
+          id: 'openai',
+          provider: {
+            async createTurn() {
+              throw new CoachProviderError('provider_unavailable', 503, true);
+            },
+          },
+        },
+      ],
+      now: () => 1_000,
+    });
+
+    const kept = await provider.createTurn(input, '33333333-3333-4333-8333-333333333333', {
+      prefer: () => false,
+    });
+
+    expect(kept.provider).toBe('openrouter');
+  });
+
   it('moves on when the caller rejects an answer, without cooling that route (B564)', async () => {
     let primaryCalls = 0;
     const primary: CoachProvider = {

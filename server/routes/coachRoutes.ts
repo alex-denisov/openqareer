@@ -10,6 +10,7 @@ import { STAGE_TO_PHASE, type CoachTurnInput, type MarketObservation } from '../
 import { checkGeneratedTextFacts } from '../domain/generatedTextFactGate';
 import { selectCoachPhase } from '../orchestration/coachPhaseRouter';
 import { CoachProviderError, type CoachProvider } from '../providers/coachProvider';
+import { preferFinishedReply } from '../providers/coachReplyShape';
 import { COACH_TURN_BUDGET_MS } from '../providers/stageTimeout';
 import type { CandidateStore } from '../data/candidateStore';
 import type { HhVacancySample } from '../connectors/hhVacancySearch';
@@ -139,7 +140,7 @@ async function completeTurnWithProvider(
     const stream = turnStreamHub(deps);
     const streamId = turnStreamId(candidateId, key);
     const onMessageText = (text: string) => stream.publish(streamId, text);
-    const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}), onMessageText };
+    const options = { ...(deadlineAt ? { deadlineAt } : {}), ...(split ? { split: 'reply' as const } : {}), onMessageText, prefer: preferFinishedReply };
     const turn = await deps.coachProvider.createTurn(input, key, options);
     const pending = { analysis: 'pending' as const, analysisStartedAt: new Date().toISOString() };
     const replied = split ? { ...turn, result: { ...turn.result, ...pending } } : turn;
