@@ -63,7 +63,6 @@ const KNOWN_UNDEFINED: Readonly<Record<string, readonly string[]>> = {
   'features/today/today-desktop.css': ['--career-text-muted'],
   'features/vacancies/s10-vis.css': ['--career-surface-soft'],
   'features/vacancies/vacancies-screen.css': ['--career-focus', '--career-surface-soft'],
-  'features/vacancies/vacancy-letter.css': ['--career-radius-circle'],
 };
 
 function findFiles(dir: string, pattern: RegExp): string[] {
