@@ -38,7 +38,7 @@ describe('цепочки моделей по механикам (28.10)', () => 
   });
 
   it('тексты для человека: Vertex первым, дешёвая ступень дважды, потом luna (04.11)', () => {
-    for (const mechanic of ['roleNames', 'coverLetters', 'linkedinDrafts'] as const) {
+    for (const mechanic of ['roleNames', 'linkedinDrafts'] as const) {
       expect(labels(mechanic)).toEqual([
         'vertex',
         'openrouter:deepseek/deepseek-v4.1-flash',
@@ -46,6 +46,13 @@ describe('цепочки моделей по механикам (28.10)', () => 
         'openai:gpt-5.6-luna',
       ]);
     }
+  });
+
+  it('письмо: DeepSeek, потом luna, без Gemini (D-F9, 05.11)', () => {
+    expect(labels('coverLetters')).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openai:gpt-5.6-luna',
+    ]);
   });
 
   it('роли кампании: Vertex первым, потом голова дважды и glm', () => {
@@ -59,7 +66,6 @@ describe('цепочки моделей по механикам (28.10)', () => 
   it('Vertex стоит только первым и один раз, за ним голова повторена ровно один раз', () => {
     for (const mechanic of [
       'roleNames',
-      'coverLetters',
       'linkedinDrafts',
       'campaignRoles',
     ] as const) {
@@ -75,7 +81,13 @@ describe('цепочки моделей по механикам (28.10)', () => 
     expect(labels('skillQuizzes')).toEqual(labels('coach'));
   });
 
-  it.each(Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>)(
+  it('сверка письма: одна быстрая ступень, её отказ снимает письмо (05.11)', () => {
+    expect(labels('letterChecks')).toEqual(['openrouter:deepseek/deepseek-v4.1-flash']);
+  });
+
+  it.each(
+    (Object.keys(MODEL_CHAINS) as Array<keyof typeof MODEL_CHAINS>).filter((mechanic) => mechanic !== 'letterChecks'),
+  )(
     '%s: не меньше двух ступеней, без бесплатных, мёртвых и дорогих маршрутов',
     (mechanic) => {
       const chain = labels(mechanic).filter((label) => label !== 'vertex');

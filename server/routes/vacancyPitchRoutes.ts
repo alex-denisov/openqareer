@@ -4,10 +4,11 @@ import { z } from 'zod';
 import {
   detectVacancyLanguage,
   filterUsablePitchFacts,
+  frameModelLetter,
   generateVacancyPitch,
 } from '../domain/vacancyPitchService';
 import { retryOnSqliteBusy } from '../data/sqliteBusyRetry';
-import { modelLetterNotice, writeCoverLetterBody } from './vacancyLetterBody';
+import { MODEL_LETTER_NOTICE, writeCoverLetterBody } from './vacancyLetterBody';
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
@@ -78,6 +79,16 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
   return wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId).has(candidateCompanyKey(company));
 }
 
+/**
+ * Модели письма нужна задача роли: она в полном тексте вакансии, а не в выжимке кластера (05.11).
+ * Язык и порядок фактов шаблона по-прежнему считаются по `description`: иначе одна кириллическая
+ * строка в конце английской вакансии переводила бы письмо на русский.
+ */
+function longestText(...texts: readonly (string | undefined)[]): string | undefined {
+  const present = texts.map((text) => text?.trim() ?? '').filter(Boolean);
+  return present.length ? present.reduce((long, text) => (text.length > long.length ? text : long)) : undefined;
+}
+
 function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancyId: string,
@@ -90,6 +101,8 @@ function resolvePitchVacancy(
     company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
     description:
       body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+    letterText:
+      body?.vacancy?.description ?? longestText(poolVacancy?.fullDescription, poolVacancy?.description) ?? cluster?.descriptionSummary,
     requiredSkills:
       body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
     responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
@@ -172,11 +185,14 @@ async function writeVacancyPitch(
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
   const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, contextMs } = context;
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
-  const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
+  // Модель сама пишет на языке письма из исходных фактов; перевод нужен шаблону и идёт рядом, без лишнего ожидания.
+  const [translations, written] = await Promise.all([
+    translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS),
+    writeCoverLetterBody(deps.coverLetterWriter, request, {
+      vacancy: { ...vacancy, description: vacancy.letterText }, facts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
+    }),
+  ]);
   const translatedFacts = withTranslatedStatements(facts, translations);
-  const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {
-    vacancy, facts: translatedFacts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
-  });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
   }
@@ -192,12 +208,13 @@ async function writeVacancyPitch(
     workplaces,
     translations,
   });
-  const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
+  const modelLetter = written.body && frameModelLetter(written.body, language, vacancy.company, candidateName);
+  const atsCoverLetter = modelLetter || pitch.atsCoverLetter;
   const templateChecks = checkPitchOutputFacts(pitch, atsCoverLetter, translatedFacts);
   // The letter screen shows emailPitch.body: the model letter has to be there, not only in the ATS field.
-  return written.body && written.factCheck
+  return modelLetter && written.factCheck
     ? {
-        pitch: { ...pitch, emailPitch: { ...pitch.emailPitch, body: written.body } },
+        pitch: { ...pitch, emailPitch: { ...pitch.emailPitch, body: modelLetter } },
         written,
         atsCoverLetter,
         candidateWorkplaces,
@@ -282,7 +299,7 @@ async function prepareVacancyPitch(deps: RouteDeps, request: FastifyRequest, rep
 /** Одно примечание под письмом (G3 L2, макет 9): письму модели — что его написала модель. */
 function letterNotices(result: Awaited<ReturnType<typeof writeVacancyPitch>>): string[] {
   const { pitch, written, outputFactChecks } = result;
-  if (written.body) return [modelLetterNotice(pitch.language)];
+  if (written.body) return [MODEL_LETTER_NOTICE];
   return [
     ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks), written.factCheck),
     ...pitch.notices,

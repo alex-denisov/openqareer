@@ -30,7 +30,7 @@ const MAX_STATEMENT = 400;
 export interface ChatCompletionClient {
   readonly chat: {
     readonly completions: {
-      create(request: Record<string, unknown>): Promise<{
+      create(request: Record<string, unknown>, options?: { signal?: AbortSignal }): Promise<{
         choices: Array<{ message: { content?: string | null } }>;
       }>;
     };

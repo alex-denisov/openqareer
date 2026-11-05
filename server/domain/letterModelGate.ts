@@ -3,8 +3,8 @@
  * предложение, только если оно дословно совпало с подтверждённым фактом, поэтому ни одно письмо
  * с пересказом до кандидата не доходило: 10 из 10 на проде ушли в шаблон при живой модели.
  * Смысл пересказа детерминированно не проверить, поэтому здесь останавливается то, что можно
- * проверить и что вредит кандидату: чужие числа, чужие имена (и транслит работодателя), усиление
- * личной роли и самооценки. Кандидат всё равно читает письмо и одобряет его сам.
+ * проверить и что вредит кандидату: чужие числа и чужие имена. Кандидат всё равно читает письмо
+ * и одобряет его сам.
  */
 
 export interface LetterGateSources {
@@ -14,11 +14,15 @@ export interface LetterGateSources {
   readonly candidate: readonly string[];
   /** Места работы: должность, компания, годы. */
   readonly career: readonly string[];
-  /** Текст вакансии подтверждает имена, но не то, что сделал кандидат. */
+  /** Работодатели как их написал кандидат: кириллица в английском письме здесь допустима. */
+  readonly employers?: readonly string[];
+  /** Название, компания, получатель и навыки вакансии: цитируются как есть и подтверждают имена. */
   readonly vacancy: readonly string[];
+  /** Полный текст вакансии подтверждает имена только во фразах о роли, но не в рассказе о своём прошлом. */
+  readonly vacancyText?: string;
 }
 
-export type LetterGateRule = 'number' | 'name' | 'ownership' | 'praise';
+export type LetterGateRule = 'number' | 'name' | 'language';
 
 export interface LetterGateViolation {
   readonly rule: LetterGateRule;
@@ -32,8 +36,11 @@ const UNIT_NAMES: Readonly<Record<string, string>> = {
 };
 
 /** Единица неотделима от числа: 40 млн не доказывают 40 %, а $40 и 40$ — одно и то же. */
+/** В диапазоне знак процента общий: «с 91 до 97 %» значит и 91 %, и 97 %. */
+const PERCENT_RANGE = /(\d+(?:[.,]\d+)?)(\s*(?:до|to)\s*\d+(?:[.,]\d+)?\s*%)/giu;
+
 function quantities(text: string): string[] {
-  return [...text.matchAll(QUANTITY)].map(([, sign, before, value, after]) => {
+  return [...text.replace(PERCENT_RANGE, '$1%$2').matchAll(QUANTITY)].map(([, sign, before, value, after]) => {
     const raw = (after ?? before ?? '').toLocaleLowerCase();
     const unit = raw.startsWith('руб') ? 'руб' : UNIT_NAMES[raw] ?? raw;
     return `${sign ? '-' : ''}${(value ?? '').replace(',', '.')}${unit}`;
@@ -84,6 +91,7 @@ const OPENING_WORDS = new Set([
   'during', 'since', 'currently', 'earlier', 'previously', 'now', 'today', 'dear', 'hello', 'hi', 'greetings',
   'в', 'во', 'на', 'из', 'при', 'для', 'с', 'со', 'до', 'после', 'как', 'мой', 'моя', 'наш', 'сейчас', 'ранее', 'прежде',
   'уважаемый', 'уважаемая', 'уважаемые', 'добрый', 'здравствуйте',
+  'если', 'когда', 'чтобы', 'пока', 'хотя', 'где', 'зато', 'но', 'и', 'а', 'if', 'when', 'where', 'but', 'and', 'although',
 ]);
 
 /**
@@ -116,20 +124,25 @@ const FIRST_PERSON_GREW = /(?<!\p{L})(?:i|we)\s+(?:\p{L}+\s+)?grew(?!\p{L})/iu;
 /** Перед глаголом кандидата — начало фразы, «я» или союз; иначе действие совершил кто-то другой. */
 const OWN_ACTOR = /(?:^|[,;:—–(.]\s*|(?<!\p{L})(?:я|мы|и|i|we|and)\s+)$/iu;
 
-function actionsOf(text: string): string[] {
-  return (text.match(ACTION) ?? []).map((action) => action.toLocaleLowerCase());
+/** «Срок сократился» называет итог, а не автора; прод 05.11: такие фразы уводили верное письмо в шаблон. */
+const REFLEXIVE_ENDING = /^\p{L}*(?:ся|сь)(?!\p{L})/iu;
+const NEGATED = /(?:(?<!\p{L})(?:не|ни|not|never)|n['’]t)(?:\s+(?!(?:только|просто|only|just)(?!\p{L}))\p{L}+)?\s+$/iu;
+/** «Добился» — личное достижение, хотя глагол возвратный. */
+const PERSONAL_REFLEXIVE = /^добил/iu;
+
+function claimedActions(text: string): RegExpMatchArray[] {
+  return [...text.matchAll(ACTION)].filter((match) => {
+    const start = match.index ?? 0;
+    const rest = text.slice(start);
+    return (PERSONAL_REFLEXIVE.test(rest) || !REFLEXIVE_ENDING.test(rest)) && !NEGATED.test(text.slice(0, start));
+  });
 }
 
 /** Действия, совершённые самим автором фразы: «команда выросла» и «заказчик создал» сюда не входят. */
 function statedActions(statement: string): string[] {
-  return [...statement.matchAll(ACTION)]
+  return claimedActions(statement)
     .filter((match) => OWN_ACTOR.test(statement.slice(0, match.index)))
     .map(([action]) => action.toLocaleLowerCase());
-}
-
-/** Какие личные действия профиль называет сам: должность считается, чужой глагол нет. */
-function ownedActions(sources: LetterGateSources): Set<string> {
-  return new Set([...sources.candidate.flatMap(statedActions), ...sources.career.flatMap(actionsOf)]);
 }
 
 /** Перевод не меняет субъект: где факт не называет личного действия, его нет и в переводе (G3d, письмо 6). */
@@ -138,17 +151,24 @@ export function addsPersonalAction(source: string, translation: string): boolean
   return statedActions(source).length === 0 && statedActions(translation).length > 0;
 }
 
-function hasStrengthenedRole(sentence: string, owned: ReadonlySet<string>): boolean {
-  return actionsOf(sentence).some((action) => !owned.has(action)) || FIRST_PERSON_GREW.test(sentence);
+const FIRST_PERSON = /(?<!\p{L})(?:я|мы|мне|меня|мной|мой|моя|моё|мои|моего|моей|моих|наш\p{L}*|i|i['’]\p{L}+|we|my|our)(?!\p{L})/iu;
+const READER_JOB = /(?<!\p{L})(?:role|job|position|you|your|requires|needs|роль|роли|ролью|позици\p{L}*|ваш\p{L}*|вам|вас|требует|нужен|нужна)(?!\p{L})/iu;
+/** Прошедшее время о себе: о нём говорит только профиль, а не текст вакансии. */
+const OWN_PAST = /(?<!\p{L})(?:\p{L}{3,}(?:ал|ил|ял|ел)(?:а|и)?|(?:i|we)\s+(?:\p{L}+\s+)?(?:\p{L}+ed|was|were|led|built|ran))(?!\p{L})/iu;
+
+function isOwnPastClaim(sentence: string): boolean {
+  return OWN_PAST.test(sentence) && (FIRST_PERSON.test(sentence) || !READER_JOB.test(sentence));
 }
 
-const PRAISE = /обширн|многолетн|богат\p{L}*\s+опыт|глубок\p{L}*\s+(?:опыт|экспертиз|знани|понимани)|значительн\p{L}*\s+опыт|extensive|track record|proven|solid (?:background|experience)|sustained|seasoned|deep (?:expertise|experience|knowledge)|strong background|wealth of/iu;
-
-/** «Не могу подтвердить…» и отрицания ничего не подтверждают. */
+/** Отрицание снимает своё предложение: «склад не успевал» не отменяет итог того же факта. */
 const DENIED = /(?:^|[\s,:])(?:не|нет|not|never)(?=\s)|cannot|can't|unable to confirm|did not/iu;
 
-function sentencesOf(body: string): string[] {
+export function sentencesOf(body: string): string[] {
   return body.split(/(?<=[.!?…])\s+|\n+/u).map((part) => part.trim()).filter(Boolean);
+}
+
+function affirmedSentences(statement: string): string[] {
+  return sentencesOf(statement).filter((sentence) => !DENIED.test(sentence));
 }
 
 /** Название вакансии цитируется как есть: его числа и слова — не заслуги кандидата. */
@@ -156,22 +176,62 @@ function withoutVacancyText(sentence: string, vacancy: readonly string[]): strin
   return vacancy.reduce((text, part) => (part ? text.split(part).join(' ') : text), sentence);
 }
 
+const CYRILLIC = /\p{Script=Cyrillic}/u;
+
+/**
+ * Английское письмо из русского профиля пересказывает его своими словами: «CEO», «Board» и «Moscow» в профиле
+ * не найти. Поэтому здесь сверяются не все заглавные, а только то, что читается как компания, и единицы чисел
+ * сравниваются без подписи («2 млрд ₽» и «2bn RUB»).
+ */
+function isTranslatedLetter(sources: LetterGateSources): boolean {
+  return sources.language === 'en' && [...sources.candidate, ...sources.career].some((text) => CYRILLIC.test(text));
+}
+
+const COMPANY_AFTER_AT = /(?<!\p{L})at\s+(\p{Lu}[\p{L}\p{N}&'’-]*)/giu;
+const CAPITAL_PAIR = /(?<![\p{L}\p{N}])(\p{Lu}[\p{Ll}]+)\s+(\p{Lu}[\p{Ll}]+)(?![\p{L}\p{N}])/gu;
+
+/** Перевод названия выдумывает компанию: «Ритейл Системс» под именем «Retail Systems» никто не найдёт. */
+function hasInventedCompany(sentence: string, known: ReadonlySet<string>): boolean {
+  const unknown = (word: string): boolean => !isKnownName(word, known);
+  return [...sentence.matchAll(COMPANY_AFTER_AT)].some(([, name]) => /^\p{Lu}/u.test(name ?? '') && unknown(name ?? '')) ||
+    [...sentence.matchAll(CAPITAL_PAIR)].some(([, first = '', second = '']) =>
+      !OPENING_WORDS.has(first.toLocaleLowerCase()) && unknown(first) && unknown(second));
+}
+
+function withoutEmployers(sentence: string, employers: readonly string[]): string {
+  return employers.reduce((text, employer) => text.split(employer).join(' '), sentence);
+}
+
+const BARE_NUMBER = /(?<![\p{L}\p{N}])\d+(?:[.,]\d+)?/gu;
+
+function hasForeignBareNumber(sentence: string, backing: readonly string[]): boolean {
+  const known = new Set(backing.join(' ').match(BARE_NUMBER)?.map((value) => value.replace(',', '.')) ?? []);
+  return (sentence.match(BARE_NUMBER) ?? []).some((value) => !known.has(value.replace(',', '.')));
+}
+
+/**
+ * Письмо проверяется только там, где ошибка видна без модели: чужие числа и чужие имена. Смысл пересказа
+ * проверить надёжно не вышло (05.11): и правила, и проверка моделью отвергали верные фразы и мнения автора и
+ * пропускали выдумки. Письмо остаётся черновиком: кандидат читает его перед отправкой.
+ */
 export function reviewLetterBody(body: string, sources: LetterGateSources): LetterGateViolation[] {
-  const backing: LetterGateSources = {
-    ...sources,
-    candidate: sources.candidate.filter((statement) => !DENIED.test(statement)),
-  };
-  const profile = [...backing.candidate, ...backing.career];
-  const owned = ownedActions(backing);
+  const candidate = sources.candidate.flatMap(affirmedSentences);
+  const profile = [...candidate, ...sources.career];
   const profileText = profile.join(' ').toLocaleLowerCase();
-  const names = new Set([...profile, ...backing.vacancy].flatMap(wordsOf));
+  const names = new Set([...profile, ...sources.vacancy].flatMap(wordsOf));
+  const namesWithText = new Set([...names, ...wordsOf(sources.vacancyText ?? '')]);
+  const translated = isTranslatedLetter(sources);
   return sentencesOf(body).flatMap((sentence) => {
-    const own = withoutVacancyText(sentence, backing.vacancy);
+    const ownPast = isOwnPastClaim(sentence);
+    const own = withoutVacancyText(sentence, sources.vacancy);
+    const backing = ownPast || !sources.vacancyText ? profile : [...profile, sources.vacancyText];
+    const known = ownPast ? names : namesWithText;
     const checks: readonly (readonly [LetterGateRule, boolean])[] = [
-      ['number', hasForeignNumber(own, profile)],
-      ['name', hasForeignName(sentence, names, sources.language) || hasForeignMonth(sentence, profileText)],
-      ['ownership', hasStrengthenedRole(own, owned)],
-      ['praise', PRAISE.test(own)],
+      ['number', translated ? hasForeignBareNumber(own, backing) : hasForeignNumber(own, backing)],
+      ['name', translated
+        ? hasInventedCompany(sentence, known)
+        : hasForeignName(sentence, known, sources.language) || hasForeignMonth(sentence, profileText)],
+      ['language', sources.language === 'en' && CYRILLIC.test(withoutEmployers(sentence, sources.employers ?? []))],
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });

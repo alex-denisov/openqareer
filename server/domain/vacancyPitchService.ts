@@ -430,6 +430,18 @@ export function letterCareer(
   });
 }
 
+/** Какие факты подтверждены каким местом: запись о самом месте результатом не считается. */
+export function letterFactPlaces(
+  workplaces: readonly PitchWorkplace[],
+  language: PitchLanguage,
+): { readonly employer: string; readonly factIds: readonly string[] }[] {
+  return workplaces.flatMap((place) => {
+    const { employer } = workplaceParts(place, language);
+    if (!employer) return [];
+    return [{ employer, factIds: place.evidenceIds.filter((id) => id !== place.recordId) }];
+  });
+}
+
 function workplacePhrase(place: PitchWorkplace, language: PitchLanguage): WorkplacePhrase | null {
   const { title, employer } = workplaceParts(place, language);
   if (!title && !employer) return null;
@@ -497,12 +509,10 @@ function letterResultFacts(
 export function letterModelFacts(
   facts: readonly VacancyPitchInputFact[],
   workplaces: readonly PitchWorkplace[],
-  language: PitchLanguage,
 ): VacancyPitchInputFact[] {
   const records = new Set(workplaces.flatMap((place) => (place.recordId ? [place.recordId] : [])));
   return filterUsableFacts(facts).filter((fact) => !records.has(fact.id) &&
-    !isStructuredRecordStatement(fact.statement) &&
-    (language === 'ru' || !hasCyrillic(fact.statement)));
+    !isStructuredRecordStatement(fact.statement));
 }
 
 function buildEvidenceParagraph(
@@ -657,6 +667,13 @@ function buildAtsCoverLetter(
     copy.ats.signOff,
     candidateName,
   ].join('\n');
+}
+
+/** Модель пишет только текст: обращение и подпись ставит система, так их нельзя выдумать или забыть. */
+export function frameModelLetter(body: string, language: PitchLanguage, company: string | undefined, candidateName: string | undefined): string {
+  const { greeting, signOff } = copyFor(language).ats;
+  const name = candidateName && language === 'en' ? englishProperName(candidateName) : candidateName;
+  return [greeting(company), '', body, '', signOff, ...(name ? [name] : [])].join('\n');
 }
 
 function buildContactMessage(

@@ -13,6 +13,7 @@ import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import {
   filterUsablePitchFacts,
   letterCareer,
+  letterFactPlaces,
   letterModelFacts,
   type PitchLanguage,
   type PitchTone,
@@ -34,7 +35,7 @@ export interface LetterWritingRequest {
     requiredSkills: readonly string[];
     recipient?: { name?: string; role?: string };
   };
-  /** Факты с переведёнными формулировками: письмо и проверка видят один текст. */
+  /** Исходные факты: письмо модель пишет на нужном языке сама. */
   readonly facts: readonly VacancyPitchInputFact[];
   readonly workplaces: readonly PitchWorkplace[];
   readonly language: PitchLanguage;
@@ -65,24 +66,22 @@ function logPitchTiming(entry: {
   console.info(JSON.stringify({ event: 'vacancy-pitch-timing', ...entry }));
 }
 
-const MODEL_LETTER_NOTICE: Readonly<Record<PitchLanguage, string>> = {
-  ru: 'Черновик написала модель. Прочитайте его перед отправкой.',
-  en: 'This draft was written by a model. Please read it before sending.',
-};
-
-/** Проверка письма не оценивает смысл пересказа, поэтому экран обещает не проверку, а чтение. */
-export function modelLetterNotice(language: PitchLanguage): string {
-  return MODEL_LETTER_NOTICE[language];
-}
+/**
+ * Читает кандидат, а не работодатель: поэтому по-русски и у английского письма. Проверка ловит не всё, поэтому
+ * экран называет, что сверить, и не обещает проверенного текста.
+ */
+export const MODEL_LETTER_NOTICE = 'Черновик написала модель. Сверьте с профилем места работы, цифры и что делали лично.';
 
 function letterGateSources(request: LetterWritingRequest): LetterGateSources {
   const { vacancy, facts, workplaces, language } = request;
+  const usable = filterUsablePitchFacts(facts);
   return {
     language,
-    candidate: filterUsablePitchFacts(facts).map((fact) => fact.statement),
+    candidate: usable.map((fact) => fact.statement),
     career: letterCareer(workplaces, language).map((place) =>
       [place.title, place.employer, place.years].filter(Boolean).join(' '),
     ),
+    employers: workplaces.flatMap((place) => (place.employer ? [place.employer] : [])),
     vacancy: [
       vacancy.title,
       vacancy.company,
@@ -90,6 +89,7 @@ function letterGateSources(request: LetterWritingRequest): LetterGateSources {
       vacancy.recipient?.role,
       ...vacancy.requiredSkills,
     ].flatMap((part) => (part ? [part] : [])),
+    vacancyText: vacancy.description,
   };
 }
 
@@ -118,9 +118,11 @@ function writerInput(
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
   const { vacancy, facts, workplaces, language, tone, rankingContext, targetCompany } = letter;
+  const places = letterFactPlaces(workplaces, language);
   return {
-    facts: letterModelFacts(facts, workplaces, language).map((fact) => ({
+    facts: letterModelFacts(facts, workplaces).map((fact) => ({
       ref: fact.id,
+      workplace: places.find((place) => place.factIds.includes(fact.id))?.employer ?? null,
       statement: fact.statement,
       domain: fact.domain,
       createdAt: fact.createdAt,
@@ -158,9 +160,10 @@ export async function writeCoverLetterBody(
     return violations.map((violation) => violation.rule);
   };
   const providerStart = Date.now();
+  // Кандидат ждёт и сборку контекста: срок считается от начала запроса, а не от вызова модели.
   const outcome = await withinTimeBudget(
     writer.writeCoverLetter(writerInput(letter, review)),
-    COVER_LETTER_BUDGET_MS,
+    Math.max(0, COVER_LETTER_BUDGET_MS - letter.contextMs),
   );
   const providerMs = Date.now() - providerStart;
   if (outcome.failure) request.log.warn(outcome.failure, 'cover-letter-stage-failed');

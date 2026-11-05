@@ -67,6 +67,8 @@ function workplaceResults<T extends LetterResultFact>(
   return [...bullets].sort((a, b) => outcomeFirst(a) - outcomeFirst(b));
 }
 
+/** «with the team growing…» держится на теме: вынесенное вперёд, оно ломает фразу (прод 05.11). */
+const DEPENDENT_TAIL = /^(?:with|as|while|when|which|that|growing|где|при|когда|что|который|которая|которые)\s/iu;
 const PAST_ACTION = /(?<!\p{L})\p{L}+(?:л|ла|ли|ло|ed)(?!\p{L})/iu;
 
 /** Первая буква фразы после двоеточия: имя, аббревиатура и чужая азбука остаются как есть. */
@@ -89,11 +91,11 @@ export function resultFirst(statement: string, language: LetterLanguage): string
   const text = statement.trim().replace(/[.;,\s]+$/u, '');
   const [, head, tail] = /^([^,;]+)[,;]\s+(.+)$/u.exec(text) ?? [];
   if (!head || !tail || /\d/u.test(head) || !/\d/u.test(tail)) return text;
-  if (OUTCOME_VERB.test(head) || PAST_ACTION.test(head)) return text;
+  if (OUTCOME_VERB.test(head) || PAST_ACTION.test(head) || DEPENDENT_TAIL.test(tail)) return text;
   return `${tail} — ${lowerLetterStart(head, language)}`;
 }
 
-/** Русские пункты мест, которые английское письмо может процитировать только в переводе. */
+/** Русские пункты мест, которые шаблон английского письма может цитировать только в переводе. */
 export function letterFactsToTranslate<T extends LetterResultFact>(
   facts: readonly T[],
   workplaces: readonly LetterResultWorkplace[],

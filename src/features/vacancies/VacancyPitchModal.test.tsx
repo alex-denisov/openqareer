@@ -152,7 +152,7 @@ describe('PitchMetaBar promises only what was checked', () => {
   });
 
   it('a model letter claims neither: the fact count describes the template it replaced', () => {
-    const notice = 'Черновик написала модель. Прочитайте его перед отправкой.';
+    const notice = 'Черновик написала модель. Сверьте с профилем места работы, цифры и что делали лично.';
     const html = renderToStaticMarkup(
       <PitchMetaBar evidenceCount={1} usedFacts={usedFacts} bodySource="model" notices={[notice]} />,
     );

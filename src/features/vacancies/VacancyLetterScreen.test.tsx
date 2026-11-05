@@ -156,7 +156,7 @@ describe('the note under the letter (G3 L2)', () => {
     const markup = notes({
       bodySource: 'model',
       usedEvidenceIds: [],
-      notices: ['Черновик написала модель. Прочитайте его перед отправкой.'],
+      notices: ['Черновик написала модель. Сверьте с профилем места работы, цифры и что делали лично.'],
     });
     expect(markup).toContain('Черновик написала модель');
     expect(markup).not.toContain('мало подтверждённых');
