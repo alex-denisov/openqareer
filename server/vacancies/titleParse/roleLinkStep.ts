@@ -24,6 +24,11 @@ const SAMPLE_CALLS_PER_PROCESS = 12;
 /** Чтение очереди занимает секунды на проде: одно на много пачек, а не на каждый такт. */
 const SAMPLE_QUEUE = 600;
 const PASS_QUEUE = 3_000;
+/** Фон не вытесняет вызовы, где ждёт кандидат: пачка не чаще раза в 2 минуты. */
+const MIN_GAP_MS = 2 * 60_000;
+/** Отказы подряд удваивают паузу: лежащий Vertex этот шаг не долбит. */
+const REFUSAL_PAUSE_MS = 2 * 60_000;
+const REFUSAL_PAUSE_MAX_MS = 30 * 60_000;
 const ROLE_LINK_TASK = 'role-link';
 const ROLE_LINK_MAX_TOKENS = 4_096;
 const SOURCE_NO_FUNCTION = 'no-function';
@@ -97,6 +102,8 @@ const STALE = `(r.source = 'model' AND r.role_id IS NULL AND r.model NOT LIKE 'g
 
 export class RoleLinkStep {
   private calls = 0;
+  private refusalsInRow = 0;
+  private nextCallAt = 0;
   private prepared = false;
   private queue: readonly Candidate[] = [];
 
@@ -256,7 +263,7 @@ export class RoleLinkStep {
   }
 
   async run(): Promise<RoleLinkReport> {
-    if (this.modelRoom() <= 0) return EMPTY_REPORT;
+    if (this.now() < this.nextCallAt || this.modelRoom() <= 0) return EMPTY_REPORT;
     if (!this.prepared) {
       this.cleanUp();
       this.prepared = true;
@@ -265,15 +272,24 @@ export class RoleLinkStep {
     const room = this.modelRoom();
     const batch = this.queue.slice(0, room);
     if (batch.length === 0) return { ...EMPTY_REPORT, ...settled };
-    this.calls += 1;
     try {
       const answered = await this.askModel(batch);
+      // Предел считает ответы: отказы сдерживает пауза.
+      this.calls += 1;
+      this.refusalsInRow = 0;
+      this.nextCallAt = this.now() + MIN_GAP_MS;
       // Название без ответа в пачке вернётся при следующем чтении очереди.
       this.queue = this.queue.slice(batch.length);
       return { ...EMPTY_REPORT, ...settled, ...answered };
     } catch (error) {
       // Нет ответа Gemini: строк нет, ключи остаются в очереди.
-      this.log?.warn({ reason: describeFailure(error) }, 'role-link-call-failed');
+      const pause = Math.min(REFUSAL_PAUSE_MS * 2 ** this.refusalsInRow, REFUSAL_PAUSE_MAX_MS);
+      this.refusalsInRow += 1;
+      this.nextCallAt = this.now() + pause;
+      this.log?.warn(
+        { reason: describeFailure(error), refusalsInRow: this.refusalsInRow, pauseMs: pause },
+        'role-link-call-failed',
+      );
       return { ...EMPTY_REPORT, ...settled, failed: true };
     }
   }
