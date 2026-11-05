@@ -93,6 +93,47 @@ describe('AdminVacancySourcesView', () => {
    * свой знаменатель. Иначе «площадка отвечает» и «площадка жива» выглядели на
    * экране одинаково, а «10 %» скрывало размер выборки.
    */
+  it('показывает приостановленный источник причиной, а не успешным опросом', () => {
+    const html = renderExpandedSourceFromView(
+      <AdminVacancySourcesView
+        state={sourcesLoaded([
+          {
+            ...sampleSources[0],
+            lastStatus: 'healthy',
+            health: {
+              liveness: {
+                verdict: 'dead',
+                reason: 'Ни одна ссылка не открылась: 0 из 5 ответивших о судьбе объявления',
+                pausedBecause: 'links_not_opening',
+                lastNonEmptyReadingAt: '2026-02-01T00:00:00.000Z',
+                consecutiveEmptyReadings: 0,
+                fresherThan30Days: { counted: 5, of: 5 },
+                fresherThan90Days: { counted: 5, of: 5 },
+                fresherThan180Days: { counted: 5, of: 5 },
+              },
+              trust: {
+                verdict: 'unknown',
+                reasons: [],
+                completeness: {
+                  withEmployer: { counted: 5, of: 5 },
+                  withLink: { counted: 5, of: 5 },
+                  withDate: { counted: 5, of: 5 },
+                },
+                consistency: { successful: { counted: 1, of: 1 } },
+                lawfulness: { permitted: true, addressStatus: 'permitted' },
+                authenticity: { measured: false, blockedBy: 'B205' },
+              },
+            },
+          },
+        ])}
+        onRefresh={vi.fn()}
+        onSync={vi.fn()}
+      />,
+    );
+    expect(html).toContain('Приостановлен: ссылки не открываются');
+    expect(html).not.toContain('Опрос OK</span>');
+  });
+
   it('печатает живость и доверие раздельно, со знаменателями', () => {
     const html = renderExpandedSourceFromView(
       <AdminVacancySourcesView

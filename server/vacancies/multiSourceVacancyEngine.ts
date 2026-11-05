@@ -273,6 +273,18 @@ function hasChangedExistingMembership(
  */
 export const SYNC_BATCH_LIMIT = 12;
 
+/** Приостановленную площадку перепроверяют не чаще этого срока. */
+export const DEAD_SOURCE_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Столько приостановленных площадок идёт за такт: после старта они не уходят залпом. */
+const DEAD_SOURCE_RECHECKS_PER_TICK = 1;
+
+/**
+ * Перепроверка ссылок идёт шире обычной выборки: улов уже записан, и вакансии
+ * с нерабочими ссылками нужно снять до пересборки кластеров.
+ */
+const DEAD_SOURCE_LINK_SAMPLE = 100;
+
 /**
  * Как движок пересобирает кластеры после волны опроса.
  *
@@ -332,7 +344,8 @@ function lastSyncMs(source: VacancySourceConfig): number {
 }
 
 function statusFromMessage(message: unknown): number | undefined {
-  const match = typeof message === 'string' ? message.match(/vacancy_source_unreachable: (\d{3})\b/) : null;
+  const match =
+    typeof message === 'string' ? message.match(/vacancy_source_unreachable: (\d{3})\b/) : null;
   return match ? Number(match[1]) : undefined;
 }
 
@@ -1109,11 +1122,15 @@ export class MultiSourceVacancyEngine {
         // 04.11: rows of candidates' roles have their own position, first on every tick.
         loadRoleCandidates: (limit) => {
           const position = pool.loadHhRoleTextPosition?.();
-          return pool.loadHhRoleTextCandidates?.(position, limit) ?? { ids: [], position: position ?? '' };
+          return (
+            pool.loadHhRoleTextCandidates?.(position, limit) ?? {
+              ids: [],
+              position: position ?? '',
+            }
+          );
         },
         saveRolePosition: (position) => pool.saveHhRoleTextPosition?.(position),
-        loadHhTextCandidates: (cursor, limit) =>
-          pool.loadHhTextCandidates!(cursor, limit),
+        loadHhTextCandidates: (cursor, limit) => pool.loadHhTextCandidates!(cursor, limit),
         loadSavedCursor: () => pool.loadHhTextCursor?.(),
         saveCursor: (cursor) => pool.saveHhTextCursor?.(cursor),
         peekPriority: (limit) => pool.peekHhTextPriority?.(limit) ?? [],
@@ -1779,6 +1796,7 @@ export class MultiSourceVacancyEngine {
   public async probeSourceLinks(
     sourceId: string,
     nowMs: number = Date.now(),
+    sample: number = DEFAULT_LINK_SAMPLE,
   ): Promise<LinkCheckCensus | undefined> {
     if (!this.linkProbe) return undefined;
     const source = this.sources.get(sourceId);
@@ -1790,7 +1808,7 @@ export class MultiSourceVacancyEngine {
     if (links.length === 0) return undefined;
 
     const { census, goneVacancyIds } = await probeVacancyLinks(links, this.linkProbe, {
-      sample: DEFAULT_LINK_SAMPLE,
+      sample,
       nowMs,
     });
 
@@ -1882,23 +1900,34 @@ export class MultiSourceVacancyEngine {
    * pressed it by hand (B161 review §2).
    */
   public async syncDue(nowMs: number = Date.now()): Promise<SourceSyncOutcome[]> {
-    const due = Array.from(this.sources.values()).filter(
-      (source) =>
-        source.enabled &&
-        !source.requiresQuery &&
-        this.isDue(source, nowMs) &&
-        // Мёртвую площадку плановый опрос не выбирает: свежего улова с неё уже
-        // полгода нет, а вежливость к чужому серверу этим и измеряется (B200).
-        !isDeadSource(this.healthOf(source.id, nowMs)),
-    );
-    const batch = [...due]
-      .sort((left, right) => lastSyncMs(left) - lastSyncMs(right))
-      .slice(0, SYNC_BATCH_LIMIT);
-    const outcomes = await Promise.all(
-      batch.map((source) => this.syncOne(source.id, undefined, nowMs)),
-    );
+    const due = Array.from(this.sources.values())
+      .filter((source) => source.enabled && !source.requiresQuery && this.isDue(source, nowMs))
+      .sort((left, right) => lastSyncMs(left) - lastSyncMs(right));
+    // Мёртвую площадку плановый опрос не выбирает: вежливость к чужому серверу
+    // этим и измеряется (B200). Вердикт снимается только новым замером, поэтому
+    // раз в неделю одна такая площадка за такт получает повторный опрос.
+    const dead = due.filter((source) => isDeadSource(this.healthOf(source.id, nowMs)));
+    const deadIds = new Set(dead.map((source) => source.id));
+    const rechecks = dead
+      .filter((source) => nowMs - lastSyncMs(source) >= DEAD_SOURCE_RECHECK_MS)
+      .slice(0, DEAD_SOURCE_RECHECKS_PER_TICK);
+    const live = due
+      .filter((source) => !deadIds.has(source.id))
+      .slice(0, SYNC_BATCH_LIMIT - rechecks.length);
+    const outcomes = await Promise.all([
+      ...live.map((source) => this.syncOne(source.id, undefined, nowMs)),
+      ...rechecks.map((source) => this.recheckDeadSource(source.id, nowMs)),
+    ]);
     this.reclusterIfChanged();
     return outcomes;
+  }
+
+  private async recheckDeadSource(sourceId: string, nowMs: number): Promise<SourceSyncOutcome> {
+    const linksWereDead =
+      this.healthOf(sourceId, nowMs).liveness.pausedBecause === 'links_not_opening';
+    const outcome = await this.syncOne(sourceId, undefined, nowMs);
+    if (linksWereDead) await this.probeSourceLinks(sourceId, nowMs, DEAD_SOURCE_LINK_SAMPLE);
+    return outcome;
   }
 
   /**

@@ -12,14 +12,24 @@ export interface LetterWorkplace {
 export interface PitchLetterText {
   readonly contactMessage?: string;
   readonly emailPitch: { readonly body: string };
+  readonly senderName?: string;
+  readonly senderFirstName?: string;
 }
 
 export function letterBodyForCircle(
   circle: ConnectionCircleNumber,
   pitch: PitchLetterText,
 ): string {
-  if (circle === 3) return pitch.emailPitch.body;
-  return pitch.contactMessage?.trim() || pitch.emailPitch.body;
+  const signature = letterSignature(circle, pitch);
+  const body =
+    circle === 3 ? pitch.emailPitch.body : pitch.contactMessage?.trim() || pitch.emailPitch.body;
+  return signature ? `${body}\n\n${signature}` : body;
+}
+
+/** Макет 9: холодное письмо подписано полным именем, письмо знакомому только именем. */
+function letterSignature(circle: ConnectionCircleNumber, pitch: PitchLetterText): string {
+  const fullName = pitch.senderName?.trim() ?? '';
+  return circle === 3 ? fullName : pitch.senderFirstName?.trim() || fullName;
 }
 
 export function recipientForConnectionPath(

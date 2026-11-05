@@ -1,4 +1,5 @@
 import { plainCoachText } from '../../shared/coachPlainText';
+import { withoutSecondAsk } from './coachReplyShape';
 import { sanitizeHiddenMarkersDeep, stripHiddenMarkers } from '../../shared/textHygiene';
 import type { CoachTurnInput } from '../domain/coach';
 import type { CoachProvider, CoachProviderResult, CoachTurnOptions } from './coachProvider';
@@ -56,7 +57,7 @@ function cleanStream(
 function withPlainReply(result: CoachProviderResult['result']): CoachProviderResult['result'] {
   const plain = (text: unknown) => (typeof text === 'string' ? plainCoachText(text) : text);
   const message = plain(result.message) as string;
-  const nextQuestion = plain(result.nextQuestion) as string | null;
+  const nextQuestion = withoutSecondAsk(message, plain(result.nextQuestion) as string | null);
   return message === result.message && nextQuestion === result.nextQuestion
     ? result
     : { ...result, message, nextQuestion };

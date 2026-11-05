@@ -31,6 +31,7 @@ import {
 } from '@phosphor-icons/react';
 import {
   CoachApiError,
+  getCandidateMessages,
   getCandidateWithMessages,
   login,
   sendCoachTurn,
@@ -50,10 +51,10 @@ import {
   useConsultantScreenObject,
   useConsultantScreenTopic,
 } from './consultantScreenTopic';
-import { screenTurnFor, sendScreenAwareTurn } from './consultantScreenObjects';
+import { consultantThread, screenTurnFor, sendScreenAwareTurn } from './consultantScreenObjects';
 import { ConsultantScreenSuggestionCard } from './ConsultantScreenSuggestionCard';
 import type { CareerJourney } from './careerJourneyEngine';
-import { consultantTurns } from './consultantHistory';
+import { consultantTurns, latestTurnOfThread } from './consultantHistory';
 import { ExpertHistoryRow, ExpertVisibleLine } from './expertSheetParts';
 import { latestExchange } from './expertSheetView';
 import { withoutStoredConditionChanges } from './careerChangeApply';
@@ -208,7 +209,9 @@ export function CareerExpertPanel({
       setSkillQuizApplying(false);
     }
   }
-  const contextKey = JSON.stringify([stage, subject]);
+  const thread = consultantThread(visibleSubject);
+  const threadKey = thread ? `${thread.kind}:${thread.id}` : '';
+  const contextKey = JSON.stringify([stage, subject, threadKey]);
   // Макет 13: на вкладке «Компании и люди» консультант подписан ею, а не «Вакансии».
   // Макет 9: на экране письма консультант подписан «Письмо»; экран сам называет страницу.
   const screenTitle = usePageTitleOverrideValue();
@@ -218,7 +221,7 @@ export function CareerExpertPanel({
       : stage === 'vacancies' && screenTitle
         ? screenTitle
         : STAGE_TITLE[stage];
-  const threadCompany = subject?.kind === 'company' ? subject.id : undefined;
+  const loadedStage = useRef<CoachTurnStage>();
   const currentContext = useRef(contextKey);
   currentContext.current = contextKey;
   const previousContext = useRef(contextKey);
@@ -320,9 +323,17 @@ export function CareerExpertPanel({
     setLoadingSnapshot(true);
     setLiveResult(undefined);
     setQuickRepliesDismissed(false);
-    void getCandidateWithMessages(stage, threadCompany)
-      .then((candidate) => {
-        if (active) setSnapshot(candidate);
+    // Смена вакансии на том же этапе меняет только ленту: снимок целиком тут не нужен.
+    const sameScope = loadedStage.current === stage;
+    loadedStage.current = stage;
+    void (sameScope
+      ? getCandidateMessages(stage, thread).then((messages) => (current: CandidateSnapshot | undefined) =>
+          current ? { ...current, messages } : current,
+        )
+      : getCandidateWithMessages(stage, thread).then((candidate) => () => candidate)
+    )
+      .then((update) => {
+        if (active) setSnapshot(update);
       })
       .catch((reason) => {
         if (active) setError(messageFrom(reason));
@@ -333,7 +344,9 @@ export function CareerExpertPanel({
     return () => {
       active = false;
     };
-  }, [user, stage, threadCompany]);
+    // threadKey несёт то же, что thread: сам объект новый на каждый рендер.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, stage, threadKey]);
   useEffect(() => {
     if (!sendRequest || sendRequest <= lastHandledSendRequest) return;
     if (!user || loadingSnapshot || !initialPrompt) return;
@@ -433,7 +446,7 @@ export function CareerExpertPanel({
     }
     if (!delivered) return false;
     try {
-      const updated = await getCandidateWithMessages(stage, threadCompany);
+      const updated = await getCandidateWithMessages(stage, thread);
       if (currentContext.current === operationContext) setSnapshot(updated);
     } catch {
       if (currentContext.current === operationContext) setError('Ответ сохранён, но историю пока не удалось обновить.');
@@ -469,9 +482,7 @@ export function CareerExpertPanel({
   useEffect(() => {
     historyEndRef.current?.scrollIntoView?.({ block: 'end' });
   }, [turns.length, showLiveMessage]);
-  const latestStoredTurn = [...(snapshot?.turns ?? [])]
-    .reverse()
-    .find((turn) => turn.status === 'completed' && turn.result);
+  const latestStoredTurn = latestTurnOfThread(snapshot?.turns ?? [], snapshot?.messages ?? [], thread);
   const latestResult =
     liveResult ?? withoutStoredConditionChanges(latestStoredTurn?.result ?? undefined);
   const lastAssistantMessage = [...turns].reverse().find((message) => message.role === 'assistant');

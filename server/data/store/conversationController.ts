@@ -128,7 +128,7 @@ export class ConversationController {
         dataClass: candidate.dataClass,
         locale: candidate.locale,
         phase: request.phase,
-        messages: this.modelTurns(candidateId, request.stage),
+        messages: this.modelTurns(candidateId, request.stage, request.subject),
         knowledgeContext: this.knowledgeContext(candidateId),
         ...(request.stageContext ? { stageContext: request.stageContext } : {}),
         ...(rejectedStrings.length > 0 ? { rejectedProposals: rejectedStrings } : {}),
@@ -696,8 +696,10 @@ export class ConversationController {
    * Import announcements are `role: 'user'` rows for schema reasons only
    * (B266) — the model must never read them as candidate turns.
    */
-  private modelTurns(candidateId: string, stage?: CoachTurnStage) {
-    return this.messages(candidateId, stage)
+  private modelTurns(candidateId: string, stage?: CoachTurnStage, subject?: TurnRequest['subject']) {
+    // Разговор о вакансии отделён: реплики о другой вакансии модель принимала за контекст (B608).
+    const thread = subject?.kind === 'vacancy' ? subject : undefined;
+    return this.messages(candidateId, stage, thread)
       .filter((message) => !isResumeImportAnnouncement(message))
       .slice(-30);
   }

@@ -76,3 +76,23 @@ function withoutRepeatedQuestions<T extends ConsultantHistoryMessage>(messages: 
   }
   return visible;
 }
+
+/**
+ * Последний завершённый ход, чьи предложения можно показать. В разговоре о вакансии это ход
+ * из её ленты: иначе под одной вакансией появлялись задания про другую (B608).
+ */
+export function latestTurnOfThread<T extends ThreadTurn>(
+  turns: readonly T[],
+  messages: readonly Pick<ConsultantHistoryMessage, 'role' | 'content'>[],
+  thread: { readonly kind: string } | undefined,
+): T | undefined {
+  const inThread = (turn: T) =>
+    thread?.kind !== 'vacancy' ||
+    messages.some((message) => message.role === 'assistant' && message.content === turn.result?.message);
+  return [...turns].reverse().find((turn) => turn.status === 'completed' && turn.result && inThread(turn));
+}
+
+interface ThreadTurn {
+  readonly status: string;
+  readonly result?: { readonly message: string } | null;
+}

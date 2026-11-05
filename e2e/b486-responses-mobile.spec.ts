@@ -215,6 +215,42 @@ test.describe('B486 mobile responses', () => {
     await expect(page.getByRole('button', { name: 'Выбрать', exact: true })).toBeVisible();
   });
 
+  test('поиск и «Фильтры»: на вид 32 px как в макете 5, нажатие 44 px (B603)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'B603 — панель только на 390');
+    await stubB486Session(page);
+    await seedB486Workspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openB486Responses(page);
+
+    const search = await page.locator('.career-responses-search').boundingBox();
+    const input = await page.getByRole('searchbox', { name: 'Компания или роль' }).boundingBox();
+    const trigger = page.getByRole('button', { name: 'Фильтры', exact: true });
+    const button = await trigger.boundingBox();
+    if (!search || !input || !button) throw new Error('панель поиска не отрисована');
+
+    expect(search.height).toBe(32);
+    expect(button.x - (search.x + search.width)).toBe(8);
+    expect(await trigger.evaluate((node) => getComputedStyle(node, '::before').height)).toBe(
+      '32px',
+    );
+    expect(input.height).toBe(44);
+    expect(input.y).toBe(search.y - 6);
+    expect(button.height).toBe(44);
+    expect(button.y).toBe(search.y - 6);
+
+    const hitAt = (x: number, y: number) =>
+      page.evaluate(
+        ([left, top]) => document.elementFromPoint(left, top)?.closest('input, button')?.className,
+        [x, y],
+      );
+    for (const y of [search.y - 5, search.y + search.height + 5]) {
+      expect(await hitAt(search.x + 100, y)).toBe('career-responses-search-mobile');
+      expect(await hitAt(button.x + 40, y)).toBe('career-responses-filters-trigger');
+    }
+  });
+
   test('the Этап filter narrows the list to one stage', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'mobile-390', 'B486 mobile stage filter');
     await stubB486Session(page);
