@@ -181,6 +181,8 @@ export interface AdminSourceHealth {
   liveness: {
     verdict: 'never_read' | 'unreachable' | 'alive' | 'fading' | 'dead';
     reason: string;
+    /** Поля нет у сервера, который ещё не называет причину приостановки. */
+    pausedBecause?: 'no_fresh_vacancies' | 'links_not_opening' | null;
     lastNonEmptyReadingAt: string | null;
     consecutiveEmptyReadings: number;
     fresherThan30Days: AdminCountedShare;

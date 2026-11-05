@@ -235,11 +235,15 @@ export function recordLinkCheck(
   return { ...previous, linkCheck };
 }
 
+/** Почему плановый опрос приостановлен: у живой площадки причины нет. */
+export type SourcePauseReason = 'no_fresh_vacancies' | 'links_not_opening';
+
 export type SourceLivenessVerdict = 'never_read' | 'unreachable' | 'alive' | 'fading' | 'dead';
 
 export interface SourceLiveness {
   readonly verdict: SourceLivenessVerdict;
   readonly reason: string;
+  readonly pausedBecause: SourcePauseReason | null;
   readonly lastNonEmptyReadingAt: string | null;
   readonly consecutiveEmptyReadings: number;
   readonly fresherThan30Days: CountedShare;
@@ -398,11 +402,22 @@ function callLiveness(observations: SourceObservations, nowMs: number): Liveness
   };
 }
 
+function pauseReasonOf(
+  call: LivenessCall,
+  observations: SourceObservations,
+): SourcePauseReason | null {
+  if (call.verdict !== 'dead') return null;
+  const byLinks = callLivenessByLinks(observations.linkCheck ?? null);
+  return byLinks?.reason === call.reason ? 'links_not_opening' : 'no_fresh_vacancies';
+}
+
 function describeLiveness(observations: SourceObservations, nowMs: number): SourceLiveness {
   const census = observations.census;
   const total = census?.total ?? 0;
+  const call = callLiveness(observations, nowMs);
   return {
-    ...callLiveness(observations, nowMs),
+    ...call,
+    pausedBecause: pauseReasonOf(call, observations),
     lastNonEmptyReadingAt: observations.lastNonEmptyReadingAt,
     consecutiveEmptyReadings: observations.consecutiveEmptyReadings,
     fresherThan30Days: share(census?.fresherThan30Days ?? 0, total),
