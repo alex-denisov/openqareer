@@ -49,14 +49,30 @@ test.describe('B486 mobile responses', () => {
     await trigger.click();
     const dialog = page.getByRole('dialog', { name: 'Фильтры' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel('Канал')).toBeVisible();
-    await expect(dialog.getByLabel('Период')).toBeVisible();
-    await expect(dialog.getByLabel('Сортировка')).toBeVisible();
+    // Макет 5 `filters`: a sheet from the bottom with rows instead of native selects.
+    const box = await dialog.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box && viewport ? Math.round(box.y + box.height) : 0).toBe(viewport?.height);
+    await expect(dialog.locator('select')).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /^Канал/ })).toContainText('Все');
+    await expect(dialog.getByRole('button', { name: /^Период/ })).toContainText('30 дней');
+    await expect(dialog.getByRole('button', { name: /^Сортировка/ })).toContainText(
+      'По сроку шага',
+    );
 
-    const applyButton = dialog.getByRole('button', { name: 'Показать', exact: true });
+    const applyButton = dialog.getByRole('button', { name: /^Показать \d+$/ });
+    await expect(applyButton).toBeVisible();
     await applyButton.focus();
     await page.keyboard.press('Tab');
     expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+
+    // Escape steps back from a choice to the filters, then closes them.
+    const channelRow = dialog.getByRole('button', { name: /^Канал/ });
+    await channelRow.click();
+    await expect(page.getByRole('dialog', { name: 'Канал' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Фильтры' })).toBeVisible();
+    await expect(channelRow).toBeFocused();
 
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
@@ -72,10 +88,16 @@ test.describe('B486 mobile responses', () => {
     await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Фильтры' });
-    await dialog.getByLabel('Канал').selectOption('recruiter');
-    await dialog.getByLabel('Период').selectOption('all');
-    await dialog.getByLabel('Сортировка').selectOption('newest');
-    await dialog.getByRole('button', { name: 'Показать', exact: true }).click();
+    const choose = async (row: RegExp, option: string) => {
+      await dialog.getByRole('button', { name: row }).click();
+      // The open choice renames the dialog to its own title.
+      await page.getByRole('dialog').getByRole('radio', { name: option }).click();
+      await expect(dialog.getByRole('button', { name: row })).toContainText(option);
+    };
+    await choose(/^Канал/, 'Ввод вручную');
+    await choose(/^Период/, 'Всё время');
+    await choose(/^Сортировка/, 'Сначала новые');
+    await dialog.getByRole('button', { name: /^Показать/ }).click();
 
     await expect(dialog).toBeHidden();
     await expect(
@@ -210,7 +232,7 @@ test.describe('B486 mobile responses', () => {
     await stageSheet.getByRole('radio', { name: 'Интервью' }).click();
     await expect(dialog.getByRole('button', { name: /^Этап/ })).toContainText('Интервью');
     await expect(dialog.getByRole('button', { name: /^Этап/ })).toBeFocused();
-    await dialog.getByRole('button', { name: 'Показать', exact: true }).click();
+    await dialog.getByRole('button', { name: /^Показать/ }).click();
     await expect(dialog).toBeHidden();
     await expect(page.getByRole('listitem').filter({ hasText: 'Peraton' })).toHaveCount(0);
   });
