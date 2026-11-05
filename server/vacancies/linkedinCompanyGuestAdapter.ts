@@ -48,14 +48,21 @@ function decodeEntities(value: string): string {
 const LINKEDIN_MARKUP =
   /show-more-less-html__markup[^>]*>([\s\S]*?)(?:<button[^>]*show-more-less-html__button|<\/section>)/;
 
-export async function fetchLinkedinJobDetailText(jobId: string): Promise<string> {
+export async function fetchLinkedinJobDetailText(
+  jobId: string,
+  customFetch: typeof fetch = fetch,
+): Promise<string> {
   const url = `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${jobId}`;
-  const response = await fetch(url, { headers: GUEST_HEADERS });
-  if (!response.ok) return '';
-  const html = await response.text();
-  const m = html.match(LINKEDIN_MARKUP);
-  if (!m?.[1]) return '';
-  return decodeEntities(m[1].replace(/<[^>]+>/g, ' ').trim());
+  try {
+    const response = await customFetch(url, { headers: GUEST_HEADERS });
+    if (!response.ok) return '';
+    const html = await response.text();
+    const m = html.match(LINKEDIN_MARKUP);
+    if (!m?.[1]) return '';
+    return decodeEntities(m[1].replace(/<[^>]+>/g, ' ').trim());
+  } catch {
+    return '';
+  }
 }
 
 async function parseCardToVacancy(
@@ -64,6 +71,7 @@ async function parseCardToVacancy(
   sourceId: string,
   observedAt: string,
   fetchFullText?: boolean,
+  customFetch: typeof fetch = fetch,
 ): Promise<UnifiedVacancy | null> {
   const id = attr(card, 'data-entity-urn').replace('urn:li:jobPosting:', '');
   if (!/^\d+$/.test(id)) return null;
@@ -80,7 +88,7 @@ async function parseCardToVacancy(
   let description = [title, company, location].filter(Boolean).join(' — ');
   if (fetchFullText) {
     try {
-      const detail = await fetchLinkedinJobDetailText(id);
+      const detail = await fetchLinkedinJobDetailText(id, customFetch);
       if (detail) description = detail;
     } catch {
       // Keep title/location fallback if detail fetch drops
@@ -151,6 +159,7 @@ export async function fetchLinkedinCompanyVacancies(
         sourceId,
         observedAt,
         options?.fetchFullText,
+        customFetch,
       );
       if (vacancy) allVacancies.push(vacancy);
     }
