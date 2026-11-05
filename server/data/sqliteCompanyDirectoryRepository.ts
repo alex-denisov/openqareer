@@ -1,9 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 import { COMPANY_DIRECTORY_MIGRATION, COMPANY_DIRECTORY_TABLE } from './companyDirectorySchema';
+import defaultCompanyDirectorySeed from './companyDirectorySeed.json';
 
 export type CompanySourceType = 'corporate_portal' | 'ats_direct' | 'linkedin_guest';
 export type CompanyDirectoryStatus = 'active' | 'dormant';
@@ -150,19 +150,8 @@ export class SqliteCompanyDirectoryRepository {
   seedDefaultsIfEmpty(): number {
     const count = this.countCompanies();
     if (count > 0) return 0;
-
-    const currentDir = dirname(fileURLToPath(import.meta.url));
-    const seedPath = resolve(currentDir, 'companyDirectorySeed.json');
-    if (!existsSync(seedPath)) return 0;
-
-    try {
-      const content = readFileSync(seedPath, 'utf8');
-      const records = JSON.parse(content) as readonly CompanyDirectoryRecord[];
-      this.upsertBatch(records);
-      return records.length;
-    } catch {
-      return 0;
-    }
+    this.upsertBatch(defaultCompanyDirectorySeed as readonly CompanyDirectoryRecord[]);
+    return defaultCompanyDirectorySeed.length;
   }
 
   upsertCompany(record: CompanyDirectoryRecord): void {
