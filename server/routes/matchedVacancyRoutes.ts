@@ -395,7 +395,7 @@ async function prepareMatchedRead(
   const setup = startOrderSetupTiming(deps.candidateStore);
   const targetLevel = readTargetLevel(setup.store, candidateId, [...targetRoles]);
   const fitLimit = setup.step('planMs', () => selectionFitLimit(candidatePlan(deps, candidateId)));
-  const order = setup.step('orderMs', () => withWantedCompanyOrder(deps, candidateId, sort, log));
+  const order = setup.step('orderMs', () => withWantedCompanyOrder(deps, candidateId, sort, log, 'read', targetRoles));
   return { targetLevel, fitLimit, order, warmFitIdsMs, orderSetupMs: setup.finish(log) };
 }
 
