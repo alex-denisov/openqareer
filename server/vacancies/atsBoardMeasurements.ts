@@ -2721,4 +2721,28 @@ export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
     observedAt: '2026-09-14',
     lists: ['buildin'],
   },
+  {
+    company: 'DataGrail',
+    provider: 'greenhouse',
+    board: 'datagrail',
+    jobs: 4,
+    observedAt: '2026-11-05',
+    lists: ['company-directory-2026-11-05'],
+  },
+  {
+    company: 'FxPro',
+    provider: 'greenhouse',
+    board: 'fxpro',
+    jobs: 44,
+    observedAt: '2026-11-05',
+    lists: ['company-directory-2026-11-05'],
+  },
+  {
+    company: 'GoStudent',
+    provider: 'greenhouse',
+    board: 'gostudent',
+    jobs: 21,
+    observedAt: '2026-11-05',
+    lists: ['company-directory-2026-11-05'],
+  },
 ];
