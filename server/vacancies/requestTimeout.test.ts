@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { withRequestTimeout } from './requestTimeout';
+import { failureMessage, withRequestTimeout } from './requestTimeout';
 
 describe('withRequestTimeout', () => {
   beforeEach(() => vi.useFakeTimers());
@@ -37,10 +37,66 @@ describe('withRequestTimeout', () => {
 
   it('still aborts when the grace period passes too', async () => {
     let clock = 0;
-    const result = withRequestTimeout(1_000, neverEnds, { clock: () => clock, graceMs: 500, lagMs: 200 });
+    const result = withRequestTimeout(1_000, neverEnds, {
+      clock: () => clock,
+      graceMs: 500,
+      lagMs: 200,
+    });
     const settled = expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
     clock = 5_000;
     await vi.advanceTimersByTimeAsync(1_500);
     await settled;
+  });
+
+  it('keeps waiting while the loop stays blocked, because a second stall proves nothing about the source either', async () => {
+    let clock = 0;
+    let resolveBody: (value: string) => void = () => undefined;
+    const result = withRequestTimeout(
+      1_000,
+      (signal) =>
+        new Promise<string>((resolve, reject) => {
+          resolveBody = resolve;
+          signal.addEventListener('abort', () => reject(signal.reason));
+        }),
+      { clock: () => clock, graceMs: 500, lagMs: 200 },
+    );
+    clock = 5_000;
+    await vi.advanceTimersByTimeAsync(1_000); // first stall ends, grace starts
+    clock = 9_000;
+    await vi.advanceTimersByTimeAsync(500); // the grace timer fired 3.5 s late
+    resolveBody('body');
+    await expect(result).resolves.toBe('body');
+  });
+
+  it('gives up after the last grace period even if every timer fired late', async () => {
+    let clock = 0;
+    const result = withRequestTimeout(1_000, neverEnds, {
+      clock: () => clock,
+      graceMs: 500,
+      lagMs: 200,
+      maxGraces: 2,
+    });
+    const settled = expect(result).rejects.toMatchObject({ name: 'TimeoutError' });
+    clock = 5_000;
+    await vi.advanceTimersByTimeAsync(1_000);
+    clock = 9_000;
+    await vi.advanceTimersByTimeAsync(500);
+    clock = 13_000;
+    await vi.advanceTimersByTimeAsync(500);
+    await settled;
+  });
+});
+
+describe('failureMessage', () => {
+  it('names the network cause of a failed fetch', () => {
+    const error = new TypeError('fetch failed', { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } });
+    expect(failureMessage(error)).toBe('fetch failed (UND_ERR_CONNECT_TIMEOUT)');
+  });
+
+  it('keeps a plain message and a non-error as they are', () => {
+    expect(failureMessage(new Error('vacancy_source_unreachable: 404'))).toBe(
+      'vacancy_source_unreachable: 404',
+    );
+    expect(failureMessage('boom')).toBe('boom');
   });
 });

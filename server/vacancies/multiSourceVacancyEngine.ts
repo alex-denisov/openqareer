@@ -1,3 +1,4 @@
+import { failureMessage } from './requestTimeout';
 import type { HhTextRateController } from './hhTextRate';
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
    are intentionally kept together so replacement, expiry and reclustering share
@@ -1538,7 +1539,7 @@ export class MultiSourceVacancyEngine {
       }
       return await this.readSource(source, query, nowMs);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = failureMessage(err);
       if (message.startsWith('source_not_configured')) {
         // The tool this source needs is not installed here: say so once, do not
         // log an error or a failed reading on every poll.
@@ -2193,7 +2194,7 @@ export class MultiSourceVacancyEngine {
         latencyMs,
         count: 0,
         vacancies: [],
-        message: err instanceof Error ? err.message : String(err),
+        message: failureMessage(err),
       };
     }
   }

@@ -1,3 +1,4 @@
+import { withRequestTimeout } from './requestTimeout';
 import { htmlToFeedText } from '../connectors/feedText';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 import { UNKNOWN_PUBLISHED_AT } from './jsonVacancyRecord';
@@ -214,17 +215,20 @@ export async function fetchYcWorkAtStartup(
     // provider origin and let a changed target fail through the normal source
     // health path rather than turning it into an SSRF primitive.
     const url = new URL(`/${path}`, YC_ORIGIN).toString();
-    const response = await fetchPage(url, {
-      headers: {
-        Accept: 'text/html,application/xhtml+xml',
-        'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
-      },
-      signal: AbortSignal.timeout(YC_SOURCE_TIMEOUT_MS),
+    const html = await withRequestTimeout(YC_SOURCE_TIMEOUT_MS, async (signal) => {
+      const response = await fetchPage(url, {
+        headers: {
+          Accept: 'text/html,application/xhtml+xml',
+          'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
+        },
+        signal,
+      });
+      if (!response.ok) throw new Error(`vacancy_source_unreachable: ${response.status}`);
+      return response.text();
     });
-    if (!response.ok) throw new Error(`vacancy_source_unreachable: ${response.status}`);
     const observedAt = new Date().toISOString();
     for (const vacancy of parseYcWorkAtStartupPage(
-      await response.text(),
+      html,
       source,
       url,
       observedAt,
