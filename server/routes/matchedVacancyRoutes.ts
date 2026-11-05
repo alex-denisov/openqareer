@@ -443,13 +443,14 @@ async function answerFromSealedList(
   const geography = matchGeographyOf(read.campaign.careerGeography);
   const order = matchedOrderChoiceKeys(deps, candidateId, read.sort);
   let sealed: SealedMatchedList | undefined;
+  let page: SealedPage | undefined;
   try {
     sealed = readSealedMatchedList({ ...read, candidateStore: deps.candidateStore, targetLevel, geography, order });
+    page = sealed?.pages.find(({ offset }) => offset === filters.offset);
   } catch (error) {
     // A row that does not open is a cold read, not a failed one.
     request.log.warn({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'matched-list-unseal-failed');
   }
-  const page = sealed?.pages.find(({ offset }) => offset === filters.offset);
   if (!sealed || !page) return undefined;
   const sealedReadMs = elapsedMs(startedAt);
   const response = await sealedResponse(deps, candidateId, sealed, page, targetLevel);

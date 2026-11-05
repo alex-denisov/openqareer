@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app';
 import { apps, config, noSessions, stores, successProvider } from '../appTestHarness';
+import { SealedText } from '../data/sealedText';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { watchWriteHolds } from '../observability/sqliteWriteHolds';
@@ -215,6 +216,59 @@ describe('the first read of a new process answers from the sealed list (PRB-055)
     } finally {
       stop();
     }
+  });
+
+  it.each([
+    ['a damaged cipher', (cipher: string) => `${cipher.slice(0, -8)}AAAAAAAA`],
+    ['a cipher of another key', () => new SealedText(Buffer.alloc(32, 7)).seal('{}', 'x')],
+  ])('%s is a cold read, and the journal has the error name without data', async (_name, spoil) => {
+    const { read, candidateStore, candidate, logged } = await sealedApp();
+    await read();
+    forgetMatchedListsForTests();
+    const database = (candidateStore as never as { database: import('node:sqlite').DatabaseSync }).database;
+    const { cipher } = database.prepare('SELECT cipher FROM sealed_matched_lists').get() as { cipher: string };
+    database.prepare('UPDATE sealed_matched_lists SET cipher = ?').run(spoil(cipher));
+
+    expect((await read()).timing.listServed).toBe('built');
+
+    const line = logged('matched-list-unseal-failed')[0] as Record<string, unknown>;
+    expect(line.errorName).toEqual(expect.any(String));
+    expect(line).not.toHaveProperty('cipher');
+    expect(JSON.stringify(line)).not.toContain(candidate.id);
+  });
+
+  it.each([
+    ['not JSON', 'это не JSON'],
+    ['JSON of no list', 'null'],
+    ['a list without pages', () => JSON.stringify({ version: SEALED_MATCHED_LIST_VERSION })],
+  ])('valid cipher with %s is a cold read', async (_name, text) => {
+    const { read, candidateStore, candidate } = await sealedApp();
+    await read();
+    forgetMatchedListsForTests();
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), typeof text === 'string' ? text : text());
+
+    expect((await read()).timing.listServed).toBe('built');
+  });
+
+  it('a right version and choice with no pages is a cold read too', async () => {
+    const { read, candidateStore, candidate } = await sealedApp();
+    await read();
+    forgetMatchedListsForTests();
+    const stored = JSON.parse(candidateStore.sealedMatchedLists.read(candidate.id, 0)!.text);
+    candidateStore.sealedMatchedLists.write(candidate.id, Date.now(), JSON.stringify({ ...stored, pages: undefined }));
+
+    expect((await read()).timing.listServed).toBe('built');
+  });
+
+  it('a process holding the list of the candidate does not touch the table', async () => {
+    const { read, candidateStore } = await sealedApp();
+    await read();
+    const reading = vi.spyOn(candidateStore.sealedMatchedLists, 'read');
+
+    await read();
+    await read('offset=7');
+
+    expect(reading).not.toHaveBeenCalled();
   });
 
   it('an older build does not replace a newer one', async () => {
