@@ -6,12 +6,12 @@
  * never be shown under one version and recorded under another.
  *
  * The pack is adapted from the owner's eterapy pack (documents 2–4 and 6),
- * same operator and same jurisdiction. Version stays `1.0` until the text is
- * actually re-issued: bumping it would invalidate every stored `versionId` and
- * require a re-acceptance flow.
+ * same operator and same jurisdiction. Bump the version whenever a text changes.
+ * Stored records keep the version they accepted; only registration reads this
+ * value, there is no re-acceptance flow and login does not check it.
  */
-export const LEGAL_PACK_VERSION = '1.0';
-export const LEGAL_PACK_PUBLISHED_AT = '2026-08-30';
+export const LEGAL_PACK_VERSION = '1.1';
+export const LEGAL_PACK_PUBLISHED_AT = '2026-11-05';
 
 /** What a consent record stores, so a record always names the exact text. */
 export const LEGAL_PACK_VERSION_ID = `legal-v${LEGAL_PACK_VERSION}-${LEGAL_PACK_PUBLISHED_AT}`;
