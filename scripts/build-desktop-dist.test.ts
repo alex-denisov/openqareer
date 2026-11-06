@@ -7,7 +7,7 @@ import {
   desktopIndexHtml,
   forbiddenText,
   isDesktopFile,
-  isLandingAsset,
+  missingBundleFiles,
 } from './build-desktop-dist';
 
 const WEB_INDEX = `<!DOCTYPE html><html><head><title>Поиск работы</title>
@@ -17,11 +17,28 @@ const WEB_INDEX = `<!DOCTYPE html><html><head><title>Поиск работы</ti
 <h1>Вы выбираете работу</h1><b>%%OQ_ACTIVE%%</b></div></div>
 </body></html>`;
 
+const CABINET_ENTRY =
+  'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/LandingPage-a.js","assets/Shell-a.js","assets/landing-a.css"])))=>i.map(i=>d[i]);app';
+const LANDING_CHUNK =
+  'const h="Вы выбираете работу";export{h as LANDING_HERO_TITLE,a as LandingPage,r as readEmbeddedLandingStats};';
+
 describe('.app bundle without the landing (B589)', () => {
   const made: string[] = [];
   afterEach(async () => {
     await Promise.all(made.splice(0).map((path) => rm(path, { recursive: true, force: true })));
   });
+
+  async function fixture(assets: Readonly<Record<string, string>>) {
+    const root = await mkdtemp(join(tmpdir(), 'oq-desktop-'));
+    made.push(root);
+    const source = join(root, 'dist');
+    await mkdir(join(source, 'assets'), { recursive: true });
+    await writeFile(join(source, 'index.html'), WEB_INDEX);
+    await Promise.all(
+      Object.entries(assets).map(([name, text]) => writeFile(join(source, 'assets', name), text)),
+    );
+    return { source, target: join(root, 'out') };
+  }
 
   it('empties the root and paints the cabinet background before any script', () => {
     const html = desktopIndexHtml(WEB_INDEX);
@@ -46,32 +63,54 @@ describe('.app bundle without the landing (B589)', () => {
     }
   });
 
-  it('finds a landing chunk under either path separator', () => {
-    for (const path of [
-      'dist/assets/LandingPage-Ab1.js',
-      'D:\\a\\openqareer\\dist\\assets\\LandingPage-Ab1.js',
-      'D:\\a\\openqareer\\dist\\assets\\landing-Ab1.css',
-    ]) {
-      expect(isLandingAsset(path)).toBe(true);
-    }
-    expect(isLandingAsset('D:\\a\\openqareer\\dist\\assets\\index-Ab1.js')).toBe(false);
-  });
-
-  it('builds the folder and drops the landing chunks', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'oq-desktop-'));
-    made.push(root);
-    const source = join(root, 'dist');
-    await mkdir(join(source, 'assets'), { recursive: true });
-    await writeFile(join(source, 'index.html'), WEB_INDEX);
+  it('builds the folder without site pages and with an empty landing chunk', async () => {
+    const { source, target } = await fixture({
+      'index-a.js': CABINET_ENTRY,
+      'LandingPage-a.js': LANDING_CHUNK,
+      'landing-a.css': '.x{}',
+      'landing-k.js': 'export{};',
+      'Shell-a.js': 'import"./landing-k.js";',
+    });
     await writeFile(join(source, 'server.mjs'), '%%OQ_ACTIVE%%');
-    await writeFile(join(source, 'assets', 'index-a.js'), 'app');
-    await writeFile(join(source, 'assets', 'LandingPage-a.js'), 'Вы выбираете работу');
-    await writeFile(join(source, 'assets', 'landing-a.css'), '.x{}');
-    const target = join(root, 'out');
     await buildDesktopDist(source, target);
     expect((await readdir(target)).sort()).toEqual(['assets', 'index.html']);
-    expect(await readdir(join(target, 'assets'))).toEqual(['index-a.js']);
     expect(forbiddenText(await readFile(join(target, 'index.html'), 'utf8'))).toEqual([]);
+    const stub = await readFile(join(target, 'assets', 'LandingPage-a.js'), 'utf8');
+    expect(forbiddenText(stub)).toEqual([]);
+    expect(stub).toContain('as LandingPage');
+    expect(stub).toContain('as readEmbeddedLandingStats');
+  });
+
+  it('keeps every file the cabinet loads, shared landing styles included', async () => {
+    const { source, target } = await fixture({
+      'index-a.js': CABINET_ENTRY,
+      'LandingPage-a.js': LANDING_CHUNK,
+      'landing-a.css': '.x{}',
+      'landing-k.js': 'export{};',
+      'Shell-a.js': 'import"./landing-k.js";',
+    });
+    await buildDesktopDist(source, target);
+    expect(await missingBundleFiles(target)).toEqual([]);
+    expect((await readdir(join(target, 'assets'))).sort()).toEqual([
+      'LandingPage-a.js',
+      'Shell-a.js',
+      'index-a.js',
+      'landing-a.css',
+      'landing-k.js',
+    ]);
+  });
+
+  it('stops the build when a file the bundle asks for is gone', async () => {
+    const { source, target } = await fixture({
+      'index-a.js': CABINET_ENTRY,
+      'LandingPage-a.js': LANDING_CHUNK,
+      'Shell-a.js': 'import"./landing-k.js";',
+    });
+    await expect(buildDesktopDist(source, target)).rejects.toThrow('landing-a.css');
+    await expect(missingBundleFiles(target)).resolves.toEqual([
+      'assets/landing-a.css',
+      'assets/landing-k.js',
+    ]);
   });
 
   it('stops the build when landing text reaches a kept file', async () => {
