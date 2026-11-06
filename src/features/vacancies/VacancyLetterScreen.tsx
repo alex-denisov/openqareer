@@ -181,20 +181,10 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
         <VacancyLetterMobileBar onBack={onBack} onOpenConsultant={actions.onOpenConsultant} />
       ) : null}
       <VacancyCard vacancy={vacancy} compact={compact} onBack={compact ? undefined : onBack} />
-      <section className="career-letter-fork" aria-labelledby="career-letter-fork-title">
-        <div className="career-letter-sub-head">
-          <h2 id="career-letter-fork-title">Как откликнуться: три круга связей</h2>
-          <LetterInfoTip text={CIRCLES_TIP} />
-        </div>
-        <CircleTabs
-          selected={state.circle.circle}
-          circles={state.circles.data?.circles ?? []}
-          frozen={frozen}
-          onSelect={(circle) => selectLetterCircle(state, circle)}
-        />
-      </section>
+      <LetterFork state={state} frozen={frozen} />
       <LetterCard
         state={state}
+        vacancyUrl={vacancy.primaryUrl}
         frozen={frozen}
         actions={actions}
         onOpenResponses={onOpenResponses}
@@ -211,13 +201,38 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
   );
 }
 
+function LetterFork({
+  state,
+  frozen,
+}: {
+  readonly state: LetterScreenState;
+  readonly frozen: boolean;
+}) {
+  return (
+    <section className="career-letter-fork" aria-labelledby="career-letter-fork-title">
+      <div className="career-letter-sub-head">
+        <h2 id="career-letter-fork-title">Как откликнуться: три круга связей</h2>
+        <LetterInfoTip text={CIRCLES_TIP} />
+      </div>
+      <CircleTabs
+        selected={state.circle.circle}
+        circles={state.circles.data?.circles ?? []}
+        frozen={frozen}
+        onSelect={(circle) => selectLetterCircle(state, circle)}
+      />
+    </section>
+  );
+}
+
 function LetterDestinationSlot({
   state,
+  vacancyUrl,
   frozen,
   actions,
   onOpenResume,
 }: {
   readonly state: LetterScreenState;
+  readonly vacancyUrl: string;
   readonly frozen: boolean;
   readonly actions: ReturnType<typeof useLetterPageActions>;
   readonly onOpenResume?: () => void;
@@ -230,6 +245,7 @@ function LetterDestinationSlot({
       circle={state.circle.circle}
       result={state.circle.result}
       path={state.circle.selectedPath}
+      vacancyUrl={vacancyUrl}
       frozen={frozen}
       onSelectPath={(pathId) => {
         state.approval.reset();
@@ -270,14 +286,25 @@ function LetterSettingsSlot({
   );
 }
 
+function isPitchReady(state: LetterScreenState): boolean {
+  return (
+    Boolean(state.draft.pitch && state.draft.text.trim()) &&
+    !state.draft.loading &&
+    !state.circles.loading &&
+    !state.circles.error
+  );
+}
+
 function LetterCard({
   state,
+  vacancyUrl,
   frozen,
   actions,
   onOpenResponses,
   onOpenResume,
 }: {
   readonly state: LetterScreenState;
+  readonly vacancyUrl: string;
   readonly frozen: boolean;
   readonly actions: ReturnType<typeof useLetterPageActions>;
   readonly onOpenResponses?: () => void;
@@ -285,11 +312,7 @@ function LetterCard({
 }) {
   const { circle } = state.circle;
   const compact = useCompactViewport();
-  const pitchReady =
-    Boolean(state.draft.pitch && state.draft.text.trim()) &&
-    !state.draft.loading &&
-    !state.circles.loading &&
-    !state.circles.error;
+  const pitchReady = isPitchReady(state);
   return (
     <section
       className="career-letter-card"
@@ -304,6 +327,7 @@ function LetterCard({
       />
       <LetterDestinationSlot
         state={state}
+        vacancyUrl={vacancyUrl}
         frozen={frozen}
         actions={actions}
         onOpenResume={onOpenResume}

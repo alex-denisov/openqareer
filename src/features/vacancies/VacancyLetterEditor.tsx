@@ -7,6 +7,7 @@ import {
   Sparkle,
   WarningCircle,
 } from '@phosphor-icons/react';
+import { pluralRu } from '../../../shared/pluralRu';
 import type { LetterDraftState } from './vacancyLetterController';
 import type { CandidateWorkplaceForLetter, ConnectionCircleNumber } from './vacancyLetterApi';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
@@ -127,6 +128,10 @@ export function PitchBodyState({ draft }: { readonly draft: LetterDraftState }) 
   return null;
 }
 
+export function wordCountLabel(count: number): string {
+  return pluralRu(count, ['слово', 'слова', 'слов']);
+}
+
 export function wordCount(text: string): number {
   return text.trim() ? text.trim().split(/\s+/u).length : 0;
 }
@@ -162,7 +167,7 @@ export function LetterEditor({
         }}
       />
       <p className="career-letter-meta">
-        <span>{wordCount(draft.text)} слов</span>
+        <span>{wordCountLabel(wordCount(draft.text))}</span>
         <span>
           {compact ? 'длина' : 'Длина'} подобрана под канал: {CHANNEL_LABEL[circle]}
         </span>

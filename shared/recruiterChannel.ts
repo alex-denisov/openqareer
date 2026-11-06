@@ -49,7 +49,10 @@ export interface RecruiterChannel {
 
 export type CandidateRecruiterChannel = Omit<RecruiterChannel, 'sourceUrl'>;
 
-const ORDER: readonly RecruiterChannelKind[] = [...PRIMARY_CHANNEL_KINDS, ...SECONDARY_CHANNEL_KINDS];
+const ORDER: readonly RecruiterChannelKind[] = [
+  ...PRIMARY_CHANNEL_KINDS,
+  ...SECONDARY_CHANNEL_KINDS,
+];
 const STATUS_ORDER: readonly RecruiterChannelStatus[] = ['verified', 'published', 'hypothesis'];
 
 export function isPrimaryChannel(kind: RecruiterChannelKind): boolean {
@@ -74,11 +77,42 @@ export function rankChannels(channels: readonly RecruiterChannel[]): RecruiterCh
 }
 
 /** Что показать кандидату: все основные каналы; второстепенные — только если основных нет. */
-export function candidateChannels(channels: readonly RecruiterChannel[]): CandidateRecruiterChannel[] {
+export function candidateChannels(
+  channels: readonly RecruiterChannel[],
+): CandidateRecruiterChannel[] {
   // Почта на домене площадки вакансий — ошибка определения домена компании, не канал человека.
   const ranked = rankChannels(channels).filter(
-    (channel) => !channel.kind.startsWith('email_') || !isHiringPlatform(channel.value.split('@')[1] ?? ''),
+    (channel) =>
+      !channel.kind.startsWith('email_') || !isHiringPlatform(channel.value.split('@')[1] ?? ''),
   );
   const primary = ranked.filter((channel) => isPrimaryChannel(channel.kind));
   return (primary.length > 0 ? primary : ranked).map(({ sourceUrl: _internal, ...shown }) => shown);
+}
+
+const LETTER_CHANNEL_KINDS = [
+  'email_personal',
+  'email_corporate',
+  'telegram',
+  'whatsapp',
+  'linkedin',
+] as const;
+
+export interface LetterDeliveryChannel {
+  readonly kind: (typeof LETTER_CHANNEL_KINDS)[number];
+  readonly value: string;
+}
+
+function isLetterChannelKind(kind: RecruiterChannelKind): kind is LetterDeliveryChannel['kind'] {
+  return (LETTER_CHANNEL_KINDS as readonly string[]).includes(kind);
+}
+
+/** Куда можно написать письмо: только подтверждённый адрес, догадку не называем (B610). */
+export function letterDeliveryChannel(
+  channels: readonly RecruiterChannel[],
+): LetterDeliveryChannel | null {
+  for (const { kind, value, status } of rankChannels(channels)) {
+    const onJobBoard = kind.startsWith('email_') && isHiringPlatform(value.split('@')[1] ?? '');
+    if (status !== 'hypothesis' && !onJobBoard && isLetterChannelKind(kind)) return { kind, value };
+  }
+  return null;
 }

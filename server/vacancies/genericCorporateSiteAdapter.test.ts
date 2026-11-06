@@ -127,5 +127,52 @@ describe('genericCorporateSiteAdapter', () => {
     expect(wd?.endpointUrl).toBe(
       'https://leonardocompany.wd3.myworkdayjobs.com/wday/cxs/leonardocompany/LeonardoCareerSite/jobs',
     );
+
+    const htmlRecruitee = `<a href="https://mayflower.recruitee.com/o/process-intake-analyst">Mayflower Jobs</a>`;
+    const rec = detectEmbeddedAts(htmlRecruitee);
+    expect(rec?.provider).toBe('recruitee');
+    expect(rec?.endpointUrl).toBe('https://mayflower.recruitee.com/api/offers/');
+  });
+
+  it('preserves paragraphs and list items in vacancy descriptions without HTML artifacts', () => {
+    const html = `
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org/",
+        "@type": "JobPosting",
+        "title": "Principal SRE",
+        "description": "<p>About the role:</p><ul><li>5+ years of Linux</li><li>Kubernetes in production</li></ul><p>Perks include:</p><ul><li>Remote work</li></ul>",
+        "datePosted": "2026-11-05",
+        "url": "https://company.com/jobs/principal-sre"
+      }
+      </script>
+    `;
+
+    const [job] = extractJsonLdJobs(html, 'https://company.com');
+    expect(job.title).toBe('Principal SRE');
+    expect(job.description).toContain('About the role:\n\n- 5+ years of Linux\n- Kubernetes in production');
+    expect(job.description).toContain('Perks include:\n\n- Remote work');
+    expect(job.description).not.toContain('<p>');
+    expect(job.description).not.toContain('<li>');
+    expect(job.description).not.toContain('<ul>');
+  });
+
+  it('extracts full descriptions from Tilda card anchor blocks', () => {
+    const html = `
+      <div class="t-card__container">
+        <div class="t-card__title">
+          <a href="#rec410830278">Senior QA Automation Engineer</a>
+        </div>
+      </div>
+      <div id="rec410830278" class="r t-rec">
+        <div class="t-descr">Fulltime | Remote work<br />About the role: establish testing standards.</div>
+      </div>
+    `;
+
+    const [job] = extractSemanticHtmlJobs(html, 'https://sleepdoctor.fr/en/careers');
+    expect(job.title).toBe('Senior QA Automation Engineer');
+    expect(job.description).toContain('Fulltime | Remote work');
+    expect(job.description).toContain('establish testing standards');
+    expect(job.isRemote).toBe(true);
   });
 });

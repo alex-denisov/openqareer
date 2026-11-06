@@ -1,3 +1,4 @@
+import type { LetterDeliveryChannel } from '../../shared/recruiterChannel';
 import { createHash } from 'node:crypto';
 import { normalizeCompanyName } from './company';
 import type {
@@ -270,6 +271,8 @@ export interface ConnectionCirclePerson {
   readonly roleTitle: string | null;
   readonly companyName: string | null;
   readonly linkedinUrl?: string | null;
+  /** B610: подтверждённый канал рекрутёра, куда уйдёт письмо. */
+  readonly deliveryChannel?: LetterDeliveryChannel | null;
   readonly workplaces?: readonly ConnectionCircleWorkplace[];
 }
 
