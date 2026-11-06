@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { stripPageHints } from '../shared/landingStats';
 
@@ -23,6 +23,11 @@ export const FORBIDDEN_IN_DESKTOP = ['Вы выбираете работу', '%%
 
 export function isDesktopFile(name: string): boolean {
   return name === 'index.html' || !SITE_ONLY.test(name);
+}
+
+/** `win32.basename` reads both separators, so this holds on every build machine. */
+export function isLandingAsset(path: string): boolean {
+  return LANDING_ASSET.test(win32.basename(path));
 }
 
 export function desktopIndexHtml(webIndex: string): string {
@@ -69,8 +74,7 @@ export async function buildDesktopDist(source: string, target: string): Promise<
     if (!isDesktopFile(name) || name === 'index.html') continue;
     await cp(join(source, name), join(target, name), {
       recursive: true,
-      filter: async (path) =>
-        (await stat(path)).isDirectory() || !LANDING_ASSET.test(path.split('/').pop() ?? ''),
+      filter: async (path) => (await stat(path)).isDirectory() || !isLandingAsset(path),
     });
   }
   await writeFile(

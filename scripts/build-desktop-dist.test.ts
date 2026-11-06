@@ -7,6 +7,7 @@ import {
   desktopIndexHtml,
   forbiddenText,
   isDesktopFile,
+  isLandingAsset,
 } from './build-desktop-dist';
 
 const WEB_INDEX = `<!DOCTYPE html><html><head><title>Поиск работы</title>
@@ -43,6 +44,17 @@ describe('.app bundle without the landing (B589)', () => {
     for (const name of ['login.html', 'server.mjs', 'landing', 'og', 'llms.txt', 'robots.txt']) {
       expect(isDesktopFile(name)).toBe(false);
     }
+  });
+
+  it('finds a landing chunk under either path separator', () => {
+    for (const path of [
+      'dist/assets/LandingPage-Ab1.js',
+      'D:\\a\\openqareer\\dist\\assets\\LandingPage-Ab1.js',
+      'D:\\a\\openqareer\\dist\\assets\\landing-Ab1.css',
+    ]) {
+      expect(isLandingAsset(path)).toBe(true);
+    }
+    expect(isLandingAsset('D:\\a\\openqareer\\dist\\assets\\index-Ab1.js')).toBe(false);
   });
 
   it('builds the folder and drops the landing chunks', async () => {
