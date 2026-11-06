@@ -15,7 +15,7 @@ export interface PersistedJobOptions {
   readonly firstRunMs: number;
   readonly intervalMs: number;
   /** Истина: шаг удался, срок считается от этого запуска. */
-  readonly run: () => boolean;
+  readonly run: () => boolean | Promise<boolean>;
 }
 
 function lastFinishedMs(database: DatabaseSync, job: string): number | undefined {
@@ -68,11 +68,15 @@ export function schedulePersistedJob(
     timer = setTimeout(tick, delayMs);
     timer.unref();
   };
+  const finish = (succeeded: boolean) => {
+    if (succeeded) recordFinished(database, job, Date.now());
+  };
   const tick = () => {
     plan(intervalMs);
-    if (!run()) return;
     try {
-      recordFinished(database, job, Date.now());
+      const outcome = run();
+      if (typeof outcome === 'boolean') finish(outcome);
+      else void outcome.then(finish).catch(reportStateFailure);
     } catch (error: unknown) {
       reportStateFailure(error);
     }
