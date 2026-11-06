@@ -44,7 +44,7 @@ const moscow = (index: number, from: number, to: number): Row => ({
 });
 
 describe('computeMarketSalaryEstimates', () => {
-  it('groups salaried live vacancies by function, level and place', () => {
+  it('groups salaried live vacancies by function, level and place', async () => {
     const rows = [
       moscow(1, 400_000, 500_000),
       moscow(2, 450_000, 550_000),
@@ -56,7 +56,7 @@ describe('computeMarketSalaryEstimates', () => {
       { ...moscow(8, 100, 200), salary: { from: 5_000, to: 6_000, currency: 'USD' } },
       { ...moscow(9, 300_000, 400_000), location: 'Казань' },
     ];
-    const estimates = computeMarketSalaryEstimates(poolDatabase(rows));
+    const estimates = await computeMarketSalaryEstimates(poolDatabase(rows));
     // midpoints 450 500 550 570 650 → p25 500, p75 570
     expect(estimates.get('it-eng-mgmt|4|city|москва')).toEqual({
       low: 500_000,
@@ -66,6 +66,25 @@ describe('computeMarketSalaryEstimates', () => {
     });
     expect(estimates.get('it-eng-mgmt|4|city|казань')).toEqual({ currency: 'RUR', sampleSize: 1 });
     expect(estimates.get('it-eng-mgmt|4|region|ru')?.sampleSize).toBe(6);
+  });
+
+  it('gives the queue back between slices and counts every row once', async () => {
+    const rows = [1, 2, 3, 4, 5].map((index) => moscow(index, 100_000, 200_000));
+    const multiFunction = { ...moscow(1, 100_000, 200_000), functionCode: 'it-product' };
+    const database = poolDatabase(rows);
+    database
+      .prepare('INSERT INTO vacancy_semantic VALUES (?, ?, ?)')
+      .run(multiFunction.id, multiFunction.functionCode, multiFunction.levelRank);
+    let pauses = 0;
+    const estimates = await computeMarketSalaryEstimates(database, {
+      sliceRows: 2,
+      pause: async () => {
+        pauses += 1;
+      },
+    });
+    expect(pauses).toBe(3);
+    expect(estimates.get('it-eng-mgmt|4|city|москва')?.sampleSize).toBe(5);
+    expect(estimates.get('it-product|4|city|москва')?.sampleSize).toBe(1);
   });
 });
 

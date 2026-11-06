@@ -1,8 +1,8 @@
 /**
  * B546: market salary estimates, computed in the maintenance process only.
  *
- * One streamed pass over salaried live vacancies (`iterate`, never the whole
- * pool in memory): each midpoint goes to a city group and a region group of
+ * Keyset slices over salaried live vacancies (never the whole pool in memory):
+ * each midpoint goes to a city group and a region group of
  * the same normalised function and level. The result replaces
  * `market_salary_estimates`; the web server reads it by primary key.
  */
@@ -26,6 +26,7 @@ export const MARKET_SALARY_TABLE_SQL = `CREATE TABLE IF NOT EXISTS market_salary
 ) STRICT`;
 
 interface SalariedRow {
+  readonly id: string;
   readonly function_code: string;
   readonly level_rank: number | null;
   readonly salary_from: number | null;
@@ -51,46 +52,75 @@ function dominant(byCurrency: Map<string, number[]>): [string, number[]] {
   return best;
 }
 
-export function computeMarketSalaryEstimates(
+export interface MarketSalarySliceOptions {
+  readonly sliceRows?: number;
+  readonly pause?: () => Promise<void>;
+}
+
+const DEFAULT_SLICE_ROWS = 2000;
+const SLICE_PAUSE_MS = 50;
+
+const SLICE_SQL = `SELECT s.id, s.function_code, s.level_rank,
+    json_extract(p.payload, '$.salary.from') AS salary_from,
+    json_extract(p.payload, '$.salary.to') AS salary_to,
+    json_extract(p.payload, '$.salary.currency') AS currency,
+    json_extract(p.payload, '$.location') AS location
+  FROM (SELECT id, function_code, level_rank FROM vacancy_semantic
+        WHERE (id, function_code) > (?, ?)
+        ORDER BY id, function_code LIMIT ?) s
+  LEFT JOIN vacancy_pool_index i ON i.id = s.id AND i.is_active = 1 AND i.expired = 0
+  LEFT JOIN vacancy_pool p ON p.id = i.id
+  ORDER BY s.id, s.function_code`;
+
+function addRow(groups: Groups, row: SalariedRow): void {
+  const midpoint = salaryMidpoint({ from: row.salary_from, to: row.salary_to });
+  if (midpoint === undefined || !row.currency) return;
+  const currency = row.currency.toUpperCase();
+  const city = marketSalaryCity(row.location);
+  const region = regionOfVacancy({ location: row.location ?? undefined });
+  if (city) {
+    addSample(
+      groups,
+      marketSalaryKey(row.function_code, row.level_rank, 'city', city),
+      currency,
+      midpoint,
+    );
+  }
+  if (region) {
+    addSample(
+      groups,
+      marketSalaryKey(row.function_code, row.level_rank, 'region', region),
+      currency,
+      midpoint,
+    );
+  }
+}
+
+/**
+ * Порции по ключу вместо одного прохода: прод 06.11, цельный проход держал
+ * очередь обслуживания 158-189 с раз в 6 часов. Строка, изменившаяся между
+ * порциями, попадёт в оценку в своём новом виде: для квартилей это не важно.
+ */
+export async function computeMarketSalaryEstimates(
   database: DatabaseSync,
-): Map<string, MarketSalaryEstimate> {
-  const rows = database
-    .prepare(
-      `SELECT s.function_code, s.level_rank,
-              json_extract(p.payload, '$.salary.from') AS salary_from,
-              json_extract(p.payload, '$.salary.to') AS salary_to,
-              json_extract(p.payload, '$.salary.currency') AS currency,
-              json_extract(p.payload, '$.location') AS location
-       FROM vacancy_semantic s
-       JOIN vacancy_pool_index i ON i.id = s.id
-       JOIN vacancy_pool p ON p.id = s.id
-       WHERE i.is_active = 1 AND i.expired = 0
-         AND json_extract(p.payload, '$.salary.currency') IS NOT NULL`,
-    )
-    .iterate() as Iterable<SalariedRow>;
+  options: MarketSalarySliceOptions = {},
+): Promise<Map<string, MarketSalaryEstimate>> {
+  const sliceRows = options.sliceRows ?? DEFAULT_SLICE_ROWS;
+  const pause =
+    options.pause ?? (() => new Promise<void>((done) => setTimeout(done, SLICE_PAUSE_MS)));
+  const statement = database.prepare(SLICE_SQL);
   const groups: Groups = new Map();
-  for (const row of rows) {
-    const midpoint = salaryMidpoint({ from: row.salary_from, to: row.salary_to });
-    if (midpoint === undefined || !row.currency) continue;
-    const currency = row.currency.toUpperCase();
-    const city = marketSalaryCity(row.location);
-    const region = regionOfVacancy({ location: row.location ?? undefined });
-    if (city) {
-      addSample(
-        groups,
-        marketSalaryKey(row.function_code, row.level_rank, 'city', city),
-        currency,
-        midpoint,
-      );
-    }
-    if (region) {
-      addSample(
-        groups,
-        marketSalaryKey(row.function_code, row.level_rank, 'region', region),
-        currency,
-        midpoint,
-      );
-    }
+  let lastId = '';
+  let lastFunction = '';
+  for (;;) {
+    const rows = statement.all(lastId, lastFunction, sliceRows) as unknown as SalariedRow[];
+    for (const row of rows) addRow(groups, row);
+    const last = rows.at(-1);
+    if (!last) break;
+    lastId = last.id;
+    lastFunction = last.function_code;
+    if (rows.length < sliceRows) break;
+    await pause();
   }
   const estimates = new Map<string, MarketSalaryEstimate>();
   for (const [key, byCurrency] of groups) {

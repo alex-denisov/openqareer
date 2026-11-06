@@ -21,10 +21,10 @@ export function scheduleMarketSalaryEstimateJob(
   database: DatabaseSync,
   log: EstimateLog,
 ): () => void {
-  const run = (): boolean => {
+  const run = async (): Promise<boolean> => {
     const started = Date.now();
     try {
-      const estimates = computeMarketSalaryEstimates(database);
+      const estimates = await computeMarketSalaryEstimates(database);
       writeMarketSalaryEstimates(database, estimates, new Date());
       log.info(
         { ms: Date.now() - started, keys: estimates.size },

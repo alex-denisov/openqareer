@@ -122,4 +122,24 @@ describe('тяжёлый шаг по сохранённому сроку', () =>
     expect(log.error).toHaveBeenCalled();
     stop();
   });
+
+  it('срок асинхронного шага пишется только после его успеха', async () => {
+    const database = new DatabaseSync(':memory:');
+    const log = { error: vi.fn() };
+    let finishRun: (ok: boolean) => void = () => undefined;
+    const stop = schedulePersistedJob(database, log, {
+      job: 'async-job',
+      firstRunMs: 1000,
+      intervalMs: 60_000,
+      run: () => new Promise<boolean>((done) => (finishRun = done)),
+    });
+    const stored = () =>
+      database.prepare("SELECT 1 FROM maintenance_job_runs WHERE job = 'async-job'").get();
+    vi.advanceTimersByTime(1000);
+    expect(stored()).toBeUndefined();
+    finishRun(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stored()).toBeDefined();
+    stop();
+  });
 });
