@@ -36,7 +36,7 @@ interface Quantity {
 const NUMBER = String.raw`\d{1,3}(?:[ \u00a0,.]\d{3})+(?!\d)|\d+(?:[.,]\d+)?`;
 const CURRENCY = String.raw`[$€£₽]|usd|eur|gbp|rub(?:les?)?|руб\p{L}*|доллар\p{L}*|евро|dollars?|euros?`;
 const SCALE = String.raw`млн|млрд|тыс|million|billion|thousand|mln|bn|[kKmMкК](?!\p{L})`;
-const KIND = String.raw`%|процент\p{L}*|percent|раз\p{L}*|times|[xXхХ](?!\p{L})`;
+const KIND = String.raw`%|процент\p{L}*|percent|раза?(?!\p{L})|times|[xXхХ](?!\p{L})`;
 const QUANTITY = new RegExp(
   String.raw`(?<![\p{L}\p{N}.,/])([-−](?=\d))?([$€£₽]|usd|eur)?\s?(${NUMBER})(?:\s?(${KIND}))?(?:\s?(${SCALE})\.?)?(?:\s?(${CURRENCY}))?(?![\p{L}\p{N}]|\/\d)`,
   'giu',
@@ -115,6 +115,39 @@ function reversesTransition(sentence: string, backing: string): boolean {
   return transitions(sentence).some(([from, to]) =>
     known.some(([knownFrom, knownTo]) => knownFrom === to && knownTo === from) &&
     !known.some(([knownFrom, knownTo]) => knownFrom === from && knownTo === to));
+}
+
+const WORD_MULTIPLES: readonly (readonly [RegExp, string])[] = [
+  [/(?<!\p{L})(?:двух|дву)кратн\p{L}*/giu, '2 раза'],
+  [/(?<!\p{L})тр[её]хкратн\p{L}*/giu, '3 раза'],
+  [/(?<!\p{L})четыр[её]хкратн\p{L}*/giu, '4 раза'],
+  [/(?<!\p{L})пятикратн\p{L}*/giu, '5 раз'],
+  [/(?<!\p{L})десятикратн\p{L}*/giu, '10 раз'],
+  [/(\d+)\s?-?\s?(?:кратн\p{L}*|fold)/giu, '$1 раз'],
+  [/(?<!\p{L})в\s+(?:два|две)\s+раза(?!\p{L})/giu, '2 раза'],
+  [/(?<!\p{L})в\s+три\s+раза(?!\p{L})/giu, '3 раза'],
+  [/(?<!\p{L})в\s+четыре\s+раза(?!\p{L})/giu, '4 раза'],
+  [/(?<!\p{L})в\s+пять\s+раз(?!\p{L})/giu, '5 раз'],
+  [/(?<!\p{L})в\s+десять\s+раз(?!\p{L})/giu, '10 раз'],
+];
+
+function withWrittenMultiples(text: string): string {
+  return WORD_MULTIPLES.reduce((rest, [pattern, plain]) => rest.replace(pattern, plain), text);
+}
+
+/**
+ * Рост «в 4 раза» и сумма «до 2 млрд» могут быть разными цифрами за разные периоды (решение владельца
+ * 06.11: в одну фразу не соединять). В одной фразе письма они законны, только если стоят в одной фразе профиля.
+ */
+function gluesGrowthToAmount(sentence: string, profileSentences: readonly string[]): boolean {
+  const found = quantities(withWrittenMultiples(sentence));
+  const multiples = found.filter((item) => item.kind === 'multiple');
+  const amounts = found.filter((item) => item.kind === 'amount');
+  if (multiples.length === 0 || amounts.length === 0) return false;
+  return !profileSentences.some((source) => {
+    const stated = quantities(withWrittenMultiples(source));
+    return [...multiples, ...amounts].every((wanted) => stated.some((item) => backedBy(wanted, item)));
+  });
 }
 
 function hasForeignNumber(sentence: string, known: readonly Quantity[], backing: string): boolean {
@@ -213,7 +246,11 @@ const NEGATED = /(?:^|[\s,:])(?:не|нет|not|never)\s+(?!только|мен�
 const RESUME_NOTE = /резюме|resum[eé]|\bcv\b/iu;
 
 function sentencesOf(body: string): string[] {
-  return body.split(/(?<=[.!?…])(?<!(?:тыс|млн|млрд|руб|долл)\.)\s+|\n+/iu).map((part) => part.trim()).filter(Boolean);
+  // После «млн.» и «руб.» фраза идёт дальше, если следующее слово не с большой буквы. Флага i нет: с ним \p{Lu} ловит и строчные.
+  return body
+    .split(/(?<=[.!?…])(?:(?<!(?:тыс|млн|млрд|руб|долл)\.)\s+|\s+(?=\p{Lu}))|\n+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 /** Название вакансии цитируется как есть: его числа и слова — не заслуги кандидата. */
@@ -222,7 +259,8 @@ function withoutVacancyText(sentence: string, vacancy: readonly string[]): strin
 }
 
 export function reviewLetterBody(body: string, sources: LetterGateSources): LetterGateViolation[] {
-  const profile = sources.candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence)).join('\n');
+  const profileSentences = sources.candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence));
+  const profile = profileSentences.join('\n');
   const known = quantities(profile);
   const names = new Set([...sources.candidate, ...sources.vacancy].flatMap(wordsOf));
   // Модель сама выбирает язык письма и может разойтись с определением по вакансии.
@@ -230,7 +268,7 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
   const sentences = sentencesOf(body);
   const checked = sentences.flatMap((sentence) => {
     const checks: readonly (readonly [LetterGateRule, boolean])[] = [
-      ['number', hasForeignNumber(withoutVacancyText(sentence, sources.vacancy), known, profile)],
+      ['number', hasForeignNumber(withoutVacancyText(sentence, sources.vacancy), known, profile) || gluesGrowthToAmount(sentence, profileSentences)],
       ['name', hasForeignName(sentence, names, language)],
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));

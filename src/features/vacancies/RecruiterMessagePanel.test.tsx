@@ -136,6 +136,29 @@ describe('RecruiterMessagePanel (C72)', () => {
     return label;
   }
 
+  it('B601: an error offers a retry that asks again', async () => {
+    const failed = Object.assign(new Error('Не удалось подготовить письмо. Попробуйте ещё раз.'), {});
+    const request = vi
+      .spyOn(vacancyPitchApi, 'requestVacancyPitch')
+      .mockRejectedValueOnce(failed)
+      .mockResolvedValueOnce({ contactMessage: 'Текст после повтора', usedEvidenceIds: [] } as never);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<RecruiterMessagePanel contact={sampleContact} onClose={() => undefined} />);
+    });
+    expect(container.textContent).toContain('Не удалось подготовить письмо');
+    const retry = [...container.querySelectorAll('button')].find((item) => item.textContent === 'Повторить');
+    await act(async () => {
+      retry?.click();
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Текст после повтора');
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
   it('says «Скопировано» only after the clipboard write succeeds', async () => {
     expect(await clickCopy(() => Promise.resolve())).toContain('Скопировано');
   });

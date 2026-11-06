@@ -150,6 +150,51 @@ describe('reviewLetterBody: письмо на другом языке', () => {
   });
 });
 
+describe('reviewLetterBody: склейка разных цифр (профиль без уточнений)', () => {
+  const growth: LetterGateSources = {
+    ...SOURCES,
+    candidate: [
+      'Grew combined revenue 4x and improved margin.',
+      'Services had combined annual revenue of about 2 billion rubles; at the start about 230 million rubles.',
+    ],
+  };
+
+  it.each([
+    'Перевод услуг обеспечил 4-кратный рост выручки (до примерно 2 млрд рублей).',
+    'Четырёхкратный рост выручки до 2 млрд рублей.',
+    'Выручка выросла в 4 раза, с 230 млн до 2 млрд рублей.',
+    'Revenue grew 4x to 2 billion rubles.',
+  ])('кратный рост и сумма из разных строк профиля в одной фразе: %s', (sentence) => {
+    expect(rules(sentence, growth)).toContain('number');
+  });
+
+  it('те же цифры в разных фразах проходят', () => {
+    expect(rules('Выручка выросла в 4 раза. Выручка направления выросла с 230 млн до 2 млрд рублей.', growth)).toEqual([]);
+  });
+
+  it('кратный рост и сумма из одной строки профиля проходят', () => {
+    const together: LetterGateSources = { ...SOURCES, candidate: ['Revenue grew 4x to $50M in two years.'] };
+    expect(rules('Выручка выросла в 4 раза до $50M.', together)).toEqual([]);
+  });
+
+  it('кратный рост рядом с процентом или людьми не склейка', () => {
+    const near: LetterGateSources = { ...SOURCES, candidate: ['Grew revenue 4x.', 'Margin 40%, team 250.'] };
+    expect(rules('Выручка выросла в 4 раза, маржа 40%, команда 250.', near)).toEqual([]);
+  });
+
+  it('кратность словом тоже склейка', () => {
+    expect(rules('Выручка выросла в четыре раза, до 2 млрд рублей.', growth)).toContain('number');
+  });
+
+  it.each([
+    ['Руководил командой из 12 разработчиков и бюджетом 300 млн ₽.', ['Команда 12 разработчиков.', 'Бюджет 300 млн ₽.']],
+    ['Вёл 3 разных направления с бюджетом 300 млн ₽.', ['Вёл 3 разных направления.', 'Бюджет 300 млн ₽.']],
+    ['Бюджет 300 млн руб. Вырастил выручку в 4 раза.', ['Бюджет 300 млн руб.', 'Вырастил выручку в 4 раза.']],
+  ])('люди и соседняя фраза не кратный рост: %s', (sentence, candidate) => {
+    expect(rules(sentence, { ...SOURCES, candidate })).toEqual([]);
+  });
+});
+
 describe('reviewLetterBody: стиль не отклоняет', () => {
   it.each([
     ['личное действие', 'Руководил, построил, увеличил, масштабировал и вырастил команду.'],

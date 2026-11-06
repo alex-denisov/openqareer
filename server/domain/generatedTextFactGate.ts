@@ -105,11 +105,6 @@ export function checkPitchOutputFacts(
 
 const SHOWN_CLAIMS = 3;
 
-const MODEL_REFUSED_NOTICE: Readonly<Record<'en' | 'ru', string>> = {
-  ru: 'В сгенерированном письме есть утверждения, которые нужно подтвердить. Вместо него показано письмо на основе фактов профиля. Проверьте факты перед отправкой.',
-  en: 'The generated letter had claims that need confirming, so a letter built from your profile facts is shown instead. Check the facts before sending.',
-};
-
 function unresolvedClaimsNotice(language: 'en' | 'ru', claims: readonly string[]): string {
   const rest = claims.length - SHOWN_CLAIMS;
   const shown = claims.slice(0, SHOWN_CLAIMS);
@@ -127,10 +122,8 @@ function unresolvedClaimsNotice(language: 'en' | 'ru', claims: readonly string[]
 export function generatedTextFactNotices(
   letterLanguage: 'en' | 'ru',
   outputChecks: readonly GeneratedTextFactCheck[],
-  modelCheck?: GeneratedTextFactCheck,
 ): string[] {
   const notices: string[] = [];
-  if (modelCheck?.status === 'needs_confirmation') notices.push(MODEL_REFUSED_NOTICE[letterLanguage]);
   const unresolved = Array.from(new Set(outputChecks.flatMap((check) => check.claims)
     .filter((claim) => claim.action === 'ask_candidate')
     .map((claim) => claim.text.trim())

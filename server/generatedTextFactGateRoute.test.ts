@@ -64,19 +64,9 @@ describe('B528 generated text fact gate', () => {
       headers: { cookie, origin: 'http://localhost:3000' },
       payload: { applicationId: application.id },
     });
-    expect(response.statusCode).toBe(200);
-    const data = response.json().data;
-    expect(data.bodySource).toBe('template');
-    expect(data.atsCoverLetter).not.toContain('90%');
-    expect(data.factCheck).toMatchObject({
-      status: 'needs_confirmation',
-      claims: [expect.objectContaining({ status: 'not_in_profile', action: 'ask_candidate' })],
-    });
-    expect(data.notices.length).toBeGreaterThan(0);
-    const saved = candidates.getSnapshot(candidateId).documents.find((doc) => doc.kind === 'cover_letter');
-    expect(saved).toBeDefined();
-    const document = candidates.getDocument(candidateId, saved!.id)!;
-    expect(Buffer.from(document.contentBase64, 'base64').toString('utf8')).toBe(data.atsCoverLetter);
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain('90%');
+    expect(candidates.getSnapshot(candidateId).documents.find((doc) => doc.kind === 'cover_letter')).toBeUndefined();
   });
 
   it('04.11: a paraphrase of imported facts reaches the letter screen under the note that a model wrote it', async () => {
@@ -120,14 +110,13 @@ describe('B528 generated text fact gate', () => {
       sourceLabel: 'synthetic',
       entries: [{ memoryId: 'imp0123456789-ach', domain: 'outcome', statement: 'Built logistics for a retail chain.' }],
     });
-    const data = (await app.inject({
+    const response = await app.inject({
       method: 'POST', url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' }, payload: { language: 'en' },
-    })).json().data;
+    });
     expect(seen).toContain('name');
-    expect(data.bodySource).toBe('template');
-    expect(data.atsCoverLetter).not.toContain('Fintech Lab');
-    expect(data.emailPitch.body).not.toContain('Fintech Lab');
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain('Fintech Lab');
   });
 
   // B601: the gate stops wrong numbers and foreign companies only; role and wording are the reader's call,
@@ -141,17 +130,17 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'same number with a different unit',
       facts: ['Я управлял бюджетом 40 млн рублей.'],
-      text: 'Я увеличил выручку на 40%.', expected: 'not_in_profile', source: 'template',
+      text: 'Я увеличил выручку на 40%.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'currency symbols must not be interchangeable',
       facts: ['Я управлял бюджетом 40$.'],
-      text: 'Я управлял бюджетом 40€.', expected: 'not_in_profile', source: 'template',
+      text: 'Я управлял бюджетом 40€.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'a negative number cannot confirm a positive one',
       facts: ['Я увеличил выручку на -20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'refused',
     },
     {
       name: 'dropping a pound unit cannot be confirmed',
@@ -181,7 +170,7 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'reversed direction is not confirmed',
       facts: ['Я снизил время обработки с 30 до 10 минут.'],
-      text: 'Я снизил время обработки с 10 до 30 минут.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я снизил время обработки с 10 до 30 минут.', expected: 'partially_confirmed', source: 'refused',
     },
     {
       // 04.11: imported facts are the candidate's own data, the template quotes them too; with the
@@ -193,7 +182,7 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'candidate explicitly cannot confirm a metric',
       facts: ['Не могу подтвердить: я увеличил выручку на 20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'cannot_confirm', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'cannot_confirm', source: 'refused',
     },
     {
       name: 'project participation does not prove authorship',
@@ -222,18 +211,18 @@ describe('B528 generated text fact gate', () => {
     },
     {
       name: 'excluded evidence cannot support generation',
-      facts: ['Я увеличил выручку на 20%.'], excluded: true,
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'template',
+      facts: ['Я увеличил выручку на 20%.'], excluded: true, emptyProfile: true,
+      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'another candidate cannot support generation',
-      facts: ['Я увеличил выручку на 20%.'], foreign: true,
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'template',
+      facts: ['Я увеличил выручку на 20%.'], foreign: true, emptyProfile: true,
+      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'negated fact cannot confirm achievement',
       facts: ['Я не увеличил выручку на 20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
     },
   ])('B528 $name', async ({ facts, text, expected, source, ...options }) => {
     const { app, candidates } = await createApp([sampleCluster], {
@@ -253,19 +242,20 @@ describe('B528 generated text fact gate', () => {
       headers: { cookie, origin: 'http://localhost:3000' },
       payload: { language: 'en', ...(options.excluded ? { excludedEvidenceIds: ids } : {}) },
     });
+    if (source === 'refused') {
+      // Профиль пуст: модель не спрашивали, это не отказ цепочки. Текст модели не показан в обоих случаях.
+      expect(response.statusCode).toBe(options.emptyProfile ? 200 : 503);
+      expect(response.body).not.toContain(text);
+      return;
+    }
     expect(response.statusCode).toBe(200);
     const data = response.json().data;
     expect(data.bodySource).toBe(source);
     expect(data.factCheck.claims).toEqual([expect.objectContaining({
       text, status: expected, action: expected === 'confirmed' ? 'none' : 'ask_candidate',
     })]);
-    if (source === 'model') {
-      expect(data.atsCoverLetter).toBe(`${text}\n\nCV attached.`);
-      if (expected === 'confirmed') expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
-    } else {
-      expect(data.atsCoverLetter).not.toContain(text);
-      expect(data.notices).toEqual([expect.stringMatching(/^The generated letter had claims/u)]);
-    }
+    expect(data.atsCoverLetter).toBe(`${text}\n\nCV attached.`);
+    if (expected === 'confirmed') expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
   });
 
 });

@@ -355,7 +355,7 @@ export interface CoverLetterWriterConfig {
 
 /**
  * Цепочка письма (решение владельца, B601): deepseek-v4.1-flash → glm-5.3-flash → Gemini на Vertex;
- * шаблон остаётся запасом за ней.
+ * если отказали все, маршрут отвечает ошибкой с повтором, а не шаблоном.
  */
 export function buildCoverLetterWriter(
   config: CoverLetterWriterConfig,
@@ -380,11 +380,8 @@ export function coverLetterStages(
   }));
 }
 
-/**
- * Письмо пишет шаблон, модель не вызывается. Запрос и цепочка B601 готовы; включает CPO, когда
- * владелец прочитает письма и решит открытые вопросы (род кандидата, уточнения, отказ всех моделей).
- */
-export const LETTER_MODEL_ENABLED = false;
+/** Письмо пишет модель (решение владельца 06.11). Откат: false, письмо снова пишет шаблон. */
+export const LETTER_MODEL_ENABLED = true;
 
 /** То, что получает прод: без цепочки маршрут пишет письмо шаблоном и не тратит ни денег, ни времени. */
 export function buildEnabledCoverLetterWriter(

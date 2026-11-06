@@ -8,7 +8,7 @@ import {
 } from '../server/domain/generatedTextFactGate';
 
 type ConnectionMode = 'rich' | 'none' | 'error' | 'slow';
-type PitchMode = 'rich' | 'few' | 'english' | 'error' | 'slow';
+type PitchMode = 'chain-failed' | 'rich' | 'few' | 'english' | 'error' | 'slow';
 
 interface PitchRequestBody {
   readonly tone?: string;
@@ -325,6 +325,18 @@ async function installPitchRoute(page: Page, state: LetterRouteState): Promise<v
       state.pendingPitch = route;
       return;
     }
+    if (state.pitchMode === 'chain-failed') {
+      return route.fulfill({
+        status: 503,
+        json: {
+          error: {
+            code: 'letter_generation_failed',
+            message: 'Не удалось подготовить письмо. Попробуйте ещё раз.',
+            retryable: true,
+          },
+        },
+      });
+    }
     if (state.pitchMode === 'error') {
       return route.fulfill({
         status: 502,
@@ -536,7 +548,7 @@ test.describe('B449 — письмо под вакансию', () => {
     const state = createRouteState();
     await installLetterMocks(page, state);
     const check = checkGeneratedTextFacts('Я увеличил выручку на 90%.', []);
-    const [notice] = generatedTextFactNotices('ru', [], check);
+    const [notice] = generatedTextFactNotices('ru', [check]);
     await page.route('**/api/v1/candidate/vacancies/*/pitch', async (route) => {
       const response = pitchResponse('synthetic-b528', 'rich', {});
       response.data.notices = [notice];
@@ -649,6 +661,33 @@ test.describe('B449 — письмо под вакансию', () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
     await expect(page.getByRole('main')).toContainText('Business Information Architect');
+  });
+
+  test('B601 the whole model chain refused: an error and a retry instead of a template letter', async ({
+    page,
+  }, testInfo) => {
+    const state = createRouteState('rich', 'chain-failed');
+    await installLetterMocks(page, state);
+    await openLetter(page);
+    const error = page.locator('.career-letter-error');
+    await expect(error).toContainText('Не удалось подготовить письмо. Попробуйте ещё раз.');
+    await expect(page.getByRole('main')).not.toContainText(/deepseek|glm|gemini|openrouter|vertex|модел/iu);
+    await expect(error).toBeInViewport();
+    await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveCount(0);
+    const approve = page.getByRole('button', { name: 'Одобрить письмо' }).first();
+    if (await approve.isVisible()) await expect(approve).toBeDisabled();
+    await captureState(page, testInfo, 'letter-chain-failed');
+    await page.screenshot({
+      path: join(EVIDENCE_DIR, `${testInfo.project.name}-letter-chain-failed-full.png`),
+      fullPage: true,
+      animations: 'disabled',
+    });
+    const asked = state.pitchBodies.length;
+    state.pitchMode = 'rich';
+    await error.getByRole('button', { name: 'Повторить' }).click();
+    await waitForLetter(page);
+    expect(state.pitchBodies.length).toBe(asked + 1);
+    await expect(page.locator('.career-letter-error')).toHaveCount(0);
   });
 
   test('recovers from generation errors and shows the requirements and few-facts notes', async ({

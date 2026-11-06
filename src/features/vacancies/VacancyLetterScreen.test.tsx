@@ -180,6 +180,17 @@ describe('the note under the letter (G3 L2)', () => {
     expect(markup).not.toContain('мало подтверждённых');
   });
 
+  it('круги 1 и 2 показывают короткое сообщение, а не письмо модели: подписи про модель нет', () => {
+    const modelNote = ['Черновик написала модель. Прочитайте его перед отправкой.'];
+    const markup = renderToStaticMarkup(
+      <LetterNotices circle={1} pitch={pitch({ bodySource: 'model', notices: modelNote })} />,
+    );
+    expect(markup).not.toContain('Черновик написала модель');
+    expect(
+      renderToStaticMarkup(<LetterNotices circle={3} pitch={pitch({ bodySource: 'model', notices: modelNote })} />),
+    ).toContain('Черновик написала модель');
+  });
+
   it('shows one line even when the server sends several', () => {
     const markup = notes({
       notices: ['Первая.', 'Вторая.'],

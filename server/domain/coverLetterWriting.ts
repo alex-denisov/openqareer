@@ -43,13 +43,15 @@ export interface CoverLetterPromptInput {
   readonly vacancy: string;
   readonly profile: string;
   readonly recipient?: { readonly name?: string; readonly role?: string };
-  /** Источника на проде пока нет (вопрос владельцу): без него запрос честно говорит «не указан». */
+  /** По имени из профиля (`candidateGender.ts`); если определить нельзя, род в письме не виден. */
   readonly gender?: LetterGender;
   /** Только когда кандидат выбрал язык сам; иначе язык письма определяет вакансия. */
   readonly chosenLanguage?: 'en' | 'ru';
 }
 
 const GENDER_TEXT: Readonly<Record<LetterGender, string>> = { male: 'мужской', female: 'женский' };
+/** Запрос утверждён дословно, поэтому просьба не показывать род идёт значением, а не правкой текста. */
+const UNKNOWN_GENDER_TEXT = 'не указан, пиши так, чтобы род кандидата не был виден';
 const LANGUAGE_TEXT: Readonly<Record<'en' | 'ru', string>> = {
   en: 'на английском языке',
   ru: 'на русском языке',
@@ -64,7 +66,7 @@ function recipientText(recipient: CoverLetterPromptInput['recipient']): string {
 export function coverLetterPrompt(input: CoverLetterPromptInput): string {
   const values: Readonly<Record<string, string>> = {
     RECIPIENT: recipientText(input.recipient),
-    GENDER: input.gender ? GENDER_TEXT[input.gender] : 'не указан',
+    GENDER: input.gender ? GENDER_TEXT[input.gender] : UNKNOWN_GENDER_TEXT,
     VACANCY: input.vacancy.trim(),
     PROFILE: input.profile.trim(),
   };

@@ -359,17 +359,21 @@ function LetterDraftContent({
   const senderName = state.draft.pitch?.senderName?.trim() || accountName;
   if (!state.draft.pitch && !state.draft.error) return null;
   const editorFrozen = frozen || state.draft.loading;
+  // Письма нет и править нечего: пустое поле под ошибкой выглядело бы как приглашение писать самому.
+  const hasText = Boolean(state.draft.pitch || state.draft.text.trim());
   return (
     <>
-      <LetterEditor
-        draft={state.draft}
-        circle={state.circle.circle}
-        senderName={senderName}
-        frozen={editorFrozen}
-        onEdit={state.approval.reset}
-      />
+      {hasText ? (
+        <LetterEditor
+          draft={state.draft}
+          circle={state.circle.circle}
+          senderName={senderName}
+          frozen={editorFrozen}
+          onEdit={state.approval.reset}
+        />
+      ) : null}
       {state.draft.pitch ? (
-        <LetterNotices pitch={state.draft.pitch} onGatherFacts={onGatherFacts} />
+        <LetterNotices pitch={state.draft.pitch} circle={state.circle.circle} onGatherFacts={onGatherFacts} />
       ) : null}
       <TariffQuotaNote quota="applications" refreshKey={state.draft.loading} />
       {state.draft.pitch ? (

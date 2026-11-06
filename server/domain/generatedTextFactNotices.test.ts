@@ -31,11 +31,6 @@ describe('generatedTextFactNotices: one notice in the language of the letter', (
     expect(notice).toContain('и ещё 11');
   });
 
-  it('the model fallback notice follows the letter too', () => {
-    expect(generatedTextFactNotices('en', [], check(['x']))).toEqual([expect.stringMatching(/^The generated letter/u)]);
-    expect(generatedTextFactNotices('ru', [], check(['x']))).toEqual([expect.stringMatching(/^В сгенерированном письме/u)]);
-  });
-
   it('nothing unconfirmed — no notices', () => {
     expect(generatedTextFactNotices('ru', [])).toEqual([]);
   });

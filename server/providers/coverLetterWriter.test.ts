@@ -202,7 +202,7 @@ describe('letterPrompt: вакансия и получатель', () => {
   it('подставляет получателя и род; без них говорит прямо', () => {
     const known = letterPrompt({ ...input, vacancy: { ...input.vacancy, recipient: { name: 'Екатерина', role: 'рекрутёр' } }, gender: 'female' });
     expect(known).toContain('Получатель: Екатерина, рекрутёр. Род кандидата: женский.');
-    expect(letterPrompt(input)).toContain('Получатель: неизвестен. Род кандидата: не указан.');
+    expect(letterPrompt(input)).toContain('Получатель: неизвестен. Род кандидата: не указан, пиши так, чтобы род кандидата не был виден.');
   });
 
   it('язык, выбранный кандидатом, идёт в запрос', () => {
@@ -275,18 +275,18 @@ describe('withinTimeBudget (B266)', () => {
 describe('letter model switch', () => {
   const credentials = { providerCredentials: { openrouter: 'k' } };
 
-  it('prod asks no model for a letter while the switch is off', () => {
-    expect(LETTER_MODEL_ENABLED).toBe(false);
+  it('письмо пишет модель: владелец принял письма и включил её 06.11', () => {
+    expect(LETTER_MODEL_ENABLED).toBe(true);
+    expect(buildEnabledCoverLetterWriter(credentials)).toBeDefined();
+  });
+
+  it('откат одним флагом: выключенный флаг возвращает шаблон', () => {
+    expect(buildEnabledCoverLetterWriter(credentials, false)).toBeUndefined();
   });
 
   it('прод даёт Gemini тот же потолок, что и ступени, а не короткий потолок кандидата', () => {
     const source = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
     expect(source).toMatch(/'coverLetters',\s*COVER_LETTER_VERTEX_TIMEOUT_MS/u);
     expect(COVER_LETTER_VERTEX_TIMEOUT_MS).toBeGreaterThan(CANDIDATE_VERTEX_TIMEOUT_MS);
-    expect(buildEnabledCoverLetterWriter(credentials)).toBeUndefined();
-  });
-
-  it('the same wiring brings the chain back when CPO turns it on', () => {
-    expect(buildEnabledCoverLetterWriter(credentials, true)).toBeDefined();
   });
 });

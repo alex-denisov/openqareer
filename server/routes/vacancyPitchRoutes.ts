@@ -1,3 +1,4 @@
+import { candidateGenderFromName } from '../../shared/candidateGender';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -11,7 +12,7 @@ import { modelLetterNotice, writeCoverLetterBody } from './vacancyLetterBody';
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
-import { requireTariffQuota } from './tariffQuotaGuard';
+import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
@@ -190,11 +191,13 @@ async function writeVacancyPitch(
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
+  const gender = candidateGenderFromName(candidateName);
   const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {
     vacancy: { ...vacancy, description: vacancy.fullDescription },
     profile,
     facts: translatedFacts,
     language,
+    ...(gender ? { gender } : {}),
     ...(body?.language ? { chosenLanguage: body.language } : {}),
     contextMs,
   });
@@ -305,7 +308,7 @@ function letterNotices(result: Awaited<ReturnType<typeof writeVacancyPitch>>): s
   const { pitch, written, outputFactChecks } = result;
   if (written.body) return [modelLetterNotice(pitch.language)];
   return [
-    ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks), written.factCheck),
+    ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks)),
     ...pitch.notices,
   ].slice(0, 1);
 }
@@ -316,6 +319,11 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   if (!prepared) return undefined;
   const { candidateId, body, vacancy } = prepared;
   const result = await writeVacancyPitch(deps, request, candidateId, body, vacancy);
+  // Вся цепочка отказала: шаблон не подменяет письмо (решение владельца, 06.11), единица квоты возвращается.
+  if (result.written.refused) {
+    await retryOnSqliteBusy(() => releaseTariffQuota(deps, candidateId, 'applications', vacancy.id));
+    return sendError(reply, request, 503, 'letter_generation_failed', LETTER_GENERATION_FAILED, true);
+  }
   const { applicationId } = body ?? {};
   if (applicationId) {
     await retryOnSqliteBusy(() =>
@@ -335,6 +343,8 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     meta: { requestId: request.id },
   };
 };
+
+const LETTER_GENERATION_FAILED = 'Не удалось подготовить письмо. Попробуйте ещё раз.';
 
 function invalidLetterSnapshot(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 400, 'invalid_letter_snapshot', 'Проверьте текст письма и повторите одобрение.', false);

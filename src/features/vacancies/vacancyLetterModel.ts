@@ -36,6 +36,8 @@ export function recipientForConnectionPath(
   path: Pick<ConnectionCirclePath, 'circle' | 'path' | 'recipient'>,
 ): { readonly name: string; readonly role?: string } | undefined {
   const person = personAddressedByConnectionPath(path);
+  // Холодный отклик без рекрутёра: в пути стоят компания и название вакансии, а не человек (B601).
+  if (person.id.startsWith('vacancy:')) return undefined;
   const name = person.fullName.trim();
   if (!name) return undefined;
   const role = person.roleTitle?.trim();

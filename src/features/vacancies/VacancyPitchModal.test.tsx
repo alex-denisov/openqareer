@@ -164,7 +164,7 @@ describe('PitchMetaBar promises only what was checked', () => {
 
 describe('pitch language (B266)', () => {
   it('lets the server detect the language until the candidate picks one', async () => {
-    const { executePitchFetch } = await import('./VacancyPitchModal');
+    const { executePitchFetch } = await import('./usePitchFetcher');
     const onFetchPitch = vi.fn(async () => ({}) as VacancyPitchResult);
     await executePitchFetch(
       { id: 'v1', title: 'VP Engineering' },

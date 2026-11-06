@@ -9,7 +9,8 @@ import {
   Users,
   X,
 } from '@phosphor-icons/react';
-import { requestVacancyPitch, type VacancyPitchResult } from './vacancyPitchApi';
+import type { VacancyPitchResult } from './vacancyPitchApi';
+import { usePitchFetcher } from './usePitchFetcher';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { useEscapeLayer } from '../shell/escapeLayers';
 
@@ -541,71 +542,6 @@ function AtsCoverLetterTab({
   );
 }
 
-export function executePitchFetch(
-  vacancy: VacancyPitchModalProps['vacancy'],
-  tone: PitchTone,
-  language: PitchLanguage | undefined,
-  onFetchPitch?: VacancyPitchModalProps['onFetchPitch'],
-): Promise<VacancyPitchResult> {
-  if (onFetchPitch) return onFetchPitch(vacancy.id, tone, language);
-  return requestVacancyPitch(vacancy.id, {
-    tone,
-    ...(language ? { language } : {}),
-    vacancy: {
-      title: vacancy.title,
-      company: vacancy.company,
-      description: vacancy.descriptionSummary,
-      requiredSkills: vacancy.skills,
-      location: vacancy.location,
-      isRemote: vacancy.isRemote,
-    },
-  });
-}
-
-function usePitchFetcher(
-  isOpen: boolean,
-  vacancy: VacancyPitchModalProps['vacancy'],
-  tone: PitchTone,
-  language: PitchLanguage | undefined,
-  initialPitch?: VacancyPitchResult,
-  onFetchPitch?: VacancyPitchModalProps['onFetchPitch'],
-  onPitchReady?: VacancyPitchModalProps['onPitchReady'],
-) {
-  const [pitch, setPitch] = useState<VacancyPitchResult | null>(initialPitch ?? null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (initialPitch && tone === 'executive' && (!language || language === initialPitch.language)) {
-      setPitch(initialPitch);
-      return;
-    }
-    let isMounted = true;
-    setLoading(true);
-    setError(null);
-    executePitchFetch(vacancy, tone, language, onFetchPitch)
-      .then((data) => {
-        if (isMounted) {
-          setPitch(data);
-          onPitchReady?.(data, tone);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setError(err instanceof Error ? err.message : 'Не удалось подготовить текст. Повторите.');
-          setLoading(false);
-        }
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [isOpen, vacancy, tone, language, initialPitch, onFetchPitch, onPitchReady]);
-
-  return { pitch, loading, error };
-}
-
 function useModalAccessibility(
   isOpen: boolean,
   onClose: () => void,
@@ -655,6 +591,7 @@ function useModalAccessibility(
 interface PitchMainViewProps {
   readonly loading: boolean;
   readonly error: string | null;
+  readonly onRetry: () => void;
   readonly pitch: VacancyPitchResult | null;
   readonly tab: PitchFormatTab;
   readonly copiedKey: string | null;
@@ -664,7 +601,7 @@ interface PitchMainViewProps {
 }
 
 function PitchMainView(props: PitchMainViewProps) {
-  const { loading, error, pitch, tab, copiedKey, onCopy, onDownloadTxt, onOpenOutreach } = props;
+  const { loading, error, onRetry, pitch, tab, copiedKey, onCopy, onDownloadTxt, onOpenOutreach } = props;
   if (loading) {
     return (
       <div className="career-pitch-loading" aria-busy="true">
@@ -676,6 +613,9 @@ function PitchMainView(props: PitchMainViewProps) {
     return (
       <div className="career-pitch-error" role="alert">
         <p>{error}</p>
+        <button type="button" className="career-btn career-btn-secondary" onClick={onRetry}>
+          Повторить
+        </button>
       </div>
     );
   }
@@ -740,7 +680,7 @@ function usePitchModalController(
   const [tone, setTone] = useState<PitchTone>('executive');
   // Unset until the candidate picks one: the server detects the vacancy's language.
   const [language, setLanguage] = useState<PitchLanguage | undefined>(undefined);
-  const { pitch, loading, error } = usePitchFetcher(
+  const { pitch, loading, error, retry } = usePitchFetcher(
     isOpen,
     vacancy,
     tone,
@@ -763,6 +703,7 @@ function usePitchModalController(
     pitch,
     loading,
     error,
+    retry,
     copiedKey,
     handleCopy,
     handleDownloadTxt,
@@ -804,6 +745,7 @@ export function VacancyPitchModal(props: VacancyPitchModalProps) {
           <PitchMainView
             loading={c.loading}
             error={c.error}
+            onRetry={c.retry}
             pitch={c.pitch}
             tab={c.tab}
             copiedKey={c.copiedKey}

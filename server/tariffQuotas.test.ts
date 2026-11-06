@@ -9,6 +9,7 @@ import type { ServerConfig } from './config';
 import { AuthService } from './auth/authService';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { CoachProvider } from './providers/coachProvider';
+import type { CoverLetterWriter } from './providers/coverLetterWriter';
 import { successProvider } from './appTestHarness';
 import { SqliteBillingRepository } from './billing/sqliteBillingRepository';
 import { calendarMonthPeriod, upgradePlanFor } from './billing/tariffQuotas';
@@ -22,6 +23,7 @@ afterEach(async () => {
 async function createQuotaApp(
   username = 'quota.candidate',
   provider: CoachProvider = successProvider,
+  extraDeps: { readonly coverLetterWriter?: CoverLetterWriter } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-quota-'));
   const databasePath = join(directory, 'quota.db');
@@ -56,6 +58,7 @@ async function createQuotaApp(
     candidateStore: candidates,
     authService: auth,
     serveStatic: false,
+    ...extraDeps,
   });
   resources.push({
     close: async () => {
@@ -76,7 +79,7 @@ async function createQuotaApp(
       headers: { ...headers, 'idempotency-key': key },
       payload: { messageId, content: 'Что мне делать дальше?' },
     });
-  return { app, headers, databasePath, username, turn };
+  return { app, headers, databasePath, username, turn, candidates };
 }
 
 function withDatabase<T>(databasePath: string, operation: (database: DatabaseSync) => T): T {
@@ -272,5 +275,43 @@ describe('квоты тарифов (B579)', { timeout: 20_000 }, () => {
     expect(upgradePlanFor('free', 'interview_trainings')).toBe('basic');
     expect(upgradePlanFor('basic', 'linkedin_drafts')).toBe('pro');
     expect(upgradePlanFor('max', 'coach_turns')).toBeNull();
+  });
+
+  it('B601: отказ всей цепочки письма не тратит единицу откликов, письмо тратит', async () => {
+    const reply: { body?: string } = {};
+    const writer: CoverLetterWriter = {
+      writeCoverLetter: async () => (reply.body
+        ? { body: reply.body, stage: 'first' }
+        : { failure: { stage: 'first', kind: 'timeout' } }),
+    };
+    const { app, headers, candidates } = await createQuotaApp('quota.letter', successProvider, { coverLetterWriter: writer });
+    const signedIn = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      headers: { origin: 'http://localhost:3000' },
+      payload: { username: 'quota.letter', password: 'candidate-password-for-tests' },
+    });
+    const { candidateId } = signedIn.json().data;
+    candidates.importResumeEvidence(candidateId, {
+      sourceLabel: 'test-import',
+      entries: [{ memoryId: 'mem-quota', domain: 'outcome', statement: 'Вырастил выручку до 2 млрд рублей' }],
+    } as never);
+    candidates.reviewMemories(candidateId, ['mem-quota'], 'confirm');
+    const pitch = () => app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/v-quota/pitch',
+      headers,
+      payload: { vacancy: { title: 'CTO', company: 'Synthetic' } },
+    });
+    const used = async () => {
+      const response = await app.inject({ method: 'GET', url: '/api/v1/candidate/billing/quotas', headers });
+      const { quotas } = response.json().data as { quotas: { key: string; used: number }[] };
+      return quotas.find((quota) => quota.key === 'applications')?.used;
+    };
+    expect((await pitch()).statusCode).toBe(503);
+    expect(await used()).toBe(0);
+    reply.body = 'Письмо модели. Резюме приложено.';
+    expect((await pitch()).statusCode).toBe(200);
+    expect(await used()).toBe(1);
   });
 });
