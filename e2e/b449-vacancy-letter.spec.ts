@@ -671,7 +671,9 @@ test.describe('B449 — письмо под вакансию', () => {
     await openLetter(page);
     const error = page.locator('.career-letter-error');
     await expect(error).toContainText('Не удалось подготовить письмо. Попробуйте ещё раз.');
-    await expect(page.getByRole('main')).not.toContainText(/deepseek|glm|gemini|openrouter|vertex|модел/iu);
+    await expect(page.getByRole('main')).not.toContainText(
+      /deepseek|glm|gemini|openrouter|vertex|модел/iu,
+    );
     await expect(error).toBeInViewport();
     await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveCount(0);
     const approve = page.getByRole('button', { name: 'Одобрить письмо' }).first();
