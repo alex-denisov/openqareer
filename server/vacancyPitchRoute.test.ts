@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { VacancyCluster } from './domain/unifiedVacancy';
 import type { CoverLetterWriter, CoverLetterWriteInput } from './providers/coverLetterWriter';
 import { normalizeJsonSource } from './vacancies/jsonSourceAdapters';
+import { resolvePitchVacancy } from './routes/vacancyPitchRoutes';
 import { createApp, login } from './testHelpers/vacancyPitchHarness';
 import type { VacancyDescriptionLoader } from './vacancies/multiSourceVacancyEngine';
 
@@ -355,7 +356,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
   it('uses the model letter and reports its stage when the writer succeeds', async () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async () => ({
-        body: 'Здравствуйте! Пишу по вакансии от модели.',
+        body: 'Здравствуйте! Пишу по вакансии от модели. Резюме приложено.',
         stage: 'openai:gpt-test',
       }),
     };
@@ -378,33 +379,50 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const data = response.json().data;
     expect(data.bodySource).toBe('model');
     expect(data.stage).toBe('openai:gpt-test');
-    expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели.');
+    expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели. Резюме приложено.');
   });
 
-  it('falls back to the template letter when the writer fails', async () => {
+  it('B601: the pool text beats the summary the letter screen sends as a description', () => {
+    const resolved = resolvePitchVacancy(
+      { vacancy: { description: 'Короткая сводка' } } as never,
+      'v1',
+      undefined,
+      { description: 'Полный текст из пула' } as never,
+    );
+    expect(resolved.fullDescription).toBe('Полный текст из пула');
+    expect(resolved.description).toBe('Короткая сводка');
+  });
+
+  it('B601: the writer gets the full vacancy text, the whole profile and the language only when chosen', async () => {
+    const inputs: CoverLetterWriteInput[] = [];
     const writer: CoverLetterWriter = {
-      writeCoverLetter: async () => ({ failure: { stage: 'openai:gpt-test', kind: 'timeout' } }),
+      writeCoverLetter: async (input) => {
+        inputs.push(input);
+        return { body: 'Письмо. Резюме приложено.', stage: 'openai:gpt-test' };
+      },
     };
     const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
     const { cookie, candidateId } = await login(app);
     candidates.importResumeEvidence(candidateId, {
       sourceLabel: 'test-import',
-      entries: [{ memoryId: 'mem-202', domain: 'skill', statement: 'Владею TypeScript, Node.js' }],
+      entries: [{ memoryId: 'mem-601', domain: 'outcome', statement: 'Вырастил выручку до 2 млрд рублей' }, { memoryId: 'mem-601-b', domain: 'outcome', statement: 'Команда 250 человек' }],
     });
-    candidates.reviewMemories(candidateId, ['mem-202'], 'confirm');
-
-    const response = await app.inject({
+    candidates.reviewMemories(candidateId, ['mem-601', 'mem-601-b'], 'confirm');
+    const request = (payload: Record<string, unknown>) => app.inject({
       method: 'POST',
       url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' },
-      payload: {},
+      payload,
     });
 
-    expect(response.statusCode).toBe(200);
-    const data = response.json().data;
-    expect(data.bodySource).toBe('template');
-    expect(data.stage).toBeUndefined();
-    expect(data.atsCoverLetter).toContain('Senior Platform Engineer');
+    await request({ vacancy: { description: 'Полный текст вакансии длиннее сводки кластера.' } });
+    expect(inputs[0]?.vacancy.description).toBe('Полный текст вакансии длиннее сводки кластера.');
+    expect(inputs[0]?.profile).toContain('Вырастил выручку до 2 млрд рублей');
+    expect(inputs[0]?.chosenLanguage).toBeUndefined();
+
+    await request({ language: 'en', excludedEvidenceIds: ['mem-601'] });
+    expect(inputs[1]?.chosenLanguage).toBe('en');
+    expect(inputs[1]?.profile ?? '').not.toContain('Вырастил выручку до 2 млрд рублей');
   });
 
   // B251, S2, architecture.md §4: an optional `applicationId` saves the
@@ -445,7 +463,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
   // только числа и имя провайдера, без текста письма и фактов.
   it('logs structured vacancy-pitch-timing with numbers and provider name only', async () => {
     const writer: CoverLetterWriter = {
-      writeCoverLetter: async () => ({ body: 'Письмо.', stage: 'openai:gpt-test' }),
+      writeCoverLetter: async () => ({ body: 'Письмо. Резюме приложено.', stage: 'openai:gpt-test' }),
     };
     const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
     const { cookie, candidateId } = await login(app);
@@ -501,7 +519,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async (input) => {
         capturedInput = input;
-        return { body: 'Письмо нанимающему.', stage: 'openai:gpt-test' };
+        return { body: 'Письмо нанимающему. Резюме приложено.', stage: 'openai:gpt-test' };
       },
     };
     const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });

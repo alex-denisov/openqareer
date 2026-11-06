@@ -4,7 +4,6 @@ import {
   type BulletTranslationRequest,
 } from './experienceBulletLanguage';
 import { checkedBullet } from './experienceFactRewrite';
-import { addsPersonalAction } from './letterModelGate';
 import type { LetterResultFact } from './letterResults';
 
 /**
@@ -16,6 +15,23 @@ import type { LetterResultFact } from './letterResults';
  * Неудача — не ошибка: письмо выйдет без результата, как раньше, но никогда
  * с русским текстом или выдумкой.
  */
+
+const ACTION = /(?<!\p{L})(?:созда|основал|основат|возглав|руковод|разработал|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|утро|реализова|организова|управлял|масштабир|вырастил|нарастил|координир|курир|(?:led|leading|directing|managing|founded|founder|created|built|launched|increased|reduced|cut|achieved|implemented|authored|doubled|managed|delivered|scaled|expanded|organized|coordinated|oversaw|headed|spearheaded|directed|drove|scaling|building|creating|launching|increasing|reducing|cutting|achieving|implementing|doubling|delivering|expanding|organizing|coordinating|overseeing|heading|spearheading|driving|growing)(?!\p{L}))/giu;
+const FIRST_PERSON_GREW = /(?<!\p{L})(?:i|we)\s+(?:\p{L}+\s+)?grew(?!\p{L})/iu;
+/** Перед глаголом кандидата — начало фразы, «я» или союз; иначе действие совершил кто-то другой. */
+const OWN_ACTOR = /(?:^|[,;:—–(.]\s*|(?<!\p{L})(?:я|мы|и|i|we|and)\s+)$/iu;
+
+function statedActions(statement: string): string[] {
+  return [...statement.matchAll(ACTION)]
+    .filter((match) => OWN_ACTOR.test(statement.slice(0, match.index)))
+    .map(([action]) => action.toLocaleLowerCase());
+}
+
+/** Перевод не меняет субъект: где факт не называет личного действия, его нет и в переводе (G3d, письмо 6). */
+function addsPersonalAction(source: string, translation: string): boolean {
+  if (FIRST_PERSON_GREW.test(translation)) return true;
+  return statedActions(source).length === 0 && statedActions(translation).length > 0;
+}
 
 export interface LetterFactTranslator {
   translate?(request: BulletTranslationRequest): Promise<BulletTranslationOutput | null>;

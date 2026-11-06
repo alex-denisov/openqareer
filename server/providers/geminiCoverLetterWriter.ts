@@ -1,16 +1,13 @@
-import { COVER_LETTER_JSON_SCHEMA, coverLetterInstructions } from '../domain/coverLetterWriting';
 import {
   acceptModelBody,
-  COVER_LETTER_REASONING_TOKENS,
   failureDetail,
   hasLetterInput,
-  serializeInput,
+  letterPrompt,
   thrownFailure,
   type CoverLetterOutcome,
   type CoverLetterWriteInput,
   type CoverLetterWriter,
 } from './coverLetterWriter';
-import { geminiResponseSchema } from './geminiSchema';
 import { PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
 import { retryOn429 } from './vertexAi';
 
@@ -39,13 +36,10 @@ interface GeminiResponse {
   }>;
 }
 
-/**
- * Ступень письма на Gemini (B266). Бесплатный nemotron писал письмо 30–105 с
- * при сроке 25 с (замер 25.09), поэтому голова очереди письма — та же, что у
- * называния ролей: Gemini через тоннель Cloudflare (решение владельца
- * 2026-09-03, Vertex-бонус — 2026-09-25). Приёмка ответа общая с остальными
- * ступенями (`acceptModelBody`).
- */
+/** Рассуждение `high` делит потолок с письмом: замер 06.11 до 5 100 токенов, это вдвое с запасом (B601). */
+const GEMINI_LETTER_OUTPUT_TOKENS = 12_000;
+
+/** Ступень письма на Gemini; приёмка ответа общая с остальными ступенями (`acceptModelBody`). */
 export class GeminiCoverLetterWriter implements CoverLetterWriter {
   private readonly fetchImpl: typeof fetch;
 
@@ -104,12 +98,9 @@ export class GeminiCoverLetterWriter implements CoverLetterWriter {
 
 function requestBody(input: CoverLetterWriteInput, thinkingLevel?: 'low' | 'high') {
   return {
-    systemInstruction: { parts: [{ text: coverLetterInstructions(input.language, input.tone) }] },
-    contents: [{ role: 'user', parts: [{ text: serializeInput(input) }] }],
+    contents: [{ role: 'user', parts: [{ text: letterPrompt(input) }] }],
     generationConfig: {
-      responseMimeType: 'application/json',
-      responseJsonSchema: geminiResponseSchema(COVER_LETTER_JSON_SCHEMA.schema),
-      maxOutputTokens: COVER_LETTER_REASONING_TOKENS,
+      maxOutputTokens: GEMINI_LETTER_OUTPUT_TOKENS,
       ...(thinkingLevel ? { thinkingConfig: { thinkingLevel } } : {}),
     },
   };

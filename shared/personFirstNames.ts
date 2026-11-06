@@ -4,7 +4,7 @@
  * (companies). Only the nominative is listed: a name in another case is part
  * of a company name, not a signature.
  */
-const MALE = [
+export const MALE_FIRST_NAMES = [
   'Александр',
   'Алексей',
   'Анатолий',
@@ -81,7 +81,7 @@ const MALE = [
   'Азат',
   'Эльдар',
 ];
-const FEMALE = [
+export const FEMALE_FIRST_NAMES = [
   'Александра',
   'Алёна',
   'Алена',
@@ -156,4 +156,4 @@ const FEMALE = [
   'Эвелина',
 ];
 
-export const PERSON_FIRST_NAMES: ReadonlySet<string> = new Set([...MALE, ...FEMALE]);
+export const PERSON_FIRST_NAMES: ReadonlySet<string> = new Set([...MALE_FIRST_NAMES, ...FEMALE_FIRST_NAMES]);

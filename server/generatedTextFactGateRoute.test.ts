@@ -64,23 +64,13 @@ describe('B528 generated text fact gate', () => {
       headers: { cookie, origin: 'http://localhost:3000' },
       payload: { applicationId: application.id },
     });
-    expect(response.statusCode).toBe(200);
-    const data = response.json().data;
-    expect(data.bodySource).toBe('template');
-    expect(data.atsCoverLetter).not.toContain('90%');
-    expect(data.factCheck).toMatchObject({
-      status: 'needs_confirmation',
-      claims: [expect.objectContaining({ status: 'not_in_profile', action: 'ask_candidate' })],
-    });
-    expect(data.notices.length).toBeGreaterThan(0);
-    const saved = candidates.getSnapshot(candidateId).documents.find((doc) => doc.kind === 'cover_letter');
-    expect(saved).toBeDefined();
-    const document = candidates.getDocument(candidateId, saved!.id)!;
-    expect(Buffer.from(document.contentBase64, 'base64').toString('utf8')).toBe(data.atsCoverLetter);
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain('90%');
+    expect(candidates.getSnapshot(candidateId).documents.find((doc) => doc.kind === 'cover_letter')).toBeUndefined();
   });
 
   it('04.11: a paraphrase of imported facts reaches the letter screen under the note that a model wrote it', async () => {
-    const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек. Буду рад обсудить задачи роли.';
+    const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек. Резюме приложено. Буду рад обсудить задачи роли.';
     const { app, candidates } = await createApp([sampleCluster], {
       coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test:model' }) },
     });
@@ -120,16 +110,17 @@ describe('B528 generated text fact gate', () => {
       sourceLabel: 'synthetic',
       entries: [{ memoryId: 'imp0123456789-ach', domain: 'outcome', statement: 'Built logistics for a retail chain.' }],
     });
-    const data = (await app.inject({
+    const response = await app.inject({
       method: 'POST', url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' }, payload: { language: 'en' },
-    })).json().data;
+    });
     expect(seen).toContain('name');
-    expect(data.bodySource).toBe('template');
-    expect(data.atsCoverLetter).not.toContain('Fintech Lab');
-    expect(data.emailPitch.body).not.toContain('Fintech Lab');
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain('Fintech Lab');
   });
 
+  // B601: the gate stops wrong numbers and foreign companies only; role and wording are the reader's call,
+  // so a letter that overstates a role reaches the candidate with its claims listed as unconfirmed.
   it.each([
     {
       name: 'confirmed metric with its context',
@@ -139,37 +130,37 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'same number with a different unit',
       facts: ['Я управлял бюджетом 40 млн рублей.'],
-      text: 'Я увеличил выручку на 40%.', expected: 'not_in_profile', source: 'template',
+      text: 'Я увеличил выручку на 40%.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'currency symbols must not be interchangeable',
       facts: ['Я управлял бюджетом 40$.'],
-      text: 'Я управлял бюджетом 40€.', expected: 'not_in_profile', source: 'template',
+      text: 'Я управлял бюджетом 40€.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'a negative number cannot confirm a positive one',
       facts: ['Я увеличил выручку на -20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'refused',
     },
     {
       name: 'dropping a pound unit cannot be confirmed',
       facts: ['I managed £40.'],
-      text: 'I managed 40.', expected: 'partially_confirmed', source: 'template',
+      text: 'I managed 40.', expected: 'partially_confirmed', source: 'model',
     },
     {
       name: 'unlisted project verbs still require evidence',
       facts: ['Участвовал в проекте Atlas.'],
-      text: 'Координировал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Координировал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'same number with an unrelated achievement',
       facts: ['Я снизил расходы на 20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'model',
     },
     {
       name: 'before and after from separate facts',
       facts: ['Время обработки составляло 30 минут.', 'Время ответа составляло 10 минут.'],
-      text: 'Я снизил время обработки с 30 до 10 минут.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я снизил время обработки с 30 до 10 минут.', expected: 'partially_confirmed', source: 'model',
     },
     {
       name: 'before and after in one confirmed fact',
@@ -179,7 +170,7 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'reversed direction is not confirmed',
       facts: ['Я снизил время обработки с 30 до 10 минут.'],
-      text: 'Я снизил время обработки с 10 до 30 минут.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я снизил время обработки с 10 до 30 минут.', expected: 'partially_confirmed', source: 'refused',
     },
     {
       // 04.11: imported facts are the candidate's own data, the template quotes them too; with the
@@ -191,27 +182,27 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'candidate explicitly cannot confirm a metric',
       facts: ['Не могу подтвердить: я увеличил выручку на 20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'cannot_confirm', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'cannot_confirm', source: 'refused',
     },
     {
       name: 'project participation does not prove authorship',
       facts: ['Я участвовал в проекте Atlas.'],
-      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'third party ownership is not personal ownership',
       facts: ['Заказчик создал проект Atlas.'],
-      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'English negation cannot prove ownership',
       facts: ['I have not created project Atlas.'],
-      text: 'I created project Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'I created project Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'first person achievements require evidence',
       facts: ['Я участвовал в проекте Atlas.'],
-      text: 'Я организовал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Я организовал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'explicit project ownership',
@@ -220,22 +211,22 @@ describe('B528 generated text fact gate', () => {
     },
     {
       name: 'excluded evidence cannot support generation',
-      facts: ['Я увеличил выручку на 20%.'], excluded: true,
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'template',
+      facts: ['Я увеличил выручку на 20%.'], excluded: true, emptyProfile: true,
+      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'another candidate cannot support generation',
-      facts: ['Я увеличил выручку на 20%.'], foreign: true,
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'template',
+      facts: ['Я увеличил выручку на 20%.'], foreign: true, emptyProfile: true,
+      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
     },
     {
       name: 'negated fact cannot confirm achievement',
       facts: ['Я не увеличил выручку на 20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
     },
   ])('B528 $name', async ({ facts, text, expected, source, ...options }) => {
     const { app, candidates } = await createApp([sampleCluster], {
-      coverLetterWriter: { writeCoverLetter: async () => ({ body: text, stage: 'test:model' }) },
+      coverLetterWriter: { writeCoverLetter: async () => ({ body: `${text}\n\nCV attached.`, stage: 'test:model' }) },
     });
     const { cookie, candidateId } = await login(app);
     const owner = options.foreign
@@ -251,19 +242,20 @@ describe('B528 generated text fact gate', () => {
       headers: { cookie, origin: 'http://localhost:3000' },
       payload: { language: 'en', ...(options.excluded ? { excludedEvidenceIds: ids } : {}) },
     });
+    if (source === 'refused') {
+      // Профиль пуст: модель не спрашивали, это не отказ цепочки. Текст модели не показан в обоих случаях.
+      expect(response.statusCode).toBe(options.emptyProfile ? 200 : 503);
+      expect(response.body).not.toContain(text);
+      return;
+    }
     expect(response.statusCode).toBe(200);
     const data = response.json().data;
     expect(data.bodySource).toBe(source);
     expect(data.factCheck.claims).toEqual([expect.objectContaining({
       text, status: expected, action: expected === 'confirmed' ? 'none' : 'ask_candidate',
     })]);
-    if (source === 'model') {
-      expect(data.atsCoverLetter).toBe(text);
-      expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
-    } else {
-      expect(data.atsCoverLetter).not.toBe(text);
-      expect(data.notices).toEqual([expect.stringMatching(/^The generated letter had claims/u)]);
-    }
+    expect(data.atsCoverLetter).toBe(`${text}\n\nCV attached.`);
+    if (expected === 'confirmed') expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
   });
 
 });

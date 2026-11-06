@@ -351,6 +351,7 @@
 }
 
 .career-letter-error {
+  flex-wrap: wrap;
   align-items: center;
   color: var(--career-danger);
 }
@@ -670,5 +671,12 @@
   .career-letter-screen *::after {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  /* B601: значок, текст и кнопка в одну строку, текст переносится внутри своей колонки. */
+  .career-letter-error p {
+    flex: 1 1 0;
   }
 }

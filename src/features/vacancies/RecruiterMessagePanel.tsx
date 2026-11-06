@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowSquareOut, Check, CircleNotch, Copy, X } from '@phosphor-icons/react';
 import { requestVacancyPitch } from './vacancyPitchApi';
 
@@ -111,6 +111,7 @@ function useRecruiterMessage(contact: RecruiterMessageContact) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [evidenceCount, setEvidenceCount] = useState(0);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -140,9 +141,10 @@ function useRecruiterMessage(contact: RecruiterMessageContact) {
     return () => {
       active = false;
     };
-  }, [contact.vacancyId, contact.fullName, contact.roleTitle]);
+  }, [contact.vacancyId, contact.fullName, contact.roleTitle, retryKey]);
 
-  return { loading, error, message, evidenceCount };
+  const retry = useCallback(() => setRetryKey((current) => current + 1), []);
+  return { loading, error, message, evidenceCount, retry };
 }
 
 function MessageFooter({
@@ -174,7 +176,7 @@ export function RecruiterMessagePanel({
   defaultSubject = 'Отклик на вакансию',
   onClose,
 }: RecruiterMessagePanelProps) {
-  const { loading, error, message, evidenceCount } = useRecruiterMessage(contact);
+  const { loading, error, message, evidenceCount, retry } = useRecruiterMessage(contact);
   const channels = resolveContactChannels(contact, defaultSubject, message);
 
   return (
@@ -206,7 +208,10 @@ export function RecruiterMessagePanel({
 
       {error && (
         <div className="career-recruiter-message-error" role="alert">
-          <span>{error}</span>
+          <span>{error}</span>{' '}
+          <button type="button" className="career-btn career-btn-secondary career-btn-sm" onClick={retry}>
+            Повторить
+          </button>
         </div>
       )}
 

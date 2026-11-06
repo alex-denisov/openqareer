@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   CaretDown,
   Check,
@@ -106,6 +106,11 @@ export function LetterSettings({
 }
 
 export function PitchBodyState({ draft }: { readonly draft: LetterDraftState }) {
+  const errorRef = useRef<HTMLDivElement>(null);
+  // Ошибка стоит под настройками: на 390 её иначе не видно, кандидат решит, что письмо ещё готовится.
+  useEffect(() => {
+    if (draft.error) errorRef.current?.scrollIntoView?.({ block: 'center' });
+  }, [draft.error]);
   if (draft.loading) {
     return (
       <p className="career-letter-loading" role="status" aria-busy="true">
@@ -116,10 +121,14 @@ export function PitchBodyState({ draft }: { readonly draft: LetterDraftState }) 
   }
   if (draft.error) {
     return (
-      <div className="career-letter-error" role="alert">
+      <div ref={errorRef} className="career-letter-error" role="alert">
         <WarningCircle size={16} aria-hidden="true" />
         <p>{draft.error}</p>
-        <button type="button" onClick={draft.retry}>
+        <button
+          type="button"
+          className="career-btn career-btn-secondary career-btn-sm"
+          onClick={draft.retry}
+        >
           Повторить
         </button>
       </div>
@@ -210,12 +219,15 @@ function UnconfirmedRequirementsNote({ labels }: { readonly labels: readonly str
  */
 export function LetterNotices({
   pitch,
+  circle = 3,
   onGatherFacts,
 }: {
   readonly pitch: VacancyPitchResult;
+  readonly circle?: ConnectionCircleNumber;
   readonly onGatherFacts?: () => void;
 }) {
-  const notice = pitch.notices?.[0];
+  // Круги 1 и 2 показывают короткое сообщение, а не письмо модели: подпись про модель там неправда.
+  const notice = pitch.bodySource === 'model' && circle !== 3 ? undefined : pitch.notices?.[0];
   const unconfirmed = pitch.unconfirmedRequirements ?? [];
   if (pitch.usedEvidenceIds.length === 0 && pitch.bodySource !== 'model') {
     return (

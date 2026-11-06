@@ -32,10 +32,8 @@ const callers = (model: string, client: ReturnType<typeof recordingClient>['clie
       client: client as never,
     })
       .writeCoverLetter({
-        facts: [{ ref: 'memory:1', statement: 'Вёл команду.' }],
+        profile: 'Вёл команду.',
         vacancy: { title: 'Head of Engineering', requirements: [] },
-        language: 'ru',
-        tone: 'executive',
       } as never)
       .catch(() => undefined),
   () =>

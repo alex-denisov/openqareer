@@ -416,25 +416,6 @@ function workplaceParts(place: PitchWorkplace, language: PitchLanguage) {
   };
 }
 
-export interface LetterCareerEntry {
-  readonly title?: string;
-  readonly employer?: string;
-  readonly years?: string;
-}
-
-/** Места работы для модели на языке письма: те же должность, компания и годы, что у шаблона. */
-export function letterCareer(
-  workplaces: readonly PitchWorkplace[],
-  language: PitchLanguage,
-): LetterCareerEntry[] {
-  return workplaces.slice(0, 3).flatMap((place) => {
-    const { title, employer } = workplaceParts(place, language);
-    if (!title && !employer) return [];
-    const years = workplacePeriod(place, language).replace(/[()\s]/gu, ' ').trim();
-    return [{ ...(title ? { title } : {}), ...(employer ? { employer } : {}), ...(years ? { years } : {}) }];
-  });
-}
-
 function workplacePhrase(place: PitchWorkplace, language: PitchLanguage): WorkplacePhrase | null {
   const { title, employer } = workplaceParts(place, language);
   if (!title && !employer) return null;
@@ -493,21 +474,6 @@ function letterResultFacts(
 ): VacancyPitchInputFact[] {
   return facts.filter((fact) => !isStructuredRecordStatement(fact.statement) &&
     (language === 'ru' || !hasCyrillic(fact.statement)) && isResultFact(fact));
-}
-
-/**
- * Факты для письма от модели: на языке письма, без записей профиля и без записей о самих местах
- * (место уже есть в `letterCareer`). Те же ограничения, что у шаблона.
- */
-export function letterModelFacts(
-  facts: readonly VacancyPitchInputFact[],
-  workplaces: readonly PitchWorkplace[],
-  language: PitchLanguage,
-): VacancyPitchInputFact[] {
-  const records = new Set(workplaces.flatMap((place) => (place.recordId ? [place.recordId] : [])));
-  return filterUsableFacts(facts).filter((fact) => !records.has(fact.id) &&
-    !isStructuredRecordStatement(fact.statement) &&
-    (language === 'ru' || !hasCyrillic(fact.statement)));
 }
 
 function buildEvidenceParagraph(

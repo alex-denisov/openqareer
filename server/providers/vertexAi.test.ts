@@ -56,7 +56,7 @@ describe('Vertex AI (B266, решение владельца 25.09)', () => {
           candidates: [
             {
               finishReason: 'STOP',
-              content: { parts: [{ text: JSON.stringify({ body: 'One. Two.' }) }] },
+              content: { parts: [{ text: 'One. Two.' }] },
             },
           ],
         }),
@@ -74,10 +74,8 @@ describe('Vertex AI (B266, решение владельца 25.09)', () => {
     });
 
     const outcome = await writer.writeCoverLetter({
-      language: 'en',
-      tone: 'executive',
       vacancy: { title: 'CTO' },
-      facts: [{ ref: 'f1', statement: 'VP of Technology' }],
+      profile: 'VP of Technology',
     });
 
     expect(outcome.body).toBe('One. Two.');
@@ -90,12 +88,12 @@ describe('Vertex AI (B266, решение владельца 25.09)', () => {
     });
   });
 
-  it('цепочка письма ставит Vertex первым (04.11)', () => {
+  it('цепочка письма ставит Vertex последним (B601, решение владельца)', () => {
     const writer = buildCoverLetterWriter({
       providerCredentials: { openrouter: 'o' },
       vertex: readVertexConfig({ OPENQAREER_VERTEX_SERVICE_ACCOUNT_B64: encoded }),
     }) as unknown as { descriptors: readonly string[] };
 
-    expect(writer.descriptors[0]).toBe('vertex:gemini-3.8-flash');
+    expect(writer.descriptors.at(-1)).toBe('vertex:gemini-3.8-flash');
   });
 });

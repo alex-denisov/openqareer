@@ -1,3 +1,4 @@
+import { candidateGenderFromName } from '../../shared/candidateGender';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -11,7 +12,7 @@ import { modelLetterNotice, writeCoverLetterBody } from './vacancyLetterBody';
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
-import { requireTariffQuota } from './tariffQuotaGuard';
+import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
@@ -22,6 +23,8 @@ import {
   withDeps,
 } from './helpers';
 import { pitchRankingContext } from './pitchRankingContext';
+import { letterProfileText } from '../domain/letterProfile';
+import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts, generatedTextFactNotices } from '../domain/generatedTextFactGate';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -78,7 +81,7 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
   return wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId).has(candidateCompanyKey(company));
 }
 
-function resolvePitchVacancy(
+export function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancyId: string,
   cluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
@@ -90,6 +93,9 @@ function resolvePitchVacancy(
     company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
     description:
       body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+    // Письмо модели пишется по полному тексту из пула: экран письма присылает в description сводку (B601).
+    fullDescription:
+      poolVacancy?.description ?? body?.vacancy?.description ?? cluster?.descriptionSummary,
     requiredSkills:
       body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
     responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
@@ -149,12 +155,23 @@ function readLetterContext(
   const excludedEvidenceIds = new Set(body?.excludedEvidenceIds ?? []);
   const usableEvidenceIds = new Set(filterUsablePitchFacts(allFacts).map((fact) => fact.id));
   const candidateWorkplaces = letterWorkplaces(snapshot, usableEvidenceIds);
+  const facts = allFacts.filter((fact) => !excludedEvidenceIds.has(fact.id));
+  const workplaces = candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id)));
   return {
     rankingContext,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
-    facts: allFacts.filter((fact) => !excludedEvidenceIds.has(fact.id)),
+    facts,
     candidateWorkplaces,
-    workplaces: candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id))),
+    workplaces,
+    profile: letterProfileText({
+      draft: snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT,
+      facts,
+      includedWorkplaceIds: workplaces.map((place) => place.id),
+      withheldEvidenceIds: new Set([
+        ...excludedEvidenceIds,
+        ...allFacts.filter((fact) => fact.sensitive === true).map((fact) => fact.id),
+      ]),
+    }),
     targetCompany: isWantedCompany(deps, candidateId, vacancy.company),
     tone: body?.tone ?? 'executive',
     language: body?.language ?? detectVacancyLanguage(vacancy),
@@ -170,12 +187,19 @@ async function writeVacancyPitch(
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
-  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, contextMs } = context;
+  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, profile, contextMs } = context;
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
+  const gender = candidateGenderFromName(candidateName);
   const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {
-    vacancy, facts: translatedFacts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
+    vacancy: { ...vacancy, description: vacancy.fullDescription },
+    profile,
+    facts: translatedFacts,
+    language,
+    ...(gender ? { gender } : {}),
+    ...(body?.language ? { chosenLanguage: body.language } : {}),
+    contextMs,
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
@@ -284,7 +308,7 @@ function letterNotices(result: Awaited<ReturnType<typeof writeVacancyPitch>>): s
   const { pitch, written, outputFactChecks } = result;
   if (written.body) return [modelLetterNotice(pitch.language)];
   return [
-    ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks), written.factCheck),
+    ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks)),
     ...pitch.notices,
   ].slice(0, 1);
 }
@@ -295,6 +319,11 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   if (!prepared) return undefined;
   const { candidateId, body, vacancy } = prepared;
   const result = await writeVacancyPitch(deps, request, candidateId, body, vacancy);
+  // Вся цепочка отказала: шаблон не подменяет письмо (решение владельца, 06.11), единица квоты возвращается.
+  if (result.written.refused) {
+    await retryOnSqliteBusy(() => releaseTariffQuota(deps, candidateId, 'applications', vacancy.id));
+    return sendError(reply, request, 503, 'letter_generation_failed', LETTER_GENERATION_FAILED, true);
+  }
   const { applicationId } = body ?? {};
   if (applicationId) {
     await retryOnSqliteBusy(() =>
@@ -314,6 +343,8 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     meta: { requestId: request.id },
   };
 };
+
+const LETTER_GENERATION_FAILED = 'Не удалось подготовить письмо. Попробуйте ещё раз.';
 
 function invalidLetterSnapshot(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 400, 'invalid_letter_snapshot', 'Проверьте текст письма и повторите одобрение.', false);

@@ -9,7 +9,7 @@ import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
-import { buildEnabledCoverLetterWriter } from './providers/coverLetterWriter';
+import { buildEnabledCoverLetterWriter, COVER_LETTER_VERTEX_TIMEOUT_MS } from './providers/coverLetterWriter';
 import { buildExperienceFactRewriter } from './providers/experienceFactRewriter';
 import { BudgetedCoachProvider } from './providers/budgetedCoachProvider';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
@@ -264,7 +264,12 @@ const app = await buildApp({
   coverLetterWriter: buildEnabledCoverLetterWriter({
     providerCredentials: config.providerCredentials,
     vertex: config.vertex,
-    vertexFetch: meteredVertexFetchFor(config.vertex, config.databasePath, 'coverLetters'),
+    vertexFetch: meteredVertexFetchFor(
+      config.vertex,
+      config.databasePath,
+      'coverLetters',
+      COVER_LETTER_VERTEX_TIMEOUT_MS,
+    ),
   }),
   serveStatic: process.env.NODE_ENV === 'production',
 });

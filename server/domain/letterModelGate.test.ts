@@ -1,202 +1,226 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { reviewLetterBody, type LetterGateSources } from './letterModelGate';
 
-// Sentences below are the ones prod models wrote for the synthetic QA candidate on 04.11.
-const RU_SOURCES: LetterGateSources = {
+const fixtures = join(__dirname, 'fixtures', 'letterAccepted');
+const read = (name: string) => readFileSync(join(fixtures, name), 'utf8');
+
+/** Письма run-15 и настоящий профиль: их принял владелец 06.11, проверка не должна их отклонять. */
+const OWNER: LetterGateSources = {
   language: 'ru',
-  candidate: ['Склад и логистика для федеральной сети магазинов, команда выросла с 8 до 35 человек.'],
-  career: [
-    'Руководитель разработки в компании Финтех Лаб (2024–по сей день)',
-    'Директор по разработке в компании Маркет Софт (2021–2023)',
-    'Руководитель разработки в компании Ритейл Системс (2014–2021)',
-  ],
-  vacancy: ['VP Operations', 'Bjak'],
+  candidate: `${read('profile.txt')}\n${read('owner-notes.txt')}`.split('\n').filter(Boolean),
+  vacancy: [read('vac-sber.txt'), 'Екатерина', 'рекрутёр'],
 };
 
-const EN_SOURCES: LetterGateSources = {
-  language: 'en',
-  candidate: ['Worked in warehouse and logistics for a nationwide retail chain as the team grew from 8 to 35 people.'],
-  career: [
-    'Head of Engineering at Финтех Лаб (2024–present)',
-    'Director of Engineering at Маркет Софт (2021–2023)',
-    'Head of Engineering at Ритейл Системс (2014–2021)',
+const acceptedLetters = read('run-15-live.md')
+  .split(/^## /mu)
+  .slice(1)
+  .map((part) => {
+    const [head = '', ...rest] = part.split('\n');
+    return { model: head, body: rest.join('\n').trim() };
+  });
+
+const SOURCES: LetterGateSources = {
+  language: 'ru',
+  candidate: [
+    'Выручка выросла с 230 млн до 2 млрд рублей, рост за год 4x.',
+    'CSAT с 23% до 68%. Бюджет ~$650K. Команда 250+ человек. Кампус 37,000 m².',
+    'Enterprise Energy IT Services, Rosseti Tsifra. Dubai, Malaysia, Corporate University.',
+    'SLA 99.5–100%. Опыт более 15 лет. Работа в 2016. Доля упала на -77%.',
   ],
-  vacancy: ['Director, Technology Operations & Sustainment', 'Leidos'],
+  vacancy: ['Head of AI Engineering', 'Сбер', 'Екатерина', 'Python, Kubernetes', 'Ада Кондэ'],
 };
 
-describe('reviewLetterBody: what a model letter may say', () => {
-  it('lets a paraphrase of the profile through in Russian', () => {
-    const body = [
-      'Здравствуйте! Заинтересовала вакансия VP Operations в компании Bjak.',
-      'Сейчас я руководитель разработки в компании Финтех Лаб (с 2024 года), до этого был директором по разработке в компании Маркет Софт.',
-      'В компании Ритейл Системс занимался складом и логистикой для федеральной сети магазинов, команда выросла с 8 до 35 человек.',
-      'Буду рад обсудить задачи роли.',
-    ].join('\n\n');
-    expect(reviewLetterBody(body, RU_SOURCES)).toEqual([]);
+const rules = (body: string, sources = SOURCES) => reviewLetterBody(`${body}\n\nРезюме приложено.`, sources).map((item) => item.rule);
+
+describe('reviewLetterBody: принятые письма проходят', () => {
+  it('в прогоне три письма трёх моделей', () => {
+    expect(acceptedLetters.map((letter) => letter.model)).toHaveLength(3);
   });
 
-  it('lets a paraphrase through in English with the employers as the candidate wrote them', () => {
-    const body = [
-      'Dear Leidos Team,',
-      'I am writing about the Director, Technology Operations & Sustainment role.',
-      'I currently work as Head of Engineering at Финтех Лаб, and earlier I was Director of Engineering at Маркет Софт.',
-      'At Ритейл Системс I worked on warehouse and logistics for a nationwide retail chain as the team grew from 8 to 35 people.',
-      'I would be glad to discuss the role.',
-    ].join('\n\n');
-    expect(reviewLetterBody(body, EN_SOURCES)).toEqual([]);
+  it.each(acceptedLetters)('$model: без замечаний на настоящем профиле', ({ body }) => {
+    expect(reviewLetterBody(body, OWNER)).toEqual([]);
+  });
+});
+
+describe('reviewLetterBody: неверные цифры', () => {
+  it.each([
+    ['другая величина', 'Выручка выросла до 3 млрд рублей.'],
+    ['другой процент', 'CSAT вырос до 86%.'],
+    ['другая кратность', 'Выручка выросла в 7 раз.'],
+    ['число, которого в профиле нет', 'Команда из 900 человек.'],
+    ['40 млн не подтверждает процент', 'Рост на 230%.'],
+    ['другая валюта', 'Бюджет 650 тыс. рублей.'],
+    ['другой год', 'С 2019 года работаю с облаком.'],
+    ['минус не подтверждает плюс', 'Рост 77%.'],
+  ])('останавливает: %s', (_name, body) => {
+    expect(rules(body)).toContain('number');
   });
 
-  it('treats a declined employer as the same name', () => {
-    const body = 'Работал в Финтех Лабе и в Ритейл Системсе.';
-    expect(reviewLetterBody(body, RU_SOURCES)).toEqual([]);
+  it('останавливает обратный порядок «с … до …»', () => {
+    expect(rules('CSAT упал с 68% до 23%.')).toContain('number');
   });
 
-  it('treats a declined job title as the same words, and a greeting as no name', () => {
-    expect(reviewLetterBody('С 2024 года занимаю должность Руководителя разработки в Финтех Лаб.', RU_SOURCES)).toEqual([]);
-    expect(reviewLetterBody('Ранее работал Директором по разработке.', RU_SOURCES)).toEqual([]);
-    expect(reviewLetterBody('Dear Hiring Lead,', EN_SOURCES)).toEqual([]);
+  it.each([
+    ['перевод единиц', 'Выручка 2 млрд рублей и 230 млн в начале.'],
+    ['кратность словом', 'Рост выручки в 4 раза.'],
+    ['тильда и K', 'Бюджет ~$650K, или 650 тыс. долларов.'],
+    ['разделитель разрядов', 'Кампус 37 000 м².'],
+    ['диапазон с запятой', 'SLA 99,5–100%.'],
+    ['диапазон с общим знаком процента', 'CSAT с 23 до 68%.'],
+    ['плюс и порядок из исходной фразы', 'Команда 250+ человек, 15 лет опыта.'],
+    ['порядок чисел в одной фразе не важен', 'Вырос до 2 млрд рублей с 230 млн.'],
+    ['термин с цифрой', 'Поддержка L1/L2, n8n, B2B, 1С, 5G.'],
+    ['минус как снижение', 'Обращений −23%.'],
+    ['стрелка', 'CSAT 23% → 68%.'],
+  ])('не трогает: %s', (_name, body) => {
+    expect(rules(body)).not.toContain('number');
   });
 
-  it('stops a transliterated or translated employer', () => {
-    const body = 'Currently, I serve as Head of Engineering at Fintech Lab.';
-    expect(reviewLetterBody(body, EN_SOURCES)).toEqual([expect.objectContaining({ rule: 'name' })]);
+  it('числа названия вакансии — не заслуги кандидата', () => {
+    const sources = { ...SOURCES, vacancy: ['Head of Level 42', 'Сбер'] };
+    expect(rules('Откликаюсь на Head of Level 42.', sources)).not.toContain('number');
   });
 
-  it('stops names the profile does not have', () => {
-    const body = 'Окончил факультет в МГТУ имени Баумана.';
-    expect(reviewLetterBody(body, RU_SOURCES).map((v) => v.rule)).toContain('name');
+  it('отрицание в профиле не подтверждает цифру, а «не только» не отрицание', () => {
+    const sources = { ...SOURCES, candidate: ['Я не увеличил выручку на 20%.', 'Не только рост, а ещё 35% маржи.'] };
+    expect(rules('Увеличил выручку на 20%.', sources)).toContain('number');
+    expect(rules('Маржа 35%.', sources)).not.toContain('number');
   });
 
-  it('checks the first word where it can: Latin in a Russian letter', () => {
-    expect(reviewLetterBody('Google доверил мне логистику.', RU_SOURCES).map((v) => v.rule)).toContain('name');
-    // A name the vacancy or the profile has is fine at the start too.
-    expect(reviewLetterBody('Bjak ищет руководителя операций.', RU_SOURCES)).toEqual([]);
+  it('отрицание гасит только своё предложение, а не всю строку «о себе»', () => {
+    const about: LetterGateSources = {
+      ...SOURCES,
+      candidate: ['Это не просто ИТ-роль. Команда 250 человек выросла до 300.'],
+    };
+    expect(rules('Команда 250 человек.', about)).not.toContain('number');
   });
 
-  it('checks the first word where it can: a name of two or more capitalised words', () => {
-    expect(reviewLetterBody('Яндекс Маркет доверил мне логистику.', RU_SOURCES).map((v) => v.rule)).toContain('name');
-    expect(reviewLetterBody('Goldman Leidos trusted me.', EN_SOURCES).map((v) => v.rule)).toContain('name');
+  it('вакансия не подтверждает цифры кандидата', () => {
+    const sources = { ...SOURCES, vacancy: ['Команда 900 человек', 'Сбер'] };
+    expect(rules('Руководил командой из 900 инженеров.', sources)).toContain('number');
+  });
+});
+
+describe('reviewLetterBody: чужие компании', () => {
+  it.each([
+    ['русское название', 'Руководил разработкой в Газпроме.'],
+    ['латиницей', 'Работал в Google над поиском.'],
+    ['аббревиатура известной компании', 'Работал в ВТБ над сервисами.'],
+    ['первым словом латиницей', 'Google доверил мне поиск.'],
+    ['имя получателя, которого нет', 'Иван, добрый день. Пишу Вам, Марина.'],
+  ])('останавливает: %s', (_name, body) => {
+    expect(rules(body)).toContain('name');
   });
 
-  it('does not read an ordinary opening as a name', () => {
-    for (const body of [
-      'Dear Leidos Team,',
-      'Currently I work as Head of Engineering at Финтех Лаб.',
-      'At Ритейл Системс I worked on logistics.',
-      'Earlier I was Director of Engineering.',
-    ]) {
-      expect(reviewLetterBody(body, EN_SOURCES)).toEqual([]);
-    }
-    for (const body of ['В Финтех Лаб работаю с 2024 года.', 'Уважаемая команда Bjak!', 'Сейчас работаю в Финтех Лаб.']) {
-      expect(reviewLetterBody(body, RU_SOURCES)).toEqual([]);
-    }
+  it.each([
+    ['склонение из вакансии', 'Со структурой Сбера знаком.'],
+    ['название на другом алфавите', 'В Россети Цифра, в Дубае и в Малайзии.'],
+    ['перевод названия', 'В Корпоративном Университете.'],
+    ['имя получателя', 'Здравствуйте, Екатерина.'],
+    ['короткое имя компании в склонении', 'Откликаюсь в компании Ады Кондэ.'],
+    ['вежливое Вы', 'Буду рад обсудить Ваши задачи и Вашу команду.'],
+  ])('не трогает: %s', (_name, body) => {
+    expect(rules(body)).not.toContain('name');
   });
 
-  it('what stays unchecked: one capitalised word that could open any sentence', () => {
-    // Documented in the PR: without a dictionary «Сбер» and «Работал» look the same to the gate.
-    expect(reviewLetterBody('Сбер доверил мне логистику.', RU_SOURCES)).toEqual([]);
-    expect(reviewLetterBody('Google trusted me with logistics.', EN_SOURCES)).toEqual([]);
+  it.each([
+    ['аббревиатуры направления', 'Отвечал за SLA, CSAT, FCR, P&L, RTO, SRE, ИТ и ИИ.'],
+    ['смешанный регистр', 'Строю FinOps и PostgreSQL.'],
+    ['термин со строчной', 'Провёл turnaround и self-service.'],
+    ['термин из вакансии', 'Работаю с Python и Kubernetes.'],
+  ])('термины не отклоняет: %s', (_name, body) => {
+    expect(rules(body)).toEqual([]);
   });
 
-  it('stops months that are not in the profile', () => {
-    const body = 'С марта работал в компании Ритейл Системс.';
-    expect(reviewLetterBody(body, RU_SOURCES)).toEqual([expect.objectContaining({ rule: 'name' })]);
+  it('первое слово без словаря не проверить: это остаётся непроверенным', () => {
+    expect(rules('Газпром доверил мне поиск.')).toEqual([]);
+  });
+});
+
+describe('reviewLetterBody: письмо на другом языке', () => {
+  it('английское письмо на русскую вакансию судит как английское: «Hello» не чужое имя', () => {
+    const body = 'Hello,\n\nI am applying for this role.\n\nMy CV is attached.';
+    expect(reviewLetterBody(body, SOURCES)).toEqual([]);
   });
 
-  it('stops a number the profile does not have', () => {
-    const violations = reviewLetterBody('Команда выросла до 50 человек.', RU_SOURCES);
-    expect(violations).toEqual([expect.objectContaining({ rule: 'number' })]);
+  it('в русском письме первое латинское слово по-прежнему проверяется', () => {
+    expect(rules('Northwind был моим клиентом.')).toContain('name');
+  });
+});
+
+describe('reviewLetterBody: склейка разных цифр (профиль без уточнений)', () => {
+  const growth: LetterGateSources = {
+    ...SOURCES,
+    candidate: [
+      'Grew combined revenue 4x and improved margin.',
+      'Services had combined annual revenue of about 2 billion rubles; at the start about 230 million rubles.',
+    ],
+  };
+
+  it.each([
+    'Перевод услуг обеспечил 4-кратный рост выручки (до примерно 2 млрд рублей).',
+    'Четырёхкратный рост выручки до 2 млрд рублей.',
+    'Выручка выросла в 4 раза, с 230 млн до 2 млрд рублей.',
+    'Revenue grew 4x to 2 billion rubles.',
+  ])('кратный рост и сумма из разных строк профиля в одной фразе: %s', (sentence) => {
+    expect(rules(sentence, growth)).toContain('number');
   });
 
-  it('stops numbers taken in the wrong order', () => {
-    const violations = reviewLetterBody('Команда сократилась с 35 до 8 человек.', {
-      ...RU_SOURCES,
-      candidate: ['Сократил команду с 8 до 35 человек.'],
-    });
-    expect(violations.map((v) => v.rule)).toContain('number');
+  it('те же цифры в разных фразах проходят', () => {
+    expect(rules('Выручка выросла в 4 раза. Выручка направления выросла с 230 млн до 2 млрд рублей.', growth)).toEqual([]);
   });
 
-  it('keeps units apart: 40 million does not prove 40 percent', () => {
-    const violations = reviewLetterBody('Вырос на 40%.', { ...RU_SOURCES, candidate: ['Бюджет 40 млн рублей.'] });
-    expect(violations.map((v) => v.rule)).toContain('number');
+  it('кратный рост и сумма из одной строки профиля проходят', () => {
+    const together: LetterGateSources = { ...SOURCES, candidate: ['Revenue grew 4x to $50M in two years.'] };
+    expect(rules('Выручка выросла в 4 раза до $50M.', together)).toEqual([]);
   });
 
-  it('accepts a currency written before or after the number, but not another currency', () => {
-    const sources = { ...RU_SOURCES, candidate: ['Бюджет 40$.'] };
-    expect(reviewLetterBody('Бюджет $40.', sources)).toEqual([]);
-    expect(reviewLetterBody('Бюджет 40€.', sources).map((v) => v.rule)).toContain('number');
+  it('кратный рост рядом с процентом или людьми не склейка', () => {
+    const near: LetterGateSources = { ...SOURCES, candidate: ['Grew revenue 4x.', 'Margin 40%, team 250.'] };
+    expect(rules('Выручка выросла в 4 раза, маржа 40%, команда 250.', near)).toEqual([]);
   });
 
-  it('a negative number is not the positive one', () => {
-    const sources = { ...RU_SOURCES, candidate: ['Выручка изменилась на -20%.'] };
-    expect(reviewLetterBody('Выручка изменилась на 20%.', sources).map((v) => v.rule)).toContain('number');
+  it('кратность словом тоже склейка', () => {
+    expect(rules('Выручка выросла в четыре раза, до 2 млрд рублей.', growth)).toContain('number');
   });
 
-  it('does not read a range as a negative number', () => {
-    const sources = { ...RU_SOURCES, candidate: ['Команда от 8-35 человек.'] };
-    expect(reviewLetterBody('Команда от 8 до 35 человек.', sources)).toEqual([]);
+  it.each([
+    ['Руководил командой из 12 разработчиков и бюджетом 300 млн ₽.', ['Команда 12 разработчиков.', 'Бюджет 300 млн ₽.']],
+    ['Вёл 3 разных направления с бюджетом 300 млн ₽.', ['Вёл 3 разных направления.', 'Бюджет 300 млн ₽.']],
+    ['Бюджет 300 млн руб. Вырастил выручку в 4 раза.', ['Бюджет 300 млн руб.', 'Вырастил выручку в 4 раза.']],
+  ])('люди и соседняя фраза не кратный рост: %s', (sentence, candidate) => {
+    expect(rules(sentence, { ...SOURCES, candidate })).toEqual([]);
+  });
+});
+
+describe('reviewLetterBody: стиль не отклоняет', () => {
+  it.each([
+    ['личное действие', 'Руководил, построил, увеличил, масштабировал и вырастил команду.'],
+    ['оценка опыта', 'Обширный опыт и глубокая экспертиза.'],
+    ['месяц', 'С ноября работаю над агентами.'],
+    ['английский глагол', 'I led and scaled the team.'],
+  ])('%s', (_name, body) => {
+    expect(rules(body)).toEqual([]);
+  });
+});
+
+describe('reviewLetterBody: резюме приложено (решение владельца)', () => {
+  const english = { ...SOURCES, language: 'en' as const };
+
+  it.each([['Буду рад обсудить.', SOURCES], ['Happy to discuss.', english]] as const)('письмо без упоминания резюме: %s', (body, sources) => {
+    expect(reviewLetterBody(body, sources).map((item) => item.rule)).toEqual(['resume']);
   });
 
-  it('stops ownership the fact does not state: the team grew is not I scaled the team', () => {
-    const body = 'At Ритейл Системс I scaled the team from 8 to 35 people.';
-    expect(reviewLetterBody(body, EN_SOURCES)).toEqual([expect.objectContaining({ rule: 'ownership' })]);
+  it.each([['Резюме приложено.', SOURCES], ['Резюме прилагаю.', SOURCES], ['My resume is attached.', english], ['CV attached.', english]] as const)('%s', (body, sources) => {
+    expect(reviewLetterBody(body, sources)).toEqual([]);
   });
+});
 
-  it('stops the -ing forms of the same claims', () => {
-    expect(reviewLetterBody('I was involved in leading engineering teams.', EN_SOURCES).map((v) => v.rule)).toEqual(['ownership']);
-    expect(reviewLetterBody('I worked on directing engineering efforts.', EN_SOURCES).map((v) => v.rule)).toEqual(['ownership']);
-  });
-
-  it('stops I grew the team when only the team grew', () => {
-    const body = 'At Ритейл Системс I grew the team from 8 to 35 people.';
-    expect(reviewLetterBody(body, EN_SOURCES)).toEqual([expect.objectContaining({ rule: 'ownership' })]);
-  });
-
-  it('an action verb is allowed when the candidate states that action', () => {
-    const sources = { ...EN_SOURCES, candidate: ['Built logistics for a retail chain.'] };
-    expect(reviewLetterBody('I built logistics for a retail chain.', sources)).toEqual([]);
-  });
-
-  it('a job title backs the matching action in Russian', () => {
-    expect(reviewLetterBody('Я руководил разработкой в компании Финтех Лаб.', RU_SOURCES)).toEqual([]);
-  });
-
-  it('another subject of the same verb backs nothing', () => {
-    const sources = { ...RU_SOURCES, candidate: ['Заказчик создал проект Atlas.'] };
-    expect(reviewLetterBody('Я создал проект Atlas.', sources).map((v) => v.rule)).toContain('ownership');
-  });
-
-  it('a negated or unconfirmed fact backs nothing', () => {
-    for (const statement of [
-      'I have not created project Atlas.',
-      'Я не увеличил выручку на 20%.',
-      'Не могу подтвердить: я увеличил выручку на 20%.',
-    ]) {
-      const sources: LetterGateSources = { language: 'ru', candidate: [statement], career: [], vacancy: [] };
-      expect(reviewLetterBody('Я увеличил выручку на 20%, I created project Atlas.', sources)).not.toEqual([]);
-    }
-  });
-
-  it('the vacancy text never backs what the candidate did', () => {
-    const sources = { ...EN_SOURCES, vacancy: ['Led operations of 500 sites'] };
-    const rules = reviewLetterBody('I led operations of 500 sites.', sources).map((v) => v.rule);
-    expect(rules).toContain('ownership');
-    expect(rules).toContain('number');
-  });
-
-  it('stops self-praise the profile cannot back', () => {
-    for (const body of [
-      'With extensive leadership experience I can help.',
-      'I have a proven track record in operations.',
-      'Мой обширный опыт поможет команде.',
-      'У меня многолетний опыт руководства.',
-    ]) {
-      expect(reviewLetterBody(body, EN_SOURCES).map((v) => v.rule)).toContain('praise');
-    }
-  });
-
-  it('names a violation by its sentence and no more than once per rule and sentence', () => {
-    const violations = reviewLetterBody('Выросла до 50 и 60 человек. Всё хорошо.', RU_SOURCES);
-    expect(violations).toEqual([{ rule: 'number', sentence: 'Выросла до 50 и 60 человек.' }]);
+describe('reviewLetterBody: отчёт о нарушении', () => {
+  it('называет предложение и правило один раз', () => {
+    const violations = reviewLetterBody('Команда из 900 человек. Резюме приложено.', SOURCES);
+    expect(violations).toEqual([{ rule: 'number', sentence: 'Команда из 900 человек.' }]);
   });
 });

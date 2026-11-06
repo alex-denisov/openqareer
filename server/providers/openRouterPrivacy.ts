@@ -27,10 +27,13 @@ export function assertOpenRouterModelForPersonalData(model: string): void {
 export function openRouterRouting(input: {
   readonly personal: boolean;
   readonly requireParameters?: boolean;
-}): { provider?: { data_collection?: 'deny'; require_parameters?: true } } {
+  /** Кандидат ждёт: провайдер с самым быстрым выводом, а не самый дешёвый. */
+  readonly fastest?: boolean;
+}): { provider?: { data_collection?: 'deny'; require_parameters?: true; sort?: 'throughput' } } {
   const provider = {
     ...(input.personal ? { data_collection: 'deny' as const } : {}),
     ...(input.requireParameters ? { require_parameters: true as const } : {}),
+    ...(input.fastest ? { sort: 'throughput' as const } : {}),
   };
   return Object.keys(provider).length ? { provider } : {};
 }

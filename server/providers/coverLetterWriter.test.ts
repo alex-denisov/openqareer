@@ -1,12 +1,21 @@
-import { COVER_LETTER_MAX_CHARS } from '../domain/coverLetterWriting';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { APIConnectionTimeoutError, APIUserAbortError } from 'openai';
+import { CANDIDATE_VERTEX_TIMEOUT_MS } from './meteredVertexFetch';
 import { describe, expect, it, vi } from 'vitest';
+import { COVER_LETTER_MAX_CHARS } from '../domain/coverLetterWriting';
 import type { ChatCompletionClient } from './roleNamer';
 import {
+  buildCoverLetterWriter,
   buildEnabledCoverLetterWriter,
+  COVER_LETTER_BUDGET_MS,
+  COVER_LETTER_OUTPUT_TOKENS,
+  COVER_LETTER_VERTEX_TIMEOUT_MS,
   LETTER_MODEL_ENABLED,
+  letterPrompt,
   LlmCoverLetterWriter,
   QueuedCoverLetterWriter,
-  serializeInput,
+  vacancyText,
   withinTimeBudget,
   type CoverLetterOutcome,
 } from './coverLetterWriter';
@@ -27,387 +36,193 @@ function client(
 }
 
 function throwingClient(error: Error): ChatCompletionClient {
-  return {
-    chat: {
-      completions: {
-        create: vi.fn().mockRejectedValue(error),
-      },
-    },
-  };
+  return { chat: { completions: { create: vi.fn().mockRejectedValue(error) } } };
 }
 
 const input = {
-  facts: [
-    { ref: 'memory:1', statement: 'Увеличил пропускную способность API в 4 раза' },
-    { ref: 'memory:2', statement: 'Владею TypeScript, Node.js' },
-  ],
-  vacancy: { title: 'Senior Platform Engineer', company: 'CloudScale Inc' },
-  language: 'ru' as const,
-  tone: 'executive' as const,
+  profile: 'EXPERIENCE\n## Директор | Россети Цифра\n- Выручка выросла с 230 млн до 2 млрд рублей',
+  vacancy: { title: 'Senior Platform Engineer', company: 'CloudScale Inc', description: 'Строим платформу.' },
 };
 
-describe('LlmCoverLetterWriter', () => {
-  it('использует ответ модели', async () => {
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      stage: 'openai:m',
-      client: client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' })),
-    });
+const LETTER = 'Здравствуйте. Откликаюсь на вакансию.\n\nРезюме приложено. Буду рад обсудить.';
 
-    await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
-      body: 'Здравствуйте! Я подхожу на роль.',
-      stage: 'openai:m',
+const write = (reply: ChatCompletionClient) =>
+  new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', stage: 'test:m', client: reply }).writeCoverLetter(input);
+
+const sent = (fake: ChatCompletionClient) =>
+  vi.mocked(fake.chat.completions.create).mock.calls[0]?.[0] as Record<string, unknown>;
+
+const openRouterWriter = (model: string, fake: ChatCompletionClient) =>
+  new LlmCoverLetterWriter({
+    apiKey: 'k', model, provider: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', client: fake,
+  });
+
+describe('LlmCoverLetterWriter: приём ответа (B601)', () => {
+  it('берёт письмо обычным текстом, как его просит запрос', async () => {
+    await expect(write(client(`  ${LETTER}\n`))).resolves.toEqual({ body: LETTER, stage: 'test:m' });
+  });
+
+  it('пустой ответ — отказ ступени с причиной: так выглядел DeepSeek при потолке 6 000', async () => {
+    await expect(write(client(''))).resolves.toMatchObject({
+      failure: { stage: 'test:m', kind: 'unusable_response', detail: 'empty' },
+    });
+    await expect(write(client(null))).resolves.toMatchObject({ failure: { detail: 'empty' } });
+  });
+
+  it('письмо, оборванное лимитом, не обрезается: в конце сказано про резюме, очередь спрашивает дальше', async () => {
+    await expect(write(client('Первое предложение. Второе оборвано на', 'length'))).resolves.toMatchObject({
+      failure: { kind: 'unusable_response', detail: 'cut' },
     });
   });
 
-  it('при обрыве модели убирает незаконченное предложение', async () => {
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      client: client(
-        JSON.stringify({
-          body: 'I led platform modernization. Delivery became predictable. Most recently as VP of Technology & IT Operations,',
-        }),
-        'length',
-      ),
-    });
-
-    await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
-      body: 'I led platform modernization. Delivery became predictable.',
+  it('текст без точки в конце считается оборванным и при finish_reason stop', async () => {
+    await expect(write(client('Первое предложение. Второе оборвано на'))).resolves.toMatchObject({
+      failure: { detail: 'cut' },
     });
   });
 
-  it('падает в шаблон, если после обрыва осталось меньше двух предложений', async () => {
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      client: client(
-        JSON.stringify({ body: 'I led platform modernization. Most recently as VP,' }),
-        'length',
-      ),
-    });
+  it('письмо длиной с принятые и длиннее старого предела 1 800 приходит целиком', async () => {
+    const long = `${'Фраза письма про опыт. '.repeat(90).trim()}`;
+    expect(long.length).toBeGreaterThan(1800);
+    expect(long.length).toBeLessThanOrEqual(COVER_LETTER_MAX_CHARS);
+    await expect(write(client(long))).resolves.toMatchObject({ body: long });
+  });
 
+  it('«С уважением,» в конце — не обрыв: подпись ставит система', async () => {
+    await expect(write(client(`${LETTER}\n\nС уважением,`))).resolves.toMatchObject({ body: LETTER });
+  });
+
+  it('ответ сверх предела — сбой модели, а не письмо', async () => {
+    await expect(write(client(`${'а'.repeat(COVER_LETTER_MAX_CHARS)}.`))).resolves.toMatchObject({
+      failure: { detail: 'too_long' },
+    });
+  });
+
+  it('отклоняет заглушку', async () => {
+    await expect(write(client('Здравствуйте, [Имя]. Резюме приложено.'))).resolves.toMatchObject({
+      failure: { detail: 'placeholder' },
+    });
+  });
+
+  it.each(['Импортировал резюме из hh.', 'Письмо из подбора вакансий.'])('отклоняет служебную механику: %s', async (body) => {
+    await expect(write(client(body))).resolves.toMatchObject({ failure: { detail: 'service_text' } });
+  });
+
+  it.each(['Вёл импортозамещение ПО.', 'Отвечал за импорт оборудования и сопоставление накладных.'])(
+    'слова профессии не отклоняет: %s',
+    async (body) => {
+      await expect(write(client(body))).resolves.toMatchObject({ body });
+    },
+  );
+
+  it('таймаут — отказ ступени', async () => {
+    const timeout = Object.assign(new Error('late'), { name: 'TimeoutError' });
+    await expect(write(throwingClient(timeout))).resolves.toMatchObject({ failure: { kind: 'timeout' } });
+  });
+
+  it('срок на весь ответ: отмена по сигналу считается таймаутом', async () => {
+    await expect(write(throwingClient(new APIUserAbortError()))).resolves.toMatchObject({ failure: { kind: 'timeout' } });
+    await expect(write(throwingClient(new APIConnectionTimeoutError()))).resolves.toMatchObject({ failure: { kind: 'timeout' } });
+  });
+
+  it('ключ провайдера не попадает в отказ', async () => {
+    const error = Object.assign(new Error('bad key secret-k'), { status: 401 });
+    const writer = new LlmCoverLetterWriter({ apiKey: 'secret-k', model: 'm', client: throwingClient(error) });
     const outcome = await writer.writeCoverLetter(input);
-    expect(outcome.body).toBeUndefined();
-    expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
+    expect(outcome.failure).toMatchObject({ kind: 'http_error', status: 401 });
+    expect(outcome.failure?.detail).not.toContain('secret-k');
   });
 
-  it('считает оборванным текст без точки в конце, даже если провайдер ответил stop', async () => {
-    // Прод 25.09: бесплатный nemotron закрыл JSON посреди фразы с finish_reason stop.
-    const cut = client(
-      JSON.stringify({
-        body: 'I am writing about the CTO role. My career spans operations and technology. It aligns with the focus of the',
-      }),
-    );
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: cut });
+  it('не зовёт модель, когда профиль пуст', async () => {
+    const fake = client(LETTER);
+    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: fake });
+    await expect(writer.writeCoverLetter({ ...input, profile: '  ' })).resolves.toEqual({});
+    expect(fake.chat.completions.create).not.toHaveBeenCalled();
+  });
+});
 
-    await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
-      body: 'I am writing about the CTO role. My career spans operations and technology.',
-    });
+describe('LlmCoverLetterWriter: запрос к модели (B601)', () => {
+  it('один текст от пользователя с вакансией и всем профилем, без JSON-схемы', async () => {
+    const fake = client(LETTER);
+    await openRouterWriter('deepseek/deepseek-v4.1-flash', fake).writeCoverLetter(input);
+    const request = sent(fake);
+    const messages = request.messages as { role: string; content: string }[];
+    expect(messages.map((message) => message.role)).toEqual(['user']);
+    expect(messages[0]?.content).toContain('Строим платформу.');
+    expect(messages[0]?.content).toContain('Выручка выросла с 230 млн до 2 млрд рублей');
+    expect(request).not.toHaveProperty('response_format');
   });
 
-  it('отдаёт очереди следующего провайдера одно оборванное предложение', async () => {
-    const cut = client(
-      JSON.stringify({
-        body: 'I am writing to express my interest in the role. My career aligns closely with the focus of the',
-      }).replace('role. ', 'role, '),
-    );
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: cut });
+  it.each(['deepseek/deepseek-v4.1-flash', 'z-ai/glm-5.3-flash'])(
+    '%s: рассуждение low и потолок, при котором письма принял владелец',
+    async (model) => {
+      const fake = client(LETTER);
+      await openRouterWriter(model, fake).writeCoverLetter(input);
+      expect(sent(fake)).toMatchObject({
+        reasoning: { effort: 'low' },
+        max_tokens: COVER_LETTER_OUTPUT_TOKENS,
+        provider: { data_collection: 'deny', sort: 'throughput' },
+      });
+    },
+  );
 
-    const outcome = await writer.writeCoverLetter(input);
-    expect(outcome.body).toBeUndefined();
-    expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
+  it('потолок вывода больше того, при котором DeepSeek молчал', () => {
+    expect(COVER_LETTER_OUTPUT_TOKENS).toBeGreaterThan(6000);
   });
 
-  it('письмо длиннее предела обрезает по предложению, а не выбрасывает (прод 25.09)', async () => {
-    const sentence = 'I led a 250-person technology organization and grew revenue four times. ';
-    const long = sentence.repeat(30).trim();
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      client: client(JSON.stringify({ body: long })),
-    });
-
-    const outcome = await writer.writeCoverLetter(input);
-
-    expect(outcome.body?.length).toBeLessThanOrEqual(COVER_LETTER_MAX_CHARS);
-    expect(outcome.body).toMatch(/times\.$/u);
+  it('передаёт сигнал со сроком на весь ответ', async () => {
+    const fake = client(LETTER);
+    await openRouterWriter('z-ai/glm-5.3-flash', fake).writeCoverLetter(input);
+    const options = vi.mocked(fake.chat.completions.create).mock.calls[0]?.[1];
+    expect(options?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('падает в шаблон, когда ответ не JSON', async () => {
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: client('не json') });
-    const outcome = await writer.writeCoverLetter(input);
-    expect(outcome.body).toBeUndefined();
-    expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
+  it('у OpenAI поле reasoning не отправляет и зовёт лимит современным именем', async () => {
+    const fake = client(LETTER);
+    await new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', provider: 'openai', client: fake }).writeCoverLetter(input);
+    expect(sent(fake)).not.toHaveProperty('reasoning');
+    expect(sent(fake)).toMatchObject({ max_completion_tokens: COVER_LETTER_OUTPUT_TOKENS });
+  });
+});
+
+describe('letterPrompt: вакансия и получатель', () => {
+  it('несёт полный текст, обязанности и требования без усечения до 20 пунктов', () => {
+    const requirements = Array.from({ length: 40 }, (_, index) => `Требование ${index}`);
+    const text = vacancyText({ title: 'CTO', company: 'Acme', description: 'x'.repeat(9000), requirements, responsibilities: ['Вести'] });
+    expect(text).toContain('x'.repeat(9000));
+    expect(text).toContain('Требование 39');
+    expect(text).toContain('- Вести');
   });
 
-  it('отклоняет ответ с заглушкой-плейсхолдером', async () => {
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      client: client(JSON.stringify({ body: 'Здравствуйте, [Имя компании]!' })),
-    });
-    const outcome = await writer.writeCoverLetter(input);
-    expect(outcome.body).toBeUndefined();
-    expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
+  it('разметку источника превращает в текст', () => {
+    expect(vacancyText({ title: 'CTO', description: '<p>Строим&nbsp;платформу</p><ul><li>Вести</li></ul>' }))
+      .toBe('CTO\n\nСтроим платформу\n Вести');
   });
 
-  it('отклоняет ответ, упоминающий импорт резюме', async () => {
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      client: client(
-        JSON.stringify({ body: 'Данные взяты из импорта резюме и подбора вакансий.' }),
-      ),
-    });
-    const outcome = await writer.writeCoverLetter(input);
-    expect(outcome.body).toBeUndefined();
-    expect(outcome.failure).toMatchObject({ kind: 'unusable_response' });
+  it('подставляет получателя и род; без них говорит прямо', () => {
+    const known = letterPrompt({ ...input, vacancy: { ...input.vacancy, recipient: { name: 'Екатерина', role: 'рекрутёр' } }, gender: 'female' });
+    expect(known).toContain('Получатель: Екатерина, рекрутёр. Род кандидата: женский.');
+    expect(letterPrompt(input)).toContain('Получатель: неизвестен. Род кандидата: не указан, пиши так, чтобы род кандидата не был виден.');
   });
 
-  it('падает в шаблон и логирует отказ при таймауте', async () => {
-    const error = new Error('timed out');
-    error.name = 'TimeoutError';
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      stage: 'openai:m',
-      client: throwingClient(error),
-    });
-    const outcome = await writer.writeCoverLetter(input);
-    expect(outcome.body).toBeUndefined();
-    expect(outcome.failure).toMatchObject({ stage: 'openai:m', kind: 'timeout' });
-  });
-
-  it('не зовёт модель, когда фактов нет', async () => {
-    const stub = client(JSON.stringify({ body: 'x' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
-    await writer.writeCoverLetter({ ...input, facts: [] });
-    expect(stub.chat.completions.create).not.toHaveBeenCalled();
-  });
-
-  it('передаёт язык в инструкцию модели', async () => {
-    const stub = client(JSON.stringify({ body: 'Hello! I fit the role.' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
-    await writer.writeCoverLetter({ ...input, language: 'en' });
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    expect(call.messages[0].content).toContain('английском');
-  });
-
-  it('для OpenAI задаёт современный лимит завершения', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'gpt-5.6-luna',
-      provider: 'openai',
-      client: stub,
-    });
-
-    await writer.writeCoverLetter(input);
-
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock
-      .calls[0][0] as Record<string, unknown>;
-    expect(call.max_completion_tokens).toBeGreaterThanOrEqual(1_500);
-    expect(call).not.toHaveProperty('max_tokens');
-  });
-
-  it('для рассуждающей модели OpenRouter резервирует общий бюджет ответа', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'nvidia/nemotron-3-ultra-550b-a55b:free',
-      provider: 'openrouter',
-      thinkingLevel: 'high',
-      client: stub,
-    });
-
-    await writer.writeCoverLetter(input);
-
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock
-      .calls[0][0] as Record<string, unknown>;
-    expect(call.max_tokens).toBeGreaterThanOrEqual(4_096);
-    expect(call).not.toHaveProperty('max_completion_tokens');
-  });
-
-  it('отправляет не больше 7 лучших фактов (C46: меньше контекста — быстрее ответ)', async () => {
-    const many = Array.from({ length: 60 }, (_, i) => ({
-      ref: `memory:${i}`,
-      statement: `Факт номер ${i}`,
-    }));
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
-    await writer.writeCoverLetter({ ...input, facts: many });
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    const sent = JSON.parse(call.messages[1].content) as { facts: unknown[] };
-    expect(sent.facts.length).toBe(7);
-  });
-
-  it('перед лимитом ставит опыт по роли выше сертификатов', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
-    await writer.writeCoverLetter({
-      ...input,
-      vacancy: {
-        title: 'Chief Product Technology Officer',
-        description: 'Own product strategy and operations.',
-      },
-      facts: [
-        { ref: 'imp-c-cert-1', statement: 'ITIL 4 Foundation', domain: 'other' },
-        { ref: 'imp-c-cert-2', statement: 'Agile Fundamentals', domain: 'other' },
-        { ref: 'imp-c-cert-3', statement: 'AWS Fundamentals', domain: 'other' },
-        {
-          ref: 'imp-c-exp-1',
-          statement: 'VP Product & Operations — Commerce Platform',
-          domain: 'role-evidence',
-        },
-        {
-          ref: 'imp-c-ach-1-1',
-          statement: 'Led product transformation across three business units',
-          domain: 'outcome',
-        },
-        {
-          ref: 'imp-c-exp-2',
-          statement: 'VP of Engineering — Infrastructure Group',
-          domain: 'role-evidence',
-        },
-      ],
-    });
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
-    expect(sent.facts.slice(0, 3).map((fact) => fact.ref)).toEqual([
-      'imp-c-exp-1',
-      'imp-c-ach-1-1',
-      'imp-c-exp-2',
-    ]);
-  });
-
-  it('передаёт модели evidenceRefs выбранной роли первыми', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
-    await writer.writeCoverLetter({
-      ...input,
-      vacancy: {
-        title: 'Chief Technology Officer',
-        rankingContext: {
-          vacancy: { functions: ['it-ops'], levelRank: 4 },
-          campaignRole: {
-            functions: ['it-ops'],
-            levelRank: 3,
-            evidenceRefs: ['memory:evidence'],
-          },
-        },
-      },
-      facts: [
-        { ref: 'memory:other', statement: 'Led Technology transformation', domain: 'outcome' },
-        { ref: 'memory:evidence', statement: 'VP of Technology & Operations', domain: 'role-evidence' },
-      ],
-    });
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
-
-    expect(sent.facts[0]?.ref).toBe('memory:evidence');
-  });
-
-  it('ставит подтверждённый факт раньше импортированного в промпте (C46)', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
-    await writer.writeCoverLetter({
-      ...input,
-      facts: [
-        { ref: 'imp-skill', statement: 'Kafka pipeline design', domain: 'skill', status: 'proposed' },
-        { ref: 'conf-skill', statement: 'Terraform infrastructure', domain: 'skill', status: 'confirmed' },
-      ],
-    });
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    const sent = JSON.parse(call.messages[1].content) as { facts: Array<{ ref: string }> };
-    expect(sent.facts.map((fact) => fact.ref)).toEqual(['conf-skill', 'imp-skill']);
-  });
-
-  it('промпт несёт требования вакансии и evidenceRefs фактов (C46)', async () => {
-    const stub = client(JSON.stringify({ body: 'Письмо.' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', client: stub });
-    await writer.writeCoverLetter({
-      ...input,
-      vacancy: { ...input.vacancy, requirements: ['TypeScript', 'Kubernetes'] },
-    });
-    const call = (stub.chat.completions.create as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
-      messages: Array<{ role: string; content: string }>;
-    };
-    const sent = JSON.parse(call.messages[1].content) as {
-      vacancy: { requirements: string[] };
-      facts: Array<{ ref: string }>;
-    };
-    expect(sent.vacancy.requirements).toEqual(['TypeScript', 'Kubernetes']);
-    expect(sent.facts.map((fact) => fact.ref)).toEqual(['memory:1', 'memory:2']);
+  it('язык, выбранный кандидатом, идёт в запрос', () => {
+    expect(letterPrompt({ ...input, chosenLanguage: 'en' })).toContain('на английском языке');
   });
 });
 
 describe('QueuedCoverLetterWriter', () => {
   it('спрашивает следующую ступень, когда первая молчит', async () => {
-    const first = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'first',
-      client: client('не json'),
-    });
-    const second = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'second',
-      stage: 'openai:second',
-      client: client(JSON.stringify({ body: 'Письмо от второй ступени.' })),
-    });
-    const queue = new QueuedCoverLetterWriter([first, second]);
-    await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({
-      body: 'Письмо от второй ступени.',
-      stage: 'openai:second',
-    });
+    const first = new LlmCoverLetterWriter({ apiKey: 'k', model: 'first', client: client('') });
+    const second = new LlmCoverLetterWriter({ apiKey: 'k', model: 'second', stage: 'openai:second', client: client(LETTER) });
+    const queue = new QueuedCoverLetterWriter([first, second], [], () => undefined);
+    await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({ body: LETTER, stage: 'openai:second' });
   });
 
   it('возвращает отказ, если ни одна ступень не ответила', async () => {
-    const first = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'first',
-      stage: 'openai:first',
-      client: client('не json'),
-    });
-    const queue = new QueuedCoverLetterWriter([first]);
-    const outcome = await queue.writeCoverLetter(input);
+    const first = new LlmCoverLetterWriter({ apiKey: 'k', model: 'first', stage: 'openai:first', client: client('') });
+    const outcome = await new QueuedCoverLetterWriter([first], [], () => undefined).writeCoverLetter(input);
     expect(outcome.body).toBeUndefined();
     expect(outcome.failure).toMatchObject({ stage: 'openai:first' });
-  });
-});
-
-describe('Письмо на проде 04.11: ступени и проверка письма', () => {
-  it('у OpenRouter выключает рассуждение: оно съедало весь потолок вывода', async () => {
-    const fake = client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' }));
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'deepseek/deepseek-v4.1-flash',
-      provider: 'openrouter',
-      baseUrl: 'https://openrouter.ai/api/v1',
-      client: fake,
-    });
-    await writer.writeCoverLetter(input);
-    expect(vi.mocked(fake.chat.completions.create).mock.calls[0]?.[0]).toMatchObject({
-      reasoning: { enabled: false },
-    });
-  });
-
-  it('у OpenAI поле reasoning не отправляет', async () => {
-    const fake = client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' }));
-    const writer = new LlmCoverLetterWriter({ apiKey: 'k', model: 'm', provider: 'openai', client: fake });
-    await writer.writeCoverLetter(input);
-    expect(vi.mocked(fake.chat.completions.create).mock.calls[0]?.[0]).not.toHaveProperty('reasoning');
   });
 
   it('письмо, остановленное проверкой, отдаёт очередь следующей ступени', async () => {
@@ -428,61 +243,50 @@ describe('Письмо на проде 04.11: ступени и проверка
     // Only rule names reach the journal: the letter is the candidate's text.
     expect(failures).toEqual([{ stage: 'a', kind: 'unusable_response', detail: 'letter_gate:number' }]);
   });
+});
 
-  it('пишет письмо, когда есть только места работы', async () => {
-    const writer = new LlmCoverLetterWriter({
-      apiKey: 'k',
-      model: 'm',
-      client: client(JSON.stringify({ body: 'Здравствуйте! Я подхожу на роль.' })),
-    });
-    const career = [{ title: 'Руководитель разработки', employer: 'Финтех Лаб', years: '2024–по сей день' }];
-    await expect(writer.writeCoverLetter({ ...input, facts: [], career })).resolves.toMatchObject({
-      body: 'Здравствуйте! Я подхожу на роль.',
-    });
+describe('цепочка письма (решение владельца, B601)', () => {
+  it('DeepSeek, затем GLM через OpenRouter', () => {
+    const writer = buildCoverLetterWriter({ providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' } }) as unknown as {
+      descriptors: readonly string[];
+    };
+    expect(writer.descriptors).toEqual(['openrouter:deepseek/deepseek-v4.1-flash', 'openrouter:z-ai/glm-5.3-flash']);
   });
+});
 
-  it('отдаёт модели места работы отдельным списком', () => {
-    const career = [{ title: 'Руководитель разработки', employer: 'Финтех Лаб', years: '2024–по сей день' }];
-    expect(JSON.parse(serializeInput({ ...input, career })).career).toEqual(career);
-    expect(JSON.parse(serializeInput(input))).not.toHaveProperty('career');
+describe('сроки письма (B601)', () => {
+  it('общий срок вмещает все три ступени и самую медленную замеренную', () => {
+    expect(COVER_LETTER_BUDGET_MS).toBeGreaterThanOrEqual(100_000);
   });
 });
 
 describe('withinTimeBudget (B266)', () => {
   it('gives up on a writer that has not answered within the budget', async () => {
-    const hanging = new Promise<CoverLetterOutcome>(() => {});
-    const outcome = await withinTimeBudget(hanging, 20);
-    expect(outcome.body).toBeUndefined();
-    expect(outcome.failure?.kind).toBe('timeout');
+    const never = new Promise<CoverLetterOutcome>(() => undefined);
+    await expect(withinTimeBudget(never, 5)).resolves.toEqual({ failure: { stage: 'budget', kind: 'timeout' } });
   });
 
   it('passes a timely answer through untouched', async () => {
-    const outcome = await withinTimeBudget(Promise.resolve({ body: 'Letter', stage: 's' }), 1_000);
-    expect(outcome).toEqual({ body: 'Letter', stage: 's' });
+    const answer = Promise.resolve<CoverLetterOutcome>({ body: 'Письмо.', stage: 's' });
+    await expect(withinTimeBudget(answer, 1000)).resolves.toEqual({ body: 'Письмо.', stage: 's' });
   });
 });
 
-describe('B422: компания «Хочу» в письме', () => {
-  it('передаёт модели отметку кандидата, только если она есть', () => {
-    const base = { facts: [], language: 'ru', tone: 'technical' } as const;
-    const marked = JSON.parse(
-      serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme', targetCompany: true } }),
-    );
-    const plain = JSON.parse(serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme' } }));
-    expect(marked.vacancy.targetCompany).toBe(true);
-    expect(plain.vacancy).not.toHaveProperty('targetCompany');
-  });
-});
+describe('letter model switch', () => {
+  const credentials = { providerCredentials: { openrouter: 'k' } };
 
-describe('letter model switch (D-F9)', () => {
-  const credentials = { providerCredentials: { openrouter: { apiKey: 'test-key' } } } as never;
-
-  it('prod asks no model for a letter while the switch is off', () => {
-    expect(LETTER_MODEL_ENABLED).toBe(false);
-    expect(buildEnabledCoverLetterWriter(credentials)).toBeUndefined();
+  it('письмо пишет модель: владелец принял письма и включил её 06.11', () => {
+    expect(LETTER_MODEL_ENABLED).toBe(true);
+    expect(buildEnabledCoverLetterWriter(credentials)).toBeDefined();
   });
 
-  it('the same wiring brings the chain back when step 2 turns it on', () => {
-    expect(buildEnabledCoverLetterWriter(credentials, true)).toBeDefined();
+  it('откат одним флагом: выключенный флаг возвращает шаблон', () => {
+    expect(buildEnabledCoverLetterWriter(credentials, false)).toBeUndefined();
+  });
+
+  it('прод даёт Gemini тот же потолок, что и ступени, а не короткий потолок кандидата', () => {
+    const source = readFileSync(join(__dirname, '..', 'index.ts'), 'utf8');
+    expect(source).toMatch(/'coverLetters',\s*COVER_LETTER_VERTEX_TIMEOUT_MS/u);
+    expect(COVER_LETTER_VERTEX_TIMEOUT_MS).toBeGreaterThan(CANDIDATE_VERTEX_TIMEOUT_MS);
   });
 });

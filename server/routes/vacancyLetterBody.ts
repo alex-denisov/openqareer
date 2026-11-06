@@ -1,26 +1,15 @@
 import type { FastifyRequest } from 'fastify';
-import {
-  checkGeneratedTextFacts,
-  type GeneratedClaimCheck,
-  type GeneratedTextFactCheck,
-} from '../domain/generatedTextFactGate';
-import {
-  reviewLetterBody,
-  type LetterGateSources,
-  type LetterGateViolation,
-} from '../domain/letterModelGate';
-import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
+import { checkGeneratedTextFacts, type GeneratedTextFactCheck } from '../domain/generatedTextFactGate';
+import { reviewLetterBody, type LetterGateSources } from '../domain/letterModelGate';
 import {
   filterUsablePitchFacts,
-  letterCareer,
-  letterModelFacts,
   type PitchLanguage,
-  type PitchTone,
-  type PitchWorkplace,
   type VacancyPitchInputFact,
 } from '../domain/vacancyPitchService';
+import type { LetterGender } from '../domain/coverLetterWriting';
 import {
   COVER_LETTER_BUDGET_MS,
+  hasLetterInput,
   withinTimeBudget,
   type CoverLetterWriteInput,
   type CoverLetterWriter,
@@ -30,18 +19,22 @@ export interface LetterWritingRequest {
   readonly vacancy: {
     title: string;
     company?: string;
+    location?: string;
+    /** Полный текст вакансии, а не сводка кластера. */
     description?: string;
+    responsibilities?: readonly string[];
     requiredSkills: readonly string[];
     recipient?: { name?: string; role?: string };
   };
-  /** Факты с переведёнными формулировками: письмо и проверка видят один текст. */
+  /** Весь мастер-профиль обычным текстом. */
+  readonly profile: string;
+  /** Факты с переведёнными формулировками: проверка знает и их. */
   readonly facts: readonly VacancyPitchInputFact[];
-  readonly workplaces: readonly PitchWorkplace[];
   readonly language: PitchLanguage;
-  readonly tone: PitchTone;
-  readonly rankingContext: PitchFactRankingContext | undefined;
-  /** B422: кандидат отметил компанию вакансии «Хочу в эту компанию». */
-  readonly targetCompany: boolean;
+  /** Только когда кандидат выбрал язык сам. */
+  readonly chosenLanguage?: PitchLanguage;
+  /** По имени из профиля; если определить нельзя, род в письме не виден. */
+  readonly gender?: LetterGender;
   readonly contextMs: number;
 }
 
@@ -49,6 +42,8 @@ export interface WrittenLetterBody {
   readonly body?: string;
   readonly stage?: string;
   readonly factCheck?: GeneratedTextFactCheck;
+  /** Модель спросили, письма нет. Пустой профиль — не отказ: спрашивать было не о чем. */
+  readonly refused?: true;
 }
 
 /**
@@ -76,74 +71,46 @@ export function modelLetterNotice(language: PitchLanguage): string {
 }
 
 function letterGateSources(request: LetterWritingRequest): LetterGateSources {
-  const { vacancy, facts, workplaces, language } = request;
+  const { vacancy, profile, facts, language } = request;
   return {
     language,
-    candidate: filterUsablePitchFacts(facts).map((fact) => fact.statement),
-    career: letterCareer(workplaces, language).map((place) =>
-      [place.title, place.employer, place.years].filter(Boolean).join(' '),
-    ),
+    candidate: [...profile.split('\n'), ...filterUsablePitchFacts(facts).map((fact) => fact.statement)],
     vacancy: [
       vacancy.title,
       vacancy.company,
+      vacancy.location,
       vacancy.recipient?.name,
       vacancy.recipient?.role,
+      vacancy.description,
+      ...(vacancy.responsibilities ?? []),
       ...vacancy.requiredSkills,
     ].flatMap((part) => (part ? [part] : [])),
   };
-}
-
-/** Сводка для кандидата: прежний разбор утверждений и всё, что остановила проверка письма. */
-function letterFactCheck(
-  body: string,
-  facts: readonly VacancyPitchInputFact[],
-  violations: readonly LetterGateViolation[],
-): GeneratedTextFactCheck {
-  const check = checkGeneratedTextFacts(body, facts);
-  if (violations.length === 0) return { ...check, status: 'checked' };
-  const known = new Set(check.claims.map((claim) => claim.text));
-  const added = [...new Set(violations.map((violation) => violation.sentence))]
-    .filter((sentence) => !known.has(sentence))
-    .map((text): GeneratedClaimCheck => ({
-      text,
-      status: 'not_in_profile',
-      evidenceIds: [],
-      action: 'ask_candidate',
-    }));
-  return { ...check, status: 'needs_confirmation', claims: [...check.claims, ...added] };
 }
 
 function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, facts, workplaces, language, tone, rankingContext, targetCompany } = letter;
+  const { vacancy, profile, chosenLanguage, gender } = letter;
   return {
-    facts: letterModelFacts(facts, workplaces, language).map((fact) => ({
-      ref: fact.id,
-      statement: fact.statement,
-      domain: fact.domain,
-      createdAt: fact.createdAt,
-      updatedAt: fact.updatedAt,
-      status: fact.status,
-    })),
-    career: letterCareer(workplaces, language),
+    profile,
     vacancy: {
       title: vacancy.title,
       ...(vacancy.company ? { company: vacancy.company } : {}),
+      ...(vacancy.location ? { location: vacancy.location } : {}),
       ...(vacancy.description ? { description: vacancy.description } : {}),
+      ...(vacancy.responsibilities?.length ? { responsibilities: vacancy.responsibilities } : {}),
       requirements: vacancy.requiredSkills,
-      ...(rankingContext ? { rankingContext } : {}),
       ...(vacancy.recipient ? { recipient: vacancy.recipient } : {}),
-      ...(targetCompany ? { targetCompany: true as const } : {}),
     },
-    language,
-    tone,
+    ...(chosenLanguage ? { chosenLanguage } : {}),
+    ...(gender ? { gender } : {}),
     review,
   };
 }
 
-/** Model writing is bounded; the deterministic template remains the fallback. */
+/** Model writing is bounded. `refused` means the whole chain refused: the route answers with an error. */
 export async function writeCoverLetterBody(
   writer: CoverLetterWriter | undefined,
   request: FastifyRequest,
@@ -151,15 +118,12 @@ export async function writeCoverLetterBody(
 ): Promise<WrittenLetterBody> {
   if (!writer) return {};
   const sources = letterGateSources(letter);
-  let refused: GeneratedTextFactCheck | undefined;
-  const review = (body: string): string[] => {
-    const violations = reviewLetterBody(body, sources);
-    if (violations.length > 0) refused = letterFactCheck(body, letter.facts, violations);
-    return violations.map((violation) => violation.rule);
-  };
+  const review = (body: string): string[] => reviewLetterBody(body, sources).map((violation) => violation.rule);
+  const input = writerInput(letter, review);
+  if (!hasLetterInput(input)) return {};
   const providerStart = Date.now();
   const outcome = await withinTimeBudget(
-    writer.writeCoverLetter(writerInput(letter, review)),
+    writer.writeCoverLetter(input),
     COVER_LETTER_BUDGET_MS,
   );
   const providerMs = Date.now() - providerStart;
@@ -171,11 +135,9 @@ export async function writeCoverLetterBody(
     totalMs: letter.contextMs + providerMs,
     ...(stage ? { stage } : {}),
   });
-  if (!outcome.body) return refused ? { factCheck: refused } : {};
+  if (!outcome.body) return { refused: true };
   // A writer outside the queue answers here: nothing unchecked reaches the candidate.
-  const violations = reviewLetterBody(outcome.body, sources);
-  const factCheck = letterFactCheck(outcome.body, letter.facts, violations);
-  return violations.length === 0
-    ? { body: outcome.body, stage: outcome.stage, factCheck }
-    : { factCheck };
+  if (reviewLetterBody(outcome.body, sources).length > 0) return { refused: true };
+  const factCheck = { ...checkGeneratedTextFacts(outcome.body, letter.facts), status: 'checked' as const };
+  return { body: outcome.body, stage: outcome.stage, factCheck };
 }

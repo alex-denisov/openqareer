@@ -65,6 +65,16 @@ describe('vacancy letter model', () => {
     ).toEqual({ name: 'Сергей' });
   });
 
+  it('B601: a cold path without a recruiter has no recipient, the company is not a person', () => {
+    expect(
+      recipientForConnectionPath({
+        circle: 3,
+        path: [],
+        recipient: { id: 'vacancy:v1', fullName: 'Сбер', roleTitle: 'Head of AI', companyName: 'Сбер' },
+      }),
+    ).toBeUndefined();
+  });
+
   it('addresses a circle-two introduction request to the candidate contact, not the final recipient', () => {
     const path: ConnectionCirclePath = {
       id: 'intro-1',

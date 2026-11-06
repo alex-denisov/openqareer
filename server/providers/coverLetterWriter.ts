@@ -1,22 +1,13 @@
 import { MODEL_CHAINS, resolveChain } from './modelChains';
-import { z } from 'zod';
-import OpenAI from 'openai';
+import OpenAI, { APIConnectionTimeoutError, APIUserAbortError } from 'openai';
 import {
-  COVER_LETTER_JSON_SCHEMA,
   COVER_LETTER_MAX_CHARS,
-  coverLetterBodySchema,
-  coverLetterInstructions,
+  coverLetterPrompt,
+  type LetterGender,
 } from '../domain/coverLetterWriting';
-import {
-  trimIncompleteFinalSentence,
-  type PitchLanguage,
-  type PitchTone,
-} from '../domain/vacancyPitchService';
-import { rankPitchFacts, type PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { ChatCompletionClient } from './roleNamer';
-import { isMutableModelAlias, modelRegistry, type ProviderId } from './modelRegistry';
+import { modelRegistry, type ProviderId } from './modelRegistry';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
-import { openRouterReasoning } from './openRouterReasoning';
 import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
@@ -26,79 +17,53 @@ import {
   openRouterRouting,
 } from './openRouterPrivacy';
 
+/** Защита от сбоя источника, а не выжимка: письмо пишется по полному тексту вакансии (B601). */
+const MAX_VACANCY_CHARS = 30_000;
+
 /**
- * Замер 25.09 (B251/B267 S6, CJM4): письмо шло ~25,6 с при 40 фактах во
- * входе — модель тратила время на лишний контекст. Выжимка из 5-7 лучших
- * фактов (ранжирование уже кладёт нужные факты первыми) укладывает p50 в
- * рамки задачи, не меняя модель и не теряя точных совпадений с вакансией.
+ * Рассуждение и письмо делят один потолок. DeepSeek при 6 000 отдавал пустые письма: всё уходило на
+ * рассуждение (B601, 06.11); при 24 000 письма принял владелец. Деньги идут за токены, а не за потолок.
  */
-const MAX_FACTS = 7;
-const MAX_STATEMENT = 400;
-const MAX_TITLE = 200;
-const MAX_REQUIREMENT = 120;
-const MAX_REQUIREMENTS = 20;
+export const COVER_LETTER_OUTPUT_TOKENS = 24_000;
+/** Письмо принято на рассуждении `low` у OpenRouter и `high` у Gemini: другие настройки не проверялись. */
+const OPENROUTER_LETTER_REASONING = { effort: 'low' } as const;
 
-/** Письмо должно влезть и без рассуждения, и после JSON-обёртки. */
-export const COVER_LETTER_ANSWER_TOKENS = 1_500;
-/** Рассуждающая модель делит этот же потолок между мыслью и письмом (B266). */
-export const COVER_LETTER_REASONING_TOKENS = 4_096;
-
-export function coverLetterOutputBudget(thinkingLevel?: 'low' | 'high'): number {
-  return thinkingLevel ? COVER_LETTER_REASONING_TOKENS : COVER_LETTER_ANSWER_TOKENS;
-}
-
-function outputLimit(provider: ProviderId, thinkingLevel?: 'low' | 'high'): Record<string, number> {
-  const budget = coverLetterOutputBudget(thinkingLevel);
+function outputLimit(provider: ProviderId): Record<string, number> {
   // Новые модели OpenAI принимают только современное имя; OpenRouter и его
   // совместимые модели по-прежнему ждут старое имя параметра.
-  return provider === 'openai' ? { max_completion_tokens: budget } : { max_tokens: budget };
-}
-
-export interface CoverLetterFact {
-  readonly ref: string;
-  readonly statement: string;
-  readonly domain?: string;
-  readonly createdAt?: string;
-  readonly updatedAt?: string;
-  /** Кандидат подтвердил факт или он ещё ждёт подтверждения (C46, ранжирование фактов). */
-  readonly status?: 'proposed' | 'confirmed' | 'corrected';
+  return provider === 'openai'
+    ? { max_completion_tokens: COVER_LETTER_OUTPUT_TOKENS }
+    : { max_tokens: COVER_LETTER_OUTPUT_TOKENS };
 }
 
 export interface CoverLetterVacancy {
   readonly title: string;
   readonly company?: string;
+  readonly location?: string;
+  /** Полный текст вакансии, а не сводка кластера. */
   readonly description?: string;
+  readonly responsibilities?: readonly string[];
   readonly requirements?: readonly string[];
-  /** Не попадает в текст вакансии: только задаёт порядок фактов в промпте. */
-  readonly rankingContext?: PitchFactRankingContext;
   readonly recipient?: {
     readonly name?: string;
     readonly role?: string;
   };
-  /** B422: кандидат отметил компанию «Хочу в эту компанию». */
-  readonly targetCompany?: true;
-}
-
-/** Место работы на языке письма: модель пишет должность и компанию дословно. */
-export interface CoverLetterCareerEntry {
-  readonly title?: string;
-  readonly employer?: string;
-  readonly years?: string;
 }
 
 export interface CoverLetterWriteInput {
-  readonly facts: readonly CoverLetterFact[];
-  readonly career?: readonly CoverLetterCareerEntry[];
+  /** Весь мастер-профиль обычным текстом (`letterProfileText`). */
+  readonly profile: string;
   readonly vacancy: CoverLetterVacancy;
-  readonly language: PitchLanguage;
-  readonly tone: PitchTone;
+  readonly gender?: LetterGender;
+  /** Язык, который кандидат выбрал сам; без него письмо идёт на языке вакансии. */
+  readonly chosenLanguage?: 'en' | 'ru';
   /** Названия нарушенных правил письма; очередь отдаёт отклонённое письмо следующей ступени. */
   readonly review?: (body: string) => readonly string[];
 }
 
 /** Спрашивать модель не о чем: это не отказ провайдера. */
 export function hasLetterInput(input: CoverLetterWriteInput): boolean {
-  return input.facts.length > 0 || (input.career?.length ?? 0) > 0;
+  return input.profile.trim().length > 0;
 }
 
 export type CoverLetterFailureKind =
@@ -122,21 +87,20 @@ export interface CoverLetterWriter {
 }
 
 /**
- * Общий срок на письмо. Очередь ждёт до 50 с на ступень, а запрос письма на
- * клиенте без таймаута: без срока кандидат минутами смотрел бы на спиннер.
- * По истечении срока идёт шаблон (B266, пункт 7).
- *
- * Было 25 с (B266); задача C46 (B251/B267 S6) требует p50 < 10 с. Честный
- * переход на шаблон при таймауте остаётся тем же путём — не новой ошибкой.
- *
- * Замер с прода 04.11: Vertex 2,8–7,6 с, DeepSeek без рассуждения 1,0–2,5 с, luna 3,3–4,5 с. При сроке
- * 9 с и потолке ступени 50 с одна медленная первая ступень съедала весь срок, поэтому у ступеней свои
- * потолки, а общего срока хватает на Vertex и повтор: быстрый случай p50 по-прежнему меньше 10 с.
+ * Сроки письма (B601, 06.11). Письмо по полному профилю идёт с рассуждением, и старые сроки (ступень
+ * 4,5 с, всё письмо 12 с) обрывали DeepSeek раньше ответа. Замер 06.11 на Сбере: DeepSeek без выбора
+ * провайдера 5–33 с (OpenRouter выбирает разных, заголовки приходят за 1–4 с), с выбором по скорости
+ * вывода 5–14 с; GLM 2–8 с; Gemini с рассуждением high 21–60 с, и один вызов из двенадцати упёрся в 60 с.
+ * У DeepSeek и GLM потолок с запасом над этими цифрами; у Gemini запаса нет, она последняя ступень.
  */
-export const COVER_LETTER_BUDGET_MS = 12_000;
-const VERTEX_LETTER_STAGE_MS = 7_500;
-const OPENROUTER_LETTER_STAGE_MS = 4_500;
-const OPENAI_LETTER_STAGE_MS = 6_000;
+const DEEPSEEK_LETTER_STAGE_MS = 25_000;
+const GLM_LETTER_STAGE_MS = 15_000;
+const VERTEX_LETTER_STAGE_MS = 60_000;
+/** Потолок учётного fetch Vertex на прод: его потолок для кандидата (18 с) оборвал бы письмо раньше ступени. */
+export const COVER_LETTER_VERTEX_TIMEOUT_MS = VERTEX_LETTER_STAGE_MS;
+/** Сумма ступеней: каждая успевает ответить даже после отказа предыдущей. */
+export const COVER_LETTER_BUDGET_MS =
+  DEEPSEEK_LETTER_STAGE_MS + GLM_LETTER_STAGE_MS + VERTEX_LETTER_STAGE_MS;
 
 export async function withinTimeBudget(
   writing: Promise<CoverLetterOutcome>,
@@ -162,7 +126,8 @@ export function failureDetail(text: string, apiKey: string): string | undefined 
 
 export function thrownFailure(stage: string, error: unknown, apiKey: string): CoverLetterFailure {
   const name = error instanceof Error ? error.name : '';
-  if (name === 'TimeoutError' || name === 'AbortError' || name === 'APIConnectionTimeoutError') {
+  // У ошибок SDK поле name равно 'Error': их узнаём по классу.
+  if (name === 'TimeoutError' || name === 'AbortError' || error instanceof APIConnectionTimeoutError || error instanceof APIUserAbortError) {
     return { stage, kind: 'timeout' };
   }
   const status =
@@ -175,13 +140,6 @@ export function thrownFailure(stage: string, error: unknown, apiKey: string): Co
     : { stage, kind: 'transport_error', ...(detail ? { detail } : {}) };
 }
 
-/** Та же осторожность с фигурной/квадратной скобкой, что и у называния ролей. */
-function jsonPayload(content: string): string | null {
-  const brace = content.indexOf('{');
-  const end = content.lastIndexOf('}');
-  return brace >= 0 && end > brace ? content.slice(brace, end + 1) : null;
-}
-
 /**
  * Ответ отклоняется, если модель всё же оставила заглушку («[Имя]») или
  * упомянула механику сбора данных — рекрутер не должен это увидеть (B266).
@@ -190,80 +148,79 @@ function hasPlaceholder(body: string): boolean {
   return /[[\]]/u.test(body);
 }
 
+/** Только служебная механика: «импортозамещение» и «импорт оборудования» — слова профессии. */
 function mentionsImportOrMatching(body: string): boolean {
-  return /импорт(?:ировал|ировано|а резюме)?|подбор(?:а)? вакансий|сопоставлени[ея]|imported (?:a|the|his|her) (?:resume|profile)|resume import|job matching/iu.test(
+  return /импорт\p{L}*\s+(?:резюме|профил)|подбор\p{L}*\s+вакансий|imported (?:a|the|his|her) (?:resume|profile)|resume import|job matching/iu.test(
     body,
   );
 }
 
-/** Прод 25.09: бесплатный провайдер закрывал JSON посреди фразы с `finish_reason: stop`,
- * поэтому обрыв узнаётся и по самому тексту, а не только по причине остановки. */
+/** Прод 25.09: провайдер закрывал ответ посреди фразы с `finish_reason: stop`. */
 function endsMidSentence(body: string): boolean {
-  return !/[.!?…](?:["'»”)\]]+)?$/u.test(body.trim());
+  return !/[.!?…](?:["'»”)\]]+)?$/u.test(body);
 }
 
-/** Та же схема без верхнего предела: длинное письмо обрезается, а не выбрасывается. */
-const looseBodySchema = coverLetterBodySchema.extend({ body: z.string().trim().min(1) });
-
-/**
- * Прод 25.09: gemini-3.8-flash писал 1 750–1 900 знаков при пределе 1 800, и
- * отказ всего письма отдавал очередь медленным ступеням. Лишнее срезается по
- * последнему законченному предложению в пределах лимита.
- */
-function clipToLimit(body: string): string {
-  if (body.length <= COVER_LETTER_MAX_CHARS) return body;
-  return trimIncompleteFinalSentence(body.slice(0, COVER_LETTER_MAX_CHARS));
+/** Почему ответ не письмо; в журнал уходит только причина, не текст кандидата. */
+function refusalReason(body: string, cutByLimit: boolean): string | undefined {
+  if (body.length === 0) return 'empty';
+  if (cutByLimit || endsMidSentence(body)) return 'cut';
+  if (body.length > COVER_LETTER_MAX_CHARS) return 'too_long';
+  if (hasPlaceholder(body)) return 'placeholder';
+  return mentionsImportOrMatching(body) ? 'service_text' : undefined;
 }
 
-function parseBody(content: string | null): string | null {
-  if (!content) return null;
-  const payload = jsonPayload(content);
-  if (!payload) return null;
-  try {
-    const parsed = looseBodySchema.safeParse(JSON.parse(payload));
-    if (!parsed.success) return null;
-    const body = clipToLimit(parsed.data.body.trim());
-    if (hasPlaceholder(body) || mentionsImportOrMatching(body)) return null;
-    return body;
-  } catch {
-    return null;
-  }
+/** Подпись ставит система: «С уважением,» модели (запрос это запрещает, но бывает) не обрыв письма. */
+function withoutClosingLine(body: string): string {
+  return body.replace(/\n\s*(?:с уважением|best regards|kind regards|regards|sincerely)[,.!]?\s*$/iu, '').trim();
 }
 
 /**
- * Общая приёмка ответа любой ступени: JSON по схеме, без заглушек, без
- * оборванного хвоста. Обрыв узнаётся и по причине остановки, и по тексту.
+ * Общая приёмка ответа любой ступени. Письмо не обрезается: в его конце сказано про резюме и
+ * предложение обсудить, поэтому оборванный ответ уступает следующей ступени.
  */
 export function acceptModelBody(
   content: string | null,
   cutByLimit: boolean,
   stage: string,
 ): CoverLetterOutcome {
-  const parsedBody = parseBody(content);
-  const body =
-    parsedBody && (cutByLimit || endsMidSentence(parsedBody))
-      ? trimIncompleteFinalSentence(parsedBody)
-      : parsedBody;
-  return body ? { body, stage } : { failure: { stage, kind: 'unusable_response' } };
+  const body = withoutClosingLine(content?.trim() ?? '');
+  const detail = refusalReason(body, cutByLimit);
+  return detail ? { failure: { stage, kind: 'unusable_response', detail } } : { body, stage };
 }
 
-export function serializeInput(input: CoverLetterWriteInput): string {
-  const rankedFacts = rankPitchFacts(input.facts, input.vacancy, input.vacancy.rankingContext);
-  return JSON.stringify({
-    vacancy: {
-      title: input.vacancy.title.slice(0, MAX_TITLE),
-      ...(input.vacancy.company ? { company: input.vacancy.company.slice(0, MAX_TITLE) } : {}),
-      requirements: (input.vacancy.requirements ?? [])
-        .slice(0, MAX_REQUIREMENTS)
-        .map((requirement) => requirement.slice(0, MAX_REQUIREMENT)),
-      ...(input.vacancy.targetCompany ? { targetCompany: true } : {}),
-    },
+function plainVacancyText(text: string): string {
+  return text
+    .replace(/<\/(?:p|li|div|h\d|ul|ol)>|<br\s*\/?>/giu, '\n')
+    .replace(/<[^>]+>/gu, ' ')
+    .replace(/&nbsp;/gu, ' ')
+    .replace(/&amp;/gu, '&')
+    .replace(/[ \t]+/gu, ' ')
+    .trim();
+}
+
+function listSection(title: string, items: readonly string[] | undefined): string[] {
+  return items?.length ? [title, ...items.map((item) => `- ${item}`)] : [];
+}
+
+export function vacancyText(vacancy: CoverLetterVacancy): string {
+  return [
+    [vacancy.title, vacancy.company].filter(Boolean).join(', '),
+    ...(vacancy.location ? [vacancy.location] : []),
+    '',
+    ...(vacancy.description ? [plainVacancyText(vacancy.description)] : []),
+    ...listSection('Обязанности:', vacancy.responsibilities),
+    ...listSection('Требования:', vacancy.requirements),
+  ].join('\n').slice(0, MAX_VACANCY_CHARS);
+}
+
+/** Запрос целиком: один текст от пользователя, как при подборе запроса с владельцем. */
+export function letterPrompt(input: CoverLetterWriteInput): string {
+  return coverLetterPrompt({
+    vacancy: vacancyText(input.vacancy),
+    profile: input.profile,
     ...(input.vacancy.recipient ? { recipient: input.vacancy.recipient } : {}),
-    ...(input.career?.length ? { career: input.career } : {}),
-    facts: rankedFacts.slice(0, MAX_FACTS).map((fact) => ({
-      ref: fact.ref,
-      statement: fact.statement.slice(0, MAX_STATEMENT),
-    })),
+    ...(input.gender ? { gender: input.gender } : {}),
+    ...(input.chosenLanguage ? { chosenLanguage: input.chosenLanguage } : {}),
   });
 }
 
@@ -272,44 +229,35 @@ export interface LlmCoverLetterWriterOptions {
   model: string;
   /** Провайдер определяет имя параметра потолка вывода. */
   provider?: ProviderId;
-  /** Уровень рассуждения модели из реестра требует общего запаса токенов. */
-  thinkingLevel?: 'low' | 'high';
   baseUrl?: string;
   timeoutMs?: number;
-  structuredOutput?: boolean;
-  requireParameters?: boolean;
   /** Имя ступени в очереди — оно же уходит в провенанс ответа. */
   stage?: string;
   client?: ChatCompletionClient;
 }
 
 /**
- * Один узкий вызов: факты и вакансия внутрь, готовое письмо наружу.
+ * Один узкий вызов: вакансия и профиль внутрь, готовое письмо наружу.
  *
- * Намеренно не переиспользует `LlmRoleNamer` — контракты разные (JSON-схема,
- * инструкция и проверки ответа), но узкий клиентский тип и приём отказа те
- * же, что у него, поэтому `ChatCompletionClient` импортирован оттуда, а не
- * продублирован (`roleNamer.ts`).
+ * Намеренно не переиспользует `LlmRoleNamer`: контракты разные, но узкий
+ * клиентский тип и приём отказа те же, поэтому `ChatCompletionClient`
+ * импортирован оттуда, а не продублирован (`roleNamer.ts`).
  */
 export class LlmCoverLetterWriter implements CoverLetterWriter {
   private readonly openRouter: boolean;
   private readonly client: ChatCompletionClient;
   private readonly apiKey: string;
   private readonly model: string;
-  private readonly structuredOutput: boolean;
-  private readonly requireParameters: boolean;
   private readonly stage: string;
   private readonly provider: ProviderId;
-  private readonly thinkingLevel: 'low' | 'high' | undefined;
+  private readonly timeoutMs: number;
 
   constructor(options: LlmCoverLetterWriterOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model;
     this.provider = options.provider ?? 'openai';
-    this.thinkingLevel = options.thinkingLevel;
+    this.timeoutMs = options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS;
     this.stage = options.stage ?? options.model;
-    this.structuredOutput = options.structuredOutput ?? false;
-    this.requireParameters = options.requireParameters ?? false;
     // A letter is built from the candidate's facts: on OpenRouter it is never collected (28.10).
     this.openRouter = isOpenRouterBaseUrl(options.baseUrl);
     this.client =
@@ -317,7 +265,7 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
       (new OpenAI({
         apiKey: options.apiKey,
         ...(options.baseUrl ? { baseURL: options.baseUrl } : {}),
-        timeout: options.timeoutMs ?? PROVIDER_STAGE_TIMEOUT_MS,
+        timeout: this.timeoutMs,
         maxRetries: PROVIDER_STAGE_MAX_RETRIES,
       }) as unknown as ChatCompletionClient);
   }
@@ -326,25 +274,15 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
     if (!hasLetterInput(input)) return {};
     try {
       if (this.openRouter) assertOpenRouterModelForPersonalData(this.model);
+      // Таймаут клиента ждёт только заголовки, а OpenRouter шлёт их сразу и держит тело: срок на весь ответ.
+      const deadline = AbortSignal.timeout(this.timeoutMs);
       const response = await this.client.chat.completions.create({
         model: this.model,
-        messages: [
-          { role: 'system', content: coverLetterInstructions(input.language, input.tone) },
-          { role: 'user', content: serializeInput(input) },
-        ],
-        ...outputLimit(this.provider, this.thinkingLevel),
-        // Прод 04.11: deepseek-v4.1-flash тратил на рассуждение 1 847 из 1 500 токенов и не отвечал.
-        ...(this.openRouter ? { reasoning: openRouterReasoning(this.model) } : {}),
-        ...(this.structuredOutput
-          ? {
-              response_format: { type: 'json_schema', json_schema: COVER_LETTER_JSON_SCHEMA },
-            }
-          : {}),
-        ...openRouterRouting({
-          personal: this.openRouter,
-          requireParameters: this.structuredOutput && this.requireParameters,
-        }),
-      });
+        messages: [{ role: 'user', content: letterPrompt(input) }],
+        ...outputLimit(this.provider),
+        ...(this.openRouter ? { reasoning: OPENROUTER_LETTER_REASONING } : {}),
+        ...openRouterRouting({ personal: this.openRouter, fastest: this.openRouter }),
+      }, { signal: deadline });
       const choice = response.choices[0] as
         ((typeof response.choices)[number] & { finish_reason?: string | null }) | undefined;
       return acceptModelBody(
@@ -359,17 +297,13 @@ export class LlmCoverLetterWriter implements CoverLetterWriter {
 }
 
 function writerForRoute(route: ProviderRoute): LlmCoverLetterWriter {
-  const definition = modelRegistry[route.provider].models.find((item) => item.id === route.model);
   return new LlmCoverLetterWriter({
     apiKey: route.apiKey,
     model: route.model,
     provider: route.provider,
     stage: `${route.provider}:${route.model}`,
     baseUrl: route.provider === 'openai' ? undefined : modelRegistry[route.provider].baseUrl,
-    timeoutMs: route.provider === 'openai' ? OPENAI_LETTER_STAGE_MS : OPENROUTER_LETTER_STAGE_MS,
-    structuredOutput: definition?.structuredOutput ?? false,
-    thinkingLevel: definition?.thinkingLevel,
-    requireParameters: route.provider === 'openrouter' && isMutableModelAlias(route.model),
+    timeoutMs: route.model.startsWith('deepseek/') ? DEEPSEEK_LETTER_STAGE_MS : GLM_LETTER_STAGE_MS,
   });
 }
 
@@ -413,39 +347,41 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
 
 export interface CoverLetterWriterConfig {
   readonly providerCredentials?: Partial<Record<ProviderId, string>>;
-  /** Gemini на Vertex — последняя ступень цепочки, когда настроен (B580, 29.10). */
+  /** Gemini на Vertex — последняя ступень цепочки, когда настроен (B601). */
   readonly vertex?: VertexConfig;
   /** Metered `fetch` of the Vertex stage (04.11): books the call and enforces the daily cap. */
   readonly vertexFetch?: typeof fetch;
 }
 
 /**
- * Цепочка письма (B580, 29.10): deepseek-v4.1-flash → gpt-5.6-luna → Vertex; шаблон
- * остаётся запасом за ней. Gemini AI Studio (402) и бесплатные маршруты ушли.
+ * Цепочка письма (решение владельца, B601): deepseek-v4.1-flash → glm-5.3-flash → Gemini на Vertex;
+ * если отказали все, маршрут отвечает ошибкой с повтором, а не шаблоном.
  */
 export function buildCoverLetterWriter(
   config: CoverLetterWriterConfig,
 ): CoverLetterWriter | undefined {
-  const stages = resolveChain(
-    MODEL_CHAINS.coverLetters,
-    config.providerCredentials ?? {},
-    config.vertex,
-  );
+  const stages = coverLetterStages(config);
   if (stages.length === 0) return undefined;
   return new QueuedCoverLetterWriter(
-    stages.map((stage) =>
-      stage.kind === 'vertex' ? vertexCoverLetterWriter(stage.vertex, config.vertexFetch) : writerForRoute(stage.route),
-    ),
+    stages.map((stage) => stage.writer),
     stages.map((stage) => stage.label),
   );
 }
 
-/**
- * D-F9, 05.11: 7 писем модели из 10 на проде исказили опыт кандидата (приписанная работа, усиленная
- * роль), и текст идёт от его имени. Пока выключено: письмо пишет шаблон, модель не вызывается.
- * Включать только после вычитки CPO.
- */
-export const LETTER_MODEL_ENABLED = false;
+/** Ступени цепочки по отдельности: контрольный прогон зовёт каждую модель тем же путём, что и прод. */
+export function coverLetterStages(
+  config: CoverLetterWriterConfig,
+): readonly { readonly label: string; readonly writer: CoverLetterWriter }[] {
+  return resolveChain(MODEL_CHAINS.coverLetters, config.providerCredentials ?? {}, config.vertex).map((stage) => ({
+    label: stage.label,
+    writer: stage.kind === 'vertex'
+      ? vertexCoverLetterWriter(stage.vertex, config.vertexFetch)
+      : writerForRoute(stage.route),
+  }));
+}
+
+/** Письмо пишет модель (решение владельца 06.11). Откат: false, письмо снова пишет шаблон. */
+export const LETTER_MODEL_ENABLED = true;
 
 /** То, что получает прод: без цепочки маршрут пишет письмо шаблоном и не тратит ни денег, ни времени. */
 export function buildEnabledCoverLetterWriter(
@@ -464,7 +400,7 @@ function vertexCoverLetterWriter(vertex: VertexConfig, fetchImpl?: typeof fetch)
     stage: `vertex:${vertex.model}`,
     baseUrl: vertexPublisherBaseUrl(vertex),
     authHeaders: async () => ({ Authorization: `Bearer ${await tokens.token()}` }),
-    thinkingLevel: 'low',
+    thinkingLevel: 'high',
     retriesOn429: 1,
     timeoutMs: VERTEX_LETTER_STAGE_MS,
   });
