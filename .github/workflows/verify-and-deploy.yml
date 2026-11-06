@@ -208,6 +208,11 @@ jobs:
           node scripts/verify-intake-fits.mjs
           node scripts/verify-wizard-source-step.mjs
 
+      - name: Verify the .app web folder opens the cabinet
+        run: |
+          npx tsx scripts/build-desktop-dist.ts
+          node scripts/verify-desktop-shell.mjs
+
   verify:
     name: Verify
     if: always()

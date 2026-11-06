@@ -43,7 +43,7 @@ export const LANDING_FEED_SHOWN = 5;
 export const LANDING_FEED_ROWS = 12;
 /** Sources the hero names one by one: hh.ru, LinkedIn, Telegram, company sites. */
 export const LANDING_NAMED_SOURCES = 4;
-export const LANDING_STATS_SCRIPT_ID = 'oq-landing-stats';
+export { LANDING_STATS_SCRIPT_ID } from './landingStatsScriptId';
 
 /**
  * Real pool reading of 2026-10-20 (prod SQL, owner-approved mockup v18). Served

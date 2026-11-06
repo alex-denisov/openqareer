@@ -1,5 +1,6 @@
 coverage/
 dist/
+dist-desktop/
 node_modules/
 output/
 playwright-report/

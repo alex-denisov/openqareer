@@ -1,4 +1,5 @@
-import { LANDING_STATS_SCRIPT_ID, type LandingStats } from '../../../shared/landingStats';
+import type { LandingStats } from '../../../shared/landingStats';
+import { LANDING_STATS_SCRIPT_ID } from '../../../shared/landingStatsScriptId';
 
 /**
  * The server writes live pool stats into the prerendered landing. The script
