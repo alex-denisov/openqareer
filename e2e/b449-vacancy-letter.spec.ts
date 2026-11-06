@@ -839,6 +839,30 @@ test.describe('B449 — письмо под вакансию', () => {
     await expect(panel.locator('header small')).toContainText('Профиль');
   });
 
+  test('opens the resume by pressing the whole row at 390', async ({ page }) => {
+    const state = createRouteState();
+    await installLetterMocks(page, state);
+    await openLetter(page);
+    await waitForLetter(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    const row = page.locator('.career-letter-dest-row').filter({ hasText: 'Резюме под вакансию' });
+    // В центр окна: иначе на других шрифтах строка уходит под закреплённую кнопку «Одобрить».
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    const box = await row.boundingBox();
+    if (!box) throw new Error('Строка резюме не на экране');
+    const point = { x: box.x + 80, y: box.y + box.height / 2 };
+    await expect
+      .poll(() =>
+        page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.className ?? '', point),
+      )
+      .toContain('career-letter-dest-open');
+    // Нажатие по тексту строки, не по кнопке: нажать и отпустить должно быть в одном слое.
+    await page.mouse.click(point.x, point.y);
+
+    await expect(page.locator('.career-letter-screen')).toHaveCount(0);
+  });
+
   test('keeps the screen within 280px and primary interaction targets at 44px', async ({
     page,
   }) => {

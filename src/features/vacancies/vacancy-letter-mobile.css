@@ -301,6 +301,11 @@
     background-color: transparent;
   }
 
+  /* Сдвиг кнопки при нажатии сделал бы её контейнером ::after: слой сжался бы, и касание строки терялось. */
+  .career-letter-dest-actions .career-letter-dest-open:active {
+    transform: none;
+  }
+
   .career-letter-dest-open::after {
     content: '';
     position: absolute;
