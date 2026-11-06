@@ -63,6 +63,7 @@ export default tseslint.config(
       'docs/**',
       'e2e/cjm/.tmp/**',
       'dist/**',
+      'dist-desktop/**',
       'node_modules/**',
       'output/**',
       'playwright-report/**',

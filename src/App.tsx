@@ -131,6 +131,13 @@ const ResetPasswordPage = lazy(() =>
   loadAuthPages().then((module) => ({ default: module.ResetPasswordPage })),
 );
 
+/** B589: `/` in the .app is the cabinet, the landing is not in its bundle. */
+function navigateDesktopHome(setPath: (path: string) => void) {
+  window.history.pushState(null, '', '/app');
+  setPath('/app');
+  window.scrollTo(0, 0);
+}
+
 function importSourceOf(source: WorkspaceInput['resumeSource']): ResumeImportSource {
   if (source === 'linkedin-pdf') return 'linkedin';
   if (source === 'hh-pdf') return 'hh';
@@ -217,6 +224,10 @@ export default function App() {
         // anonymous visitor to `/`) must not throw the reader back to the top.
         const here = `${window.location.pathname}${window.location.search}`;
         if (path === here) return;
+        if (isDesktop && path === '/') {
+          navigateDesktopHome(setCurrentPath);
+          return;
+        }
         if (requiresAnalyticsDocumentNavigation(here, path, isDesktop)) {
           window.location.assign(path);
           return;
@@ -829,6 +840,9 @@ export default function App() {
       </AppErrorBoundary>
     );
   }
+
+  // B589: the .app has no landing; any other path falls back to the cabinet.
+  if (isDesktop) return <AppErrorBoundary>{renderWorkspace()}</AppErrorBoundary>;
 
   // Default: Public landing page at `/`
   return (
