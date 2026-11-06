@@ -22,6 +22,8 @@ import {
   withDeps,
 } from './helpers';
 import { pitchRankingContext } from './pitchRankingContext';
+import { letterProfileText } from '../domain/letterProfile';
+import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts, generatedTextFactNotices } from '../domain/generatedTextFactGate';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -78,7 +80,7 @@ function isWantedCompany(deps: RouteDeps, candidateId: string, company: string |
   return wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId).has(candidateCompanyKey(company));
 }
 
-function resolvePitchVacancy(
+export function resolvePitchVacancy(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancyId: string,
   cluster: ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>,
@@ -90,6 +92,9 @@ function resolvePitchVacancy(
     company: body?.vacancy?.company ?? cluster?.canonicalCompany ?? poolVacancy?.company,
     description:
       body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
+    // Письмо модели пишется по полному тексту из пула: экран письма присылает в description сводку (B601).
+    fullDescription:
+      poolVacancy?.description ?? body?.vacancy?.description ?? cluster?.descriptionSummary,
     requiredSkills:
       body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
     responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
@@ -149,12 +154,23 @@ function readLetterContext(
   const excludedEvidenceIds = new Set(body?.excludedEvidenceIds ?? []);
   const usableEvidenceIds = new Set(filterUsablePitchFacts(allFacts).map((fact) => fact.id));
   const candidateWorkplaces = letterWorkplaces(snapshot, usableEvidenceIds);
+  const facts = allFacts.filter((fact) => !excludedEvidenceIds.has(fact.id));
+  const workplaces = candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id)));
   return {
     rankingContext,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
-    facts: allFacts.filter((fact) => !excludedEvidenceIds.has(fact.id)),
+    facts,
     candidateWorkplaces,
-    workplaces: candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id))),
+    workplaces,
+    profile: letterProfileText({
+      draft: snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT,
+      facts,
+      includedWorkplaceIds: workplaces.map((place) => place.id),
+      withheldEvidenceIds: new Set([
+        ...excludedEvidenceIds,
+        ...allFacts.filter((fact) => fact.sensitive === true).map((fact) => fact.id),
+      ]),
+    }),
     targetCompany: isWantedCompany(deps, candidateId, vacancy.company),
     tone: body?.tone ?? 'executive',
     language: body?.language ?? detectVacancyLanguage(vacancy),
@@ -170,12 +186,17 @@ async function writeVacancyPitch(
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
-  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, contextMs } = context;
+  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, profile, contextMs } = context;
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
   const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {
-    vacancy, facts: translatedFacts, workplaces, language, tone, rankingContext, targetCompany, contextMs,
+    vacancy: { ...vacancy, description: vacancy.fullDescription },
+    profile,
+    facts: translatedFacts,
+    language,
+    ...(body?.language ? { chosenLanguage: body.language } : {}),
+    contextMs,
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');

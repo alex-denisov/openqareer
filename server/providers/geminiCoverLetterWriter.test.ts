@@ -3,10 +3,8 @@ import { buildCoverLetterWriter } from './coverLetterWriter';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
 
 const input = {
-  language: 'en' as const,
-  tone: 'executive' as const,
   vacancy: { title: 'SVP of Technical Product Management', company: '2 Hour Learning' },
-  facts: [{ ref: 'f1', statement: 'VP of Technology, 250+ people, revenue 4x' }],
+  profile: 'VP of Technology, 250+ people, revenue 4x',
 };
 
 function geminiReply(body: string, finishReason = 'STOP') {
@@ -14,7 +12,7 @@ function geminiReply(body: string, finishReason = 'STOP') {
     async () =>
       new Response(
         JSON.stringify({
-          candidates: [{ finishReason, content: { parts: [{ text: JSON.stringify({ body }) }] } }],
+          candidates: [{ finishReason, content: { parts: [{ text: body }] } }],
         }),
         { status: 200 },
       ),
@@ -46,7 +44,7 @@ describe('GeminiCoverLetterWriter (B266)', () => {
     expect((init.headers as Record<string, string>)['cf-aig-authorization']).toBe('Bearer t');
   });
 
-  it('обрезает хвост, оборванный лимитом вывода', async () => {
+  it('письмо, оборванное лимитом вывода, уступает следующей ступени', async () => {
     const writer = new GeminiCoverLetterWriter({
       apiKey: 'k',
       model: 'm',
@@ -58,8 +56,25 @@ describe('GeminiCoverLetterWriter (B266)', () => {
     });
 
     await expect(writer.writeCoverLetter(input)).resolves.toMatchObject({
-      body: 'First sentence. Second sentence.',
+      failure: { kind: 'unusable_response', detail: 'cut' },
     });
+  });
+
+  it('просит письмо обычным текстом, запас вывода хватает на рассуждение high', async () => {
+    const fetchImpl = geminiReply('One. Two.');
+    const writer = new GeminiCoverLetterWriter({
+      apiKey: 'k',
+      model: 'm',
+      baseUrl: 'https://g',
+      thinkingLevel: 'high',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    await writer.writeCoverLetter(input);
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(String(init.body));
+    expect(body.generationConfig).toEqual({ maxOutputTokens: 12000, thinkingConfig: { thinkingLevel: 'high' } });
+    expect(body).not.toHaveProperty('systemInstruction');
+    expect(body.contents[0].parts[0].text).toContain('250+ people');
   });
 
   it('отказ шлюза — это отказ ступени с кодом, а не молчание', async () => {
@@ -78,15 +93,14 @@ describe('GeminiCoverLetterWriter (B266)', () => {
     expect(outcome.failure?.detail).not.toContain('secret');
   });
 
-  it('цепочка письма: deepseek-v4.1-flash → luna, Gemini AI Studio (402) в ней нет (28.10)', () => {
+  it('Gemini AI Studio (402) в цепочке письма нет (28.10)', () => {
     const writer = buildCoverLetterWriter({
       providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' },
     }) as unknown as { descriptors: readonly string[] };
 
     expect(writer.descriptors).toEqual([
       'openrouter:deepseek/deepseek-v4.1-flash',
-      'openrouter:deepseek/deepseek-v4.1-flash',
-      'openai:gpt-5.6-luna',
+      'openrouter:z-ai/glm-5.3-flash',
     ]);
   });
 });

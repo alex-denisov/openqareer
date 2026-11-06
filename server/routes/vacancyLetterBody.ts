@@ -9,16 +9,12 @@ import {
   type LetterGateSources,
   type LetterGateViolation,
 } from '../domain/letterModelGate';
-import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import {
   filterUsablePitchFacts,
-  letterCareer,
-  letterModelFacts,
   type PitchLanguage,
-  type PitchTone,
-  type PitchWorkplace,
   type VacancyPitchInputFact,
 } from '../domain/vacancyPitchService';
+import type { LetterGender } from '../domain/coverLetterWriting';
 import {
   COVER_LETTER_BUDGET_MS,
   withinTimeBudget,
@@ -30,18 +26,22 @@ export interface LetterWritingRequest {
   readonly vacancy: {
     title: string;
     company?: string;
+    location?: string;
+    /** Полный текст вакансии, а не сводка кластера. */
     description?: string;
+    responsibilities?: readonly string[];
     requiredSkills: readonly string[];
     recipient?: { name?: string; role?: string };
   };
-  /** Факты с переведёнными формулировками: письмо и проверка видят один текст. */
+  /** Весь мастер-профиль обычным текстом. */
+  readonly profile: string;
+  /** Факты с переведёнными формулировками: проверка знает и их. */
   readonly facts: readonly VacancyPitchInputFact[];
-  readonly workplaces: readonly PitchWorkplace[];
   readonly language: PitchLanguage;
-  readonly tone: PitchTone;
-  readonly rankingContext: PitchFactRankingContext | undefined;
-  /** B422: кандидат отметил компанию вакансии «Хочу в эту компанию». */
-  readonly targetCompany: boolean;
+  /** Только когда кандидат выбрал язык сам. */
+  readonly chosenLanguage?: PitchLanguage;
+  /** Источника пока нет (вопрос владельцу): запрос говорит «не указан». */
+  readonly gender?: LetterGender;
   readonly contextMs: number;
 }
 
@@ -76,18 +76,18 @@ export function modelLetterNotice(language: PitchLanguage): string {
 }
 
 function letterGateSources(request: LetterWritingRequest): LetterGateSources {
-  const { vacancy, facts, workplaces, language } = request;
+  const { vacancy, profile, facts, language } = request;
   return {
     language,
-    candidate: filterUsablePitchFacts(facts).map((fact) => fact.statement),
-    career: letterCareer(workplaces, language).map((place) =>
-      [place.title, place.employer, place.years].filter(Boolean).join(' '),
-    ),
+    candidate: [...profile.split('\n'), ...filterUsablePitchFacts(facts).map((fact) => fact.statement)],
     vacancy: [
       vacancy.title,
       vacancy.company,
+      vacancy.location,
       vacancy.recipient?.name,
       vacancy.recipient?.role,
+      vacancy.description,
+      ...(vacancy.responsibilities ?? []),
       ...vacancy.requiredSkills,
     ].flatMap((part) => (part ? [part] : [])),
   };
@@ -117,28 +117,20 @@ function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, facts, workplaces, language, tone, rankingContext, targetCompany } = letter;
+  const { vacancy, profile, chosenLanguage, gender } = letter;
   return {
-    facts: letterModelFacts(facts, workplaces, language).map((fact) => ({
-      ref: fact.id,
-      statement: fact.statement,
-      domain: fact.domain,
-      createdAt: fact.createdAt,
-      updatedAt: fact.updatedAt,
-      status: fact.status,
-    })),
-    career: letterCareer(workplaces, language),
+    profile,
     vacancy: {
       title: vacancy.title,
       ...(vacancy.company ? { company: vacancy.company } : {}),
+      ...(vacancy.location ? { location: vacancy.location } : {}),
       ...(vacancy.description ? { description: vacancy.description } : {}),
+      ...(vacancy.responsibilities?.length ? { responsibilities: vacancy.responsibilities } : {}),
       requirements: vacancy.requiredSkills,
-      ...(rankingContext ? { rankingContext } : {}),
       ...(vacancy.recipient ? { recipient: vacancy.recipient } : {}),
-      ...(targetCompany ? { targetCompany: true as const } : {}),
     },
-    language,
-    tone,
+    ...(chosenLanguage ? { chosenLanguage } : {}),
+    ...(gender ? { gender } : {}),
     review,
   };
 }

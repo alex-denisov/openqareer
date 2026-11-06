@@ -1,154 +1,219 @@
 /**
- * Проверка письма от модели (04.11). Прежняя проверка (`generatedTextFactGate`) принимала
- * предложение, только если оно дословно совпало с подтверждённым фактом, поэтому ни одно письмо
- * с пересказом до кандидата не доходило: 10 из 10 на проде ушли в шаблон при живой модели.
- * Смысл пересказа детерминированно не проверить, поэтому здесь останавливается то, что можно
- * проверить и что вредит кандидату: чужие числа, чужие имена (и транслит работодателя), усиление
- * личной роли и самооценки. Кандидат всё равно читает письмо и одобряет его сам.
+ * Проверка письма от модели (B601, 06.11). Письма принимает владелец, читая тексты, и прежняя проверка
+ * отклоняла все письма, которые он принял: 3 из 3 с 22 срабатываниями, в основном на «усиление роли»
+ * и незнакомые термины. Поэтому останавливаем только то, что проверяется надёжно и вредит кандидату:
+ * цифру, которой нет в профиле, и компанию, которой нет ни в профиле, ни в вакансии. Стиль, самооценка
+ * и термины направления не отклоняются. Цифры прописью и слово в начале фразы не проверяются.
  */
 
 export interface LetterGateSources {
   /** Язык письма: латиница в начале русской фразы — имя, а в английской — обычное слово. */
   readonly language: 'en' | 'ru';
-  /** Формулировки фактов кандидата на языке письма. */
+  /** Весь профиль кандидата построчно. */
   readonly candidate: readonly string[];
-  /** Места работы: должность, компания, годы. */
-  readonly career: readonly string[];
-  /** Текст вакансии подтверждает имена, но не то, что сделал кандидат. */
+  /** Вакансия и получатель подтверждают имена, но не то, что сделал кандидат. */
   readonly vacancy: readonly string[];
 }
 
-export type LetterGateRule = 'number' | 'name' | 'ownership' | 'praise';
+export type LetterGateRule = 'number' | 'name' | 'resume';
 
 export interface LetterGateViolation {
   readonly rule: LetterGateRule;
   readonly sentence: string;
 }
 
-const QUANTITY = /((?<![\p{L}\p{N}])[-−])?([£$€₽])?(\d+(?:[.,]\d+)?)\s*(%|млн|млрд|тыс|million|billion|thousand|usd|eur|руб\p{L}*|₽|\$|€|£)?/giu;
-const YEAR = /^(?:19|20)\d{2}$/u;
-const UNIT_NAMES: Readonly<Record<string, string>> = {
-  million: 'млн', billion: 'млрд', thousand: 'тыс', usd: '$', eur: '€', '₽': 'руб',
+type QuantityKind = 'percent' | 'multiple' | 'amount' | 'plain';
+
+interface Quantity {
+  readonly kind: QuantityKind;
+  /** Число как написано: 230 в «230 млн». */
+  readonly written: number;
+  /** С учётом единицы: 230 000 000. */
+  readonly value: number;
+  readonly currency?: string;
+}
+
+const NUMBER = String.raw`\d{1,3}(?:[ \u00a0,.]\d{3})+(?!\d)|\d+(?:[.,]\d+)?`;
+const CURRENCY = String.raw`[$€£₽]|usd|eur|gbp|rub(?:les?)?|руб\p{L}*|доллар\p{L}*|евро|dollars?|euros?`;
+const SCALE = String.raw`млн|млрд|тыс|million|billion|thousand|mln|bn|[kKmMкК](?!\p{L})`;
+const KIND = String.raw`%|процент\p{L}*|percent|раз\p{L}*|times|[xXхХ](?!\p{L})`;
+const QUANTITY = new RegExp(
+  String.raw`(?<![\p{L}\p{N}.,/])([-−](?=\d))?([$€£₽]|usd|eur)?\s?(${NUMBER})(?:\s?(${KIND}))?(?:\s?(${SCALE})\.?)?(?:\s?(${CURRENCY}))?(?![\p{L}\p{N}]|\/\d)`,
+  'giu',
+);
+
+const SCALE_VALUES: Readonly<Record<string, number>> = {
+  млн: 1e6, млрд: 1e9, тыс: 1e3, million: 1e6, billion: 1e9, thousand: 1e3, mln: 1e6, bn: 1e9, k: 1e3, m: 1e6, к: 1e3, м: 1e6,
 };
 
-/** Единица неотделима от числа: 40 млн не доказывают 40 %, а $40 и 40$ — одно и то же. */
-function quantities(text: string): string[] {
-  return [...text.matchAll(QUANTITY)].map(([, sign, before, value, after]) => {
-    const raw = (after ?? before ?? '').toLocaleLowerCase();
-    const unit = raw.startsWith('руб') ? 'руб' : UNIT_NAMES[raw] ?? raw;
-    return `${sign ? '-' : ''}${(value ?? '').replace(',', '.')}${unit}`;
+function currencyOf(raw: string | undefined): string | undefined {
+  const text = raw?.toLocaleLowerCase();
+  if (!text) return undefined;
+  if (text === '$' || text === 'usd' || text.startsWith('доллар') || text.startsWith('dollar')) return '$';
+  if (text === '€' || text === 'eur' || text === 'евро' || text.startsWith('euro')) return '€';
+  if (text === '£' || text === 'gbp') return '£';
+  return '₽';
+}
+
+function numberOf(raw: string): number {
+  const compact = raw.replace(/[ \u00a0]/gu, '');
+  const grouped = /^\d{1,3}(?:[,.]\d{3})+$/u.test(compact);
+  return Number(grouped ? compact.replace(/[,.]/gu, '') : compact.replace(',', '.'));
+}
+
+function kindOf(rawKind: string | undefined, money: boolean, scale: string | undefined): QuantityKind {
+  const kind = rawKind?.toLocaleLowerCase();
+  if (kind?.startsWith('%') || kind?.startsWith('процент') || kind === 'percent') return 'percent';
+  if (kind) return 'multiple';
+  return money || scale ? 'amount' : 'plain';
+}
+
+/** Единица общая на диапазон: «с 23 до 68%» и «99,5–100%» называют проценты оба раза. */
+function withSharedPercent(text: string): string {
+  return text.replace(new RegExp(String.raw`(${NUMBER})\s?[–—-]\s?(${NUMBER})\s?%`, 'gu'), '$1% – $2%');
+}
+
+function quantities(text: string): Quantity[] {
+  return [...withSharedPercent(text).matchAll(QUANTITY)].map(([, sign, before, number = '', kind, scale, after]) => {
+    const written = numberOf(number) * (sign ? -1 : 1);
+    const unit = scale ? SCALE_VALUES[scale.toLocaleLowerCase()] ?? 1 : 1;
+    const currency = currencyOf(before ?? after);
+    return {
+      kind: kindOf(kind, Boolean(currency), scale),
+      written,
+      value: Math.round(written * unit * 1000) / 1000,
+      ...(currency ? { currency } : {}),
+    };
   });
 }
 
-/** Каждое число есть в профиле; пара чисел из одного факта идёт в том же порядке, что и в нём. */
-function hasForeignNumber(sentence: string, backing: readonly string[]): boolean {
-  const numbers = quantities(sentence);
-  const sourceLists = backing.map(quantities);
-  const known = new Set(sourceLists.flat());
-  if (numbers.some((value) => !known.has(value))) return true;
-  return numbers.some((value, index) => {
-    const next = numbers[index + 1];
-    if (next === undefined || YEAR.test(value) || YEAR.test(next)) return false;
-    const together = sourceLists.filter((list) => list.includes(value) && list.includes(next));
-    return together.length > 0 && !together.some((list) => list.indexOf(value) < list.lastIndexOf(next));
-  });
+/** «Обращений −40%» — это снижение на 40%. Обратное неверно: «−20%» в профиле не подтверждает рост на 20%. */
+function backedBy(wanted: Quantity, known: Quantity): boolean {
+  if (wanted.value < 0 && known.value > 0) {
+    return backedBy({ ...wanted, value: -wanted.value, written: -wanted.written }, known);
+  }
+  // Голое число могло потерять единицу в пересказе: «с 230 до 2 млрд» опирается на «230 million».
+  if (wanted.kind === 'plain') return wanted.value === known.written || wanted.value === known.value;
+  if (wanted.kind !== known.kind && !(wanted.kind === 'amount' && known.kind === 'plain')) return false;
+  if (wanted.value !== known.value) return false;
+  return !wanted.currency || !known.currency || wanted.currency === known.currency;
+}
+
+const TRANSITION = new RegExp(
+  String.raw`(?:(?<!\p{L})(?:from|с|со|от)\s+~?(?:[£$€₽])?(${NUMBER})[^\d]{0,12}?\s(?:to|до)\s+~?(?:[£$€₽])?(${NUMBER}))|(?:(${NUMBER})\s?\S{0,3}\s?(?:→|->)\s?~?(?:[£$€₽])?(${NUMBER}))`,
+  'giu',
+);
+
+function transitions(text: string): [number, number][] {
+  return [...text.matchAll(TRANSITION)].map(([, from, to, arrowFrom, arrowTo]) =>
+    [numberOf(from ?? arrowFrom ?? '0'), numberOf(to ?? arrowTo ?? '0')]);
+}
+
+/** «CSAT с 68% до 23%» при «с 23% до 68%» в профиле: каждое число есть, а смысл обратный. */
+function reversesTransition(sentence: string, backing: string): boolean {
+  const known = transitions(backing);
+  return transitions(sentence).some(([from, to]) =>
+    known.some(([knownFrom, knownTo]) => knownFrom === to && knownTo === from) &&
+    !known.some(([knownFrom, knownTo]) => knownFrom === from && knownTo === to));
+}
+
+function hasForeignNumber(sentence: string, known: readonly Quantity[], backing: string): boolean {
+  return quantities(sentence).some((wanted) => !known.some((item) => backedBy(wanted, item))) ||
+    reversesTransition(sentence, backing);
 }
 
 const WORD = /\p{L}[\p{L}\p{N}'’]*/gu;
 const CYRILLIC_WORD = /^\p{Script=Cyrillic}+$/u;
 /** Слова письма, а не имена: их пишут с большой буквы и без профиля. */
-const PLAIN_CAPITALS = new Set(["i", "i'm", "i'd", "i've", "i'll", 'team', 'hiring', 'lead', 'manager', 'regards']);
+const PLAIN_CAPITALS = new Set([
+  'i', "i'm", "i'd", "i've", "i'll", 'team', 'hiring', 'regards',
+  'вы', 'вас', 'вам', 'вами', 'ваш', 'ваша', 'ваше', 'ваши', 'вашей', 'вашего', 'вашу', 'вашим', 'ваших', 'вашем', 'вашему',
+]);
+/** Аббревиатуры обычно термины (SLA, FinOps); эти — компании, и профиль должен их называть. */
+const COMPANY_ABBREVIATIONS = new Set([
+  'ibm', 'sap', 'hp', 'vk', 'epam', 'amd', 'pwc', 'kpmg', 'bcg', 'nvidia', 'мтс', 'втб', 'ржд', 'гпб', 'кпмг', 'мгтс', 'нлмк', 'ммк',
+]);
 
 function wordsOf(text: string): string[] {
   return (text.match(WORD) ?? []).map((word) => word.replace(/’/gu, "'").toLocaleLowerCase());
 }
 
 /** Русское слово склоняется: «Финтех Лабе» — это «Финтех Лаб», «Руководителя» — «Руководитель». */
-function sameName(word: string, known: string): boolean {
-  if (word === known) return true;
+function sameInflectedWord(word: string, known: string): boolean {
   if (!CYRILLIC_WORD.test(word) || known.length < 3) return false;
   const shared = [...word].findIndex((letter, index) => letter !== known[index]);
   const common = shared === -1 ? word.length : shared;
-  return common >= 3 && Math.max(word.length, known.length) - common <= 2;
+  return common >= Math.min(3, known.length - 1) && Math.max(word.length, known.length) - common <= 2;
+}
+
+const LETTER_SOUNDS: Readonly<Record<string, string>> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'sh', з: 's', и: 'i', й: 'i', к: 'k', л: 'l', м: 'm', н: 'n',
+  о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'k', ч: 'ch', ш: 'sh', щ: 'sh', ъ: '', ы: 'i', ь: '',
+  э: 'e', ю: 'iu', я: 'ia', c: 'k', q: 'k', w: 'v', y: 'i', z: 's', j: 'i', x: 'ks',
+};
+
+/** Звучание без алфавита: «Россети» и Rosseti, «Цифра» и Tsifra, «Дубае» и Dubai сходятся. */
+function soundOf(word: string): string {
+  return [...word.replace(/ts/gu, 'c')]
+    .map((letter) => LETTER_SOUNDS[letter] ?? letter)
+    .join('')
+    .replace(/(.)\1+/gu, '$1');
+}
+
+function editDistance(left: string, right: string): number {
+  let row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  [...left].forEach((letter, leftIndex) => {
+    const next = [leftIndex + 1];
+    [...right].forEach((other, rightIndex) => {
+      next.push(Math.min((row[rightIndex + 1] ?? 0) + 1, (next[rightIndex] ?? 0) + 1, (row[rightIndex] ?? 0) + (letter === other ? 0 : 1)));
+    });
+    row = next;
+  });
+  return row[right.length] ?? 0;
+}
+
+function sharedPrefix(left: string, right: string): number {
+  const stop = [...left].findIndex((letter, index) => letter !== right[index]);
+  return stop === -1 ? left.length : stop;
+}
+
+/** Имя с другого алфавита или в переводе: Корпоративный и Corporate, Университет и University. */
+function sameSound(word: string, known: string): boolean {
+  const [one, other] = [soundOf(word), soundOf(known)];
+  if (one === other) return true;
+  const shorter = Math.min(one.length, other.length);
+  if (shorter < 4) return false;
+  const prefix = sharedPrefix(one, other);
+  return editDistance(one, other) <= Math.floor(shorter / 4) || (prefix >= 5 && prefix >= shorter * 0.6);
 }
 
 function isKnownName(word: string, known: ReadonlySet<string>): boolean {
   const lower = word.replace(/’/gu, "'").toLocaleLowerCase().replace(/'s$/u, '');
-  return PLAIN_CAPITALS.has(lower) || known.has(lower) || [...known].some((name) => sameName(lower, name));
+  return PLAIN_CAPITALS.has(lower) || known.has(lower) ||
+    [...known].some((name) => sameInflectedWord(lower, name) || sameSound(lower, name));
 }
 
-const OPENING = /^(\p{L}[\p{L}\p{N}'’]*)(?:\s+(\p{Lu}[\p{L}\p{N}'’]*))?/u;
-/** Служебные слова начала фразы: «At Ритейл Системс» и «В Финтех Лаб» — не имя из двух слов. */
-const OPENING_WORDS = new Set([
-  'at', 'in', 'for', 'with', 'from', 'as', 'by', 'on', 'to', 'my', 'our', 'the', 'this', 'after', 'before', 'while',
-  'during', 'since', 'currently', 'earlier', 'previously', 'now', 'today', 'dear', 'hello', 'hi', 'greetings',
-  'в', 'во', 'на', 'из', 'при', 'для', 'с', 'со', 'до', 'после', 'как', 'мой', 'моя', 'наш', 'сейчас', 'ранее', 'прежде',
-  'уважаемый', 'уважаемая', 'уважаемые', 'добрый', 'здравствуйте',
-]);
-
-/**
- * Первое слово с заглавной пишут всегда, поэтому имя в нём видно не всегда. Проверяем надёжное:
- * латиницу в русском письме и начало имени из двух слов. Одно слово без словаря не отличить:
- * «Сбер доверил» и «Работал над» для проверки одинаковы.
- */
-function hasForeignOpening(sentence: string, known: ReadonlySet<string>, language: 'en' | 'ru'): boolean {
-  const [, first = '', second] = OPENING.exec(sentence) ?? [];
-  if (!first || isKnownName(first, known)) return false;
-  if (language === 'ru' && /^\p{Script=Latin}/u.test(first)) return true;
-  return Boolean(second) && !OPENING_WORDS.has(first.toLocaleLowerCase()) &&
-    !PLAIN_CAPITALS.has(second!.toLocaleLowerCase());
+/** Термин направления: аббревиатура, смешанный регистр или цифра внутри слова. */
+function isTerm(word: string): boolean {
+  if (COMPANY_ABBREVIATIONS.has(word.toLocaleLowerCase())) return false;
+  return /^\p{Lu}[\p{Lu}\p{N}]*$/u.test(word) || /\p{Ll}\p{Lu}/u.test(word) || /\p{N}/u.test(word);
 }
 
 function hasForeignName(sentence: string, known: ReadonlySet<string>, language: 'en' | 'ru'): boolean {
-  const capitals = (sentence.match(WORD) ?? []).slice(1).filter((word) => /^\p{Lu}/u.test(word));
-  return capitals.some((word) => !isKnownName(word, known)) || hasForeignOpening(sentence, known, language);
+  const words = sentence.match(WORD) ?? [];
+  const [first = '', ...rest] = words;
+  const capitals = rest.filter((word) => /^\p{Lu}/u.test(word) && !isTerm(word));
+  const foreignFirst = language === 'ru' && /^\p{Script=Latin}/u.test(first) && !isTerm(first) && !isKnownName(first, known);
+  return foreignFirst || capitals.some((word) => !isKnownName(word, known));
 }
 
-const MONTH = /(?<!\p{L})(?:январ|феврал|март|апрел|мая|май|июн|июл|август|сентябр|октябр|ноябр|декабр|january|february|march|april|june|july|august|september|october|november|december)\p{L}*/giu;
+/** Отрицание ничего не подтверждает: «не увеличил выручку на 20%» — не повод писать про 20%. «Не только» не отрицание. */
+const NEGATED = /(?:^|[\s,:])(?:не|нет|not|never)\s+(?!только|менее|более|just|only|less|more)\p{L}|cannot|can't|unable to confirm|did not/iu;
 
-/** Месяцев в данных модели нет: кандидат видел бы дату, которой не называл. */
-function hasForeignMonth(sentence: string, backing: string): boolean {
-  return (sentence.match(MONTH) ?? []).some((month) => !backing.includes(month.toLocaleLowerCase()));
-}
-
-const ACTION = /(?<!\p{L})(?:созда|основал|основат|возглав|руковод|разработал|внедр|запуст|увелич|сниз|сократ|добил|постро|удво|утро|реализова|организова|управлял|масштабир|вырастил|нарастил|координир|курир|(?:led|leading|directing|managing|founded|founder|created|built|launched|increased|reduced|cut|achieved|implemented|authored|doubled|managed|delivered|scaled|expanded|organized|coordinated|oversaw|headed|spearheaded|directed|drove|scaling|building|creating|launching|increasing|reducing|cutting|achieving|implementing|doubling|delivering|expanding|organizing|coordinating|overseeing|heading|spearheading|driving|growing)(?!\p{L}))/giu;
-const FIRST_PERSON_GREW = /(?<!\p{L})(?:i|we)\s+(?:\p{L}+\s+)?grew(?!\p{L})/iu;
-/** Перед глаголом кандидата — начало фразы, «я» или союз; иначе действие совершил кто-то другой. */
-const OWN_ACTOR = /(?:^|[,;:—–(.]\s*|(?<!\p{L})(?:я|мы|и|i|we|and)\s+)$/iu;
-
-function actionsOf(text: string): string[] {
-  return (text.match(ACTION) ?? []).map((action) => action.toLocaleLowerCase());
-}
-
-/** Действия, совершённые самим автором фразы: «команда выросла» и «заказчик создал» сюда не входят. */
-function statedActions(statement: string): string[] {
-  return [...statement.matchAll(ACTION)]
-    .filter((match) => OWN_ACTOR.test(statement.slice(0, match.index)))
-    .map(([action]) => action.toLocaleLowerCase());
-}
-
-/** Какие личные действия профиль называет сам: должность считается, чужой глагол нет. */
-function ownedActions(sources: LetterGateSources): Set<string> {
-  return new Set([...sources.candidate.flatMap(statedActions), ...sources.career.flatMap(actionsOf)]);
-}
-
-/** Перевод не меняет субъект: где факт не называет личного действия, его нет и в переводе (G3d, письмо 6). */
-export function addsPersonalAction(source: string, translation: string): boolean {
-  if (FIRST_PERSON_GREW.test(translation)) return true;
-  return statedActions(source).length === 0 && statedActions(translation).length > 0;
-}
-
-function hasStrengthenedRole(sentence: string, owned: ReadonlySet<string>): boolean {
-  return actionsOf(sentence).some((action) => !owned.has(action)) || FIRST_PERSON_GREW.test(sentence);
-}
-
-const PRAISE = /обширн|многолетн|богат\p{L}*\s+опыт|глубок\p{L}*\s+(?:опыт|экспертиз|знани|понимани)|значительн\p{L}*\s+опыт|extensive|track record|proven|solid (?:background|experience)|sustained|seasoned|deep (?:expertise|experience|knowledge)|strong background|wealth of/iu;
-
-/** «Не могу подтвердить…» и отрицания ничего не подтверждают. */
-const DENIED = /(?:^|[\s,:])(?:не|нет|not|never)(?=\s)|cannot|can't|unable to confirm|did not/iu;
+const RESUME_NOTE = /резюме|resum[eé]|\bcv\b/iu;
 
 function sentencesOf(body: string): string[] {
-  return body.split(/(?<=[.!?…])\s+|\n+/u).map((part) => part.trim()).filter(Boolean);
+  return body.split(/(?<=[.!?…])(?<!(?:тыс|млн|млрд|руб|долл)\.)\s+|\n+/iu).map((part) => part.trim()).filter(Boolean);
 }
 
 /** Название вакансии цитируется как есть: его числа и слова — не заслуги кандидата. */
@@ -157,22 +222,18 @@ function withoutVacancyText(sentence: string, vacancy: readonly string[]): strin
 }
 
 export function reviewLetterBody(body: string, sources: LetterGateSources): LetterGateViolation[] {
-  const backing: LetterGateSources = {
-    ...sources,
-    candidate: sources.candidate.filter((statement) => !DENIED.test(statement)),
-  };
-  const profile = [...backing.candidate, ...backing.career];
-  const owned = ownedActions(backing);
-  const profileText = profile.join(' ').toLocaleLowerCase();
-  const names = new Set([...profile, ...backing.vacancy].flatMap(wordsOf));
-  return sentencesOf(body).flatMap((sentence) => {
-    const own = withoutVacancyText(sentence, backing.vacancy);
+  const profile = sources.candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence)).join('\n');
+  const known = quantities(profile);
+  const names = new Set([...sources.candidate, ...sources.vacancy].flatMap(wordsOf));
+  // Модель сама выбирает язык письма и может разойтись с определением по вакансии.
+  const language = /\p{Script=Cyrillic}/u.test(body) ? sources.language : 'en';
+  const sentences = sentencesOf(body);
+  const checked = sentences.flatMap((sentence) => {
     const checks: readonly (readonly [LetterGateRule, boolean])[] = [
-      ['number', hasForeignNumber(own, profile)],
-      ['name', hasForeignName(sentence, names, sources.language) || hasForeignMonth(sentence, profileText)],
-      ['ownership', hasStrengthenedRole(own, owned)],
-      ['praise', PRAISE.test(own)],
+      ['number', hasForeignNumber(withoutVacancyText(sentence, sources.vacancy), known, profile)],
+      ['name', hasForeignName(sentence, names, language)],
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });
+  return RESUME_NOTE.test(body) ? checked : [...checked, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
 }

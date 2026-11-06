@@ -80,7 +80,7 @@ describe('B528 generated text fact gate', () => {
   });
 
   it('04.11: a paraphrase of imported facts reaches the letter screen under the note that a model wrote it', async () => {
-    const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек. Буду рад обсудить задачи роли.';
+    const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек. Резюме приложено. Буду рад обсудить задачи роли.';
     const { app, candidates } = await createApp([sampleCluster], {
       coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test:model' }) },
     });
@@ -130,6 +130,8 @@ describe('B528 generated text fact gate', () => {
     expect(data.emailPitch.body).not.toContain('Fintech Lab');
   });
 
+  // B601: the gate stops wrong numbers and foreign companies only; role and wording are the reader's call,
+  // so a letter that overstates a role reaches the candidate with its claims listed as unconfirmed.
   it.each([
     {
       name: 'confirmed metric with its context',
@@ -154,22 +156,22 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'dropping a pound unit cannot be confirmed',
       facts: ['I managed £40.'],
-      text: 'I managed 40.', expected: 'partially_confirmed', source: 'template',
+      text: 'I managed 40.', expected: 'partially_confirmed', source: 'model',
     },
     {
       name: 'unlisted project verbs still require evidence',
       facts: ['Участвовал в проекте Atlas.'],
-      text: 'Координировал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Координировал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'same number with an unrelated achievement',
       facts: ['Я снизил расходы на 20%.'],
-      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я увеличил выручку на 20%.', expected: 'partially_confirmed', source: 'model',
     },
     {
       name: 'before and after from separate facts',
       facts: ['Время обработки составляло 30 минут.', 'Время ответа составляло 10 минут.'],
-      text: 'Я снизил время обработки с 30 до 10 минут.', expected: 'partially_confirmed', source: 'template',
+      text: 'Я снизил время обработки с 30 до 10 минут.', expected: 'partially_confirmed', source: 'model',
     },
     {
       name: 'before and after in one confirmed fact',
@@ -196,22 +198,22 @@ describe('B528 generated text fact gate', () => {
     {
       name: 'project participation does not prove authorship',
       facts: ['Я участвовал в проекте Atlas.'],
-      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'third party ownership is not personal ownership',
       facts: ['Заказчик создал проект Atlas.'],
-      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Я создал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'English negation cannot prove ownership',
       facts: ['I have not created project Atlas.'],
-      text: 'I created project Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'I created project Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'first person achievements require evidence',
       facts: ['Я участвовал в проекте Atlas.'],
-      text: 'Я организовал проект Atlas.', expected: 'not_in_profile', source: 'template',
+      text: 'Я организовал проект Atlas.', expected: 'not_in_profile', source: 'model',
     },
     {
       name: 'explicit project ownership',
@@ -235,7 +237,7 @@ describe('B528 generated text fact gate', () => {
     },
   ])('B528 $name', async ({ facts, text, expected, source, ...options }) => {
     const { app, candidates } = await createApp([sampleCluster], {
-      coverLetterWriter: { writeCoverLetter: async () => ({ body: text, stage: 'test:model' }) },
+      coverLetterWriter: { writeCoverLetter: async () => ({ body: `${text}\n\nCV attached.`, stage: 'test:model' }) },
     });
     const { cookie, candidateId } = await login(app);
     const owner = options.foreign
@@ -258,10 +260,10 @@ describe('B528 generated text fact gate', () => {
       text, status: expected, action: expected === 'confirmed' ? 'none' : 'ask_candidate',
     })]);
     if (source === 'model') {
-      expect(data.atsCoverLetter).toBe(text);
-      expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
+      expect(data.atsCoverLetter).toBe(`${text}\n\nCV attached.`);
+      if (expected === 'confirmed') expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
     } else {
-      expect(data.atsCoverLetter).not.toBe(text);
+      expect(data.atsCoverLetter).not.toContain(text);
       expect(data.notices).toEqual([expect.stringMatching(/^The generated letter had claims/u)]);
     }
   });

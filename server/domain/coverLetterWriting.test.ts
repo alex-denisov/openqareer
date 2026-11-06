@@ -1,49 +1,46 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import {
-  COVER_LETTER_MAX_CHARS,
-  coverLetterBodySchema,
-  coverLetterInstructions,
-} from './coverLetterWriting';
+import { COVER_LETTER_PROMPT, coverLetterPrompt } from './coverLetterWriting';
 
-describe('coverLetterInstructions', () => {
-  it('называет язык и тон письма', () => {
-    const ru = coverLetterInstructions('ru', 'technical');
-    expect(ru).toContain('русском');
-    expect(ru).toContain('технический');
+const base = { vacancy: 'Вакансия про склад', profile: 'Профиль кладовщика' };
 
-    const en = coverLetterInstructions('en', 'executive');
-    expect(en).toContain('английском');
+describe('coverLetterPrompt: запрос, который принял владелец (B601, live-7)', () => {
+  it('текст запроса не отличается от утверждённого consultant-prompt-live-7.txt', () => {
+    const hash = createHash('sha256').update(COVER_LETTER_PROMPT).digest('hex');
+    expect(hash).toBe('d3fa04af137d34875c23097b2558d2e5961595cc7d4aa032b1b28670d5c88ba1');
   });
 
-  it('запрещает служебный текст и заглушки', () => {
-    const instructions = coverLetterInstructions('ru', 'confident');
-    expect(instructions).toContain('импорт');
-    expect(instructions).toContain('квадратных скобок');
-  });
-});
-
-describe('coverLetterBodySchema', () => {
-  it('принимает непустой текст в пределах лимита', () => {
-    const result = coverLetterBodySchema.safeParse({ body: 'Здравствуйте!' });
-    expect(result.success).toBe(true);
-  });
-
-  it('отклоняет текст длиннее лимита', () => {
-    const tooLong = 'a'.repeat(COVER_LETTER_MAX_CHARS + 1);
-    const result = coverLetterBodySchema.safeParse({ body: tooLong });
-    expect(result.success).toBe(false);
+  it('подставляет получателя, род, вакансию и профиль', () => {
+    const text = coverLetterPrompt({
+      ...base,
+      recipient: { name: 'Екатерина', role: 'рекрутёр' },
+      gender: 'male',
+    });
+    expect(text).toContain('Получатель: Екатерина, рекрутёр. Род кандидата: мужской.');
+    expect(text).toContain('Вакансия:\nВакансия про склад');
+    expect(text).toContain('Профиль кандидата:\nПрофиль кладовщика');
+    expect(text).not.toMatch(/\{(?:RECIPIENT|GENDER|VACANCY|PROFILE)\}/u);
   });
 
-  it('отклоняет пустой текст', () => {
-    const result = coverLetterBodySchema.safeParse({ body: '   ' });
-    expect(result.success).toBe(false);
+  it('неизвестные получатель и род называет прямо, не угадывая', () => {
+    const text = coverLetterPrompt(base);
+    expect(text).toContain('Получатель: неизвестен. Род кандидата: не указан.');
   });
-});
 
-describe('B422: инструкция для компании «Хочу»', () => {
-  it('просит одну фразу о желании работать здесь, без выдуманных причин', () => {
-    const text = coverLetterInstructions('ru', 'technical');
-    expect(text).toContain('targetCompany');
-    expect(text).toContain('не придумывай причин');
+  it('роль без имени остаётся получателем', () => {
+    expect(coverLetterPrompt({ ...base, recipient: { role: 'HR-директор' } })).toContain('Получатель: HR-директор.');
+  });
+
+  it('текст вакансии не подменяет другие поля и не читается как шаблон замены', () => {
+    const text = coverLetterPrompt({ ...base, vacancy: 'Пишите {PROFILE} и $& сюда', profile: 'Настоящий профиль' });
+    expect(text).toContain('Вакансия:\nПишите {PROFILE} и $& сюда');
+    expect(text.match(/Настоящий профиль/gu)).toHaveLength(1);
+  });
+
+  it('язык, выбранный кандидатом, заменяет только «на языке вакансии»', () => {
+    expect(coverLetterPrompt(base)).toContain('на языке вакансии');
+    const chosen = coverLetterPrompt({ ...base, chosenLanguage: 'en' });
+    expect(chosen).toContain('сопроводительное сообщение на английском языке по вакансии ниже');
+    expect(chosen).not.toContain('на языке вакансии');
   });
 });
