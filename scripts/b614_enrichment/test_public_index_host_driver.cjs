@@ -9,6 +9,7 @@ function fixture() {
   const calls = [];
   const imports = [];
   const exports = [];
+  const verifications = [];
   let globalPause = null;
   let currentTime = 1_900_000_000_000;
   const manifest = {
@@ -56,47 +57,92 @@ function fixture() {
     readGlobalPause: async () => globalPause,
     writeGlobalPause: async (_path, value) => { globalPause = value; },
     clearGlobalPause: async () => { globalPause = null; },
+    verifyManifest: async ({ manifest }) => {
+      verifications.push(manifest);
+      return { verified: true, batch_id: manifest.batch_id, manifest_sha256: manifest.manifest_sha256, stage: manifest.stage };
+    },
     newRunId: () => "run-001",
     now: () => currentTime,
   };
-  return { adapters, files, calls, imports, exports, manifest,
+  return { adapters, files, calls, imports, exports, verifications, manifest,
     get globalPause() { return globalPause; }, set currentTime(value) { currentTime = value; } };
 }
 
-test("host driver recognizes parenthesized route 429, persists platform pause, and stops", async () => {
+test("host driver distinguishes unbound parenthesized route 429 and persists a manual pause", async () => {
   const f = fixture();
+  const clickManifest = {
+    ...f.manifest,
+    stage: "click",
+    operation: "click",
+    batch_id: "f".repeat(64),
+    manifest_sha256: "e".repeat(64),
+    requests: [{ ...f.manifest.requests[0], find_result_ref: "turn_expected_find0", employee_link_id: 11 }],
+    indexed_linkedin_content_authorized: true,
+    tool_args: { click: [{ ref_id: "turn_expected_find0", id: 11 }], response_length: "long" },
+  };
+  f.adapters.exportBatch = async ({ stage, manifestPath }) => {
+    f.exports.push({ stage, manifestPath });
+    return stage === "click" ? { eligible: true, manifest: clickManifest } : { eligible: false };
+  };
   f.adapters.callSearchService = async (args) => {
     f.calls.push(args);
     return {
       isError: false,
-      content: [{ type: "text", text: "www.linkedin.com (https://www.linkedin.com/signup/cold-join?x=y)\nSource: click({\"ref_id\":\"turn1view0\",\"id\":11}); (429) Too Many Requests" }],
+      content: [{ type: "text", text: "www.linkedin.com (https://www.linkedin.com/signup/cold-join?x=y)\nSource: click({\"ref_id\":\"turn_stale_find0\",\"id\":11}); (429) Too Many Requests" }],
     };
   };
   const driver = createB614PublicIndexHostDriver(f.adapters);
-  const result = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root", maxBatches: 8 });
-  assert.deepEqual(f.calls, [f.manifest.tool_args]);
+  const result = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root",
+    maxBatches: 8, allowIndexedLinkedinContent: true });
+  assert.deepEqual(f.calls, [clickManifest.tool_args]);
   assert.equal(f.imports.length, 1);
   assert.equal(f.imports[0].is_error, false);
   assert.deepEqual(f.imports[0].request_ids, f.manifest.request_ids);
-  assert.equal(result.stop_reason, "platform_restriction_requires_operator_resume");
+  assert.equal(result.stop_reason, "unbound_platform_429_operator_resume");
   assert.equal(result.batch_count, 1);
   assert.equal(result.request_outcomes.indexed_ref, 1);
-  assert.equal(f.globalPause.kind, "platform_restriction");
+  assert.equal(f.globalPause.kind, "unbound_platform_429");
   assert.equal(f.globalPause.requires_operator_resume, true);
   assert.equal(f.adapters.releasedRunId, "run-001");
   const exportsBeforeResume = f.exports.length;
-  const pausedResume = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root", maxBatches: 8 });
-  assert.equal(pausedResume.stop_reason, "platform_restriction_requires_operator_resume");
-  assert.equal(f.globalPause.kind, "platform_restriction");
+  const pausedResume = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root",
+    maxBatches: 8, allowIndexedLinkedinContent: true });
+  assert.equal(pausedResume.stop_reason, "unbound_platform_429_requires_operator_resume");
+  assert.equal(f.globalPause.kind, "unbound_platform_429");
   assert.equal(f.exports.length, exportsBeforeResume);
   assert.equal(f.calls.length, 1);
 
   f.adapters.exportBatch = async () => ({ eligible: false });
   const manualResume = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root",
-    maxBatches: 8, resumeAfterManualPause: true });
-  assert.equal(manualResume.stop_reason, "search_only_scope_complete");
+    maxBatches: 8, allowIndexedLinkedinContent: true, resumeAfterManualPause: true });
+  assert.equal(manualResume.stop_reason, "queue_idle_no_eligible_requests");
   assert.equal(f.globalPause, null);
   assert.equal(f.calls.length, 1);
+});
+
+test("host driver distinguishes a 429 bound to a requested route", async () => {
+  const f = fixture();
+  const clickManifest = {
+    ...f.manifest,
+    stage: "click",
+    operation: "click",
+    batch_id: "f".repeat(64),
+    manifest_sha256: "e".repeat(64),
+    requests: [{ ...f.manifest.requests[0], find_result_ref: "turn_expected_find0", employee_link_id: 11 }],
+    indexed_linkedin_content_authorized: true,
+    tool_args: { click: [{ ref_id: "turn_expected_find0", id: 11 }], response_length: "long" },
+  };
+  f.adapters.exportBatch = async ({ stage }) => stage === "click"
+    ? { eligible: true, manifest: clickManifest } : { eligible: false };
+  f.adapters.callSearchService = async () => ({
+    isError: false,
+    content: [{ type: "text", text: "Source: click({\"ref_id\":\"turn_expected_find0\",\"id\":11}); (429) Too Many Requests" }],
+  });
+  const driver = createB614PublicIndexHostDriver(f.adapters);
+  const result = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root",
+    maxBatches: 1, allowIndexedLinkedinContent: true });
+  assert.equal(result.stop_reason, "platform_restriction_requires_operator_resume");
+  assert.equal(f.globalPause.kind, "platform_restriction");
 });
 
 test("Search Service 429 stores a timed global pause and never retries before it expires", async () => {
@@ -189,4 +235,17 @@ test("content-enabled work drains click then find/open before requesting more se
   assert.equal(result.stop_reason, "max_batches_reached_resume_from_state");
   assert.deepEqual(f.exports.map((item) => item.stage), ["click"]);
   assert.deepEqual(f.calls, [clickManifest.tool_args]);
+});
+
+test("pre-call manifest verification failure blocks provider use and attempt writes", async () => {
+  const f = fixture();
+  f.adapters.verifyManifest = async () => ({ verified: true, batch_id: "wrong", manifest_sha256: "wrong", stage: "search" });
+  const driver = createB614PublicIndexHostDriver(f.adapters);
+  await assert.rejects(
+    () => driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root", maxBatches: 1 }),
+    /pre-call manifest verification/,
+  );
+  assert.equal(f.calls.length, 0);
+  assert.equal([...f.files.keys()].some((path) => path.includes("attempt-")), false);
+  assert.equal(f.adapters.releasedRunId, "run-001");
 });

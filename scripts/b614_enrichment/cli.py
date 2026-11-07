@@ -1726,6 +1726,107 @@ def export_public_index_batch(conn: sqlite3.Connection, stage: str, out_path: st
             "request_count": len(requests), "resumed": False, "out": str(out_path)}
 
 
+def verify_public_index_manifest_file(conn: sqlite3.Connection, manifest_file: str | Path,
+                                      evidence_root: str | Path | None) -> dict[str, Any]:
+    """Verify an exported manifest against Python's canonical hash and persisted batch before provider use."""
+    path, _file_sha, raw = _safe_evidence_file(str(manifest_file), evidence_root)
+    try:
+        manifest = json.loads(_json_text(raw))
+    except json.JSONDecodeError as error:
+        raise ValueError("public-index manifest is not valid JSON") from error
+    if not isinstance(manifest, dict):
+        raise ValueError("public-index manifest must be an object")
+    supplied_hash = manifest.get("manifest_sha256")
+    if not isinstance(supplied_hash, str) or not re.fullmatch(r"[a-f0-9]{64}", supplied_hash):
+        raise ValueError("public-index manifest hash is missing or malformed")
+    content = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+    if sha256_value(content) != supplied_hash:
+        raise ValueError("public-index manifest hash does not match Python canonical JSON")
+
+    stage = manifest.get("stage")
+    expected_operation = {"search": "system2_search_query", "open": "open", "find": "find", "click": "click"}.get(stage)
+    if (manifest.get("provider") != "mcp__codex_apps__search_service_web_run"
+            or manifest.get("schema_version") != 1
+            or not isinstance(manifest.get("batch_id"), str)
+            or not re.fullmatch(r"[a-f0-9]{64}", manifest["batch_id"])
+            or not isinstance(manifest.get("plan_sha256"), str)
+            or not re.fullmatch(r"[a-f0-9]{64}", manifest["plan_sha256"])
+            or manifest.get("operation") != expected_operation):
+        raise ValueError("public-index manifest provider or stage metadata is invalid")
+    requests = manifest.get("requests")
+    request_ids = manifest.get("request_ids")
+    if (not isinstance(requests, list) or not 1 <= len(requests) <= 4
+            or not isinstance(request_ids, list) or len(request_ids) != len(requests)
+            or len(set(request_ids)) != len(request_ids)
+            or any(not isinstance(item, str) or not re.fullmatch(r"[a-f0-9]{64}", item) for item in request_ids)
+            or any(not isinstance(row, dict) or row.get("request_id") != request_ids[index]
+                   for index, row in enumerate(requests))):
+        raise ValueError("public-index manifest request IDs do not bind to its request rows")
+
+    content_authorized = stage in {"open", "find", "click"}
+    if manifest.get("indexed_linkedin_content_authorized") is not content_authorized:
+        raise ValueError("public-index manifest indexed-content authorization does not match its stage")
+    tool_args = manifest.get("tool_args")
+    if (not isinstance(tool_args, dict) or set(tool_args) != {expected_operation, "response_length"}
+            or tool_args.get("response_length") != "long"):
+        raise ValueError("public-index tool arguments have an unsupported shape")
+    calls = tool_args.get(expected_operation)
+    if not isinstance(calls, list) or len(calls) != len(requests):
+        raise ValueError("public-index tool call count does not match its request rows")
+
+    for request, call in zip(requests, calls):
+        if not isinstance(call, dict):
+            raise ValueError("public-index tool call must be an object")
+        if stage == "search":
+            query = request.get("query")
+            if (not isinstance(query, str) or not query.strip()
+                    or request.get("query_sha256") != sha256_bytes(query.encode("utf-8"))
+                    or set(call) != {"q", "domains"} or call.get("q") != query
+                    or call.get("domains") != ["linkedin.com"]
+                    or request.get("domains") != ["linkedin.com"]):
+                raise ValueError("public-index search arguments do not bind to the stable query")
+        elif stage == "open":
+            if (set(call) != {"ref_id"} or call.get("ref_id") != request.get("source_ref")
+                    or not isinstance(request.get("source_ref"), str)
+                    or not re.fullmatch(r"turn[\w-]+", request["source_ref"])):
+                raise ValueError("public-index open arguments do not bind to the exported search ref")
+        elif stage == "find":
+            if (set(call) != {"ref_id", "pattern"} or call.get("ref_id") != request.get("page_ref")
+                    or call.get("pattern") != "View all"
+                    or not isinstance(request.get("page_ref"), str)
+                    or not re.fullmatch(r"turn[\w-]+", request["page_ref"])):
+                raise ValueError("public-index find arguments do not bind to the opened page ref")
+        elif stage == "click":
+            link_id = request.get("employee_link_id")
+            if (set(call) != {"ref_id", "id"} or call.get("ref_id") != request.get("find_result_ref")
+                    or call.get("id") != link_id or not isinstance(link_id, int) or isinstance(link_id, bool)
+                    or not isinstance(request.get("find_result_ref"), str)
+                    or not re.fullmatch(r"turn[\w-]+", request["find_result_ref"])):
+                raise ValueError("public-index click arguments do not bind to the exact find ref and link ID")
+
+    batch = conn.execute(
+        "SELECT manifest_json,manifest_sha256,status FROM public_index_batches WHERE batch_id=?",
+        (manifest["batch_id"],),
+    ).fetchone()
+    if not batch:
+        raise ValueError("public-index manifest has no persisted exported batch")
+    stored = json.loads(batch["manifest_json"])
+    if (batch["manifest_sha256"] != supplied_hash
+            or canonical_json(stored) != canonical_json(manifest)):
+        raise ValueError("public-index manifest differs from the exact persisted export")
+    if batch["status"] != "awaiting_response":
+        raise ValueError("public-index batch is no longer awaiting a provider response")
+    for request_id in request_ids:
+        lease = conn.execute(
+            "SELECT active_batch_id,active_stage FROM public_index_requests WHERE request_id=?",
+            (request_id,),
+        ).fetchone()
+        if not lease or lease["active_batch_id"] != manifest["batch_id"] or lease["active_stage"] != stage:
+            raise ValueError("public-index manifest request lease no longer matches the exported batch")
+    return {"verified": True, "batch_id": manifest["batch_id"], "manifest_sha256": supplied_hash,
+            "stage": stage, "request_count": len(requests), "manifest_file": str(path)}
+
+
 def _public_index_citation_refs(block: str) -> list[str]:
     refs = re.findall(r"cite(turn[\w-]+)", block)
     refs.extend(re.findall(r"【(turn[\w-]+)】", block))
@@ -1795,6 +1896,33 @@ def _public_index_terminal_route_block(blocks: list[str]) -> tuple[str, str, str
         if result:
             return result[0], result[1], block
     return None
+
+
+def _public_index_unbound_route_429_blocks(raw_text: str, stage: str,
+                                           requests: list[dict[str, Any]]) -> list[str]:
+    expected_calls: set[tuple[Any, ...]] = set()
+    for request in requests:
+        if stage == "open":
+            expected_calls.add((request.get("source_ref"),))
+        elif stage == "find":
+            expected_calls.add((request.get("page_ref"), "View all"))
+        elif stage == "click":
+            expected_calls.add((request.get("find_result_ref"), request.get("employee_link_id")))
+    unbound: list[str] = []
+    for block in split_capture_blocks(raw_text):
+        arguments = _capture_source_invocation(block, stage)
+        terminal = _public_index_terminal_route_status(block)
+        if not arguments or not terminal or terminal[0] != "cooldown_pending":
+            continue
+        if stage == "open":
+            call = (arguments.get("ref_id"),)
+        elif stage == "find":
+            call = (arguments.get("ref_id"), arguments.get("pattern"))
+        else:
+            call = (arguments.get("ref_id"), arguments.get("id"))
+        if call not in expected_calls:
+            unbound.append(block)
+    return unbound
 
 
 def _public_index_retry(conn: sqlite3.Connection, request_id: str, stage: str,
@@ -1999,6 +2127,7 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
             if (arguments := _capture_source_invocation(block, "open"))
             and arguments.get("ref_id") not in requested_refs
         ]
+        unbound_open_429_blocks = _public_index_unbound_route_429_blocks(raw_text, "open", requests)
         for request in requests:
             route_blocks = _public_index_call_blocks(raw_text, "open", request)
             terminal = _public_index_terminal_route_block(route_blocks)
@@ -2023,6 +2152,11 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                         "search_status", "unverified",
                         {"reason": "public_index_search_ref_unresolvable", "retry_stage": "search"},
                     )
+                elif unbound_open_429_blocks:
+                    stage_updates[request["request_id"]] = (
+                        "open_status", "call_uncertain",
+                        {"reason": "public_index_unbound_platform_429", "retry_stage": "search"},
+                    )
                 elif unrequested_open_blocks:
                     stage_updates[request["request_id"]] = (
                         "open_status", "provider_ref_mismatch",
@@ -2040,6 +2174,7 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                 continue
             stage_updates[request["request_id"]] = ("open_status", "opened", {**result, "heading": heading})
     elif stage == "find":
+        unbound_find_429_blocks = _public_index_unbound_route_429_blocks(raw_text, "find", requests)
         for request in requests:
             route_blocks = _public_index_call_blocks(raw_text, "find", request)
             terminal = _public_index_terminal_route_block(route_blocks)
@@ -2056,7 +2191,13 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                         and source_args.get("pattern") == "View all"):
                     matching.append((result, source_args))
             if len(matching) != 1:
-                stage_updates[request["request_id"]] = ("find_status", "no_cta", {"reason": "public_index_find_result_not_unique"})
+                if unbound_find_429_blocks:
+                    stage_updates[request["request_id"]] = (
+                        "find_status", "call_uncertain",
+                        {"reason": "public_index_unbound_platform_429", "retry_stage": "search"},
+                    )
+                else:
+                    stage_updates[request["request_id"]] = ("find_status", "no_cta", {"reason": "public_index_find_result_not_unique"})
                 continue
             result, _args = matching[0]
             heading = _raw_page_heading(result["block"])
@@ -2083,6 +2224,7 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
             "facetCurrentCompany_ids": [],
         } for request in requests]
         click_data = {"queue": queue, "web": raw_text}
+        unbound_click_429_blocks = _public_index_unbound_route_429_blocks(raw_text, "click", requests)
         for request in requests:
             try:
                 target, target_id, cooldown = _extract_legacy_click_target(
@@ -2097,6 +2239,11 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                     stage_updates[request["request_id"]] = ("click_status", status_value, {
                         "reason": reason, "result_sha256": sha256_bytes(terminal_block.encode("utf-8")),
                     })
+                elif unbound_click_429_blocks:
+                    stage_updates[request["request_id"]] = (
+                        "click_status", "call_uncertain",
+                        {"reason": "public_index_unbound_platform_429", "retry_stage": "search"},
+                    )
                 else:
                     stage_updates[request["request_id"]] = ("click_status", "no_numeric_facet", {"reason": str(error)})
                 continue
@@ -2252,7 +2399,8 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
             not_before = None
             retry_stage = info.get("retry_stage", stage)
             if status_value in {"no_exact_result", "no_page", "identity_mismatch", "no_cta", "ambiguous",
-                                "no_numeric_facet", "unverified", "cooldown_pending", "provider_ref_mismatch"}:
+                                "no_numeric_facet", "unverified", "cooldown_pending", "provider_ref_mismatch",
+                                "call_uncertain"}:
                 attempt_row = conn.execute(
                     f"SELECT {retry_stage}_attempts FROM public_index_requests WHERE request_id=?",
                     (request_id,),
@@ -2336,7 +2484,7 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                     (canonical_json({"reason": info.get("reason"), "public_index_request_id": request_id}), timestamp, row["job_id"]),
                 )
             if status_value in {"no_exact_result", "no_page", "identity_mismatch", "no_cta", "ambiguous",
-                                "no_numeric_facet", "unverified", "provider_ref_mismatch"}:
+                                "no_numeric_facet", "unverified", "provider_ref_mismatch", "call_uncertain"}:
                 conn.execute(
                     "UPDATE jobs SET status='cooldown_pending',not_before=?,result_json=?,updated_at=? WHERE job_id=? AND status='awaiting_import'",
                     (not_before, canonical_json({"reason": info.get("reason"), "public_index_request_id": request_id,
@@ -3197,6 +3345,13 @@ def command_public_index_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_public_index_verify_manifest(args: argparse.Namespace) -> int:
+    with open_state(args.state) as conn:
+        result = verify_public_index_manifest_file(conn, args.manifest, args.evidence_root)
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def command_public_index_import(args: argparse.Namespace) -> int:
     with open_state(args.state) as conn:
         result = public_index_import_capture(conn, args.capture, args.evidence_root)
@@ -3436,6 +3591,9 @@ def build_parser() -> argparse.ArgumentParser:
     pi_export.add_argument("--allow-indexed-linkedin-content", action="store_true",
                            help="explicitly permit Search Service open/find/click calls against indexed LinkedIn pages")
     pi_export.set_defaults(func=command_public_index_export)
+    pi_verify = sub.add_parser("public-index-verify-manifest", help="verify a fresh public-index manifest hash, tool args, and active SQLite export before provider call")
+    pi_verify.add_argument("--state", required=True); pi_verify.add_argument("--manifest", required=True)
+    pi_verify.add_argument("--evidence-root", required=True); pi_verify.set_defaults(func=command_public_index_verify_manifest)
     pi_import = sub.add_parser("public-index-import", help="import an exact Search Service response capture")
     pi_import.add_argument("--state", required=True); pi_import.add_argument("--capture", required=True)
     pi_import.add_argument("--evidence-root", required=True); pi_import.set_defaults(func=command_public_index_import)

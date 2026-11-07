@@ -28,7 +28,23 @@ function sourceBlocks(rawText) {
   return String(rawText || "").split(/-{80}/g);
 }
 
-function platformRouteStatus(rawText) {
+function sourceInvocation(block, expectedOperation) {
+  const match = block.match(/\bSource:\s*(open|find|click)\s*\((\{.*?\})\)/is);
+  if (!match || (expectedOperation && match[1] !== expectedOperation)) return null;
+  try { return { operation: match[1], arguments: JSON.parse(match[2]) }; } catch { return null; }
+}
+
+function sourceCallMatchesManifest(operation, arguments_, manifest) {
+  if (!manifest || manifest.stage !== operation || !Array.isArray(manifest.requests)) return false;
+  return manifest.requests.some((request) => {
+    if (operation === "open") return arguments_.ref_id === request.source_ref;
+    if (operation === "find") return arguments_.ref_id === request.page_ref && arguments_.pattern === "View all";
+    if (operation === "click") return arguments_.ref_id === request.find_result_ref && arguments_.id === request.employee_link_id;
+    return false;
+  });
+}
+
+function platformRouteStatus(rawText, manifest) {
   const rateLimitPatterns = [
     /\(\s*429\s*\)\s*too many requests/i,
     /failed to fetch[^\n]{0,400}\(?\s*429\s*\)?/i,
@@ -37,9 +53,13 @@ function platformRouteStatus(rawText) {
     /status(?: code)?\s*[:=]?\s*429\b/i,
   ];
   for (const block of sourceBlocks(rawText)) {
-    if (!/\bSource:\s*(?:open|find|click)\s*\(/i.test(block)) continue;
+    const invocation = sourceInvocation(block, manifest?.stage);
+    if (!invocation) continue;
     if (/robots\.txt|blocked by robots|disallowed by robots|\b401\b|\b403\b/i.test(block)) return "policy_denied";
-    if (rateLimitPatterns.some((pattern) => pattern.test(block))) return "platform_restriction";
+    if (rateLimitPatterns.some((pattern) => pattern.test(block))) {
+      return sourceCallMatchesManifest(invocation.operation, invocation.arguments, manifest)
+        ? "platform_restriction" : "unbound_platform_429";
+    }
   }
   return null;
 }
@@ -101,7 +121,7 @@ function createB614PublicIndexHostDriver(adapters) {
   const required = [
     "preparePrivatePaths", "acquireLock", "releaseLock", "exportBatch", "exists",
     "readJson", "writeImmutableJson", "callSearchService", "importCapture", "writeReport", "newRunId",
-    "readGlobalPause", "writeGlobalPause", "clearGlobalPause",
+    "readGlobalPause", "writeGlobalPause", "clearGlobalPause", "verifyManifest",
   ];
   for (const name of required) assert(typeof adapters?.[name] === "function", `missing host adapter: ${name}`);
 
@@ -145,9 +165,11 @@ function createB614PublicIndexHostDriver(adapters) {
         } else {
           await adapters.clearGlobalPause(paths.globalPausePath);
         }
-      } else if (globalPause && globalPause.kind === "platform_restriction") {
+      } else if (globalPause && ["platform_restriction", "unbound_platform_429"].includes(globalPause.kind)) {
         if (!resumeAfterManualPause) {
-          summary.stop_reason = "platform_restriction_requires_operator_resume";
+          summary.stop_reason = globalPause.kind === "unbound_platform_429"
+            ? "unbound_platform_429_requires_operator_resume"
+            : "platform_restriction_requires_operator_resume";
           canProcess = false;
         } else {
           await adapters.clearGlobalPause(paths.globalPausePath);
@@ -197,7 +219,7 @@ function createB614PublicIndexHostDriver(adapters) {
             captureSummary = {
               is_error: saved.is_error === true,
               provider_error_status: saved.provider_error_status || null,
-              platform_status: platformRouteStatus(String(saved.raw_result_text || "")),
+              platform_status: platformRouteStatus(String(saved.raw_result_text || ""), manifest),
               provider_rate_limited: saved.provider_error_status === 429
                 || (!saved.is_error && providerRateLimitWithoutSource(String(saved.raw_result_text || ""))),
             };
@@ -207,6 +229,13 @@ function createB614PublicIndexHostDriver(adapters) {
               summary.stop_reason = "call_uncertain_wait_for_lease_expiry";
               break outer;
             }
+
+            const verification = await adapters.verifyManifest({ statePath, manifestPath, evidenceRoot, manifest });
+            assert(verification && verification.verified === true
+              && verification.batch_id === manifest.batch_id
+              && verification.manifest_sha256 === manifest.manifest_sha256
+              && verification.stage === stage,
+            "pre-call manifest verification did not match the in-memory tool call");
 
             await adapters.writeImmutableJson(attemptPath, {
               batch_id: manifest.batch_id,
@@ -226,7 +255,7 @@ function createB614PublicIndexHostDriver(adapters) {
             }
 
             const rawResultText = extractText(providerResult);
-            const routeStatus = platformRouteStatus(rawResultText);
+            const routeStatus = platformRouteStatus(rawResultText, manifest);
             const isProviderError = (providerResult?.isError === true && routeStatus === null)
               || (routeStatus === null && providerRateLimitWithoutSource(rawResultText));
             const providerStatus = isProviderError
@@ -289,6 +318,17 @@ function createB614PublicIndexHostDriver(adapters) {
             });
             summary.stop_reason = "search_service_rate_limit_cooldown";
             summary.pause_until = new Date(pausedUntilMs).toISOString();
+            break outer;
+          }
+          if (captureSummary.platform_status === "unbound_platform_429") {
+            await adapters.writeGlobalPause(paths.globalPausePath, {
+              kind: "unbound_platform_429",
+              batch_id: manifest.batch_id,
+              paused_at: new Date(nowMs()).toISOString(),
+              reason: "platform_429_source_ref_not_in_manifest",
+              requires_operator_resume: true,
+            });
+            summary.stop_reason = "unbound_platform_429_operator_resume";
             break outer;
           }
           if (captureSummary.platform_status === "platform_restriction") {
@@ -516,6 +556,12 @@ print(json.dumps({'company_count':r.get('company_count'),'public_index':r.get('p
         "--evidence-root", evidenceRoot]);
       if (result.exit_code !== 0) throw new Error(`public-index capture import failed with exit ${result.exit_code}`);
       return parseLastJson(result.output, "public-index import");
+    },
+    async verifyManifest({ statePath, manifestPath, evidenceRoot }) {
+      const result = await runCli(["public-index-verify-manifest", "--state", statePath,
+        "--manifest", manifestPath, "--evidence-root", evidenceRoot]);
+      if (result.exit_code !== 0) throw new Error("pre-call public-index manifest verification failed");
+      return parseLastJson(result.output, "public-index manifest verification");
     },
     async writeReport({ statePath, outPath }) {
       const cliResult = await runCli(["report", "--state", statePath, "--out", outPath], { quiet: true });

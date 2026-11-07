@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import sqlite3
 import tempfile
@@ -17,6 +18,7 @@ from cli import (
     source_outcome, validate_candidate, validate_full_baseline, validate_rendered_cta, wrapped_transport_status,
     normalize_packet_evidence,
     public_index_import_root_batches, export_public_index_batch, public_index_import_capture,
+    verify_public_index_manifest_file,
 )
 
 
@@ -535,6 +537,50 @@ class QueueTests(unittest.TestCase):
             self.assertEqual(conn.execute(
                 "SELECT COUNT(*) FROM public_index_batches WHERE status='awaiting_response'"
             ).fetchone()[0], 0)
+        finally:
+            conn.close()
+
+    def test_public_index_manifest_pre_call_hash_and_tool_shape_verification(self):
+        conn, evidence_root, _request_id, _search_ref, _source_url, _ = self._prepare_public_index_request(include_reference=False)
+        try:
+            manifest_path = evidence_root / "search-manifest.json"
+            export_public_index_batch(
+                conn, "search", manifest_path, limit=4, now=time.time() + 10000,
+            )
+            verified = verify_public_index_manifest_file(conn, manifest_path, evidence_root)
+            self.assertTrue(verified["verified"])
+            self.assertEqual(verified["stage"], "search")
+            manifest = json.loads(manifest_path.read_text())
+
+            bad_hash = dict(manifest)
+            bad_hash["manifest_sha256"] = "0" * 64
+            bad_hash_path = evidence_root / "bad-hash-manifest.json"
+            bad_hash_path.write_text(json.dumps(bad_hash), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "canonical JSON"):
+                verify_public_index_manifest_file(conn, bad_hash_path, evidence_root)
+
+            bad_shape = json.loads(json.dumps(manifest))
+            bad_shape["tool_args"]["system2_search_query"][0]["domains"] = ["example.com"]
+            bad_shape["manifest_sha256"] = sha256_value(
+                {key: value for key, value in bad_shape.items() if key != "manifest_sha256"}
+            )
+            bad_shape_path = evidence_root / "bad-shape-manifest.json"
+            bad_shape_path.write_text(json.dumps(bad_shape), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "search arguments do not bind"):
+                verify_public_index_manifest_file(conn, bad_shape_path, evidence_root)
+
+            recomputed = json.loads(json.dumps(manifest))
+            replacement_query = recomputed["requests"][0]["query"] + " revised"
+            recomputed["requests"][0]["query"] = replacement_query
+            recomputed["requests"][0]["query_sha256"] = hashlib.sha256(replacement_query.encode("utf-8")).hexdigest()
+            recomputed["tool_args"]["system2_search_query"][0]["q"] = replacement_query
+            recomputed["manifest_sha256"] = sha256_value(
+                {key: value for key, value in recomputed.items() if key != "manifest_sha256"}
+            )
+            recomputed_path = evidence_root / "recomputed-manifest.json"
+            recomputed_path.write_text(json.dumps(recomputed), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "differs from the exact persisted export"):
+                verify_public_index_manifest_file(conn, recomputed_path, evidence_root)
         finally:
             conn.close()
 
@@ -1092,6 +1138,73 @@ class QueueTests(unittest.TestCase):
                 export_public_index_batch(conn, "click", public_dir / "click-retry.json", limit=4,
                                           now=time.time() + 100000,
                                           allow_indexed_linkedin_content=True)
+        finally:
+            conn.close()
+
+    def test_public_index_unbound_click_429_is_call_uncertain_and_recovers_by_search(self):
+        conn, evidence_root, request_id, search_ref, source_url, _ = self._prepare_public_index_request()
+        try:
+            def capture_stage(stage, raw_result_text, name):
+                manifest_path = evidence_root / f"{name}-manifest.json"
+                export_public_index_batch(
+                    conn, stage, manifest_path, limit=4,
+                    allow_indexed_linkedin_content=stage in {"open", "find", "click"},
+                )
+                manifest = json.loads(manifest_path.read_text())
+                capture = {
+                    "provider": manifest["provider"], "stage": stage, "operation": manifest["operation"],
+                    "batch_id": manifest["batch_id"], "manifest_sha256": manifest["manifest_sha256"],
+                    "request_ids": manifest["request_ids"], "tool_args": manifest["tool_args"],
+                    "raw_result_text": raw_result_text, "is_error": False,
+                }
+                path = evidence_root / f"{name}-capture.json"
+                path.write_text(json.dumps(capture), encoding="utf-8")
+                return public_index_import_capture(conn, path, evidence_root)
+
+            page_ref = "turn200view0"
+            open_call = json.dumps({"ref_id": search_ref}, separators=(",", ":"))
+            self.assertEqual(capture_stage(
+                "open", f"Acme Systems | LinkedIn ({source_url})\nL12: # Acme Systems\n"
+                f"cite{page_ref} [wordlim 80]; Source: open({open_call}); Total lines: 40", "open",
+            )["request_outcomes"], {"opened": 1})
+
+            find_ref = "turn300view0"
+            find_call = json.dumps({"ref_id": page_ref, "pattern": "View all"}, separators=(",", ":"))
+            self.assertEqual(capture_stage(
+                "find", f"Acme Systems | LinkedIn ({source_url})\nL12: # Acme Systems\n"
+                f"L22: * 【11†View all 42 employees】\ncite{find_ref} [wordlim 80]; "
+                f"Source: find({find_call}); Total lines: 40", "find",
+            )["request_outcomes"], {"cta_found": 1})
+
+            target = (
+                "https://www.linkedin.com/signup/cold-join?session_redirect="
+                "https%3A%2F%2Fwww.linkedin.com%2Fsearch%2Fresults%2Fpeople%2F"
+                "%3FfacetCurrentCompany%3D%255B123456%255D&trk=employees-cta"
+            )
+            wrong_call = json.dumps({"ref_id": "turn_staleview0", "id": 11}, separators=(",", ":"))
+            result = capture_stage(
+                "click", f"www.linkedin.com ({target})\nSource: click({wrong_call}); (429) Too Many Requests",
+                "click-unbound-429",
+            )
+            self.assertEqual(result["request_outcomes"], {"call_uncertain": 1})
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM proposals").fetchone()[0], 0)
+            saved = conn.execute(
+                "SELECT search_status,search_not_before,click_status FROM public_index_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            self.assertEqual(saved["click_status"], "call_uncertain")
+            self.assertEqual(saved["search_status"], "unverified")
+            self.assertIsNotNone(saved["search_not_before"])
+            with self.assertRaisesRegex(ValueError, "no public-index click requests are eligible"):
+                export_public_index_batch(
+                    conn, "click", evidence_root / "old-click-retry.json", limit=4,
+                    now=time.time() + 100000, allow_indexed_linkedin_content=True,
+                )
+            fresh_search = evidence_root / "fresh-search-after-429.json"
+            export_public_index_batch(conn, "search", fresh_search, limit=4, now=time.time() + 100000)
+            manifest = json.loads(fresh_search.read_text())
+            self.assertEqual(manifest["request_ids"], [request_id])
+            self.assertEqual(manifest["requests"][0]["query"], 'site:linkedin.com/company "Acme Systems"')
         finally:
             conn.close()
 
