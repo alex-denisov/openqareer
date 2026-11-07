@@ -1,7 +1,7 @@
 "use strict";
 
 const PUBLIC_INDEX_PROVIDER = "mcp__codex_apps__search_service_web_run";
-const STAGES = ["search", "open", "find", "click"];
+const STAGES_WITH_CONTENT = ["click", "find", "open", "search"];
 const CONTENT_STAGES = new Set(["open", "find", "click"]);
 
 function assert(condition, message) {
@@ -129,27 +129,34 @@ function createB614PublicIndexHostDriver(adapters) {
     let manifestSequence = 0;
     const nowMs = typeof adapters.now === "function" ? adapters.now : () => Date.now();
     let canProcess = true;
+    const stageOrder = allowIndexedLinkedinContent ? STAGES_WITH_CONTENT : ["search"];
 
     try {
       const globalPause = await adapters.readGlobalPause(paths.globalPausePath);
       if (globalPause && globalPause.kind === "search_service_cooldown") {
-        if (Number(globalPause.paused_until_ms) > nowMs()) {
-          summary.stop_reason = "search_service_cooldown_pause_active";
-          summary.pause_until = new Date(Number(globalPause.paused_until_ms)).toISOString();
+        const pausedUntilMs = Number(globalPause.paused_until_ms);
+        if (!Number.isFinite(pausedUntilMs)) {
+          summary.stop_reason = "global_cooldown_state_invalid_requires_operator_review";
           canProcess = false;
+        } else if (pausedUntilMs > nowMs()) {
+          summary.stop_reason = "search_service_cooldown_pause_active";
+          summary.pause_until = new Date(pausedUntilMs).toISOString();
+          canProcess = false;
+        } else {
+          await adapters.clearGlobalPause(paths.globalPausePath);
         }
-        await adapters.clearGlobalPause(paths.globalPausePath);
       } else if (globalPause && globalPause.kind === "platform_restriction") {
         if (!resumeAfterManualPause) {
           summary.stop_reason = "platform_restriction_requires_operator_resume";
           canProcess = false;
+        } else {
+          await adapters.clearGlobalPause(paths.globalPausePath);
         }
-        await adapters.clearGlobalPause(paths.globalPausePath);
       }
 
       outer: while (canProcess && summary.batch_count < maxBatches) {
         let exportedAny = false;
-        for (const stage of STAGES) {
+        for (const stage of stageOrder) {
           if (CONTENT_STAGES.has(stage) && !allowIndexedLinkedinContent) {
             summary.stop_reason = "indexed_linkedin_content_opt_in_required";
             break outer;
@@ -304,7 +311,8 @@ function createB614PublicIndexHostDriver(adapters) {
         }
 
         if (!exportedAny) {
-          summary.stop_reason = "queue_idle_no_eligible_requests";
+          summary.stop_reason = allowIndexedLinkedinContent
+            ? "queue_idle_no_eligible_requests" : "search_only_scope_complete";
           break;
         }
       }

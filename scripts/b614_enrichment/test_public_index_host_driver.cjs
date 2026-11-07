@@ -84,8 +84,18 @@ test("host driver recognizes parenthesized route 429, persists platform pause, a
   assert.equal(f.globalPause.kind, "platform_restriction");
   assert.equal(f.globalPause.requires_operator_resume, true);
   assert.equal(f.adapters.releasedRunId, "run-001");
+  const exportsBeforeResume = f.exports.length;
   const pausedResume = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root", maxBatches: 8 });
   assert.equal(pausedResume.stop_reason, "platform_restriction_requires_operator_resume");
+  assert.equal(f.globalPause.kind, "platform_restriction");
+  assert.equal(f.exports.length, exportsBeforeResume);
+  assert.equal(f.calls.length, 1);
+
+  f.adapters.exportBatch = async () => ({ eligible: false });
+  const manualResume = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root",
+    maxBatches: 8, resumeAfterManualPause: true });
+  assert.equal(manualResume.stop_reason, "search_only_scope_complete");
+  assert.equal(f.globalPause, null);
   assert.equal(f.calls.length, 1);
 });
 
@@ -106,8 +116,13 @@ test("Search Service 429 stores a timed global pause and never retries before it
   const exportedBeforeCooldown = f.exports.length;
   const beforeCooldown = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root", maxBatches: 2 });
   assert.equal(beforeCooldown.stop_reason, "search_service_cooldown_pause_active");
+  assert.equal(f.globalPause.kind, "search_service_cooldown");
   assert.equal(f.exports.length, exportedBeforeCooldown);
   assert.equal(f.calls.length, 1);
+  const stillPaused = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root", maxBatches: 2 });
+  assert.equal(stillPaused.stop_reason, "search_service_cooldown_pause_active");
+  assert.equal(f.globalPause.kind, "search_service_cooldown");
+  assert.equal(f.exports.length, exportedBeforeCooldown);
 });
 
 test("host driver imports a saved immutable capture on resume without another provider call", async () => {
@@ -138,7 +153,7 @@ test("uncertain call markers prevent a duplicate provider call after interruptio
   assert.equal(result.stop_reason, "call_uncertain_wait_for_lease_expiry");
 });
 
-test("open/find/click are not exported without explicit indexed-content opt-in", async () => {
+test("search-only mode does not export open/find/click", async () => {
   const f = fixture();
   f.adapters.exportBatch = async ({ stage }) => {
     f.exports.push({ stage });
@@ -149,6 +164,29 @@ test("open/find/click are not exported without explicit indexed-content opt-in",
   const driver = createB614PublicIndexHostDriver(f.adapters);
   const result = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root", maxBatches: 1 });
   assert.equal(f.calls.length, 0);
-  assert.equal(result.stop_reason, "indexed_linkedin_content_opt_in_required");
+  assert.equal(result.stop_reason, "search_only_scope_complete");
   assert.deepEqual(f.exports.map((item) => item.stage), ["search"]);
+});
+
+test("content-enabled work drains click then find/open before requesting more search refs", async () => {
+  const f = fixture();
+  const clickManifest = {
+    ...f.manifest,
+    stage: "click",
+    operation: "click",
+    batch_id: "f".repeat(64),
+    manifest_sha256: "e".repeat(64),
+    indexed_linkedin_content_authorized: true,
+    tool_args: { click: [{ ref_id: "turn300view0", id: 11 }], response_length: "long" },
+  };
+  f.adapters.exportBatch = async ({ stage, manifestPath }) => {
+    f.exports.push({ stage, manifestPath });
+    return stage === "click" ? { eligible: true, manifest: clickManifest } : { eligible: false };
+  };
+  const driver = createB614PublicIndexHostDriver(f.adapters);
+  const result = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root",
+    maxBatches: 1, allowIndexedLinkedinContent: true });
+  assert.equal(result.stop_reason, "max_batches_reached_resume_from_state");
+  assert.deepEqual(f.exports.map((item) => item.stage), ["click"]);
+  assert.deepEqual(f.calls, [clickManifest.tool_args]);
 });
