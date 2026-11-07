@@ -61,6 +61,34 @@ CREATE TABLE IF NOT EXISTS jobs (
   UNIQUE(company_key, task_kind, provider, source_url)
 );
 CREATE INDEX IF NOT EXISTS jobs_ready_idx ON jobs(status, not_before, job_id);
+CREATE TABLE IF NOT EXISTS public_index_requests (
+  request_id TEXT PRIMARY KEY, plan_sha256 TEXT NOT NULL, job_id TEXT NOT NULL, company_key TEXT NOT NULL,
+  company_name TEXT NOT NULL, expected_old TEXT, query TEXT NOT NULL,
+  query_sha256 TEXT NOT NULL, slug TEXT, lead_kind TEXT NOT NULL DEFAULT '',
+  search_status TEXT NOT NULL DEFAULT 'pending', search_attempts INTEGER NOT NULL DEFAULT 0,
+  search_not_before REAL, search_ref TEXT, search_url TEXT, search_title TEXT,
+  search_capture_file TEXT, search_capture_sha256 TEXT, search_result_sha256 TEXT,
+  open_status TEXT NOT NULL DEFAULT 'pending', open_attempts INTEGER NOT NULL DEFAULT 0,
+  open_not_before REAL, open_ref TEXT, open_url TEXT, open_title TEXT, open_heading TEXT,
+  open_capture_file TEXT, open_capture_sha256 TEXT, open_result_sha256 TEXT,
+  find_status TEXT NOT NULL DEFAULT 'pending', find_attempts INTEGER NOT NULL DEFAULT 0,
+  find_not_before REAL, find_result_ref TEXT, employee_link_id INTEGER, employee_cta_label TEXT,
+  find_capture_file TEXT, find_capture_sha256 TEXT, find_result_sha256 TEXT,
+  click_status TEXT NOT NULL DEFAULT 'pending', click_attempts INTEGER NOT NULL DEFAULT 0,
+  click_not_before REAL, click_target_url TEXT, linkedin_org_id TEXT,
+  click_capture_file TEXT, click_capture_sha256 TEXT, click_result_sha256 TEXT,
+  active_batch_id TEXT, active_stage TEXT, lease_until REAL, last_error TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  UNIQUE(job_id)
+);
+CREATE INDEX IF NOT EXISTS public_index_stage_idx ON public_index_requests(search_status,open_status,find_status,click_status);
+CREATE TABLE IF NOT EXISTS public_index_batches (
+  batch_id TEXT PRIMARY KEY, stage TEXT NOT NULL, plan_sha256 TEXT NOT NULL,
+  manifest_json TEXT NOT NULL, manifest_sha256 TEXT NOT NULL, status TEXT NOT NULL,
+  capture_file TEXT, capture_sha256 TEXT, result_json TEXT,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS public_index_batches_stage_idx ON public_index_batches(stage,status,created_at);
 CREATE TABLE IF NOT EXISTS source_cache (
   cache_key TEXT PRIMARY KEY, provider TEXT NOT NULL, source_url TEXT NOT NULL,
   response_sha256 TEXT NOT NULL, observed_status INTEGER, evidence_json TEXT NOT NULL,
@@ -496,6 +524,19 @@ def _linkedin_https_url(parsed: urllib.parse.SplitResult) -> bool:
             and parsed.username is None and parsed.password is None and port_ok)
 
 
+def _linkedin_company_slug(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(value)
+    except ValueError:
+        return None
+    if not _linkedin_https_url(parsed):
+        return None
+    match = re.fullmatch(r"/company/([^/]+)(?:/jobs)?/?", parsed.path, re.I)
+    return urllib.parse.unquote(match.group(1)) if match else None
+
+
 def _single_numeric_facet_id(query: str, *, allowed_keys: tuple[str, ...] = ("facetCurrentCompany", "currentCompany")) -> str | None:
     params = urllib.parse.parse_qs(query, keep_blank_values=True)
     if any(key.casefold() == "keywords" for key in params):
@@ -619,7 +660,15 @@ def validate_candidate(field: str, value: Any, evidence: dict[str, Any], company
     source_url = evidence.get("source_url")
     excerpt = evidence.get("excerpt")
     if wrapped_transport_status(evidence) == 429:
-        return "deferred_cooldown", "wrapped_http_429_retry_after_required", "none"
+        public_binding = evidence.get("public_index_binding") or {}
+        legacy_binding = evidence.get("legacy_click_binding") or {}
+        verified_href = (
+            isinstance(public_binding, dict) and public_binding.get("verified") is True
+        ) or (
+            isinstance(legacy_binding, dict) and legacy_binding.get("verified") is True
+        )
+        if field != "linkedin_org_id" or not verified_href:
+            return "deferred_cooldown", "wrapped_http_429_retry_after_required", "none"
     if evidence.get("adapter_gap") == "unsupported_raw_evidence_shape":
         return "exception", "adapter_gap:unsupported_raw_evidence_shape", "none"
     careers_gap = evidence.get("adapter_gap")
@@ -703,7 +752,25 @@ def validate_candidate(field: str, value: Any, evidence: dict[str, Any], company
         text_value = str(value)
         if not re.fullmatch(r"[1-9]\d*", text_value):
             return "rejected", "linkedin_org_id_must_be_positive_numeric", confidence
+        public_binding = evidence.get("public_index_binding") or {}
         legacy_binding = evidence.get("legacy_click_binding") or {}
+        exact_id = None
+        if public_binding:
+            required_hashes = (
+                "search_capture_sha256", "open_capture_sha256", "find_capture_sha256",
+                "click_capture_sha256", "find_result_sha256", "click_result_sha256",
+            )
+            if public_binding.get("verified") is not True or any(
+                not isinstance(public_binding.get(key), str)
+                or not re.fullmatch(r"[a-f0-9]{64}", public_binding[key])
+                for key in required_hashes
+            ):
+                return "exception", "public_index_response_binding_unverified", confidence
+            exact_id = parse_linkedin_employee_cta_id(str(public_binding.get("raw_href", "")))
+            if exact_id is None or public_binding.get("linkedin_org_id") != exact_id:
+                return "exception", "public_index_href_facet_binding_invalid", confidence
+            if exact_id != text_value:
+                return "exception", "candidate_id_differs_from_public_index_href", confidence
         if legacy_binding:
             if legacy_binding.get("verified") is not True:
                 return "exception", "legacy_click_ref_id_href_binding_unverified", confidence
@@ -713,7 +780,8 @@ def validate_candidate(field: str, value: Any, evidence: dict[str, Any], company
                 return "exception", "official_domain_mismatch", confidence
         cta = evidence.get("company_cta") or {}
         published = evidence.get("published_company_href") or evidence.get("raw_href")
-        exact_id = legacy_binding.get("linkedin_org_id") if legacy_binding.get("verified") is True else None
+        if exact_id is None:
+            exact_id = legacy_binding.get("linkedin_org_id") if legacy_binding.get("verified") is True else None
         if published and exact_id is None:
             target = urllib.parse.urlsplit(urllib.parse.urljoin(source_url, str(published)))
             exact_id = parse_linkedin_company_id(urllib.parse.urlunsplit(target))
@@ -864,6 +932,15 @@ def _raw_page_heading(block: str) -> str | None:
     return None
 
 
+def _employee_cta_markers(block: str) -> list[tuple[str, str]]:
+    markers = re.findall(r"【(\d+)†([^】]*\bemployees?\b[^】]*)】", block, re.I)
+    counted = [item for item in markers if re.search(r"\b(?:view|see)\s+all\s+[\d][\d,]*\s+employees?\b", item[1], re.I)]
+    if counted:
+        return counted
+    generic = [item for item in markers if re.search(r"\b(?:view|see)\s+(?:all\s+)?employees?\b", item[1], re.I)]
+    return generic
+
+
 def _normalized_linkedin_page_url(value: str) -> str:
     parsed = urllib.parse.urlsplit(value)
     return urllib.parse.urlunsplit((parsed.scheme.casefold(), (parsed.hostname or "").casefold().rstrip("."),
@@ -918,7 +995,7 @@ def _extract_legacy_find_capture(find_data: Any, company: dict[str, Any],
             continue
         if normalize_name(row_title.split("|", 1)[0].strip()) != normalize_name(title_name):
             continue
-        employee_markers = re.findall(r"【(\d+)†([^】]*\bemployees?\b[^】]*)】", block, re.I)
+        employee_markers = _employee_cta_markers(block)
         if len(employee_markers) != 1:
             continue
         matches.append({"block": block, "primary_page_ref": primary_ref, "primary_url": source_url,
@@ -1247,6 +1324,998 @@ def load_destination_capture(path_token: str | Path | None,
     return {"path": str(path), "sha256": digest, "rows": data}
 
 
+def _load_public_index_plan(plan_file: str | Path, evidence_root: str | Path | None,
+                            baseline: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str, int]:
+    path, digest, raw = resolve_legacy_evidence_file(str(plan_file), evidence_root)
+    plan = json.loads(_json_text(raw))
+    if not isinstance(plan, dict) or not isinstance(plan.get("jobs"), list):
+        raise ValueError("public-index acquisition plan must contain jobs")
+    baseline_by_key = {row["company_key"]: row for row in baseline}
+    seen: set[str] = set()
+    valid: list[dict[str, Any]] = []
+    conflicts = 0
+    for item in plan["jobs"]:
+        if not isinstance(item, dict):
+            conflicts += 1
+            continue
+        request_id, key, query = item.get("request_id"), item.get("company_key"), item.get("query")
+        if (not isinstance(request_id, str) or not re.fullmatch(r"[a-f0-9]{64}", request_id)
+                or request_id in seen or not isinstance(key, str)):
+            conflicts += 1
+            continue
+        seen.add(request_id)
+        company = baseline_by_key.get(key)
+        if not company or not isinstance(query, str) or not query.strip() or "site:linkedin.com" not in query.casefold():
+            conflicts += 1
+            continue
+        if (normalize_name(str(item.get("company_name", ""))) != normalize_name(company["company_name"])
+                or item.get("expected_old") != company.get("linkedin_org_id")
+                or item.get("registry_website") != company.get("website_url")
+                or item.get("registry_linkedin_url") != company.get("linkedin_url")
+                or company.get("linkedin_org_id") not in (None, "")):
+            conflicts += 1
+            continue
+        leads = item.get("publisher_leads") or []
+        if not isinstance(leads, list) or not all(isinstance(lead, dict) for lead in leads):
+            conflicts += 1
+            continue
+        slugs = sorted({str(lead["slug"]) for lead in leads if isinstance(lead.get("slug"), str) and lead["slug"]})
+        source_url = company.get("linkedin_url") or ""
+        task = {"company_key": key, "task_kind": "linkedin_identity_import",
+                "provider": "linkedin_import", "source_url": source_url}
+        valid.append({
+            "request_id": request_id,
+            "job_id": task_id(task),
+            "company_key": key,
+            "company_name": company["company_name"],
+            "expected_old": item.get("expected_old"),
+            "query": query,
+            "query_sha256": sha256_bytes(query.encode("utf-8")),
+            "slugs": slugs,
+            "lead_kind": str(item.get("lead_kind") or ""),
+            "task": task,
+        })
+    return valid, digest, conflicts
+
+
+def public_index_import_root_batches(conn: sqlite3.Connection, plan_file: str | Path,
+                                     batches_dir: str | Path, evidence_root: str | Path | None) -> dict[str, int]:
+    """Import saved search-index envelopes by request ID and exact supplied company slug."""
+    baseline = get_baseline(conn)
+    plan_jobs, plan_sha, plan_conflicts = _load_public_index_plan(plan_file, evidence_root, baseline)
+    enqueue_tasks(conn, [item["task"] for item in plan_jobs])
+    timestamp = utc_now()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for item in plan_jobs:
+            conn.execute(
+                "INSERT OR IGNORE INTO public_index_requests(request_id,plan_sha256,job_id,company_key,company_name,expected_old,query,query_sha256,slug,lead_kind,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (item["request_id"], plan_sha, item["job_id"], item["company_key"], item["company_name"],
+                 item["expected_old"], item["query"], item["query_sha256"], canonical_json(item["slugs"]),
+                 item["lead_kind"], timestamp, timestamp),
+            )
+            saved = conn.execute(
+                "SELECT plan_sha256,job_id,company_key,query_sha256 FROM public_index_requests WHERE request_id=?",
+                (item["request_id"],),
+            ).fetchone()
+            if (not saved or saved["plan_sha256"] != plan_sha or saved["job_id"] != item["job_id"] or saved["company_key"] != item["company_key"]
+                    or saved["query_sha256"] != item["query_sha256"]):
+                raise ValueError(f"stable public-index request changed: {item['request_id']}")
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+    if evidence_root is None:
+        raise ValueError("--evidence-root is required for public-index batch imports")
+    root_input = Path(evidence_root).expanduser()
+    if root_input.is_symlink():
+        raise PermissionError("evidence root cannot be a symlink")
+    root = root_input.resolve(strict=True)
+    if not root.is_dir() or root.stat().st_mode & 0o077:
+        raise PermissionError("evidence root must be a private directory with mode 0700")
+    batch_input = Path(batches_dir).expanduser()
+    if batch_input.is_symlink():
+        raise PermissionError("public-index batch directory cannot be a symlink")
+    batch_dir = batch_input.resolve(strict=True)
+    try:
+        batch_dir.relative_to(root)
+    except ValueError as error:
+        raise PermissionError("public-index batch directory must be under evidence root") from error
+    if not batch_dir.is_dir() or batch_dir.stat().st_mode & 0o077:
+        raise PermissionError("public-index batch directory must be private with mode 0700")
+
+    plan_by_id = {item["request_id"]: item for item in plan_jobs}
+    counts = {"root_batches": 0, "indexed_refs": 0, "missing_refs": 0, "adapter_gaps": 0,
+              "plan_conflicts": plan_conflicts}
+    for batch_path in sorted(batch_dir.glob("batch-*.json")):
+        path, digest, raw = resolve_legacy_evidence_file(str(batch_path), root)
+        try:
+            batch = json.loads(_json_text(raw))
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise ValueError(f"invalid public-index batch JSON: {path.name}") from error
+        if (not isinstance(batch, dict) or not isinstance(batch.get("requests"), list)
+                or not isinstance(batch.get("indexed_company_references"), list)
+                or not isinstance(batch.get("raw_response"), str)):
+            raise ValueError(f"unsupported public-index batch shape: {path.name}")
+        counts["root_batches"] += 1
+        raw_text = batch["raw_response"]
+        raw_result_blocks = _public_index_result_blocks(raw_text)
+        requests: dict[str, dict[str, Any]] = {}
+        for request in batch["requests"]:
+            if not isinstance(request, dict):
+                continue
+            request_id = request.get("request_id")
+            plan_item = plan_by_id.get(request_id) if isinstance(request_id, str) else None
+            if (not plan_item or request.get("company_key") != plan_item["company_key"]
+                    or request.get("query") != plan_item["query"]):
+                counts["adapter_gaps"] += 1
+                continue
+            request_slug = request.get("slug")
+            if not isinstance(request_slug, str) or request_slug.casefold() not in {s.casefold() for s in plan_item["slugs"]}:
+                counts["adapter_gaps"] += 1
+                continue
+            if request_id in requests:
+                counts["adapter_gaps"] += 1
+                requests.pop(request_id, None)
+                continue
+            requests[request_id] = request
+
+        references: dict[str, list[dict[str, Any]]] = {}
+        for reference in batch["indexed_company_references"]:
+            if isinstance(reference, dict) and isinstance(reference.get("request_id"), str):
+                references.setdefault(reference["request_id"], []).append(reference)
+
+        batch_request_ids: list[str] = []
+        now_text = utc_now()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for request_id, request in requests.items():
+                row = conn.execute("SELECT * FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()
+                if not row:
+                    counts["adapter_gaps"] += 1
+                    continue
+                refs = references.get(request_id, [])
+                if not refs:
+                    if row["search_status"] not in {"indexed_ref", "open", "found_cta", "candidate_imported"}:
+                        attempt = int(row["search_attempts"] or 0) + 1
+                        conn.execute(
+                            "UPDATE public_index_requests SET search_status='no_exact_result',search_attempts=?,search_not_before=?,last_error='public_index_no_exact_vanity_result',updated_at=? WHERE request_id=?",
+                            (attempt, time.time() + backoff_delay(attempt), now_text, request_id),
+                        )
+                    counts["missing_refs"] += 1
+                    continue
+                if len(refs) != 1:
+                    counts["adapter_gaps"] += 1
+                    continue
+                reference = refs[0]
+                result_ref, result_url, result_title = reference.get("ref"), reference.get("url"), reference.get("title")
+                actual_slug = _linkedin_company_slug(result_url)
+                expected_slug = str(request.get("slug") or "")
+                exact_result_blocks = [block for block in raw_result_blocks
+                    if block["ref"] == result_ref and block["url"] == result_url
+                    and isinstance(result_title, str) and result_title in block["block"]
+                    and (_linkedin_company_slug(block["url"]) or "").casefold() == expected_slug.casefold()]
+                if (reference.get("company_key") != row["company_key"]
+                        or not isinstance(result_ref, str) or not re.fullmatch(r"turn[\w-]+search\d+", result_ref)
+                        or not isinstance(result_url, str) or actual_slug is None
+                        or actual_slug.casefold() != expected_slug.casefold()
+                        or not isinstance(result_title, str) or not result_title.strip()
+                        or len(exact_result_blocks) != 1):
+                    counts["adapter_gaps"] += 1
+                    continue
+                if row["search_ref"] and (
+                    row["search_ref"] != result_ref or row["search_url"] != result_url or row["search_title"] != result_title
+                ):
+                    counts["adapter_gaps"] += 1
+                    continue
+                result_sha = sha256_value({
+                    "request_id": request_id, "company_key": row["company_key"], "slug": actual_slug,
+                    "ref": result_ref, "url": result_url, "title": result_title,
+                    "raw_response_sha256": digest,
+                })
+                conn.execute(
+                    "UPDATE public_index_requests SET search_status='indexed_ref',search_ref=?,search_url=?,search_title=?,search_capture_file=?,search_capture_sha256=?,search_result_sha256=?,search_not_before=NULL,last_error=NULL,updated_at=? WHERE request_id=?",
+                    (result_ref, result_url, result_title, str(path), digest, result_sha, now_text, request_id),
+                )
+                batch_request_ids.append(request_id)
+                counts["indexed_refs"] += 1
+            batch_id = sha256_value({"stage": "search_root", "plan_sha256": plan_sha,
+                                     "file_sha256": digest, "file_name": path.name})
+            batch_manifest = {"stage": "search_root", "plan_sha256": plan_sha, "file_sha256": digest,
+                              "request_ids": sorted(batch_request_ids)}
+            manifest_sha = sha256_value(batch_manifest)
+            conn.execute(
+                "INSERT OR IGNORE INTO public_index_batches(batch_id,stage,plan_sha256,manifest_json,manifest_sha256,status,capture_file,capture_sha256,result_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                (batch_id, "search_root", plan_sha, canonical_json(batch_manifest), manifest_sha, "imported",
+                 str(path), digest, canonical_json({"indexed_refs": len(batch_request_ids)}), now_text, now_text),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    return counts
+
+
+def export_public_index_batch(conn: sqlite3.Connection, stage: str, out_path: str | Path,
+                              *, limit: int = 4, now: float | None = None,
+                              lease_seconds: int = 900,
+                              allow_indexed_linkedin_content: bool = False) -> dict[str, Any]:
+    """Export one exact, bounded public-index tool call manifest."""
+    if stage not in {"search", "open", "find", "click"}:
+        raise ValueError("public-index stage must be search, open, find, or click")
+    if stage in {"open", "find", "click"} and not allow_indexed_linkedin_content:
+        raise PermissionError("LinkedIn page content operations require explicit --allow-indexed-linkedin-content")
+    if limit < 1 or limit > 4:
+        raise ValueError("public-index batch size must be between 1 and 4")
+    now = time.time() if now is None else now
+
+    active = conn.execute(
+        "SELECT * FROM public_index_batches WHERE stage=? AND status='awaiting_response' ORDER BY created_at LIMIT 1",
+        (stage,),
+    ).fetchone()
+    if active:
+        requests = json.loads(active["manifest_json"]).get("requests", [])
+        live = any(
+            (row := conn.execute("SELECT active_batch_id,lease_until FROM public_index_requests WHERE request_id=?",
+                                 (item.get("request_id"),)).fetchone())
+            and row["active_batch_id"] == active["batch_id"] and (row["lease_until"] or 0) > now
+            for item in requests if isinstance(item, dict)
+        )
+        if live:
+            manifest = json.loads(active["manifest_json"])
+            private_write(ensure_private_external_path(out_path), (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+            return {"batch_id": active["batch_id"], "manifest_sha256": active["manifest_sha256"],
+                    "stage": stage, "request_count": len(requests), "resumed": True, "out": str(out_path)}
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for item in requests:
+                request_id = item.get("request_id")
+                row = conn.execute("SELECT * FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()
+                if not row or row["active_batch_id"] != active["batch_id"]:
+                    continue
+                attempts_column = f"{stage}_attempts"
+                status_column = f"{stage}_status"
+                not_before_column = f"{stage}_not_before"
+                attempt = int(row[attempts_column] or 1)
+                delay = backoff_delay(attempt)
+                conn.execute(
+                    f"UPDATE public_index_requests SET {status_column}='retry_pending',{not_before_column}=?,active_batch_id=NULL,active_stage=NULL,lease_until=NULL,last_error='public_index_batch_lease_expired',updated_at=? WHERE request_id=?",
+                    (now + delay, utc_now(), request_id),
+                )
+            conn.execute("UPDATE public_index_batches SET status='expired',updated_at=? WHERE batch_id=?",
+                         (utc_now(), active["batch_id"]))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    stage_config = {
+        "search": ("search_status", "search_attempts", "search_not_before",
+                   {"pending", "no_exact_result", "unverified", "retry_pending"}),
+        "open": ("open_status", "open_attempts", "open_not_before",
+                 {"pending", "no_page", "identity_mismatch", "retry_pending"}),
+        "find": ("find_status", "find_attempts", "find_not_before",
+                 {"pending", "no_cta", "identity_mismatch", "ambiguous", "retry_pending"}),
+        "click": ("click_status", "click_attempts", "click_not_before",
+                  {"pending", "no_numeric_facet", "ambiguous", "retry_pending"}),
+    }
+    status_column, attempts_column, not_before_column, eligible_statuses = stage_config[stage]
+    request_rows = conn.execute(
+        f"SELECT * FROM public_index_requests WHERE {status_column} IN ({','.join('?' for _ in eligible_statuses)}) "
+        f"AND COALESCE({not_before_column},0)<=? AND (active_batch_id IS NULL OR lease_until<=?) "
+        "ORDER BY request_id",
+        (*sorted(eligible_statuses), now, now),
+    ).fetchall()
+    request_rows = [row for row in request_rows if int(row[attempts_column] or 0) < 3]
+    if stage == "search":
+        priority = {"pending": 0, "unverified": 1, "retry_pending": 2, "no_exact_result": 3}
+        request_rows.sort(key=lambda row: (priority.get(row[status_column], 4), row["request_id"]))
+
+    def stage_ready(row: sqlite3.Row) -> bool:
+        if stage == "open":
+            return row["search_status"] == "indexed_ref" and bool(row["search_ref"])
+        if stage == "find":
+            return row["open_status"] == "opened" and bool(row["open_ref"])
+        if stage == "click":
+            return row["find_status"] == "cta_found" and bool(row["find_result_ref"]) and row["employee_link_id"] is not None
+        return True
+
+    selected = [row for row in request_rows if stage_ready(row)][:limit]
+    if not selected:
+        raise ValueError(f"no public-index {stage} requests are eligible")
+    plan_shas = {row["plan_sha256"] for row in selected}
+    if len(plan_shas) != 1:
+        raise ValueError("public-index batch cannot mix acquisition plans")
+
+    attempts = [int(row[attempts_column] or 0) + 1 for row in selected]
+    request_ids = [row["request_id"] for row in selected]
+    batch_id = sha256_value({"stage": stage, "plan_sha256": next(iter(plan_shas)),
+                             "request_ids": request_ids, "attempts": attempts})
+    requests: list[dict[str, Any]] = []
+    calls: list[dict[str, Any]] = []
+    for row, attempt in zip(selected, attempts):
+        slugs = json.loads(row["slug"] or "[]")
+        item: dict[str, Any] = {
+            "request_id": row["request_id"], "company_key": row["company_key"],
+            "company_name": row["company_name"], "expected_old": row["expected_old"],
+            "lead_kind": row["lead_kind"], "slugs": slugs, "attempt": attempt,
+        }
+        if stage == "search":
+            item.update({"query": row["query"], "query_sha256": row["query_sha256"], "domains": ["linkedin.com"]})
+            calls.append({"q": row["query"], "domains": ["linkedin.com"]})
+        elif stage == "open":
+            item.update({"source_ref": row["search_ref"], "source_url": row["search_url"],
+                         "source_title": row["search_title"]})
+            calls.append({"ref_id": row["search_ref"]})
+        elif stage == "find":
+            item.update({"source_ref": row["search_ref"], "source_url": row["open_url"],
+                         "page_ref": row["open_ref"], "page_title": row["open_title"]})
+            calls.append({"ref_id": row["open_ref"], "pattern": "View all"})
+        else:
+            item.update({"source_ref": row["search_ref"], "page_ref": row["open_ref"],
+                         "find_result_ref": row["find_result_ref"], "employee_link_id": row["employee_link_id"]})
+            calls.append({"ref_id": row["find_result_ref"], "id": int(row["employee_link_id"])})
+
+        requests.append(item)
+
+    operation = {"search": "system2_search_query", "open": "open", "find": "find", "click": "click"}[stage]
+    tool_args_key = "system2_search_query" if stage == "search" else operation
+    manifest: dict[str, Any] = {
+        "schema_version": 1, "provider": "mcp__codex_apps__search_service_web_run",
+        "stage": stage, "operation": operation, "batch_id": batch_id,
+        "plan_sha256": next(iter(plan_shas)), "request_ids": request_ids,
+        "indexed_linkedin_content_authorized": stage in {"open", "find", "click"},
+        "requests": requests, "tool_args": {tool_args_key: calls, "response_length": "long"},
+    }
+    manifest_sha = sha256_value(manifest)
+    manifest["manifest_sha256"] = manifest_sha
+    timestamp = utc_now()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            "INSERT INTO public_index_batches(batch_id,stage,plan_sha256,manifest_json,manifest_sha256,status,created_at,updated_at) VALUES(?,?,?,?,?,'awaiting_response',?,?)",
+            (batch_id, stage, manifest["plan_sha256"], canonical_json(manifest), manifest_sha, timestamp, timestamp),
+        )
+        for row, attempt in zip(selected, attempts):
+            conn.execute(
+                f"UPDATE public_index_requests SET {attempts_column}=?,active_batch_id=?,active_stage=?,lease_until=?,updated_at=? WHERE request_id=?",
+                (attempt, batch_id, stage, now + lease_seconds, timestamp, row["request_id"]),
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    private_write(ensure_private_external_path(out_path), (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    return {"batch_id": batch_id, "manifest_sha256": manifest_sha, "stage": stage,
+            "request_count": len(requests), "resumed": False, "out": str(out_path)}
+
+
+def _public_index_citation_refs(block: str) -> list[str]:
+    refs = re.findall(r"cite(turn[\w-]+)", block)
+    refs.extend(re.findall(r"【(turn[\w-]+)】", block))
+    return sorted(set(refs))
+
+
+def _public_index_result_blocks(raw_text: str) -> list[dict[str, Any]]:
+    results = []
+    for block in split_capture_blocks(raw_text):
+        header = _raw_page_header(block)
+        refs = _public_index_citation_refs(block)
+        if header and len(refs) == 1:
+            results.append({
+                "block": block,
+                "title": header[0],
+                "url": header[1],
+                "ref": refs[0],
+                "block_sha256": sha256_bytes(block.encode("utf-8")),
+            })
+    return results
+
+
+def _same_linkedin_company_route(first_url: Any, second_url: Any) -> bool:
+    first_slug = _linkedin_company_slug(first_url)
+    second_slug = _linkedin_company_slug(second_url)
+    return bool(first_slug and second_slug and first_slug.casefold() == second_slug.casefold())
+
+
+def _public_index_result_rank(result: dict[str, Any], slug: str) -> tuple[int, int, int, str]:
+    parsed = urllib.parse.urlsplit(result["url"])
+    host = (parsed.hostname or "").casefold().rstrip(".")
+    host_rank = 0 if host == "www.linkedin.com" else 1 if host == "linkedin.com" else 2
+    path = parsed.path.rstrip("/").casefold()
+    root_path = f"/company/{slug}".casefold()
+    path_rank = 0 if path == root_path else 1 if path == root_path + "/jobs" else 2
+    query_rank = 0 if not parsed.query else 1
+    return host_rank, path_rank, query_rank, result["ref"]
+
+
+def _public_index_call_blocks(raw_text: str, stage: str, request: dict[str, Any]) -> list[str]:
+    expected = {
+        "open": {"ref_id": request.get("source_ref")},
+        "find": {"ref_id": request.get("page_ref"), "pattern": "View all"},
+        "click": {"ref_id": request.get("find_result_ref"), "id": request.get("employee_link_id")},
+    }.get(stage)
+    if expected is None:
+        return []
+    matches = []
+    for block in split_capture_blocks(raw_text):
+        arguments = _capture_source_invocation(block, stage)
+        if arguments and all(arguments.get(key) == value for key, value in expected.items()):
+            matches.append(block)
+    return matches
+
+
+def _public_index_terminal_route_status(block: str) -> tuple[str, str] | None:
+    if wrapped_transport_status({"raw_response_excerpt": block}) == 429:
+        return "cooldown_pending", "public_index_exact_route_http_429"
+    if re.search(r"\b401\b|\b403\b|robots\.txt|blocked by robots|disallowed by robots", block, re.I):
+        return "policy_denied", "public_index_exact_route_policy_denied"
+    return None
+
+
+def _public_index_terminal_route_block(blocks: list[str]) -> tuple[str, str, str] | None:
+    for block in blocks:
+        result = _public_index_terminal_route_status(block)
+        if result:
+            return result[0], result[1], block
+    return None
+
+
+def _public_index_retry(conn: sqlite3.Connection, request_id: str, stage: str,
+                        reason: str, now: float, retry_after: float | None = None,
+                        *, terminal: bool = False) -> float:
+    attempts_column = f"{stage}_attempts"
+    status_column = f"{stage}_status"
+    not_before_column = f"{stage}_not_before"
+    row = conn.execute(f"SELECT {attempts_column},job_id FROM public_index_requests WHERE request_id=?",
+                       (request_id,)).fetchone()
+    if not row:
+        raise ValueError("public-index request disappeared during retry checkpoint")
+    delay = backoff_delay(max(1, int(row[attempts_column] or 1)), retry_after)
+    due = now + delay
+    conn.execute(
+        f"UPDATE public_index_requests SET {status_column}=?,{not_before_column}=?,active_batch_id=NULL,active_stage=NULL,lease_until=NULL,last_error=?,updated_at=? WHERE request_id=?",
+        ("cooldown_pending" if terminal else "retry_pending", due, reason, utc_now(), request_id),
+    )
+    conn.execute(
+        "UPDATE jobs SET status='cooldown_pending',lease_token=NULL,lease_until=NULL,not_before=?,result_json=?,updated_at=? WHERE job_id=?",
+        (due, canonical_json({"reason": reason, "retry_after_seconds": delay, "public_index_stage": stage}), utc_now(), row["job_id"]),
+    )
+    return delay
+
+
+def _capture_raw_text(capture: dict[str, Any]) -> str:
+    raw_text = capture.get("raw_result_text")
+    if isinstance(raw_text, str):
+        return raw_text
+    content = capture.get("content")
+    if isinstance(content, list):
+        return "\n".join(item.get("text", "") for item in content if isinstance(item, dict) and isinstance(item.get("text"), str))
+    raise ValueError("public-index capture must include raw_result_text or tool content text")
+
+
+def _public_index_stage_status_column(stage: str) -> tuple[str, str, str]:
+    config = {
+        "search": ("search_status", "search_attempts", "search_not_before"),
+        "open": ("open_status", "open_attempts", "open_not_before"),
+        "find": ("find_status", "find_attempts", "find_not_before"),
+        "click": ("click_status", "click_attempts", "click_not_before"),
+    }
+    if stage not in config:
+        raise ValueError("unsupported public-index stage")
+    return config[stage]
+
+
+def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Path,
+                               evidence_root: str | Path | None) -> dict[str, Any]:
+    """Import one public-index tool response only after exact batch/call verification."""
+    capture_path, capture_sha, capture_bytes = _safe_evidence_file(str(capture_file), evidence_root)
+    try:
+        capture = json.loads(_json_text(capture_bytes))
+    except json.JSONDecodeError as error:
+        raise ValueError("public-index capture is not valid JSON") from error
+    if not isinstance(capture, dict):
+        raise ValueError("public-index capture must be an object")
+    batch_id = capture.get("batch_id")
+    batch = conn.execute("SELECT * FROM public_index_batches WHERE batch_id=?", (batch_id,)).fetchone()
+    if not batch:
+        raise ValueError("public-index capture references an unknown batch")
+    manifest = json.loads(batch["manifest_json"])
+    if (capture.get("provider") != "mcp__codex_apps__search_service_web_run"
+            or capture.get("stage") != batch["stage"]
+            or capture.get("operation") != manifest.get("operation")
+            or capture.get("manifest_sha256") != batch["manifest_sha256"]
+            or capture.get("request_ids") != manifest.get("request_ids")
+            or canonical_json(capture.get("tool_args")) != canonical_json(manifest.get("tool_args"))):
+        raise ValueError("public-index response does not bind to the exact exported batch calls")
+    if batch["status"] == "imported":
+        if batch["capture_sha256"] == capture_sha:
+            return json.loads(batch["result_json"] or "{}") | {"replayed": True}
+        raise ValueError("public-index batch already imported from a different response")
+    if batch["status"] != "awaiting_response":
+        raise ValueError("public-index batch is not awaiting a response")
+
+    stage = batch["stage"]
+    if stage in {"open", "find", "click"} and manifest.get("indexed_linkedin_content_authorized") is not True:
+        raise ValueError("LinkedIn page content response lacks an explicit authorized export manifest")
+    now = time.time()
+    provider_status = capture.get("provider_error_status")
+    is_error = capture.get("is_error") is True
+    if is_error or provider_status is not None:
+        try:
+            status_value = int(provider_status) if provider_status is not None else None
+        except (TypeError, ValueError):
+            status_value = None
+        retry_after = retry_after_seconds(str(capture.get("retry_after"))) if capture.get("retry_after") is not None else None
+        deferred = 0
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for request in manifest["requests"]:
+                request_id = request["request_id"]
+                row = conn.execute("SELECT active_batch_id,job_id FROM public_index_requests WHERE request_id=?",
+                                   (request_id,)).fetchone()
+                if not row or row["active_batch_id"] != batch_id:
+                    raise ValueError("public-index request lease is stale")
+                if status_value in {401, 403}:
+                    status_column, _, _ = _public_index_stage_status_column(stage)
+                    conn.execute(
+                        f"UPDATE public_index_requests SET {status_column}='policy_denied',active_batch_id=NULL,active_stage=NULL,lease_until=NULL,last_error='public_index_provider_policy_denied',updated_at=? WHERE request_id=?",
+                        (utc_now(), request_id),
+                    )
+                    conn.execute(
+                        "UPDATE jobs SET status='policy_denied',lease_token=NULL,lease_until=NULL,result_json=?,updated_at=? WHERE job_id=?",
+                        (canonical_json({"reason": "public_index_provider_policy_denied", "stage": stage}), utc_now(), row["job_id"]),
+                    )
+                else:
+                    _public_index_retry(conn, request_id, stage, "public_index_provider_error", now, retry_after,
+                                        terminal=status_value == 429)
+                    deferred += 1
+            result = {"stage": stage, "deferred": deferred, "policy_denied": len(manifest["requests"]) - deferred}
+            conn.execute(
+                "UPDATE public_index_batches SET status='provider_error',capture_file=?,capture_sha256=?,result_json=?,updated_at=? WHERE batch_id=?",
+                (str(capture_path), capture_sha, canonical_json(result), utc_now(), batch_id),
+            )
+            conn.execute(
+                "INSERT INTO audit(audit_id,action,subject,payload_json,created_at) VALUES(?,?,?,?,?)",
+                (secrets.token_hex(16), "public_index_provider_error", batch_id, canonical_json(result), utc_now()),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        return result
+
+    raw_text = _capture_raw_text(capture)
+    result_blocks = _public_index_result_blocks(raw_text)
+    requests = manifest["requests"]
+    stage_updates: dict[str, tuple[str, str, dict[str, Any]]] = {}
+    candidate_updates: list[dict[str, Any]] = []
+    trusted_bindings: dict[str, dict[str, Any]] = {}
+    result_requests: dict[str, list[dict[str, Any]]] = {request["request_id"]: [] for request in requests}
+
+    if stage == "search":
+        selected_results: dict[str, dict[str, Any]] = {}
+        search_reasons: dict[str, str] = {}
+        for request in requests:
+            slugs = {str(slug).casefold() for slug in request.get("slugs", []) if isinstance(slug, str)}
+            matches = []
+            for result in result_blocks:
+                slug = _linkedin_company_slug(result["url"])
+                if slug is None:
+                    continue
+                title_match = _company_title_matches(result["title"], request["company_name"])
+                lead_match = bool(slugs and slug.casefold() in slugs)
+                if lead_match or (not slugs and title_match):
+                    matches.append((slug, result))
+            distinct_slugs = {slug.casefold() for slug, _result in matches}
+            if len(distinct_slugs) > 1:
+                search_reasons[request["request_id"]] = "public_index_multiple_company_slugs"
+            elif len(matches) == 1:
+                selected_results[request["request_id"]] = matches[0][1]
+            elif matches:
+                slug = matches[0][0]
+                selected_results[request["request_id"]] = sorted(
+                    (result for candidate_slug, result in matches if candidate_slug.casefold() == slug.casefold()),
+                    key=lambda result: _public_index_result_rank(result, slug),
+                )[0]
+            else:
+                search_reasons[request["request_id"]] = "public_index_no_exact_company_result"
+
+        block_matches: dict[str, list[str]] = {}
+        for request_id, result in selected_results.items():
+            block_matches.setdefault(result["block_sha256"], []).append(request_id)
+        for request in requests:
+            request_id = request["request_id"]
+            if request_id in search_reasons:
+                reason = search_reasons[request_id]
+                stage_updates[request_id] = ("search_status", "ambiguous" if "multiple_company_slugs" in reason else "no_exact_result",
+                                             {"reason": reason})
+                continue
+            result = selected_results.get(request_id)
+            if result and len(set(block_matches.get(result["block_sha256"], []))) > 1:
+                stage_updates[request_id] = ("search_status", "ambiguous", {"reason": "search_result_matches_multiple_requests"})
+            elif result:
+                stage_updates[request_id] = ("search_status", "indexed_ref", result)
+            else:
+                stage_updates[request_id] = ("search_status", "no_exact_result", {"reason": "public_index_no_exact_company_result"})
+    elif stage == "open":
+        invalid_search_ref = bool(re.search(
+            r"(?:unable to resolve open call.*invalid ref[_ -]?id|invalid ref[_ -]?id argument)",
+            raw_text, re.I,
+        ))
+        for request in requests:
+            route_blocks = _public_index_call_blocks(raw_text, "open", request)
+            terminal = _public_index_terminal_route_block(route_blocks)
+            if terminal:
+                status_value, reason, terminal_block = terminal
+                stage_updates[request["request_id"]] = ("open_status", status_value, {
+                    "reason": reason, "result_sha256": sha256_bytes(terminal_block.encode("utf-8")),
+                })
+                continue
+            matching = []
+            for result in result_blocks:
+                source_args = _capture_source_invocation(result["block"], "open")
+                if source_args and source_args.get("ref_id") == request.get("source_ref"):
+                    matching.append((result, source_args))
+            if len(matching) != 1:
+                exact_invalid_ref = any(re.search(
+                    r"(?:unable to resolve open call.*invalid ref[_ -]?id|invalid ref[_ -]?id argument)",
+                    block, re.I,
+                ) for block in route_blocks)
+                if exact_invalid_ref or (invalid_search_ref and len(requests) == 1):
+                    stage_updates[request["request_id"]] = (
+                        "search_status", "unverified",
+                        {"reason": "public_index_search_ref_unresolvable", "retry_stage": "search"},
+                    )
+                else:
+                    stage_updates[request["request_id"]] = ("open_status", "no_page", {"reason": "public_index_open_result_not_unique"})
+                continue
+            result, _args = matching[0]
+            heading = _raw_page_heading(result["block"])
+            if (not _same_linkedin_company_route(result["url"], request.get("source_url"))
+                    or not _company_title_matches(result["title"], request["company_name"])
+                    or not heading or not _company_title_matches(heading, request["company_name"])):
+                stage_updates[request["request_id"]] = ("open_status", "identity_mismatch", {"reason": "public_index_open_identity_not_bound"})
+                continue
+            stage_updates[request["request_id"]] = ("open_status", "opened", {**result, "heading": heading})
+    elif stage == "find":
+        for request in requests:
+            route_blocks = _public_index_call_blocks(raw_text, "find", request)
+            terminal = _public_index_terminal_route_block(route_blocks)
+            if terminal:
+                status_value, reason, terminal_block = terminal
+                stage_updates[request["request_id"]] = ("find_status", status_value, {
+                    "reason": reason, "result_sha256": sha256_bytes(terminal_block.encode("utf-8")),
+                })
+                continue
+            matching = []
+            for result in result_blocks:
+                source_args = _capture_source_invocation(result["block"], "find")
+                if (source_args and source_args.get("ref_id") == request.get("page_ref")
+                        and source_args.get("pattern") == "View all"):
+                    matching.append((result, source_args))
+            if len(matching) != 1:
+                stage_updates[request["request_id"]] = ("find_status", "no_cta", {"reason": "public_index_find_result_not_unique"})
+                continue
+            result, _args = matching[0]
+            heading = _raw_page_heading(result["block"])
+            if (not _same_linkedin_company_route(result["url"], request.get("source_url"))
+                    or not _company_title_matches(result["title"], request["company_name"])
+                    or not heading or not _company_title_matches(heading, request["company_name"])):
+                stage_updates[request["request_id"]] = ("find_status", "identity_mismatch", {"reason": "public_index_find_identity_not_bound"})
+                continue
+            markers = _employee_cta_markers(result["block"])
+            if len(markers) != 1:
+                stage_updates[request["request_id"]] = ("find_status", "ambiguous", {"reason": "employee_cta_link_id_not_unique"})
+                continue
+            stage_updates[request["request_id"]] = ("find_status", "cta_found", {
+                **result, "heading": heading, "employee_link_id": int(markers[0][0]),
+                "employee_cta_label": markers[0][1],
+            })
+    else:
+        queue = [{
+            "company_key": request["company_key"],
+            "existing_page_ref": request.get("page_ref"),
+            "find_result_ref": request.get("find_result_ref"),
+            "employee_link_id": request.get("employee_link_id"),
+            "target_url": None,
+            "facetCurrentCompany_ids": [],
+        } for request in requests]
+        click_data = {"queue": queue, "web": raw_text}
+        for request in requests:
+            try:
+                target, target_id, cooldown = _extract_legacy_click_target(
+                    click_data, request["company_key"], request.get("page_ref"),
+                    request.get("find_result_ref"), int(request.get("employee_link_id")),
+                )
+            except (ValueError, TypeError) as error:
+                route_blocks = _public_index_call_blocks(raw_text, "click", request)
+                terminal = _public_index_terminal_route_block(route_blocks)
+                if terminal:
+                    status_value, reason, terminal_block = terminal
+                    stage_updates[request["request_id"]] = ("click_status", status_value, {
+                        "reason": reason, "result_sha256": sha256_bytes(terminal_block.encode("utf-8")),
+                    })
+                else:
+                    stage_updates[request["request_id"]] = ("click_status", "no_numeric_facet", {"reason": str(error)})
+                continue
+            result_block = next((block for block in split_capture_blocks(raw_text)
+                                 if (_capture_source_invocation(block, "click") or {}).get("ref_id") == request.get("find_result_ref")
+                                 and (_capture_source_invocation(block, "click") or {}).get("id") == int(request.get("employee_link_id"))), None)
+            if not result_block:
+                stage_updates[request["request_id"]] = ("click_status", "no_numeric_facet", {"reason": "exact_click_result_block_missing"})
+                continue
+            result_hash = sha256_bytes(result_block.encode("utf-8"))
+            route_status = _public_index_terminal_route_status(result_block)
+            if route_status:
+                route_access_status, route_access_reason = route_status
+                cooldown = route_access_status == "cooldown_pending"
+            else:
+                route_access_status, route_access_reason = None, None
+            request_row = conn.execute("SELECT * FROM public_index_requests WHERE request_id=?", (request["request_id"],)).fetchone()
+            if not request_row:
+                raise ValueError("public-index request missing during click import")
+            company_row = conn.execute("SELECT row_json FROM companies WHERE company_key=?", (request["company_key"],)).fetchone()
+            if not company_row:
+                raise ValueError("public-index company missing during click import")
+            current_id = json.loads(company_row[0]).get("linkedin_org_id")
+            if str(current_id or "") == target_id:
+                stage_updates[request["request_id"]] = ("click_status", "already_current", {
+                    "reason": "public_index_value_already_current", "target": target,
+                    "linkedin_org_id": target_id, "result_sha256": result_hash,
+                })
+                continue
+            if request.get("expected_old") != current_id:
+                stage_updates[request["request_id"]] = ("click_status", "stale_conflict", {
+                    "reason": "stale_expected_old_conflict", "target": target,
+                    "linkedin_org_id": target_id, "result_sha256": result_hash,
+                })
+                continue
+            page_title = request_row["open_title"] or ""
+            page_heading = request_row["open_heading"] or ""
+            source_url = request_row["open_url"] or ""
+            excerpt = f"{page_title}; {page_heading}"
+            binding = {
+                "verified": True,
+                "linkedin_org_id": target_id,
+                "raw_href": target,
+                "request_id": request["request_id"],
+                "batch_id": batch_id,
+                "source_ref": request_row["search_ref"],
+                "page_ref": request_row["open_ref"],
+                "find_result_ref": request["find_result_ref"],
+                "employee_link_id": int(request["employee_link_id"]),
+                "search_capture_sha256": request_row["search_capture_sha256"],
+                "open_capture_sha256": request_row["open_capture_sha256"],
+                "find_capture_sha256": request_row["find_capture_sha256"],
+                "click_capture_sha256": capture_sha,
+                "find_result_sha256": request_row["find_result_sha256"],
+                "click_result_sha256": result_hash,
+            }
+            value_key = sha256_value({"company_key": request["company_key"], "field": "linkedin_org_id", "new": target_id})
+            trusted_bindings[value_key] = binding
+            evidence = {
+                "source_url": source_url,
+                "excerpt": excerpt,
+                "raw_href": target,
+                "published_company_href": target,
+                "source_access": {
+                    "status": "content_observed",
+                    "method": "public_index",
+                    "raw_sha256": [request_row["open_capture_sha256"], request_row["find_capture_sha256"]],
+                },
+                "identity": {
+                    "observed_company_name": page_heading,
+                    "business_context": excerpt,
+                    "name_match": True,
+                    "identity_basis": "public_index_open_find_title_h1",
+                },
+                "destination_access_status": route_access_status or "unknown",
+                "destination_access_detail": (
+                    "wrapped_http_429_in_exact_public_index_click" if route_access_status == "cooldown_pending"
+                    else "policy_denied_in_exact_public_index_click" if route_access_status == "policy_denied"
+                    else "signup_redirect_href_only"
+                ),
+                **({"transport_error": "HTTP 429 Too Many Requests in exact saved public-index click result"}
+                   if route_access_status == "cooldown_pending" else {}),
+                **({"access_error": route_access_reason} if route_access_status == "policy_denied" else {}),
+            }
+            candidate_updates.append({
+                "company_key": request["company_key"],
+                "fields": {"linkedin_org_id": target_id},
+                "expected": {"linkedin_org_id": request["expected_old"]},
+                "evidence": {"linkedin_org_id": evidence},
+            })
+            stage_updates[request["request_id"]] = ("click_status", "id_candidate", {
+                "target": target, "linkedin_org_id": target_id, "cooldown": cooldown, "result_sha256": result_hash,
+            })
+
+    import_counts: dict[str, int] = {}
+    if candidate_updates:
+        import_counts = import_packet(
+            conn, {"packet_id": batch_id, "candidates": candidate_updates},
+            verified_public_index_bindings=trusted_bindings,
+        )
+
+    timestamp = utc_now()
+    candidate_outcomes = Counter()
+    request_outcomes = Counter()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        if candidate_updates:
+            for update in candidate_updates:
+                key = update["company_key"]
+                new_id = update["fields"]["linkedin_org_id"]
+                row = conn.execute(
+                    "SELECT validation_status,candidate_id FROM proposals WHERE company_key=? AND field='linkedin_org_id' AND new_json=? ORDER BY created_at DESC LIMIT 1",
+                    (key, canonical_json(new_id)),
+                ).fetchone()
+                binding = trusted_bindings[sha256_value({"company_key": key, "field": "linkedin_org_id", "new": new_id})]
+                request_id = binding["request_id"]
+                req_result = stage_updates.get(request_id)
+                if row and row["validation_status"] == "valid_pending_review":
+                    request_status = "candidate_imported"
+                    job_status = "completed"
+                    reason = "public_index_id_pending_review"
+                    candidate_outcomes["pending_review"] += 1
+                elif row and row["validation_status"] == "deferred_cooldown":
+                    request_status = "cooldown_pending"
+                    job_status = "cooldown_pending"
+                    reason = "public_index_click_cooldown"
+                    candidate_outcomes["deferred"] += 1
+                else:
+                    request_status = "candidate_exception"
+                    job_status = "awaiting_import"
+                    reason = row["validation_status"] if row else "public_index_candidate_not_persisted"
+                    candidate_outcomes["exceptions"] += 1
+                stage_updates[request_id] = ("click_status", request_status, {
+                    "reason": reason,
+                    "target": req_result[2].get("target") if req_result else None,
+                    "linkedin_org_id": new_id,
+                    "candidate_id": row["candidate_id"] if row else None,
+                    "result_sha256": req_result[2].get("result_sha256") if req_result else None,
+                })
+                job_row = conn.execute("SELECT job_id FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()
+                not_before = None
+                if job_status == "cooldown_pending":
+                    not_before = time.time() + backoff_delay(1)
+                conn.execute(
+                    "UPDATE jobs SET status=?,lease_token=NULL,lease_until=NULL,not_before=?,result_json=?,updated_at=? WHERE job_id=?",
+                    (job_status, not_before, canonical_json({"reason": reason, "public_index_request_id": request_id,
+                                                            "linkedin_org_id": new_id}), timestamp, job_row["job_id"]),
+                )
+        for request_id, (status_col, status_value, info) in stage_updates.items():
+            row = conn.execute("SELECT job_id FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()
+            if not row:
+                continue
+            not_before = None
+            retry_stage = info.get("retry_stage", stage)
+            if status_value in {"no_exact_result", "no_page", "identity_mismatch", "no_cta", "ambiguous",
+                                "no_numeric_facet", "unverified", "cooldown_pending"}:
+                attempt_row = conn.execute(
+                    f"SELECT {retry_stage}_attempts FROM public_index_requests WHERE request_id=?",
+                    (request_id,),
+                ).fetchone()
+                attempts = max(1, int(attempt_row[0] or 1))
+                not_before = time.time() + backoff_delay(attempts)
+                info = {**info, "retry_after_seconds": not_before - time.time()}
+            capture_column = f"{stage}_capture_file"
+            capture_sha_column = f"{stage}_capture_sha256"
+            result_sha_column = f"{stage}_result_sha256"
+            updates = [f"{status_col}=?", "active_batch_id=NULL", "active_stage=NULL", "lease_until=NULL",
+                       "last_error=?", "updated_at=?"]
+            values: list[Any] = [status_value, info.get("reason"), timestamp]
+            if stage == "search" and status_value == "indexed_ref":
+                updates.extend([
+                    "search_ref=?", "search_url=?", "search_title=?", "search_result_sha256=?",
+                    "open_status='pending'", "open_ref=NULL", "open_url=NULL", "open_title=NULL", "open_heading=NULL",
+                    "find_status='pending'", "find_result_ref=NULL", "employee_link_id=NULL", "employee_cta_label=NULL",
+                    "click_status='pending'", "click_target_url=NULL", "linkedin_org_id=NULL",
+                    "search_not_before=NULL", "open_not_before=NULL", "find_not_before=NULL", "click_not_before=NULL",
+                ])
+                values.extend([info["ref"], info["url"], info["title"], info["block_sha256"]])
+            elif stage == "open" and status_value == "opened":
+                updates.extend(["open_ref=?", "open_url=?", "open_title=?", "open_heading=?", "open_result_sha256=?"])
+                values.extend([info["ref"], info["url"], info["title"], info["heading"], info["block_sha256"]])
+            elif stage == "find" and status_value == "cta_found":
+                updates.extend(["find_result_ref=?", "employee_link_id=?", "employee_cta_label=?", "find_result_sha256=?"])
+                values.extend([info["ref"], info["employee_link_id"], info["employee_cta_label"], info["block_sha256"]])
+            if stage == "click" and status_value in {"id_candidate", "candidate_imported", "cooldown_pending",
+                                                     "candidate_exception", "already_current", "stale_conflict"}:
+                updates.extend(["click_target_url=?", "linkedin_org_id=?"])
+                values.extend([info.get("target"), str(info.get("linkedin_org_id") or "") or None])
+            if info.get("retry_stage") == "search":
+                updates.append("open_status=?")
+                values.append("invalid_ref")
+            updates.extend([f"{capture_column}=?", f"{capture_sha_column}=?"])
+            values.extend([str(capture_path), capture_sha])
+            if info.get("result_sha256"):
+                updates.append(f"{result_sha_column}=?")
+                values.append(info["result_sha256"])
+            if not_before is not None:
+                updates.append(f"{retry_stage}_not_before=?")
+                values.append(not_before)
+            values.append(request_id)
+            conn.execute(f"UPDATE public_index_requests SET {','.join(updates)} WHERE request_id=?", values)
+            if stage == "click" and status_value == "already_current":
+                conn.execute(
+                    "UPDATE jobs SET status='completed',lease_token=NULL,lease_until=NULL,result_json=?,updated_at=? WHERE job_id=?",
+                    (canonical_json({"reason": "public_index_value_already_current", "public_index_request_id": request_id,
+                                     "linkedin_org_id": info.get("linkedin_org_id")}), timestamp, row["job_id"]),
+                )
+            elif stage == "click" and status_value == "stale_conflict":
+                conflict_evidence = {"public_index_request_id": request_id, "batch_id": batch_id,
+                                     "capture_file": str(capture_path), "capture_sha256": capture_sha,
+                                     "result_sha256": info.get("result_sha256"), "reason": info.get("reason")}
+                conflict_id = exception_id(
+                    conn.execute("SELECT company_key FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()[0],
+                    "linkedin_org_id", "public_index_stale_expected_old_conflict", conflict_evidence,
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO exceptions(exception_id,company_key,field,reason,evidence_json,created_at) VALUES(?,?,?,?,?,?)",
+                    (conflict_id, conn.execute("SELECT company_key FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()[0],
+                     "linkedin_org_id", "public_index_stale_expected_old_conflict", canonical_json(conflict_evidence), timestamp),
+                )
+                conn.execute(
+                    "UPDATE jobs SET status='awaiting_import',lease_token=NULL,lease_until=NULL,result_json=?,updated_at=? WHERE job_id=?",
+                    (canonical_json({"reason": "public_index_stale_expected_old_conflict", "public_index_request_id": request_id}), timestamp, row["job_id"]),
+                )
+            elif status_value == "candidate_imported":
+                conn.execute(
+                    "UPDATE jobs SET status='completed',lease_token=NULL,lease_until=NULL,result_json=?,updated_at=? WHERE job_id=?",
+                    (canonical_json({"reason": "public_index_id_pending_review", "public_index_request_id": request_id,
+                                     "linkedin_org_id": info.get("linkedin_org_id")}), timestamp, row["job_id"]),
+                )
+            elif status_value == "candidate_exception":
+                conn.execute(
+                    "UPDATE jobs SET status='awaiting_import',lease_token=NULL,lease_until=NULL,result_json=?,updated_at=? WHERE job_id=?",
+                    (canonical_json({"reason": info.get("reason"), "public_index_request_id": request_id}), timestamp, row["job_id"]),
+                )
+            if status_value in {"no_exact_result", "no_page", "identity_mismatch", "no_cta", "ambiguous", "no_numeric_facet", "unverified"}:
+                conn.execute(
+                    "UPDATE jobs SET status='cooldown_pending',not_before=?,result_json=?,updated_at=? WHERE job_id=? AND status='awaiting_import'",
+                    (not_before, canonical_json({"reason": info.get("reason"), "public_index_request_id": request_id,
+                                                "public_index_stage": stage}), timestamp, row["job_id"]),
+                )
+            elif status_value == "cooldown_pending":
+                conn.execute(
+                    "UPDATE jobs SET status='cooldown_pending',lease_token=NULL,lease_until=NULL,not_before=?,result_json=?,updated_at=? WHERE job_id=?",
+                    (time.time() + backoff_delay(1), canonical_json({"reason": info.get("reason"),
+                        "public_index_request_id": request_id, "public_index_stage": stage}), timestamp, row["job_id"]),
+                )
+            elif status_value == "policy_denied":
+                conn.execute(
+                    "UPDATE jobs SET status='policy_denied',lease_token=NULL,lease_until=NULL,result_json=?,updated_at=? WHERE job_id=?",
+                    (canonical_json({"reason": info.get("reason"), "public_index_request_id": request_id,
+                                     "public_index_stage": stage}), timestamp, row["job_id"]),
+                )
+            if status_value in {"identity_mismatch", "ambiguous", "no_numeric_facet"}:
+                evidence = {"public_index_request_id": request_id, "batch_id": batch_id,
+                            "capture_file": str(capture_path), "capture_sha256": capture_sha,
+                            "result_sha256": info.get("result_sha256"), "reason": info.get("reason")}
+                exc_id = exception_id(conn.execute("SELECT company_key FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()[0],
+                                      "linkedin_org_id", "public_index:" + str(info.get("reason")), evidence)
+                conn.execute("INSERT OR IGNORE INTO exceptions(exception_id,company_key,field,reason,evidence_json,created_at) VALUES(?,?,?,?,?,?)",
+                             (exc_id, conn.execute("SELECT company_key FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()[0],
+                              "linkedin_org_id", "public_index:" + str(info.get("reason")), canonical_json(evidence), timestamp))
+            request_outcomes[status_value] += 1
+        result = {"stage": stage, "request_count": len(requests), "capture_sha256": capture_sha,
+                  "import_counts": import_counts, "candidate_outcomes": dict(candidate_outcomes),
+                  "request_outcomes": dict(request_outcomes)}
+        conn.execute(
+            "UPDATE public_index_batches SET status='imported',capture_file=?,capture_sha256=?,result_json=?,updated_at=? WHERE batch_id=?",
+            (str(capture_path), capture_sha, canonical_json(result), timestamp, batch_id),
+        )
+        conn.execute("INSERT INTO audit(audit_id,action,subject,payload_json,created_at) VALUES(?,?,?,?,?)",
+                     (secrets.token_hex(16), "public_index_import", batch_id, canonical_json(result), timestamp))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    return result
+
+
 def normalize_careers_destination_capture(normalized: dict[str, Any], company: dict[str, Any],
                                           proposed_value: Any, capture: dict[str, Any] | None) -> None:
     binding = normalized.get("legacy_corporate_binding") or {}
@@ -1486,11 +2555,16 @@ def normalize_legacy_source_line(normalized: dict[str, Any], company: dict[str, 
 
 def normalize_packet_evidence(evidence: Any, company: dict[str, Any], evidence_root: str | Path | None = None,
                               field: str | None = None, proposed_value: Any = None,
-                              destination_capture: dict[str, Any] | None = None) -> Any:
+                              destination_capture: dict[str, Any] | None = None,
+                              verified_public_index_binding: dict[str, Any] | None = None) -> Any:
     """Preserve source records; add only mechanically observed access/hash metadata."""
     if not isinstance(evidence, dict):
         return evidence
     normalized = dict(evidence)
+    normalized.pop("public_index_binding", None)
+    normalized.pop("legacy_click_binding", None)
+    if verified_public_index_binding is not None:
+        normalized["public_index_binding"] = dict(verified_public_index_binding)
     if "source_url" not in normalized and isinstance(normalized.get("url"), str):
         normalized["source_url"] = normalized["url"]
     raw_file = normalized.get("raw_file")
@@ -1565,7 +2639,8 @@ def normalize_packet_evidence(evidence: Any, company: dict[str, Any], evidence_r
 
 
 def import_packet(conn: sqlite3.Connection, packet: dict[str, Any], evidence_root: str | Path | None = None,
-                  destination_checks_file: str | Path | None = None) -> dict[str, int]:
+                  destination_checks_file: str | Path | None = None,
+                  verified_public_index_bindings: dict[str, dict[str, Any]] | None = None) -> dict[str, int]:
     if not isinstance(packet, dict):
         raise ValueError("packet must be an object")
     updates = packet.get("updates", packet.get("patches", packet.get("candidates")))
@@ -1604,8 +2679,11 @@ def import_packet(conn: sqlite3.Connection, packet: dict[str, Any], evidence_roo
                 if expected != current:
                     raise ValueError(f"stale expected old value for {key}.{field}")
                 original_evidence = evidence_obj.get(field) if isinstance(evidence_obj, dict) and field in evidence_obj else evidence_obj
+                public_binding_key = sha256_value({"company_key": key, "field": field, "new": value})
+                trusted_public_binding = (verified_public_index_bindings or {}).get(public_binding_key)
                 evidence = normalize_packet_evidence(original_evidence, company, evidence_root, field, value,
-                                                    destination_capture=destination_capture)
+                                                    destination_capture=destination_capture,
+                                                    verified_public_index_binding=trusted_public_binding)
                 validation, reason, confidence = validate_candidate(field, value, evidence, company)
                 if field == "domain_group" and validation == "valid_pending_review":
                     if value not in known_groups:
@@ -1728,7 +2806,18 @@ def make_report(conn: sqlite3.Connection) -> dict[str, Any]:
             item["fields"][field] = {"state": state, "baseline_value_present": company.get(field) not in (None, "")}
             totals[field][state] = totals[field].get(state, 0) + 1
         out_rows.append(item)
-    return {"generated_at": utc_now(), "company_count": len(out_rows), "field_count": len(FIELDS), "rows": out_rows, "coverage": totals}
+    public_index_rows = conn.execute("SELECT * FROM public_index_requests").fetchall()
+    public_index = {
+        "request_count": len(public_index_rows),
+        "linkedin_org_ids_missing": sum(row.get("linkedin_org_id") in (None, "") for row in companies),
+        "stage_statuses": {
+            stage: dict(Counter(row[f"{stage}_status"] for row in public_index_rows))
+            for stage in ("search", "open", "find", "click")
+        },
+        "batch_statuses": dict(Counter(row[0] for row in conn.execute("SELECT status FROM public_index_batches"))),
+    }
+    return {"generated_at": utc_now(), "company_count": len(out_rows), "field_count": len(FIELDS),
+            "rows": out_rows, "coverage": totals, "public_index": public_index}
 
 
 def make_approved_manifest(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -2024,6 +3113,28 @@ def command_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_public_index_root_import(args: argparse.Namespace) -> int:
+    with open_state(args.state) as conn:
+        result = public_index_import_root_batches(conn, args.plan, args.batches_dir, args.evidence_root)
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def command_public_index_export(args: argparse.Namespace) -> int:
+    with open_state(args.state) as conn:
+        result = export_public_index_batch(conn, args.stage, args.out, limit=args.limit,
+                                           allow_indexed_linkedin_content=args.allow_indexed_linkedin_content)
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def command_public_index_import(args: argparse.Namespace) -> int:
+    with open_state(args.state) as conn:
+        result = public_index_import_capture(conn, args.capture, args.evidence_root)
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def command_approve(args: argparse.Namespace) -> int:
     with open_state(args.state) as conn:
         approve_candidate(conn, args.candidate_id, args.reviewer, args.candidate_sha256)
@@ -2246,6 +3357,19 @@ def build_parser() -> argparse.ArgumentParser:
     imp.add_argument("--state", required=True); imp.add_argument("--packet", required=True); imp.add_argument("--evidence-root")
     imp.add_argument("--destination-checks", help="private JSON destination-check capture paired with careers source-line evidence")
     imp.set_defaults(func=command_import)
+    pi_root = sub.add_parser("public-index-import-root-batches", help="import saved public-index search envelopes by request ID and vanity slug")
+    pi_root.add_argument("--state", required=True); pi_root.add_argument("--plan", required=True)
+    pi_root.add_argument("--batches-dir", required=True); pi_root.add_argument("--evidence-root", required=True)
+    pi_root.set_defaults(func=command_public_index_root_import)
+    pi_export = sub.add_parser("public-index-export", help="export a bounded public-index tool call batch (maximum four requests)")
+    pi_export.add_argument("--state", required=True); pi_export.add_argument("--stage", choices=("search", "open", "find", "click"), required=True)
+    pi_export.add_argument("--out", required=True); pi_export.add_argument("--limit", type=int, default=4)
+    pi_export.add_argument("--allow-indexed-linkedin-content", action="store_true",
+                           help="explicitly permit Search Service open/find/click calls against indexed LinkedIn pages")
+    pi_export.set_defaults(func=command_public_index_export)
+    pi_import = sub.add_parser("public-index-import", help="import an exact Search Service response capture")
+    pi_import.add_argument("--state", required=True); pi_import.add_argument("--capture", required=True)
+    pi_import.add_argument("--evidence-root", required=True); pi_import.set_defaults(func=command_public_index_import)
     approve = sub.add_parser("approve", help="record a separate review against an immutable candidate hash")
     approve.add_argument("--state", required=True); approve.add_argument("--candidate-id", required=True); approve.add_argument("--reviewer", required=True)
     approve.add_argument("--candidate-sha256", required=True); approve.set_defaults(func=command_approve)

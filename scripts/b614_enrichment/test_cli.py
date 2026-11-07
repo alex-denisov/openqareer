@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -15,6 +16,7 @@ from cli import (
     source_specific_raw_text, extract_corporate_observation,
     source_outcome, validate_candidate, validate_full_baseline, validate_rendered_cta, wrapped_transport_status,
     normalize_packet_evidence,
+    public_index_import_root_batches, export_public_index_batch, public_index_import_capture,
 )
 
 
@@ -433,6 +435,507 @@ class QueueTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def _prepare_public_index_request(self, *, include_reference=True, raw_response_override=None):
+        evidence_root = self.root / "public-index-evidence"
+        evidence_root.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(evidence_root, 0o700)
+        batch_dir = evidence_root / "batches"
+        batch_dir.mkdir(mode=0o700, exist_ok=True)
+        source_url = "https://www.linkedin.com/company/acme/"
+        query = 'site:linkedin.com/company "Acme Systems"'
+        request_id = sha256_value({"company_key": "acme", "query": query})
+        plan = {
+            "baseline_sha256": sha256_value([full_row()]),
+            "jobs": [{
+                "request_id": request_id, "company_key": "acme", "company_name": "Acme Systems",
+                "expected_old": None, "registry_website": "https://old.acme.example",
+                "registry_linkedin_url": None, "lead_kind": "publisher_link_lead",
+                "publisher_leads": [{"slug": "acme"}], "query": query,
+            }],
+        }
+        (evidence_root / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        search_ref = "turn100search0"
+        requests = [{"request_id": request_id, "company_key": "acme", "query": query, "slug": "acme"}]
+        references = [{
+            "request_id": request_id, "company_key": "acme", "ref": search_ref,
+            "url": source_url, "title": "Acme Systems | LinkedIn",
+        }] if include_reference else []
+        raw_response = raw_response_override or (
+            f"Acme Systems | LinkedIn ({source_url})\n【{search_ref}】 [wordlim 100]; indexed company page"
+            if include_reference else "No indexed company reference returned."
+        )
+        (batch_dir / "batch-001.json").write_text(
+            json.dumps({"requests": requests, "indexed_company_references": references, "raw_response": raw_response}),
+            encoding="utf-8",
+        )
+        conn = open_state(self.state)
+        root_result = public_index_import_root_batches(conn, "plan.json", batch_dir, evidence_root)
+        return conn, evidence_root, request_id, search_ref, source_url, root_result
+
+    def test_public_index_root_import_requires_ref_url_title_in_same_raw_block(self):
+        raw = ("-" * 80 + "\n").join([
+            "Wrong title | LinkedIn (https://www.linkedin.com/company/wrong/)\n【turn100search0】",
+            "Wrong title | LinkedIn (https://www.linkedin.com/company/acme/)\n【turn100search1】",
+            "Acme Systems | LinkedIn (https://www.linkedin.com/company/wrong/)\n【turn100search2】",
+        ])
+        conn, _root, _request_id, _search_ref, _source_url, result = self._prepare_public_index_request(
+            raw_response_override=raw,
+        )
+        try:
+            self.assertEqual(result["indexed_refs"], 0)
+            self.assertEqual(result["adapter_gaps"], 1)
+            self.assertEqual(result["missing_refs"], 0)
+            self.assertEqual(conn.execute("SELECT search_status FROM public_index_requests").fetchone()[0], "pending")
+        finally:
+            conn.close()
+
+    def test_public_index_root_import_binds_metadata_title_within_exact_rendered_block(self):
+        source_url = "https://www.linkedin.com/company/acme/"
+        raw = (
+            f"Acme Systems ({source_url})\n【turn100search0】 [wordlim 80]; "
+            "Acme Systems | LinkedIn"
+        )
+        conn, _root, _request_id, _search_ref, _source_url, result = self._prepare_public_index_request(
+            raw_response_override=raw,
+        )
+        try:
+            self.assertEqual(result["indexed_refs"], 1)
+            self.assertEqual(result["adapter_gaps"], 0)
+            saved = conn.execute(
+                "SELECT search_status,search_ref,search_url FROM public_index_requests"
+            ).fetchone()
+            self.assertEqual(saved["search_status"], "indexed_ref")
+            self.assertEqual(saved["search_ref"], "turn100search0")
+            self.assertEqual(saved["search_url"], source_url)
+        finally:
+            conn.close()
+
+    def test_public_index_root_import_rejects_metadata_url_absent_from_source_block(self):
+        raw = (
+            "Acme Systems (https://www.linkedin.com/company/acme/?trk=search)\n"
+            "【turn100search0】 [wordlim 80]; Acme Systems | LinkedIn"
+        )
+        conn, _root, _request_id, _search_ref, _source_url, result = self._prepare_public_index_request(
+            raw_response_override=raw,
+        )
+        try:
+            self.assertEqual(result["indexed_refs"], 0)
+            self.assertEqual(result["adapter_gaps"], 1)
+        finally:
+            conn.close()
+
+    def test_public_index_linkedin_content_stages_require_explicit_gate(self):
+        conn, evidence_root, _request_id, _search_ref, _source_url, _ = self._prepare_public_index_request()
+        try:
+            with self.assertRaisesRegex(PermissionError, "explicit --allow-indexed-linkedin-content"):
+                export_public_index_batch(conn, "open", evidence_root / "open.json", limit=4)
+            self.assertIsNone(conn.execute(
+                "SELECT active_batch_id FROM public_index_requests"
+            ).fetchone()[0])
+            self.assertEqual(conn.execute(
+                "SELECT COUNT(*) FROM public_index_batches WHERE status='awaiting_response'"
+            ).fetchone()[0], 0)
+        finally:
+            conn.close()
+
+    def test_public_index_provider_429_is_terminal_no_retry(self):
+        conn, evidence_root, request_id, _search_ref, _source_url, _ = self._prepare_public_index_request(include_reference=False)
+        try:
+            manifest_path = evidence_root / "search.json"
+            export_public_index_batch(conn, "search", manifest_path, limit=4, now=time.time() + 10000)
+            manifest = json.loads(manifest_path.read_text())
+            capture = {
+                "provider": manifest["provider"], "stage": manifest["stage"],
+                "operation": manifest["operation"], "batch_id": manifest["batch_id"],
+                "manifest_sha256": manifest["manifest_sha256"], "request_ids": manifest["request_ids"],
+                "tool_args": manifest["tool_args"], "raw_result_text": "Rate limited",
+                "is_error": True, "provider_error_status": 429,
+            }
+            capture_path = evidence_root / "search-429.json"
+            capture_path.write_text(json.dumps(capture), encoding="utf-8")
+            result = public_index_import_capture(conn, capture_path, evidence_root)
+            self.assertEqual(result["deferred"], 1)
+            saved = conn.execute(
+                "SELECT search_status,search_not_before FROM public_index_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            self.assertEqual(saved["search_status"], "cooldown_pending")
+            self.assertIsNotNone(saved["search_not_before"])
+            self.assertEqual(conn.execute("SELECT status FROM jobs").fetchone()[0], "cooldown_pending")
+            with self.assertRaisesRegex(ValueError, "no public-index search requests are eligible"):
+                export_public_index_batch(conn, "search", evidence_root / "search-retry.json",
+                                          limit=4, now=time.time() + 100000)
+        finally:
+            conn.close()
+
+    def test_public_index_exact_open_429_is_terminal_no_retry(self):
+        conn, evidence_root, request_id, search_ref, source_url, _ = self._prepare_public_index_request()
+        try:
+            manifest_path = evidence_root / "open.json"
+            export_public_index_batch(conn, "open", manifest_path, limit=4,
+                                      allow_indexed_linkedin_content=True)
+            manifest = json.loads(manifest_path.read_text())
+            call = json.dumps({"ref_id": search_ref}, separators=(",", ":"))
+            raw = (
+                f"Acme Systems | LinkedIn ({source_url})\n"
+                "citeturn200view0 [wordlim 40]; "
+                f"Source: open({call}); Failed to fetch <{source_url}>: (429) Too Many Requests"
+            )
+            capture = {
+                "provider": manifest["provider"], "stage": "open", "operation": manifest["operation"],
+                "batch_id": manifest["batch_id"], "manifest_sha256": manifest["manifest_sha256"],
+                "request_ids": manifest["request_ids"], "tool_args": manifest["tool_args"],
+                "raw_result_text": raw, "is_error": False,
+            }
+            capture_path = evidence_root / "open-429.json"
+            capture_path.write_text(json.dumps(capture), encoding="utf-8")
+            result = public_index_import_capture(conn, capture_path, evidence_root)
+            self.assertEqual(result["request_outcomes"], {"cooldown_pending": 1})
+            saved = conn.execute(
+                "SELECT open_status,open_not_before FROM public_index_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            self.assertEqual(saved["open_status"], "cooldown_pending")
+            self.assertIsNotNone(saved["open_not_before"])
+            with self.assertRaisesRegex(ValueError, "no public-index open requests are eligible"):
+                export_public_index_batch(conn, "open", evidence_root / "open-retry.json", limit=4,
+                                          now=time.time() + 100000,
+                                          allow_indexed_linkedin_content=True)
+        finally:
+            conn.close()
+
+    def test_public_index_exact_open_403_is_terminal_policy_denial(self):
+        conn, evidence_root, request_id, search_ref, source_url, _ = self._prepare_public_index_request()
+        try:
+            manifest_path = evidence_root / "open.json"
+            export_public_index_batch(conn, "open", manifest_path, limit=4,
+                                      allow_indexed_linkedin_content=True)
+            manifest = json.loads(manifest_path.read_text())
+            call = json.dumps({"ref_id": search_ref}, separators=(",", ":"))
+            raw = (
+                f"Acme Systems | LinkedIn ({source_url})\n"
+                "citeturn200view0 [wordlim 40]; "
+                f"Source: open({call}); Failed to fetch <{source_url}>: (403) Forbidden"
+            )
+            capture = {
+                "provider": manifest["provider"], "stage": "open", "operation": manifest["operation"],
+                "batch_id": manifest["batch_id"], "manifest_sha256": manifest["manifest_sha256"],
+                "request_ids": manifest["request_ids"], "tool_args": manifest["tool_args"],
+                "raw_result_text": raw, "is_error": False,
+            }
+            capture_path = evidence_root / "open-403.json"
+            capture_path.write_text(json.dumps(capture), encoding="utf-8")
+            result = public_index_import_capture(conn, capture_path, evidence_root)
+            self.assertEqual(result["request_outcomes"], {"policy_denied": 1})
+            saved = conn.execute(
+                "SELECT open_status FROM public_index_requests WHERE request_id=?", (request_id,)
+            ).fetchone()
+            self.assertEqual(saved["open_status"], "policy_denied")
+            self.assertEqual(conn.execute("SELECT status FROM jobs").fetchone()[0], "policy_denied")
+            with self.assertRaisesRegex(ValueError, "no public-index open requests are eligible"):
+                export_public_index_batch(conn, "open", evidence_root / "open-retry.json", limit=4,
+                                          now=time.time() + 100000,
+                                          allow_indexed_linkedin_content=True)
+        finally:
+            conn.close()
+
+    def test_public_index_search_collapses_same_slug_hosts_to_canonical_www_root(self):
+        conn, evidence_root, request_id, _search_ref, _source_url, _ = self._prepare_public_index_request(include_reference=False)
+        try:
+            manifest_path = evidence_root / "search.json"
+            export_public_index_batch(conn, "search", manifest_path, limit=4, now=time.time() + 10000)
+            manifest = json.loads(manifest_path.read_text())
+            root = "Acme Systems | LinkedIn (https://www.linkedin.com/company/acme/)\n【turn100search0】 [wordlim 100]"
+            jobs = "Acme Systems | LinkedIn (https://www.linkedin.com/company/acme/jobs/)\n【turn100search1】 [wordlim 100]"
+            localized = "Acme Systems | LinkedIn (https://mt.linkedin.com/company/acme/)\n【turn100search2】 [wordlim 100]"
+            localized_jobs = "Acme Systems | LinkedIn (https://ru.linkedin.com/company/acme/jobs/)\n【turn100search3】 [wordlim 100]"
+            localized_ua = "Acme Systems | LinkedIn (https://ua.linkedin.com/company/acme/)\n【turn100search4】 [wordlim 100]"
+            raw_text = ("-" * 80 + "\n").join([localized, jobs, localized_jobs, localized_ua, root])
+            capture = {
+                "provider": manifest["provider"], "stage": "search", "operation": manifest["operation"],
+                "batch_id": manifest["batch_id"], "manifest_sha256": manifest["manifest_sha256"],
+                "request_ids": manifest["request_ids"], "tool_args": manifest["tool_args"],
+                "raw_result_text": raw_text, "is_error": False,
+            }
+            capture_path = evidence_root / "search-capture.json"
+            capture_path.write_text(json.dumps(capture), encoding="utf-8")
+            self.assertEqual(public_index_import_capture(conn, capture_path, evidence_root)["request_outcomes"], {"indexed_ref": 1})
+            saved = conn.execute(
+                "SELECT search_status,search_ref,search_url FROM public_index_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            self.assertEqual(saved["search_status"], "indexed_ref")
+            self.assertEqual(saved["search_ref"], "turn100search0")
+            self.assertEqual(saved["search_url"], "https://www.linkedin.com/company/acme/")
+        finally:
+            conn.close()
+
+    def test_public_index_invalid_open_reference_requeues_search_not_url_fallback(self):
+        conn, evidence_root, request_id, _search_ref, _source_url, _ = self._prepare_public_index_request()
+        try:
+            manifest_path = evidence_root / "open.json"
+            export_public_index_batch(conn, "open", manifest_path, limit=4, allow_indexed_linkedin_content=True)
+            manifest = json.loads(manifest_path.read_text())
+            capture = {
+                "provider": manifest["provider"], "stage": "open", "operation": manifest["operation"],
+                "batch_id": manifest["batch_id"], "manifest_sha256": manifest["manifest_sha256"],
+                "request_ids": manifest["request_ids"], "tool_args": manifest["tool_args"],
+                "raw_result_text": "Unable to resolve open call due to invalid ref_id argument",
+                "is_error": False,
+            }
+            capture_path = evidence_root / "open-capture.json"
+            capture_path.write_text(json.dumps(capture), encoding="utf-8")
+            result = public_index_import_capture(conn, capture_path, evidence_root)
+            self.assertEqual(result["request_outcomes"], {"unverified": 1})
+            saved = conn.execute(
+                "SELECT search_status,search_ref,open_status,search_not_before FROM public_index_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            self.assertEqual(saved["search_status"], "unverified")
+            self.assertEqual(saved["open_status"], "invalid_ref")
+            self.assertIsNotNone(saved["search_not_before"])
+            self.assertEqual(conn.execute("SELECT status FROM jobs").fetchone()[0], "cooldown_pending")
+            new_manifest_path = evidence_root / "search-retry.json"
+            export_public_index_batch(conn, "search", new_manifest_path, limit=4, now=time.time() + 10000)
+            retry_manifest = json.loads(new_manifest_path.read_text())
+            self.assertEqual(retry_manifest["stage"], "search")
+            self.assertEqual(retry_manifest["request_ids"], [request_id])
+            self.assertEqual(retry_manifest["tool_args"].keys(), {"system2_search_query", "response_length"})
+        finally:
+            conn.close()
+
+    def test_public_index_capture_403_is_policy_denied(self):
+        conn, evidence_root, _request_id, _search_ref, _source_url, _ = self._prepare_public_index_request()
+        try:
+            manifest_path = evidence_root / "open.json"
+            export_public_index_batch(conn, "open", manifest_path, limit=4, allow_indexed_linkedin_content=True)
+            manifest = json.loads(manifest_path.read_text())
+            capture = {
+                "provider": manifest["provider"], "stage": "open", "operation": manifest["operation"],
+                "batch_id": manifest["batch_id"], "manifest_sha256": manifest["manifest_sha256"],
+                "request_ids": manifest["request_ids"], "tool_args": manifest["tool_args"],
+                "raw_result_text": "Access denied", "is_error": True, "provider_error_status": 403,
+            }
+            capture_path = evidence_root / "open-denied.json"
+            capture_path.write_text(json.dumps(capture), encoding="utf-8")
+            result = public_index_import_capture(conn, capture_path, evidence_root)
+            self.assertEqual(result["policy_denied"], 1)
+            self.assertEqual(conn.execute("SELECT status FROM jobs").fetchone()[0], "policy_denied")
+        finally:
+            conn.close()
+
+    def test_public_index_saved_batches_flow_through_exact_open_find_click_bridge(self):
+        evidence_root = self.root / "public-index-evidence"
+        evidence_root.mkdir(mode=0o700)
+        os.chmod(evidence_root, 0o700)
+        batch_dir = evidence_root / "batches"
+        batch_dir.mkdir(mode=0o700)
+        source_url = "https://www.linkedin.com/company/acme/"
+        query = 'site:linkedin.com/company "Acme Systems"'
+        request_id = sha256_value({"company_key": "acme", "query": query})
+        plan = {
+            "baseline_sha256": sha256_value([full_row()]),
+            "jobs": [{
+                "request_id": request_id,
+                "company_key": "acme",
+                "company_name": "Acme Systems",
+                "expected_old": None,
+                "registry_website": "https://old.acme.example",
+                "registry_linkedin_url": None,
+                "lead_kind": "publisher_link_lead",
+                "publisher_leads": [{"slug": "acme"}],
+                "query": query,
+            }],
+        }
+        (evidence_root / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+        search_ref = "turn100search0"
+        search_result = f"Acme Systems | LinkedIn ({source_url})\n【{search_ref}】 [wordlim 100]; indexed company page"
+        root_batch = {
+            "requests": [{"request_id": request_id, "company_key": "acme", "query": query, "slug": "acme"}],
+            "indexed_company_references": [{
+                "request_id": request_id, "company_key": "acme", "ref": search_ref,
+                "url": source_url, "title": "Acme Systems | LinkedIn",
+            }],
+            "raw_response": search_result,
+        }
+        (batch_dir / "batch-001.json").write_text(json.dumps(root_batch), encoding="utf-8")
+        conn = open_state(self.state)
+        try:
+            imported_root = public_index_import_root_batches(
+                conn, "plan.json", batch_dir, evidence_root
+            )
+            self.assertEqual(imported_root["indexed_refs"], 1)
+            public_dir = evidence_root / "public-index-run"
+            public_dir.mkdir(mode=0o700)
+
+            def tool_capture(manifest, raw_result_text, suffix):
+                capture = {
+                    "provider": manifest["provider"],
+                    "stage": manifest["stage"],
+                    "operation": manifest["operation"],
+                    "batch_id": manifest["batch_id"],
+                    "manifest_sha256": manifest["manifest_sha256"],
+                    "request_ids": manifest["request_ids"],
+                    "tool_args": manifest["tool_args"],
+                    "raw_result_text": raw_result_text,
+                    "is_error": False,
+                }
+                path = public_dir / f"{suffix}.json"
+                path.write_text(json.dumps(capture), encoding="utf-8")
+                return path
+
+            open_manifest_path = public_dir / "open.json"
+            exported = export_public_index_batch(conn, "open", open_manifest_path, limit=4, allow_indexed_linkedin_content=True)
+            open_manifest = json.loads(open_manifest_path.read_text())
+            self.assertEqual(exported["request_count"], 1)
+            self.assertEqual(open_manifest["tool_args"]["open"], [{"ref_id": search_ref}])
+            open_ref = "turn200view0"
+            open_call = json.dumps({"ref_id": search_ref}, separators=(",", ":"))
+            open_text = (
+                f"Acme Systems | LinkedIn ({source_url})\n"
+                "L12: # Acme Systems\n"
+                f"cite{open_ref} [wordlim 100]; Source: open({open_call}); Total lines: 40"
+            )
+            open_capture = tool_capture(open_manifest, open_text, "open-capture")
+            self.assertEqual(
+                public_index_import_capture(conn, open_capture, evidence_root)["request_outcomes"],
+                {"opened": 1},
+            )
+
+            find_manifest_path = public_dir / "find.json"
+            export_public_index_batch(conn, "find", find_manifest_path, limit=4, allow_indexed_linkedin_content=True)
+            find_manifest = json.loads(find_manifest_path.read_text())
+            find_ref = "turn300view0"
+            find_call = json.dumps({"ref_id": open_ref, "pattern": "View all"}, separators=(",", ":"))
+            find_text = (
+                f"Acme Systems | LinkedIn ({source_url})\n"
+                "L12: # Acme Systems\n"
+                "L22: * 【11†View all 42 employees】\n"
+                "L23: * 【17†See all employees】\n"
+                f"cite{find_ref} [wordlim 100]; Source: find({find_call}); Total lines: 40"
+            )
+            find_capture = tool_capture(find_manifest, find_text, "find-capture")
+            self.assertEqual(
+                public_index_import_capture(conn, find_capture, evidence_root)["request_outcomes"],
+                {"cta_found": 1},
+            )
+            saved_request = conn.execute(
+                "SELECT employee_link_id,find_result_ref FROM public_index_requests WHERE request_id=?",
+                (request_id,),
+            ).fetchone()
+            self.assertEqual(saved_request["employee_link_id"], 11)
+            self.assertEqual(saved_request["find_result_ref"], find_ref)
+
+            click_manifest_path = public_dir / "click.json"
+            export_public_index_batch(conn, "click", click_manifest_path, limit=4, allow_indexed_linkedin_content=True)
+            click_manifest = json.loads(click_manifest_path.read_text())
+            click_ref = "turn400view0"
+            target = (
+                "https://www.linkedin.com/signup/cold-join?session_redirect="
+                "https%3A%2F%2Fwww.linkedin.com%2Fsearch%2Fresults%2Fpeople%2F"
+                "%3FfacetCurrentCompany%3D%255B123456%255D&trk=employees-cta"
+            )
+            click_call = json.dumps({"ref_id": find_ref, "id": 11}, separators=(",", ":"))
+            click_text = (
+                f"www.linkedin.com ({target})\n"
+                f"cite{click_ref} [wordlim 80]; Source: click({click_call}); "
+                "Redirected to URL: https://www.linkedin.com/signup; Total lines: 20"
+            )
+            click_capture = tool_capture(click_manifest, click_text, "click-capture")
+            result = public_index_import_capture(conn, click_capture, evidence_root)
+            self.assertEqual(result["import_counts"]["imported"], 1)
+            proposal = conn.execute(
+                "SELECT validation_status,approved,evidence_json FROM proposals WHERE company_key='acme' AND field='linkedin_org_id'"
+            ).fetchone()
+            evidence = json.loads(proposal["evidence_json"])
+            self.assertEqual(proposal["validation_status"], "valid_pending_review")
+            self.assertEqual(proposal["approved"], 0)
+            self.assertEqual(evidence["public_index_binding"]["linkedin_org_id"], "123456")
+            self.assertEqual(evidence["public_index_binding"]["employee_link_id"], 11)
+            self.assertEqual(evidence["destination_access_status"], "unknown")
+            self.assertNotIn("http_status", evidence)
+            report = make_report(conn)
+            self.assertEqual(report["public_index"]["request_count"], 1)
+            self.assertEqual(report["public_index"]["stage_statuses"]["search"], {"indexed_ref": 1})
+            self.assertEqual(report["public_index"]["stage_statuses"]["click"], {"candidate_imported": 1})
+        finally:
+            conn.close()
+
+    def test_public_index_exact_click_href_survives_429_without_content_claim_or_retry(self):
+        conn, evidence_root, request_id, search_ref, source_url, _ = self._prepare_public_index_request()
+        try:
+            public_dir = evidence_root / "429-run"
+            public_dir.mkdir(mode=0o700)
+
+            def capture_stage(stage, raw_result_text, suffix):
+                manifest_path = public_dir / f"{suffix}-manifest.json"
+                export_public_index_batch(
+                    conn, stage, manifest_path, limit=4,
+                    allow_indexed_linkedin_content=stage in {"open", "find", "click"},
+                )
+                manifest = json.loads(manifest_path.read_text())
+                capture = {
+                    "provider": manifest["provider"], "stage": stage,
+                    "operation": manifest["operation"], "batch_id": manifest["batch_id"],
+                    "manifest_sha256": manifest["manifest_sha256"], "request_ids": manifest["request_ids"],
+                    "tool_args": manifest["tool_args"], "raw_result_text": raw_result_text, "is_error": False,
+                }
+                capture_path = public_dir / f"{suffix}-capture.json"
+                capture_path.write_text(json.dumps(capture), encoding="utf-8")
+                return public_index_import_capture(conn, capture_path, evidence_root)
+
+            page_ref = "turn200view0"
+            open_call = json.dumps({"ref_id": search_ref}, separators=(",", ":"))
+            self.assertEqual(capture_stage(
+                "open", f"Acme Systems | LinkedIn ({source_url})\nL12: # Acme Systems\n"
+                f"cite{page_ref} [wordlim 100]; Source: open({open_call}); Total lines: 40", "open",
+            )["request_outcomes"], {"opened": 1})
+
+            find_ref = "turn300view0"
+            find_call = json.dumps({"ref_id": page_ref, "pattern": "View all"}, separators=(",", ":"))
+            self.assertEqual(capture_stage(
+                "find", f"Acme Systems | LinkedIn ({source_url})\nL12: # Acme Systems\n"
+                f"L22: * 【11†View all 42 employees】\ncite{find_ref} [wordlim 100]; "
+                f"Source: find({find_call}); Total lines: 40", "find",
+            )["request_outcomes"], {"cta_found": 1})
+
+            target = (
+                "https://www.linkedin.com/signup/cold-join?session_redirect="
+                "https%3A%2F%2Fwww.linkedin.com%2Fsearch%2Fresults%2Fpeople%2F"
+                "%3FfacetCurrentCompany%3D%255B123456%255D&trk=employees-cta"
+            )
+            click_ref = "turn400view0"
+            click_call = json.dumps({"ref_id": find_ref, "id": 11}, separators=(",", ":"))
+            result = capture_stage(
+                "click", f"www.linkedin.com ({target})\ncite{click_ref} [wordlim 80]; "
+                f"Source: click({click_call}); Failed to fetch <{target}>: (429) Too Many Requests",
+                "click-429",
+            )
+            self.assertEqual(result["import_counts"]["imported"], 1)
+            self.assertEqual(result["request_outcomes"], {"candidate_imported": 1})
+            self.assertEqual(result["candidate_outcomes"], {"pending_review": 1})
+            proposal = conn.execute(
+                "SELECT validation_status,approved,evidence_json FROM proposals WHERE company_key='acme' AND field='linkedin_org_id'"
+            ).fetchone()
+            evidence = json.loads(proposal["evidence_json"])
+            self.assertEqual(proposal["validation_status"], "valid_pending_review")
+            self.assertEqual(proposal["approved"], 0)
+            self.assertEqual(evidence["public_index_binding"]["linkedin_org_id"], "123456")
+            self.assertEqual(evidence["destination_access_status"], "cooldown_pending")
+            self.assertEqual(evidence["destination_access_detail"], "wrapped_http_429_in_exact_public_index_click")
+            self.assertEqual(evidence["source_access"]["status"], "content_observed")
+            self.assertNotIn("employee_content_accessed", evidence)
+            saved = conn.execute(
+                "SELECT click_status FROM public_index_requests WHERE request_id=?", (request_id,)
+            ).fetchone()
+            self.assertEqual(saved["click_status"], "candidate_imported")
+            with self.assertRaisesRegex(ValueError, "no public-index click requests are eligible"):
+                export_public_index_batch(conn, "click", public_dir / "click-retry.json", limit=4,
+                                          now=time.time() + 100000,
+                                          allow_indexed_linkedin_content=True)
+        finally:
+            conn.close()
+
     def test_full_row_projection_is_rejected(self):
         projection = {k: v for k, v in full_row().items() if k not in {"notes", "created_at", "updated_at"}}
         with self.assertRaisesRegex(ValueError, "full SELECT \\* shape"):
@@ -476,6 +979,10 @@ class QueueTests(unittest.TestCase):
 
     def test_legacy_linkedin_candidate_packet_hashes_and_binds_both_saved_captures(self):
         find_doc, click_doc, target, page_url = self._legacy_capture_docs()
+        find_doc["findings"] = find_doc["findings"].replace(
+            "L22: * 【11†View all 42 employees】",
+            "L22: * 【11†View all 42 employees】\nL23: * 【17†See all employees】",
+        )
         counts, status, reason, stored = self._import_legacy_packet(find_doc, click_doc)
 
         self.assertEqual(counts["imported"], 1)
@@ -483,6 +990,7 @@ class QueueTests(unittest.TestCase):
         self.assertIsNone(reason)
         self.assertTrue(stored["legacy_click_binding"]["verified"])
         self.assertEqual(stored["legacy_click_binding"]["linkedin_org_id"], "123456")
+        self.assertEqual(stored["legacy_click_binding"]["employee_link_id"], 11)
         self.assertEqual(stored["source_url"], page_url)
         self.assertEqual(stored["identity"]["observed_company_name"], "Acme Systems")
         self.assertNotIn("official_domain_match", stored["identity"])
@@ -610,9 +1118,9 @@ class QueueTests(unittest.TestCase):
             f"Failed to fetch <{target}>: (429) Too Many Requests"
         )
         counts, status, reason, stored = self._import_legacy_packet(find_doc, click_doc)
-        self.assertEqual(counts["exceptions"], 1)
-        self.assertEqual(status, "deferred_cooldown")
-        self.assertEqual(reason, "wrapped_http_429_retry_after_required")
+        self.assertEqual(counts["imported"], 1)
+        self.assertEqual(status, "valid_pending_review")
+        self.assertIsNone(reason)
         self.assertTrue(stored["legacy_click_binding"]["verified"])
         self.assertEqual(stored["legacy_click_binding"]["linkedin_org_id"], "123456")
         self.assertEqual(stored["destination_access_status"], "deferred_cooldown")

@@ -34,6 +34,35 @@ A legacy LinkedIn ID candidate that names `raw_find_file` and `raw_click_file` i
 
 A signup redirect proves href metadata only. It does not show employee-list or jobs content is available. A wrapped 429 in the exact click result stays deferred as destination cooldown; source-page evidence remains separate. Missing CTA, invocation, target, or unique ID is recorded as an exception rather than repaired from another block in the batch.
 
+## Public-index acquisition bridge
+
+The CLI includes a checkpointed bridge for the permitted `mcp__codex_apps__search_service_web_run` public-index tool. It batches at most four stable request IDs per operation, stores each exact exported manifest in SQLite, and accepts a capture only when its provider, operation, request IDs, tool arguments, and manifest hash match that export. The host runner performs one provider call for the batch and saves its full text response; Python does not issue HTTP requests to LinkedIn. Search references are leads. A candidate is created only after the saved open/find/click chain ties the company page, employee CTA marker, exact click invocation, and one numeric employee-facet target together. Same-slug localized LinkedIn hosts are collapsed, preferring `www.linkedin.com` and the root company route over jobs routes. Ambiguous slugs, invalid refs, missing CTAs, and non-unique facets stay unresolved. Search-result retries are bounded to three attempts with backoff; an unresolvable open ref returns to search by the stable query. Search Service 401/403/429 responses and exact-route LinkedIn 401/403/429 responses are terminal and are never re-exported automatically. A single exact employee-facet href in a 429 click result can support an unapproved ID candidate while destination access remains cooldown-pending; no employee-list content is claimed. Open/find/click exports require the explicit `--allow-indexed-linkedin-content` opt-in, which is recorded in the hashed manifest. This standalone tool requires a host that exposes the permitted Search Service provider; availability in a Codex session does not establish availability in the OpenQareer web app or production worker. Do not bundle the Python CLI into the web app.
+
+Import the saved public-index root search envelopes against the exact private acquisition plan, then let the host runner consume the exported manifests and save immutable captures under the private evidence root:
+
+```sh
+python3 scripts/b614_enrichment/cli.py public-index-import-root-batches \
+  --state STATE.sqlite \
+  --plan PRIVATE_RESUME_DIR/acquisition-plan.json \
+  --batches-dir PRIVATE_RESUME_DIR/public-index-root-batches \
+  --evidence-root PRIVATE_RESUME_DIR
+
+python3 scripts/b614_enrichment/cli.py public-index-export \
+  --state STATE.sqlite --stage search --limit 4 --out PRIVATE_RESUME_DIR/next-manifest.json
+# Call the permitted Search Service operation named in next-manifest.json.tool_args.
+# Save its complete response in a capture JSON beside the manifest, then import it:
+python3 scripts/b614_enrichment/cli.py public-index-import \
+  --state STATE.sqlite --capture PRIVATE_RESUME_DIR/next-capture.json \
+  --evidence-root PRIVATE_RESUME_DIR
+
+# Page-content operations require this explicit per-export permission:
+python3 scripts/b614_enrichment/cli.py public-index-export \
+  --state STATE.sqlite --stage open --limit 4 --allow-indexed-linkedin-content \
+  --out PRIVATE_RESUME_DIR/next-open-manifest.json
+```
+
+After each import, export the next eligible stage (`search`, `open`, `find`, or `click`) until the report shows no eligible requests. A capture envelope must include `provider`, `stage`, `operation`, `batch_id`, `manifest_sha256`, exact `request_ids`, exact `tool_args`, `raw_result_text`, and `is_error`; include `provider_error_status` and `retry_after` only when the provider reports them. Save the complete response text, including citation markers and `Source:` invocation blocks. Keep plans, manifests, captures, SQLite state, and reports outside the checkout in a mode-0700 private evidence directory. Do not fabricate a capture or reuse a response from a different request batch. The resulting candidates remain unapproved and require separate review.
+
 ## Careers source and destination binding
 
 For legacy `careers_url` patches that cite `source_file` plus a 1-based `line`, pass the matching private destination-check capture with `--destination-checks`. The source line must bind the baseline company key, the packet's exact source URL, the employer page title, and exactly one `careers_links.url` equal to the proposed value. The destination record is selected by normalized HTTPS host and path plus company-key membership when supplied; its record index and hashes are stored with the proposal.
@@ -91,4 +120,4 @@ python3 scripts/b614_enrichment/cli.py benchmark --jobs 30000
 python3 -m unittest discover -s scripts/b614_enrichment -p 'test_*.py' -v
 ```
 
-The deterministic checks do not prove every imported page is authoritative. Reviewer inspection of exact primary URLs, context, and raw-source hashes remains required; there is no live LinkedIn adapter or claim that the registry’s LinkedIn IDs can be auto-completed from this CLI.
+The deterministic checks do not prove every imported page is authoritative. Reviewer inspection of exact primary URLs, context, and raw-source hashes remains required. The public-index bridge does not raw-scrape LinkedIn, bypass access controls, or claim registry ID completion; corporate source fetching also remains disabled pending reviewed jittered pacing.
