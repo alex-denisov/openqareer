@@ -145,6 +145,33 @@ test("host driver distinguishes a 429 bound to a requested route", async () => {
   assert.equal(f.globalPause.kind, "platform_restriction");
 });
 
+test("open 429 with the requested ref but another company route is unbound", async () => {
+  const f = fixture();
+  const openManifest = {
+    ...f.manifest,
+    stage: "open",
+    operation: "open",
+    batch_id: "1".repeat(64),
+    manifest_sha256: "2".repeat(64),
+    requests: [{ ...f.manifest.requests[0], source_ref: "turn_expected_search0",
+      source_url: "https://www.linkedin.com/company/sample/" }],
+    indexed_linkedin_content_authorized: true,
+    tool_args: { open: [{ ref_id: "turn_expected_search0" }], response_length: "long" },
+  };
+  f.adapters.exportBatch = async ({ stage }) => stage === "open"
+    ? { eligible: true, manifest: openManifest } : { eligible: false };
+  f.adapters.callSearchService = async () => ({
+    isError: true,
+    content: [{ type: "text", text: "Other Company | LinkedIn (https://www.linkedin.com/company/other/)\nSource: open({\"ref_id\":\"turn_expected_search0\"}); (429) Too Many Requests" }],
+  });
+  const driver = createB614PublicIndexHostDriver(f.adapters);
+  const result = await driver.run({ statePath: "/private/root/state.sqlite", evidenceRoot: "/private/root",
+    maxBatches: 1, allowIndexedLinkedinContent: true });
+  assert.equal(result.stop_reason, "unbound_platform_429_operator_resume");
+  assert.equal(f.globalPause.kind, "unbound_platform_429");
+  assert.equal(f.imports[0].is_error, false);
+});
+
 test("Search Service 429 stores a timed global pause and never retries before it expires", async () => {
   const f = fixture();
   f.adapters.callSearchService = async (args) => {

@@ -34,6 +34,34 @@ function sourceInvocation(block, expectedOperation) {
   try { return { operation: match[1], arguments: JSON.parse(match[2]) }; } catch { return null; }
 }
 
+function linkedinCompanySlug(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    const host = (url.hostname || "").toLowerCase();
+    if (!(host === "linkedin.com" || host.endsWith(".linkedin.com"))) return null;
+    const match = url.pathname.match(/\/company\/([^/]+)(?:\/jobs)?\/?$/i);
+    return match ? decodeURIComponent(match[1]).toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+function sourceRouteConflictsWithManifest(invocation, block, manifest) {
+  if (!manifest || !["open", "find"].includes(invocation.operation)) return false;
+  const args = invocation.arguments;
+  const request = manifest.requests.find((item) => {
+    if (invocation.operation === "open") return item.source_ref === args.ref_id;
+    return item.page_ref === args.ref_id && args.pattern === "View all";
+  });
+  if (!request) return true;
+  const header = block.match(/^\s*.*?\s+\((https:\/\/[^\s)]+)\)\s*$/m);
+  if (!header) return false;
+  const expectedSlug = linkedinCompanySlug(request.source_url);
+  const returnedSlug = linkedinCompanySlug(header[1]);
+  return Boolean(expectedSlug && returnedSlug && expectedSlug !== returnedSlug);
+}
+
 function sourceCallMatchesManifest(operation, arguments_, manifest) {
   if (!manifest || manifest.stage !== operation || !Array.isArray(manifest.requests)) return false;
   return manifest.requests.some((request) => {
@@ -58,6 +86,7 @@ function platformRouteStatus(rawText, manifest) {
     if (/robots\.txt|blocked by robots|disallowed by robots|\b401\b|\b403\b/i.test(block)) return "policy_denied";
     if (rateLimitPatterns.some((pattern) => pattern.test(block))) {
       return sourceCallMatchesManifest(invocation.operation, invocation.arguments, manifest)
+        && !sourceRouteConflictsWithManifest(invocation, block, manifest)
         ? "platform_restriction" : "unbound_platform_429";
     }
   }
