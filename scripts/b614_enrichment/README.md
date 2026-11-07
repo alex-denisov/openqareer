@@ -2,7 +2,7 @@
 
 This is a Python 3.10+ standard-library pipeline for private company registry enrichment. It keeps source observations, queue state, proposals, reviewer decisions, and full-row apply backups outside the checkout. The default path is dry-run. It never inserts/deletes companies or changes source, ATS, or status fields.
 
-LinkedIn is an imported-evidence provider only. `enqueue --from-baseline` creates `awaiting_import` LinkedIn jobs; `claim` excludes them. The corporate HTTPS worker is disabled until per-request host pacing includes reviewed jitter. Saved observations record source-page access separately from destination availability; a wrapped 429 remains deferred.
+LinkedIn IDs are created only from imported, provider-bound evidence; `enqueue --from-baseline` creates `awaiting_import` jobs and `claim` excludes them. The corporate HTTPS worker is disabled until per-request host pacing includes reviewed jitter. Saved observations record source-page access separately from destination availability; a 429 keeps destination access in cooldown, while an exact published employee href may still support an unapproved ID candidate.
 
 ## Private state and current evidence
 
@@ -36,7 +36,7 @@ A signup redirect proves href metadata only. It does not show employee-list or j
 
 ## Public-index acquisition bridge
 
-The CLI includes a checkpointed bridge for the permitted `mcp__codex_apps__search_service_web_run` public-index tool. It batches at most four stable request IDs per operation, stores each exact exported manifest in SQLite, and accepts a capture only when its provider, operation, request IDs, tool arguments, and manifest hash match that export. The host runner performs one provider call for the batch and saves its full text response; Python does not issue HTTP requests to LinkedIn. Search references are leads. A candidate is created only after the saved open/find/click chain ties the company page, employee CTA marker, exact click invocation, and one numeric employee-facet target together. Same-slug localized LinkedIn hosts are collapsed, preferring `www.linkedin.com` and the root company route over jobs routes. Ambiguous slugs, invalid refs, missing CTAs, and non-unique facets stay unresolved. Search-result retries are bounded to three attempts with backoff; an unresolvable open ref returns to search by the stable query. Search Service 401/403/429 responses and exact-route LinkedIn 401/403/429 responses are terminal and are never re-exported automatically. A single exact employee-facet href in a 429 click result can support an unapproved ID candidate while destination access remains cooldown-pending; no employee-list content is claimed. Open/find/click exports require the explicit `--allow-indexed-linkedin-content` opt-in, which is recorded in the hashed manifest. This standalone tool requires a host that exposes the permitted Search Service provider; availability in a Codex session does not establish availability in the OpenQareer web app or production worker. Do not bundle the Python CLI into the web app.
+The CLI includes a checkpointed bridge for the permitted `mcp__codex_apps__search_service_web_run` public-index tool. It batches at most four stable request IDs per operation, stores each exact exported manifest in SQLite, and accepts a capture only when its provider, operation, request IDs, tool arguments, and manifest hash match that export. The workstation host runner performs one provider call for the batch and saves its full text response; Python does not issue HTTP requests to LinkedIn. Search references are leads. A candidate is created only after the saved open/find/click chain ties the company page, employee CTA marker, exact click invocation, and one numeric employee-facet target together. Same-slug localized LinkedIn hosts are collapsed, preferring `www.linkedin.com` and the root company route over jobs routes. Ambiguous slugs, invalid refs, missing CTAs, and non-unique facets stay unresolved. Search and provider-ref recovery are bounded to three attempts; a mismatched `Source: open` ref returns to search by the same stable query. Search Service 401/403 is terminal. A Search Service HTTP 429 writes a durable global cooldown and retries only after its cooldown expires. An exact LinkedIn route 401/403/429 is terminal; a single employee-facet href from an exact 429 click result can support an unapproved ID candidate while destination access remains cooldown-pending. The host pauses the queue after that platform restriction until an operator explicitly resumes it; the denied route is not re-exported. No employee-list content is claimed. Open/find/click exports require `--allow-indexed-linkedin-content`, recorded in the hashed manifest. This standalone workstation tool requires a host that exposes the permitted Search Service provider; Codex availability does not establish availability in the OpenQareer web app or production worker. Do not bundle it into the web app artifact.
 
 Import the saved public-index root search envelopes against the exact private acquisition plan, then let the host runner consume the exported manifests and save immutable captures under the private evidence root:
 
@@ -62,6 +62,51 @@ python3 scripts/b614_enrichment/cli.py public-index-export \
 ```
 
 After each import, export the next eligible stage (`search`, `open`, `find`, or `click`) until the report shows no eligible requests. A capture envelope must include `provider`, `stage`, `operation`, `batch_id`, `manifest_sha256`, exact `request_ids`, exact `tool_args`, `raw_result_text`, and `is_error`; include `provider_error_status` and `retry_after` only when the provider reports them. Save the complete response text, including citation markers and `Source:` invocation blocks. Keep plans, manifests, captures, SQLite state, and reports outside the checkout in a mode-0700 private evidence directory. Do not fabricate a capture or reuse a response from a different request batch. The resulting candidates remain unapproved and require separate review.
+
+### Run or resume the workstation host driver
+
+Run this callback inside `functions.exec` in a host where the Search Service tool is actually available. The private SQLite state, exact baseline-matched plan, and evidence directory must already be initialized. Set `WORKTREE`, `STATE`, and `EVIDENCE_ROOT` to the existing checkout and private files, then paste this callback:
+
+```js
+// @exec: {"yield_time_ms": 120000}
+const WORKTREE = "/path/to/openqareer-worktree";
+const STATE = "/private/path/state.sqlite";
+const EVIDENCE_ROOT = "/private/path/resume";
+
+const source = await tools.exec_command({
+  cmd: "cat scripts/b614_enrichment/public_index_host_driver.cjs",
+  workdir: WORKTREE,
+  max_output_tokens: 7000,
+});
+if (source.exit_code !== 0) throw new Error("Could not load the workstation host driver");
+
+const factories = new Function(
+  `${source.output}\nreturn { createB614PublicIndexHostDriver, createB614FunctionsExecRuntime };`,
+)();
+const runtime = factories.createB614FunctionsExecRuntime({ tools, worktree: WORKTREE });
+const driver = factories.createB614PublicIndexHostDriver(runtime);
+const result = await driver.run({
+  statePath: STATE,
+  evidenceRoot: EVIDENCE_ROOT,
+  maxBatches: 20,
+  allowIndexedLinkedinContent: true,
+});
+text(JSON.stringify(result));
+```
+
+Each callback run processes at most `maxBatches` tool calls; each call handles up to four requests. Run it again to resume from SQLite. The driver stores one immutable capture per batch before importing it, and stores an attempt marker before each provider call. If a callback ends after a call starts but before its response is saved, the next run stops on that uncertain batch instead of duplicating the call; let the CLI lease expire before retrying. Captures, manifests, pause state, locks, and reports stay under the private evidence directory, and the callback prints only aggregate outcomes.
+
+A Search Service HTTP 429 stops the current callback and records a global cooldown in both the CLI state and the private host state. Re-run after the reported `pause_until`. A platform-route 429 stops the callback and stores a manual-resume pause. After reviewing the captured response, an operator can resume other eligible requests with `resumeAfterManualPause: true`; the exact denied request remains terminal in SQLite and is never clicked again. If a callback is interrupted while holding `public-index-host/host-driver.lock`, verify that no host run is still active before removing that stale lock. The state and immutable captures remain the checkpoint.
+
+The host driver is a workstation-only operator tool, not part of the Vite/Fastify app artifact. The repository's `main` release workflow deploys the app; it does not install the workstation runtime. A PR follows the repository review path, but approval or merge does not install this tool. Keep it in a reviewed source-control branch and execute it only from a pinned workstation checkout with the approved provider.
+
+Offline checks for the host driver and CLI:
+
+```sh
+node --check scripts/b614_enrichment/public_index_host_driver.cjs
+node --test scripts/b614_enrichment/test_public_index_host_driver.cjs
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/b614_enrichment -p 'test_*.py' -v
+```
 
 ## Careers source and destination binding
 

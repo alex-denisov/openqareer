@@ -89,6 +89,10 @@ CREATE TABLE IF NOT EXISTS public_index_batches (
   created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS public_index_batches_stage_idx ON public_index_batches(stage,status,created_at);
+CREATE TABLE IF NOT EXISTS public_index_provider_state (
+  provider TEXT PRIMARY KEY, pause_kind TEXT NOT NULL, paused_until REAL NOT NULL,
+  reason TEXT NOT NULL, updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS source_cache (
   cache_key TEXT PRIMARY KEY, provider TEXT NOT NULL, source_url TEXT NOT NULL,
   response_sha256 TEXT NOT NULL, observed_status INTEGER, evidence_json TEXT NOT NULL,
@@ -1550,6 +1554,13 @@ def export_public_index_batch(conn: sqlite3.Connection, stage: str, out_path: st
         raise ValueError("public-index batch size must be between 1 and 4")
     now = time.time() if now is None else now
 
+    provider_pause = conn.execute(
+        "SELECT paused_until FROM public_index_provider_state WHERE provider=?",
+        ("mcp__codex_apps__search_service_web_run",),
+    ).fetchone()
+    if provider_pause and float(provider_pause["paused_until"]) > now:
+        raise ValueError(f"public_index_provider_cooldown_active:{float(provider_pause['paused_until']):.3f}")
+
     active = conn.execute(
         "SELECT * FROM public_index_batches WHERE stage=? AND status='awaiting_response' ORDER BY created_at LIMIT 1",
         (stage,),
@@ -1569,22 +1580,46 @@ def export_public_index_batch(conn: sqlite3.Connection, stage: str, out_path: st
                     "stage": stage, "request_count": len(requests), "resumed": True, "out": str(out_path)}
         conn.execute("BEGIN IMMEDIATE")
         try:
+            recovery_reason = "public_index_batch_lease_expired"
+            recovery_kind = "same_stable_search_query"
             for item in requests:
                 request_id = item.get("request_id")
                 row = conn.execute("SELECT * FROM public_index_requests WHERE request_id=?", (request_id,)).fetchone()
                 if not row or row["active_batch_id"] != active["batch_id"]:
                     continue
-                attempts_column = f"{stage}_attempts"
-                status_column = f"{stage}_status"
-                not_before_column = f"{stage}_not_before"
-                attempt = int(row[attempts_column] or 1)
-                delay = backoff_delay(attempt)
+                if stage == "search":
+                    attempt = max(1, int(row["search_attempts"] or 1))
+                    due = now + backoff_delay(attempt)
+                    conn.execute(
+                        "UPDATE public_index_requests SET search_status='retry_pending',search_not_before=?,active_batch_id=NULL,active_stage=NULL,lease_until=NULL,last_error=?,updated_at=? WHERE request_id=?",
+                        (due, recovery_reason, utc_now(), request_id),
+                    )
+                else:
+                    recovery_reason = "public_index_call_uncertain_resume_with_fresh_search"
+                    recovery_kind = "fresh_stable_search"
+                    attempt = max(1, int(row["search_attempts"] or 1))
+                    due = now + backoff_delay(attempt)
+                    status_column = f"{stage}_status"
+                    conn.execute(
+                        f"UPDATE public_index_requests SET {status_column}='call_uncertain',search_status='unverified',search_not_before=?,active_batch_id=NULL,active_stage=NULL,lease_until=NULL,last_error=?,updated_at=? WHERE request_id=?",
+                        (due, recovery_reason, utc_now(), request_id),
+                    )
                 conn.execute(
-                    f"UPDATE public_index_requests SET {status_column}='retry_pending',{not_before_column}=?,active_batch_id=NULL,active_stage=NULL,lease_until=NULL,last_error='public_index_batch_lease_expired',updated_at=? WHERE request_id=?",
-                    (now + delay, utc_now(), request_id),
+                    "UPDATE jobs SET status='cooldown_pending',lease_token=NULL,lease_until=NULL,not_before=?,result_json=?,updated_at=? WHERE job_id=?",
+                    (due, canonical_json({"reason": recovery_reason, "public_index_stage": stage,
+                                          "recovery": recovery_kind}), utc_now(), row["job_id"]),
                 )
-            conn.execute("UPDATE public_index_batches SET status='expired',updated_at=? WHERE batch_id=?",
-                         (utc_now(), active["batch_id"]))
+            expiry_result = {"stage": stage, "request_count": len(requests),
+                             "reason": recovery_reason, "recovery": recovery_kind,
+                             "capture_missing": True}
+            expired_status = "expired_uncertain" if stage in {"open", "find", "click"} else "expired"
+            conn.execute("UPDATE public_index_batches SET status=?,result_json=?,updated_at=? WHERE batch_id=?",
+                         (expired_status, canonical_json(expiry_result), utc_now(), active["batch_id"]))
+            conn.execute(
+                "INSERT INTO audit(audit_id,action,subject,payload_json,created_at) VALUES(?,?,?,?,?)",
+                (secrets.token_hex(16), "public_index_batch_expired_uncertain", active["batch_id"],
+                 canonical_json(expiry_result), utc_now()),
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -1849,6 +1884,7 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
             status_value = None
         retry_after = retry_after_seconds(str(capture.get("retry_after"))) if capture.get("retry_after") is not None else None
         deferred = 0
+        provider_pause_until: float | None = None
         conn.execute("BEGIN IMMEDIATE")
         try:
             for request in manifest["requests"]:
@@ -1868,10 +1904,23 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                         (canonical_json({"reason": "public_index_provider_policy_denied", "stage": stage}), utc_now(), row["job_id"]),
                     )
                 else:
-                    _public_index_retry(conn, request_id, stage, "public_index_provider_error", now, retry_after,
-                                        terminal=status_value == 429)
+                    delay = _public_index_retry(conn, request_id, stage, "public_index_provider_error", now, retry_after,
+                                                terminal=False)
+                    if status_value == 429:
+                        provider_pause_until = max(provider_pause_until or 0.0, now + delay)
                     deferred += 1
+            if provider_pause_until is not None:
+                conn.execute(
+                    "INSERT INTO public_index_provider_state(provider,pause_kind,paused_until,reason,updated_at) "
+                    "VALUES(?,?,?,?,?) ON CONFLICT(provider) DO UPDATE SET "
+                    "pause_kind=excluded.pause_kind,paused_until=MAX(public_index_provider_state.paused_until,excluded.paused_until), "
+                    "reason=excluded.reason,updated_at=excluded.updated_at",
+                    ("mcp__codex_apps__search_service_web_run", "search_service_cooldown", provider_pause_until,
+                     "search_service_http_429", utc_now()),
+                )
             result = {"stage": stage, "deferred": deferred, "policy_denied": len(manifest["requests"]) - deferred}
+            if provider_pause_until is not None:
+                result["provider_pause_until"] = provider_pause_until
             conn.execute(
                 "UPDATE public_index_batches SET status='provider_error',capture_file=?,capture_sha256=?,result_json=?,updated_at=? WHERE batch_id=?",
                 (str(capture_path), capture_sha, canonical_json(result), utc_now(), batch_id),
@@ -1944,6 +1993,12 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
             r"(?:unable to resolve open call.*invalid ref[_ -]?id|invalid ref[_ -]?id argument)",
             raw_text, re.I,
         ))
+        requested_refs = {request.get("source_ref") for request in requests if request.get("source_ref")}
+        unrequested_open_blocks = [
+            block for block in split_capture_blocks(raw_text)
+            if (arguments := _capture_source_invocation(block, "open"))
+            and arguments.get("ref_id") not in requested_refs
+        ]
         for request in requests:
             route_blocks = _public_index_call_blocks(raw_text, "open", request)
             terminal = _public_index_terminal_route_block(route_blocks)
@@ -1967,6 +2022,11 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                     stage_updates[request["request_id"]] = (
                         "search_status", "unverified",
                         {"reason": "public_index_search_ref_unresolvable", "retry_stage": "search"},
+                    )
+                elif unrequested_open_blocks:
+                    stage_updates[request["request_id"]] = (
+                        "open_status", "provider_ref_mismatch",
+                        {"reason": "public_index_source_ref_mismatch", "retry_stage": "search"},
                     )
                 else:
                     stage_updates[request["request_id"]] = ("open_status", "no_page", {"reason": "public_index_open_result_not_unique"})
@@ -2192,7 +2252,7 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
             not_before = None
             retry_stage = info.get("retry_stage", stage)
             if status_value in {"no_exact_result", "no_page", "identity_mismatch", "no_cta", "ambiguous",
-                                "no_numeric_facet", "unverified", "cooldown_pending"}:
+                                "no_numeric_facet", "unverified", "cooldown_pending", "provider_ref_mismatch"}:
                 attempt_row = conn.execute(
                     f"SELECT {retry_stage}_attempts FROM public_index_requests WHERE request_id=?",
                     (request_id,),
@@ -2226,8 +2286,11 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                 updates.extend(["click_target_url=?", "linkedin_org_id=?"])
                 values.extend([info.get("target"), str(info.get("linkedin_org_id") or "") or None])
             if info.get("retry_stage") == "search":
-                updates.append("open_status=?")
-                values.append("invalid_ref")
+                if status_col == "search_status":
+                    updates.append("open_status=?")
+                    values.append(info.get("open_status", "invalid_ref"))
+                else:
+                    updates.append("search_status='unverified'")
             updates.extend([f"{capture_column}=?", f"{capture_sha_column}=?"])
             values.extend([str(capture_path), capture_sha])
             if info.get("result_sha256"):
@@ -2272,7 +2335,8 @@ def public_index_import_capture(conn: sqlite3.Connection, capture_file: str | Pa
                     "UPDATE jobs SET status='awaiting_import',lease_token=NULL,lease_until=NULL,result_json=?,updated_at=? WHERE job_id=?",
                     (canonical_json({"reason": info.get("reason"), "public_index_request_id": request_id}), timestamp, row["job_id"]),
                 )
-            if status_value in {"no_exact_result", "no_page", "identity_mismatch", "no_cta", "ambiguous", "no_numeric_facet", "unverified"}:
+            if status_value in {"no_exact_result", "no_page", "identity_mismatch", "no_cta", "ambiguous",
+                                "no_numeric_facet", "unverified", "provider_ref_mismatch"}:
                 conn.execute(
                     "UPDATE jobs SET status='cooldown_pending',not_before=?,result_json=?,updated_at=? WHERE job_id=? AND status='awaiting_import'",
                     (not_before, canonical_json({"reason": info.get("reason"), "public_index_request_id": request_id,
@@ -2807,6 +2871,10 @@ def make_report(conn: sqlite3.Connection) -> dict[str, Any]:
             totals[field][state] = totals[field].get(state, 0) + 1
         out_rows.append(item)
     public_index_rows = conn.execute("SELECT * FROM public_index_requests").fetchall()
+    provider_pause_row = conn.execute(
+        "SELECT pause_kind,paused_until,reason FROM public_index_provider_state WHERE provider=?",
+        ("mcp__codex_apps__search_service_web_run",),
+    ).fetchone()
     public_index = {
         "request_count": len(public_index_rows),
         "linkedin_org_ids_missing": sum(row.get("linkedin_org_id") in (None, "") for row in companies),
@@ -2815,6 +2883,7 @@ def make_report(conn: sqlite3.Connection) -> dict[str, Any]:
             for stage in ("search", "open", "find", "click")
         },
         "batch_statuses": dict(Counter(row[0] for row in conn.execute("SELECT status FROM public_index_batches"))),
+        "provider_pause": dict(provider_pause_row) if provider_pause_row else None,
     }
     return {"generated_at": utc_now(), "company_count": len(out_rows), "field_count": len(FIELDS),
             "rows": out_rows, "coverage": totals, "public_index": public_index}
