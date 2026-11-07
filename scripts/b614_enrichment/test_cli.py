@@ -180,6 +180,17 @@ class EvidenceTests(unittest.TestCase):
         self.assertNotIn("identity", normalized)
         self.assertEqual(normalized["source_access"]["status"], "unknown")
 
+    def test_careers_source_file_without_line_is_adapter_gap_not_identity(self):
+        evidence = good_evidence(source_file="footer.jsonl", http_status=200)
+        normalized = normalize_packet_evidence(evidence, full_row(), field="careers_url",
+                                               proposed_value="https://acme.example/careers")
+        status, reason, _ = validate_candidate(
+            "careers_url", "https://acme.example/careers", normalized, full_row()
+        )
+        self.assertEqual((status, reason), ("exception", "adapter_gap:source_file_line_shape_unsupported"))
+        self.assertNotIn("http_status", normalized)
+        self.assertNotIn("identity", normalized)
+
     def test_unknown_source_status_is_not_fabricated(self):
         evidence = good_evidence()
         status, reason, _ = validate_candidate("website_url", "https://acme.example", evidence, full_row())
@@ -376,32 +387,22 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(set(report["rows"][0]["fields"]), set(FULL_FIELDS_FOR_TEST))
         conn.close()
 
-    def test_corporate_worker_uses_cache_and_per_host_rate_budget(self):
+    def test_corporate_fetch_is_disabled_before_lease_or_network(self):
         conn = open_state(self.state)
         tasks = [
             {"company_key": "acme", "task_kind": "corporate_profile", "provider": "corporate", "source_url": "https://acme.example/about"},
-            {"company_key": "acme", "task_kind": "corporate_careers", "provider": "corporate", "source_url": "https://acme.example/careers"},
         ]
         enqueue_tasks(conn, tasks)
         conn.close()
-        with patch("cli.fetch_public_https", side_effect=lambda url: (url, 200, {}, b"<title>Acme Systems</title>")) as fetch:
-            result = run_corporate_jobs(self.state, limit=2, concurrency=2, min_host_interval=30)
-        self.assertEqual(result["completed"], 1)
-        self.assertEqual(result["deferred"], 1)
-        self.assertEqual(fetch.call_count, 1)
+        with patch("cli.fetch_public_https") as fetch:
+            with self.assertRaisesRegex(PermissionError, "disabled until jittered normal host pacing"):
+                run_corporate_jobs(self.state, limit=1, concurrency=1, min_host_interval=30)
+        fetch.assert_not_called()
         conn = open_state(self.state)
-        cached_url = fetch.call_args.args[0]
-        cached = source_cache_lookup(conn, "corporate", cached_url)
-        self.assertIsNotNone(cached)
+        self.assertEqual(conn.execute("SELECT status FROM jobs").fetchone()[0], "pending")
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM host_budget").fetchone()[0], 0)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM source_cache").fetchone()[0], 0)
         conn.close()
-        # A separate task for the cached URL completes without invoking the adapter.
-        conn = open_state(self.state)
-        task = {"company_key": "acme", "task_kind": "corporate_homepage", "provider": "corporate", "source_url": cached_url}
-        enqueue_tasks(conn, [task])
-        conn.close()
-        with patch("cli.fetch_public_https", side_effect=AssertionError("cache miss must not fetch")):
-            result = run_corporate_jobs(self.state, limit=1, concurrency=1)
-        self.assertEqual(result["completed"], 1)
 
     def test_stale_expected_packet_is_noop_only_when_new_value_is_already_current(self):
         current_row = full_row()
@@ -652,6 +653,258 @@ class QueueTests(unittest.TestCase):
         self.assertFalse(evidence["legacy_click_binding"]["verified"])
         conn.close()
 
+    def _import_career_source_and_destination(self, target="https://acme.example/careers",
+                                              destination_records=None, destination_file=True,
+                                              source_overrides=None, preceding_source_records=None):
+        evidence_root = self.root / "career-evidence"
+        evidence_root.mkdir(mode=0o700, exist_ok=True)
+        os.chmod(evidence_root, 0o700)
+        source_row = {
+            "requested_url": "https://acme.example/about",
+            "status": 200,
+            "final_url": "https://acme.example/about",
+            "title": "Acme Systems",
+            "company_keys": ["acme"],
+            "careers_links": [{"url": target, "label": "Careers", "footer": True, "nav": False}],
+        }
+        if source_overrides:
+            source_row.update(source_overrides)
+        preceding_source_records = preceding_source_records or []
+        source_records = preceding_source_records + [source_row]
+        source_line_number = len(source_records)
+        jsonl_text = "\n".join(json.dumps(record, ensure_ascii=False) for record in source_records) + "\n"
+        (evidence_root / "footer.jsonl").write_text(jsonl_text, encoding="utf-8")
+        if destination_records is None:
+            destination_records = [{
+                "requested_url": target,
+                "final_url": target,
+                "status": 200,
+                "title": "Acme Systems Careers",
+                "company_keys": ["acme"],
+                "body_truncated": False,
+                "careers_links": [],
+            }]
+        if destination_file:
+            (evidence_root / "destinations.json").write_text(json.dumps(destination_records), encoding="utf-8")
+        packet = {
+            "patches": [{
+                "company_key": "acme",
+                "fields": {"careers_url": target},
+                "expected": {"careers_url": "https://old.acme.example/careers"},
+                "evidence": {"careers_url": {
+                    "source_file": "footer.jsonl",
+                    "line": source_line_number,
+                    "url": "https://acme.example/about",
+                    "excerpt": "Careers",
+                }},
+            }]
+        }
+        conn = open_state(self.state)
+        try:
+            counts = import_packet(
+                conn, packet, evidence_root=evidence_root,
+                destination_checks_file="destinations.json" if destination_file else None,
+            )
+            proposal = conn.execute(
+                "SELECT validation_status,validation_reason,evidence_json,approved FROM proposals"
+            ).fetchone()
+            return counts, proposal["validation_status"], proposal["validation_reason"], json.loads(proposal["evidence_json"]), proposal["approved"]
+        finally:
+            conn.close()
+
+    def test_careers_source_and_exact_destination_capture_create_general_portal_candidate(self):
+        counts, status, reason, saved, approved = self._import_career_source_and_destination()
+        self.assertEqual(counts["imported"], 1)
+        self.assertEqual(status, "valid_pending_review")
+        self.assertIsNone(reason)
+        self.assertFalse(approved)
+        self.assertEqual(saved["source_access"]["status"], "content_observed")
+        self.assertEqual(saved["identity"]["observed_company_name"], "Acme Systems")
+        self.assertEqual(saved["destination_access_status"], "available")
+        self.assertEqual(saved["careers_scope"], "general_jobs_portal")
+        self.assertNotEqual(saved["careers_scope"], "companywide_general_jobs")
+        self.assertEqual(saved["destination_check_evidence"]["status"], 200)
+        self.assertEqual(len(saved["destination_check_evidence"]["file_sha256"]), 64)
+        self.assertEqual(len(saved["destination_check_evidence"]["record_sha256"]), 64)
+        self.assertIn("Careers", saved["careers_scope_excerpt"])
+        self.assertIn("Acme Systems Careers", saved["careers_scope_excerpt"])
+
+    def test_jsonl_line_index_counts_lf_only_not_u2028(self):
+        preceding = [{
+            "requested_url": "https://other.example/about",
+            "status": 200,
+            "title": "Other Systems",
+            "company_keys": ["other"],
+            "notes": "before\u2028after",
+            "careers_links": [],
+        }]
+        counts, status, reason, saved, approved = self._import_career_source_and_destination(
+            preceding_source_records=preceding
+        )
+        self.assertEqual(counts["imported"], 1)
+        self.assertEqual(status, "valid_pending_review")
+        self.assertIsNone(reason)
+        self.assertFalse(approved)
+        self.assertEqual(saved["raw_line_number"], 2)
+        self.assertEqual(saved["legacy_corporate_binding"]["company_key_match"], True)
+        self.assertEqual(saved["legacy_corporate_binding"]["target_href_match"], True)
+        self.assertEqual(saved["careers_scope"], "general_jobs_portal")
+
+    def test_careers_source_line_company_key_mismatch_is_adapter_gap(self):
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            source_overrides={"company_keys": ["another-company"]}
+        )
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_source_line_binding_unverified")
+        self.assertEqual(saved["source_access"]["status"], "unknown")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_careers_source_without_company_title_stays_adapter_gap(self):
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            source_overrides={"title": ""}
+        )
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_source_line_binding_unverified")
+        self.assertEqual(saved["source_access"]["status"], "unknown")
+        self.assertNotIn("identity", saved)
+        self.assertNotIn("careers_scope", saved)
+
+    def test_careers_source_line_url_mismatch_is_adapter_gap(self):
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            source_overrides={"requested_url": "https://different.example/about",
+                              "final_url": "https://different.example/about"}
+        )
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_source_line_binding_unverified")
+        self.assertEqual(saved["source_access"]["status"], "unknown")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_careers_destination_check_must_match_the_same_company_key(self):
+        target = "https://acme.example/careers"
+        destination = [{
+            "requested_url": target, "final_url": target, "status": 200, "title": "Acme Systems Careers",
+            "company_keys": ["another-company"], "careers_links": [],
+        }]
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            target=target, destination_records=destination
+        )
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_destination_check_missing_or_ambiguous")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_careers_destination_path_redirect_remains_unverified(self):
+        target = "https://acme.example/careers"
+        destination = [{
+            "requested_url": target, "final_url": "https://jobs.acme.example/careers",
+            "status": 200, "title": "Acme Systems Careers", "company_keys": ["acme"], "careers_links": [],
+        }]
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            target=target, destination_records=destination
+        )
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_destination_redirect_unverified")
+        self.assertEqual(saved["destination_access_status"], "available")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_careers_429_destination_stays_cooldown_and_source_stays_observed(self):
+        target = "https://acme.example/careers"
+        destination = [{
+            "requested_url": target, "final_url": None, "status": 429, "retry_after": "30",
+            "title": None, "company_keys": ["acme"], "careers_links": [],
+        }]
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            target=target, destination_records=destination
+        )
+        self.assertEqual(counts["deferred"], 1)
+        self.assertEqual(status, "deferred_cooldown")
+        self.assertEqual(reason, "wrapped_http_429_retry_after_required")
+        self.assertEqual(saved["source_access"]["status"], "content_observed")
+        self.assertEqual(saved["http_status"], 200)
+        self.assertEqual(saved["destination_access_status"], "cooldown_pending")
+        self.assertEqual(saved["destination_retry_after_seconds"], 30)
+        self.assertNotIn("careers_scope", saved)
+
+    def test_locale_path_needs_explicit_global_scope_evidence(self):
+        target = "https://acme.example/us/careers"
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(target=target)
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_regional_scope_unverified")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_emea_region_prefix_requires_explicit_global_evidence(self):
+        target = "https://acme.example/emea/careers"
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(target=target)
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_regional_scope_unverified")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_language_region_prefix_requires_explicit_global_evidence(self):
+        target = "https://acme.example/en-us/careers"
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(target=target)
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_regional_scope_unverified")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_unknown_route_prefix_is_not_assumed_general(self):
+        target = "https://acme.example/region-west/careers"
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(target=target)
+        self.assertEqual(counts["exceptions"], 1)
+        self.assertEqual(status, "exception")
+        self.assertEqual(reason, "adapter_gap:careers_regional_scope_unverified")
+        self.assertNotIn("careers_scope", saved)
+
+    def test_emea_route_with_explicit_global_link_is_companywide(self):
+        target = "https://acme.example/emea/careers"
+        destination = [{
+            "requested_url": target, "final_url": target, "status": 200,
+            "title": "Acme Systems Careers", "company_keys": ["acme"],
+            "careers_links": [{"url": "https://acme.example/careers/all", "label": "Global jobs"}],
+        }]
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            target=target, destination_records=destination
+        )
+        self.assertEqual(counts["imported"], 1)
+        self.assertEqual(status, "valid_pending_review")
+        self.assertIsNone(reason)
+        self.assertEqual(saved["careers_scope"], "companywide_general_jobs")
+
+    def test_en_us_route_with_explicit_global_title_is_companywide(self):
+        target = "https://acme.example/en-us/careers"
+        destination = [{
+            "requested_url": target, "final_url": target, "status": 200,
+            "title": "Acme Systems Global Careers", "company_keys": ["acme"], "careers_links": [],
+        }]
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            target=target, destination_records=destination
+        )
+        self.assertEqual(counts["imported"], 1)
+        self.assertEqual(status, "valid_pending_review")
+        self.assertIsNone(reason)
+        self.assertEqual(saved["careers_scope"], "companywide_general_jobs")
+
+    def test_locale_path_can_use_explicit_global_destination_link(self):
+        target = "https://acme.example/us/careers"
+        destination = [{
+            "requested_url": target, "final_url": target, "status": 200,
+            "title": "Acme Systems Careers", "company_keys": ["acme"],
+            "careers_links": [{"url": "https://acme.example/careers/all", "label": "Global jobs"}],
+        }]
+        counts, status, reason, saved, _ = self._import_career_source_and_destination(
+            target=target, destination_records=destination
+        )
+        self.assertEqual(counts["imported"], 1)
+        self.assertEqual(status, "valid_pending_review")
+        self.assertIsNone(reason)
+        self.assertEqual(saved["careers_scope"], "companywide_general_jobs")
+
     def test_legacy_source_file_line_adapter_binds_exact_careers_href(self):
         evidence_root = self.root / "evidence"
         evidence_root.mkdir(mode=0o700); os.chmod(evidence_root, 0o700)
@@ -667,9 +920,12 @@ class QueueTests(unittest.TestCase):
         saved = json.loads(proposal["evidence_json"])
         self.assertEqual(saved["http_status"], 200)
         self.assertTrue(saved["legacy_corporate_binding"]["company_key_match"])
+        self.assertTrue(saved["legacy_corporate_binding"]["source_url_match"])
+        self.assertTrue(saved["legacy_corporate_binding"]["source_title_match"])
         self.assertTrue(saved["legacy_corporate_binding"]["target_href_match"])
         self.assertEqual(saved["raw_line_number"], 1)
-        self.assertEqual(proposal["validation_reason"], "adapter_gap:careers_scope_evidence_not_normalized")
+        self.assertNotIn("careers_scope", saved)
+        self.assertEqual(proposal["validation_reason"], "adapter_gap:careers_destination_checks_missing")
         conn.close()
 
     def test_synthetic_30k_benchmark_uses_sqlite_queue_cache_and_restart(self):

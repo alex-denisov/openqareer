@@ -622,6 +622,17 @@ def validate_candidate(field: str, value: Any, evidence: dict[str, Any], company
         return "deferred_cooldown", "wrapped_http_429_retry_after_required", "none"
     if evidence.get("adapter_gap") == "unsupported_raw_evidence_shape":
         return "exception", "adapter_gap:unsupported_raw_evidence_shape", "none"
+    careers_gap = evidence.get("adapter_gap")
+    if isinstance(careers_gap, str) and careers_gap.startswith("careers_"):
+        raw_source_status = evidence.get("http_status", evidence.get("status"))
+        if raw_source_status is None:
+            return "exception", f"adapter_gap:{careers_gap}", "none"
+        try:
+            normalized_source_status = int(raw_source_status)
+        except (TypeError, ValueError):
+            return "exception", f"adapter_gap:{careers_gap}", "none"
+        if 200 <= normalized_source_status < 300:
+            return "exception", f"adapter_gap:{careers_gap}", "none"
     if evidence.get("adapter_gap") in {
         "source_file_line_shape_unsupported",
         "source_file_line_unavailable", "source_file_line_out_of_range", "source_file_line_unparseable",
@@ -640,6 +651,8 @@ def validate_candidate(field: str, value: Any, evidence: dict[str, Any], company
             return "exception", "invalid_source_access_status", "none"
         if not 200 <= source_status < 300:
             return "exception", "source_not_opened_successfully", "none"
+    elif evidence.get("adapter_gap") == "careers_source_line_binding_unverified":
+        return "exception", "adapter_gap:careers_source_line_binding_unverified", "none"
     elif not (isinstance(source_access, dict) and source_access.get("status") == "content_observed"
               and source_access.get("method") in {"public_index", "cached_primary_page", "official_site",
                                                   "saved_b614_find_and_click_capture", "saved_b614_find_capture", "saved_corporate_footer_line"}):
@@ -651,7 +664,7 @@ def validate_candidate(field: str, value: Any, evidence: dict[str, Any], company
     # Destination reachability is an independent observation. In particular a published
     # company link remains evidence when its destination was not opened or robots-denied.
     destination_status = evidence.get("destination_access_status")
-    if destination_status not in {None, "unknown", "not_attempted", "available", "policy_denied", "access_denied", "deferred_cooldown"}:
+    if destination_status not in {None, "unknown", "not_attempted", "available", "policy_denied", "access_denied", "deferred_cooldown", "cooldown_pending", "unavailable"}:
         return "exception", "invalid_destination_access_state", "none"
     identity = evidence.get("identity") or {}
     if not isinstance(identity, dict):
@@ -674,9 +687,9 @@ def validate_candidate(field: str, value: Any, evidence: dict[str, Any], company
         if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
             return "rejected", "url_must_be_https_without_credentials", confidence
         if field == "careers_url":
-            if not is_direct_careers_portal(value):
-                return "exception", "narrow_or_unverified_careers_subpage", confidence
             scope = evidence.get("careers_scope")
+            if not is_direct_careers_portal(value) and not (scope == "companywide_general_jobs" and _is_locale_path(value)):
+                return "exception", "narrow_or_unverified_careers_subpage", confidence
             scope_excerpt = str(evidence.get("careers_scope_excerpt", "")).strip()
             if scope not in {"companywide_general_jobs", "general_jobs_portal", "all_roles"} or len(scope_excerpt) < 12:
                 return "exception", "careers_scope_unverified", confidence
@@ -1122,11 +1135,243 @@ def normalize_legacy_linkedin_observation(normalized: dict[str, Any], company: d
     })
 
 
+def _normalized_https_host_path(value: Any) -> tuple[str, str] | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        port_ok = parsed.port in (None, 443)
+    except ValueError:
+        return None
+    if parsed.scheme.casefold() != "https" or not parsed.hostname or parsed.username or parsed.password or not port_ok:
+        return None
+    return parsed.hostname.casefold().rstrip("."), parsed.path.rstrip("/") or "/"
+
+
+def _normalized_https_source_url(value: Any) -> tuple[str, str, str] | None:
+    key = _normalized_https_host_path(value)
+    if key is None:
+        return None
+    parsed = urllib.parse.urlsplit(str(value))
+    return key[0], key[1], parsed.query
+
+
+def _company_title_matches(title: Any, company_name: str) -> bool:
+    if not isinstance(title, str) or not title.strip():
+        return False
+    expected = normalize_name(company_name)
+    parts = re.split(r"[|•·:]|\s+[–—-]\s+", title)
+    for part in parts:
+        candidate = re.sub(r"(?i)^\s*(?:careers?|jobs?|work|join)\s+(?:at|for)\s+", "", part).strip()
+        candidate = re.sub(r"(?i)\s+(?:careers?|jobs?|employment|open positions?)\s*$", "", candidate).strip()
+        if normalize_name(candidate) == expected:
+            return True
+    return False
+
+
+def _is_locale_path(url: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    first = next((segment.casefold().replace("_", "-") for segment in parsed.path.split("/") if segment), "")
+    regional = {
+        "us", "uk", "eu", "fr", "de", "in", "au", "ca", "sg", "jp", "kr", "br", "mx",
+        "emea", "apac", "apj", "latam", "americas", "north-america", "south-america",
+        "europe", "asia-pacific", "middle-east", "africa", "oceania", "mena", "anz",
+        "dach", "benelux", "nordics", "asean", "gcc", "global", "worldwide",
+    }
+    languages = {"en", "fr", "de", "es", "pt", "zh", "ja", "ko", "ru", "it", "ar", "hi",
+                 "nl", "sv", "no", "da", "fi", "pl", "tr", "vi", "th", "id", "ms"}
+    locale_tag = bool(re.fullmatch(r"[a-z]{2,3}-(?:[a-z]{2}|[0-9]{3}|hans|hant)(?:-[a-z]{2})?", first))
+    return first in regional or first in languages or locale_tag
+
+
+def _has_non_general_careers_prefix(url: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    segments = [segment.casefold() for segment in parsed.path.split("/") if segment]
+    if not segments:
+        return False
+    ats_hosts = ("greenhouse.io", "lever.co", "ashbyhq.com", "workable.com", "smartrecruiters.com",
+                 "workday.com", "myworkdayjobs.com", "pinpointhq.com")
+    host = (parsed.hostname or "").casefold().rstrip(".")
+    if any(host == ats or host.endswith("." + ats) for ats in ats_hosts):
+        return False
+    general_roots = {"careers", "career", "jobs", "job-openings", "join-us", "join-our-team",
+                     "open-positions", "vacancies", "work-with-us"}
+    return segments[0] not in general_roots
+
+
+def _is_narrow_careers_path(url: str) -> bool:
+    parsed = urllib.parse.urlsplit(url)
+    segments = [segment.casefold() for segment in parsed.path.split("/") if segment]
+    narrow = {
+        "career-types", "job-categories", "departments", "department", "locations", "location",
+        "teams", "team", "technology", "tech", "engineering", "product", "sales", "marketing",
+        "design", "finance", "operations", "support", "students", "student", "internships",
+        "internship", "graduate", "graduates", "campus", "early-careers", "earlycareer",
+        "stories", "blog", "editorial",
+    }
+    if any(segment in narrow for segment in segments):
+        return True
+    career_segments = {"careers", "career", "jobs", "job-openings", "join-us", "join-our-team"}
+    if len(segments) >= 3 and any(segment in career_segments for segment in segments[:-1]):
+        return True
+    if _is_locale_path(url):
+        remaining = segments[1:]
+        return not remaining or remaining[-1] not in {"careers", "career", "jobs", "job-openings", "join-us", "join-our-team"}
+    return False
+
+
+def _explicit_global_scope_link(destination_record: dict[str, Any]) -> dict[str, Any] | None:
+    pattern = re.compile(r"\b(global|worldwide|all\s+(?:roles|jobs|locations)|international\s+(?:careers|jobs))\b", re.I)
+    links = destination_record.get("careers_links")
+    if not isinstance(links, list):
+        return None
+    for link in links:
+        if isinstance(link, dict) and isinstance(link.get("label"), str) and pattern.search(link["label"]):
+            if _normalized_https_host_path(link.get("url")):
+                return link
+    return None
+
+
+def load_destination_capture(path_token: str | Path | None,
+                            evidence_root: str | Path | None) -> dict[str, Any] | None:
+    if path_token is None:
+        return None
+    try:
+        path, digest, raw = resolve_legacy_evidence_file(str(path_token), evidence_root)
+        data = json.loads(_json_text(raw))
+    except (FileNotFoundError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        return {"error": str(error), "requested_path": str(path_token)}
+    if not isinstance(data, list) or not all(isinstance(row, dict) for row in data):
+        return {"error": "destination_check_file_must_be_json_array_of_objects",
+                "path": str(path), "sha256": digest}
+    return {"path": str(path), "sha256": digest, "rows": data}
+
+
+def normalize_careers_destination_capture(normalized: dict[str, Any], company: dict[str, Any],
+                                          proposed_value: Any, capture: dict[str, Any] | None) -> None:
+    binding = normalized.get("legacy_corporate_binding") or {}
+    if not (binding.get("company_key_match") is True and binding.get("target_href_match") is True
+            and binding.get("source_url_match") is True and binding.get("source_title_match") is True):
+        normalized["adapter_gap"] = "careers_source_line_binding_unverified"
+        return
+    if not isinstance(capture, dict):
+        normalized["adapter_gap"] = "careers_destination_checks_missing"
+        return
+    if capture.get("error"):
+        normalized["adapter_gap"] = "careers_destination_checks_unavailable"
+        normalized["adapter_gap_detail"] = capture["error"]
+        return
+    target_key = _normalized_https_host_path(proposed_value)
+    if target_key is None:
+        normalized["adapter_gap"] = "careers_destination_target_not_https"
+        return
+    matches = []
+    for index, row in enumerate(capture.get("rows", [])):
+        if _normalized_https_host_path(row.get("requested_url")) != target_key:
+            continue
+        company_keys = row.get("company_keys")
+        if company_keys is not None and (not isinstance(company_keys, list) or company["company_key"] not in company_keys):
+            continue
+        matches.append((index, row, company_keys))
+    if len(matches) != 1:
+        normalized["adapter_gap"] = "careers_destination_check_missing_or_ambiguous"
+        return
+
+    index, row, company_keys = matches[0]
+    raw_status = row.get("status")
+    try:
+        status = int(raw_status) if raw_status is not None and not isinstance(raw_status, bool) else None
+    except (TypeError, ValueError):
+        status = None
+    final_url = row.get("final_url")
+    final_key = _normalized_https_host_path(final_url)
+    normalized["destination_check_evidence"] = {
+        "file": capture["path"],
+        "file_sha256": capture["sha256"],
+        "record_index": index + 1,
+        "record_sha256": sha256_value(row),
+        "requested_url": row.get("requested_url"),
+        "final_url": final_url,
+        "status": status,
+        "title": row.get("title"),
+        "company_key_match": company["company_key"] in company_keys if isinstance(company_keys, list) else None,
+    }
+    if status == 429:
+        retry_delay = retry_after_seconds(str(row.get("retry_after"))) if row.get("retry_after") is not None else None
+        normalized.update({
+            "destination_access_status": "cooldown_pending",
+            "destination_access_detail": "http_429_in_exact_destination_capture",
+            "transport_error": "HTTP 429 Too Many Requests in exact careers destination capture",
+        })
+        if retry_delay is not None:
+            normalized["destination_retry_after_seconds"] = retry_delay
+        return
+    if status in {401, 403}:
+        normalized["destination_access_status"] = "access_denied"
+        normalized["adapter_gap"] = "careers_destination_access_denied"
+        return
+    if status == 404:
+        normalized["destination_access_status"] = "unavailable"
+        normalized["adapter_gap"] = "careers_destination_unavailable"
+        return
+    if status is None or not 200 <= status < 300:
+        normalized["destination_access_status"] = "unknown"
+        normalized["adapter_gap"] = "careers_destination_status_unverified"
+        return
+
+    normalized["destination_access_status"] = "available"
+    if final_key != target_key:
+        normalized["destination_access_detail"] = "redirect_target_not_canonicalized"
+        normalized["adapter_gap"] = "careers_destination_redirect_unverified"
+        return
+    localized_target = _is_locale_path(str(proposed_value))
+    scoped_target = localized_target or _has_non_general_careers_prefix(str(proposed_value))
+    if _is_narrow_careers_path(str(proposed_value)) or (
+        not localized_target and not is_direct_careers_portal(str(proposed_value))
+    ):
+        normalized["destination_access_detail"] = "destination_is_not_a_general_careers_entrypoint"
+        normalized["adapter_gap"] = "careers_destination_narrow_or_unverified"
+        return
+
+    source_link_label = str(binding.get("target_href_label") or "").strip()
+    source_title = str(binding.get("source_title") or "").strip()
+    destination_title = str(row.get("title") or "").strip()
+    if not source_link_label or not re.search(r"career|job|join", source_link_label, re.I):
+        normalized["destination_access_detail"] = "employer_link_label_not_careers_or_jobs"
+        normalized["adapter_gap"] = "careers_source_link_label_unverified"
+        return
+    if not destination_title or re.search(r"\b(?:internships?|students?|graduates?|early\s*careers?|stories|blog|editorial)\b", destination_title, re.I):
+        normalized["destination_access_detail"] = "destination_title_missing_or_narrow"
+        normalized["adapter_gap"] = "careers_destination_narrow_or_unverified"
+        return
+
+    if scoped_target:
+        global_link = _explicit_global_scope_link(row)
+        global_title = bool(re.search(
+            r"\b(global|worldwide|all\s+(?:roles|jobs|locations)|international\s+(?:careers|jobs))\b",
+            destination_title, re.I))
+        if not global_link and not global_title:
+            normalized["destination_access_detail"] = "localized_destination_without_explicit_global_roles"
+            normalized["adapter_gap"] = "careers_regional_scope_unverified"
+            return
+        scope = "companywide_general_jobs"
+        excerpt_parts = [source_title, source_link_label, destination_title]
+        if global_link:
+            excerpt_parts.extend([str(global_link.get("label") or ""), str(global_link.get("url") or "")])
+    else:
+        scope = "general_jobs_portal"
+        excerpt_parts = [source_title, source_link_label, destination_title]
+    normalized["careers_scope"] = scope
+    normalized["careers_scope_excerpt"] = " | ".join(part for part in excerpt_parts if part)
+    normalized["destination_access_detail"] = "exact_company_link_and_destination_capture_match"
+
+
 def normalize_legacy_source_line(normalized: dict[str, Any], company: dict[str, Any], evidence_root: str | Path | None,
                                  field: str, proposed_value: Any) -> None:
     source_file, line_number = normalized.get("source_file"), normalized.get("line")
     if not isinstance(source_file, str):
         return
+    source_url_hint = normalized.get("source_url") or normalized.get("url")
     for key in ("http_status", "status", "source_access", "identity"):
         normalized.pop(key, None)
     if not isinstance(line_number, int) or isinstance(line_number, bool) or line_number < 1:
@@ -1144,7 +1389,9 @@ def normalize_legacy_source_line(normalized: dict[str, Any], company: dict[str, 
         normalized.pop("source_url", None)
         normalized.pop("excerpt", None)
         return
-    lines = raw.decode("utf-8", errors="replace").splitlines()
+    # JSONL record indexes are LF-delimited; str.splitlines() also splits U+2028
+    # embedded in a JSON string and shifts every later evidence line reference.
+    lines = raw.decode("utf-8", errors="replace").split("\n")
     if line_number > len(lines):
         normalized.update({"adapter_gap": "source_file_line_out_of_range",
                            "source_access": {"status": "unknown", "method": "source_line_out_of_range", "raw_file_sha256": digest}})
@@ -1155,40 +1402,91 @@ def normalize_legacy_source_line(normalized: dict[str, Any], company: dict[str, 
     try:
         record = json.loads(line)
     except json.JSONDecodeError:
-        record = {}
+        record = None
     if not isinstance(record, dict):
         normalized.update({"adapter_gap": "source_file_line_unparseable",
                            "source_access": {"status": "unknown", "method": "source_line_unparseable", "raw_file_sha256": digest}})
         normalized.pop("source_url", None)
         normalized.pop("excerpt", None)
         return
-    links = record.get("careers_links", []) if isinstance(record, dict) else []
-    exact_link = any(isinstance(item, dict) and item.get("url") == proposed_value for item in links)
-    key_list = record.get("company_keys", []) if isinstance(record, dict) else []
-    source_status = record.get("status") if isinstance(record, dict) and isinstance(record.get("status"), int) else None
+
+    links = record.get("careers_links")
+    links = links if isinstance(links, list) else []
+    matching_links = [item for item in links if isinstance(item, dict) and item.get("url") == proposed_value]
+    key_list = record.get("company_keys")
+    key_list = key_list if isinstance(key_list, list) else []
+    source_status_raw = record.get("status")
+    try:
+        source_status = int(source_status_raw) if source_status_raw is not None and not isinstance(source_status_raw, bool) else None
+    except (TypeError, ValueError):
+        source_status = None
     source_url = record.get("requested_url") if isinstance(record.get("requested_url"), str) else None
+    source_final_url = record.get("final_url") if isinstance(record.get("final_url"), str) else None
+    source_hint_key = _normalized_https_source_url(source_url_hint)
+    source_url_match = bool(source_hint_key and source_hint_key in {
+        _normalized_https_source_url(source_url),
+        _normalized_https_source_url(source_final_url),
+    })
+    source_title = record.get("title") if isinstance(record.get("title"), str) else ""
+    company_key_match = company["company_key"] in key_list
+    target_href_match = len(matching_links) == 1
+    title_match = _company_title_matches(source_title, company["company_name"])
     excerpt = normalized.get("excerpt")
-    if not isinstance(excerpt, str) or not excerpt.strip() or excerpt not in line:
+    excerpt_match = isinstance(excerpt, str) and bool(excerpt.strip()) and excerpt in line
+    if not excerpt_match or len(str(excerpt).strip()) < 12:
+        excerpt = source_title
+    if not isinstance(excerpt, str) or not excerpt.strip():
         normalized.pop("excerpt", None)
         excerpt = ""
-    normalized.update({"raw_file": str(path), "raw_file_sha256": digest, "raw_source_block": line,
-                       "raw_source_block_sha256": sha256_bytes(line.encode("utf-8")),
-                       "source_url": source_url or "", "excerpt": excerpt, "raw_line_number": line_number,
-                       "legacy_corporate_binding": {"company_key_match": company["company_key"] in key_list,
-                                                     "target_href_match": exact_link, "source_status": source_status}})
+    else:
+        normalized["excerpt"] = excerpt
+    if not title_match and excerpt_match and normalize_name(company["company_name"]) in normalize_name(str(normalized.get("excerpt", ""))):
+        title_match = True
+    source_content_observed = (company_key_match and target_href_match and source_url_match and title_match
+                               and (source_status is None or 200 <= source_status < 300))
+    target_link = matching_links[0] if target_href_match else {}
+    target_label = target_link.get("label") if isinstance(target_link.get("label"), str) else ""
+    normalized.update({
+        "raw_file": str(path), "raw_file_sha256": digest, "raw_source_block": line,
+        "raw_source_block_sha256": sha256_bytes(line.encode("utf-8")),
+        "source_url": source_url or "", "excerpt": excerpt, "raw_line_number": line_number,
+        "legacy_corporate_binding": {
+            "company_key_match": company_key_match,
+            "source_url_match": source_url_match,
+            "source_title_match": title_match,
+            "target_href_match": target_href_match,
+            "source_status": source_status,
+            "source_title": source_title,
+            "source_requested_url": source_url,
+            "source_final_url": source_final_url,
+            "target_href_label": target_label,
+        },
+    })
+    if not source_url:
+        normalized.pop("source_url", None)
     if source_status is not None:
         normalized["http_status"] = source_status
-    normalized["source_access"] = {"status": "content_observed" if company["company_key"] in key_list and exact_link else "unknown",
-                                    "method": "saved_corporate_footer_line", "raw_file_sha256": digest, "line": line_number}
-    identity = normalized.get("identity")
-    excerpt = str(normalized.get("excerpt", ""))
-    if not identity and normalize_name(company["company_name"]) and normalize_name(company["company_name"]) in normalize_name(excerpt) and excerpt in line:
-        normalized["identity"] = {"observed_company_name": company["company_name"], "business_context": excerpt,
-                                   "name_match": True, "extraction": "exact_name_from_cited_source_line"}
+    if source_status == 429:
+        normalized["transport_error"] = "HTTP 429 Too Many Requests in exact corporate source-line capture"
+    normalized["source_access"] = {
+        "status": "content_observed" if source_content_observed else "unknown",
+        "method": "saved_corporate_footer_line",
+        "raw_file_sha256": digest,
+        "line": line_number,
+    }
+    if source_content_observed:
+        context = source_title or str(excerpt)
+        normalized["identity"] = {
+            "observed_company_name": company["company_name"],
+            "business_context": context,
+            "name_match": True,
+            "identity_basis": "raw_company_footer_title_link_and_source_url",
+        }
 
 
 def normalize_packet_evidence(evidence: Any, company: dict[str, Any], evidence_root: str | Path | None = None,
-                              field: str | None = None, proposed_value: Any = None) -> Any:
+                              field: str | None = None, proposed_value: Any = None,
+                              destination_capture: dict[str, Any] | None = None) -> Any:
     """Preserve source records; add only mechanically observed access/hash metadata."""
     if not isinstance(evidence, dict):
         return evidence
@@ -1219,6 +1517,18 @@ def normalize_packet_evidence(evidence: Any, company: dict[str, Any], evidence_r
         normalize_legacy_linkedin_observation(normalized, company, evidence_root, proposed_value)
     if "source_file" in normalized and "line" in normalized:
         normalize_legacy_source_line(normalized, company, evidence_root, field or "", proposed_value)
+    source_locator_present = "source_file" in normalized or "line" in normalized
+    source_locator_supported = (
+        isinstance(normalized.get("source_file"), str)
+        and isinstance(normalized.get("line"), int)
+        and not isinstance(normalized.get("line"), bool)
+        and normalized.get("line") >= 1
+    )
+    if field == "careers_url" and source_locator_present and not source_locator_supported:
+        normalized["adapter_gap"] = "source_file_line_shape_unsupported"
+        for key in ("http_status", "status", "identity", "source_access"):
+            normalized.pop(key, None)
+        normalized["source_access"] = {"status": "unknown", "method": "unsupported_source_line_shape"}
     raw_like_fields = {"raw", "corporate_raw"}
     supported_raw_path = (isinstance(normalized.get("raw_file"), str)
                           or (isinstance(normalized.get("raw_find_file"), str)
@@ -1228,12 +1538,22 @@ def normalize_packet_evidence(evidence: Any, company: dict[str, Any], evidence_r
         for key in ("http_status", "status", "identity", "source_access"):
             normalized.pop(key, None)
         normalized["source_access"] = {"status": "unknown", "method": "unsupported_evidence_adapter_gap"}
-    elif (field == "careers_url" and isinstance(normalized.get("source_file"), str)
-          and isinstance(normalized.get("line"), int)
-          and (not isinstance(normalized.get("careers_scope"), str)
-               or normalized.get("careers_scope") not in {"companywide_general_jobs", "general_jobs_portal", "all_roles"}
-               or len(str(normalized.get("careers_scope_excerpt", "")).strip()) < 12)):
-        normalized["adapter_gap"] = "careers_scope_evidence_not_normalized"
+    if (not normalized.get("adapter_gap") and field == "careers_url"
+            and isinstance(normalized.get("source_file"), str)
+            and isinstance(normalized.get("line"), int)):
+        source_binding = normalized.get("legacy_corporate_binding") or {}
+        source_complete = (
+            source_binding.get("company_key_match") is True
+            and source_binding.get("target_href_match") is True
+            and source_binding.get("source_url_match") is True
+            and source_binding.get("source_title_match") is True
+            and isinstance(normalized.get("source_access"), dict)
+            and normalized["source_access"].get("status") == "content_observed"
+        )
+        if not source_complete:
+            normalized["adapter_gap"] = "careers_source_line_binding_unverified"
+        else:
+            normalize_careers_destination_capture(normalized, company, proposed_value, destination_capture)
     # Exact registered-name text in a cited excerpt is an observation only; no HTTP or
     # official-domain flag is inferred here.
     identity = normalized.get("identity")
@@ -1244,7 +1564,8 @@ def normalize_packet_evidence(evidence: Any, company: dict[str, Any], evidence_r
     return normalized
 
 
-def import_packet(conn: sqlite3.Connection, packet: dict[str, Any], evidence_root: str | Path | None = None) -> dict[str, int]:
+def import_packet(conn: sqlite3.Connection, packet: dict[str, Any], evidence_root: str | Path | None = None,
+                  destination_checks_file: str | Path | None = None) -> dict[str, int]:
     if not isinstance(packet, dict):
         raise ValueError("packet must be an object")
     updates = packet.get("updates", packet.get("patches", packet.get("candidates")))
@@ -1255,6 +1576,7 @@ def import_packet(conn: sqlite3.Connection, packet: dict[str, Any], evidence_roo
         saved = get_baseline(conn)
         if sha256_value(supplied) != sha256_value(saved):
             raise ValueError("packet baseline does not exactly match initialized full-row snapshot")
+    destination_capture = load_destination_capture(destination_checks_file, evidence_root) if destination_checks_file is not None else None
     counts = {"imported": 0, "rejected": 0, "exceptions": 0, "unchanged": 0}
     known_groups = {row.get("domain_group") for row in get_baseline(conn) if row.get("domain_group") not in (None, "")}
     conn.execute("BEGIN IMMEDIATE")
@@ -1282,7 +1604,8 @@ def import_packet(conn: sqlite3.Connection, packet: dict[str, Any], evidence_roo
                 if expected != current:
                     raise ValueError(f"stale expected old value for {key}.{field}")
                 original_evidence = evidence_obj.get(field) if isinstance(evidence_obj, dict) and field in evidence_obj else evidence_obj
-                evidence = normalize_packet_evidence(original_evidence, company, evidence_root, field, value)
+                evidence = normalize_packet_evidence(original_evidence, company, evidence_root, field, value,
+                                                    destination_capture=destination_capture)
                 validation, reason, confidence = validate_candidate(field, value, evidence, company)
                 if field == "domain_group" and validation == "valid_pending_review":
                     if value not in known_groups:
@@ -1603,99 +1926,8 @@ def reserve_host_budget(state_path: str | Path, provider: str, host: str, min_in
 
 def run_corporate_jobs(state_path: str | Path, *, limit: int, concurrency: int, kill_switch: str | None = None,
                        min_host_interval: float = 2.0) -> dict[str, int]:
-    if concurrency < 1 or concurrency > 8:
-        raise ValueError("concurrency must be between 1 and 8")
-    if min_host_interval < 0:
-        raise ValueError("minimum host interval cannot be negative")
-    if kill_switch and Path(kill_switch).exists():
-        return {"claimed": 0, "completed": 0, "deferred": 0, "refused": 0}
-    conn = open_state(state_path)
-    jobs = claim_jobs(conn, limit, 600)
-    outcome_counts = {"claimed": len(jobs), "completed": 0, "deferred": 0, "refused": 0}
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for job in jobs:
-        if job["provider"] != "corporate":
-            record_job(conn, job["job_id"], job["lease_token"], "policy_denied", {"reason": "unsupported_provider_live_fetch_disabled"})
-            outcome_counts["refused"] += 1
-        elif not job["source_url"]:
-            record_job(conn, job["job_id"], job["lease_token"], "unavailable", {"reason": "no_source_url_to_attempt"})
-            outcome_counts["refused"] += 1
-        else:
-            groups.setdefault((job["provider"], job["source_url"]), []).append(job)
-
-    fresh_groups: list[list[dict[str, Any]]] = []
-    for (provider, url), group in groups.items():
-        cached = source_cache_lookup(conn, provider, url)
-        if cached:
-            result = {"reason": "source_cache_hit", "response_sha256": cached["response_sha256"], "http_status": cached["observed_status"], "observation": cached["evidence"]}
-            for job in group:
-                record_job(conn, job["job_id"], job["lease_token"], "completed", result)
-                outcome_counts["completed"] += 1
-        else:
-            fresh_groups.append(group)
-
-    def fetch_group(group: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], str | None, int | None, dict[str, str], bytes, str | None, float]:
-        job = group[0]
-        if kill_switch and Path(kill_switch).exists():
-            return group, job["source_url"], None, {}, b"", "kill_switch", 0
-        host = urllib.parse.urlsplit(job["source_url"]).hostname or ""
-        try:
-            wait = reserve_host_budget(state_path, "corporate", host, min_host_interval)
-            if wait > 0:
-                return group, job["source_url"], None, {}, b"", "host_cooldown", wait
-            final_url, status, headers, body = fetch_public_https(job["source_url"])
-            return group, final_url, status, headers, body, None, 0
-        except (PermissionError, ValueError) as error:
-            return group, job["source_url"], None, {}, b"", str(error), 0
-        except Exception as error:
-            return group, job["source_url"], None, {}, b"", f"transport:{type(error).__name__}", 0
-
-    with ThreadPoolExecutor(max_workers=concurrency) as pool:
-        futures = [pool.submit(fetch_group, group) for group in fresh_groups]
-        for future in as_completed(futures):
-            group, final_url, status, headers, body, error, wait = future.result()
-            if error == "kill_switch":
-                continue  # Lease expiry recovers this work without fabricating an outcome.
-            if error == "host_cooldown":
-                result = {"reason": "per_host_rate_budget", "retry_after_seconds": wait}
-                for job in group:
-                    record_job(conn, job["job_id"], job["lease_token"], "cooldown_pending", result)
-                    outcome_counts["deferred"] += 1
-                continue
-            if error and not error.startswith("transport:"):
-                result = {"reason": error}
-                for job in group:
-                    record_job(conn, job["job_id"], job["lease_token"], "policy_denied", result)
-                    outcome_counts["refused"] += 1
-                continue
-            job = group[0]
-            outcome, details = source_outcome("corporate", status, headers, body.decode("utf-8", errors="replace")[:2000], job["attempt"])
-            if error and error.startswith("transport:"):
-                outcome, details = source_outcome("corporate", None, attempt=job["attempt"])
-                details["transport_error"] = error.split(":", 1)[1]
-            if status == 429:
-                host = urllib.parse.urlsplit(job["source_url"]).hostname or ""
-                delay = rate_limit_result(conn, "corporate", host, job["attempt"], retry_after_seconds(headers.get("retry-after")))
-                details["retry_after_seconds"] = delay
-            observation = None
-            if status is not None and 200 <= status < 300:
-                observation = extract_corporate_observation(final_url, status, body)
-                details["observation"] = observation
-                details["response_sha256"] = observation["body_sha256"]
-                conn.execute("INSERT OR IGNORE INTO source_cache(cache_key,provider,source_url,response_sha256,observed_status,evidence_json,observed_at) VALUES(?,?,?,?,?,?,?)",
-                             (sha256_value({"provider": "corporate", "url": job["source_url"], "body_sha256": observation["body_sha256"]}),
-                              "corporate", job["source_url"], observation["body_sha256"], status, canonical_json(observation), utc_now()))
-                conn.execute("UPDATE host_budget SET consecutive_429=0 WHERE provider='corporate' AND host=?", (urllib.parse.urlsplit(job["source_url"]).hostname or "",))
-            for item in group:
-                record_job(conn, item["job_id"], item["lease_token"], outcome, details)
-                if outcome == "completed":
-                    outcome_counts["completed"] += 1
-                elif outcome == "cooldown_pending":
-                    outcome_counts["deferred"] += 1
-                else:
-                    outcome_counts["refused"] += 1
-    conn.close()
-    return outcome_counts
+    """Fail closed until per-request host pacing includes reviewed jitter."""
+    raise PermissionError("corporate-fetch is disabled until jittered normal host pacing is implemented and reviewed")
 
 
 def benchmark_synthetic(job_count: int) -> dict[str, Any]:
@@ -1786,7 +2018,8 @@ def command_record(args: argparse.Namespace) -> int:
 def command_import(args: argparse.Namespace) -> int:
     packet = read_json(args.packet)
     with open_state(args.state) as conn:
-        result = import_packet(conn, packet, evidence_root=args.evidence_root)
+        result = import_packet(conn, packet, evidence_root=args.evidence_root,
+                               destination_checks_file=args.destination_checks)
     print(json.dumps(result, ensure_ascii=False))
     return 0
 
@@ -2010,7 +2243,9 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--status", choices=sorted(TASK_STATUSES - {"pending", "leased", "awaiting_import"}), required=True)
     record.add_argument("--result", required=True, help="JSON outcome object"); record.set_defaults(func=command_record)
     imp = sub.add_parser("import-packet", help="import primary evidence proposals; imported proposals remain unapproved")
-    imp.add_argument("--state", required=True); imp.add_argument("--packet", required=True); imp.add_argument("--evidence-root"); imp.set_defaults(func=command_import)
+    imp.add_argument("--state", required=True); imp.add_argument("--packet", required=True); imp.add_argument("--evidence-root")
+    imp.add_argument("--destination-checks", help="private JSON destination-check capture paired with careers source-line evidence")
+    imp.set_defaults(func=command_import)
     approve = sub.add_parser("approve", help="record a separate review against an immutable candidate hash")
     approve.add_argument("--state", required=True); approve.add_argument("--candidate-id", required=True); approve.add_argument("--reviewer", required=True)
     approve.add_argument("--candidate-sha256", required=True); approve.set_defaults(func=command_approve)
@@ -2026,7 +2261,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply = sub.add_parser("apply", help="dry-run approved patch; writes only with explicit --apply and matching baseline hash")
     apply.add_argument("--state", required=True); apply.add_argument("--db", required=True); apply.add_argument("--backup-dir", required=True)
     apply.add_argument("--manifest"); apply.add_argument("--apply", action="store_true"); apply.add_argument("--confirm-baseline-sha"); apply.add_argument("--confirm-manifest-sha"); apply.set_defaults(func=command_apply)
-    fetch = sub.add_parser("corporate-fetch", help="fetch queued public HTTPS corporate pages only; LinkedIn is import-only")
+    fetch = sub.add_parser("corporate-fetch", help="disabled pending reviewed jittered per-host pacing")
     fetch.add_argument("--state", required=True); fetch.add_argument("--limit", type=int, default=20); fetch.add_argument("--concurrency", type=int, default=4)
     fetch.add_argument("--kill-switch"); fetch.add_argument("--min-host-interval", type=float, default=2.0); fetch.set_defaults(func=command_corporate_fetch)
     bench = sub.add_parser("benchmark", help="synthetic offline queue/cache benchmark; creates no research evidence")
