@@ -4,6 +4,7 @@ import {
   SqliteCompanyDirectoryRepository,
   type CompanyDirectoryRecord,
 } from './sqliteCompanyDirectoryRepository';
+import { COMPANY_DIRECTORY_MIGRATION } from './companyDirectorySchema';
 
 describe('SqliteCompanyDirectoryRepository', () => {
   it('marks ATS boards answering 404 dormant on an already seeded database, once', () => {
@@ -182,7 +183,7 @@ describe('SqliteCompanyDirectoryRepository', () => {
     const sample = repo.getCompany('uzum');
     expect(sample?.companyName).toBe('uzum');
     expect(sample?.careersUrl).toBe('https://people.uzum.com/career/ru/vacancies/3688');
-    expect(sample?.websiteUrl).toBe('https://uzum.com');
+    expect(sample?.websiteUrl).toBe('https://uzum.com/');
     expect(sample?.linkedinUrl).toBe('https://www.linkedin.com/company/uzum-uz/jobs/');
 
     // Проверяем, что ни у одной компании нет search/?keywords=
@@ -197,7 +198,7 @@ describe('SqliteCompanyDirectoryRepository', () => {
     repo.close();
   });
 
-  it('гарантирует полноту данных всех компаний: website, careers, linkedin, geo, industry, domainGroup', () => {
+  it('у каждого пустого обязательного поля есть причина в evidence (B619)', () => {
     const repo = new SqliteCompanyDirectoryRepository({
       databasePath: ':memory:',
       autoSeed: true,
@@ -205,18 +206,33 @@ describe('SqliteCompanyDirectoryRepository', () => {
 
     const all = repo.listCompanies();
     expect(all.length).toBeGreaterThan(1000);
-
-    const incomplete = all.filter(
-      (c) =>
-        !c.websiteUrl ||
-        !c.careersUrl ||
-        !c.linkedinUrl ||
-        !c.geo ||
-        !c.industry ||
-        !c.domainGroup,
+    const required = ['websiteUrl', 'careersUrl', 'linkedinUrl', 'geo', 'industry', 'domainGroup', 'linkedinOrgId'] as const;
+    const unexplained = all.flatMap((c) =>
+      required
+        .filter((field) => !c[field])
+        .filter((field) => {
+          const entry = c.evidence?.[field] as { how?: string } | undefined;
+          return !entry?.how;
+        })
+        .map((field) => `${c.companyKey}.${field}`),
     );
 
-    expect(incomplete).toHaveLength(0);
+    expect(unexplained).toEqual([]);
     repo.close();
+  });
+
+  it('добавляет колонку evidence в уже существующую таблицу и читает её как объект', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(COMPANY_DIRECTORY_MIGRATION);
+    const repo = new SqliteCompanyDirectoryRepository(db);
+    repo.upsertCompany({
+      companyKey: 'acme', companyName: 'Acme', websiteUrl: 'https://acme.com/', careersUrl: null,
+      linkedinUrl: null, linkedinOrgId: null, sourceType: 'corporate_portal', atsProvider: null,
+      atsSlug: null, status: 'active', geo: null, industry: null, domainGroup: null, notes: null,
+      createdAt: '2026-11-09T00:00:00Z', updatedAt: '2026-11-09T00:00:00Z',
+      evidence: { careersUrl: { value: null, how: 'not found' } },
+    });
+    expect(repo.getCompany('acme')?.evidence).toEqual({ careersUrl: { value: null, how: 'not found' } });
+    db.close();
   });
 });
