@@ -643,3 +643,18 @@ details.oq-guide-toc {
     width: 100%;
   }
 }
+
+/* Список ссылок на страницы каталога внутри материала. */
+.oq-guide-links {
+  display: grid;
+  gap: var(--ps-space-2);
+  padding-left: 0;
+  list-style: none;
+}
+
+.oq-guide-links a {
+  color: var(--ps-blue);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

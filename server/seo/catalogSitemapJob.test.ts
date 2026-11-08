@@ -303,7 +303,7 @@ describe('buildSitemapFiles', () => {
     expect(urls).toContain('https://openqareer.com/guides/cant-find-a-job');
     // B617: the blog hub and nine posts.
     expect(urls).toContain('https://openqareer.com/blog/probation-period');
-    expect(urls).toHaveLength(59);
+    expect(urls).toHaveLength(60);
   });
 
   it('splits 0, 1, 10,000, 10,001 and 25,000 URLs without truncation', () => {
