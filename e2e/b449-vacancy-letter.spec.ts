@@ -1004,7 +1004,7 @@ test.describe('B449 — письмо под вакансию', () => {
       'Не удалось подготовить резюме. Подготовьте его, чтобы одобрить письмо',
     );
     await expect(approve).toBeDisabled();
-    await expect(page.getByRole('status')).not.toContainText('Ничего не отправлено.');
+    await expect(page.locator('.career-letter-approved')).toHaveCount(0);
     await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await captureState(page, testInfo, 'resume-snapshot-failed');
     await row.getByRole('button', { name: 'Подготовить резюме' }).click();
