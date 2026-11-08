@@ -82,6 +82,14 @@ const SUMMARY_MAX_TOKENS = 1_500;
 export const CATALOG_RU_SUMMARY_BOOST_UNTIL_MS = Date.parse('2026-11-09T00:00:00Z');
 export const CATALOG_RU_SUMMARY_BOOST_CALLS = 16;
 
+/**
+ * One refused call of a 16-call pack paused the whole step for 10 min (08.11: ~290/h). Until the
+ * credit ends the pause is a minute; the chain already falls back to OpenRouter per call.
+ */
+export function catalogRuSummaryOutagePauseMs(now: number): number {
+  return now < CATALOG_RU_SUMMARY_BOOST_UNTIL_MS ? 60_000 : OUTAGE_PAUSE_MS;
+}
+
 export function catalogRuSummaryCallsPerTick(now: number): number {
   return now < CATALOG_RU_SUMMARY_BOOST_UNTIL_MS ? CATALOG_RU_SUMMARY_BOOST_CALLS : 1;
 }
@@ -245,7 +253,7 @@ export class CatalogRuSummaryJob {
     if (result === 'paused') return { ...tally, skipped: 'paused' };
     if (result === 'unavailable') {
       // An outage is not the card's fault: no attempt is spent, the step waits instead.
-      this.pausedUntil = now + OUTAGE_PAUSE_MS;
+      this.pausedUntil = now + catalogRuSummaryOutagePauseMs(now);
       return { ...tally, issue: 'model_unavailable', skipped: 'paused' };
     }
     if ('rejected' in result) return fail(result.rejected);
