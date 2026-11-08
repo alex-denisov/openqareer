@@ -79,12 +79,27 @@ function shareTitle(title: string): string {
   return title.replace(/\s+[·|]\s+openqareer$/u, '');
 }
 
+function canonicalLink(path: string): string {
+  return `<link rel="canonical" href="${SITE_ORIGIN}${escapeHtml(path)}">`;
+}
+
+/** B615: without our Russian summary the employer's own text is the page's content. */
+function contentLanguageOf(detail: VacancyDetail): string | undefined {
+  return !detail.ruSummary && detail.language && detail.language !== 'ru'
+    ? detail.language
+    : undefined;
+}
+
 function head(options: {
   title: string;
   description: string;
   canonicalPath: string;
   jsonLd: StructuredGraph;
   noindex?: boolean;
+  /** B615: a cursor page is noindex; a canonical to page 1 beside it mixes signals. */
+  omitCanonical?: boolean;
+  /** B615: og:locale follows the vacancy text when no Russian summary leads the page. */
+  ogLocale?: string;
   previousPath?: string;
   nextPath?: string;
   ogType?: 'website' | 'article';
@@ -95,7 +110,7 @@ function head(options: {
     '<meta name="theme-color" content="#f9fafc">',
     `<title>${escapeHtml(options.title)}</title>`,
     `<meta name="description" content="${escapeHtml(options.description)}">`,
-    `<link rel="canonical" href="${SITE_ORIGIN}${escapeHtml(options.canonicalPath)}">`,
+    options.omitCanonical ? '' : canonicalLink(options.canonicalPath),
     options.noindex ? '<meta name="robots" content="noindex, follow">' : '',
     options.previousPath
       ? `<link rel="prev" href="${SITE_ORIGIN}${escapeHtml(options.previousPath)}">`
@@ -110,7 +125,7 @@ function head(options: {
     `<meta property="og:image" content="${ogImageUrl('vacancies')}">`,
     '<meta property="og:image:width" content="1200">',
     '<meta property="og:image:height" content="630">',
-    '<meta property="og:locale" content="ru_RU">',
+    `<meta property="og:locale" content="${options.ogLocale ?? 'ru_RU'}">`,
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${escapeHtml(shareTitle(options.title))}">`,
     `<meta name="twitter:description" content="${escapeHtml(options.description)}">`,
@@ -301,6 +316,7 @@ export function renderCatalogDocument(
       ...(empty || !isIndexablePage(page.page) || page.indexable === false
         ? { noindex: true }
         : {}),
+      ...(page.indexable === false ? { omitCanonical: true } : {}),
       ...(page.previousPath ? { previousPath: page.previousPath } : {}),
       ...(page.nextPath ? { nextPath: page.nextPath } : {}),
     }),
@@ -367,11 +383,12 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
         160,
       );
 
+  const contentLanguage = contentLanguageOf(detail);
   const body =
     siteHeader() +
     '<main id="main" class="ps-wrap ps-page">' +
     crumbs([{ label: 'Вакансии', path: CATALOG_ROOT }]) +
-    `<div class="cat-detail"><article${posting ? ' itemscope itemtype="https://schema.org/JobPosting"' : ''}>` +
+    `<div class="cat-detail"><article${contentLanguage ? ` lang="${contentLanguage}"` : ''}${posting ? ' itemscope itemtype="https://schema.org/JobPosting"' : ''}>` +
     (posting ? jobPostingMetadata(posting) : '') +
     `<h1${posting ? ' itemprop="title"' : ''}>${escapeHtml(entry.title)}</h1>` +
     metaLine(entry) +
@@ -395,6 +412,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
       canonicalPath: entry.path,
       jsonLd,
       ogType: 'article',
+      ...(contentLanguage === 'en' ? { ogLocale: 'en_US' } : {}),
       // Outside the indexable set: reachable and followed, not indexed.
       ...(detail.indexable ? {} : { noindex: true }),
     }),

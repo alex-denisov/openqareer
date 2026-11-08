@@ -15,8 +15,8 @@ import type { RouteDeps } from './deps';
 import { registerRoleSkillAssessmentRoutes } from './roleSkillAssessmentRoutes';
 
 export const ROLE_TITLE = 'Head of Product';
-/** Relative to now: a fixed date aged the rig's vacancies out of the 30-day window on 08.11. */
-export const OBSERVED_AT = new Date(Date.now() - 2 * 86_400_000).toISOString();
+// A fixed date expired out of the 30-day freshness window on 08.11 (B615 CI).
+export const OBSERVED_AT = new Date(Date.now() - 86_400_000).toISOString();
 export const DIALOGUE_ANSWERS = [
   'Провела 12 интервью и выделила три устойчивых сценария для клиентов.',
   'Проверила unit-экономику сегмента и согласовала измеримые критерии решения.',

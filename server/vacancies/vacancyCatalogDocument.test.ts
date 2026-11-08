@@ -140,6 +140,26 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).not.toContain('cat-ru');
   });
 
+  it('B615: английский текст без русской сводки — lang="en" у статьи и og:locale en_US', () => {
+    const html = renderVacancyDocument(
+      buildVacancyDetail(
+        cluster({
+          descriptionSummary:
+            'We are looking for a senior machine learning engineer to build ranking models and own the training pipeline end to end.',
+        }),
+      )!,
+    );
+    expect(html).toContain('<article lang="en"');
+    expect(html).toContain('<meta property="og:locale" content="en_US">');
+    expect(html).not.toContain('content="ru_RU"');
+  });
+
+  it('B615: русский текст оставляет ru_RU и статью без своего lang', () => {
+    const html = renderVacancyDocument(buildVacancyDetail(cluster())!);
+    expect(html).toContain('<meta property="og:locale" content="ru_RU">');
+    expect(html).not.toContain('<article lang=');
+  });
+
   it('закрывает от индекса карточку вне индексируемого набора, но оставляет ссылки', () => {
     const html = renderVacancyDocument(buildVacancyDetail(cluster())!);
     expect(html).toContain('<meta name="robots" content="noindex, follow">');

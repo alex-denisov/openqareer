@@ -121,7 +121,8 @@ describe('B209: публичный каталог вакансий', () => {
     expect(second.statusCode).toBe(200);
     expect(second.body).toContain('Страница 2 из 2');
     // Курсор сдвигается с каждой новой вакансией: это ссылка для обхода, а не адрес для индекса.
-    expect(second.body).toContain('<link rel="canonical" href="https://openqareer.com/vacancies">');
+    // B615: без canonical — noindex вместе с canonical на первую страницу смешивает сигналы.
+    expect(second.body).not.toContain('rel="canonical"');
     expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
   });
 
@@ -147,9 +148,7 @@ describe('B209: публичный каталог вакансий', () => {
     });
     expect(second.statusCode).toBe(200);
     expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
-    expect(second.body).toContain(
-      '<link rel="canonical" href="https://openqareer.com/vacancies/moscow">',
-    );
+    expect(second.body).not.toContain('rel="canonical"');
     expect(second.body).toContain('/vacancies/job/');
     expect(second.body).toMatch(/\/vacancies\/moscow\/page\/3\?after=/u);
     // Устаревший курсор отвечает так же, а голый адрес по-прежнему ведёт на первую страницу.
