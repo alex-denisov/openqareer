@@ -41,7 +41,9 @@ function jobRow(entry: CatalogEntry, now: Date): string {
     ? `<span class="lv-s">${escapeHtml(entry.salaryLabel.replace(/\s—\s/u, '–'))}</span>`
     : '<span class="lv-s lv-none">зарплата не указана</span>';
   const when = relativeDay(entry.publishedAt, now);
-  const source = [entry.sourceName ? vacancySourceDisplayName(entry.sourceName) : '', when].filter(Boolean).join(' · ');
+  const source = [entry.sourceName ? vacancySourceDisplayName(entry.sourceName) : '', when]
+    .filter(Boolean)
+    .join(' · ');
   const employer = employerLabel(publicEmployerName(entry.company));
   return (
     `<div class="lv-job"><span class="lv-t"><a href="${escapeHtml(entry.path)}">${escapeHtml(entry.title)}</a></span>` +

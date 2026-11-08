@@ -16,29 +16,47 @@ describe('parseSalaryLabel', () => {
 });
 
 describe('salaryStats', () => {
+  const month = (from: number, to: number, currency = 'RUB') =>
+    ({ from, to, currency, period: 'month' }) as const;
   const ranges = [
-    '100 000 — 110 000 ₽',
-    '110 000 — 130 000 ₽',
-    '120 000 — 140 000 ₽',
-    '130 000 — 150 000 ₽',
-    '140 000 — 160 000 ₽',
+    month(100000, 110000),
+    month(110000, 130000),
+    month(120000, 140000),
+    month(130000, 150000),
+    month(140000, 160000),
   ];
 
-  it('counts salaries and ranges and takes quartiles of range midpoints', () => {
-    const stats = salaryStats([...ranges, 'от 60 000 ₽', '30 000 ₽']);
-    expect(stats).toMatchObject({ withSalary: 7, withRange: 5, median: 130000, sign: '₽' });
-    expect(stats.low).toBe(120000);
-    expect(stats.high).toBe(140000);
+  it('takes quartiles of range midpoints per currency and period', () => {
+    const stats = salaryStats(7, ranges);
+    expect(stats).toMatchObject({ withSalary: 7, withRange: 5 });
+    expect(stats.groups).toEqual([
+      { currency: 'RUB', period: 'month', sample: 5, median: 130000, low: 120000, high: 140000 },
+    ]);
   });
 
-  it('gives no median for too few ranges', () => {
-    expect(salaryStats(ranges.slice(0, 3))).toEqual({ withSalary: 3, withRange: 3 });
+  it('gives no figure for too few ranges', () => {
+    expect(salaryStats(3, ranges.slice(0, 3))).toEqual({ withSalary: 3, withRange: 3 });
   });
 
-  it('ignores ranges in minority currencies when picking the median', () => {
-    const stats = salaryStats([...ranges, '1 000 — 2 000 $']);
-    expect(stats.sign).toBe('₽');
-    expect(stats.withRange).toBe(6);
+  it('never mixes yearly, monthly and hourly ranges in one median', () => {
+    const year = Array.from({ length: 5 }, (_, i) => ({
+      from: 100000 + i * 1000,
+      to: 140000 + i * 1000,
+      currency: 'USD',
+      period: 'year' as const,
+    }));
+    const hour = Array.from({ length: 4 }, () => ({
+      from: 30,
+      to: 50,
+      currency: 'USD',
+      period: 'hour' as const,
+    }));
+    const stats = salaryStats(20, [...ranges, ...year, ...hour]);
+    expect(stats.groups?.map((g) => `${g.currency}|${g.period}|${g.sample}`)).toEqual([
+      'RUB|month|5',
+      'USD|year|5',
+    ]);
+    expect(stats.withRange).toBe(14);
   });
 });
 

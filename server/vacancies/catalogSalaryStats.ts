@@ -1,10 +1,10 @@
 /**
- * B569: salary facts for a catalog list, counted from the salary labels the
- * list already stores. No numeric salary column exists in the projection, so
- * the label («120 000 — 140 000 ₽», «от 60 000 ₽», «до 90 000 ₽», «30 000 ₽») is
- * parsed here. Only ranges «от — до» in one currency enter the median; a list
- * with fewer than MIN_RANGES of them gets counts but no median (no invented
- * numbers).
+ * B569, revised 09.11: salary facts for a catalog list. Labels («120 000 —
+ * 140 000 ₽») carry no period, so a yearly, a monthly and an hourly range used to
+ * meet in one median. Now `withSalary` still counts labels, but ranges come only
+ * from the stored salary whose period the source stated (Lever interval,
+ * Himalayas salaryPeriod, hh MONTH — `parseSalaryRangeEvidence`), one group per
+ * currency × period. A group below MIN_RANGES is dropped; no group, no figure.
  */
 import { normalizeSalaryLabel } from './catalogCopy';
 
@@ -17,16 +17,33 @@ export interface ParsedSalary {
   readonly sign: string;
 }
 
+export type SalaryPeriod = 'hour' | 'month' | 'year';
+
+/** One currency × period group of period-proven ranges. */
+export interface SalaryGroup {
+  readonly currency: string;
+  readonly period: SalaryPeriod;
+  readonly sample: number;
+  /** Median of range midpoints; low/high are its quartiles. */
+  readonly median: number;
+  readonly low: number;
+  readonly high: number;
+}
+
+export interface ProvenRange {
+  readonly from: number;
+  readonly to: number;
+  readonly currency: string;
+  readonly period: SalaryPeriod;
+}
+
 export interface SalaryStats {
   /** Vacancies of the list that state any salary. */
   readonly withSalary: number;
-  /** Of them, with both ends «от — до». */
+  /** Ranges «от — до» whose period the source stated. */
   readonly withRange: number;
-  /** Median of range midpoints, in `sign`; absent when ranges are too few. */
-  readonly median?: number;
-  readonly low?: number;
-  readonly high?: number;
-  readonly sign?: string;
+  /** Groups with at least MIN_RANGES ranges, largest first; absent when none. */
+  readonly groups?: readonly SalaryGroup[];
   /** The role of the list has its own /salaries/<role> page (B569). */
   readonly salaryPage?: boolean;
 }
@@ -68,24 +85,32 @@ function roundFigure(value: number): number {
   return value >= 10_000 ? Math.round(value / 1000) * 1000 : Math.round(value);
 }
 
-export function salaryStats(labels: readonly string[]): SalaryStats {
-  const parsed = labels.map(parseSalaryLabel).filter((p): p is ParsedSalary => p !== undefined);
-  const ranges = parsed.filter(
-    (p) => p.from !== undefined && p.to !== undefined && p.from !== p.to,
-  );
-  const base = { withSalary: parsed.length, withRange: ranges.length };
-  const bySign = new Map<string, number[]>();
-  for (const p of ranges) {
-    bySign.set(p.sign, [...(bySign.get(p.sign) ?? []), (p.from! + p.to!) / 2]);
-  }
-  const [sign, mids] = [...bySign.entries()].sort((a, b) => b[1].length - a[1].length)[0] ?? [];
-  if (!mids || mids.length < MIN_RANGES) return base;
+function group(currency: string, period: SalaryPeriod, mids: number[]): SalaryGroup {
   const sorted = [...mids].sort((a, b) => a - b);
   return {
-    ...base,
+    currency,
+    period,
+    sample: sorted.length,
     median: roundFigure(quantile(sorted, 0.5)),
     low: roundFigure(quantile(sorted, 0.25)),
     high: roundFigure(quantile(sorted, 0.75)),
-    sign: sign ?? '',
   };
+}
+
+export function salaryStats(withSalary: number, ranges: readonly ProvenRange[]): SalaryStats {
+  const real = ranges.filter((r) => r.to > r.from);
+  const byKey = new Map<string, number[]>();
+  for (const r of real) {
+    const key = `${r.currency}|${r.period}`;
+    byKey.set(key, [...(byKey.get(key) ?? []), (r.from + r.to) / 2]);
+  }
+  const groups = [...byKey.entries()]
+    .filter(([, mids]) => mids.length >= MIN_RANGES)
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([key, mids]) => {
+      const [currency, period] = key.split('|') as [string, SalaryPeriod];
+      return group(currency, period, mids);
+    });
+  const base = { withSalary, withRange: real.length };
+  return groups.length ? { ...base, groups } : base;
 }
