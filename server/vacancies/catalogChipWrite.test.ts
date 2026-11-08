@@ -46,12 +46,21 @@ describe('catalog chips are written as a difference in short transactions (PRB-0
     const report = writeCatalogChips(database, rows, new Date(NOW + 1000));
 
     expect(commit).not.toHaveBeenCalled();
-    expect(report).toEqual({ entriesAdded: 0, entriesRemoved: 0, countsChanged: 0, transactions: 0 });
+    expect(report).toEqual({
+      entriesAdded: 0,
+      entriesRemoved: 0,
+      countsChanged: 0,
+      transactions: 0,
+    });
   });
 
   it('applies only the difference, including a list that disappeared', () => {
     const database = new DatabaseSync(':memory:');
-    writeCatalogChips(database, snapshot([entry('a'), entry('b'), entry('x', 'kazan')]), new Date(NOW));
+    writeCatalogChips(
+      database,
+      snapshot([entry('a'), entry('b'), entry('x', 'kazan')]),
+      new Date(NOW),
+    );
 
     const report = writeCatalogChips(database, snapshot([entry('b'), entry('c')]), new Date(NOW));
 

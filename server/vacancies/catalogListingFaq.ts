@@ -7,7 +7,7 @@ import { salaryRolePath } from '../../shared/salaryMarketPublic';
 import { escapeHtml } from './catalogHtml';
 import { dataDate, type Names } from './catalogListingNames';
 import type { SalaryStats } from './catalogSalaryStats';
-import { groupMedian } from './catalogSalaryText';
+import { groupMedian, shownGroups } from './catalogSalaryText';
 import type { CatalogPage } from './vacancyCatalogPage';
 
 interface Item {
@@ -46,7 +46,7 @@ function items(page: CatalogPage, names: Names, stats?: SalaryStats): Item[] {
           ? `Сколько платят ${names.roleDat} в ${names.placePrep}?`
           : 'Сколько платят в этих вакансиях?',
       answerHtml:
-        `Медиана вилок — ${stats.groups.map(groupMedian).join('; ')}. ` +
+        `Медиана вилок — ${shownGroups(stats).map(groupMedian).join('; ')}. ` +
         `<a href="${escapeHtml(salaryPath)}">Подробнее по городам</a>.`,
     });
   }

@@ -78,3 +78,11 @@ describe('salary sign from a source label', () => {
     expect(parseSalaryLabel('100 000 — 120 000 ₽')?.sign).toBe('₽');
   });
 });
+
+describe('shownGroups', () => {
+  it('caps stored rows written before the cap', async () => {
+    const { shownGroups } = await import('./catalogSalaryText');
+    const g = { currency: 'USD', period: 'year' as const, sample: 5, median: 1, low: 1, high: 1 };
+    expect(shownGroups({ withSalary: 9, withRange: 9, groups: [g, g, g, g, g] })).toHaveLength(3);
+  });
+});
