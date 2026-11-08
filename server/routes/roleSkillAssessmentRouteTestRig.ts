@@ -15,7 +15,8 @@ import type { RouteDeps } from './deps';
 import { registerRoleSkillAssessmentRoutes } from './roleSkillAssessmentRoutes';
 
 export const ROLE_TITLE = 'Head of Product';
-export const OBSERVED_AT = '2026-10-09T12:00:00.000Z';
+// A fixed date expired out of the 30-day freshness window on 08.11 (B615 CI).
+export const OBSERVED_AT = new Date(Date.now() - 86_400_000).toISOString();
 export const DIALOGUE_ANSWERS = [
   'Провела 12 интервью и выделила три устойчивых сценария для клиентов.',
   'Проверила unit-экономику сегмента и согласовала измеримые критерии решения.',
