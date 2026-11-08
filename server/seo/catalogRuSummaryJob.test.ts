@@ -120,6 +120,41 @@ beforeEach(() => {
 afterEach(() => database.close());
 
 describe('catalog Russian summary job', () => {
+  it('an overlapping step fills free slots with other cards while a slow call runs (08.11)', async () => {
+    for (let i = 0; i < 4; i += 1) addCard(`s${i}`, { publishedMs: NOW - i * 1000 });
+    const fast = fakeClient();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const client = {
+      calls: fast.calls,
+      complete: vi.fn(async (input: BulkLlmInput) => {
+        if (fast.calls.length === 0) {
+          fast.calls.push(input);
+          await gate;
+          return fast.complete.getMockImplementation()!(input);
+        }
+        return fast.complete(input);
+      }),
+    };
+    const lanes = new CatalogRuSummaryJob({
+      store,
+      client,
+      spend: noSpend,
+      limits,
+      now: () => NOW,
+      callsPerTick: 2,
+    });
+    const slow = lanes.step(); // takes two cards: one hangs, one finishes
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(store.countReady(CATALOG_RU_SUMMARY_VERSION)).toBe(1);
+    // One slot is free while the slow call runs: the next step writes another card.
+    expect(await lanes.step()).toMatchObject({ written: 1 });
+    expect(store.countReady(CATALOG_RU_SUMMARY_VERSION)).toBe(2);
+    release();
+    expect((await slow).written).toBe(2);
+    expect(store.countReady(CATALOG_RU_SUMMARY_VERSION)).toBe(3);
+  });
+
   it('until the credit ends sends several calls a tick, then one again (owner 08.11)', async () => {
     for (let i = 0; i < 20; i += 1) addCard(`c${i}`, { publishedMs: NOW - i * 1000 });
     const boosted = fakeClient();
