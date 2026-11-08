@@ -13,6 +13,7 @@ import {
   CATALOG_RU_SUMMARY_BOOST_UNTIL_MS,
   CatalogRuSummaryJob,
   catalogRuSummaryCallsPerTick,
+  catalogRuSummaryOutagePauseMs,
   sqliteCatalogRuSummarySpend,
   type CatalogRuSummaryLimits,
 } from './catalogRuSummaryJob';
@@ -136,6 +137,8 @@ describe('catalog Russian summary job', () => {
     expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS)).toBe(1);
     expect(catalogRuSummaryTickMs(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(5_000);
     expect(catalogRuSummaryTickMs(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS)).toBe(20_000);
+    expect(catalogRuSummaryOutagePauseMs(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(60_000);
+    expect(catalogRuSummaryOutagePauseMs(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS)).toBe(600_000);
   });
 
   it('writes the newest card first, one model call a tick, and the page reads it by the text hash', async () => {
