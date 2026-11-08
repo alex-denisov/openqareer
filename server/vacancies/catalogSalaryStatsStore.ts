@@ -7,7 +7,8 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { readSalaryMarketIndex } from '../salaryMarket/salaryMarketSnapshot';
-import { salaryStats, type SalaryStats } from './catalogSalaryStats';
+import { parseSalaryRangeEvidence } from '../salaryMarket/salaryMarketRanges';
+import { salaryStats, type ProvenRange, type SalaryStats } from './catalogSalaryStats';
 
 const TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_salary_stats (
   list_key TEXT PRIMARY KEY,
@@ -20,36 +21,53 @@ export function salaryStatsKey(query: { place: string; role?: string }): string 
   return query.role ? `${query.place}|${query.role}` : query.place;
 }
 
-function push(map: Map<string, string[]>, key: string, label: string): void {
-  const labels = map.get(key);
-  if (labels) labels.push(label);
-  else map.set(key, [label]);
+interface ListFacts {
+  withSalary: number;
+  readonly ranges: ProvenRange[];
 }
 
-/** Maintenance process only: one scan of the materialized catalog (0.4 s on prod, 28.10). */
+function add(map: Map<string, ListFacts>, key: string, range: ProvenRange | undefined): void {
+  const facts = map.get(key) ?? { withSalary: 0, ranges: [] };
+  facts.withSalary += 1;
+  if (range) facts.ranges.push(range);
+  map.set(key, facts);
+}
+
+function provenRange(json: string | null): ProvenRange | undefined {
+  const parsed = parseSalaryRangeEvidence(json);
+  return typeof parsed === 'string' ? undefined : parsed;
+}
+
+/** Maintenance process only: one scan of the materialized catalog joined to its clusters. */
 export function computeCatalogSalaryStats(database: DatabaseSync): Map<string, SalaryStats> {
   const result = new Map<string, SalaryStats>();
   const exists = database
     .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'catalog_entries'")
     .get();
   if (!exists) return result;
+  const clusters = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'vacancy_clusters'")
+    .get();
+  const salarySql = clusters
+    ? `(SELECT json_extract(c.cluster_json, '$.salary') FROM vacancy_clusters c WHERE c.id = e.cluster_id)`
+    : 'NULL';
   const rows = database
     .prepare(
-      `SELECT place_slug, role_slug, salary_label FROM catalog_entries
-        WHERE status = 'active' AND path <> '' AND place_slug IS NOT NULL
-          AND salary_label IS NOT NULL AND salary_label <> ''`,
+      `SELECT e.place_slug, e.role_slug, ${salarySql} AS salary_json FROM catalog_entries e
+        WHERE e.status = 'active' AND e.path <> '' AND e.place_slug IS NOT NULL
+          AND e.salary_label IS NOT NULL AND e.salary_label <> ''`,
     )
-    .all() as Array<{ place_slug: string; role_slug: string | null; salary_label: string }>;
-  const byList = new Map<string, string[]>();
+    .all() as Array<{ place_slug: string; role_slug: string | null; salary_json: string | null }>;
+  const byList = new Map<string, ListFacts>();
   for (const row of rows) {
-    push(byList, row.place_slug, row.salary_label);
-    if (row.role_slug) push(byList, `${row.place_slug}|${row.role_slug}`, row.salary_label);
+    const range = provenRange(row.salary_json);
+    add(byList, row.place_slug, range);
+    if (row.role_slug) add(byList, `${row.place_slug}|${row.role_slug}`, range);
   }
   // A role page exists only for roles in the prepared salary directory.
   const salaryRoles = new Set(readSalaryMarketIndex(database).map((entry) => entry.role));
-  for (const [key, labels] of byList) {
-    const stats = salaryStats(labels);
-    if (stats.withSalary === 0) continue;
+  for (const [key, facts] of byList) {
+    const stats = salaryStats(facts.withSalary, facts.ranges);
     const role = key.split('|')[1];
     result.set(key, role && salaryRoles.has(role) ? { ...stats, salaryPage: true } : stats);
   }

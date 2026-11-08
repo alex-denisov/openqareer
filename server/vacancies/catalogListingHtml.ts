@@ -15,11 +15,12 @@ import { escapeHtml } from './catalogHtml';
 import { ARROW, jobsCard, pager } from './catalogListingJobs';
 import type { NearbyListing } from './catalogNearbyListings';
 import type { SalaryStats } from './catalogSalaryStats';
+import { groupMedian, groupSpread } from './catalogSalaryText';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import type { CatalogPage } from './vacancyCatalogPage';
 import { listingFaq } from './catalogListingFaq';
 import { listingIntroBlock, listingIntroFor } from './catalogListingIntro';
-import { dataDate, money, namesOf, type Names } from './catalogListingNames';
+import { dataDate, namesOf, type Names } from './catalogListingNames';
 
 /** B574: chips of the list; only chips with vacancies behind them are printed. */
 export interface ListingChips {
@@ -103,10 +104,8 @@ function factsLine(page: CatalogPage, names: Names, stats?: SalaryStats): string
           : '') +
         '</span>'
       : '';
-  const median =
-    stats?.median !== undefined
-      ? `<span>медиана вилок <b>${money(stats.median, stats.sign)}</b></span>`
-      : '';
+  const lead = stats?.groups?.[0];
+  const median = lead ? `<span>медиана вилок <b>${groupMedian(lead)}</b></span>` : '';
   const role = page.listing?.role;
   const alertText = `Присылать новые вакансии${names.roleGen ? ` ${names.roleGen}` : ''}`;
   const alertHref = `/signup?from=catalog&amp;alert=${role ? encodeURIComponent(role) : '1'}`;
@@ -145,10 +144,12 @@ function answer(page: CatalogPage, names: Names, stats?: SalaryStats): string {
     stats && stats.withRange > 0
       ? `, у ${stats.withRange.toLocaleString('ru-RU')} указана вилка «от — до»`
       : '';
-  const spread =
-    stats?.median !== undefined && stats.low !== undefined && stats.high !== undefined
-      ? ` Медиана — ${money(stats.median, stats.sign)}, половина вакансий — от ${stats.low.toLocaleString('ru-RU')} до ${money(stats.high, stats.sign)}.`
-      : '';
+  const spread = (stats?.groups ?? [])
+    .map(
+      (group) =>
+        ` Медиана — ${groupMedian(group)}, половина таких вакансий — ${groupSpread(group)} (по ${group.sample.toLocaleString('ru-RU')}).`,
+    )
+    .join('');
   return (
     `<p class="lv-answer lv-hm"><b>Коротко:</b> на ${dataDate(page)} в открытом каталоге ` +
     `${countLabel(page.total)}${where}${ranges}.${spread}</p>`
@@ -156,7 +157,8 @@ function answer(page: CatalogPage, names: Names, stats?: SalaryStats): string {
 }
 
 function salaryCard(page: CatalogPage, names: Names, stats?: SalaryStats): string {
-  if (stats?.median === undefined || stats.low === undefined || stats.high === undefined) return '';
+  const groups = stats?.groups ?? [];
+  if (!groups.length) return '';
   const role = page.listing?.role;
   const country = role ? undefined : salaryCountryPathForPlace(page.listing?.place);
   const href =
@@ -164,11 +166,15 @@ function salaryCard(page: CatalogPage, names: Names, stats?: SalaryStats): strin
   const title = names.placeGen
     ? `Зарплаты в вакансиях ${names.placeGen}`
     : 'Зарплаты в этих вакансиях';
+  const lines = groups
+    .map(
+      (group) =>
+        `<b>${groupMedian(group)}</b><span>медиана · половина вакансий ${groupSpread(group)} · по ${group.sample.toLocaleString('ru-RU')} вакансиям</span>`,
+    )
+    .join('');
   return (
-    `<div class="lv-card lv-hm"><h2>${escapeHtml(title)}</h2><div class="lv-sal"><b>${money(stats.median, stats.sign)}</b>` +
-    `<span>медиана · половина вакансий ${stats.low.toLocaleString('ru-RU')}–${money(stats.high, stats.sign)}</span>` +
-    `<span class="lv-small">По ${stats.withRange.toLocaleString('ru-RU')} вакансиям с вилкой «от — до». ` +
-    `У остальных зарплата указана одним числом или не указана. ${dataDate(page)}</span></div>` +
+    `<div class="lv-card lv-hm"><h2>${escapeHtml(title)}</h2><div class="lv-sal">${lines}` +
+    `<span class="lv-small">Только вилки «от — до», где источник указал период; годовые, месячные и почасовые считаются отдельно. ${dataDate(page)}</span></div>` +
     `<a class="lv-link" href="${escapeHtml(href)}">${escapeHtml(country?.name ?? 'Зарплаты по городам')} ${ARROW}</a></div>`
   );
 }

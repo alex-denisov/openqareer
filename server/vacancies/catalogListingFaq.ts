@@ -5,8 +5,9 @@
 import { interviewProfession, interviewProfessionPath } from '../../shared/interviewQuestions';
 import { salaryRolePath } from '../../shared/salaryMarketPublic';
 import { escapeHtml } from './catalogHtml';
-import { dataDate, money, type Names } from './catalogListingNames';
+import { dataDate, type Names } from './catalogListingNames';
 import type { SalaryStats } from './catalogSalaryStats';
+import { groupMedian } from './catalogSalaryText';
 import type { CatalogPage } from './vacancyCatalogPage';
 
 interface Item {
@@ -36,7 +37,7 @@ function items(page: CatalogPage, names: Names, stats?: SalaryStats): Item[] {
       ),
     },
   ];
-  if (stats?.median !== undefined) {
+  if (stats?.groups?.length) {
     const salaryPath =
       (role && stats?.salaryPage ? salaryRolePath(role) : undefined) ?? '/salaries';
     list.push({
@@ -45,7 +46,7 @@ function items(page: CatalogPage, names: Names, stats?: SalaryStats): Item[] {
           ? `Сколько платят ${names.roleDat} в ${names.placePrep}?`
           : 'Сколько платят в этих вакансиях?',
       answerHtml:
-        `Медиана вилок — ${escapeHtml(money(stats.median, stats.sign))}. ` +
+        `Медиана вилок — ${stats.groups.map(groupMedian).join('; ')}. ` +
         `<a href="${escapeHtml(salaryPath)}">Подробнее по городам</a>.`,
     });
   }

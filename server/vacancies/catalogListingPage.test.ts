@@ -45,9 +45,14 @@ const listings = [
   },
   { ...summary, role: 'lawyer', roleLabel: 'Юрист', path: '/vacancies/moscow/lawyer', count: 257 },
 ];
-const ranges = Array.from({ length: 6 }, (_, i) => `${100 + i * 10} 000 — ${120 + i * 10} 000 ₽`);
+const ranges = Array.from({ length: 6 }, (_, i) => ({
+  from: 100000 + i * 10000,
+  to: 120000 + i * 10000,
+  currency: 'RUB',
+  period: 'month' as const,
+}));
 
-function render(total = 438, stats = salaryStats(ranges)) {
+function render(total = 438, stats = salaryStats(ranges.length, ranges)) {
   const entries = Array.from({ length: 24 }, (_, i) =>
     entry(i + 1, i === 9 ? { salaryLabel: undefined, isRemote: true } : {}),
   );
@@ -76,7 +81,7 @@ describe('catalog list page (mockup 08)', () => {
 
   it('prints facts counted from the list', () => {
     expect(html).toContain('<b>6</b> с зарплатой, из них 6 с вилкой «от — до»');
-    expect(html).toContain('медиана вилок <b>135 000 ₽</b>');
+    expect(html).toContain('медиана вилок <b>135 000 ₽ в месяц</b>');
     expect(html).toContain('Зарплаты в вакансиях Москвы');
     expect(html).toContain('Присылать новые вакансии бухгалтера');
   });
@@ -104,7 +109,7 @@ describe('catalog list page (mockup 08)', () => {
   });
 
   it('leaves out the median when there are too few ranges', () => {
-    const thin = render(438, salaryStats(ranges.slice(0, 2))).replace(/[\u00a0\u202f]/gu, ' ');
+    const thin = render(438, salaryStats(2, ranges.slice(0, 2))).replace(/[\u00a0\u202f]/gu, ' ');
     expect(thin).not.toContain('медиана');
     expect(thin).not.toContain('Зарплаты в вакансиях');
     expect(thin).toContain('Присылать новые вакансии бухгалтера');

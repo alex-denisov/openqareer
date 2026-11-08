@@ -32,7 +32,7 @@ interface RangeEvidence {
 function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 }
-function parseEvidence(
+export function parseSalaryRangeEvidence(
   json: string | null,
 ): RangeEvidence | 'missingPeriod' | 'missingCurrency' | 'openRange' | 'invalidRange' {
   let salary: Record<string, unknown>;
@@ -81,7 +81,7 @@ export function recordSalaryRange(
   json: string | null,
   excluded: MutableExclusions,
 ): void {
-  const range = parseEvidence(json);
+  const range = parseSalaryRangeEvidence(json);
   if (typeof range === 'string') {
     excluded[range] += 1;
     return;
