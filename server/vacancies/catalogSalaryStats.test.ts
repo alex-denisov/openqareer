@@ -58,6 +58,18 @@ describe('salaryStats', () => {
     ]);
     expect(stats.withRange).toBe(14);
   });
+
+  it('keeps only the largest groups', () => {
+    const many = ['USD', 'EUR', 'GBP', 'CAD'].flatMap((currency, n) =>
+      Array.from({ length: 5 + n }, () => ({
+        from: 10,
+        to: 20,
+        currency,
+        period: 'hour' as const,
+      })),
+    );
+    expect(salaryStats(26, many).groups?.map((g) => g.currency)).toEqual(['CAD', 'GBP', 'EUR']);
+  });
 });
 
 describe('salary sign from a source label', () => {
