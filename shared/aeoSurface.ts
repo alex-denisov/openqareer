@@ -10,6 +10,7 @@
  * ChatGPT) нужны факты и границы, а не маркетинг.
  */
 import { LEGAL_DOCS, legalPath } from './legalRegistry';
+import { GUIDES, GUIDES_ROOT, guidePath } from './guides';
 import type { LandingStats } from './landingStats';
 import { TARIFF_LEVELS } from '../src/features/tariffs/tariffsData';
 
@@ -34,6 +35,8 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   '/tools/resume',
   '/tools/interview-questions',
   '/tools/relocation',
+  GUIDES_ROOT,
+  ...GUIDES.map((guide) => guidePath(guide.slug)),
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
 ];
 
@@ -127,6 +130,14 @@ export function buildLlmsTxt(stats?: LandingStats): string {
     `- [Вопросы и ответы о поиске работы](${SITE_ORIGIN}/faq)`,
     `- [Поддержка](${SITE_ORIGIN}/support)`,
     '',
+    '## Материалы для кандидата',
+    '',
+    bullet(
+      GUIDES.map(
+        (guide) => `[${guide.h1}](${SITE_ORIGIN}${guidePath(guide.slug)}) — ${guide.description}`,
+      ),
+    ),
+    '',
     '## Правовые документы',
     '',
     legal,
@@ -182,6 +193,14 @@ export function buildLlmsFullTxt(stats?: LandingStats): string {
     '- Открытые ленты и агрегаторы удалённой работы.',
     '- Каждая карточка называет источник и дату наблюдения; повторы с разных площадок сводятся в одну запись.',
     '- Площадка с непроверенным адресом помечается, а не выдаётся за рабочую.',
+    '',
+    '## Материалы для кандидата',
+    '',
+    bullet(
+      GUIDES.map(
+        (guide) => `[${guide.h1}](${SITE_ORIGIN}${guidePath(guide.slug)}) — ${guide.description}`,
+      ),
+    ),
     '',
     '## Правовые документы',
     '',

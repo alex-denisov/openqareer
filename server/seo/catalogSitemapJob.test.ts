@@ -299,7 +299,9 @@ describe('buildSitemapFiles', () => {
     // B568: the interview hub and six reviewed professions.
     expect(urls).toContain('https://openqareer.com/tools/interview-questions');
     expect(urls).toContain('https://openqareer.com/tools/interview-questions/accountant');
-    expect(urls).toHaveLength(21);
+    // B616: the guides hub and three guides.
+    expect(urls).toContain('https://openqareer.com/guides/cant-find-a-job');
+    expect(urls).toHaveLength(49);
   });
 
   it('splits 0, 1, 10,000, 10,001 and 25,000 URLs without truncation', () => {
