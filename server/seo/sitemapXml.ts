@@ -16,6 +16,8 @@ import {
   interviewProfessionPath,
   publishedInterviewProfessions,
 } from '../../shared/interviewQuestions';
+import { GUIDES, GUIDES_ROOT, guidePath } from '../../shared/guides';
+import { BLOG_POSTS, BLOG_ROOT, blogPath } from '../../shared/blog';
 
 /**
  * URLs per child file. The site's working limit leaves headroom below the
@@ -139,6 +141,22 @@ export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
     // B567: the page, its menu item and the landing card ship in one release.
     { path: '/tools/resume', lastmod: '2026-10-27' },
     ...interviewSitemapUrls(),
+    // B616: опорные материалы под боли кандидата.
+    {
+      path: GUIDES_ROOT,
+      lastmod: GUIDES.map((guide) => guide.updatedAt)
+        .sort()
+        .at(-1),
+    },
+    ...GUIDES.map((guide) => ({ path: guidePath(guide.slug), lastmod: guide.updatedAt })),
+    // B617: блог на шаблоне опорных материалов.
+    {
+      path: BLOG_ROOT,
+      lastmod: BLOG_POSTS.map((post) => post.updatedAt)
+        .sort()
+        .at(-1),
+    },
+    ...BLOG_POSTS.map((post) => ({ path: blogPath(post.slug), lastmod: post.updatedAt })),
     { path: '/tools/relocation', lastmod: '2026-10-27' },
     // B574: the calculator and the relocation list answer 200 since layer 1.
     { path: '/tools/salary-calculator', lastmod: '2026-10-28' },

@@ -75,6 +75,40 @@ const IDLE_PAUSE_MS = 5 * 60_000;
 const CANDIDATES_PER_TICK = 20;
 /** 600 words of Russian fit in ~1 200 tokens; the cap keeps a runaway answer cheap. */
 const SUMMARY_MAX_TOKENS = 1_500;
+/**
+ * Owner 08.11: the hh queue is closed on the last day of the Vertex credit, so until it ends a tick
+ * sends several calls at once; afterwards one call a tick again, by the date alone.
+ */
+export const CATALOG_RU_SUMMARY_BOOST_UNTIL_MS = Date.parse('2026-11-09T00:00:00Z');
+export const CATALOG_RU_SUMMARY_BOOST_CALLS = 16;
+
+export function catalogRuSummaryCallsPerTick(now: number): number {
+  return now < CATALOG_RU_SUMMARY_BOOST_UNTIL_MS ? CATALOG_RU_SUMMARY_BOOST_CALLS : 1;
+}
+
+type Tally = { written: number; thin: number; failed: number; unchanged: number };
+
+/** Reports of the calls of one tick as one: counts add up, the first pause or issue wins. */
+function mergeReports(
+  base: Tally,
+  reports: readonly CatalogRuSummaryReport[],
+): CatalogRuSummaryReport {
+  const sum = (key: keyof Tally) => reports.reduce((total, r) => total + r[key], base[key]);
+  const skipped = reports.find((r) => r.skipped)?.skipped;
+  const issue = reports.find((r) => r.issue)?.issue;
+  const model = reports.find((r) => r.model)?.model;
+  const costs = reports.flatMap((r) => (r.costUsd === undefined ? [] : [r.costUsd]));
+  return {
+    written: sum('written'),
+    thin: sum('thin'),
+    failed: sum('failed'),
+    unchanged: sum('unchanged'),
+    ...(skipped ? { skipped } : {}),
+    ...(issue ? { issue } : {}),
+    ...(model ? { model } : {}),
+    ...(costs.length > 0 ? { costUsd: costs.reduce((a, b) => a + b, 0) } : {}),
+  };
+}
 
 function utcDay(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
@@ -96,6 +130,8 @@ export class CatalogRuSummaryJob {
       readonly spend: CatalogRuSummarySpend;
       readonly limits: CatalogRuSummaryLimits;
       readonly now?: () => number;
+      /** Model calls of one tick; by default by the date (`catalogRuSummaryCallsPerTick`). */
+      readonly callsPerTick?: number;
     },
   ) {}
 
@@ -145,7 +181,10 @@ export class CatalogRuSummaryJob {
       this.pausedUntil = now + IDLE_PAUSE_MS;
       return { ...tally, skipped: 'idle' };
     }
+    const calls = this.options.callsPerTick ?? catalogRuSummaryCallsPerTick(now);
+    const due: { candidate: CatalogRuSummaryCandidate; description: string; hash: string }[] = [];
     for (const candidate of candidates) {
+      if (due.length >= calls) break;
       const description = store.sourceText(candidate);
       const hash = catalogSummarySourceHash(candidate.title, description);
       const stored = candidate.stored;
@@ -164,10 +203,17 @@ export class CatalogRuSummaryJob {
         tally.thin += 1;
         continue;
       }
-      // One model call a tick: the rest of the page waits for the next tick.
-      return this.summarise(candidate, description, hash, now, tally);
+      // Model calls are capped per tick: the rest of the page waits for the next tick.
+      due.push({ candidate, description, hash });
     }
-    return { ...tally };
+    if (due.length === 0) return { ...tally };
+    const zero = { written: 0, thin: 0, failed: 0, unchanged: 0 };
+    const reports = await Promise.all(
+      due.map((item) =>
+        this.summarise(item.candidate, item.description, item.hash, now, { ...zero }),
+      ),
+    );
+    return mergeReports(tally, reports);
   }
 
   private async summarise(

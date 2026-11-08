@@ -14,6 +14,7 @@ import {
 } from './catalogRuSummaryJob';
 import { CatalogRuSummaryStore } from './catalogRuSummaryStore';
 import { CATALOG_RU_SUMMARY_VERSION } from './catalogRuSummary';
+import { CATALOG_RU_SUMMARY_BOOST_UNTIL_MS } from './catalogRuSummaryJob';
 
 interface SummaryLog {
   info(details: Record<string, unknown>, message: string): void;
@@ -23,6 +24,11 @@ interface SummaryLog {
 /** ~4 300 calls a day at most; the day caps stop it well before that. */
 const TICK_MS = 20_000;
 const FIRST_TICK_MS = 120_000;
+/** Until the Vertex credit ends a pack of calls outlasts 20 s; the next starts as soon as it ends. */
+const BOOST_TICK_MS = 5_000;
+export function catalogRuSummaryTickMs(now: number): number {
+  return now < CATALOG_RU_SUMMARY_BOOST_UNTIL_MS ? BOOST_TICK_MS : TICK_MS;
+}
 
 function positive(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -100,7 +106,14 @@ export function scheduleCatalogRuSummaryJob(
   });
   const tick = ticker(job, store, log);
   const first = setTimeout(() => void tick(), FIRST_TICK_MS);
-  const every = setInterval(() => void tick(), TICK_MS);
+  // A short tick until the credit ends, then the usual one; `step` skips while a pack is running.
+  let last = 0;
+  const every = setInterval(() => {
+    const now = Date.now();
+    if (now - last < catalogRuSummaryTickMs(now)) return;
+    last = now;
+    void tick();
+  }, BOOST_TICK_MS);
   first.unref();
   every.unref();
   return () => {

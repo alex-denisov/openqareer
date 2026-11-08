@@ -15,7 +15,7 @@ import type { RouteDeps } from './deps';
 import { registerRoleSkillAssessmentRoutes } from './roleSkillAssessmentRoutes';
 
 export const ROLE_TITLE = 'Head of Product';
-// Вакансии стенда не старше окна свежести (30 дней): фиксированная дата истекла 08.11.
+// A fixed date expired out of the 30-day freshness window on 08.11 (B615 CI).
 export const OBSERVED_AT = new Date(Date.now() - 86_400_000).toISOString();
 export const DIALOGUE_ANSWERS = [
   'Провела 12 интервью и выделила три устойчивых сценария для клиентов.',
