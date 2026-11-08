@@ -52,21 +52,3 @@ export function personAddressedByConnectionPath(
     path.path.at(-1)?.id === path.recipient.id ? path.path.slice(0, -1) : path.path;
   return pathBeforeRecipient.at(-1) ?? path.recipient;
 }
-
-export function excludedEvidenceIdsForWorkplaces(
-  workplaces: readonly LetterWorkplace[],
-  selectedWorkplaceIds: readonly string[],
-): string[] {
-  const selected = new Set(selectedWorkplaceIds);
-  const includedEvidence = new Set(
-    workplaces
-      .filter((workplace) => selected.has(workplace.id))
-      .flatMap((workplace) => workplace.evidenceIds),
-  );
-  const excludedEvidence = new Set(
-    workplaces
-      .filter((workplace) => !selected.has(workplace.id))
-      .flatMap((workplace) => workplace.evidenceIds),
-  );
-  return Array.from(excludedEvidence).filter((evidenceId) => !includedEvidence.has(evidenceId));
-}

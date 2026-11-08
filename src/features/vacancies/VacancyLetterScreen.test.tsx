@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { LetterScreenState } from './vacancyLetterController';
 import { VacancyLetterScreen, type VacancyLetterTarget } from './VacancyLetterScreen';
-import { factsLabel, LetterNotices, wordCountLabel, workplaceRange } from './VacancyLetterEditor';
+import { LetterNotices, wordCountLabel } from './VacancyLetterEditor';
 import type { VacancyPitchResult } from './vacancyPitchApi';
 import { CandidateDisplayNameContext } from '../shell/candidateDisplayName';
 
@@ -71,9 +71,6 @@ function makeState(overrides: Partial<LetterScreenState['draft']> = {}): LetterS
       loading: false,
       error: '',
       retry: vi.fn(),
-      includedIds: ['w1'],
-      excludedEvidenceIds: [],
-      toggle: vi.fn(),
       ...overrides,
     },
     approval: { saved: null, busy: false, error: '', approve: vi.fn(), reset: vi.fn() },
@@ -136,14 +133,12 @@ describe('VacancyLetterScreen (mockup 9)', () => {
     expect(markup).toContain('Требование про Kafka не подтверждено профилем.');
   });
 
-  it('shows workplaces as one line with the real fact count', () => {
+  it('does not offer a choice of workplaces: the letter uses the whole profile (B618)', () => {
     const markup = html();
-    // Решение CPO: места отмечает правило «есть подтверждённые факты», а не консультант и не вакансия.
-    expect(markup).toContain('Отмечены места с фактами');
-    expect(markup).not.toContain('Предложено консультантом');
-    expect(markup).toContain('Head of Engineering, 2021 — сейчас');
-    expect(markup).toContain('Для письма доступно: 2 подтверждённых факта из этого места');
-    expect(markup).not.toContain('2 факта<');
+    expect(markup).not.toContain('Места работы в письме');
+    expect(markup).not.toContain('Отмечены места с фактами');
+    expect(markup).not.toContain('career-letter-workplaces');
+    expect(markup).not.toContain('type="checkbox"');
   });
 
   it('offers «Открыть» for the resume only when the host gives a way to', () => {
@@ -246,38 +241,3 @@ describe('letter word counter', () => {
   });
 });
 
-describe('letter helpers', () => {
-  it('declines facts and prints years only', () => {
-    expect(factsLabel(1)).toBe('1 подтверждённый факт');
-    expect(factsLabel(3)).toBe('3 подтверждённых факта');
-    expect(factsLabel(11)).toBe('11 подтверждённых фактов');
-    expect(
-      workplaceRange({
-        id: 'a',
-        employer: null,
-        title: null,
-        startDate: '2014-05-01',
-        endDate: '2017',
-        current: false,
-        evidenceIds: [],
-      }),
-    ).toBe('2014 — 2017');
-  });
-
-  it('names the board, not how the source is read (Д2)', () => {
-    state.current = makeState();
-    const markup = renderToStaticMarkup(
-      <CandidateDisplayNameContext.Provider value={null}>
-        <VacancyLetterScreen
-          vacancy={{
-            ...vacancy,
-            sources: [{ sourceName: 'Himalayas (JSON API)' }, { sourceName: 'Himalayas' }],
-          }}
-          onBack={vi.fn()}
-        />
-      </CandidateDisplayNameContext.Provider>,
-    );
-    expect(markup).toContain('· Himalayas</p>');
-    expect(markup).not.toContain('JSON API');
-  });
-});

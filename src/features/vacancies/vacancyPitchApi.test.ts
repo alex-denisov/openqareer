@@ -22,7 +22,7 @@ describe('requestVacancyPitch', () => {
       .spyOn(apiClient, 'apiFetch')
       .mockResolvedValue(new Response(JSON.stringify({ data: payload }), { status: 200 }));
 
-    const requestPayload = { tone: 'technical' as const, excludedEvidenceIds: ['mem-2'] as const };
+    const requestPayload = { tone: 'technical' as const, language: 'ru' as const };
     const result = await requestVacancyPitch('v-1', requestPayload);
 
     expect(result).toEqual(payload);

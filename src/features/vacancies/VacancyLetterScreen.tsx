@@ -24,7 +24,6 @@ import {
   LetterNotices,
   LetterSettings,
   PitchBodyState,
-  WorkplaceList,
 } from './VacancyLetterEditor';
 import { LetterInfoTip } from './VacancyLetterInfoTip';
 import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
@@ -385,17 +384,6 @@ function LetterDraftContent({
         />
       ) : null}
       <TariffQuotaNote quota="applications" refreshKey={state.draft.loading} />
-      {state.draft.pitch ? (
-        <WorkplaceList
-          workplaces={state.draft.workplaces}
-          includedIds={state.draft.includedIds}
-          frozen={editorFrozen}
-          onToggle={(id) => {
-            state.approval.reset();
-            state.draft.toggle(id);
-          }}
-        />
-      ) : null}
     </>
   );
 }

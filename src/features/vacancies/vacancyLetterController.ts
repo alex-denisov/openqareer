@@ -11,11 +11,7 @@ import { useLetterApproval } from './vacancyLetterApproval';
 import type { ResumeSnapshotFailure } from './vacancyLetterResumeNote';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
 import { requestVacancyPitch } from './vacancyPitchApi';
-import {
-  excludedEvidenceIdsForWorkplaces,
-  letterBodyForCircle,
-  recipientForConnectionPath,
-} from './vacancyLetterModel';
+import { letterBodyForCircle, recipientForConnectionPath } from './vacancyLetterModel';
 
 type PitchTone = NonNullable<VacancyPitchPayload['tone']>;
 type PitchLanguage = NonNullable<VacancyPitchPayload['language']>;
@@ -36,13 +32,7 @@ interface CircleSelection {
   readonly result?: ConnectionCircleResult;
 }
 
-interface WorkplaceSelection {
-  readonly includedIds: readonly string[];
-  readonly excludedEvidenceIds: readonly string[];
-  readonly toggle: (workplaceId: string) => void;
-}
-
-export interface LetterDraftState extends WorkplaceSelection {
+export interface LetterDraftState {
   readonly pitch: VacancyPitchResult | null;
   readonly workplaces: readonly CandidateWorkplaceForLetter[];
   readonly text: string;
@@ -116,43 +106,12 @@ function useCircleSelection(
   return { circle, setCircle, selectedPathId, setSelectedPathId, selectedPath, result };
 }
 
-function useWorkplaceSelection(
-  workplaces: readonly CandidateWorkplaceForLetter[],
-): WorkplaceSelection {
-  const [override, setOverride] = useState<readonly string[] | null>(null);
-  const availableIds = useMemo(
-    () =>
-      workplaces
-        .filter((workplace) => workplace.evidenceIds.length > 0)
-        .map((workplace) => workplace.id),
-    [workplaces],
-  );
-  const includedIds = override ?? availableIds;
-  const excludedEvidenceIds = useMemo(
-    () => excludedEvidenceIdsForWorkplaces(workplaces, includedIds),
-    [includedIds, workplaces],
-  );
-  const toggle = useCallback(
-    (workplaceId: string) => {
-      setOverride((current) => {
-        const next = new Set(current ?? availableIds);
-        if (next.has(workplaceId)) next.delete(workplaceId);
-        else next.add(workplaceId);
-        return Array.from(next);
-      });
-    },
-    [availableIds],
-  );
-  return { includedIds, excludedEvidenceIds, toggle };
-}
-
 function beginLetterPitchRequest(input: {
   readonly vacancyId: string;
   readonly circle: ConnectionCircleNumber;
   readonly tone: PitchTone;
   readonly language: 'auto' | PitchLanguage;
   readonly recipient?: VacancyPitchPayload['recipient'];
-  readonly excludedEvidenceIds: readonly string[];
   readonly requestSequence: { current: number };
   readonly setPitch: (pitch: VacancyPitchResult | null) => void;
   readonly setWorkplaces: (workplaces: readonly CandidateWorkplaceForLetter[]) => void;
@@ -170,7 +129,6 @@ function beginLetterPitchRequest(input: {
     tone: input.tone,
     ...(input.language === 'auto' ? {} : { language: input.language }),
     ...(input.recipient ? { recipient: input.recipient } : {}),
-    excludedEvidenceIds: input.excludedEvidenceIds,
   };
   void requestVacancyPitch(input.vacancyId, payload)
     .then((result) => {
@@ -210,7 +168,6 @@ interface PitchRequestInput {
   readonly language: 'auto' | PitchLanguage;
   readonly enabled: boolean;
   readonly resetWhenDisabled: boolean;
-  readonly excludedEvidenceIds: readonly string[];
   readonly setWorkplaces: (workplaces: readonly CandidateWorkplaceForLetter[]) => void;
   readonly setPitch: (pitch: VacancyPitchResult | null) => void;
   readonly setText: (text: string) => void;
@@ -221,7 +178,6 @@ interface PitchRequestInput {
 function runPitchRequestEffect(
   input: PitchRequestInput,
   recipient: VacancyPitchPayload['recipient'] | undefined,
-  excludedKey: string,
   requestSequence: { current: number },
 ) {
   if (!input.enabled) {
@@ -235,7 +191,6 @@ function runPitchRequestEffect(
     tone: input.tone,
     language: input.language,
     recipient,
-    excludedEvidenceIds: JSON.parse(excludedKey) as string[],
     requestSequence,
     setPitch: input.setPitch,
     setWorkplaces: input.setWorkplaces,
@@ -258,10 +213,9 @@ function usePitchRequestEffect(input: PitchRequestInput): void {
     [input.path],
   );
   const requestSequence = useRef(0);
-  const excludedKey = JSON.stringify(input.excludedEvidenceIds);
   useEffect(
-    () => runPitchRequestEffect(input, recipient, excludedKey, requestSequence),
-    [input, recipient, excludedKey],
+    () => runPitchRequestEffect(input, recipient, requestSequence),
+    [input, recipient],
   );
 }
 
@@ -276,7 +230,6 @@ function usePitchGeneration(input: PitchGenerationInput): PitchRequestState {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
-  const excludedEvidenceKey = JSON.stringify(input.excludedEvidenceIds);
   const requestInput = useMemo(
     () => ({
       ...input,
@@ -294,7 +247,6 @@ function usePitchGeneration(input: PitchGenerationInput): PitchRequestState {
       input.language,
       input.enabled,
       input.resetWhenDisabled,
-      excludedEvidenceKey,
       input.setWorkplaces,
       retryKey,
     ],
@@ -322,7 +274,6 @@ function useLetterDraft({
   readonly resetWhenDisabled: boolean;
 }): LetterDraftState {
   const [workplaces, setWorkplaces] = useState<readonly CandidateWorkplaceForLetter[]>([]);
-  const selection = useWorkplaceSelection(workplaces);
   const pitchState = usePitchGeneration({
     vacancyId,
     circle,
@@ -331,10 +282,9 @@ function useLetterDraft({
     language,
     enabled,
     resetWhenDisabled,
-    excludedEvidenceIds: selection.excludedEvidenceIds,
     setWorkplaces,
   });
-  return { ...pitchState, workplaces, ...selection };
+  return { ...pitchState, workplaces };
 }
 
 export function useVacancyLetterController(
@@ -371,7 +321,8 @@ export function useVacancyLetterController(
     path: circle.selectedPath,
     pitch: draft.pitch,
     body: draft.text,
-    includedWorkplaceIds: draft.includedIds,
+    // B618: выбора нет, письмо опирается на все места работы профиля.
+    includedWorkplaceIds: draft.workplaces.map((workplace) => workplace.id),
     onResumeChanged: draft.retry,
   });
   return { circles, circle, tone, language, setTone, setLanguage, draft, approval };

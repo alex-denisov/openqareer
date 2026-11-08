@@ -1,17 +1,14 @@
 import { useEffect, useRef } from 'react';
 import {
   CaretDown,
-  Check,
   ChatCircleText,
   CircleNotch,
-  Sparkle,
   WarningCircle,
 } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { LetterDraftState } from './vacancyLetterController';
-import type { CandidateWorkplaceForLetter, ConnectionCircleNumber } from './vacancyLetterApi';
+import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
-import { LetterInfoTip } from './VacancyLetterInfoTip';
 import { useCompactViewport } from './useCompactViewport';
 import { useAutoGrowTextarea } from './useLetterViewport';
 
@@ -253,116 +250,5 @@ export function LetterNotices({
     <div className="career-letter-notes">
       {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} />}
     </div>
-  );
-}
-
-function yearOf(date: string | null): string {
-  return date?.match(/\d{4}/u)?.[0] ?? '';
-}
-
-export function workplaceRange(workplace: CandidateWorkplaceForLetter): string {
-  return [yearOf(workplace.startDate), workplace.current ? 'сейчас' : yearOf(workplace.endDate)]
-    .filter(Boolean)
-    .join(' — ');
-}
-
-export function factsLabel(count: number): string {
-  const last = count % 10;
-  const tens = count % 100;
-  if (last === 1 && tens !== 11) return `${count} подтверждённый факт`;
-  const word = last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? 'факта' : 'фактов';
-  return `${count} подтверждённых ${word}`;
-}
-
-/**
- * Отметки ставит правило: все места с подтверждёнными фактами (`useWorkplaceSelection`).
- * Ни консультант, ни сравнение с вакансией в выборе не участвуют — о них подпись не говорит.
- */
-const WORKPLACES_CHIP = 'Отмечены места с фактами';
-const WORKPLACES_FOOT =
-  'Отмечены все места с подтверждёнными фактами. Снимите отметку: письмо пересоберётся без этого места.';
-
-function WorkplaceRow({
-  workplace,
-  checked,
-  frozen,
-  onToggle,
-}: {
-  readonly workplace: CandidateWorkplaceForLetter;
-  readonly checked: boolean;
-  readonly frozen: boolean;
-  readonly onToggle: () => void;
-}) {
-  const range = workplaceRange(workplace);
-  const count = workplace.evidenceIds.length;
-  return (
-    <li>
-      <label>
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={frozen || count === 0}
-          onChange={onToggle}
-        />
-        <span className="career-letter-job-copy">
-          <strong>{workplace.employer ?? 'Работодатель не указан'}</strong>
-          {' · '}
-          {workplace.title ?? 'Должность не указана'}
-          {range ? ', ' + range : ''}
-          <small>
-            {count === 0
-              ? 'Нет подтверждённых фактов для письма'
-              : `Для письма доступно: ${factsLabel(count)} из этого места`}
-          </small>
-        </span>
-        <Check className="career-letter-job-tick" size={20} aria-hidden="true" />
-      </label>
-    </li>
-  );
-}
-
-export function WorkplaceList({
-  workplaces,
-  includedIds,
-  frozen,
-  onToggle,
-}: {
-  readonly workplaces: readonly CandidateWorkplaceForLetter[];
-  readonly includedIds: readonly string[];
-  readonly frozen: boolean;
-  readonly onToggle: (id: string) => void;
-}) {
-  return (
-    <section
-      className="career-letter-block career-letter-workplaces"
-      aria-label="Места работы в письме"
-    >
-      <div className="career-letter-sub-head">
-        <h3>Места работы в письме</h3>
-        <span className="career-letter-chip is-hyp">
-          <Sparkle size={14} aria-hidden="true" />
-          {WORKPLACES_CHIP}
-        </span>
-        <LetterInfoTip text="Отмеченные места работы войдут в письмо. Снимите или поставьте галочку: текст письма пересоберётся. Источник: Профиль, Опыт." />
-      </div>
-      {workplaces.length === 0 ? (
-        <p className="career-letter-muted">
-          В профиле нет подтверждённых мест работы. Письмо не будет добавлять неподтверждённый опыт.
-        </p>
-      ) : (
-        <ul>
-          {workplaces.map((workplace) => (
-            <WorkplaceRow
-              key={workplace.id}
-              workplace={workplace}
-              checked={includedIds.includes(workplace.id)}
-              frozen={frozen}
-              onToggle={() => onToggle(workplace.id)}
-            />
-          ))}
-        </ul>
-      )}
-      {workplaces.length > 0 ? <p className="career-letter-foot">{WORKPLACES_FOOT}</p> : null}
-    </section>
   );
 }

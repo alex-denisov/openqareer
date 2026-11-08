@@ -214,11 +214,6 @@ describe('B528 generated text fact gate', () => {
       text: 'Я создал проект Atlas.', expected: 'confirmed', source: 'model',
     },
     {
-      name: 'excluded evidence cannot support generation',
-      facts: ['Я увеличил выручку на 20%.'], excluded: true, emptyProfile: true,
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
-    },
-    {
       name: 'another candidate cannot support generation',
       facts: ['Я увеличил выручку на 20%.'], foreign: true, emptyProfile: true,
       text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
@@ -244,7 +239,7 @@ describe('B528 generated text fact gate', () => {
     const response = await app.inject({
       method: 'POST', url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' },
-      payload: { language: 'en', ...(options.excluded ? { excludedEvidenceIds: ids } : {}) },
+      payload: { language: 'en' },
     });
     if (source === 'refused') {
       // Профиль пуст: модель не спрашивали, это не отказ цепочки. Текст модели не показан в обоих случаях.
