@@ -35,6 +35,8 @@ export interface LetterWritingRequest {
   readonly chosenLanguage?: PitchLanguage;
   /** По имени из профиля; если определить нельзя, род в письме не виден. */
   readonly gender?: LetterGender;
+  /** Есть ли резюме для приложения: без него письмо не говорит, что резюме приложено. */
+  readonly resumeAttached: boolean;
   readonly contextMs: number;
 }
 
@@ -71,9 +73,10 @@ export function modelLetterNotice(language: PitchLanguage): string {
 }
 
 function letterGateSources(request: LetterWritingRequest): LetterGateSources {
-  const { vacancy, profile, facts, language } = request;
+  const { vacancy, profile, facts, language, resumeAttached } = request;
   return {
     language,
+    resumeAttached,
     candidate: [...profile.split('\n'), ...filterUsablePitchFacts(facts).map((fact) => fact.statement)],
     vacancy: [
       vacancy.title,
@@ -92,7 +95,7 @@ function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, profile, chosenLanguage, gender } = letter;
+  const { vacancy, profile, chosenLanguage, gender, resumeAttached } = letter;
   return {
     profile,
     vacancy: {
@@ -106,6 +109,7 @@ function writerInput(
     },
     ...(chosenLanguage ? { chosenLanguage } : {}),
     ...(gender ? { gender } : {}),
+    ...(resumeAttached ? {} : { resumeAttached: false }),
     review,
   };
 }

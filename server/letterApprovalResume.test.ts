@@ -1,93 +1,6 @@
-import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { EMPTY_RESUME_DRAFT, type ResumeDraft } from './domain/resumeDraft';
-import type { VacancyCluster } from './domain/unifiedVacancy';
-import { createApp, login } from './testHelpers/vacancyPitchHarness';
-
-const cluster: VacancyCluster = {
-  id: 'cluster-99',
-  canonicalTitle: 'Senior Platform Engineer',
-  canonicalCompany: 'CloudScale Inc',
-  canonicalLocation: 'Remote',
-  isRemote: true,
-  descriptionSummary: 'Платформа на Node.js и Kubernetes',
-  skills: ['Node.js', 'TypeScript', 'Kubernetes', 'PostgreSQL'],
-  primaryUrl: 'https://example.com/vacancies/99',
-  sources: [],
-  firstObservedAt: '2026-09-17T00:00:00.000Z',
-  lastSeenAt: '2026-09-17T00:00:00.000Z',
-  status: 'active',
-  vacanciesCount: 1,
-};
-
-const LETTER = {
-  circle: 3,
-  language: 'ru',
-  tone: 'executive',
-  body: 'Добрый день. Готов обсудить платформу. Резюме приложено.',
-  usedEvidenceIds: [],
-  includedWorkplaceIds: [],
-};
-
-type Candidates = Awaited<ReturnType<typeof createApp>>['candidates'];
-
-/** Место работы попадает в снимок, только когда его подтверждает факт профиля. */
-function seedResume(candidates: Candidates, candidateId: string, title: string): void {
-  const memoryId = 'import:test:role-' + title.length;
-  candidates.importResumeEvidence(candidateId, {
-    sourceLabel: 'synthetic',
-    entries: [{ memoryId, domain: 'outcome', statement: title + ', Финтех Лаб, с 2021 года.' }],
-  } as never);
-  candidates.reviewMemories(candidateId, [memoryId], 'confirm');
-  const draft: ResumeDraft = {
-    ...EMPTY_RESUME_DRAFT,
-    candidate: { fullName: 'Мила Пример' },
-    experience: [{
-      id: 'exp-1',
-      chronologyMemoryId: memoryId,
-      title,
-      employer: 'Финтех Лаб',
-      startDate: '2021-01',
-      current: true,
-      bulletMemoryIds: [],
-    }],
-  };
-  candidates.saveResumeDraft(candidateId, draft, []);
-}
-
-async function setup(role?: string) {
-  const { app, candidates, databasePath } = await createApp([cluster]);
-  const { cookie, candidateId } = await login(app);
-  if (role) seedResume(candidates, candidateId, role);
-  const approve = () => app.inject({
-    method: 'POST',
-    url: '/api/v1/candidate/vacancies/cluster-99/letter-approvals',
-    headers: { cookie, origin: 'http://localhost:3000' },
-    payload: LETTER,
-  });
-  const pitch = () => app.inject({
-    method: 'POST',
-    url: '/api/v1/candidate/vacancies/cluster-99/pitch',
-    headers: { cookie, origin: 'http://localhost:3000' },
-    payload: {},
-  });
-  const resumeDocuments = () =>
-    candidates.getSnapshot(candidateId).documents.filter((document) => document.kind === 'resume');
-  const versions = () => candidates.listResumeVersions(candidateId, { limit: 50, cursor: null }).items;
-  // Привязку читаем прямо из таблицы: у хранилища нет чтения материала заявки.
-  const linkedResume = (applicationId: string) => {
-    const database = new DatabaseSync(databasePath, { readOnly: true });
-    try {
-      const row = database
-        .prepare("SELECT document_id FROM application_materials WHERE application_id = ? AND role = 'resume'")
-        .get(applicationId) as { document_id: string } | undefined;
-      return row?.document_id;
-    } finally {
-      database.close();
-    }
-  };
-  return { candidates, candidateId, approve, pitch, resumeDocuments, versions, linkedResume };
-}
+import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
+import { seedResume, setup } from './testHelpers/letterApprovalHarness';
 
 describe('B601: одобрение письма прикладывает резюме под вакансию', () => {
   it('снимок резюме под вакансию привязан к заявке вместе с письмом, ничего не отправлено', async () => {
@@ -96,7 +9,7 @@ describe('B601: одобрение письма прикладывает рез�
     expect(response.statusCode).toBe(200);
     const data = response.json().data;
     expect(data).toMatchObject({ status: 'approved', sent: false });
-    expect(data.resume).toMatchObject({ versionId: expect.any(String), documentId: expect.any(String) });
+    expect(data.resume).toMatchObject({ kind: 'targeted', versionId: expect.any(String), documentId: expect.any(String) });
     expect(Number.isNaN(Date.parse(data.resume.snapshotAt))).toBe(false);
 
     const application = candidates.getApplication(candidateId, data.applicationId);

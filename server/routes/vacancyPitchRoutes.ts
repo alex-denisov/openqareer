@@ -13,8 +13,14 @@ import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
-import { attachApprovedResume, hasAttachableResume } from './letterApprovalResume';
-import { masterProjectionOf } from './resumeMaster';
+import {
+  attachApprovedResume,
+  generalResumeOf,
+  letterResumeState,
+  prepareLetterResume,
+  ResumeSnapshotError,
+} from './letterApprovalResume';
+import { currentMaster, masterProjectionOf } from './resumeMaster';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
@@ -72,6 +78,10 @@ const approvedLetterSnapshotSchema = z.object({
   body: z.string().trim().min(1).max(12000),
   usedEvidenceIds: z.array(z.string().trim().min(1).max(200)).max(200),
   includedWorkplaceIds: z.array(z.string().trim().min(1).max(200)).max(100),
+  /** С каким признаком резюме написан черновик: не совпал с текущим — письмо готовится заново. */
+  resumeAvailable: z.boolean().optional(),
+  /** Снимок не создался, и кандидат выбрал своё общее резюме. */
+  generalResumeId: z.string().trim().min(1).max(200).optional(),
 });
 
 /** Перевод результатов идёт до письма: модель цитирует и проверка сверяет один и тот же текст. */
@@ -162,7 +172,7 @@ function readLetterContext(
   return {
     rankingContext,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
-    resumeAvailable: hasAttachableResume(masterProjectionOf(snapshot).master),
+    resume: letterResumeState(deps, candidateId, masterProjectionOf(snapshot).master),
     facts,
     candidateWorkplaces,
     workplaces,
@@ -190,7 +200,7 @@ async function writeVacancyPitch(
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
-  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, profile, contextMs, resumeAvailable } = context;
+  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, profile, contextMs, resume } = context;
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
@@ -202,6 +212,7 @@ async function writeVacancyPitch(
     language,
     ...(gender ? { gender } : {}),
     ...(body?.language ? { chosenLanguage: body.language } : {}),
+    resumeAttached: resume.available,
     contextMs,
   });
   if (translations.size < toTranslate.length) {
@@ -228,10 +239,10 @@ async function writeVacancyPitch(
         written,
         atsCoverLetter,
         candidateWorkplaces,
-        resumeAvailable,
+        resume,
         outputFactChecks: { ...templateChecks, emailBody: written.factCheck, atsCoverLetter: written.factCheck },
       }
-    : { pitch, written, atsCoverLetter, candidateWorkplaces, resumeAvailable, outputFactChecks: templateChecks };
+    : { pitch, written, atsCoverLetter, candidateWorkplaces, resume, outputFactChecks: templateChecks };
 }
 
 function saveGeneratedCoverLetter(
@@ -338,7 +349,8 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
       ...result.pitch,
       atsCoverLetter: result.atsCoverLetter,
       candidateWorkplaces: result.candidateWorkplaces,
-      resumeAvailable: result.resumeAvailable,
+      resumeAvailable: result.resume.available,
+      resumeKind: result.resume.kind,
       outputFactChecks: result.outputFactChecks,
       ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
       notices: letterNotices(result),
@@ -359,6 +371,36 @@ function changedLetterEvidence(reply: FastifyReply, request: FastifyRequest) {
   return sendError(reply, request, 400, 'letter_evidence_changed', 'Факты письма изменились. Подготовьте письмо ещё раз.', false);
 }
 
+const RESUME_SNAPSHOT_FAILED = 'Не удалось подготовить резюме. Подготовьте его, чтобы одобрить письмо.';
+
+function resumeSnapshotFailed(deps: RouteDeps, reply: FastifyReply, request: FastifyRequest, candidateId: string, error: ResumeSnapshotError) {
+  request.log.error({ err: error.cause }, 'letter-resume-snapshot-failed');
+  const generalResume = generalResumeOf(deps, candidateId);
+  return sendError(reply, request, 503, 'resume_snapshot_failed', RESUME_SNAPSHOT_FAILED, true, undefined, { generalResume });
+}
+
+function changedLetterResume(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 409, 'letter_resume_changed', 'Резюме в профиле изменилось. Письмо подготовлено заново: проверьте его и одобрите.', false);
+}
+
+/** «Подготовить резюме»: повторяет снимок резюме под вакансию до одобрения, письмо не трогает. */
+const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const vacancyId = (request.params as { id: string }).id;
+  const cluster = multiSourceEngine.getActiveCluster(vacancyId);
+  if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
+  try {
+    const state = prepareLetterResume(deps, candidate.id, cluster);
+    return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available }, meta: { requestId: request.id } };
+  } catch (error) {
+    if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
+    throw error;
+  }
+};
+
 const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -375,15 +417,18 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   if (parsed.data.usedEvidenceIds.some((id) => !evidenceIds.has(id))) {
     return changedLetterEvidence(reply, request);
   }
+  const resumeNow = letterResumeState(deps, candidate.id, currentMaster(deps, candidate.id).document);
+  if (parsed.data.resumeAvailable !== undefined && parsed.data.resumeAvailable !== resumeNow.available) {
+    return changedLetterResume(reply, request);
+  }
   const approvedAt = new Date().toISOString();
-  const stored = persistApprovedLetterSnapshot(
-    deps,
-    candidate.id,
-    vacancyId,
-    cluster,
-    parsed.data,
-    approvedAt,
-  );
+  let stored: ReturnType<typeof persistApprovedLetterSnapshot>;
+  try {
+    stored = persistApprovedLetterSnapshot(deps, candidate.id, vacancyId, cluster, parsed.data, approvedAt);
+  } catch (error) {
+    if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
+    throw error;
+  }
   return {
     data: {
       applicationId: stored.application.id,
@@ -438,7 +483,12 @@ function persistApprovedLetterSnapshot(
         parseStatus: 'not_applicable',
       },
     ).document;
-    const resume = attachApprovedResume(deps, candidateId, application.id, cluster, approvedAt);
+    const resume = attachApprovedResume(deps, candidateId, {
+      applicationId: application.id,
+      cluster,
+      approvedAt,
+      ...(input.generalResumeId ? { generalResumeId: input.generalResumeId } : {}),
+    });
     return { application, document, resume };
   });
 }
@@ -453,5 +503,10 @@ export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps
     '/api/v1/candidate/vacancies/:id/letter-approvals',
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
     withDeps(deps, handleApproveVacancyLetter),
+  );
+  app.post(
+    '/api/v1/candidate/vacancies/:id/letter-resume',
+    { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
+    withDeps(deps, handlePrepareLetterResume),
   );
 }

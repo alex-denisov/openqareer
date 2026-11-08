@@ -218,6 +218,19 @@ describe('reviewLetterBody: резюме приложено (решение вл
   });
 });
 
+describe('reviewLetterBody: опыта нет, резюме не приложится (B601, 08.11)', () => {
+  const noResume = { ...SOURCES, resumeAttached: false };
+  const english = { ...noResume, language: 'en' as const };
+
+  it.each([['Буду рад обсудить.', noResume], ['Happy to discuss.', english]] as const)('письмо без упоминания резюме принимается: %s', (body, sources) => {
+    expect(reviewLetterBody(body, sources)).toEqual([]);
+  });
+
+  it.each([['Буду рад обсудить. Резюме приложено.', noResume], ['Happy to discuss. My resume is attached.', english], ['CV attached.', english]] as const)('обещание приложить резюме отклоняется: %s', (body, sources) => {
+    expect(reviewLetterBody(body, sources).map((item) => item.rule)).toEqual(['resume']);
+  });
+});
+
 describe('reviewLetterBody: отчёт о нарушении', () => {
   it('называет предложение и правило один раз', () => {
     const violations = reviewLetterBody('Команда из 900 человек. Резюме приложено.', SOURCES);

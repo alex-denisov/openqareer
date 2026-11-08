@@ -44,3 +44,19 @@ describe('coverLetterPrompt: запрос, который принял влад�
     expect(chosen).not.toContain('на языке вакансии');
   });
 });
+
+describe('coverLetterPrompt: опыта нет, резюме не приложится (B601, 08.11)', () => {
+  const input = { vacancy: 'Platform Engineer', profile: 'Курс по Kubernetes.' };
+
+  it('не просит сказать, что резюме приложено, и прямо запрещает упоминать его', () => {
+    const prompt = coverLetterPrompt({ ...input, resumeAttached: false });
+    expect(prompt).not.toMatch(/Резюме приложено к этому сообщению|скажи, что резюме приложено/u);
+    expect(prompt).toContain('Резюме к сообщению не приложено, не упоминай его.');
+    expect(prompt).toContain('В конце вежливо предложи обсудить');
+  });
+
+  it('с резюме запрос прежний, дословно утверждённый', () => {
+    expect(coverLetterPrompt({ ...input, resumeAttached: true })).toBe(coverLetterPrompt(input));
+    expect(coverLetterPrompt(input)).toContain('В конце скажи, что резюме приложено');
+  });
+});

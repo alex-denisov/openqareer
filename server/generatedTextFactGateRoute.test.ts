@@ -70,7 +70,7 @@ describe('B528 generated text fact gate', () => {
   });
 
   it('04.11: a paraphrase of imported facts reaches the letter screen under the note that a model wrote it', async () => {
-    const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек. Резюме приложено. Буду рад обсудить задачи роли.';
+    const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек.. Буду рад обсудить задачи роли.';
     const { app, candidates } = await createApp([sampleCluster], {
       coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test:model' }) },
     });
@@ -226,7 +226,7 @@ describe('B528 generated text fact gate', () => {
     },
   ])('B528 $name', async ({ facts, text, expected, source, ...options }) => {
     const { app, candidates } = await createApp([sampleCluster], {
-      coverLetterWriter: { writeCoverLetter: async () => ({ body: `${text}\n\nCV attached.`, stage: 'test:model' }) },
+      coverLetterWriter: { writeCoverLetter: async () => ({ body: `${text}\n\nHappy to discuss.`, stage: 'test:model' }) },
     });
     const { cookie, candidateId } = await login(app);
     const owner = options.foreign
@@ -254,7 +254,7 @@ describe('B528 generated text fact gate', () => {
     expect(data.factCheck.claims).toEqual([expect.objectContaining({
       text, status: expected, action: expected === 'confirmed' ? 'none' : 'ask_candidate',
     })]);
-    expect(data.atsCoverLetter).toBe(`${text}\n\nCV attached.`);
+    expect(data.atsCoverLetter).toBe(`${text}\n\nHappy to discuss.`);
     if (expected === 'confirmed') expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
   });
 

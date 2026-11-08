@@ -23,7 +23,7 @@ const url = '/api/v1/candidate/vacancies/cluster-busy/pitch';
 
 describe('POST /pitch while the database is busy', () => {
   it('a lock on the candidate snapshot is waited out, the writer is asked once', async () => {
-    const writeCoverLetter = vi.fn(async () => ({ body: 'Здравствуйте! Буду рад обсудить задачи роли. Резюме приложено.', stage: 'test' }));
+    const writeCoverLetter = vi.fn(async () => ({ body: 'Здравствуйте! Буду рад обсудить задачи роли.', stage: 'test' }));
     const { app, candidates } = await createApp([cluster], { coverLetterWriter: { writeCoverLetter } });
     const { cookie, candidateId } = await login(app);
     candidates.importResumeEvidence(candidateId, {
@@ -37,7 +37,7 @@ describe('POST /pitch while the database is busy', () => {
   });
 
   it('a lock while saving the letter does not lose the letter or ask the model again', async () => {
-    const writeCoverLetter = vi.fn(async () => ({ body: 'Здравствуйте! Буду рад обсудить задачи роли. Резюме приложено.', stage: 'test' }));
+    const writeCoverLetter = vi.fn(async () => ({ body: 'Здравствуйте! Буду рад обсудить задачи роли.', stage: 'test' }));
     const { app, candidates } = await createApp([cluster], { coverLetterWriter: { writeCoverLetter } });
     const { cookie, candidateId } = await login(app);
     candidates.importResumeEvidence(candidateId, {

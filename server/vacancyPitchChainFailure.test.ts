@@ -22,7 +22,7 @@ const sampleCluster: VacancyCluster = {
 
 describe('POST /pitch: письмо модели (B601)', () => {
   describe('B601: отказ всей цепочки модели', () => {
-    const LETTER = 'Письмо модели. Резюме приложено.';
+    const LETTER = 'Письмо модели.';
     const refusing = (): CoverLetterWriter => ({
       writeCoverLetter: async () => ({ failure: { stage: 'openrouter:deepseek/deepseek-v4.1-flash', kind: 'timeout' } }),
     });
@@ -113,7 +113,7 @@ describe('POST /pitch: письмо модели (B601)', () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async (input) => {
         inputs.push(input);
-        return { body: 'Письмо. Резюме приложено.', stage: 'openai:gpt-test' };
+        return { body: 'Письмо.', stage: 'openai:gpt-test' };
       },
     };
     const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });

@@ -57,6 +57,8 @@ export interface CoverLetterWriteInput {
   readonly gender?: LetterGender;
   /** Язык, который кандидат выбрал сам; без него письмо идёт на языке вакансии. */
   readonly chosenLanguage?: 'en' | 'ru';
+  /** `false` — резюме не приложится: запрос не просит фразу о приложении. */
+  readonly resumeAttached?: boolean;
   /** Названия нарушенных правил письма; очередь отдаёт отклонённое письмо следующей ступени. */
   readonly review?: (body: string) => readonly string[];
 }
@@ -221,6 +223,7 @@ export function letterPrompt(input: CoverLetterWriteInput): string {
     ...(input.vacancy.recipient ? { recipient: input.vacancy.recipient } : {}),
     ...(input.gender ? { gender: input.gender } : {}),
     ...(input.chosenLanguage ? { chosenLanguage: input.chosenLanguage } : {}),
+    ...(input.resumeAttached === false ? { resumeAttached: false } : {}),
   });
 }
 
