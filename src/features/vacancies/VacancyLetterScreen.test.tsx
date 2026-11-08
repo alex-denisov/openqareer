@@ -103,7 +103,7 @@ describe('VacancyLetterScreen (mockup 9)', () => {
     const markup = html();
     const card = markup.slice(markup.indexOf('career-letter-card"'));
     expect(card).toContain('Черновик, ничего не отправлено');
-    expect(card).toContain('Кому: Мария Орлова');
+    expect(card).toContain('Кому: Мария О., Вектор');
     expect(card).toContain('Куда и что отправим');
     expect(card).toContain('Текст письма');
     expect(card).toContain('Одобрить письмо');
