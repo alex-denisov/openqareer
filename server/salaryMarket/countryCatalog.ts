@@ -20,7 +20,7 @@ export function countryCatalogFrom(database: DatabaseSync, code: string): Countr
   const readAt = new Date().toISOString();
   const labels = database
     .prepare(
-      `SELECT salary_label AS label, source_name AS source
+      `SELECT salary_label AS label, source_url AS source
          FROM catalog_entries
         WHERE status = 'active' AND path <> '' AND salary_label IS NOT NULL AND salary_label <> ''
           AND place_slug IN (${slugs.map(() => '?').join(',')})
@@ -30,8 +30,17 @@ export function countryCatalogFrom(database: DatabaseSync, code: string): Countr
   const pay = countryPoolPay(
     labels.map((row) => row.label),
     readAt,
-    labels.map((row) => row.source ?? ''),
+    labels.map((row) => boardHost(row.source)),
   );
   const value: CountryCatalog = { cities: rows, readAt, ...(pay ? { pay } : {}) };
   return value;
+}
+
+/** The board a vacancy came from, by its host («boards.greenhouse.io» → «greenhouse.io»). */
+export function boardHost(url: string | null): string {
+  try {
+    return url ? new URL(url).hostname.replace(/^(www|boards|jobs|job-boards|apply)\./u, '') : '';
+  } catch {
+    return '';
+  }
 }

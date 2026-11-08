@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { countryPoolPay } from './countryPoolPay';
+import { boardHost } from './countryCatalog';
 import { MIN_COUNTRY_POOL_SAMPLE } from '../../shared/salaryCountryCities';
 import { salaryCountryPathForPlace } from '../../shared/salaryPublicPages';
 
@@ -31,6 +32,11 @@ describe('countryPoolPay (SEO P2)', () => {
       at,
     );
     expect(pay).toMatchObject({ period: 'month', sampleSize: 40 });
+  });
+  it('names the board by host, not the employer', () => {
+    expect(boardHost('https://boards.greenhouse.io/airbnb/jobs/1')).toBe('greenhouse.io');
+    expect(boardHost('https://hh.ru/vacancy/1')).toBe('hh.ru');
+    expect(boardHost('not a url')).toBe('');
   });
   it('maps catalog cities to their country page', () => {
     expect(salaryCountryPathForPlace('berlin')?.path).toBe('/salaries/germany');

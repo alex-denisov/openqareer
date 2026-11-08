@@ -87,6 +87,6 @@ export interface CountryPoolPay {
   /** Vacancies of the cities that state any salary. */
   readonly withSalary: number;
   readonly readAt: string;
-  /** Source boards of the counted vacancies (source_name). */
+  /** Hosts of the boards the counted vacancies came from (source_url). */
   readonly sources: readonly string[];
 }
