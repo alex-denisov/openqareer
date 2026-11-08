@@ -16,6 +16,7 @@ import type {
   ConnectionCircleResult,
 } from './vacancyLetterApi';
 import { letterRecipientTitle } from './letterDeliveryPlace';
+import { personChain } from './letterPersonChain';
 import { circleSummary, strengthLabel } from './VacancyLetterCircles';
 import { LetterInfoTip } from './VacancyLetterInfoTip';
 import type { ResumeRowView } from './vacancyLetterResumeNote';
@@ -87,15 +88,6 @@ function DestinationRow({
       {children ? <span className="career-letter-dest-actions">{children}</span> : null}
     </li>
   );
-}
-
-function personChain(path: ConnectionCirclePath): string {
-  const people =
-    path.path.at(-1)?.id === path.recipient.id ? path.path : [...path.path, path.recipient];
-  return people
-    .map((person) => person.fullName)
-    .filter(Boolean)
-    .join(' → ');
 }
 
 function pathNote(path: ConnectionCirclePath): string {
