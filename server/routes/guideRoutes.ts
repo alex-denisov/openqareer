@@ -10,6 +10,8 @@ import {
   guideStructuredData,
   guidesHubStructuredData,
 } from '../../shared/guides/structuredData';
+import { BLOG_POSTS } from '../../shared/blog';
+import { BLOG_COLLECTION } from '../../shared/guides/collection';
 import { withOgImage } from '../../shared/seoHead';
 import { GuidePage, GuidesHubPage } from '../../src/features/site/GuidePage';
 import { SALARY_MARKET_TEMPLATE } from '../../src/features/site/SalaryMarketPage';
@@ -94,7 +96,11 @@ export function renderGuidesHub(template: string): string {
       structured: guidesHubStructuredData(GUIDES),
     },
     renderToStaticMarkup(
-      React.createElement(GuidesHubPage, { guides: GUIDES, title: GUIDES_HUB_NAME }),
+      React.createElement(GuidesHubPage, {
+        guides: GUIDES,
+        title: GUIDES_HUB_NAME,
+        cross: { title: 'Статьи блога', items: BLOG_POSTS, collection: BLOG_COLLECTION },
+      }),
     ),
   );
 }

@@ -1,5 +1,12 @@
 import React from 'react';
-import { GUIDES_ROOT, findGuide, guidePath, relatedHref } from '../../../shared/guides';
+import { findGuide, relatedHref } from '../../../shared/guides';
+import { BLOG_POSTS } from '../../../shared/blog';
+import {
+  BLOG_COLLECTION,
+  GUIDES_COLLECTION,
+  collectionPath,
+  type GuideCollection,
+} from '../../../shared/guides/collection';
 import type {
   Guide,
   GuideAction,
@@ -206,7 +213,7 @@ function Section({ section, sources }: { section: GuideSection; sources: readonl
   );
 }
 
-function Crumbs({ current }: { current?: string }) {
+function Crumbs({ current, collection }: { current?: string; collection: GuideCollection }) {
   return (
     <nav className="oq-guide-crumbs" aria-label="Хлебные крошки">
       <ol>
@@ -215,9 +222,9 @@ function Crumbs({ current }: { current?: string }) {
         </li>
         <li>
           {current ? (
-            <a href={GUIDES_ROOT}>Материалы</a>
+            <a href={collection.root}>{collection.crumb}</a>
           ) : (
-            <span aria-current="page">Материалы</span>
+            <span aria-current="page">{collection.crumb}</span>
           )}
         </li>
         {current ? (
@@ -230,16 +237,34 @@ function Crumbs({ current }: { current?: string }) {
   );
 }
 
+/** Материал или статья по адресу: связка /guides ↔ /blog в «Читайте также». */
+function findByPath(href: string): { guide: Guide; collection: GuideCollection } | undefined {
+  for (const [collection, items] of [
+    [GUIDES_COLLECTION, undefined],
+    [BLOG_COLLECTION, BLOG_POSTS],
+  ] as const) {
+    const prefix = `${collection.root}/`;
+    if (!href.startsWith(prefix)) continue;
+    const slug = href.slice(prefix.length);
+    const guide = items ? items.find((row) => row.slug === slug) : findGuide(slug);
+    return guide ? { guide, collection } : undefined;
+  }
+  return undefined;
+}
+
 function RelatedCard({ entry }: { entry: string }) {
   const href = relatedHref(entry);
-  const guide = entry.startsWith('/') ? undefined : findGuide(entry);
+  const found = findByPath(href);
+  const guide = found?.guide;
   const tool = TOOL_LABELS[href];
   const title = guide?.h1 ?? tool?.title;
   if (!title) return null;
   return (
     <li>
       <a href={href}>
-        <span className="oq-guide-related-kind">{guide ? 'Материал' : 'Инструмент'}</span>
+        <span className="oq-guide-related-kind">
+          {found ? found.collection.kind : 'Инструмент'}
+        </span>
         <b>{title}</b>
         <small>{guide?.eyebrow ?? tool?.note}</small>
       </a>
@@ -262,15 +287,21 @@ function FinalCta() {
   );
 }
 
-export function GuidePage({ guide }: { readonly guide: Guide }) {
+export function GuidePage({
+  guide,
+  collection = GUIDES_COLLECTION,
+}: {
+  readonly guide: Guide;
+  readonly collection?: GuideCollection;
+}) {
   const toc = [
     ...guide.sections.map((section) => ({ id: section.id, title: section.title })),
-    { id: 'faq', title: 'Вопросы и ответы' },
+    ...(guide.faq.length > 0 ? [{ id: 'faq', title: 'Вопросы и ответы' }] : []),
     ...(guide.sources.length > 0 ? [{ id: 'sources', title: 'Источники' }] : []),
   ];
   return (
     <main id="main" tabIndex={-1} className="ps-wrap ps-page oq-guide">
-      <Crumbs current={guide.crumb} />
+      <Crumbs current={guide.crumb} collection={collection} />
       <GuideHero guide={guide} />
       <div className="oq-guide-layout">
         <Toc rows={toc} />
@@ -326,6 +357,7 @@ function Toc({ rows: toc }: { rows: readonly { id: string; title: string }[] }) 
 }
 
 function Faq({ rows }: { rows: Guide['faq'] }) {
+  if (rows.length === 0) return null;
   return (
     <section className="oq-guide-faq" id="faq" aria-labelledby="h-faq">
       <h2 id="h-faq">Вопросы и ответы</h2>
@@ -376,37 +408,67 @@ function Related({ entries }: { entries: readonly string[] }) {
   );
 }
 
+function HubList({
+  items,
+  collection,
+  label,
+}: {
+  items: readonly Guide[];
+  collection: GuideCollection;
+  label: string;
+}) {
+  return (
+    <ul className="oq-guide-related-list" aria-label={label}>
+      {items.map((item) => (
+        <li key={item.slug}>
+          <a href={collectionPath(collection, item.slug)}>
+            <span className="oq-guide-related-kind">{item.eyebrow}</span>
+            <b>{item.h1}</b>
+            <small>{item.description}</small>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export interface HubCrossLink {
+  readonly title: string;
+  readonly items: readonly Guide[];
+  readonly collection: GuideCollection;
+}
+
 export function GuidesHubPage({
   guides,
   title,
+  collection = GUIDES_COLLECTION,
+  lead = 'Разборы частых трудностей поиска работы: что проверить, как исправить и чем поможет openqareer.',
+  cross,
 }: {
   readonly guides: readonly Guide[];
   readonly title: string;
+  readonly collection?: GuideCollection;
+  readonly lead?: string;
+  /** B617: соседняя коллекция, чтобы хабы ссылались друг на друга. */
+  readonly cross?: HubCrossLink;
 }) {
   return (
     <main id="main" tabIndex={-1} className="ps-wrap ps-page oq-guide">
-      <Crumbs />
+      <Crumbs collection={collection} />
       <header className="oq-guide-hero">
         <p className="oq-guide-eyebrow">Поиск работы</p>
         <h1>{title}</h1>
-        <p className="oq-guide-lead">
-          Разборы частых трудностей поиска работы: что проверить, как исправить и чем поможет
-          openqareer.
-        </p>
+        <p className="oq-guide-lead">{lead}</p>
       </header>
-      <section className="oq-guide-related" aria-label="Материалы">
-        <ul className="oq-guide-related-list">
-          {guides.map((guide) => (
-            <li key={guide.slug}>
-              <a href={guidePath(guide.slug)}>
-                <span className="oq-guide-related-kind">{guide.eyebrow}</span>
-                <b>{guide.h1}</b>
-                <small>{guide.description}</small>
-              </a>
-            </li>
-          ))}
-        </ul>
+      <section className="oq-guide-related" aria-label={collection.crumb}>
+        <HubList items={guides} collection={collection} label={collection.crumb} />
       </section>
+      {cross && cross.items.length > 0 ? (
+        <section className="oq-guide-related" aria-labelledby="h-cross">
+          <h2 id="h-cross">{cross.title}</h2>
+          <HubList items={cross.items} collection={cross.collection} label={cross.title} />
+        </section>
+      ) : null}
       <FinalCta />
     </main>
   );
