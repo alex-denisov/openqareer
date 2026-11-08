@@ -129,7 +129,8 @@ export function catalogRuSummaryRunId(now: number): string {
 
 export class CatalogRuSummaryJob {
   private pausedUntil = 0;
-  private running = false;
+  /** Cards whose model call is running: steps overlap and fill free slots, not wait for a whole pack. */
+  private readonly inFlight = new Set<string>();
 
   constructor(
     private readonly options: {
@@ -164,35 +165,38 @@ export class CatalogRuSummaryJob {
 
   async step(): Promise<CatalogRuSummaryReport> {
     const empty = { written: 0, thin: 0, failed: 0, unchanged: 0 };
-    if (this.running) return { ...empty, skipped: 'idle' };
-    this.running = true;
-    try {
-      return await this.run(empty);
-    } finally {
-      this.running = false;
-    }
+    const calls = this.options.callsPerTick ?? catalogRuSummaryCallsPerTick(this.now());
+    if (this.inFlight.size >= calls) return { ...empty, skipped: 'idle' };
+    return this.run(empty, calls - this.inFlight.size);
   }
 
-  private async run(tally: {
-    written: number;
-    thin: number;
-    failed: number;
-    unchanged: number;
-  }): Promise<CatalogRuSummaryReport> {
+  private async run(
+    tally: {
+      written: number;
+      thin: number;
+      failed: number;
+      unchanged: number;
+    },
+    free: number,
+  ): Promise<CatalogRuSummaryReport> {
     const now = this.now();
     const blocked = this.spendBlock(now);
     if (blocked) return { ...tally, skipped: blocked };
     const { store } = this.options;
-    const candidates = store.candidates(now, CATALOG_RU_SUMMARY_VERSION, CANDIDATES_PER_TICK);
+    const candidates = store.candidates(
+      now,
+      CATALOG_RU_SUMMARY_VERSION,
+      CANDIDATES_PER_TICK + this.inFlight.size,
+    );
     if (candidates.length === 0) {
       // Nothing to do: the candidate query walks the catalog, so it is not repeated every tick.
       this.pausedUntil = now + IDLE_PAUSE_MS;
       return { ...tally, skipped: 'idle' };
     }
-    const calls = this.options.callsPerTick ?? catalogRuSummaryCallsPerTick(now);
     const due: { candidate: CatalogRuSummaryCandidate; description: string; hash: string }[] = [];
     for (const candidate of candidates) {
-      if (due.length >= calls) break;
+      if (due.length >= free) break;
+      if (this.inFlight.has(candidate.clusterId)) continue;
       const description = store.sourceText(candidate);
       const hash = catalogSummarySourceHash(candidate.title, description);
       const stored = candidate.stored;
@@ -215,13 +219,27 @@ export class CatalogRuSummaryJob {
       due.push({ candidate, description, hash });
     }
     if (due.length === 0) return { ...tally };
+    return mergeReports(tally, await this.launch(due, now));
+  }
+
+  /** The cards' calls at once; each frees its slot as soon as it ends. */
+  private async launch(
+    due: readonly { candidate: CatalogRuSummaryCandidate; description: string; hash: string }[],
+    now: number,
+  ): Promise<CatalogRuSummaryReport[]> {
     const zero = { written: 0, thin: 0, failed: 0, unchanged: 0 };
-    const reports = await Promise.all(
-      due.map((item) =>
-        this.summarise(item.candidate, item.description, item.hash, now, { ...zero }),
-      ),
+    for (const item of due) this.inFlight.add(item.candidate.clusterId);
+    return Promise.all(
+      due.map(async (item) => {
+        try {
+          return await this.summarise(item.candidate, item.description, item.hash, now, {
+            ...zero,
+          });
+        } finally {
+          this.inFlight.delete(item.candidate.clusterId);
+        }
+      }),
     );
-    return mergeReports(tally, reports);
   }
 
   private async summarise(
