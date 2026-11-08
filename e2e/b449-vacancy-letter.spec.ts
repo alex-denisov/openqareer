@@ -666,6 +666,9 @@ test.describe('B449 — письмо под вакансию', () => {
   test('selects circle recipients and approves an unsent snapshot over all workplaces', async ({
     page,
   }, testInfo) => {
+    // Одобрение в макете датировано 10.10.2026, а «Отклики» по умолчанию показывают 30 дней:
+    // без фиксированных часов тест ломается с 09.11 и на main.
+    await page.clock.setFixedTime(new Date('2026-10-15T09:00:00.000Z'));
     const state = createRouteState();
     await installLetterMocks(page, state);
     await openLetter(page);
