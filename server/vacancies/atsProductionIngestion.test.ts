@@ -9,8 +9,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { useRecordedFetch } from './__fixtures__/recordedFetch';
 
 describe('ATS Production Ingestion Gate (Subgroup 4.1)', () => {
+  useRecordedFetch('atsProductionIngestion');
   const atsTestCases: Array<{
     provider: AtsProvider;
     board: string;

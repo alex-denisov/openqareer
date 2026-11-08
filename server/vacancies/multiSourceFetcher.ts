@@ -26,18 +26,13 @@ import {
   CORPORATE_JSON_ENDPOINTS,
   fetchCorporateJsonApiVacancies,
 } from './corporateJsonApiAdapter';
-import {
-  NEXT_DATA_CAREER_ENDPOINTS,
-  fetchNextDataVacancies,
-} from './nextDataCareerAdapter';
-import {
-  CORPORATE_HTML_ENDPOINTS,
-  fetchCorporateHtmlVacancies,
-} from './corporateHtmlAdapter';
+import { NEXT_DATA_CAREER_ENDPOINTS, fetchNextDataVacancies } from './nextDataCareerAdapter';
+import { CORPORATE_HTML_ENDPOINTS, fetchCorporateHtmlVacancies } from './corporateHtmlAdapter';
 import {
   LINKEDIN_GROUP_B_TARGETS,
   fetchLinkedinCompanyVacancies,
 } from './linkedinCompanyGuestAdapter';
+import { createLinkedinCompanyGate, type LinkedinCompanyGate } from './linkedinCompanyGate';
 import { fetchGenericCorporateVacancies } from './genericCorporateSiteAdapter';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
@@ -50,6 +45,18 @@ type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<Vac
  * площадкам отказ «aborted due to timeout» (прод 2026-09-06, 92 источника).
  */
 const JSON_SOURCE_TIMEOUT_MS = 45_000;
+/**
+ * B622: Greenhouse с текстом — до 33 МБ (SpaceX), Stripe 6 МБ, Cloudflare 8 МБ.
+ * С прода они скачиваются за 0,3–1,5 с, но в волне на занятом цикле событий
+ * 45 с не хватало: 10 досок падали «aborted due to timeout» 08.11.
+ */
+const LARGE_BOARD_TIMEOUT_MS = 120_000;
+
+export function jsonSourceTimeoutMs(url: string): number {
+  return /^https:\/\/boards-api\.greenhouse\.io\//.test(url)
+    ? LARGE_BOARD_TIMEOUT_MS
+    : JSON_SOURCE_TIMEOUT_MS;
+}
 const LINKEDIN_PAGE_TIMEOUT_MS = 20_000;
 
 const FETCH_HEADERS = {
@@ -204,7 +211,7 @@ async function fetchJsonPayload(
     },
     request.headers,
   );
-  return withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, (signal) =>
+  return withRequestTimeout(jsonSourceTimeoutMs(request.url), (signal) =>
     readJsonPayload(request, mergedHeaders, signal, fetchStealth),
   );
 }
@@ -577,7 +584,18 @@ async function fetchJsonOrCareerSite(
   deps: MultiSourceFetcherDeps,
   sleep: (ms: number) => Promise<void>,
   now: () => number,
+  linkedinGate: LinkedinCompanyGate,
 ): Promise<UnifiedVacancy[] | SourceReading> {
+  if (source.linkedinOrgId) {
+    const target = {
+      slug: source.companyKey ?? source.linkedinOrgId,
+      company: source.name.replace(/ \(LinkedIn\)$/, ''),
+      organizationId: source.linkedinOrgId,
+    };
+    return linkedinGate.run(() =>
+      fetchLinkedinCompanyVacancies(target, { sourceId: source.id, maxPages: 10 }),
+    );
+  }
   if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
     return fetchYcWorkAtStartup(source);
   }
@@ -612,6 +630,7 @@ export function buildMultiSourceFetcher(
 ): SourceFetcher {
   const sleep = deps.sleep ?? defaultSleep;
   const now = deps.now ?? Date.now;
+  const linkedinGate = createLinkedinCompanyGate({ sleep, now });
   return async (source, options) => {
     if (source.type === 'hh') {
       const sample = await hh({ text: options?.query || 'Developer', perPage: 20 });
@@ -624,7 +643,7 @@ export function buildMultiSourceFetcher(
     if (source.type === 'telegram') return fetchTelegramChannel(source);
     if (source.type === 'rss') return fetchRssFeed(source, options);
     if (source.type === 'career_site' || source.type === 'json_api') {
-      return fetchJsonOrCareerSite(source, options, deps, sleep, now);
+      return fetchJsonOrCareerSite(source, options, deps, sleep, now, linkedinGate);
     }
     if (source.type === 'hh_search') return fetchHhSearchBatch(crawlCoordinator);
     if (source.id === 'src-linkedin-crawler') {

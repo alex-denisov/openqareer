@@ -3,8 +3,10 @@ import {
   CORPORATE_HTML_ENDPOINTS,
   fetchCorporateHtmlVacancies,
 } from './corporateHtmlAdapter';
+import { useRecordedFetch } from './__fixtures__/recordedFetch';
 
 describe('Corporate HTML Generic Adapter', () => {
+  useRecordedFetch('corporateHtmlAdapter');
   it('registers Kaspersky, Veeam, and FaceApp as declarative endpoints', () => {
     const ids = CORPORATE_HTML_ENDPOINTS.map((e) => e.id);
     expect(ids).toContain('kaspersky');

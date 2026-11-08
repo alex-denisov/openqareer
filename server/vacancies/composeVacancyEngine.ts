@@ -18,6 +18,8 @@ import {
   type ReclusterMode,
   type SourceFetcher,
 } from './multiSourceVacancyEngine';
+import { planCompanyChannels, readDirectoryCompanies } from './companyDirectorySources';
+import { DEFAULT_VACANCY_SOURCES, type RegisteredVacancySource } from './defaultVacancySources';
 import { RobotsPolicyLoader, type RobotsFetcher } from './robotsPolicyLoader';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
 
@@ -66,6 +68,25 @@ function createPoolJobsReader(databasePath: string, hasVacancy: (id: string) => 
 }
 
 /**
+ * Реестр с основными каналами компаний справочника (B622). Справочник
+ * читается только на чтение; база без таблицы даёт прежний реестр с ярусами.
+ */
+export function registryWithCompanyChannels(databasePath: string): RegisteredVacancySource[] {
+  let companies: ReturnType<typeof readDirectoryCompanies> = [];
+  try {
+    const database = new DatabaseSync(databasePath, { readOnly: true });
+    try {
+      companies = readDirectoryCompanies(database);
+    } finally {
+      database.close();
+    }
+  } catch {
+    companies = [];
+  }
+  return [...planCompanyChannels(DEFAULT_VACANCY_SOURCES, companies).sources];
+}
+
+/**
  * Одна сборка движка пула для обоих процессов (B230): HTTP отвечает из пула,
  * обслуживатель его пополняет. Раньше всё это жило в `server/index.ts`, и
  * второй процесс неизбежно разошёлся бы с первым по набору площадок или
@@ -94,6 +115,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
   // Карточки пула LinkedIn читаются своим соединением и только при опросе источника.
   const poolJobs = createPoolJobsReader(options.databasePath, (id) => engine.hasVacancy(id));
   const engine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
+    sources: registryWithCompanyChannels(options.databasePath),
     fetcher:
       options.fetcher ??
       buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {

@@ -3,8 +3,10 @@ import {
   fetchLinkedinCompanyVacancies,
   LINKEDIN_GROUP_B_TARGETS,
 } from './linkedinCompanyGuestAdapter';
+import { useRecordedFetch } from './__fixtures__/recordedFetch';
 
 describe('LinkedIn Company Guest Adapter (Group B)', () => {
+  useRecordedFetch('linkedinCompanyGuestAdapter');
   it('registers all active LinkedIn Guest companies with confirmed organization IDs', () => {
     expect(LINKEDIN_GROUP_B_TARGETS.length).toBe(7);
     const slugs = LINKEDIN_GROUP_B_TARGETS.map((t) => t.slug);

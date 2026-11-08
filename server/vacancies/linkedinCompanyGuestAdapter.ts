@@ -125,12 +125,14 @@ export async function fetchLinkedinCompanyVacancies(
     readonly maxPages?: number;
     readonly fetchFullText?: boolean;
     readonly customFetch?: typeof fetch;
+    /** Id источника в реестре; по умолчанию старая форма `src-linkedin-<slug>`. */
+    readonly sourceId?: string;
   },
 ): Promise<UnifiedVacancy[]> {
   const customFetch = options?.customFetch ?? fetch;
   const maxPages = options?.maxPages ?? 5;
   const observedAt = new Date().toISOString();
-  const sourceId = `src-linkedin-${target.slug}`;
+  const sourceId = options?.sourceId ?? `src-linkedin-${target.slug}`;
   const allVacancies: UnifiedVacancy[] = [];
 
   for (let page = 0; page < maxPages; page++) {
@@ -140,13 +142,19 @@ export async function fetchLinkedinCompanyVacancies(
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         response = await customFetch(url, { headers: GUEST_HEADERS });
-        if (response.ok) break;
+        if (response.ok || response.status === 429) break;
       } catch {
         // Retry once on transient network error
       }
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));
     }
-    if (!response || !response.ok) break;
+    // 429 — LinkedIn просит паузу: источник падает с заголовком, расписание ждёт (B622).
+    if (response?.status === 429) throw linkedinRateLimited(response);
+    if (!response || !response.ok) {
+      if (page === 0)
+        throw new Error(`vacancy_source_unreachable: ${response?.status ?? 'network'}`);
+      break;
+    }
 
     const html = await response.text();
     const cards = html.split('<li>').slice(1);
@@ -168,4 +176,11 @@ export async function fetchLinkedinCompanyVacancies(
   }
 
   return allVacancies;
+}
+
+export function linkedinRateLimited(response: Response): Error {
+  return Object.assign(new Error('vacancy_source_unreachable: 429'), {
+    statusCode: 429,
+    headers: response.headers,
+  });
 }

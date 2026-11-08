@@ -273,6 +273,17 @@ function hasChangedExistingMembership(
  */
 export const SYNC_BATCH_LIMIT = 12;
 
+/**
+ * B622: основной канал компании (ярус 1) идёт в волну первым, прочие доски
+ * (ярус 2) опрашиваются вдвое реже своего интервала, агрегаторы (ярус 3) —
+ * в свой интервал, но после каналов компаний.
+ */
+const TIER_INTERVAL_FACTOR: Readonly<Record<1 | 2 | 3, number>> = { 1: 1, 2: 2, 3: 1 };
+
+function tierOf(source: VacancySourceConfig): 1 | 2 | 3 {
+  return source.channelTier ?? 3;
+}
+
 /** Приостановленную площадку перепроверяют не чаще этого срока. */
 export const DEAD_SOURCE_RECHECK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -1902,7 +1913,7 @@ export class MultiSourceVacancyEngine {
   public async syncDue(nowMs: number = Date.now()): Promise<SourceSyncOutcome[]> {
     const due = Array.from(this.sources.values())
       .filter((source) => source.enabled && !source.requiresQuery && this.isDue(source, nowMs))
-      .sort((left, right) => lastSyncMs(left) - lastSyncMs(right));
+      .sort((left, right) => tierOf(left) - tierOf(right) || lastSyncMs(left) - lastSyncMs(right));
     // Мёртвую площадку плановый опрос не выбирает: вежливость к чужому серверу
     // этим и измеряется (B200). Вердикт снимается только новым замером, поэтому
     // раз в неделю одна такая площадка за такт получает повторный опрос.
@@ -1954,7 +1965,8 @@ export class MultiSourceVacancyEngine {
   private isDue(source: VacancySourceConfig, nowMs: number): boolean {
     const addressStatus = (source as { addressStatus?: string }).addressStatus;
     if (addressStatus === 'robots_forbidden') return false;
-    const status = this.scheduler.isSourceDue(source.id, source.refreshIntervalMinutes, nowMs);
+    const interval = source.refreshIntervalMinutes * TIER_INTERVAL_FACTOR[tierOf(source)];
+    const status = this.scheduler.isSourceDue(source.id, interval, nowMs);
     return status.due;
   }
 
