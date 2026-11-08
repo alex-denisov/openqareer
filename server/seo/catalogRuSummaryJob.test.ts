@@ -7,6 +7,7 @@ import {
 } from '../data/sqliteSchema';
 import { BULK_BUDGET_EXCEEDED, type BulkLlmInput } from '../providers/bulkLlmClient';
 import { CATALOG_RU_SUMMARY_VERSION, catalogSummarySourceHash } from './catalogRuSummary';
+import { catalogRuSummaryTickMs } from './catalogRuSummarySchedule';
 import {
   CATALOG_RU_SUMMARY_BOOST_CALLS,
   CATALOG_RU_SUMMARY_BOOST_UNTIL_MS,
@@ -119,7 +120,7 @@ afterEach(() => database.close());
 
 describe('catalog Russian summary job', () => {
   it('until the credit ends sends several calls a tick, then one again (owner 08.11)', async () => {
-    for (let i = 0; i < 12; i += 1) addCard(`c${i}`, { publishedMs: NOW - i * 1000 });
+    for (let i = 0; i < 20; i += 1) addCard(`c${i}`, { publishedMs: NOW - i * 1000 });
     const boosted = fakeClient();
     const many = new CatalogRuSummaryJob({
       store,
@@ -130,9 +131,11 @@ describe('catalog Russian summary job', () => {
     });
     const report = await many.step();
     expect(report.written).toBe(CATALOG_RU_SUMMARY_BOOST_CALLS);
-    expect(report.costUsd).toBeCloseTo(0.004, 8);
-    expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(10);
+    expect(report.costUsd).toBeCloseTo(0.0064, 8);
+    expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(16);
     expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS)).toBe(1);
+    expect(catalogRuSummaryTickMs(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(5_000);
+    expect(catalogRuSummaryTickMs(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS)).toBe(20_000);
   });
 
   it('writes the newest card first, one model call a tick, and the page reads it by the text hash', async () => {
