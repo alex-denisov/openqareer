@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { CoachApiError } from '../coach/apiClient';
 import type { ApprovalState } from './vacancyLetterController';
 import type {
@@ -99,6 +99,46 @@ function usePrepareResume(vacancyId: string, gate: ResumeGateState): () => Promi
   }, [busy, setBusy, vacancyId, resumeFailure, setResumeFailure]);
 }
 
+interface ApprovalFailureSinks {
+  readonly setResumeFailure: Dispatch<SetStateAction<ResumeSnapshotFailure | null>>;
+  readonly setError: (message: string) => void;
+  readonly onResumeChanged: () => void;
+}
+
+/** Снимок не создался — гейт строки резюме; резюме изменилось — письмо готовится заново. */
+function approvalFailed(reason: unknown, sinks: ApprovalFailureSinks): void {
+  if (reason instanceof CoachApiError && reason.code === 'resume_snapshot_failed') {
+    sinks.setResumeFailure((previous) => ({
+      retried: previous?.retried ?? false,
+      generalResume: generalResumeOf(reason),
+    }));
+    return;
+  }
+  if (reason instanceof CoachApiError && reason.code === 'letter_resume_changed') {
+    sinks.onResumeChanged();
+  }
+  sinks.setError(errorMessage(reason, 'Не удалось сохранить снимок письма.'));
+}
+
+/** Обычное одобрение закрыто, пока снимок не готов; повтор снимка и своё общее резюме его открывают. */
+function useResumeGateActions(
+  vacancyId: string,
+  gate: ResumeGateState,
+  submit: (generalResumeId?: string) => Promise<void>,
+) {
+  const { resumeFailure } = gate;
+  const approve = useCallback(
+    async () => (resumeFailure ? undefined : submit()),
+    [resumeFailure, submit],
+  );
+  const prepareResume = usePrepareResume(vacancyId, gate);
+  const attachGeneralResume = useCallback(async () => {
+    const general = resumeFailure?.generalResume;
+    if (general) await submit(general.documentId);
+  }, [resumeFailure, submit]);
+  return { approve, prepareResume, attachGeneralResume };
+}
+
 /**
  * Одобрение письма (B601, решения владельца 08.11): снимок резюме не создался — письмо не одобряется,
  * строка резюме предлагает повторить снимок, а после неудачного повтора — приложить общее резюме.
@@ -129,38 +169,22 @@ export function useLetterApproval(input: ApprovalInput): ApprovalState {
         setSaved(await approveVacancyLetter(input.vacancyId, snapshot));
         setResumeFailure(null);
       } catch (reason: unknown) {
-        if (reason instanceof CoachApiError && reason.code === 'resume_snapshot_failed') {
-          setResumeFailure((previous) => ({
-            retried: previous?.retried ?? false,
-            generalResume: generalResumeOf(reason),
-          }));
-          return;
-        }
-        if (reason instanceof CoachApiError && reason.code === 'letter_resume_changed') {
-          input.onResumeChanged();
-        }
-        setError(errorMessage(reason, 'Не удалось сохранить снимок письма.'));
+        approvalFailed(reason, {
+          setResumeFailure,
+          setError,
+          onResumeChanged: input.onResumeChanged,
+        });
       } finally {
         setBusy(false);
       }
     },
     [busy, input],
   );
-  // Снимок не создался: обычное одобрение закрыто, пока резюме не готово.
-  const approve = useCallback(
-    async () => (resumeFailure ? undefined : submit()),
-    [resumeFailure, submit],
+  const gate = { busy, setBusy, resumeFailure, setResumeFailure };
+  const { approve, prepareResume, attachGeneralResume } = useResumeGateActions(
+    input.vacancyId,
+    gate,
+    submit,
   );
-  const prepareResume = usePrepareResume(input.vacancyId, {
-    busy,
-    setBusy,
-    resumeFailure,
-    setResumeFailure,
-  });
-  const attachGeneralResume = useCallback(async () => {
-    const general = resumeFailure?.generalResume;
-    if (!general) return;
-    await submit(general.documentId);
-  }, [resumeFailure, submit]);
   return { saved, busy, error, approve, reset, resumeFailure, prepareResume, attachGeneralResume };
 }
