@@ -3,9 +3,11 @@
  * Сайт компании: redirect вручную (не больше 5), каждый шаг — только http(s)
  * на порты 80/443 и публичный адрес (адреса сайта берутся из реестра, поэтому
  * внутренние сети хоста недоступны), тайм-аут, потолок размера ответа.
+ * Остаточный риск DNS rebinding между проверкой и соединением принят:
+ * адреса задаёт реестр, а не пользователь.
  */
 import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { BlockList, isIP } from 'node:net';
 import type { FetchPage, PageResponse } from './linkedinOrgResolver';
 
 const HEADERS = {
@@ -26,24 +28,46 @@ export class BlockedAddress extends Error {
   }
 }
 
-/** Петля, частные, link-local, CGNAT, multicast и неуказанные адреса. */
+function blockList(
+  family: 'ipv4' | 'ipv6',
+  subnets: readonly (readonly [string, number])[],
+): BlockList {
+  const list = new BlockList();
+  for (const [net, prefix] of subnets) list.addSubnet(net, prefix, family);
+  return list;
+}
+
+// Два списка: BlockList сверяет IPv4 и с ::ffff:0:0/96, поэтому IPv4 — только по первому.
+const BLOCKED_V4 = blockList('ipv4', [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10],
+  ['127.0.0.0', 8],
+  ['169.254.0.0', 16],
+  ['172.16.0.0', 12],
+  ['192.0.0.0', 24],
+  ['192.168.0.0', 16],
+  ['198.18.0.0', 15],
+  ['224.0.0.0', 3],
+]);
+// Встроенные IPv4 (::ffff:, ::/96, NAT64, 6to4) закрыты целиком: сайту они не нужны.
+const BLOCKED_V6 = blockList('ipv6', [
+  ['::', 96],
+  ['::1', 128],
+  ['::ffff:0:0', 96],
+  ['64:ff9b::', 96],
+  ['2002::', 16],
+  ['fc00::', 7],
+  ['fe80::', 10],
+  ['fec0::', 10],
+  ['ff00::', 8],
+]);
+
+/** Петля, частные, link-local, CGNAT, multicast, неуказанные и встроенные IPv4. */
 export function isPrivateAddress(address: string): boolean {
-  if (isIP(address) === 4) {
-    const [a, b] = address.split('.').map(Number) as [number, number];
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      a >= 224 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168)
-    );
-  }
-  const v6 = address.toLowerCase();
-  if (v6.startsWith('::ffff:')) return isPrivateAddress(v6.slice(7));
-  return v6 === '::' || v6 === '::1' || /^(fc|fd|fe[89ab]|ff)/.test(v6);
+  const family = isIP(address);
+  if (family === 0) return true;
+  return family === 4 ? BLOCKED_V4.check(address, 'ipv4') : BLOCKED_V6.check(address, 'ipv6');
 }
 
 export type HostResolver = (host: string) => Promise<readonly string[]>;

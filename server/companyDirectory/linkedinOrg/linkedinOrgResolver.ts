@@ -166,7 +166,22 @@ export async function resolveCompany(
 ): Promise<ResolutionOutcome> {
   const registrySlug = slugFromLinkedinUrl(row.linkedinUrl);
   const site = await readSiteSlugs(row, fetchPage);
-  if (site.slugs.length === 0) {
+  if (site.slugs.length === 0) return noSiteLinkOutcome(row, site, registrySlug, now);
+  const found = new Map<string, string>();
+  for (const slug of orderSlugs(site.slugs, registrySlug)) {
+    const orgId = /^\d+$/.test(slug) ? slug : await orgIdForSlug(slug, row, fetchPage);
+    if (orgId) found.set(slug, orgId);
+  }
+  return foundOutcome(found, site, registrySlug, now);
+}
+
+function noSiteLinkOutcome(
+  row: QueueRow,
+  site: SiteEvidence,
+  registrySlug: string | null,
+  now: Date,
+): ResolutionOutcome {
+  {
     if (!site.reachable && siteUrls(row).length > 0) {
       return {
         status: 'retry_after',
@@ -182,17 +197,14 @@ export async function resolveCompany(
       reason: siteUrls(row).length > 0 ? 'no_linkedin_link_on_site' : 'no_official_site',
     };
   }
+}
 
-  const found = new Map<string, string>();
-  for (const slug of orderSlugs(site.slugs, registrySlug)) {
-    if (/^\d+$/.test(slug)) {
-      found.set(slug, slug);
-      continue;
-    }
-    const orgId = await orgIdForSlug(slug, row, fetchPage);
-    if (orgId) found.set(slug, orgId);
-  }
-
+function foundOutcome(
+  found: ReadonlyMap<string, string>,
+  site: SiteEvidence,
+  registrySlug: string | null,
+  now: Date,
+): ResolutionOutcome {
   const ids = new Set(found.values());
   const evidence = site.evidenceUrl ? { evidenceUrl: site.evidenceUrl } : {};
   if (ids.size === 0) {

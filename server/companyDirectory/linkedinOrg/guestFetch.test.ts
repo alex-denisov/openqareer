@@ -26,6 +26,9 @@ describe('guestFetch address guard', () => {
       '::1',
       'fd00::1',
       '::ffff:127.0.0.1',
+      '::ffff:7f00:1',
+      '64:ff9b::a00:1',
+      'not-an-ip',
     ]) {
       expect(isPrivateAddress(a)).toBe(true);
     }
