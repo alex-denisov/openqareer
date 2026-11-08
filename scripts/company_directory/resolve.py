@@ -385,6 +385,7 @@ def hirehi_org(f: Fetcher, slug: str) -> dict:
 
 _hh_lock = threading.Lock()
 _hh_last = [0.0]
+HIREHI_UA = "openqareer-company-directory/1.0 (+https://openqareer.com)"
 HIREHI_INTERVAL = 0.35  # HireHi answers 429 above ~3 requests/s
 
 
@@ -396,7 +397,7 @@ def _hirehi_get(url: str) -> str:
                 time.sleep(wait)
             _hh_last[0] = time.time()
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA, "Range": "bytes=0-60000"})
+            req = urllib.request.Request(url, headers={"User-Agent": HIREHI_UA, "Range": "bytes=0-60000"})
             with urllib.request.urlopen(req, timeout=TIMEOUT, context=_ssl) as resp:
                 return resp.read(60_000).decode("utf-8", errors="replace")
         except urllib.error.HTTPError as err:
