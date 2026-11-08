@@ -18,11 +18,11 @@ describe('countryPoolPay (SEO P2)', () => {
     const pay = countryPoolPay(
       [...ranges(MIN_COUNTRY_POOL_SAMPLE, 100_000, 150_000, '$'), 'от 90 000 $', '20 — 30 $'],
       at,
-      ['Greenhouse', 'Lever', 'Greenhouse'],
+      ['lever.co', 'greenhouse.io', 'greenhouse.io'],
     );
     expect(pay).toMatchObject({ sign: '$', period: 'year', sampleSize: MIN_COUNTRY_POOL_SAMPLE });
     expect(pay?.withSalary).toBe(MIN_COUNTRY_POOL_SAMPLE + 2);
-    expect(pay?.sources).toEqual(['Greenhouse', 'Lever']);
+    expect(pay?.sources).toEqual(['greenhouse.io', 'lever.co']);
     expect(pay?.median).toBe(140_000);
     expect(pay?.readAt).toBe(at);
   });
@@ -35,6 +35,7 @@ describe('countryPoolPay (SEO P2)', () => {
   });
   it('names the board by host, not the employer', () => {
     expect(boardHost('https://boards.greenhouse.io/airbnb/jobs/1')).toBe('greenhouse.io');
+    expect(boardHost('https://abb.wd3.myworkdayjobs.com/x')).toBe('myworkdayjobs.com');
     expect(boardHost('https://hh.ru/vacancy/1')).toBe('hh.ru');
     expect(boardHost('not a url')).toBe('');
   });
