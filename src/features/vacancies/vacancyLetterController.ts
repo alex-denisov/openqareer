@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
-  ApprovedVacancyLetterInput,
   ApprovedVacancyLetterResult,
   CandidateWorkplaceForLetter,
   ConnectionCircleNumber,
   ConnectionCirclePath,
   ConnectionCircleResult,
 } from './vacancyLetterApi';
-import { approveVacancyLetter, getVacancyConnectionCircles } from './vacancyLetterApi';
+import { getVacancyConnectionCircles } from './vacancyLetterApi';
+import { useLetterApproval } from './vacancyLetterApproval';
+import type { ResumeSnapshotFailure } from './vacancyLetterResumeNote';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
 import { requestVacancyPitch } from './vacancyPitchApi';
 import {
   excludedEvidenceIdsForWorkplaces,
   letterBodyForCircle,
-  personAddressedByConnectionPath,
   recipientForConnectionPath,
 } from './vacancyLetterModel';
 
@@ -58,6 +58,10 @@ export interface ApprovalState {
   readonly error: string;
   readonly approve: () => Promise<void>;
   readonly reset: () => void;
+  /** Снимок резюме не создался: письмо не одобряется, пока резюме не готово (B601, 08.11). */
+  readonly resumeFailure: ResumeSnapshotFailure | null;
+  readonly prepareResume: () => Promise<void>;
+  readonly attachGeneralResume: () => Promise<void>;
 }
 
 export interface LetterScreenState {
@@ -333,83 +337,6 @@ function useLetterDraft({
   return { ...pitchState, workplaces, ...selection };
 }
 
-function approvedSnapshot(
-  input: {
-    readonly circle: ConnectionCircleNumber;
-    readonly language: 'auto' | PitchLanguage;
-    readonly tone: PitchTone;
-    readonly path?: ConnectionCirclePath;
-    readonly pitch: VacancyPitchResult;
-    readonly body: string;
-    readonly includedWorkplaceIds: readonly string[];
-  },
-  language: PitchLanguage,
-): ApprovedVacancyLetterInput {
-  const recipient = input.path ? personAddressedByConnectionPath(input.path) : undefined;
-  return {
-    circle: input.circle,
-    language,
-    tone: input.tone,
-    ...(recipient
-      ? {
-          recipient: {
-            id: recipient.id,
-            name: recipient.fullName,
-            ...(recipient.roleTitle ? { role: recipient.roleTitle } : {}),
-            ...(recipient.companyName ? { company: recipient.companyName } : {}),
-          },
-        }
-      : {}),
-    ...(input.pitch.emailPitch.subject ? { subject: input.pitch.emailPitch.subject } : {}),
-    body: input.body.trim(),
-    usedEvidenceIds: input.pitch.usedEvidenceIds,
-    includedWorkplaceIds: input.includedWorkplaceIds,
-  };
-}
-
-function useLetterApproval(input: {
-  readonly vacancyId: string;
-  readonly circle: ConnectionCircleNumber;
-  readonly language: 'auto' | PitchLanguage;
-  readonly tone: PitchTone;
-  readonly path?: ConnectionCirclePath;
-  readonly pitch: VacancyPitchResult | null;
-  readonly body: string;
-  readonly includedWorkplaceIds: readonly string[];
-}): ApprovalState {
-  const [saved, setSaved] = useState<ApprovedVacancyLetterResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const reset = useCallback(() => {
-    setSaved(null);
-    setError('');
-  }, []);
-  const approve = useCallback(async () => {
-    if (busy || !input.pitch || !input.body.trim()) return;
-    const pitch = input.pitch;
-    const language = pitch.language ?? (input.language === 'auto' ? undefined : input.language);
-    if (!language) {
-      setError('Не удалось определить язык письма. Выберите его вручную.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      setSaved(
-        await approveVacancyLetter(
-          input.vacancyId,
-          approvedSnapshot({ ...input, pitch }, language),
-        ),
-      );
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : 'Не удалось сохранить снимок письма.');
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, input]);
-  return { saved, busy, error, approve, reset };
-}
-
 export function useVacancyLetterController(
   vacancyId: string,
   initialCircle?: ConnectionCircleNumber,
@@ -445,6 +372,7 @@ export function useVacancyLetterController(
     pitch: draft.pitch,
     body: draft.text,
     includedWorkplaceIds: draft.includedIds,
+    onResumeChanged: draft.retry,
   });
   return { circles, circle, tone, language, setTone, setLanguage, draft, approval };
 }

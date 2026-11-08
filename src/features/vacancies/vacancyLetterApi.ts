@@ -74,6 +74,8 @@ export interface VacancyConnectionCircles {
   readonly companyName: string;
   readonly vacancyTitle: string;
   readonly circles: readonly ConnectionCircleResult[];
+  /** Есть ли резюме для приложения и какое: под вакансию или общее (Free). */
+  readonly resume?: { readonly available: boolean; readonly kind: 'targeted' | 'master' };
   readonly linkedinImport: {
     readonly state: 'imported' | 'unknown';
     readonly importedAt: string | null;
@@ -95,6 +97,15 @@ export interface ApprovedVacancyLetterInput {
   readonly body: string;
   readonly usedEvidenceIds: readonly string[];
   readonly includedWorkplaceIds: readonly string[];
+  /** С каким признаком резюме написан черновик: сервер сверяет его с текущим. */
+  readonly resumeAvailable?: boolean;
+  /** Снимок не создался, и кандидат выбрал своё общее резюме. */
+  readonly generalResumeId?: string;
+}
+
+export interface LetterGeneralResume {
+  readonly documentId: string;
+  readonly fileName: string;
 }
 
 export interface ApprovedVacancyLetterResult {
@@ -105,7 +116,9 @@ export interface ApprovedVacancyLetterResult {
   readonly sent: false;
   /** Снимок резюме под вакансию, привязанный к заявке при одобрении; `null` — резюме нет. */
   readonly resume?: {
-    readonly versionId: string;
+    /** Под вакансию, общее (Free) или своё общее резюме кандидата вместо несозданного снимка. */
+    readonly kind: 'targeted' | 'master' | 'general';
+    readonly versionId: string | null;
     readonly documentId: string;
     readonly snapshotAt: string;
   } | null;
@@ -134,4 +147,13 @@ export async function approveVacancyLetter(
     },
   );
   return readData<ApprovedVacancyLetterResult>(response);
+}
+
+/** «Подготовить резюме»: повторяет снимок резюме под вакансию, письмо не одобряет. */
+export async function prepareVacancyLetterResume(vacancyId: string): Promise<{ readonly ready: boolean }> {
+  const response = await apiFetch(
+    '/api/v1/candidate/vacancies/' + encodeURIComponent(vacancyId) + '/letter-resume',
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
+  );
+  return readData<{ readonly ready: boolean }>(response);
 }

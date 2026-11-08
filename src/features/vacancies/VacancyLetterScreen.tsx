@@ -17,7 +17,7 @@ import { useCandidateDisplayName } from '../shell/candidateDisplayName';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import { circleSummary, CircleTabs } from './VacancyLetterCircles';
 import { LetterCardHeading, LetterDestination } from './VacancyLetterDestination';
-import { resumeRowNote } from './vacancyLetterResumeNote';
+import { resumeRowView } from './vacancyLetterResumeNote';
 import { LetterActions } from './VacancyLetterActions';
 import {
   LetterEditor,
@@ -259,10 +259,15 @@ function LetterDestinationSlot({
       }}
       onOpenContacts={actions.openContacts}
       onOpenResume={onOpenResume}
-      resumeNote={resumeRowNote({
-        resumeAvailable: state.draft.pitch?.resumeAvailable,
+      resumeRow={resumeRowView({
+        resumeAvailable: state.draft.pitch?.resumeAvailable ?? state.circles.data?.resume?.available,
+        resumeKind: state.draft.pitch?.resumeKind ?? state.circles.data?.resume?.kind,
         approved: state.approval.saved,
+        failure: state.approval.resumeFailure,
       })}
+      resumeBusy={state.approval.busy}
+      onPrepareResume={() => void state.approval.prepareResume()}
+      onAttachGeneralResume={() => void state.approval.attachGeneralResume()}
     />
   );
 }

@@ -52,7 +52,7 @@ function DraftLetterActions({
       <button
         type="button"
         className="career-btn career-btn-primary"
-        disabled={!pitchReady}
+        disabled={!pitchReady || Boolean(approval.resumeFailure)}
         aria-busy={approval.busy}
         onClick={() => void approval.approve()}
       >

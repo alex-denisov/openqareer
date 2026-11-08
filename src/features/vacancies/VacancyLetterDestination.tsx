@@ -18,6 +18,7 @@ import type {
 import { letterRecipientTitle } from './letterDeliveryPlace';
 import { circleSummary, strengthLabel } from './VacancyLetterCircles';
 import { LetterInfoTip } from './VacancyLetterInfoTip';
+import type { ResumeRowView } from './vacancyLetterResumeNote';
 
 const CIRCLE_HEADINGS: Readonly<Record<ConnectionCircleNumber, string>> = {
   1: 'Написать знакомому',
@@ -305,29 +306,49 @@ export interface LetterDestinationProps {
   readonly onShowPaths: () => void;
   readonly onOpenContacts: () => void;
   readonly onOpenResume?: () => void;
-  /** Пояснение строки резюме по состоянию черновика и одобрения (B601). */
-  readonly resumeNote?: string;
+  /** Строка резюме по состоянию черновика, одобрения и снимка (B601, 08.11). */
+  readonly resumeRow?: ResumeRowView;
+  readonly resumeBusy?: boolean;
+  readonly onPrepareResume?: () => void;
+  readonly onAttachGeneralResume?: () => void;
 }
 
-function ResumeAndResponseRows({
-  onOpenResume,
-  resumeNote,
-}: {
+interface ResumeRowProps {
   readonly onOpenResume?: () => void;
-  readonly resumeNote?: string;
-}) {
+  readonly row: ResumeRowView;
+  readonly busy?: boolean;
+  readonly onPrepareResume?: () => void;
+  readonly onAttachGeneralResume?: () => void;
+}
+
+/** Повтор снимка или своё общее резюме: без них письмо не одобряется (гейт B601). */
+function ResumeRowAction({ row, busy, onPrepareResume, onAttachGeneralResume }: ResumeRowProps) {
+  const onClick = row.action === 'prepare' ? onPrepareResume : onAttachGeneralResume;
+  if (!row.action || !onClick) return null;
+  return (
+    <button
+      type="button"
+      className="career-btn is-sm career-letter-dest-action"
+      disabled={busy}
+      aria-busy={busy}
+      onClick={onClick}
+    >
+      {row.action === 'prepare' ? 'Подготовить резюме' : 'Приложить общее резюме'}
+    </button>
+  );
+}
+
+function ResumeAndResponseRows(props: ResumeRowProps) {
+  const { onOpenResume, row } = props;
   return (
     <>
-      <DestinationRow
-        icon={<FileText size={18} />}
-        title="Резюме под вакансию"
-        note={resumeNote}
-      >
-        {onOpenResume ? (
+      <DestinationRow icon={<FileText size={18} />} title={row.title} note={row.note}>
+        <ResumeRowAction {...props} />
+        {onOpenResume && !row.action ? (
           <button
             type="button"
             className="career-btn is-sm is-ghost career-letter-dest-open"
-            aria-label="Открыть резюме под вакансию"
+            aria-label={'Открыть: ' + row.title}
             onClick={onOpenResume}
           >
             <ArrowSquareOut className="career-letter-dest-open-icon" aria-hidden="true" />
@@ -376,7 +397,13 @@ export function LetterDestination(props: LetterDestinationProps) {
             onOpenContacts={onOpenContacts}
           />
         ) : null}
-        <ResumeAndResponseRows onOpenResume={onOpenResume} resumeNote={props.resumeNote} />
+        <ResumeAndResponseRows
+          onOpenResume={onOpenResume}
+          row={props.resumeRow ?? { title: 'Резюме под вакансию' }}
+          busy={props.resumeBusy}
+          onPrepareResume={props.onPrepareResume}
+          onAttachGeneralResume={props.onAttachGeneralResume}
+        />
       </ul>
       {/* Макет 9 при 390: без (i), пояснение — подпись под списком. */}
       <p className="career-letter-foot career-letter-dest-foot">

@@ -47,6 +47,8 @@ export interface VacancyPitchResult {
   readonly bodySource?: 'model' | 'template';
   /** Есть ли резюме, которое приложится при одобрении письма (B601). */
   readonly resumeAvailable?: boolean;
+  /** Резюме под вакансию (Basic и выше) или общее резюме (Free). */
+  readonly resumeKind?: 'targeted' | 'master';
   readonly generatedAt: string;
 }
 

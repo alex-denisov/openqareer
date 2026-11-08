@@ -68,7 +68,12 @@ export function PushCircleOneDraft({
         <button
           type="button"
           className="vacancy-push-primary"
-          disabled={approval.busy || Boolean(approval.saved) || draft.loading || !draft.text.trim()}
+          disabled={
+            approval.busy ||
+            Boolean(approval.saved || approval.resumeFailure) ||
+            draft.loading ||
+            !draft.text.trim()
+          }
           onClick={() => void approval.approve()}
         >
           {approval.saved ? 'Одобрено' : 'Одобрить и отправить'}
