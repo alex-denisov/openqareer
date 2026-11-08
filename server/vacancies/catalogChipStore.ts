@@ -147,7 +147,10 @@ function entryWrites(database: DatabaseSync, snapshot: ChipSnapshot) {
     () => {
       statement.run(row.listKey, row.chip, row.publishedMs, row.entryKey);
     };
-  return { added: Array.from(missing.values(), write(insert)), removed: removed.map(write(remove)) };
+  return {
+    added: Array.from(missing.values(), write(insert)),
+    removed: removed.map(write(remove)),
+  };
 }
 
 function countWrites(database: DatabaseSync, snapshot: ChipSnapshot, at: string): ChipWrite[] {
@@ -160,12 +163,23 @@ function countWrites(database: DatabaseSync, snapshot: ChipSnapshot, at: string)
        ON CONFLICT (list_key) DO UPDATE SET payload = excluded.payload, computed_at = excluded.computed_at`,
   );
   const remove = database.prepare('DELETE FROM catalog_chip_counts WHERE list_key = ?');
-  const changed = Array.from(snapshot.counts, ([key, value]) => [key, JSON.stringify(value)] as const)
+  const changed = Array.from(
+    snapshot.counts,
+    ([key, value]) => [key, JSON.stringify(value)] as const,
+  )
     .filter(([key, payload]) => payloads.get(key) !== payload)
-    .map(([key, payload]): ChipWrite => () => void upsert.run(key, payload, at));
+    .map(
+      ([key, payload]): ChipWrite =>
+        () =>
+          void upsert.run(key, payload, at),
+    );
   const gone = stored
     .filter((row) => !snapshot.counts.has(row.listKey))
-    .map((row): ChipWrite => () => void remove.run(row.listKey));
+    .map(
+      (row): ChipWrite =>
+        () =>
+          void remove.run(row.listKey),
+    );
   return [...changed, ...gone];
 }
 

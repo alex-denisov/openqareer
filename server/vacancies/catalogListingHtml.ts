@@ -15,7 +15,7 @@ import { escapeHtml } from './catalogHtml';
 import { ARROW, jobsCard, pager } from './catalogListingJobs';
 import type { NearbyListing } from './catalogNearbyListings';
 import type { SalaryStats } from './catalogSalaryStats';
-import { groupMedian, groupSpread } from './catalogSalaryText';
+import { groupMedian, groupSpread, shownGroups } from './catalogSalaryText';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import type { CatalogPage } from './vacancyCatalogPage';
 import { listingFaq } from './catalogListingFaq';
@@ -144,7 +144,7 @@ function answer(page: CatalogPage, names: Names, stats?: SalaryStats): string {
     stats && stats.withRange > 0
       ? `, у ${stats.withRange.toLocaleString('ru-RU')} указана вилка «от — до»`
       : '';
-  const spread = (stats?.groups ?? [])
+  const spread = shownGroups(stats)
     .map(
       (group) =>
         ` Медиана — ${groupMedian(group)}, половина таких вакансий — ${groupSpread(group)} (по ${group.sample.toLocaleString('ru-RU')}).`,
@@ -157,7 +157,7 @@ function answer(page: CatalogPage, names: Names, stats?: SalaryStats): string {
 }
 
 function salaryCard(page: CatalogPage, names: Names, stats?: SalaryStats): string {
-  const groups = stats?.groups ?? [];
+  const groups = shownGroups(stats);
   if (!groups.length) return '';
   const role = page.listing?.role;
   const country = role ? undefined : salaryCountryPathForPlace(page.listing?.place);
