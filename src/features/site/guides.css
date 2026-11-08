@@ -657,4 +657,97 @@ details.oq-guide-toc {
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
+/* ---------- GEO 09.11: подпись автора, «Коротко», таблица, страница автора ---------- */
+.oq-guide-byline {
+  display: flex;
+  align-items: center;
+  gap: var(--ps-space-3);
+  margin-top: var(--ps-space-4);
+  font-size: var(--ps-text-sm);
+  color: var(--ps-soft);
+}
+.oq-guide-byline img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--ps-line);
+}
+.oq-guide-short {
+  max-width: 68ch;
+  margin-top: var(--ps-space-6);
+  padding: var(--ps-space-4) var(--ps-space-6);
+  border-left: 3px solid var(--ps-line);
+}
+.oq-guide-short h2 {
+  font-size: var(--ps-text-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ps-mute);
+}
+.oq-guide-short p {
+  margin-top: var(--ps-space-2);
+  font-size: var(--oq-guide-text-md);
+  line-height: 1.55;
+}
+.oq-guide-table-wrap {
+  margin-top: var(--ps-space-4);
+  overflow-x: auto;
+}
+.oq-guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ps-text-sm);
+}
+.oq-guide-table th,
+.oq-guide-table td {
+  padding: var(--ps-space-2) var(--ps-space-3);
+  border-bottom: var(--ps-border-width) solid var(--ps-line);
+  text-align: left;
+  vertical-align: top;
+}
+.oq-guide-table th {
+  font-weight: 600;
+  color: var(--ps-soft);
+}
+.oq-author-hero {
+  display: flex;
+  gap: var(--ps-space-6);
+  align-items: flex-start;
+}
+.oq-author-photo {
+  flex: none;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--ps-line);
+}
+.oq-author-body {
+  max-width: 72ch;
+}
+.oq-author-roles li {
+  display: grid;
+  gap: var(--ps-space-1);
+  margin-top: var(--ps-space-3);
+}
+.oq-author-roles span {
+  color: var(--ps-soft);
+  font-size: var(--ps-text-sm);
+}
+@media (max-width: 640px) {
+  .oq-author-hero {
+    flex-direction: column;
+  }
+  .oq-author-photo {
+    width: 96px;
+    height: 96px;
+  }
+}
+.oq-guide-table-caption {
+  padding-bottom: var(--ps-space-2);
+  text-align: left;
+  font-size: var(--ps-text-sm);
+  color: var(--ps-mute);
 }

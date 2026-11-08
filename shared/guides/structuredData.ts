@@ -1,4 +1,5 @@
-import { SITE_ORIGIN } from '../aeoSurface';
+import { SITE_ORIGIN } from '../siteOrigin';
+import { authorReference } from '../author';
 import { GUIDES_COLLECTION, collectionPath, type GuideCollection } from './collection';
 import type { Guide } from './types';
 
@@ -47,10 +48,11 @@ export function guideStructuredData(
       inLanguage: 'ru-RU',
       datePublished: guide.publishedAt,
       dateModified: guide.updatedAt,
-      author: PUBLISHER,
+      author: authorReference(),
       publisher: PUBLISHER,
       mainEntityOfPage: url,
       url,
+      ...(guide.short ? { abstract: guide.short.text } : {}),
       ...(guide.sources.length > 0 ? { citation: guide.sources.map((source) => source.url) } : {}),
     },
     guideBreadcrumbs(guide, collection),
