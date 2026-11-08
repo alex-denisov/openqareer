@@ -457,7 +457,13 @@ export const CANT_FIND_A_JOB: Guide = {
       date: '2026-11-08',
     },
   ],
-  related: ['cover-letter', 'how-to-write-a-resume', '/tools/interview-questions'],
+  related: [
+    'cover-letter',
+    'how-to-write-a-resume',
+    '/tools/interview-questions',
+    '/salaries/germany',
+    '/salaries/usa',
+  ],
   queries: [
     'не могу найти работу',
     'не могу найти работу что делать',

@@ -4,6 +4,8 @@ import {
   groupDigits,
   vacancies,
   type NetRow,
+  type PoolPayView,
+  type SalaryPoolCountryView,
   type SalaryCityView,
   type SalaryCountryView,
   type SalaryFaq,
@@ -488,14 +490,85 @@ function CountryCities({ view }: { readonly view: SalaryCountryView }) {
         ))}
       </ul>
       <p className="sp-small">Города, где меньше 30 вакансий, не показываем.</p>
-      <p className="sp-note">
-        В вакансиях из каталога зарплата {view.inName} указана редко, поэтому медиану по стране не
-        считаем. Ориентируйтесь на таблицу «на руки» и на пороги переезда ниже.
-      </p>
+      {view.pay ? null : (
+        <p className="sp-note">
+          В вакансиях из каталога зарплата {view.inName} указана редко, поэтому медиану по стране не
+          считаем. Ориентируйтесь на таблицу «на руки» и на пороги переезда ниже.
+        </p>
+      )}
       {view.catalogDate ? (
         <p className="sp-small">Открытый каталог openqareer, {view.catalogDate}.</p>
       ) : null}
     </section>
+  );
+}
+
+/** SEO P2: the pool figure with its source, sample and date, never a bare number. */
+function CountryPay({ pay, inName }: { readonly pay?: PoolPayView; readonly inName: string }) {
+  if (!pay) return null;
+  return (
+    <section className="sp-s sp-narrow" aria-labelledby="sp-pay">
+      <span className="sp-label">Вакансии</span>
+      <h2 className="sp-h3" id="sp-pay">
+        Зарплаты {inName} в вакансиях
+      </h2>
+      <p className="sp-answer">
+        Медиана вилок — <b>{pay.median}</b> {pay.per} до налогов. Половина вакансий платит{' '}
+        {pay.range}.
+      </p>
+      <p className="sp-small">
+        Источник: {pay.source}. Выборка — {vacancies(pay.sampleSize)} с вилкой «от — до». Данные на{' '}
+        {pay.date}.
+      </p>
+    </section>
+  );
+}
+
+function PoolCities({ view }: { readonly view: SalaryPoolCountryView }) {
+  if (!view.cities.length) return null;
+  return (
+    <section className="sp-s sp-narrow" aria-labelledby="sp-where">
+      <h2 className="sp-h3" id="sp-where">
+        Где искать: города с вакансиями
+      </h2>
+      <ul className="sp-cities">
+        {view.cities.map((city) => (
+          <li key={city.slug}>
+            <a href={`/vacancies/${city.slug}`}>{city.label}</a>
+            <span>{vacancies(city.count)}</span>
+          </li>
+        ))}
+      </ul>
+      {view.catalogDate ? (
+        <p className="sp-small">Открытый каталог openqareer, {view.catalogDate}.</p>
+      ) : null}
+    </section>
+  );
+}
+
+/** SEO P2: a country page built from the vacancy pool only («Зарплаты в США»). */
+export function SalaryPoolCountryPage({ view }: { readonly view: SalaryPoolCountryView }) {
+  return (
+    <main className="sp" id="main">
+      <Crumbs current={view.name} />
+      <section className="sp-hero">
+        <span className="sp-eyebrow">Зарплаты по странам · по вакансиям</span>
+        <h1>Зарплаты {view.inName} в 2026 году</h1>
+        <p className="sp-answer sp-callout">
+          <b>Коротко:</b> {view.answer}
+        </p>
+      </section>
+      <CountryPay pay={view.pay} inName={view.inName} />
+      <PoolCities view={view} />
+      {view.faqs.length ? (
+        <Faq title={`Частые вопросы о зарплате ${view.inName}`} faqs={view.faqs} />
+      ) : null}
+      <section className="sp-s sp-narrow">
+        <a className="sp-link" href="/salaries">
+          Все зарплаты по профессиям и странам <Arrow />
+        </a>
+      </section>
+    </main>
   );
 }
 
@@ -630,6 +703,7 @@ export function SalaryCountryPage({ view }: { readonly view: SalaryCountryView }
       <Crumbs current={view.name} />
       <CountryHero view={view} />
       <CountryNet view={view} />
+      <CountryPay pay={view.pay} inName={view.inName} />
       <CountryCities view={view} />
       <CountryThresholds view={view} />
       <Faq title={`Частые вопросы о зарплате ${view.inName}`} faqs={view.faqs} />

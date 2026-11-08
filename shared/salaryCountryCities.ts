@@ -21,6 +21,15 @@ export const SALARY_COUNTRY_CITIES: Readonly<Record<string, Readonly<Record<stri
   RS: { belgrade: 'Белграда', 'novi-sad': 'Нови-Сада' },
   AE: { dubai: 'Дубая', 'abu-dhabi': 'Абу-Даби' },
   GE: { tbilisi: 'Тбилиси', batumi: 'Батуми' },
+  US: {
+    'new-york': 'Нью-Йорка',
+    'san-francisco': 'Сан-Франциско',
+    seattle: 'Сиэтла',
+    austin: 'Остина',
+    boston: 'Бостона',
+    chicago: 'Чикаго',
+    'los-angeles': 'Лос-Анджелеса',
+  },
 };
 
 /** Russian city name by catalog slug, from the shared gazetteer; the catalog label when absent. */
@@ -33,6 +42,13 @@ const COUNTRY_CITY_NAMES: Readonly<Record<string, string>> = {
   paphos: 'Пафос',
   'novi-sad': 'Нови-Сад',
   batumi: 'Батуми',
+  'new-york': 'Нью-Йорк',
+  'san-francisco': 'Сан-Франциско',
+  seattle: 'Сиэтл',
+  austin: 'Остин',
+  boston: 'Бостон',
+  chicago: 'Чикаго',
+  'los-angeles': 'Лос-Анджелес',
 };
 export function russianCityName(slug: string, label: string): string {
   return (
@@ -52,4 +68,25 @@ export interface CountryCatalog {
   readonly cities: readonly CountryCityCount[];
   /** ISO time the counts were read. */
   readonly readAt: string;
+  /** Pool salary figure; absent below MIN_COUNTRY_POOL_SAMPLE ranges. */
+  readonly pay?: CountryPoolPay;
+}
+
+/** SEO P2: fewer «от — до» ranges than this for a country is not a market figure. */
+export const MIN_COUNTRY_POOL_SAMPLE = 30;
+export type PoolPayPeriod = 'month' | 'year';
+/** Median of range midpoints over the country's catalog cities, with its sample and date. */
+export interface CountryPoolPay {
+  readonly median: number;
+  readonly low: number;
+  readonly high: number;
+  readonly sign: string;
+  readonly period: PoolPayPeriod;
+  /** Ranges in the published currency+period group. */
+  readonly sampleSize: number;
+  /** Vacancies of the cities that state any salary. */
+  readonly withSalary: number;
+  readonly readAt: string;
+  /** Source boards of the counted vacancies (source_name). */
+  readonly sources: readonly string[];
 }

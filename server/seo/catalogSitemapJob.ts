@@ -9,6 +9,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { VACANCY_CLUSTERS_TABLE } from '../data/sqliteSchema';
 import { salaryMarketSitemapUrls } from './salaryMarketSitemap';
+import { countryCatalogFrom } from '../salaryMarket/countryCatalog';
 import { SEARCH_RESTRICTED_JSON_NEEDLES } from './searchRestrictedSources';
 import { listingPath } from '../../shared/vacancyCatalogRoutes';
 import {
@@ -142,7 +143,10 @@ function listings(database: DatabaseSync, now: Date): SitemapUrl[] {
 /** Also records which listings exist and qualify (`catalog_listing_history`). */
 export function computeCatalogSitemaps(database: DatabaseSync, now: Date): SitemapFile[] {
   return buildSitemapFiles({
-    listings: [...listings(database, now), ...salaryMarketSitemapUrls(database)],
+    listings: [
+      ...listings(database, now),
+      ...salaryMarketSitemapUrls(database, (code) => countryCatalogFrom(database, code)),
+    ],
     jobs: indexableJobs(database, now),
   });
 }

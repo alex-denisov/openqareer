@@ -12,6 +12,8 @@ const SITE_PATHS = new Set([
   '/tools/relocation',
   '/tools/country-fit',
   '/salaries',
+  '/salaries/germany',
+  '/salaries/usa',
   '/vacancies',
   '/vacancies/remote',
   '/faq',
