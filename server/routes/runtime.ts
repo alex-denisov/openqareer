@@ -13,6 +13,7 @@ import { registerSalaryMarketRoutes } from './salaryMarketRoutes';
 import { registerInterviewQuestionRoutes } from './interviewQuestionRoutes';
 import { registerGuideRoutes } from './guideRoutes';
 import { registerBlogRoutes } from './blogRoutes';
+import { registerAuthorRoutes, type AuthorPhotoReader } from './authorRoutes';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
@@ -456,6 +457,7 @@ export async function registerStaticDelivery(
   config: ServerConfig,
   serveStatic: boolean,
   signedIn?: (request: FastifyRequest) => boolean,
+  readAuthorPhoto?: AuthorPhotoReader,
 ): Promise<void> {
   if (serveStatic) {
     registerAeoRoutes(app);
@@ -463,6 +465,7 @@ export async function registerStaticDelivery(
     registerInterviewQuestionRoutes(app, { ...config, signedIn });
     registerGuideRoutes(app, config);
     registerBlogRoutes(app, config);
+    registerAuthorRoutes(app, { staticRoot: config.staticRoot, readPhoto: readAuthorPhoto });
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,

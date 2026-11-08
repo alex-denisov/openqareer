@@ -20,7 +20,12 @@ export const AEO_UPDATED_AT = '2026-10-23';
 
 export { SITE_ORIGIN } from './siteOrigin';
 import { SITE_ORIGIN } from './siteOrigin';
-import { publicPages, renderPublicPagesSection, salaryPublicPages, type PublicPage } from './publicPages';
+import {
+  publicPages,
+  renderPublicPagesSection,
+  salaryPublicPages,
+  type PublicPage,
+} from './publicPages';
 import { AUTHOR_PATH } from './author';
 
 /** Каждый публичный адрес, который витрина имеет право назвать. */
@@ -119,10 +124,7 @@ function poolEvidence(stats?: LandingStats): string[] {
 }
 
 /** Короткий индекс витрины — то, что ответчик читает первым. */
-export function buildLlmsTxt(
-  stats?: LandingStats,
-  extraPages: readonly PublicPage[] = [],
-): string {
+export function buildLlmsTxt(stats?: LandingStats, extraPages: readonly PublicPage[] = []): string {
   const legal = LEGAL_DOCS.map(
     (doc) => `- [${doc.title}](${SITE_ORIGIN}${legalPath(doc.slug)})`,
   ).join('\n');

@@ -1,3 +1,4 @@
+import { profilePhotoReader } from './routes/authorRoutes';
 import { queuePrecomputedSelectionFit } from './routes/precomputedSelectionFit';
 import { warmMatchedList } from './routes/matchedListWarm';
 import { rebuildCampaignRoles } from './vacancies/rebuildCampaignRoles';
@@ -617,6 +618,6 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);
-  await registerStaticDelivery(app, config, serveStatic, signedInCheck(config, deps.authService, deps.candidateStore));
+  await registerStaticDelivery(app, config, serveStatic, isSignedIn, profilePhotoReader(config.databasePath, deps.candidateStore));
   return app;
 }

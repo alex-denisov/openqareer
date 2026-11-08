@@ -39,12 +39,26 @@ export type GuideBlock =
     }
   | { readonly kind: 'compare'; readonly weak: string; readonly strong: string }
   /** Список ссылок на страницы сайта (каталог, инструменты). */
-  | { readonly kind: 'links'; readonly items: readonly GuideLink[] };
+  | { readonly kind: 'links'; readonly items: readonly GuideLink[] }
+  | ({ readonly kind: 'table' } & GuideTable);
 
 export interface GuideLink {
   readonly label: string;
   /** Путь сайта, начинается с `/`. */
   readonly href: string;
+}
+
+/** Таблица в тексте или в «Коротко»: только факты, что уже есть в материале. */
+export interface GuideTable {
+  readonly caption: string;
+  readonly head: readonly string[];
+  readonly rows: readonly (readonly string[])[];
+}
+
+/** GEO 09.11: прямой ответ на вопрос заголовка — 2–3 предложения над текстом. */
+export interface GuideShortAnswer {
+  readonly text: string;
+  readonly table?: GuideTable;
 }
 
 export interface GuideSection {
@@ -77,6 +91,8 @@ export interface Guide {
   readonly eyebrow: string;
   /** Хук первого экрана: 1–2 предложения. */
   readonly lead: string;
+  /** Блок «Коротко»; тест требует его у каждого опубликованного материала. */
+  readonly short?: GuideShortAnswer;
   readonly publishedAt: string;
   readonly updatedAt: string;
   /** Главный вход первого экрана. */

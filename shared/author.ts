@@ -57,14 +57,24 @@ export const AUTHOR = {
       from: '2020',
       to: '2023',
     },
-    { title: 'Сооснователь и COO', employer: 'Fishance Berhad, Малайзия', from: '2016', to: '2019' },
+    {
+      title: 'Сооснователь и COO',
+      employer: 'Fishance Berhad, Малайзия',
+      from: '2016',
+      to: '2019',
+    },
     {
       title: 'ИТ-лид (и. о. руководителя ИТ)',
       employer: 'Корпоративный университет крупного финансового института',
       from: '2012',
       to: '2016',
     },
-    { title: 'Руководитель премиальной поддержки', employer: 'Kaspersky', from: '2010', to: '2012' },
+    {
+      title: 'Руководитель премиальной поддержки',
+      employer: 'Kaspersky',
+      from: '2010',
+      to: '2012',
+    },
   ] satisfies readonly AuthorRole[],
   education: [
     'Технический университет Молдовы — бакалавр инженерии, информационные технологии (2005–2010)',

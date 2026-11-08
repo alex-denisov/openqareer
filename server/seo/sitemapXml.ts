@@ -5,9 +5,7 @@
  * pages, place/role listings, and the narrow set of indexable vacancy cards
  * (`catalogIndexing`). Deep catalog pages are not listed anywhere.
  */
-import { RELOCATION_PLACE } from '../vacancies/catalogChips';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
-import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import {
   INTERVIEW_EVIDENCE,
   INTERVIEW_HUB_PATH,
@@ -130,19 +128,11 @@ export function staticSitemapUrls(
   catalogLastmod?: string,
   extraPages: readonly PublicPage[] = [],
 ): SitemapUrl[] {
-  const withDate = (page: PublicPage): SitemapUrl => ({
-    path: page.path,
-    ...(page.updatedAt ? { lastmod: page.updatedAt } : {}),
-  });
-  return [
-    ...publicPages().map(withDate),
-    ...extraPages.map(withDate),
-    { path: CATALOG_ROOT, ...(catalogLastmod ? { lastmod: catalogLastmod } : {}) },
-    {
-      path: `${CATALOG_ROOT}/${RELOCATION_PLACE}`,
-      ...(catalogLastmod ? { lastmod: catalogLastmod } : {}),
-    },
-  ];
+  const withDate = (page: PublicPage): SitemapUrl => {
+    const lastmod = page.datedByCatalog ? catalogLastmod : page.updatedAt;
+    return { path: page.path, ...(lastmod ? { lastmod } : {}) };
+  };
+  return [...publicPages().map(withDate), ...extraPages.map(withDate)];
 }
 
 /**

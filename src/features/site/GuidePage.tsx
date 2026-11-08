@@ -7,8 +7,10 @@ import {
   collectionPath,
   type GuideCollection,
 } from '../../../shared/guides/collection';
+import { AuthorByline } from './AuthorPage';
 import type {
   Guide,
+  GuideTable,
   GuideAction,
   GuideBlock,
   GuideSection,
@@ -129,6 +131,8 @@ function Block({ block, sources }: { block: GuideBlock; sources: readonly GuideS
           ))}
         </ul>
       );
+    case 'table':
+      return <Table table={block} />;
   }
 }
 
@@ -343,6 +347,14 @@ function GuideHero({ guide }: { guide: Guide }) {
       <p className="oq-guide-eyebrow">{guide.eyebrow}</p>
       <h1>{guide.h1}</h1>
       <p className="oq-guide-lead">{guide.lead}</p>
+      <AuthorByline />
+      {guide.short ? (
+        <section className="oq-guide-short" aria-labelledby="h-short">
+          <h2 id="h-short">Коротко</h2>
+          <p>{guide.short.text}</p>
+          {guide.short.table ? <Table table={guide.short.table} /> : null}
+        </section>
+      ) : null}
       <div className="oq-guide-cta">
         <a className="ps-btn is-primary is-lg" href={actionHref(guide.primaryAction)}>
           {guide.primaryAction.label}
@@ -354,6 +366,34 @@ function GuideHero({ guide }: { guide: Guide }) {
         Обновлено <time dateTime={guide.updatedAt}>{formatDate(guide.updatedAt)}</time>
       </p>
     </header>
+  );
+}
+
+export function Table({ table }: { table: GuideTable }) {
+  return (
+    <div className="oq-guide-table-wrap">
+      <table className="oq-guide-table">
+        <caption className="oq-guide-table-caption">{table.caption}</caption>
+        <thead>
+          <tr>
+            {table.head.map((cell) => (
+              <th key={cell} scope="col">
+                {cell}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.map((row) => (
+            <tr key={row.join('|')}>
+              {row.map((cell, index) => (
+                <td key={`${index}-${cell}`}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

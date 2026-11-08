@@ -19,6 +19,10 @@ import {
 } from './interviewQuestions';
 import { SALARY_COUNTRIES, SALARY_POOL_COUNTRIES } from './salaryPublicPages';
 import { AUTHOR, AUTHOR_PATH } from './author';
+import { CATALOG_ROOT } from './vacancyCatalogRoutes';
+
+/** Same slug as `RELOCATION_PLACE` in server/vacancies/catalogChips. */
+const RELOCATION_LISTING = `${CATALOG_ROOT}/relocation`;
 
 export interface PublicPage {
   readonly path: string;
@@ -29,6 +33,8 @@ export interface PublicPage {
   readonly updatedAt?: string;
   /** Раздел в llms.txt. */
   readonly group: PublicPageGroup;
+  /** Дата берётся из самой свежей вакансии каталога, а не из кода. */
+  readonly datedByCatalog?: true;
 }
 
 export type PublicPageGroup =
@@ -142,7 +148,8 @@ export function publicPages(): PublicPage[] {
     {
       path: GUIDES_ROOT,
       title: 'Материалы для кандидата',
-      description: 'Разборы частых трудностей поиска работы: резюме, сопроводительное письмо, отклики.',
+      description:
+        'Разборы частых трудностей поиска работы: резюме, сопроводительное письмо, отклики.',
       updatedAt: newest(GUIDES.map((guide) => guide.updatedAt)),
       group: 'Материалы для кандидата',
     },
@@ -189,6 +196,21 @@ export function publicPages(): PublicPage[] {
       updatedAt: AUTHOR.checkedAt,
       group: 'Автор',
     },
+    {
+      path: CATALOG_ROOT,
+      title: 'Каталог вакансий',
+      description:
+        'Открытый каталог вакансий: карточка называет работодателя, место, источник и дату наблюдения.',
+      group: 'Продукт',
+      datedByCatalog: true,
+    },
+    {
+      path: RELOCATION_LISTING,
+      title: 'Вакансии с релокацией',
+      description: 'Вакансии, где работодатель пишет о помощи с переездом, с источником и датой.',
+      group: 'Продукт',
+      datedByCatalog: true,
+    },
     ...LEGAL_DOCS.map((doc) => ({
       path: legalPath(doc.slug),
       title: doc.title,
@@ -217,10 +239,7 @@ const GROUP_ORDER: readonly PublicPageGroup[] = [
 ];
 
 /** Раздел llms.txt: строка на страницу — ссылка, описание, дата обновления. */
-export function renderPublicPagesSection(
-  origin: string,
-  pages: readonly PublicPage[],
-): string[] {
+export function renderPublicPagesSection(origin: string, pages: readonly PublicPage[]): string[] {
   return GROUP_ORDER.flatMap((group) => {
     const rows = pages.filter((page) => page.group === group);
     if (rows.length === 0) return [];
