@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -6,18 +5,15 @@ import {
   type AtsRequirementSource,
   type ResumeAtsAssessment,
 } from '../domain/resumeAtsAssessment';
-import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
-import { buildResumeStudioProjection, buildTargetedResumeSlice } from '../domain/resumeStudio';
 import { formatResumeAsAtsText, formatTargetedResumeAsAtsText } from '../domain/resumeAtsText';
-import { estimateResumePages } from '../domain/resumeTargetedVolume';
 import type {
   ResumeVersionContent,
   ResumeVersionCursor,
   ResumeVersionUpdateResult,
   StoredResumeVersion,
 } from '../domain/resumeVersions';
-import type { ResumeDocument, ResumeStudioProjection } from '../domain/resumeStudioTypes';
 import type { RouteDeps } from './deps';
+import { buildVersionContent, canonicalJson, currentMaster } from './resumeMaster';
 import { currentMasterVersion, observedCareerRoles, roleKeywordBasis } from '../../shared/atsBasis';
 import { readCareerRoleContext } from './careerRolesRead';
 import { readRoleKeywords, readVacancyKeywords } from './atsRequirementSources';
@@ -59,14 +55,6 @@ const cursorSchema = z.object({
   versionId: z.string().min(1).max(100),
 });
 const paramsSchema = z.object({ versionId: versionIdSchema });
-
-interface CandidateResumeMaster {
-  readonly draft: ResumeDraft;
-  readonly document: ResumeDocument;
-  readonly projection: ResumeStudioProjection;
-  readonly updatedAt: string | null;
-  readonly revision: string;
-}
 
 export async function registerCandidateResumeVersionRoutes(
   app: FastifyInstance,
@@ -712,72 +700,6 @@ async function careerRoleBasis(deps: RouteDeps, request: FastifyRequest, candida
     request.log.warn({ error }, 'ats_role_basis_unavailable');
     return null;
   }
-}
-
-function currentMaster(deps: RouteDeps, candidateId: string): CandidateResumeMaster {
-  const snapshot = deps.candidateStore.getSnapshot(candidateId);
-  const stored = snapshot.resume;
-  const draft = stored?.draft ?? EMPTY_RESUME_DRAFT;
-  const projection = buildResumeStudioProjection({ ...draft, evidence: snapshot.memory });
-  const revision = masterRevision(
-    candidateId,
-    draft,
-    projection.evidenceSnapshot,
-    deps.config.dataEncryptionKey,
-  );
-  return {
-    draft,
-    document: projection.master,
-    projection,
-    updatedAt: stored?.updatedAt ?? null,
-    revision,
-  };
-}
-
-function masterRevision(
-  candidateId: string,
-  draft: ResumeDraft,
-  evidence: ResumeStudioProjection['evidenceSnapshot'],
-  key: Buffer,
-): string {
-  const payload = canonicalJson({ draft, evidence });
-  return createHmac('sha256', key)
-    .update(candidateId)
-    .update('\u0000')
-    .update(payload)
-    .digest('base64url');
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return '[' + value.map((item) => canonicalJson(item)).join(',') + ']';
-  }
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, item]) => item !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right));
-    return (
-      '{' +
-      entries.map(([key, item]) => JSON.stringify(key) + ':' + canonicalJson(item)).join(',') +
-      '}'
-    );
-  }
-  return JSON.stringify(value) ?? 'null';
-}
-
-function buildVersionContent(
-  master: CandidateResumeMaster,
-  title: string,
-  requirements: readonly string[],
-  status: 'draft' | 'approved' = 'draft',
-): ResumeVersionContent {
-  const slice = buildTargetedResumeSlice(master.document, { title, requirements });
-  return {
-    title: title.trim(),
-    requirements: slice.requirements.map((item) => item.requirement),
-    status,
-    snapshot: estimateResumePages(slice),
-  };
 }
 
 function validationError(

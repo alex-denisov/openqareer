@@ -64,6 +64,8 @@ export async function createApp(
     titleParse?: TitleParseEntry;
     descriptionLoader?: VacancyDescriptionLoader;
     experienceFactRewriter?: RouteDeps['experienceFactRewriter'];
+    /** Тарифы включены: новый кандидат на Free (B601). */
+    billingEnforcement?: boolean;
   } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-pitch-routes-'));
@@ -97,7 +99,7 @@ export async function createApp(
     (multiSourceEngine as unknown as { clusters: VacancyCluster[] }).clusters = clusters;
   }
 
-  const config = pitchTestConfig(directory, databasePath);
+  const config = { ...pitchTestConfig(directory, databasePath), ...(options.billingEnforcement ? { billingEnforcement: true } : {}) };
 
   const app = await buildApp({
     config,

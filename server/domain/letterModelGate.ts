@@ -13,6 +13,11 @@ export interface LetterGateSources {
   readonly candidate: readonly string[];
   /** Вакансия и получатель подтверждают имена, но не то, что сделал кандидат. */
   readonly vacancy: readonly string[];
+  /**
+   * `false` — опыта работы нет, резюме к отклику не приложится: письмо не должно упоминать резюме.
+   * По умолчанию резюме приложено, и письмо обязано сказать об этом (B601, 08.11).
+   */
+  readonly resumeAttached?: boolean;
 }
 
 export type LetterGateRule = 'number' | 'name' | 'resume';
@@ -273,5 +278,9 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });
+  if (sources.resumeAttached === false) {
+    const promised = sentences.filter((sentence) => RESUME_NOTE.test(sentence));
+    return [...checked, ...promised.map((sentence) => ({ rule: 'resume' as const, sentence }))];
+  }
   return RESUME_NOTE.test(body) ? checked : [...checked, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
 }

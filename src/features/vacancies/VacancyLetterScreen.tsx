@@ -17,6 +17,7 @@ import { useCandidateDisplayName } from '../shell/candidateDisplayName';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import { circleSummary, CircleTabs } from './VacancyLetterCircles';
 import { LetterCardHeading, LetterDestination } from './VacancyLetterDestination';
+import { resumeRowForLetter } from './vacancyLetterResumeNote';
 import { LetterActions } from './VacancyLetterActions';
 import {
   LetterEditor,
@@ -258,6 +259,10 @@ function LetterDestinationSlot({
       }}
       onOpenContacts={actions.openContacts}
       onOpenResume={onOpenResume}
+      resumeRow={resumeRowForLetter(state)}
+      resumeBusy={state.approval.busy}
+      onPrepareResume={() => void state.approval.prepareResume()}
+      onAttachGeneralResume={() => void state.approval.attachGeneralResume()}
     />
   );
 }
@@ -373,7 +378,11 @@ function LetterDraftContent({
         />
       ) : null}
       {state.draft.pitch ? (
-        <LetterNotices pitch={state.draft.pitch} circle={state.circle.circle} onGatherFacts={onGatherFacts} />
+        <LetterNotices
+          pitch={state.draft.pitch}
+          circle={state.circle.circle}
+          onGatherFacts={onGatherFacts}
+        />
       ) : null}
       <TariffQuotaNote quota="applications" refreshKey={state.draft.loading} />
       {state.draft.pitch ? (

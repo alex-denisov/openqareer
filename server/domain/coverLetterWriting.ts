@@ -47,6 +47,22 @@ export interface CoverLetterPromptInput {
   readonly gender?: LetterGender;
   /** Только когда кандидат выбрал язык сам; иначе язык письма определяет вакансия. */
   readonly chosenLanguage?: 'en' | 'ru';
+  /** `false` — опыта работы нет, резюме к отклику не приложится, и письмо его не упоминает (B601, 08.11). */
+  readonly resumeAttached?: boolean;
+}
+
+/**
+ * Без резюме утверждённый запрос не просит сказать о приложении. Меняются только фразы про резюме,
+ * остальной текст запроса тот же: он утверждён дословно и сверяется по хешу.
+ */
+const NO_RESUME_EDITS: readonly (readonly [string, string])[] = [
+  [' Резюме приложено к этому сообщению.', ' Резюме к сообщению не приложено, не упоминай его.'],
+  ['это не пересказ резюме', 'это не пересказ профиля'],
+  ['В конце скажи, что резюме приложено, и вежливо предложи', 'В конце вежливо предложи'],
+];
+
+function withoutResume(template: string): string {
+  return NO_RESUME_EDITS.reduce((text, [from, to]) => text.replace(from, to), template);
 }
 
 const GENDER_TEXT: Readonly<Record<LetterGender, string>> = { male: 'мужской', female: 'женский' };
@@ -70,8 +86,9 @@ export function coverLetterPrompt(input: CoverLetterPromptInput): string {
     VACANCY: input.vacancy.trim(),
     PROFILE: input.profile.trim(),
   };
+  const approved = input.resumeAttached === false ? withoutResume(COVER_LETTER_PROMPT) : COVER_LETTER_PROMPT;
   const template = input.chosenLanguage
-    ? COVER_LETTER_PROMPT.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
-    : COVER_LETTER_PROMPT;
+    ? approved.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
+    : approved;
   return template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE)\}/gu, (_match, key: string) => values[key] ?? '').trim();
 }

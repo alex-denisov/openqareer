@@ -356,7 +356,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
   it('uses the model letter and reports its stage when the writer succeeds', async () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async () => ({
-        body: 'Здравствуйте! Пишу по вакансии от модели. Резюме приложено.',
+        body: 'Здравствуйте! Пишу по вакансии от модели.',
         stage: 'openai:gpt-test',
       }),
     };
@@ -379,7 +379,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const data = response.json().data;
     expect(data.bodySource).toBe('model');
     expect(data.stage).toBe('openai:gpt-test');
-    expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели. Резюме приложено.');
+    expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели.');
   });
 
   it('B601: the pool text beats the summary the letter screen sends as a description', () => {
@@ -398,7 +398,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async (input) => {
         inputs.push(input);
-        return { body: 'Письмо. Резюме приложено.', stage: 'openai:gpt-test' };
+        return { body: 'Письмо.', stage: 'openai:gpt-test' };
       },
     };
     const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
@@ -463,7 +463,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
   // только числа и имя провайдера, без текста письма и фактов.
   it('logs structured vacancy-pitch-timing with numbers and provider name only', async () => {
     const writer: CoverLetterWriter = {
-      writeCoverLetter: async () => ({ body: 'Письмо. Резюме приложено.', stage: 'openai:gpt-test' }),
+      writeCoverLetter: async () => ({ body: 'Письмо.', stage: 'openai:gpt-test' }),
     };
     const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
     const { cookie, candidateId } = await login(app);
@@ -519,7 +519,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     const writer: CoverLetterWriter = {
       writeCoverLetter: async (input) => {
         capturedInput = input;
-        return { body: 'Письмо нанимающему. Резюме приложено.', stage: 'openai:gpt-test' };
+        return { body: 'Письмо нанимающему.', stage: 'openai:gpt-test' };
       },
     };
     const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });

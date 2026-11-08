@@ -8,6 +8,7 @@ import { pathCircleCards, pathSourceNote, type PathCircleCard } from './vacancyP
 import type { VacancyPathCirclesState } from './useVacancyPathCircles';
 import { PushCircleOneDraft } from './VacancyPushCircleOne';
 import { PushRecruiterGroup } from './VacancyPushRecruiter';
+import { resumeRowView } from './vacancyLetterResumeNote';
 
 export type CirclePage = 'c1' | 'c2' | 'c3';
 
@@ -54,6 +55,21 @@ export function PushRow({
       {body}
       <CaretRight className="vacancy-push-chev" aria-hidden="true" />
     </button>
+  );
+}
+
+/** Строка резюме круга 3 говорит то же, что строка экрана письма до одобрения (B601, 08.11). */
+function CircleThreeResumeRow({ data }: { readonly data: VacancyConnectionCircles }) {
+  const row = resumeRowView({
+    resumeAvailable: data.resume?.available,
+    resumeKind: data.resume?.kind,
+  });
+  return (
+    <PushRow
+      icon={<FileText aria-hidden="true" />}
+      title={row.title}
+      lines={row.note ? [row.note] : []}
+    />
   );
 }
 
@@ -225,7 +241,7 @@ function CircleThreePage({ data }: { readonly data: VacancyConnectionCircles }) 
       <section className="vacancy-push-group">
         <h3 className="vacancy-push-cap">Что отправится</h3>
         <div className="vacancy-push-list">
-          <PushRow icon={<FileText aria-hidden="true" />} title="Резюме под вакансию" />
+          <CircleThreeResumeRow data={data} />
           <PushRow
             icon={<EnvelopeSimple aria-hidden="true" />}
             title="Сопроводительное письмо"

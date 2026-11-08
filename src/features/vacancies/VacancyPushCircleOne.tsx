@@ -1,5 +1,7 @@
 import { PencilSimple } from '@phosphor-icons/react';
 import { useVacancyLetterController } from './vacancyLetterController';
+import { LetterResumeRow } from './VacancyLetterDestination';
+import { resumeRowForLetter } from './vacancyLetterResumeNote';
 
 function DraftBody({ state }: { readonly state: ReturnType<typeof useVacancyLetterController> }) {
   const { draft } = state;
@@ -42,6 +44,26 @@ function DraftNote({
   );
 }
 
+/** Снимок резюме не создался: та же строка, что на экране письма, иначе кнопка закрыта навсегда. */
+function ResumeGateRow({
+  state,
+}: {
+  readonly state: ReturnType<typeof useVacancyLetterController>;
+}) {
+  const { approval } = state;
+  if (!approval.resumeFailure) return null;
+  return (
+    <ul className="career-letter-dest-list">
+      <LetterResumeRow
+        row={resumeRowForLetter(state)}
+        busy={approval.busy}
+        onPrepareResume={() => void approval.prepareResume()}
+        onAttachGeneralResume={() => void approval.attachGeneralResume()}
+      />
+    </ul>
+  );
+}
+
 /**
  * «Черновик сообщения Ирине» (mockup 4, 390, круг 1; G5 R3): the same draft and approval as
  * «Письмо под вакансию» on circle 1. Approval saves an unsent snapshot; nothing is sent here.
@@ -63,12 +85,18 @@ export function PushCircleOneDraft({
         <h3 className="vacancy-push-cap">Черновик сообщения · {recipient.fullName}</h3>
         <DraftBody state={state} />
         <DraftNote approval={approval} />
+        <ResumeGateRow state={state} />
       </section>
       <div className="vacancy-push-cta">
         <button
           type="button"
           className="vacancy-push-primary"
-          disabled={approval.busy || Boolean(approval.saved) || draft.loading || !draft.text.trim()}
+          disabled={
+            approval.busy ||
+            Boolean(approval.saved || approval.resumeFailure) ||
+            draft.loading ||
+            !draft.text.trim()
+          }
           onClick={() => void approval.approve()}
         >
           {approval.saved ? 'Одобрено' : 'Одобрить и отправить'}

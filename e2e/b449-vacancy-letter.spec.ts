@@ -46,6 +46,14 @@ interface LetterRouteState {
   } | null;
   sendAttempts: string[];
   manualContacts: ManualConnectionContact[];
+  /** Есть ли у кандидата резюме, которое приложится при одобрении (B601). */
+  resumeAvailable: boolean;
+  /** Под вакансию (Basic и выше) или общее резюме (Free). */
+  resumeKind: 'targeted' | 'master';
+  /** Сбой снимка при одобрении: `always` — и повтор не удаётся, `once` — повтор удаётся. */
+  snapshotFailure: 'none' | 'once' | 'always';
+  generalResume: { documentId: string; fileName: string } | null;
+  prepareCalls: number;
 }
 
 const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'evidence', 'AUD-9');
@@ -66,6 +74,11 @@ function createRouteState(
     approvedResult: null,
     sendAttempts: [],
     manualContacts: [],
+    resumeAvailable: true,
+    resumeKind: 'targeted',
+    snapshotFailure: 'none',
+    generalResume: null,
+    prepareCalls: 0,
   };
 }
 
@@ -261,9 +274,9 @@ async function installConnectionRoute(page: Page, state: LetterRouteState): Prom
     const vacancyId = decodeURIComponent(
       new URL(route.request().url()).pathname.split('/').at(-2) ?? '',
     );
-    return route.fulfill({
-      json: connectionResponse(vacancyId, state.connectionMode, state.manualContacts),
-    });
+    const response = connectionResponse(vacancyId, state.connectionMode, state.manualContacts);
+    const resume = { available: state.resumeAvailable, kind: state.resumeKind };
+    return route.fulfill({ json: { ...response, data: { ...response.data, resume } } });
   });
 }
 
@@ -346,7 +359,9 @@ async function installPitchRoute(page: Page, state: LetterRouteState): Promise<v
     const vacancyId = decodeURIComponent(
       new URL(route.request().url()).pathname.split('/').at(-2) ?? '',
     );
-    return route.fulfill({ json: pitchResponse(vacancyId, state.pitchMode, request) });
+    const { data } = pitchResponse(vacancyId, state.pitchMode, request);
+    const resume = { resumeAvailable: state.resumeAvailable, resumeKind: state.resumeKind };
+    return route.fulfill({ json: { data: { ...data, ...resume } } });
   });
 }
 
@@ -354,6 +369,10 @@ async function installApprovalRoute(page: Page, state: LetterRouteState): Promis
   await page.route('**/api/v1/candidate/vacancies/*/letter-approvals', async (route) => {
     if (route.request().method() !== 'POST') return route.continue();
     state.approvedBody = route.request().postDataJSON() as Record<string, unknown>;
+    const generalResumeId = state.approvedBody.generalResumeId;
+    if (state.snapshotFailure !== 'none' && state.resumeAvailable && !generalResumeId) {
+      return route.fulfill({ status: 503, json: snapshotFailedBody(state) });
+    }
     const vacancyId = decodeURIComponent(
       new URL(route.request().url()).pathname.split('/').at(-2) ?? '',
     );
@@ -372,8 +391,51 @@ async function installApprovalRoute(page: Page, state: LetterRouteState): Promis
           approvedAt: state.approvedResult.approvedAt,
           status: 'approved',
           sent: false,
+          resume: approvedResume(state, generalResumeId),
         },
       },
+    });
+  });
+}
+
+function snapshotFailedBody(state: LetterRouteState) {
+  return {
+    error: {
+      code: 'resume_snapshot_failed',
+      message: 'Не удалось подготовить резюме. Подготовьте его, чтобы одобрить письмо.',
+      retryable: true,
+      details: { generalResume: state.generalResume },
+    },
+  };
+}
+
+function approvedResume(state: LetterRouteState, generalResumeId: unknown) {
+  if (!state.resumeAvailable) return null;
+  const snapshotAt = '2026-10-02T12:00:00.000Z';
+  if (typeof generalResumeId === 'string') {
+    return { kind: 'general', versionId: null, documentId: generalResumeId, snapshotAt };
+  }
+  return state.resumeKind === 'master'
+    ? { kind: 'master', versionId: null, documentId: 'document-b449-resume', snapshotAt }
+    : {
+        kind: 'targeted',
+        versionId: '6f0c1a52-0d4e-5b1a-9c3e-2a7b8d9e0f11',
+        documentId: 'document-b449-resume',
+        snapshotAt,
+      };
+}
+
+/** «Подготовить резюме»: `once` — повтор удаётся, `always` — снова сбой с общим резюме в ответе. */
+async function installPrepareResumeRoute(page: Page, state: LetterRouteState): Promise<void> {
+  await page.route('**/api/v1/candidate/vacancies/*/letter-resume', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    state.prepareCalls += 1;
+    if (state.snapshotFailure === 'always') {
+      return route.fulfill({ status: 503, json: snapshotFailedBody(state) });
+    }
+    state.snapshotFailure = 'none';
+    return route.fulfill({
+      json: { data: { ready: true, resumeAvailable: true, resumeKind: state.resumeKind } },
     });
   });
 }
@@ -418,6 +480,7 @@ async function installLetterMocks(page: Page, state: LetterRouteState): Promise<
   await installConnectionContactRoutes(page, state);
   await installPitchRoute(page, state);
   await installApprovalRoute(page, state);
+  await installPrepareResumeRoute(page, state);
   page.on('request', (request) => {
     if (request.method() !== 'POST') return;
     const pathname = new URL(request.url()).pathname;
@@ -493,6 +556,10 @@ async function openRecipientChoice(page: Page): Promise<void> {
 async function showIntroductionPaths(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Показать пути' }).click();
   await expect(page.locator('.career-letter-card')).toContainText('Попросить представить');
+}
+
+function resumeRow(page: Page) {
+  return page.locator('.career-letter-dest-row').filter({ hasText: 'Резюме под вакансию' });
 }
 
 async function captureState(page: Page, testInfo: TestInfo, name: string): Promise<void> {
@@ -644,9 +711,14 @@ test.describe('B449 — письмо под вакансию', () => {
     await page
       .getByRole('textbox', { name: 'Текст письма' })
       .fill('Кандидат одобрил этот снимок письма.');
+    await expect(resumeRow(page)).toContainText(
+      'Резюме под вакансию прикрепится при одобрении письма',
+    );
     await page.getByRole('button', { name: 'Одобрить письмо' }).click();
     await expect(page.getByRole('status')).toContainText('Ничего не отправлено.');
     await expect(page.locator('.career-letter-approved')).toContainText('10.10.2026');
+    await expect(resumeRow(page)).toContainText('Снимок от 02.10, мастер-резюме не менялось');
+    await expect(resumeRow(page)).not.toContainText('не прикреплено');
     await captureState(page, testInfo, 'approved');
     expect(state.approvedBody).toMatchObject({
       circle: 3,
@@ -858,7 +930,7 @@ test.describe('B449 — письмо под вакансию', () => {
       'true',
     );
     const delivery = page.getByRole('group', { name: 'Куда и что отправим' });
-    await expect(delivery).toContainText('Резюме не прикреплено');
+    await expect(delivery).toContainText('Резюме под вакансию прикрепится при одобрении письма');
     await expect(delivery.getByRole('button', { name: 'Изменить' })).toHaveCount(0);
     await captureState(page, testInfo, 'cold-outreach-availability');
   });
@@ -878,6 +950,110 @@ test.describe('B449 — письмо под вакансию', () => {
     const panel = page.locator('.career-expert-panel');
     await expect(panel).toBeVisible();
     await expect(panel.locator('header small')).toContainText('Профиль');
+  });
+
+  test('B601: without work experience the row says the response goes without a resume', async ({
+    page,
+  }, testInfo) => {
+    const state = { ...createRouteState(), resumeAvailable: false };
+    await installLetterMocks(page, state);
+    await openLetter(page);
+    await waitForLetter(page);
+    const row = resumeRow(page);
+    const text = 'В профиле нет опыта работы: отклик уйдёт без резюме, письмо об этом не упоминает';
+    await expect(row).toContainText(text);
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-no-experience-draft');
+    await page.getByRole('button', { name: 'Одобрить письмо' }).click();
+    await expect(page.getByRole('status')).toContainText('Ничего не отправлено.');
+    await expect(row).toContainText(text);
+    expect(state.approvedBody).toMatchObject({ resumeAvailable: false });
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-no-experience-approved');
+    expect(state.sendAttempts).toEqual([]);
+  });
+
+  test('B601: Free attaches the general resume', async ({ page }, testInfo) => {
+    const state: LetterRouteState = { ...createRouteState(), resumeKind: 'master' };
+    await installLetterMocks(page, state);
+    await openLetter(page);
+    await waitForLetter(page);
+    const row = page.locator('.career-letter-dest-row').filter({ hasText: 'Общее резюме' });
+    await expect(row).toContainText('Общее резюме прикрепится при одобрении письма');
+    await expect(row.locator('b, strong, h4').first()).toHaveText('Резюме');
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-free-draft');
+    await page.getByRole('button', { name: 'Одобрить письмо' }).click();
+    await expect(page.getByRole('status')).toContainText('Ничего не отправлено.');
+    await expect(row).toContainText('Общее резюме, снимок от 02.10');
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-free-approved');
+  });
+
+  test('B601: a failed resume snapshot blocks approval until it is prepared', async ({
+    page,
+  }, testInfo) => {
+    const state: LetterRouteState = { ...createRouteState(), snapshotFailure: 'once' };
+    await installLetterMocks(page, state);
+    await openLetter(page);
+    await waitForLetter(page);
+    const approve = page.getByRole('button', { name: 'Одобрить письмо' });
+    await approve.click();
+    const row = resumeRow(page);
+    await expect(row).toContainText(
+      'Не удалось подготовить резюме. Подготовьте его, чтобы одобрить письмо',
+    );
+    await expect(approve).toBeDisabled();
+    await expect(page.locator('.career-letter-approved')).toHaveCount(0);
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-snapshot-failed');
+    await row.getByRole('button', { name: 'Подготовить резюме' }).click();
+    await expect(approve).toBeEnabled();
+    expect(state.prepareCalls).toBe(1);
+    await approve.click();
+    await expect(page.getByRole('status')).toContainText('Ничего не отправлено.');
+    await expect(row).toContainText('Снимок от 02.10, мастер-резюме не менялось');
+  });
+
+  test('B601: when the retry fails too, the general resume can be attached', async ({
+    page,
+  }, testInfo) => {
+    const state: LetterRouteState = {
+      ...createRouteState(),
+      snapshotFailure: 'always',
+      generalResume: { documentId: 'document-own-cv', fileName: 'cv.pdf' },
+    };
+    await installLetterMocks(page, state);
+    await openLetter(page);
+    await waitForLetter(page);
+    await page.getByRole('button', { name: 'Одобрить письмо' }).click();
+    const row = resumeRow(page);
+    await row.getByRole('button', { name: 'Подготовить резюме' }).click();
+    await expect(row).toContainText('Можно приложить ваше общее резюме „cv.pdf“');
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-offer-general');
+    await row.getByRole('button', { name: 'Приложить общее резюме' }).click();
+    await expect(page.getByRole('status')).toContainText('Ничего не отправлено.');
+    expect(state.approvedBody).toMatchObject({ generalResumeId: 'document-own-cv' });
+    const attached = page.locator('.career-letter-dest-row').filter({ hasText: 'Общее резюме' });
+    await expect(attached).toContainText('Общее резюме, снимок от 02.10');
+    expect(state.sendAttempts).toEqual([]);
+  });
+
+  test('B601: with a resume the row names the attached snapshot', async ({ page }, testInfo) => {
+    const state = createRouteState();
+    await installLetterMocks(page, state);
+    await openLetter(page);
+    await waitForLetter(page);
+    const row = resumeRow(page);
+    await expect(row).toContainText('Резюме под вакансию прикрепится при одобрении письма');
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-attach-draft');
+    await page.getByRole('button', { name: 'Одобрить письмо' }).click();
+    await expect(page.getByRole('status')).toContainText('Ничего не отправлено.');
+    await expect(row).toContainText('Снимок от 02.10, мастер-резюме не менялось');
+    await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    await captureState(page, testInfo, 'resume-attached');
   });
 
   test('opens the resume by pressing the whole row at 390', async ({ page }) => {

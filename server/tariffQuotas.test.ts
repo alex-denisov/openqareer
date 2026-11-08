@@ -310,7 +310,7 @@ describe('квоты тарифов (B579)', { timeout: 20_000 }, () => {
     };
     expect((await pitch()).statusCode).toBe(503);
     expect(await used()).toBe(0);
-    reply.body = 'Письмо модели. Резюме приложено.';
+    reply.body = 'Письмо модели.';
     expect((await pitch()).statusCode).toBe(200);
     expect(await used()).toBe(1);
   });

@@ -39,6 +39,8 @@ import {
   stableJson,
   unreachedImportedContacts,
 } from './connectionImportMerge';
+import { letterResumeState } from './letterApprovalResume';
+import { masterProjectionOf } from './resumeMaster';
 
 const CONNECTION_IMPORT_RECEIPT_ID = '__b448_linkedin_import_receipt__';
 // A whole LinkedIn network: run 9 read 1 888 connections, and circles need
@@ -500,6 +502,7 @@ async function connectionCirclesResponse(
       companyName: matched.cluster.canonicalCompany,
       vacancyTitle: matched.cluster.canonicalTitle,
       circles: built.circles,
+      resume: letterResumeState(deps, candidateId, masterProjectionOf(snapshot).master),
       linkedinImport: importReceipt
         ? {
             state: 'imported',
