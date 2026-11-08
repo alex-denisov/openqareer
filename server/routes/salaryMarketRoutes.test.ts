@@ -212,6 +212,54 @@ describe('bounded salary SSR', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+  it('adds the pool figure with source, sample, date and Dataset; USA is noindex below the sample (SEO P2)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'salary-pool-'));
+    writeFileSync(join(dir, 'salary-market.html'), template);
+    const pay = {
+      median: 140_000,
+      low: 120_000,
+      high: 170_000,
+      sign: '$',
+      period: 'year' as const,
+      sampleSize: 64,
+      withSalary: 80,
+      readAt: '2026-11-08T10:00:00.000Z',
+      sources: ['Greenhouse'],
+    };
+    let withPay = true;
+    const app = Fastify();
+    registerSalaryMarketRoutes(app, {
+      staticRoot: dir,
+      databasePath: join(dir, 'none.db'),
+      readCountryCatalog: () => ({
+        cities: [{ slug: 'new-york', label: 'New York', count: 2029 }],
+        readAt: '2026-11-08T10:00:00.000Z',
+        ...(withPay ? { pay } : {}),
+      }),
+    });
+    try {
+      const usa = await app.inject('/salaries/usa');
+      expect(usa.statusCode).toBe(200);
+      expect(usa.body).toContain('Зарплаты в США в 2026 году');
+      expect(usa.body).toMatch(/140\s000\s\$/u);
+      expect(usa.body).toContain('64\u00a0вакансии с вилкой');
+      expect(usa.body).toContain('08.11.2026');
+      expect(usa.body).toContain('Greenhouse');
+      expect(usa.body).toContain('"@type":"Dataset"');
+      expect(usa.body).toContain('index, follow');
+      expect(usa.body).toContain('href="/vacancies/new-york"');
+      const germany = await app.inject('/salaries/germany');
+      expect(germany.body).toContain('Зарплаты в Германии в вакансиях');
+      expect(germany.body).toContain('"@type":"Dataset"');
+      withPay = false;
+      const thin = await app.inject('/salaries/usa');
+      expect(thin.body).toContain('noindex, follow');
+      expect(thin.body).not.toContain('"@type":"Dataset"');
+    } finally {
+      await app.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   it('serves the city page when a place reaches the minimum, the old view otherwise (06a)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'salary-city-'));
     writeFileSync(join(dir, 'salary-market.html'), template);

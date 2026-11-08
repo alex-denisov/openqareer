@@ -8,6 +8,7 @@
 import { CATALOG_ROOT, listingPath } from '../../shared/vacancyCatalogRoutes';
 import { interviewProfession, interviewProfessionPath } from '../../shared/interviewQuestions';
 import { salaryRolePath } from '../../shared/salaryMarketPublic';
+import { salaryCountryPathForPlace } from '../../shared/salaryPublicPages';
 import { LISTING_CHIPS, type CatalogChip, type ChipCounts } from './catalogChips';
 import { countLabel } from './catalogCopy';
 import { escapeHtml } from './catalogHtml';
@@ -156,7 +157,9 @@ function answer(page: CatalogPage, names: Names, stats?: SalaryStats): string {
 function salaryCard(page: CatalogPage, names: Names, stats?: SalaryStats): string {
   if (stats?.median === undefined || stats.low === undefined || stats.high === undefined) return '';
   const role = page.listing?.role;
-  const href = (role && stats?.salaryPage ? salaryRolePath(role) : undefined) ?? '/salaries';
+  const country = role ? undefined : salaryCountryPathForPlace(page.listing?.place);
+  const href =
+    (role && stats?.salaryPage ? salaryRolePath(role) : undefined) ?? country?.path ?? '/salaries';
   const title = names.placeGen
     ? `Зарплаты в вакансиях ${names.placeGen}`
     : 'Зарплаты в этих вакансиях';
@@ -165,7 +168,7 @@ function salaryCard(page: CatalogPage, names: Names, stats?: SalaryStats): strin
     `<span>медиана · половина вакансий ${stats.low.toLocaleString('ru-RU')}–${money(stats.high, stats.sign)}</span>` +
     `<span class="lv-small">По ${stats.withRange.toLocaleString('ru-RU')} вакансиям с вилкой «от — до». ` +
     `У остальных зарплата указана одним числом или не указана. ${dataDate(page)}</span></div>` +
-    `<a class="lv-link" href="${escapeHtml(href)}">Зарплаты по городам ${ARROW}</a></div>`
+    `<a class="lv-link" href="${escapeHtml(href)}">${escapeHtml(country?.name ?? 'Зарплаты по городам')} ${ARROW}</a></div>`
   );
 }
 
@@ -215,6 +218,7 @@ function prepCard(page: CatalogPage, names: Names, stats?: SalaryStats): string 
     `<a class="lv-link" href="${escapeHtml(href)}">${escapeHtml(text)} ${ARROW}</a>`;
   const profession = role ? interviewProfession(role) : undefined;
   const genitive = names.roleGen;
+  const country = salaryCountryPathForPlace(page.listing?.place);
   const links = [
     link('/tools/resume', genitive ? `Резюме ${genitive} по шаблону` : 'Резюме по шаблону'),
     link(
@@ -225,6 +229,7 @@ function prepCard(page: CatalogPage, names: Names, stats?: SalaryStats): string 
       (role && stats?.salaryPage ? salaryRolePath(role) : undefined) ?? '/salaries',
       genitive && stats?.salaryPage ? `Зарплаты ${genitive} по городам` : 'Зарплаты по профессиям',
     ),
+    ...(country ? [link(country.path, country.name)] : []),
   ];
   return `<div class="lv-card lv-side-like lv-hm"><h2>Подготовьтесь к отклику</h2><div class="lv-prep">${links.join('')}</div></div>`;
 }
