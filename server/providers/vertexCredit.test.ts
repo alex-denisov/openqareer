@@ -17,16 +17,20 @@ const config = (patch: Partial<VertexCreditConfig> = {}): VertexCreditConfig => 
   sinceIso: '2026-11-04T00:00:00.000Z',
   untilMs: Date.parse('2026-11-09T00:00:00Z'),
   dayUsd: 20,
-  catalogSummaryDayUsd: 5,
+  catalogSummaryDayUsd: 40,
   ...patch,
 });
 const usage = (cost: number) => ({ cost, promptTokens: 1, cachedTokens: 0, completionTokens: 1 });
 
 describe('настройки кредита Vertex', () => {
-  it('по умолчанию 60, с 2026-11-04, до 2026-11-09, 20 в день, 5 на сводки', () => {
+  it('по умолчанию 60, с 2026-11-04, до 2026-11-09, 20 в день, 40 на сводки', () => {
     const warn = vi.fn();
     expect(readVertexCreditConfig({}, warn)).toEqual(config());
     expect(warn).not.toHaveBeenCalled();
+  });
+  it('общий предел не выше 175, что бы ни стояло в окружении (владелец 08.11)', () => {
+    expect(readVertexCreditConfig({ OPENQAREER_VERTEX_CREDIT_USD: '250' }).creditUsd).toBe(175);
+    expect(readVertexCreditConfig({ OPENQAREER_VERTEX_CREDIT_USD: '100' }).creditUsd).toBe(100);
   });
   it('читает числа, день и полную отметку времени UTC', () => {
     const read = readVertexCreditConfig({
@@ -38,7 +42,7 @@ describe('настройки кредита Vertex', () => {
     });
     expect(read).toEqual(
       config({
-        creditUsd: 250,
+        creditUsd: 175,
         sinceIso: '2026-11-04T12:30:00.000Z',
         untilMs: Date.parse('2026-11-10T00:00:00Z'),
         dayUsd: 80,

@@ -34,6 +34,22 @@ export const CATALOG_RU_SUMMARIES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalo
 export const SUMMARY_RECHECK_MS = 86_400_000;
 /** After this many unusable answers for the same text the card waits for a new text or version. */
 export const SUMMARY_MAX_ATTEMPTS = 3;
+/**
+ * Owner 08.11: summaries only for hh.ru and company/ATS boards; aggregator cards copy other sites and
+ * do not earn the spend. Names as `catalog_entries.source_name` stores them on prod.
+ */
+export const SUMMARY_SKIPPED_AGGREGATORS: readonly string[] = [
+  'Himalayas (JSON API)',
+  'Indeed',
+  'LinkedIn',
+  'The Muse',
+  'Jobicy',
+  'Arbeitnow (Германия и EU)',
+  'We Work Remotely',
+  'Remotive (Global Remote)',
+  'Get on Board (LATAM)',
+];
+const AGGREGATOR_PLACEHOLDERS = SUMMARY_SKIPPED_AGGREGATORS.map(() => '?').join(', ');
 const SUMMARY_RETRY_MS = 6 * 3_600_000;
 const DAY_MS = 86_400_000;
 
@@ -97,6 +113,7 @@ export class CatalogRuSummaryStore {
             AND c.salary_label IS NOT NULL AND c.salary_label GLOB '*[1-9]*'
             AND trim(c.company) <> '' AND c.role_slug IS NOT NULL
             AND c.last_seen_ms >= ?
+            AND c.source_name NOT IN (${AGGREGATOR_PLACEHOLDERS})
             AND (s.cluster_id IS NULL OR s.version <> ? OR s.checked_ms < ?
                  OR (s.status = 'failed' AND s.attempts < ? AND s.next_attempt_ms <= ?))
           ORDER BY c.published_ms DESC, c.entry_key ASC
@@ -104,6 +121,7 @@ export class CatalogRuSummaryStore {
       )
       .all(
         now - CARD_SEEN_WITHIN_DAYS * DAY_MS,
+        ...SUMMARY_SKIPPED_AGGREGATORS,
         version,
         now - SUMMARY_RECHECK_MS,
         SUMMARY_MAX_ATTEMPTS,
