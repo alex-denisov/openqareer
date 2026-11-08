@@ -6,11 +6,13 @@ import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
 import {
   companySlugsInHtml,
   detectBlock,
+  parseCompanyTypeahead,
   parseJobViewCompany,
   parseSearchCards,
   slugFromLinkedinUrl,
 } from './linkedinGuestPages';
 import {
+  rankCandidates,
   registrableDomain,
   resolveCompany,
   siteUrls,
@@ -26,6 +28,8 @@ const SEARCH = fixture('search-ciklum.html');
 const VIEW = fixture('jobview-ciklum.html');
 const CLOUDFLARE = fixture('cloudflare-block.html');
 const RECAPTCHA = fixture('recaptcha.html');
+const TYPEAHEAD = fixture('typeahead-andersen.json');
+const SEARCH_FC = fixture('search-fc-andersen-lab.html');
 const NOW = new Date('2026-11-08T12:00:00Z');
 
 const ok = (body: string, finalUrl = 'https://x'): PageResponse => ({
@@ -42,7 +46,7 @@ function routes(map: Record<string, PageResponse | Error>): FetchPage & { calls:
     const hit = key ? map[key]! : ok('<html></html>');
     if (hit instanceof Error) throw hit;
     return hit;
-  }) as FetchPage & { calls: string[] };
+  }) as unknown as FetchPage & { calls: string[] };
   fetchPage.calls = calls;
   return fetchPage;
 }
@@ -108,6 +112,46 @@ describe('resolveCompany', () => {
     expect(outcome.status).toBe('ambiguous');
     expect(outcome.reason).toBe('no_open_jobs');
     expect(outcome.orgId).toBeUndefined();
+  });
+
+  it('confirms a typeahead candidate only when its f_C filter leads to the site slug', async () => {
+    const row: QueueRow = {
+      companyKey: 'andersen',
+      companyName: 'Andersen Custom software / аутсорс',
+      websiteUrl: 'https://andersenlab.com',
+      careersUrl: null,
+      linkedinUrl: null,
+    };
+    const andersen = (siteSlug: string) =>
+      routes({
+        'andersenlab.com': ok(`<a href="https://www.linkedin.com/company/${siteSlug}/">`),
+        'f_C=35704771': ok(SEARCH_FC),
+        'f_C=': ok('<ul></ul>'),
+        typeaheadHits: ok(TYPEAHEAD),
+        seeMoreJobPostings: ok(SEARCH),
+      });
+    const confirmed = andersen('andersen-softwaredev');
+    expect(await resolveCompany(row, confirmed, NOW)).toMatchObject({
+      status: 'resolved',
+      slug: 'andersen-softwaredev',
+      orgId: '35704771',
+    });
+    expect(confirmed.calls.some((u) => u.includes('query=Andersen'))).toBe(true);
+    // Сайт ссылается на старый slug: кандидат «Andersen Lab» его не подтверждает.
+    expect(await resolveCompany(row, andersen('andersen-lab'), NOW)).toMatchObject({
+      status: 'ambiguous',
+      reason: 'no_open_jobs',
+    });
+  });
+
+  it('ranks typeahead candidates by name closeness and keeps only three', () => {
+    const ranked = rankCandidates(parseCompanyTypeahead(TYPEAHEAD), [
+      'Andersen Lab',
+      'andersen lab',
+    ]);
+    expect(ranked.map((c) => c.id)).toEqual(['35704771', '166985', '2776']);
+    expect(parseCompanyTypeahead('not json')).toEqual([]);
+    expect(parseCompanyTypeahead('[{"id":"x","type":"COMPANY","displayName":"a"}]')).toEqual([]);
   });
 
   it('records no_page when the official site links no LinkedIn company', async () => {

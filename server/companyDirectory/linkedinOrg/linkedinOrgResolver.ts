@@ -11,9 +11,11 @@ import {
   companySlugsInHtml,
   detectBlock,
   parseJobViewCompany,
+  parseCompanyTypeahead,
   parseSearchCards,
   slugFromLinkedinUrl,
   type BlockKind,
+  type CompanyCandidate,
 } from './linkedinGuestPages';
 import type { QueueRow, ResolutionOutcome } from './linkedinOrgStore';
 
@@ -118,29 +120,80 @@ async function linkedinGet(url: string, fetchPage: FetchPage): Promise<PageRespo
   return page;
 }
 
-function searchUrl(keywords: string): string {
-  const params = new URLSearchParams({ keywords, location: 'Worldwide', start: '0' });
+function searchUrl(filter: { keywords: string } | { f_C: string }): string {
+  const params = new URLSearchParams({ ...filter, location: 'Worldwide', start: '0' });
   return `${SEARCH_URL}?${params.toString()}`;
 }
 
-/** ID работодателя по подтверждённому slug: вакансия, где LinkedIn связал их сам. */
+const TYPEAHEAD_URL = 'https://www.linkedin.com/jobs-guest/api/typeaheadHits';
+const MAX_CANDIDATES = 3;
+
+function cleanName(name: string): string {
+  return name.replace(/\s*(?:[([]|\s\/\s).*$/, '').trim() || name;
+}
+
+const squash = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+
+/** Кандидаты по названию — ближе к названию и slug первыми; доказательством не служат. */
+export function rankCandidates(
+  candidates: readonly CompanyCandidate[],
+  names: readonly string[],
+): readonly CompanyCandidate[] {
+  const wanted = names.map(squash);
+  const score = (c: CompanyCandidate) => {
+    const n = squash(c.displayName);
+    if (wanted.includes(n)) return 0;
+    return wanted.some((w) => n.startsWith(w) || w.startsWith(n)) ? 1 : 2;
+  };
+  const unique = [...new Map(candidates.map((c) => [c.id, c])).values()];
+  return unique
+    .map((c, index) => ({ c, index, s: score(c) }))
+    .sort((x, y) => x.s - y.s || x.index - y.index)
+    .slice(0, MAX_CANDIDATES)
+    .map((x) => x.c);
+}
+
+/** Путь 1: карточка поиска с тем же slug → `/jobs/view` с companyId и тем же slug. */
+async function idFromNameSearch(slug: string, keywords: string, fetchPage: FetchPage) {
+  const search = await linkedinGet(searchUrl({ keywords }), fetchPage);
+  if (search.status >= 400) return null;
+  const card = parseSearchCards(search.body).find((c) => c.companySlug === slug);
+  if (!card) return null;
+  const view = await linkedinGet(`https://www.linkedin.com/jobs/view/${card.jobId}`, fetchPage);
+  const company = view.status < 400 ? parseJobViewCompany(view.body) : null;
+  return company && company.companySlug === slug ? company.companyId : null;
+}
+
+/** Путь 2: кандидаты typeahead → поиск с фильтром f_C, карточки которого ведут на тот же slug. */
+async function idFromCompanyFilter(slug: string, names: readonly string[], fetchPage: FetchPage) {
+  const candidates: CompanyCandidate[] = [];
+  for (const query of names) {
+    const params = new URLSearchParams({ typeaheadType: 'COMPANY', query });
+    const hits = await linkedinGet(`${TYPEAHEAD_URL}?${params.toString()}`, fetchPage);
+    if (hits.status < 400) candidates.push(...parseCompanyTypeahead(hits.body));
+    if (candidates.length >= MAX_CANDIDATES) break;
+  }
+  for (const candidate of rankCandidates(candidates, [...names, slug])) {
+    const search = await linkedinGet(searchUrl({ f_C: candidate.id }), fetchPage);
+    if (search.status >= 400) continue;
+    const slugs = new Set(parseSearchCards(search.body).map((c) => c.companySlug));
+    if (slugs.size === 1 && slugs.has(slug)) return candidate.id;
+  }
+  return null;
+}
+
+/** ID работодателя по подтверждённому по домену slug: связку ID↔slug даёт сам LinkedIn. */
 async function orgIdForSlug(
   slug: string,
   row: QueueRow,
   fetchPage: FetchPage,
 ): Promise<string | null> {
-  const name = row.companyName.replace(/\s*[([].*$/, '').trim() || row.companyName;
-  const queries = [...new Set([name, slug.replace(/[-_]+/g, ' ')])];
-  for (const keywords of queries) {
-    const search = await linkedinGet(searchUrl(keywords), fetchPage);
-    if (search.status >= 400) continue;
-    const card = parseSearchCards(search.body).find((c) => c.companySlug === slug);
-    if (!card) continue;
-    const view = await linkedinGet(`https://www.linkedin.com/jobs/view/${card.jobId}`, fetchPage);
-    const company = view.status < 400 ? parseJobViewCompany(view.body) : null;
-    if (company && company.companySlug === slug) return company.companyId;
-  }
-  return null;
+  const name = cleanName(row.companyName);
+  const names = [...new Set([name, slug.replace(/[-_.]+/g, ' ')])];
+  return (
+    (await idFromNameSearch(slug, name, fetchPage)) ??
+    (await idFromCompanyFilter(slug, names, fetchPage))
+  );
 }
 
 function later(now: Date, days: number): string {

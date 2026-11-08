@@ -97,3 +97,29 @@ export function detectBlock(status: number, body: string): BlockKind | null {
   }
   return null;
 }
+
+export interface CompanyCandidate {
+  readonly id: string;
+  readonly displayName: string;
+}
+
+/** Ответ `jobs-guest/api/typeaheadHits?typeaheadType=COMPANY`: только кандидаты, не доказательство. */
+export function parseCompanyTypeahead(body: string): readonly CompanyCandidate[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(body);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(data)) return [];
+  return data.flatMap((item: unknown) => {
+    if (typeof item !== 'object' || item === null) return [];
+    const { id, type, displayName } = item as Record<string, unknown>;
+    return type === 'COMPANY' &&
+      typeof id === 'string' &&
+      /^\d+$/.test(id) &&
+      typeof displayName === 'string'
+      ? [{ id, displayName }]
+      : [];
+  });
+}
