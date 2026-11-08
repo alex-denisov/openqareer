@@ -212,8 +212,7 @@ async function writeVacancyPitch(
     language,
     ...(gender ? { gender } : {}),
     ...(body?.language ? { chosenLanguage: body.language } : {}),
-    resumeAttached: resume.available,
-    contextMs,
+    resumeAttached: resume.available, contextMs,
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
