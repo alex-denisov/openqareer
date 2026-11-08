@@ -311,6 +311,8 @@ export function PitchMetaBar({
   notices?: readonly string[];
   bodySource?: VacancyPitchResult['bodySource'];
 }) {
+  // Письмо модели без предупреждений не держит пустую полосу с фоном и линией над текстом (08.11).
+  if (bodySource === 'model' && !notices?.length) return null;
   return (
     <div className="career-pitch-meta-bar">
       {bodySource === 'model' ? null : <div className="career-pitch-meta-tags">

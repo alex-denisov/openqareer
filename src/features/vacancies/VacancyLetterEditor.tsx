@@ -226,7 +226,7 @@ export function LetterNotices({
   readonly circle?: ConnectionCircleNumber;
   readonly onGatherFacts?: () => void;
 }) {
-  // Круги 1 и 2 показывают короткое сообщение, а не письмо модели: подпись про модель там неправда.
+  // Круги 1 и 2 показывают короткое сообщение, а не письмо модели: предупреждение о его фактах там не к месту.
   const notice = pitch.bodySource === 'model' && circle !== 3 ? undefined : pitch.notices?.[0];
   const unconfirmed = pitch.unconfirmedRequirements ?? [];
   if (pitch.usedEvidenceIds.length === 0 && pitch.bodySource !== 'model') {
