@@ -8,10 +8,12 @@ import type {
 } from './salaryMarketSnapshot';
 import {
   MIN_COUNTRY_CITY_VACANCIES,
+  MIN_COUNTRY_POOL_SAMPLE,
   SALARY_COUNTRY_CITIES,
   russianCityName,
   type CountryCatalog,
   type CountryCityCount,
+  type CountryPoolPay,
 } from './salaryCountryCities';
 
 /** B351 round 5 (27.10): every figure comes from the prepared snapshot or the tax calculator. */
@@ -305,6 +307,8 @@ export interface SalaryCountryView {
   readonly code: string;
   readonly cities: readonly (CountryCityCount & { readonly genitive: string })[];
   readonly catalogDate?: string;
+  /** SEO P2: pool salary figure, present only at MIN_COUNTRY_POOL_SAMPLE ranges or more. */
+  readonly pay?: PoolPayView;
   readonly taxYear: number;
   readonly assumptions: string;
   readonly rows: readonly NetRow[];
@@ -316,6 +320,43 @@ export interface SalaryCountryView {
     readonly name: string;
   })[];
   readonly faqs: readonly SalaryFaq[];
+}
+
+export interface PoolPayView {
+  readonly median: string;
+  readonly range: string;
+  readonly per: string;
+  readonly sampleSize: number;
+  readonly date: string;
+  readonly source: string;
+  readonly answer: string;
+}
+
+function poolMoney(amount: number, sign: string): string {
+  return sign ? `${groupDigits(amount)}\u00a0${sign}` : groupDigits(amount);
+}
+
+/** Every figure carries its source, sample and date (DESIGN.md). */
+export function poolPayView(
+  pay: CountryPoolPay | undefined,
+  inName: string,
+): PoolPayView | undefined {
+  if (!pay || pay.sampleSize < MIN_COUNTRY_POOL_SAMPLE) return undefined;
+  const per = pay.period === 'year' ? 'в год' : 'в месяц';
+  const median = poolMoney(pay.median, pay.sign);
+  const range = `${poolMoney(pay.low, pay.sign)} — ${poolMoney(pay.high, pay.sign)}`;
+  const date = formatDate(pay.readAt);
+  const boards = pay.sources.length ? pay.sources.join(', ') : 'открытые доски вакансий';
+  const source = `открытый каталог вакансий openqareer (${boards})`;
+  return {
+    median,
+    range,
+    per,
+    sampleSize: pay.sampleSize,
+    date,
+    source,
+    answer: `Медиана вилок в вакансиях ${inName} — ${median} ${per} до налогов, половина вакансий платит ${range}. Выборка — ${vacancies(pay.sampleSize)} с вилкой «от — до», ${source}, ${date}.`,
+  };
 }
 
 function percent(value: number): string {
@@ -405,7 +446,11 @@ export function salaryCountryView(
     const item = SALARY_COUNTRIES[other];
     return { slug: other, name: item.name, ...netRow(item.code, item.currency, item.reference) };
   });
+  const pay = poolPayView(catalog?.pay, country.in);
   const faqs: SalaryFaq[] = [
+    ...(pay
+      ? [{ question: `Какая средняя зарплата ${country.in} в вакансиях?`, answer: pay.answer }]
+      : []),
     {
       question: `Сколько остаётся на руки с ${reference.gross} ${country.in}?`,
       answer: `${reference.net} в месяц, налоги и взносы — ${reference.deductions}. Допущения расчёта: ${sample.assumptionSummary}`,
@@ -430,6 +475,7 @@ export function salaryCountryView(
     code: country.code,
     cities: countryCities(country.code, catalog),
     ...(catalog ? { catalogDate: formatDate(catalog.readAt) } : {}),
+    ...(pay ? { pay } : {}),
     taxYear: sample.taxYear,
     assumptions: sample.assumptionSummary,
     rows,
@@ -450,4 +496,100 @@ export function faqStructuredData(faqs: readonly SalaryFaq[]): Record<string, un
       acceptedAnswer: { '@type': 'Answer', text: faq.answer },
     })),
   };
+}
+
+/**
+ * SEO P2: countries without a tax calculator, built from the vacancy pool only.
+ * Indexed only while the pool figure clears MIN_COUNTRY_POOL_SAMPLE.
+ */
+export const SALARY_POOL_COUNTRIES = {
+  usa: { code: 'US', name: 'США', in: 'в США', genitive: 'США' },
+} as const;
+export type SalaryPoolCountrySlug = keyof typeof SALARY_POOL_COUNTRIES;
+export function isSalaryPoolCountrySlug(value: string): value is SalaryPoolCountrySlug {
+  return Object.hasOwn(SALARY_POOL_COUNTRIES, value);
+}
+export interface SalaryPoolCountryView {
+  readonly slug: SalaryPoolCountrySlug;
+  readonly name: string;
+  readonly inName: string;
+  readonly cities: readonly (CountryCityCount & { readonly genitive: string })[];
+  readonly catalogDate?: string;
+  readonly pay?: PoolPayView;
+  readonly indexable: boolean;
+  readonly answer: string;
+  readonly faqs: readonly SalaryFaq[];
+}
+
+export function salaryPoolCountryView(
+  slug: SalaryPoolCountrySlug,
+  catalog?: CountryCatalog,
+): SalaryPoolCountryView {
+  const country = SALARY_POOL_COUNTRIES[slug];
+  const pay = poolPayView(catalog?.pay, country.in);
+  const cities = countryCities(country.code, catalog);
+  const answer =
+    pay?.answer ??
+    `Вакансий с вилкой «от — до» ${country.in} пока меньше ${MIN_COUNTRY_POOL_SAMPLE}, поэтому медиану не публикуем.`;
+  const faqs: SalaryFaq[] = pay
+    ? [
+        { question: `Какая средняя зарплата ${country.in}?`, answer: pay.answer },
+        {
+          question: `Где больше всего вакансий ${country.in}?`,
+          answer: cities.length
+            ? `${cities
+                .slice(0, 3)
+                .map((city) => `${city.label} — ${vacancies(city.count)}`)
+                .join(', ')} в открытом каталоге openqareer на ${pay.date}.`
+            : `В открытом каталоге openqareer на ${pay.date}.`,
+        },
+      ]
+    : [];
+  return {
+    slug,
+    name: country.name,
+    inName: country.in,
+    cities,
+    ...(catalog ? { catalogDate: formatDate(catalog.readAt) } : {}),
+    ...(pay ? { pay } : {}),
+    indexable: Boolean(pay),
+    answer,
+    faqs,
+  };
+}
+
+/** schema.org Dataset for a published pool figure: what was counted, by whom, when. */
+export function poolPayDataset(
+  pay: PoolPayView,
+  name: string,
+  url: string,
+): Record<string, unknown> {
+  return {
+    '@type': 'Dataset',
+    name,
+    description: pay.answer,
+    url,
+    creator: { '@type': 'Organization', name: 'openqareer', url: 'https://openqareer.com/' },
+    isAccessibleForFree: true,
+    license: 'https://openqareer.com/legal/terms',
+    dateModified: pay.date.split('.').reverse().join('-'),
+    variableMeasured: `Медиана вилок зарплат в вакансиях, ${pay.per}`,
+    measurementTechnique: `Медиана середин вилок «от — до», ${vacancies(pay.sampleSize)}`,
+  };
+}
+
+/** SEO P2: the /salaries/<country> page of a catalog city, for listing links. */
+export function salaryCountryPathForPlace(
+  placeSlug: string | undefined,
+): { readonly path: string; readonly name: string } | undefined {
+  if (!placeSlug) return undefined;
+  const all: Record<string, { readonly code: string; readonly in: string }> = {
+    ...SALARY_COUNTRIES,
+    ...SALARY_POOL_COUNTRIES,
+  };
+  for (const [slug, country] of Object.entries(all)) {
+    if (SALARY_COUNTRY_CITIES[country.code]?.[placeSlug])
+      return { path: `/salaries/${slug}`, name: `Зарплаты ${country.in}` };
+  }
+  return undefined;
 }

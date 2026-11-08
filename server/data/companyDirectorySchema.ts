@@ -16,6 +16,7 @@
  * - industry: industry taxonomy
  * - domain_group: domain group
  * - notes: company description and context
+ * - evidence: JSON {field: {value, how}} — where each value came from, or why it is missing (B619)
  *
  * Used for referral routing, company intelligence, and vacancy ingestion.
  */
@@ -58,3 +59,6 @@ CREATE INDEX IF NOT EXISTS idx_company_directory_name ON ${COMPANY_DIRECTORY_TAB
 CREATE INDEX IF NOT EXISTS idx_company_directory_source_type ON ${COMPANY_DIRECTORY_TABLE}(source_type);
 CREATE INDEX IF NOT EXISTS idx_company_directory_status ON ${COMPANY_DIRECTORY_TABLE}(status);
 `;
+
+/** B619: per-field provenance. Added by ALTER on existing databases. */
+export const COMPANY_DIRECTORY_EVIDENCE_COLUMN = 'evidence';

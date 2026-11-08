@@ -38,14 +38,23 @@ import { escapeHtml } from '../vacancies/catalogHtml';
 import {
   faqStructuredData,
   isSalaryCountrySlug,
+  isSalaryPoolCountrySlug,
+  poolPayDataset,
+  SALARY_POOL_COUNTRIES,
+  salaryPoolCountryView,
   SALARY_COUNTRIES,
   salaryCountryView,
   salaryProfessionView,
   type SalaryFaq,
 } from '../../shared/salaryPublicPages';
 import { SALARY_COUNTRY_CITIES, type CountryCatalog } from '../../shared/salaryCountryCities';
+import { countryCatalogFrom } from '../salaryMarket/countryCatalog';
 import { withOgImage } from '../../shared/seoHead';
-import { SalaryCountryPage, SalaryProfessionPage } from '../../src/features/site/SalaryPublicPages';
+import {
+  SalaryCountryPage,
+  SalaryPoolCountryPage,
+  SalaryProfessionPage,
+} from '../../src/features/site/SalaryPublicPages';
 
 interface PublicSalaryPage {
   readonly title: string;
@@ -53,6 +62,10 @@ interface PublicSalaryPage {
   readonly crumb: string;
   readonly faqs: readonly SalaryFaq[];
   readonly occupation?: string;
+  /** schema.org Dataset of the published figure (SEO P2). */
+  readonly dataset?: Record<string, unknown>;
+  /** Below the sample threshold the page stays reachable but is not indexed. */
+  readonly indexable?: boolean;
   readonly element: React.ReactElement;
 }
 
@@ -76,6 +89,7 @@ export function renderPublicSalaryPage(
     ...(page.occupation
       ? [{ '@type': 'Occupation', name: page.occupation, mainEntityOfPage: canonical }]
       : []),
+    ...(page.dataset ? [page.dataset] : []),
   ];
   const structured = JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(
     /</gu,
@@ -84,7 +98,7 @@ export function renderPublicSalaryPage(
   return salaryDocumentHead(template, {
     title: escapeHtml(page.title),
     canonical,
-    robots: 'index, follow',
+    robots: page.indexable === false ? 'noindex, follow' : 'index, follow',
     structured,
     description: page.description,
   })
@@ -122,35 +136,62 @@ export function loadCountryCatalog(databasePath: string, code: string): CountryC
   if (cached && Date.now() - cached.at < COUNTRY_CATALOG_TTL_MS) return cached.value;
   const database = new DatabaseSync(databasePath, { readOnly: true });
   try {
-    const rows = database
-      .prepare(
-        `SELECT place_slug AS slug, max(place_label) AS label, count(*) AS count
-           FROM catalog_entries
-          WHERE status = 'active' AND path <> '' AND place_slug IN (${slugs.map(() => '?').join(',')})
-          GROUP BY place_slug`,
-      )
-      .all(...slugs) as { slug: string; label: string; count: number }[];
-    const value = { cities: rows, readAt: new Date().toISOString() };
-    countryCatalogCache.set(code, { at: Date.now(), value });
+    const value = countryCatalogFrom(database, code);
+    if (value) countryCatalogCache.set(code, { at: Date.now(), value });
     return value;
   } finally {
     database.close();
   }
 }
 
-function countryPage(slug: string, options: SalaryRouteOptions): PublicSalaryPage | null {
-  if (!isSalaryCountrySlug(slug)) return null;
-  const code = SALARY_COUNTRIES[slug].code;
-  let catalog: CountryCatalog | null = null;
+function readCatalog(code: string, options: SalaryRouteOptions): CountryCatalog | null {
   try {
-    catalog = options.readCountryCatalog
+    return options.readCountryCatalog
       ? options.readCountryCatalog(code)
       : loadCountryCatalog(options.databasePath, code);
   } catch {
     /* The net table stands on the calculator alone; the city list is optional. */
+    return null;
   }
+}
+
+function poolCountryPage(slug: string, options: SalaryRouteOptions): PublicSalaryPage | null {
+  if (!isSalaryPoolCountrySlug(slug)) return null;
+  const catalog = readCatalog(SALARY_POOL_COUNTRIES[slug].code, options);
+  const view = salaryPoolCountryView(slug, catalog ?? undefined);
+  return {
+    title: `Зарплаты ${view.inName} в 2026 году по вакансиям | openqareer`,
+    description: view.answer,
+    crumb: view.name,
+    faqs: view.faqs,
+    indexable: view.indexable,
+    ...(view.pay
+      ? {
+          dataset: poolPayDataset(
+            view.pay,
+            `Зарплаты ${view.inName} в вакансиях`,
+            `${SITE_ORIGIN}/salaries/${slug}`,
+          ),
+        }
+      : {}),
+    element: React.createElement(SalaryPoolCountryPage, { view }),
+  };
+}
+
+function countryPage(slug: string, options: SalaryRouteOptions): PublicSalaryPage | null {
+  if (!isSalaryCountrySlug(slug)) return poolCountryPage(slug, options);
+  const catalog = readCatalog(SALARY_COUNTRIES[slug].code, options);
   const view = salaryCountryView(slug, catalog ?? undefined);
   return {
+    ...(view.pay
+      ? {
+          dataset: poolPayDataset(
+            view.pay,
+            `Зарплаты ${view.inName} в вакансиях`,
+            `${SITE_ORIGIN}/salaries/${slug}`,
+          ),
+        }
+      : {}),
     title: `Зарплата ${view.inName} на руки в ${view.taxYear} году | openqareer`,
     description: view.answer,
     crumb: view.name,
@@ -168,6 +209,18 @@ function professionPage(snapshot: SalaryMarketSnapshot | null): PublicSalaryPage
     crumb: view.label,
     faqs: view.faqs,
     occupation: view.label,
+    dataset: {
+      '@type': 'Dataset',
+      name: `Зарплата ${view.labelGenitive} в вакансиях`,
+      description: view.answer,
+      url: `${SITE_ORIGIN}/salaries/${view.role}`,
+      creator: { '@type': 'Organization', name: 'openqareer', url: `${SITE_ORIGIN}/` },
+      isAccessibleForFree: true,
+      license: `${SITE_ORIGIN}/legal/terms`,
+      dateModified: view.date.split('.').reverse().join('-'),
+      variableMeasured: 'Медиана вилок зарплат в вакансиях, в месяц',
+      measurementTechnique: `Медиана середин вилок «от — до», выборка ${view.sampleSize}`,
+    },
     element: React.createElement(SalaryProfessionPage, { view }),
   };
 }

@@ -321,7 +321,7 @@ export const COVER_LETTER: Guide = {
       date: '2026-01-18',
     },
   ],
-  related: ['cant-find-a-job', 'how-to-write-a-resume'],
+  related: ['cant-find-a-job', 'how-to-write-a-resume', '/salaries'],
   queries: [
     'сопроводительное письмо',
     'как написать сопроводительное письмо',

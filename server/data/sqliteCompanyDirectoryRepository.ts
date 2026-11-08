@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
 import {
   COMPANY_DIRECTORY_DEAD_ATS_BOARDS_MIGRATION,
+  COMPANY_DIRECTORY_EVIDENCE_COLUMN,
   COMPANY_DIRECTORY_MIGRATION,
   COMPANY_DIRECTORY_TABLE,
 } from './companyDirectorySchema';
@@ -29,6 +30,8 @@ export interface CompanyDirectoryRecord {
   readonly notes: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+  /** Per-field provenance: { field: { value, how } }. */
+  readonly evidence?: Readonly<Record<string, unknown>> | null;
 }
 
 export interface CompanyDirectoryFilter {
@@ -54,6 +57,7 @@ interface RawDirectoryRow {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  evidence?: string | null;
 }
 
 export type CompanyDirectoryRepoOptions =
@@ -64,8 +68,8 @@ const UPSERT_COMPANY_SQL = `
   INSERT INTO ${COMPANY_DIRECTORY_TABLE} (
     company_key, company_name, website_url, careers_url, linkedin_url,
     linkedin_org_id, source_type, ats_provider, ats_slug, status,
-    geo, industry, domain_group, notes, created_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    geo, industry, domain_group, notes, created_at, updated_at, evidence
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(company_key) DO UPDATE SET
     company_name = excluded.company_name,
     website_url = COALESCE(excluded.website_url, ${COMPANY_DIRECTORY_TABLE}.website_url),
@@ -80,6 +84,7 @@ const UPSERT_COMPANY_SQL = `
     industry = COALESCE(excluded.industry, ${COMPANY_DIRECTORY_TABLE}.industry),
     domain_group = COALESCE(excluded.domain_group, ${COMPANY_DIRECTORY_TABLE}.domain_group),
     notes = COALESCE(excluded.notes, ${COMPANY_DIRECTORY_TABLE}.notes),
+    evidence = COALESCE(excluded.evidence, ${COMPANY_DIRECTORY_TABLE}.evidence),
     updated_at = excluded.updated_at;
 `;
 
@@ -101,6 +106,7 @@ function companyToParams(record: CompanyDirectoryRecord) {
     record.notes,
     record.createdAt,
     record.updatedAt,
+    record.evidence ? JSON.stringify(record.evidence) : null,
   ] as const;
 }
 
@@ -122,7 +128,29 @@ function mapRowToRecord(row: RawDirectoryRow): CompanyDirectoryRecord {
     notes: row.notes,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    evidence: parseEvidence(row.evidence),
   };
+}
+
+function parseEvidence(raw: string | null | undefined): Readonly<Record<string, unknown>> | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function ensureEvidenceColumn(database: DatabaseSync): void {
+  const columns = database
+    .prepare(`PRAGMA table_info(${COMPANY_DIRECTORY_TABLE})`)
+    .all() as unknown as { name: string }[];
+  if (!columns.some((c) => c.name === COMPANY_DIRECTORY_EVIDENCE_COLUMN)) {
+    database.exec(
+      `ALTER TABLE ${COMPANY_DIRECTORY_TABLE} ADD COLUMN ${COMPANY_DIRECTORY_EVIDENCE_COLUMN} TEXT`,
+    );
+  }
 }
 
 export class SqliteCompanyDirectoryRepository {
@@ -135,6 +163,7 @@ export class SqliteCompanyDirectoryRepository {
       this.ownsDatabase = false;
       this.database.exec(COMPANY_DIRECTORY_MIGRATION);
       this.database.exec(COMPANY_DIRECTORY_DEAD_ATS_BOARDS_MIGRATION);
+      ensureEvidenceColumn(this.database);
     } else {
       if (options.databasePath !== ':memory:') {
         mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -146,6 +175,7 @@ export class SqliteCompanyDirectoryRepository {
       this.database.exec('PRAGMA foreign_keys = ON;');
       this.database.exec(COMPANY_DIRECTORY_MIGRATION);
       this.database.exec(COMPANY_DIRECTORY_DEAD_ATS_BOARDS_MIGRATION);
+      ensureEvidenceColumn(this.database);
 
       if (options.autoSeed ?? true) {
         this.seedDefaultsIfEmpty();
@@ -156,7 +186,7 @@ export class SqliteCompanyDirectoryRepository {
   seedDefaultsIfEmpty(): number {
     const count = this.countCompanies();
     if (count > 0) return 0;
-    this.upsertBatch(defaultCompanyDirectorySeed as readonly CompanyDirectoryRecord[]);
+    this.upsertBatch(defaultCompanyDirectorySeed as unknown as readonly CompanyDirectoryRecord[]);
     return defaultCompanyDirectorySeed.length;
   }
 
