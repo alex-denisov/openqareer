@@ -5,12 +5,14 @@ import { COUNTRY_FIT_TITLE, COUNTRY_FIT_DESCRIPTION } from '../src/features/site
 import { legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { LEGAL_DOCS } from '../shared/legalRegistry';
 import { buildLlmsTxt } from '../shared/aeoSurface';
+import { GUIDES } from '../shared/guides';
 
 describe('public discovery metadata', () => {
   it('keeps public tool and legal discovery copy within the approved length budgets', () => {
     for (const title of [
       COUNTRY_FIT_TITLE,
       ...LEGAL_DOCS.map((doc) => legalDocumentTitle(doc.slug)),
+      ...GUIDES.map((guide) => guide.title),
     ]) {
       expect(title.length, title).toBeGreaterThanOrEqual(45);
       expect(title.length, title).toBeLessThanOrEqual(65);
@@ -18,6 +20,7 @@ describe('public discovery metadata', () => {
     for (const description of [
       COUNTRY_FIT_DESCRIPTION,
       ...LEGAL_DOCS.map((doc) => doc.description),
+      ...GUIDES.map((guide) => guide.description),
     ]) {
       expect(description.length, description).toBeGreaterThanOrEqual(120);
       expect(description.length, description).toBeLessThanOrEqual(160);

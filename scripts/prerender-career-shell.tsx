@@ -383,7 +383,7 @@ async function writeHelpPages(
 async function writeServerPageStyles(distDirectory: string): Promise<string> {
   const source = (
     await Promise.all(
-      ['salaryMarketPage.css', 'interviewQuestions.css'].map((file) =>
+      ['salaryMarketPage.css', 'interviewQuestions.css', 'guides.css'].map((file) =>
         readFile(new URL(`../src/features/site/${file}`, import.meta.url), 'utf8'),
       ),
     )

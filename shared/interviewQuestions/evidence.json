@@ -1,102 +1,520 @@
 {
-  "measuredAt": "2026-10-27",
+  "measuredAt": "2026-11-08",
   "windowDays": 90,
   "minDescribed": 100,
   "professions": {
     "accountant": {
-      "vacancies": 9776,
-      "described": 1543,
+      "vacancies": 6971,
+      "described": 521,
       "topics": {
-        "month-close": 804,
-        "payroll": 380,
-        "automation": 1260,
-        "erp-1c": 1025,
-        "primary-docs": 786,
-        "ifrs": 527,
-        "banks": 425,
-        "audit": 1009,
-        "tax-audit": 720,
-        "vat-request": 238
+        "month-close": 274,
+        "tax-audit": 219,
+        "erp-1c": 323,
+        "vat-request": 67,
+        "ifrs": 193,
+        "payroll": 120,
+        "audit": 290,
+        "automation": 353,
+        "banks": 108,
+        "primary-docs": 184
       }
     },
     "project-manager": {
-      "vacancies": 9736,
-      "described": 7087,
+      "vacancies": 3886,
+      "described": 1838,
       "topics": {
-        "stakeholders": 4350,
-        "plan": 6001,
-        "budget": 5166,
-        "vendors": 3921,
-        "risks": 4117,
-        "scope-change": 3792,
-        "status": 4602,
-        "methodology": 1693,
-        "certification": 3072,
-        "tools": 1476
+        "plan": 1512,
+        "risks": 1179,
+        "stakeholders": 1182,
+        "methodology": 594,
+        "status": 1126,
+        "tools": 476,
+        "scope-change": 1049,
+        "budget": 1261,
+        "vendors": 783,
+        "certification": 812
       }
     },
     "data-analyst": {
-      "vacancies": 2413,
-      "described": 1445,
+      "vacancies": 1559,
+      "described": 1018,
       "topics": {
-        "sql": 1004,
-        "metric-drop": 641,
-        "ab-test": 614,
-        "dashboard": 1036,
-        "excel": 885,
-        "priorities": 1133,
-        "python": 703,
-        "model": 297,
-        "data-quality": 572,
-        "cohorts": 107
+        "ab-test": 456,
+        "dashboard": 710,
+        "excel": 594,
+        "priorities": 809,
+        "model": 221,
+        "sql": 698,
+        "metric-drop": 456,
+        "python": 474,
+        "data-quality": 414,
+        "cohorts": 80
       }
     },
     "recruiter-talent-acquisition-specialist": {
-      "vacancies": 4542,
-      "described": 1147,
+      "vacancies": 2785,
+      "described": 323,
       "topics": {
-        "candidate-experience": 719,
-        "volume": 585,
-        "intake": 884,
-        "sourcing": 1017,
-        "ats": 689,
-        "offer-decline": 855,
-        "assessment": 941,
-        "onboarding": 400,
-        "metrics": 809,
-        "law": 104
+        "intake": 218,
+        "sourcing": 262,
+        "metrics": 206,
+        "ats": 173,
+        "offer-decline": 223,
+        "candidate-experience": 183,
+        "assessment": 241,
+        "volume": 166,
+        "onboarding": 125,
+        "law": 29
       }
     },
     "customer-support-agent": {
-      "vacancies": 2112,
-      "described": 1228,
+      "vacancies": 1769,
+      "described": 1017,
       "topics": {
-        "metrics": 229,
-        "channels": 855,
-        "angry-customer": 503,
-        "escalation": 432,
-        "tone": 629,
-        "tech": 470,
-        "languages": 528,
-        "sales": 386,
-        "stress": 472,
-        "unknown-answer": 100
+        "angry-customer": 459,
+        "channels": 724,
+        "escalation": 394,
+        "stress": 392,
+        "languages": 449,
+        "tech": 449,
+        "tone": 533,
+        "sales": 349,
+        "unknown-answer": 75,
+        "metrics": 172
       }
     },
     "head-sales": {
-      "vacancies": 3394,
-      "described": 1374,
+      "vacancies": 2204,
+      "described": 915,
       "topics": {
-        "funnel": 947,
-        "key-accounts": 395,
-        "marketing": 951,
-        "motivation-scheme": 599,
-        "pricing": 871,
-        "process": 403,
-        "hiring": 730,
-        "underperformer": 573,
-        "reporting": 768,
-        "plan": 1206
+        "plan": 786,
+        "underperformer": 389,
+        "hiring": 485,
+        "motivation-scheme": 371,
+        "pricing": 520,
+        "reporting": 445,
+        "marketing": 569,
+        "process": 260,
+        "funnel": 647,
+        "key-accounts": 247
+      }
+    },
+    "account-manager": {
+      "vacancies": 2953,
+      "described": 1936,
+      "topics": {
+        "portfolio": 1533,
+        "crm": 698,
+        "negotiation": 505,
+        "kpi-plan": 184,
+        "reporting": 507,
+        "onboarding": 376,
+        "b2b-b2c": 825,
+        "retention": 675,
+        "upsell": 437,
+        "qbr": 293,
+        "receivables": 68
+      }
+    },
+    "backend-engineer": {
+      "vacancies": 1620,
+      "described": 960,
+      "topics": {
+        "api-design": 602,
+        "slow-query": 606,
+        "transactions": 44,
+        "security": 339,
+        "stack-depth": 907,
+        "containers": 573,
+        "observability": 220,
+        "concurrency": 193,
+        "architecture": 270,
+        "testing": 154,
+        "queues": 261,
+        "caching": 184
+      }
+    },
+    "business-development-representative": {
+      "vacancies": 1171,
+      "described": 1051,
+      "topics": {
+        "tools": 889,
+        "cold-outreach": 908,
+        "cold-call": 377,
+        "qualification": 940,
+        "metrics": 779,
+        "personalization": 564,
+        "email": 814,
+        "decision-maker": 350,
+        "objections": 269,
+        "handoff": 148,
+        "icp": 143
+      }
+    },
+    "customer-success-manager": {
+      "vacancies": 1030,
+      "described": 918,
+      "topics": {
+        "onboarding": 423,
+        "churn": 630,
+        "upsell": 542,
+        "tools": 443,
+        "product-feedback": 529,
+        "qbr": 353,
+        "stakeholders": 546,
+        "escalation": 266,
+        "metrics": 170,
+        "health-score": 121,
+        "portfolio": 48
+      }
+    },
+    "data-engineer": {
+      "vacancies": 536,
+      "described": 383,
+      "topics": {
+        "sql": 308,
+        "etl-design": 325,
+        "orchestration": 176,
+        "spark-big-data": 205,
+        "streaming": 117,
+        "dwh-modeling": 214,
+        "python": 295,
+        "cloud-infra": 293,
+        "data-quality": 217,
+        "security-privacy": 141,
+        "dbt-analytics": 115
+      }
+    },
+    "devops-engineer": {
+      "vacancies": 512,
+      "described": 204,
+      "topics": {
+        "ci-cd-pipeline": 189,
+        "kubernetes": 147,
+        "iac": 172,
+        "containers-security": 154,
+        "cloud": 189,
+        "linux-network": 158,
+        "database-ops": 86,
+        "automation-scripts": 194,
+        "monitoring-slo": 129,
+        "scaling": 111,
+        "release-strategy": 32
+      }
+    },
+    "engineering-manager": {
+      "vacancies": 1106,
+      "described": 874,
+      "topics": {
+        "hiring": 616,
+        "delivery": 690,
+        "tech-quality": 375,
+        "performance": 415,
+        "architecture-role": 468,
+        "incidents": 390,
+        "remote-team": 383,
+        "product-collab": 517,
+        "processes": 390,
+        "metrics": 92,
+        "team-building": 243
+      }
+    },
+    "executive-assistant": {
+      "vacancies": 3724,
+      "described": 467,
+      "topics": {
+        "events": 243,
+        "calendar": 375,
+        "prioritization": 340,
+        "confidentiality": 316,
+        "travel": 304,
+        "communication": 271,
+        "meetings": 354,
+        "tools": 391,
+        "expenses": 166,
+        "tasks-control": 232,
+        "boundaries": 47
+      }
+    },
+    "financial-controller": {
+      "vacancies": 663,
+      "described": 297,
+      "topics": {
+        "ifrs": 95,
+        "budgeting": 200,
+        "management-reporting": 112,
+        "tax": 111,
+        "erp-tools": 131,
+        "audit": 105,
+        "cashflow": 91,
+        "month-close": 108,
+        "internal-control": 79,
+        "business-partner": 107,
+        "team-lead": 29,
+        "cost-control": 28
+      }
+    },
+    "fp-analyst": {
+      "vacancies": 911,
+      "described": 303,
+      "topics": {
+        "budget-process": 198,
+        "forecast": 189,
+        "financial-model": 152,
+        "business-partnering": 137,
+        "variance": 131,
+        "excel-bi": 200,
+        "planning-systems": 89,
+        "communication": 107,
+        "pnl-structure": 68,
+        "business-case": 22,
+        "unit-economics": 57,
+        "reporting-dashboards": 72
+      }
+    },
+    "frontend-engineer": {
+      "vacancies": 472,
+      "described": 317,
+      "topics": {
+        "react-rendering": 259,
+        "typescript": 211,
+        "api-integration": 212,
+        "live-coding-approach": 277,
+        "browser-basics": 216,
+        "state-management": 112,
+        "web-performance": 213,
+        "build-tooling": 117,
+        "framework-choice": 97,
+        "testing-front": 136,
+        "accessibility": 93,
+        "component-library": 98,
+        "security-front": 51
+      }
+    },
+    "full-stack-engineer": {
+      "vacancies": 1132,
+      "described": 1030,
+      "topics": {
+        "stack-balance": 911,
+        "api-contract": 537,
+        "db-schema": 782,
+        "frontend-state": 715,
+        "deploy": 616,
+        "performance": 451,
+        "security": 321,
+        "testing": 191,
+        "ownership-incident": 166,
+        "auth": 210,
+        "queues-jobs": 157
+      }
+    },
+    "head-marketing": {
+      "vacancies": 889,
+      "described": 338,
+      "topics": {
+        "strategy": 207,
+        "budget": 126,
+        "sales-alignment": 129,
+        "channels": 268,
+        "analytics": 76,
+        "brand": 231,
+        "agencies": 137,
+        "market-research": 89,
+        "martech": 148,
+        "content": 99,
+        "team": 40,
+        "metrics": 63
+      }
+    },
+    "hr-business-partner": {
+      "vacancies": 307,
+      "described": 171,
+      "topics": {
+        "org-diagnostics": 20,
+        "talent-review": 64,
+        "performance": 80,
+        "attrition": 98,
+        "labor-law": 75,
+        "employee-relations": 96,
+        "compensation": 96,
+        "workforce-planning": 100,
+        "manager-coaching": 68,
+        "hr-analytics": 95,
+        "first-90-days": 96,
+        "change-management": 32
+      }
+    },
+    "key-account-manager": {
+      "vacancies": 964,
+      "described": 672,
+      "topics": {
+        "account-plan": 462,
+        "negotiations": 344,
+        "growth": 137,
+        "stakeholders": 401,
+        "forecast": 289,
+        "crm": 270,
+        "segmentation": 270,
+        "cross-functional": 253,
+        "tenders": 33,
+        "discount": 34
+      }
+    },
+    "marketing-specialist": {
+      "vacancies": 2039,
+      "described": 1183,
+      "topics": {
+        "channels": 1066,
+        "metrics": 443,
+        "launch": 565,
+        "sales-alignment": 792,
+        "agency": 275,
+        "brand-pr": 992,
+        "content": 890,
+        "analytics": 522,
+        "positioning": 404,
+        "automation": 626,
+        "ab-testing": 251,
+        "marketing-plan": 435,
+        "seo": 326
+      }
+    },
+    "mobile-engineer": {
+      "vacancies": 342,
+      "described": 204,
+      "topics": {
+        "platform-stack": 201,
+        "release-store": 78,
+        "testing": 51,
+        "networking": 131,
+        "architecture": 94,
+        "lifecycle-state": 72,
+        "performance-battery": 141,
+        "ui-adaptive": 101,
+        "permissions-security": 42,
+        "sdk-update": 19,
+        "offline-sync": 37,
+        "background-work": 42
+      }
+    },
+    "operations-manager": {
+      "vacancies": 1422,
+      "described": 907,
+      "topics": {
+        "process-improvement": 426,
+        "kpi": 280,
+        "budget": 281,
+        "automation": 228,
+        "cross-functional": 419,
+        "capacity": 272,
+        "incident": 96,
+        "hiring": 316,
+        "vendors": 297,
+        "quality": 482,
+        "regulations": 26,
+        "team-management": 73
+      }
+    },
+    "performance-marketing-specialist": {
+      "vacancies": 449,
+      "described": 250,
+      "topics": {
+        "channels": 245,
+        "metrics": 153,
+        "analytics": 161,
+        "lead-quality": 97,
+        "ab-tests": 209,
+        "budget": 164,
+        "creatives": 167,
+        "reporting": 117,
+        "retargeting": 63,
+        "optimization": 33,
+        "sudden-drop": 32
+      }
+    },
+    "product-manager": {
+      "vacancies": 3583,
+      "described": 2542,
+      "topics": {
+        "roadmap": 1886,
+        "stakeholders": 1768,
+        "analytics-tools": 372,
+        "agile-tools": 876,
+        "prioritization": 1080,
+        "discovery": 876,
+        "metrics": 737,
+        "ab-tests": 603,
+        "unit-economics": 472,
+        "launch": 1383,
+        "strategy": 890
+      }
+    },
+    "sales-representative-account-executive": {
+      "vacancies": 40071,
+      "described": 791,
+      "topics": {
+        "objections": 107,
+        "prospecting": 335,
+        "negotiation": 278,
+        "crm": 341,
+        "proposal": 88,
+        "decision-maker": 154,
+        "forecast": 94,
+        "plan": 110,
+        "sales-cycle": 245,
+        "discovery": 81,
+        "repeat-sales": 42
+      }
+    },
+    "social-media-manager": {
+      "vacancies": 1444,
+      "described": 241,
+      "topics": {
+        "content-strategy": 50,
+        "metrics": 206,
+        "platforms": 179,
+        "paid": 164,
+        "video": 168,
+        "tools": 92,
+        "community": 185,
+        "reporting": 96,
+        "influencers": 73,
+        "funnel": 36,
+        "crisis": 33
+      }
+    },
+    "solutions-architect": {
+      "vacancies": 1473,
+      "described": 1343,
+      "topics": {
+        "requirements": 823,
+        "integration": 702,
+        "cloud": 965,
+        "architecture-design": 1063,
+        "nfr": 878,
+        "security": 744,
+        "data-storage": 345,
+        "devops": 359,
+        "stakeholders": 805,
+        "tech-debt": 425,
+        "presales": 509,
+        "monolith-vs-micro": 186
+      }
+    },
+    "ux-ui-designer": {
+      "vacancies": 452,
+      "described": 255,
+      "topics": {
+        "research": 192,
+        "figma": 240,
+        "design-system": 176,
+        "ux-process": 237,
+        "accessibility": 137,
+        "developer-handoff": 189,
+        "ui-craft": 151,
+        "ai-tools": 144,
+        "content-ux-writing": 10,
+        "metrics": 37
       }
     }
   }

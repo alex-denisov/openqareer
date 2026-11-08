@@ -75,6 +75,7 @@ export const PUBLIC_FOOTER_COLUMNS: readonly ChromeColumn[] = [
     title: 'Помощь',
     links: [
       { label: 'Вопросы и ответы', href: '/faq' },
+      { label: 'Материалы для кандидата', href: '/guides' },
       { label: 'Поддержка', href: '/support' },
       { label: 'Telegram-бот', href: 'https://t.me/openqareer_bot', external: true },
       { label: 'Приложение для Mac', href: '/downloads/openqareer-macos.dmg' },

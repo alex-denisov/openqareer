@@ -4,6 +4,30 @@ import { DATA_ANALYST } from './bank/dataAnalyst';
 import { HEAD_SALES } from './bank/headSales';
 import { PROJECT_MANAGER } from './bank/projectManager';
 import { RECRUITER } from './bank/recruiter';
+import { ACCOUNT_MANAGER } from './bank/accountManager';
+import { BACKEND_ENGINEER } from './bank/backendEngineer';
+import { BUSINESS_DEVELOPMENT_REPRESENTATIVE } from './bank/businessDevelopmentRepresentative';
+import { CUSTOMER_SUCCESS_MANAGER } from './bank/customerSuccessManager';
+import { DATA_ENGINEER } from './bank/dataEngineer';
+import { DEVOPS_ENGINEER } from './bank/devopsEngineer';
+import { ENGINEERING_MANAGER } from './bank/engineeringManager';
+import { EXECUTIVE_ASSISTANT } from './bank/executiveAssistant';
+import { FINANCIAL_CONTROLLER } from './bank/financialController';
+import { FP_ANALYST } from './bank/fpAnalyst';
+import { FRONTEND_ENGINEER } from './bank/frontendEngineer';
+import { FULL_STACK_ENGINEER } from './bank/fullStackEngineer';
+import { HEAD_MARKETING } from './bank/headMarketing';
+import { HR_BUSINESS_PARTNER } from './bank/hrBusinessPartner';
+import { KEY_ACCOUNT_MANAGER } from './bank/keyAccountManager';
+import { MARKETING_SPECIALIST } from './bank/marketingSpecialist';
+import { MOBILE_ENGINEER } from './bank/mobileEngineer';
+import { OPERATIONS_MANAGER } from './bank/operationsManager';
+import { PERFORMANCE_MARKETING_SPECIALIST } from './bank/performanceMarketingSpecialist';
+import { PRODUCT_MANAGER } from './bank/productManager';
+import { SALES_REPRESENTATIVE_ACCOUNT_EXECUTIVE } from './bank/salesRepresentativeAccountExecutive';
+import { SOCIAL_MEDIA_MANAGER } from './bank/socialMediaManager';
+import { SOLUTIONS_ARCHITECT } from './bank/solutionsArchitect';
+import { UX_UI_DESIGNER } from './bank/uxUiDesigner';
 import evidenceJson from './evidence.json';
 import type {
   InterviewEvidence,
@@ -26,6 +50,30 @@ export const INTERVIEW_PROFESSIONS: readonly InterviewProfession[] = [
   RECRUITER,
   CUSTOMER_SUPPORT,
   HEAD_SALES,
+  ACCOUNT_MANAGER,
+  BACKEND_ENGINEER,
+  BUSINESS_DEVELOPMENT_REPRESENTATIVE,
+  CUSTOMER_SUCCESS_MANAGER,
+  DATA_ENGINEER,
+  DEVOPS_ENGINEER,
+  ENGINEERING_MANAGER,
+  EXECUTIVE_ASSISTANT,
+  FINANCIAL_CONTROLLER,
+  FP_ANALYST,
+  FRONTEND_ENGINEER,
+  FULL_STACK_ENGINEER,
+  HEAD_MARKETING,
+  HR_BUSINESS_PARTNER,
+  KEY_ACCOUNT_MANAGER,
+  MARKETING_SPECIALIST,
+  MOBILE_ENGINEER,
+  OPERATIONS_MANAGER,
+  PERFORMANCE_MARKETING_SPECIALIST,
+  PRODUCT_MANAGER,
+  SALES_REPRESENTATIVE_ACCOUNT_EXECUTIVE,
+  SOCIAL_MEDIA_MANAGER,
+  SOLUTIONS_ARCHITECT,
+  UX_UI_DESIGNER,
 ];
 
 export const INTERVIEW_EVIDENCE = evidenceJson as InterviewEvidence;
