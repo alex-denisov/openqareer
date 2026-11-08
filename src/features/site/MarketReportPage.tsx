@@ -26,7 +26,10 @@ function date(iso: string): string {
 }
 
 function percent(part: number, whole: number): string {
-  return `${Math.round((part / whole) * 100)} %`;
+  const value = (part / whole) * 100;
+  // Small shares keep one decimal: «0 %» next to 439 vacancies reads as an error.
+  const text = value < 10 ? value.toFixed(1).replace('.', ',') : String(Math.round(value));
+  return `${text} %`;
 }
 
 function SourceLine({ report, sample }: { report: MarketReport; sample: number }) {
@@ -64,9 +67,9 @@ function Salaries({ report }: { report: MarketReport }) {
                 <td>
                   {group.currency}, {PERIOD[group.period]}
                 </td>
-                <td>{num(group.medianLow)}</td>
-                <td>{num(group.medianHigh)}</td>
-                <td>{num(group.sample)}</td>
+                <td data-l="Медиана «от»">{num(group.medianLow)}</td>
+                <td data-l="Медиана «до»">{num(group.medianHigh)}</td>
+                <td data-l="Вилок">{num(group.sample)}</td>
               </tr>
             ))}
           </tbody>
@@ -94,8 +97,8 @@ function Roles({ report }: { report: MarketReport }) {
           {report.topRoles.map((role) => (
             <tr key={role.slug}>
               <td>{role.label}</td>
-              <td>{num(role.count)}</td>
-              <td>{percent(role.count, report.vacancies)}</td>
+              <td data-l="Вакансий">{num(role.count)}</td>
+              <td data-l="Доля месяца">{percent(role.count, report.vacancies)}</td>
             </tr>
           ))}
         </tbody>

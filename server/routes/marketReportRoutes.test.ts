@@ -69,3 +69,14 @@ describe('market report routes', () => {
     expect((await server.inject('/reports')).statusCode).toBe(404);
   });
 });
+
+describe('report cells on a phone', () => {
+  it('every number cell carries its column label', async () => {
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(
+      new URL('../../src/features/site/MarketReportPage.tsx', import.meta.url),
+      'utf8',
+    );
+    expect(source.match(/<td>\{num\(/gu) ?? []).toHaveLength(0);
+  });
+});
