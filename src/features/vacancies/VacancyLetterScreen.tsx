@@ -379,7 +379,6 @@ function LetterDraftContent({
       {state.draft.pitch ? (
         <LetterNotices
           pitch={state.draft.pitch}
-          circle={state.circle.circle}
           onGatherFacts={onGatherFacts}
         />
       ) : null}

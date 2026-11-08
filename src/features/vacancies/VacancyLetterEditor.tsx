@@ -187,45 +187,20 @@ export function LetterEditor({
   );
 }
 
-/** Сноску читает кандидат, поэтому она на русском при любом языке письма. */
-function requirementsNote(count: number): string {
-  const last = count % 10;
-  const tens = count % 100;
-  const few = last >= 2 && last <= 4 && (tens < 12 || tens > 14);
-  if (last === 1 && tens !== 11)
-    return `${count} требование вакансии не подтверждено фактами профиля`;
-  return `${count} ${few ? 'требования' : 'требований'} вакансии не подтверждены фактами профиля`;
-}
-
-function UnconfirmedRequirementsNote({ labels }: { readonly labels: readonly string[] }) {
-  return (
-    <details className="career-letter-requirements">
-      <summary>{requirementsNote(labels.length)}</summary>
-      <ul>
-        {labels.map((label) => (
-          <li key={label}>{label}</li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
 /**
- * Под письмом в макете 9 — одна строка «слов · длина · от имени». Сигнал о
- * фактах остаётся, но одной короткой заметкой, самой полезной (G3 L2, 03.11).
+ * Под письмом в макете 9 — одна строка «слов · длина · от имени». Примечаний без действия нет (B623):
+ * ни «сверьте с профилем», ни «N требований не подтверждены». Остаётся нехватка фактов с кнопкой
+ * «Собрать факты с консультантом» и примечание шаблонного текста, если сервер его прислал.
  */
 export function LetterNotices({
   pitch,
-  circle = 3,
   onGatherFacts,
 }: {
   readonly pitch: VacancyPitchResult;
-  readonly circle?: ConnectionCircleNumber;
   readonly onGatherFacts?: () => void;
 }) {
-  // Круги 1 и 2 показывают короткое сообщение, а не письмо модели: предупреждение о его фактах там не к месту.
-  const notice = pitch.bodySource === 'model' && circle !== 3 ? undefined : pitch.notices?.[0];
-  const unconfirmed = pitch.unconfirmedRequirements ?? [];
+  // Письму модели сервер примечаний не шлёт (B623); на всякий случай они не показываются ни в одном круге.
+  const notice = pitch.bodySource === 'model' ? undefined : pitch.notices?.[0];
   if (pitch.usedEvidenceIds.length === 0 && pitch.bodySource !== 'model') {
     return (
       <div className="career-letter-notes">
@@ -245,10 +220,10 @@ export function LetterNotices({
       </div>
     );
   }
-  if (!notice && unconfirmed.length === 0) return null;
+  if (!notice) return null;
   return (
     <div className="career-letter-notes">
-      {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} />}
+      <p>{notice}</p>
     </div>
   );
 }

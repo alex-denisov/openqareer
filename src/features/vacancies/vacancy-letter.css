@@ -540,19 +540,6 @@
   gap: var(--career-space-2);
 }
 
-.career-letter-requirements {
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-}
-
-.career-letter-requirements summary {
-  cursor: pointer;
-}
-
-.career-letter-requirements ul {
-  margin: var(--career-space-1) 0 0;
-  padding-inline-start: var(--career-space-4);
-}
 @media (max-width: 40rem) {
   .career-cabinet-view-opportunities:has(.career-letter-screen) .career-page-header,
   .career-cabinet-view-opportunities:has(.career-letter-screen) .career-path {

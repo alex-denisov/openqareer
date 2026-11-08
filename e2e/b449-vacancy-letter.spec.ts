@@ -754,7 +754,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await expect(page.locator('.career-letter-error')).toHaveCount(0);
   });
 
-  test('recovers from generation errors and shows the requirements and few-facts notes', async ({
+  test('recovers from generation errors, hides requirement notes and keeps the few-facts note', async ({
     page,
   }, testInfo) => {
     const state = createRouteState('rich', 'error');
@@ -769,16 +769,10 @@ test.describe('B449 — письмо под вакансию', () => {
     await waitForLetter(page);
     state.pitchMode = 'english';
     await page.getByLabel('Язык').selectOption('en');
-    const requirements = page.locator('.career-letter-requirements');
-    await expect(requirements.locator('summary')).toHaveText(
-      '2 требования вакансии не подтверждены фактами профиля',
-    );
-    await requirements.locator('summary').click();
-    await expect(requirements.getByRole('listitem')).toHaveText([
-      'Director of technology',
-      'IT director',
-    ]);
-    await expect(page.locator('.career-letter-notes')).not.toContainText('Письмо на английском');
+    await waitForLetter(page);
+    // B623: непроверенные требования вакансии под письмом не показываются — действия у них нет.
+    await expect(page.locator('.career-letter-requirements')).toHaveCount(0);
+    await expect(page.locator('.career-letter-notes')).toHaveCount(0);
     await captureState(page, testInfo, 'english-partial');
 
     const preservedText = 'Кандидатская правка, которую нужно сохранить при ошибке.';

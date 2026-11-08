@@ -165,29 +165,13 @@ describe('the note under the letter (G3 L2)', () => {
     expect(notes({})).toBe('');
   });
 
-  it('a model letter shows its fact warning, not the few-facts line the template would have earned', () => {
-    const markup = notes({
-      bodySource: 'model',
-      usedEvidenceIds: [],
-      notices: ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'],
-    });
-    expect(markup).toContain('сверьте с профилем');
-    expect(markup).not.toContain('мало подтверждённых');
+  it('B623: письмо модели не показывает предупреждение «сверьте с профилем» ', () => {
+    const modelNote = ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'];
+    expect(notes({ bodySource: 'model', notices: modelNote })).toBe('');
   });
 
   it('08.11: письмо модели без примечаний не рисует пустой блок под письмом', () => {
     expect(notes({ bodySource: 'model', usedEvidenceIds: [], notices: [] })).toBe('');
-  });
-
-  it('круги 1 и 2 показывают короткое сообщение, а не письмо модели: предупреждения о письме там нет', () => {
-    const modelNote = ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'];
-    const markup = renderToStaticMarkup(
-      <LetterNotices circle={1} pitch={pitch({ bodySource: 'model', notices: modelNote })} />,
-    );
-    expect(markup).not.toContain('сверьте с профилем');
-    expect(
-      renderToStaticMarkup(<LetterNotices circle={3} pitch={pitch({ bodySource: 'model', notices: modelNote })} />),
-    ).toContain('сверьте с профилем');
   });
 
   it('shows one line even when the server sends several', () => {
@@ -200,28 +184,12 @@ describe('the note under the letter (G3 L2)', () => {
     expect(markup).not.toContain('IT director');
   });
 
-  it('counts unconfirmed requirements and lists their human labels on demand', () => {
-    const markup = notes({
-      language: 'ru',
-      unconfirmedRequirements: ['Director of technology', 'Technology director'],
-    });
-    expect(markup).toContain(
-      '<summary>2 требования вакансии не подтверждены фактами профиля</summary>',
-    );
-    expect(markup).toContain('<li>Director of technology</li>');
-    expect(markup).not.toMatch(/\p{L}+-\p{Lu}\p{Ll}+/u);
-    expect(notes({ language: 'ru', unconfirmedRequirements: ['Kafka'] })).toContain(
-      '1 требование вакансии не подтверждено',
-    );
+  it('B623: непроверенные требования вакансии под письмом не показываются', () => {
+    expect(notes({ language: 'ru', unconfirmedRequirements: ['Director of technology', 'Kafka'] })).toBe('');
+    expect(notes({ bodySource: 'model', unconfirmedRequirements: ['Kafka'] })).toBe('');
   });
 
-  it('the requirements note stays in Russian under an English letter: the candidate reads it', () => {
-    expect(notes({ unconfirmedRequirements: ['Kafka', 'Go'] })).toContain(
-      '2 требования вакансии не подтверждены',
-    );
-    expect(notes({ unconfirmedRequirements: ['Kafka'] })).toContain(
-      '1 требование вакансии не подтверждено',
-    );
+  it('the few-facts note keeps its action and the language of the letter', () => {
     const fewFacts = notes({ usedEvidenceIds: [] });
     expect(fewFacts).toContain('too few confirmed facts');
     expect(fewFacts).not.toContain('мало подтверждённых');

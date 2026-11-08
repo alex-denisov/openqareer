@@ -33,7 +33,7 @@ import {
 import { pitchRankingContext } from './pitchRankingContext';
 import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
-import { checkPitchOutputFacts, generatedTextFactNotices } from '../domain/generatedTextFactGate';
+import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -312,21 +312,15 @@ async function prepareVacancyPitch(deps: RouteDeps, request: FastifyRequest, rep
 }
 
 /**
- * Одно примечание под письмом (G3 L2, макет 9). Подписи «написала модель» нет (решение владельца 08.11):
- * письмо модели получает только предупреждение о фактах без источника в своём тексте; примечания и проверки
- * шаблонных текстов к нему не относятся.
+ * Примечание под письмом (G3 L2, макет 9). Проверка фактов остаётся внутренней (B623, правило владельца
+ * «без технических подсказок без действия»): выдумки отклоняет гейт цепочки, кандидат не видит ни подписи
+ * «написала модель», ни списка «сверьте с профилем N утверждений». Под шаблонным текстом остаётся только
+ * примечание о нехватке фактов: к нему на экране есть действие «Собрать факты с консультантом».
  */
 export function letterNotices(
-  result: Pick<Awaited<ReturnType<typeof writeVacancyPitch>>, 'pitch' | 'written' | 'outputFactChecks'>,
+  result: Pick<Awaited<ReturnType<typeof writeVacancyPitch>>, 'pitch' | 'written'>,
 ): string[] {
-  const { pitch, written, outputFactChecks } = result;
-  if (written.body) {
-    return generatedTextFactNotices(pitch.language, written.factCheck ? [written.factCheck] : []).slice(0, 1);
-  }
-  return [
-    ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks)),
-    ...pitch.notices,
-  ].slice(0, 1);
+  return result.written.body ? [] : result.pitch.notices.slice(0, 1);
 }
 
 const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
