@@ -6,6 +6,7 @@ import { legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { LEGAL_DOCS } from '../shared/legalRegistry';
 import { buildLlmsTxt } from '../shared/aeoSurface';
 import { GUIDES } from '../shared/guides';
+import { BLOG_POSTS } from '../shared/blog';
 
 describe('public discovery metadata', () => {
   it('keeps public tool and legal discovery copy within the approved length budgets', () => {
@@ -13,6 +14,7 @@ describe('public discovery metadata', () => {
       COUNTRY_FIT_TITLE,
       ...LEGAL_DOCS.map((doc) => legalDocumentTitle(doc.slug)),
       ...GUIDES.map((guide) => guide.title),
+      ...BLOG_POSTS.map((post) => post.title),
     ]) {
       expect(title.length, title).toBeGreaterThanOrEqual(45);
       expect(title.length, title).toBeLessThanOrEqual(65);
@@ -21,6 +23,7 @@ describe('public discovery metadata', () => {
       COUNTRY_FIT_DESCRIPTION,
       ...LEGAL_DOCS.map((doc) => doc.description),
       ...GUIDES.map((guide) => guide.description),
+      ...BLOG_POSTS.map((post) => post.description),
     ]) {
       expect(description.length, description).toBeGreaterThanOrEqual(120);
       expect(description.length, description).toBeLessThanOrEqual(160);

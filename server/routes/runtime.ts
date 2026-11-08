@@ -12,6 +12,7 @@ import { registerAeoRoutes } from '../seo/aeoRoutes';
 import { registerSalaryMarketRoutes } from './salaryMarketRoutes';
 import { registerInterviewQuestionRoutes } from './interviewQuestionRoutes';
 import { registerGuideRoutes } from './guideRoutes';
+import { registerBlogRoutes } from './blogRoutes';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
@@ -461,6 +462,7 @@ export async function registerStaticDelivery(
     registerSalaryMarketRoutes(app, config);
     registerInterviewQuestionRoutes(app, { ...config, signedIn });
     registerGuideRoutes(app, config);
+    registerBlogRoutes(app, config);
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,

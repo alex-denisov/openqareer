@@ -11,6 +11,7 @@
  */
 import { LEGAL_DOCS, legalPath } from './legalRegistry';
 import { GUIDES, GUIDES_ROOT, guidePath } from './guides';
+import { BLOG_POSTS, BLOG_ROOT, blogPath } from './blog';
 import type { LandingStats } from './landingStats';
 import { TARIFF_LEVELS } from '../src/features/tariffs/tariffsData';
 
@@ -37,6 +38,8 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   '/tools/relocation',
   GUIDES_ROOT,
   ...GUIDES.map((guide) => guidePath(guide.slug)),
+  BLOG_ROOT,
+  ...BLOG_POSTS.map((post) => blogPath(post.slug)),
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
 ];
 
@@ -138,6 +141,14 @@ export function buildLlmsTxt(stats?: LandingStats): string {
       ),
     ),
     '',
+    '## Блог',
+    '',
+    bullet(
+      BLOG_POSTS.map(
+        (post) => `[${post.h1}](${SITE_ORIGIN}${blogPath(post.slug)}) — ${post.description}`,
+      ),
+    ),
+    '',
     '## Правовые документы',
     '',
     legal,
@@ -199,6 +210,14 @@ export function buildLlmsFullTxt(stats?: LandingStats): string {
     bullet(
       GUIDES.map(
         (guide) => `[${guide.h1}](${SITE_ORIGIN}${guidePath(guide.slug)}) — ${guide.description}`,
+      ),
+    ),
+    '',
+    '## Блог',
+    '',
+    bullet(
+      BLOG_POSTS.map(
+        (post) => `[${post.h1}](${SITE_ORIGIN}${blogPath(post.slug)}) — ${post.description}`,
       ),
     ),
     '',

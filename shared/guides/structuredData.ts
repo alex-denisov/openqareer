@@ -1,8 +1,8 @@
 import { SITE_ORIGIN } from '../aeoSurface';
-import { GUIDES_ROOT, guidePath } from './index';
+import { GUIDES_COLLECTION, collectionPath, type GuideCollection } from './collection';
 import type { Guide } from './types';
 
-export const GUIDES_HUB_NAME = 'Материалы для кандидата';
+export const GUIDES_HUB_NAME = GUIDES_COLLECTION.hubName;
 
 type JsonLd = Record<string, unknown>;
 
@@ -12,11 +12,16 @@ const PUBLISHER: JsonLd = {
   url: `${SITE_ORIGIN}/`,
 };
 
-export function guideBreadcrumbs(guide?: Guide): JsonLd {
+export function guideBreadcrumbs(
+  guide?: Guide,
+  collection: GuideCollection = GUIDES_COLLECTION,
+): JsonLd {
   const items = [
     { name: 'Главная', item: `${SITE_ORIGIN}/` },
-    { name: GUIDES_HUB_NAME, item: `${SITE_ORIGIN}${GUIDES_ROOT}` },
-    ...(guide ? [{ name: guide.crumb, item: `${SITE_ORIGIN}${guidePath(guide.slug)}` }] : []),
+    { name: collection.hubName, item: `${SITE_ORIGIN}${collection.root}` },
+    ...(guide
+      ? [{ name: guide.crumb, item: `${SITE_ORIGIN}${collectionPath(collection, guide.slug)}` }]
+      : []),
   ];
   return {
     '@type': 'BreadcrumbList',
@@ -29,8 +34,11 @@ export function guideBreadcrumbs(guide?: Guide): JsonLd {
 }
 
 /** Article + BreadcrumbList + FAQPage: FAQ только из вопросов, напечатанных на странице. */
-export function guideStructuredData(guide: Guide): JsonLd[] {
-  const url = `${SITE_ORIGIN}${guidePath(guide.slug)}`;
+export function guideStructuredData(
+  guide: Guide,
+  collection: GuideCollection = GUIDES_COLLECTION,
+): JsonLd[] {
+  const url = `${SITE_ORIGIN}${collectionPath(collection, guide.slug)}`;
   return [
     {
       '@type': 'Article',
@@ -45,33 +53,40 @@ export function guideStructuredData(guide: Guide): JsonLd[] {
       url,
       ...(guide.sources.length > 0 ? { citation: guide.sources.map((source) => source.url) } : {}),
     },
-    guideBreadcrumbs(guide),
-    {
-      '@type': 'FAQPage',
-      mainEntity: guide.faq.map((row) => ({
-        '@type': 'Question',
-        name: row.question,
-        acceptedAnswer: { '@type': 'Answer', text: row.answer },
-      })),
-    },
+    guideBreadcrumbs(guide, collection),
+    ...(guide.faq.length === 0
+      ? []
+      : [
+          {
+            '@type': 'FAQPage',
+            mainEntity: guide.faq.map((row) => ({
+              '@type': 'Question',
+              name: row.question,
+              acceptedAnswer: { '@type': 'Answer', text: row.answer },
+            })),
+          },
+        ]),
   ];
 }
 
-export function guidesHubStructuredData(guides: readonly Guide[]): JsonLd[] {
+export function guidesHubStructuredData(
+  guides: readonly Guide[],
+  collection: GuideCollection = GUIDES_COLLECTION,
+): JsonLd[] {
   return [
-    guideBreadcrumbs(),
+    guideBreadcrumbs(undefined, collection),
     {
       '@type': 'CollectionPage',
-      name: GUIDES_HUB_NAME,
+      name: collection.hubName,
       inLanguage: 'ru-RU',
-      url: `${SITE_ORIGIN}${GUIDES_ROOT}`,
+      url: `${SITE_ORIGIN}${collection.root}`,
       mainEntity: {
         '@type': 'ItemList',
         numberOfItems: guides.length,
         itemListElement: guides.map((guide, index) => ({
           '@type': 'ListItem',
           position: index + 1,
-          url: `${SITE_ORIGIN}${guidePath(guide.slug)}`,
+          url: `${SITE_ORIGIN}${collectionPath(collection, guide.slug)}`,
           name: guide.h1,
         })),
       },
