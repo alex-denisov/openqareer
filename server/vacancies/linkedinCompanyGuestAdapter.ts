@@ -149,7 +149,9 @@ export async function fetchLinkedinCompanyVacancies(
       try {
         response = await customFetch(url, { headers: GUEST_HEADERS });
         if (response.ok || response.status === 429) break;
-      } catch {
+      } catch (error: unknown) {
+        // Пауза бюджета LinkedIn — не сетевой сбой: повторять нельзя (B622).
+        if ((error as { statusCode?: number } | null)?.statusCode === 429) throw error;
         // Retry once on transient network error
       }
       if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));

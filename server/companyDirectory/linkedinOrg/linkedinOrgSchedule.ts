@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { createGuestFetch } from './guestFetch';
 import { LinkedinOrgRunner, type RunnerLog } from './linkedinOrgRunner';
 import { LinkedinOrgStore } from './linkedinOrgStore';
+import type { LinkedinGuestBudget } from '../../vacancies/linkedinGuestBudget';
 
 interface ScheduleLog extends RunnerLog {
   error(details: Record<string, unknown>, message: string): void;
@@ -19,9 +20,18 @@ const IDLE_MS = 60 * 60_000;
 const ERROR_MS = 10 * 60_000;
 const LOG_EVERY = 25;
 
-export function scheduleLinkedinOrgResolver(database: DatabaseSync, log: ScheduleLog): () => void {
+export function scheduleLinkedinOrgResolver(
+  database: DatabaseSync,
+  log: ScheduleLog,
+  budget?: LinkedinGuestBudget,
+): () => void {
   const store = new LinkedinOrgStore(database);
-  const runner = new LinkedinOrgRunner({ store, fetchPage: createGuestFetch(), log });
+  const runner = new LinkedinOrgRunner({
+    store,
+    fetchPage: createGuestFetch(),
+    log,
+    ...(budget ? { budget } : {}),
+  });
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
   let processed = 0;

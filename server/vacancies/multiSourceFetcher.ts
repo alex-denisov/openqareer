@@ -32,7 +32,11 @@ import {
   LINKEDIN_GROUP_B_TARGETS,
   fetchLinkedinCompanyVacancies,
 } from './linkedinCompanyGuestAdapter';
-import { createLinkedinCompanyGate, type LinkedinCompanyGate } from './linkedinCompanyGate';
+import {
+  budgetedFetch,
+  createLinkedinGuestBudget,
+  type LinkedinGuestBudget,
+} from './linkedinGuestBudget';
 import { fetchGenericCorporateVacancies } from './genericCorporateSiteAdapter';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
@@ -328,28 +332,25 @@ async function fetchPagedJsonApi(
 }
 
 /** LinkedIn — гостевой список, свой HTML-разбор и вежливый темп (B218). */
-/**
- * Общий гостевой поиск идёт через тот же шлюз, что и компании (B622): один
- * клиент LinkedIn за раз, и любой 429 ставит на паузу и его, и компании.
- */
+/** Общий гостевой поиск берёт слоты из того же бюджета, что компании и резолвер (B622). */
 async function fetchLinkedinGuestSource(
   sleep: (ms: number) => Promise<void>,
-  gate: LinkedinCompanyGate,
+  budget: LinkedinGuestBudget,
 ): Promise<SourceReading> {
-  return gate.run(() =>
-    fetchLinkedinGuest({
-      fetchPage: async (url, headers) => {
-        // Per page, not per poll: one slow page ends the run with what was read.
-        return withRequestTimeout(LINKEDIN_PAGE_TIMEOUT_MS, async (signal) => {
-          const res = await fetch(url, { headers, signal });
-          if (res.status === 429) gate.markRateLimited();
-          return { status: res.status, body: res.ok ? await res.text() : '' };
-        });
-      },
-      sleep,
-      observedAt: new Date().toISOString(),
-    }),
-  );
+  return fetchLinkedinGuest({
+    fetchPage: async (url, headers) => {
+      // Слот бюджета ждётся до тайм-аута страницы: ожидание очереди — не медленная сеть.
+      await budget.acquire('guest');
+      // Per page, not per poll: one slow page ends the run with what was read.
+      return withRequestTimeout(LINKEDIN_PAGE_TIMEOUT_MS, async (signal) => {
+        const res = await fetch(url, { headers, signal });
+        if (res.status === 429 || res.status === 999) budget.markRateLimited();
+        return { status: res.status, body: res.ok ? await res.text() : '' };
+      });
+    },
+    sleep,
+    observedAt: new Date().toISOString(),
+  });
 }
 
 export const BAYT_PAGES_PER_SYNC = 5;
@@ -500,6 +501,8 @@ export interface MultiSourceFetcherDeps {
   readonly fetchLinkedinCrawler?: (deps?: LinkedinCrawlerDeps) => Promise<SourceReading>;
   /** Карточки поиска вакансий на сессиях пула (решение владельца 03.11); всегда частичное чтение. */
   readonly readLinkedinPoolJobs?: () => SourceReading;
+  /** Общий на процесс бюджет гостевых запросов LinkedIn (B622). */
+  readonly linkedinBudget?: LinkedinGuestBudget;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -592,7 +595,7 @@ async function fetchJsonOrCareerSite(
   deps: MultiSourceFetcherDeps,
   sleep: (ms: number) => Promise<void>,
   now: () => number,
-  linkedinGate: LinkedinCompanyGate,
+  linkedinBudget: LinkedinGuestBudget,
 ): Promise<UnifiedVacancy[] | SourceReading> {
   if (source.linkedinOrgId) {
     const target = {
@@ -600,9 +603,11 @@ async function fetchJsonOrCareerSite(
       company: source.name.replace(/ \(LinkedIn\)$/, ''),
       organizationId: source.linkedinOrgId,
     };
-    return linkedinGate.run(() =>
-      fetchLinkedinCompanyVacancies(target, { sourceId: source.id, maxPages: 10 }),
-    );
+    return fetchLinkedinCompanyVacancies(target, {
+      sourceId: source.id,
+      maxPages: 10,
+      customFetch: budgetedFetch(linkedinBudget, 'companies'),
+    });
   }
   if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
     return fetchYcWorkAtStartup(source);
@@ -618,7 +623,7 @@ async function fetchJsonOrCareerSite(
   }
   if (source.type === 'json_api') {
     if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
-    if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep, linkedinGate);
+    if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep, linkedinBudget);
     if (source.id === BAYT_SOURCE_ID) {
       return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
     }
@@ -638,7 +643,7 @@ export function buildMultiSourceFetcher(
 ): SourceFetcher {
   const sleep = deps.sleep ?? defaultSleep;
   const now = deps.now ?? Date.now;
-  const linkedinGate = createLinkedinCompanyGate({ sleep, now });
+  const linkedinBudget = deps.linkedinBudget ?? createLinkedinGuestBudget({ sleep, now });
   return async (source, options) => {
     if (source.type === 'hh') {
       const sample = await hh({ text: options?.query || 'Developer', perPage: 20 });
@@ -651,7 +656,7 @@ export function buildMultiSourceFetcher(
     if (source.type === 'telegram') return fetchTelegramChannel(source);
     if (source.type === 'rss') return fetchRssFeed(source, options);
     if (source.type === 'career_site' || source.type === 'json_api') {
-      return fetchJsonOrCareerSite(source, options, deps, sleep, now, linkedinGate);
+      return fetchJsonOrCareerSite(source, options, deps, sleep, now, linkedinBudget);
     }
     if (source.type === 'hh_search') return fetchHhSearchBatch(crawlCoordinator);
     if (source.id === 'src-linkedin-crawler') {

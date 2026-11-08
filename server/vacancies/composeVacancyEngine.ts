@@ -18,6 +18,7 @@ import {
   type ReclusterMode,
   type SourceFetcher,
 } from './multiSourceVacancyEngine';
+import type { LinkedinGuestBudget } from './linkedinGuestBudget';
 import { planCompanyChannels, readDirectoryCompanies } from './companyDirectorySources';
 import { DEFAULT_VACANCY_SOURCES, type RegisteredVacancySource } from './defaultVacancySources';
 import { RobotsPolicyLoader, type RobotsFetcher } from './robotsPolicyLoader';
@@ -44,6 +45,8 @@ export interface ComposeVacancyEngineOptions {
   readonly clusterWritePause?: () => void;
   /** Подбор по смыслу вместо LIKE (B267 S3); по умолчанию старое поведение. */
   readonly matchMode?: 'legacy' | 'semantic';
+  /** Общий бюджет гостевого LinkedIn процесса (B622): тот же отдаётся резолверу B621. */
+  readonly linkedinBudget?: LinkedinGuestBudget;
 }
 
 function openPoolJobsDatabase(databasePath: string): DatabaseSync {
@@ -120,6 +123,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
       options.fetcher ??
       buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
         readLinkedinPoolJobs: poolJobs.read,
+        ...(options.linkedinBudget ? { linkedinBudget: options.linkedinBudget } : {}),
       }),
     pool,
     // Право обхода спрашивается у самой площадки, а не берётся из записи,

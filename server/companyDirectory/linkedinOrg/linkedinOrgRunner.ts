@@ -13,6 +13,7 @@ import {
   type PageKind,
 } from './linkedinOrgResolver';
 import type { LinkedinOrgStore, ResolutionOutcome } from './linkedinOrgStore';
+import type { LinkedinGuestBudget } from '../../vacancies/linkedinGuestBudget';
 
 export interface RunnerLog {
   info(details: Record<string, unknown>, message: string): void;
@@ -26,6 +27,8 @@ export interface RunnerOptions {
   readonly minGapMs?: number;
   readonly now?: () => Date;
   readonly sleep?: (ms: number) => Promise<void>;
+  /** Общий бюджет гостевого LinkedIn процесса (B622); без него — свой интервал. */
+  readonly budget?: LinkedinGuestBudget;
 }
 
 export const DEFAULT_MIN_GAP_MS = 20_000;
@@ -44,6 +47,7 @@ export function cooldownMs(strikes: number): number {
 
 export class LinkedinOrgRunner {
   private lastLinkedinAt = 0;
+  private pausedByBudget = false;
   private readonly minGapMs: number;
   private readonly now: () => Date;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -55,7 +59,14 @@ export class LinkedinOrgRunner {
   }
 
   private readonly pacedFetch: FetchPage = async (url: string, kind: PageKind) => {
-    if (kind === 'linkedin') {
+    if (kind === 'linkedin' && this.options.budget) {
+      try {
+        await this.options.budget.acquire('resolver');
+      } catch {
+        this.pausedByBudget = true;
+        throw new LinkedinThrottled('rate_limited', url);
+      }
+    } else if (kind === 'linkedin') {
       const wait = this.lastLinkedinAt + this.minGapMs - this.now().getTime();
       if (wait > 0) await this.sleep(wait);
       this.lastLinkedinAt = this.now().getTime();
@@ -70,6 +81,7 @@ export class LinkedinOrgRunner {
     const cooldown = store.cooldownUntil();
     if (cooldown && cooldown.until > now) return { kind: 'cooldown', until: cooldown.until };
     const row = store.nextDue(now);
+    this.pausedByBudget = false;
     if (!row) return { kind: 'idle' };
     try {
       const outcome = await resolveCompany(row, this.pacedFetch, now);
@@ -85,6 +97,9 @@ export class LinkedinOrgRunner {
       return { kind: 'done', companyKey: row.companyKey, outcome };
     } catch (error: unknown) {
       if (!(error instanceof LinkedinThrottled)) throw error;
+      // Свой 429 резолвера ставит паузу и каналам с гостевым поиском (B622).
+      if (!this.pausedByBudget) this.options.budget?.markRateLimited();
+      this.pausedByBudget = false;
       const strikes = (cooldown?.strikes ?? 0) + 1;
       const until = new Date(this.now().getTime() + cooldownMs(strikes));
       store.setCooldown(until, strikes, error.kind, this.now());
