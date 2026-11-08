@@ -35,9 +35,8 @@ describe('B528 generated text fact gate', () => {
     expect(data.bodySource).toBe('template');
     expect(data.atsCoverLetter).toContain('25%');
     expect(data.outputFactChecks.atsCoverLetter.status).toBe('needs_confirmation');
-    expect(data.notices).toEqual(expect.arrayContaining([
-      expect.stringMatching(/Перед отправкой сверьте с профилем.*25%/u),
-    ]));
+    // B623: проверка остаётся внутренней, кандидату список «сверьте с профилем» не показывается.
+    expect(data.notices.join(' ')).not.toContain('сверьте с профилем');
     expect(candidates.getSnapshot(candidateId).memory.find((fact) => fact.id === 'imp0123456789-template')?.status).toBe('proposed');
   });
 
@@ -69,7 +68,7 @@ describe('B528 generated text fact gate', () => {
     expect(candidates.getSnapshot(candidateId).documents.find((doc) => doc.kind === 'cover_letter')).toBeUndefined();
   });
 
-  it('08.11: a paraphrase of imported facts reaches the letter screen without a note that a model wrote it', async () => {
+  it('08.11, B623: a paraphrase of imported facts reaches the letter screen with no notes under it', async () => {
     const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек.. Буду рад обсудить задачи роли.';
     const { app, candidates } = await createApp([sampleCluster], {
       coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test:model' }) },
@@ -90,12 +89,8 @@ describe('B528 generated text fact gate', () => {
     expect(data.atsCoverLetter).toBe(body);
     expect(data.factCheck.status).toBe('checked');
     expect(data.outputFactChecks.emailBody.status).toBe('checked');
-    // Решение владельца 08.11: подписи «написала модель» нет. Пересказ без источника остаётся предупреждением,
-    // и только о тексте самого письма, а не о шаблонных текстах, которые под ним не видны.
-    expect(data.notices).toHaveLength(1);
-    expect(data.notices[0]).toContain('Перед отправкой сверьте с профилем 1 утверждение');
-    expect(data.notices[0]).toContain('Занимался логистикой');
-    expect(data.notices[0]).not.toContain('модель');
+    // Решения владельца 08.11 (подписи «написала модель» нет) и B623 (без «сверьте с профилем»): под письмом пусто.
+    expect(data.notices).toEqual([]);
   });
 
   it('04.11: a stage whose letter fails the gate gives way, a transliterated employer never shows', async () => {
@@ -214,11 +209,6 @@ describe('B528 generated text fact gate', () => {
       text: 'Я создал проект Atlas.', expected: 'confirmed', source: 'model',
     },
     {
-      name: 'excluded evidence cannot support generation',
-      facts: ['Я увеличил выручку на 20%.'], excluded: true, emptyProfile: true,
-      text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
-    },
-    {
       name: 'another candidate cannot support generation',
       facts: ['Я увеличил выручку на 20%.'], foreign: true, emptyProfile: true,
       text: 'Я увеличил выручку на 20%.', expected: 'not_in_profile', source: 'refused',
@@ -244,7 +234,7 @@ describe('B528 generated text fact gate', () => {
     const response = await app.inject({
       method: 'POST', url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' },
-      payload: { language: 'en', ...(options.excluded ? { excludedEvidenceIds: ids } : {}) },
+      payload: { language: 'en' },
     });
     if (source === 'refused') {
       // Профиль пуст: модель не спрашивали, это не отказ цепочки. Текст модели не показан в обоих случаях.

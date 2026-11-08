@@ -42,7 +42,7 @@ const facts = [
 
 describe('letterProfileText: весь мастер-профиль для письма (B601)', () => {
   it('несёт заголовок, о себе, все места работы с пунктами, проекты, образование, языки, навыки', () => {
-    const text = letterProfileText({ draft, facts, includedWorkplaceIds: ['w1', 'w2'] });
+    const text = letterProfileText({ draft, facts });
     for (const part of ['VP of Technology', 'Строю ИТ-организации.', 'Дубай',
       '## Директор | Россети Цифра | Москва | 2023-04 — 2025-10', '- Выручка выросла с 230 млн до 2 млрд рублей',
       '## Советник | OptiLab | 2025-11 — now', '- Спроектировал LLM Gateway',
@@ -52,7 +52,7 @@ describe('letterProfileText: весь мастер-профиль для пис�
   });
 
   it('факт вне мест работы идёт уточнением кандидата: так письмо узнаёт настоящие названия', () => {
-    const text = letterProfileText({ draft, facts, includedWorkplaceIds: ['w1', 'w2'] });
+    const text = letterProfileText({ draft, facts });
     expect(text).toContain('УТОЧНЕНИЯ КАНДИДАТА');
     expect(text).toContain('- «Enterprise Public Cloud Platform» — это VK Cloud');
     // Запись о самом месте работы и его пункты не дублируются в уточнениях.
@@ -61,15 +61,16 @@ describe('letterProfileText: весь мастер-профиль для пис�
   });
 
   it('контакты, имя кандидата и чужие рекомендации модели не уходят', () => {
-    const text = letterProfileText({ draft, facts, includedWorkplaceIds: ['w1', 'w2'] });
+    const text = letterProfileText({ draft, facts });
     for (const part of ['ivan@example.com', '+70000000000', 'Иван Петров', 'Чужой Человек', 'Отличный коллега']) {
       expect(text).not.toContain(part);
     }
   });
 
-  it('место работы, которое кандидат снял с письма, не попадает в профиль вместе с пунктами', () => {
-    const text = letterProfileText({ draft, facts: facts.filter((item) => item.id !== 'b3'), includedWorkplaceIds: ['w1'] });
-    expect(text).not.toContain('Советник');
+  it('все места работы идут в профиль, и место без подтверждённых фактов тоже (B618)', () => {
+    const text = letterProfileText({ draft, facts: facts.filter((item) => !['c2', 'b3'].includes(item.id)) });
+    expect(text).toContain('## Советник | OptiLab | 2025-11 — now');
+    expect(text).toContain('eterapy.com');
     expect(text).not.toContain('Спроектировал LLM Gateway');
   });
 
@@ -78,7 +79,6 @@ describe('letterProfileText: весь мастер-профиль для пис�
     const text = letterProfileText({
       draft,
       facts: [...facts.filter((item) => item.id !== 'b2'), negative],
-      includedWorkplaceIds: ['w1', 'w2'],
     });
     expect(text).not.toContain('Я не работал с большими командами');
     expect(text).not.toContain('Команда 250+ человек');
@@ -88,7 +88,6 @@ describe('letterProfileText: весь мастер-профиль для пис�
     const text = letterProfileText({
       draft,
       facts: [...facts, { ...fact('imp0123456789-a', 'Импортированный факт', 'proposed') }, fact('note2', 'Работаю с Python каждый день')],
-      includedWorkplaceIds: ['w1', 'w2'],
     });
     expect(text.indexOf('Работаю с Python каждый день')).toBeLessThan(text.indexOf('Импортированный факт'));
   });
@@ -104,23 +103,10 @@ describe('letterProfileText: весь мастер-профиль для пис�
       achievements: [{ id: 'a1', kind: 'honor', evidenceMemoryId: 'secret', title: 'Тайная награда' }],
     };
     const text = letterProfileText({
-      draft: withEvidence, facts, includedWorkplaceIds: ['w1', 'w2'], withheldEvidenceIds: new Set(['secret']),
+      draft: withEvidence, facts, withheldEvidenceIds: new Set(['secret']),
     });
     expect(text).not.toMatch(/Тайн|Закрытая история/u);
     expect(text).toContain('Открытый проект');
-  });
-
-  it('проект снятого места работы не уходит, а проект оставшегося места уходит', () => {
-    const withProjects: ResumeDraft = {
-      ...draft,
-      projects: [
-        { id: 'p1', name: 'Проект энергетиков', employer: 'россети цифра' },
-        { id: 'p2', name: 'eterapy.com', employer: 'OptiLab' },
-      ],
-    };
-    const text = letterProfileText({ draft: withProjects, facts, includedWorkplaceIds: ['w2'] });
-    expect(text).not.toContain('Проект энергетиков');
-    expect(text).toContain('eterapy.com');
   });
 
   it('контакты из свободного текста вычищаются, цифры опыта и адрес продукта остаются', () => {
@@ -132,7 +118,7 @@ describe('letterProfileText: весь мастер-профиль для пис�
       },
     };
     const noted = [...facts, fact('n2', 'Запустил eterapy.com, рост +40% и 1 200 000 000 рублей, linkedin.com/in/ivan')];
-    const text = letterProfileText({ draft: withContacts, facts: noted, includedWorkplaceIds: ['w1', 'w2'] });
+    const text = letterProfileText({ draft: withContacts, facts: noted });
     expect(text).not.toMatch(/example\.com|916|ivan_petrov|linkedin\.com/u);
     expect(text).toContain('eterapy.com');
     expect(text).toContain('+40%');
@@ -141,12 +127,12 @@ describe('letterProfileText: весь мастер-профиль для пис�
 
   it('размер ограничен, но опыт важнее хвоста уточнений', () => {
     const many = Array.from({ length: 2000 }, (_, index) => fact(`n${index}`, `Уточнение ${index} ${'с'.repeat(80)}`));
-    const text = letterProfileText({ draft, facts: [...facts, ...many], includedWorkplaceIds: ['w1', 'w2'] });
+    const text = letterProfileText({ draft, facts: [...facts, ...many] });
     expect(text.length).toBeLessThanOrEqual(MAX_LETTER_PROFILE_CHARS);
     expect(text).toContain('Спроектировал LLM Gateway');
   });
 
   it('пустой черновик без фактов даёт пустой профиль: спрашивать модель не о чем', () => {
-    expect(letterProfileText({ draft: EMPTY_RESUME_DRAFT, facts: [], includedWorkplaceIds: [] })).toBe('');
+    expect(letterProfileText({ draft: EMPTY_RESUME_DRAFT, facts: [] })).toBe('');
   });
 });

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { LetterScreenState } from './vacancyLetterController';
 import { VacancyLetterScreen, type VacancyLetterTarget } from './VacancyLetterScreen';
-import { factsLabel, LetterNotices, wordCountLabel, workplaceRange } from './VacancyLetterEditor';
+import { LetterNotices, wordCountLabel } from './VacancyLetterEditor';
 import type { VacancyPitchResult } from './vacancyPitchApi';
 import { CandidateDisplayNameContext } from '../shell/candidateDisplayName';
 
@@ -71,9 +71,6 @@ function makeState(overrides: Partial<LetterScreenState['draft']> = {}): LetterS
       loading: false,
       error: '',
       retry: vi.fn(),
-      includedIds: ['w1'],
-      excludedEvidenceIds: [],
-      toggle: vi.fn(),
       ...overrides,
     },
     approval: { saved: null, busy: false, error: '', approve: vi.fn(), reset: vi.fn() },
@@ -103,7 +100,7 @@ describe('VacancyLetterScreen (mockup 9)', () => {
     const markup = html();
     const card = markup.slice(markup.indexOf('career-letter-card"'));
     expect(card).toContain('Черновик, ничего не отправлено');
-    expect(card).toContain('Кому: Мария Орлова');
+    expect(card).toContain('Кому: Мария О., Вектор');
     expect(card).toContain('Куда и что отправим');
     expect(card).toContain('Текст письма');
     expect(card).toContain('Одобрить письмо');
@@ -136,14 +133,12 @@ describe('VacancyLetterScreen (mockup 9)', () => {
     expect(markup).toContain('Требование про Kafka не подтверждено профилем.');
   });
 
-  it('shows workplaces as one line with the real fact count', () => {
+  it('does not offer a choice of workplaces: the letter uses the whole profile (B618)', () => {
     const markup = html();
-    // Решение CPO: места отмечает правило «есть подтверждённые факты», а не консультант и не вакансия.
-    expect(markup).toContain('Отмечены места с фактами');
-    expect(markup).not.toContain('Предложено консультантом');
-    expect(markup).toContain('Head of Engineering, 2021 — сейчас');
-    expect(markup).toContain('Для письма доступно: 2 подтверждённых факта из этого места');
-    expect(markup).not.toContain('2 факта<');
+    expect(markup).not.toContain('Места работы в письме');
+    expect(markup).not.toContain('Отмечены места с фактами');
+    expect(markup).not.toContain('career-letter-workplaces');
+    expect(markup).not.toContain('type="checkbox"');
   });
 
   it('offers «Открыть» for the resume only when the host gives a way to', () => {
@@ -170,29 +165,13 @@ describe('the note under the letter (G3 L2)', () => {
     expect(notes({})).toBe('');
   });
 
-  it('a model letter shows its fact warning, not the few-facts line the template would have earned', () => {
-    const markup = notes({
-      bodySource: 'model',
-      usedEvidenceIds: [],
-      notices: ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'],
-    });
-    expect(markup).toContain('сверьте с профилем');
-    expect(markup).not.toContain('мало подтверждённых');
+  it('B623: письмо модели не показывает предупреждение «сверьте с профилем» ', () => {
+    const modelNote = ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'];
+    expect(notes({ bodySource: 'model', notices: modelNote })).toBe('');
   });
 
   it('08.11: письмо модели без примечаний не рисует пустой блок под письмом', () => {
     expect(notes({ bodySource: 'model', usedEvidenceIds: [], notices: [] })).toBe('');
-  });
-
-  it('круги 1 и 2 показывают короткое сообщение, а не письмо модели: предупреждения о письме там нет', () => {
-    const modelNote = ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'];
-    const markup = renderToStaticMarkup(
-      <LetterNotices circle={1} pitch={pitch({ bodySource: 'model', notices: modelNote })} />,
-    );
-    expect(markup).not.toContain('сверьте с профилем');
-    expect(
-      renderToStaticMarkup(<LetterNotices circle={3} pitch={pitch({ bodySource: 'model', notices: modelNote })} />),
-    ).toContain('сверьте с профилем');
   });
 
   it('shows one line even when the server sends several', () => {
@@ -205,28 +184,12 @@ describe('the note under the letter (G3 L2)', () => {
     expect(markup).not.toContain('IT director');
   });
 
-  it('counts unconfirmed requirements and lists their human labels on demand', () => {
-    const markup = notes({
-      language: 'ru',
-      unconfirmedRequirements: ['Director of technology', 'Technology director'],
-    });
-    expect(markup).toContain(
-      '<summary>2 требования вакансии не подтверждены фактами профиля</summary>',
-    );
-    expect(markup).toContain('<li>Director of technology</li>');
-    expect(markup).not.toMatch(/\p{L}+-\p{Lu}\p{Ll}+/u);
-    expect(notes({ language: 'ru', unconfirmedRequirements: ['Kafka'] })).toContain(
-      '1 требование вакансии не подтверждено',
-    );
+  it('B623: непроверенные требования вакансии под письмом не показываются', () => {
+    expect(notes({ language: 'ru', unconfirmedRequirements: ['Director of technology', 'Kafka'] })).toBe('');
+    expect(notes({ bodySource: 'model', unconfirmedRequirements: ['Kafka'] })).toBe('');
   });
 
-  it('the requirements note stays in Russian under an English letter: the candidate reads it', () => {
-    expect(notes({ unconfirmedRequirements: ['Kafka', 'Go'] })).toContain(
-      '2 требования вакансии не подтверждены',
-    );
-    expect(notes({ unconfirmedRequirements: ['Kafka'] })).toContain(
-      '1 требование вакансии не подтверждено',
-    );
+  it('the few-facts note keeps its action and the language of the letter', () => {
     const fewFacts = notes({ usedEvidenceIds: [] });
     expect(fewFacts).toContain('too few confirmed facts');
     expect(fewFacts).not.toContain('мало подтверждённых');
@@ -246,38 +209,3 @@ describe('letter word counter', () => {
   });
 });
 
-describe('letter helpers', () => {
-  it('declines facts and prints years only', () => {
-    expect(factsLabel(1)).toBe('1 подтверждённый факт');
-    expect(factsLabel(3)).toBe('3 подтверждённых факта');
-    expect(factsLabel(11)).toBe('11 подтверждённых фактов');
-    expect(
-      workplaceRange({
-        id: 'a',
-        employer: null,
-        title: null,
-        startDate: '2014-05-01',
-        endDate: '2017',
-        current: false,
-        evidenceIds: [],
-      }),
-    ).toBe('2014 — 2017');
-  });
-
-  it('names the board, not how the source is read (Д2)', () => {
-    state.current = makeState();
-    const markup = renderToStaticMarkup(
-      <CandidateDisplayNameContext.Provider value={null}>
-        <VacancyLetterScreen
-          vacancy={{
-            ...vacancy,
-            sources: [{ sourceName: 'Himalayas (JSON API)' }, { sourceName: 'Himalayas' }],
-          }}
-          onBack={vi.fn()}
-        />
-      </CandidateDisplayNameContext.Provider>,
-    );
-    expect(markup).toContain('· Himalayas</p>');
-    expect(markup).not.toContain('JSON API');
-  });
-});

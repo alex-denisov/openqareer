@@ -1,38 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import type { GeneratedTextFactCheck } from '../domain/generatedTextFactGate';
 import { letterNotices } from './vacancyPitchRoutes';
 
 type NoticeInput = Parameters<typeof letterNotices>[0];
 
-const unconfirmed: GeneratedTextFactCheck = {
-  scope: 'quantities_and_explicit_achievements',
-  status: 'needs_confirmation',
-  claims: [{ text: 'выручка выросла в 3 раза', status: 'not_in_profile', evidenceIds: [], action: 'ask_candidate' }],
-};
-const clean: GeneratedTextFactCheck = { scope: 'quantities_and_explicit_achievements', status: 'checked', claims: [] };
-
-function input(modelBody: string | null, check: GeneratedTextFactCheck, templateNotices: string[] = []): NoticeInput {
+function input(modelBody: string | null, templateNotices: string[] = []): NoticeInput {
   return {
     pitch: { language: 'ru', notices: templateNotices },
-    written: modelBody ? { body: modelBody, factCheck: check } : { body: null },
-    outputFactChecks: { emailBody: check, linkedInNote: unconfirmed },
+    written: modelBody ? { body: modelBody } : { body: null },
   } as unknown as NoticeInput;
 }
 
-describe('letterNotices: подписи «написала модель» нет (08.11)', () => {
-  it('письмо модели без фактов вне профиля приходит без примечаний', () => {
-    expect(letterNotices(input('Здравствуйте!', clean))).toEqual([]);
+describe('letterNotices: проверка фактов внутренняя, под письмом без подсказок (B623)', () => {
+  it('письмо модели приходит без примечаний', () => {
+    expect(letterNotices(input('Здравствуйте!'))).toEqual([]);
   });
 
-  it('письмо модели сохраняет предупреждение о конкретном неподтверждённом факте', () => {
-    const [notice] = letterNotices(input('Здравствуйте!', unconfirmed));
-    expect(notice).toContain('«выручка выросла в 3 раза»');
-    expect(notice).not.toContain('модел');
+  it('примечание шаблона о нехватке фактов к письму модели не переходит', () => {
+    expect(letterNotices(input('Здравствуйте!', ['В профиле мало подтверждённых фактов.']))).toEqual([]);
   });
 
-  it('примечания и проверки шаблонных текстов не переходят к письму модели', () => {
-    const few = 'В профиле мало подтверждённых фактов.';
-    expect(letterNotices(input('Здравствуйте!', clean, [few]))).toEqual([]);
-    expect(letterNotices(input(null, clean, [few]))[0]).toContain('«выручка выросла в 3 раза»');
+  it('под шаблонным текстом остаётся одно примечание о нехватке фактов, без «сверьте с профилем»', () => {
+    const notices = letterNotices(input(null, ['В профиле мало подтверждённых фактов.', 'Второе.']));
+    expect(notices).toEqual(['В профиле мало подтверждённых фактов.']);
   });
 });

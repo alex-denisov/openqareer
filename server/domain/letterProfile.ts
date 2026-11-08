@@ -1,4 +1,4 @@
-import type { ResumeDraft, ResumeExperienceInput, ResumeProjectInput } from './resumeDraft';
+import type { ResumeDraft, ResumeExperienceInput } from './resumeDraft';
 import { isStructuredRecordStatement } from './letterResults';
 import { filterUsablePitchFacts, type VacancyPitchInputFact } from './vacancyPitchService';
 
@@ -12,10 +12,8 @@ export const MAX_LETTER_PROFILE_CHARS = 40_000;
 
 export interface LetterProfileInput {
   readonly draft: ResumeDraft;
-  /** Уже без фактов, которые кандидат снял с письма. */
   readonly facts: readonly VacancyPitchInputFact[];
-  readonly includedWorkplaceIds: readonly string[];
-  /** Факты, снятые с письма или закрытые: всё, что на них опирается, в модель не идёт. */
+  /** Закрытые факты: всё, что на них опирается, в модель не идёт. */
   readonly withheldEvidenceIds?: ReadonlySet<string>;
 }
 
@@ -37,14 +35,6 @@ function visibleItems<T extends { readonly evidenceMemoryId?: string }>(
   withheld: ReadonlySet<string>,
 ): readonly T[] {
   return (items ?? []).filter((item) => !item.evidenceMemoryId || !withheld.has(item.evidenceMemoryId));
-}
-
-const employerKey = (name: string | undefined): string => (name ?? '').trim().toLocaleLowerCase();
-
-/** Проект снятого места работы; у имени работодателя с оставшимся местом он остаётся. */
-function isFromRemovedPlace(project: ResumeProjectInput, places: readonly ResumeExperienceInput[], included: ReadonlySet<string>): boolean {
-  const same = places.filter((place) => employerKey(place.employer) === employerKey(project.employer));
-  return same.length > 0 && same.every((place) => !included.has(place.id));
 }
 
 function line(...parts: readonly (string | number | undefined)[]): string {
@@ -94,8 +84,8 @@ function candidateNotes(draft: ResumeDraft, usable: readonly VacancyPitchInputFa
   return [...confirmed, ...imported].map((fact) => `- ${fact.statement.trim()}`);
 }
 
-function draftSections(draft: ResumeDraft, included: ReadonlySet<string>, withheld: ReadonlySet<string>): string[] {
-  const projects = visibleItems(draft.projects, withheld).filter((item) => !isFromRemovedPlace(item, draft.experience, included));
+function draftSections(draft: ResumeDraft, withheld: ReadonlySet<string>): string[] {
+  const projects = visibleItems(draft.projects, withheld);
   return [
     ...section('PROJECTS', projects.flatMap((item) => [
       `## ${line(item.name, item.employer, period(item.startDate, item.endDate, item.current))}`,
@@ -132,22 +122,19 @@ function withinLimit(lines: readonly string[]): string {
 export function letterProfileText({
   draft,
   facts,
-  includedWorkplaceIds,
   withheldEvidenceIds = new Set<string>(),
 }: LetterProfileInput): string {
   const { headline, about, aboutMemoryId, contact } = draft.candidate;
   const aboutVisible = about && !(aboutMemoryId && withheldEvidenceIds.has(aboutMemoryId));
   const usable = filterUsablePitchFacts(facts);
   const usableById = new Map(usable.map((fact) => [fact.id, fact.statement.trim()]));
-  const included = new Set(includedWorkplaceIds);
-  const places = draft.experience.filter((place) => included.has(place.id));
   const notes = candidateNotes(draft, usable);
   return withinLimit([
     ...(headline ? [`HEADLINE: ${headline}`, ''] : []),
     ...(aboutVisible ? ['ABOUT:', about, ''] : []),
     ...(contact?.location ? [`LOCATION: ${contact.location}`, ''] : []),
-    ...section('EXPERIENCE', places.flatMap((place) => experienceLines(place, usableById))),
-    ...draftSections(draft, included, withheldEvidenceIds),
+    ...section('EXPERIENCE', draft.experience.flatMap((place) => experienceLines(place, usableById))),
+    ...draftSections(draft, withheldEvidenceIds),
     ...joinedLine('LANGUAGES', visibleItems(draft.languages, withheldEvidenceIds).map((item) => [item.name, item.cefr ?? item.sourceLabel].filter(Boolean).join(' '))),
     ...joinedLine('SKILLS', visibleItems(draft.skills, withheldEvidenceIds).map((item) => item.name)),
     ...section('УТОЧНЕНИЯ КАНДИДАТА К ПРОФИЛЮ', notes),

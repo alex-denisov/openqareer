@@ -1,5 +1,6 @@
 import { isHiringPlatform } from '../../../shared/hiringPlatforms';
 import type { LetterDeliveryChannel } from '../../../shared/recruiterChannel';
+import { shortPersonName } from './letterPersonChain';
 import type { ConnectionCircleNumber, ConnectionCirclePath } from './vacancyLetterApi';
 
 /** Системы найма: письмо уходит в их форму на странице вакансии. */
@@ -60,23 +61,24 @@ function parseUrl(url: string): URL | null {
   }
 }
 
-function placeForWebPage(page: URL): string {
+/** Канал, через который письмо уйдёт по адресу вакансии; стоит после «через», адресатом не бывает. */
+function channelForWebPage(page: URL): string {
   const host = page.hostname.toLowerCase().replace(/^www\./u, '');
-  if (host === 'hh.ru' || host.endsWith('.hh.ru')) return 'hh.ru, отклик на вакансию';
-  if (host === 't.me') return `Telegram, t.me/${page.pathname.split('/')[1] ?? ''}`;
+  if (host === 'hh.ru' || host.endsWith('.hh.ru')) return 'hh.ru';
+  if (host === 't.me') return `Telegram t.me/${page.pathname.split('/')[1] ?? ''}`;
   const ats = nameForHost(ATS_NAMES, host);
   if (ats) return `ATS ${ats}`;
   const board = nameForHost(BOARD_NAMES, host);
-  if (board) return `${board}, страница вакансии`;
-  return isHiringPlatform(host) ? `${host}, страница вакансии` : `сайт компании, ${host}`;
+  if (board) return board;
+  return isHiringPlatform(host) ? host : `сайт компании ${host}`;
 }
 
 /** Куда ведёт адрес вакансии; неизвестное не угадываем. */
-export function vacancyDeliveryPlace(url: string): string | null {
+export function vacancyDeliveryChannel(url: string): string | null {
   const page = parseUrl(url);
   if (!page) return null;
-  if (page.protocol === 'mailto:') return `почта ${page.pathname}`;
-  return page.protocol === 'https:' || page.protocol === 'http:' ? placeForWebPage(page) : null;
+  if (page.protocol === 'mailto:') return `почту ${page.pathname}`;
+  return page.protocol === 'https:' || page.protocol === 'http:' ? channelForWebPage(page) : null;
 }
 
 const CHANNEL_NAMES: Readonly<Record<LetterDeliveryChannel['kind'], string>> = {
@@ -102,19 +104,34 @@ export function recipientDeliveryPlace(person: DeliveryPerson): string | null {
   return person.linkedinUrl ? 'LinkedIn' : null;
 }
 
-/** Строка «Кому» макета 9: точное место отправки, а не только название компании. */
+/** Тот же канал после «через»: «через почту m@acme.com». */
+function recipientDeliveryChannel(person: DeliveryPerson): string | null {
+  const place = recipientDeliveryPlace(person);
+  return place?.startsWith('почта ') ? `почту ${place.slice('почта '.length)}` : place;
+}
+
+/**
+ * Строка «Кому» (B618, решение владельца 08.11): адресат — компания или человек в ней, площадка или ATS
+ * только канал после «через». Круг 2 «Через кого» остаётся как в макете 9.
+ */
 export function letterRecipientTitle(
   circle: ConnectionCircleNumber,
   path: Pick<ConnectionCirclePath, 'path' | 'recipient'>,
   name: string,
   vacancyUrl: string,
 ): string {
-  const person = circle === 2 ? (path.path[1] ?? path.recipient) : path.recipient;
-  const place =
-    recipientDeliveryPlace(person) ?? (circle === 3 ? vacancyDeliveryPlace(vacancyUrl) : null);
-  // Адресата-человека нет: вместо него в строке стоит сам канал.
-  if (path.recipient.id.startsWith('vacancy:')) {
-    return `Кому: ${place ?? `${name}, канал отправки не указан в вакансии`}`;
+  if (circle === 2) {
+    const intermediary = path.path[1] ?? path.recipient;
+    return `Через кого: ${name}, ${recipientDeliveryPlace(intermediary) ?? 'канал не указан'}`;
   }
-  return `${circle === 2 ? 'Через кого' : 'Кому'}: ${name}, ${place ?? 'канал не указан'}`;
+  const { recipient } = path;
+  const channel =
+    recipientDeliveryChannel(recipient) ?? (circle === 3 ? vacancyDeliveryChannel(vacancyUrl) : null);
+  const company = recipient.companyName?.trim();
+  if (recipient.id.startsWith('vacancy:')) {
+    const addressee = company || name;
+    return `Кому: ${addressee}, ${channel ? `через ${channel}` : 'канал отправки не указан в вакансии'}`;
+  }
+  const addressee = [shortPersonName(name), company].filter(Boolean).join(', ');
+  return `Кому: ${addressee}, ${channel ? `через ${channel}` : 'канал не указан'}`;
 }

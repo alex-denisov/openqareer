@@ -33,7 +33,7 @@ import {
 import { pitchRankingContext } from './pitchRankingContext';
 import { letterProfileText } from '../domain/letterProfile';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
-import { checkPitchOutputFacts, generatedTextFactNotices } from '../domain/generatedTextFactGate';
+import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -42,7 +42,6 @@ const vacancyPitchInputSchema = z
     tone: z.enum(['executive', 'confident', 'technical']).optional(),
     /** Overrides language auto-detected from the vacancy's own text (B266). */
     language: z.enum(['en', 'ru']).optional(),
-    excludedEvidenceIds: z.array(z.string().trim().min(1).max(200)).max(200).optional(),
     /** Saved, candidate-owned cover letter for an application card (B251). */
     applicationId: z.string().trim().min(1).max(200).optional(),
     recipient: z
@@ -164,26 +163,21 @@ function readLetterContext(
   const rankingContext = pitchRankingContext(deps.candidateStore, deps.titleParseStore, candidateId, vacancy.title);
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const allFacts = snapshot.memory ?? [];
-  const excludedEvidenceIds = new Set(body?.excludedEvidenceIds ?? []);
   const usableEvidenceIds = new Set(filterUsablePitchFacts(allFacts).map((fact) => fact.id));
   const candidateWorkplaces = letterWorkplaces(snapshot, usableEvidenceIds);
-  const facts = allFacts.filter((fact) => !excludedEvidenceIds.has(fact.id));
-  const workplaces = candidateWorkplaces.filter((place) => place.evidenceIds.some((id) => !excludedEvidenceIds.has(id)));
+  // B618: кандидат места работы не выбирает; модель получает весь мастер-профиль.
+  const workplaces = candidateWorkplaces.filter((place) => place.evidenceIds.length > 0);
   return {
     rankingContext,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
     resume: letterResumeState(deps, candidateId, masterProjectionOf(snapshot).master),
-    facts,
+    facts: allFacts,
     candidateWorkplaces,
     workplaces,
     profile: letterProfileText({
       draft: snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT,
-      facts,
-      includedWorkplaceIds: workplaces.map((place) => place.id),
-      withheldEvidenceIds: new Set([
-        ...excludedEvidenceIds,
-        ...allFacts.filter((fact) => fact.sensitive === true).map((fact) => fact.id),
-      ]),
+      facts: allFacts,
+      withheldEvidenceIds: new Set(allFacts.filter((fact) => fact.sensitive === true).map((fact) => fact.id)),
     }),
     targetCompany: isWantedCompany(deps, candidateId, vacancy.company),
     tone: body?.tone ?? 'executive',
@@ -318,21 +312,15 @@ async function prepareVacancyPitch(deps: RouteDeps, request: FastifyRequest, rep
 }
 
 /**
- * Одно примечание под письмом (G3 L2, макет 9). Подписи «написала модель» нет (решение владельца 08.11):
- * письмо модели получает только предупреждение о фактах без источника в своём тексте; примечания и проверки
- * шаблонных текстов к нему не относятся.
+ * Примечание под письмом (G3 L2, макет 9). Проверка фактов остаётся внутренней (B623, правило владельца
+ * «без технических подсказок без действия»): выдумки отклоняет гейт цепочки, кандидат не видит ни подписи
+ * «написала модель», ни списка «сверьте с профилем N утверждений». Под шаблонным текстом остаётся только
+ * примечание о нехватке фактов: к нему на экране есть действие «Собрать факты с консультантом».
  */
 export function letterNotices(
-  result: Pick<Awaited<ReturnType<typeof writeVacancyPitch>>, 'pitch' | 'written' | 'outputFactChecks'>,
+  result: Pick<Awaited<ReturnType<typeof writeVacancyPitch>>, 'pitch' | 'written'>,
 ): string[] {
-  const { pitch, written, outputFactChecks } = result;
-  if (written.body) {
-    return generatedTextFactNotices(pitch.language, written.factCheck ? [written.factCheck] : []).slice(0, 1);
-  }
-  return [
-    ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks)),
-    ...pitch.notices,
-  ].slice(0, 1);
+  return result.written.body ? [] : result.pitch.notices.slice(0, 1);
 }
 
 const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {

@@ -6,7 +6,6 @@ export interface VacancyPitchPayload {
   /** Overrides the letter's auto-detected language. */
   readonly language?: 'en' | 'ru';
   /** Candidate-selected work evidence omitted from the generated draft. */
-  readonly excludedEvidenceIds?: readonly string[];
   readonly recipient?: {
     readonly name?: string;
     readonly role?: string;

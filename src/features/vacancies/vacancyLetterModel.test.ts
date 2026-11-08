@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  excludedEvidenceIdsForWorkplaces,
   letterBodyForCircle,
   recipientForConnectionPath,
 } from './vacancyLetterModel';
@@ -110,17 +109,5 @@ describe('vacancy letter model', () => {
       name: 'Игорь Н.',
       role: 'Продакт-менеджер',
     });
-  });
-
-  it('excludes every evidence item belonging to an unchecked workplace', () => {
-    expect(
-      excludedEvidenceIdsForWorkplaces(
-        [
-          { id: 'work-1', evidenceIds: ['memory-1', 'memory-2'] },
-          { id: 'work-2', evidenceIds: ['memory-2', 'memory-3'] },
-        ],
-        ['work-1'],
-      ),
-    ).toEqual(['memory-3']);
   });
 });

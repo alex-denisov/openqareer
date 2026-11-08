@@ -61,7 +61,6 @@
 .career-letter-vacancy p,
 .career-letter-muted,
 .career-letter-footnote,
-.career-letter-workplaces small,
 .career-letter-path-copy span {
   margin: 0;
   color: var(--career-text-soft);
@@ -184,8 +183,7 @@
   background: var(--career-accent-soft);
 }
 
-.career-letter-path-option input,
-.career-letter-workplaces input {
+.career-letter-path-option input {
   flex: 0 0 auto;
   accent-color: var(--career-accent);
 }
@@ -203,19 +201,6 @@
   border-radius: 50%;
 }
 
-.career-shell .career-letter-workplaces input[type='checkbox'] {
-  inline-size: var(--career-space-5);
-  block-size: var(--career-space-5);
-  min-inline-size: var(--career-space-5);
-  min-block-size: var(--career-space-5);
-  max-inline-size: var(--career-space-5);
-  max-block-size: var(--career-space-5);
-  /* Макет 9: строка места — 44 px с галочкой по центру, подпись под ней. */
-  margin: 10px 0;
-  padding: 0;
-  border: 0;
-}
-
 .career-letter-path-copy {
   display: grid;
   gap: var(--career-space-1);
@@ -224,8 +209,7 @@
   overflow-wrap: anywhere;
 }
 
-.career-letter-path-copy strong,
-.career-letter-workplaces strong {
+.career-letter-path-copy strong {
   color: var(--career-text);
   font-size: var(--career-text-sm);
 }
@@ -428,8 +412,7 @@
   min-inline-size: 0;
 }
 
-.career-letter-dest-list,
-.career-letter-workplaces ul {
+.career-letter-dest-list {
   display: grid;
   gap: var(--career-space-2);
   margin: 0;
@@ -461,14 +444,12 @@
   overflow-wrap: anywhere;
 }
 
-.career-letter-dest-copy strong,
-.career-letter-job-copy strong {
+.career-letter-dest-copy strong {
   color: var(--career-text);
   font-size: var(--career-text-sm);
 }
 
-.career-letter-dest-copy small,
-.career-letter-job-copy small {
+.career-letter-dest-copy small {
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
@@ -557,52 +538,6 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--career-space-2);
-}
-
-.career-letter-requirements {
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-}
-
-.career-letter-requirements summary {
-  cursor: pointer;
-}
-
-.career-letter-requirements ul {
-  margin: var(--career-space-1) 0 0;
-  padding-inline-start: var(--career-space-4);
-}
-
-.career-letter-workplaces li {
-  min-inline-size: 0;
-  border-block-end: var(--career-border-width) solid var(--career-line);
-}
-
-.career-letter-workplaces li:last-child {
-  border-block-end: 0;
-}
-
-.career-letter-workplaces li label {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--career-space-3);
-  min-inline-size: 0;
-  min-block-size: max(44px, var(--career-target-min));
-  padding-block: var(--career-space-4) var(--career-space-2);
-}
-
-.career-letter-job-copy {
-  min-inline-size: 0;
-  padding-block-start: 11.5px;
-  color: var(--career-text-soft);
-  font-size: var(--career-text-sm);
-  overflow-wrap: anywhere;
-}
-
-.career-letter-job-copy small {
-  display: block;
-  margin-block-start: 13.5px;
 }
 
 @media (max-width: 40rem) {

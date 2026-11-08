@@ -14,7 +14,6 @@ interface PitchRequestBody {
   readonly tone?: string;
   readonly language?: string;
   readonly recipient?: { readonly name?: string };
-  readonly excludedEvidenceIds?: readonly string[];
 }
 
 interface ManualConnectionContact {
@@ -224,8 +223,7 @@ function connectionResponse(
 }
 
 function pitchResponse(vacancyId: string, mode: PitchMode, request: PitchRequestBody) {
-  const excluded = request.excludedEvidenceIds ?? [];
-  const fewFacts = mode === 'few' || excluded.includes(FACT_ID);
+  const fewFacts = mode === 'few';
   const language = mode === 'english' || request.language === 'en' ? 'en' : 'ru';
   return {
     data: {
@@ -665,9 +663,12 @@ test.describe('B449 — письмо под вакансию', () => {
     await captureState(page, testInfo, 'high-facts');
   });
 
-  test('selects circle recipients, workplace evidence and approves an unsent snapshot', async ({
+  test('selects circle recipients and approves an unsent snapshot over all workplaces', async ({
     page,
   }, testInfo) => {
+    // Одобрение в макете датировано 10.10.2026, а «Отклики» по умолчанию показывают 30 дней:
+    // без фиксированных часов тест ломается с 09.11 и на main.
+    await page.clock.setFixedTime(new Date('2026-10-15T09:00:00.000Z'));
     const state = createRouteState();
     await installLetterMocks(page, state);
     await openLetter(page);
@@ -696,18 +697,10 @@ test.describe('B449 — письмо под вакансию', () => {
     await expect(page.locator('.career-letter-card')).toContainText('Холодный отклик');
     await captureState(page, testInfo, 'circle-3');
     await reviewWithConsultant(page);
-    const workplace = page.locator('.career-letter-screen').getByRole('checkbox').first();
-    await workplace.uncheck();
-    await expect.poll(() => state.pitchBodies.at(-1)?.excludedEvidenceIds).toEqual([FACT_ID]);
-    await expect(
-      page.getByText(
-        'В профиле мало подтверждённых фактов: письмо не добавляет достижения без источника.',
-        { exact: true },
-      ),
-    ).toBeVisible();
-    await captureState(page, testInfo, 'few-facts-by-workplace');
-    await workplace.check();
-    await waitForLetter(page);
+    // B618: мест работы на выбор нет, запрос письма ничего не снимает с профиля.
+    await expect(page.locator('.career-letter-screen').getByRole('checkbox')).toHaveCount(0);
+    await expect(page.locator('.career-letter-screen')).not.toContainText('Места работы в письме');
+    expect(state.pitchBodies.every((body) => !('excludedEvidenceIds' in body))).toBe(true);
     await page
       .getByRole('textbox', { name: 'Текст письма' })
       .fill('Кандидат одобрил этот снимок письма.');
@@ -764,7 +757,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await expect(page.locator('.career-letter-error')).toHaveCount(0);
   });
 
-  test('recovers from generation errors and shows the requirements and few-facts notes', async ({
+  test('recovers from generation errors, hides requirement notes and keeps the few-facts note', async ({
     page,
   }, testInfo) => {
     const state = createRouteState('rich', 'error');
@@ -779,16 +772,10 @@ test.describe('B449 — письмо под вакансию', () => {
     await waitForLetter(page);
     state.pitchMode = 'english';
     await page.getByLabel('Язык').selectOption('en');
-    const requirements = page.locator('.career-letter-requirements');
-    await expect(requirements.locator('summary')).toHaveText(
-      '2 требования вакансии не подтверждены фактами профиля',
-    );
-    await requirements.locator('summary').click();
-    await expect(requirements.getByRole('listitem')).toHaveText([
-      'Director of technology',
-      'IT director',
-    ]);
-    await expect(page.locator('.career-letter-notes')).not.toContainText('Письмо на английском');
+    await waitForLetter(page);
+    // B623: непроверенные требования вакансии под письмом не показываются — действия у них нет.
+    await expect(page.locator('.career-letter-requirements')).toHaveCount(0);
+    await expect(page.locator('.career-letter-notes')).toHaveCount(0);
     await captureState(page, testInfo, 'english-partial');
 
     const preservedText = 'Кандидатская правка, которую нужно сохранить при ошибке.';
@@ -1102,7 +1089,7 @@ test.describe('B449 — письмо под вакансию', () => {
     expect(scrollWidth).toBeLessThanOrEqual(280);
     const dimensions = await page
       .locator(
-        '.career-letter-screen .career-letter-circle-tab, .career-letter-screen button, .career-letter-screen select, .career-letter-screen textarea, .career-letter-path-option, .career-letter-workplaces li label',
+        '.career-letter-screen .career-letter-circle-tab, .career-letter-screen button, .career-letter-screen select, .career-letter-screen textarea, .career-letter-path-option',
       )
       .evaluateAll((elements) =>
         elements.map((element) => {

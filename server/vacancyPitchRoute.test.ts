@@ -192,7 +192,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
       method: 'POST',
       url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' },
-      payload: { tone: 'technical', excludedEvidenceIds: ['mem-102'] },
+      payload: { tone: 'technical' },
     });
 
     expect(response.statusCode).toBe(200);
@@ -208,7 +208,6 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
       usedEvidenceIds: expect.arrayContaining(['mem-101']),
     });
 
-    expect(json.data.usedEvidenceIds).not.toContain('mem-102');
     expect(json.data.linkedInNote.length).toBeLessThanOrEqual(300);
   });
 
@@ -420,9 +419,10 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(inputs[0]?.profile).toContain('Вырастил выручку до 2 млрд рублей');
     expect(inputs[0]?.chosenLanguage).toBeUndefined();
 
+    // B618: выбора мест работы больше нет; старое поле запроса ничего не снимает с профиля.
     await request({ language: 'en', excludedEvidenceIds: ['mem-601'] });
     expect(inputs[1]?.chosenLanguage).toBe('en');
-    expect(inputs[1]?.profile ?? '').not.toContain('Вырастил выручку до 2 млрд рублей');
+    expect(inputs[1]?.profile).toContain('Вырастил выручку до 2 млрд рублей');
   });
 
   // B251, S2, architecture.md §4: an optional `applicationId` saves the

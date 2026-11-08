@@ -1,17 +1,14 @@
 import { useEffect, useRef } from 'react';
 import {
   CaretDown,
-  Check,
   ChatCircleText,
   CircleNotch,
-  Sparkle,
   WarningCircle,
 } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { LetterDraftState } from './vacancyLetterController';
-import type { CandidateWorkplaceForLetter, ConnectionCircleNumber } from './vacancyLetterApi';
+import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
-import { LetterInfoTip } from './VacancyLetterInfoTip';
 import { useCompactViewport } from './useCompactViewport';
 import { useAutoGrowTextarea } from './useLetterViewport';
 
@@ -190,45 +187,20 @@ export function LetterEditor({
   );
 }
 
-/** Сноску читает кандидат, поэтому она на русском при любом языке письма. */
-function requirementsNote(count: number): string {
-  const last = count % 10;
-  const tens = count % 100;
-  const few = last >= 2 && last <= 4 && (tens < 12 || tens > 14);
-  if (last === 1 && tens !== 11)
-    return `${count} требование вакансии не подтверждено фактами профиля`;
-  return `${count} ${few ? 'требования' : 'требований'} вакансии не подтверждены фактами профиля`;
-}
-
-function UnconfirmedRequirementsNote({ labels }: { readonly labels: readonly string[] }) {
-  return (
-    <details className="career-letter-requirements">
-      <summary>{requirementsNote(labels.length)}</summary>
-      <ul>
-        {labels.map((label) => (
-          <li key={label}>{label}</li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
 /**
- * Под письмом в макете 9 — одна строка «слов · длина · от имени». Сигнал о
- * фактах остаётся, но одной короткой заметкой, самой полезной (G3 L2, 03.11).
+ * Под письмом в макете 9 — одна строка «слов · длина · от имени». Примечаний без действия нет (B623):
+ * ни «сверьте с профилем», ни «N требований не подтверждены». Остаётся нехватка фактов с кнопкой
+ * «Собрать факты с консультантом» и примечание шаблонного текста, если сервер его прислал.
  */
 export function LetterNotices({
   pitch,
-  circle = 3,
   onGatherFacts,
 }: {
   readonly pitch: VacancyPitchResult;
-  readonly circle?: ConnectionCircleNumber;
   readonly onGatherFacts?: () => void;
 }) {
-  // Круги 1 и 2 показывают короткое сообщение, а не письмо модели: предупреждение о его фактах там не к месту.
-  const notice = pitch.bodySource === 'model' && circle !== 3 ? undefined : pitch.notices?.[0];
-  const unconfirmed = pitch.unconfirmedRequirements ?? [];
+  // Письму модели сервер примечаний не шлёт (B623); на всякий случай они не показываются ни в одном круге.
+  const notice = pitch.bodySource === 'model' ? undefined : pitch.notices?.[0];
   if (pitch.usedEvidenceIds.length === 0 && pitch.bodySource !== 'model') {
     return (
       <div className="career-letter-notes">
@@ -248,121 +220,10 @@ export function LetterNotices({
       </div>
     );
   }
-  if (!notice && unconfirmed.length === 0) return null;
+  if (!notice) return null;
   return (
     <div className="career-letter-notes">
-      {notice ? <p>{notice}</p> : <UnconfirmedRequirementsNote labels={unconfirmed} />}
+      <p>{notice}</p>
     </div>
-  );
-}
-
-function yearOf(date: string | null): string {
-  return date?.match(/\d{4}/u)?.[0] ?? '';
-}
-
-export function workplaceRange(workplace: CandidateWorkplaceForLetter): string {
-  return [yearOf(workplace.startDate), workplace.current ? 'сейчас' : yearOf(workplace.endDate)]
-    .filter(Boolean)
-    .join(' — ');
-}
-
-export function factsLabel(count: number): string {
-  const last = count % 10;
-  const tens = count % 100;
-  if (last === 1 && tens !== 11) return `${count} подтверждённый факт`;
-  const word = last >= 2 && last <= 4 && (tens < 12 || tens > 14) ? 'факта' : 'фактов';
-  return `${count} подтверждённых ${word}`;
-}
-
-/**
- * Отметки ставит правило: все места с подтверждёнными фактами (`useWorkplaceSelection`).
- * Ни консультант, ни сравнение с вакансией в выборе не участвуют — о них подпись не говорит.
- */
-const WORKPLACES_CHIP = 'Отмечены места с фактами';
-const WORKPLACES_FOOT =
-  'Отмечены все места с подтверждёнными фактами. Снимите отметку: письмо пересоберётся без этого места.';
-
-function WorkplaceRow({
-  workplace,
-  checked,
-  frozen,
-  onToggle,
-}: {
-  readonly workplace: CandidateWorkplaceForLetter;
-  readonly checked: boolean;
-  readonly frozen: boolean;
-  readonly onToggle: () => void;
-}) {
-  const range = workplaceRange(workplace);
-  const count = workplace.evidenceIds.length;
-  return (
-    <li>
-      <label>
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={frozen || count === 0}
-          onChange={onToggle}
-        />
-        <span className="career-letter-job-copy">
-          <strong>{workplace.employer ?? 'Работодатель не указан'}</strong>
-          {' · '}
-          {workplace.title ?? 'Должность не указана'}
-          {range ? ', ' + range : ''}
-          <small>
-            {count === 0
-              ? 'Нет подтверждённых фактов для письма'
-              : `Для письма доступно: ${factsLabel(count)} из этого места`}
-          </small>
-        </span>
-        <Check className="career-letter-job-tick" size={20} aria-hidden="true" />
-      </label>
-    </li>
-  );
-}
-
-export function WorkplaceList({
-  workplaces,
-  includedIds,
-  frozen,
-  onToggle,
-}: {
-  readonly workplaces: readonly CandidateWorkplaceForLetter[];
-  readonly includedIds: readonly string[];
-  readonly frozen: boolean;
-  readonly onToggle: (id: string) => void;
-}) {
-  return (
-    <section
-      className="career-letter-block career-letter-workplaces"
-      aria-label="Места работы в письме"
-    >
-      <div className="career-letter-sub-head">
-        <h3>Места работы в письме</h3>
-        <span className="career-letter-chip is-hyp">
-          <Sparkle size={14} aria-hidden="true" />
-          {WORKPLACES_CHIP}
-        </span>
-        <LetterInfoTip text="Отмеченные места работы войдут в письмо. Снимите или поставьте галочку: текст письма пересоберётся. Источник: Профиль, Опыт." />
-      </div>
-      {workplaces.length === 0 ? (
-        <p className="career-letter-muted">
-          В профиле нет подтверждённых мест работы. Письмо не будет добавлять неподтверждённый опыт.
-        </p>
-      ) : (
-        <ul>
-          {workplaces.map((workplace) => (
-            <WorkplaceRow
-              key={workplace.id}
-              workplace={workplace}
-              checked={includedIds.includes(workplace.id)}
-              frozen={frozen}
-              onToggle={() => onToggle(workplace.id)}
-            />
-          ))}
-        </ul>
-      )}
-      {workplaces.length > 0 ? <p className="career-letter-foot">{WORKPLACES_FOOT}</p> : null}
-    </section>
   );
 }

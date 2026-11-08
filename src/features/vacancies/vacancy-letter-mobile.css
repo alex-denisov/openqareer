@@ -5,7 +5,6 @@
 .career-letter-cap,
 .career-letter-foot,
 .career-letter-card-summary,
-.career-letter-job-tick,
 .career-letter-ask-tail,
 .career-letter-open-row {
   display: none;
@@ -235,8 +234,7 @@
     letter-spacing: 0.02em;
   }
 
-  .career-letter-block .career-letter-info-tip,
-  .career-letter-workplaces .career-letter-chip {
+  .career-letter-block .career-letter-info-tip {
     display: none;
   }
 
@@ -255,8 +253,7 @@
   }
 
   /* Куда и что отправим */
-  .career-letter-dest-list,
-  .career-letter-workplaces ul {
+  .career-letter-dest-list {
     gap: 0;
     overflow: hidden;
     border-radius: var(--career-letter-list-radius);
@@ -440,85 +437,6 @@
 
   .career-letter-notes {
     padding-inline: var(--career-letter-cap-inset);
-  }
-
-  /* Места работы: галка справа, вся строка — цель */
-  .career-letter-workplaces .career-letter-sub-head {
-    display: block;
-  }
-
-  .career-letter-workplaces li {
-    position: relative;
-    border-block-end: 0;
-  }
-
-  .career-letter-workplaces li + li::before {
-    content: '';
-    position: absolute;
-    inset-inline: var(--career-space-4) 0;
-    inset-block-start: 0;
-    border-block-start: var(--career-border-width) solid var(--career-line);
-  }
-
-  .career-letter-workplaces li label {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--career-space-3);
-    min-block-size: 50px;
-    padding: var(--career-space-3) var(--career-space-4);
-    cursor: pointer;
-  }
-
-  .career-letter-workplaces li label:has(input:focus-visible) {
-    outline: 2px solid var(--career-accent);
-    outline-offset: -2px;
-    border-radius: var(--career-letter-list-radius);
-  }
-
-  .career-shell .career-letter-workplaces input[type='checkbox'] {
-    position: absolute;
-    inset: 0;
-    inline-size: 100%;
-    block-size: 100%;
-    min-inline-size: 0;
-    min-block-size: 0;
-    max-inline-size: none;
-    max-block-size: none;
-    margin: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-
-  .career-letter-job-copy {
-    flex: 1;
-    padding-block-start: 0;
-    color: var(--career-text);
-    font-size: var(--career-text-md);
-    font-weight: 500;
-    line-height: 1.5;
-  }
-
-  .career-letter-job-copy strong {
-    font-size: inherit;
-    font-weight: inherit;
-  }
-
-  .career-letter-job-copy small {
-    margin-block-start: 0;
-    font-weight: 400;
-    line-height: 1.5;
-  }
-
-  .career-letter-job-tick {
-    display: block;
-    flex: none;
-    color: var(--career-accent);
-    visibility: hidden;
-  }
-
-  .career-letter-workplaces input:checked ~ .career-letter-job-tick {
-    visibility: visible;
   }
 
   /* «Одобрить» прилипает над меню или над клавиатурой. Край прилипания — внутренний отступ
