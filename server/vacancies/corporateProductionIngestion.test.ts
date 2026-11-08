@@ -20,8 +20,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { useRecordedFetch } from './__fixtures__/recordedFetch';
 
 describe('Corporate & Group B Production Ingestion Gate', () => {
+  useRecordedFetch('corporateProductionIngestion');
   it('persists EPAM (Corporate JSON API) into SQLite pool with active status and full schema', async () => {
     const epamEndpoint = CORPORATE_JSON_ENDPOINTS.find((e) => e.id === 'epam')!;
     const vacancies = await fetchCorporateJsonApiVacancies(epamEndpoint, { maxPages: 1 });

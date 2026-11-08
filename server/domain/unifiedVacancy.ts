@@ -230,6 +230,16 @@ export interface VacancySourceConfig {
    * запрет площадки действует (B204, B217).
    */
   robotsOverride?: RobotsOverride;
+  /**
+   * Ярус расписания (B622): 1 — основной канал компании из справочника,
+   * 2 — прочие доски работодателей и корпоративные сайты, 3 — агрегаторы.
+   * Без поля источник считается агрегатором.
+   */
+  channelTier?: 1 | 2 | 3;
+  /** Ключ компании справочника, чей это основной канал (B622). */
+  companyKey?: string;
+  /** Организация LinkedIn, чьи вакансии читает гостевой поиск с f_C (B622). */
+  linkedinOrgId?: string;
 }
 
 export interface RobotsOverride {

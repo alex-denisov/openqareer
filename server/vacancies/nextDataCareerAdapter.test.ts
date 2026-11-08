@@ -3,8 +3,10 @@ import {
   NEXT_DATA_CAREER_ENDPOINTS,
   fetchNextDataVacancies,
 } from './nextDataCareerAdapter';
+import { useRecordedFetch } from './__fixtures__/recordedFetch';
 
 describe('Next.js SSR Data Generic Career Adapter', () => {
+  useRecordedFetch('nextDataCareerAdapter');
   it('registers Preply as a declarative endpoint', () => {
     const ids = NEXT_DATA_CAREER_ENDPOINTS.map((e) => e.id);
     expect(ids).toContain('preply');

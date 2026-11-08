@@ -4,6 +4,7 @@ import { parseDouCompanyVacanciesHtml } from './douVacanciesAdapter';
 import { withRequestTimeout } from './requestTimeout';
 import { fetchWithStealthFallback } from './jobspyAdapters';
 import { htmlToFeedText } from '../connectors/feedText';
+import { corporateQualityError, gateCorporateVacancies } from './corporateSourceQuality';
 
 const CORPORATE_FETCH_TIMEOUT_MS = 15_000;
 
@@ -826,6 +827,16 @@ function mapRawJobsToUnified(
  * Автоматически парсит вакансии с любого корпоративного сайта через 4 каскадные стратегии.
  */
 export async function fetchGenericCorporateVacancies(
+  source: VacancySourceConfig,
+  fetchStealth?: typeof fetchWithStealthFallback,
+): Promise<UnifiedVacancy[]> {
+  const read = await readGenericCorporateVacancies(source, fetchStealth);
+  const verdict = gateCorporateVacancies(read, [source.targetUrl], source.name);
+  if (!verdict.passed) throw corporateQualityError(verdict);
+  return [...verdict.kept];
+}
+
+async function readGenericCorporateVacancies(
   source: VacancySourceConfig,
   fetchStealth?: typeof fetchWithStealthFallback,
 ): Promise<UnifiedVacancy[]> {

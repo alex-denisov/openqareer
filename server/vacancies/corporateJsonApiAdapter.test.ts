@@ -3,8 +3,10 @@ import {
   CORPORATE_JSON_ENDPOINTS,
   fetchCorporateJsonApiVacancies,
 } from './corporateJsonApiAdapter';
+import { useRecordedFetch } from './__fixtures__/recordedFetch';
 
 describe('Corporate JSON API Generic Adapter', () => {
+  useRecordedFetch('corporateJsonApiAdapter');
   it('registers EPAM and Playrix as declarative endpoints', () => {
     const ids = CORPORATE_JSON_ENDPOINTS.map((e) => e.id);
     expect(ids).toContain('epam');

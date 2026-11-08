@@ -12,6 +12,10 @@ const ATS_URL_REGEX =
   /(https?:\/\/(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.lever\.co|api\.eu\.lever\.co|jobs\.ashbyhq\.com|apply\.workable\.com|[a-z0-9-]+\.recruitee\.com|[a-z0-9-]+\.pinpointhq\.com|[a-z0-9-]+\.myworkdayjobs\.com)\/[^\s"')]+)/i;
 
 export function getSourcePriority(provenance: VacancyProvenance): number {
+  // 0. Канал компании в LinkedIn по org_id (B622): основной канал компании без
+  // своего сайта и ATS — выше общих площадок, как доска работодателя.
+  if (provenance.sourceId.startsWith('src-company-li-')) return 100;
+
   // 1. Direct employer career sites and ATS boards (Priority: 100)
   // Whether delivered via direct scraping, JSON API, RSS (e.g. company career RSS), or ATS adapter
   if (
