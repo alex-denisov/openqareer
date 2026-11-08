@@ -167,6 +167,28 @@ describe('vacancyPitchService', () => {
     expect(execPitch.emailPitch.body).toMatch(/бизнес|управлен|масштаб|процесс/i);
   });
 
+  it('08.11: тема письма — «Должность — Имя Фамилия», без хвоста, при любом тоне и языке', () => {
+    const tones = ['executive', 'confident', 'technical'] as const;
+    for (const tone of tones) {
+      const ru = generateVacancyPitch({
+        vacancy: sampleVacancy,
+        candidateName: 'Алексей Денисов',
+        facts: sampleFacts,
+        tone,
+        language: 'ru',
+      });
+      expect(ru.emailPitch.subject).toBe('Lead Backend Engineer — Алексей Денисов');
+      const en = generateVacancyPitch({
+        vacancy: sampleVacancy,
+        candidateName: 'Alexey Denisov',
+        facts: [],
+        tone,
+        language: 'en',
+      });
+      expect(en.emailPitch.subject).toBe('Lead Backend Engineer — Alexey Denisov');
+    }
+  });
+
   it('generates clean text with zero emoji and without hidden markers', () => {
     const pitch = generateVacancyPitch({
       vacancy: sampleVacancy,
