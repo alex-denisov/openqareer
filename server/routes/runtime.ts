@@ -1,3 +1,4 @@
+import { registerMarketReportRoutes } from './marketReportRoutes';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { errorDiagnostics } from '../observability/errorDiagnostics';
 import { isSqliteBusy } from '../data/sqliteBusyRetry';
@@ -466,6 +467,7 @@ export async function registerStaticDelivery(
     registerGuideRoutes(app, config);
     registerBlogRoutes(app, config);
     registerAuthorRoutes(app, { staticRoot: config.staticRoot, readPhoto: readAuthorPhoto });
+    registerMarketReportRoutes(app, config);
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,

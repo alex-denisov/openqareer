@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { buildLlmsFullTxt, buildLlmsTxt } from '../../shared/aeoSurface';
 import { getLandingStats } from '../landing/landingStatsCache';
+import { getMarketReportPages } from './marketReportSnapshot';
 
 /** Public aggregate evidence only. Reads the same prepared snapshot as the landing. */
 export function registerAeoRoutes(app: FastifyInstance): void {
@@ -12,7 +13,7 @@ export function registerAeoRoutes(app: FastifyInstance): void {
       reply
         .header('Cache-Control', 'public, max-age=300')
         .type('text/markdown; charset=utf-8')
-        .send(build(getLandingStats())),
+        .send(build(getLandingStats(), getMarketReportPages())),
     );
   }
 }

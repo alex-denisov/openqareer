@@ -22,7 +22,7 @@ export function emptySalaryExclusions(): MutableExclusions {
   };
 }
 
-interface RangeEvidence {
+export interface RangeEvidence {
   readonly from: number;
   readonly to: number;
   readonly currency: string;

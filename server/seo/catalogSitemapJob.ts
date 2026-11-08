@@ -9,6 +9,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { VACANCY_CLUSTERS_TABLE } from '../data/sqliteSchema';
 import { salaryMarketSitemapUrls } from './salaryMarketSitemap';
+import { marketReportPages } from './marketReport';
 import { countryCatalogFrom } from '../salaryMarket/countryCatalog';
 import { SEARCH_RESTRICTED_JSON_NEEDLES } from './searchRestrictedSources';
 import { listingPath } from '../../shared/vacancyCatalogRoutes';
@@ -148,6 +149,7 @@ export function computeCatalogSitemaps(database: DatabaseSync, now: Date): Sitem
       ...salaryMarketSitemapUrls(database, (code) => countryCatalogFrom(database, code)),
     ],
     jobs: indexableJobs(database, now),
+    extraPages: marketReportPages(database),
   });
 }
 

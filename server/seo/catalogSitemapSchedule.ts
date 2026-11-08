@@ -19,6 +19,8 @@ import { listingHistoryKey, readListingHistory } from './catalogListingHistory';
 import { createGoogleIndexingNotifier } from './googleIndexing';
 import { createIndexNowNotifier } from './indexNow';
 import type { SitemapFile } from './sitemapXml';
+import { ensureMarketReport, previousMonth, readMarketReports } from './marketReport';
+import { setMarketReports } from './marketReportSnapshot';
 
 interface SitemapLog {
   info(details: Record<string, unknown>, message: string): void;
@@ -72,6 +74,17 @@ function runCardRollout(database: DatabaseSync, log: SitemapLog, now: Date): voi
   }
 }
 
+/** GEO 09.11: the last finished month, once; a failure never stops the sitemap files. */
+function runMarketReport(database: DatabaseSync, log: SitemapLog, now: Date): void {
+  try {
+    const started = Date.now();
+    if (ensureMarketReport(database, now))
+      log.info({ month: previousMonth(now), ms: Date.now() - started }, 'market-report-written');
+  } catch (error: unknown) {
+    log.error({ errorName: errorName(error) }, 'market-report-failed');
+  }
+}
+
 /** Maintenance process only: the listings query groups the whole catalog. */
 export function scheduleCatalogSitemapJob(
   database: DatabaseSync,
@@ -91,6 +104,7 @@ export function scheduleCatalogSitemapJob(
     try {
       const now = new Date();
       runCardRollout(database, log, now);
+      runMarketReport(database, log, now);
       const files = computeCatalogSitemaps(database, now);
       writeCatalogSitemaps(database, files, now);
       await checkIndexCoverage({ database, files, telegram, log, now });
@@ -132,6 +146,7 @@ export function scheduleCatalogSitemapRefresh(databasePath: string, log: Sitemap
       applySqliteBusyTimeout(database);
       setCatalogSitemaps(readCatalogSitemaps(database));
       setListingHistory(readListingHistory(database));
+      setMarketReports(readMarketReports(database));
     } catch (error: unknown) {
       log.error({ errorName: errorName(error) }, 'catalog-sitemaps-refresh-failed');
     } finally {
