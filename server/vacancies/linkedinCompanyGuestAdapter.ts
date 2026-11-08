@@ -17,6 +17,12 @@ export const LINKEDIN_GROUP_B_TARGETS: readonly LinkedinCompanyTarget[] = [
   { slug: 'datadome', company: 'DataDome', organizationId: '10398947' },
 ] as const;
 
+/**
+ * «Весь мир» в гостевом поиске (B622, прод 09.11): без geoId LinkedIn на f_C
+ * отвечает пустой страницей 26 байт или 429, с ним — карточками компании.
+ */
+export const WORLDWIDE_GEO_ID = '92000000';
+
 const GUEST_HEADERS = {
   accept: 'text/html,application/xhtml+xml',
   'accept-language': 'en-US,en;q=0.9',
@@ -137,7 +143,7 @@ export async function fetchLinkedinCompanyVacancies(
 
   for (let page = 0; page < maxPages; page++) {
     const start = page * 10;
-    const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=${target.organizationId}&start=${start}`;
+    const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=${target.organizationId}&geoId=${WORLDWIDE_GEO_ID}&start=${start}`;
     let response: Response | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
