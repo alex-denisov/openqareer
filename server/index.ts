@@ -9,7 +9,10 @@ import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
 import { buildCampaignRoleModel } from './providers/campaignRoleModel';
 import { buildSkillQuizModel } from './providers/skillQuizModel';
-import { buildEnabledCoverLetterWriter, COVER_LETTER_VERTEX_TIMEOUT_MS } from './providers/coverLetterWriter';
+import {
+  buildEnabledCoverLetterWriter,
+  COVER_LETTER_VERTEX_TIMEOUT_MS,
+} from './providers/coverLetterWriter';
 import { buildExperienceFactRewriter } from './providers/experienceFactRewriter';
 import { BudgetedCoachProvider } from './providers/budgetedCoachProvider';
 import { HygienicCoachProvider } from './providers/hygienicCoachProvider';
@@ -27,6 +30,7 @@ import { meteredVertexFetchFor } from './providers/meteredVertexFetch';
 import { buildCoachChainProvider } from './providers/modelChains';
 import { VERTEX_CHAT_TIMEOUTS_MS } from './providers/vertexChatTimeouts';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import { readSmmConfig, startSmmAssistant } from './smm/smmRuntime';
 import { AuthService } from './auth/authService';
 import { buildEmailVerificationSender } from './auth/emailVerificationEmail';
 import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
@@ -423,6 +427,17 @@ try {
   scheduleCurrencyRatesRefresh(config.databasePath, scheduleLog);
   // Sitemap files written by the maintenance process; the HTTP path reads memory only.
   scheduleCatalogSitemapRefresh(config.databasePath, scheduleLog);
+  // SMM-агент владельца (09.11): только на проде, где задан OPENQAREER_SMM_ENABLED=1, —
+  // иначе настольное приложение с тем же токеном перебивало бы опрос Bot API (409).
+  const smmConfig = process.env.OPENQAREER_SMM_ENABLED === '1' ? readSmmConfig(process.env) : null;
+  if (smmConfig) {
+    startSmmAssistant({
+      databasePath: config.databasePath,
+      config: smmConfig,
+      getResumeCandidate: (candidateId) => candidateStore.getResumeCandidate(candidateId),
+      log: (event, detail = {}) => app.log.info(detail, event),
+    });
+  }
   // Сервер слушает и отвечает на /health мгновенно (<10 мс). Пул читается
   // из базы постранично, пополняет его обслуживатель (B230) — на этом цикле
   // событий ни восстановления, ни сведения, ни опросов нет.
