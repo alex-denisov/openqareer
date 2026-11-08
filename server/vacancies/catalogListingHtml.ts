@@ -17,6 +17,7 @@ import type { SalaryStats } from './catalogSalaryStats';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import type { CatalogPage } from './vacancyCatalogPage';
 import { listingFaq } from './catalogListingFaq';
+import { listingIntroBlock, listingIntroFor } from './catalogListingIntro';
 import { dataDate, money, namesOf, type Names } from './catalogListingNames';
 
 /** B574: chips of the list; only chips with vacancies behind them are printed. */
@@ -250,6 +251,14 @@ export function renderListingMain(
     '<div class="lv-sticky"><a class="ps-btn is-primary is-lg" href="/signup?from=catalog">Показать мой процент совпадения · бесплатно</a></div>' +
     pager(page) +
     `</div><aside class="lv-side">${salaryCard(page, names, extras.stats)}${alertCard(page, names)}</aside></div>` +
+    listingIntroBlock(
+      page.listing && page.page === 1 && !extras.chips?.active
+        ? listingIntroFor(page.listing.place, role)
+        : undefined,
+      names.roleGen && names.placePrep
+        ? `Рынок вакансий ${names.roleGen} в ${names.placePrep}`
+        : 'О рынке вакансий',
+    ) +
     `<section class="lv-sec"><div class="ps-wrap lv-facets">${facetCards(filters, names)}${prepCard(page, names, extras.stats)}</div></section>` +
     listingFaq(page, names, extras.stats)
   );
