@@ -69,7 +69,7 @@ describe('B528 generated text fact gate', () => {
     expect(candidates.getSnapshot(candidateId).documents.find((doc) => doc.kind === 'cover_letter')).toBeUndefined();
   });
 
-  it('04.11: a paraphrase of imported facts reaches the letter screen under the note that a model wrote it', async () => {
+  it('08.11: a paraphrase of imported facts reaches the letter screen without a note that a model wrote it', async () => {
     const body = 'Здравствуйте! Занимался логистикой для сети магазинов, команда выросла с 8 до 35 человек.. Буду рад обсудить задачи роли.';
     const { app, candidates } = await createApp([sampleCluster], {
       coverLetterWriter: { writeCoverLetter: async () => ({ body, stage: 'test:model' }) },
@@ -90,8 +90,12 @@ describe('B528 generated text fact gate', () => {
     expect(data.atsCoverLetter).toBe(body);
     expect(data.factCheck.status).toBe('checked');
     expect(data.outputFactChecks.emailBody.status).toBe('checked');
-    // The gate does not check what a paraphrase means, so the screen promises no checking.
-    expect(data.notices).toEqual(['Черновик написала модель. Прочитайте его перед отправкой.']);
+    // Решение владельца 08.11: подписи «написала модель» нет. Пересказ без источника остаётся предупреждением,
+    // и только о тексте самого письма, а не о шаблонных текстах, которые под ним не видны.
+    expect(data.notices).toHaveLength(1);
+    expect(data.notices[0]).toContain('Перед отправкой сверьте с профилем 1 утверждение');
+    expect(data.notices[0]).toContain('Занимался логистикой');
+    expect(data.notices[0]).not.toContain('модель');
   });
 
   it('04.11: a stage whose letter fails the gate gives way, a transliterated employer never shows', async () => {

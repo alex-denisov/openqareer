@@ -152,13 +152,22 @@ describe('PitchMetaBar promises only what was checked', () => {
   });
 
   it('a model letter claims neither: the fact count describes the template it replaced', () => {
-    const notice = 'Черновик написала модель. Прочитайте его перед отправкой.';
+    const notice = 'Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».';
     const html = renderToStaticMarkup(
       <PitchMetaBar evidenceCount={1} usedFacts={usedFacts} bodySource="model" notices={[notice]} />,
     );
     expect(html).toContain(notice);
     expect(html).not.toContain('подтверждённых');
     expect(html).not.toContain('Ничего не придумано');
+  });
+});
+
+describe('PitchMetaBar without a model note (08.11)', () => {
+  it('a model letter with no notices leaves no empty bar above the letter', () => {
+    const html = renderToStaticMarkup(
+      <PitchMetaBar evidenceCount={1} usedFacts={[{ id: 'f1', basis: 'confirmed' }]} bodySource="model" notices={[]} />,
+    );
+    expect(html).toBe('');
   });
 });
 

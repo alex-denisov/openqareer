@@ -62,16 +62,6 @@ function logPitchTiming(entry: {
   console.info(JSON.stringify({ event: 'vacancy-pitch-timing', ...entry }));
 }
 
-const MODEL_LETTER_NOTICE: Readonly<Record<PitchLanguage, string>> = {
-  ru: 'Черновик написала модель. Прочитайте его перед отправкой.',
-  en: 'This draft was written by a model. Please read it before sending.',
-};
-
-/** Проверка письма не оценивает смысл пересказа, поэтому экран обещает не проверку, а чтение. */
-export function modelLetterNotice(language: PitchLanguage): string {
-  return MODEL_LETTER_NOTICE[language];
-}
-
 function letterGateSources(request: LetterWritingRequest): LetterGateSources {
   const { vacancy, profile, facts, language, resumeAttached } = request;
   return {

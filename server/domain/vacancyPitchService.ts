@@ -211,7 +211,8 @@ function truncateSafely(text: string, maxLen: number): string {
 }
 
 interface Copy {
-  subject(title: string, candidateName: string, tone: PitchTone, hasMetric: boolean): string;
+  /** Тема — «Должность — Имя Фамилия», без хвоста при любом тоне (решение 08.11). */
+  subject(title: string, candidateName: string): string;
   intro(title: string, company: string | undefined, tone: PitchTone): string;
   /** B422: кандидат отметил компанию «Хочу в эту компанию». */
   targetCompany(company: string): string;
@@ -241,14 +242,7 @@ interface Copy {
 }
 
 const RU_COPY: Copy = {
-  subject: (title, candidateName, tone, hasMetric) => {
-    if (tone === 'technical') return `${title} — ${candidateName} | Технический контекст роли`;
-    if (tone === 'confident') {
-      return `Отклик на позицию ${title}: ${candidateName} — обсуждение задач роли`;
-    }
-    const suffix = hasMetric ? 'Подтверждённые результаты' : 'Цели и задачи роли';
-    return `${title} — ${candidateName} | ${suffix}`;
-  },
+  subject: (title, candidateName) => `${title} — ${candidateName}`,
   intro: (title, company, tone) => {
     const target = company ? 'компании ' + company : 'вашей команды';
     const opening =
@@ -314,13 +308,7 @@ const RU_COPY: Copy = {
 };
 
 const EN_COPY: Copy = {
-  subject: (title, candidateName, tone, hasMetric) => {
-    if (tone === 'technical') return `${title} — ${candidateName} | Technical context of the role`;
-    if (tone === 'confident')
-      return `Application for ${title}: ${candidateName} — role scope discussion`;
-    const suffix = hasMetric ? 'Proven results' : 'Role goals and scope';
-    return `${title} — ${candidateName} | ${suffix}`;
-  },
+  subject: (title, candidateName) => `${title} — ${candidateName}`,
   intro: (title, company, tone) => {
     const target = company ? `at ${company}` : 'on your team';
     const opening =
@@ -729,8 +717,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const notices: string[] = [];
 
   const requirements = matchRequirements(vacancy.requiredSkills ?? [], usableFacts);
-  const metricFact = usableFacts.find((f) => /\d+/u.test(f.statement));
-  const subject = copy.subject(vacancy.title, candidateName, tone, Boolean(metricFact));
+  const subject = copy.subject(vacancy.title, candidateName);
   const pitches = assemblePitches({
     copy,
     vacancy,

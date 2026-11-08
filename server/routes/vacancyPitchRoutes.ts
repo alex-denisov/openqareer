@@ -8,7 +8,7 @@ import {
   generateVacancyPitch,
 } from '../domain/vacancyPitchService';
 import { retryOnSqliteBusy } from '../data/sqliteBusyRetry';
-import { modelLetterNotice, writeCoverLetterBody } from './vacancyLetterBody';
+import { writeCoverLetterBody } from './vacancyLetterBody';
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
@@ -317,10 +317,18 @@ async function prepareVacancyPitch(deps: RouteDeps, request: FastifyRequest, rep
   return vacancy ? { ...access, vacancy } : undefined;
 }
 
-/** Одно примечание под письмом (G3 L2, макет 9): письму модели — что его написала модель. */
-function letterNotices(result: Awaited<ReturnType<typeof writeVacancyPitch>>): string[] {
+/**
+ * Одно примечание под письмом (G3 L2, макет 9). Подписи «написала модель» нет (решение владельца 08.11):
+ * письмо модели получает только предупреждение о фактах без источника в своём тексте; примечания и проверки
+ * шаблонных текстов к нему не относятся.
+ */
+export function letterNotices(
+  result: Pick<Awaited<ReturnType<typeof writeVacancyPitch>>, 'pitch' | 'written' | 'outputFactChecks'>,
+): string[] {
   const { pitch, written, outputFactChecks } = result;
-  if (written.body) return [modelLetterNotice(pitch.language)];
+  if (written.body) {
+    return generatedTextFactNotices(pitch.language, written.factCheck ? [written.factCheck] : []).slice(0, 1);
+  }
   return [
     ...generatedTextFactNotices(pitch.language, Object.values(outputFactChecks)),
     ...pitch.notices,

@@ -170,25 +170,29 @@ describe('the note under the letter (G3 L2)', () => {
     expect(notes({})).toBe('');
   });
 
-  it('a model letter shows its note, not the few-facts line the template would have earned', () => {
+  it('a model letter shows its fact warning, not the few-facts line the template would have earned', () => {
     const markup = notes({
       bodySource: 'model',
       usedEvidenceIds: [],
-      notices: ['Черновик написала модель. Прочитайте его перед отправкой.'],
+      notices: ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'],
     });
-    expect(markup).toContain('Черновик написала модель');
+    expect(markup).toContain('сверьте с профилем');
     expect(markup).not.toContain('мало подтверждённых');
   });
 
-  it('круги 1 и 2 показывают короткое сообщение, а не письмо модели: подписи про модель нет', () => {
-    const modelNote = ['Черновик написала модель. Прочитайте его перед отправкой.'];
+  it('08.11: письмо модели без примечаний не рисует пустой блок под письмом', () => {
+    expect(notes({ bodySource: 'model', usedEvidenceIds: [], notices: [] })).toBe('');
+  });
+
+  it('круги 1 и 2 показывают короткое сообщение, а не письмо модели: предупреждения о письме там нет', () => {
+    const modelNote = ['Перед отправкой сверьте с профилем 1 утверждение: «команда выросла с 8 до 35 человек».'];
     const markup = renderToStaticMarkup(
       <LetterNotices circle={1} pitch={pitch({ bodySource: 'model', notices: modelNote })} />,
     );
-    expect(markup).not.toContain('Черновик написала модель');
+    expect(markup).not.toContain('сверьте с профилем');
     expect(
       renderToStaticMarkup(<LetterNotices circle={3} pitch={pitch({ bodySource: 'model', notices: modelNote })} />),
-    ).toContain('Черновик написала модель');
+    ).toContain('сверьте с профилем');
   });
 
   it('shows one line even when the server sends several', () => {
