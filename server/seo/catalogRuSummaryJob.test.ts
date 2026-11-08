@@ -8,7 +8,10 @@ import {
 import { BULK_BUDGET_EXCEEDED, type BulkLlmInput } from '../providers/bulkLlmClient';
 import { CATALOG_RU_SUMMARY_VERSION, catalogSummarySourceHash } from './catalogRuSummary';
 import {
+  CATALOG_RU_SUMMARY_BOOST_CALLS,
+  CATALOG_RU_SUMMARY_BOOST_UNTIL_MS,
   CatalogRuSummaryJob,
+  catalogRuSummaryCallsPerTick,
   sqliteCatalogRuSummarySpend,
   type CatalogRuSummaryLimits,
 } from './catalogRuSummaryJob';
@@ -44,14 +47,20 @@ let store: CatalogRuSummaryStore;
 
 function addCard(
   id: string,
-  options: { publishedMs: number; text?: string; salary?: string | null; expired?: boolean },
+  options: {
+    publishedMs: number;
+    text?: string;
+    salary?: string | null;
+    expired?: boolean;
+    source?: string;
+  },
 ) {
   database
     .prepare(
       `INSERT INTO catalog_entries (cluster_id, entry_key, path, title, company, location, is_remote, salary_label,
          summary, skills_json, source_url, source_name, published_at, last_seen_at, source_count, status,
          role_slug, published_ms, last_seen_ms)
-       VALUES (?, ?, ?, 'Бухгалтер', 'ГК Мебетек', 'Москва', 0, ?, '', '[]', 'https://hh.ru/vacancy/1', 'hh.ru',
+       VALUES (?, ?, ?, 'Бухгалтер', 'ГК Мебетек', 'Москва', 0, ?, '', '[]', 'https://hh.ru/vacancy/1', ?,
          ?, ?, 1, 'active', 'buhgalter', ?, ?)`,
     )
     .run(
@@ -59,6 +68,7 @@ function addCard(
       id,
       `/vacancies/job/${id}`,
       options.salary === undefined ? 'от 120 000 ₽' : options.salary,
+      options.source ?? 'hh.ru',
       new Date(options.publishedMs).toISOString(),
       new Date(NOW).toISOString(),
       options.publishedMs,
@@ -96,7 +106,7 @@ function fakeClient(content = ANSWER) {
 const noSpend = { task: () => ({ usd: 0, calls: 0 }), channelDay: () => 0, channelMonth: () => 0 };
 
 function job(client: ReturnType<typeof fakeClient>, now = NOW, spend = noSpend) {
-  return new CatalogRuSummaryJob({ store, client, spend, limits, now: () => now });
+  return new CatalogRuSummaryJob({ store, client, spend, limits, now: () => now, callsPerTick: 1 });
 }
 
 beforeEach(() => {
@@ -108,6 +118,23 @@ beforeEach(() => {
 afterEach(() => database.close());
 
 describe('catalog Russian summary job', () => {
+  it('until the credit ends sends several calls a tick, then one again (owner 08.11)', async () => {
+    for (let i = 0; i < 12; i += 1) addCard(`c${i}`, { publishedMs: NOW - i * 1000 });
+    const boosted = fakeClient();
+    const many = new CatalogRuSummaryJob({
+      store,
+      client: boosted,
+      spend: noSpend,
+      limits,
+      now: () => NOW,
+    });
+    const report = await many.step();
+    expect(report.written).toBe(CATALOG_RU_SUMMARY_BOOST_CALLS);
+    expect(report.costUsd).toBeCloseTo(0.004, 8);
+    expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(10);
+    expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS)).toBe(1);
+  });
+
   it('writes the newest card first, one model call a tick, and the page reads it by the text hash', async () => {
     addCard('old', { publishedMs: NOW - 3 * DAY });
     addCard('new', { publishedMs: NOW - DAY });

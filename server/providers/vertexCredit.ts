@@ -19,8 +19,14 @@ const DEFAULTS = {
   since: '2026-11-04',
   until: '2026-11-09',
   dayUsd: 20,
-  catalogSummaryDayUsd: 5,
+  // Owner 08.11: the hh queue is closed on the last credit day; Vertex itself stops at `until`.
+  catalogSummaryDayUsd: 40,
 } as const;
+/**
+ * Owner 08.11: Google shows ~$100 of the bonus left while the ledger counts $86.8 since 04.11, so the
+ * env ceiling of $250 would let the card be charged. The total never goes above this, whatever the env.
+ */
+export const VERTEX_CREDIT_HARD_CAP_USD = 175;
 const BILLING_OFF_MS = 6 * 3_600_000;
 const COOL_BASE_MS = 60_000;
 const COOL_MAX_MS = 300_000;
@@ -77,7 +83,10 @@ export function readVertexCreditConfig(
     return Date.parse(`${fallback}T00:00:00Z`);
   };
   return {
-    creditUsd: money('OPENQAREER_VERTEX_CREDIT_USD', DEFAULTS.creditUsd),
+    creditUsd: Math.min(
+      money('OPENQAREER_VERTEX_CREDIT_USD', DEFAULTS.creditUsd),
+      VERTEX_CREDIT_HARD_CAP_USD,
+    ),
     sinceIso: new Date(instant('OPENQAREER_VERTEX_CREDIT_SINCE', DEFAULTS.since)).toISOString(),
     untilMs: instant('OPENQAREER_VERTEX_CREDIT_UNTIL', DEFAULTS.until),
     dayUsd: money('OPENQAREER_VERTEX_DAY_USD', DEFAULTS.dayUsd),
@@ -197,7 +206,8 @@ class CreditGate implements VertexGate {
     const { config } = this;
     if (this.now() >= config.untilMs) return 'credit_expired';
     if (this.billingOff()) return 'billing_off';
-    if (this.coolUntil > this.now() && !(patient && this.failures < OUTAGE_FAILURES)) return 'cooling';
+    if (this.coolUntil > this.now() && !(patient && this.failures < OUTAGE_FAILURES))
+      return 'cooling';
     const spent = this.ledger.vertexSpend({
       sinceIso: config.sinceIso,
       dayStartIso: `${new Date(this.now()).toISOString().slice(0, 10)}T00:00:00.000Z`,
