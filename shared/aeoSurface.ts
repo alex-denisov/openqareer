@@ -18,7 +18,10 @@ import { TARIFF_LEVELS } from '../src/features/tariffs/tariffsData';
 /** Last factual update of this surface; bump with the texts. */
 export const AEO_UPDATED_AT = '2026-10-23';
 
-export const SITE_ORIGIN = 'https://openqareer.com';
+export { SITE_ORIGIN } from './siteOrigin';
+import { SITE_ORIGIN } from './siteOrigin';
+import { publicPages, renderPublicPagesSection, salaryPublicPages, type PublicPage } from './publicPages';
+import { AUTHOR_PATH } from './author';
 
 /** Каждый публичный адрес, который витрина имеет право назвать. */
 export const AEO_PUBLISHED_PATHS: readonly string[] = [
@@ -40,8 +43,18 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   ...GUIDES.map((guide) => guidePath(guide.slug)),
   BLOG_ROOT,
   ...BLOG_POSTS.map((post) => blogPath(post.slug)),
+  AUTHOR_PATH,
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
 ];
+
+/** Все страницы для llms: реестр, зарплаты по странам и страницы из базы. */
+export function llmsPages(extraPages: readonly PublicPage[] = []): PublicPage[] {
+  return [...publicPages(), ...salaryPublicPages(), ...extraPages];
+}
+
+function allPagesSection(extraPages: readonly PublicPage[]): string[] {
+  return ['## Все страницы', '', ...renderPublicPagesSection(SITE_ORIGIN, llmsPages(extraPages))];
+}
 
 /** Что продукт делает — только то, что уже работает в выпущенной сборке. */
 const CAPABILITIES: readonly string[] = [
@@ -106,7 +119,10 @@ function poolEvidence(stats?: LandingStats): string[] {
 }
 
 /** Короткий индекс витрины — то, что ответчик читает первым. */
-export function buildLlmsTxt(stats?: LandingStats): string {
+export function buildLlmsTxt(
+  stats?: LandingStats,
+  extraPages: readonly PublicPage[] = [],
+): string {
   const legal = LEGAL_DOCS.map(
     (doc) => `- [${doc.title}](${SITE_ORIGIN}${legalPath(doc.slug)})`,
   ).join('\n');
@@ -149,6 +165,7 @@ export function buildLlmsTxt(stats?: LandingStats): string {
       ),
     ),
     '',
+    ...allPagesSection(extraPages),
     '## Правовые документы',
     '',
     legal,
@@ -157,7 +174,10 @@ export function buildLlmsTxt(stats?: LandingStats): string {
 }
 
 /** Полная спецификация: факты, границы и адреса, без пересказа маркетинга. */
-export function buildLlmsFullTxt(stats?: LandingStats): string {
+export function buildLlmsFullTxt(
+  stats?: LandingStats,
+  extraPages: readonly PublicPage[] = [],
+): string {
   const legal = LEGAL_DOCS.map(
     (doc) => `- [${doc.title}](${SITE_ORIGIN}${legalPath(doc.slug)}) — ${doc.description}`,
   ).join('\n');
@@ -229,5 +249,6 @@ export function buildLlmsFullTxt(stats?: LandingStats): string {
     '',
     bullet(AEO_PUBLISHED_PATHS.map((path) => `${SITE_ORIGIN}${path === '/' ? '/' : path}`)),
     '',
+    ...allPagesSection(extraPages),
   ].join('\n');
 }

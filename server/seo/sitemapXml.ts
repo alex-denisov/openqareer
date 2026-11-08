@@ -7,7 +7,6 @@
  */
 import { RELOCATION_PLACE } from '../vacancies/catalogChips';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
-import { LEGAL_DOCS, LEGAL_PACK_PUBLISHED_AT, legalPath } from '../../shared/legalRegistry';
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 import {
   INTERVIEW_EVIDENCE,
@@ -16,8 +15,7 @@ import {
   interviewProfessionPath,
   publishedInterviewProfessions,
 } from '../../shared/interviewQuestions';
-import { GUIDES, GUIDES_ROOT, guidePath } from '../../shared/guides';
-import { BLOG_POSTS, BLOG_ROOT, blogPath } from '../../shared/blog';
+import { publicPages, type PublicPage } from '../../shared/publicPages';
 
 /**
  * URLs per child file. The site's working limit leaves headroom below the
@@ -110,12 +108,7 @@ function file(name: string, urls: readonly SitemapUrl[]): SitemapFile {
   };
 }
 
-/**
- * Last content change of the landing and the help pages (B535 release).
- * Bump it with any text change there: a stale or missing lastmod makes
- * crawlers re-fetch by guess instead of by signal.
- */
-export const PUBLIC_PAGES_UPDATED_AT = '2026-10-20';
+export { PUBLIC_PAGES_UPDATED_AT } from '../../shared/publicPages';
 
 /** B568: the hub and every reviewed profession; noindex professions stay out. */
 export function interviewSitemapUrls(): SitemapUrl[] {
@@ -128,39 +121,22 @@ export function interviewSitemapUrls(): SitemapUrl[] {
   ];
 }
 
-/** `catalogLastmod` — the freshest listing date; the catalog root changes with it. */
-export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
+/**
+ * GEO 09.11: permanent pages come from the one registry that also writes
+ * llms.txt. `catalogLastmod` — the freshest listing date; the catalog root
+ * changes with it. `extraPages` — database pages (monthly market reports).
+ */
+export function staticSitemapUrls(
+  catalogLastmod?: string,
+  extraPages: readonly PublicPage[] = [],
+): SitemapUrl[] {
+  const withDate = (page: PublicPage): SitemapUrl => ({
+    path: page.path,
+    ...(page.updatedAt ? { lastmod: page.updatedAt } : {}),
+  });
   return [
-    { path: '/', lastmod: PUBLIC_PAGES_UPDATED_AT },
-    // B535: help pages next to the landing.
-    { path: '/faq', lastmod: PUBLIC_PAGES_UPDATED_AT },
-    { path: '/support', lastmod: PUBLIC_PAGES_UPDATED_AT },
-    // B569: the tariffs page is a document of its own.
-    { path: '/tariffs', lastmod: '2026-10-27' },
-    { path: '/tools/country-fit', lastmod: '2026-10-23' },
-    // B567: the page, its menu item and the landing card ship in one release.
-    { path: '/tools/resume', lastmod: '2026-10-27' },
-    ...interviewSitemapUrls(),
-    // B616: опорные материалы под боли кандидата.
-    {
-      path: GUIDES_ROOT,
-      lastmod: GUIDES.map((guide) => guide.updatedAt)
-        .sort()
-        .at(-1),
-    },
-    ...GUIDES.map((guide) => ({ path: guidePath(guide.slug), lastmod: guide.updatedAt })),
-    // B617: блог на шаблоне опорных материалов.
-    {
-      path: BLOG_ROOT,
-      lastmod: BLOG_POSTS.map((post) => post.updatedAt)
-        .sort()
-        .at(-1),
-    },
-    ...BLOG_POSTS.map((post) => ({ path: blogPath(post.slug), lastmod: post.updatedAt })),
-    { path: '/tools/relocation', lastmod: '2026-10-27' },
-    // B574: the calculator and the relocation list answer 200 since layer 1.
-    { path: '/tools/salary-calculator', lastmod: '2026-10-28' },
-    ...LEGAL_DOCS.map((doc) => ({ path: legalPath(doc.slug), lastmod: LEGAL_PACK_PUBLISHED_AT })),
+    ...publicPages().map(withDate),
+    ...extraPages.map(withDate),
     { path: CATALOG_ROOT, ...(catalogLastmod ? { lastmod: catalogLastmod } : {}) },
     {
       path: `${CATALOG_ROOT}/${RELOCATION_PLACE}`,
@@ -176,8 +152,11 @@ export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
 export function buildSitemapFiles(input: {
   readonly listings: readonly SitemapUrl[];
   readonly jobs: readonly SitemapUrl[];
+  readonly extraPages?: readonly PublicPage[];
 }): SitemapFile[] {
-  const files = [file(STATIC_SITEMAP, staticSitemapUrls(newest(input.listings)))];
+  const files = [
+    file(STATIC_SITEMAP, staticSitemapUrls(newest(input.listings), input.extraPages)),
+  ];
   for (let start = 0; start < input.listings.length; start += SITEMAP_FILE_URL_LIMIT) {
     const chunk = input.listings.slice(start, start + SITEMAP_FILE_URL_LIMIT);
     files.push(file(listingsSitemapName(start / SITEMAP_FILE_URL_LIMIT + 1), chunk));
