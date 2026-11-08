@@ -41,6 +41,7 @@ import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSch
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
+import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -188,6 +189,7 @@ let stopSalaryMarketSnapshots: (() => void) | undefined;
 let stopCatalogRuSummaries: (() => void) | undefined;
 let stopOpenRouterBalance: (() => void) | undefined;
 let stopCatalogSearchEvidence: (() => void) | undefined;
+let stopLinkedinOrgResolver: (() => void) | undefined;
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;
 async function shutdown(signal: string): Promise<void> {
@@ -197,6 +199,7 @@ async function shutdown(signal: string): Promise<void> {
   stopCatalogRuSummaries?.();
   stopOpenRouterBalance?.();
   stopCatalogSearchEvidence?.();
+  stopLinkedinOrgResolver?.();
   log.info({ signal }, 'maintenance-shutdown-started');
   // `restoreAsync` reads the large SQLite pool in bounded chunks, but a
   // single restore can still take more than the old systemd stop window on
@@ -257,6 +260,10 @@ try {
   scheduleMarketSalaryEstimateJob(semanticDatabase, log);
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   scheduleRemoteScopeBackfill(semanticDatabase, log);
+  // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
+  if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
+    stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(semanticDatabase, log);
+  }
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
 } catch (error: unknown) {
   log.error(
