@@ -54,6 +54,11 @@ export const LISTING_STYLE = `
 .lv-link{color:var(--ps-blue);font-weight:600;display:inline-flex;align-items:center;gap:6px;min-height:44px}
 .lv-ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .lv-sec{padding:80px 0;border-top:1px solid var(--ps-line)}
+.lv-prose{max-width:72ch;display:grid;gap:12px;font-size:16px;color:var(--ps-soft)}
+.lv-prose h2{color:var(--ps-ink)}
+.lv-prose h3{font-size:16px;color:var(--ps-ink);margin-top:8px}
+.lv-intro-sal{list-style:none;padding:0;display:grid;gap:4px}
+.lv-intro-sal b{color:var(--ps-ink);font-variant-numeric:tabular-nums}
 .lv-facets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .lv-facets .lv-card{padding:20px}
 .lv-facets h2{font-size:16px;margin-bottom:8px}
