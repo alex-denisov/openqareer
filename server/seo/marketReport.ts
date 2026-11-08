@@ -4,11 +4,11 @@
  * Computed once per finished month by the maintenance process from the
  * deduplicated catalog (`catalog_entries`: one row per vacancy cluster) and
  * the cluster salary evidence. Only ranges with an explicit provider period
- * enter a median (`parseEvidence`, the /salaries rule); every figure needs a
+ * enter a median (`parseSalaryRangeEvidence`, the /salaries rule); every figure needs a
  * sample of at least MIN_REPORT_SAMPLE, otherwise it is not published.
  */
 import type { DatabaseSync } from 'node:sqlite';
-import { parseEvidence } from '../salaryMarket/salaryMarketRanges';
+import { parseSalaryRangeEvidence } from '../salaryMarket/salaryMarketRanges';
 import { VACANCY_CLUSTERS_TABLE } from '../data/sqliteSchema';
 import type { PublicPage } from '../../shared/publicPages';
 import {
@@ -78,7 +78,7 @@ function add(acc: Accumulator, row: Row): void {
     };
     acc.roles.set(row.role_slug, { ...role, count: role.count + 1 });
   }
-  const range = parseEvidence(row.salary_json);
+  const range = parseSalaryRangeEvidence(row.salary_json);
   if (typeof range === 'string') return;
   acc.withPeriodisedRange += 1;
   const key = `${range.currency}|${range.period}`;
