@@ -313,7 +313,7 @@ export interface LetterDestinationProps {
   readonly onAttachGeneralResume?: () => void;
 }
 
-interface ResumeRowProps {
+export interface ResumeRowProps {
   readonly onOpenResume?: () => void;
   readonly row: ResumeRowView;
   readonly busy?: boolean;
@@ -338,25 +338,32 @@ function ResumeRowAction({ row, busy, onPrepareResume, onAttachGeneralResume }: 
   );
 }
 
-function ResumeAndResponseRows(props: ResumeRowProps) {
+/** Строка резюме письма (B601): тот же вид на экране письма и на мобильной странице круга 1. */
+export function LetterResumeRow(props: ResumeRowProps) {
   const { onOpenResume, row } = props;
   return (
+    <DestinationRow icon={<FileText size={18} />} title={row.title} note={row.note}>
+      <ResumeRowAction {...props} />
+      {onOpenResume && !row.action ? (
+        <button
+          type="button"
+          className="career-btn is-sm is-ghost career-letter-dest-open"
+          aria-label={'Открыть: ' + row.title}
+          onClick={onOpenResume}
+        >
+          <ArrowSquareOut className="career-letter-dest-open-icon" aria-hidden="true" />
+          <span className="career-letter-dest-open-label">Открыть</span>
+          <CaretRight className="career-letter-dest-open-caret" size={14} aria-hidden="true" />
+        </button>
+      ) : null}
+    </DestinationRow>
+  );
+}
+
+function ResumeAndResponseRows(props: ResumeRowProps) {
+  return (
     <>
-      <DestinationRow icon={<FileText size={18} />} title={row.title} note={row.note}>
-        <ResumeRowAction {...props} />
-        {onOpenResume && !row.action ? (
-          <button
-            type="button"
-            className="career-btn is-sm is-ghost career-letter-dest-open"
-            aria-label={'Открыть: ' + row.title}
-            onClick={onOpenResume}
-          >
-            <ArrowSquareOut className="career-letter-dest-open-icon" aria-hidden="true" />
-            <span className="career-letter-dest-open-label">Открыть</span>
-            <CaretRight className="career-letter-dest-open-caret" size={14} aria-hidden="true" />
-          </button>
-        ) : null}
-      </DestinationRow>
+      <LetterResumeRow {...props} />
       <DestinationRow
         icon={<PaperPlaneTilt size={18} />}
         title="Отклик с письмом"

@@ -1,4 +1,5 @@
 import type { ApprovedVacancyLetterResult, LetterGeneralResume } from './vacancyLetterApi';
+import type { LetterScreenState } from './vacancyLetterController';
 
 export type LetterResumeKind = 'targeted' | 'master';
 
@@ -103,4 +104,14 @@ export function resumeRowView({
         };
   }
   return { title: titleFor(resumeKind) };
+}
+
+/** Строка резюме по состоянию экрана письма: черновик, круги связей, одобрение и сбой снимка. */
+export function resumeRowForLetter(state: LetterScreenState): ResumeRowView {
+  return resumeRowView({
+    resumeAvailable: state.draft.pitch?.resumeAvailable ?? state.circles.data?.resume?.available,
+    resumeKind: state.draft.pitch?.resumeKind ?? state.circles.data?.resume?.kind,
+    approved: state.approval.saved,
+    failure: state.approval.resumeFailure,
+  });
 }
