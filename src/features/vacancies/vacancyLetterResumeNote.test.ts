@@ -78,7 +78,7 @@ describe('resumeRowView (B601, решения владельца 08.11)', () => 
       failure: { retried: true, generalResume: { documentId: 'g', fileName: 'cv.pdf' } },
     });
     expect(view.action).toBe('attach-general');
-    expect(view.note).toContain('«cv.pdf»');
+    expect(view.note).toContain('„cv.pdf“');
   });
 
   it('повтор не удался, общего резюме нет: снова «Подготовить резюме»', () => {

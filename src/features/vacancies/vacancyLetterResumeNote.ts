@@ -51,9 +51,9 @@ function failureRow(
     return {
       title,
       note:
-        'Не удалось подготовить резюме. Можно приложить ваше общее резюме «' +
+        'Не удалось подготовить резюме. Можно приложить ваше общее резюме „' +
         failure.generalResume.fileName +
-        '»',
+        '“',
       action: 'attach-general',
     };
   }

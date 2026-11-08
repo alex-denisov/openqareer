@@ -1029,7 +1029,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await page.getByRole('button', { name: 'Одобрить письмо' }).click();
     const row = resumeRow(page);
     await row.getByRole('button', { name: 'Подготовить резюме' }).click();
-    await expect(row).toContainText('Можно приложить ваше общее резюме «cv.pdf»');
+    await expect(row).toContainText('Можно приложить ваше общее резюме „cv.pdf“');
     await row.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await captureState(page, testInfo, 'resume-offer-general');
     await row.getByRole('button', { name: 'Приложить общее резюме' }).click();
