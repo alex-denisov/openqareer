@@ -5,6 +5,8 @@
  */
 export interface LinkedinCompanyGate {
   run<T>(task: () => Promise<T>): Promise<T>;
+  /** 429 внутри задачи, которая сама его не бросает (общий гостевой поиск). */
+  markRateLimited(): void;
 }
 
 export interface LinkedinCompanyGateOptions {
@@ -55,6 +57,9 @@ export function createLinkedinCompanyGate(
   }
 
   return {
+    markRateLimited(): void {
+      pausedUntil = now() + pauseMs;
+    },
     run<T>(task: () => Promise<T>): Promise<T> {
       const next = queue.then(
         () => guarded(task),

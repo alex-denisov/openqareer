@@ -59,3 +59,19 @@ describe('linkedinCompanyGate (B622)', () => {
     await expect(gate.run(async () => 7)).resolves.toBe(7);
   });
 });
+
+describe('linkedinCompanyGate shared pause (B622)', () => {
+  it('a 429 seen by the general guest search pauses company reads too', async () => {
+    let t = 0;
+    const gate = createLinkedinCompanyGate({
+      now: () => t,
+      sleep: async () => {},
+      spacingMs: 0,
+      pauseMs: 1000,
+    });
+    await gate.run(async () => gate.markRateLimited());
+    await expect(gate.run(async () => 1)).rejects.toMatchObject({ statusCode: 429 });
+    t = 1000;
+    await expect(gate.run(async () => 1)).resolves.toBe(1);
+  });
+});

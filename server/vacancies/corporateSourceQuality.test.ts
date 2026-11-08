@@ -64,3 +64,35 @@ describe('corporateSourceQuality navigation and aggregators (B622)', () => {
     expect(verdict.passed).toBe(false);
   });
 });
+
+describe('ATS board ownership (B622)', () => {
+  it('rejects another company board on an ATS host (Nebius → TripleTen)', () => {
+    expect(
+      corporateRejectReason(
+        v('Openings at TripleTen', 'https://www.comeet.com/jobs/tripleten/98.008'),
+        ['nebius.com'],
+        'Nebius AI Cloud',
+      ),
+    ).toBe('foreign_board');
+  });
+
+  it('keeps the own board and boards without a slug', () => {
+    expect(
+      corporateRejectReason(
+        v('Backend Engineer', 'https://job-boards.greenhouse.io/ahrefsjobs/jobs/1'),
+        ['ahrefs.com'],
+        'Ahrefs SEO',
+      ),
+    ).toBeNull();
+    expect(
+      corporateRejectReason(v('Go Developer', 'https://apply.workable.com/j/ABC'), ['x.com'], 'X'),
+    ).toBeNull();
+    expect(
+      corporateRejectReason(
+        v('Analyst', 'https://accenture.wd103.myworkdayjobs.com/job/1'),
+        ['accenture.com'],
+        'Accenture',
+      ),
+    ).toBeNull();
+  });
+});

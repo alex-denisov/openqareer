@@ -831,7 +831,7 @@ export async function fetchGenericCorporateVacancies(
   fetchStealth?: typeof fetchWithStealthFallback,
 ): Promise<UnifiedVacancy[]> {
   const read = await readGenericCorporateVacancies(source, fetchStealth);
-  const verdict = gateCorporateVacancies(read, [source.targetUrl]);
+  const verdict = gateCorporateVacancies(read, [source.targetUrl], source.name);
   if (!verdict.passed) throw corporateQualityError(verdict);
   return [...verdict.kept];
 }

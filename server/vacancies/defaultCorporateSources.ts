@@ -1740,7 +1740,9 @@ export const DEFAULT_CORPORATE_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'open_web',
     market: 'Global (Nebius AI Careers Portal)',
     addressStatus: 'live',
-    enabled: true,
+    enabled: false,
+    disabledReason:
+      'Не прошёл ворота качества B622 (2026-11-09): сайт отдаёт доску другой компании (TripleTen на comeet), foreign_board 1.',
     targetUrl: 'https://nebius.com/careers',
     refreshIntervalMinutes: 720,
     itemsFoundTotal: 1,
@@ -2975,7 +2977,9 @@ export const DEFAULT_CORPORATE_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'open_web',
     market: 'USA; Global; Remote WW (Salesforce Careers Portal)',
     addressStatus: 'live',
-    enabled: true,
+    enabled: false,
+    disabledReason:
+      'Не прошёл ворота качества B622 (2026-11-09): страница отдаёт только навигацию, bad_title 1.',
     targetUrl: 'https://salesforce.com/careers',
     refreshIntervalMinutes: 720,
     itemsFoundTotal: 1,
@@ -3066,7 +3070,9 @@ export const DEFAULT_CORPORATE_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'open_web',
     market: 'Cyprus; Global; Remote WW (inDrive Careers Portal)',
     addressStatus: 'live',
-    enabled: true,
+    enabled: false,
+    disabledReason:
+      'Не прошёл ворота качества B622 (2026-11-09): страница отдаёт только навигацию, bad_title 10.',
     targetUrl: 'https://careers.indrive.com',
     refreshIntervalMinutes: 720,
     itemsFoundTotal: 10,

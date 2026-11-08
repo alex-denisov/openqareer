@@ -328,20 +328,28 @@ async function fetchPagedJsonApi(
 }
 
 /** LinkedIn — гостевой список, свой HTML-разбор и вежливый темп (B218). */
+/**
+ * Общий гостевой поиск идёт через тот же шлюз, что и компании (B622): один
+ * клиент LinkedIn за раз, и любой 429 ставит на паузу и его, и компании.
+ */
 async function fetchLinkedinGuestSource(
   sleep: (ms: number) => Promise<void>,
+  gate: LinkedinCompanyGate,
 ): Promise<SourceReading> {
-  return fetchLinkedinGuest({
-    fetchPage: async (url, headers) => {
-      // Per page, not per poll: one slow page ends the run with what was read.
-      return withRequestTimeout(LINKEDIN_PAGE_TIMEOUT_MS, async (signal) => {
-        const res = await fetch(url, { headers, signal });
-        return { status: res.status, body: res.ok ? await res.text() : '' };
-      });
-    },
-    sleep,
-    observedAt: new Date().toISOString(),
-  });
+  return gate.run(() =>
+    fetchLinkedinGuest({
+      fetchPage: async (url, headers) => {
+        // Per page, not per poll: one slow page ends the run with what was read.
+        return withRequestTimeout(LINKEDIN_PAGE_TIMEOUT_MS, async (signal) => {
+          const res = await fetch(url, { headers, signal });
+          if (res.status === 429) gate.markRateLimited();
+          return { status: res.status, body: res.ok ? await res.text() : '' };
+        });
+      },
+      sleep,
+      observedAt: new Date().toISOString(),
+    }),
+  );
 }
 
 export const BAYT_PAGES_PER_SYNC = 5;
@@ -610,7 +618,7 @@ async function fetchJsonOrCareerSite(
   }
   if (source.type === 'json_api') {
     if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
-    if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep);
+    if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep, linkedinGate);
     if (source.id === BAYT_SOURCE_ID) {
       return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
     }
