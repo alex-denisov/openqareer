@@ -111,6 +111,16 @@ function Block({ block, sources }: { block: GuideBlock; sources: readonly GuideS
       return <Example title={block.title} text={block.text} why={block.why} />;
     case 'compare':
       return <Compare weak={block.weak} strong={block.strong} />;
+    case 'links':
+      return (
+        <ul className="oq-guide-links">
+          {block.items.map((item) => (
+            <li key={item.href}>
+              <a href={item.href}>{item.label}</a>
+            </li>
+          ))}
+        </ul>
+      );
   }
 }
 

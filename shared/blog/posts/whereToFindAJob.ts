@@ -250,6 +250,7 @@ export const WHERE_TO_FIND_A_JOB: Guide = {
   related: [
     '/guides/cant-find-a-job',
     '/guides/how-to-write-a-resume',
+    '/guides/executive-job-search',
     '/vacancies',
     '/blog/create-a-resume-online',
     '/tools/relocation',

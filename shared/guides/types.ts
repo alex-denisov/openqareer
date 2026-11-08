@@ -37,7 +37,15 @@ export type GuideBlock =
       /** Почему пример работает — разбор под текстом. */
       readonly why?: string;
     }
-  | { readonly kind: 'compare'; readonly weak: string; readonly strong: string };
+  | { readonly kind: 'compare'; readonly weak: string; readonly strong: string }
+  /** Список ссылок на страницы сайта (каталог, инструменты). */
+  | { readonly kind: 'links'; readonly items: readonly GuideLink[] };
+
+export interface GuideLink {
+  readonly label: string;
+  /** Путь сайта, начинается с `/`. */
+  readonly href: string;
+}
 
 export interface GuideSection {
   /** id для якоря и оглавления: латиница через дефис. */

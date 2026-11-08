@@ -19,7 +19,7 @@ const SITE_PATHS = new Set([
 
 function knownHref(href: string): boolean {
   const path = href.split(/[?#]/u)[0] ?? href;
-  return SITE_PATHS.has(path) || path.startsWith(`${GUIDES_ROOT}/`) || path === GUIDES_ROOT;
+  return SITE_PATHS.has(path) || /^\/vacancies\/[a-z-]+\/[a-z-]+$/u.test(path) || path.startsWith(`${GUIDES_ROOT}/`) || path === GUIDES_ROOT;
 }
 
 describe('B616 guides', () => {
@@ -56,7 +56,9 @@ describe('B616 guides', () => {
       for (const action of actions) expect(knownHref(action.href), action.href).toBe(true);
       for (const section of guide.sections)
         for (const block of section.blocks)
-          if (block.kind === 'paragraph')
+          if (block.kind === 'links')
+            for (const item of block.items) expect(knownHref(item.href), item.href).toBe(true);
+          else if (block.kind === 'paragraph')
             for (const id of block.sourceIds ?? []) expect(sourceIds.has(id), id).toBe(true);
       for (const entry of guide.related) {
         const href = relatedHref(entry);
