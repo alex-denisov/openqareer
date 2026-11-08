@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Не могу найти работу: почему нет откликов и что менять · openqareer</title>
+<meta name="description" content="Почему приходят отказы или тишина после откликов: три частые причины, как их отличить и что исправить в резюме, выборе вакансий и названии должности.">
+<link rel="icon" href="../public/favicon.svg" type="image/svg+xml">
+<!--
+  B616, макет шаблона /guides/<slug>. Стили: публичный каркас publicSite.css
+  (шапка, подвал, кнопки, <details>) и финальный src/features/site/guides.css —
+  макет подключает оба файла, а не копию, чтобы не разойтись с реализацией.
+  Шапка и подвал напечатаны из shared/publicSiteChrome.ts (renderChromeHeaderHtml / FooterHtml).
+  Текст — заполнитель про «Не могу найти работу»; источники внизу — образцы
+  оформления, не настоящие ссылки: реальные цифры и источники вносит автор материала.
+-->
+<link rel="stylesheet" href="../src/features/site/publicSite.css">
+<link rel="stylesheet" href="../src/features/site/guides.css">
+</head>
+<body class="ps">
+<a class="ps-skip" href="#main">К содержанию</a>
+<header class="ps-top"><div class="ps-wrap ps-top-row"><a class="ps-brand" href="/" aria-label="openqareer — на главную"><span class="brand-lockup"><img src="../public/favicon.svg" width="26" height="26" alt=""><span class="brand-lockup-word">open<span class="brand-lockup-qareer">qareer</span></span></span></a><nav class="ps-nav" aria-label="Разделы"><a href="/vacancies">Вакансии</a><div class="ps-tooldrop is-nav"><a class="ps-tooldrop-trigger" href="/#tools" aria-expanded="false" data-ps-disclosure>Инструменты</a></div><a href="/tariffs">Тарифы</a><a href="/faq">Вопросы</a></nav><div class="ps-top-actions"><a class="ps-btn is-login ps-guest" href="/login">Войти</a><a class="ps-btn is-cta ps-guest" href="/signup">Найти работу</a><a class="ps-btn is-cta ps-member" href="/app">Открыть кабинет</a><a class="ps-btn is-cta ps-admin" href="/admin">Администрирование</a><button class="ps-menu-btn" type="button" aria-label="Меню разделов" aria-expanded="false" aria-controls="ps-menu" data-ps-menu><svg width="22" height="22" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M224 128a8 8 0 0 1-8 8H40a8 8 0 0 1 0-16h176a8 8 0 0 1 8 8ZM40 72h176a8 8 0 0 0 0-16H40a8 8 0 0 0 0 16Zm176 112H40a8 8 0 0 0 0 16h176a8 8 0 0 0 0-16Z"/></svg></button></div></div><nav class="ps-menu" id="ps-menu" aria-label="Разделы" hidden><a class="ps-menu-login ps-guest" href="/login">Войти</a></nav></header>
+
+<main id="main" tabindex="-1" class="ps-wrap ps-page oq-guide">
+
+  <!-- 1. Крошки: «Главная / Материалы / <короткое имя>». Последний шаг — текущая страница. -->
+  <nav class="oq-guide-crumbs" aria-label="Хлебные крошки">
+    <ol>
+      <li><a href="/">Главная</a></li>
+      <li><a href="/guides">Материалы</a></li>
+      <li><span aria-current="page">Не могу найти работу</span></li>
+    </ol>
+  </nav>
+
+  <!-- 2. Первый экран: eyebrow, H1, лид, одна акцентная кнопка, дата. -->
+  <header class="oq-guide-hero">
+    <p class="oq-guide-eyebrow">Поиск работы · разбор</p>
+    <h1>Не могу найти работу: почему нет откликов и что менять</h1>
+    <p class="oq-guide-lead">Отклики уходят, а приглашений нет. Почти всегда дело в одном из трёх мест: резюме не убеждает, вы откликаетесь не туда или рынок знает вашу должность под другим названием. Ниже — как понять, где именно, и что поправить.</p>
+    <div class="oq-guide-cta">
+      <a class="ps-btn is-primary is-lg" href="/tools/resume">
+        Собрать резюме из опыта
+        <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg>
+      </a>
+      <span class="oq-guide-cta-note">Конструктор работает без регистрации: результат можно скачать в PDF.</span>
+    </div>
+    <p class="oq-guide-updated">Обновлено <time datetime="2026-11-08">08.11.2026</time></p>
+  </header>
+
+  <div class="oq-guide-layout">
+
+    <!-- 3. Оглавление: <details>; на 390 свёрнут, на 1440 — липкая колонка слева. -->
+    <details class="oq-guide-toc" data-oq-guide-toc>
+      <summary>Содержание</summary>
+      <nav aria-label="Содержание материала">
+        <ol>
+          <li><a href="#resume-first-screen">Резюме не убеждает за первые секунды</a></li>
+          <li><a href="#wrong-vacancies">Вы откликаетесь не на те вакансии</a></li>
+          <li><a href="#other-job-title">Рынок знает вас под другим названием</a></li>
+          <li><a href="#faq">Вопросы и ответы</a></li>
+          <li><a href="#sources">Источники</a></li>
+        </ol>
+      </nav>
+    </details>
+
+    <article class="oq-guide-article">
+
+      <!-- 4a. Причина 1: симптом, абзацы, чек-лист, слабо/сильно, механика. -->
+      <section class="oq-guide-section" id="resume-first-screen" aria-labelledby="h-resume-first-screen">
+        <p class="oq-guide-kicker">Причина 1</p>
+        <h2 id="h-resume-first-screen">Резюме не убеждает за первые секунды</h2>
+        <div class="oq-guide-symptom">
+          <b>Как понять, что дело в этом</b>
+          <p>Откликов много, а ответов почти нет. Отказы приходят быстро или не приходят совсем.</p>
+        </div>
+        <div class="oq-guide-blocks">
+          <p>Первый просмотр резюме короткий.<span class="oq-guide-ref"><a href="#src-1" aria-label="Источник 1">[1]</a></span> Рекрутёр ищет в верхней части страницы ответ на один вопрос: подходит ли этот человек под вакансию. Если там общие слова вместо результата, дальше он не читает.</p>
+          <div class="oq-guide-checklist">
+            <h3>Проверьте первый экран вашего резюме</h3>
+            <ul>
+              <li><span class="oq-guide-tick"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg></span>Должность в заголовке совпадает с названием в вакансии</li>
+              <li><span class="oq-guide-tick"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg></span>У каждого последнего места работы есть результат, а не только обязанности</li>
+              <li><span class="oq-guide-tick"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg></span>Видно масштаб: размер команды, бюджета или нагрузки</li>
+              <li><span class="oq-guide-tick"><svg viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></svg></span>Навыки из вакансии названы теми же словами, что в тексте объявления</li>
+            </ul>
+          </div>
+          <p>Главная правка — заменить обязанности результатами. Сравните две формулировки одного и того же опыта.</p>
+          <div class="oq-guide-compare">
+            <div class="oq-guide-weak"><b>Слабо</b>Отвечал за развитие отдела продаж, участвовал в запуске новых проектов.</div>
+            <div class="oq-guide-strong"><b>Сильнее</b>Вырастил выручку отдела за год: выстроил воронку и нанял четырёх менеджеров.</div>
+          </div>
+        </div>
+        <aside class="oq-guide-action" aria-label="Что делает openqareer">
+          <div>
+            <p class="oq-guide-action-label">Что делает openqareer</p>
+            <p>Конструктор превращает ваши места работы в резюме с результатами. Цифры остаются вашими: мы их не придумываем.</p>
+          </div>
+          <a class="ps-btn" href="/tools/resume">Собрать резюме
+            <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg></a>
+        </aside>
+      </section>
+
+      <!-- 4b. Причина 2: пример письма (example) и механика, доступная после входа. -->
+      <section class="oq-guide-section" id="wrong-vacancies" aria-labelledby="h-wrong-vacancies">
+        <p class="oq-guide-kicker">Причина 2</p>
+        <h2 id="h-wrong-vacancies">Вы откликаетесь не на те вакансии</h2>
+        <div class="oq-guide-symptom">
+          <b>Как понять, что дело в этом</b>
+          <p>Откликов много, но в большинстве вакансий вы закрываете меньше половины требований.</p>
+        </div>
+        <div class="oq-guide-blocks">
+          <p>Массовые отклики дают тишину. Работодатель сравнивает вас с требованиями, и чем больше расхождений, тем ниже шанс на ответ. Сильнее работает меньше откликов, но на вакансии, где ваш опыт виден сразу.</p>
+          <ol>
+            <li>Выпишите три обязательных требования вакансии.</li>
+            <li>Напротив каждого — ваш пример из опыта.</li>
+            <li>Если примера нет хотя бы у двух требований, вакансия не ваша.</li>
+          </ol>
+          <figure class="oq-guide-example">
+            <figcaption>Пример: бухгалтер</figcaption>
+            <blockquote>
+              <p>Здравствуйте! Вижу, что вам нужен главный бухгалтер с переходом на МСФО.</p>
+              <p>Последние четыре года веду учёт группы из шести компаний, в прошлом году провели трансформацию отчётности по МСФО без срыва сроков аудита. Резюме прикладываю, готов обсудить задачи на созвоне.</p>
+            </blockquote>
+            <div class="oq-guide-why">
+              <b>Почему это работает</b>
+              <p>В первой строке — требование вакансии, во второй — ваш подтверждающий пример. Письмо читается за десять секунд и отвечает на главный вопрос работодателя.</p>
+            </div>
+          </figure>
+        </div>
+        <aside class="oq-guide-action" aria-label="Что делает openqareer">
+          <div>
+            <p class="oq-guide-action-label">Что делает openqareer <span class="ps-chip">После входа</span></p>
+            <p>Показывает вакансии со всего рынка и совпадение с вашим профилем: что подтверждено, чего не хватает. Отклик остаётся вашим решением.</p>
+          </div>
+          <a class="ps-btn" href="/signup?from=guide">Подобрать вакансии
+            <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg></a>
+        </aside>
+      </section>
+
+      <!-- 4c. Причина 3: короткий вариант без примера (состояние «частично»). -->
+      <section class="oq-guide-section" id="other-job-title" aria-labelledby="h-other-job-title">
+        <p class="oq-guide-kicker">Причина 3</p>
+        <h2 id="h-other-job-title">Рынок знает вас под другим названием</h2>
+        <div class="oq-guide-symptom">
+          <b>Как понять, что дело в этом</b>
+          <p>Резюме открывают редко, хотя оно опубликовано. Ваше название должности почти не встречается в вакансиях.</p>
+        </div>
+        <div class="oq-guide-blocks">
+          <p>В разных компаниях одна и та же работа называется по-разному: «руководитель направления», «head of» и «директор по развитию» могут описывать одно и то же. Поиск по одному названию прячет от вас половину рынка.</p>
+          <ul>
+            <li>Откройте пять вакансий, которые вам нравятся, и выпишите их названия.</li>
+            <li>Найдите общие слова в задачах и требованиях, а не в заголовках.</li>
+            <li>Добавьте два-три близких названия в поиск и в заголовок резюме.</li>
+          </ul>
+        </div>
+        <aside class="oq-guide-action" aria-label="Что делает openqareer">
+          <div>
+            <p class="oq-guide-action-label">Что делает openqareer <span class="ps-chip">После входа</span></p>
+            <p>Предлагает должности, под которые подходит ваш опыт, и показывает вакансии по каждой. Каждая гипотеза помечена как проверенная или нет.</p>
+          </div>
+          <a class="ps-btn" href="/signup?from=guide">Найти свои должности
+            <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg></a>
+        </aside>
+      </section>
+
+      <!-- 5. FAQ: <details>, первый открыт. -->
+      <section class="oq-guide-faq" id="faq" aria-labelledby="h-faq">
+        <h2 id="h-faq">Вопросы и ответы</h2>
+        <div class="oq-guide-faq-list">
+          <details open>
+            <summary>Сколько откликов нужно, чтобы получить приглашение?</summary>
+            <p class="oq-guide-answer">Универсального числа нет: оно зависит от профессии, региона и уровня. Полезнее смотреть, после какой доли откликов вас зовут на разговор. Если она низкая после нескольких десятков откликов, меняйте резюме или выбор вакансий, а не количество.</p>
+          </details>
+          <details>
+            <summary>Резюме хорошее, а приглашений нет. Что проверить в первую очередь?</summary>
+            <p class="oq-guide-answer">Сначала вакансии: сравните требования со своим опытом по пунктам. Потом первый экран резюме: должность, результат и масштаб должны быть видны без прокрутки.</p>
+          </details>
+          <details>
+            <summary>Нужно ли сопроводительное письмо?</summary>
+            <p class="oq-guide-answer">Если вакансия не требует его прямо, достаточно короткого письма из двух-трёх предложений: что требуется и чем вы это подтверждаете. Длинное письмо без примеров вреда не принесёт, но и не поможет.</p>
+          </details>
+        </div>
+      </section>
+
+      <!-- 6. Источники: нумерованный список; [n] в тексте ведёт сюда. -->
+      <section class="oq-guide-sources" id="sources" aria-labelledby="h-sources">
+        <h2 id="h-sources">Источники</h2>
+        <ol class="oq-guide-source-list">
+          <li id="src-1"><a href="https://example.com/" rel="noopener">Как рекрутёры читают резюме — исследование (образец оформления)</a><span class="oq-guide-source-meta">Издатель · 12.10.2026</span></li>
+          <li id="src-2"><a href="https://example.com/" rel="noopener">Требования вакансий и совпадение с резюме — отчёт (образец оформления)</a><span class="oq-guide-source-meta">Издатель · 03.09.2026</span></li>
+          <li id="src-3"><a href="https://example.com/" rel="noopener">Названия должностей на рынке — справочник (образец оформления)</a><span class="oq-guide-source-meta">Издатель · 21.08.2026</span></li>
+        </ol>
+      </section>
+    </article>
+  </div>
+
+  <!-- 7. Читайте также: материалы и инструменты. -->
+  <section class="oq-guide-related" aria-labelledby="h-related">
+    <h2 id="h-related">Читайте также</h2>
+    <ul class="oq-guide-related-list">
+      <li><a href="/guides/cover-letter"><span class="oq-guide-related-kind">Материал</span><b>Как написать сопроводительное письмо</b><small>Три абзаца, которые читают до конца.</small></a></li>
+      <li><a href="/tools/interview-questions"><span class="oq-guide-related-kind">Инструмент</span><b>Вопросы на собеседовании</b><small>По профессиям, с разбором сильного ответа.</small></a></li>
+      <li><a href="/salaries"><span class="oq-guide-related-kind">Инструмент</span><b>Зарплаты по профессиям</b><small>Вилки из открытых вакансий, с датой и выборкой.</small></a></li>
+    </ul>
+  </section>
+
+  <!-- 8. Финальный призыв. -->
+  <section class="oq-guide-final" aria-labelledby="h-final">
+    <div>
+      <h2 id="h-final">Начните с резюме, которое отвечает на вакансию</h2>
+      <p>Free навсегда: резюме, должности и вакансии со всего рынка.</p>
+    </div>
+    <a class="ps-btn is-primary is-lg" href="/signup?from=guide">Найти работу
+      <svg width="18" height="18" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true"><path d="M221.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L196.69,136H40a8,8,0,0,1,0-16H196.69L138.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,221.66,133.66Z"/></svg></a>
+  </section>
+</main>
+
+<footer class="ps-footer"><div class="ps-wrap ps-footer-grid"><div><a class="ps-brand" href="/" aria-label="openqareer — на главную"><span class="brand-lockup"><img src="../public/favicon.svg" width="26" height="26" alt=""><span class="brand-lockup-word">open<span class="brand-lockup-qareer">qareer</span></span></span></a><p class="ps-footer-about">Поиск работы с ИИ: резюме, вакансии со всего рынка и отклики в одном месте.</p></div><div class="ps-footer-group"><b>Поиск</b><a href="/vacancies">Все вакансии</a><a href="/vacancies/remote">Удалённая работа</a><a href="/vacancies/relocation">Вакансии с релокацией</a><a href="/tariffs">Тарифы</a></div><div class="ps-footer-group"><b>Инструменты</b><a href="/tools/resume">Конструктор резюме</a><a href="/tools/interview-questions">Вопросы на собеседовании</a><a href="/tools/salary-calculator">Калькулятор зарплаты на руки</a><a href="/salaries">Зарплаты по профессиям</a><a href="/tools/relocation">В какую страну переехать</a></div><div class="ps-footer-group"><b>Помощь</b><a href="/faq">Вопросы и ответы</a><a href="/support">Поддержка</a><a href="https://t.me/openqareer_bot" rel="noopener">Telegram-бот</a><a href="/downloads/openqareer-macos.dmg">Приложение для Mac</a><a href="/downloads/openqareer-windows.exe">Приложение для Windows</a></div><div class="ps-footer-group"><b>Документы</b><a href="/legal/terms">Соглашение</a><a href="/legal/privacy">Персональные данные</a><a href="/legal/consent">Согласие</a><a href="/legal/disclaimer">Дисклеймер</a></div><div class="ps-footer-legal"><span>© 2026 openqareer</span><span>ИНН 774315089677</span><span>support@openqareer.com</span><button type="button" class="ps-footer-cookie" data-oq-consent-open="">Настройки cookie</button></div></div></footer>
+<script>
+  /* oq-guide-1.js: на десктопе раскрыть оглавление (без ::details-content). */
+  (function () {
+    var toc = document.querySelector('[data-oq-guide-toc]');
+    if (toc && window.matchMedia('(min-width: 901px)').matches) toc.open = true;
+  })();
+</script>
+</body>
+</html>

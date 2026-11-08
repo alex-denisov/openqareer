@@ -1,0 +1,645 @@
+/* B616: шаблон публичной опорной статьи /guides/<slug>, макет
+ * docs-mockups/guide-template.html. Страница рендерится сервером в тот же
+ * каркас, что /tools/interview-questions, без React-гидратации: всё на
+ * <details> и якорях. Всё внутри .oq-guide поверх publicSite.css (.ps).
+ *
+ * Шкала кегля B232: 13 / 14 / 16 / 20 / 28 / 40 (--ps-text-sm, -lg, -display
+ * уже есть в publicSite.css; xs, md, xl заведены ниже на тех же значениях).
+ * Отступы — токены --ps-space-*, крупные шаги — их суммы.
+ * Состояния: нет symptom / action / FAQ / источников / «Читайте также» —
+ * блок не печатается (никаких пустых рамок); один раздел — оглавление
+ * скрывается; много разделов — оглавление листается внутри липкой колонки.
+ */
+.oq-guide {
+  --oq-guide-text-xs: 0.8125rem;
+  --oq-guide-text-md: 1rem;
+  --oq-guide-text-xl: 1.75rem;
+  --oq-guide-space-5: calc(var(--ps-space-4) + var(--ps-space-1));
+  --oq-guide-space-10: calc(var(--ps-space-8) + var(--ps-space-2));
+  --oq-guide-space-12: calc(var(--ps-space-8) + var(--ps-space-4));
+  --oq-guide-header: 4rem;
+  /* Текст на тёмной полосе: то же значение, что в .iq-strip p. */
+  --oq-guide-band-soft: oklch(85% 0.01 256);
+  --oq-guide-measure: 68ch;
+  padding-top: 0;
+  padding-bottom: calc(var(--ps-space-8) * 3);
+}
+
+/* ---------- хлебные крошки ---------- */
+.oq-guide-crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--ps-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--oq-guide-text-xs);
+  color: var(--ps-mute);
+}
+.oq-guide-crumbs li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ps-space-2);
+  min-width: 0;
+}
+.oq-guide-crumbs li + li::before {
+  content: '/';
+  opacity: 0.6;
+}
+.oq-guide-crumbs a,
+.oq-guide-crumbs [aria-current] {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.oq-guide-crumbs a:hover {
+  color: var(--ps-ink);
+}
+.oq-guide-crumbs [aria-current] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- первый экран ---------- */
+.oq-guide-hero {
+  padding: var(--ps-space-6) 0 var(--oq-guide-space-10);
+}
+.oq-guide-eyebrow {
+  font-size: var(--oq-guide-text-xs);
+  font-weight: 600;
+  color: var(--ps-mute);
+}
+.oq-guide-hero h1 {
+  max-width: 28ch;
+  margin-top: var(--ps-space-2);
+  font-size: var(--ps-text-display);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.oq-guide-lead {
+  max-width: 56ch;
+  margin-top: var(--ps-space-4);
+  font-size: var(--ps-text-lg);
+  line-height: 1.5;
+  color: var(--ps-soft);
+}
+.oq-guide-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ps-space-3) var(--ps-space-6);
+  margin-top: var(--ps-space-8);
+}
+.oq-guide .ps-btn {
+  font-size: var(--ps-text-sm);
+}
+.oq-guide .ps-btn.is-lg {
+  font-size: var(--oq-guide-text-md);
+}
+.oq-guide-cta-note {
+  max-width: 40ch;
+  font-size: var(--ps-text-sm);
+  color: var(--ps-soft);
+}
+.oq-guide-updated {
+  margin-top: var(--ps-space-4);
+  font-size: var(--ps-text-sm);
+  color: var(--ps-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- каркас: оглавление + статья ---------- */
+.oq-guide-layout {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: var(--oq-guide-space-12);
+  align-items: start;
+  padding-top: var(--oq-guide-space-10);
+  border-top: var(--ps-border-width) solid var(--ps-line);
+}
+.oq-guide-article {
+  max-width: 47.5rem;
+}
+
+/* Оглавление: на телефоне свёрнутый <details>, на десктопе липкая колонка. */
+/* details.: перебивает `.ps details` (отступ и верхняя линия) из publicSite.css. */
+details.oq-guide-toc {
+  position: sticky;
+  top: calc(var(--oq-guide-header) + var(--ps-space-4));
+  max-height: calc(100vh - var(--oq-guide-header) - var(--ps-space-8));
+  overflow-y: auto;
+  padding: 0;
+  border: 0;
+}
+.oq-guide-toc summary {
+  min-height: 44px;
+  align-items: center;
+  font-size: var(--oq-guide-text-xs);
+  color: var(--ps-mute);
+}
+.oq-guide-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: oq-guide-toc;
+  border-left: var(--ps-border-width) solid var(--ps-line-2);
+}
+.oq-guide-toc li {
+  counter-increment: oq-guide-toc;
+}
+.oq-guide-toc a {
+  display: flex;
+  gap: var(--ps-space-3);
+  align-items: center;
+  min-height: 44px;
+  padding: var(--ps-space-2) var(--ps-space-4);
+  margin-left: calc(var(--ps-border-width) * -1);
+  border-left: calc(var(--ps-border-width) * 2) solid transparent;
+  font-size: var(--ps-text-sm);
+  line-height: 1.4;
+  color: var(--ps-soft);
+  transition:
+    color 0.18s,
+    border-color 0.18s;
+}
+.oq-guide-toc a::before {
+  content: counter(oq-guide-toc, decimal-leading-zero);
+  flex: none;
+  font-size: var(--oq-guide-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ps-mute);
+}
+.oq-guide-toc a:hover {
+  color: var(--ps-ink);
+  border-left-color: var(--ps-blue);
+}
+
+/* ---------- разделы ---------- */
+.oq-guide-section {
+  padding: var(--oq-guide-space-12) 0;
+  border-top: var(--ps-border-width) solid var(--ps-line);
+  scroll-margin-top: calc(var(--oq-guide-header) + var(--ps-space-4));
+}
+.oq-guide-section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.oq-guide-kicker {
+  font-size: var(--oq-guide-text-xs);
+  font-weight: 600;
+  color: var(--ps-blue);
+}
+.oq-guide-section h2,
+.oq-guide-faq h2,
+.oq-guide-sources h2 {
+  margin-top: var(--ps-space-1);
+  font-size: var(--oq-guide-text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.oq-guide-symptom {
+  margin-top: var(--ps-space-4);
+  padding: var(--ps-space-4) var(--oq-guide-space-5);
+  border-radius: var(--ps-radius-sm);
+  background: var(--ps-bg-2);
+}
+.oq-guide-symptom b {
+  display: block;
+  font-size: var(--oq-guide-text-xs);
+  font-weight: 600;
+  color: var(--ps-mute);
+}
+.oq-guide-symptom p {
+  margin-top: var(--ps-space-1);
+}
+
+/* Блоки статьи идут одним ритмом. */
+.oq-guide-blocks {
+  display: grid;
+  gap: var(--oq-guide-space-5);
+  margin-top: var(--ps-space-6);
+}
+.oq-guide-blocks > p,
+.oq-guide-symptom p,
+.oq-guide-blocks > ul,
+.oq-guide-blocks > ol {
+  max-width: var(--oq-guide-measure);
+  font-size: var(--oq-guide-text-md);
+  line-height: 1.7;
+}
+.oq-guide-blocks > ul,
+.oq-guide-blocks > ol {
+  padding-left: var(--oq-guide-space-5);
+}
+.oq-guide-blocks > ul li,
+.oq-guide-blocks > ol li {
+  padding-left: var(--ps-space-1);
+}
+.oq-guide-blocks > ul li + li,
+.oq-guide-blocks > ol li + li {
+  margin-top: var(--ps-space-2);
+}
+.oq-guide-blocks li::marker {
+  color: var(--ps-mute);
+}
+.oq-guide-ref a {
+  display: inline-block;
+  padding: 0 var(--ps-space-1);
+  font-size: var(--oq-guide-text-xs);
+  font-weight: 600;
+  color: var(--ps-blue);
+  vertical-align: super;
+  line-height: 0;
+}
+
+/* Чек-лист: статичный (без состояния), поэтому галочки, а не поля. */
+.oq-guide-checklist {
+  padding: var(--oq-guide-space-5) var(--ps-space-6);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-sm);
+  background: var(--ps-surface);
+}
+.oq-guide-checklist h3 {
+  font-size: var(--oq-guide-text-md);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.oq-guide-checklist ul {
+  display: grid;
+  gap: var(--ps-space-3);
+  margin: var(--ps-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.oq-guide-checklist li {
+  display: flex;
+  gap: var(--ps-space-3);
+  align-items: flex-start;
+  line-height: 1.55;
+}
+.oq-guide-tick {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--oq-guide-space-5);
+  height: var(--oq-guide-space-5);
+  margin-top: var(--ps-space-1);
+  border-radius: 50%;
+  background: var(--ps-ok-bg);
+  color: var(--ps-ok);
+}
+.oq-guide-tick svg {
+  width: var(--ps-space-3);
+  height: var(--ps-space-3);
+}
+
+/* Пример письма: вид документа, разбор под ним. */
+.oq-guide-example {
+  margin: 0;
+  overflow: hidden;
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-surface);
+}
+.oq-guide-example figcaption {
+  padding: var(--ps-space-3) var(--ps-space-6);
+  border-bottom: var(--ps-border-width) solid var(--ps-line);
+  background: var(--ps-bg-2);
+  font-size: var(--ps-text-sm);
+  font-weight: 600;
+}
+.oq-guide-example blockquote {
+  display: grid;
+  gap: var(--ps-space-3);
+  margin: 0;
+  padding: var(--ps-space-6);
+  line-height: 1.7;
+}
+.oq-guide-example blockquote p {
+  max-width: var(--oq-guide-measure);
+}
+.oq-guide-why {
+  padding: var(--oq-guide-space-5) var(--ps-space-6) var(--ps-space-6);
+  border-top: var(--ps-border-width) solid var(--ps-line);
+}
+.oq-guide-why b {
+  display: block;
+  font-size: var(--oq-guide-text-xs);
+  font-weight: 600;
+  color: var(--ps-mute);
+}
+.oq-guide-why p {
+  max-width: var(--oq-guide-measure);
+  margin-top: var(--ps-space-1);
+  color: var(--ps-soft);
+  line-height: 1.6;
+}
+
+/* Слабо / сильно: подписи словами, цвет — вторичный сигнал. */
+.oq-guide-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ps-space-3);
+}
+.oq-guide-compare > div {
+  padding: var(--ps-space-4) var(--oq-guide-space-5);
+  border-radius: var(--ps-radius-sm);
+  line-height: 1.6;
+}
+.oq-guide-compare b {
+  display: block;
+  margin-bottom: var(--ps-space-1);
+  font-size: var(--oq-guide-text-xs);
+  font-weight: 600;
+}
+.oq-guide-weak {
+  border: var(--ps-border-width) solid var(--ps-line);
+  background: var(--ps-bg-2);
+}
+.oq-guide-weak b {
+  color: var(--ps-mute);
+}
+.oq-guide-strong {
+  border: var(--ps-border-width) solid var(--ps-ok-bg);
+  background: var(--ps-ok-bg);
+}
+.oq-guide-strong b {
+  color: var(--ps-ok);
+}
+
+/* ---------- «Что делает openqareer» ---------- */
+.oq-guide-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--ps-space-4) var(--ps-space-6);
+  align-items: center;
+  margin-top: var(--ps-space-8);
+  padding: var(--oq-guide-space-5) var(--ps-space-6);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-blue-soft);
+}
+.oq-guide-action-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ps-space-2);
+  font-size: var(--oq-guide-text-xs);
+  font-weight: 600;
+  color: var(--ps-blue);
+}
+.oq-guide-action p {
+  max-width: 52ch;
+  margin-top: var(--ps-space-1);
+  line-height: 1.55;
+}
+.oq-guide-action .ps-btn {
+  background: var(--ps-surface);
+}
+.oq-guide-action .ps-btn:hover {
+  border-color: var(--ps-blue);
+}
+.oq-guide-action .ps-btn svg {
+  flex: none;
+}
+
+/* ---------- FAQ ---------- */
+.oq-guide-faq,
+.oq-guide-sources {
+  padding: var(--oq-guide-space-12) 0;
+  border-top: var(--ps-border-width) solid var(--ps-line);
+  scroll-margin-top: calc(var(--oq-guide-header) + var(--ps-space-4));
+}
+.oq-guide-faq-list {
+  margin-top: var(--ps-space-6);
+  border-bottom: var(--ps-border-width) solid var(--ps-line);
+}
+.oq-guide-faq summary {
+  min-height: 44px;
+  align-items: center;
+  font-size: var(--oq-guide-text-md);
+  line-height: 1.4;
+}
+.oq-guide-faq .oq-guide-answer {
+  max-width: var(--oq-guide-measure);
+  margin-top: var(--ps-space-3);
+  font-size: var(--oq-guide-text-md);
+  line-height: 1.7;
+}
+
+/* ---------- источники ---------- */
+.oq-guide-source-list {
+  margin: var(--ps-space-4) 0 0;
+  padding-left: var(--ps-space-6);
+  line-height: 1.5;
+}
+.oq-guide-source-list li {
+  padding: var(--ps-space-1) var(--ps-space-2);
+  border-radius: var(--ps-radius-sm);
+}
+.oq-guide-source-list li::marker {
+  color: var(--ps-mute);
+  font-variant-numeric: tabular-nums;
+}
+.oq-guide-source-list li:target {
+  background: var(--ps-blue-soft);
+}
+.oq-guide-source-list a {
+  display: inline-block;
+  padding: var(--ps-space-3) 0;
+  font-weight: 600;
+  color: var(--ps-blue);
+}
+.oq-guide-source-meta {
+  display: block;
+  font-size: var(--oq-guide-text-xs);
+  color: var(--ps-mute);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- читайте также ---------- */
+.oq-guide-related {
+  padding: var(--oq-guide-space-12) 0 0;
+  border-top: var(--ps-border-width) solid var(--ps-line);
+}
+.oq-guide-related h2 {
+  font-size: var(--ps-text-lg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.oq-guide-related-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ps-space-4);
+  margin: var(--ps-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.oq-guide-related-list a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ps-space-1);
+  height: 100%;
+  min-height: 44px;
+  padding: var(--oq-guide-space-5);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-surface);
+  transition: border-color 0.18s;
+}
+.oq-guide-related-list a:hover {
+  border-color: var(--ps-blue);
+}
+.oq-guide-related-kind {
+  font-size: var(--oq-guide-text-xs);
+  color: var(--ps-mute);
+}
+.oq-guide-related-list b {
+  font-size: var(--oq-guide-text-md);
+  font-weight: 600;
+  line-height: 1.35;
+}
+.oq-guide-related-list small {
+  font-size: var(--ps-text-sm);
+  line-height: 1.5;
+  color: var(--ps-soft);
+}
+
+/* ---------- финальный призыв ---------- */
+.oq-guide-final {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ps-space-6);
+  margin-top: var(--oq-guide-space-12);
+  padding: var(--oq-guide-space-10);
+  border-radius: var(--ps-radius-md);
+  background: var(--ps-band);
+  color: var(--ps-blue-ink);
+}
+.oq-guide-final h2 {
+  max-width: 24ch;
+  font-size: var(--oq-guide-text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.oq-guide-final p {
+  max-width: 52ch;
+  margin-top: var(--ps-space-2);
+  color: var(--oq-guide-band-soft);
+}
+
+/* ---------- планшет и телефон ---------- */
+@media (max-width: 900px) {
+  .oq-guide-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ps-space-6);
+    padding-top: var(--ps-space-6);
+  }
+  details.oq-guide-toc {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+  details.oq-guide-toc {
+    border: var(--ps-border-width) solid var(--ps-line-2);
+    border-radius: var(--ps-radius-sm);
+    background: var(--ps-surface);
+  }
+  .oq-guide-toc summary {
+    padding: 0 var(--ps-space-4);
+    font-size: var(--ps-text-sm);
+    color: var(--ps-ink);
+  }
+  .oq-guide-toc ol {
+    margin: 0 var(--ps-space-4) var(--ps-space-3);
+  }
+}
+@media (min-width: 901px) {
+  /* Без скрипта оглавление остаётся видимым там, где есть ::details-content;
+     иначе его раскрывает oq-guide-1.js. Заголовок перестаёт быть кнопкой. */
+  .oq-guide-toc summary {
+    pointer-events: none;
+    cursor: default;
+  }
+  .oq-guide-toc summary::after {
+    content: none;
+  }
+  @supports selector(::details-content) {
+    .oq-guide-toc::details-content {
+      content-visibility: visible;
+      display: block;
+    }
+  }
+}
+@media (max-width: 760px) {
+  .oq-guide-hero {
+    padding: var(--ps-space-3) 0 var(--ps-space-8);
+  }
+  .oq-guide-hero h1 {
+    font-size: var(--oq-guide-text-xl);
+  }
+  .oq-guide-lead {
+    font-size: var(--oq-guide-text-md);
+  }
+  .oq-guide-cta {
+    margin-top: var(--ps-space-6);
+  }
+  .oq-guide-cta .ps-btn {
+    flex: 1 1 100%;
+  }
+  .oq-guide-section,
+  .oq-guide-faq,
+  .oq-guide-sources {
+    padding: var(--oq-guide-space-10) 0;
+  }
+  .oq-guide-related {
+    padding-top: var(--oq-guide-space-10);
+  }
+  .oq-guide-section h2,
+  .oq-guide-faq h2,
+  .oq-guide-sources h2 {
+    font-size: var(--ps-text-lg);
+  }
+  .oq-guide-compare,
+  .oq-guide-related-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .oq-guide-action {
+    grid-template-columns: minmax(0, 1fr);
+    padding: var(--oq-guide-space-5);
+  }
+  .oq-guide-action .ps-btn {
+    width: 100%;
+  }
+  .oq-guide-checklist,
+  .oq-guide-example blockquote {
+    padding: var(--oq-guide-space-5);
+  }
+  .oq-guide-example figcaption,
+  .oq-guide-why {
+    padding-left: var(--oq-guide-space-5);
+    padding-right: var(--oq-guide-space-5);
+  }
+  .oq-guide-final {
+    flex-direction: column;
+    align-items: stretch;
+    margin-top: var(--oq-guide-space-10);
+    padding: var(--ps-space-6);
+  }
+  .oq-guide-final h2 {
+    font-size: var(--ps-text-lg);
+  }
+  .oq-guide-final .ps-btn {
+    width: 100%;
+  }
+}
