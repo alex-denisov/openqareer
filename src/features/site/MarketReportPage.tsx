@@ -17,7 +17,7 @@ const PERIOD: Readonly<Record<string, string>> = {
 };
 
 function num(value: number): string {
-  return value.toLocaleString('ru-RU').replace(/ /gu, ' ');
+  return value.toLocaleString('ru-RU').replace(/\u00a0/gu, ' ');
 }
 
 function date(iso: string): string {
