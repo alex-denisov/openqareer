@@ -154,7 +154,10 @@ export class CatalogRuSummaryJob {
     const { limits, spend } = this.options;
     const day = utcDay(now);
     const own = spend.task(day);
-    if (own.usd >= limits.dayUsd || own.calls >= limits.dayCalls) return 'own_cap';
+    // Until the Vertex credit ends the call count does not stop the step (08.11: 3 000 Gemini calls
+    // closed it by 17 UTC); Vertex money has its own day cap in the Vertex gate.
+    const callsCapped = own.calls >= limits.dayCalls && now >= CATALOG_RU_SUMMARY_BOOST_UNTIL_MS;
+    if (own.usd >= limits.dayUsd || callsCapped) return 'own_cap';
     if (
       spend.channelDay(day) >= limits.channelDayUsd * limits.channelShare ||
       spend.channelMonth(`${day.slice(0, 7)}-01`) >= limits.channelMonthUsd * limits.channelShare

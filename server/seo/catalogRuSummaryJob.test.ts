@@ -310,6 +310,14 @@ describe('catalog Russian summary job', () => {
     expect(refusing.complete).toHaveBeenCalledTimes(1);
   });
 
+  it('the call count stops the step only after the credit ends (08.11)', async () => {
+    addCard('cap', { publishedMs: NOW - DAY });
+    const many = { ...noSpend, task: () => ({ usd: 0, calls: 5_000 }) };
+    expect(await job(fakeClient(), NOW, many).step()).toMatchObject({ written: 1 });
+    const after = CATALOG_RU_SUMMARY_BOOST_UNTIL_MS + DAY;
+    expect(await job(fakeClient(), after, many).step()).toMatchObject({ skipped: 'own_cap' });
+  });
+
   it('reads spend from the bulk ledger table, and zero before it exists', () => {
     const spend = sqliteCatalogRuSummarySpend(database);
     expect(spend.task('2026-11-03')).toEqual({ usd: 0, calls: 0 });
