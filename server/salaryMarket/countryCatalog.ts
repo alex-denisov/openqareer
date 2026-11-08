@@ -39,7 +39,9 @@ export function countryCatalogFrom(database: DatabaseSync, code: string): Countr
 /** The board a vacancy came from, by its host («boards.greenhouse.io» → «greenhouse.io»). */
 export function boardHost(url: string | null): string {
   try {
-    return url ? new URL(url).hostname.replace(/^(www|boards|jobs|job-boards|apply)\./u, '') : '';
+    if (!url) return '';
+    const labels = new URL(url).hostname.split('.');
+    return labels.slice(-2).join('.');
   } catch {
     return '';
   }

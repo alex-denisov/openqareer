@@ -61,6 +61,16 @@ export function countryPoolPay(
     sampleSize: sorted.length,
     withSalary,
     readAt,
-    sources: [...new Set(sources.filter(Boolean))].sort().slice(0, 5),
+    sources: topSources(sources),
   };
+}
+
+/** The boards that gave the most vacancies, most first. */
+function topSources(sources: readonly string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const source of sources) if (source) counts.set(source, (counts.get(source) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([source]) => source);
 }
