@@ -13,6 +13,8 @@ import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
 import { releaseTariffQuota, requireTariffQuota } from './tariffQuotaGuard';
+import { attachApprovedResume, hasAttachableResume } from './letterApprovalResume';
+import { masterProjectionOf } from './resumeMaster';
 import { candidateCompanyKey } from '../domain/candidateCompanies';
 import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
@@ -160,6 +162,7 @@ function readLetterContext(
   return {
     rankingContext,
     candidateName: snapshot.resume?.draft?.candidate?.fullName,
+    resumeAvailable: hasAttachableResume(masterProjectionOf(snapshot).master),
     facts,
     candidateWorkplaces,
     workplaces,
@@ -187,7 +190,7 @@ async function writeVacancyPitch(
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
-  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, profile, contextMs } = context;
+  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, profile, contextMs, resumeAvailable } = context;
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
@@ -225,9 +228,10 @@ async function writeVacancyPitch(
         written,
         atsCoverLetter,
         candidateWorkplaces,
+        resumeAvailable,
         outputFactChecks: { ...templateChecks, emailBody: written.factCheck, atsCoverLetter: written.factCheck },
       }
-    : { pitch, written, atsCoverLetter, candidateWorkplaces, outputFactChecks: templateChecks };
+    : { pitch, written, atsCoverLetter, candidateWorkplaces, resumeAvailable, outputFactChecks: templateChecks };
 }
 
 function saveGeneratedCoverLetter(
@@ -334,6 +338,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
       ...result.pitch,
       atsCoverLetter: result.atsCoverLetter,
       candidateWorkplaces: result.candidateWorkplaces,
+      resumeAvailable: result.resumeAvailable,
       outputFactChecks: result.outputFactChecks,
       ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
       notices: letterNotices(result),
@@ -372,7 +377,7 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
   }
   const approvedAt = new Date().toISOString();
   const stored = persistApprovedLetterSnapshot(
-    candidateStore,
+    deps,
     candidate.id,
     vacancyId,
     cluster,
@@ -386,19 +391,21 @@ const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
       approvedAt,
       status: 'approved',
       sent: false,
+      resume: stored.resume,
     },
     meta: { requestId: request.id },
   };
 };
 
 function persistApprovedLetterSnapshot(
-  candidateStore: RouteDeps['candidateStore'],
+  deps: RouteDeps,
   candidateId: string,
   vacancyId: string,
   cluster: NonNullable<ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>>,
   input: z.infer<typeof approvedLetterSnapshotSchema>,
   approvedAt: string,
 ) {
+  const { candidateStore } = deps;
   return candidateStore.transaction(() => {
     const application = candidateStore.createApplication(candidateId, {
       clusterId: vacancyId,
@@ -431,7 +438,8 @@ function persistApprovedLetterSnapshot(
         parseStatus: 'not_applicable',
       },
     ).document;
-    return { application, document };
+    const resume = attachApprovedResume(deps, candidateId, application.id, cluster, approvedAt);
+    return { application, document, resume };
   });
 }
 

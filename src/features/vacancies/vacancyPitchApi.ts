@@ -45,6 +45,8 @@ export interface VacancyPitchResult {
   readonly senderFirstName?: string;
   /** Who wrote the letter: a model letter's fact count and promises do not apply to it. */
   readonly bodySource?: 'model' | 'template';
+  /** Есть ли резюме, которое приложится при одобрении письма (B601). */
+  readonly resumeAvailable?: boolean;
   readonly generatedAt: string;
 }
 

@@ -17,6 +17,7 @@ import { useCandidateDisplayName } from '../shell/candidateDisplayName';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import { circleSummary, CircleTabs } from './VacancyLetterCircles';
 import { LetterCardHeading, LetterDestination } from './VacancyLetterDestination';
+import { resumeRowNote } from './vacancyLetterResumeNote';
 import { LetterActions } from './VacancyLetterActions';
 import {
   LetterEditor,
@@ -258,6 +259,10 @@ function LetterDestinationSlot({
       }}
       onOpenContacts={actions.openContacts}
       onOpenResume={onOpenResume}
+      resumeNote={resumeRowNote({
+        resumeAvailable: state.draft.pitch?.resumeAvailable,
+        approved: state.approval.saved,
+      })}
     />
   );
 }

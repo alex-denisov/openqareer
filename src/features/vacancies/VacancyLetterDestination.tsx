@@ -305,15 +305,23 @@ export interface LetterDestinationProps {
   readonly onShowPaths: () => void;
   readonly onOpenContacts: () => void;
   readonly onOpenResume?: () => void;
+  /** Пояснение строки резюме по состоянию черновика и одобрения (B601). */
+  readonly resumeNote?: string;
 }
 
-function ResumeAndResponseRows({ onOpenResume }: { readonly onOpenResume?: () => void }) {
+function ResumeAndResponseRows({
+  onOpenResume,
+  resumeNote,
+}: {
+  readonly onOpenResume?: () => void;
+  readonly resumeNote?: string;
+}) {
   return (
     <>
       <DestinationRow
         icon={<FileText size={18} />}
         title="Резюме под вакансию"
-        note="Резюме не прикреплено к этому черновику. Факты письма не заменяют резюме."
+        note={resumeNote}
       >
         {onOpenResume ? (
           <button
@@ -368,7 +376,7 @@ export function LetterDestination(props: LetterDestinationProps) {
             onOpenContacts={onOpenContacts}
           />
         ) : null}
-        <ResumeAndResponseRows onOpenResume={onOpenResume} />
+        <ResumeAndResponseRows onOpenResume={onOpenResume} resumeNote={props.resumeNote} />
       </ul>
       {/* Макет 9 при 390: без (i), пояснение — подпись под списком. */}
       <p className="career-letter-foot career-letter-dest-foot">

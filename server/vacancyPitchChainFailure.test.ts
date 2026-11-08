@@ -125,7 +125,7 @@ describe('POST /pitch: письмо модели (B601)', () => {
       payload: {},
     });
     const withName = (fullName: string) => vi.spyOn(candidates, 'getSnapshot').mockImplementation(
-      () => ({ resume: { draft: { ...EMPTY_RESUME_DRAFT, candidate: { fullName, headline: 'CTO' } } } }) as never,
+      () => ({ memory: [], documents: [], resume: { draft: { ...EMPTY_RESUME_DRAFT, candidate: { fullName, headline: 'CTO' } } } }) as never,
     );
     withName('Мария Иванова');
     await request();

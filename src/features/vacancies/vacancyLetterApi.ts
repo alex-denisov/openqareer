@@ -103,6 +103,12 @@ export interface ApprovedVacancyLetterResult {
   readonly approvedAt: string;
   readonly status: 'approved';
   readonly sent: false;
+  /** Снимок резюме под вакансию, привязанный к заявке при одобрении; `null` — резюме нет. */
+  readonly resume?: {
+    readonly versionId: string;
+    readonly documentId: string;
+    readonly snapshotAt: string;
+  } | null;
 }
 
 export async function getVacancyConnectionCircles(
