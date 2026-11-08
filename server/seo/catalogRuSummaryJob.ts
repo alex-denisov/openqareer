@@ -80,7 +80,7 @@ const SUMMARY_MAX_TOKENS = 1_500;
  * sends several calls at once; afterwards one call a tick again, by the date alone.
  */
 export const CATALOG_RU_SUMMARY_BOOST_UNTIL_MS = Date.parse('2026-11-09T00:00:00Z');
-export const CATALOG_RU_SUMMARY_BOOST_CALLS = 8;
+export const CATALOG_RU_SUMMARY_BOOST_CALLS = 10;
 
 export function catalogRuSummaryCallsPerTick(now: number): number {
   return now < CATALOG_RU_SUMMARY_BOOST_UNTIL_MS ? CATALOG_RU_SUMMARY_BOOST_CALLS : 1;

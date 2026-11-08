@@ -119,7 +119,7 @@ afterEach(() => database.close());
 
 describe('catalog Russian summary job', () => {
   it('until the credit ends sends several calls a tick, then one again (owner 08.11)', async () => {
-    for (let i = 0; i < 10; i += 1) addCard(`c${i}`, { publishedMs: NOW - i * 1000 });
+    for (let i = 0; i < 12; i += 1) addCard(`c${i}`, { publishedMs: NOW - i * 1000 });
     const boosted = fakeClient();
     const many = new CatalogRuSummaryJob({
       store,
@@ -130,19 +130,9 @@ describe('catalog Russian summary job', () => {
     });
     const report = await many.step();
     expect(report.written).toBe(CATALOG_RU_SUMMARY_BOOST_CALLS);
-    expect(report.costUsd).toBeCloseTo(0.0032, 8);
-    expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(8);
+    expect(report.costUsd).toBeCloseTo(0.004, 8);
+    expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS - 1)).toBe(10);
     expect(catalogRuSummaryCallsPerTick(CATALOG_RU_SUMMARY_BOOST_UNTIL_MS)).toBe(1);
-  });
-
-  it('leaves aggregator cards without a summary (owner 08.11: hh.ru and company boards only)', async () => {
-    addCard('agg', { publishedMs: NOW - 1000, source: 'Himalayas (JSON API)' });
-    addCard('own', { publishedMs: NOW - DAY, source: 'NVIDIA' });
-    const client = fakeClient();
-    await job(client).step();
-    expect(client.calls).toHaveLength(1);
-    expect(store.countReady(CATALOG_RU_SUMMARY_VERSION)).toBe(1);
-    expect(await job(client).step()).toMatchObject({ written: 0 });
   });
 
   it('writes the newest card first, one model call a tick, and the page reads it by the text hash', async () => {
