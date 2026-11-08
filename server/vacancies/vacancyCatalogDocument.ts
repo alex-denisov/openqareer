@@ -79,6 +79,17 @@ function shareTitle(title: string): string {
   return title.replace(/\s+[·|]\s+openqareer$/u, '');
 }
 
+function canonicalLink(path: string): string {
+  return `<link rel="canonical" href="${SITE_ORIGIN}${escapeHtml(path)}">`;
+}
+
+/** B615: without our Russian summary the employer's own text is the page's content. */
+function contentLanguageOf(detail: VacancyDetail): string | undefined {
+  return !detail.ruSummary && detail.language && detail.language !== 'ru'
+    ? detail.language
+    : undefined;
+}
+
 function head(options: {
   title: string;
   description: string;
@@ -99,9 +110,7 @@ function head(options: {
     '<meta name="theme-color" content="#f9fafc">',
     `<title>${escapeHtml(options.title)}</title>`,
     `<meta name="description" content="${escapeHtml(options.description)}">`,
-    options.omitCanonical
-      ? ''
-      : `<link rel="canonical" href="${SITE_ORIGIN}${escapeHtml(options.canonicalPath)}">`,
+    options.omitCanonical ? '' : canonicalLink(options.canonicalPath),
     options.noindex ? '<meta name="robots" content="noindex, follow">' : '',
     options.previousPath
       ? `<link rel="prev" href="${SITE_ORIGIN}${escapeHtml(options.previousPath)}">`
@@ -374,9 +383,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
         160,
       );
 
-  // B615: without our Russian summary the employer's own text is the page's content.
-  const contentLanguage =
-    !detail.ruSummary && detail.language && detail.language !== 'ru' ? detail.language : undefined;
+  const contentLanguage = contentLanguageOf(detail);
   const body =
     siteHeader() +
     '<main id="main" class="ps-wrap ps-page">' +
