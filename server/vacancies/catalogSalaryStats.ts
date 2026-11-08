@@ -10,6 +10,8 @@ import { normalizeSalaryLabel } from './catalogCopy';
 
 /** Fewer ranges than this is an anecdote, not a market figure. */
 export const MIN_RANGES = 5;
+/** A list prints at most this many groups, largest first (remote had 26). */
+export const MAX_GROUPS = 3;
 
 export interface ParsedSalary {
   readonly from?: number;
@@ -110,7 +112,8 @@ export function salaryStats(withSalary: number, ranges: readonly ProvenRange[]):
     .map(([key, mids]) => {
       const [currency, period] = key.split('|') as [string, SalaryPeriod];
       return group(currency, period, mids);
-    });
+    })
+    .slice(0, MAX_GROUPS);
   const base = { withSalary, withRange: real.length };
   return groups.length ? { ...base, groups } : base;
 }
