@@ -664,16 +664,30 @@ details.oq-guide-toc {
   display: flex;
   align-items: center;
   gap: var(--ps-space-3);
-  margin-top: var(--ps-space-4);
-  font-size: var(--ps-text-sm);
-  color: var(--ps-soft);
+  margin-top: var(--ps-space-6);
 }
 .oq-guide-byline img {
-  width: 32px;
-  height: 32px;
+  flex: none;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   object-fit: cover;
   background: var(--ps-line);
+}
+.oq-guide-byline p {
+  display: grid;
+  gap: 2px;
+  font-size: var(--ps-text-sm);
+  line-height: 1.4;
+}
+.oq-guide-byline a {
+  color: inherit;
+  text-decoration: none;
+}
+.oq-guide-byline span,
+.oq-guide-byline small {
+  color: var(--ps-soft);
+  font-size: var(--ps-text-sm);
 }
 .oq-guide-short {
   max-width: 68ch;
@@ -712,40 +726,6 @@ details.oq-guide-toc {
 .oq-guide-table th {
   font-weight: 600;
   color: var(--ps-soft);
-}
-.oq-author-hero {
-  display: flex;
-  gap: var(--ps-space-6);
-  align-items: flex-start;
-}
-.oq-author-photo {
-  flex: none;
-  width: 128px;
-  height: 128px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--ps-line);
-}
-.oq-author-body {
-  max-width: 72ch;
-}
-.oq-author-roles li {
-  display: grid;
-  gap: var(--ps-space-1);
-  margin-top: var(--ps-space-3);
-}
-.oq-author-roles span {
-  color: var(--ps-soft);
-  font-size: var(--ps-text-sm);
-}
-@media (max-width: 640px) {
-  .oq-author-hero {
-    flex-direction: column;
-  }
-  .oq-author-photo {
-    width: 96px;
-    height: 96px;
-  }
 }
 .oq-guide-table-caption {
   padding-bottom: var(--ps-space-2);

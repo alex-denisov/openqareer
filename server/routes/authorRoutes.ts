@@ -1,22 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import React from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { FastifyInstance } from 'fastify';
-import {
-  AUTHOR,
-  AUTHOR_ACCOUNT,
-  AUTHOR_PATH,
-  AUTHOR_PHOTO_PATH,
-  authorPerson,
-} from '../../shared/author';
-import { SITE_ORIGIN } from '../../shared/siteOrigin';
-import { GUIDES, guidePath } from '../../shared/guides';
-import { BLOG_POSTS, blogPath } from '../../shared/blog';
-import { AuthorPage } from '../../src/features/site/AuthorPage';
-import { SALARY_MARKET_TEMPLATE } from '../../src/features/site/SalaryMarketPage';
-import { renderGuideDocument } from './guideRoutes';
+import { AUTHOR_ACCOUNT, AUTHOR_PHOTO_PATH, RETIRED_AUTHOR_PATH } from '../../shared/author';
 
 export interface AuthorPhoto {
   readonly mime: string;
@@ -54,49 +39,16 @@ export function profilePhotoReader(databasePath: string, store: PhotoStore): Aut
   };
 }
 
-export const AUTHOR_TITLE = `${AUTHOR.nameRu} — ${AUTHOR.jobTitleRu} · openqareer`;
-
-export function renderAuthor(template: string): string {
-  const articles = [
-    ...GUIDES.map((guide) => ({ href: guidePath(guide.slug), title: guide.h1 })),
-    ...BLOG_POSTS.map((post) => ({ href: blogPath(post.slug), title: post.h1 })),
-  ];
-  return renderGuideDocument(
-    template,
-    {
-      title: AUTHOR_TITLE,
-      description: AUTHOR.lead,
-      path: AUTHOR_PATH,
-      structured: [
-        {
-          '@type': 'ProfilePage',
-          url: `${SITE_ORIGIN}${AUTHOR_PATH}`,
-          inLanguage: 'ru-RU',
-          dateModified: AUTHOR.checkedAt,
-          mainEntity: authorPerson(),
-        },
-      ],
-    },
-    renderToStaticMarkup(React.createElement(AuthorPage, { articles })),
-  );
-}
-
 const PHOTO_TTL_MS = 5 * 60_000;
 
 export function registerAuthorRoutes(
   app: FastifyInstance,
-  options: { readonly staticRoot: string; readonly readPhoto?: AuthorPhotoReader },
+  options: { readonly readPhoto?: AuthorPhotoReader },
 ): void {
-  const templatePath = join(options.staticRoot, SALARY_MARKET_TEMPLATE);
-  const template = existsSync(templatePath) ? readFileSync(templatePath, 'utf8') : undefined;
-  const page = template ? renderAuthor(template) : undefined;
   let cached: { at: number; photo: AuthorPhoto | null } | undefined;
 
-  app.get(AUTHOR_PATH, (_request, reply) => {
-    if (!page)
-      return reply.code(503).header('X-Robots-Tag', 'noindex').send('Страница временно недоступна');
-    return reply.type('text/html; charset=utf-8').header('Cache-Control', 'no-cache').send(page);
-  });
+  // 09.11: the author page was removed at the owner's request; the address is permanent-redirected.
+  app.get(RETIRED_AUTHOR_PATH, (_request, reply) => reply.redirect('/', 301));
 
   app.get(AUTHOR_PHOTO_PATH, (request, reply) => {
     const now = Date.now();
