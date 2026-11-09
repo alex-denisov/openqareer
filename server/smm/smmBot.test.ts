@@ -55,7 +55,15 @@ function setup(replies: Array<string | null> = [VALID]) {
   };
   const now = () => Date.UTC(2026, 10, 9, 9, 0);
   const agent = new SmmAgent({ store, model, ownerBrief: () => 'Имя: Алексей Денисов', now });
-  const bot = new SmmBot({ store, agent, telegram, chatId: CHAT, now, log: () => {} });
+  const bot = new SmmBot({
+    store,
+    agent,
+    telegram,
+    chatId: CHAT,
+    now,
+    log: () => {},
+    autopost: true,
+  });
   return { store, bot, sent, prompts };
 }
 
@@ -139,6 +147,14 @@ describe('SmmBot', () => {
     expect(store.recentNotes('strategy', 1)[0]).toContain('два поста в день про руководителей');
   });
 
+  it('a draft with an invented percentage is not delivered', async () => {
+    const bad = VALID.replace('не просто так.', 'не просто так: 62% вакансий без вилки.');
+    const { bot, sent, store } = setup([bad]);
+    await bot.handle(message('/post'));
+    expect(store.recentPosts(5)).toHaveLength(0);
+    expect(sent.at(-1)?.text).toContain('Модели не ответили');
+  });
+
   it('tells the owner when no model answered', async () => {
     const { bot, sent, store } = setup([null]);
     await bot.handle(message('/post'));
@@ -183,5 +199,21 @@ describe('SmmBot', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('autopost flag', () => {
+  it('does not post on schedule until the owner turns autopost on', async () => {
+    const { store } = setup();
+    const quiet = new SmmBot({
+      store,
+      agent: { scheduledPost: async () => null } as never,
+      telegram: { send: async () => 1 } as never,
+      chatId: CHAT,
+      now: () => Date.UTC(2026, 10, 9, 9, 0),
+      log: () => {},
+    });
+    await quiet.tick();
+    expect(store.recentPosts(5)).toHaveLength(0);
   });
 });

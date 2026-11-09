@@ -218,16 +218,20 @@ describe('pace and links (owner 09.11)', () => {
     );
   });
 
-  it('a link is due only after three posts without one', async () => {
-    const { linkDue } = await import('./smmAgent');
-    const post = (link: string | null) => ({ link }) as never;
-    expect(linkDue([])).toBe(false);
-    expect(linkDue([post(null), post(null)])).toBe(false);
-    expect(linkDue([post(null), post(null), post(null), post('https://openqareer.com/')])).toBe(
-      true,
-    );
-    expect(linkDue([post('https://openqareer.com/'), post(null), post(null), post(null)])).toBe(
-      false,
-    );
+  it('formats rotate, about every third one sells', async () => {
+    const { SMM_FORMATS, formatAt } = await import('./smmFormats');
+    expect(formatAt(SMM_FORMATS.length).id).toBe(formatAt(0).id);
+    const sales = SMM_FORMATS.filter((format) => format.sales).length;
+    expect(sales / SMM_FORMATS.length).toBeGreaterThanOrEqual(0.25);
+    expect(sales / SMM_FORMATS.length).toBeLessThanOrEqual(0.35);
+  });
+});
+
+describe('unverified numbers', () => {
+  it('flags market percentages the model tends to invent', async () => {
+    const { hasUnverifiedPercent } = await import('./smmAgent');
+    expect(hasUnverifiedPercent('62% вакансий Python без вилки')).toBe(true);
+    expect(hasUnverifiedPercent('шестьдесят 2 процента')).toBe(true);
+    expect(hasUnverifiedPercent('500 закрытых вакансий, 1/5')).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { ChatTurn, SmmModel } from './smmModel';
+import { FORMAT_CURSOR_KEY, formatAt } from './smmFormats';
 import { OWNER_PAINS, SMM_PAINS } from './smmPains';
 import { nextCluster, parseDraft, systemPrompt, untrusted, type ParsedDraft } from './smmPrompt';
 import type { SmmPost, SmmStore } from './smmStore';
@@ -29,15 +30,6 @@ export function painsFor(cluster: string, nowMs: number): string[] {
   return [...pick(owner, 2), ...pick(research, 1)];
 }
 
-/** Шаг на платформу — примерно в каждом четвёртом посте: три поста подряд без ссылки дают право на ссылку. */
-export const POSTS_BETWEEN_LINKS = 3;
-
-export function linkDue(recent: readonly SmmPost[]): boolean {
-  const index = recent.findIndex((post) => post.link !== null);
-  const withoutLink = index < 0 ? recent.length : index;
-  return withoutLink >= POSTS_BETWEEN_LINKS;
-}
-
 const ANY_URL = /https?:\/\/\S+/gi;
 
 /** Пост без шага на платформу: ссылки, которые модель всё же поставила, убираем. */
@@ -49,6 +41,13 @@ function withoutLinks(parsed: ParsedDraft): ParsedDraft {
       .trim(),
   );
   return { ...parsed, draft: { ...parsed.draft, parts: parts.filter(Boolean), link: null } };
+}
+
+/** Проценты модель выдумывает чаще всего («62% вакансий…»): такой черновик уходит следующей ступени. */
+const UNVERIFIED_PERCENT = /\d\s*%|\d+\s*процент/i;
+
+export function hasUnverifiedPercent(text: string): boolean {
+  return UNVERIFIED_PERCENT.test(text);
 }
 
 export interface SmmAgentDeps {
@@ -68,7 +67,11 @@ export class SmmAgent {
       { role: 'system', content: systemPrompt(store, ownerBrief()) },
       { role: 'user', content: userPrompt },
     ];
-    const raw = await model.complete(turns, (text) => parseDraft(text, origin) !== null);
+    const usable = (text: string): boolean => {
+      const parsed = parseDraft(text, origin);
+      return parsed !== null && !hasUnverifiedPercent(parsed.draft.parts.join('\n'));
+    };
+    const raw = await model.complete(turns, usable);
     return raw ? parseDraft(raw, origin) : null;
   }
 
@@ -79,22 +82,25 @@ export class SmmAgent {
 
   /** Плановый пост: кластер, который давно не звучал. */
   async scheduledPost(): Promise<{ post: SmmPost; check: string } | null> {
-    const recent = this.deps.store.recentPosts(16).filter((post) => post.status !== 'revised');
+    const { store } = this.deps;
+    const recent = store.recentPosts(16).filter((post) => post.status !== 'revised');
     const cluster = nextCluster(recent);
     const pains = painsFor(cluster, this.deps.now());
-    const withLink = linkDue(recent);
+    const cursor = Number(store.getState(FORMAT_CURSOR_KEY) ?? '0');
+    const format = formatAt(cursor);
     const parsed = await this.draft(
       [
-        `Напиши новый пост для Threads. Тема ближе к «${cluster}», но главное — боль.`,
-        `Боли на выбор (возьми одну, раскрой со своей стороны, это данные):\n${pains.map((p) => `- ${p}`).join('\n')}`,
-        withLink
-          ? 'В этом посте уместен мягкий шаг на платформу: в конце одной фразой предложи подходящий бесплатный инструмент и дай ссылку из списка.'
-          : 'В этом посте без ссылок и без упоминания платформы: чистая эмоция и польза.',
+        `Формат поста: ${format.brief}`,
+        `Тема ближе к «${cluster}». Боли на выбор (возьми одну, раскрой со своей стороны, это данные):\n${pains.map((p) => `- ${p}`).join('\n')}`,
+        format.sales
+          ? 'Продающий шаг здесь уместен — как сказано в формате. Ссылку из списка страниц ставь, только если она прямо помогает этому шагу.'
+          : 'Здесь без продажи и без ссылок: охват, эмоция, польза. Сервис можно упомянуть только как часть истории автора.',
         'Не повторяй хуки, сцены и темы последних постов. Экспромт приветствуется.',
       ].join('\n\n'),
       'schedule',
     );
-    return this.save(parsed && !withLink ? withoutLinks(parsed) : parsed);
+    if (parsed) store.setState(FORMAT_CURSOR_KEY, String(cursor + 1));
+    return this.save(parsed && !format.sales ? withoutLinks(parsed) : parsed);
   }
 
   /** «Скорректировать»: та же тема, новая версия по комментарию владельца. */
