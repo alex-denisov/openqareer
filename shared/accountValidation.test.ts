@@ -37,6 +37,30 @@ describe('getNameError', () => {
   it('explains what characters are allowed', () => {
     expect(getNameError('A1')).toContain('буквы');
   });
+
+  it.each([
+    'Олексій Ґонта',
+    'Їжак Євген',
+    'Әлия Қасымова',
+    'José Müller',
+    'Łukasz Żółć',
+    "O'Brien",
+    'D’Artagnan',
+    'Анна-Мария Д.',
+    'José',
+  ])('accepts a real name in any alphabet: %s', (name) => {
+    expect(getNameError(name)).toBeNull();
+  });
+
+  it.each(['QA Prod 1', 'Имя_Фамилия', 'name@x', '<script>'])('still rejects %s', (name) => {
+    expect(getNameError(name)).not.toBeNull();
+  });
+});
+
+describe('sanitizeName in other alphabets', () => {
+  it('keeps letters of any alphabet, apostrophes and dots, drops digits', () => {
+    expect(sanitizeName("Олексій O'Brien Д. 42")).toBe("Олексій O'Brien Д. ");
+  });
 });
 
 describe('sanitizeEmail / getEmailError', () => {
