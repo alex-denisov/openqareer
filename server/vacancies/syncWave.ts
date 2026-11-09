@@ -25,3 +25,32 @@ export function pickWave<T>(
   const rest = sorted.filter((item) => !chosen.has(item)).slice(0, limit - chosen.size);
   return sorted.filter((item) => chosen.has(item) || rest.includes(item));
 }
+
+/**
+ * B628: каналы компаний (ярус 1 — свой сайт, затем ATS) идут отдельной
+ * полосой волны. Шесть мест на ~2 000 каналов давали обход за сутки; теперь
+ * полоса берёт до COMPANY_LANE_LIMIT каналов, но не больше
+ * COMPANY_LANE_PER_HOST на один хост (все доски Greenhouse — один API).
+ */
+export const COMPANY_LANE_LIMIT = 24;
+export const COMPANY_LANE_PER_HOST = 3;
+export const COMPANY_LANE_CONCURRENCY = 12;
+
+export function pickCompanyLane<T>(
+  sorted: readonly T[],
+  limit: number,
+  perHost: number,
+  hostOf: (item: T) => string,
+): T[] {
+  const perHostUsed = new Map<string, number>();
+  const picked: T[] = [];
+  for (const item of sorted) {
+    if (picked.length >= limit) break;
+    const host = hostOf(item);
+    const used = perHostUsed.get(host) ?? 0;
+    if (used >= perHost) continue;
+    perHostUsed.set(host, used + 1);
+    picked.push(item);
+  }
+  return picked;
+}

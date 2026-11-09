@@ -76,7 +76,13 @@ import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mapYielding } from './mapYielding';
 import type { CatalogTotals } from './matchedCatalogSummary';
-import { pickWave } from './syncWave';
+import {
+  COMPANY_LANE_CONCURRENCY,
+  COMPANY_LANE_LIMIT,
+  COMPANY_LANE_PER_HOST,
+  pickCompanyLane,
+  pickWave,
+} from './syncWave';
 import {
   WorkdayDescriptionBackfill,
   type WorkdayDescriptionReport,
@@ -280,6 +286,14 @@ export const SYNC_BATCH_LIMIT = 12;
  * в свой интервал, но после каналов компаний.
  */
 const TIER_INTERVAL_FACTOR: Readonly<Record<1 | 2 | 3, number>> = { 1: 1, 2: 2, 3: 1 };
+
+function sourceHost(source: VacancySourceConfig): string {
+  try {
+    return new URL(source.targetUrl).hostname.toLowerCase();
+  } catch {
+    return source.id;
+  }
+}
 
 function tierOf(source: VacancySourceConfig): 1 | 2 | 3 {
   return source.channelTier ?? 3;
@@ -1932,15 +1946,29 @@ export class MultiSourceVacancyEngine {
     const rechecks = dead
       .filter((source) => nowMs - lastSyncMs(source) >= DEAD_SOURCE_RECHECK_MS)
       .slice(0, DEAD_SOURCE_RECHECKS_PER_TICK);
+    const ready = due.filter((source) => !deadIds.has(source.id) && !this.holdSource(source));
+    const companyLane = pickCompanyLane(
+      ready.filter((source) => tierOf(source) === 1),
+      COMPANY_LANE_LIMIT,
+      COMPANY_LANE_PER_HOST,
+      sourceHost,
+    );
     const live = pickWave(
-      due.filter((source) => !deadIds.has(source.id) && !this.holdSource(source)),
+      ready.filter((source) => tierOf(source) !== 1),
       SYNC_BATCH_LIMIT - rechecks.length,
       tierOf,
     );
-    const outcomes = await Promise.all([
-      ...live.map((source) => this.syncOne(source.id, undefined, nowMs)),
-      ...rechecks.map((source) => this.recheckDeadSource(source.id, nowMs)),
-    ]);
+    const outcomes = (
+      await Promise.all([
+        mapWithConcurrency(companyLane, COMPANY_LANE_CONCURRENCY, (source) =>
+          this.syncOne(source.id, undefined, nowMs),
+        ),
+        Promise.all([
+          ...live.map((source) => this.syncOne(source.id, undefined, nowMs)),
+          ...rechecks.map((source) => this.recheckDeadSource(source.id, nowMs)),
+        ]),
+      ])
+    ).flat();
     this.reclusterIfChanged();
     return outcomes;
   }
