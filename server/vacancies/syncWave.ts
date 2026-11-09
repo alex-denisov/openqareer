@@ -35,6 +35,8 @@ export function pickWave<T>(
 export const COMPANY_LANE_LIMIT = 24;
 export const COMPANY_LANE_PER_HOST = 3;
 export const COMPANY_LANE_CONCURRENCY = 12;
+/** Потолок ожидания одного канала в полосе; сам опрос не прерывается. */
+export const COMPANY_LANE_SOURCE_TIMEOUT_MS = 120_000;
 
 export function pickCompanyLane<T>(
   sorted: readonly T[],

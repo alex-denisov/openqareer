@@ -46,3 +46,27 @@ describe('B628 — полоса каналов компаний', () => {
     expect(synced.filter((id) => id.startsWith('agg-'))).toHaveLength(4);
   });
 });
+
+describe('B628 — зависший канал не занимает полосу', () => {
+  it('следующая волна не выбирает канал, который ещё опрашивается, и не ждёт его', async () => {
+    const hung = source('hung', 'hung.example', 1);
+    const others = Array.from({ length: 30 }, (_, i) => source(`s-${i}`, `s${i}.example`, 1));
+    const synced: string[] = [];
+    const engine = new MultiSourceVacancyEngine({
+      sources: [hung, ...others],
+      fetcher: (s) => {
+        if (s.id === 'hung') return new Promise(() => undefined);
+        synced.push(s.id);
+        return Promise.resolve([]);
+      },
+      companyLaneSourceTimeoutMs: 20,
+    } as ConstructorParameters<typeof MultiSourceVacancyEngine>[0]);
+
+    const first = await engine.syncDue();
+    const second = await engine.syncDue();
+
+    expect(first.find((o) => o.sourceId === 'hung')?.status).toBe('lane_timeout');
+    expect(second.some((o) => o.sourceId === 'hung')).toBe(false);
+    expect(new Set(synced).size).toBe(30);
+  });
+});
