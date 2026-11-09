@@ -293,6 +293,13 @@ function hasForeignCyrillic(sentence: string, companies: readonly string[]): boo
   return /\p{Script=Cyrillic}/u.test(rest);
 }
 
+/** Письмо английское, если латиница в нём преобладает; русское письмо правило не трогает (B624). */
+function isLatinLetter(body: string): boolean {
+  const latin = body.match(/\p{Script=Latin}/gu)?.length ?? 0;
+  const cyrillic = body.match(/\p{Script=Cyrillic}/gu)?.length ?? 0;
+  return latin > cyrillic;
+}
+
 export function reviewLetterBody(body: string, sources: LetterGateSources): LetterGateViolation[] {
   const profileSentences = sources.candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence));
   const profile = profileSentences.join('\n');
@@ -309,7 +316,7 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });
   const companies = companyNames(sources);
-  const cyrillic = sources.language === 'en'
+  const cyrillic = isLatinLetter(body)
     ? sentences.filter((sentence) => hasForeignCyrillic(sentence, companies)).map((sentence) => ({ rule: 'cyrillic' as const, sentence }))
     : [];
   if (sources.resumeAttached === false) {

@@ -254,6 +254,32 @@ describe('QueuedCoverLetterWriter', () => {
     // Only rule names reach the journal: the letter is the candidate's text.
     expect(failures).toEqual([{ stage: 'a', kind: 'unusable_response', detail: 'letter_gate:number' }]);
   });
+
+  it('повтор той же модели после таймаута пропускается, после отказа проверки спрашивается (B601, 10.11)', async () => {
+    const calls: string[] = [];
+    const stage = (label: string, outcome: Awaited<ReturnType<CoverLetterWriter['writeCoverLetter']>>): CoverLetterWriter => ({
+      writeCoverLetter: async () => {
+        calls.push(label);
+        return outcome;
+      },
+    });
+    const slow = new QueuedCoverLetterWriter(
+      [stage('d1', { failure: { stage: 'd', kind: 'timeout' } }), stage('d2', { body: 'Письмо.', stage: 'd' }), stage('g', { body: 'Письмо GLM.', stage: 'g' })],
+      ['d', 'd', 'g'],
+      () => undefined,
+    );
+    await expect(slow.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'g' });
+    expect(calls).toEqual(['d1', 'g']);
+
+    calls.length = 0;
+    const refused = new QueuedCoverLetterWriter(
+      [stage('d1', { failure: { stage: 'd', kind: 'unusable_response', detail: 'cut' } }), stage('d2', { body: 'Письмо.', stage: 'd' }), stage('g', { body: 'Письмо GLM.', stage: 'g' })],
+      ['d', 'd', 'g'],
+      () => undefined,
+    );
+    await expect(refused.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'd' });
+    expect(calls).toEqual(['d1', 'd2']);
+  });
 });
 
 describe('цепочка письма (решение владельца, B601)', () => {

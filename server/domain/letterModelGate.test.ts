@@ -141,8 +141,8 @@ describe('reviewLetterBody: кириллица в английском пись�
     expect(cyrillic('I moved the books to 1С:Бухгалтерия 8.3. My resume is attached.')).toHaveLength(1);
   });
 
-  it('русское письмо не проверяется этим правилом', () => {
-    expect(reviewLetterBody('Перевела учёт на 1С:Бухгалтерия 8.3. Резюме приложено.', { ...profile, language: 'ru' })
+  it('русское письмо не проверяется этим правилом, даже если ждали английское (B624)', () => {
+    expect(reviewLetterBody('Перевела учёт на 1С:Бухгалтерия 8.3. Резюме приложено.', profile)
       .filter((item) => item.rule === 'cyrillic')).toEqual([]);
   });
 });
@@ -245,9 +245,12 @@ describe('reviewLetterBody: стиль не отклоняет', () => {
     ['личное действие', 'Руководил, построил, увеличил, масштабировал и вырастил команду.'],
     ['оценка опыта', 'Обширный опыт и глубокая экспертиза.'],
     ['месяц', 'С ноября работаю над агентами.'],
-    ['английский глагол', 'I led and scaled the team.'],
   ])('%s', (_name, body) => {
     expect(rules(body)).toEqual([]);
+  });
+
+  it('английский глагол', () => {
+    expect(reviewLetterBody('I led and scaled the team. My resume is attached.', SOURCES)).toEqual([]);
   });
 });
 
