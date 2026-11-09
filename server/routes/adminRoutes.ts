@@ -1,4 +1,5 @@
 import { readPreparedSeoSources } from '../seo/preparedSeoSources';
+import { registerAdminAccountCreateRoutes } from './adminAccountCreateRoutes';
 import { forgetMemberNetwork } from './networkIndexFeed';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -435,6 +436,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
       searchProviders: readPreparedSeoSources(deps.config.seoSummarySnapshotFile) }, meta: { requestId: request.id } };
   });
   registerAdminPermissionRoutes(app, deps);
+  registerAdminAccountCreateRoutes(app, deps);
   registerAdminPartnerRoutes(app, deps);
   registerCrawlFilter(app, deps);
   registerRuntimeMemory(app, deps);

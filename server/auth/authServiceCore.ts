@@ -539,6 +539,23 @@ export class AuthServiceCore implements SessionAuth {
     recordLegalConsent(this.database, input);
   }
 
+  recordAdminAction(entry: {
+    actor: AuthPrincipal;
+    action: string;
+    subjectUserId?: string | null;
+    subjectUsername?: string | null;
+    detail?: string | null;
+  }): void {
+    recordAdminAudit(this.database, {
+      actorUserId: entry.actor.userId,
+      actorUsername: entry.actor.username,
+      action: entry.action,
+      subjectUserId: entry.subjectUserId,
+      subjectUsername: entry.subjectUsername,
+      detail: entry.detail,
+    });
+  }
+
   /** Записи акцепта одного пользователя (B195). */
   listConsents(userId: string): readonly LegalConsentRecord[] {
     return listConsents(this.database, userId);

@@ -38,6 +38,7 @@ import { AdminAuditView } from './AdminAuditView';
 import { AdminUserProfileModal } from './AdminUserProfileModal';
 import { AdminLinkedinPoolView } from './AdminLinkedinPoolView';
 import { AdminSearchForm } from './AdminSearchForm';
+import { AdminCreateAccount } from './AdminCreateAccount';
 import { roleCan } from '../../../shared/roleMatrix';
 export type AdminConsoleSession = Omit<AuthUser, 'role'> & {
   role: AuthUser['role'] | 'CareerPartner';
@@ -324,7 +325,7 @@ function AdminDirectory() {
 
   return (
     <>
-      <AdminDirectoryHeader />
+      <AdminDirectoryHeader onCreated={() => void load()} />
       <AdminSearchForm
         query={query}
         onQueryChange={setQuery}
@@ -438,7 +439,7 @@ function AdminDirectory() {
   );
 }
 
-function AdminDirectoryHeader() {
+function AdminDirectoryHeader({ onCreated }: { onCreated: () => void }) {
   return (
     <header className="admin-head">
       <div>
@@ -446,6 +447,7 @@ function AdminDirectoryHeader() {
         <h1>Учётные записи</h1>
         <p className="admin-note">Поиск, доступ и состояние пользователей.</p>
       </div>
+      <AdminCreateAccount onCreated={onCreated} />
     </header>
   );
 }

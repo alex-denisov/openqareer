@@ -648,3 +648,21 @@ export async function requestHhDeepSweep(): Promise<void> {
 export async function getAdminSeoSummary(days = 28, signal?: AbortSignal): Promise<SeoGoalSummary> {
   return readData<SeoGoalSummary>(await apiFetch(`/api/v1/admin/seo-summary?days=${days}`, { signal }));
 }
+
+export interface AdminAccountCreateInput {
+  displayName: string;
+  email: string;
+  password: string;
+  emailVerified: boolean;
+  subscriptionTier?: SubscriptionTier;
+}
+
+/** Owner-created candidate account: no public limit, no consent tick, no session kept. */
+export async function createAdminAccount(input: AdminAccountCreateInput): Promise<AdminUser> {
+  const response = await apiFetch('/api/v1/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readData<AdminUser>(response);
+}

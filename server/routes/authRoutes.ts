@@ -118,7 +118,7 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
   }
 }
 
-function registrationFailure(error: unknown, request: FastifyRequest, reply: FastifyReply) {
+export function registrationFailure(error: unknown, request: FastifyRequest, reply: FastifyReply) {
   if (error instanceof AuthEmailDomainUnreachableError) {
     return sendError(reply, request, 422, 'email_domain_unreachable', error.message, false, {
       email: error.message,
