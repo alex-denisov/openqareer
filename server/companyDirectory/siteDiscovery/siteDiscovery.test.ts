@@ -56,10 +56,10 @@ describe('B627 site discovery', () => {
       'https://api.ashbyhq.com/posting-api/job-board/acme': [200, '{"jobs":[{},{},{}]}'],
       'https://boards-api.greenhouse.io/v1/boards/acme-wrong/jobs': [404, ''],
     });
-    const ask = async () =>
-      '[{"key":"acme","website":"acme.com","careers":"https://acme.com/careers","ats":"greenhouse","slug":"acme-wrong"},{"key":"ghost","website":"ghost.invalid"}]';
+    const ask = async () => ({ route: 'openrouter' as const, text:
+      '[{"key":"acme","website":"acme.com","careers":"https://acme.com/careers","ats":"greenhouse","slug":"acme-wrong"},{"key":"ghost","website":"ghost.invalid"}]' });
     const result = await runSiteDiscoveryTick(db, ask, fetchImpl, new Date('2026-11-09T12:00:00Z'));
-    expect(result).toEqual({ checked: 2, boards: 1 });
+    expect(result).toEqual({ checked: 2, boards: 1, vertex: 0, openrouter: 1 });
     const acme = db.prepare("SELECT * FROM company_directory WHERE company_key = 'acme'").get() as Record<string, string>;
     expect(acme).toMatchObject({
       website_url: 'https://acme.com/',
