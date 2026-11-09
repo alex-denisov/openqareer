@@ -127,6 +127,11 @@ export interface ParsedDraft {
 }
 
 /** Ответ модели → черновик или null; лишнее не чиним, а отбрасываем — спросим следующую ступень. */
+/** Владелец 09.11: «ё никто никогда не пишет» — в текстах для Threads только «е». */
+export function withoutYo(text: string): string {
+  return text.replace(/ё/g, 'е').replace(/Ё/g, 'Е');
+}
+
 export function parseDraft(raw: string, origin: string): ParsedDraft | null {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
@@ -142,7 +147,7 @@ export function parseDraft(raw: string, origin: string): ParsedDraft | null {
   const parts = Array.isArray(record.parts)
     ? record.parts
         .filter((p): p is string => typeof p === 'string')
-        .map((p) => stripForeignLinks(p).trim())
+        .map((p) => withoutYo(stripForeignLinks(p)).trim())
     : [];
   const nonEmpty = parts.filter(Boolean);
   if (nonEmpty.length < PARTS_MIN || nonEmpty.length > PARTS_MAX) return null;
@@ -159,7 +164,7 @@ export function parseDraft(raw: string, origin: string): ParsedDraft | null {
   // Хук попадает в системный промпт как память, а «проверить» — в чат владельца:
   // оба проходят ту же чистку чужих адресов, хук ещё и в одну строку.
   const hook =
-    oneLine(stripForeignLinks(typeof record.hook === 'string' ? record.hook : '')) ||
+    oneLine(withoutYo(stripForeignLinks(typeof record.hook === 'string' ? record.hook : ''))) ||
     oneLine(nonEmpty[0].split('\n')[0]);
   return {
     draft: { cluster, hook: hook.slice(0, 200), parts: nonEmpty, link, origin },
