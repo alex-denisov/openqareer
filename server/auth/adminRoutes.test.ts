@@ -725,3 +725,86 @@ describe('prepared SEO source HTTP boundary', () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
+
+describe('POST /api/v1/admin/users (admin-created account)', () => {
+  const payload = {
+    displayName: 'Тестовый Кандидат',
+    email: 'qa.manual@openqareer.test',
+    password: 'manual-password-for-tests',
+    emailVerified: true,
+    subscriptionTier: 'pro',
+  };
+  const headers = (cookie: string) => ({ cookie, origin: 'http://localhost:3000' });
+
+  it('refuses a candidate', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, CANDIDATE);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/users',
+      headers: headers(cookie),
+      payload,
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  it('creates a verified account with tariff, consent and an audit row; the new account can sign in', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, ADMIN);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/users',
+      headers: headers(cookie),
+      payload,
+    });
+    expect(response.statusCode).toBe(201);
+    const user = response.json().data as { id: string; email: string; subscriptionTier: string };
+    expect(user.email).toBe(payload.email);
+    expect(user.subscriptionTier).toBe('pro');
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      headers: { origin: 'http://localhost:3000' },
+      payload: { username: payload.email, password: payload.password },
+    });
+    expect(login.statusCode).toBe(200);
+    expect(login.json().data.emailVerified).not.toBe(false);
+    const db = new DatabaseSync(resources.at(-1)!.directory + '/app.db');
+    const consent = db
+      .prepare('SELECT version_id FROM legal_consents WHERE user_id = ?')
+      .get(user.id) as { version_id: string };
+    expect(consent.version_id).toBe(LEGAL_PACK_VERSION_ID);
+    const audit = db
+      .prepare("SELECT actor_username, detail FROM admin_audit WHERE action = 'user.create'")
+      .get() as { actor_username: string; detail: string };
+    expect(audit.actor_username).toBe(ADMIN.username);
+    expect(JSON.parse(audit.detail).legalConsent.acceptedBy).toBe('admin');
+    db.close();
+  });
+
+  it('answers 409 for an address that already has an account', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, ADMIN);
+    await register(app, 'Первый Кандидат', payload.email);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/users',
+      headers: headers(cookie),
+      payload,
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe('email_taken');
+  });
+
+  it('rejects an invalid password with 422', async () => {
+    const app = await createApp();
+    const cookie = await signIn(app, ADMIN);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/admin/users',
+      headers: headers(cookie),
+      payload: { ...payload, password: '1' },
+    });
+    expect(response.statusCode).toBe(422);
+  });
+});

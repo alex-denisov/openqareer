@@ -226,6 +226,14 @@ export interface SessionAuth {
     documents: readonly string[];
     acceptedAt?: string;
   }): void;
+  /** Writes one row to the admin action journal (admin_audit). */
+  recordAdminAction?(entry: {
+    actor: AuthPrincipal;
+    action: string;
+    subjectUserId?: string | null;
+    subjectUsername?: string | null;
+    detail?: string | null;
+  }): void;
   listUsers?(input: AdminUserQuery): AdminUserPage;
   getUser?(userId: string): AdminUserRecord | null;
   getAdminPermissionSnapshot?(userId: string): AdminPermissionSnapshot | null;

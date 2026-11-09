@@ -209,6 +209,15 @@ export const adminUserPatchSchema = z.object({
   subscriptionNotes: z.string().max(1000).nullable().optional(),
 });
 
+/** Admin-created account: same field rules as public registration, no consent tick. */
+export const adminAccountCreateSchema = z.object({
+  displayName: fieldGovernedBy(getNameError, true),
+  email: fieldGovernedBy(getEmailError, true),
+  password: passwordField,
+  emailVerified: z.boolean().default(true),
+  subscriptionTier: z.enum(['free', 'pro', 'executive', 'enterprise']).optional(),
+});
+
 export const adminPermissionPatchSchema = z.object({
   permission: z.enum([
     'can_view_candidates',

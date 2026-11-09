@@ -2444,3 +2444,30 @@
 
 /* Provider query text is untrusted and can contain long unbroken strings. */
 .admin-seo-sources { overflow-wrap: anywhere; }
+
+/* Admin-created account (owner request 09.11). */
+.admin-create-account {
+  flex-basis: 100%;
+}
+
+.admin-create-account .admin-form-inline {
+  margin-top: 0;
+}
+
+.admin-create-account .admin-form-inline .admin-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-height: 44px;
+}
+
+.admin-field-error {
+  margin: 0;
+  color: var(--danger-red);
+  font-size: var(--career-text-xs);
+}
