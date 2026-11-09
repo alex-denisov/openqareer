@@ -34,6 +34,24 @@ describe('linkedinGuestBudget (B622)', () => {
     expect(at[2]! - at[1]!).toBe(4000);
   });
 
+  it('divides the gap by the number of egress proxies (B626)', async () => {
+    const c = clock();
+    const budget = createLinkedinGuestBudget({
+      now: c.now,
+      sleep: c.sleep,
+      baseGapMs: 4000,
+      parallelism: () => 4,
+    });
+    const at: number[] = [];
+    await Promise.all(
+      (['guest', 'companies', 'resolver'] as const).map((who) =>
+        budget.acquire(who).then(() => at.push(c.now())),
+      ),
+    );
+    expect(at[1]! - at[0]!).toBe(1000);
+    expect(at[2]! - at[1]!).toBe(1000);
+  });
+
   it('under contention splits slots by share: resolver half, guest below companies', async () => {
     const c = clock();
     const budget = createLinkedinGuestBudget({ now: c.now, sleep: c.sleep, baseGapMs: 1000 });

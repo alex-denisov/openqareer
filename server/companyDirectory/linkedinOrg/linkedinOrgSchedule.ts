@@ -24,11 +24,12 @@ export function scheduleLinkedinOrgResolver(
   database: DatabaseSync,
   log: ScheduleLog,
   budget?: LinkedinGuestBudget,
+  linkedinFetch: typeof fetch = fetch,
 ): () => void {
   const store = new LinkedinOrgStore(database);
   const runner = new LinkedinOrgRunner({
     store,
-    fetchPage: createGuestFetch(),
+    fetchPage: createGuestFetch(linkedinFetch),
     log,
     ...(budget ? { budget } : {}),
   });

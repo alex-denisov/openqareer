@@ -24,6 +24,8 @@ export interface LinkedinGuestBudgetOptions {
   readonly initial?: { readonly pausedUntil: number; readonly gapMs: number };
   /** Вызывается после 429 и после ослабления интервала: сохранить состояние. */
   readonly onChange?: (stats: LinkedinBudgetStats) => void;
+  /** B626: число адресов выхода (прокси Webshare); интервал делится на него. */
+  readonly parallelism?: () => number;
 }
 
 export interface LinkedinBudgetStats {
@@ -94,6 +96,7 @@ class SharedGuestBudget implements LinkedinGuestBudget {
   private limits: readonly number[] = [];
 
   private readonly onChange: (stats: LinkedinBudgetStats) => void;
+  private readonly parallelism: () => number;
 
   constructor(options: LinkedinGuestBudgetOptions) {
     this.now = options.now ?? Date.now;
@@ -103,6 +106,7 @@ class SharedGuestBudget implements LinkedinGuestBudget {
     this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
     this.shares = options.shares ?? DEFAULT_SHARES;
     this.onChange = options.onChange ?? (() => undefined);
+    this.parallelism = options.parallelism ?? (() => 1);
     this.gapMs = Math.min(this.maxGapMs, Math.max(this.baseGapMs, options.initial?.gapMs ?? 0));
     this.pausedUntil = options.initial?.pausedUntil ?? 0;
     // Пауза из прошлого процесса — как недавний 429: интервал не ослабевает сразу.
@@ -194,7 +198,8 @@ class SharedGuestBudget implements LinkedinGuestBudget {
       while (this.waiters.length > 0) {
         const t = this.now();
         if (t < this.pausedUntil) return this.rejectAll(t);
-        const wait = this.lastGrantAt + this.gapMs - t;
+        const lanes = Math.max(1, this.parallelism());
+        const wait = this.lastGrantAt + this.gapMs / lanes - t;
         if (wait > 0) await this.sleep(wait);
         else this.grantNext(t);
       }

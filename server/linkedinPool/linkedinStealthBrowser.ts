@@ -22,6 +22,32 @@ const CLIENT_HINTS_HEADERS: Readonly<Record<string, string>> = {
   'Accept-Language': 'en-US,en;q=0.9',
 };
 
+/** B626: путь Google Chrome на проде (пакет google-chrome-stable). */
+export const LINUX_GOOGLE_CHROME_PATH = '/opt/google/chrome/chrome';
+
+export interface LinkedinBrowserLaunch {
+  readonly headless: boolean;
+  readonly executablePath?: string;
+  readonly channel?: 'chrome';
+}
+
+/**
+ * B626: Cloudflare на /login отдаёт 403 встроенному Chromium Playwright, а
+ * настоящий Google Chrome в окне (Xvfb) проходит. Поэтому LinkedIn открывается
+ * только в Google Chrome и с окном; DISPLAY задаёт юнит сервиса.
+ * OPENQAREER_LINKEDIN_CHROME_PATH — другой путь, OPENQAREER_LINKEDIN_HEADLESS=1 — для отладки.
+ */
+export function getLinkedinBrowserLaunch(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): LinkedinBrowserLaunch {
+  const headless = env.OPENQAREER_LINKEDIN_HEADLESS?.trim() === '1';
+  const configured = env.OPENQAREER_LINKEDIN_CHROME_PATH?.trim();
+  if (configured) return { headless, executablePath: configured };
+  if (platform === 'linux') return { headless, executablePath: LINUX_GOOGLE_CHROME_PATH };
+  return { headless, channel: 'chrome' };
+}
+
 export function getLinkedinChromiumLaunchArgs(options: { proxyUrl?: string } = {}): string[] {
   const args = [
     '--disable-blink-features=AutomationControlled',
@@ -120,7 +146,8 @@ export async function createLinkedinStealthContext(
   options: LinkedinStealthOptions = {},
 ): Promise<BrowserContext> {
   const browserVersion =
-    options.browserVersion ?? (typeof browser.version === 'function' ? browser.version() : undefined);
+    options.browserVersion ??
+    (typeof browser.version === 'function' ? browser.version() : undefined);
   const contextOptions = getLinkedinStealthContextOptions({
     ...options,
     ...(browserVersion ? { browserVersion } : {}),

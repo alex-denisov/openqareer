@@ -10,7 +10,9 @@ function fakeChromium() {
     context,
     chromium: {
       executablePath: () => '/opt/chromium/chrome',
-      launchPersistentContext: vi.fn(async (_dir: string, _options: Record<string, unknown>) => context),
+      launchPersistentContext: vi.fn(
+        async (_dir: string, _options: Record<string, unknown>) => context,
+      ),
     },
   };
 }
@@ -25,18 +27,35 @@ describe('launchLinkedinPersistentContext', () => {
     const { chromium, context } = fakeChromium();
     const result = await launchLinkedinPersistentContext(chromium as never, '/profiles/acc', {
       timezone: 'Europe/Berlin',
-      readVersion: async () => '141.0.7390.37',
+      readVersion: async (path) =>
+        path === '/opt/google/chrome/chrome' ? '141.0.7390.37' : undefined,
+      env: {},
+      platform: 'linux',
     });
     expect(result).toBe(context);
     expect(chromium.launchPersistentContext).toHaveBeenCalledWith(
       '/profiles/acc',
       expect.objectContaining({
-        headless: true,
+        headless: false,
+        executablePath: '/opt/google/chrome/chrome',
         timezoneId: 'Europe/Berlin',
         userAgent: expect.stringContaining('Chrome/141.0.0.0'),
       }),
     );
     expect(context.addInitScript).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the Chrome channel off Linux and honours the headless override (B626)', async () => {
+    const { chromium } = fakeChromium();
+    await launchLinkedinPersistentContext(chromium as never, '/profiles/acc', {
+      readVersion: async () => '141.0.7390.37',
+      env: { OPENQAREER_LINKEDIN_HEADLESS: '1' },
+      platform: 'darwin',
+    });
+    const options = chromium.launchPersistentContext.mock.calls[0]?.[1];
+    expect(options).toMatchObject({ channel: 'chrome', headless: true });
+    expect(options?.executablePath).toBeUndefined();
+    expect(options?.userAgent).toBeUndefined();
   });
 
   it('leaves the userAgent to the browser when the version cannot be read', async () => {
