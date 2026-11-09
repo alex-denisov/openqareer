@@ -246,3 +246,15 @@ describe('owner answers 09.11', () => {
     expect(SMM_LINKS.some((link) => link.url === 'https://openqareer.com/signup')).toBe(true);
   });
 });
+
+describe('no ё in posts (owner 09.11)', () => {
+  it('replaces ё in parts and hook', async () => {
+    const { parseDraft: parse } = await import('./smmPrompt');
+    const parsed = parse(
+      JSON.stringify({ cluster: 'поиск работы', hook: 'Ещё раз', parts: ['Всё ЁЛКИ'], link: '' }),
+      'test',
+    );
+    expect(parsed?.draft.parts[0]).toBe('Все ЕЛКИ');
+    expect(parsed?.draft.hook).toBe('Еще раз');
+  });
+});

@@ -1,7 +1,14 @@
 import type { ChatTurn, SmmModel } from './smmModel';
 import { FORMAT_CURSOR_KEY, formatAt } from './smmFormats';
 import { OWNER_PAINS, SMM_PAINS } from './smmPains';
-import { nextCluster, parseDraft, systemPrompt, untrusted, type ParsedDraft } from './smmPrompt';
+import {
+  nextCluster,
+  parseDraft,
+  systemPrompt,
+  untrusted,
+  withoutYo,
+  type ParsedDraft,
+} from './smmPrompt';
 import type { SmmPost, SmmStore } from './smmStore';
 
 /** Сколько реплик диалога с владельцем держим в памяти разговора. */
@@ -163,8 +170,9 @@ export class SmmAgent {
       ...history,
       { role: 'user', content: message.slice(0, CHAT_TURN_MAX_CHARS) },
     ];
-    const answer = await model.complete(turns);
-    if (!answer) return null;
+    const raw = await model.complete(turns);
+    if (!raw) return null;
+    const answer = withoutYo(raw);
     for (const line of answer.split('\n')) {
       const trimmed = line.trim();
       if (trimmed.startsWith(STRATEGY_MARK))
