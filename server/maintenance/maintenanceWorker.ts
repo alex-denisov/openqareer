@@ -189,6 +189,7 @@ export class MaintenanceWorker {
   private orphanRestUntil = 0;
   /** Время последнего расчёта итогов; `undefined`, пока не прочитано из базы. */
   private catalogTotalsAt: number | undefined;
+  private catalogTotalsRunning = false;
   private titleModelRunning = false;
   private roleLinkRunning = false;
   private lastTitleModelLogAt = 0;
@@ -307,21 +308,32 @@ export class MaintenanceWorker {
     if (this.stopped || typeof this.engine.refreshCatalogTotals !== 'function') return;
     const now = this.now();
     this.catalogTotalsAt ??= this.storedCatalogTotalsAt();
+    if (this.catalogTotalsRunning) return;
     if (now - this.catalogTotalsAt < CATALOG_TOTALS_REFRESH_MS) return;
     this.catalogTotalsAt = now;
+    this.catalogTotalsRunning = true;
     const startedAt = Date.now();
-    try {
-      const totals = this.engine.refreshCatalogTotals(new Date(now).toISOString());
+    const written = (totals: unknown) => {
+      this.catalogTotalsRunning = false;
       const clusters = (totals as { clusters?: unknown } | undefined)?.clusters;
       this.log.info(
         { clusters: typeof clusters === 'number' ? clusters : null, ms: Date.now() - startedAt },
         'vacancy-catalog-totals-written',
       );
-    } catch (error: unknown) {
+    };
+    const failed = (error: unknown) => {
+      this.catalogTotalsRunning = false;
       this.log.warn(
         { reason: error instanceof Error ? error.message : 'unknown' },
         'vacancy-catalog-totals-failed',
       );
+    };
+    try {
+      const totals = this.engine.refreshCatalogTotals(new Date(now).toISOString());
+      if (totals instanceof Promise) void totals.then(written, failed);
+      else written(totals);
+    } catch (error: unknown) {
+      failed(error);
     }
   }
 

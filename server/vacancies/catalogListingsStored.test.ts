@@ -79,4 +79,26 @@ describe('stored catalog listings (PRB-041)', () => {
     store.recomputeCatalogTotals('2026-11-03T10:15:00.000Z');
     expect(store.loadCatalogListings()).toEqual([]);
   });
+
+  it('counts active clusters in slices and gives the queue back between them', async () => {
+    // Prod 08.11: one json_extract pass over 463 000 clusters held the queue 42 s.
+    const { store } = openStore();
+    store.saveClusters([
+      ...listingClusters(['Бухгалтер', 'Бухгалтер', 'Бухгалтер', 'Юрист']),
+      { ...sampleCluster, id: 'cluster-closed', status: 'archived' as const },
+    ]);
+    let pauses = 0;
+    const totals = await store.recomputeCatalogTotalsInSlices('2026-11-09T10:00:00.000Z', {
+      sliceRows: 2,
+      pause: async () => {
+        pauses += 1;
+      },
+    });
+    expect(totals.clusters).toBe(4);
+    expect(pauses).toBe(2);
+    expect(store.readCatalogTotals()?.clusters).toBe(4);
+    expect(
+      store.loadCatalogListings().find((listing) => listing.role === 'accountant')?.count,
+    ).toBe(3);
+  });
 });

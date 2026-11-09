@@ -908,7 +908,12 @@ export class MultiSourceVacancyEngine {
   }
 
   /** Обслуживание (B485): пересчёт итогов после сведения пула. */
-  public refreshCatalogTotals(observedAt: string): CatalogTotals | undefined {
+  public refreshCatalogTotals(
+    observedAt: string,
+  ): CatalogTotals | undefined | Promise<CatalogTotals> {
+    if (typeof this.pool.recomputeCatalogTotalsInSlices === 'function') {
+      return this.pool.recomputeCatalogTotalsInSlices(observedAt);
+    }
     return this.pool.recomputeCatalogTotals?.(observedAt);
   }
 
