@@ -9,7 +9,10 @@ import {
   LinkedinPoolCompanyPageExecutor,
   readLinkedinPoolExecutorConfig,
 } from './linkedinPool/companyPageExecutor';
-import { getLinkedinChromiumLaunchArgs } from './linkedinPool/linkedinStealthBrowser';
+import {
+  getLinkedinBrowserLaunch,
+  getLinkedinChromiumLaunchArgs,
+} from './linkedinPool/linkedinStealthBrowser';
 import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersistentContext';
 import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
@@ -42,6 +45,7 @@ import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/market
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
 import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
+import { createWebsharePool, readWebshareCredentials } from './vacancies/webshareProxyPool';
 import { loadBudgetState, saveBudgetState } from './vacancies/linkedinBudgetState';
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 
@@ -64,7 +68,14 @@ const linkedinExecutorConfig = readExecutorConfigOrDisable();
 const budgetStateDatabase = new DatabaseSync(config.databasePath);
 applySqliteBusyTimeout(budgetStateDatabase);
 const savedBudget = loadBudgetState(budgetStateDatabase);
+// B626: гостевой LinkedIn через ротацию прокси Webshare; без ключа — напрямую.
+const webshareCredentials = readWebshareCredentials();
+const websharePool = webshareCredentials
+  ? createWebsharePool({ credentials: webshareCredentials })
+  : undefined;
+const linkedinFetch: typeof fetch = websharePool?.fetch ?? fetch;
 const linkedinBudget = createLinkedinGuestBudget({
+  ...(websharePool ? { parallelism: () => websharePool.parallelism() } : {}),
   ...(savedBudget ? { initial: savedBudget } : {}),
   onChange: (stats) => {
     try {
@@ -81,6 +92,7 @@ const linkedinBudget = createLinkedinGuestBudget({
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
   linkedinBudget,
+  linkedinFetch,
   // Сведение по ключам: партия × соседи в куче, полная пересборка запрещена.
   recluster: { mode: 'keyed', batchSize: DEFAULT_KEYED_BATCH_SIZE },
   // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:
@@ -127,8 +139,9 @@ const linkedinPoolExecutor =
         // Только по требованию: на проде playwright ставится отдельно (B309, B313).
         browserFactory: async () => {
           const { chromium } = await import(playwrightModuleSpecifier());
+          // B626: Google Chrome в окне Xvfb; встроенный Chromium Cloudflare блокирует.
           return chromium.launch({
-            headless: true,
+            ...getLinkedinBrowserLaunch(),
             args: getLinkedinChromiumLaunchArgs(),
           });
         },
@@ -286,14 +299,32 @@ try {
   scheduleRemoteScopeBackfill(semanticDatabase, log);
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
-    stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(semanticDatabase, log, linkedinBudget);
+    stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(
+      semanticDatabase,
+      log,
+      linkedinBudget,
+      linkedinFetch,
+    );
     // Замер бюджета раз в 15 минут: процесс перезапускается чаще часа (B622).
     setInterval(
-      () => log.info({ ...linkedinBudget.stats() }, 'linkedin-budget'),
+      () =>
+        log.info(
+          {
+            ...linkedinBudget.stats(),
+            ...(websharePool ? { webshare: websharePool.stats() } : {}),
+          },
+          'linkedin-budget',
+        ),
       15 * 60_000,
     ).unref();
   }
-  log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
+  log.info(
+    {
+      sources: composed.engine.getSources().length,
+      linkedinEgress: websharePool ? 'webshare' : 'direct',
+    },
+    'maintenance-started',
+  );
 } catch (error: unknown) {
   log.error(
     { errorName: error instanceof Error ? error.name : 'UnknownError' },

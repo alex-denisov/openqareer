@@ -336,6 +336,7 @@ async function fetchPagedJsonApi(
 async function fetchLinkedinGuestSource(
   sleep: (ms: number) => Promise<void>,
   budget: LinkedinGuestBudget,
+  linkedinFetch: typeof fetch,
 ): Promise<SourceReading> {
   return fetchLinkedinGuest({
     fetchPage: async (url, headers) => {
@@ -343,7 +344,7 @@ async function fetchLinkedinGuestSource(
       await budget.acquire('guest');
       // Per page, not per poll: one slow page ends the run with what was read.
       return withRequestTimeout(LINKEDIN_PAGE_TIMEOUT_MS, async (signal) => {
-        const res = await fetch(url, { headers, signal });
+        const res = await linkedinFetch(url, { headers, signal });
         if (res.status === 429 || res.status === 999) budget.markRateLimited();
         return { status: res.status, body: res.ok ? await res.text() : '' };
       });
@@ -503,6 +504,8 @@ export interface MultiSourceFetcherDeps {
   readonly readLinkedinPoolJobs?: () => SourceReading;
   /** Общий на процесс бюджет гостевых запросов LinkedIn (B622). */
   readonly linkedinBudget?: LinkedinGuestBudget;
+  /** B626: fetch для linkedin.com (ротация Webshare); без него — прямой fetch. */
+  readonly linkedinFetch?: typeof fetch;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -606,7 +609,7 @@ async function fetchJsonOrCareerSite(
     return fetchLinkedinCompanyVacancies(target, {
       sourceId: source.id,
       maxPages: 10,
-      customFetch: budgetedFetch(linkedinBudget, 'companies'),
+      customFetch: budgetedFetch(linkedinBudget, 'companies', deps.linkedinFetch ?? fetch),
     });
   }
   if (source.type === 'career_site' && source.id === YC_WORK_AT_STARTUP_SOURCE_ID) {
@@ -623,7 +626,8 @@ async function fetchJsonOrCareerSite(
   }
   if (source.type === 'json_api') {
     if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
-    if (source.id === LINKEDIN_SOURCE_ID) return fetchLinkedinGuestSource(sleep, linkedinBudget);
+    if (source.id === LINKEDIN_SOURCE_ID)
+      return fetchLinkedinGuestSource(sleep, linkedinBudget, deps.linkedinFetch ?? fetch);
     if (source.id === BAYT_SOURCE_ID) {
       return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
     }

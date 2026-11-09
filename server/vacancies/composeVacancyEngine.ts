@@ -48,6 +48,8 @@ export interface ComposeVacancyEngineOptions {
   readonly matchMode?: 'legacy' | 'semantic';
   /** Общий бюджет гостевого LinkedIn процесса (B622): тот же отдаётся резолверу B621. */
   readonly linkedinBudget?: LinkedinGuestBudget;
+  /** B626: fetch для linkedin.com через ротацию Webshare. */
+  readonly linkedinFetch?: typeof fetch;
 }
 
 function openPoolJobsDatabase(databasePath: string): DatabaseSync {
@@ -129,6 +131,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
       buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
         readLinkedinPoolJobs: poolJobs.read,
         ...(options.linkedinBudget ? { linkedinBudget: options.linkedinBudget } : {}),
+        ...(options.linkedinFetch ? { linkedinFetch: options.linkedinFetch } : {}),
       }),
     pool,
     // Право обхода спрашивается у самой площадки, а не берётся из записи,

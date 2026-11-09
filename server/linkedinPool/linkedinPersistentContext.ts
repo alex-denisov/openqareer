@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import type { BrowserContext, BrowserType } from 'playwright';
 import {
+  getLinkedinBrowserLaunch,
   getLinkedinChromiumLaunchArgs,
   getLinkedinStealthContextOptions,
   installLinkedinStealthScript,
@@ -10,6 +11,8 @@ export interface PersistentContextOptions {
   readonly timezone?: string;
   /** Подменяется в тестах; по умолчанию версия берётся у самого бинарника Chromium. */
   readonly readVersion?: (executablePath: string) => Promise<string | undefined>;
+  readonly env?: NodeJS.ProcessEnv;
+  readonly platform?: NodeJS.Platform;
 }
 
 /** "Chromium 141.0.7390.37" -> "141.0.7390.37". */
@@ -30,14 +33,18 @@ export function readChromiumVersion(executablePath: string): Promise<string | un
  * запусками, как в обычном браузере. UA строится из настоящей версии Chromium.
  */
 export async function launchLinkedinPersistentContext(
-  chromium: Pick<BrowserType, 'launchPersistentContext' | 'executablePath'>,
+  chromium: Pick<BrowserType, 'launchPersistentContext'>,
   profileDirectory: string,
   options: PersistentContextOptions = {},
 ): Promise<BrowserContext> {
   const readVersion = options.readVersion ?? readChromiumVersion;
-  const browserVersion = await readVersion(chromium.executablePath());
+  const launch = getLinkedinBrowserLaunch(options.env, options.platform);
+  // Версия читается у того же бинарника Google Chrome, что запускается (B626).
+  const browserVersion = launch.executablePath
+    ? await readVersion(launch.executablePath)
+    : undefined;
   const context = await chromium.launchPersistentContext(profileDirectory, {
-    headless: true,
+    ...launch,
     args: getLinkedinChromiumLaunchArgs(),
     ...getLinkedinStealthContextOptions({
       ...(options.timezone ? { timezone: options.timezone } : {}),
