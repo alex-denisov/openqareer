@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { VacancyCluster } from './domain/unifiedVacancy';
+import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
 import type { CoverLetterWriter, CoverLetterWriteInput } from './providers/coverLetterWriter';
 import { normalizeJsonSource } from './vacancies/jsonSourceAdapters';
 import { resolvePitchVacancy } from './routes/vacancyPitchRoutes';
@@ -379,6 +380,60 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     expect(data.bodySource).toBe('model');
     expect(data.stage).toBe('openai:gpt-test');
     expect(data.atsCoverLetter).toBe('Здравствуйте! Пишу по вакансии от модели.');
+  });
+
+  describe('B624: подпись и тема на языке текста письма', () => {
+    const signedLetter = async (profileName: string, reply: { body: string; senderName?: string }, payload = {}) => {
+      const inputs: CoverLetterWriteInput[] = [];
+      const writer: CoverLetterWriter = {
+        writeCoverLetter: async (input) => {
+          inputs.push(input);
+          return { ...reply, stage: 'openai:gpt-test' };
+        },
+      };
+      const { app, candidates } = await createApp([sampleCluster], { coverLetterWriter: writer });
+      const { cookie, candidateId } = await login(app);
+      candidates.importResumeEvidence(candidateId, {
+        sourceLabel: 'test-import',
+        entries: [{ memoryId: 'mem-624', domain: 'skill', statement: 'Владею TypeScript, Node.js' }],
+      });
+      candidates.reviewMemories(candidateId, ['mem-624'], 'confirm');
+      candidates.saveResumeDraft(candidateId, { ...EMPTY_RESUME_DRAFT, candidate: { fullName: profileName } }, []);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/candidate/vacancies/cluster-99/pitch',
+        headers: { cookie, origin: 'http://localhost:3000' },
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      return { data: response.json().data, input: inputs[0] };
+    };
+    const RU = 'Здравствуйте! Откликаюсь на вакансию и буду рад обсудить задачи команды.';
+    const EN = 'Hello! I am applying for the role and would be glad to discuss the team goals.';
+
+    it('русское письмо при латинском имени в профиле подписано кириллицей, тема совпадает', async () => {
+      const { data, input } = await signedLetter('Alexey Denisov', { body: RU, senderName: 'Алексей Денисов' }, { language: 'en' });
+      expect(input?.candidateName).toBe('Alexey Denisov');
+      expect(data.language).toBe('ru');
+      expect(data.senderName).toBe('Алексей Денисов');
+      expect(data.emailPitch.subject).toMatch(/ — Алексей Денисов$/u);
+    });
+
+    it('английское письмо при кириллице в профиле подписано латиницей, тема совпадает', async () => {
+      const { data } = await signedLetter('Алексей Денисов', { body: EN, senderName: 'Alexey Denisov' });
+      expect(data.language).toBe('en');
+      expect(data.senderName).toBe('Alexey Denisov');
+      expect(data.emailPitch.subject).toMatch(/ — Alexey Denisov$/u);
+    });
+
+    it('модель не вернула имя или вернула его не на языке письма: остаётся имя из профиля', async () => {
+      const silent = await signedLetter('Alexey Denisov', { body: RU });
+      expect(silent.data.senderName).toBe('Alexey Denisov');
+      expect(silent.data.emailPitch.subject).toMatch(/ — Alexey Denisov$/u);
+      const wrong = await signedLetter('Alexey Denisov', { body: RU, senderName: 'Alexey Denisov' });
+      expect(wrong.data.senderName).toBe('Alexey Denisov');
+      expect(wrong.data.emailPitch.body).toBe(RU);
+    });
   });
 
   it('B601: the pool text beats the summary the letter screen sends as a description', () => {

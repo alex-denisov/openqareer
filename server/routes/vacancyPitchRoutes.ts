@@ -8,7 +8,7 @@ import {
   generateVacancyPitch,
 } from '../domain/vacancyPitchService';
 import { retryOnSqliteBusy } from '../data/sqliteBusyRetry';
-import { writeCoverLetterBody } from './vacancyLetterBody';
+import { writeCoverLetterBody, type WrittenLetterBody } from './vacancyLetterBody';
 import { translateLetterFacts } from '../domain/letterFactTranslation';
 import { letterFactsToTranslate, withTranslatedStatements } from '../domain/letterResults';
 import type { RouteDeps } from './deps';
@@ -186,6 +186,30 @@ function readLetterContext(
   } as const;
 }
 
+/** B624: подпись, тема и поле языка идут по языку текста модели, а не по вакансии. */
+function letterPitch(
+  context: Awaited<ReturnType<typeof readLetterContext>>,
+  vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
+  body: z.infer<typeof vacancyPitchInputSchema>,
+  written: WrittenLetterBody,
+  translations: Parameters<typeof generateVacancyPitch>[0]['translations'],
+) {
+  const { rankingContext, candidateName, facts, workplaces, targetCompany, tone, language } = context;
+  return generateVacancyPitch({
+    vacancy,
+    candidateName,
+    ...(written.senderName ? { letterName: written.senderName } : {}),
+    facts,
+    tone,
+    ...(rankingContext ? { rankingContext } : {}),
+    language: written.language ?? language,
+    ...(body?.recipient ? { recipient: body.recipient } : {}),
+    ...(targetCompany ? { targetCompany: true } : {}),
+    workplaces,
+    translations,
+  });
+}
+
 async function writeVacancyPitch(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -194,7 +218,7 @@ async function writeVacancyPitch(
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
   const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
-  const { rankingContext, candidateName, facts, candidateWorkplaces, workplaces, targetCompany, tone, language, profile, contextMs, resume } = context;
+  const { candidateName, facts, candidateWorkplaces, workplaces, language, profile, contextMs, resume } = context;
   const toTranslate = letterFactsToTranslate(facts, workplaces, language);
   const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
   const translatedFacts = withTranslatedStatements(facts, translations);
@@ -207,22 +231,12 @@ async function writeVacancyPitch(
     ...(gender ? { gender } : {}),
     ...(body?.language ? { chosenLanguage: body.language } : {}),
     resumeAttached: resume.available, contextMs,
+    ...(candidateName ? { candidateName } : {}),
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
   }
-  const pitch = generateVacancyPitch({
-    vacancy,
-    candidateName,
-    facts,
-    tone,
-    ...(rankingContext ? { rankingContext } : {}),
-    language,
-    ...(body?.recipient ? { recipient: body.recipient } : {}),
-    ...(targetCompany ? { targetCompany: true } : {}),
-    workplaces,
-    translations,
-  });
+  const pitch = letterPitch(context, vacancy, body, written, translations);
   const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
   const templateChecks = checkPitchOutputFacts(pitch, atsCoverLetter, translatedFacts);
   // The letter screen shows emailPitch.body: the model letter has to be there, not only in the ATS field.

@@ -1,3 +1,5 @@
+import { SIGNATURE_LINE_LABEL } from './letterSignature';
+
 /**
  * Сопроводительное письмо пишет модель по запросу, который подобрал и принял владелец (B601, 06.11,
  * consultant-prompt-live-7.txt). Смысл запроса не меняем: короткий запрос дал лучшие письма, а каждый
@@ -49,6 +51,8 @@ export interface CoverLetterPromptInput {
   readonly chosenLanguage?: 'en' | 'ru';
   /** `false` — опыта работы нет, резюме к отклику не приложится, и письмо его не упоминает (B601, 08.11). */
   readonly resumeAttached?: boolean;
+  /** Имя из профиля как есть; модель возвращает его на языке письма для подписи и темы (B624). */
+  readonly candidateName?: string;
 }
 
 /**
@@ -60,6 +64,19 @@ const NO_RESUME_EDITS: readonly (readonly [string, string])[] = [
   ['это не пересказ резюме', 'это не пересказ профиля'],
   ['В конце скажи, что резюме приложено, и вежливо предложи', 'В конце вежливо предложи'],
 ];
+
+/**
+ * B624: имя для подписи переводит модель. Утверждённый запрос не меняется: заменяется только
+ * последняя фраза, и только когда имя в профиле есть.
+ */
+const RETURN_TEXT_ONLY = 'Верни только текст сообщения.';
+
+function withSignatureName(template: string): string {
+  return template.replace(
+    RETURN_TEXT_ONLY,
+    `Верни текст сообщения. После него отдельной последней строкой напиши «${SIGNATURE_LINE_LABEL} » и имя и фамилию кандидата (в профиле: {NAME}) так, как их пишут на языке сообщения: сначала имя, потом фамилия.`,
+  );
+}
 
 function withoutResume(template: string): string {
   return NO_RESUME_EDITS.reduce((text, [from, to]) => text.replace(from, to), template);
@@ -80,15 +97,18 @@ function recipientText(recipient: CoverLetterPromptInput['recipient']): string {
 
 /** За один проход: фигурные скобки и `$&` в тексте вакансии остаются текстом. */
 export function coverLetterPrompt(input: CoverLetterPromptInput): string {
+  const name = input.candidateName?.trim();
   const values: Readonly<Record<string, string>> = {
     RECIPIENT: recipientText(input.recipient),
     GENDER: input.gender ? GENDER_TEXT[input.gender] : UNKNOWN_GENDER_TEXT,
     VACANCY: input.vacancy.trim(),
     PROFILE: input.profile.trim(),
+    NAME: name ?? '',
   };
   const approved = input.resumeAttached === false ? withoutResume(COVER_LETTER_PROMPT) : COVER_LETTER_PROMPT;
+  const signed = name ? withSignatureName(approved) : approved;
   const template = input.chosenLanguage
-    ? approved.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
-    : approved;
-  return template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE)\}/gu, (_match, key: string) => values[key] ?? '').trim();
+    ? signed.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
+    : signed;
+  return template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE|NAME)\}/gu, (_match, key: string) => values[key] ?? '').trim();
 }

@@ -92,6 +92,17 @@ describe('LlmCoverLetterWriter: приём ответа (B601)', () => {
     await expect(write(client(`${LETTER}\n\nС уважением,`))).resolves.toMatchObject({ body: LETTER });
   });
 
+  it('B624: строка с именем для подписи снимается с письма и приходит отдельно', async () => {
+    await expect(write(client(`${LETTER}\n\nИмя для подписи: Алексей Денисов`))).resolves.toEqual({
+      body: LETTER, stage: 'test:m', senderName: 'Алексей Денисов',
+    });
+  });
+
+  it('B624: имя в запросе к модели, когда оно есть в профиле', () => {
+    expect(letterPrompt({ ...input, candidateName: 'Alexey Denisov' })).toContain('(в профиле: Alexey Denisov)');
+    expect(letterPrompt(input)).toContain('Верни только текст сообщения.');
+  });
+
   it('ответ сверх предела — сбой модели, а не письмо', async () => {
     await expect(write(client(`${'а'.repeat(COVER_LETTER_MAX_CHARS)}.`))).resolves.toMatchObject({
       failure: { detail: 'too_long' },
