@@ -42,6 +42,7 @@ import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/market
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
 import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
+import { loadBudgetState, saveBudgetState } from './vacancies/linkedinBudgetState';
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 
 /**
@@ -58,7 +59,25 @@ watchWriteHolds((hold) =>
 const linkedinExecutorConfig = readExecutorConfigOrDisable();
 // Один бюджет гостевого LinkedIn на процесс: каналы компаний, общий поиск и
 // резолвер org_id (B621) делят его по долям, 429 — пауза всем (B622).
-const linkedinBudget = createLinkedinGuestBudget();
+// Пауза и интервал переживают перезапуск: 09.11 пять стартов за час, и каждый
+// начинал с базового интервала прямо в 429.
+const budgetStateDatabase = new DatabaseSync(config.databasePath);
+applySqliteBusyTimeout(budgetStateDatabase);
+const savedBudget = loadBudgetState(budgetStateDatabase);
+const linkedinBudget = createLinkedinGuestBudget({
+  ...(savedBudget ? { initial: savedBudget } : {}),
+  onChange: (stats) => {
+    try {
+      saveBudgetState(budgetStateDatabase, stats, new Date());
+    } catch (error: unknown) {
+      log.warn(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'linkedin-budget-save-failed',
+      );
+    }
+    log.info({ ...stats }, 'linkedin-budget');
+  },
+});
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
   linkedinBudget,
@@ -268,10 +287,10 @@ try {
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
     stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(semanticDatabase, log, linkedinBudget);
-    // Замер бюджета: запросы и 429 за час по потребителям (B622).
+    // Замер бюджета раз в 15 минут: процесс перезапускается чаще часа (B622).
     setInterval(
       () => log.info({ ...linkedinBudget.stats() }, 'linkedin-budget'),
-      60 * 60_000,
+      15 * 60_000,
     ).unref();
   }
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');

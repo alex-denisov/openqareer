@@ -20,6 +20,10 @@ export interface LinkedinGuestBudgetOptions {
   readonly maxGapMs?: number;
   readonly pauseMs?: number;
   readonly shares?: Readonly<Record<LinkedinConsumer, number>>;
+  /** Пауза и интервал, пережившие перезапуск процесса (09.11: 5 стартов за час). */
+  readonly initial?: { readonly pausedUntil: number; readonly gapMs: number };
+  /** Вызывается после 429 и после ослабления интервала: сохранить состояние. */
+  readonly onChange?: (stats: LinkedinBudgetStats) => void;
 }
 
 export interface LinkedinBudgetStats {
@@ -89,6 +93,8 @@ class SharedGuestBudget implements LinkedinGuestBudget {
   private grants: readonly { at: number; consumer: LinkedinConsumer }[] = [];
   private limits: readonly number[] = [];
 
+  private readonly onChange: (stats: LinkedinBudgetStats) => void;
+
   constructor(options: LinkedinGuestBudgetOptions) {
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
@@ -96,7 +102,11 @@ class SharedGuestBudget implements LinkedinGuestBudget {
     this.maxGapMs = options.maxGapMs ?? DEFAULT_MAX_GAP_MS;
     this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
     this.shares = options.shares ?? DEFAULT_SHARES;
-    this.gapMs = this.baseGapMs;
+    this.onChange = options.onChange ?? (() => undefined);
+    this.gapMs = Math.min(this.maxGapMs, Math.max(this.baseGapMs, options.initial?.gapMs ?? 0));
+    this.pausedUntil = options.initial?.pausedUntil ?? 0;
+    // Пауза из прошлого процесса — как недавний 429: интервал не ослабевает сразу.
+    if (this.pausedUntil > this.now()) this.lastLimitAt = this.now();
   }
 
   acquire(consumer: LinkedinConsumer): Promise<void> {
@@ -116,6 +126,7 @@ class SharedGuestBudget implements LinkedinGuestBudget {
     this.lastLimitAt = t;
     this.limits = [...this.limits, t];
     this.rejectAll(t);
+    this.onChange(this.stats());
   }
 
   isPaused(): boolean {
@@ -154,6 +165,7 @@ class SharedGuestBudget implements LinkedinGuestBudget {
     ) {
       this.gapMs = Math.max(this.baseGapMs, Math.round(this.gapMs * 0.75));
       this.lastRelaxAt = t;
+      this.onChange(this.stats());
     }
   }
 

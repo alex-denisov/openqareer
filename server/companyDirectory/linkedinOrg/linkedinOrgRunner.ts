@@ -74,12 +74,21 @@ export class LinkedinOrgRunner {
     return this.options.fetchPage(url, kind);
   };
 
+  private budgetPause(): StepResult | undefined {
+    const budget = this.options.budget;
+    if (!budget?.isPaused()) return undefined;
+    return { kind: 'cooldown', until: new Date(budget.stats().pausedUntil) };
+  }
+
   /** Одна строка очереди или ничего, если идёт пауза / очередь пуста. */
   async step(): Promise<StepResult> {
     const { store, log } = this.options;
     const now = this.now();
     const cooldown = store.cooldownUntil();
     if (cooldown && cooldown.until > now) return { kind: 'cooldown', until: cooldown.until };
+    // Пауза общего бюджета — не 429 резолвера: ждать её конца без страйка (09.11).
+    const budgetPause = this.budgetPause();
+    if (budgetPause) return budgetPause;
     const row = store.nextDue(now);
     this.pausedByBudget = false;
     if (!row) return { kind: 'idle' };
@@ -97,9 +106,12 @@ export class LinkedinOrgRunner {
       return { kind: 'done', companyKey: row.companyKey, outcome };
     } catch (error: unknown) {
       if (!(error instanceof LinkedinThrottled)) throw error;
+      if (this.pausedByBudget) {
+        this.pausedByBudget = false;
+        return this.budgetPause() ?? { kind: 'cooldown', until: this.now() };
+      }
       // Свой 429 резолвера ставит паузу и каналам с гостевым поиском (B622).
-      if (!this.pausedByBudget) this.options.budget?.markRateLimited();
-      this.pausedByBudget = false;
+      this.options.budget?.markRateLimited();
       const strikes = (cooldown?.strikes ?? 0) + 1;
       const until = new Date(this.now().getTime() + cooldownMs(strikes));
       store.setCooldown(until, strikes, error.kind, this.now());

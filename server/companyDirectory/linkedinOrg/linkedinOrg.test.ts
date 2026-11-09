@@ -21,6 +21,7 @@ import {
 } from './linkedinOrgResolver';
 import { cooldownMs, LinkedinOrgRunner } from './linkedinOrgRunner';
 import { LinkedinOrgStore, type QueueRow } from './linkedinOrgStore';
+import { createLinkedinGuestBudget } from '../../vacancies/linkedinGuestBudget';
 
 const fixture = (name: string) => readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
 const SITE = fixture('site-ciklum.html');
@@ -250,6 +251,24 @@ function seededDb(rows: readonly { key: string; orgId?: string; site?: string }[
 const silentLog = { info: () => undefined, warn: () => undefined };
 
 describe('LinkedinOrgRunner', () => {
+  it('waits out a shared budget pause without striking the company (B622)', async () => {
+    const db = seededDb([{ key: 'ciklum' }]);
+    const store = new LinkedinOrgStore(db);
+    const budget = createLinkedinGuestBudget({ now: () => NOW.getTime(), pauseMs: 60_000 });
+    budget.markRateLimited();
+    const runner = new LinkedinOrgRunner({
+      store,
+      fetchPage: happy(),
+      log: silentLog,
+      now: () => NOW,
+      budget,
+    });
+    const result = await runner.step();
+    expect(result).toEqual({ kind: 'cooldown', until: new Date(NOW.getTime() + 60_000) });
+    expect(store.cooldownUntil()?.strikes ?? 0).toBe(0);
+    expect(store.counts()).toEqual({});
+  });
+
   it('writes the id and url once and leaves rows that already have an id untouched', async () => {
     const db = seededDb([{ key: 'ciklum' }, { key: 'has-id', orgId: '777' }]);
     const store = new LinkedinOrgStore(db);

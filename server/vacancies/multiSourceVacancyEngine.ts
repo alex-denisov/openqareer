@@ -76,6 +76,7 @@ import { expireClusterSources } from './clusterExpiry';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mapYielding } from './mapYielding';
 import type { CatalogTotals } from './matchedCatalogSummary';
+import { pickWave } from './syncWave';
 import {
   WorkdayDescriptionBackfill,
   type WorkdayDescriptionReport,
@@ -413,6 +414,7 @@ export class MultiSourceVacancyEngine {
   /** Сколько уловов сведено по ключам (B230) — для журнала обслуживателя. */
   private keyedClusterings = 0;
   private fetcher?: SourceFetcher;
+  private readonly holdSource: (source: VacancySourceConfig) => boolean;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
    * хранилищу, и память следует за размером запроса, а не пула (B221). Без
@@ -471,7 +473,10 @@ export class MultiSourceVacancyEngine {
     recluster?: ReclusterMode;
     /** Роли кандидатов для очереди текста hh (02.11); без них очередь — каталог и пул. */
     workdayDetailFetch?: WorkdayDetailFetch;
+    /** Источник сейчас нельзя опрашивать (пауза бюджета LinkedIn): место в волне не занимает. */
+    holdSource?: (source: VacancySourceConfig) => boolean;
   }) {
+    this.holdSource = options?.holdSource ?? (() => false);
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
@@ -1922,9 +1927,11 @@ export class MultiSourceVacancyEngine {
     const rechecks = dead
       .filter((source) => nowMs - lastSyncMs(source) >= DEAD_SOURCE_RECHECK_MS)
       .slice(0, DEAD_SOURCE_RECHECKS_PER_TICK);
-    const live = due
-      .filter((source) => !deadIds.has(source.id))
-      .slice(0, SYNC_BATCH_LIMIT - rechecks.length);
+    const live = pickWave(
+      due.filter((source) => !deadIds.has(source.id) && !this.holdSource(source)),
+      SYNC_BATCH_LIMIT - rechecks.length,
+      tierOf,
+    );
     const outcomes = await Promise.all([
       ...live.map((source) => this.syncOne(source.id, undefined, nowMs)),
       ...rechecks.map((source) => this.recheckDeadSource(source.id, nowMs)),
