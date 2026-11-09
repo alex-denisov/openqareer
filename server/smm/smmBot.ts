@@ -133,6 +133,7 @@ export class SmmBot {
       createdToday: store.countCreatedSince(mskDayStart(now()), 'schedule'),
       acceptedTotal: store.countAccepted(),
       pending: store.countPending(),
+      lastCreatedMs: store.recentPosts(1)[0]?.createdMs ?? null,
     });
     if (due) await this.generateScheduled();
   }

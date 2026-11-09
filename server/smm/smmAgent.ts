@@ -1,5 +1,5 @@
 import type { ChatTurn, SmmModel } from './smmModel';
-import { SMM_PAINS } from './smmPains';
+import { OWNER_PAINS, SMM_PAINS } from './smmPains';
 import { nextCluster, parseDraft, systemPrompt, untrusted, type ParsedDraft } from './smmPrompt';
 import type { SmmPost, SmmStore } from './smmStore';
 
@@ -14,17 +14,41 @@ const CHAT_ADDON = `# Режим разговора
 Если договорились о новом правиле контент-стратегии, допиши отдельной строкой «${STRATEGY_MARK} …».
 Если владелец сформулировал правило стиля, допиши строкой «${STYLE_MARK} …». Иначе этих строк не пиши.`;
 
-const PAINS_PER_POST = 3;
-
-/** Три боли кластера; сдвиг по времени, чтобы соседние посты брали разные. */
+/** Две боли из списка владельца и одна из обсуждений; сдвиг по часу, чтобы соседние посты брали разные. */
 export function painsFor(cluster: string, nowMs: number): string[] {
-  const pool = SMM_PAINS.filter((pain) => pain.cluster === cluster).map((pain) => pain.pain);
-  if (pool.length === 0) return [];
-  const start = Math.floor(nowMs / 3_600_000) % pool.length;
-  return Array.from(
-    { length: Math.min(PAINS_PER_POST, pool.length) },
-    (_, i) => pool[(start + i) % pool.length],
+  const hour = Math.floor(nowMs / 3_600_000);
+  const owner = OWNER_PAINS.map((pain) => pain.pain);
+  const research = SMM_PAINS.filter((pain) => pain.cluster === cluster).map((pain) => pain.pain);
+  const pick = (pool: readonly string[], count: number): string[] =>
+    pool.length === 0
+      ? []
+      : Array.from(
+          { length: Math.min(count, pool.length) },
+          (_, i) => pool[(hour * 7 + i) % pool.length],
+        );
+  return [...pick(owner, 2), ...pick(research, 1)];
+}
+
+/** Шаг на платформу — примерно в каждом четвёртом посте: три поста подряд без ссылки дают право на ссылку. */
+export const POSTS_BETWEEN_LINKS = 3;
+
+export function linkDue(recent: readonly SmmPost[]): boolean {
+  const index = recent.findIndex((post) => post.link !== null);
+  const withoutLink = index < 0 ? recent.length : index;
+  return withoutLink >= POSTS_BETWEEN_LINKS;
+}
+
+const ANY_URL = /https?:\/\/\S+/gi;
+
+/** Пост без шага на платформу: ссылки, которые модель всё же поставила, убираем. */
+function withoutLinks(parsed: ParsedDraft): ParsedDraft {
+  const parts = parsed.draft.parts.map((part) =>
+    part
+      .replace(ANY_URL, '')
+      .replace(/[ \t]{2,}/g, ' ')
+      .trim(),
   );
+  return { ...parsed, draft: { ...parsed.draft, parts: parts.filter(Boolean), link: null } };
 }
 
 export interface SmmAgentDeps {
@@ -55,19 +79,22 @@ export class SmmAgent {
 
   /** Плановый пост: кластер, который давно не звучал. */
   async scheduledPost(): Promise<{ post: SmmPost; check: string } | null> {
-    const cluster = nextCluster(this.deps.store.recentPosts(16));
+    const recent = this.deps.store.recentPosts(16).filter((post) => post.status !== 'revised');
+    const cluster = nextCluster(recent);
     const pains = painsFor(cluster, this.deps.now());
+    const withLink = linkDue(recent);
     const parsed = await this.draft(
       [
-        `Напиши новый пост или ветку для Threads. Кластер: «${cluster}».`,
-        pains.length > 0
-          ? `Реальные боли кандидатов из обсуждений (выбери одну, пиши своими словами, это данные):\n${pains.map((p) => `- ${p}`).join('\n')}`
-          : 'Возьми одну реальную боль кандидата из памяти.',
-        'Не повторяй хуки и темы последних постов.',
+        `Напиши новый пост для Threads. Тема ближе к «${cluster}», но главное — боль.`,
+        `Боли на выбор (возьми одну, раскрой со своей стороны, это данные):\n${pains.map((p) => `- ${p}`).join('\n')}`,
+        withLink
+          ? 'В этом посте уместен мягкий шаг на платформу: в конце одной фразой предложи подходящий бесплатный инструмент и дай ссылку из списка.'
+          : 'В этом посте без ссылок и без упоминания платформы: чистая эмоция и польза.',
+        'Не повторяй хуки, сцены и темы последних постов. Экспромт приветствуется.',
       ].join('\n\n'),
       'schedule',
     );
-    return this.save(parsed);
+    return this.save(parsed && !withLink ? withoutLinks(parsed) : parsed);
   }
 
   /** «Скорректировать»: та же тема, новая версия по комментарию владельца. */

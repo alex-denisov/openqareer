@@ -51,7 +51,7 @@ async function completeWithChain(
           model: stage.model,
           messages: turns.map((turn) => ({ role: turn.role, content: turn.content })),
           max_tokens: OUTPUT_TOKENS,
-          temperature: 0.9,
+          temperature: 1,
         },
         { signal: AbortSignal.timeout(stage.timeoutMs) },
       );

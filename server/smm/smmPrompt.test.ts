@@ -108,10 +108,20 @@ describe('schedule', () => {
     const day = mskDayStart(Date.UTC(2026, 10, 9, 12));
     expect(new Date(slotTime(day, 0, 4)).toISOString()).toBe('2026-11-09T04:00:00.000Z');
     const at = Date.UTC(2026, 10, 9, 4, 1);
-    expect(isPostDue({ nowMs: at, createdToday: 0, acceptedTotal: 0, pending: 0 })).toBe(true);
-    expect(isPostDue({ nowMs: at, createdToday: 0, acceptedTotal: 0, pending: 3 })).toBe(false);
     expect(
-      isPostDue({ nowMs: Date.UTC(2026, 10, 9, 3), createdToday: 0, acceptedTotal: 0, pending: 0 }),
+      isPostDue({ nowMs: at, createdToday: 0, acceptedTotal: 0, pending: 0, lastCreatedMs: null }),
+    ).toBe(true);
+    expect(
+      isPostDue({ nowMs: at, createdToday: 0, acceptedTotal: 0, pending: 1, lastCreatedMs: null }),
+    ).toBe(false);
+    expect(
+      isPostDue({
+        nowMs: Date.UTC(2026, 10, 9, 3),
+        createdToday: 0,
+        acceptedTotal: 0,
+        pending: 0,
+        lastCreatedMs: null,
+      }),
     ).toBe(false);
   });
 });
@@ -194,5 +204,30 @@ describe('pain bank', () => {
     for (const cluster of SMM_CLUSTERS.filter((c) => c !== 'кулуары основателя')) {
       expect(painsFor(cluster, 0).length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('pace and links (owner 09.11)', () => {
+  it('waits an hour after the previous post and stops after 22:00 Moscow', () => {
+    const at = Date.UTC(2026, 10, 9, 8);
+    const base = { createdToday: 1, acceptedTotal: 0, pending: 0 };
+    expect(isPostDue({ ...base, nowMs: at, lastCreatedMs: at - 59 * 60_000 })).toBe(false);
+    expect(isPostDue({ ...base, nowMs: at, lastCreatedMs: at - 61 * 60_000 })).toBe(true);
+    expect(isPostDue({ ...base, nowMs: Date.UTC(2026, 10, 9, 19, 30), lastCreatedMs: null })).toBe(
+      false,
+    );
+  });
+
+  it('a link is due only after three posts without one', async () => {
+    const { linkDue } = await import('./smmAgent');
+    const post = (link: string | null) => ({ link }) as never;
+    expect(linkDue([])).toBe(false);
+    expect(linkDue([post(null), post(null)])).toBe(false);
+    expect(linkDue([post(null), post(null), post(null), post('https://openqareer.com/')])).toBe(
+      true,
+    );
+    expect(linkDue([post('https://openqareer.com/'), post(null), post(null), post(null)])).toBe(
+      false,
+    );
   });
 });
