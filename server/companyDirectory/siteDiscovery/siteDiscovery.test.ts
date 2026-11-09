@@ -74,3 +74,12 @@ describe('B627 site discovery', () => {
     expect(readPendingCompanies(db, 10)).toEqual([]);
   });
 });
+
+describe('B627 model URLs', () => {
+  it('accepts only public host names', async () => {
+    const { isPublicHost } = await import('./siteDiscovery');
+    expect(isPublicHost(new URL('https://acme.com/careers'))).toBe(true);
+    for (const bad of ['http://127.0.0.1/', 'http://localhost/', 'http://[::1]/', 'https://acme.com:8080/', 'http://db.internal/', 'file:///etc/passwd'])
+      expect(isPublicHost(new URL(bad))).toBe(false);
+  });
+});

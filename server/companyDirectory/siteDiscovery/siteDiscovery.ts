@@ -57,12 +57,21 @@ export interface Discovery {
 
 const LINKEDIN = /linkedin\.com/i;
 
+/** Model-supplied URLs: public DNS names on default ports only, no IP literals or local names. */
+export function isPublicHost(url: URL): boolean {
+  if (!/^https?:$/.test(url.protocol) || url.port !== '' || url.username || url.password) return false;
+  const host = url.hostname.toLowerCase();
+  if (!host.includes('.') || /^[\d.]+$/.test(host) || host.includes(':') || host.startsWith('[')) return false;
+  return !/(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(host);
+}
+
 function absolute(url: string | null | undefined): string | undefined {
   const value = url?.trim();
   if (!value) return undefined;
   const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
   try {
-    return new URL(withScheme).href;
+    const url = new URL(withScheme);
+    return isPublicHost(url) ? url.href : undefined;
   } catch {
     return undefined;
   }
