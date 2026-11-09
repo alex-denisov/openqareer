@@ -37317,7 +37317,7 @@
   {
     "companyKey": "n8n",
     "companyName": "n8n",
-    "websiteUrl": "https://n8n.com/",
+    "websiteUrl": "https://n8n.io/",
     "careersUrl": "https://jobs.ashbyhq.com/n8n",
     "linkedinUrl": "https://www.linkedin.com/company/n8n/jobs/",
     "linkedinOrgId": "28491094",
@@ -37333,14 +37333,12 @@
     "updatedAt": "2026-11-09T00:00:00Z",
     "evidence": {
       "websiteUrl": {
-        "value": "https://n8n.com/",
-        "how": "existing row, checked by page; unconfirmed: HTTP 0 <urlopen error [Errno 61] Connection refused>",
-        "confirmed": false
+        "value": "https://n8n.io/",
+        "how": "manual check 09.11: n8n.io/careers links jobs.ashbyhq.com/n8n and linkedin.com/company/n8n; n8n.com does not answer"
       },
       "ats": {
         "value": "ashby:n8n",
-        "confirmed": false,
-        "how": "unconfirmed: board API ok (49 jobs, name=None), not linked from the site"
+        "how": "linked from n8n.io/careers"
       },
       "careersUrl": {
         "value": "https://jobs.ashbyhq.com/n8n",

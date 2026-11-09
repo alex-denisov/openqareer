@@ -64,7 +64,7 @@ def clean(r: dict, ves: dict) -> dict:
         if v["notes"] and not out["notes"]:
             out["notes"] = v["notes"]
     if r.get("hirehiVacancies") is not None:
-        ev["hirehi"] = {"value": r["hints"]["hirehiSlug"], "how": f"{r['hirehiVacancies']} vacancies on hirehi.ru"}
+        ev["hirehi"] = {"value": (r.get("hints") or {}).get("hirehiSlug", r["companyKey"]), "how": f"{r['hirehiVacancies']} vacancies on hirehi.ru"}
     for k in ("geo", "industry", "domainGroup"):
         if out.get(k) and k not in ev:
             ev[k] = {"value": out[k], "how": "existing row (agent import), not re-checked"}

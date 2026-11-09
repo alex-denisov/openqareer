@@ -385,6 +385,7 @@ def hirehi_org(f: Fetcher, slug: str) -> dict:
 
 _hh_lock = threading.Lock()
 _hh_last = [0.0]
+HIREHI_UA = "openqareer-company-directory/1.0 (+https://openqareer.com)"
 HIREHI_INTERVAL = 0.35  # HireHi answers 429 above ~3 requests/s
 
 
@@ -396,7 +397,7 @@ def _hirehi_get(url: str) -> str:
                 time.sleep(wait)
             _hh_last[0] = time.time()
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA, "Range": "bytes=0-60000"})
+            req = urllib.request.Request(url, headers={"User-Agent": HIREHI_UA, "Range": "bytes=0-60000"})
             with urllib.request.urlopen(req, timeout=TIMEOUT, context=_ssl) as resp:
                 return resp.read(60_000).decode("utf-8", errors="replace")
         except urllib.error.HTTPError as err:
@@ -424,7 +425,8 @@ def fill_profile(f: Fetcher, row: dict, out: dict, ev: dict) -> None:
     if org.get("desc") and not out.get("notes"):
         out["notes"] = org["desc"]
     if not out.get("industry") or not out.get("domainGroup"):
-        c = classify(f"{row['companyName']}. {org.get('desc') or ''}")
+        desc = org.get("desc") or ""
+        c = classify(desc) if desc and "открытых ваканс" not in desc else None
         if c:
             out["domainGroup"], out["industry"] = out.get("domainGroup") or c[0], out.get("industry") or c[1]
             how = f"keywords in HireHi description: {', '.join(c[2])}"
@@ -457,7 +459,10 @@ def collect_from_pages(pages: list[dict], official: str) -> dict:
             s = linkedin_slug(link) if "linkedin.com" in h else None
             if s:
                 li.append(s)
-            if reg_domain(h) == official and CAREER_WORDS.search(urllib.parse.urlparse(link).path):
+            path = urllib.parse.urlparse(link).path
+            if re.search(r"\.(js|css|png|jpe?g|svg|gif|webp|json|xml|pdf|ico|woff2?)$", path, re.I):
+                continue
+            if reg_domain(h) == official and CAREER_WORDS.search(path):
                 careers.append(link.split("#")[0])
     return {"ats": ats, "li": li, "careers": careers}
 
@@ -540,7 +545,7 @@ def resolve(f: Fetcher, row: dict) -> dict:
                 continue
             seen.add(u)
             p = f.get(u)
-            if p["status"] == 200:
+            if p["status"] == 200 and not re.search(r"/(404|not-found)\b", p.get("url") or ""):
                 fh = host_of(p["url"])
                 if reg_domain(fh) == official or is_ats_host(fh):
                     careers_ok.append(p["url"])
