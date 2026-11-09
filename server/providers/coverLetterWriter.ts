@@ -107,7 +107,7 @@ const VERTEX_LETTER_STAGE_MS = 60_000;
 export const COVER_LETTER_VERTEX_TIMEOUT_MS = VERTEX_LETTER_STAGE_MS;
 /** Сумма ступеней: каждая успевает ответить даже после отказа предыдущей. */
 export const COVER_LETTER_BUDGET_MS =
-  DEEPSEEK_LETTER_STAGE_MS + GLM_LETTER_STAGE_MS + VERTEX_LETTER_STAGE_MS;
+  2 * DEEPSEEK_LETTER_STAGE_MS + GLM_LETTER_STAGE_MS + VERTEX_LETTER_STAGE_MS;
 
 export async function withinTimeBudget(
   writing: Promise<CoverLetterOutcome>,
@@ -365,7 +365,7 @@ export interface CoverLetterWriterConfig {
 }
 
 /**
- * Цепочка письма (решение владельца, B601): deepseek-v4.1-flash → glm-5.3-flash → Gemini на Vertex;
+ * Цепочка письма (решение владельца, B601; повтор DeepSeek с 10.11): deepseek-v4.1-flash дважды → glm-5.3-flash → Gemini на Vertex;
  * если отказали все, маршрут отвечает ошибкой с повтором, а не шаблоном.
  */
 export function buildCoverLetterWriter(

@@ -79,7 +79,12 @@ export const MODEL_CHAINS = {
    * Сопроводительное письмо (решение владельца, B601, 06.11): порядок по его чтению писем на настоящем
    * мастер-профиле. Отменяет для письма правило «Gemini первым» от 04.11.
    */
-  coverLetters: [DEEPSEEK_FLASH, GLM_FLASH, VERTEX],
+  /**
+   * B601, 10.11: бонус Vertex кончился 09.11 (`vertexCredit.ts`), Gemini теперь пропускается. GLM на проде
+   * обрывала письмо и писала по-русски на английскую вакансию, поэтому DeepSeek спрашивается второй раз:
+   * отказ проверки у него случайный, повтор пишет другой текст.
+   */
+  coverLetters: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, GLM_FLASH, VERTEX],
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому

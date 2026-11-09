@@ -257,11 +257,15 @@ describe('QueuedCoverLetterWriter', () => {
 });
 
 describe('цепочка письма (решение владельца, B601)', () => {
-  it('DeepSeek, затем GLM через OpenRouter', () => {
+  it('DeepSeek дважды, затем GLM через OpenRouter', () => {
     const writer = buildCoverLetterWriter({ providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' } }) as unknown as {
       descriptors: readonly string[];
     };
-    expect(writer.descriptors).toEqual(['openrouter:deepseek/deepseek-v4.1-flash', 'openrouter:z-ai/glm-5.3-flash']);
+    expect(writer.descriptors).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:z-ai/glm-5.3-flash',
+    ]);
   });
 });
 

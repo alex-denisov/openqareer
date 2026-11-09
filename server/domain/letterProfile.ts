@@ -75,10 +75,32 @@ function linkedIds(draft: ResumeDraft): Set<string> {
   return new Set(evidence.flatMap((id) => (id ? [id] : [])));
 }
 
+/**
+ * Заголовок уточнений говорит, что место работы у пунктов не указано. 10.11 на проде пункты без места
+ * («операционный бюджет около 2 млрд ₽») модель приписывала соседней компании профиля в 4 письмах из 5.
+ */
+export const CANDIDATE_NOTES_TITLE =
+  'УТОЧНЕНИЯ КАНДИДАТА К ПРОФИЛЮ (место работы у пунктов не указано: не приписывай пункт компании, если он сам её не называет)';
+
+function normalized(text: string): string {
+  return text.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+/** Импорт повторяет «о себе» и строку места работы («Директор, Россети Цифра · Москва») отдельными фактами. */
+function repeatsProfile(statement: string, draft: ResumeDraft): boolean {
+  const text = normalized(statement);
+  if (draft.candidate.about && text === normalized(draft.candidate.about)) return true;
+  return draft.experience.some((place) => {
+    const record = normalized([place.title, place.employer, place.location].filter(Boolean).join(' '));
+    return record.length > 0 && text === record;
+  });
+}
+
 /** Факт вне мест работы: уточнение из беседы с консультантом, подтверждённые раньше импортированных. */
 function candidateNotes(draft: ResumeDraft, usable: readonly VacancyPitchInputFact[]): string[] {
   const linked = linkedIds(draft);
-  const free = usable.filter((fact) => !linked.has(fact.id) && !isStructuredRecordStatement(fact.statement));
+  const free = usable.filter((fact) =>
+    !linked.has(fact.id) && !isStructuredRecordStatement(fact.statement) && !repeatsProfile(fact.statement, draft));
   const confirmed = free.filter((fact) => fact.status !== 'proposed');
   const imported = free.filter((fact) => fact.status === 'proposed');
   return [...confirmed, ...imported].map((fact) => `- ${fact.statement.trim()}`);
@@ -137,6 +159,6 @@ export function letterProfileText({
     ...draftSections(draft, withheldEvidenceIds),
     ...joinedLine('LANGUAGES', visibleItems(draft.languages, withheldEvidenceIds).map((item) => [item.name, item.cefr ?? item.sourceLabel].filter(Boolean).join(' '))),
     ...joinedLine('SKILLS', visibleItems(draft.skills, withheldEvidenceIds).map((item) => item.name)),
-    ...section('УТОЧНЕНИЯ КАНДИДАТА К ПРОФИЛЮ', notes),
+    ...section(CANDIDATE_NOTES_TITLE, notes),
   ].map(withoutContacts));
 }

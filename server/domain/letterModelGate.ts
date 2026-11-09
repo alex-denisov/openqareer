@@ -20,7 +20,7 @@ export interface LetterGateSources {
   readonly resumeAttached?: boolean;
 }
 
-export type LetterGateRule = 'number' | 'name' | 'resume';
+export type LetterGateRule = 'number' | 'name' | 'resume' | 'cyrillic';
 
 export interface LetterGateViolation {
   readonly rule: LetterGateRule;
@@ -73,9 +73,20 @@ function kindOf(rawKind: string | undefined, money: boolean, scale: string | und
   return money || scale ? 'amount' : 'plain';
 }
 
-/** Единица общая на диапазон: «с 23 до 68%» и «99,5–100%» называют проценты оба раза. */
+/**
+ * Единица общая на диапазон: «с 23 до 68%» и «99,5–100%» называют проценты оба раза. 10.11 на проде
+ * «from 91% to 97%» отклонялось при «с 91 до 97 %» в профиле: английские письма уходили к GLM и в 503.
+ */
+const SHARED_PERCENT_RANGE = new RegExp(String.raw`(${NUMBER})\s?[–—-]\s?(${NUMBER})\s?%`, 'gu');
+const SHARED_PERCENT_TRANSITION = new RegExp(
+  String.raw`(?<!\p{L})(с|со|от|from)(\s+)(${NUMBER})(\s+)(до|to)(\s+)(${NUMBER})\s?%`,
+  'giu',
+);
+
 function withSharedPercent(text: string): string {
-  return text.replace(new RegExp(String.raw`(${NUMBER})\s?[–—-]\s?(${NUMBER})\s?%`, 'gu'), '$1% – $2%');
+  return text
+    .replace(SHARED_PERCENT_RANGE, '$1% – $2%')
+    .replace(SHARED_PERCENT_TRANSITION, '$1$2$3%$4$5$6$7%');
 }
 
 function quantities(text: string): Quantity[] {
@@ -234,7 +245,8 @@ function isKnownName(word: string, known: ReadonlySet<string>): boolean {
 /** Термин направления: аббревиатура, смешанный регистр или цифра внутри слова. */
 function isTerm(word: string): boolean {
   if (COMPANY_ABBREVIATIONS.has(word.toLocaleLowerCase())) return false;
-  return /^\p{Lu}[\p{Lu}\p{N}]*$/u.test(word) || /\p{Ll}\p{Lu}/u.test(word) || /\p{N}/u.test(word);
+  // «KPIs», «SLAs»: множественное число аббревиатуры тоже термин (10.11).
+  return /^\p{Lu}[\p{Lu}\p{N}]*$/u.test(word) || /^\p{Lu}{2,}s$/u.test(word) || /\p{Ll}\p{Lu}/u.test(word) || /\p{N}/u.test(word);
 }
 
 function hasForeignName(sentence: string, known: ReadonlySet<string>, language: 'en' | 'ru'): boolean {
@@ -263,6 +275,24 @@ function withoutVacancyText(sentence: string, vacancy: readonly string[]): strin
   return vacancy.reduce((text, part) => (part ? text.split(part).join(' ') : text), sentence);
 }
 
+/** Названия компаний из строк мест работы профиля («## Должность | Компания | …») и из вакансии. */
+function companyNames(sources: LetterGateSources): string[] {
+  const employers = sources.candidate.flatMap((line) => {
+    const employer = line.startsWith('## ') ? line.slice(3).split(' | ')[1] : undefined;
+    return employer ? [employer] : [];
+  });
+  return [...employers, ...sources.vacancy.filter((part) => part.length <= 80)];
+}
+
+/**
+ * Приёмка B601: в английском письме кириллица только в названиях компаний. 10.11 GLM оставляла
+ * «1С:Бухгалтерия 8.3» кириллицей; такое письмо уступает следующей ступени.
+ */
+function hasForeignCyrillic(sentence: string, companies: readonly string[]): boolean {
+  const rest = companies.reduce((text, name) => (name ? text.split(name).join(' ') : text), sentence);
+  return /\p{Script=Cyrillic}/u.test(rest);
+}
+
 export function reviewLetterBody(body: string, sources: LetterGateSources): LetterGateViolation[] {
   const profileSentences = sources.candidate.flatMap(sentencesOf).filter((sentence) => !NEGATED.test(sentence));
   const profile = profileSentences.join('\n');
@@ -278,9 +308,15 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });
+  const companies = companyNames(sources);
+  const cyrillic = sources.language === 'en'
+    ? sentences.filter((sentence) => hasForeignCyrillic(sentence, companies)).map((sentence) => ({ rule: 'cyrillic' as const, sentence }))
+    : [];
   if (sources.resumeAttached === false) {
     const promised = sentences.filter((sentence) => RESUME_NOTE.test(sentence));
-    return [...checked, ...promised.map((sentence) => ({ rule: 'resume' as const, sentence }))];
+    return [...checked, ...cyrillic, ...promised.map((sentence) => ({ rule: 'resume' as const, sentence }))];
   }
-  return RESUME_NOTE.test(body) ? checked : [...checked, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
+  return RESUME_NOTE.test(body)
+    ? [...checked, ...cyrillic]
+    : [...checked, ...cyrillic, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
 }

@@ -478,6 +478,10 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     await request({ language: 'en', excludedEvidenceIds: ['mem-601'] });
     expect(inputs[1]?.chosenLanguage).toBe('en');
     expect(inputs[1]?.profile).toContain('Вырастил выручку до 2 млрд рублей');
+
+    // 10.11: вакансия без кириллицы — письмо английское, даже если профиль русский (GLM писала по-русски).
+    await request({ vacancy: { title: 'Warehouse Manager', description: 'Full English vacancy text for the warehouse.' } });
+    expect(inputs[2]?.chosenLanguage).toBe('en');
   });
 
   // B251, S2, architecture.md §4: an optional `applicationId` saves the
