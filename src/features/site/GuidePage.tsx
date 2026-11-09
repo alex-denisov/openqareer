@@ -7,7 +7,7 @@ import {
   collectionPath,
   type GuideCollection,
 } from '../../../shared/guides/collection';
-import { AuthorByline } from './AuthorPage';
+import { AuthorByline } from './AuthorByline';
 import type {
   Guide,
   GuideTable,

@@ -26,7 +26,6 @@ import {
   salaryPublicPages,
   type PublicPage,
 } from './publicPages';
-import { AUTHOR_PATH } from './author';
 
 /** Каждый публичный адрес, который витрина имеет право назвать. */
 export const AEO_PUBLISHED_PATHS: readonly string[] = [
@@ -48,7 +47,6 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   ...GUIDES.map((guide) => guidePath(guide.slug)),
   BLOG_ROOT,
   ...BLOG_POSTS.map((post) => blogPath(post.slug)),
-  AUTHOR_PATH,
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
 ];
 

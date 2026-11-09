@@ -466,7 +466,7 @@ export async function registerStaticDelivery(
     registerInterviewQuestionRoutes(app, { ...config, signedIn });
     registerGuideRoutes(app, config);
     registerBlogRoutes(app, config);
-    registerAuthorRoutes(app, { staticRoot: config.staticRoot, readPhoto: readAuthorPhoto });
+    registerAuthorRoutes(app, { readPhoto: readAuthorPhoto });
     registerMarketReportRoutes(app, config);
     await app.register(fastifyStatic, {
       root: config.staticRoot,

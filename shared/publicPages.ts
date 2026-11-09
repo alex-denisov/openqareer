@@ -18,7 +18,6 @@ import {
   publishedInterviewProfessions,
 } from './interviewQuestions';
 import { SALARY_COUNTRIES, SALARY_POOL_COUNTRIES } from './salaryPublicPages';
-import { AUTHOR, AUTHOR_PATH } from './author';
 import { CATALOG_ROOT } from './vacancyCatalogRoutes';
 
 /** Same slug as `RELOCATION_PLACE` in server/vacancies/catalogChips. */
@@ -45,7 +44,6 @@ export type PublicPageGroup =
   | 'Вопросы на собеседовании'
   | 'Зарплаты'
   | 'Отчёты о рынке'
-  | 'Автор'
   | 'Правовые документы';
 
 /** Последнее изменение лендинга и страниц помощи (B535). */
@@ -190,13 +188,6 @@ export function publicPages(): PublicPage[] {
       group: 'Инструменты',
     },
     {
-      path: AUTHOR_PATH,
-      title: `${AUTHOR.nameRu}, ${AUTHOR.jobTitleRu}`,
-      description: `Автор материалов openqareer: ${AUTHOR.lead}`,
-      updatedAt: AUTHOR.checkedAt,
-      group: 'Автор',
-    },
-    {
       path: CATALOG_ROOT,
       title: 'Каталог вакансий',
       description:
@@ -234,7 +225,6 @@ const GROUP_ORDER: readonly PublicPageGroup[] = [
   'Вопросы на собеседовании',
   'Зарплаты',
   'Отчёты о рынке',
-  'Автор',
   'Правовые документы',
 ];
 

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { buildLlmsFullTxt, buildLlmsTxt, llmsPages, SITE_ORIGIN } from './aeoSurface';
 import { publicPages, salaryPublicPages, type PublicPage } from './publicPages';
 import { staticSitemapUrls } from '../server/seo/sitemapXml';
-import { AUTHOR_PATH } from './author';
 import { RELOCATION_PLACE } from '../server/vacancies/catalogChips';
 
 const report: PublicPage = {
@@ -45,10 +44,9 @@ describe('page registry → sitemap and llms.txt', () => {
     expect(publicPages().map((page) => page.path)).toContain(`/vacancies/${RELOCATION_PLACE}`);
   });
 
-  it('paths are unique and the author page is registered', () => {
+  it('paths are unique', () => {
     const paths = llmsPages().map((page) => page.path);
     expect(new Set(paths).size).toBe(paths.length);
-    expect(paths).toContain(AUTHOR_PATH);
   });
 
   it('database pages travel into the sitemap and llms.txt', () => {
