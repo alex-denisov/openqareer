@@ -425,7 +425,8 @@ def fill_profile(f: Fetcher, row: dict, out: dict, ev: dict) -> None:
     if org.get("desc") and not out.get("notes"):
         out["notes"] = org["desc"]
     if not out.get("industry") or not out.get("domainGroup"):
-        c = classify(f"{row['companyName']}. {org.get('desc') or ''}")
+        desc = org.get("desc") or ""
+        c = classify(desc) if desc and "открытых ваканс" not in desc else None
         if c:
             out["domainGroup"], out["industry"] = out.get("domainGroup") or c[0], out.get("industry") or c[1]
             how = f"keywords in HireHi description: {', '.join(c[2])}"
@@ -458,7 +459,10 @@ def collect_from_pages(pages: list[dict], official: str) -> dict:
             s = linkedin_slug(link) if "linkedin.com" in h else None
             if s:
                 li.append(s)
-            if reg_domain(h) == official and CAREER_WORDS.search(urllib.parse.urlparse(link).path):
+            path = urllib.parse.urlparse(link).path
+            if re.search(r"\.(js|css|png|jpe?g|svg|gif|webp|json|xml|pdf|ico|woff2?)$", path, re.I):
+                continue
+            if reg_domain(h) == official and CAREER_WORDS.search(path):
                 careers.append(link.split("#")[0])
     return {"ats": ats, "li": li, "careers": careers}
 
@@ -541,7 +545,7 @@ def resolve(f: Fetcher, row: dict) -> dict:
                 continue
             seen.add(u)
             p = f.get(u)
-            if p["status"] == 200:
+            if p["status"] == 200 and not re.search(r"/(404|not-found)\b", p.get("url") or ""):
                 fh = host_of(p["url"])
                 if reg_domain(fh) == official or is_ats_host(fh):
                     careers_ok.append(p["url"])
