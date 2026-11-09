@@ -60,3 +60,19 @@ describe('coverLetterPrompt: опыта нет, резюме не приложи
     expect(coverLetterPrompt(input)).toContain('В конце скажи, что резюме приложено');
   });
 });
+
+describe('coverLetterPrompt: имя для подписи на языке письма (B624, 09.11)', () => {
+  const input = { vacancy: 'Head of Data, Сбер', profile: 'Руководил данными.' };
+
+  it('с именем просит вернуть его отдельной последней строкой на языке сообщения', () => {
+    const prompt = coverLetterPrompt({ ...input, candidateName: 'Alexey Denisov' });
+    expect(prompt).not.toContain('Верни только текст сообщения.');
+    expect(prompt).toMatch(/Имя для подписи: .*Alexey Denisov.*на языке сообщения/su);
+    expect(prompt.endsWith('.')).toBe(true);
+  });
+
+  it('без имени запрос прежний, дословно утверждённый', () => {
+    expect(coverLetterPrompt({ ...input, candidateName: '  ' })).toBe(coverLetterPrompt(input));
+    expect(coverLetterPrompt(input)).toContain('Верни только текст сообщения.');
+  });
+});

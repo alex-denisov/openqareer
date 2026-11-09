@@ -8,6 +8,7 @@ import {
 import type { ChatCompletionClient } from './roleNamer';
 import { modelRegistry, type ProviderId } from './modelRegistry';
 import { GeminiCoverLetterWriter } from './geminiCoverLetterWriter';
+import { splitSignatureLine } from '../domain/letterSignature';
 import { VertexTokenProvider, vertexPublisherBaseUrl, type VertexConfig } from './vertexAi';
 import type { ProviderRoute } from './providerQueue';
 import { PROVIDER_STAGE_MAX_RETRIES, PROVIDER_STAGE_TIMEOUT_MS } from './stageTimeout';
@@ -61,6 +62,8 @@ export interface CoverLetterWriteInput {
   readonly resumeAttached?: boolean;
   /** Названия нарушенных правил письма; очередь отдаёт отклонённое письмо следующей ступени. */
   readonly review?: (body: string) => readonly string[];
+  /** Имя из профиля как есть: модель возвращает его на языке письма (B624). */
+  readonly candidateName?: string;
 }
 
 /** Спрашивать модель не о чем: это не отказ провайдера. */
@@ -81,6 +84,8 @@ export interface CoverLetterFailure {
 export interface CoverLetterOutcome {
   readonly body?: string;
   readonly stage?: string;
+  /** Имя для подписи, как его вернула модель; проверяет его вызывающий (B624). */
+  readonly senderName?: string;
   readonly failure?: CoverLetterFailure;
 }
 
@@ -185,9 +190,11 @@ export function acceptModelBody(
   cutByLimit: boolean,
   stage: string,
 ): CoverLetterOutcome {
-  const body = withoutClosingLine(content?.trim() ?? '');
+  const signed = splitSignatureLine(content?.trim() ?? '');
+  const body = withoutClosingLine(signed.body);
   const detail = refusalReason(body, cutByLimit);
-  return detail ? { failure: { stage, kind: 'unusable_response', detail } } : { body, stage };
+  if (detail) return { failure: { stage, kind: 'unusable_response', detail } };
+  return signed.name ? { body, stage, senderName: signed.name } : { body, stage };
 }
 
 function plainVacancyText(text: string): string {
@@ -224,6 +231,7 @@ export function letterPrompt(input: CoverLetterWriteInput): string {
     ...(input.gender ? { gender: input.gender } : {}),
     ...(input.chosenLanguage ? { chosenLanguage: input.chosenLanguage } : {}),
     ...(input.resumeAttached === false ? { resumeAttached: false } : {}),
+    ...(input.candidateName ? { candidateName: input.candidateName } : {}),
   });
 }
 
