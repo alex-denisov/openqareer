@@ -171,6 +171,16 @@ const ORPHAN_CLUSTERS_REST_MS = 60 * 60 * 1_000;
  * площадку дважды. На SIGTERM `stop()` ждёт идущие волны не дольше срока и
  * запрещает новые — база закрывается после.
  */
+/** Статусы, при которых исполнитель пула законно ждёт; без записи пауза выглядела как сбой (B625). */
+const LINKEDIN_POOL_IDLE_STATUSES: ReadonlySet<string> = new Set([
+  'outside_window',
+  'window_skipped',
+  'rest_day',
+  'daily_limit',
+  'no_target',
+  'account_not_ready',
+]);
+
 export class MaintenanceWorker {
   private readonly engine: MaintenanceEngine;
   private readonly log: MaintenanceLog;
@@ -184,6 +194,8 @@ export class MaintenanceWorker {
   private readonly titleModel?: TitleModelStep;
   private readonly roleLink?: RoleLinkStep;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
+  /** Последний «тихий» статус пула (окно, лимит, нет цели): пишется только при смене (B625). */
+  private lastLinkedinPoolIdleStatus?: string;
   private readonly purgeRecruiters?: () => number;
   private readonly now: () => number;
   private orphanRestUntil = 0;
@@ -500,6 +512,11 @@ export class MaintenanceWorker {
   async runLinkedinPoolExecutorStep(): Promise<void> {
     if (this.stopped || !this.linkedinPoolExecutor) return;
     const work = this.linkedinPoolExecutor.runStep().then((result) => {
+      const idle = LINKEDIN_POOL_IDLE_STATUSES.has(result.status) ? result.status : undefined;
+      if (idle && idle !== this.lastLinkedinPoolIdleStatus) {
+        this.log.info({ status: idle }, 'linkedin-pool-executor-idle');
+      }
+      this.lastLinkedinPoolIdleStatus = idle;
       if (result.status === 'processed') {
         this.log.info(
           {
