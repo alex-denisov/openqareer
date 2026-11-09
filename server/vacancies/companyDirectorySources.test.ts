@@ -141,3 +141,47 @@ describe('directoryBoard', () => {
     expect(directoryBoard(company({ careersUrl: 'https://acme.com/careers' }))).toBeUndefined();
   });
 });
+
+describe('B628 — directory career sites become sources', () => {
+  it('builds a career_site source from an own careers URL missing from the registry', () => {
+    const plan = planCompanyChannels(REGISTRY, [
+      company({
+        companyKey: 'globex',
+        companyName: 'Globex',
+        careersUrl: 'https://careers.globex.io/jobs',
+      }),
+    ]);
+    expect(plan.channels).toEqual([
+      expect.objectContaining({
+        companyKey: 'globex',
+        kind: 'career_site',
+        sourceId: 'src-company-site-globex',
+      }),
+    ]);
+    const built = plan.sources.find((s) => s.id === 'src-company-site-globex');
+    expect(built).toMatchObject({
+      type: 'career_site',
+      enabled: true,
+      targetUrl: 'https://careers.globex.io/jobs',
+      channelTier: 1,
+      companyKey: 'globex',
+    });
+  });
+
+  it('does not build a site source from the bare website URL or an ATS careers URL', () => {
+    const plan = planCompanyChannels(REGISTRY, [
+      company({ companyKey: 'a', websiteUrl: 'https://a-corp.io' }),
+      company({ companyKey: 'b', careersUrl: 'https://www.linkedin.com/company/b/jobs' }),
+      company({ companyKey: 'c', careersUrl: 'not a url' }),
+    ]);
+    expect(plan.sources.some((s) => s.id.startsWith('src-company-site-'))).toBe(false);
+  });
+
+  it('reads Pinpoint and Personio boards from the careers URL', () => {
+    const plan = planCompanyChannels(REGISTRY, [
+      company({ companyKey: 'p1', careersUrl: 'https://acme1.pinpointhq.com/' }),
+      company({ companyKey: 'p2', careersUrl: 'https://acme2.jobs.personio.de/' }),
+    ]);
+    expect(plan.channels.map((c) => c.kind)).toEqual(['company_ats', 'company_ats']);
+  });
+});

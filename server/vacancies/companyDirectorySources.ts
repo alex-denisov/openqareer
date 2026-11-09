@@ -84,6 +84,8 @@ const CAREERS_URL_BOARDS: readonly [RegExp, AtsProvider][] = [
   [/^https?:\/\/([\w-]+)\.recruitee\.com/i, 'recruitee'],
   [/^https?:\/\/(?:careers|jobs)\.smartrecruiters\.com\/([\w-]+)/i, 'smartrecruiters'],
   [/^https?:\/\/([\w-]+)\.breezy\.hr/i, 'breezy'],
+  [/^https?:\/\/([\w-]+)\.pinpointhq\.com/i, 'pinpoint'],
+  [/^https?:\/\/([\w-]+)\.jobs\.personio\.(?:de|com)/i, 'personio'],
 ];
 
 /** Доска ATS из записи справочника, а если поля пусты — из адреса страницы вакансий. */
@@ -145,6 +147,32 @@ function linkedinCompanySource(company: DirectoryCompany): RegisteredVacancySour
   };
 }
 
+export const COMPANY_SITE_SOURCE_PREFIX = 'src-company-site-';
+const COMPANY_SITE_REFRESH_MINUTES = 720;
+
+/**
+ * B628 — свой адрес вакансий из справочника становится источником общего
+ * адаптера сайтов (JSON-LD, __NEXT_DATA__, встроенная ATS, разметка). Только
+ * явный careers_url: главная страница сайта — не страница вакансий.
+ */
+function companySiteSource(company: DirectoryCompany): RegisteredVacancySource | undefined {
+  const url = company.careersUrl?.trim() ?? '';
+  if (!isOwnSite(url) || !/^https?:\/\//i.test(url)) return undefined;
+  return {
+    id: `${COMPANY_SITE_SOURCE_PREFIX}${company.companyKey}`,
+    name: `${company.companyName} Careers`,
+    type: 'career_site',
+    accessClass: 'open_web',
+    market: 'Вакансии на сайте компании (справочник компаний)',
+    addressStatus: 'live',
+    enabled: true,
+    targetUrl: url,
+    refreshIntervalMinutes: COMPANY_SITE_REFRESH_MINUTES,
+    itemsFoundTotal: 0,
+    itemsActiveTotal: 0,
+  };
+}
+
 function primaryFor(
   company: DirectoryCompany,
   byDomain: ReadonlyMap<string, RegisteredVacancySource>,
@@ -152,6 +180,8 @@ function primaryFor(
 ): { kind: CompanyChannelKind; source: RegisteredVacancySource } | undefined {
   const site = findCareerSite(company, byDomain);
   if (site) return { kind: 'career_site', source: site };
+  const ownSite = companySiteSource(company);
+  if (ownSite) return { kind: 'career_site', source: byId.get(ownSite.id) ?? ownSite };
   const ats = companyAtsSource(company, byId);
   if (ats) return { kind: 'company_ats', source: ats };
   const linkedin = linkedinCompanySource(company);
