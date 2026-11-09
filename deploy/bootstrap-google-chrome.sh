@@ -71,7 +71,8 @@ ExecStart=/usr/bin/Xvfb :99 -screen 0 1440x900x24 -nolisten tcp
 Restart=always
 RestartSec=5s
 NoNewPrivileges=true
-ProtectSystem=strict
+# strict делал /tmp только для чтения: Xvfb не создавал /tmp/.X99-lock.
+ProtectSystem=full
 ProtectHome=true
 
 [Install]
@@ -80,6 +81,7 @@ UNIT
 install_if_changed "$TEMP_DIR/xvfb.service" "$XVFB_UNIT" 0644 && changed_units=1
 
 # 3. Обслуживание видит дисплей.
+install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0700 /var/lib/openqareer/chrome-home
 install -d -o root -g root -m 0755 "$DROPIN_DIR"
 cat > "$TEMP_DIR/dropin.conf" <<'CONF'
 [Unit]
@@ -88,6 +90,9 @@ After=openqareer-xvfb.service
 
 [Service]
 Environment=DISPLAY=:99
+# PrivateTmp прячет сокет X, ProtectHome — домашний каталог (crashpad Chrome).
+BindReadOnlyPaths=-/tmp/.X11-unix
+Environment=HOME=/var/lib/openqareer/chrome-home
 Environment=OPENQAREER_LINKEDIN_CHROME_PATH=/opt/google/chrome/chrome
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 CONF
@@ -96,12 +101,15 @@ install_if_changed "$TEMP_DIR/dropin.conf" "$DROPIN" 0644 && changed_units=1
 if [[ "$changed_units" -eq 1 ]]; then
   systemctl daemon-reload
 fi
-systemctl enable --now openqareer-xvfb.service >/dev/null
+systemctl enable openqareer-xvfb.service >/dev/null
+[[ "$changed_units" -eq 0 ]] || systemctl restart openqareer-xvfb.service
+sleep 3
 systemctl is-active --quiet openqareer-xvfb.service || {
   printf 'openqareer-xvfb.service is not active\n' >&2
   exit 1
 }
 
+[[ -S /tmp/.X11-unix/X99 ]] || { printf 'Xvfb socket /tmp/.X11-unix/X99 is absent\n' >&2; exit 1; }
 printf 'bootstrap-google-chrome: %s, Xvfb :99 active, units changed=%s\n' \
   "$chrome_version" "$changed_units"
 printf 'maintenance picks the display up on its next restart (deploy restarts it)\n'
