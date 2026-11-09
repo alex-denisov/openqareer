@@ -19,12 +19,9 @@ import { circleSummary, CircleTabs } from './VacancyLetterCircles';
 import { LetterCardHeading, LetterDestination } from './VacancyLetterDestination';
 import { resumeRowForLetter } from './vacancyLetterResumeNote';
 import { LetterActions } from './VacancyLetterActions';
-import {
-  LetterEditor,
-  LetterNotices,
-  LetterSettings,
-  PitchBodyState,
-} from './VacancyLetterEditor';
+import type { LetterPlatform } from './VacancyLetterPlatformStep';
+import type { VacancyApplications } from './useVacancyApplications';
+import { LetterEditor, LetterNotices, LetterSettings, PitchBodyState } from './VacancyLetterEditor';
 import { LetterInfoTip } from './VacancyLetterInfoTip';
 import { TariffQuotaNote } from '../tariffs/TariffQuotaNote';
 import { useLetterConsultantSuggestion } from './letterConsultantSuggestion';
@@ -40,7 +37,7 @@ export interface VacancyLetterTarget {
   readonly canonicalCompany: string;
   readonly canonicalLocation?: string | null;
   readonly isRemote?: boolean | null;
-  readonly sources: readonly { readonly sourceName?: string }[];
+  readonly sources: readonly { readonly sourceName?: string; readonly sourceId?: string }[];
   readonly descriptionSummary: string;
   readonly primaryUrl: string;
 }
@@ -63,9 +60,30 @@ interface VacancyLetterScreenProps {
   readonly vacancy: VacancyLetterTarget;
   readonly initialCircle?: ConnectionCircleNumber;
   readonly onBack: () => void;
+  readonly applications?: VacancyApplications;
   readonly onOpenResponses?: () => void;
   readonly onOpenResume?: () => void;
   readonly onOpenExpert?: OpenExpert;
+}
+
+/** B629: the platform step after approval; the mark goes to the same «Отклики» as the row. */
+export function letterPlatform(
+  vacancy: VacancyLetterTarget,
+  applications?: VacancyApplications,
+): LetterPlatform {
+  return {
+    url: vacancy.primaryUrl,
+    applied: applications?.byCluster.get(vacancy.id)?.status === 'applied',
+    onConfirmSent: applications
+      ? () =>
+          applications.record(vacancy.id, 'applied', {
+            title: vacancy.canonicalTitle,
+            company: vacancy.canonicalCompany,
+            url: vacancy.primaryUrl,
+            source: vacancy.sources[0]?.sourceId ?? '',
+          })
+      : undefined,
+  };
 }
 
 function ConnectionsLoading() {
@@ -99,6 +117,7 @@ export function VacancyLetterScreen({
   vacancy,
   initialCircle,
   onBack,
+  applications,
   onOpenResponses,
   onOpenResume,
   onOpenExpert,
@@ -110,6 +129,7 @@ export function VacancyLetterScreen({
       vacancy={vacancy}
       state={state}
       onBack={onBack}
+      platform={letterPlatform(vacancy, applications)}
       onOpenResponses={onOpenResponses}
       onOpenResume={onOpenResume}
       onOpenExpert={onOpenExpert}
@@ -154,6 +174,7 @@ interface VacancyLetterPageProps {
   readonly vacancy: VacancyLetterTarget;
   readonly state: LetterScreenState;
   readonly onBack: () => void;
+  readonly platform?: LetterPlatform;
   readonly onOpenResponses?: () => void;
   readonly onOpenResume?: () => void;
   readonly onOpenExpert?: OpenExpert;
@@ -187,6 +208,7 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
         vacancyUrl={vacancy.primaryUrl}
         frozen={frozen}
         actions={actions}
+        platform={props.platform}
         onOpenResponses={onOpenResponses}
         onOpenResume={onOpenResume}
       />
@@ -299,21 +321,18 @@ function isPitchReady(state: LetterScreenState): boolean {
   );
 }
 
-function LetterCard({
-  state,
-  vacancyUrl,
-  frozen,
-  actions,
-  onOpenResponses,
-  onOpenResume,
-}: {
+interface LetterCardProps {
   readonly state: LetterScreenState;
   readonly vacancyUrl: string;
   readonly frozen: boolean;
   readonly actions: ReturnType<typeof useLetterPageActions>;
+  readonly platform?: LetterPlatform;
   readonly onOpenResponses?: () => void;
   readonly onOpenResume?: () => void;
-}) {
+}
+
+function LetterCard(props: LetterCardProps) {
+  const { state, vacancyUrl, frozen, actions, platform, onOpenResponses, onOpenResume } = props;
   const { circle } = state.circle;
   const compact = useCompactViewport();
   const pitchReady = isPitchReady(state);
@@ -344,6 +363,7 @@ function LetterCard({
         pitchReady={pitchReady}
         onAskEdits={actions.onAskEdits}
         onOpenResponses={onOpenResponses}
+        platform={platform}
       />
     </section>
   );
@@ -377,10 +397,7 @@ function LetterDraftContent({
         />
       ) : null}
       {state.draft.pitch ? (
-        <LetterNotices
-          pitch={state.draft.pitch}
-          onGatherFacts={onGatherFacts}
-        />
+        <LetterNotices pitch={state.draft.pitch} onGatherFacts={onGatherFacts} />
       ) : null}
       <TariffQuotaNote quota="applications" refreshKey={state.draft.loading} />
     </>

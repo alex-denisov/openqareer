@@ -5,6 +5,9 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import type { VacancyLetterTarget } from './VacancyLetterScreen';
 
+/** «Откликнуться» и «Подготовить письмо» ведут в один круг: холодный отклик (B629). */
+export const COLD_LETTER_CIRCLE: ConnectionCircleNumber = 3;
+
 export interface VacancyLetterRouteRequest {
   readonly vacancy: VacancyLetterTarget;
   readonly initialCircle?: ConnectionCircleNumber;

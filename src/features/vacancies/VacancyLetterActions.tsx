@@ -1,5 +1,6 @@
 import { ChatCircleText, Check } from '@phosphor-icons/react';
 import type { ApprovalState } from './vacancyLetterController';
+import { LetterPlatformStep, type LetterPlatform } from './VacancyLetterPlatformStep';
 
 function ApprovedLetterActions({
   onOpenResponses,
@@ -80,20 +81,25 @@ export function LetterActions({
   pitchReady,
   onAskEdits,
   onOpenResponses,
+  platform,
 }: {
   readonly approval: ApprovalState;
   readonly pitchReady: boolean;
   readonly onAskEdits?: () => void;
   readonly onOpenResponses?: () => void;
+  readonly platform?: LetterPlatform;
 }) {
   return (
     <footer className="career-letter-actions">
       {approval.error ? <p role="alert">{approval.error}</p> : null}
       {approval.saved ? (
-        <ApprovedLetterActions
-          onOpenResponses={onOpenResponses}
-          approvedAt={approval.saved.approvedAt}
-        />
+        <>
+          <ApprovedLetterActions
+            onOpenResponses={onOpenResponses}
+            approvedAt={approval.saved.approvedAt}
+          />
+          <LetterPlatformStep platform={platform} />
+        </>
       ) : (
         <DraftLetterActions approval={approval} pitchReady={pitchReady} onAskEdits={onAskEdits} />
       )}

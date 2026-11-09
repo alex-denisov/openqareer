@@ -1,6 +1,7 @@
 import { VacancyFitBlock } from './VacancyFitMark';
 import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
 import type { RowLetterOpen } from './useVacancyLetterRoute';
+import { useVacancyRowApply } from './useVacancyRowApply';
 import { useState, type FormEvent } from 'react';
 import { Archive, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -9,7 +10,6 @@ import { vacancyTrustSignals } from '../../../shared/vacancyTrustSignals';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { RecruiterContactsBlock } from './RecruiterContactsBlock';
 import { recruiterEnrichPayload } from './recruiterEnrichPayload';
-import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { VacancyInfoModal } from './VacancyInfoModal';
 import { VacancyCompanyPathPanel, companyPathActions } from './VacancyCompanyPathPanel';
 import { VacancyRowPush } from './VacancyMobilePush';
@@ -426,12 +426,7 @@ function useVacancyRowState({
   const application = applications?.byCluster.get(cluster.id);
   const applicationArchived = archivedApplicationClusterIds?.has(cluster.id) ?? false;
 
-  // B341: открытие сайта ещё не отклик — отмечаем только по подтверждению.
-  const [externalOpened, setExternalOpened] = useState(false);
-  const handleApplyExternal = () => {
-    void openExternalLink(cluster.primaryUrl);
-    setExternalOpened(true);
-  };
+  const apply = useVacancyRowApply(cluster, onOpenLetter);
   return {
     age: vacancyAge(cluster, now),
     trust: vacancyTrustSignals(cluster, now),
@@ -445,8 +440,7 @@ function useVacancyRowState({
     appliedState,
     savingApplied: appliedState.savingApplied,
     handleOpenLetter: onOpenLetter ? () => onOpenLetter(cluster) : undefined,
-    handleApplyExternal,
-    externalOpened,
+    ...apply,
     handleConfirmSent: appliedState.handleConfirmSent,
   };
 }
@@ -512,13 +506,13 @@ function DetailInterviewSection({
 
 function externalApplyProps(rowState: {
   readonly externalOpened: boolean;
-  readonly handleApplyExternal: () => void;
+  readonly handleApply: () => void;
   readonly handleConfirmSent: () => void | Promise<void>;
   readonly savingApplied: boolean;
 }) {
   return {
     externalOpened: rowState.externalOpened,
-    onApplyExternal: rowState.handleApplyExternal,
+    onApplyExternal: rowState.handleApply,
     onConfirmSent: rowState.handleConfirmSent,
     savingApplied: rowState.savingApplied,
   };
