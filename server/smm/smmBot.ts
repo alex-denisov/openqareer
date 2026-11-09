@@ -50,6 +50,8 @@ export interface SmmBotDeps {
   readonly chatId: string;
   readonly now: () => number;
   readonly log: (event: string, detail?: Record<string, unknown>) => void;
+  /** Плановые посты в чат; выключено, пока владелец не утвердит подачу (09.11). */
+  readonly autopost?: boolean;
 }
 
 function formatDraft(post: SmmPost, check: string): string {
@@ -127,7 +129,7 @@ export class SmmBot {
   /** Тик расписания: пишет пост, если подошёл слот дня. */
   async tick(): Promise<void> {
     const { store, now } = this.deps;
-    if (this.generating || now() < this.scheduleRetryAfterMs) return;
+    if (!this.deps.autopost || this.generating || now() < this.scheduleRetryAfterMs) return;
     const due = isPostDue({
       nowMs: now(),
       createdToday: store.countCreatedSince(mskDayStart(now()), 'schedule'),

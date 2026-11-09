@@ -20,6 +20,7 @@ export interface SmmRuntimeConfig {
   readonly openRouterKey?: string;
   readonly geminiKey?: string;
   readonly ownerUsername: string;
+  readonly autopost: boolean;
 }
 
 /** Бот включается только с токеном и чатом SMM; чат владельца для оповещений — другой. */
@@ -33,6 +34,7 @@ export function readSmmConfig(env: NodeJS.ProcessEnv): SmmRuntimeConfig | null {
     openRouterKey: env.OPENQAREER_OPENROUTER_API_KEY?.trim() || undefined,
     geminiKey: env.OPENQAREER_GEMINI_API_KEY?.trim() || undefined,
     ownerUsername: env.OPENQAREER_SMM_OWNER_USERNAME?.trim() || DEFAULT_OWNER_USERNAME,
+    autopost: env.OPENQAREER_SMM_AUTOPOST === '1',
   };
 }
 
@@ -90,6 +92,7 @@ export function startSmmAssistant(deps: SmmRuntimeDeps): () => void {
   });
   const agent = new SmmAgent({ store, model, ownerBrief, now: Date.now });
   const bot = new SmmBot({
+    autopost: deps.config.autopost,
     store,
     agent,
     telegram: createSmmTelegram(deps.config.token),
