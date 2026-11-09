@@ -358,7 +358,9 @@ describe('MaintenanceWorker (B230)', () => {
       timeout: 10_000,
     });
     expect(firstWaveFinished).toBe(false);
-    expect(nextWaveFinished).toBe(false);
+    // B628: следующая волна не выбирает площадку, которая ещё опрашивается, и
+    // завершается без неё — зависший опрос больше не держит обе волны.
+    await vi.waitFor(() => expect(nextWaveFinished).toBe(true), { timeout: 10_000 });
 
     releaseStuckSource?.();
     await expect(firstWave).resolves.toMatchObject({ synced: expect.any(Number) });

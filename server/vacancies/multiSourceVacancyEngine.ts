@@ -80,6 +80,7 @@ import {
   COMPANY_LANE_CONCURRENCY,
   COMPANY_LANE_LIMIT,
   COMPANY_LANE_PER_HOST,
+  COMPANY_LANE_SOURCE_TIMEOUT_MS,
   pickCompanyLane,
   pickWave,
 } from './syncWave';
@@ -161,7 +162,14 @@ const LISTINGS_CACHE_MS = 5 * 60_000;
  */
 export interface SourceSyncOutcome {
   readonly sourceId: string;
-  readonly status: 'healthy' | 'error' | 'unknown_source' | 'disabled' | 'skipped_needs_query';
+  readonly status:
+    | 'healthy'
+    | 'error'
+    | 'unknown_source'
+    | 'disabled'
+    | 'skipped_needs_query'
+    /** B628: канал компании не ответил за отведённое полосе время; опрос идёт дальше в фоне. */
+    | 'lane_timeout';
   /** How many records the source returned before the freshness filter. */
   readonly fetched: number;
   /** How many of them the pool now holds for this source. */
@@ -429,6 +437,7 @@ export class MultiSourceVacancyEngine {
   private keyedClusterings = 0;
   private fetcher?: SourceFetcher;
   private readonly holdSource: (source: VacancySourceConfig) => boolean;
+  private readonly companyLaneSourceTimeoutMs: number;
   /**
    * Где лежит пул. Движок не держит копию в куче: каждое чтение — вопрос к
    * хранилищу, и память следует за размером запроса, а не пула (B221). Без
@@ -489,8 +498,12 @@ export class MultiSourceVacancyEngine {
     workdayDetailFetch?: WorkdayDetailFetch;
     /** Источник сейчас нельзя опрашивать (пауза бюджета LinkedIn): место в волне не занимает. */
     holdSource?: (source: VacancySourceConfig) => boolean;
+    /** B628: сколько полоса каналов компаний ждёт один источник, прежде чем освободить место. */
+    companyLaneSourceTimeoutMs?: number;
   }) {
     this.holdSource = options?.holdSource ?? (() => false);
+    this.companyLaneSourceTimeoutMs =
+      options?.companyLaneSourceTimeoutMs ?? COMPANY_LANE_SOURCE_TIMEOUT_MS;
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
     for (const src of initial) {
@@ -1946,7 +1959,11 @@ export class MultiSourceVacancyEngine {
     const rechecks = dead
       .filter((source) => nowMs - lastSyncMs(source) >= DEAD_SOURCE_RECHECK_MS)
       .slice(0, DEAD_SOURCE_RECHECKS_PER_TICK);
-    const ready = due.filter((source) => !deadIds.has(source.id) && !this.holdSource(source));
+    // B628: источник, который ещё опрашивается прошлой волной, места не занимает.
+    const ready = due.filter(
+      (source) =>
+        !deadIds.has(source.id) && !this.holdSource(source) && !this.running.has(source.id),
+    );
     const companyLane = pickCompanyLane(
       ready.filter((source) => tierOf(source) === 1),
       COMPANY_LANE_LIMIT,
@@ -1961,7 +1978,7 @@ export class MultiSourceVacancyEngine {
     const outcomes = (
       await Promise.all([
         mapWithConcurrency(companyLane, COMPANY_LANE_CONCURRENCY, (source) =>
-          this.syncOne(source.id, undefined, nowMs),
+          this.syncWithinLane(source.id, nowMs),
         ),
         Promise.all([
           ...live.map((source) => this.syncOne(source.id, undefined, nowMs)),
@@ -1971,6 +1988,20 @@ export class MultiSourceVacancyEngine {
     ).flat();
     this.reclusterIfChanged();
     return outcomes;
+  }
+
+  /** Опрос канала компании с потолком ожидания: зависший сайт не держит место полосы. */
+  private syncWithinLane(sourceId: string, nowMs: number): Promise<SourceSyncOutcome> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<SourceSyncOutcome>((resolve) => {
+      timer = setTimeout(
+        () => resolve({ sourceId, status: 'lane_timeout', fetched: 0, kept: 0 }),
+        this.companyLaneSourceTimeoutMs,
+      );
+    });
+    return Promise.race([this.syncOne(sourceId, undefined, nowMs), timeout]).finally(() =>
+      clearTimeout(timer),
+    );
   }
 
   private async recheckDeadSource(sourceId: string, nowMs: number): Promise<SourceSyncOutcome> {
