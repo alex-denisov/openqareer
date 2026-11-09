@@ -241,15 +241,11 @@ describe('GET /api/v1/admin/users', () => {
     expect(byUsername.json().data.users[0].role).toBe('admin');
 
     const nameOnly = await app.inject({
-      method: 'GET',
-      url: '/api/v1/admin/users?query=Мария&searchField=displayName',
-      headers: { cookie },
+      method: 'GET', url: '/api/v1/admin/users?query=Мария&searchField=displayName', headers: { cookie },
     });
     expect(nameOnly.json().data.total).toBe(1);
     const emailOnly = await app.inject({
-      method: 'GET',
-      url: '/api/v1/admin/users?query=Мария&searchField=email',
-      headers: { cookie },
+      method: 'GET', url: '/api/v1/admin/users?query=Мария&searchField=email', headers: { cookie },
     });
     expect(emailOnly.json().data.total).toBe(0);
   });
@@ -367,34 +363,21 @@ describe('GET /api/v1/admin/audit', () => {
   it('groups block and unblock events under the blocking filter', async () => {
     const app = await createApp();
     const cookie = await signIn(app, ADMIN);
-    const directory = await app.inject({
-      method: 'GET',
-      url: '/api/v1/admin/users?query=candidate.test',
-      headers: { cookie },
-    });
+    const directory = await app.inject({ method: 'GET', url: '/api/v1/admin/users?query=candidate.test', headers: { cookie } });
     const userId = directory.json().data.users[0].id;
     for (const blocked of [true, false]) {
       const changed = await app.inject({
-        method: 'POST',
-        url: `/api/v1/admin/users/${userId}/block`,
-        headers: { cookie },
-        payload: { blocked },
+        method: 'POST', url: `/api/v1/admin/users/${userId}/block`,
+        headers: { cookie }, payload: { blocked },
       });
       expect(changed.statusCode).toBe(200);
     }
     const audit = await app.inject({
-      method: 'GET',
-      url: '/api/v1/admin/audit?action=block_user&query=candidate.test',
-      headers: { cookie },
+      method: 'GET', url: '/api/v1/admin/audit?action=block_user&query=candidate.test', headers: { cookie },
     });
     expect(audit.statusCode).toBe(200);
     expect(audit.json().data.total).toBe(2);
-    expect(
-      audit
-        .json()
-        .data.records.map((record: { action: string }) => record.action)
-        .sort(),
-    ).toEqual(['block_user', 'unblock_user']);
+    expect(audit.json().data.records.map((record: { action: string }) => record.action).sort()).toEqual(['block_user', 'unblock_user']);
   });
 });
 
@@ -686,45 +669,20 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
 describe('GET /api/v1/admin/seo-summary', () => {
   it('rejects anonymous/candidate access and returns only bounded aggregate records to an authorized administrator', async () => {
     const app = await createApp();
-    expect((await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary' })).statusCode).toBe(
-      401,
-    );
+    expect((await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary' })).statusCode).toBe(401);
     const candidateCookie = await signIn(app, CANDIDATE);
-    expect(
-      (
-        await app.inject({
-          method: 'GET',
-          url: '/api/v1/admin/seo-summary',
-          headers: { cookie: candidateCookie },
-        })
-      ).statusCode,
-    ).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie: candidateCookie } })).statusCode).toBe(403);
     const cookie = await signIn(app, ADMIN);
-    const response = await app.inject({
-      method: 'GET',
-      url: '/api/v1/admin/seo-summary?days=28',
-      headers: { cookie },
-    });
+    const response = await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary?days=28', headers: { cookie } });
     expect(response.statusCode).toBe(200);
     expect(response.headers['cache-control']).toBe('no-store');
-    expect(response.json().data).toMatchObject({
-      source: 'internal_operational_records',
-      period: { days: 28 },
-      methodology: { organicConversion: 'unavailable_no_attribution' },
-      searchProviders: { google: { status: 'unavailable' }, yandex: { status: 'unavailable' } },
-    });
+    expect(response.json().data).toMatchObject({ source: 'internal_operational_records',
+      period: { days: 28 }, methodology: { organicConversion: 'unavailable_no_attribution' },
+      searchProviders: { google: { status: 'unavailable' }, yandex: { status: 'unavailable' } } });
     expect(response.body).not.toContain(CANDIDATE.username);
     expect(response.body).not.toContain('candidate_id');
     for (const days of ['0', '91', 'Infinity', '1.5']) {
-      expect(
-        (
-          await app.inject({
-            method: 'GET',
-            url: `/api/v1/admin/seo-summary?days=${days}`,
-            headers: { cookie },
-          })
-        ).statusCode,
-      ).toBe(422);
+      expect((await app.inject({ method: 'GET', url: `/api/v1/admin/seo-summary?days=${days}`, headers: { cookie } })).statusCode).toBe(422);
     }
   });
 
@@ -734,26 +692,14 @@ describe('GET /api/v1/admin/seo-summary', () => {
     const resource = resources.at(-1)!;
     const db = new DatabaseSync(join(resource.directory, 'app.db'));
     try {
-      db.prepare('UPDATE users SET admin_permissions_json = ? WHERE username = ?').run(
-        JSON.stringify({ can_view_audit: false }),
-        ADMIN.username,
-      );
-      expect(
-        (await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie } }))
-          .statusCode,
-      ).toBe(403);
-      db.prepare(
-        "UPDATE users SET role_override = 'CareerPartner', admin_permissions_json = ? WHERE username = ?",
-      ).run(JSON.stringify({ can_view_audit: true }), ADMIN.username);
-      expect(
-        (await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie } }))
-          .statusCode,
-      ).toBe(403);
-    } finally {
-      db.close();
-    }
+      db.prepare('UPDATE users SET admin_permissions_json = ? WHERE username = ?').run(JSON.stringify({ can_view_audit: false }), ADMIN.username);
+      expect((await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie } })).statusCode).toBe(403);
+      db.prepare("UPDATE users SET role_override = 'CareerPartner', admin_permissions_json = ? WHERE username = ?").run(JSON.stringify({ can_view_audit: true }), ADMIN.username);
+      expect((await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie } })).statusCode).toBe(403);
+    } finally { db.close(); }
   });
 });
+
 
 describe('prepared SEO source HTTP boundary', () => {
   it('reads only configured prepared aggregates without provider network or credential access', async () => {
@@ -761,48 +707,22 @@ describe('prepared SEO source HTTP boundary', () => {
     try {
       const snapshot = emptySeoPreparedSnapshot();
       const observedAt = new Date().toISOString();
-      snapshot.providers.google = {
-        latestAttempt: { observedAt, mode: 'official_api', status: 'available', reason: 'none' },
-        lastSuccess: {
-          observedAt,
-          mode: 'official_api',
-          window: null,
-          metrics: {
-            clicks: 0,
-            impressions: 4,
-            ctr: 0,
-            position: null,
-            indexedPages: null,
-            sqi: null,
-          },
-          queries: [],
-          sections: { aggregate: 'available', queries: 'available' },
-        },
-      };
-      const path = join(directory, 'prepared.json');
-      writeFileSync(path, JSON.stringify(snapshot));
-      const network = vi.fn(() => {
-        throw new Error('provider network forbidden');
-      });
+      snapshot.providers.google = { latestAttempt: { observedAt, mode: 'official_api', status: 'available', reason: 'none' },
+        lastSuccess: { observedAt, mode: 'official_api', window: null,
+          metrics: { clicks: 0, impressions: 4, ctr: 0, position: null, indexedPages: null, sqi: null },
+          queries: [], sections: { aggregate: 'available', queries: 'available' } } };
+      const path = join(directory, 'prepared.json'); writeFileSync(path, JSON.stringify(snapshot));
+      const network = vi.fn(() => { throw new Error('provider network forbidden'); });
       vi.stubGlobal('fetch', network);
       const app = await createApp(path);
       const cookie = await signIn(app, ADMIN);
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/admin/seo-summary',
-        headers: { cookie },
-      });
+      const response = await app.inject({ method: 'GET', url: '/api/v1/admin/seo-summary', headers: { cookie } });
       expect(response.statusCode).toBe(200);
-      expect(response.json().data.searchProviders.google).toMatchObject({
-        status: 'available',
-        stale: false,
-        lastSuccess: { metrics: { clicks: 0, impressions: 4, position: null } },
-      });
+      expect(response.json().data.searchProviders.google).toMatchObject({ status: 'available', stale: false,
+        lastSuccess: { metrics: { clicks: 0, impressions: 4, position: null } } });
       expect(network).not.toHaveBeenCalled();
       expect(response.body).not.toContain(path);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });
 
