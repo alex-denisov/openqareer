@@ -60,7 +60,9 @@ export type AtsProvider =
   | 'smartrecruiters'
   | 'breezy'
   | 'pinpoint'
-  | 'personio';
+  | 'personio'
+  | 'bamboohr'
+  | 'teamtailor';
 
 /**
  * Что площадка разрешила словами в своём `robots.txt` на 2026-09-05. Запрет —
@@ -173,6 +175,25 @@ export const ATS_PROVIDERS: readonly AtsProviderContract[] = [
     crawlPermission: 'allowed',
     robotsNote: 'robots.txt отсутствует (404), запрета словами нет (замер 2026-09-18)',
     measuredAt: '2026-09-18',
+  },
+  {
+    provider: 'bamboohr',
+    name: 'BambooHR',
+    endpoint: (board) => `https://${board}.bamboohr.com/careers/list`,
+    boardUrl: (board) => `https://${board}.bamboohr.com/careers`,
+    crawlPermission: 'allowed',
+    robotsNote: 'User-Agent: * с пустым Disallow (замер 2026-11-09, B628)',
+    measuredAt: '2026-11-09',
+  },
+  {
+    provider: 'teamtailor',
+    name: 'Teamtailor',
+    endpoint: (board) => `https://${board}.teamtailor.com/jobs.rss`,
+    boardUrl: (board) => `https://${board}.teamtailor.com/jobs`,
+    crawlPermission: 'allowed',
+    robotsNote:
+      'Disallow только /app/, /messages/ и т.п. — /jobs.rss разрешён (замер 2026-11-09, B628)',
+    measuredAt: '2026-11-09',
   },
 ];
 
@@ -461,6 +482,8 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
       });
     }),
 
+  bamboohr: readBamboohr,
+  teamtailor: readTeamtailor,
   personio: (payload, context, sourceId, board) => {
     const xml = typeof payload === 'string' ? payload : '';
     if (!/<workzag-jobs\b/i.test(xml)) throw new Error(UNREADABLE);
@@ -501,6 +524,86 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
     });
   },
 };
+
+/** Текст из XML, где разметка ещё и экранирована (&lt;p&gt;): декодировать и снять дважды. */
+function cleanEscapedHtml(value: string): string {
+  return cleanXmlText(
+    cleanXmlText(value).replace(/&#(\d+);/g, (_, code: string) =>
+      String.fromCodePoint(Number(code)),
+    ),
+  );
+}
+
+function readBamboohr(
+  payload: unknown,
+  context: JsonAdapterContext,
+  sourceId: string,
+  board: string,
+): UnifiedVacancy[] {
+  return listOf(payload, (value) => asArray(record(value).result)).map((item) => {
+    const job = record(item);
+    const place = record(job.atsLocation);
+    const legacy = record(job.location);
+    const location =
+      [
+        text(place.city) || text(legacy.city),
+        text(place.state) || text(legacy.state),
+        text(place.country),
+      ]
+        .filter(Boolean)
+        .join(', ') || undefined;
+    const status = text(job.employmentStatusLabel);
+    const id = text(job.id);
+    return buildJsonVacancy({
+      sourceId,
+      context,
+      externalId: id,
+      title: text(job.jobOpeningName),
+      company: employer('', context, board),
+      location,
+      isRemote: job.isRemote === true || /remote/i.test(status),
+      description:
+        [text(job.departmentLabel), status].filter(Boolean).join(' · ') || text(job.jobOpeningName),
+      skills: [],
+      employmentType: status || undefined,
+      url: id ? `https://${board}.bamboohr.com/careers/${id}` : '',
+      publishedAt: fromIso(undefined),
+    });
+  });
+}
+
+function readTeamtailor(
+  payload: unknown,
+  context: JsonAdapterContext,
+  sourceId: string,
+  board: string,
+): UnifiedVacancy[] {
+  const xml = typeof payload === 'string' ? payload : '';
+  if (!/<rss\b/i.test(xml)) throw new Error(UNREADABLE);
+  return [...xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)].map((match) => {
+    const item = match[1] ?? '';
+    const location = [
+      xmlTag(item, 'tt:city') || xmlTag(item, 'tt:name'),
+      xmlTag(item, 'tt:country'),
+    ]
+      .filter(Boolean)
+      .join(', ');
+    const pub = Date.parse(xmlTag(item, 'pubDate'));
+    return buildJsonVacancy({
+      sourceId,
+      context,
+      externalId: xmlTag(item, 'guid'),
+      title: xmlTag(item, 'title'),
+      company: employer('', context, board),
+      location: location || undefined,
+      isRemote: /fully|remote/i.test(xmlTag(item, 'remoteStatus')),
+      description: cleanEscapedHtml(xmlTags(item, 'description')[0] ?? '') || xmlTag(item, 'title'),
+      skills: xmlTag(item, 'tt:department') ? [xmlTag(item, 'tt:department')] : [],
+      url: xmlTag(item, 'link'),
+      publishedAt: fromIso(Number.isFinite(pub) ? new Date(pub).toISOString() : undefined),
+    });
+  });
+}
 
 function xmlTags(xml: string, tag: string): string[] {
   return [...xml.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi'))].map(

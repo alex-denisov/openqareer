@@ -151,7 +151,8 @@ async function fetchJsonApi(
   options?: { query?: string },
 ): Promise<UnifiedVacancy[]> {
   const url = withQuery(source, options?.query);
-  if (parseAtsBoardSourceId(source.id)?.provider === 'personio') {
+  const xmlProvider = parseAtsBoardSourceId(source.id)?.provider;
+  if (xmlProvider === 'personio' || xmlProvider === 'teamtailor') {
     return fetchXmlAtsBoard(source, url);
   }
   return readJsonPage(source, { url });
