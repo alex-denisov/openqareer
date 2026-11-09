@@ -48,7 +48,8 @@ import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
 import { createWebsharePool, readWebshareCredentials } from './vacancies/webshareProxyPool';
 import { loadBudgetState, saveBudgetState } from './vacancies/linkedinBudgetState';
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
-import { scheduleSiteDiscovery, vertexAsk } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
+import { scheduleSiteDiscovery } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
+import { discoveryModel } from './companyDirectory/siteDiscovery/discoveryModel';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -300,7 +301,7 @@ try {
   scheduleRemoteScopeBackfill(semanticDatabase, log);
   // B627: домен, карьеры и ATS новых компаний реестра через Vertex и проверку HTTP.
   if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1') {
-    scheduleSiteDiscovery(semanticDatabase, log, vertexAsk(process.env));
+    scheduleSiteDiscovery(semanticDatabase, log, discoveryModel(semanticDatabase, config.databasePath, process.env));
   }
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
