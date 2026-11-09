@@ -87,7 +87,9 @@ describe('SmmBot', () => {
     await bot.handle(message('/post'));
     await bot.handle(press('smm:a:1'));
     expect(store.getPost(1)?.status).toBe('accepted');
-    expect(sent.slice(-2).map((s) => s.text)).toEqual(JSON.parse(VALID).parts);
+    expect(sent.slice(-2).map((s) => s.text)).toEqual(store.getPost(1)?.parts);
+    expect(store.getPost(1)?.link).toBeNull();
+    expect(sent.at(-1)?.text).not.toContain('https://');
     expect(sent.slice(-2).every((s) => !s.buttons)).toBe(true);
   });
 

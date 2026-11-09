@@ -6,8 +6,10 @@ export const SMM_START_PER_DAY = 4;
 export const SMM_MAX_PER_DAY = 9;
 /** Каждые десять принятых постов добавляют один в день. */
 export const SMM_ACCEPTED_PER_STEP = 10;
-/** Владелец не разобрал три черновика — новые не шлём, чтобы не заваливать чат. */
-export const SMM_MAX_PENDING = 3;
+/** Черновик без решения владельца — новый не шлём. */
+export const SMM_MAX_PENDING = 1;
+/** Решение владельца 09.11: один пост в час, следующий — после его реакции на предыдущий. */
+export const SMM_POST_GAP_MS = 60 * 60_000;
 
 const MSK_OFFSET_MS = 3 * 60 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
@@ -39,10 +41,14 @@ export interface DueInput {
   readonly createdToday: number;
   readonly acceptedTotal: number;
   readonly pending: number;
+  readonly lastCreatedMs: number | null;
 }
 
 export function isPostDue(input: DueInput): boolean {
   const target = dailyTarget(input.acceptedTotal);
   if (input.createdToday >= target || input.pending >= SMM_MAX_PENDING) return false;
-  return input.nowMs >= slotTime(mskDayStart(input.nowMs), input.createdToday, target);
+  if (input.lastCreatedMs !== null && input.nowMs - input.lastCreatedMs < SMM_POST_GAP_MS)
+    return false;
+  const day = mskDayStart(input.nowMs);
+  return input.nowMs >= slotTime(day, 0, target) && input.nowMs < day + WINDOW_END_H * 60 * 60_000;
 }
