@@ -7,6 +7,7 @@ import {
   type VacancyPitchInputFact,
 } from '../domain/vacancyPitchService';
 import type { LetterGender } from '../domain/coverLetterWriting';
+import { letterSignatureName, letterTextLanguage } from '../domain/letterSignature';
 import {
   COVER_LETTER_BUDGET_MS,
   hasLetterInput,
@@ -38,12 +39,18 @@ export interface LetterWritingRequest {
   /** Есть ли резюме для приложения: без него письмо не говорит, что резюме приложено. */
   readonly resumeAttached: boolean;
   readonly contextMs: number;
+  /** Имя из профиля как есть: модель возвращает его на языке письма (B624). */
+  readonly candidateName?: string;
 }
 
 export interface WrittenLetterBody {
   readonly body?: string;
   readonly stage?: string;
   readonly factCheck?: GeneratedTextFactCheck;
+  /** Язык готового текста, а не вакансии: по нему подпись и тема (B624). */
+  readonly language?: PitchLanguage;
+  /** Имя на языке письма от модели; только если это имя в письменности письма. */
+  readonly senderName?: string;
   /** Модель спросили, письма нет. Пустой профиль — не отказ: спрашивать было не о чем. */
   readonly refused?: true;
 }
@@ -85,7 +92,7 @@ function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, profile, chosenLanguage, gender, resumeAttached } = letter;
+  const { vacancy, profile, chosenLanguage, gender, resumeAttached, candidateName } = letter;
   return {
     profile,
     vacancy: {
@@ -100,6 +107,7 @@ function writerInput(
     ...(chosenLanguage ? { chosenLanguage } : {}),
     ...(gender ? { gender } : {}),
     ...(resumeAttached ? {} : { resumeAttached: false }),
+    ...(candidateName?.trim() ? { candidateName: candidateName.trim() } : {}),
     review,
   };
 }
@@ -133,5 +141,7 @@ export async function writeCoverLetterBody(
   // A writer outside the queue answers here: nothing unchecked reaches the candidate.
   if (reviewLetterBody(outcome.body, sources).length > 0) return { refused: true };
   const factCheck = { ...checkGeneratedTextFacts(outcome.body, letter.facts), status: 'checked' as const };
-  return { body: outcome.body, stage: outcome.stage, factCheck };
+  const language = letterTextLanguage(outcome.body);
+  const senderName = letterSignatureName(outcome.senderName, language);
+  return { body: outcome.body, stage: outcome.stage, factCheck, language, ...(senderName ? { senderName } : {}) };
 }

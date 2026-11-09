@@ -207,17 +207,20 @@ async function writeVacancyPitch(
     ...(gender ? { gender } : {}),
     ...(body?.language ? { chosenLanguage: body.language } : {}),
     resumeAttached: resume.available, contextMs,
+    ...(candidateName ? { candidateName } : {}),
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
   }
+  // B624: подпись, тема и поле языка идут по языку текста модели, а не по вакансии.
   const pitch = generateVacancyPitch({
     vacancy,
     candidateName,
+    ...(written.senderName ? { letterName: written.senderName } : {}),
     facts,
     tone,
     ...(rankingContext ? { rankingContext } : {}),
-    language,
+    language: written.language ?? language,
     ...(body?.recipient ? { recipient: body.recipient } : {}),
     ...(targetCompany ? { targetCompany: true } : {}),
     workplaces,

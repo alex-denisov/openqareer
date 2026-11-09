@@ -71,6 +71,8 @@ export interface PitchRecipient {
 export interface GenerateVacancyPitchOptions {
   readonly vacancy: VacancyPitchInputVacancy;
   readonly candidateName?: string;
+  /** Имя на языке письма, как его вернула модель (B624): заменяет имя из профиля в подписи и теме. */
+  readonly letterName?: string;
   readonly facts: readonly VacancyPitchInputFact[];
   readonly tone?: PitchTone;
   /** Переопределяет язык, иначе он определяется по тексту вакансии. */
@@ -694,7 +696,13 @@ function buildUsedFacts(
 function letterSender(
   ownName: string | undefined,
   language: PitchLanguage,
+  letterName: string | undefined,
 ): Pick<VacancyPitchResponse, 'senderName' | 'senderFirstName'> {
+  // Модель пишет сначала имя, потом фамилию (запрос B624): первое слово и есть имя.
+  if (letterName) {
+    const [first] = letterName.split(/\s+/u);
+    return { senderName: letterName, ...(first && first !== letterName ? { senderFirstName: first } : {}) };
+  }
   if (!ownName) return {};
   const inLetter = (name: string): string => (language === 'en' ? englishProperName(name) : name);
   const firstName = ownName.split(/\s+/u).find((part) => PERSON_FIRST_NAMES.has(part));
@@ -709,7 +717,9 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
   const language = options.language ?? detectVacancyLanguage(vacancy);
   const copy = copyFor(language);
   const ownName = options.candidateName?.trim();
-  const candidateName = ownName ? (language === 'en' ? englishProperName(ownName) : ownName) : copy.candidateFallback;
+  const letterName = options.letterName?.trim() || undefined;
+  const candidateName =
+    letterName ?? (ownName ? (language === 'en' ? englishProperName(ownName) : ownName) : copy.candidateFallback);
   const facts = withTranslatedStatements(options.facts, language === 'en' ? options.translations : undefined);
   const usableFacts = rankPitchFacts(filterUsableFacts(facts), vacancy, options.rankingContext);
   const useRanking = hasRoleAwarePitchRanking(options.rankingContext);
@@ -743,7 +753,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
     usedFacts: buildUsedFacts(usedEvidenceIds, usableFacts),
     coveredRequirements: requirements.matched,
     unconfirmedRequirements: requirements.missing.map(requirementLabel),
-    ...letterSender(ownName, language),
+    ...letterSender(ownName, language, letterName),
     language,
     notices,
     generatedAt: new Date().toISOString(),

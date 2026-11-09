@@ -189,6 +189,21 @@ describe('vacancyPitchService', () => {
     }
   });
 
+  it('B624: имя модели на языке письма подписывает письмо и стоит в теме', () => {
+    const ru = generateVacancyPitch({
+      vacancy: sampleVacancy, candidateName: 'Alexey Denisov', letterName: 'Алексей Денисов', facts: [], language: 'ru',
+    });
+    expect(ru.senderName).toBe('Алексей Денисов');
+    expect(ru.senderFirstName).toBe('Алексей');
+    expect(ru.emailPitch.subject).toBe('Lead Backend Engineer — Алексей Денисов');
+    const en = generateVacancyPitch({
+      vacancy: sampleVacancy, candidateName: 'Алексей Денисов', letterName: 'Alexey Denisov', facts: [], language: 'en',
+    });
+    expect(en.senderName).toBe('Alexey Denisov');
+    expect(en.senderFirstName).toBe('Alexey');
+    expect(en.emailPitch.subject).toBe('Lead Backend Engineer — Alexey Denisov');
+  });
+
   it('generates clean text with zero emoji and without hidden markers', () => {
     const pitch = generateVacancyPitch({
       vacancy: sampleVacancy,
