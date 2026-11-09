@@ -280,10 +280,13 @@ function foundOutcome(
   const [slug, orgId] = [...found.entries()][0]!;
   // Ссылка с официального сайта сильнее сохранённой в реестре: неверный
   // slug реестра заменяется подтверждённым (старое значение — в причине).
-  const corrected = !!registrySlug && registrySlug !== slug && !/^\d+$/.test(slug);
+  const numeric = /^\d+$/.test(slug);
+  const corrected = !!registrySlug && registrySlug !== slug && !numeric;
+  // Числовая ссылка /company/<id> сама и есть ID: просмотра вакансии не было (B622).
+  const plain = numeric ? 'site_numeric_link' : 'site_link_and_job_view';
   return {
     status: 'resolved',
-    reason: corrected ? `registry_url_corrected:${registrySlug}` : 'site_link_and_job_view',
+    reason: corrected ? `registry_url_corrected:${registrySlug}` : plain,
     slug,
     orgId,
     replaceUrl: corrected,

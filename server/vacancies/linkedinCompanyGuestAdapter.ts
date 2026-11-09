@@ -125,6 +125,22 @@ async function parseCardToVacancy(
   };
 }
 
+async function fetchGuestPage(customFetch: typeof fetch, url: string): Promise<Response | null> {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      response = await customFetch(url, { headers: GUEST_HEADERS });
+      if (response.ok || response.status === 429) break;
+    } catch (error: unknown) {
+      // Пауза бюджета LinkedIn — не сетевой сбой: повторять нельзя (B622).
+      if ((error as { statusCode?: number } | null)?.statusCode === 429) throw error;
+      // Retry once on transient network error
+    }
+    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return response;
+}
+
 export async function fetchLinkedinCompanyVacancies(
   target: LinkedinCompanyTarget,
   options?: {
@@ -144,18 +160,7 @@ export async function fetchLinkedinCompanyVacancies(
   for (let page = 0; page < maxPages; page++) {
     const start = page * 10;
     const url = `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=${target.organizationId}&geoId=${WORLDWIDE_GEO_ID}&start=${start}`;
-    let response: Response | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        response = await customFetch(url, { headers: GUEST_HEADERS });
-        if (response.ok || response.status === 429) break;
-      } catch (error: unknown) {
-        // Пауза бюджета LinkedIn — не сетевой сбой: повторять нельзя (B622).
-        if ((error as { statusCode?: number } | null)?.statusCode === 429) throw error;
-        // Retry once on transient network error
-      }
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));
-    }
+    const response = await fetchGuestPage(customFetch, url);
     // 429 — LinkedIn просит паузу: источник падает с заголовком, расписание ждёт (B622).
     if (response?.status === 429) throw linkedinRateLimited(response);
     if (!response || !response.ok) {

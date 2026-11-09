@@ -72,110 +72,130 @@ interface Waiter {
   readonly reject: (error: Error) => void;
 }
 
+class SharedGuestBudget implements LinkedinGuestBudget {
+  private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly baseGapMs: number;
+  private readonly maxGapMs: number;
+  private readonly pauseMs: number;
+  private readonly shares: Readonly<Record<LinkedinConsumer, number>>;
+  private gapMs: number;
+  private pausedUntil = 0;
+  private lastGrantAt = -Infinity;
+  private lastLimitAt = -Infinity;
+  private lastRelaxAt = 0;
+  private waiters: readonly Waiter[] = [];
+  private pumping = false;
+  private grants: readonly { at: number; consumer: LinkedinConsumer }[] = [];
+  private limits: readonly number[] = [];
+
+  constructor(options: LinkedinGuestBudgetOptions) {
+    this.now = options.now ?? Date.now;
+    this.sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+    this.baseGapMs = options.baseGapMs ?? DEFAULT_GAP_MS;
+    this.maxGapMs = options.maxGapMs ?? DEFAULT_MAX_GAP_MS;
+    this.pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
+    this.shares = options.shares ?? DEFAULT_SHARES;
+    this.gapMs = this.baseGapMs;
+  }
+
+  acquire(consumer: LinkedinConsumer): Promise<void> {
+    const t = this.now();
+    if (t < this.pausedUntil) return Promise.reject(new LinkedinPaused(this.pausedUntil, t));
+    const granted = new Promise<void>((resolve, reject) => {
+      this.waiters = [...this.waiters, { consumer, resolve, reject }];
+    });
+    void this.pump();
+    return granted;
+  }
+
+  markRateLimited(): void {
+    const t = this.now();
+    this.pausedUntil = Math.max(this.pausedUntil, t + this.pauseMs);
+    this.gapMs = Math.min(this.maxGapMs, this.gapMs * 2);
+    this.lastLimitAt = t;
+    this.limits = [...this.limits, t];
+    this.rejectAll(t);
+  }
+
+  isPaused(): boolean {
+    return this.now() < this.pausedUntil;
+  }
+
+  stats(): LinkedinBudgetStats {
+    this.prune(this.now());
+    const count = (c: LinkedinConsumer) => this.grants.filter((g) => g.consumer === c).length;
+    return {
+      gapMs: this.gapMs,
+      pausedUntil: this.pausedUntil,
+      lastHour: {
+        resolver: count('resolver'),
+        companies: count('companies'),
+        guest: count('guest'),
+      },
+      rateLimitedLastHour: this.limits.length,
+    };
+  }
+
+  private prune(t: number): void {
+    this.grants = this.grants.filter((g) => t - g.at < HOUR_MS);
+    this.limits = this.limits.filter((at) => t - at < HOUR_MS);
+  }
+
+  private usage(consumer: LinkedinConsumer): number {
+    return this.grants.filter((g) => g.consumer === consumer).length / this.shares[consumer];
+  }
+
+  private relax(t: number): void {
+    if (
+      this.gapMs > this.baseGapMs &&
+      t - this.lastLimitAt >= HOUR_MS &&
+      t - this.lastRelaxAt >= HOUR_MS / 4
+    ) {
+      this.gapMs = Math.max(this.baseGapMs, Math.round(this.gapMs * 0.75));
+      this.lastRelaxAt = t;
+    }
+  }
+
+  private rejectAll(t: number): void {
+    const pending = this.waiters;
+    this.waiters = [];
+    for (const w of pending) w.reject(new LinkedinPaused(this.pausedUntil, t));
+  }
+
+  private grantNext(t: number): void {
+    this.prune(t);
+    this.relax(t);
+    const pick = this.waiters.reduce((best, w) =>
+      this.usage(w.consumer) < this.usage(best.consumer) ? w : best,
+    );
+    this.waiters = this.waiters.filter((w) => w !== pick);
+    this.lastGrantAt = t;
+    this.grants = [...this.grants, { at: t, consumer: pick.consumer }];
+    pick.resolve();
+  }
+
+  private async pump(): Promise<void> {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      while (this.waiters.length > 0) {
+        const t = this.now();
+        if (t < this.pausedUntil) return this.rejectAll(t);
+        const wait = this.lastGrantAt + this.gapMs - t;
+        if (wait > 0) await this.sleep(wait);
+        else this.grantNext(t);
+      }
+    } finally {
+      this.pumping = false;
+    }
+  }
+}
+
 export function createLinkedinGuestBudget(
   options: LinkedinGuestBudgetOptions = {},
 ): LinkedinGuestBudget {
-  const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
-  const baseGapMs = options.baseGapMs ?? DEFAULT_GAP_MS;
-  const maxGapMs = options.maxGapMs ?? DEFAULT_MAX_GAP_MS;
-  const pauseMs = options.pauseMs ?? DEFAULT_PAUSE_MS;
-  const shares = options.shares ?? DEFAULT_SHARES;
-  let gapMs = baseGapMs;
-  let pausedUntil = 0;
-  let lastGrantAt = -Infinity;
-  let lastLimitAt = -Infinity;
-  let lastRelaxAt = 0;
-  let waiters: Waiter[] = [];
-  let pumping = false;
-  let grants: { at: number; consumer: LinkedinConsumer }[] = [];
-  let limits: number[] = [];
-
-  const prune = (t: number): void => {
-    grants = grants.filter((g) => t - g.at < HOUR_MS);
-    limits = limits.filter((at) => t - at < HOUR_MS);
-  };
-
-  const usage = (consumer: LinkedinConsumer): number =>
-    grants.filter((g) => g.consumer === consumer).length / shares[consumer];
-
-  const relax = (t: number): void => {
-    if (gapMs > baseGapMs && t - lastLimitAt >= HOUR_MS && t - lastRelaxAt >= HOUR_MS / 4) {
-      gapMs = Math.max(baseGapMs, Math.round(gapMs * 0.75));
-      lastRelaxAt = t;
-    }
-  };
-
-  const rejectAll = (t: number): void => {
-    const pending = waiters;
-    waiters = [];
-    for (const w of pending) w.reject(new LinkedinPaused(pausedUntil, t));
-  };
-
-  const pump = async (): Promise<void> => {
-    if (pumping) return;
-    pumping = true;
-    try {
-      while (waiters.length > 0) {
-        const t = now();
-        if (t < pausedUntil) return rejectAll(t);
-        const wait = lastGrantAt + gapMs - t;
-        if (wait > 0) {
-          await sleep(wait);
-          continue;
-        }
-        prune(t);
-        relax(t);
-        const pick = waiters.reduce((best, w) =>
-          usage(w.consumer) < usage(best.consumer) ? w : best,
-        );
-        waiters = waiters.filter((w) => w !== pick);
-        lastGrantAt = t;
-        grants = [...grants, { at: t, consumer: pick.consumer }];
-        pick.resolve();
-      }
-    } finally {
-      pumping = false;
-    }
-  };
-
-  return {
-    acquire(consumer: LinkedinConsumer): Promise<void> {
-      const t = now();
-      if (t < pausedUntil) return Promise.reject(new LinkedinPaused(pausedUntil, t));
-      const granted = new Promise<void>((resolve, reject) => {
-        waiters = [...waiters, { consumer, resolve, reject }];
-      });
-      void pump();
-      return granted;
-    },
-    markRateLimited(): void {
-      const t = now();
-      pausedUntil = Math.max(pausedUntil, t + pauseMs);
-      gapMs = Math.min(maxGapMs, gapMs * 2);
-      lastLimitAt = t;
-      limits = [...limits, t];
-      rejectAll(t);
-    },
-    isPaused(): boolean {
-      return now() < pausedUntil;
-    },
-    stats(): LinkedinBudgetStats {
-      const t = now();
-      prune(t);
-      const count = (c: LinkedinConsumer) => grants.filter((g) => g.consumer === c).length;
-      return {
-        gapMs,
-        pausedUntil,
-        lastHour: {
-          resolver: count('resolver'),
-          companies: count('companies'),
-          guest: count('guest'),
-        },
-        rateLimitedLastHour: limits.length,
-      };
-    },
-  };
+  return new SharedGuestBudget(options);
 }
 
 /** fetch через бюджет: слот до запроса, 429 в ответе — пауза всем. */
