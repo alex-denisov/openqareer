@@ -177,6 +177,8 @@ export interface VacancyPoolStore {
   countClusters(): number;
   /** B485: пересчёт итогов каталога — только процесс обслуживания. */
   recomputeCatalogTotals?(observedAt: string, computedAt?: string): CatalogTotalsRow;
+  /** То же порциями с паузами: очередь обслуживания не стоит весь проход. */
+  recomputeCatalogTotalsInSlices?(observedAt: string): Promise<CatalogTotalsRow>;
   /** B485: одна строка итогов по ключу; HTTP-путь, без vacancy_clusters. */
   readCatalogTotals?(): CatalogTotalsRow | undefined;
   /**

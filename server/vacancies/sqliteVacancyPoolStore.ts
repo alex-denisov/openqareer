@@ -97,6 +97,15 @@ import { readCatalogChipCounts, readCatalogChipKeys } from './catalogChipStore';
 import type { ChipCounts } from './catalogChips';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
+const CATALOG_TOTALS_SLICE_ROWS = 20_000;
+const CATALOG_TOTALS_SLICE_PAUSE_MS = 50;
+
+export interface CatalogTotalsSliceOptions {
+  readonly sliceRows?: number;
+  readonly pause?: () => Promise<void>;
+  readonly computedAt?: string;
+}
+
 interface VacancyRow {
   payload: string;
 }
@@ -2780,6 +2789,51 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
           WHERE json_extract(cluster_json, '$.status') = 'active'`,
       )
       .get() as { n: number };
+    return this.writeCatalogTotals(row.n, observedAt, computedAt);
+  }
+
+  /**
+   * Прод 08.11: один проход json_extract по 463 000 кластерам держал очередь
+   * обслуживания до 42 с на холодном кэше. Порции по rowid с паузой между ними;
+   * кластер, изменившийся между порциями, считается в своём новом виде.
+   */
+  async recomputeCatalogTotalsInSlices(
+    observedAt: string,
+    options: CatalogTotalsSliceOptions = {},
+  ): Promise<CatalogTotalsRow> {
+    const sliceRows = options.sliceRows ?? CATALOG_TOTALS_SLICE_ROWS;
+    const pause =
+      options.pause ??
+      (() => new Promise<void>((done) => setTimeout(done, CATALOG_TOTALS_SLICE_PAUSE_MS)));
+    const computedAt = options.computedAt ?? new Date().toISOString();
+    const slice = this.database.prepare(
+      `SELECT count(*) AS seen, max(rowid) AS last,
+              coalesce(sum(json_extract(cluster_json, '$.status') = 'active'), 0) AS active
+         FROM (SELECT rowid, cluster_json FROM vacancy_clusters
+                WHERE rowid > ? ORDER BY rowid LIMIT ?)`,
+    );
+    let lastRowid = 0;
+    let active = 0;
+    for (;;) {
+      const row = slice.get(lastRowid, sliceRows) as {
+        seen: number;
+        last: number | null;
+        active: number;
+      };
+      active += row.active;
+      if (row.last === null) break;
+      lastRowid = row.last;
+      if (row.seen < sliceRows) break;
+      await pause();
+    }
+    return this.writeCatalogTotals(active, observedAt, computedAt);
+  }
+
+  private writeCatalogTotals(
+    clusters: number,
+    observedAt: string,
+    computedAt: string,
+  ): CatalogTotalsRow {
     this.database
       .prepare(
         `INSERT INTO catalog_totals (id, catalog_total, observed_at, computed_at)
@@ -2787,7 +2841,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
          ON CONFLICT(id) DO UPDATE SET catalog_total = excluded.catalog_total,
            observed_at = excluded.observed_at, computed_at = excluded.computed_at`,
       )
-      .run(row.n, observedAt, computedAt);
+      .run(clusters, observedAt, computedAt);
     this.database
       .prepare(
         `INSERT INTO catalog_listings (id, listings_json, computed_at) VALUES (1, ?, ?)
@@ -2795,7 +2849,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
            computed_at = excluded.computed_at`,
       )
       .run(JSON.stringify(this.countCatalogListings()), computedAt);
-    return { clusters: row.n, updatedAt: observedAt, computedAt };
+    return { clusters, updatedAt: observedAt, computedAt };
   }
 
   readCatalogTotals(): CatalogTotalsRow | undefined {

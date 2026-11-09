@@ -776,6 +776,29 @@ describe('MaintenanceWorker catalog totals (B485)', () => {
     expect(log.entries).toEqual([{ level: 'info', msg: 'vacancy-catalog-totals-written' }]);
   });
 
+  it('ждёт итоги, посчитанные порциями, и не запускает второй расчёт поверх', async () => {
+    let now = Date.parse('2026-11-09T10:00:00.000Z');
+    const log = silentLog();
+    let finish: (value: { clusters: number }) => void = () => {};
+    const refresh = vi.fn().mockReturnValue(
+      new Promise<{ clusters: number }>((done) => {
+        finish = done;
+      }),
+    );
+    const engine = { refreshCatalogTotals: refresh } as unknown as ConstructorParameters<
+      typeof MaintenanceWorker
+    >[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log, now: () => now });
+    worker.refreshCatalogTotals();
+    now += 20 * 60_000;
+    worker.refreshCatalogTotals();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(log.entries).toEqual([]);
+    finish({ clusters: 7 });
+    await new Promise((done) => setTimeout(done, 0));
+    expect(log.entries).toEqual([{ level: 'info', msg: 'vacancy-catalog-totals-written' }]);
+  });
+
   it('старт со свежими итогами в базе их не пересчитывает, а срок идёт от расчёта', () => {
     let now = Date.parse('2026-11-05T20:10:00.000Z');
     const refresh = vi.fn().mockReturnValue({ clusters: 10 });
