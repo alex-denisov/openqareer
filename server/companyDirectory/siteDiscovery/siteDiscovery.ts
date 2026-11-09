@@ -4,6 +4,8 @@
  * HTTP (the site, the careers page, a board API listing jobs) is written.
  */
 import type { DatabaseSync } from 'node:sqlite';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { z } from 'zod';
 import { boardJobs, boardsFromHtml, PROVIDER_NAMES, type BoardCandidate } from './atsBoards';
 
@@ -60,7 +62,7 @@ const LINKEDIN = /linkedin\.com/i;
 /** Model-supplied URLs: public DNS names on default ports only, no IP literals or local names. */
 export function isPublicHost(url: URL): boolean {
   if (!/^https?:$/.test(url.protocol) || url.port !== '' || url.username || url.password) return false;
-  const host = url.hostname.toLowerCase();
+  const host = url.hostname.toLowerCase().replace(/\.$/, '');
   if (!host.includes('.') || /^[\d.]+$/.test(host) || host.includes(':') || host.startsWith('[')) return false;
   return !/(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(host);
 }
@@ -77,11 +79,38 @@ function absolute(url: string | null | undefined): string | undefined {
   }
 }
 
+const PRIVATE_V4 = /^(0|10|127|169\.254|172\.(1[6-9]|2\d|3[01])|192\.168|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7]))\./;
+/** Every resolved address must be public; DNS errors reject. */
+export async function resolvesPublic(host: string, resolve = lookup): Promise<boolean> {
+  try {
+    const addresses = await resolve(host, { all: true });
+    return addresses.length > 0 && addresses.every(({ address }) => {
+      const v4 = address.replace(/^::ffff:/i, '');
+      if (isIP(v4) === 4) return !PRIVATE_V4.test(v4);
+      return !/^(::1?$|f[cd]|fe[89ab])/i.test(address);
+    });
+  } catch {
+    return false;
+  }
+}
+
 async function page(url: string, fetchImpl: typeof fetch): Promise<{ status: number; url: string; html: string }> {
   try {
-    const response = await fetchImpl(url, { redirect: 'follow', signal: AbortSignal.timeout(12_000) });
-    const html = (await response.text()).slice(0, 600_000);
-    return { status: response.status, url: response.url || url, html };
+    let current = url;
+    for (let hop = 0; hop < 4; hop++) {
+      const parsed = new URL(current);
+      if (!isPublicHost(parsed) || (fetchImpl === fetch && !(await resolvesPublic(parsed.hostname))))
+        return { status: 0, url, html: '' };
+      const response = await fetchImpl(current, { redirect: 'manual', signal: AbortSignal.timeout(12_000) });
+      const location = response.headers?.get('location');
+      if (response.status >= 300 && response.status < 400 && location) {
+        current = new URL(location, current).href;
+        continue;
+      }
+      const html = (await response.text()).slice(0, 600_000);
+      return { status: response.status, url: current, html };
+    }
+    return { status: 0, url, html: '' };
   } catch {
     return { status: 0, url, html: '' };
   }

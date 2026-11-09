@@ -22,7 +22,7 @@ function fakeFetch(routes: Record<string, [number, string]>): typeof fetch {
   return (async (input: string | URL | Request) => {
     const url = String(input);
     const [status, body] = routes[url] ?? [404, ''];
-    return { status, ok: status < 400, url, text: async () => body } as Response;
+    return { status, ok: status < 400, url, headers: new Headers(), text: async () => body } as Response;
   }) as typeof fetch;
 }
 
@@ -81,5 +81,15 @@ describe('B627 model URLs', () => {
     expect(isPublicHost(new URL('https://acme.com/careers'))).toBe(true);
     for (const bad of ['http://127.0.0.1/', 'http://localhost/', 'http://[::1]/', 'https://acme.com:8080/', 'http://db.internal/', 'file:///etc/passwd'])
       expect(isPublicHost(new URL(bad))).toBe(false);
+  });
+});
+
+describe('B627 dns check', () => {
+  it('rejects hosts resolving to private addresses', async () => {
+    const { resolvesPublic } = await import('./siteDiscovery');
+    const fake = (address: string) => (async () => [{ address, family: 4 }]) as never;
+    expect(await resolvesPublic('a.com', fake('93.184.216.34'))).toBe(true);
+    expect(await resolvesPublic('a.com', fake('10.0.0.5'))).toBe(false);
+    expect(await resolvesPublic('a.com', fake('::ffff:127.0.0.1'))).toBe(false);
   });
 });
