@@ -221,7 +221,11 @@ describe('resolveCompany', () => {
       'ciklum.com': ok('<a href="https://www.linkedin.com/company/9183/">'),
     });
     const outcome = await resolveCompany(CIKLUM, fetchPage, NOW);
-    expect(outcome).toMatchObject({ status: 'resolved', orgId: '9183' });
+    expect(outcome).toMatchObject({
+      status: 'resolved',
+      orgId: '9183',
+      reason: 'site_numeric_link',
+    });
     expect(fetchPage.calls.some((u) => u.includes('linkedin.com'))).toBe(false);
   });
 });

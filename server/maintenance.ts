@@ -41,6 +41,7 @@ import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSch
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
+import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 
 /**
@@ -55,8 +56,12 @@ watchWriteHolds((hold) =>
   log.warn({ ...hold, heldMs: Math.round(hold.heldMs) }, 'write-lock-held-long'),
 );
 const linkedinExecutorConfig = readExecutorConfigOrDisable();
+// Один бюджет гостевого LinkedIn на процесс: каналы компаний, общий поиск и
+// резолвер org_id (B621) делят его по долям, 429 — пауза всем (B622).
+const linkedinBudget = createLinkedinGuestBudget();
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
+  linkedinBudget,
   // Сведение по ключам: партия × соседи в куче, полная пересборка запрещена.
   recluster: { mode: 'keyed', batchSize: DEFAULT_KEYED_BATCH_SIZE },
   // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:
@@ -262,7 +267,12 @@ try {
   scheduleRemoteScopeBackfill(semanticDatabase, log);
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
-    stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(semanticDatabase, log);
+    stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(semanticDatabase, log, linkedinBudget);
+    // Замер бюджета: запросы и 429 за час по потребителям (B622).
+    setInterval(
+      () => log.info({ ...linkedinBudget.stats() }, 'linkedin-budget'),
+      60 * 60_000,
+    ).unref();
   }
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
 } catch (error: unknown) {

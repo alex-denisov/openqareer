@@ -145,3 +145,18 @@ describe('LinkedIn Company Guest Adapter (Group B)', () => {
     expect(vacancies[0]!.description.length).toBeGreaterThan(100);
   });
 });
+
+describe('LinkedIn company search address (B622)', () => {
+  it('asks for the worldwide geoId, without which f_C answers an empty page', async () => {
+    const urls: string[] = [];
+    const fakeFetch = (async (url: string) => {
+      urls.push(url);
+      return new Response('', { status: 200 });
+    }) as unknown as typeof fetch;
+    await fetchLinkedinCompanyVacancies(
+      { slug: 'x', company: 'X', organizationId: '42' },
+      { maxPages: 1, customFetch: fakeFetch },
+    );
+    expect(urls[0]).toContain('f_C=42&geoId=92000000&start=0');
+  });
+});

@@ -131,7 +131,7 @@ function linkedinCompanySource(company: DirectoryCompany): RegisteredVacancySour
     market: 'Вакансии компании в LinkedIn (гостевой поиск по org_id)',
     addressStatus: 'live',
     enabled: true,
-    targetUrl: `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=${orgId}`,
+    targetUrl: `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?f_C=${orgId}&geoId=92000000`,
     refreshIntervalMinutes: LINKEDIN_COMPANY_REFRESH_MINUTES,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
