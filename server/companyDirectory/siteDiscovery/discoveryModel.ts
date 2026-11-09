@@ -6,11 +6,34 @@
  * company is never dropped for them. The answer stays a candidate; HTTP checks decide.
  */
 import type { DatabaseSync } from 'node:sqlite';
-import { meteredVertexFetchFor } from '../../providers/meteredVertexFetch';
+import { SqliteBulkLlmLedger } from '../../data/sqliteBulkLlmLedger';
+import { createMeteredVertexFetch } from '../../providers/meteredVertexFetch';
+import { createVertexGate, readVertexCreditConfig, type VertexCreditConfig } from '../../providers/vertexCredit';
 import { readVertexConfig, vertexPublisherBaseUrl, VertexTokenProvider } from '../../providers/vertexAi';
 
 export const SITE_DISCOVERY_TASK = 'site-discovery';
 export const SITE_DISCOVERY_VERTEX_CAP_USD = 40;
+/** Owner 10.11: the $40 is a separate, open-ended credit; the trial's end date does not apply to it. */
+const OWN_CREDIT_SINCE = '2026-11-10T00:00:00.000Z';
+const NO_END_MS = Date.parse('2100-01-01T00:00:00Z');
+
+/** This step's own Vertex gate: $40 from 10.11, no end date, the global per-day cap no lower than that. */
+export function siteDiscoveryCredit(environment: NodeJS.ProcessEnv): VertexCreditConfig {
+  const global = readVertexCreditConfig(environment);
+  return {
+    ...global,
+    creditUsd: SITE_DISCOVERY_VERTEX_CAP_USD,
+    sinceIso: OWN_CREDIT_SINCE,
+    untilMs: NO_END_MS,
+    dayUsd: SITE_DISCOVERY_VERTEX_CAP_USD,
+  };
+}
+
+function ownMeteredFetch(environment: NodeJS.ProcessEnv, databasePath: string): typeof fetch {
+  const ledger = new SqliteBulkLlmLedger(databasePath);
+  const gate = createVertexGate({ ledger, config: siteDiscoveryCredit(environment) });
+  return createMeteredVertexFetch({ gate, task: SITE_DISCOVERY_TASK, timeoutMs: 120_000 });
+}
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = 'openrouter/free';
 const MAX_ATTEMPTS = 8;
@@ -113,11 +136,11 @@ function vertexOnce(environment: Record<string, string | undefined>, metered: ty
 export function discoveryModel(
   database: DatabaseSync,
   databasePath: string,
-  environment: Record<string, string | undefined>,
+  environment: NodeJS.ProcessEnv,
   deps: Deps = {},
 ): AskModel | undefined {
-  const metered =
-    deps.vertexFetch ?? meteredVertexFetchFor(readVertexConfig(environment), databasePath, SITE_DISCOVERY_TASK, 120_000);
+  const hasVertex = Boolean(readVertexConfig(environment));
+  const metered = deps.vertexFetch ?? (hasVertex ? ownMeteredFetch(environment, databasePath) : undefined);
   const vertex = metered ? vertexOnce(environment, metered) : undefined;
   const key = environment.OPENQAREER_OPENROUTER_API_KEY;
   const free = key ? openRouterAsk(key, deps) : undefined;

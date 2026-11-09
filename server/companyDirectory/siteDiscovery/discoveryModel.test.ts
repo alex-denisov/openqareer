@@ -82,3 +82,13 @@ describe('B627 discovery model', () => {
     expect((await ask!('q')).route).toBe('openrouter');
   });
 });
+
+describe('B627 own Vertex credit', () => {
+  it('is $40 from 10.11 with no end date, past the trial', async () => {
+    const { siteDiscoveryCredit } = await import('./discoveryModel');
+    const credit = siteDiscoveryCredit({});
+    expect(credit.creditUsd).toBe(40);
+    expect(credit.sinceIso).toBe('2026-11-10T00:00:00.000Z');
+    expect(credit.untilMs).toBeGreaterThan(Date.parse('2099-01-01'));
+  });
+});
