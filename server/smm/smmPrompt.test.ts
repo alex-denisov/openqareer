@@ -235,3 +235,14 @@ describe('unverified numbers', () => {
     expect(hasUnverifiedPercent('500 закрытых вакансий, 1/5')).toBe(false);
   });
 });
+
+describe('owner answers 09.11', () => {
+  it('the "+" call always comes with the free signup link, which is allowed', async () => {
+    const { SMM_FORMATS } = await import('./smmFormats');
+    const { SMM_LINKS, SMM_ROLE_PROMPT } = await import('./smmRolePrompt');
+    const beta = SMM_FORMATS.find((format) => format.id === 'building_beta');
+    expect(beta?.brief).toContain('https://openqareer.com/signup');
+    expect(SMM_ROLE_PROMPT).toContain('https://openqareer.com/signup');
+    expect(SMM_LINKS.some((link) => link.url === 'https://openqareer.com/signup')).toBe(true);
+  });
+});
