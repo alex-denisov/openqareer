@@ -16,13 +16,16 @@ const MAX_EMAIL_LENGTH = 254;
 export const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 256;
 
-const NAME_ALLOWED = /^[a-zA-Zа-яА-ЯёЁ\s-]+$/u;
+/** Letters of any alphabet (with combining accents), spaces, hyphens, apostrophes, dots. */
+const NAME_CHAR = String.raw`\p{L}\p{M}\s'’.-`;
+const NAME_ALLOWED = new RegExp(`^[${NAME_CHAR}]+$`, 'u');
+const NAME_DISALLOWED = new RegExp(`[^${NAME_CHAR}]`, 'gu');
 const EMAIL_SHAPE = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/u;
 const HANDLE_ALLOWED = /^[a-z0-9][a-z0-9._-]*$/u;
 
-/** Letters, spaces and hyphens only — applied while the candidate types. */
+/** Letters, spaces, hyphens, apostrophes and dots only — applied while the candidate types. */
 export function sanitizeName(input: string): string {
-  return input.replace(/[^a-zA-Zа-яА-ЯёЁ\s-]/gu, '').slice(0, MAX_NAME_LENGTH);
+  return input.replace(NAME_DISALLOWED, '').slice(0, MAX_NAME_LENGTH);
 }
 
 /** Address characters only. Plus-aliases are removed, as in eterapy. */
@@ -40,7 +43,7 @@ export function getNameError(name: string): string | null {
     return `Имя слишком длинное (максимум ${MAX_NAME_LENGTH} символов)`;
   }
   if (!NAME_ALLOWED.test(trimmed)) {
-    return 'Имя может содержать только буквы, пробелы и дефисы';
+    return 'Имя может содержать только буквы, пробелы, дефисы, апострофы и точки';
   }
   return null;
 }
