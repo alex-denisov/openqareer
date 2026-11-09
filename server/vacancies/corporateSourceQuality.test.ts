@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { corporateRejectReason, gateCorporateVacancies } from './corporateSourceQuality';
+import {
+  boardBelongsToCompany,
+  corporateRejectReason,
+  gateCorporateVacancies,
+} from './corporateSourceQuality';
 
 const v = (title: string, url: string) => ({ title, url }) as UnifiedVacancy;
 const HOSTS = ['careers.acme.com'];
@@ -94,5 +98,12 @@ describe('ATS board ownership (B622)', () => {
         'Accenture',
       ),
     ).toBeNull();
+  });
+});
+
+describe('B628 — короткий слаг доски', () => {
+  it('доска 0x принадлежит компании 0x (0x.org/careers → Ashby)', () => {
+    expect(boardBelongsToCompany('0x', ['0x', '0x'])).toBe(true);
+    expect(boardBelongsToCompany('0x', ['Acme'])).toBe(false);
   });
 });

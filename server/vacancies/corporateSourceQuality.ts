@@ -78,7 +78,10 @@ export function boardBelongsToCompany(slug: string, companyHints: readonly strin
       .filter(Boolean)
       .map((w) => w[0]!.toLowerCase())
       .join('');
+    // B628: короткое имя (0x, N26) сравнивается целиком — слова короче трёх букв токены отбрасывают.
+    const whole = hint.toLowerCase().replace(/[^a-z0-9]/g, '');
     return (
+      (whole.length >= 2 && flat === whole) ||
       (initials.length >= 2 && flat === initials) ||
       words.some((token) => flat.includes(token) || token.includes(flat))
     );

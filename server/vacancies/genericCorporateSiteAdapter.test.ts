@@ -150,7 +150,9 @@ describe('genericCorporateSiteAdapter', () => {
 
     const [job] = extractJsonLdJobs(html, 'https://company.com');
     expect(job.title).toBe('Principal SRE');
-    expect(job.description).toContain('About the role:\n\n- 5+ years of Linux\n- Kubernetes in production');
+    expect(job.description).toContain(
+      'About the role:\n\n- 5+ years of Linux\n- Kubernetes in production',
+    );
     expect(job.description).toContain('Perks include:\n\n- Remote work');
     expect(job.description).not.toContain('<p>');
     expect(job.description).not.toContain('<li>');
@@ -174,5 +176,34 @@ describe('genericCorporateSiteAdapter', () => {
     expect(job.description).toContain('Fulltime | Remote work');
     expect(job.description).toContain('establish testing standards');
     expect(job.isRemote).toBe(true);
+  });
+});
+
+describe('B628 — встроенные ATS на снятых с прода страницах', () => {
+  it('Ashby через posting-api (0x.org/careers)', () => {
+    const html =
+      'const jobsUrl = "https://api.ashbyhq.com/posting-api/job-board/0x?includeCompensation=true";';
+    expect(detectEmbeddedAts(html)).toMatchObject({ provider: 'ashby', orgId: '0x' });
+  });
+  it('Workable через поддомен компании (1global.com/careers)', () => {
+    const html =
+      '\\"application_url\\":\\"https://1global.workable.com/jobs/6237555/candidates/new\\"';
+    expect(detectEmbeddedAts(html)).toMatchObject({ provider: 'workable', orgId: '1global' });
+  });
+  it('Greenhouse embed с for=', () => {
+    const html =
+      '<script src="https://boards.greenhouse.io/embed/job_board/js?for=acmeco"></script>';
+    expect(detectEmbeddedAts(html)).toMatchObject({ provider: 'greenhouse', orgId: 'acmeco' });
+  });
+  it('слаги с буквами j/api внутри не отбрасываются', () => {
+    expect(detectEmbeddedAts('https://apply.workable.com/jumia/')).toMatchObject({
+      orgId: 'jumia',
+    });
+    expect(detectEmbeddedAts('https://boards.greenhouse.io/rapid7')).toMatchObject({
+      orgId: 'rapid7',
+    });
+    expect(detectEmbeddedAts('https://rapidapi.recruitee.com/')).toMatchObject({
+      orgId: 'rapidapi',
+    });
   });
 });
