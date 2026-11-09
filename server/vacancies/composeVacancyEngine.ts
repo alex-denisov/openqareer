@@ -19,6 +19,7 @@ import {
   type SourceFetcher,
 } from './multiSourceVacancyEngine';
 import type { LinkedinGuestBudget } from './linkedinGuestBudget';
+import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { planCompanyChannels, readDirectoryCompanies } from './companyDirectorySources';
 import { DEFAULT_VACANCY_SOURCES, type RegisteredVacancySource } from './defaultVacancySources';
 import { RobotsPolicyLoader, type RobotsFetcher } from './robotsPolicyLoader';
@@ -119,6 +120,10 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
   const poolJobs = createPoolJobsReader(options.databasePath, (id) => engine.hasVacancy(id));
   const engine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
     sources: registryWithCompanyChannels(options.databasePath),
+    // Во время паузы бюджета LinkedIn-источники не занимают места в волне (B622).
+    ...(options.linkedinBudget
+      ? { holdSource: holdDuringLinkedinPause(options.linkedinBudget) }
+      : {}),
     fetcher:
       options.fetcher ??
       buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
@@ -152,4 +157,13 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
       hhCrawlSettings.close();
     },
   };
+}
+
+const LINKEDIN_GUEST_SOURCE_ID = 'src-linkedin-guest';
+
+export function holdDuringLinkedinPause(
+  budget: LinkedinGuestBudget,
+): (source: VacancySourceConfig) => boolean {
+  return (source) =>
+    (Boolean(source.linkedinOrgId) || source.id === LINKEDIN_GUEST_SOURCE_ID) && budget.isPaused();
 }
