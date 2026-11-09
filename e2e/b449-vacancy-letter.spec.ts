@@ -922,6 +922,69 @@ test.describe('B449 — письмо под вакансию', () => {
     await captureState(page, testInfo, 'cold-outreach-availability');
   });
 
+  test('B629: «Откликнуться» opens the cold letter, the platform comes after approval', async ({
+    page,
+  }, testInfo) => {
+    const state = createRouteState();
+    await installLetterMocks(page, state);
+    const marks: { clusterId: string; status: string }[] = [];
+    await page.route('**/api/v1/candidate/vacancy-applications', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      const body = route.request().postDataJSON() as { clusterId: string; status: string };
+      marks.push(body);
+      return route.fulfill({
+        json: {
+          data: {
+            ...body,
+            openedAt: '2026-10-10T12:00:00.000Z',
+            appliedAt: '2026-10-10T12:00:00.000Z',
+            confirmedBy: 'candidate',
+          },
+        },
+      });
+    });
+    await page.addInitScript(() => {
+      const opened = window as Window & { __openedUrls?: string[] };
+      opened.__openedUrls = [];
+      window.open = ((url: string | URL) => {
+        opened.__openedUrls?.push(String(url));
+        return null;
+      }) as typeof window.open;
+    });
+    const openedUrls = () =>
+      page.evaluate(() => (window as Window & { __openedUrls?: string[] }).__openedUrls ?? []);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+    const firstItem = page.locator('.vac-list-item').first();
+    await expect(firstItem).toBeVisible({ timeout: 15_000 });
+    const row = firstItem.locator('.vacancies-screen-row-trigger');
+    if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click();
+    const opened = page.locator('.vacancy-push, .vacancies-screen-detail-actions').first();
+    await opened.getByRole('button', { name: 'Откликнуться' }).click();
+
+    await expect(
+      page.getByRole('heading', { name: 'Как откликнуться: три круга связей' }),
+    ).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Круг 3/u })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(await openedUrls()).toEqual([]);
+    await waitForLetter(page);
+    await expect(page.getByRole('button', { name: 'Открыть площадку' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Одобрить письмо' }).click();
+    await expect(page.locator('.career-letter-approved')).toBeVisible();
+    expect(marks).toEqual([]);
+
+    await page.getByRole('button', { name: 'Открыть площадку' }).click();
+    expect(await openedUrls()).toHaveLength(1);
+    await expect(page.locator('.career-letter-actions')).toContainText('Отклик отправлен?');
+    await captureState(page, testInfo, 'b629-approved-platform');
+    await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+    await expect.poll(() => marks.at(-1)?.status).toBe('applied');
+    await expect(page.locator('.career-letter-actions')).toContainText('Отклик отмечен');
+  });
+
   test('offers a real consultant route when the profile has too few facts', async ({ page }) => {
     const state = createRouteState('rich', 'few');
     await installLetterMocks(page, state);

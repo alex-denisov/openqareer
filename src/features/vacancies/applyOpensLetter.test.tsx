@@ -230,7 +230,7 @@ describe('B629: the letter leads to the platform after approval', () => {
 
   it('after «Одобрить письмо» opens the platform and asks whether the response was sent', () => {
     const openSpy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue(true);
-    const onConfirmSent = vi.fn();
+    const onConfirmSent = vi.fn().mockResolvedValue(undefined);
     mount(
       <LetterActions
         approval={approved}
@@ -270,6 +270,24 @@ describe('B629: the letter leads to the platform after approval', () => {
     root = undefined;
   });
 
+  it('a failed save says so and keeps the question', async () => {
+    vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue(true);
+    const onConfirmSent = vi.fn().mockRejectedValue(new Error('write_failed'));
+    mount(
+      <LetterActions
+        approval={approved}
+        pitchReady
+        platform={{ url: 'https://example.com/vacancy', applied: false, onConfirmSent }}
+      />,
+    );
+    click('Открыть площадку');
+    await act(async () => button('Да, отклик отправлен')?.click());
+    expect(document.body.textContent).toContain(
+      'Не удалось сохранить отклик. Состояние не изменено.',
+    );
+    expect(button('Да, отклик отправлен')?.disabled).toBe(false);
+  });
+
   it('a marked response does not ask again', () => {
     mount(
       <LetterActions
@@ -289,8 +307,8 @@ describe('B629: the letter screen records the response like the row', () => {
     const host = letterHostProps({ applications: apps });
     const platform = letterPlatform(item().cluster, host.applications);
     expect(platform).toMatchObject({ url: 'https://example.com/vacancy', applied: false });
-    platform.onConfirmSent?.();
-    expect(apps.record).toHaveBeenCalledWith('c-1', 'applied', {
+    void platform.onConfirmSent?.();
+    expect(apps.recordConfirmed).toHaveBeenCalledWith('c-1', 'applied', {
       title: 'Head of Platform',
       company: 'Вектор Банк',
       url: 'https://example.com/vacancy',

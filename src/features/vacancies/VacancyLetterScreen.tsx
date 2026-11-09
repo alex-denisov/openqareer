@@ -76,7 +76,7 @@ export function letterPlatform(
     applied: applications?.byCluster.get(vacancy.id)?.status === 'applied',
     onConfirmSent: applications
       ? () =>
-          applications.record(vacancy.id, 'applied', {
+          applications.recordConfirmed(vacancy.id, 'applied', {
             title: vacancy.canonicalTitle,
             company: vacancy.canonicalCompany,
             url: vacancy.primaryUrl,

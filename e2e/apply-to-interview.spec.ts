@@ -225,6 +225,117 @@ interface StubOptions {
   readonly failInterviewCreation?: boolean;
 }
 
+const COLD_RECIPIENT = {
+  id: 'person-team',
+  fullName: 'Команда найма',
+  roleTitle: null,
+  companyName: CLUSTER.canonicalCompany,
+};
+
+/** B629: «Откликнуться» goes through the cold letter, so the chain needs its three answers. */
+function letterStub(method: string, pathname: string): unknown {
+  const vacancyId = pathname.split('/').at(-2) ?? '';
+  if (method === 'GET' && pathname.endsWith('/connection-circles')) {
+    const none = (circle: number) => ({
+      circle,
+      state: 'none',
+      message: 'Знакомых нет.',
+      paths: [],
+    });
+    return {
+      data: {
+        vacancyId,
+        companyKey: 'company',
+        companyName: CLUSTER.canonicalCompany,
+        vacancyTitle: CLUSTER.canonicalTitle,
+        circles: [
+          none(1),
+          none(2),
+          {
+            circle: 3,
+            state: 'available',
+            message: 'Подготовьте холодный отклик по вакансии.',
+            paths: [
+              {
+                id: 'cold-team',
+                circle: 3,
+                recipient: COLD_RECIPIENT,
+                path: [],
+                evidence: [],
+                strength: 'unknown',
+                source: 'cold',
+                nextStep: 'cold_application',
+              },
+            ],
+          },
+        ],
+        linkedinImport: { state: 'unknown', importedAt: null, importedCount: null },
+        resume: { available: false, kind: 'targeted' },
+      },
+    };
+  }
+  if (method === 'POST' && pathname.endsWith('/pitch')) {
+    return {
+      data: {
+        vacancyId,
+        emailPitch: { subject: 'О роли', body: 'Пишу по поводу роли.' },
+        linkedInNote: 'Короткое сообщение.',
+        atsCoverLetter: 'Письмо на основе подтверждённого опыта.',
+        contactMessage: 'Здравствуйте. Пишу по поводу роли.',
+        usedEvidenceIds: [],
+        candidateWorkplaces: [],
+        language: 'ru',
+        notices: [],
+        unconfirmedRequirements: [],
+        generatedAt: '2026-09-27T09:00:00.000Z',
+        resumeAvailable: false,
+        resumeKind: 'targeted',
+      },
+    };
+  }
+  if (method === 'POST' && pathname.endsWith('/letter-approvals')) {
+    return {
+      data: {
+        applicationId: 'application-letter',
+        documentId: 'document-letter',
+        approvedAt: '2026-09-27T09:00:00.000Z',
+        status: 'approved',
+        sent: false,
+        resume: null,
+      },
+    };
+  }
+  return null;
+}
+
+/**
+ * B629: «Откликнуться» opens the letter; after «Одобрить письмо» the platform opens and the
+ * response is marked only on «Да, отклик отправлен». Returns on the letter screen.
+ */
+async function applyThroughLetter(page: Page, apply: Locator): Promise<void> {
+  await page.addInitScript(() => {
+    window.open = (() => null) as typeof window.open;
+  });
+  await page.evaluate(() => {
+    window.open = (() => null) as typeof window.open;
+  });
+  await apply.click();
+  await expect(
+    page.getByRole('heading', { name: 'Как откликнуться: три круга связей' }),
+  ).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveValue(/\S+/u);
+  await page.getByRole('button', { name: 'Одобрить письмо' }).click();
+  await page.getByRole('button', { name: 'Открыть площадку' }).click();
+  // B341: открытие сайта — ещё не отклик; отметка только по подтверждению.
+  await expect(page.locator('.career-letter-actions')).toContainText('Отклик отправлен?');
+  await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+}
+
+/** Back from the letter to the vacancy list. */
+async function leaveLetter(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Назад к вакансиям' }).first().click();
+}
+
 /** One route table shared by both tests: an in-memory tracker that mutates
  * as the candidate applies, moves the stage and schedules the interview —
  * the chain has no meaning against a frozen fixture. */
@@ -239,6 +350,8 @@ function stubSession(
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
+    const letter = letterStub(request.method(), pathname);
+    if (letter) return route.fulfill({ json: letter });
     if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
     if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
     if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
@@ -463,11 +576,10 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await openFirstVacancy(page);
 
   const detailActions = await openedVacancy(page);
-  const applyButton = detailActions.getByRole('button', { name: 'Откликнуться' });
-  await applyButton.click();
-  // B341: открытие сайта — ещё не отклик; отметка только по подтверждению.
-  await expect(detailActions).not.toContainText('Отклик отмечен');
-  await detailActions.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+  await applyThroughLetter(page, detailActions.getByRole('button', { name: 'Откликнуться' }));
+  await expect(page.locator('.career-letter-actions')).toContainText('Отклик отмечен');
+  await leaveLetter(page);
+  await openFirstVacancy(page);
   const goToResponses = page.getByRole('button', { name: 'Перейти в «Отклики»' });
   await expect(goToResponses).toBeVisible();
   const viewport = page.viewportSize()?.width ?? 0;
@@ -683,19 +795,23 @@ test.describe('C47 apply-to-interview chain', () => {
     await openVacancies(page);
     await openFirstVacancy(page);
 
-    await page
-      .locator('.vacancies-screen-detail-actions')
-      .getByRole('button', { name: 'Откликнуться' })
-      .click();
-    await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+    await applyThroughLetter(
+      page,
+      page
+        .locator('.vacancies-screen-detail-actions')
+        .getByRole('button', { name: 'Откликнуться' }),
+    );
 
-    await expect(page.locator('.vacancies-interview-error')).toContainText('Состояние не изменено');
+    await expect(page.locator('.career-letter-actions')).toContainText('Состояние не изменено');
+    await expect(page.locator('.career-letter-actions')).not.toContainText('Отклик отмечен');
+    await expect(page.getByRole('button', { name: 'Да, отклик отправлен' })).toBeVisible();
+    await leaveLetter(page);
+    await openFirstVacancy(page);
     await expect(
       page.locator('.vacancies-screen-detail-actions').getByRole('button', {
         name: 'Перейти в «Отклики»',
       }),
     ).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Да, отклик отправлен' })).toBeVisible();
   });
 
   test('keeps the applied stage and does not open prep when interview scheduling fails', async ({
