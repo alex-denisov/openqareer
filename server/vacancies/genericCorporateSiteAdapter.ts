@@ -341,6 +341,7 @@ export {
   type DetectedAtsProvider,
 } from './embeddedAtsDetector';
 import { detectEmbeddedAts, type DetectedAts } from './embeddedAtsDetector';
+import { fetchEmbeddedAtsBoard } from './embeddedAtsBoardFetch';
 
 async function fetchWorkdayAts(
   ats: DetectedAts,
@@ -664,6 +665,11 @@ async function fetchFromAtsProvider(
       return fetchSmartRecruitersAts(ats, source, observedAt);
     case 'recruitee':
       return fetchRecruiteeAts(ats, source, observedAt);
+    case 'bamboohr':
+    case 'teamtailor':
+    case 'personio':
+    case 'pinpoint':
+      return ats.orgId ? fetchEmbeddedAtsBoard(ats.provider, ats.orgId, source, observedAt) : [];
     case 'dou':
       if (html) {
         return parseDouCompanyVacanciesHtml(html, {

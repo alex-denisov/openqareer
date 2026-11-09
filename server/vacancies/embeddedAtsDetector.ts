@@ -7,6 +7,10 @@ export type DetectedAtsProvider =
   | 'workable'
   | 'smartrecruiters'
   | 'recruitee'
+  | 'bamboohr'
+  | 'teamtailor'
+  | 'personio'
+  | 'pinpoint'
   | 'dou';
 
 export interface DetectedAts {
@@ -15,9 +19,34 @@ export interface DetectedAts {
   readonly orgId?: string;
 }
 
+/**
+ * B628: доски, у которых есть адаптер ATS-доски, а своего чтения в адаптере
+ * сайтов нет. Поддомен — слаг компании; служебные поддомены не считаются.
+ */
+const SUBDOMAIN_BOARDS: readonly [DetectedAtsProvider, RegExp][] = [
+  ['bamboohr', /https?:\/\/([a-z0-9-]+)\.bamboohr\.com/i],
+  ['teamtailor', /https?:\/\/([a-z0-9-]+)\.teamtailor\.com/i],
+  ['personio', /https?:\/\/([a-z0-9-]+)\.jobs\.personio\.(?:de|com)/i],
+  ['pinpoint', /https?:\/\/([a-z0-9-]+)\.pinpointhq\.com/i],
+];
+const SERVICE_SUBDOMAIN = /^(?:www|app|api|static|assets|cdn|res|scripts|help|support|blog)$/i;
+
+function subdomainBoard(text: string): DetectedAts | null {
+  for (const [provider, pattern] of SUBDOMAIN_BOARDS) {
+    const re = new RegExp(pattern.source, 'gi');
+    for (const m of text.matchAll(re)) {
+      const slug = m[1];
+      if (slug && !SERVICE_SUBDOMAIN.test(slug)) return { provider, endpointUrl: '', orgId: slug };
+    }
+  }
+  return null;
+}
+
 const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
   (text) => {
-    const m = text.match(/https?:\/\/([a-z0-9_-]+\.wd\d+\.myworkdayjobs\.com)\/([a-z0-9_-]+)/i);
+    const m = text.match(
+      /https?:\/\/([a-z0-9_-]+\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?([a-z0-9_-]+)/i,
+    );
     if (!m) return null;
     const [host, site] = [m[1], m[2]];
     const tenant = host.split('.')[0];
@@ -78,7 +107,9 @@ const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
     };
   },
   (text) => {
-    const m = text.match(/jobs\.smartrecruiters\.com\/([a-z0-9_-]+)/i);
+    const m = text.match(
+      /(?:(?:jobs|careers)\.smartrecruiters\.com\/|api\.smartrecruiters\.com\/v1\/companies\/)([a-z0-9_-]+)/i,
+    );
     if (!m?.[1]) return null;
     return {
       provider: 'smartrecruiters',
@@ -105,6 +136,7 @@ const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
       orgId: m[1],
     };
   },
+  subdomainBoard,
 ];
 
 /**
