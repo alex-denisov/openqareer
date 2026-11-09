@@ -69,7 +69,10 @@ function parseJsonLdLocation(jobLocation: unknown): string {
   return typeof jobLocation === 'string' ? jobLocation : '';
 }
 
-function parseJsonLdJobItem(item: Record<string, unknown>, baseUrl: string): ExtractedRawJob | null {
+function parseJsonLdJobItem(
+  item: Record<string, unknown>,
+  baseUrl: string,
+): ExtractedRawJob | null {
   const type = String(item['@type'] || '');
   if (!/JobPosting/i.test(type)) return null;
 
@@ -110,7 +113,8 @@ function parseJsonLdJobItem(item: Record<string, unknown>, baseUrl: string): Ext
  */
 export function extractJsonLdJobs(html: string, baseUrl: string): ExtractedRawJob[] {
   const jobs: ExtractedRawJob[] = [];
-  const scriptRegex = /<script\b[^>]*type=['"]application\/ld\+json['"][^>]*>([\s\S]*?)<\/script>/gi;
+  const scriptRegex =
+    /<script\b[^>]*type=['"]application\/ld\+json['"][^>]*>([\s\S]*?)<\/script>/gi;
   let match: RegExpExecArray | null;
 
   while ((match = scriptRegex.exec(html)) !== null) {
@@ -206,7 +210,9 @@ function extractComeetJobs(html: string, baseUrl: string): ExtractedRawJob[] {
   if (!html.includes('comeet-position-name')) return [];
   const jobs: ExtractedRawJob[] = [];
   const seenUrls = new Set<string>();
-  const items = Array.from(html.matchAll(/<li[^>]*class="[^"]*all-loc[^"]*"[^>]*>([\s\S]*?)<\/li>/gi));
+  const items = Array.from(
+    html.matchAll(/<li[^>]*class="[^"]*all-loc[^"]*"[^>]*>([\s\S]*?)<\/li>/gi),
+  );
   for (const item of items) {
     const raw = item[1];
     const titleMatch = raw.match(/class="comeet-position-name">([\s\S]*?)<\/div>/);
@@ -250,7 +256,9 @@ function extractTildaCardJobs(html: string, baseUrl: string): ExtractedRawJob[] 
   if (!html.includes('t-card__title')) return [];
   const jobs: ExtractedRawJob[] = [];
   const seenUrls = new Set<string>();
-  const matches = Array.from(html.matchAll(/<div class="[^"]*t-card__title[^"]*"[^>]*>([\s\S]*?)<\/div>/gi));
+  const matches = Array.from(
+    html.matchAll(/<div class="[^"]*t-card__title[^"]*"[^>]*>([\s\S]*?)<\/div>/gi),
+  );
   for (const m of matches) {
     const raw = m[1];
     const title = cleanText(raw);
@@ -291,9 +299,7 @@ export function extractSemanticHtmlJobs(html: string, baseUrl: string): Extracte
     const fullUrl = resolveUrl(href, baseUrl);
     if (seenUrls.has(fullUrl)) continue;
 
-    if (
-      /glassdoor\.com|indeed\.com|linkedin\.com|hh\.ru|superjob\.ru|habr\.com/i.test(fullUrl)
-    ) {
+    if (/glassdoor\.com|indeed\.com|linkedin\.com|hh\.ru|superjob\.ru|habr\.com/i.test(fullUrl)) {
       continue;
     }
 
@@ -329,116 +335,12 @@ export function extractSemanticHtmlJobs(html: string, baseUrl: string): Extracte
   return jobs;
 }
 
-export type DetectedAtsProvider =
-  | 'greenhouse'
-  | 'lever'
-  | 'ashby'
-  | 'workday'
-  | 'workable'
-  | 'smartrecruiters'
-  | 'recruitee'
-  | 'dou';
-
-export interface DetectedAts {
-  readonly provider: DetectedAtsProvider;
-  readonly endpointUrl: string;
-  readonly orgId?: string;
-}
-
-const ATS_MATCHERS: Array<(text: string) => DetectedAts | null> = [
-  (text) => {
-    const m = text.match(/https?:\/\/([a-z0-9_-]+\.wd\d+\.myworkdayjobs\.com)\/([a-z0-9_-]+)/i);
-    if (!m) return null;
-    const [host, site] = [m[1], m[2]];
-    const tenant = host.split('.')[0];
-    return {
-      provider: 'workday',
-      endpointUrl: `https://${host}/wday/cxs/${tenant}/${site}/jobs`,
-      orgId: `${tenant}/${site}`,
-    };
-  },
-  (text) => {
-    const m = text.match(
-      /(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|job-boards\.eu\.greenhouse\.io)\/([a-z0-9_-]+)/i,
-    );
-    if (!m?.[1] || /embed|api|v1/i.test(m[1])) return null;
-    return {
-      provider: 'greenhouse',
-      endpointUrl: `https://boards-api.greenhouse.io/v1/boards/${m[1]}/jobs`,
-      orgId: m[1],
-    };
-  },
-  (text) => {
-    const m = text.match(/jobs\.ashbyhq\.com\/([a-z0-9_.-]+)/i);
-    if (!m?.[1]) return null;
-    return {
-      provider: 'ashby',
-      endpointUrl: `https://api.ashbyhq.com/posting-api/job-board/${m[1]}`,
-      orgId: m[1],
-    };
-  },
-  (text) => {
-    const m = text.match(/(?:jobs\.lever\.co|jobs\.eu\.lever\.co)\/([a-z0-9_-]+)/i);
-    if (!m?.[1]) return null;
-    const isEu = /jobs\.eu\.lever\.co/i.test(text);
-    return {
-      provider: 'lever',
-      endpointUrl: isEu
-        ? `https://api.eu.lever.co/v0/postings/${m[1]}?mode=json`
-        : `https://api.lever.co/v0/postings/${m[1]}?mode=json`,
-      orgId: m[1],
-    };
-  },
-  (text) => {
-    const m = text.match(/apply\.workable\.com\/(?:[a-z]{2}\/)?([a-z0-9_-]+)/i);
-    if (!m?.[1] || /api|j|widget|assets/i.test(m[1])) return null;
-    return {
-      provider: 'workable',
-      endpointUrl: `https://apply.workable.com/api/v1/widget/accounts/${m[1]}?details=true`,
-      orgId: m[1],
-    };
-  },
-  (text) => {
-    const m = text.match(/jobs\.smartrecruiters\.com\/([a-z0-9_-]+)/i);
-    if (!m?.[1]) return null;
-    return {
-      provider: 'smartrecruiters',
-      endpointUrl: `https://api.smartrecruiters.com/v1/companies/${m[1]}/postings`,
-      orgId: m[1],
-    };
-  },
-  (text) => {
-    const m = text.match(/(?:([a-z0-9_-]+)\.recruitee\.com|recruitee\.com\/([a-z0-9_-]+))/i);
-    const slug = m?.[1] || m?.[2];
-    if (!slug || /api|assets|static|blog/i.test(slug)) return null;
-    return {
-      provider: 'recruitee',
-      endpointUrl: `https://${slug}.recruitee.com/api/offers/`,
-      orgId: slug,
-    };
-  },
-  (text) => {
-    const m = text.match(/jobs\.dou\.ua\/companies\/([a-z0-9_-]+)\/vacancies/i);
-    if (!m?.[1]) return null;
-    return {
-      provider: 'dou',
-      endpointUrl: `https://jobs.dou.ua/companies/${m[1]}/vacancies/`,
-      orgId: m[1],
-    };
-  },
-];
-
-/**
- * Стратегия 4: Обнаружение встроенных ATS в адресе страницы или внутри HTML.
- */
-export function detectEmbeddedAts(textToScan: string): DetectedAts | null {
-  if (!textToScan || typeof textToScan !== 'string') return null;
-  for (const matcher of ATS_MATCHERS) {
-    const match = matcher(textToScan);
-    if (match) return match;
-  }
-  return null;
-}
+export {
+  detectEmbeddedAts,
+  type DetectedAts,
+  type DetectedAtsProvider,
+} from './embeddedAtsDetector';
+import { detectEmbeddedAts, type DetectedAts } from './embeddedAtsDetector';
 
 async function fetchWorkdayAts(
   ats: DetectedAts,
@@ -573,7 +475,10 @@ async function fetchLeverAts(
     const descBody = String(job.descriptionPlain || job.description || '');
     const lists = Array.isArray(job.lists)
       ? job.lists
-          .map((l: Record<string, unknown>) => `${cleanText(String(l.text || ''))}:\n${cleanDescription(String(l.content || ''))}`)
+          .map(
+            (l: Record<string, unknown>) =>
+              `${cleanText(String(l.text || ''))}:\n${cleanDescription(String(l.content || ''))}`,
+          )
           .join('\n\n')
       : '';
     const fullDesc = [descBody, lists].filter(Boolean).join('\n\n') || title;
@@ -643,7 +548,9 @@ async function fetchRecruiteeAts(
   return offers.map((job: Record<string, unknown>) => {
     const title = cleanText(String(job.title || ''));
     const extId = String(job.id || job.slug || '');
-    const jobUrl = String(job.careers_url || job.careers_apply_url || `${source.targetUrl}#${extId}`);
+    const jobUrl = String(
+      job.careers_url || job.careers_apply_url || `${source.targetUrl}#${extId}`,
+    );
     const loc = String(job.location || job.city || '');
     const isRemote = Boolean(job.remote) || /remote/i.test(loc) || /remote/i.test(title);
     const descParts = [job.description, job.requirements].filter(Boolean).map(String);
@@ -667,7 +574,9 @@ async function fetchRecruiteeAts(
 
 async function fetchSmartRecruitersDetail(orgId: string, extId: string): Promise<string> {
   try {
-    const res = await fetch(`https://api.smartrecruiters.com/v1/companies/${orgId}/postings/${extId}`);
+    const res = await fetch(
+      `https://api.smartrecruiters.com/v1/companies/${orgId}/postings/${extId}`,
+    );
     if (!res.ok) return '';
     const json = await res.json();
     const sections =
