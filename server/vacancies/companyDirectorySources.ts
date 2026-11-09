@@ -86,6 +86,8 @@ const CAREERS_URL_BOARDS: readonly [RegExp, AtsProvider][] = [
   [/^https?:\/\/([\w-]+)\.breezy\.hr/i, 'breezy'],
   [/^https?:\/\/([\w-]+)\.pinpointhq\.com/i, 'pinpoint'],
   [/^https?:\/\/([\w-]+)\.jobs\.personio\.(?:de|com)/i, 'personio'],
+  [/^https?:\/\/(?!www\.)([\w-]+)\.bamboohr\.com/i, 'bamboohr'],
+  [/^https?:\/\/(?!www\.)([\w-]+)\.teamtailor\.com/i, 'teamtailor'],
 ];
 
 /** Доска ATS из записи справочника, а если поля пусты — из адреса страницы вакансий. */

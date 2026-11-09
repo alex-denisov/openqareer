@@ -78,6 +78,8 @@ describe('ats board source id', () => {
       'breezy',
       'pinpoint',
       'personio',
+      'bamboohr',
+      'teamtailor',
     ]);
   });
 });
@@ -549,5 +551,69 @@ describe('ats board adapters', () => {
         },
       ),
     ).toEqual([]);
+  });
+});
+
+describe('B628 — BambooHR и Teamtailor на ответах, снятых с живых досок', () => {
+  it('читает BambooHR careers/list (chainstack)', () => {
+    const [vacancy] = normalizeAtsBoard(
+      'ats-bamboohr-chainstack',
+      {
+        meta: { totalCount: 1 },
+        result: [
+          {
+            id: '133',
+            jobOpeningName: 'Account Manager',
+            departmentLabel: 'Accounts Team',
+            employmentStatusLabel: 'Full-Time Remote',
+            location: { city: null, state: null },
+            atsLocation: { country: 'Singapore', state: null, province: null, city: null },
+            isRemote: null,
+            locationType: '1',
+          },
+        ],
+      },
+      { observedAt: OBSERVED_AT, sourceName: 'Chainstack' },
+    );
+    expect(vacancy).toMatchObject({
+      title: 'Account Manager',
+      company: 'Chainstack',
+      location: 'Singapore',
+      isRemote: true,
+      url: 'https://chainstack.bamboohr.com/careers/133',
+    });
+    expect(atsBoardEndpoint('bamboohr', 'chainstack')).toBe(
+      'https://chainstack.bamboohr.com/careers/list',
+    );
+  });
+
+  it('читает Teamtailor jobs.rss (tradingview) и снимает экранированную разметку', () => {
+    const [vacancy] = normalizeAtsBoard(
+      'ats-teamtailor-tradingview',
+      `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:tt="https://teamtailor.com/locations"><channel><title>TradingView</title>
+<item>
+  <title>Backend Unit Lead</title>
+  <description>&lt;p&gt;&lt;span&gt;TradingView is the world&#8217;s largest financial analysis platform.&lt;/span&gt;&lt;/p&gt;</description>
+  <pubDate>Thu, 13 Aug 2026 17:34:13 +0300</pubDate>
+  <link>https://tradingview.teamtailor.com/jobs/8218448-backend-unit-lead</link>
+  <remoteStatus>hybrid</remoteStatus>
+  <guid>7e5c1783-241a-45b1-bca3-c2034ae43504</guid>
+  <tt:locations><tt:location><tt:name>Limassol</tt:name><tt:city>Limassol</tt:city><tt:country>Cyprus</tt:country></tt:location></tt:locations>
+  <tt:department>Technology</tt:department>
+</item></channel></rss>`,
+      { observedAt: OBSERVED_AT, sourceName: 'TradingView' },
+    );
+    expect(vacancy).toMatchObject({
+      title: 'Backend Unit Lead',
+      company: 'TradingView',
+      location: 'Limassol, Cyprus',
+      url: 'https://tradingview.teamtailor.com/jobs/8218448-backend-unit-lead',
+    });
+    expect(vacancy?.description).toContain('financial analysis platform');
+    expect(vacancy?.description).not.toContain('<p>');
+    expect(atsBoardEndpoint('teamtailor', 'tradingview')).toBe(
+      'https://tradingview.teamtailor.com/jobs.rss',
+    );
   });
 });
