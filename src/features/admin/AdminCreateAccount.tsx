@@ -162,12 +162,15 @@ function CreateActions({ saving, onClose }: { saving: boolean; onClose: () => vo
 }
 
 function CreateStatus({ status }: { status: Status }) {
-  if (status.kind === 'error')
+  if (status.kind === 'error') {
+    // A field error is already shown under its field; repeat nothing.
+    if (Object.keys(status.fields).length > 0) return null;
     return (
       <p className="admin-field-error" role="alert">
         {status.message}
       </p>
     );
+  }
   if (status.kind !== 'created') return null;
   return (
     <p className="admin-note" role="status">

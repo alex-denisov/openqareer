@@ -77,6 +77,17 @@ describe('AdminCreateAccount', () => {
     await act(async () => button('Создать').click());
     expect(input('create-email').getAttribute('aria-invalid')).toBe('true');
     expect(onCreated).not.toHaveBeenCalled();
+    const alerts = [...document.querySelectorAll('[role=alert]')].map((el) => el.textContent);
+    expect(alerts).toEqual(['Этот email уже связан с другим аккаунтом.']);
+  });
+
+  it('shows a general message once when the error names no field', async () => {
+    vi.spyOn(adminApi, 'createAdminAccount').mockRejectedValue(
+      new CoachApiError('Сервер недоступен.', 'unavailable', true, {}),
+    );
+    await act(async () => button('Создать').click());
+    const alerts = [...document.querySelectorAll('[role=alert]')].map((el) => el.textContent);
+    expect(alerts).toEqual(['Сервер недоступен.']);
   });
 });
 
