@@ -75,6 +75,26 @@ describe('PlacementBackfill', () => {
   });
 });
 
+describe('PlacementBackfill adopts employers outside the directory', () => {
+  it('creates the company for an unlinked board and ties the placement to it', () => {
+    const db = openDb();
+    db.exec(`ALTER TABLE company_directory ADD COLUMN source_type TEXT NOT NULL DEFAULT 'x';
+      ALTER TABLE company_directory ADD COLUMN created_at TEXT NOT NULL DEFAULT 'x';
+      ALTER TABLE company_directory ADD COLUMN updated_at TEXT NOT NULL DEFAULT 'x';
+      ALTER TABLE company_directory ADD COLUMN evidence TEXT;
+      CREATE TABLE vacancy_pool_index (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, expired INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE vacancy_cluster_input (id TEXT PRIMARY KEY, cluster_json TEXT NOT NULL);
+      INSERT INTO vacancy_source_state VALUES ('src-apple-jobs');
+      INSERT INTO vacancy_pool_index (id, source_id) VALUES ('v1', 'src-apple-jobs');
+      INSERT INTO vacancy_cluster_input VALUES ('v1', '{"company":"Apple"}');`);
+    const step = new PlacementBackfill(db, { chunk: 50, now: () => 1 });
+    let report = step.step();
+    while (!report.done) report = step.step();
+    expect(report.adoptedCompanies).toBe(1);
+    expect(db.prepare(`SELECT company_key FROM company_placement WHERE source_id = 'src-apple-jobs'`).get()).toEqual({ company_key: 'apple' });
+  });
+});
+
 describe('PlacementBackfillTicker', () => {
   it('stops at the budget, reports the finished pass and then pauses', async () => {
     const { PlacementBackfillTicker, PLACEMENT_PASS_PAUSE_MS } = await import('./placementBackfill');
@@ -83,7 +103,7 @@ describe('PlacementBackfillTicker', () => {
     const step = () => {
       calls += 1;
       clock += 100;
-      return { done: calls === 5, processed: 1, changed: 1, changedTotal: calls, duplicateSources: 0, ms: 100 };
+      return { done: calls === 5, processed: 1, changed: 1, changedTotal: calls, duplicateSources: 0, adoptedCompanies: 0, ms: 100 };
     };
     const ticker = new PlacementBackfillTicker({ step }, () => clock);
     expect(ticker.tick()).toBeUndefined();
