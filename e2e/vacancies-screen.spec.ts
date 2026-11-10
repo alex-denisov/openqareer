@@ -558,9 +558,7 @@ const FACETS = {
 };
 
 test.describe('B250 vacancies screen', () => {
-  test('links an archived application from its vacancy row to the open archive', async ({
-    page,
-  }) => {
+  test('B631: an archived vacancy offers one action — «Вернуть из архива»', async ({ page }) => {
     await stubSession(page);
     await page.route('**/api/v1/candidate/applications**', async (route) => {
       const request = route.request();
@@ -601,6 +599,42 @@ test.describe('B250 vacancies screen', () => {
       }
       return route.fallback();
     });
+    const restored: string[] = [];
+    await page.route('**/api/v1/candidate/applications/*/restore', async (route) => {
+      const id = new URL(route.request().url()).pathname.split('/').at(-2) ?? '';
+      restored.push(id);
+      return route.fulfill({
+        json: {
+          data: {
+            id,
+            candidateId: CANDIDATE.candidateId,
+            clusterId: 'c-1',
+            stage: 'applied',
+            closedReason: null,
+            archiveReason: null,
+            archivePreviousStage: null,
+            archiveStaleDays: 30,
+            processProfile: 'standard',
+            vacancy: {
+              title: 'Business Information Architect',
+              company: 'Genetec',
+              url: '',
+              source: 'test',
+            },
+            notes: null,
+            followUpDueAt: null,
+            stageChangedAt: '2026-11-10T08:00:00.000Z',
+            version: 3,
+            createdAt: '2026-09-20T08:00:00.000Z',
+            updatedAt: '2026-11-10T08:00:00.000Z',
+            followUp: null,
+            whoseTurn: 'company',
+            materials: { coverLetter: false, resume: false },
+            nearestInterview: null,
+          },
+        },
+      });
+    });
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
@@ -611,17 +645,14 @@ test.describe('B250 vacancies screen', () => {
     await expect(row).toContainText('Отклик в архиве');
     await expect(row).not.toContainText('Отклик отмечен');
     await setRowExpanded(page, 0, true);
-    const openArchive = page.getByRole('button', { name: 'Открыть архив' });
-    await openArchive.click();
-
-    await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
-    const archiveToggle = page.getByRole('button', { name: 'Показать закрытые' });
-    await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(archiveToggle).toBeFocused();
-    await expect(archiveToggle).toBeInViewport();
-    await expect(page.locator('.career-responses-archive-card')).toContainText(
-      'Business Information Architect',
-    );
+    // 1440 shows the card's action row, 390 the push sheet: both offer only «Вернуть из архива».
+    const restore = page.getByRole('button', { name: 'Вернуть из архива' });
+    await expect(restore).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Открыть архив' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Назначили интервью' })).toHaveCount(0);
+    await restore.click();
+    await expect.poll(() => restored).toEqual(['archived-c-1']);
+    await expect(row).not.toContainText('Отклик в архиве');
   });
 
   test('shows the approved vacancy summary, tabs, pool filters and rows', async ({ page }) => {
