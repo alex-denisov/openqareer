@@ -6,6 +6,7 @@ import { record, text } from '../jsonVacancyRecord';
 import { createFeedClient, type FeedClient } from './feedClient';
 import { RUSSIAN_COMPANY_FEEDS, type FreehireFeed } from './russianCompanyFeeds';
 import { RUSSIAN_PLATFORM_FEEDS } from './russianPlatformFeeds';
+import { SITEMAP_FEEDS } from './sitemapJsonLdFeed';
 import { readJsonLdJobPosting } from '../detailTextSources';
 
 /**
@@ -16,7 +17,11 @@ export const FREEHIRE_SOURCE_PREFIX = 'src-fh-';
 /** Опрос раз в три часа: как доски ATS после #571. */
 const REFRESH_MINUTES = 180;
 
-const FEEDS: readonly FreehireFeed[] = [...RUSSIAN_COMPANY_FEEDS, ...RUSSIAN_PLATFORM_FEEDS];
+const FEEDS: readonly FreehireFeed[] = [
+  ...RUSSIAN_COMPANY_FEEDS,
+  ...RUSSIAN_PLATFORM_FEEDS,
+  ...SITEMAP_FEEDS,
+];
 const BY_SOURCE_ID = new Map(FEEDS.map((f) => [`${FREEHIRE_SOURCE_PREFIX}${f.id}`, f]));
 
 export function freehireFeedFor(sourceId: string): FreehireFeed | undefined {
@@ -59,6 +64,9 @@ const MEASURED_ITEMS: Readonly<Record<string, number>> = {
   'habr-career': 1109,
   megafon: 1011,
   mts: 2296,
+  avito: 125,
+  uzum: 49,
+  kaspi: 42,
 };
 
 export const FREEHIRE_FEED_MEASUREMENTS: Readonly<

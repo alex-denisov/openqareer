@@ -26,6 +26,8 @@ export interface FeedClientOptions {
 export interface FeedClient {
   getJson(url: string, init?: FeedRequestInit): Promise<unknown>;
   getText(url: string, init?: FeedRequestInit): Promise<string>;
+  /** Тело как байты: сжатый sitemap (`.xml.gz`). */
+  getBytes(url: string): Promise<Uint8Array>;
   /** Пауза между страницами одной ленты. */
   pause(ms: number): Promise<void>;
 }
@@ -165,6 +167,10 @@ export function createFeedClient(options: FeedClientOptions = {}): FeedClient {
     async getText(url, init = {}) {
       const accept = 'text/html,application/xhtml+xml,application/xml';
       return (await request(config, url, init, accept)).text();
+    },
+    async getBytes(url) {
+      const res = await request(config, url, {}, 'application/xml,application/gzip,*/*');
+      return new Uint8Array(await res.arrayBuffer());
     },
     pause: (ms) => config.sleep(ms),
   };
