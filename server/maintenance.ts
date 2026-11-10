@@ -45,7 +45,11 @@ import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/market
 import { scheduleRemoteScopeBackfill } from './vacancies/remoteScopeBackfillSchedule';
 import { pauseClusterWrite } from './vacancies/clusterWritePause';
 import { createLinkedinGuestBudget } from './vacancies/linkedinGuestBudget';
-import { createWebsharePool, readWebshareCredentials } from './vacancies/webshareProxyPool';
+import {
+  createWebsharePool,
+  readStaticProxyList,
+  readWebshareCredentials,
+} from './vacancies/webshareProxyPool';
 import { loadBudgetState, saveBudgetState } from './vacancies/linkedinBudgetState';
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 import { scheduleSiteDiscovery } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
@@ -71,10 +75,15 @@ const budgetStateDatabase = new DatabaseSync(config.databasePath);
 applySqliteBusyTimeout(budgetStateDatabase);
 const savedBudget = loadBudgetState(budgetStateDatabase);
 // B626: гостевой LinkedIn через ротацию прокси Webshare; без ключа — напрямую.
+// Платный список из окружения важнее бесплатного списка API.
+const staticProxies = readStaticProxyList();
 const webshareCredentials = readWebshareCredentials();
-const websharePool = webshareCredentials
-  ? createWebsharePool({ credentials: webshareCredentials })
-  : undefined;
+const websharePool =
+  staticProxies.length > 0
+    ? createWebsharePool({ credentials: { apiKey: 'static' }, loadList: async () => staticProxies })
+    : webshareCredentials
+      ? createWebsharePool({ credentials: webshareCredentials })
+      : undefined;
 const linkedinFetch: typeof fetch = websharePool?.fetch ?? fetch;
 const linkedinBudget = createLinkedinGuestBudget({
   ...(websharePool ? { parallelism: () => websharePool.parallelism() } : {}),
@@ -301,7 +310,11 @@ try {
   scheduleRemoteScopeBackfill(semanticDatabase, log);
   // B627: домен, карьеры и ATS новых компаний реестра через Vertex и проверку HTTP.
   if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1') {
-    scheduleSiteDiscovery(semanticDatabase, log, discoveryModel(semanticDatabase, config.databasePath, process.env));
+    scheduleSiteDiscovery(
+      semanticDatabase,
+      log,
+      discoveryModel(semanticDatabase, config.databasePath, process.env),
+    );
   }
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
@@ -327,7 +340,8 @@ try {
   log.info(
     {
       sources: composed.engine.getSources().length,
-      linkedinEgress: websharePool ? 'webshare' : 'direct',
+      linkedinEgress:
+        staticProxies.length > 0 ? 'static-proxies' : websharePool ? 'webshare' : 'direct',
     },
     'maintenance-started',
   );

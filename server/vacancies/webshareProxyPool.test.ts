@@ -3,6 +3,7 @@ import {
   createWebsharePool,
   isLinkedinUrl,
   parseWebshareList,
+  readStaticProxyList,
   readWebshareCredentials,
   type WebshareProxy,
 } from './webshareProxyPool';
@@ -107,5 +108,15 @@ describe('webshareProxyPool', () => {
     });
     await failing.fetch('https://www.linkedin.com/x');
     expect(failing.stats().listError).toBe('webshare-list-status-401');
+  });
+
+  it('reads a static paid proxy list from env', () => {
+    expect(readStaticProxyList({})).toEqual([]);
+    expect(
+      readStaticProxyList({
+        OPENQAREER_LINKEDIN_GUEST_PROXY_URLS:
+          'http://u%40x:p@1.2.3.4:80, bad, socks5://a:b@h:1,http://h:0',
+      }),
+    ).toEqual([{ host: '1.2.3.4', port: 80, username: 'u@x', password: 'p' }]);
   });
 });
