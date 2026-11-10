@@ -79,7 +79,7 @@ import type { CatalogTotals } from './matchedCatalogSummary';
 import {
   COMPANY_LANE_CONCURRENCY,
   COMPANY_LANE_LIMIT,
-  COMPANY_LANE_PER_HOST,
+  companyLanePerHost,
   COMPANY_LANE_SOURCE_TIMEOUT_MS,
   pickCompanyLane,
   pickWave,
@@ -1967,7 +1967,7 @@ export class MultiSourceVacancyEngine {
     const companyLane = pickCompanyLane(
       ready.filter((source) => tierOf(source) === 1),
       COMPANY_LANE_LIMIT,
-      COMPANY_LANE_PER_HOST,
+      companyLanePerHost,
       sourceHost,
     );
     const live = pickWave(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickCompanyLane, pickWave, type ChannelTier } from './syncWave';
+import { companyLanePerHost, pickCompanyLane, pickWave, type ChannelTier } from './syncWave';
 
 const items = (tier: ChannelTier, n: number) =>
   Array.from({ length: n }, (_, i) => ({ id: `t${tier}-${i}`, tier }));
@@ -35,5 +35,18 @@ describe('B628 — company lane', () => {
   });
   it('returns [] for a zero limit', () => {
     expect(pickCompanyLane([item('x', 'h')], 0, 3, (s) => s.host)).toEqual([]);
+  });
+});
+
+describe('companyLanePerHost (B628 throughput)', () => {
+  it('a public ATS API is limited per service, not like a corporate site', () => {
+    expect(companyLanePerHost('boards-api.greenhouse.io')).toBe(16);
+    expect(companyLanePerHost('api.lever.co')).toBe(16);
+    expect(companyLanePerHost('api.ashbyhq.com')).toBe(16);
+    expect(companyLanePerHost('www.example.com')).toBe(3);
+  });
+  it('pickCompanyLane accepts a per-host limit function', () => {
+    const sorted = Array.from({ length: 20 }, (_, i) => ({ id: `g${i}`, host: 'boards-api.greenhouse.io' }));
+    expect(pickCompanyLane(sorted, 96, companyLanePerHost, (s) => s.host)).toHaveLength(16);
   });
 });
