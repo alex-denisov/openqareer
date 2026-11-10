@@ -66,6 +66,8 @@ export interface CoverLetterPromptInput {
   readonly resumeAttached?: boolean;
   /** Имя из профиля как есть; модель возвращает его на языке письма для подписи и темы (B624). */
   readonly candidateName?: string;
+  /** B639: место кандидата в компании вакансии или её группе (`letterCompanyLink`). */
+  readonly companyLink?: string;
 }
 
 /**
@@ -88,6 +90,19 @@ function withSignatureName(template: string): string {
   return template.replace(
     RETURN_TEXT_ONLY,
     `Верни текст сообщения. После него отдельной последней строкой напиши «${SIGNATURE_LINE_LABEL} » и имя и фамилию кандидата (в профиле: {NAME}) так, как их пишут на языке сообщения: сначала имя, потом фамилия.`,
+  );
+}
+
+/**
+ * B639: работа в компании вакансии — сильнейший довод письма, и после правки длины модель его теряла.
+ * Утверждённый запрос не меняется: фраза добавляется только при совпадении (`letterCompanyLink`).
+ */
+const INTRO_SENTENCE_END = 'что сильнее всего связывает его с этой вакансией и компанией.';
+
+function withCompanyLink(template: string): string {
+  return template.replace(
+    INTRO_SENTENCE_END,
+    `${INTRO_SENTENCE_END} Кандидат работал в «{LINK}»: это та же компания, что в вакансии, или её группа. Обязательно скажи об этом во вводном абзаце как о том, что связывает его с компанией, даже если письмо выйдет длиннее 180 слов или мест работы станет больше. Если по тексту вакансии видно, что это другая компания, не говори об этом.`,
   );
 }
 
@@ -117,11 +132,13 @@ export function coverLetterPrompt(input: CoverLetterPromptInput): string {
     VACANCY: input.vacancy.trim(),
     PROFILE: input.profile.trim(),
     NAME: name ?? '',
+    LINK: input.companyLink?.trim() ?? '',
   };
   const approved = input.resumeAttached === false ? withoutResume(COVER_LETTER_PROMPT) : COVER_LETTER_PROMPT;
   const signed = name ? withSignatureName(approved) : approved;
+  const linked = input.companyLink?.trim() ? withCompanyLink(signed) : signed;
   const template = input.chosenLanguage
-    ? signed.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
-    : signed;
-  return template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE|NAME)\}/gu, (_match, key: string) => values[key] ?? '').trim();
+    ? linked.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
+    : linked;
+  return template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE|NAME|LINK)\}/gu, (_match, key: string) => values[key] ?? '').trim();
 }

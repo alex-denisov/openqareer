@@ -182,7 +182,8 @@ const MASK_STEMS: readonly string[] = [
   'конфиденциальн',
 ];
 
-function isMaskWord(word: string): boolean {
+/** Общее слово названия (банк, компания, IT Services): само по себе компанию не называет. */
+export function isMaskWord(word: string): boolean {
   if (MASK_WORDS.has(word) || /^\d+$/u.test(word)) return true;
   return /\p{Script=Cyrillic}/u.test(word) && MASK_STEMS.some((stem) => word.startsWith(stem));
 }

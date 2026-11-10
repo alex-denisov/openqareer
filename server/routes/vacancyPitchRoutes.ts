@@ -31,7 +31,8 @@ import {
   withDeps,
 } from './helpers';
 import { pitchRankingContext } from './pitchRankingContext';
-import { letterNotesToTranslate, letterProfileText } from '../domain/letterProfile';
+import { letterEmployerNames, letterNotesToTranslate, letterProfileText } from '../domain/letterProfile';
+import { letterCompanyLink } from '../domain/letterCompanyLink';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
 
@@ -216,6 +217,15 @@ function letterPitch(
  * Английскому письму переводятся пункты мест работы и, отдельным вызовом рядом, уточнения кандидата (B639):
  * второй вызов не задерживает первый, а профиль собирается заново только если перевод уточнений пришёл.
  */
+/** B639: работа кандидата в компании вакансии или её группе идёт во вводный абзац. */
+function companyLinkInput(
+  context: Awaited<ReturnType<typeof readLetterContext>>,
+  company: string | undefined,
+): { companyLink?: string } {
+  const link = letterCompanyLink(company, letterEmployerNames(context.draft, context.facts));
+  return link ? { companyLink: link } : {};
+}
+
 async function translatedLetterInput(
   deps: RouteDeps,
   context: Awaited<ReturnType<typeof readLetterContext>>,
@@ -268,6 +278,7 @@ async function writeVacancyPitch(
     ...(body?.language ? { chosenLanguage: body.language } : {}),
     resumeAttached: resume.available, contextMs,
     ...(candidateName ? { candidateName } : {}),
+    ...companyLinkInput(context, vacancy.company),
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');

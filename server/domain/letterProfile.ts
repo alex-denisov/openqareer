@@ -86,6 +86,18 @@ function realEmployerNames(
   return (line) => masks.reduce((text, mask) => text.split(mask).join(names.get(mask)!), line);
 }
 
+/** B639: названия мест кандидата для письма, настоящие вместо масок. */
+export function letterEmployerNames<T extends VacancyPitchInputFact>(
+  draft: ResumeDraft,
+  facts: readonly T[],
+): string[] {
+  const usable = new Map(filterUsablePitchFacts(facts).map((fact) => [fact.id, fact.statement.trim()]));
+  return draft.experience.flatMap((place) => {
+    const name = employerOf(place, usable)?.trim();
+    return name ? [name] : [];
+  });
+}
+
 function experienceLines(
   place: ResumeExperienceInput,
   usable: ReadonlyMap<string, string>,

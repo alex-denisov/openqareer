@@ -10,6 +10,16 @@ describe('coverLetterPrompt: запрос, который принял влад�
     expect(hash).toBe('257eef537a4d41cab2eb36dafc1c98ce86a5865de521396e4c47f4689371c3b3');
   });
 
+  it('B639: работа в компании вакансии или её группе — во вводном абзаце сверх длины и числа мест', () => {
+    const prompt = coverLetterPrompt({ ...base, companyLink: 'Корпоративный университет Сбера' });
+    expect(prompt).toContain(
+      'Кандидат работал в «Корпоративный университет Сбера»: это та же компания, что в вакансии, или её группа.',
+    );
+    expect(prompt).toContain('даже если письмо выйдет длиннее 180 слов или мест работы станет больше');
+    expect(prompt.indexOf('Корпоративный университет Сбера')).toBeLessThan(prompt.indexOf('Вакансия:'));
+    expect(coverLetterPrompt(base)).not.toContain('Кандидат работал в «');
+  });
+
   it('подставляет получателя, род, вакансию и профиль', () => {
     const text = coverLetterPrompt({
       ...base,

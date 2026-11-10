@@ -64,6 +64,8 @@ export interface CoverLetterWriteInput {
   readonly review?: (body: string) => readonly string[];
   /** Имя из профиля как есть: модель возвращает его на языке письма (B624). */
   readonly candidateName?: string;
+  /** B639: место кандидата в компании вакансии или её группе. */
+  readonly companyLink?: string;
 }
 
 /** Спрашивать модель не о чем: это не отказ провайдера. */
@@ -234,6 +236,7 @@ export function letterPrompt(input: CoverLetterWriteInput): string {
     ...(input.chosenLanguage ? { chosenLanguage: input.chosenLanguage } : {}),
     ...(input.resumeAttached === false ? { resumeAttached: false } : {}),
     ...(input.candidateName ? { candidateName: input.candidateName } : {}),
+    ...(input.companyLink ? { companyLink: input.companyLink } : {}),
   });
 }
 
