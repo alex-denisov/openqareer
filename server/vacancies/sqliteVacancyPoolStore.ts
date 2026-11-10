@@ -222,6 +222,21 @@ function flag(value: boolean | undefined): number | null {
   return value === undefined ? null : value ? 1 : 0;
 }
 
+/**
+ * B642: запись, которой нет в полном чтении источника, снимается сразу. Каждое
+ * такое снятие идёт в журнал со ссылкой, чтобы удаления проверялись выборкой.
+ */
+function logAbsentRemoved(
+  sourceId: string,
+  rows: readonly { id: string; url: string | null }[],
+): void {
+  for (const row of rows) {
+    console.info(
+      JSON.stringify({ event: 'pool_absent_removed', sourceId, id: row.id, url: row.url ?? '' }),
+    );
+  }
+}
+
 function yieldToEventLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
@@ -1417,9 +1432,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     // источника проходится один раз, а не с начала на каждую порцию. Нового
     // индекса не нужно — его создание на 3,8 ГБ прода съело бы окно выката.
     const stale = this.database.prepare(
-      `SELECT rowid AS row, id FROM vacancy_pool
-        WHERE source_id = ? AND rowid > ? AND expired_at IS NULL AND stored_at < ?
-        ORDER BY rowid LIMIT ?`,
+      `SELECT p.rowid AS row, p.id, i.url FROM vacancy_pool p
+         LEFT JOIN vacancy_pool_index i ON i.id = p.id
+        WHERE p.source_id = ? AND p.rowid > ? AND p.expired_at IS NULL AND p.stored_at < ?
+        ORDER BY p.rowid LIMIT ?`,
     );
     let removed = 0;
     let cursor = 0;
@@ -1427,9 +1443,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       const rows = stale.all(sourceId, cursor, storedAt, this.writeChunkSize) as Array<{
         row: number;
         id: string;
+        url: string | null;
       }>;
       if (rows.length === 0) break;
       cursor = rows[rows.length - 1].row;
+      logAbsentRemoved(sourceId, rows);
       removed += this.removeByIds(
         sourceId,
         rows.map((row) => row.id),
@@ -1456,9 +1474,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const tally: WriteTally = { transactions: 0, maxTransactionMs: 0 };
     const storedAt = await this.upsertAllAsync(sourceId, vacancies, tally);
     const stale = this.database.prepare(
-      `SELECT rowid AS row, id FROM vacancy_pool
-        WHERE source_id = ? AND rowid > ? AND expired_at IS NULL AND stored_at < ?
-        ORDER BY rowid LIMIT ?`,
+      `SELECT p.rowid AS row, p.id, i.url FROM vacancy_pool p
+         LEFT JOIN vacancy_pool_index i ON i.id = p.id
+        WHERE p.source_id = ? AND p.rowid > ? AND p.expired_at IS NULL AND p.stored_at < ?
+        ORDER BY p.rowid LIMIT ?`,
     );
     let removed = 0;
     let cursor = 0;
@@ -1466,9 +1485,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       const rows = stale.all(sourceId, cursor, storedAt, this.writeChunkSize) as Array<{
         row: number;
         id: string;
+        url: string | null;
       }>;
       if (rows.length === 0) break;
       cursor = rows[rows.length - 1].row;
+      logAbsentRemoved(sourceId, rows);
       removed += await this.removeByIdsAsync(
         sourceId,
         rows.map((row) => row.id),

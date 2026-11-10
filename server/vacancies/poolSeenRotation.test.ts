@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 
@@ -84,5 +84,32 @@ describe('уборка по последнему чтению (B642)', () => {
       read.prepare('SELECT id FROM vacancy_pool ORDER BY id').all() as Array<{ id: string }>
     ).map((row) => row.id);
     expect(ids).toEqual(['alive']);
+  });
+});
+
+describe('журнал удалённых по отсутствию в полном чтении (B642)', () => {
+  it('пишет источник, id и ссылку каждой снятой записи', () => {
+    const { store } = open();
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, 'info').mockImplementation((line: unknown) => {
+      lines.push(String(line));
+    });
+    store.replaceSourceSlice('ats-greenhouse-acme', [
+      vacancy('keep', 'ats-greenhouse-acme', 5, 0),
+      vacancy('closed', 'ats-greenhouse-acme', 5, 0),
+    ]);
+    store.replaceSourceSlice('ats-greenhouse-acme', [vacancy('keep', 'ats-greenhouse-acme', 5, 0)]);
+    spy.mockRestore();
+    const removed = lines
+      .map((line) => JSON.parse(line))
+      .filter((e) => e.event === 'pool_absent_removed');
+    expect(removed).toEqual([
+      {
+        event: 'pool_absent_removed',
+        sourceId: 'ats-greenhouse-acme',
+        id: 'closed',
+        url: 'https://example.test/closed',
+      },
+    ]);
   });
 });
