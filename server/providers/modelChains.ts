@@ -80,11 +80,12 @@ export const MODEL_CHAINS = {
    * мастер-профиле. Отменяет для письма правило «Gemini первым» от 04.11.
    */
   /**
-   * B601, 10.11: бонус Vertex кончился 09.11 (`vertexCredit.ts`), Gemini теперь пропускается. GLM на проде
-   * обрывала письмо и писала по-русски на английскую вакансию, поэтому DeepSeek спрашивается второй раз:
-   * отказ проверки у него случайный, повтор пишет другой текст.
+   * B640, 10.11 (решение CPO): по одному вызову в порядке, утверждённом владельцем. Повтор DeepSeek
+   * убран: во время сбоя 07:30–08:00 он только добавлял ожидание, а отказ проверки у GLM теперь ловит
+   * и искажённые слова (`letterWordDistortion.ts`). Gemini пропускается, пока у Vertex нет бонуса
+   * (`vertexCredit.ts`, кончился 09.11).
    */
-  coverLetters: [DEEPSEEK_FLASH, DEEPSEEK_FLASH, GLM_FLASH, VERTEX],
+  coverLetters: [DEEPSEEK_FLASH, GLM_FLASH, VERTEX],
   linkedinDrafts: [VERTEX, DEEPSEEK_FLASH, DEEPSEEK_FLASH, LUNA],
   /**
    * Квиз по навыку профиля (блок A, пакет 3): вопросы читает кандидат, поэтому

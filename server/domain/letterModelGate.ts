@@ -5,6 +5,7 @@
  * цифру, которой нет в профиле, и компанию, которой нет ни в профиле, ни в вакансии. Стиль, самооценка
  * и термины направления не отклоняются. Цифры прописью и слово в начале фразы не проверяются.
  */
+import { distortedWords } from './letterWordDistortion';
 
 export interface LetterGateSources {
   /** Язык письма: латиница в начале русской фразы — имя, а в английской — обычное слово. */
@@ -20,7 +21,7 @@ export interface LetterGateSources {
   readonly resumeAttached?: boolean;
 }
 
-export type LetterGateRule = 'number' | 'name' | 'resume' | 'cyrillic';
+export type LetterGateRule = 'number' | 'name' | 'resume' | 'cyrillic' | 'distorted';
 
 export interface LetterGateViolation {
   readonly rule: LetterGateRule;
@@ -332,15 +333,19 @@ export function reviewLetterBody(body: string, sources: LetterGateSources): Lett
     ];
     return checks.filter(([, failed]) => failed).map(([rule]) => ({ rule, sentence }));
   });
+  const sourceTexts = [...sources.candidate, ...sources.vacancy];
+  const distorted = sentences
+    .filter((sentence) => distortedWords(sentence, sourceTexts).length > 0)
+    .map((sentence) => ({ rule: 'distorted' as const, sentence }));
   const companies = companyNames(sources);
   const cyrillic = isLatinLetter(body)
     ? sentences.filter((sentence) => hasForeignCyrillic(sentence, companies)).map((sentence) => ({ rule: 'cyrillic' as const, sentence }))
     : [];
   if (sources.resumeAttached === false) {
     const promised = sentences.filter((sentence) => RESUME_NOTE.test(sentence));
-    return [...checked, ...cyrillic, ...promised.map((sentence) => ({ rule: 'resume' as const, sentence }))];
+    return [...checked, ...distorted, ...cyrillic, ...promised.map((sentence) => ({ rule: 'resume' as const, sentence }))];
   }
   return RESUME_NOTE.test(body)
-    ? [...checked, ...cyrillic]
-    : [...checked, ...cyrillic, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
+    ? [...checked, ...distorted, ...cyrillic]
+    : [...checked, ...distorted, ...cyrillic, { rule: 'resume', sentence: sentences.at(-1) ?? '' }];
 }

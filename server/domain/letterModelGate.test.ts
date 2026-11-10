@@ -309,3 +309,19 @@ describe('reviewLetterBody: отчёт о нарушении', () => {
     expect(violations).toEqual([{ rule: 'number', sentence: 'Команда из 900 человек.' }]);
   });
 });
+
+describe('reviewLetterBody: искажённые слова письма GLM (B640)', () => {
+  const distorted = (body: string) =>
+    reviewLetterBody(`${body}\n\nРезюме приложено.`, SOURCES).filter((item) => item.rule === 'distorted');
+
+  it('«СБером» и «руководител» отклоняют письмо с указанием фразы', () => {
+    expect(distorted('С СБером меня связывает многолетний опыт.')).toEqual([
+      { rule: 'distorted', sentence: 'С СБером меня связывает многолетний опыт.' },
+    ]);
+    expect(distorted('Я руководител технологическими подразделениями.').map((item) => item.rule)).toEqual(['distorted']);
+  });
+
+  it('обычное письмо проходит', () => {
+    expect(distorted('Откликаюсь на вакансию в Сбере. Руководитель направления с 15-летним опытом.')).toEqual([]);
+  });
+});
