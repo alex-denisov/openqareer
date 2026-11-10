@@ -253,6 +253,26 @@ function isVacancyFresh(publishedAt: string, nowMs: number = Date.now()): boolea
   return isWithin(parseMs(publishedAt), freshnessWindow(nowMs));
 }
 
+/** Замер B642: сколько записей улова отсёк срок публикации. */
+function logStaleIntake(
+  source: VacancySourceConfig,
+  fetched: number,
+  fresh: number,
+  partial: boolean,
+): void {
+  if (fetched <= fresh) return;
+  console.info(
+    JSON.stringify({
+      event: 'pool_intake_stale',
+      sourceId: source.id,
+      type: source.type,
+      partial,
+      fetched,
+      stale: fetched - fresh,
+    }),
+  );
+}
+
 function vacancyMembershipFields(vacancy: UnifiedVacancy): string {
   return JSON.stringify({
     title: vacancy.title,
@@ -1719,6 +1739,7 @@ export class MultiSourceVacancyEngine {
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
+    logStaleIntake(source, fetched.length, freshFetched.length, readingPartial);
     const replaceRefused = this.replaceRefusal(source.id, freshFetched.length, readingPartial);
     const partial = readingPartial || replaceRefused !== undefined;
     const changedExistingMembership =
