@@ -54,6 +54,7 @@ import { loadBudgetState, saveBudgetState } from './vacancies/linkedinBudgetStat
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 import { scheduleSiteDiscovery } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
 import { discoveryModel } from './companyDirectory/siteDiscovery/discoveryModel';
+import { scheduleFreehireImport } from './companyDirectory/freehire/freehireSchedule';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -316,6 +317,8 @@ try {
       discoveryModel(semanticDatabase, config.databasePath, process.env),
     );
   }
+  // B641: компании, сайты и доски ATS из открытого API freehire.me, крупные первыми.
+  scheduleFreehireImport(semanticDatabase, log, process.env);
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
     stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(
