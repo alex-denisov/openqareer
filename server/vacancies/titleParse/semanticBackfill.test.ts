@@ -46,9 +46,11 @@ describe('SemanticBackfill (B267 S2)', () => {
     const backfill = new SemanticBackfill(database);
     backfill.step(100);
     backfill.step(100);
-    const read = () => database.prepare('SELECT grade_min, grade_max, title_key FROM vacancy_grade').all();
+    const read = () =>
+      database.prepare('SELECT grade_min, grade_max, title_key FROM vacancy_grade').all();
     expect(read()).toEqual([expect.objectContaining({ grade_min: 3, grade_max: 5 })]);
-    const changes = () => (database.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+    const changes = () =>
+      (database.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
     const before = changes();
     backfill.step(100);
     expect(changes() - before).toBeLessThan(10);
@@ -286,7 +288,9 @@ describe('SemanticBackfill (B267 S2)', () => {
     const report = restarted.step(1);
 
     expect(report.backfilled).toBe(1);
-    const count = database.prepare("SELECT count(*) AS n FROM vacancy_semantic WHERE id = 'z9'").get() as { n: number };
+    const count = database
+      .prepare("SELECT count(*) AS n FROM vacancy_semantic WHERE id = 'z9'")
+      .get() as { n: number };
     expect(count.n).toBeGreaterThan(0);
   });
 
@@ -312,15 +316,23 @@ describe('SemanticBackfill (B267 S2)', () => {
 
     const first = backfill.step(100);
     expect(first.ontologyCorrected).toBe(4);
-    const read = database.prepare('SELECT functions, level_rank FROM title_parse WHERE title_key = ?');
-    expect(read.get('ит директор, группа')).toMatchObject({ functions: '["it-ops"]', level_rank: 4 });
+    const read = database.prepare(
+      'SELECT functions, level_rank FROM title_parse WHERE title_key = ?',
+    );
+    expect(read.get('ит директор, группа')).toMatchObject({
+      functions: '["it-ops"]',
+      level_rank: 4,
+    });
     expect(read.get('it director')).toMatchObject({ functions: '["it-ops"]', level_rank: 4 });
     expect(read.get('руководитель службы технической поддержки')).toMatchObject({
       functions: '["support"]',
       level_rank: 2,
     });
     expect(read.get('директор по ит-инфраструктуре')).toMatchObject({ level_rank: 2 });
-    expect(read.get('начальник отдела ит')).toMatchObject({ functions: '["it-ops"]', level_rank: 2 });
+    expect(read.get('начальник отдела ит')).toMatchObject({
+      functions: '["it-ops"]',
+      level_rank: 2,
+    });
     expect(read.get('руководитель отдела поддержки платформ')).toMatchObject({
       functions: '["it-ops"]',
     });
@@ -401,5 +413,22 @@ describe('SemanticBackfill (B267 S2)', () => {
 
     expect(semanticRows(database).find((row) => row.id === 'v1')).toMatchObject({ level_rank: 1 });
   });
-});
 
+  it('reports the stages of a slow step (B641)', () => {
+    const database = poolDatabase();
+    addVacancy(database, 'v1', 'Software Engineer');
+    const slow: Record<string, number>[] = [];
+    let clock = 0;
+    const realNow = Date.now;
+    Date.now = () => (clock += 400);
+    try {
+      new SemanticBackfill(database, undefined, (stages) => slow.push({ ...stages })).step(100);
+    } finally {
+      Date.now = realNow;
+    }
+    expect(slow).toHaveLength(1);
+    expect(Object.keys(slow[0]!)).toEqual(
+      expect.arrayContaining(['corrections', 'catchUp', 'readWindow', 'writeChunk', 'totalMs']),
+    );
+  });
+});
