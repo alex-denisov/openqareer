@@ -14,6 +14,7 @@ import { VacancyInfoModal } from './VacancyInfoModal';
 import { RecruiterContactsBlock } from './RecruiterContactsBlock';
 import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
+import { COLD_LETTER_CIRCLE, type RowLetterOpen } from './useVacancyLetterRoute';
 import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
 import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
@@ -28,8 +29,15 @@ interface VacancyDetailPanelProps {
   readonly item: MatchedVacancyItem;
   readonly now: string;
   readonly applications?: VacancyApplications;
-  readonly onMarkAlreadyApplied?: (clusterId: string, vacancy: VacancyApplicationSnapshot) => Promise<void>;
-  readonly onScheduleInterview?: (clusterId: string, scheduledAt: string, vacancy: VacancyApplicationSnapshot) => Promise<ApplicationView>;
+  readonly onMarkAlreadyApplied?: (
+    clusterId: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<void>;
+  readonly onScheduleInterview?: (
+    clusterId: string,
+    scheduledAt: string,
+    vacancy: VacancyApplicationSnapshot,
+  ) => Promise<ApplicationView>;
   readonly onBack: () => void;
   /** Opens «Отклики» after the candidate confirms an application (B251 F5,
    * C47): without this door the tracker card was reachable only by rail
@@ -41,6 +49,8 @@ interface VacancyDetailPanelProps {
   /** Opens the contact window for this vacancy (B297): who works in the
    * company and the note to write. Nothing is sent by the product. */
   readonly onOpenNetworking?: () => void;
+  /** B629: with a letter screen «Откликнуться» opens the cold letter instead of the platform. */
+  readonly onOpenLetter?: RowLetterOpen;
 }
 
 export function VacancyDetailPanel({
@@ -53,6 +63,7 @@ export function VacancyDetailPanel({
   onOpenResponses,
   onAddToProfile,
   onOpenNetworking,
+  onOpenLetter,
 }: VacancyDetailPanelProps) {
   const { cluster, explanation } = item;
   const age = vacancyAge(cluster, now);
@@ -76,6 +87,7 @@ export function VacancyDetailPanel({
       onOpenResponses={onOpenResponses}
       onAddToProfile={onAddToProfile}
       onOpenNetworking={onOpenNetworking}
+      onOpenLetter={onOpenLetter}
     />
   );
 }
@@ -95,6 +107,7 @@ interface VacancyDetailViewProps {
   readonly onOpenResponses?: () => void;
   readonly onAddToProfile?: VacancyDetailPanelProps['onAddToProfile'];
   readonly onOpenNetworking?: VacancyDetailPanelProps['onOpenNetworking'];
+  readonly onOpenLetter?: RowLetterOpen;
 }
 
 function VacancyDetailPanelView(props: VacancyDetailViewProps) {
@@ -113,6 +126,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
     onOpenResponses,
     onAddToProfile,
     onOpenNetworking,
+    onOpenLetter,
   } = props;
   return (
     <div className="vacancies-detail-panel">
@@ -124,7 +138,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
         trust={trust}
         onBack={onBack}
       />
-      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={onAddToProfile} />
+      <VacancyFitEvidenceForItem item={{ cluster, explanation }} onAddToProfile={onAddToProfile} />
       <VacancyProfileEvidence
         cluster={cluster}
         explanation={explanation}
@@ -141,6 +155,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
         onScheduleInterview={onScheduleInterview}
         onOpenResponses={onOpenResponses}
         onOpenNetworking={onOpenNetworking}
+        onOpenLetter={onOpenLetter}
       />
     </div>
   );
@@ -203,23 +218,25 @@ function VacancyProfileEvidence({
   return (
     <>
       <VacancySignalGrid signals={signals} />
-      {!explanation.fitView?<div className="vacancies-detail-requirements">
-        {vacancyLevel ? (
-          <p className="vacancies-detail-level-row">
-            Уровень вакансии: <strong>{LEVEL_HUMAN_NAMES[vacancyLevel]}</strong>
-          </p>
-        ) : null}
-        <VacancyRequirementList
-          title="Совпадает по фактам профиля"
-          points={skillMatching}
-          tone="yes"
-        />
-        <VacancyMissingRequirements
-          cluster={cluster}
-          points={skillMissing}
-          onAddToProfile={onAddToProfile}
-        />
-      </div>:null}
+      {!explanation.fitView ? (
+        <div className="vacancies-detail-requirements">
+          {vacancyLevel ? (
+            <p className="vacancies-detail-level-row">
+              Уровень вакансии: <strong>{LEVEL_HUMAN_NAMES[vacancyLevel]}</strong>
+            </p>
+          ) : null}
+          <VacancyRequirementList
+            title="Совпадает по фактам профиля"
+            points={skillMatching}
+            tone="yes"
+          />
+          <VacancyMissingRequirements
+            cluster={cluster}
+            points={skillMissing}
+            onAddToProfile={onAddToProfile}
+          />
+        </div>
+      ) : null}
 
       <div className="vacancies-detail-description vacancies-req-block">
         <h4>Вилка</h4>
@@ -348,6 +365,7 @@ interface VacancyActionProps {
   /** Opens the contact window: who is in the company and what to write. Without
    * a handler the candidate would have no way out of the vacancy (B297). */
   readonly onOpenNetworking?: () => void;
+  readonly onOpenLetter?: RowLetterOpen;
 }
 
 function NetworkingAction({ onOpenNetworking }: { readonly onOpenNetworking?: () => void }) {
@@ -395,6 +413,7 @@ function VacancyResponseAction(props: VacancyActionProps) {
       cluster={props.cluster}
       applications={props.applications}
       onMarkAlreadyApplied={props.onMarkAlreadyApplied}
+      onOpenLetter={props.onOpenLetter}
     />
   );
 }
@@ -403,7 +422,8 @@ function VacancyUnappliedActions({
   cluster,
   applications,
   onMarkAlreadyApplied,
-}: Pick<VacancyActionProps, 'cluster' | 'applications' | 'onMarkAlreadyApplied'>) {
+  onOpenLetter,
+}: Pick<VacancyActionProps, 'cluster' | 'applications' | 'onMarkAlreadyApplied' | 'onOpenLetter'>) {
   const [confirmationError, setConfirmationError] = useState<string>();
   return (
     <>
@@ -412,6 +432,7 @@ function VacancyUnappliedActions({
         applications={applications}
         showUnsavedError={!confirmationError}
         onApply={() => setConfirmationError(undefined)}
+        onOpenLetter={onOpenLetter}
       />
       {onMarkAlreadyApplied ? (
         <ConfirmAlreadyAppliedButton
@@ -434,7 +455,8 @@ function ExternalApplyButton({
   applications,
   showUnsavedError,
   onApply,
-}: Pick<VacancyActionProps, 'cluster' | 'applications'> & {
+  onOpenLetter,
+}: Pick<VacancyActionProps, 'cluster' | 'applications' | 'onOpenLetter'> & {
   readonly showUnsavedError: boolean;
   readonly onApply: () => void;
 }) {
@@ -447,6 +469,10 @@ function ExternalApplyButton({
         className="vacancies-btn vacancies-btn-primary"
         onClick={() => {
           onApply();
+          if (onOpenLetter) {
+            onOpenLetter(cluster, COLD_LETTER_CIRCLE);
+            return;
+          }
           void openExternalLink(cluster.primaryUrl);
           setOpened(true);
         }}
@@ -488,9 +514,7 @@ function ConfirmAlreadyAppliedButton({
         className="vacancies-btn vacancies-btn-secondary"
         disabled={saving}
         aria-busy={saving}
-        onClick={() =>
-          runApplicationConfirmation(cluster, onConfirm, setSaving, onErrorChange)
-        }
+        onClick={() => runApplicationConfirmation(cluster, onConfirm, setSaving, onErrorChange)}
       >
         {saving ? 'Сохраняем…' : 'Я уже откликнулся'}
       </button>
@@ -637,9 +661,7 @@ async function submitInterviewSchedule(
   }
 }
 
-function vacancySnapshot(
-  cluster: MatchedVacancyItem['cluster'],
-): VacancyApplicationSnapshot {
+function vacancySnapshot(cluster: MatchedVacancyItem['cluster']): VacancyApplicationSnapshot {
   return {
     title: cluster.canonicalTitle,
     company: cluster.canonicalCompany ?? '',
@@ -650,16 +672,10 @@ function vacancySnapshot(
 
 /** Chip plus the door to «Отклики» (B251 F5, C47): confirming an application
  * has to tell the candidate the tracker card exists, not just stop talking. */
-function AppliedStatus({
-  onOpenResponses,
-}: {
-  readonly onOpenResponses?: () => void;
-}) {
+function AppliedStatus({ onOpenResponses }: { readonly onOpenResponses?: () => void }) {
   return (
     <>
-      <span className="vacancies-chip is-selected vacancies-detail-applied">
-        Отклик отмечен
-      </span>
+      <span className="vacancies-chip is-selected vacancies-detail-applied">Отклик отмечен</span>
       {onOpenResponses ? (
         <button
           type="button"

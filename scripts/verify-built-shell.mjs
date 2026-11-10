@@ -54,6 +54,100 @@ async function openFromShell(page, label, railSelector) {
   await page.locator(railSelector).first().click();
 }
 
+const COLD_PATH = {
+  id: 'cold-team',
+  circle: 3,
+  recipient: { id: 'person-team', fullName: 'Команда найма', roleTitle: null, companyName: null },
+  path: [],
+  evidence: [],
+  strength: 'unknown',
+  source: 'cold',
+  nextStep: 'cold_application',
+};
+
+/** B629: «Откликнуться» opens the cold letter, so the stand answers its three requests. */
+function letterAnswer(method, pathname) {
+  const vacancyId = pathname.split('/').at(-2) ?? '';
+  if (method === 'GET' && pathname.endsWith('/connection-circles')) {
+    const none = (circle) => ({ circle, state: 'none', message: 'Знакомых нет.', paths: [] });
+    return {
+      vacancyId,
+      companyKey: 'company',
+      companyName: 'FinCloud',
+      vacancyTitle: 'Вакансия',
+      circles: [
+        none(1),
+        none(2),
+        { circle: 3, state: 'available', message: 'Холодный отклик.', paths: [COLD_PATH] },
+      ],
+      linkedinImport: { state: 'unknown', importedAt: null, importedCount: null },
+      resume: { available: false, kind: 'targeted' },
+    };
+  }
+  if (method === 'POST' && pathname.endsWith('/pitch')) {
+    return {
+      vacancyId,
+      emailPitch: { subject: 'О роли', body: 'Пишу по поводу роли.' },
+      linkedInNote: 'Короткое сообщение.',
+      atsCoverLetter: 'Письмо на основе подтверждённого опыта.',
+      contactMessage: 'Здравствуйте. Пишу по поводу роли.',
+      usedEvidenceIds: [],
+      candidateWorkplaces: [],
+      language: 'ru',
+      notices: [],
+      unconfirmedRequirements: [],
+      generatedAt: new Date().toISOString(),
+      resumeAvailable: false,
+      resumeKind: 'targeted',
+    };
+  }
+  if (method === 'POST' && pathname.endsWith('/letter-approvals')) {
+    return {
+      applicationId: 'application-letter',
+      documentId: 'document-letter',
+      approvedAt: new Date().toISOString(),
+      status: 'approved',
+      sent: false,
+      resume: null,
+    };
+  }
+  return null;
+}
+
+async function installLetterRoutes(page) {
+  await page.route('**/api/v1/candidate/vacancies/*/*', async (route) => {
+    const request = route.request();
+    const data = letterAnswer(request.method(), new URL(request.url()).pathname);
+    if (!data) return route.fallback();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data }),
+    });
+  });
+}
+
+/**
+ * B629: «Откликнуться» opens the letter; the platform and «Отклик отправлен?» come only after
+ * «Одобрить письмо». Leaves the letter for the vacancy list.
+ */
+async function applyThroughLetter(page, openedVacancy, viewport) {
+  await page.evaluate(() => {
+    window.open = () => null;
+  });
+  await openedVacancy.getByRole('button', { name: 'Откликнуться' }).click();
+  await page.getByRole('heading', { name: 'Как откликнуться: три круга связей' }).waitFor();
+  await page.getByRole('button', { name: 'Одобрить письмо' }).click();
+  assert(page.__recordedApplications.length === 0, `${viewport.name}: отклик отмечен до площадки`);
+  await page.getByRole('button', { name: 'Открыть площадку' }).click();
+  assert(
+    page.__recordedApplications.length === 0,
+    `${viewport.name}: отклик отмечен без подтверждения`,
+  );
+  await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+  await page.locator('.career-letter-actions').getByText('Отклик отмечен').waitFor();
+}
+
 async function verifyViewport(browser, baseUrl, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -807,6 +901,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // уходит на неё же. Сервер атомарно создаёт карточку трекера при статусе
   // applied; стенд отражает тот же dual-write, чтобы экран видел карточку.
   page.__recordedApplications = [];
+  await installLetterRoutes(page);
   const trackerCards = [];
   await page.route('**/api/v1/candidate/vacancy-applications', async (route) => {
     const request = route.request();
@@ -1432,8 +1527,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     fullPage: true,
   });
 
-  // Отклик из карточки (B251 F5, C47, B341): «Откликнуться» ведёт на площадку,
-  // запись «applied» ставит только подтверждение «Да, отклик отправлен».
+  // Отклик из карточки (B251 F5, C47, B341, B629): «Откликнуться» ведёт в письмо, площадка —
+  // после одобрения, запись «applied» ставит только подтверждение «Да, отклик отправлен».
   // На широком экране первая строка раскрыта сразу; на узком — свёрнута.
   const closeFilterSheet = page
     .locator('.vacancies-filters.is-expanded')
@@ -1448,12 +1543,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     viewport.width <= 760 ? '.vacancy-push' : '.vacancies-detail-panel',
   );
   await openedVacancy.waitFor();
-  await openedVacancy.getByRole('button', { name: 'Откликнуться' }).click();
-  assert(
-    page.__recordedApplications.length === 0,
-    `${viewport.name}: отклик отмечен без подтверждения`,
-  );
-  await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+  await applyThroughLetter(page, openedVacancy, viewport);
   const recorded = page.__recordedApplications;
   assert(
     recorded.length === 1 && recorded[0].status === 'applied' && Boolean(recorded[0].clusterId),
@@ -1463,6 +1553,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     path: `output/playwright/b165-manual-application-${viewport.name}.png`,
     fullPage: true,
   });
+  await page.getByRole('button', { name: 'Назад к вакансиям' }).first().click();
 
   // B265 — «Профиль» is its own screen now (`ProfileScreenView`), not a fold
   // on «Сегодня»; «Документ и форматы» is a tab of that screen, not a route

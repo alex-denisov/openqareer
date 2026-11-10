@@ -54,7 +54,8 @@ interface VacancyScreenActionState {
   readonly externalOpened: boolean;
   readonly handleConfirmSent: () => void | Promise<void>;
   readonly savingApplied?: boolean;
-  readonly handleApplyExternal: () => void;
+  readonly handleApply: () => void;
+  readonly applyOpensLetter?: boolean;
 }
 
 function ApplyAction({
@@ -73,8 +74,8 @@ function ApplyAction({
     <button
       type="button"
       className="btn btn-primary action-btn"
-      onClick={rowState.handleApplyExternal}
-      disabled={!cluster.primaryUrl}
+      onClick={rowState.handleApply}
+      disabled={!rowState.applyOpensLetter && !cluster.primaryUrl}
     >
       <PaperPlaneTilt size={15} aria-hidden="true" />
       Откликнуться

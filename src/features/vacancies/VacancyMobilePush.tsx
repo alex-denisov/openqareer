@@ -217,9 +217,7 @@ function JobPage({
       <section className="vacancy-push-group">
         <h3 className="vacancy-push-cap">Описание</h3>
         <div className="vacancy-push-list">
-          <p className="vacancy-push-quote">
-            {summaryLine(summary)}
-          </p>
+          <p className="vacancy-push-quote">{summaryLine(summary)}</p>
           <PushRow
             icon={<FileText aria-hidden="true" />}
             title="Полное описание"
@@ -410,9 +408,9 @@ function applyCta(
     };
   }
   return {
-    onApply: rowState.handleApplyExternal,
+    onApply: rowState.handleApply,
     applyLabel: 'Откликнуться',
-    applyDisabled: !cluster.primaryUrl,
+    applyDisabled: !rowState.applyOpensLetter && !cluster.primaryUrl,
   };
 }
 
@@ -420,7 +418,8 @@ interface RowPushState {
   readonly applicationArchived: boolean;
   readonly alreadyApplied: boolean;
   readonly externalOpened: boolean;
-  readonly handleApplyExternal: () => void;
+  readonly handleApply: () => void;
+  readonly applyOpensLetter?: boolean;
   readonly handleConfirmSent: () => void | Promise<void>;
   readonly setInfoOpen: (open: boolean) => void;
 }
@@ -493,12 +492,21 @@ export function VacancyRowPush({
   };
   return (
     <VacancyMobilePush
-      {...vacancyRowPushProps(item, rowProps, rowState, actions)}
+      {...vacancyRowPushProps(item, rowProps, pushApplyState(rowState, leave), actions)}
       notice={<DetailTrustAlert trust={rowState.trust} />}
       moreActions={pushMoreActions({ ...rowState, ...more })}
       overlay={more.interviewForm}
     />
   );
+}
+
+/** B629: the letter is another screen, so applying closes the push like «Подготовить письмо». */
+function pushApplyState<T extends RowPushState>(
+  rowState: T,
+  leave: (action?: () => void) => (() => void) | undefined,
+): T {
+  if (!rowState.applyOpensLetter) return rowState;
+  return { ...rowState, handleApply: leave(rowState.handleApply) ?? rowState.handleApply };
 }
 
 function pushMoreActions(rowState: {
