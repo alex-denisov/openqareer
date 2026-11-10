@@ -132,6 +132,34 @@ describe('translateLetterFacts', () => {
     expect(await translateLetterFacts(undefined, [fact], 20)).toEqual(new Map([['ach-3-1', OUTCOME_EN]]));
   });
 
+  it('B639: facts are translated one per call in parallel, the calls that answered in time are kept', async () => {
+    clearLetterFactTranslationCache();
+    const facts = Array.from({ length: 20 }, (_, index) => ({
+      id: `own-${index}`,
+      statement: `Сократил срок выполнения заказа с ${index + 20} до 7 дней.`,
+      domain: 'outcome',
+    }));
+    const calls: number[] = [];
+    const batched = {
+      translate: (request: BulletTranslationRequest) => {
+        calls.push(request.bullets.length);
+        const first = request.bullets[0]?.key === 'own-0';
+        const reply = {
+          bullets: request.bullets.map((bullet) => ({
+            key: bullet.key,
+            text: `Reduced order lead time from ${Number(bullet.key.slice(4)) + 20} to 7 days.`,
+          })),
+        };
+        return first ? new Promise<typeof reply>(() => undefined) : Promise.resolve(reply);
+      },
+    };
+    const result = await translateLetterFacts(batched, facts, 50);
+    expect(calls.every((size) => size === 1)).toBe(true);
+    expect(calls.reduce((sum, size) => sum + size, 0)).toBe(20);
+    expect(result.size).toBe(20 - calls[0]!);
+    expect(result.has('own-0')).toBe(false);
+  });
+
   it('a failing translator leaves the letter without a result', async () => {
     const failing = { translate: async () => { throw new Error('provider down'); } };
     expect(await translateLetterFacts(failing, [fact], 1_000)).toEqual(new Map());

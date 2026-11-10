@@ -74,23 +74,46 @@ export async function translateLetterFacts(
     }),
   );
   const missing = facts.filter((fact) => !known.has(fact.id));
-  if (missing.length === 0 || !translator?.translate) return known;
+  const translate = translator?.translate?.bind(translator);
+  if (missing.length === 0 || !translate) return known;
+  // B639: one request for 30 facts answered in 15-16 s on prod against a 5 s budget, so the first
+  // English letter went without them. Measured on prod (gpt-5.6-luna, 10.11): one fact per call,
+  // 30 in parallel, gave 29-30 of 30 within 5 s; batches of 2 gave 20-24, of 3 gave 15.
+  const arrived = new Map<string, string>();
+  const batches = chunks(missing, TRANSLATION_BATCH).map((batch) =>
+    translateBatch(translate, batch).then((translated) => {
+      for (const [id, text] of translated) arrived.set(id, text);
+    }),
+  );
+  const deadline = expiresIn(budgetMs);
+  await Promise.race([Promise.all(batches), deadline.promise]).finally(deadline.cancel);
+  return new Map([...known, ...arrived]);
+}
+
+const TRANSLATION_BATCH = 1;
+
+function chunks<T>(items: readonly T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+    items.slice(index * size, index * size + size),
+  );
+}
+
+// A late answer still lands in the cache: the next letter quotes it at once.
+function translateBatch(
+  translate: NonNullable<LetterFactTranslator['translate']>,
+  facts: readonly LetterResultFact[],
+): Promise<Map<string, string>> {
   const request: BulletTranslationRequest = {
-    bullets: missing.map((fact) => ({
+    bullets: facts.map((fact) => ({
       key: fact.id,
       language: 'en',
       text: fact.statement,
       facts: [fact.statement],
     })),
   };
-  // A late answer still lands in the cache: the next letter quotes it at once.
-  const answered = translator
-    .translate(request)
-    .then((output) => checkedTranslations(missing, output))
+  return translate(request)
+    .then((output) => checkedTranslations(facts, output))
     .catch(() => new Map<string, string>());
-  const deadline = expiresIn(budgetMs);
-  const translated = await Promise.race([answered, deadline.promise]).finally(deadline.cancel);
-  return new Map([...known, ...(translated ?? [])]);
 }
 
 function checkedTranslations(

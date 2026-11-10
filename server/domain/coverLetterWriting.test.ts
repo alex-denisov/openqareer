@@ -5,9 +5,9 @@ import { COVER_LETTER_PROMPT, coverLetterPrompt } from './coverLetterWriting';
 const base = { vacancy: 'Вакансия про склад', profile: 'Профиль кладовщика' };
 
 describe('coverLetterPrompt: запрос, который принял владелец (B601, live-7)', () => {
-  it('текст запроса: live-7 и правка длины B639 (150–180 слов, два-три места работы)', () => {
+  it('текст запроса: live-7 и правка длины B639 (150–180 слов, два-три места работы, короче при нехватке фактов)', () => {
     const hash = createHash('sha256').update(COVER_LETTER_PROMPT).digest('hex');
-    expect(hash).toBe('c373a6da88a8e25bc3cc5631031ea651a07f2cddc9d05a1652f741dc89dc2712');
+    expect(hash).toBe('257eef537a4d41cab2eb36dafc1c98ce86a5865de521396e4c47f4689371c3b3');
   });
 
   it('подставляет получателя, род, вакансию и профиль', () => {

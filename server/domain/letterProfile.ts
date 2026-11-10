@@ -66,6 +66,26 @@ function employerOf(
   return named && sameMask ? named : place.employer;
 }
 
+/**
+ * B639: the mask the candidate named is replaced everywhere in the letter profile, not only in the
+ * place heading. On 10.11 the projects, the about text and the notes still carried
+ * «Corporate University of a Top-Tier …», and the letter to Sber lost the Sber background.
+ */
+function realEmployerNames(
+  draft: ResumeDraft,
+  usable: ReadonlyMap<string, string>,
+): (line: string) => string {
+  const names = new Map(
+    draft.experience.flatMap((place) => {
+      const mask = place.employer?.trim();
+      const named = employerOf(place, usable);
+      return mask && named && named !== place.employer ? [[mask, named] as const] : [];
+    }),
+  );
+  const masks = [...names.keys()].sort((left, right) => right.length - left.length);
+  return (line) => masks.reduce((text, mask) => text.split(mask).join(names.get(mask)!), line);
+}
+
 function experienceLines(
   place: ResumeExperienceInput,
   usable: ReadonlyMap<string, string>,
@@ -238,5 +258,7 @@ export function letterProfileText({
     ...joinedLine('LANGUAGES', visibleItems(draft.languages, withheldEvidenceIds).map((item) => [item.name, item.cefr ?? item.sourceLabel].filter(Boolean).join(' '))),
     ...joinedLine('SKILLS', visibleItems(draft.skills, withheldEvidenceIds).map((item) => item.name)),
     ...section(CANDIDATE_NOTES_TITLE, notes),
-  ].map(withoutContacts));
+  ]
+    .map(withoutContacts)
+    .map(realEmployerNames(draft, usableById)));
 }

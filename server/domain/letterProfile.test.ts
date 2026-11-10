@@ -110,6 +110,30 @@ describe('letterProfileText: весь мастер-профиль для пис�
     expect(letterNoteFacts(masked, [...facts, nameFact]).map((item) => item.id)).toEqual(['note']);
   });
 
+  it('маска с ответом заменена во всём профиле: проекты, о себе, уточнения (B639)', () => {
+    const mask = 'Corporate University of a Top-Tier Financial Institution';
+    const masked: ResumeDraft = {
+      ...draft,
+      candidate: { ...draft.candidate, about: `Built IT from zero at ${mask}.` },
+      experience: draft.experience.map((place) =>
+        place.id === 'w1'
+          ? { ...place, employer: mask, employerRealName: 'Корпоративный университет Сбера', employerNameMemoryId: 'name' }
+          : place,
+      ),
+      projects: [{ id: 'p1', name: 'Campus Commissioning', employer: mask }],
+    };
+    const nameFact = {
+      ...fact('name', `Компания «${mask}» в профиле называется «Корпоративный университет Сбера».`),
+      domain: 'other',
+    };
+    const note = { ...fact('note-2', `В ${mask} он строил ИТ кампуса с нуля.`), domain: 'other' };
+    const text = letterProfileText({ draft: masked, facts: [...facts, nameFact, note] });
+    expect(text).not.toContain(mask);
+    expect(text).toContain('Built IT from zero at Корпоративный университет Сбера.');
+    expect(text).toContain('Campus Commissioning | Корпоративный университет Сбера');
+    expect(text).toContain('В Корпоративный университет Сбера он строил ИТ кампуса с нуля.');
+  });
+
   it('работодатель места сменился: прежний ответ о маске не подставляется (B639)', () => {
     const changed: ResumeDraft = {
       ...draft,
