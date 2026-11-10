@@ -51,6 +51,7 @@ const MISSING_WINDOW = 10_000;
 const CORRECTION_CHUNK = 500;
 const CORRECTION_BUDGET_MS = 300;
 const SLOW_STEP_MS = 1_000;
+const RELABEL_WINDOW = 20_000;
 
 interface Correction {
   key: string;
@@ -82,6 +83,7 @@ export class SemanticBackfill {
   private gradeCursor = '';
   /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
   private relabelDone = false;
+  private relabelCursor = 0;
   private ontologyCorrectionDone = false;
   private correctionPhase: 'exact' | 'senior' | 'oneRole' = 'exact';
   private correctionOffset = 0;
@@ -323,16 +325,21 @@ export class SemanticBackfill {
    */
   private relabelStale(limit: number): number {
     if (this.relabelDone) return 0;
+    // B641 10.11: без устаревших строк запрос обходил весь title_parse (6,2 с
+    // на первом шаге после старта). Окно RELABEL_WINDOW строк по rowid за шаг.
+    const from = this.relabelCursor;
     const stale = this.database
       .prepare(
         `SELECT title_key, sample_title FROM title_parse
-         WHERE parsed_by = 'rules' AND taxonomy_version < ? LIMIT ?`,
+         WHERE rowid > ? AND rowid <= ? AND parsed_by = 'rules' AND taxonomy_version < ?
+         ORDER BY rowid LIMIT ?`,
       )
-      .all(TAXONOMY_VERSION, limit) as { title_key: string; sample_title: string }[];
-    if (stale.length === 0) {
-      this.relabelDone = true;
-      return 0;
-    }
+      .all(from, from + RELABEL_WINDOW, TAXONOMY_VERSION, limit) as {
+      title_key: string;
+      sample_title: string;
+    }[];
+    if (stale.length < limit) this.advanceRelabelCursor(from + RELABEL_WINDOW);
+    if (stale.length === 0) return 0;
     const parsed = stale.map((row) => ({ ...row, parsed: rulesParseOrOther(row.sample_title) }));
     const update = this.database.prepare(
       `UPDATE title_parse SET functions = ?, level_rank = ?, taxonomy_version = ?, parsed_at = ?
@@ -358,6 +365,14 @@ export class SemanticBackfill {
       throw error;
     }
     return stale.length;
+  }
+
+  private advanceRelabelCursor(next: number): void {
+    const max = (
+      this.database.prepare('SELECT max(rowid) AS m FROM title_parse').get() as { m: number | null }
+    ).m;
+    if (max !== null && next < max) this.relabelCursor = next;
+    else this.relabelDone = true;
   }
 
   /** Сбой грейдов уходит в журнал и не останавливает индексацию вакансий. */
