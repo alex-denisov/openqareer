@@ -182,12 +182,41 @@ async function pickBoard(
 ): Promise<{ board: FoundBoard; jobs: number } | null> {
   const hints = [card.name, card.slug, hostRoot(website).split('.')[0] ?? ''].filter(Boolean);
   for (const board of boards.slice(0, 3)) {
+    if (isAggregator(board.slug)) continue;
     const flat = board.slug.split('/')[0]!.replace(/[^a-z0-9]/g, '');
     if (!boardBelongsToCompany(flat, hints)) continue;
     const jobs = await check(board);
     if (jobs !== -1) return { board, jobs };
   }
   return null;
+}
+
+/**
+ * Job aggregators publish many employers' jobs on one board (Jobgether had 4 010
+ * on lever on 10.11): not a company's own ATS, so neither the board nor the company is kept.
+ */
+const AGGREGATOR = /jobgether|jobsbridge|worksterjobs|workster-jobs|^jobs-?for-|jooble|remoteok|remotive|talent-?com$|jobleads|jobright|lensa|ziprecruiter|careerbuilder|monster|adzuna|simplyhired/i;
+
+export function isAggregator(nameOrSlug: string): boolean {
+  return AGGREGATOR.test(nameOrSlug.toLowerCase().replace(/\s+/g, '-'));
+}
+
+/** Aggregator boards already imported from freehire become dormant; returns how many. */
+export function disableAggregatorBoards(database: DatabaseSync, now: Date): number {
+  const rows = database
+    .prepare(
+      `SELECT company_key, company_name, ats_slug FROM company_directory
+        WHERE status = 'active' AND json_extract(evidence, '$.freehire') IS NOT NULL AND ats_slug IS NOT NULL`,
+    )
+    .all() as unknown as { company_key: string; company_name: string; ats_slug: string }[];
+  const keys = rows.filter((r) => isAggregator(r.company_name) || isAggregator(r.ats_slug) || isAggregator(r.company_key)).map((r) => r.company_key);
+  const update = database.prepare(
+    `UPDATE company_directory SET status = 'dormant', updated_at = ?,
+       evidence = json_patch(COALESCE(evidence, '{}'), '{"dormant":{"value":"aggregator","how":"B641 job aggregator board, not an employer"}}')
+     WHERE company_key = ?`,
+  );
+  for (const key of keys) update.run(now.toISOString(), key);
+  return keys.length;
 }
 
 /** «jobs.compassgroupcareers.com», «jpmc-dev9-fa-oraclecloud-com-cx»: a job host, not a company. */
@@ -202,7 +231,7 @@ export async function importCompany(
   now: Date,
 ): Promise<ImportOutcome | null> {
   const name = card.name.trim();
-  if (name.length < 2 || name.length > 160 || HOST_LIKE.test(name) || HOST_LIKE.test(card.slug.replace(/-/g, '.'))) return null;
+  if (name.length < 2 || name.length > 160 || HOST_LIKE.test(name) || HOST_LIKE.test(card.slug.replace(/-/g, '.')) || isAggregator(name) || isAggregator(card.slug)) return null;
   const website = cleanWebsite(card.website);
   const boards = boardsOfCard(card);
   const day = now.toISOString().slice(0, 10);
