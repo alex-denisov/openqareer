@@ -320,6 +320,9 @@ function listingSummaryOf(row: CatalogListingRow): CatalogListingSummary {
   };
 }
 
+/** Строк индекса за вызов при поиске снятых hh-записей с живым кластером (B641). */
+const EXPIRED_HH_CLUSTER_WINDOW = 20_000;
+
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
   private readonly databasePath: string;
@@ -331,6 +334,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly writeBudgetMs: number;
   private readonly clusterWritePause: (() => void) | undefined;
   private readonly onWrite?: (event: PoolWriteEvent) => void;
+  /** Окно rowid для снятия кластеров со снятых строк hh (B641). */
+  private expiredHhClusterCursor = 0;
   readonly matchMode: 'legacy' | 'semantic';
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
   private backfillCursor = 0;
@@ -1906,15 +1911,28 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * пуле, а кластер оставался активным). Источник 13K снятых строк, партия за вызов.
    */
   archiveExpiredHhClusters(limit: number): number {
+    // B641 10.11: один запрос по всем 45K снятым строкам hh шёл 5,7 с каждые 12 с и
+    // возвращал ноль. Теперь вызов смотрит окно строк индекса по rowid и идёт дальше.
+    const from = this.expiredHhClusterCursor;
+    const to = from + EXPIRED_HH_CLUSTER_WINDOW;
     const rows = this.database
       .prepare(
         `SELECT c.id AS id FROM vacancy_pool_index i
            JOIN vacancy_clusters c ON c.id = 'cluster-' || i.id
-          WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 1
+          WHERE i.rowid > ? AND i.rowid <= ?
+            AND i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 1
             AND coalesce(json_extract(c.cluster_json, '$.status'), 'active') = 'active'
           LIMIT ?`,
       )
-      .all(Math.max(1, Math.trunc(limit))) as Array<{ id: string }>;
+      .all(from, to, Math.max(1, Math.trunc(limit))) as Array<{ id: string }>;
+    const maxRowid = (
+      this.database.prepare('SELECT max(rowid) AS m FROM vacancy_pool_index').get() as {
+        m: number | null;
+      }
+    ).m;
+    const full = rows.length >= Math.max(1, Math.trunc(limit));
+    // Полная партия: окно проверяется ещё раз. Иначе — следующее окно или начало.
+    if (!full) this.expiredHhClusterCursor = maxRowid !== null && to < maxRowid ? to : 0;
     let archived = 0;
     for (const row of rows) {
       const cluster = this.getCluster(row.id);
