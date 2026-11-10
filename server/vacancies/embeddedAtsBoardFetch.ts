@@ -6,6 +6,7 @@ import {
   type AtsProvider,
 } from './atsBoardAdapters';
 import { withRequestTimeout } from './requestTimeout';
+import { fetchBamboohrBoard } from './bamboohrBoardFetch';
 
 /**
  * B628: сайт компании со встроенной доской BambooHR, Teamtailor, Personio или
@@ -22,11 +23,14 @@ export async function fetchEmbeddedAtsBoard(
   observedAt: string,
 ): Promise<UnifiedVacancy[]> {
   const url = atsBoardEndpoint(provider, board);
-  const payload = await withRequestTimeout(EMBEDDED_BOARD_TIMEOUT_MS, async (signal) => {
-    const res = await fetch(url, { signal });
-    if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
-    return XML_PROVIDERS.has(provider) ? res.text() : (res.json() as Promise<unknown>);
-  });
+  const payload =
+    provider === 'bamboohr'
+      ? await fetchBamboohrBoard(board)
+      : await withRequestTimeout(EMBEDDED_BOARD_TIMEOUT_MS, async (signal) => {
+          const res = await fetch(url, { signal });
+          if (!res.ok) throw new Error(`vacancy_source_unreachable: ${res.status}`);
+          return XML_PROVIDERS.has(provider) ? res.text() : (res.json() as Promise<unknown>);
+        });
   const vacancies = normalizeAtsBoard(atsBoardSourceId(provider, board), payload, {
     observedAt,
     sourceName: source.name.replace(/\s+Careers$/i, ''),

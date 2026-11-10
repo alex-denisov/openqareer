@@ -567,7 +567,8 @@ function readBamboohr(
       skills: [],
       employmentType: status || undefined,
       url: id ? `https://${board}.bamboohr.com/careers/${id}` : '',
-      publishedAt: fromIso(undefined),
+      // Дата приходит из карточки (bamboohrBoardFetch); без неё — неизвестна.
+      publishedAt: fromIso(job.datePosted),
     });
   });
 }
