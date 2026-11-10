@@ -441,14 +441,7 @@ function ExperienceGroupsList({
           group={group}
           collapsed={index >= EXPANDED_PLACES}
           period={group.positions[0] ? periodLabel(group.positions[0]) : ''}
-          question={
-            group.positions[0] ? (
-              <ProfileEmployerName
-                place={group.positions[0]}
-                onChanged={onManualExperienceFactAdded}
-              />
-            ) : null
-          }
+          question={employerQuestion(group, onManualExperienceFactAdded)}
         >
           <CompanyGroup
             group={group}
@@ -464,6 +457,14 @@ function ExperienceGroupsList({
       ))}
     </>
   );
+}
+
+function employerQuestion(
+  group: ReturnType<typeof groupExperienceByEmployer>[number],
+  onChanged?: () => Promise<void> | void,
+) {
+  const first = group.positions[0];
+  return first ? <ProfileEmployerName place={first} onChanged={onChanged} /> : null;
 }
 
 export function ProfileExperienceSection({ ...props }: ProfileExperienceSectionProps) {
