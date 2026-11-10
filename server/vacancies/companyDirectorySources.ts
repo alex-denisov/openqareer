@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { workdayBoardSource, workdaySourceId } from './workdayBoardSources';
 import { ATS_PROVIDERS, atsBoardSourceId, type AtsProvider } from './atsBoardAdapters';
 import { atsBoardSource } from './atsBoardSources';
 import type { RegisteredVacancySource } from './defaultVacancySources';
@@ -109,6 +110,7 @@ function companyAtsSource(
   byId: ReadonlyMap<string, RegisteredVacancySource>,
 ): RegisteredVacancySource | undefined {
   const { provider, board } = directoryBoard(company) ?? {};
+  if (provider === 'workday' && board) return companyWorkdaySource(company, board, byId);
   if (!provider || !board || !KNOWN_PROVIDERS.has(provider)) return undefined;
   const id = atsBoardSourceId(provider as AtsProvider, board);
   const known = byId.get(id);
@@ -122,6 +124,30 @@ function companyAtsSource(
     lists: ['company_directory'],
   });
   return built.enabled ? built : undefined;
+}
+
+/** B628: доска Workday из справочника — слаг вида tenant/wdN/site, опрос адаптером Workday. */
+const WORKDAY_SLUG = /^([a-z0-9-]+)\/(wd\d+)\/([A-Za-z0-9_-]+)$/i;
+
+function companyWorkdaySource(
+  company: DirectoryCompany,
+  board: string,
+  byId: ReadonlyMap<string, RegisteredVacancySource>,
+): RegisteredVacancySource | undefined {
+  const match = WORKDAY_SLUG.exec(board.trim());
+  if (!match) return undefined;
+  const [, rawTenant, wd, site] = match;
+  const tenant = rawTenant.toLowerCase();
+  const known = byId.get(workdaySourceId(tenant));
+  if (known) return known.enabled ? known : undefined;
+  return workdayBoardSource({
+    company: company.companyName,
+    tenant,
+    host: `${tenant}.${wd.toLowerCase()}.myworkdayjobs.com`,
+    site,
+    jobs: 0,
+    observedAt: '',
+  });
 }
 
 function linkedinCompanySource(company: DirectoryCompany): RegisteredVacancySource | undefined {

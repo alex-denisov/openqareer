@@ -185,3 +185,28 @@ describe('B628 — directory career sites become sources', () => {
     expect(plan.channels.map((c) => c.kind)).toEqual(['company_ats', 'company_ats']);
   });
 });
+
+describe('B628 — Workday boards from the directory', () => {
+  it('builds a Workday source from tenant/wdN/site', () => {
+    const plan = planCompanyChannels(REGISTRY, [
+      company({
+        companyKey: 'dbs',
+        companyName: 'DBS',
+        atsProvider: 'workday',
+        atsSlug: 'dbs/wd3/DBS_Careers',
+      }),
+    ]);
+    const added = plan.sources.find((s) => s.id === 'ats-workday-dbs');
+    expect(added?.targetUrl).toBe(
+      'https://dbs.wd3.myworkdayjobs.com/wday/cxs/dbs/DBS_Careers/jobs',
+    );
+    expect(added?.companyKey).toBe('dbs');
+    expect(added?.channelTier).toBe(1);
+  });
+  it('ignores a Workday slug without a site', () => {
+    const plan = planCompanyChannels(REGISTRY, [
+      company({ companyKey: 'x', atsProvider: 'workday', atsSlug: 'x.wd3.myworkdayjobs.com' }),
+    ]);
+    expect(plan.sources.some((s) => s.id.startsWith('ats-workday-'))).toBe(false);
+  });
+});
