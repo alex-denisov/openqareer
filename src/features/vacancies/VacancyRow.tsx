@@ -652,14 +652,8 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
       id={`vacancy-details-${cluster.id}`}
       className="vac-detail vacancies-detail-panel vacancies-screen-detail"
     >
-      <VacancyFitBlock cluster={cluster} view={explanation.fitView} />
       <DetailTrustAlert trust={rowState.trust} />
-      <VacancyScreenDetailGrid
-        cluster={cluster}
-        explanation={explanation}
-        rowProps={rowProps}
-        rowState={rowState}
-      />
+      {/* B631: the action row stands right under the head; the reasons follow it. */}
       <VacancyScreenDetailActions
         cluster={cluster}
         rowProps={rowProps}
@@ -681,6 +675,13 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
             ? () => rowState.interviewState.setScheduleOpen(true)
             : undefined
         }
+      />
+      <VacancyFitBlock cluster={cluster} view={explanation.fitView} />
+      <VacancyScreenDetailGrid
+        cluster={cluster}
+        explanation={explanation}
+        rowProps={rowProps}
+        rowState={rowState}
       />
     </div>
   );

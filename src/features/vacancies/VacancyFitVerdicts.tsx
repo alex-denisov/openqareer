@@ -15,14 +15,15 @@ const VERDICT = {
 
 /**
  * 02.11: every counted requirement with its verdict and the profile words it rests on, so the
- * candidate can check a 100 % themselves instead of trusting the number.
+ * candidate can check a 100 % themselves instead of trusting the number. B631: folded by default —
+ * ten quotes pushed «Откликнуться» ~60 scroll steps down the card.
  */
 export function VacancyFitVerdicts({ view }: { readonly view?: VacancyFitView }) {
   const rows = countedSkillRequirements(view);
   if (!view?.result || rows.length === 0) return null;
   return (
-    <section className="vacancy-fit-verdicts" aria-label="На чём основан процент">
-      <h4>На чём основан процент</h4>
+    <details className="vacancy-fit-verdicts">
+      <summary>На чём основан процент</summary>
       <ul>
         {rows.map((requirement) => {
           const { status, checked, impliedRole, evidence } = requirementVerdict(
@@ -46,6 +47,6 @@ export function VacancyFitVerdicts({ view }: { readonly view?: VacancyFitView })
           );
         })}
       </ul>
-    </section>
+    </details>
   );
 }

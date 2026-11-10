@@ -56,3 +56,12 @@ describe('VacancyFitVerdicts', () => {
     expect(renderToStaticMarkup(<VacancyFitVerdicts view={withDuty} />)).not.toContain('Kafka');
   });
 });
+
+describe('VacancyFitVerdicts folded (B631)', () => {
+  it('folds the quotes under «На чём основан процент» so the actions stay on screen', () => {
+    const html = renderToStaticMarkup(<VacancyFitVerdicts view={view} />);
+    expect(html).toMatch(/^<details class="vacancy-fit-verdicts"/u);
+    expect(html).not.toContain(' open=');
+    expect(html).toMatch(/<summary[^>]*>[^<]*На чём основан процент/u);
+  });
+});

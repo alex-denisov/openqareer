@@ -390,14 +390,15 @@
   margin-block-start: var(--career-space-1);
 }
 
+/* B631: the action row opens the card, so its rule separates it from the reasons below. */
 .vacancies-screen-detail-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--career-space-2);
   margin: 0;
-  padding-block-start: var(--career-space-2);
-  border-block-start: var(--career-border-width) solid var(--career-line);
+  padding-block-end: var(--career-space-3);
+  border-block-end: var(--career-border-width) solid var(--career-line);
 }
 
 .vacancies-screen-detail-actions .action-btn {
