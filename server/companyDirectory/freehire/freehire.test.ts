@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
 import { FreehireClient } from './freehireClient';
-import { boardFromJobUrl, cleanWebsite, importCompany, loadDirectoryIndex, nameKey } from './freehireImport';
+import { boardFromJobUrl, cleanWebsite, disableAggregatorBoards, importCompany, loadDirectoryIndex, nameKey } from './freehireImport';
 import { readTotals, runFreehireTick } from './freehireSchedule';
 
 function directory(): DatabaseSync {
@@ -55,6 +55,18 @@ describe('B641 freehire import', () => {
     const fresh = await importCompany(db, index, { slug: 'agoda', name: 'Agoda', website: null, jobs: [job('https://job-boards.greenhouse.io/agoda/jobs/1')] }, check, now);
     expect(fresh).toMatchObject({ isNew: true, board: { provider: 'greenhouse', slug: 'agoda' } });
     expect(row(db, 'agoda')).toMatchObject({ source_type: 'ats_direct', website_url: null });
+  });
+
+  it('keeps job aggregators out and puts imported ones to sleep', async () => {
+    const db = directory();
+    const index = loadDirectoryIndex(db);
+    expect(await importCompany(db, index, { slug: 'jobgether', name: 'Jobgether', website: null, jobs: [job('https://jobs.lever.co/jobgether/1')] }, async () => 4010, now)).toBeNull();
+    db.prepare(`INSERT INTO company_directory (company_key, company_name, source_type, ats_provider, ats_slug, status, created_at, updated_at, evidence)
+      VALUES ('workster-jobs', 'Workster Jobs', 'ats_direct', 'teamtailor', 'worksterjobs', 'active', 'x', 'x', '{"freehire":{"value":"workster-jobs"}}'),
+             ('bertelsmann-jobs', 'Bertelsmann-Jobs', 'ats_direct', 'smartrecruiters', 'bertelsmann-jobs', 'active', 'x', 'x', '{"freehire":{"value":"b"}}')`).run();
+    expect(disableAggregatorBoards(db, now)).toBe(1);
+    expect(row(db, 'workster-jobs')?.status).toBe('dormant');
+    expect(row(db, 'bertelsmann-jobs')?.status).toBe('active');
   });
 
   it('skips job hosts posing as companies', async () => {

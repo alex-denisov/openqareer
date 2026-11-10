@@ -6,7 +6,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { FreehireClient } from './freehireClient';
-import { boardCheck, importCompany, loadDirectoryIndex, type BoardCheck } from './freehireImport';
+import { boardCheck, disableAggregatorBoards, importCompany, loadDirectoryIndex, type BoardCheck } from './freehireImport';
 
 interface Log {
   info(details: Record<string, unknown>, message: string): void;
@@ -61,6 +61,7 @@ export async function runFreehireTick(
   now: () => Date = () => new Date(),
 ): Promise<{ read: number; totals: FreehireTotals }> {
   const totals = readTotals(database);
+  disableAggregatorBoards(database, now());
   if (totals.offset >= maxCompanies) return { read: 0, totals };
   const { items } = await client.listCompanies(totals.offset, PAGE);
   if (items.length === 0) return { read: 0, totals };
