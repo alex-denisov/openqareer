@@ -74,6 +74,8 @@ export interface ResponsesWorkspaceScreenProps {
   readonly emptyContent: ReactNode;
   /** B631: set by the screen itself — «Прикрепить» opens the letter for the response vacancy. */
   readonly onAttachMaterials?: (application: ApplicationView) => void;
+  /** B631: while a letter is open over the workspace, the letter owns the consultant topic. */
+  readonly letterOpen?: boolean;
 }
 
 function WorkspacePanelContent({
@@ -138,6 +140,7 @@ export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
       <div className="career-responses-workspace-host" hidden={Boolean(letter)}>
         <ResponsesWorkspaceTabs
           {...props}
+          letterOpen={Boolean(letter)}
           onAttachMaterials={(application) => setLetter(responseLetterTarget(application))}
         />
       </div>
@@ -147,7 +150,7 @@ export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
 
 function ResponsesWorkspaceTabs(props: ResponsesWorkspaceScreenProps) {
   const workspace = useWorkspaceController(props);
-  usePublishConsultantTopic(RESPONSES_TAB_TOPICS[workspace.section]);
+  usePublishConsultantTopic(props.letterOpen ? null : RESPONSES_TAB_TOPICS[workspace.section]);
   const tableView = renderTableView({
     state: props.state,
     workspace,

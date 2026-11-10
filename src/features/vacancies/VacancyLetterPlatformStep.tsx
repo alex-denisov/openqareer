@@ -49,13 +49,19 @@ type OpenState = 'idle' | 'copied' | 'copy-failed';
 
 function useCopyAndOpen(platform?: LetterPlatform) {
   const [state, setState] = useState<OpenState>('idle');
+  const [busy, setBusy] = useState(false);
   const run = async () => {
-    if (!platform) return;
-    const copied = await copyLetter(platform.letterText);
+    if (!platform || busy) return;
+    setBusy(true);
+    // Both start inside the click: awaiting the clipboard first would spend the user activation
+    // a browser needs to open the platform (WebKit blocks the window after an await).
+    const copying = copyLetter(platform.letterText);
     void openExternalLink(platform.url);
+    const copied = await copying;
     setState(copied ? 'copied' : 'copy-failed');
+    setBusy(false);
   };
-  return { state, run };
+  return { state, busy, run };
 }
 
 function btnClass(primary: boolean): string {
@@ -82,7 +88,12 @@ export function LetterPlatformStep({ platform }: { readonly platform?: LetterPla
   const opened = open.state !== 'idle';
   return (
     <div className="career-letter-action-row">
-      <button type="button" className={btnClass(!opened)} onClick={() => void open.run()}>
+      <button
+        type="button"
+        className={btnClass(!opened)}
+        disabled={open.busy}
+        onClick={() => void open.run()}
+      >
         <ArrowSquareOut size={16} aria-hidden="true" />
         Скопировать письмо и открыть площадку
       </button>

@@ -34,8 +34,11 @@ function usePreview(vacancyId: string, approved: ApprovedVacancyLetterResult['re
 function useModalDialog() {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
+    // Focus goes back to «Открыть» when the panel closes, as with a closed native dialog.
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = ref.current;
     if (dialog && typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+    return () => opener?.focus();
   }, []);
   return ref;
 }
