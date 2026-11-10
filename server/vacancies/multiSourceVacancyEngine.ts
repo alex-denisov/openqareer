@@ -538,6 +538,24 @@ export class MultiSourceVacancyEngine {
     }
   }
 
+  /**
+   * B641 10.11: with ~3 000 sources the full state read (observations JSON,
+   * slice counts) took up to 8.5 s on every 5 s poll. Only request columns.
+   */
+  private refreshRequestedSyncs(): void {
+    const load = this.pool.loadRequestedSourceSyncs?.bind(this.pool);
+    if (!load) {
+      this.restoreSourceStates();
+      return;
+    }
+    const pending = new Map(load().map((row) => [row.sourceId, row]));
+    for (const source of this.sources.values()) {
+      const row = pending.get(source.id);
+      source.syncRequestedAt = row?.syncRequestedAt;
+      source.syncStartedAt = row?.syncStartedAt;
+    }
+  }
+
   private restoreSourceStates(): void {
     for (const state of this.pool.loadSourceStates()) {
       const source = this.sources.get(state.sourceId);
@@ -714,7 +732,7 @@ export class MultiSourceVacancyEngine {
     // The HTTP process can enqueue a request after the worker was started.
     // Source state is tiny and bounded by the registry, so refresh it before
     // every worker tick instead of keeping a stale in-memory queue (B231).
-    this.restoreSourceStates();
+    this.refreshRequestedSyncs();
     return Array.from(this.sources.values())
       .filter(
         (source): source is VacancySourceConfig & { syncRequestedAt: string } =>

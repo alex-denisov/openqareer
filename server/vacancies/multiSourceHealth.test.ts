@@ -181,3 +181,28 @@ describe('B641 · здоровье источника в keyed не считае
     expect(counted).toBe(0);
   });
 });
+
+describe('B641 · опрос ручных запросов не читает всё состояние площадок', () => {
+  it('reads only pending requests on the worker poll', () => {
+    const pool = new MemoryVacancyPoolStore();
+    let fullReads = 0;
+    const store = Object.assign(Object.create(pool) as VacancyPoolStore, {
+      loadSourceStates: () => {
+        fullReads += 1;
+        return [];
+      },
+      loadRequestedSourceSyncs: () => [
+        { sourceId: 'src-other', syncRequestedAt: '2026-11-10T10:00:00.000Z' },
+      ],
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source(), source({ id: 'src-other' })],
+      pool: store,
+    });
+    fullReads = 0;
+    expect(engine.getRequestedSourceSyncs()).toEqual([
+      { sourceId: 'src-other', requestedAt: '2026-11-10T10:00:00.000Z' },
+    ]);
+    expect(fullReads).toBe(0);
+  });
+});

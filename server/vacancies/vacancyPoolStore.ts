@@ -141,6 +141,12 @@ export interface VacancyPoolStore {
     dropObservedBefore?: string,
   ): Promise<MergeSliceResult>;
   loadSourceStates(): StoredSourceState[];
+  /** Only sources with a pending manual request: the 5 s worker poll (B641). */
+  loadRequestedSourceSyncs?(): readonly {
+    sourceId: string;
+    syncRequestedAt: string;
+    syncStartedAt?: string;
+  }[];
   /** Queues an out-of-band source read for the maintenance process (B231). */
   requestSourceSync?(sourceId: string, requestedAt: string): void;
   /** Marks the same request as running without overwriting a newer request. */
@@ -236,12 +242,18 @@ export interface VacancyPoolStore {
   peekHhTextPriority?(limit: number): string[];
   dropHhTextPriority?(vacancyIds: readonly string[]): void;
   /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
-  loadHhTextCandidates?(cursor: string | undefined, limit: number): { ids: string[]; cursor?: string };
+  loadHhTextCandidates?(
+    cursor: string | undefined,
+    limit: number,
+  ): { ids: string[]; cursor?: string };
   /** Позиция обхода текста hh между перезапусками воркера (02.11). */
   loadHhTextCursor?(): string | undefined;
   saveHhTextCursor?(cursor: string | undefined): void;
   /** Строки ролей кампаний: своя позиция, первая на каждом такте (04.11). */
-  loadHhRoleTextCandidates?(position: string | undefined, limit: number): { ids: string[]; position: string };
+  loadHhRoleTextCandidates?(
+    position: string | undefined,
+    limit: number,
+  ): { ids: string[]; position: string };
   loadHhRoleTextPosition?(): string | undefined;
   saveHhRoleTextPosition?(position: string): void;
   /** Аккаунт удалён: его цель больше не ведёт очередь текста hh (04.11). */
