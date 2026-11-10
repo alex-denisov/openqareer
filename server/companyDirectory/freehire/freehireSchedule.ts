@@ -25,6 +25,7 @@ export interface FreehireTotals {
   read: number;
   added: number;
   websites: number;
+  failed: number;
   boards: Record<string, number>;
 }
 
@@ -33,7 +34,7 @@ const STATE_SQL = `CREATE TABLE IF NOT EXISTS freehire_import_state (id INTEGER 
 export function readTotals(database: DatabaseSync): FreehireTotals {
   database.exec(STATE_SQL);
   const row = database.prepare('SELECT totals FROM freehire_import_state WHERE id = 1').get() as { totals: string } | undefined;
-  const empty: FreehireTotals = { offset: 0, read: 0, added: 0, websites: 0, boards: {} };
+  const empty: FreehireTotals = { offset: 0, read: 0, added: 0, websites: 0, failed: 0, boards: {} };
   if (!row) return empty;
   try {
     return { ...empty, ...(JSON.parse(row.totals) as Partial<FreehireTotals>) };
@@ -66,8 +67,9 @@ export async function runFreehireTick(
   const index = loadDirectoryIndex(database);
   let next: FreehireTotals = { ...totals, boards: { ...totals.boards } };
   for (const item of items) {
-    const card = await client.companyCard(item.slug);
-    next = { ...next, read: next.read + 1 };
+    // One card that keeps failing must not pin the whole page to its offset.
+    const card = await client.companyCard(item.slug).catch(() => undefined);
+    next = { ...next, read: next.read + 1, failed: next.failed + (card === undefined ? 1 : 0) };
     if (!card) continue;
     const outcome = await importCompany(database, index, card, check, now());
     if (!outcome) continue;

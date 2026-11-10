@@ -74,6 +74,16 @@ describe('B641 freehire import', () => {
     expect(row(db, 'initech')?.source_type).toBe('linkedin_guest');
   });
 
+  it('skips a card that keeps failing and moves on', async () => {
+    const db = directory();
+    const fetchImpl = (async (input: string | URL | Request) =>
+      String(input).includes('/companies?')
+        ? Response.json({ data: [{ slug: 'broken', name: 'Broken', job_count: 9 }], meta: { total: 1 } })
+        : new Response('', { status: 503 })) as typeof fetch;
+    const client = new FreehireClient(fetchImpl, async () => {}, () => 0);
+    expect((await runFreehireTick(db, client, async () => 1, 100, () => now)).totals).toMatchObject({ offset: 1, failed: 1, added: 0 });
+  });
+
   it('pages through companies, keeps the offset and slows down on 429', async () => {
     const db = directory();
     let calls = 0;
