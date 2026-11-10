@@ -687,6 +687,11 @@ ALTER TABLE vacancy_source_state ADD COLUMN sync_started_at TEXT;
  * Дата смерти объявления (B200 срез 2). Отсутствие записи неотличимо от
  * «никогда не видели», поэтому снятое объявление не удаляется, а помечается.
  */
+/** B642 — первое чтение записи; последнее лежит в `observed_ms`. */
+export const VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN = `
+ALTER TABLE vacancy_pool_index ADD COLUMN first_seen_ms INTEGER;
+`;
+
 export const VACANCY_POOL_EXPIRED_AT_COLUMN = `
 ALTER TABLE vacancy_pool ADD COLUMN expired_at TEXT;
 `;

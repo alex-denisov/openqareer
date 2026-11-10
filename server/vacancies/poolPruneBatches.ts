@@ -1,3 +1,4 @@
+import { confirmsLiveness, NOT_SEEN_PRUNE_DAYS } from './poolLiveness';
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 /** Одна порция за проход: остальное снимет следующий запуск, как и до разбивки. */
@@ -121,6 +122,34 @@ function pruneStaleVacancies(pass: PrunePass, oldestPublishedAt: string): void {
   );
 }
 
+/**
+ * B642: запись доски работодателя живёт, пока её видно; невиденная
+ * `NOT_SEEN_PRUNE_DAYS` дней (источник перестал читаться) снимается.
+ */
+function pruneNotSeenVacancies(pass: PrunePass, knownSourceIds: readonly string[]): void {
+  const confirming = knownSourceIds.filter(confirmsLiveness);
+  if (confirming.length === 0) return;
+  const cutoffMs = Date.now() - NOT_SEEN_PRUNE_DAYS * 24 * 60 * 60 * 1000;
+  const placeholders = confirming.map(() => '?').join(', ');
+  const stale = pass.find(
+    `SELECT i.id AS key
+       FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
+      WHERE i.expired = 0 AND i.source_id IN (${placeholders}) AND i.observed_ms < ?
+      LIMIT ${PRUNE_PORTION_ROWS}`,
+    ...confirming,
+    cutoffMs,
+  );
+  pass.remove(
+    `DELETE FROM vacancy_pool WHERE id = ?
+       AND EXISTS (
+         SELECT 1 FROM vacancy_pool_index i
+          WHERE i.id = vacancy_pool.id AND i.expired = 0 AND i.observed_ms < ?
+       )`,
+    stale,
+    cutoffMs,
+  );
+}
+
 function pruneOrphanIndexes(pass: PrunePass): void {
   // Индекс следует за таблицей: строка без записи — это не запись.
   const orphanIndex = pass.find(
@@ -154,6 +183,7 @@ export function prunePoolInBatches(
   const pass = startPass(database, limits, 'pool');
   const placeholders = knownSourceIds.map(() => '?').join(', ');
   pruneStaleVacancies(pass, oldestPublishedAt);
+  pruneNotSeenVacancies(pass, knownSourceIds);
   const unknown = pass.find(
     `SELECT rowid AS key FROM vacancy_pool
       WHERE source_id NOT IN (${placeholders}) LIMIT ${PRUNE_PORTION_ROWS}`,

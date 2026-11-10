@@ -1,3 +1,4 @@
+import { freshnessAnchorMs } from './poolLiveness';
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { readInWorker } from '../data/readInWorker';
@@ -21,6 +22,7 @@ import {
   MIGRATION_23,
   VACANCY_CLUSTERS_TABLE,
   VACANCY_POOL_EXPIRED_AT_COLUMN,
+  VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN,
   VACANCY_CLUSTER_INPUT_TABLE,
   VACANCY_CATALOG_ENTRIES_TABLE,
   VACANCY_CLUSTER_KEYS_TABLE,
@@ -234,7 +236,7 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
   return [
     vacancy.id,
     sourceId,
-    parseMs(vacancy.publishedAt) ?? null,
+    freshnessAnchorMs(vacancy) ?? null,
     parseMs(vacancy.provenance.observedAt) ?? null,
     vacancy.status === 'active' ? 1 : 0,
     flag(vacancy.isRemote),
@@ -244,7 +246,7 @@ function indexColumns(vacancy: UnifiedVacancy, sourceId: string): SQLInputValue[
 }
 
 function semanticDateColumns(vacancy: UnifiedVacancy): SQLInputValue[] {
-  return [vacancy.id, parseMs(vacancy.publishedAt) ?? null, flag(vacancy.isRemote)];
+  return [vacancy.id, freshnessAnchorMs(vacancy) ?? null, flag(vacancy.isRemote)];
 }
 
 /**
@@ -413,7 +415,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
     );
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
-    this.database.exec(`${VACANCY_POOL_INDEX_TABLE};${SOURCE_SYNC_REQUESTED_INDEX};`);
+    this.ensurePoolIndex();
     // Match LIMIT must stop in index order; CASE remote sorting previously
     // joined and sorted the entire fresh pool, including every wide payload.
     this.database.exec(MATCH_ORDER_SCHEMA);
@@ -445,6 +447,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * оставаться идемпотентным, а `ADD COLUMN IF NOT EXISTS` в SQLite нет —
    * поэтому наличие колонки проверяется явно.
    */
+  /** Индекс пула и его поздние колонки (B221, B642). */
+  private ensurePoolIndex(): void {
+    this.database.exec(`${VACANCY_POOL_INDEX_TABLE};${SOURCE_SYNC_REQUESTED_INDEX};`);
+    this.ensureColumn('vacancy_pool_index', 'first_seen_ms', VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN);
+  }
+
   private ensureColumn(table: string, column: string, ddl: string): void {
     const columns = this.database.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
       name: string;
@@ -999,9 +1007,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private prepareIndexUpsert() {
     return this.database.prepare(
       `INSERT INTO vacancy_pool_index (
-         id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text, expired
+         id, source_id, published_ms, observed_ms, is_active, is_remote, url, search_text, expired,
+         first_seen_ms
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, coalesce(
-         (SELECT p.expired_at IS NOT NULL FROM vacancy_pool p WHERE p.id = ?1), ?9))
+         (SELECT p.expired_at IS NOT NULL FROM vacancy_pool p WHERE p.id = ?1), ?9), ?4)
        ON CONFLICT(id) DO UPDATE SET
          source_id = excluded.source_id,
          published_ms = excluded.published_ms,

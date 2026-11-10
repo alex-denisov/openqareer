@@ -1,3 +1,4 @@
+import { freshnessAnchorMs } from './poolLiveness';
 import { extractRemoteScope } from './remoteScopeExtraction';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { extractAtsLink, vacancyTextKey } from './vacancyDeduplicator';
@@ -133,7 +134,7 @@ export function compareNewestFirst(a: UnifiedVacancy, b: UnifiedVacancy): number
 }
 
 export function matchesQuery(vacancy: UnifiedVacancy, query: VacancyPoolQuery): boolean {
-  if (!isWithin(parseMs(vacancy.publishedAt), query.window)) return false;
+  if (!isWithin(freshnessAnchorMs(vacancy), query.window)) return false;
   if (query.sourceIds && !query.sourceIds.includes(vacancy.provenance.sourceId)) return false;
   if (query.isRemote !== undefined && vacancy.isRemote !== query.isRemote) return false;
   const needle = normalizeQuery(query.query);

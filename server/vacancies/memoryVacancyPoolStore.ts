@@ -1,3 +1,11 @@
+import { confirmsLiveness, freshnessAnchorMs, NOT_SEEN_PRUNE_DAYS } from './poolLiveness';
+
+/** B642: запись доски работодателя, невиденная неделю, уборка снимает. */
+function notSeenTooLong(vacancy: UnifiedVacancy): boolean {
+  if (!confirmsLiveness(vacancy.provenance.sourceId)) return false;
+  const seen = Date.parse(vacancy.provenance.observedAt);
+  return Number.isFinite(seen) && seen < Date.now() - NOT_SEEN_PRUNE_DAYS * 24 * 60 * 60 * 1000;
+}
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import {
@@ -79,7 +87,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
 
   loadVacancies(window?: FreshnessWindow): UnifiedVacancy[] {
     const alive = Array.from(this.alive());
-    return window ? alive.filter((v) => isWithin(parseMs(v.publishedAt), window)) : alive;
+    return window ? alive.filter((v) => isWithin(freshnessAnchorMs(v), window)) : alive;
   }
 
   *iterateClusterInput(window: FreshnessWindow): IterableIterator<UnifiedVacancy> {
@@ -117,7 +125,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   countBySource(window: FreshnessWindow): ReadonlyMap<string, number> {
     const counts = new Map<string, number>();
     for (const row of this.aliveRows()) {
-      if (!isWithin(parseMs(row.vacancy.publishedAt), window)) continue;
+      if (!isWithin(freshnessAnchorMs(row.vacancy), window)) continue;
       counts.set(row.sourceId, (counts.get(row.sourceId) ?? 0) + 1);
     }
     return counts;
@@ -166,8 +174,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     const terms = extractMatchTerms(candidate);
 
     const activeRows = Array.from(this.aliveRows()).filter(
-      (row) =>
-        row.vacancy.status === 'active' && isWithin(parseMs(row.vacancy.publishedAt), window),
+      (row) => row.vacancy.status === 'active' && isWithin(freshnessAnchorMs(row.vacancy), window),
     );
 
     const results: UnifiedVacancy[] = [];
@@ -316,7 +323,11 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
     const known = new Set(knownSourceIds);
     for (const [id, row] of this.rows) {
-      if (row.vacancy.publishedAt < oldestPublishedAt || !known.has(row.sourceId)) {
+      if (
+        (freshnessAnchorMs(row.vacancy) ?? 0) < Date.parse(oldestPublishedAt) ||
+        notSeenTooLong(row.vacancy) ||
+        !known.has(row.sourceId)
+      ) {
         this.rows.delete(id);
       }
     }
