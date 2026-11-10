@@ -1,3 +1,4 @@
+import { PlacementBackfill, PlacementBackfillTicker } from './companyDirectory/placement/placementBackfill';
 import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
@@ -216,6 +217,10 @@ const worker = new MaintenanceWorker({
       }
     : {}),
   ...(linkedinPoolExecutor ? { linkedinPoolExecutor } : {}),
+  // B643-3: размещения компаний; откат — OPENQAREER_COMPANY_PLACEMENT_OFF=1.
+  ...(process.env.OPENQAREER_COMPANY_PLACEMENT_OFF === '1'
+    ? {}
+    : { placements: new PlacementBackfillTicker(new PlacementBackfill(semanticDatabase)) }),
   purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
 });
 
