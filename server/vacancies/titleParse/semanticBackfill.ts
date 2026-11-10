@@ -48,6 +48,22 @@ const PRUNE_CHUNK = 5_000;
 /** B641 10.11: whole-table prune at pass end held the loop ~10 s; one rowid window per step. */
 const PRUNE_WINDOW = 20_000;
 const MISSING_WINDOW = 10_000;
+const CORRECTION_CHUNK = 500;
+const CORRECTION_BUDGET_MS = 300;
+
+interface Correction {
+  key: string;
+  functions: string;
+  levelRank: number | null;
+}
+
+interface OneRoleRow {
+  title_key: string;
+  sample_title: string;
+  functions: string;
+  level_rank: number | null;
+  parsed_by: string;
+}
 /** Названий на шаг для грейдов: только правила, модель не вызывается. */
 const GRADE_CHUNK = 2_000;
 /** Выше этой ступени название уже различает `level_rank`. */
@@ -66,6 +82,10 @@ export class SemanticBackfill {
   /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
   private relabelDone = false;
   private ontologyCorrectionDone = false;
+  private correctionPhase: 'exact' | 'senior' | 'oneRole' = 'exact';
+  private correctionOffset = 0;
+  private oneRoleRows: OneRoleRow[] | null = null;
+  private readonly exactCorrected = new Set<string>();
 
   constructor(
     database: DatabaseSync,
@@ -116,18 +136,54 @@ export class SemanticBackfill {
    * ближайший проход наполнения. Один раз за процесс.
    */
   private correctByExactOntology(): number {
+    // B641 10.11: все три правки разом держали первый шаг 5,4 с на проде
+    // (7 100 строк через rulesParse). Теперь по CORRECTION_CHUNK за шаг, в
+    // прежнем порядке: точные ключи онтологии главнее остальных правок.
     if (this.ontologyCorrectionDone) return 0;
-    this.ontologyCorrectionDone = true;
-    const ontology = this.exactOntologyCorrections();
-    const exactKeys = new Set(ontology.map((correction) => correction.key));
-    const corrections = [
-      ...ontology,
-      ...this.seniorManagerCorrections().filter((correction) => !exactKeys.has(correction.key)),
-      ...this.oneRoleCorrections().filter((correction) => !exactKeys.has(correction.key)),
-    ];
-    if (corrections.length === 0) return 0;
-    this.applyCorrections(corrections);
-    return corrections.length;
+    const startedAt = Date.now();
+    let applied = 0;
+    while (Date.now() - startedAt < CORRECTION_BUDGET_MS) {
+      const batch = this.nextCorrectionBatch();
+      if (batch === undefined) {
+        this.ontologyCorrectionDone = true;
+        break;
+      }
+      const corrections = batch.filter((correction) => !this.exactCorrected.has(correction.key));
+      if (this.correctionPhase === 'exact') {
+        for (const correction of corrections) this.exactCorrected.add(correction.key);
+      }
+      if (corrections.length > 0) this.applyCorrections(corrections);
+      applied += corrections.length;
+    }
+    return applied;
+  }
+
+  /** Следующая порция правок; `undefined` — все три правки пройдены. */
+  private nextCorrectionBatch(): Correction[] | undefined {
+    if (this.correctionPhase === 'exact') {
+      const keys = exactOntologyTitleKeys();
+      if (this.correctionOffset < keys.length) {
+        const slice = keys.slice(this.correctionOffset, this.correctionOffset + CORRECTION_CHUNK);
+        this.correctionOffset += CORRECTION_CHUNK;
+        return this.exactOntologyCorrections(slice);
+      }
+      this.correctionPhase = 'senior';
+      return this.seniorManagerCorrections();
+    }
+    if (this.correctionPhase === 'senior') {
+      this.correctionPhase = 'oneRole';
+      this.correctionOffset = 0;
+      this.oneRoleRows = this.readOneRoleRows();
+      return [];
+    }
+    const rows = this.oneRoleRows ?? [];
+    if (this.correctionOffset >= rows.length) {
+      this.oneRoleRows = null;
+      return undefined;
+    }
+    const slice = rows.slice(this.correctionOffset, this.correctionOffset + CORRECTION_CHUNK);
+    this.correctionOffset += CORRECTION_CHUNK;
+    return this.oneRoleCorrections(slice);
   }
 
   /**
@@ -135,8 +191,8 @@ export class SemanticBackfill {
    * меняется: пересчитываются только эти названия. Модельный разбор поддержки не трогается, запись
    * идёт лишь при расхождении, поэтому повторный проход не пишет в базу.
    */
-  private oneRoleCorrections(): { key: string; functions: string; levelRank: number | null }[] {
-    const rows = this.database
+  private readOneRoleRows(): OneRoleRow[] {
+    return this.database
       .prepare(
         `SELECT title_key, sample_title, functions, level_rank, parsed_by FROM title_parse
          WHERE (parsed_by = 'rules' AND title_key LIKE '%поддержк%')
@@ -148,13 +204,10 @@ export class SemanticBackfill {
              AND (title_key LIKE '%it%' OR title_key LIKE '%ит%'
                OR title_key LIKE '%информац%' OR title_key LIKE '%information%'))`,
       )
-      .all() as {
-      title_key: string;
-      sample_title: string;
-      functions: string;
-      level_rank: number | null;
-      parsed_by: string;
-    }[];
+      .all() as unknown as OneRoleRow[];
+  }
+
+  private oneRoleCorrections(rows: readonly OneRoleRow[]): Correction[] {
     return rows.flatMap((row) => {
       const chief = isChiefInformationTitle(row.sample_title);
       const service = row.parsed_by === 'rules' && !row.functions.includes('"support"');
@@ -172,16 +225,12 @@ export class SemanticBackfill {
     });
   }
 
-  private exactOntologyCorrections(): {
-    key: string;
-    functions: string;
-    levelRank: number | null;
-  }[] {
+  private exactOntologyCorrections(keys: readonly string[]): Correction[] {
     const read = this.database.prepare(
       `SELECT title_key, sample_title, functions, level_rank FROM title_parse
        WHERE title_key = ? AND parsed_by = 'model'`,
     );
-    return exactOntologyTitleKeys().flatMap((key) => {
+    return keys.flatMap((key) => {
       const row = read.get(key) as
         | { title_key: string; sample_title: string; functions: string; level_rank: number | null }
         | undefined;
