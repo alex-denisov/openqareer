@@ -15,6 +15,7 @@ import type {
   VacancyMatchExplanation,
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
+import { confirmsLiveness } from './poolLiveness';
 import {
   calculateSourceAuthenticity,
   clusterVacancies,
@@ -271,6 +272,14 @@ function logStaleIntake(
       stale: fetched - fresh,
     }),
   );
+}
+
+/**
+ * B642: полное чтение доски работодателя подтверждает, что вакансия открыта, —
+ * её дата публикации не важна. Остальным — 30 дней от публикации.
+ */
+function keptOnIntake(vacancy: UnifiedVacancy, sourceId: string, partial: boolean): boolean {
+  return isVacancyFresh(vacancy.publishedAt) || (!partial && confirmsLiveness(sourceId));
 }
 
 function vacancyMembershipFields(vacancy: UnifiedVacancy): string {
@@ -1735,7 +1744,7 @@ export class MultiSourceVacancyEngine {
     // Название площадки едет вместе с записью: на экране кандидат читает
     // источник, а не тип адаптера (PRB-017).
     const freshFetched = fetched
-      .filter((v) => isVacancyFresh(v.publishedAt))
+      .filter((v) => keptOnIntake(v, source.id, readingPartial))
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
