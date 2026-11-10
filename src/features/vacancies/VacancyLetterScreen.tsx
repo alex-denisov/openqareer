@@ -373,7 +373,7 @@ function LetterCard(props: LetterCardProps) {
         pitchReady={pitchReady}
         onAskEdits={actions.onAskEdits}
         onOpenResponses={onOpenResponses}
-        platform={platform}
+        platform={platform ? { ...platform, letterText: state.draft.text } : undefined}
       />
     </section>
   );

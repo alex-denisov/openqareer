@@ -5,7 +5,7 @@ import type { VacancyApplications } from './useVacancyApplications';
 
 /**
  * What the host screen lends the letter: responses, the resume (lives in Profile), the consultant
- * and the response marks — the letter asks «Отклик отправлен?» after approval (B629).
+ * and the response marks — the letter offers «Отметить отправленным» after approval (B629, B631).
  */
 export function letterHostProps(input: {
   readonly applications?: VacancyApplications;

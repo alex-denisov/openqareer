@@ -168,3 +168,19 @@ describe('B631: резюме под вакансию открывается по
     expect((await prepareResume()).json().data).toMatchObject({ resumeKind: 'master', versionId: null });
   });
 });
+
+describe('B631: «Отметить отправленным» после одобрения', () => {
+  it('поднимает ту же заявку до «Отправлено», письмо и резюме остаются привязаны', async () => {
+    const { candidates, candidateId, approve } = await setup('Head of Platform');
+    const approved = (await approve()).json().data;
+    candidates.recordVacancyApplication(candidateId, {
+      clusterId: 'cluster-99',
+      status: 'applied',
+      vacancy: { title: 'Head of Platform', company: 'Вектор', url: 'https://example.com', source: 'hh' },
+    });
+    const list = candidates.listApplications(candidateId).filter((item) => item.clusterId === 'cluster-99');
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ id: approved.applicationId, stage: 'applied' });
+    expect(list[0]?.materials).toMatchObject({ resume: true, coverLetter: true });
+  });
+});

@@ -310,7 +310,7 @@ function letterStub(method: string, pathname: string): unknown {
 
 /**
  * B629: «Откликнуться» opens the letter; after «Одобрить письмо» the platform opens and the
- * response is marked only on «Да, отклик отправлен». Returns on the letter screen.
+ * response is marked only on «Отметить отправленным» (B631). Returns on the letter screen.
  */
 async function applyThroughLetter(page: Page, apply: Locator): Promise<void> {
   await page.addInitScript(() => {
@@ -325,10 +325,10 @@ async function applyThroughLetter(page: Page, apply: Locator): Promise<void> {
   ).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveValue(/\S+/u);
   await page.getByRole('button', { name: 'Одобрить письмо' }).click();
-  await page.getByRole('button', { name: 'Открыть площадку' }).click();
-  // B341: открытие сайта — ещё не отклик; отметка только по подтверждению.
-  await expect(page.locator('.career-letter-actions')).toContainText('Отклик отправлен?');
-  await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+  await page.getByRole('button', { name: 'Скопировать письмо и открыть площадку' }).click();
+  // B341: открытие сайта — ещё не отклик; отметка только по подтверждению (B631).
+  await expect(page.locator('.career-letter-actions')).toContainText(/скопир/iu);
+  await page.getByRole('button', { name: 'Отметить отправленным' }).click();
 }
 
 /** Back from the letter to the vacancy list. */
@@ -803,8 +803,8 @@ test.describe('C47 apply-to-interview chain', () => {
     );
 
     await expect(page.locator('.career-letter-actions')).toContainText('Состояние не изменено');
-    await expect(page.locator('.career-letter-actions')).not.toContainText('Отклик отмечен');
-    await expect(page.getByRole('button', { name: 'Да, отклик отправлен' })).toBeVisible();
+    await expect(page.locator('.career-letter-actions')).not.toContainText('Отклик отправлен:');
+    await expect(page.getByRole('button', { name: 'Отметить отправленным' })).toBeVisible();
     await leaveLetter(page);
     await openFirstVacancy(page);
     await expect(

@@ -971,18 +971,20 @@ test.describe('B449 — письмо под вакансию', () => {
     );
     expect(await openedUrls()).toEqual([]);
     await waitForLetter(page);
-    await expect(page.getByRole('button', { name: 'Открыть площадку' })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Скопировать письмо и открыть площадку' }),
+    ).toHaveCount(0);
     await page.getByRole('button', { name: 'Одобрить письмо' }).click();
     await expect(page.locator('.career-letter-approved')).toBeVisible();
     expect(marks).toEqual([]);
 
-    await page.getByRole('button', { name: 'Открыть площадку' }).click();
+    await page.getByRole('button', { name: 'Скопировать письмо и открыть площадку' }).click();
     expect(await openedUrls()).toHaveLength(1);
-    await expect(page.locator('.career-letter-actions')).toContainText('Отклик отправлен?');
+    await expect(page.locator('.career-letter-actions')).toContainText(/скопир/iu);
     await captureState(page, testInfo, 'b629-approved-platform');
-    await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
+    await page.getByRole('button', { name: 'Отметить отправленным' }).click();
     await expect.poll(() => marks.at(-1)?.status).toBe('applied');
-    await expect(page.locator('.career-letter-actions')).toContainText('Отклик отмечен');
+    await expect(page.locator('.career-letter-actions')).toContainText('Отклик отправлен:');
   });
 
   test('offers a real consultant route when the profile has too few facts', async ({ page }) => {
