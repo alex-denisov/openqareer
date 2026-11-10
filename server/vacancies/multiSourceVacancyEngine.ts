@@ -1719,6 +1719,19 @@ export class MultiSourceVacancyEngine {
       .map((v) =>
         v.provenance ? { ...v, provenance: { ...v.provenance, sourceName: source.name } } : v,
       );
+    // Замер B642: сколько живых в источнике записей отсекает срок публикации.
+    if (fetched.length > freshFetched.length) {
+      console.info(
+        JSON.stringify({
+          event: 'pool_intake_stale',
+          sourceId: source.id,
+          type: source.type,
+          partial: readingPartial,
+          fetched: fetched.length,
+          stale: fetched.length - freshFetched.length,
+        }),
+      );
+    }
     const replaceRefused = this.replaceRefusal(source.id, freshFetched.length, readingPartial);
     const partial = readingPartial || replaceRefused !== undefined;
     const changedExistingMembership =
