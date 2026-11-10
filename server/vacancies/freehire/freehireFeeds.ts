@@ -35,7 +35,8 @@ export function freehireFeedFor(sourceId: string): FreehireFeed | undefined {
 /**
  * B641: доски ATS включаются порциями по 300 в сутки от даты старта (решение CPO
  * 10.11 — пул вырастет больше чем вдвое). Порядок — порядок `MEASURED_ATS_BOARDS`.
- * Набор пересчитывается при каждом старте процесса.
+ * Набор пересчитывается при старте и на смене суток UTC в цикле опроса
+ * (`atsRolloutAdmits`), без перезапуска.
  */
 export const ATS_ROLLOUT_START_MS = Date.UTC(2026, 10, 10);
 export const ATS_BOARDS_PER_DAY = 300;
@@ -50,11 +51,23 @@ const ADMITTED_ATS = new Set(
   MEASURED_ATS_BOARDS.slice(0, admittedAtsBoards(Date.now())).map((b) => atsFeedId(b)),
 );
 
+export const ATS_ROLLOUT_WAIT_REASON = 'Доска ATS ждёт своей порции';
+
+const ATS_ORDER = new Map(
+  MEASURED_ATS_BOARDS.map((b, i) => [`${FREEHIRE_SOURCE_PREFIX}${atsFeedId(b)}`, i]),
+);
+
+/** Допущена ли доска ATS к опросу на момент `nowMs`; undefined — не доска порций. */
+export function atsRolloutAdmits(sourceId: string, nowMs: number): boolean | undefined {
+  const index = ATS_ORDER.get(sourceId);
+  return index === undefined ? undefined : index < admittedAtsBoards(nowMs);
+}
+
 function rollout(feedId: string): Pick<RegisteredVacancySource, 'enabled' | 'disabledReason'> {
   if (!ATS_IDS.has(feedId) || ADMITTED_ATS.has(feedId)) return { enabled: true };
   return {
     enabled: false,
-    disabledReason: `Доска ATS ждёт своей порции: ${ATS_BOARDS_PER_DAY} досок в сутки с 10.11 (B641).`,
+    disabledReason: `${ATS_ROLLOUT_WAIT_REASON}: ${ATS_BOARDS_PER_DAY} досок в сутки с 10.11 (B641).`,
   };
 }
 
