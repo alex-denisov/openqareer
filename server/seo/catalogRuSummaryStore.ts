@@ -13,6 +13,7 @@ import {
   readStoredCatalogRuSummary,
   type CatalogRuSummary,
 } from './catalogRuSummary';
+import { notExcludedSourceUrlSql } from '../vacancies/freehire/paidProcessingGate';
 
 export const CATALOG_RU_SUMMARIES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS catalog_ru_summaries (
   cluster_id TEXT PRIMARY KEY,
@@ -97,6 +98,7 @@ export class CatalogRuSummaryStore {
             AND c.salary_label IS NOT NULL AND c.salary_label GLOB '*[1-9]*'
             AND trim(c.company) <> '' AND c.role_slug IS NOT NULL
             AND c.last_seen_ms >= ?
+            AND ${notExcludedSourceUrlSql('c.source_url')}
             AND (s.cluster_id IS NULL OR s.version <> ? OR s.checked_ms < ?
                  OR (s.status = 'failed' AND s.attempts < ? AND s.next_attempt_ms <= ?))
           ORDER BY c.published_ms DESC, c.entry_key ASC

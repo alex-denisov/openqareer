@@ -6,6 +6,7 @@ import { MIGRATION_35 } from '../../data/sqliteSchema';
 import type { BulkLlmClient } from '../../providers/bulkLlmClient';
 import { rulesParse } from './rulesParse';
 import { describeFailure, ensureLastFailureColumn } from './titleFreeze';
+import { notExcludedVacancyIdSql } from '../freehire/paidProcessingGate';
 
 export interface TitleModelInput {
   readonly titleKey: string;
@@ -267,6 +268,9 @@ export class TitleModelStep {
         `SELECT p.title_key, p.sample_title FROM title_parse p INDEXED BY title_parse_queue
        WHERE p.parsed_by = 'rules' AND NOT EXISTS (
          SELECT 1 FROM title_parse_model_queue q WHERE q.title_key = p.title_key
+       ) AND EXISTS (
+         SELECT 1 FROM vacancy_semantic s WHERE s.title_key = p.title_key
+           AND ${notExcludedVacancyIdSql('s.id')}
        ) ORDER BY p.priority DESC, p.title_key LIMIT ?`,
       )
       .all(limit) as { title_key: string; sample_title: string }[];
@@ -308,10 +312,7 @@ export class TitleModelStep {
     this.consecutiveFailures += 1;
     const delay = Math.min(15 * 60_000, 60_000 * 2 ** (this.consecutiveFailures - 1));
     this.pausedUntil = this.now() + delay;
-    this.log?.warn(
-      { reason, items: items.length, retryInMs: delay },
-      'title-model-call-failed',
-    );
+    this.log?.warn({ reason, items: items.length, retryInMs: delay }, 'title-model-call-failed');
     const mark = this.database.prepare(
       'UPDATE title_parse_model_queue SET last_failure = ? WHERE title_key = ?',
     );

@@ -124,3 +124,34 @@ describe('Oracle Recruiting Cloud', () => {
     ).toBe('Build\n\nGo');
   });
 });
+
+describe('B641 rollout and paid-model gate', () => {
+  it('admits 300 ATS boards per day from the start date', async () => {
+    const { admittedAtsBoards, ATS_ROLLOUT_START_MS } = await import('./freehireFeeds');
+    expect(admittedAtsBoards(ATS_ROLLOUT_START_MS - 1)).toBe(0);
+    expect(admittedAtsBoards(ATS_ROLLOUT_START_MS + 3_600_000)).toBe(300);
+    expect(admittedAtsBoards(ATS_ROLLOUT_START_MS + 2 * 86_400_000)).toBe(900);
+  });
+
+  it('keeps ATS vacancies out of bulk model queues by id and by card url', async () => {
+    const { DatabaseSync } = await import('node:sqlite');
+    const { notExcludedSourceUrlSql, notExcludedVacancyIdSql } =
+      await import('./paidProcessingGate');
+    const db = new DatabaseSync(':memory:');
+    db.exec('CREATE TABLE t (id TEXT, url TEXT)');
+    const rows: [string, string][] = [
+      ['src-fh-sber:1', 'https://rabota.sber.ru/x'],
+      ['src-fh-icims-360care:2', 'https://careers-360care.icims.com/jobs/2/a/job'],
+      ['src-fh-jobvite-hoar:3', 'https://jobs.jobvite.com/hoar/job/o1'],
+      ['src-fh-oracle-x:4', 'https://eihu.fa.us8.oraclecloud.com/hcmUI/x'],
+    ];
+    for (const [id, url] of rows) db.prepare('INSERT INTO t VALUES (?, ?)').run(id, url);
+    const pick = (where: string) =>
+      db
+        .prepare(`SELECT id FROM t WHERE ${where}`)
+        .all()
+        .map((r) => r.id);
+    expect(pick(notExcludedVacancyIdSql('id'))).toEqual(['src-fh-sber:1']);
+    expect(pick(notExcludedSourceUrlSql('url'))).toEqual(['src-fh-sber:1']);
+  });
+});

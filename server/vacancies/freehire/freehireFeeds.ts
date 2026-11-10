@@ -31,6 +31,32 @@ export function freehireFeedFor(sourceId: string): FreehireFeed | undefined {
   return BY_SOURCE_ID.get(sourceId);
 }
 
+/**
+ * B641: доски ATS включаются порциями по 300 в сутки от даты старта (решение CPO
+ * 10.11 — пул вырастет больше чем вдвое). Порядок — порядок `MEASURED_ATS_BOARDS`.
+ * Набор пересчитывается при каждом старте процесса.
+ */
+export const ATS_ROLLOUT_START_MS = Date.UTC(2026, 10, 10);
+export const ATS_BOARDS_PER_DAY = 300;
+
+export function admittedAtsBoards(nowMs: number): number {
+  const days = Math.floor((nowMs - ATS_ROLLOUT_START_MS) / 86_400_000);
+  return days < 0 ? 0 : (days + 1) * ATS_BOARDS_PER_DAY;
+}
+
+const ATS_IDS = new Set(MEASURED_ATS_BOARDS.map((b) => atsFeedId(b)));
+const ADMITTED_ATS = new Set(
+  MEASURED_ATS_BOARDS.slice(0, admittedAtsBoards(Date.now())).map((b) => atsFeedId(b)),
+);
+
+function rollout(feedId: string): Pick<RegisteredVacancySource, 'enabled' | 'disabledReason'> {
+  if (!ATS_IDS.has(feedId) || ADMITTED_ATS.has(feedId)) return { enabled: true };
+  return {
+    enabled: false,
+    disabledReason: `Доска ATS ждёт своей порции: ${ATS_BOARDS_PER_DAY} досок в сутки с 10.11 (B641).`,
+  };
+}
+
 export const FREEHIRE_FEED_SOURCES: readonly RegisteredVacancySource[] = FEEDS.map((f) => ({
   id: `${FREEHIRE_SOURCE_PREFIX}${f.id}`,
   name: f.name,
@@ -38,7 +64,7 @@ export const FREEHIRE_FEED_SOURCES: readonly RegisteredVacancySource[] = FEEDS.m
   accessClass: 'open_web',
   market: f.market,
   addressStatus: 'live',
-  enabled: true,
+  ...rollout(f.id),
   targetUrl: f.homeUrl,
   refreshIntervalMinutes: REFRESH_MINUTES,
   itemsFoundTotal: 0,
