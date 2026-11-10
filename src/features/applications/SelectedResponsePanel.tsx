@@ -33,6 +33,8 @@ import './selected-response-panel.css';
 type SelectedResponsePanelProps = Omit<ResponseStatusMenuProps, 'application'> & {
   readonly application: ApplicationView;
   readonly onMarkFollowUpSent: () => Promise<void>;
+  /** B631: «Прикрепить» prepares the letter for this response's vacancy; approval links both. */
+  readonly onAttachMaterials?: (application: ApplicationView) => void;
 };
 
 interface SelectedResponseView {
@@ -112,6 +114,7 @@ function SelectedResponseContent({
       <SelectedResponseDetails
         application={props.application}
         company={view.displayCompany}
+        onAttachMaterials={props.onAttachMaterials}
         onMarkFollowUpSent={props.onMarkFollowUpSent}
         onStartPreparation={view.onStartPreparation}
         onOpenStories={view.onOpenStories}
@@ -172,6 +175,7 @@ function SelectedResponseHeader({
 function SelectedResponseDetails({
   application,
   company,
+  onAttachMaterials,
   onMarkFollowUpSent,
   onStartPreparation,
   onOpenStories,
@@ -179,6 +183,7 @@ function SelectedResponseDetails({
 }: {
   readonly application: ApplicationView;
   readonly company: string;
+  readonly onAttachMaterials?: (application: ApplicationView) => void;
   readonly onMarkFollowUpSent: () => Promise<void>;
   readonly onStartPreparation: () => void;
   readonly onOpenStories: () => void;
@@ -192,7 +197,7 @@ function SelectedResponseDetails({
       <NextStepRow application={application} onOpen={openStep} />
       <FollowUpSentControl application={application} onMark={onMarkFollowUpSent} />
       <div className="career-responses-selected__columns">
-        <Materials application={application} />
+        <Materials application={application} onAttach={onAttachMaterials} />
         <Delivery application={application} />
       </div>
       <Dossier application={application} company={company} />
@@ -338,9 +343,33 @@ function PanelRow({ icon, title, detail, aside }: PanelRowProps) {
   );
 }
 
-/** Mockup 5 «Материалы». Material bodies are not linked to the record yet, so no «Открыть». */
-function Materials({ application }: { readonly application: ApplicationView }) {
+function AttachButton({ label, onClick }: { readonly label: string; readonly onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="career-btn career-btn-secondary career-btn-sm"
+      aria-label={label}
+      onClick={onClick}
+    >
+      Прикрепить
+    </button>
+  );
+}
+
+/**
+ * Mockup 5 «Материалы». B631: a missing letter or resume is not a dead row — «Прикрепить» prepares
+ * the letter for this response's vacancy, and its approval links the letter and the resume.
+ * A manual card without a vacancy has nothing to prepare from, so it keeps the plain row.
+ */
+function Materials({
+  application,
+  onAttach,
+}: {
+  readonly application: ApplicationView;
+  readonly onAttach?: (application: ApplicationView) => void;
+}) {
   const { resume, coverLetter } = application.materials;
+  const attach = onAttach && application.clusterId ? () => onAttach(application) : undefined;
   return (
     <section aria-labelledby="career-responses-materials-title">
       <h3 id="career-responses-materials-title" className="career-subsection-title">
@@ -355,12 +384,16 @@ function Materials({ application }: { readonly application: ApplicationView }) {
               ? 'Версия сохранена вместе с откликом'
               : 'Отклик ушёл без сохранённой версии резюме'
           }
+          aside={!resume && attach ? <AttachButton label="Прикрепить резюме" onClick={attach} /> : undefined}
         />
         <PanelRow
           icon={<EnvelopeSimple aria-hidden="true" />}
           title={coverLetter ? 'Письмо' : 'Письмо не привязано'}
           detail={
             coverLetter ? 'Текст сохранён вместе с откликом' : 'Отклик ушёл без сохранённого письма'
+          }
+          aside={
+            !coverLetter && attach ? <AttachButton label="Прикрепить письмо" onClick={attach} /> : undefined
           }
         />
         <PanelRow
