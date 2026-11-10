@@ -18,6 +18,7 @@ import {
   vacancyText,
   withinTimeBudget,
   type CoverLetterOutcome,
+  type CoverLetterWriter,
 } from './coverLetterWriter';
 
 function client(
