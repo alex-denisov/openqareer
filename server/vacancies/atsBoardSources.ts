@@ -23,9 +23,11 @@ export interface MeasuredAtsBoard {
 
 /**
  * Доски работодателей меняются медленнее агрегаторов: вакансия висит неделями,
- * а лента отдаёт весь список целиком. Дважды в сутки — это и свежо, и вежливо.
+ * а лента отдаёт весь список целиком. Публичный JSON-API сервиса держит
+ * десятки запросов: раз в три часа (B628) — при 720 минутах 720 досок давали
+ * не больше 60 опросов в час.
  */
-const ATS_REFRESH_INTERVAL_MINUTES = 720;
+export const ATS_REFRESH_INTERVAL_MINUTES = 180;
 
 export function atsBoardSource(measured: MeasuredAtsBoard): RegisteredVacancySource {
   const contract = atsBoardContract(measured.provider);

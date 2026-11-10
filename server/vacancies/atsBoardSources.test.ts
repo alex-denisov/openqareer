@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atsBoardSource, ATS_BOARD_SOURCES } from './atsBoardSources';
+import { ATS_REFRESH_INTERVAL_MINUTES, atsBoardSource, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { hasJsonAdapter } from './jsonSourceAdapters';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 
@@ -86,4 +86,10 @@ describe('доски работодателей подключены к прод
     await engine.syncSource(board!.id);
     expect(asked).toContain(board!.targetUrl);
   }, 30_000);
+});
+
+describe('ATS board refresh interval (B628 throughput)', () => {
+  it('a board is polled every three hours, not twice a day', () => {
+    expect(ATS_REFRESH_INTERVAL_MINUTES).toBe(180);
+  });
 });
