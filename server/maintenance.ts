@@ -184,8 +184,10 @@ const worker = new MaintenanceWorker({
   ...(titleBulkRuntime.client && process.env.OPENQAREER_ROLE_LINK_OFF !== '1'
     ? { roleLink: new RoleLinkStep(semanticDatabase, titleBulkRuntime.client, log) }
     : {}),
-  titleParse: new SemanticBackfill(semanticDatabase, (reason) =>
-    log.error({ reason }, 'title-grade-step-failed'),
+  titleParse: new SemanticBackfill(
+    semanticDatabase,
+    (reason) => log.error({ reason }, 'title-grade-step-failed'),
+    (stages) => log.info({ ...stages }, 'title-parse-slow-step'),
   ),
   ...(titleModelParser
     ? {

@@ -50,6 +50,7 @@ const PRUNE_WINDOW = 20_000;
 const MISSING_WINDOW = 10_000;
 const CORRECTION_CHUNK = 500;
 const CORRECTION_BUDGET_MS = 300;
+const SLOW_STEP_MS = 1_000;
 
 interface Correction {
   key: string;
@@ -90,6 +91,7 @@ export class SemanticBackfill {
   constructor(
     database: DatabaseSync,
     private readonly onGradeError?: (reason: string) => void,
+    private readonly onSlowStep?: (stages: Readonly<Record<string, number>>) => void,
   ) {
     this.database = database;
     this.database.exec(MIGRATION_35);
@@ -101,21 +103,35 @@ export class SemanticBackfill {
    * LIMIT по совпадениям на размеченном пуле обходил бы весь индекс за шаг.
    */
   step(chunk: number): SemanticBackfillReport {
-    const ontologyCorrected = this.correctByExactOntology();
-    const relabeled = this.relabelStale(RELABEL_CHUNK);
-    const caughtUp = this.catchUpMissing(chunk);
-    const windowEnd = this.windowEnd(chunk);
-    const rows = this.readWindow(windowEnd);
-    const written = this.writeChunk(rows);
+    // B641 10.11: первый шаг после старта держал цикл 7,6 с; стадии медленного
+    // шага уходят в журнал, чтобы найти виновника на проде.
+    const stages: Record<string, number> = {};
+    const timed = <T>(name: string, run: () => T): T => {
+      const startedAt = Date.now();
+      try {
+        return run();
+      } finally {
+        stages[name] = Date.now() - startedAt;
+      }
+    };
+    const ontologyCorrected = timed('corrections', () => this.correctByExactOntology());
+    const relabeled = timed('relabel', () => this.relabelStale(RELABEL_CHUNK));
+    const caughtUp = timed('catchUp', () => this.catchUpMissing(chunk));
+    const windowEnd = timed('windowEnd', () => this.windowEnd(chunk));
+    const rows = timed('readWindow', () => this.readWindow(windowEnd));
+    const written = timed('writeChunk', () => this.writeChunk(rows));
     const backfilled = written.backfilled + caughtUp.backfilled;
     const newKeys = written.newKeys + caughtUp.newKeys;
-    const poolRowsScanned = windowEnd === null ? this.countRemainingRows() : chunk;
+    const poolRowsScanned =
+      windowEnd === null ? timed('countRemaining', () => this.countRemainingRows()) : chunk;
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
-    this.prunedSincePass += this.pruneOrphans();
+    this.prunedSincePass += timed('prune', () => this.pruneOrphans());
     const pruned = passFinished ? this.prunedSincePass : 0;
     if (passFinished) this.prunedSincePass = 0;
-    this.gradeStep();
+    timed('grade', () => this.gradeStep());
+    const totalMs = Object.values(stages).reduce((sum, ms) => sum + ms, 0);
+    if (totalMs >= SLOW_STEP_MS) this.onSlowStep?.({ ...stages, totalMs });
     return {
       scanned: rows.length + caughtUp.backfilled,
       poolRowsScanned,
