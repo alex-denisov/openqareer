@@ -615,3 +615,79 @@
     flex: 1 1 0;
   }
 }
+
+/* B631: the resume for this vacancy opens in a side panel over the letter, not in «Профиль». */
+.career-letter-resume-panel {
+  inset-block: 0;
+  inset-inline: auto 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  inline-size: min(560px, 100vw);
+  max-inline-size: 100vw;
+  block-size: 100dvh;
+  max-block-size: 100dvh;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-inline-start: var(--career-border-width) solid var(--career-line);
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+}
+.career-letter-resume-panel:not([open]) {
+  display: none;
+}
+.career-letter-resume-panel::backdrop {
+  background: var(--career-backdrop);
+}
+.career-letter-resume-panel-head {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  padding: var(--career-space-3) var(--career-space-4);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+}
+.career-letter-resume-panel-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: var(--career-text-md);
+}
+.career-letter-resume-panel-x {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  padding: 0;
+  border: 0;
+  color: var(--career-text-dim);
+  background: transparent;
+  cursor: pointer;
+}
+.career-letter-resume-panel-body {
+  overflow-y: auto;
+  padding: var(--career-space-4);
+}
+.career-letter-resume-panel-text {
+  margin: 0;
+  font-family: inherit;
+  font-size: var(--career-text-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.career-letter-resume-panel-note {
+  margin: 0;
+  color: var(--career-text-dim);
+}
+.career-letter-resume-panel-error {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-3);
+}
+.career-letter-resume-panel-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  padding: var(--career-space-3) var(--career-space-4)
+    calc(var(--career-space-3) + env(safe-area-inset-bottom));
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}

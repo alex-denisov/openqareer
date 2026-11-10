@@ -150,10 +150,16 @@ export async function approveVacancyLetter(
 }
 
 /** «Подготовить резюме»: повторяет снимок резюме под вакансию, письмо не одобряет. */
-export async function prepareVacancyLetterResume(vacancyId: string): Promise<{ readonly ready: boolean }> {
+export interface PreparedLetterResume {
+  readonly ready: boolean;
+  /** B631: the targeted version the approval will attach; `null` on Free or without experience. */
+  readonly versionId?: string | null;
+}
+
+export async function prepareVacancyLetterResume(vacancyId: string): Promise<PreparedLetterResume> {
   const response = await apiFetch(
     '/api/v1/candidate/vacancies/' + encodeURIComponent(vacancyId) + '/letter-resume',
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' },
   );
-  return readData<{ readonly ready: boolean }>(response);
+  return readData<PreparedLetterResume>(response);
 }

@@ -7,6 +7,7 @@ import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons
 import { vacancyConsultantPrompt } from './vacancyConsultantPrompt';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
+import { campaignUpdateHandler, useActiveCampaign } from './vacanciesCampaignState';
 import type { ApplicationView } from '../applications/applicationsApi';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { VacancySubscription, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
@@ -93,6 +94,8 @@ export interface VacanciesScreenProps {
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
+  /** B631: an archived vacancy's one action — the response returns to its previous stage. */
+  readonly onRestoreFromArchive?: (clusterId: string) => Promise<void>;
   readonly onOpenConnections?: () => void;
   readonly onOpenNotifications?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
@@ -223,6 +226,7 @@ export interface ListContentProps {
   readonly onOpenLetter?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
+  readonly onRestoreFromArchive?: VacanciesScreenProps['onRestoreFromArchive'];
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly savedClusterIds?: ReadonlySet<string>;
@@ -446,6 +450,7 @@ function buildListProps(
     onOpenLetter,
     onOpenResponses: input.onOpenResponses,
     onOpenArchive: input.onOpenArchive,
+    onRestoreFromArchive: input.onRestoreFromArchive,
     onAddToProfile: input.onOpenProfile,
     onDiscussWithConsultant: discussVacancy(input),
     savedClusterIds,
@@ -788,39 +793,8 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
   );
 }
 
-function campaignUpdateHandler(
-  setCampaign: ReturnType<typeof useActiveCampaign>[1],
-  setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
-) {
-  return (updated: CampaignMetaView, addedRole: string | undefined) =>
-    applyCampaignUpdate(updated, addedRole, setCampaign, setScreenState);
-}
-
 function careerPathAction(path: VacanciesPathIndicator | undefined) {
   return path ? () => path.onNavigate('career') : undefined;
-}
-
-function useActiveCampaign(campaign?: CampaignMetaView) {
-  const [active, setActive] = useState(campaign);
-  useEffect(() => {
-    if (campaign) setActive(campaign);
-  }, [campaign]);
-  return [active, setActive] as const;
-}
-
-function applyCampaignUpdate(
-  campaign: CampaignMetaView,
-  addedRole: string | undefined,
-  setCampaign: ReturnType<typeof useActiveCampaign>[1],
-  setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
-) {
-  setCampaign(campaign);
-  setScreenState((current: VacanciesScreenState) => ({
-    ...current,
-    roles: addedRole ? [...current.roles, addedRole] : current.roles,
-    regions: current.regions,
-    remoteOnly: current.remoteOnly,
-  }));
 }
 
 /** Единственная точка «есть совпадение» на всех трёх fit-dots (B248/B324). */

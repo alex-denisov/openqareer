@@ -1,8 +1,9 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { vacancyScreenObject } from '../journey/consultantScreenObjects';
 import { usePublishConsultantObject } from '../journey/consultantScreenTopic';
 import { vacancyFitPercent } from '../../../shared/vacancyFitPercent';
 import {
+  ArrowCounterClockwise,
   ArrowSquareOut,
   Briefcase,
   ChatCircleText,
@@ -34,6 +35,7 @@ import { VacancyFitVerdicts } from './VacancyFitVerdicts';
 
 interface VacancyScreenDetailRowProps {
   readonly onOpenArchive?: () => void;
+  readonly onRestoreFromArchive?: (clusterId: string) => Promise<void>;
   readonly onOpenResponses?: () => void;
   readonly onToggleCompanyWant?: () => void | Promise<void>;
   readonly companyWantKnown?: boolean;
@@ -67,7 +69,9 @@ function ApplyAction({
   readonly rowProps: VacancyScreenDetailRowProps;
   readonly rowState: VacancyScreenActionState;
 }) {
-  if (rowState.applicationArchived) return <ArchivedApplicationAction rowProps={rowProps} />;
+  if (rowState.applicationArchived) {
+    return <ArchivedApplicationAction cluster={cluster} rowProps={rowProps} />;
+  }
   if (rowState.alreadyApplied) return <RecordedApplicationAction rowProps={rowProps} />;
   if (rowState.externalOpened) return <ConfirmSentAction rowState={rowState} />;
   return (
@@ -83,11 +87,59 @@ function ApplyAction({
   );
 }
 
+const RESTORE_FAILED = 'Не удалось вернуть отклик из архива. Попробуйте ещё раз.';
+
+function useRestore(clusterId: string, onRestore?: (clusterId: string) => Promise<void>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const restore = async () => {
+    if (!onRestore) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onRestore(clusterId);
+    } catch {
+      setError(RESTORE_FAILED);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { busy, error, restore };
+}
+
+/**
+ * B631: an archived response leaves one action on its vacancy — «Вернуть из архива». The interview,
+ * the letter and the platform wait until the response is back in work.
+ */
 function ArchivedApplicationAction({
+  cluster,
   rowProps,
 }: {
+  readonly cluster: MatchedVacancyItem['cluster'];
   readonly rowProps: VacancyScreenDetailRowProps;
 }) {
+  const restore = useRestore(cluster.id, rowProps.onRestoreFromArchive);
+  if (rowProps.onRestoreFromArchive) {
+    return (
+      <>
+        <button
+          type="button"
+          className="btn btn-primary action-btn"
+          disabled={restore.busy}
+          aria-busy={restore.busy}
+          onClick={() => void restore.restore()}
+        >
+          <ArrowCounterClockwise size={15} aria-hidden="true" />
+          Вернуть из архива
+        </button>
+        {restore.error ? (
+          <p className="vacancies-interview-error" role="alert">
+            {restore.error}
+          </p>
+        ) : null}
+      </>
+    );
+  }
   return rowProps.onOpenArchive ? (
     <button type="button" className="btn btn-secondary action-btn" onClick={rowProps.onOpenArchive}>
       Открыть архив
@@ -606,6 +658,13 @@ export function VacancyScreenDetailActions({
   readonly rowState: VacancyScreenActionState;
   readonly path?: CompanyPathToggle;
 }) {
+  if (rowState.applicationArchived) {
+    return (
+      <div className="action-row vacancies-detail-actions vacancies-screen-detail-actions">
+        <ArchivedApplicationAction cluster={cluster} rowProps={rowProps} />
+      </div>
+    );
+  }
   return (
     <div className="action-row vacancies-detail-actions vacancies-screen-detail-actions">
       <ApplyAction cluster={cluster} rowProps={rowProps} rowState={rowState} />

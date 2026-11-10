@@ -153,3 +153,34 @@ describe('B601 (08.11): снимок резюме не создался', () => 
     expect((await approve({ generalResumeId: 'document-not-mine' })).statusCode).toBe(503);
   });
 });
+
+describe('B631: резюме под вакансию открывается поверх письма', () => {
+  it('«Подготовить резюме» отдаёт версию, которую одобрение привяжет к отклику', async () => {
+    const { prepareResume, approve } = await setup('Head of Platform');
+    const prepared = (await prepareResume()).json().data;
+    expect(prepared.versionId).toEqual(expect.any(String));
+    const approved = (await approve()).json().data;
+    expect(approved.resume).toMatchObject({ kind: 'targeted', versionId: prepared.versionId });
+  });
+
+  it('Free: версии нет, письмо прикладывает общее резюме', async () => {
+    const { prepareResume } = await setup('Head of Platform', { billingEnforcement: true });
+    expect((await prepareResume()).json().data).toMatchObject({ resumeKind: 'master', versionId: null });
+  });
+});
+
+describe('B631: «Отметить отправленным» после одобрения', () => {
+  it('поднимает ту же заявку до «Отправлено», письмо и резюме остаются привязаны', async () => {
+    const { candidates, candidateId, approve } = await setup('Head of Platform');
+    const approved = (await approve()).json().data;
+    candidates.recordVacancyApplication(candidateId, {
+      clusterId: 'cluster-99',
+      status: 'applied',
+      vacancy: { title: 'Head of Platform', company: 'Вектор', url: 'https://example.com', source: 'hh' },
+    });
+    const list = candidates.listApplications(candidateId).filter((item) => item.clusterId === 'cluster-99');
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ id: approved.applicationId, stage: 'applied' });
+    expect(list[0]?.materials).toMatchObject({ resume: true, coverLetter: true });
+  });
+});

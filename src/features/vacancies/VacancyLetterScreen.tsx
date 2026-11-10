@@ -19,6 +19,7 @@ import { circleSummary, CircleTabs } from './VacancyLetterCircles';
 import { LetterCardHeading, LetterDestination } from './VacancyLetterDestination';
 import { resumeRowForLetter } from './vacancyLetterResumeNote';
 import { LetterActions } from './VacancyLetterActions';
+import { VacancyLetterResumePanel } from './VacancyLetterResumePanel';
 import type { LetterPlatform } from './VacancyLetterPlatformStep';
 import type { VacancyApplications } from './useVacancyApplications';
 import { LetterEditor, LetterNotices, LetterSettings, PitchBodyState } from './VacancyLetterEditor';
@@ -184,6 +185,7 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
   const { vacancy, state, onBack, onOpenResponses, onOpenResume, onOpenExpert } = props;
   usePageTitleOverride('Письмо');
   const actions = useLetterPageActions(vacancy, onOpenExpert);
+  const [resumeOpen, setResumeOpen] = useState(false);
   const frozen = Boolean(state.approval.saved);
   // Макет 9 при 390: «Назад» и консультант — в шапке экрана, в карточке вакансии «Назад» нет.
   const compact = useCompactViewport();
@@ -210,8 +212,16 @@ function VacancyLetterPage(props: VacancyLetterPageProps) {
         actions={actions}
         platform={props.platform}
         onOpenResponses={onOpenResponses}
-        onOpenResume={onOpenResume}
+        onOpenResume={() => setResumeOpen(true)}
       />
+      {resumeOpen ? (
+        <VacancyLetterResumePanel
+          vacancyId={vacancy.id}
+          approved={state.approval.saved?.resume ?? null}
+          onClose={() => setResumeOpen(false)}
+          onOpenProfile={onOpenResume}
+        />
+      ) : null}
       {actions.contactsOpen ? (
         <ConnectionContactsDialog
           vacancyCompany={vacancy.canonicalCompany}
@@ -363,7 +373,7 @@ function LetterCard(props: LetterCardProps) {
         pitchReady={pitchReady}
         onAskEdits={actions.onAskEdits}
         onOpenResponses={onOpenResponses}
-        platform={platform}
+        platform={platform ? { ...platform, letterText: state.draft.text } : undefined}
       />
     </section>
   );

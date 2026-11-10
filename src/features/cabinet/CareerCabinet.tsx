@@ -34,6 +34,7 @@ import {
   type VacancyApplications,
 } from '../vacancies/useVacancyApplications';
 import { useApplications } from '../applications/useApplications';
+import { archivedClusterIds, restoreArchivedVacancy } from './restoreArchivedVacancy';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
@@ -159,12 +160,7 @@ export function CareerCabinet(props: CareerCabinetProps) {
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
   const applicationsTracker = useApplications();
   const archivedApplicationClusterIds = useMemo(
-    () =>
-      new Set(
-        applicationsTracker.applications
-          .filter((application) => application.stage === 'archived' && application.clusterId)
-          .map((application) => application.clusterId as string),
-      ),
+    () => archivedClusterIds(applicationsTracker.applications),
     [applicationsTracker.applications],
   );
   const recordConfirmedVacancy = vacancyApplications.recordConfirmed;
@@ -704,6 +700,7 @@ function CabinetSection({
       onScheduleInterview={onScheduleInterview}
       onOpenResponses={() => onNavigate('responses')}
       onOpenArchive={() => onNavigate('responses', { openArchive: true })}
+      onRestoreFromArchive={(clusterId) => restoreArchivedVacancy(applicationsTracker, clusterId)}
       onOpenConnections={onOpenConnections}
       onOpenNotifications={onOpenNotifications}
       onOpenProfile={onOpenProfileRequirement}
@@ -874,3 +871,4 @@ function nearestInterviewOf(
     scheduledAt: nearest.nearestInterview.scheduledAt,
   };
 }
+

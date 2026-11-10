@@ -403,7 +403,7 @@ const handlePrepareLetterResume: Handler = async (deps, request, reply) => {
   if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
   try {
     const state = prepareLetterResume(deps, candidate.id, cluster);
-    return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available }, meta: { requestId: request.id } };
+    return { data: { resumeAvailable: state.available, resumeKind: state.kind, ready: state.available, versionId: state.versionId }, meta: { requestId: request.id } };
   } catch (error) {
     if (error instanceof ResumeSnapshotError) return resumeSnapshotFailed(deps, reply, request, candidate.id, error);
     throw error;

@@ -460,3 +460,13 @@ describe('VacancyRow screen detail requirements (B549)', () => {
     expect(html).not.toContain('Требования ещё не разобраны.');
   });
 });
+
+describe('VacancyRow expanded card order (B631)', () => {
+  it('puts the action row right under the card head, before requirements and description', () => {
+    const html = render({ item: item(), layout: 'screen', isSelected: true });
+    const actions = html.indexOf('vacancies-screen-detail-actions');
+    expect(actions).toBeGreaterThan(-1);
+    expect(actions).toBeLessThan(html.indexOf('vacancies-screen-requirements'));
+    expect(actions).toBeLessThan(html.indexOf('vacancies-screen-description'));
+  });
+});

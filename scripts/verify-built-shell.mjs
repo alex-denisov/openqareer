@@ -128,8 +128,8 @@ async function installLetterRoutes(page) {
 }
 
 /**
- * B629: «Откликнуться» opens the letter; the platform and «Отклик отправлен?» come only after
- * «Одобрить письмо». Leaves the letter for the vacancy list.
+ * B629/B631: «Откликнуться» opens the letter; «Скопировать письмо и открыть площадку» and
+ * «Отметить отправленным» come only after «Одобрить письмо». Leaves the letter for the list.
  */
 async function applyThroughLetter(page, openedVacancy, viewport) {
   await page.evaluate(() => {
@@ -139,13 +139,13 @@ async function applyThroughLetter(page, openedVacancy, viewport) {
   await page.getByRole('heading', { name: 'Как откликнуться: три круга связей' }).waitFor();
   await page.getByRole('button', { name: 'Одобрить письмо' }).click();
   assert(page.__recordedApplications.length === 0, `${viewport.name}: отклик отмечен до площадки`);
-  await page.getByRole('button', { name: 'Открыть площадку' }).click();
+  await page.getByRole('button', { name: 'Скопировать письмо и открыть площадку' }).click();
   assert(
     page.__recordedApplications.length === 0,
     `${viewport.name}: отклик отмечен без подтверждения`,
   );
-  await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
-  await page.locator('.career-letter-actions').getByText('Отклик отмечен').waitFor();
+  await page.getByRole('button', { name: 'Отметить отправленным' }).click();
+  await page.locator('.career-letter-actions').getByText('Отклик отправлен:').waitFor();
 }
 
 async function verifyViewport(browser, baseUrl, viewport) {
@@ -1528,7 +1528,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   });
 
   // Отклик из карточки (B251 F5, C47, B341, B629): «Откликнуться» ведёт в письмо, площадка —
-  // после одобрения, запись «applied» ставит только подтверждение «Да, отклик отправлен».
+  // после одобрения, запись «applied» ставит только «Отметить отправленным» (B631).
   // На широком экране первая строка раскрыта сразу; на узком — свёрнута.
   const closeFilterSheet = page
     .locator('.vacancies-filters.is-expanded')

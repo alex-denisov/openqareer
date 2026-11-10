@@ -228,23 +228,54 @@ describe('B629: the letter leads to the platform after approval', () => {
     reset: vi.fn(),
   } as unknown as ApprovalState;
 
-  it('after «Одобрить письмо» opens the platform and asks whether the response was sent', () => {
+  it('after «Одобрить письмо» copies the letter, opens the platform, then «Отметить отправленным» (B631)', async () => {
     const openSpy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue(true);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     const onConfirmSent = vi.fn().mockResolvedValue(undefined);
     mount(
       <LetterActions
         approval={approved}
         pitchReady
-        platform={{ url: 'https://example.com/vacancy', applied: false, onConfirmSent }}
+        platform={{
+          url: 'https://example.com/vacancy',
+          applied: false,
+          onConfirmSent,
+          letterText: 'Добрый день! Готов обсудить роль.',
+        }}
       />,
     );
-    expect(document.body.textContent).not.toContain('Отклик отправлен?');
-    click('Открыть площадку');
+    const copy = button('Скопировать письмо и открыть площадку');
+    expect(copy?.className).toContain('career-btn-primary');
+    expect(button('Отметить отправленным')?.className).toContain('career-btn-secondary');
+    await act(async () => copy?.click());
+    expect(writeText).toHaveBeenCalledWith('Добрый день! Готов обсудить роль.');
     expect(openSpy).toHaveBeenCalledWith('https://example.com/vacancy');
-    expect(document.body.textContent).toContain('Отклик отправлен?');
+    expect(document.body.textContent).toContain('Письмо скопировано');
+    // One filled action: after the platform opened, marking the response leads.
+    expect(button('Отметить отправленным')?.className).toContain('career-btn-primary');
+    expect(button('Скопировать письмо и открыть площадку')?.className).toContain(
+      'career-btn-secondary',
+    );
     expect(onConfirmSent).not.toHaveBeenCalled();
-    click('Да, отклик отправлен');
+    await act(async () => button('Отметить отправленным')?.click());
     expect(onConfirmSent).toHaveBeenCalled();
+  });
+
+  it('still opens the platform when the clipboard refuses, and says to copy by hand', async () => {
+    const openSpy = vi.spyOn(openExternalLinkModule, 'openExternalLink').mockResolvedValue(true);
+    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    mount(
+      <LetterActions
+        approval={approved}
+        pitchReady
+        platform={{ url: 'https://example.com/vacancy', applied: false, letterText: 'текст' }}
+      />,
+    );
+    await act(async () => button('Скопировать письмо и открыть площадку')?.click());
+    expect(openSpy).toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Не удалось скопировать');
   });
 
   it('shows no platform step on a draft or without a platform link', () => {
@@ -256,7 +287,7 @@ describe('B629: the letter leads to the platform after approval', () => {
         platform={{ url: 'https://example.com/vacancy', applied: false, onConfirmSent: vi.fn() }}
       />,
     );
-    expect(button('Открыть площадку')).toBeUndefined();
+    expect(button('Скопировать письмо и открыть площадку')).toBeUndefined();
     act(() => root?.unmount());
     host?.remove();
     mount(
@@ -266,7 +297,7 @@ describe('B629: the letter leads to the platform after approval', () => {
         platform={{ url: '', applied: false, onConfirmSent: vi.fn() }}
       />,
     );
-    expect(button('Открыть площадку')).toBeUndefined();
+    expect(button('Скопировать письмо и открыть площадку')).toBeUndefined();
     root = undefined;
   });
 
@@ -280,12 +311,11 @@ describe('B629: the letter leads to the platform after approval', () => {
         platform={{ url: 'https://example.com/vacancy', applied: false, onConfirmSent }}
       />,
     );
-    click('Открыть площадку');
-    await act(async () => button('Да, отклик отправлен')?.click());
+    await act(async () => button('Отметить отправленным')?.click());
     expect(document.body.textContent).toContain(
       'Не удалось сохранить отклик. Состояние не изменено.',
     );
-    expect(button('Да, отклик отправлен')?.disabled).toBe(false);
+    expect(button('Отметить отправленным')?.disabled).toBe(false);
   });
 
   it('a marked response does not ask again', () => {
@@ -296,8 +326,9 @@ describe('B629: the letter leads to the platform after approval', () => {
         platform={{ url: 'https://example.com/vacancy', applied: true, onConfirmSent: vi.fn() }}
       />,
     );
-    expect(button('Открыть площадку')).toBeUndefined();
-    expect(document.body.textContent).toContain('Отклик отмечен');
+    expect(button('Скопировать письмо и открыть площадку')).toBeUndefined();
+    expect(document.body.textContent).toContain('Отклик отправлен');
+    expect(document.body.textContent).toContain('письмо и резюме привязаны');
   });
 });
 

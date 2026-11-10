@@ -63,6 +63,8 @@ export interface VacancyRowProps {
   readonly onOpenLetter?: RowLetterOpen;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
+  /** B631: an archived vacancy's one action — the response returns to its previous stage. */
+  readonly onRestoreFromArchive?: (clusterId: string) => Promise<void>;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly isSaved?: boolean;
@@ -652,14 +654,8 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
       id={`vacancy-details-${cluster.id}`}
       className="vac-detail vacancies-detail-panel vacancies-screen-detail"
     >
-      <VacancyFitBlock cluster={cluster} view={explanation.fitView} />
       <DetailTrustAlert trust={rowState.trust} />
-      <VacancyScreenDetailGrid
-        cluster={cluster}
-        explanation={explanation}
-        rowProps={rowProps}
-        rowState={rowState}
-      />
+      {/* B631: the action row stands right under the head; the reasons follow it. */}
       <VacancyScreenDetailActions
         cluster={cluster}
         rowProps={rowProps}
@@ -677,10 +673,17 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
         appliedError={rowState.appliedState.appliedError}
         interviewState={rowState.interviewState}
         onScheduleInterview={
-          rowState.alreadyApplied && rowProps.onScheduleInterview
+          rowState.alreadyApplied && !rowState.applicationArchived && rowProps.onScheduleInterview
             ? () => rowState.interviewState.setScheduleOpen(true)
             : undefined
         }
+      />
+      <VacancyFitBlock cluster={cluster} view={explanation.fitView} />
+      <VacancyScreenDetailGrid
+        cluster={cluster}
+        explanation={explanation}
+        rowProps={rowProps}
+        rowState={rowState}
       />
     </div>
   );

@@ -36,6 +36,9 @@ import { RESPONSES_TAB_TOPICS } from './responsesTabTopics';
 import { bulkFilterQuery } from './responsesFiltering';
 import { OlderResponsesNotice } from './OlderResponsesNotice';
 import { usePublishConsultantTopic } from '../journey/consultantScreenTopic';
+import { VacancyLetterScreen, type VacancyLetterTarget } from '../vacancies/VacancyLetterScreen';
+import { COLD_LETTER_CIRCLE } from '../vacancies/useVacancyLetterRoute';
+import { responseLetterTarget } from './responseLetterTarget';
 import './responses-workspace.css';
 import './responses-mobile.css';
 
@@ -69,6 +72,10 @@ export interface ResponsesWorkspaceScreenProps {
   ) => void;
   readonly columnsContent: (input: ResponsesColumnsContentInput) => ReactNode;
   readonly emptyContent: ReactNode;
+  /** B631: set by the screen itself — «Прикрепить» opens the letter for the response vacancy. */
+  readonly onAttachMaterials?: (application: ApplicationView) => void;
+  /** B631: while a letter is open over the workspace, the letter owns the consultant topic. */
+  readonly letterOpen?: boolean;
 }
 
 function WorkspacePanelContent({
@@ -107,9 +114,43 @@ function WorkspacePanelContent({
   }
 }
 
+/**
+ * B631: the letter for a response opens over the workspace and returns to it; the approval links
+ * the letter and the resume to the card, so the list is read again on the way back.
+ */
 export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
+  const [letter, setLetter] = useState<VacancyLetterTarget | null>(null);
+  const back = () => {
+    setLetter(null);
+    props.state.reload();
+  };
+  // The workspace stays mounted under the letter, so the selected response and filters survive.
+  return (
+    <>
+      {letter ? (
+        <VacancyLetterScreen
+          vacancy={letter}
+          initialCircle={COLD_LETTER_CIRCLE}
+          onBack={back}
+          onOpenResponses={back}
+          onOpenResume={props.onOpenResume}
+          onOpenExpert={props.onOpenExpert}
+        />
+      ) : null}
+      <div className="career-responses-workspace-host" hidden={Boolean(letter)}>
+        <ResponsesWorkspaceTabs
+          {...props}
+          letterOpen={Boolean(letter)}
+          onAttachMaterials={(application) => setLetter(responseLetterTarget(application))}
+        />
+      </div>
+    </>
+  );
+}
+
+function ResponsesWorkspaceTabs(props: ResponsesWorkspaceScreenProps) {
   const workspace = useWorkspaceController(props);
-  usePublishConsultantTopic(RESPONSES_TAB_TOPICS[workspace.section]);
+  usePublishConsultantTopic(props.letterOpen ? null : RESPONSES_TAB_TOPICS[workspace.section]);
   const tableView = renderTableView({
     state: props.state,
     workspace,
@@ -427,6 +468,7 @@ function SelectedResponse({
     <SelectedResponsePanel
       application={application}
       onOpenExpert={props.onOpenExpert}
+      onAttachMaterials={props.onAttachMaterials}
       onMarkFollowUpSent={() => props.state.markFollowUpSent(application.id)}
       onChangeStage={(stage, occurredAt, receipt) =>
         props.state.changeStage(application.id, stage, occurredAt, receipt)

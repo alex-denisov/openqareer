@@ -536,7 +536,7 @@ div.vacancy-push-row {
 .vacancy-push-requirements .vacancy-fit-verdicts {
   padding-inline: var(--career-space-4);
 }
-.vacancy-push-requirements .vacancy-fit-verdicts h4 {
+.vacancy-push-requirements .vacancy-fit-verdicts > summary {
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }

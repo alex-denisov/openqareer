@@ -190,16 +190,20 @@ function planSnapshot(deps: RouteDeps, candidateId: string, applicationId: strin
 }
 
 /** Кнопка «Подготовить резюме»: повторяет создание снимка, не трогая письмо и заявку. */
-export function prepareLetterResume(deps: RouteDeps, candidateId: string, cluster: VacancyCluster): LetterResumeState {
+/** B631: the version id lets the letter open the resume it will attach in a panel over itself. */
+export function prepareLetterResume(
+  deps: RouteDeps,
+  candidateId: string,
+  cluster: VacancyCluster,
+): LetterResumeState & { readonly versionId: string | null } {
   const master = currentMaster(deps, candidateId);
   const state = letterResumeState(deps, candidateId, master.document);
-  if (!state.available || state.kind === 'master') return state;
+  if (!state.available || state.kind === 'master') return { ...state, versionId: null };
   try {
-    approvedVersion(deps, candidateId, master, cluster);
+    return { ...state, versionId: approvedVersion(deps, candidateId, master, cluster).id };
   } catch (error) {
     throw new ResumeSnapshotError(error);
   }
-  return state;
 }
 
 /** Снимок не создался, и кандидат выбрал своё общее резюме: привязываем его как есть. */

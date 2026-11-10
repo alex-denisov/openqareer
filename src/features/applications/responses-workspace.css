@@ -1295,3 +1295,11 @@
     min-block-size: var(--career-target-min);
   }
 }
+
+/* B631: the workspace stays mounted under a response letter; the host adds no box of its own. */
+.career-responses-workspace-host {
+  display: contents;
+}
+.career-responses-workspace-host[hidden] {
+  display: none;
+}

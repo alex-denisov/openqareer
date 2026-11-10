@@ -429,9 +429,16 @@
   gap: var(--career-space-2);
   margin-block-start: var(--career-space-3);
 }
-.vacancy-fit-verdicts h4 {
-  margin: 0;
+.vacancy-fit-verdicts > summary {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
   font-size: var(--career-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.vacancy-fit-verdicts:not([open]) {
+  gap: 0;
 }
 .vacancy-fit-verdicts ul {
   display: grid;

@@ -116,6 +116,7 @@ function VacancyScreenRow({
       onOpenLetter={props.onOpenLetter}
       onOpenResponses={props.onOpenResponses}
       onOpenArchive={props.onOpenArchive}
+      onRestoreFromArchive={props.onRestoreFromArchive}
       onAddToProfile={props.onAddToProfile}
       onDiscussWithConsultant={props.onDiscussWithConsultant}
       isSaved={props.savedClusterIds?.has(item.cluster.id)}
