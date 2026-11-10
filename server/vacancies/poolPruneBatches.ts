@@ -172,6 +172,17 @@ function pruneOrphanIndexes(pass: PrunePass): void {
        AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = vacancy_cluster_input.id)`,
     orphanInput,
   );
+  // B643: связь записи агрегатора с компанией живёт, пока жива запись.
+  const orphanCompany = pass.find(
+    `SELECT c.rowid AS key FROM vacancy_company c
+       LEFT JOIN vacancy_pool_index i ON i.id = c.vacancy_id
+      WHERE i.id IS NULL LIMIT ${PRUNE_PORTION_ROWS}`,
+  );
+  pass.remove(
+    `DELETE FROM vacancy_company WHERE rowid = ?
+       AND NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = vacancy_company.vacancy_id)`,
+    orphanCompany,
+  );
 }
 
 export function prunePoolInBatches(
