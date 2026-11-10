@@ -339,6 +339,9 @@ function registerVacancyList(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/admin/vacancies/:vacancyId', withDeps(deps, handleGetVacancy));
 }
 
+/** B641: localeCompare with options builds a collator per call; ~5 000 sources per page took seconds. */
+const SOURCE_NAME_COLLATOR = new Intl.Collator('ru-RU', { sensitivity: 'base' });
+
 async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdmin(deps, request, reply);
   if (!principal) return;
@@ -353,7 +356,7 @@ async function handleListSources(deps: RouteDeps, request: FastifyRequest, reply
     .getSources()
     .sort(
       (left, right) =>
-        left.name.localeCompare(right.name, 'ru-RU', { sensitivity: 'base' }) ||
+        SOURCE_NAME_COLLATOR.compare(left.name, right.name) ||
         left.id.localeCompare(right.id),
     );
   const nowMs = Date.now();
