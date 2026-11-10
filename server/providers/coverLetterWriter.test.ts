@@ -173,7 +173,7 @@ describe('LlmCoverLetterWriter: запрос к модели (B601)', () => {
       expect(sent(fake)).toMatchObject({
         reasoning: { effort: 'low' },
         max_tokens: COVER_LETTER_OUTPUT_TOKENS,
-        provider: { data_collection: 'deny', sort: 'throughput' },
+        provider: { data_collection: 'deny', sort: 'latency' },
       });
     },
   );

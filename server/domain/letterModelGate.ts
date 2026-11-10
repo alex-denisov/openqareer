@@ -236,9 +236,25 @@ function sameSound(word: string, known: string): boolean {
   return editDistance(one, other) <= Math.floor(shorter / 4) || (prefix >= 5 && prefix >= shorter * 0.6);
 }
 
+/**
+ * Слова названий, которые английское письмо переводит, а не транслитерирует (10.11: «Торговый дом Север» →
+ * «Trading House Sever», «ИПБ России» → «IPB Russia»). Слово проходит, только если его русская основа есть в профиле.
+ */
+const TRANSLATED_NAME_WORDS: Readonly<Record<string, readonly string[]>> = {
+  trading: ['торгов'], house: ['дом'], group: ['групп', 'гк'], company: ['компани'], russia: ['росси'], russian: ['росси'],
+  logistics: ['логист'], operator: ['оператор'], retail: ['розниц', 'ритейл'], chain: ['сеть', 'сети'], stores: ['магазин'],
+  factory: ['фабрик', 'завод'], plant: ['завод'], furniture: ['мебел'], university: ['университет'], institute: ['институт'],
+  financial: ['финансов'], government: ['правительств'], distributor: ['дистрибьютор'], appliances: ['техник'],
+};
+
+function isTranslatedName(lower: string, known: ReadonlySet<string>): boolean {
+  const stems = TRANSLATED_NAME_WORDS[lower];
+  return stems !== undefined && [...known].some((name) => stems.some((stem) => name.startsWith(stem)));
+}
+
 function isKnownName(word: string, known: ReadonlySet<string>): boolean {
   const lower = word.replace(/’/gu, "'").toLocaleLowerCase().replace(/'s$/u, '');
-  return PLAIN_CAPITALS.has(lower) || known.has(lower) ||
+  return PLAIN_CAPITALS.has(lower) || known.has(lower) || isTranslatedName(lower, known) ||
     [...known].some((name) => sameInflectedWord(lower, name) || sameSound(lower, name));
 }
 

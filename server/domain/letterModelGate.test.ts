@@ -147,6 +147,23 @@ describe('reviewLetterBody: кириллица в английском пись�
   });
 });
 
+describe('reviewLetterBody: переведённое слово в названии (B601, 10.11)', () => {
+  const profile: LetterGateSources = {
+    language: 'en',
+    candidate: ['## Заместитель главного бухгалтера | Торговый дом Север | Москва | 2014-02 — 2019-03', 'Аттестат профессионального бухгалтера ИПБ России | 2016'],
+    vacancy: ['Accounting Manager', 'Colliers'],
+  };
+  const names = (body: string) => reviewLetterBody(body, profile).filter((item) => item.rule === 'name');
+
+  it('переведённые слова из профиля не чужое имя', () => {
+    expect(names('At Trading House Sever I managed settlements. I hold the IPB Russia certificate. My resume is attached.')).toEqual([]);
+  });
+
+  it('переведённое слово без основы в профиле остаётся чужим именем', () => {
+    expect(names('At Furniture House Sever I managed settlements. My resume is attached.')).toHaveLength(1);
+  });
+});
+
 describe('reviewLetterBody: чужие компании', () => {
   it.each([
     ['русское название', 'Руководил разработкой в Газпроме.'],
