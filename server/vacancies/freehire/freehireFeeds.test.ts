@@ -36,7 +36,7 @@ describe('freehire feeds registry (B641)', () => {
       expect(source.type).toBe('json_api');
       expect(source.id.startsWith('src-fh-')).toBe(true);
     }
-    expect(FREEHIRE_FEED_SOURCES.length).toBe(13);
+    expect(FREEHIRE_FEED_SOURCES.length).toBe(17);
   });
 
   it('routes card text through detailTextSources', () => {
@@ -161,6 +161,68 @@ describe('Russian company feeds', () => {
   it('a failure on the first page is a source failure', async () => {
     const client = clientFor(() => json({}, 403));
     await expect(fetchFreehireFeed('src-fh-rwb', 'RWB', client)).rejects.toThrow('403');
+  });
+});
+
+describe('Russian platform feeds', () => {
+  it('MTS reads the public apiKey from the site and posts it with each page', async () => {
+    const seen: string[] = [];
+    const client = createFeedClient({
+      fetchImpl: (async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === 'https://job.mts.ru/') return new Response('<script>apiKey:"k1"</script>');
+        seen.push(new Headers(init?.headers).get('x-api-key') ?? '');
+        return json({
+          data: {
+            pageInfo: { total: 1 },
+            vacancies: [{ id: '7', name: 'Аналитик', info: { brand: 'МТС Банк', city: 'Москва' } }],
+          },
+        });
+      }) as typeof fetch,
+      sleep: async () => {},
+    });
+    const reading = await fetchFreehireFeed('src-fh-mts', 'МТС', client);
+    expect(seen).toEqual(['k1']);
+    expect(reading.vacancies[0]).toMatchObject({
+      company: 'МТС Банк',
+      url: 'https://job.mts.ru/vacancy/7',
+    });
+  });
+
+  it('MTS without an apiKey on the site fails instead of reading nothing', async () => {
+    const client = clientFor(() => new Response('<html></html>'));
+    await expect(fetchFreehireFeed('src-fh-mts', 'МТС', client)).rejects.toThrow('apiKey');
+  });
+
+  it('Habr Career takes the company from the record and pages by totalPages', async () => {
+    const calls: string[] = [];
+    const client = clientFor(
+      (url) =>
+        json({
+          meta: { totalPages: 2 },
+          list: [
+            {
+              id: url.endsWith('page=1') ? 1 : 2,
+              title: 'Dev',
+              company: { title: 'ANCOR' },
+              publishedDate: { date: '2026-11-10T08:55:36+03:00' },
+              remoteWork: true,
+            },
+          ],
+        }),
+      calls,
+    );
+    const reading = await fetchFreehireFeed('src-fh-habr-career', 'Хабр', client);
+    expect(calls).toHaveLength(2);
+    expect(reading.vacancies[0]).toMatchObject({ company: 'ANCOR', isRemote: true });
+    expect(reading.vacancies[0]?.publishedAt).toBe('2026-11-10T05:55:36.000Z');
+  });
+
+  it('getmatch maps the public link to its card API', () => {
+    const source = freehireDetailTextSource('src-fh-getmatch');
+    expect(
+      source?.detailUrl('src-fh-getmatch', { url: 'https://getmatch.ru/vacancies/37210-senior' }),
+    ).toBe('https://getmatch.ru/api/offers/37210');
   });
 });
 

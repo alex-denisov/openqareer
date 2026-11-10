@@ -5,6 +5,8 @@ import { htmlToFeedText } from '../../connectors/feedText';
 import { record, text } from '../jsonVacancyRecord';
 import { createFeedClient, type FeedClient } from './feedClient';
 import { RUSSIAN_COMPANY_FEEDS, type FreehireFeed } from './russianCompanyFeeds';
+import { RUSSIAN_PLATFORM_FEEDS } from './russianPlatformFeeds';
+import { readJsonLdJobPosting } from '../detailTextSources';
 
 /**
  * Ленты, перенесённые из github.com/strelov1/freehire (MIT, © 2026 freehire
@@ -14,7 +16,7 @@ export const FREEHIRE_SOURCE_PREFIX = 'src-fh-';
 /** Опрос раз в три часа: как доски ATS после #571. */
 const REFRESH_MINUTES = 180;
 
-const FEEDS: readonly FreehireFeed[] = [...RUSSIAN_COMPANY_FEEDS];
+const FEEDS: readonly FreehireFeed[] = [...RUSSIAN_COMPANY_FEEDS, ...RUSSIAN_PLATFORM_FEEDS];
 const BY_SOURCE_ID = new Map(FEEDS.map((f) => [`${FREEHIRE_SOURCE_PREFIX}${f.id}`, f]));
 
 export function freehireFeedFor(sourceId: string): FreehireFeed | undefined {
@@ -53,6 +55,10 @@ const MEASURED_ITEMS: Readonly<Record<string, number>> = {
   dodo: 16,
   rwb: 204,
   mtslink: 2,
+  getmatch: 909,
+  'habr-career': 1109,
+  megafon: 1011,
+  mts: 2296,
 };
 
 export const FREEHIRE_FEED_MEASUREMENTS: Readonly<
@@ -121,6 +127,21 @@ function jsonDetail(
 }
 
 const DETAIL: Record<string, DetailTextSource> = {
+  'src-fh-getmatch': jsonDetail(
+    'getmatch.ru',
+    /^\/vacancies\/(\d+)/,
+    (m) => `https://getmatch.ru/api/offers/${m[1]}`,
+    (p) => html(record(p).description),
+  ),
+  'src-fh-habr-career': {
+    format: 'html',
+    detailUrl: (_sourceId, vacancy) =>
+      pathMatch(vacancy.url, 'career.habr.com', /^\/vacancies\/\d+$/) ? vacancy.url : undefined,
+    readText: (payload) => (typeof payload === 'string' ? readJsonLdJobPosting(payload) : ''),
+    intervalMs: 3_000,
+    intervalJitterMs: 2_000,
+    throttlePauseMs: 600_000,
+  },
   'src-fh-yandex': jsonDetail(
     'yandex.ru',
     /^\/jobs\/vacancies\/[^/]*-(\d+)\/?$/,
