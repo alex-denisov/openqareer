@@ -101,4 +101,18 @@ describe('stored catalog listings (PRB-041)', () => {
       store.loadCatalogListings().find((listing) => listing.role === 'accountant')?.count,
     ).toBe(3);
   });
+
+  it('reads totals and listings in a worker thread on a file database (B641)', async () => {
+    const { store } = openStore();
+    store.saveClusters([
+      ...listingClusters(['Бухгалтер', 'Бухгалтер', 'Бухгалтер', 'Юрист']),
+      { ...sampleCluster, id: 'cluster-closed', status: 'archived' as const },
+    ]);
+    const totals = await store.recomputeCatalogTotalsInSlices('2026-11-10T10:00:00.000Z');
+    expect(totals.clusters).toBe(4);
+    expect(store.readCatalogTotals()?.clusters).toBe(4);
+    expect(
+      store.loadCatalogListings().find((listing) => listing.role === 'accountant')?.count,
+    ).toBe(3);
+  });
 });

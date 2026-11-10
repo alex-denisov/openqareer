@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
+import { readInWorker } from '../data/readInWorker';
 import {
   prunePoolInBatches,
   pruneClustersInBatches,
@@ -98,6 +99,27 @@ import type { ChipCounts } from './catalogChips';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 const CATALOG_TOTALS_SLICE_ROWS = 20_000;
+const CATALOG_ACTIVE_CLUSTERS_SQL = `SELECT coalesce(sum(json_extract(cluster_json, '$.status') = 'active'), 0) AS active FROM vacancy_clusters`;
+const CATALOG_LISTINGS_SQL = `SELECT place_slug, max(place_label) AS place_label,
+                NULL AS role_slug, NULL AS role_label, NULL AS role_title,
+                count(*) AS count
+           FROM catalog_entries
+          WHERE status = 'active' AND path <> '' AND place_slug IS NOT NULL
+          GROUP BY place_slug
+         HAVING count(*) >= 3
+          UNION ALL
+         SELECT place_slug, max(place_label) AS place_label,
+                role_slug, max(role_label) AS role_label,
+                -- preferredRoleTitle: a Russian title first, then the shortest.
+                substr(min(CASE WHEN title GLOB '[А-ЯЁа-яё]*' THEN '0' ELSE '1' END
+                           || printf('%05d', length(title)) || title), 7) AS role_title,
+                count(*) AS count
+           FROM catalog_entries
+          WHERE status = 'active' AND path <> ''
+            AND place_slug IS NOT NULL AND role_slug IS NOT NULL
+          GROUP BY place_slug, role_slug
+         HAVING count(*) >= 3
+          ORDER BY count DESC, place_slug ASC, role_slug ASC`;
 const CATALOG_TOTALS_SLICE_PAUSE_MS = 50;
 
 export interface CatalogTotalsSliceOptions {
@@ -2851,6 +2873,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       options.pause ??
       (() => new Promise<void>((done) => setTimeout(done, CATALOG_TOTALS_SLICE_PAUSE_MS)));
     const computedAt = options.computedAt ?? new Date().toISOString();
+    // B641 10.11: на проде первая порция держала цикл до 4,9 с, а свод мест в
+    // конце — ещё ~2 с. На файловой базе оба чтения идут в своём потоке.
+    if (this.database.location() && options.sliceRows === undefined) {
+      const [activeRows, listingRows] = await Promise.all([
+        readInWorker<{ active: number }>(this.database, CATALOG_ACTIVE_CLUSTERS_SQL),
+        readInWorker<CatalogListingRow>(this.database, CATALOG_LISTINGS_SQL),
+      ]);
+      return this.writeCatalogTotals(
+        activeRows[0]?.active ?? 0,
+        observedAt,
+        computedAt,
+        listingRows.map(listingSummaryOf),
+      );
+    }
     const slice = this.database.prepare(
       `SELECT count(*) AS seen, max(rowid) AS last,
               coalesce(sum(json_extract(cluster_json, '$.status') = 'active'), 0) AS active
@@ -2878,6 +2914,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     clusters: number,
     observedAt: string,
     computedAt: string,
+    listings: CatalogListingSummary[] = this.countCatalogListings(),
   ): CatalogTotalsRow {
     this.database
       .prepare(
@@ -2893,7 +2930,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
          ON CONFLICT(id) DO UPDATE SET listings_json = excluded.listings_json,
            computed_at = excluded.computed_at`,
       )
-      .run(JSON.stringify(this.countCatalogListings()), computedAt);
+      .run(JSON.stringify(listings), computedAt);
     return { clusters, updatedAt: observedAt, computedAt };
   }
 
@@ -3013,36 +3050,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   private countCatalogListings(): CatalogListingSummary[] {
     const rows = this.database
-      .prepare(
-        `SELECT place_slug, max(place_label) AS place_label,
-                NULL AS role_slug, NULL AS role_label, NULL AS role_title,
-                count(*) AS count
-           FROM catalog_entries
-          WHERE status = 'active' AND path <> '' AND place_slug IS NOT NULL
-          GROUP BY place_slug
-         HAVING count(*) >= 3
-          UNION ALL
-         SELECT place_slug, max(place_label) AS place_label,
-                role_slug, max(role_label) AS role_label,
-                -- preferredRoleTitle: a Russian title first, then the shortest.
-                substr(min(CASE WHEN title GLOB '[А-ЯЁа-яё]*' THEN '0' ELSE '1' END
-                           || printf('%05d', length(title)) || title), 7) AS role_title,
-                count(*) AS count
-           FROM catalog_entries
-          WHERE status = 'active' AND path <> ''
-            AND place_slug IS NOT NULL AND role_slug IS NOT NULL
-          GROUP BY place_slug, role_slug
-         HAVING count(*) >= 3
-          ORDER BY count DESC, place_slug ASC, role_slug ASC`,
-      )
-      .all() as unknown as Array<{
-      place_slug: string;
-      place_label: string;
-      role_slug: string | null;
-      role_label: string | null;
-      role_title: string | null;
-      count: number;
-    }>;
+      .prepare(CATALOG_LISTINGS_SQL)
+      .all() as unknown as CatalogListingRow[];
     return rows.map(listingSummaryOf);
   }
 

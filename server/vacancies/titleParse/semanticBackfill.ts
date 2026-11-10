@@ -47,6 +47,7 @@ interface ParsedTitle {
 const PRUNE_CHUNK = 5_000;
 /** B641 10.11: whole-table prune at pass end held the loop ~10 s; one rowid window per step. */
 const PRUNE_WINDOW = 20_000;
+const MISSING_WINDOW = 10_000;
 /** Названий на шаг для грейдов: только правила, модель не вызывается. */
 const GRADE_CHUNK = 2_000;
 /** Выше этой ступени название уже различает `level_rank`. */
@@ -59,7 +60,8 @@ export class SemanticBackfill {
   private cursor = '';
   private pruneCursor = 0;
   private prunedSincePass = 0;
-  private missingIds: readonly string[] | null = null;
+  private missingCursor = '';
+  private missingDone = false;
   private gradeCursor = '';
   /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
   private relabelDone = false;
@@ -360,29 +362,28 @@ export class SemanticBackfill {
    * (04.11: 7 эталонных вакансий пропали из подбора). Список читается один раз за процесс, около 1 с.
    */
   private catchUpMissing(chunk: number): { backfilled: number; newKeys: number } {
-    if (this.missingIds === null) {
-      const rows = this.database
-        .prepare(
-          `SELECT i.id FROM vacancy_pool_index i
-           WHERE i.expired = 0 AND NOT EXISTS (SELECT 1 FROM vacancy_semantic s WHERE s.id = i.id)
-           ORDER BY i.id`,
-        )
-        .all() as { id: string }[];
-      this.missingIds = rows.map((row) => row.id);
-    }
-    if (this.missingIds.length === 0) return { backfilled: 0, newKeys: 0 };
-    const ids = this.missingIds.slice(0, chunk);
-    this.missingIds = this.missingIds.slice(chunk);
-    const read = this.database.prepare(
-      `SELECT i.id, i.published_ms, i.is_remote, json_extract(p.payload, '$.title') AS title
-       FROM vacancy_pool_index i JOIN vacancy_pool p ON p.id = i.id
-       WHERE i.id = ? AND i.expired = 0
-         AND NOT EXISTS (SELECT 1 FROM vacancy_semantic s WHERE s.id = i.id)`,
-    );
-    const rows = ids.flatMap((id) => {
-      const row = read.get(id) as unknown as PoolRow | undefined;
-      return row ? [row] : [];
-    });
+    // B641 10.11: один запрос по всему индексу занимал 17,8 с на проде. Теперь
+    // окно в MISSING_WINDOW строк индекса за шаг; проход один раз за процесс.
+    if (this.missingDone) return { backfilled: 0, newKeys: 0 };
+    const from = this.missingCursor;
+    const end = this.database
+      .prepare('SELECT id FROM vacancy_pool_index WHERE id > ? ORDER BY id LIMIT 1 OFFSET ?')
+      .get(from, MISSING_WINDOW - 1) as { id: string } | undefined;
+    const upperBound = end ? 'AND i.id <= ?' : '';
+    const params = end ? [from, end.id, chunk] : [from, chunk];
+    const rows = this.database
+      .prepare(
+        `SELECT i.id, i.published_ms, i.is_remote, json_extract(p.payload, '$.title') AS title
+         FROM vacancy_pool_index i JOIN vacancy_pool p ON p.id = i.id
+         WHERE i.id > ? ${upperBound} AND i.expired = 0
+           AND NOT EXISTS (SELECT 1 FROM vacancy_semantic s WHERE s.id = i.id)
+         ORDER BY i.id LIMIT ?`,
+      )
+      .all(...params) as unknown as PoolRow[];
+    // Полная порция — в окне могут остаться строки: курсор встаёт на последнюю.
+    if (rows.length === chunk) this.missingCursor = rows[rows.length - 1]!.id;
+    else if (end) this.missingCursor = end.id;
+    else this.missingDone = true;
     return this.writeChunk(rows);
   }
 
