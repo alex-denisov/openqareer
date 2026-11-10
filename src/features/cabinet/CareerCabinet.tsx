@@ -704,6 +704,7 @@ function CabinetSection({
       onScheduleInterview={onScheduleInterview}
       onOpenResponses={() => onNavigate('responses')}
       onOpenArchive={() => onNavigate('responses', { openArchive: true })}
+      onRestoreFromArchive={(clusterId) => restoreArchivedVacancy(applicationsTracker, clusterId)}
       onOpenConnections={onOpenConnections}
       onOpenNotifications={onOpenNotifications}
       onOpenProfile={onOpenProfileRequirement}
@@ -873,4 +874,16 @@ function nearestInterviewOf(
       : nearest.vacancy?.company || 'Компания не указана',
     scheduledAt: nearest.nearestInterview.scheduledAt,
   };
+}
+
+/** B631: «Вернуть из архива» on a vacancy restores the archived response card of that vacancy. */
+async function restoreArchivedVacancy(
+  tracker: ReturnType<typeof useApplications>,
+  clusterId: string,
+): Promise<void> {
+  const archived = tracker.applications.find(
+    (application) => application.clusterId === clusterId && application.stage === 'archived',
+  );
+  if (!archived) throw new Error('Архивный отклик этой вакансии не найден.');
+  await tracker.restoreFromArchive(archived);
 }

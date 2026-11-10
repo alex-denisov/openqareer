@@ -381,10 +381,24 @@ export function VacancyMobilePush(props: VacancyMobilePushProps) {
 
 function applyCta(
   cluster: MatchedVacancyItem['cluster'],
-  rowProps: { readonly onOpenArchive?: () => void; readonly onOpenResponses?: () => void },
+  rowProps: {
+    readonly onOpenArchive?: () => void;
+    readonly onOpenResponses?: () => void;
+    readonly onRestoreFromArchive?: (clusterId: string) => Promise<void>;
+  },
   rowState: RowPushState,
 ): Pick<VacancyMobilePushProps, 'onApply' | 'applyLabel' | 'applyDisabled'> {
   if (rowState.applicationArchived) {
+    // B631: the archived vacancy's one action returns the response to work. The push has no
+    // error line, so a failed restore opens the archive, where the card can be restored by hand.
+    const restore = rowProps.onRestoreFromArchive;
+    if (restore) {
+      return {
+        onApply: () => void restore(cluster.id).catch(() => rowProps.onOpenArchive?.()),
+        applyLabel: 'Вернуть из архива',
+        applyDisabled: false,
+      };
+    }
     const open = rowProps.onOpenArchive;
     return {
       onApply: open ?? (() => undefined),
@@ -437,6 +451,7 @@ export function vacancyRowPushProps(
     readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
     readonly onOpenArchive?: () => void;
     readonly onOpenResponses?: () => void;
+    readonly onRestoreFromArchive?: (clusterId: string) => Promise<void>;
   },
   rowState: RowPushState,
   pathActions: CompanyPathActions,

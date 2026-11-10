@@ -93,6 +93,8 @@ export interface VacanciesScreenProps {
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
+  /** B631: an archived vacancy's one action — the response returns to its previous stage. */
+  readonly onRestoreFromArchive?: (clusterId: string) => Promise<void>;
   readonly onOpenConnections?: () => void;
   readonly onOpenNotifications?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
@@ -223,6 +225,7 @@ export interface ListContentProps {
   readonly onOpenLetter?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
+  readonly onRestoreFromArchive?: VacanciesScreenProps['onRestoreFromArchive'];
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly savedClusterIds?: ReadonlySet<string>;
@@ -446,6 +449,7 @@ function buildListProps(
     onOpenLetter,
     onOpenResponses: input.onOpenResponses,
     onOpenArchive: input.onOpenArchive,
+    onRestoreFromArchive: input.onRestoreFromArchive,
     onAddToProfile: input.onOpenProfile,
     onDiscussWithConsultant: discussVacancy(input),
     savedClusterIds,

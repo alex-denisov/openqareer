@@ -63,6 +63,8 @@ export interface VacancyRowProps {
   readonly onOpenLetter?: RowLetterOpen;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
+  /** B631: an archived vacancy's one action — the response returns to its previous stage. */
+  readonly onRestoreFromArchive?: (clusterId: string) => Promise<void>;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly isSaved?: boolean;
@@ -671,7 +673,7 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
         appliedError={rowState.appliedState.appliedError}
         interviewState={rowState.interviewState}
         onScheduleInterview={
-          rowState.alreadyApplied && rowProps.onScheduleInterview
+          rowState.alreadyApplied && !rowState.applicationArchived && rowProps.onScheduleInterview
             ? () => rowState.interviewState.setScheduleOpen(true)
             : undefined
         }
