@@ -92,6 +92,32 @@ describe('PlacementBackfill adopts employers outside the directory', () => {
     while (!report.done) report = step.step();
     expect(report.adoptedCompanies).toBe(1);
     expect(db.prepare(`SELECT company_key FROM company_placement WHERE source_id = 'src-apple-jobs'`).get()).toEqual({ company_key: 'apple' });
+    db.exec(`INSERT INTO company_directory (company_key, company_name) VALUES ('x-apple', 'Shadow');`);
+    const again = new PlacementBackfill(db, { chunk: 50, now: () => 2 });
+    let second = again.step();
+    while (!second.done) second = again.step();
+    expect(second.adoptedCompanies).toBe(0);
+    expect(second.changedTotal).toBe(0);
+  });
+  it('does not count a board whose company key the index cannot resolve as adopted again', () => {
+    const db = openDb();
+    db.exec(`ALTER TABLE company_directory ADD COLUMN source_type TEXT NOT NULL DEFAULT 'x';
+      ALTER TABLE company_directory ADD COLUMN created_at TEXT NOT NULL DEFAULT 'x';
+      ALTER TABLE company_directory ADD COLUMN updated_at TEXT NOT NULL DEFAULT 'x';
+      ALTER TABLE company_directory ADD COLUMN evidence TEXT;
+      CREATE TABLE vacancy_pool_index (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, expired INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE vacancy_cluster_input (id TEXT PRIMARY KEY, cluster_json TEXT NOT NULL);
+      INSERT INTO company_directory (company_key, company_name) VALUES ('acme', 'Other Acme');
+      INSERT INTO vacancy_source_state VALUES ('ats-lever-acme');
+      INSERT INTO vacancy_pool_index (id, source_id) VALUES ('v1', 'ats-lever-acme');
+      INSERT INTO vacancy_cluster_input VALUES ('v1', '{"company":"Acme Lever"}');`);
+    const passes = [1, 2].map((now) => {
+      const step = new PlacementBackfill(db, { chunk: 50, now: () => now });
+      let report = step.step();
+      while (!report.done) report = step.step();
+      return report.adoptedCompanies;
+    });
+    expect(passes).toEqual([0, 0]);
   });
 });
 

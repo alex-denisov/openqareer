@@ -75,6 +75,7 @@ export class PlacementBackfill {
   private adopted = 0;
   private names = new Map<string, string | null>();
   private readonly sourceOf: StatementSync;
+  private readonly companyOfSource: StatementSync;
   private readonly dropMoved: StatementSync;
   private readonly upsert: StatementSync;
 
@@ -84,6 +85,7 @@ export class PlacementBackfill {
     // Обслуживатель может стартовать раньше API, создающего таблицы пула.
     database.exec(PLACEMENT_TABLES);
     this.sourceOf = database.prepare('SELECT source_id AS sourceId FROM company_placement WHERE placement_id = ?');
+    this.companyOfSource = database.prepare('SELECT company_key AS companyKey FROM company_placement WHERE source_id = ?');
     this.dropMoved = database.prepare('DELETE FROM company_placement WHERE source_id = ? AND placement_id <> ?');
     this.upsert = database.prepare(`INSERT INTO company_placement
         (placement_id, company_key, type, provider, slug, url, priority, source_id, discovered_by, updated_at)
@@ -150,13 +152,19 @@ export class PlacementBackfill {
     return item.discoveredBy === 'source' && !item.companyKey && (item.type === 'ats' || item.type === 'employer_site');
   }
 
+  /** Компания, уже заведённая для этой доски прошлым проходом. */
+  private knownCompany(sourceId: string): string | null {
+    const row = this.companyOfSource.get(sourceId) as { companyKey: string | null } | undefined;
+    return row?.companyKey ?? null;
+  }
+
   /** Чтение вне транзакции: запись не держит блокировку, пока ищутся имена. */
   private lookupNames(slice: readonly Work[]): Map<string, string | null> {
     const startedAt = this.now();
     const names = new Map<string, string | null>();
     for (const item of slice) {
       if (this.now() - startedAt >= ADOPT_LOOKUP_BUDGET_MS) break;
-      if (this.needsCompany(item)) names.set(item.sourceId, topCompanyName(this.database, item.sourceId));
+      if (this.needsCompany(item) && !this.knownCompany(item.sourceId)) names.set(item.sourceId, topCompanyName(this.database, item.sourceId));
     }
     return names;
   }
@@ -164,6 +172,8 @@ export class PlacementBackfill {
   /** Доска работодателя вне справочника заводит свою компанию (B643). */
   private withAdoptedCompany(item: Work): Work {
     if (!this.needsCompany(item)) return item;
+    const known = this.knownCompany(item.sourceId);
+    if (known) return { ...item, companyKey: known };
     if (!this.names.has(item.sourceId)) return item;
     const name = this.names.get(item.sourceId) ?? null;
     const companyKey = adoptBoardCompany(this.database, item, new Date(this.now()).toISOString(), name);
