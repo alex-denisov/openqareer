@@ -24,11 +24,65 @@ const EMPLOYER_SITE_IDS: ReadonlySet<string> = new Set([
   'src-qualcomm-careers',
 ]);
 
+/**
+ * freehire — репозиторий адаптеров, а не источник: под `src-fh-` лежат доски
+ * ATS работодателей, сайты компаний и две площадки-агрегатора.
+ */
+const FREEHIRE_PREFIX = 'src-fh-';
+const FREEHIRE_AGGREGATORS: ReadonlySet<string> = new Set(['getmatch', 'habr-career']);
+const ATS_PROVIDERS: readonly string[] = [
+  'greenhouse',
+  'lever',
+  'ashby',
+  'workable',
+  'recruitee',
+  'smartrecruiters',
+  'breezy',
+  'pinpoint',
+  'personio',
+  'bamboohr',
+  'teamtailor',
+  'workday',
+  'icims',
+  'jobvite',
+  'oracle',
+];
+
+export type SourceKind =
+  | { readonly kind: 'ats'; readonly provider: string }
+  | { readonly kind: 'employer_site' | 'aggregator' | 'hh' | 'linkedin' };
+
+function atsProviderOf(rest: string): string | undefined {
+  return ATS_PROVIDERS.find((provider) => rest.startsWith(`${provider}-`));
+}
+
+/** Тип настоящего источника: доска ATS, сайт работодателя, агрегатор, hh, LinkedIn. */
+export function sourceKind(sourceId: string): SourceKind {
+  if (sourceId.startsWith('ats-')) {
+    return { kind: 'ats', provider: atsProviderOf(sourceId.slice(4)) ?? 'other' };
+  }
+  if (sourceId.startsWith(FREEHIRE_PREFIX)) {
+    const rest = sourceId.slice(FREEHIRE_PREFIX.length);
+    const provider = atsProviderOf(rest);
+    if (provider) return { kind: 'ats', provider };
+    return { kind: FREEHIRE_AGGREGATORS.has(rest) ? 'aggregator' : 'employer_site' };
+  }
+  if (EMPLOYER_SITE_IDS.has(sourceId) || sourceId.startsWith('src-company-site-')) {
+    return { kind: 'employer_site' };
+  }
+  if (sourceId === 'hh' || sourceId.startsWith('src-hh-')) return { kind: 'hh' };
+  if (sourceId.includes('linkedin') || sourceId.startsWith('src-company-li-')) {
+    return { kind: 'linkedin' };
+  }
+  return { kind: 'aggregator' };
+}
+
 /** Сколько дней невиденная запись подтверждающего источника держится в пуле. */
 export const NOT_SEEN_PRUNE_DAYS = 7;
 
 export function confirmsLiveness(sourceId: string): boolean {
-  return sourceId.startsWith('ats-') || EMPLOYER_SITE_IDS.has(sourceId);
+  const { kind } = sourceKind(sourceId);
+  return kind === 'ats' || kind === 'employer_site';
 }
 
 /**

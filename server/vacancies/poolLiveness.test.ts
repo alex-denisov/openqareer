@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
-import { confirmsLiveness, freshnessAnchorMs, NOT_SEEN_PRUNE_DAYS } from './poolLiveness';
+import {
+  confirmsLiveness,
+  freshnessAnchorMs,
+  NOT_SEEN_PRUNE_DAYS,
+  sourceKind,
+} from './poolLiveness';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -84,5 +89,25 @@ describe('приём улова (B642)', () => {
     const ids = await kept('src-himalayas-api');
     expect(ids).not.toContain('src-himalayas-api-old');
     expect(ids).toContain('src-himalayas-api-new');
+  });
+});
+
+describe('тип настоящего источника, а не репозитория адаптера (B642)', () => {
+  it('доски ATS и сайты компаний из freehire — работодательские, площадки — агрегаторы', () => {
+    expect(sourceKind('src-fh-icims-careers-acme')).toEqual({ kind: 'ats', provider: 'icims' });
+    expect(sourceKind('src-fh-oracle-eeho')).toEqual({ kind: 'ats', provider: 'oracle' });
+    expect(sourceKind('ats-greenhouse-stripe')).toEqual({ kind: 'ats', provider: 'greenhouse' });
+    expect(sourceKind('src-fh-sber')).toEqual({ kind: 'employer_site' });
+    expect(sourceKind('src-amazon-jobs')).toEqual({ kind: 'employer_site' });
+    expect(sourceKind('src-fh-habr-career')).toEqual({ kind: 'aggregator' });
+    expect(sourceKind('src-fh-getmatch')).toEqual({ kind: 'aggregator' });
+    expect(sourceKind('src-hh-search')).toEqual({ kind: 'hh' });
+    expect(sourceKind('src-linkedin-guest')).toEqual({ kind: 'linkedin' });
+    expect(sourceKind('src-himalayas-api')).toEqual({ kind: 'aggregator' });
+    expect(confirmsLiveness('src-fh-icims-careers-acme')).toBe(true);
+    expect(confirmsLiveness('src-fh-sber')).toBe(true);
+    expect(confirmsLiveness('src-fh-habr-career')).toBe(false);
+    expect(sourceKind('src-company-li-123')).toEqual({ kind: 'linkedin' });
+    expect(sourceKind('src-company-site-acme')).toEqual({ kind: 'employer_site' });
   });
 });
