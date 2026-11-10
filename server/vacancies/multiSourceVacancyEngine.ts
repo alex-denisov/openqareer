@@ -1950,18 +1950,23 @@ export class MultiSourceVacancyEngine {
    */
   public async probeDueLinks(nowMs: number = Date.now()): Promise<LinkCheckCensus | undefined> {
     if (!this.linkProbe) return undefined;
-    const candidates = [...this.sources.values()].filter((source) => {
-      if (!source.enabled) return false;
-      return this.pool.countSourceSlice(source.id).total > 0;
-    });
-    if (candidates.length === 0) return undefined;
-
-    const oldest = candidates.reduce((best, source) =>
-      (this.linkCheckedAt.get(source.id) ?? 0) < (this.linkCheckedAt.get(best.id) ?? 0)
-        ? source
-        : best,
-    );
-    return this.probeSourceLinks(oldest.id, nowMs);
+    // B641 10.11: подсчёт среза у всех ~3 000 площадок подряд держал цикл до
+    // 3,6 с. Сначала порядок по давности проверки, потом счёт до первой
+    // площадки с записями, с уступкой потоку каждые LIVENESS_COUNT_CHUNK.
+    const ordered = [...this.sources.values()]
+      .filter((source) => source.enabled)
+      .sort(
+        (left, right) =>
+          (this.linkCheckedAt.get(left.id) ?? 0) - (this.linkCheckedAt.get(right.id) ?? 0),
+      );
+    for (let index = 0; index < ordered.length; index += 1) {
+      if (index > 0 && index % LIVENESS_COUNT_CHUNK === 0) await yieldTurn();
+      const source = ordered[index]!;
+      if (this.pool.countSourceSlice(source.id).total > 0) {
+        return this.probeSourceLinks(source.id, nowMs);
+      }
+    }
+    return undefined;
   }
 
   private persistSourceState(source: VacancySourceConfig): void {
@@ -2358,6 +2363,7 @@ const HIDDEN_TEXT_ANSWERS = 2;
 
 /** Кластеров снятых hh-записей за такт: точечные записи, не обход всех кластеров. */
 const EXPIRED_CLUSTER_BATCH = 50;
+const LIVENESS_COUNT_CHUNK = 50;
 
 function yieldTurn(): Promise<void> {
   return new Promise<void>((resolve) => setImmediate(resolve));

@@ -7,6 +7,7 @@ import { hasNoRoleToLink } from './roleLinkTitles';
 import { rulesParse } from './rulesParse';
 import { describeFailure } from './titleFreeze';
 import { notExcludedVacancyIdSql } from '../freehire/paidProcessingGate';
+import { readInWorker } from '../../data/readInWorker';
 
 /**
  * Связь названия с ролью словаря (владелец 04.11): правила, затем модель на неизвестных с закрытым
@@ -33,6 +34,8 @@ const REFUSAL_PAUSE_MAX_MS = 30 * 60_000;
 const ROLE_LINK_TASK = 'role-link';
 const ROLE_LINK_MAX_TOKENS = 4_096;
 const SOURCE_NO_FUNCTION = 'no-function';
+/** B641: записи разбора без модели — пачками в транзакции, между пачками цикл свободен. */
+const SETTLE_CHUNK = 200;
 
 const ROLE_LINK_PROMPT = `
 Сопоставь каждое название вакансии с одной ролью из списка roles. Верни JSON-объект {"items": [...]}
@@ -146,11 +149,12 @@ export class RoleLinkStep {
   }
 
   /** Названия руководителей без связи; ответы не с Gemini первыми. */
-  private readQueue(): Candidate[] {
+  private readQueue(): Promise<Candidate[]> {
     const sample = this.stage === 'sample';
-    return this.database
-      .prepare(
-        `SELECT p.title_key, p.sample_title, p.functions
+    // B641 10.11: агрегат по всему смысловому индексу — 7 с на проде; в своём потоке.
+    return readInWorker<Candidate>(
+      this.database,
+      `SELECT p.title_key, p.sample_title, p.functions
          FROM (SELECT title_key, count(*) AS n FROM vacancy_semantic
                WHERE level_rank >= 2 AND ${notExcludedVacancyIdSql('id')}
                GROUP BY title_key) s
@@ -163,8 +167,8 @@ export class RoleLinkStep {
          }
          ORDER BY ${STALE} DESC, ${sample ? 'random()' : 's.n DESC, s.title_key'}
          LIMIT ?`,
-      )
-      .all(sample ? SAMPLE_QUEUE : PASS_QUEUE) as unknown as Candidate[];
+      [sample ? SAMPLE_QUEUE : PASS_QUEUE],
+    );
   }
 
   private write(
@@ -204,24 +208,34 @@ export class RoleLinkStep {
   }
 
   /** Правила и названия без функции не тратят вызов: модель получает только остаток. */
-  private settleWithoutModel(candidates: readonly Candidate[]): {
+  private async settleWithoutModel(candidates: readonly Candidate[]): Promise<{
     readonly unknown: Candidate[];
     readonly rules: number;
     readonly noFunction: number;
-  } {
+  }> {
     const unknown: Candidate[] = [];
     let rules = 0;
     let noFunction = 0;
-    for (const candidate of candidates) {
-      const roleId = rulesParse(candidate.sample_title).roleId;
-      if (roleId) {
-        this.write(candidate.title_key, roleId, 'rules', null, null);
-        rules += 1;
-      } else if (hasNoRoleToLink(candidate.title_key)) {
-        this.write(candidate.title_key, null, SOURCE_NO_FUNCTION, null, null);
-        noFunction += 1;
-      } else {
-        unknown.push(candidate);
+    for (let start = 0; start < candidates.length; start += SETTLE_CHUNK) {
+      if (start > 0) await new Promise<void>((resolve) => setImmediate(resolve));
+      this.database.exec('BEGIN');
+      try {
+        for (const candidate of candidates.slice(start, start + SETTLE_CHUNK)) {
+          const roleId = rulesParse(candidate.sample_title).roleId;
+          if (roleId) {
+            this.write(candidate.title_key, roleId, 'rules', null, null);
+            rules += 1;
+          } else if (hasNoRoleToLink(candidate.title_key)) {
+            this.write(candidate.title_key, null, SOURCE_NO_FUNCTION, null, null);
+            noFunction += 1;
+          } else {
+            unknown.push(candidate);
+          }
+        }
+        this.database.exec('COMMIT');
+      } catch (error) {
+        this.database.exec('ROLLBACK');
+        throw error;
       }
     }
     return { unknown, rules, noFunction };
@@ -257,9 +271,9 @@ export class RoleLinkStep {
     return counts;
   }
 
-  private refillQueue(): Pick<RoleLinkReport, 'rules' | 'noFunction'> {
+  private async refillQueue(): Promise<Pick<RoleLinkReport, 'rules' | 'noFunction'>> {
     if (this.queue.length > 0) return { rules: 0, noFunction: 0 };
-    const { unknown, rules, noFunction } = this.settleWithoutModel(this.readQueue());
+    const { unknown, rules, noFunction } = await this.settleWithoutModel(await this.readQueue());
     this.queue = unknown;
     return { rules, noFunction };
   }
@@ -270,7 +284,7 @@ export class RoleLinkStep {
       this.cleanUp();
       this.prepared = true;
     }
-    const settled = this.refillQueue();
+    const settled = await this.refillQueue();
     const room = this.modelRoom();
     const batch = this.queue.slice(0, room);
     if (batch.length === 0) return { ...EMPTY_REPORT, ...settled };
