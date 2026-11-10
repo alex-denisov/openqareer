@@ -247,7 +247,12 @@ describe('HhCatalogTextBackfill', () => {
           : { unavailable: false, status: 'loaded' as const };
       },
     };
-    const backfill = new HhCatalogTextBackfill({ engine, perTick: 6, concurrency: 3, now: () => 0 });
+    const backfill = new HhCatalogTextBackfill({
+      engine,
+      perTick: 6,
+      concurrency: 3,
+      now: () => 0,
+    });
     const report = await backfill.step();
     expect(peak).toBe(3);
     expect(report.blocked).toBe(true);
@@ -256,7 +261,12 @@ describe('HhCatalogTextBackfill', () => {
 
   it('03.11: concurrency 3 loads a whole page', async () => {
     const { engine, loaded } = engineWith([{ ids: ['a', 'b', 'c', 'd', 'e'] }], {});
-    const backfill = new HhCatalogTextBackfill({ engine, perTick: 5, concurrency: 3, now: () => 0 });
+    const backfill = new HhCatalogTextBackfill({
+      engine,
+      perTick: 5,
+      concurrency: 3,
+      now: () => 0,
+    });
     expect(await backfill.step()).toMatchObject({ requested: 5, loaded: 5 });
     expect([...loaded].sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
@@ -403,5 +413,18 @@ describe('02.11: position survives a restart, hidden text and gone clusters', ()
     expect(store.getCluster(`cluster-${gone.id}`)?.status).toBe('archived');
     expect(store.getCluster(`cluster-${live.id}`)?.status).toBe('active');
     expect(store.archiveExpiredHhClusters(100)).toBe(0);
+  });
+
+  it('walks expired hh rows by window and finds rows that expire after a pass (B641)', () => {
+    const store = openSqlite();
+    const rows = [hh(1, 1), hh(2, 1), hh(3, 1)];
+    store.mergeSourceSlice(HH, rows);
+    store.saveClusters(rows.map(clusterOf));
+    store.markExpired([rows[0]!.id, rows[1]!.id], new Date().toISOString());
+    expect(store.archiveExpiredHhClusters(1)).toBe(1);
+    expect(store.archiveExpiredHhClusters(1)).toBe(1);
+    expect(store.archiveExpiredHhClusters(1)).toBe(0);
+    store.markExpired([rows[2]!.id], new Date().toISOString());
+    expect(store.archiveExpiredHhClusters(1)).toBe(1);
   });
 });

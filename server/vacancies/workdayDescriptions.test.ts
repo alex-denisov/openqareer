@@ -176,6 +176,30 @@ describe('WorkdayDescriptionBackfill', () => {
     expect(pool.merged.filter((m) => m.sourceId === nvidia)).toHaveLength(2);
   });
 
+  it('reads each board in its own event-loop turn (B641)', async () => {
+    const pool = new FakePool(
+      new Map([
+        [sony, [vacancy('s:1', sony)]],
+        [nvidia, [vacancy('n:1', nvidia)]],
+      ]),
+    );
+    const turns: string[] = [];
+    const read = pool.loadVacanciesWithoutFullText.bind(pool);
+    pool.loadVacanciesWithoutFullText = (sourceId, limit, exclude) => {
+      turns.push(sourceId);
+      setImmediate(() => turns.push('turn'));
+      return read(sourceId, limit, exclude);
+    };
+    const backfill = new WorkdayDescriptionBackfill({
+      pool,
+      sourceIds: () => [sony, nvidia],
+      fetchDetail: async () => detail(200),
+      sleep: async () => undefined,
+    });
+    await backfill.step();
+    expect(turns.slice(0, 3)).toEqual([sony, 'turn', nvidia]);
+  });
+
   it('retires a vacancy the employer removed (404) instead of retrying it', async () => {
     const pool = new FakePool(new Map([[sony, [vacancy('s:1', sony)]]]));
     const backfill = new WorkdayDescriptionBackfill({

@@ -191,7 +191,14 @@ export class WorkdayDescriptionBackfill {
       const sources = this.sourceIds()
         .filter(isDetailTextSource)
         .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= startedAt);
-      const outcomes = await Promise.all(sources.map((sourceId) => this.stepSource(sourceId)));
+      // B641 10.11: выборка площадки без текста — до 100 мс; 147 площадок подряд
+      // держали цикл событий до 8 с. Каждая площадка начинается в своём обороте.
+      const started: Promise<Outcome[]>[] = [];
+      for (const sourceId of sources) {
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        started.push(this.stepSource(sourceId));
+      }
+      const outcomes = await Promise.all(started);
       const flat = outcomes.flat();
       return {
         requested: flat.length,

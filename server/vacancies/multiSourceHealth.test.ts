@@ -160,3 +160,24 @@ describe('B200 · здоровье площадок в движке', () => {
     expect(second.getSourceHealthReport(NOW)[0].liveness.verdict).toBe('dead');
   });
 });
+
+describe('B641 · здоровье источника в keyed не считает кластеры', () => {
+  it('reads health for many sources without counting clusters on disk', () => {
+    const pool = new MemoryVacancyPoolStore();
+    let counted = 0;
+    const store = Object.assign(Object.create(pool) as VacancyPoolStore, {
+      countClusters: () => {
+        counted += 1;
+        return 1;
+      },
+      loadClustersPage: () => [],
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source(), source({ id: 'src-other' })],
+      pool: store,
+      recluster: { mode: 'keyed', batchSize: 100 },
+    });
+    expect(engine.getSourceHealthReport(NOW)).toHaveLength(2);
+    expect(counted).toBe(0);
+  });
+});

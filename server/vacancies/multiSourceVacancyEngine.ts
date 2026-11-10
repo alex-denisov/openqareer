@@ -1188,15 +1188,25 @@ export class MultiSourceVacancyEngine {
     });
     // 03.11: тик текста идёт каждые 3 с; побочные шаги сведения не чаще раза в 12 с, как раньше.
     const nowMs = Date.now();
-    if (nowMs - this.lastHhSideStepAt >= 12_000) {
-      this.lastHhSideStepAt = nowMs;
-      this.runClusterTextStep();
-      pool.archiveExpiredHhClusters?.(EXPIRED_CLUSTER_BATCH);
-    }
-    return this.hhCatalogText.step().then((report) => {
-      const rateWindow = this.rate()?.takeClosedWindow();
-      return rateWindow ? { ...report, rateWindow } : report;
-    });
+    const sideStepDue = nowMs - this.lastHhSideStepAt >= 12_000;
+    if (sideStepDue) this.lastHhSideStepAt = nowMs;
+    // B641: побочные шаги и чтение текста — в разных оборотах цикла событий.
+    const backfill = this.hhCatalogText;
+    return yieldTurn()
+      .then(() => (sideStepDue ? this.runHhSideSteps() : undefined))
+      .then(() => yieldTurn())
+      .then(() => backfill.step())
+      .then((report) => {
+        const rateWindow = this.rate()?.takeClosedWindow();
+        return rateWindow ? { ...report, rateWindow } : report;
+      });
+  }
+
+  /** Сведение дочитанных текстов и снятие кластеров снятых строк — каждое в своём обороте. */
+  private async runHhSideSteps(): Promise<void> {
+    this.runClusterTextStep();
+    await yieldTurn();
+    this.pool.archiveExpiredHhClusters?.(EXPIRED_CLUSTER_BATCH);
   }
 
   private rate(): HhTextRateController | undefined {
@@ -1249,6 +1259,17 @@ export class MultiSourceVacancyEngine {
    * чтение» на проде — это минуты без ответа для всех (B221).
    */
   private ensureClusters(options: { hydrateDisk?: boolean } = {}): void {
+    // B641 10.11: без этой проверки здоровье каждого источника считало все кластеры
+    // (20 мс тёплым) — 52 с синхронно на волну из ~2 500 источников. Вне режима `sync`
+    // итог тот же: ветка ниже ничего не делает.
+    if (
+      options.hydrateDisk === false &&
+      this.clusters.length === 0 &&
+      this.reclusterMode.mode !== 'sync' &&
+      typeof this.pool.loadClustersPage === 'function'
+    ) {
+      return;
+    }
     if (
       this.clusters.length === 0 &&
       typeof this.pool.countClusters === 'function' &&
@@ -2319,3 +2340,7 @@ const HIDDEN_TEXT_ANSWERS = 2;
 
 /** Кластеров снятых hh-записей за такт: точечные записи, не обход всех кластеров. */
 const EXPIRED_CLUSTER_BATCH = 50;
+
+function yieldTurn(): Promise<void> {
+  return new Promise<void>((resolve) => setImmediate(resolve));
+}
