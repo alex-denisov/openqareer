@@ -270,3 +270,21 @@ describe('card text', () => {
     expect(source?.readText({ descr: '<p>Ищем <b>аналитика</b></p>' })).toBe('Ищем аналитика');
   });
 });
+
+describe('VK detail text', () => {
+  it('maps the vacancy page and reads the description block', async () => {
+    const { freehireDetailTextSource, readVkDescription } = await import('./freehireFeeds');
+    const detail = freehireDetailTextSource('src-fh-vk');
+    expect(detail?.detailUrl('src-fh-vk', { url: 'https://team.vk.company/vacancy/55285/' })).toBe(
+      'https://team.vk.company/vacancy/55285/',
+    );
+    expect(
+      detail?.detailUrl('src-fh-vk', { url: 'https://evil.example/vacancy/1/' }),
+    ).toBeUndefined();
+    const page =
+      '<div class="block-control"><a>Откликнуться</a></div><div class="article" itemprop="description"><p>Ищем руководителя</p><ul><li>Задачи</li></ul></div><div class="page-control">share</div>';
+    expect(readVkDescription(page)).toContain('Ищем руководителя');
+    expect(readVkDescription(page)).not.toContain('share');
+    expect(readVkDescription('<html></html>')).toBe('');
+  });
+});
