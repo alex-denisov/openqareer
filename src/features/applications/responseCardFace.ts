@@ -89,19 +89,21 @@ function appliedPill(input: FaceInput): ResponseStatusPill {
   return { tone: 'sent', label: withDate('Отправлено', formatDayMonth(input.appliedAt)) };
 }
 
-const REMINDER_URGENCIES: ReadonlySet<string> = new Set(['due', 'overdue', 'stale']);
-
 /**
- * A reminder only makes sense after a confirmed delivery: a failed send, or an
- * unconfirmed one at the point a reminder would be due, asks to resend (B511 G3 item 5).
+ * Only a send the candidate marked as failed asks to resend. An unconfirmed one is
+ * followed up like «Сегодня» does, so one step keeps one name on both screens (B632,
+ * finding 11; replaces B511 G3 item 5).
  */
 export function needsResend(
   input: Pick<ApplicationView, 'stage' | 'deliveryReceipt' | 'followUp'>,
 ): boolean {
   if (input.stage !== 'applied') return false;
-  const state = deliveryState('applied', input.deliveryReceipt ?? null);
-  if (state === 'failed') return true;
-  return state === 'attempted' && REMINDER_URGENCIES.has(input.followUp?.urgency ?? '');
+  return deliveryState('applied', input.deliveryReceipt ?? null) === 'failed';
+}
+
+/** The follow-up step, word for word the same in «Сегодня» and «Отклики» (B632). */
+export function companyReminderStep(company?: string | null): string {
+  return company ? `Напомнить компании ${company} про ответ` : 'Напомнить компании про ответ';
 }
 
 /**
@@ -118,9 +120,9 @@ export function responseNextStep(input: FaceInput): ResponseNextStep {
   }
   if (needsResend(input)) return { text: 'Повторить отклик', yours: true };
   const urgency = input.followUp?.urgency;
-  if (urgency === 'due') return { text: 'Напомнить компании сегодня', yours: true };
+  if (urgency === 'due') return { text: `${companyReminderStep()} сегодня`, yours: true };
   if (urgency === 'overdue' || urgency === 'stale') {
-    return { text: withDate('Напомнить компании, срок был', due), yours: true };
+    return { text: withDate(`${companyReminderStep()}, срок был`, due), yours: true };
   }
   if (input.stage === 'interview') return interviewStep(input, due);
   if (input.stage === 'offer') {

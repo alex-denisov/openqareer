@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { responseNextStep, responseStatusPill } from './responseCardFace';
+import { companyReminderStep, responseNextStep, responseStatusPill } from './responseCardFace';
 
 const base = {
   stage: 'applied' as const,
@@ -69,11 +69,11 @@ describe('responseNextStep', () => {
         deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
         followUp: dueReminder,
       } as never).text,
-    ).toBe('Напомнить компании сегодня');
-    // An unconfirmed send is resent, not followed up (B511 G3 item 5).
+    ).toBe('Напомнить компании про ответ сегодня');
+    // An unconfirmed send is followed up like «Сегодня» does; only a failed one is resent (B632).
     expect(
       responseNextStep({ ...base, whoseTurn: 'candidate', followUp: dueReminder } as never).text,
-    ).toBe('Повторить отклик');
+    ).toBe('Напомнить компании про ответ сегодня');
     expect(
       responseNextStep({
         ...base,
@@ -117,5 +117,12 @@ describe('interview pill (B511 Д8)', () => {
         },
       }).label,
     ).toBe('Интервью 01.12');
+  });
+});
+
+describe('companyReminderStep (B632)', () => {
+  it('is the same words «Сегодня» uses, with or without the company', () => {
+    expect(companyReminderStep('Snowflake')).toBe('Напомнить компании Snowflake про ответ');
+    expect(companyReminderStep()).toBe('Напомнить компании про ответ');
   });
 });

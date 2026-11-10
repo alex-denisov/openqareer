@@ -110,11 +110,9 @@ function EmptyState({
   return (
     <>
       <div className="career-responses-empty">
-        <h3>Откликов пока нет за выбранный период</h3>
+        <h3>Открытых откликов пока нет</h3>
         <p>Здесь появится карточка каждого отклика с материалами и следующим шагом.</p>
-        <p className="career-responses-empty-step">
-          Выберите другой период. Откликнитесь на вакансию из подборки.
-        </p>
+        <p className="career-responses-empty-step">Откликнитесь на вакансию из подборки.</p>
         <div className="career-responses-empty-actions">
           <button
             type="button"

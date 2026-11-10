@@ -140,14 +140,14 @@ describe('mobileNextStep', () => {
     ).toEqual({ label: 'Повторить отклик', hot: true });
   });
 
-  it('retries an unconfirmed attempt once a reminder would be due', () => {
+  it('reminds the company about an unconfirmed attempt, as «Сегодня» does (B632)', () => {
     expect(mobileNextStep(application({ whoseTurn: 'candidate', followUp: overdue }))).toEqual({
-      label: 'Повторить отклик',
+      label: 'Напомнить компании',
       hot: true,
     });
   });
 
-  it('reminds the recruiter only after a confirmed delivery', () => {
+  it('reminds the company after a confirmed delivery', () => {
     expect(
       mobileNextStep(
         application({
@@ -156,7 +156,7 @@ describe('mobileNextStep', () => {
           deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
         }),
       ),
-    ).toEqual({ label: 'Напомнить рекрутеру', hot: true });
+    ).toEqual({ label: 'Напомнить компании', hot: true });
   });
 
   it('keeps passive steps quiet', () => {

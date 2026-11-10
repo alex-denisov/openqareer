@@ -124,9 +124,9 @@ test.describe('B486 mobile responses', () => {
     await expect(response).toContainText('Пробовали отправить');
     await expect(response.locator('time')).toBeVisible();
 
-    // B511 G3 item 5: an unconfirmed send is resent, not followed up; the action is accent.
+    // B632: an unconfirmed send is followed up as «Сегодня» does; only a failed one is resent.
     await expect(response.locator('.career-responses-mobile-row-next')).toHaveText(
-      'Повторить отклик',
+      'Напомнить сегодня',
     );
     await expect(response.locator('.career-responses-mobile-row-next')).toHaveClass(/is-hot/);
     await expect(response.locator('svg[data-arrow]')).toHaveCount(0);
@@ -148,7 +148,7 @@ test.describe('B486 mobile responses', () => {
       await expect(push.getByRole('region', { name: group, exact: true })).toHaveCount(1);
     }
     const step = push.getByRole('region', { name: 'Следующий шаг', exact: true });
-    await expect(step.getByRole('button')).toContainText('Повторить отклик');
+    await expect(step.getByRole('button')).toContainText('Напомнить компании про ответ сегодня');
     const about = push.getByRole('region', { name: 'О компании', exact: true });
     await expect(about.locator('.career-responses-contact')).toContainText('Рекрутер не указан');
     // Pinned above the menu: the mock interview and the round chat; STAR lives in «Подготовка».

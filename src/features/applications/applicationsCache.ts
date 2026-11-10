@@ -4,7 +4,6 @@ import type {
   ApplicationView,
 } from './applicationsApi';
 import { SECTION_CACHE_KEYS, readSectionCache, writeSectionCache } from '../shell/sectionCache';
-import { lastDaysRange } from './responsesFiltering';
 
 /** The tracker's first read on every mount: active stages, newest first. */
 export const DEFAULT_APPLICATIONS_QUERY: ApplicationListQuery = {
@@ -13,7 +12,7 @@ export const DEFAULT_APPLICATIONS_QUERY: ApplicationListQuery = {
   offset: 0,
 };
 
-/** The period of a whole-pool reading («Отклики» read the pool for a range). */
+/** The period of a whole-pool reading; since B632 «Отклики» read the pool undated. */
 export interface ApplicationsPoolRange {
   readonly from?: string;
   readonly to?: string;
@@ -37,16 +36,16 @@ export function applicationsPoolKey(range: ApplicationsPoolRange): string {
  * other filters. A stage, channel or sort selection is the candidate's view of
  * the moment and every mount starts without it.
  */
-export function readCachedApplications(today = new Date()): CachedApplicationsPage | undefined {
+export function readCachedApplications(): CachedApplicationsPage | undefined {
   const cached = readSectionCache<CachedApplicationsPage>(SECTION_CACHE_KEYS.applications);
-  // A pool kept yesterday or for another period is not what «Отклики» open with.
-  if (cached?.pool && !isDefaultPoolRange(cached.pool, today)) return undefined;
+  // A dated pool (kept before B632) is not what «Отклики» open with.
+  if (cached?.pool && !isDefaultPoolRange(cached.pool)) return undefined;
   return cached;
 }
 
-/** «Отклики» open on the last 30 days; only that pool is worth restoring. */
-function isDefaultPoolRange(range: ApplicationsPoolRange, today: Date): boolean {
-  return applicationsPoolKey(range) === applicationsPoolKey(lastDaysRange(30, today));
+/** «Отклики» read the whole pool undated (B632); only that pool is worth restoring. */
+function isDefaultPoolRange(range: ApplicationsPoolRange): boolean {
+  return !range.from && !range.to;
 }
 
 export function cacheApplicationsRead(
@@ -55,7 +54,7 @@ export function cacheApplicationsRead(
   page: Omit<CachedApplicationsPage, 'pool'>,
 ): void {
   if (poolLoaded) {
-    if (!isPlainPoolQuery(query) || !isDefaultPoolRange(query, new Date())) return;
+    if (!isPlainPoolQuery(query) || !isDefaultPoolRange(query)) return;
     writeSectionCache<CachedApplicationsPage>(SECTION_CACHE_KEYS.applications, {
       ...page,
       pool: { from: query.from, to: query.to },

@@ -137,7 +137,7 @@ describe('ResponsesBoard columns', () => {
     const html = renderToStaticMarkup(
       <ResponsesBoard state={readyState([])} onOpenVacancies={() => {}} />,
     );
-    expect(html).toContain('Откликов пока нет за выбранный период');
+    expect(html).toContain('Открытых откликов пока нет');
     expect(html).toContain('Здесь появится карточка каждого отклика');
     expect(html).toContain('Перейти к вакансиям');
     expect(html).toContain('Добавить отклик вручную');
@@ -430,8 +430,8 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     });
 
     expect(document.querySelector('.career-mock-dialog[role="dialog"]')).not.toBeNull();
-    const askBtn = Array.from(document.querySelectorAll('button')).find((b) =>
-      b.getAttribute('aria-label') === 'Спросить консультанта',
+    const askBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.getAttribute('aria-label') === 'Спросить консультанта',
     );
     expect(askBtn).toBeDefined();
 
@@ -615,7 +615,7 @@ describe('ResponsesBoard B450 workspace navigation', () => {
         'Собрать письмо',
         'Решить по офферу',
         'Напомнить сегодня',
-        'Напомнить рекрутеру',
+        'Напомнить компании',
       ]),
     );
     const chooseButton = Array.from(
@@ -686,7 +686,7 @@ describe('ResponsesBoard B450 workspace navigation', () => {
     });
     expect(container.textContent).toContain('Security Lead');
     expect(container.textContent).not.toContain('Platform Engineer');
-    expect(container.textContent).toContain('Напомнить компании, срок был');
+    expect(container.textContent).toContain('Напомнить компании про ответ, срок был');
   });
 });
 
