@@ -916,6 +916,35 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    * сколько записей похоронено этим вызовом: уже похороненное не переписывается
    * — первая дата смерти и есть дата смерти.
    */
+  loadUnseenLinks(sourceIds: readonly string[], beforeMs: number, limit: number): VacancyLink[] {
+    if (sourceIds.length === 0 || limit <= 0) return [];
+    const placeholders = sourceIds.map(() => '?').join(', ');
+    return this.database
+      .prepare(
+        `SELECT i.id, i.url FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
+          WHERE i.expired = 0 AND i.source_id IN (${placeholders}) AND i.observed_ms < ?
+          ORDER BY i.observed_ms LIMIT ?`,
+      )
+      .all(...sourceIds, beforeMs, limit) as unknown as VacancyLink[];
+  }
+
+  markSeen(vacancyIds: readonly string[], nowMs: number): void {
+    if (vacancyIds.length === 0) return;
+    const index = this.database.prepare(
+      `UPDATE vacancy_pool_index SET observed_ms = ?2, published_ms = max(coalesce(published_ms, 0), ?2)
+        WHERE id = ?1 AND expired = 0`,
+    );
+    const semantic = this.database.prepare(
+      'UPDATE vacancy_semantic SET published_ms = max(coalesce(published_ms, 0), ?2) WHERE id = ?1',
+    );
+    this.inTransaction(() => {
+      for (const id of vacancyIds) {
+        index.run(id, nowMs);
+        semantic.run(id, nowMs);
+      }
+    });
+  }
+
   markExpired(vacancyIds: readonly string[], atIso: string): number {
     if (vacancyIds.length === 0) return 0;
     const bury = this.database.prepare(

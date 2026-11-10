@@ -16,6 +16,7 @@ import type {
   VacancySourceConfig,
 } from '../domain/unifiedVacancy';
 import { confirmsLiveness } from './poolLiveness';
+import { checkUnseenLinks, type UnseenLinkReport } from './unseenLinkCheck';
 import {
   calculateSourceAuthenticity,
   clusterVacancies,
@@ -506,6 +507,7 @@ export class MultiSourceVacancyEngine {
    * ссылок — измерение, а не догадка, и выдумывать её нельзя (B200 срез 2).
    */
   private readonly linkProbe?: LinkProbe;
+  private readonly unseenAskedAt = new Map<string, number>();
   private readonly descriptionLoader?: VacancyDescriptionLoader;
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
   private readonly workdayDetailFetch?: WorkdayDetailFetch;
@@ -1953,6 +1955,30 @@ export class MultiSourceVacancyEngine {
     }
     this.persistSourceState(source);
     return census;
+  }
+
+  /** B642: проверка ссылок записей работодателей, невиденных в последнем чтении. */
+  public async probeUnseenEmployerLinks(nowMs: number = Date.now()): Promise<UnseenLinkReport> {
+    const empty = { checked: 0, gone: 0, open: 0, unknown: 0 };
+    if (!this.linkProbe) return empty;
+    const sourceIds = [...this.sources.values()]
+      .filter((source) => source.enabled && confirmsLiveness(source.id))
+      .map((source) => source.id);
+    const { goneLinks, ...report } = await checkUnseenLinks(
+      this.pool,
+      this.linkProbe,
+      sourceIds,
+      this.unseenAskedAt,
+      nowMs,
+    );
+    if (goneLinks.length > 0) {
+      if (this.reclusterMode.mode === 'keyed') detachVacanciesByKeys(this.keyedStore(), goneLinks);
+      else {
+        this.handleExpiredVacancies(goneLinks.map((link) => link.id));
+        this.poolChangedSinceRecluster = true;
+      }
+    }
+    return report;
   }
 
   private handleExpiredVacancies(goneVacancyIds: readonly string[]): void {

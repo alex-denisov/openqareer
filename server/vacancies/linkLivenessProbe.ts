@@ -19,6 +19,25 @@ import { mapWithConcurrency } from './boundedConcurrency';
 export interface LinkProbeOutcome {
   readonly status?: number;
   readonly error?: string;
+  /** Куда отправляет ответ `3xx` (заголовок `Location`), если он есть. */
+  readonly location?: string;
+}
+
+/**
+ * B642: переход с объявления на корень сайта или на его родительский список —
+ * это доска говорит «такой вакансии больше нет», а не «вот она».
+ */
+function redirectsToList(url: string, location: string): boolean {
+  try {
+    const from = new URL(url);
+    const to = new URL(location, from);
+    if (to.host !== from.host) return false;
+    const target = to.pathname.replace(/\/+$/u, '');
+    const origin = from.pathname.replace(/\/+$/u, '');
+    return target === '' || (target.length < origin.length && origin.startsWith(`${target}/`));
+  } catch {
+    return false;
+  }
 }
 
 export type LinkProbe = (url: string) => Promise<LinkProbeOutcome>;
@@ -56,8 +75,18 @@ export const DEFAULT_LINK_SAMPLE = 20;
  */
 const DEFAULT_LINK_CONCURRENCY = 2;
 
-export function judgeLinkOutcome(outcome: LinkProbeOutcome): LinkJudgement {
+export function judgeLinkOutcome(outcome: LinkProbeOutcome, url?: string): LinkJudgement {
   const { status } = outcome;
+  if (
+    url &&
+    outcome.location &&
+    typeof status === 'number' &&
+    status >= 300 &&
+    status < 400 &&
+    redirectsToList(url, outcome.location)
+  ) {
+    return { verdict: 'gone', reason: `Объявление снято: переход ${status} на список` };
+  }
   if (status === 404 || status === 410) {
     return { verdict: 'gone', reason: `Объявление снято: ответ ${status}` };
   }
@@ -147,6 +176,8 @@ export interface LinkProbeReport {
   readonly census: LinkCheckCensus;
   /** Записи, чей адрес сервер сам объявил несуществующим. */
   readonly goneVacancyIds: readonly string[];
+  /** Записи, чья ссылка открылась (B642: виденные вновь). */
+  readonly openVacancyIds: readonly string[];
 }
 
 /** Обходит выборку ссылок площадки и считает, сколько из них ещё открывается. */
@@ -170,7 +201,7 @@ export async function probeVacancyLinks(
       } catch (error) {
         outcome = { error: error instanceof Error ? error.message : String(error) };
       }
-      return { vacancy, judgement: judgeLinkOutcome(outcome) };
+      return { vacancy, judgement: judgeLinkOutcome(outcome, vacancy.url!.trim()) };
     },
   );
 
@@ -178,9 +209,12 @@ export async function probeVacancyLinks(
   let gone = 0;
   let unknown = 0;
   const goneVacancyIds: string[] = [];
+  const openVacancyIds: string[] = [];
   for (const { vacancy, judgement } of judged) {
-    if (judgement.verdict === 'open') open += 1;
-    else if (judgement.verdict === 'gone') {
+    if (judgement.verdict === 'open') {
+      open += 1;
+      openVacancyIds.push(vacancy.id);
+    } else if (judgement.verdict === 'gone') {
       gone += 1;
       goneVacancyIds.push(vacancy.id);
     } else unknown += 1;
@@ -196,6 +230,7 @@ export async function probeVacancyLinks(
       sampledFrom: vacancies.length,
     },
     goneVacancyIds,
+    openVacancyIds,
   };
 }
 
@@ -221,6 +256,11 @@ export interface HttpLinkProbeOptions {
  * Продукт представляется своим именем (та же строка, что у опроса площадок):
  * обход, который прячется, — это обход, о котором площадка не договаривалась.
  */
+function outcomeOf(response: Response): LinkProbeOutcome {
+  const location = response.headers.get('location');
+  return location ? { status: response.status, location } : { status: response.status };
+}
+
 export function createHttpLinkProbe(options: HttpLinkProbeOptions = {}): LinkProbe {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? LINK_PROBE_TIMEOUT_MS;
@@ -240,9 +280,8 @@ export function createHttpLinkProbe(options: HttpLinkProbeOptions = {}): LinkPro
   return async (url: string): Promise<LinkProbeOutcome> => {
     try {
       const head = await ask(url, 'HEAD');
-      if (!HEAD_NOT_SUPPORTED.has(head.status)) return { status: head.status };
-      const page = await ask(url, 'GET');
-      return { status: page.status };
+      if (!HEAD_NOT_SUPPORTED.has(head.status)) return outcomeOf(head);
+      return outcomeOf(await ask(url, 'GET'));
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }
