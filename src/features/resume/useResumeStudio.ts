@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { SECTION_CACHE_KEYS, readSectionCache, writeSectionCache } from '../shell/sectionCache';
 import { profileFailureText } from './profileFailureText';
 import { getResumeStudio, saveResumeStudioDraft } from './resumeApi';
 import { draftOf, toSavePayload } from './resumeStudioModel';
@@ -29,7 +30,7 @@ export interface ResumeStudioState {
  * quietly stand behind facts on the candidate's behalf.
  */
 export function useResumeStudio(onSaved?: () => void, refreshKey?: number): ResumeStudioState {
-  const { view, draft, loading, error, setView, setDraft, setLoading, load } =
+  const { view, draft, loading, error, applyRead, setDraft, setLoading, load } =
     useResumeLoader(refreshKey);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
@@ -42,8 +43,7 @@ export function useResumeStudio(onSaved?: () => void, refreshKey?: number): Resu
       setSaveError(undefined);
       try {
         const next = await saveResumeStudioDraft(toSavePayload(toSave));
-        setView(next);
-        setDraft(draftOf(next));
+        applyRead(next);
         onSaved?.();
         return true;
       } catch (reason) {
@@ -55,7 +55,7 @@ profileFailureText(reason, 'save')
         setSaving(false);
       }
     },
-    [draft, onSaved],
+    [applyRead, draft, onSaved],
   );
 
   return {
@@ -74,18 +74,62 @@ profileFailureText(reason, 'save')
   };
 }
 
+/**
+ * B589: the profile opens from the last reading and the read below refreshes
+ * it in the background. The refresh after a cached start must not throw away
+ * an edit the candidate began on the cached draft, and a read that answers
+ * after a newer reading or save is dropped.
+ */
+function useResumeViewState() {
+  const [view, setView] = useState<ResumeStudioView | undefined>(() =>
+    readSectionCache<ResumeStudioView>(SECTION_CACHE_KEYS.resumeStudio),
+  );
+  const [draft, setDraftState] = useState<ResumeDraft | undefined>(() =>
+    view ? draftOf(view) : undefined,
+  );
+  const awaitingFirstRead = useRef(view !== undefined);
+  const cachedDraftEdited = useRef(false);
+  const viewRevision = useRef(0);
+  const setDraft = useCallback((next: ResumeDraft) => {
+    if (awaitingFirstRead.current) cachedDraftEdited.current = true;
+    setDraftState(next);
+  }, []);
+  const applyRead = useCallback((next: ResumeStudioView) => {
+    viewRevision.current += 1;
+    awaitingFirstRead.current = false;
+    setView(next);
+    setDraftState(draftOf(next));
+  }, []);
+  const applyBackgroundRead = useCallback(
+    (next: ResumeStudioView, startedAt: number) => {
+      if (startedAt !== viewRevision.current) return;
+      if (!awaitingFirstRead.current || !cachedDraftEdited.current) {
+        applyRead(next);
+        return;
+      }
+      viewRevision.current += 1;
+      awaitingFirstRead.current = false;
+      setView(next);
+    },
+    [applyRead],
+  );
+  useEffect(() => {
+    if (view) writeSectionCache(SECTION_CACHE_KEYS.resumeStudio, view);
+  }, [view]);
+  return { view, draft, setDraft, applyRead, applyBackgroundRead, viewRevision };
+}
+
 function useResumeLoader(refreshKey?: number) {
-  const [view, setView] = useState<ResumeStudioView>();
-  const [draft, setDraft] = useState<ResumeDraft>();
+  const { view, draft, setDraft, applyRead, applyBackgroundRead, viewRevision } =
+    useResumeViewState();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
 
   const load = useCallback(async () => {
     setError(undefined);
     try {
-      const next = await getResumeStudio();
-      setView(next);
-      setDraft(draftOf(next));
+      const startedAt = viewRevision.current;
+      applyBackgroundRead(await getResumeStudio(), startedAt);
     } catch (reason) {
       setError(
 profileFailureText(reason, 'load')
@@ -93,12 +137,12 @@ profileFailureText(reason, 'load')
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyBackgroundRead, viewRevision]);
 
   useEffect(() => {
     setLoading(true);
     void load();
   }, [load, refreshKey]);
 
-  return { view, draft, loading, error, setView, setDraft, setLoading, load };
+  return { view, draft, loading, error, applyRead, setDraft, setLoading, load };
 }

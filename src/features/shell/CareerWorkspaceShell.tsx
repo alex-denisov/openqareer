@@ -41,6 +41,7 @@ import {
   CareerNavigationRail,
 } from './CareerShellNavigation';
 import { CareerSessionGate } from './CareerSessionGate';
+import { bindSectionCacheOwner } from './sectionCache';
 import { ResponsesAutomationSwitch } from './ResponsesAutomationSwitch';
 import { BootstrapNotificationsBell, DesktopCabinetTopbar } from './DesktopCabinetTopbar';
 import {
@@ -173,6 +174,9 @@ function CareerWorkspaceShellContent({
     !sessionPending && session?.candidateId
       ? { ...session, candidateId: session.candidateId }
       : undefined;
+  // Before the sections read their caches: another candidate never sees the
+  // previous one's sections, and a pending session check keeps them (B589).
+  if (!sessionPending) bindSectionCacheOwner(session?.candidateId);
   const diaryAccess = useCareerDiaryShellAccess(
     Boolean(cabinetSession),
     cabinetSession?.candidateId,

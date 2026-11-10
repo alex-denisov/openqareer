@@ -6,6 +6,7 @@ import type {
 } from '../../../shared/vacancyApplication';
 import { getVacancyApplications, recordVacancyApplication } from '../coach/coachApi';
 import { mergeApplication, optimisticApplication } from './vacancyApplicationState';
+import { SECTION_CACHE_KEYS, readSectionCache, writeSectionCache } from '../shell/sectionCache';
 
 export interface VacancyApplications {
   readonly applications: readonly VacancyApplication[];
@@ -37,9 +38,16 @@ export interface VacancyApplications {
 export function useVacancyApplications(
   provided?: readonly VacancyApplication[],
 ): VacancyApplications {
+  // B589: the row marks of the last reading show at once on a repeat visit.
   const [applications, setApplications] = useState<readonly VacancyApplication[]>(
-    provided ?? [],
+    () =>
+      provided ??
+      readSectionCache<readonly VacancyApplication[]>(SECTION_CACHE_KEYS.vacancyApplications) ??
+      [],
   );
+  useEffect(() => {
+    if (!provided) writeSectionCache(SECTION_CACHE_KEYS.vacancyApplications, applications);
+  }, [applications, provided]);
   const [unsaved, setUnsaved] = useState<ReadonlySet<string>>(new Set());
   const record = useOptimisticVacancyRecord(setApplications, setUnsaved);
   const recordConfirmed = useConfirmedVacancyRecord(setApplications, setUnsaved);

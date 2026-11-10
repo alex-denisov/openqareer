@@ -16,6 +16,7 @@ import {
 } from './todayApi';
 import { recordFollowUpSent } from '../applications/applicationsApi';
 import { CoachApiError } from '../coach/apiClient';
+import { SECTION_CACHE_KEYS, readSectionCache, writeSectionCache } from '../shell/sectionCache';
 
 export interface TodayRead {
   readonly snapshot: TodaySnapshot | null;
@@ -64,12 +65,34 @@ async function loadTodaySnapshot(
   }
 }
 
+interface CachedToday {
+  readonly day: string;
+  readonly snapshot: TodaySnapshot;
+}
+
+function localDay(now = new Date()): string {
+  return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+}
+
+/** Yesterday's plan is not today's: after midnight the visit waits for the server. */
+function readCachedToday(): TodaySnapshot | null {
+  const cached = readSectionCache<CachedToday>(SECTION_CACHE_KEYS.today);
+  return cached?.day === localDay() ? cached.snapshot : null;
+}
+
 export function useToday(): TodayRead {
-  const [snapshot, setSnapshot] = useState<TodaySnapshot | null>(null);
+  // B589: a repeat visit shows the last day plan at once; the read below
+  // refreshes it in the background.
+  const [snapshot, setSnapshot] = useState<TodaySnapshot | null>(readCachedToday);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const requestSequence = useRef(0);
-  const hasSnapshot = useRef(false);
+  const hasSnapshot = useRef(snapshot !== null);
+  useEffect(() => {
+    if (snapshot) {
+      writeSectionCache<CachedToday>(SECTION_CACHE_KEYS.today, { day: localDay(), snapshot });
+    }
+  }, [snapshot]);
   const load = useCallback(async (signal?: AbortSignal, recordVisit = false) => {
     const requestId = ++requestSequence.current;
     await loadTodaySnapshot(
