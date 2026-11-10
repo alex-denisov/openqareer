@@ -168,7 +168,8 @@ describe('B589 section cache in the section hooks', () => {
     hook.mount();
     await flush();
     await act(async () => {
-      await hook.latest.current?.loadPool?.(lastDaysRange(30));
+      // B632: «Отклики» read the whole pool undated.
+      await hook.latest.current?.loadPool?.({});
     });
     hook.unmount();
 
@@ -181,12 +182,11 @@ describe('B589 section cache in the section hooks', () => {
       'app-1',
       'app-2',
     ]);
-    expect(hook.latest.current?.restoredPool).toEqual(lastDaysRange(30));
+    expect(hook.latest.current?.restoredPool).toEqual({ from: undefined, to: undefined });
     expect(listApplicationsPage).not.toHaveBeenCalled();
-    expect(vi.mocked(listApplicationsPool).mock.lastCall?.[0]).toMatchObject({
-      stage: [],
-      ...lastDaysRange(30),
-    });
+    const refresh = vi.mocked(listApplicationsPool).mock.lastCall?.[0];
+    expect(refresh).toMatchObject({ stage: [] });
+    expect(refresh?.from).toBeUndefined();
   });
 
   it('Responses: a failed background refresh keeps the cached list', async () => {
@@ -206,7 +206,7 @@ describe('B589 section cache in the section hooks', () => {
     expect(hook.latest.current?.applications).toHaveLength(1);
   });
 
-  it('Responses: a pool kept for another period is not restored', async () => {
+  it('Responses: a dated pool (kept before B632) is not restored', async () => {
     vi.mocked(listApplicationsPage).mockResolvedValue({ items: [], meta: { total: 0 } } as never);
     vi.mocked(listApplicationsPool).mockResolvedValue({
       items: [{ id: 'app-7', stage: 'applied', version: 1 }],
@@ -216,7 +216,7 @@ describe('B589 section cache in the section hooks', () => {
     hook.mount();
     await flush();
     await act(async () => {
-      await hook.latest.current?.loadPool?.(lastDaysRange(7));
+      await hook.latest.current?.loadPool?.(lastDaysRange(30));
     });
     hook.unmount();
 

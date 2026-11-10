@@ -158,7 +158,7 @@ function MockGroup(props: PreparationMobileProps) {
       foot={props.interviews.length > 0 ? STRESS_FOOT : undefined}
     >
       {props.interviews.length === 0 ? (
-        <p role="status">В выбранном периоде нет откликов с назначенным этапом интервью.</p>
+        <p role="status">Пока нет откликов на этапе «Интервью».</p>
       ) : (
         props.interviews.map((application) => (
           <LinkRow

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
@@ -11,11 +11,15 @@ import type {
 } from './ResponsesWorkspaceControls';
 import type { ResponsesSortMode as SortMode } from './responsesFiltering';
 import {
+  countHiddenByPeriod,
   countResponseStages,
   countResponsesNeedingAction,
   filterResponseCohort,
   filterResponsesForQuery,
   lastDaysRange,
+  OPEN_APPLICATION_STAGES,
+  revealApplicationFilters,
+  type RevealedResponseFilters,
 } from './responsesFiltering';
 import type { UseApplications } from './useApplications';
 
@@ -29,13 +33,7 @@ export interface WorkspaceControllerProps {
   readonly initialApplicationId?: string;
 }
 
-export const OPEN_APPLICATION_STAGES: readonly ApplicationStage[] = [
-  'saved',
-  'applied',
-  'responded',
-  'interview',
-  'offer',
-];
+export { OPEN_APPLICATION_STAGES };
 
 const DEFAULT_COLUMN_LIMITS = {
   sent: 4,
@@ -65,6 +63,8 @@ export interface WorkspaceController {
   readonly poolStatus: 'loading' | 'ready' | 'error';
   readonly poolError: string;
   readonly needsActionCount: number;
+  /** Closed responses older than the period that would match otherwise (B632). */
+  readonly hiddenByPeriodCount: number;
   readonly stageCounts: Record<ApplicationStage, number>;
   readonly applyQuery: (query: ApplicationListQuery) => void;
   readonly applySummaryFilter: (filter: ResponsesSummaryFilter) => void;
@@ -93,7 +93,14 @@ export function useWorkspaceController(props: WorkspaceControllerProps): Workspa
     clearSelection();
   }, [resetPagination, clearSelection]);
   const filters = useWorkspaceFilters(props, resetPages, resetPagination);
-  const pool = useWorkspacePool(props.state, filters.query);
+  const pool = useWorkspacePool(props.state);
+  useRevealLinkedApplication({
+    applicationId: props.initialApplicationId,
+    applications: props.state.applications,
+    poolStatus: pool.poolStatus,
+    filters,
+    selectApplication: selection.selectApplication,
+  });
   const selectedApplication =
     filters.filteredApplications.find((application) => application.id === selection.selectedId) ??
     defaultSelectedApplication(filters.filteredApplications);
@@ -203,12 +210,14 @@ interface WorkspaceFilters {
   readonly filteredApplications: readonly ApplicationView[];
   readonly stageCounts: Record<ApplicationStage, number>;
   readonly needsActionCount: number;
+  readonly hiddenByPeriodCount: number;
   readonly applyQuery: (query: ApplicationListQuery) => void;
   readonly applySummaryFilter: (filter: ResponsesSummaryFilter) => void;
   readonly setSearch: (search: string) => void;
   readonly setSortMode: (mode: SortMode) => void;
   readonly changePeriod: (period: ResponsesPeriod) => void;
   readonly resetFilters: () => void;
+  readonly revealFilters: (filters: RevealedResponseFilters) => void;
 }
 
 function useWorkspaceFilters(
@@ -224,15 +233,9 @@ function useWorkspaceFilters(
   const [search, setSearchState] = useState('');
   const [sortMode, setSortModeState] = useState<SortMode>('step');
   const [actionOnly, setActionOnly] = useState(false);
-  const [query, setQuery] = useState<ApplicationListQuery>(() => ({
-    stage: props.stageFilter ? [props.stageFilter] : OPEN_APPLICATION_STAGES,
-    ...lastDaysRange(30),
-    limit: 20,
-    offset: 0,
-  }));
-  const applications = props.state.applications;
+  const [query, setQuery] = useState<ApplicationListQuery>(() => initialQuery(props.stageFilter));
   useStageFilterSync(props.stageFilter, setQuery);
-  const data = useResponseFilterData(applications, query, search, actionOnly, sortMode);
+  const data = useResponseFilterData(props.state.applications, query, search, actionOnly, sortMode);
   const queryActions = useWorkspaceQueryActions({
     props,
     query,
@@ -245,19 +248,90 @@ function useWorkspaceFilters(
     resetPages,
     resetPagination,
   });
-  return {
-    section,
-    setSection,
-    view,
+  const revealFilters = useRevealFiltersAction({
+    applyQuery: queryActions.applyQuery,
+    setPeriod,
+    setSearchState,
+    setActionOnly,
     setView,
-    query,
-    period,
-    search,
-    sortMode,
-    actionOnly,
-    ...data,
-    ...queryActions,
+    setSection,
+  });
+  const state = { section, setSection, view, setView, query, period, search, sortMode, actionOnly };
+  return { ...state, ...data, ...queryActions, revealFilters };
+}
+
+function initialQuery(stageFilter: ApplicationStage | null | undefined): ApplicationListQuery {
+  return {
+    stage: stageFilter ? [stageFilter] : OPEN_APPLICATION_STAGES,
+    ...lastDaysRange(30),
+    limit: 20,
+    offset: 0,
   };
+}
+
+function useRevealFiltersAction(setters: {
+  readonly applyQuery: (query: ApplicationListQuery) => void;
+  readonly setPeriod: (period: ResponsesPeriod) => void;
+  readonly setSearchState: (search: string) => void;
+  readonly setActionOnly: (actionOnly: boolean) => void;
+  readonly setView: (view: ResponsesViewMode) => void;
+  readonly setSection: (section: ResponsesWorkspaceSection) => void;
+}) {
+  const { applyQuery, setPeriod, setSearchState, setActionOnly, setView, setSection } = setters;
+  return useCallback(
+    (next: RevealedResponseFilters) => {
+      applyQuery(next.query);
+      setPeriod(next.period);
+      setSearchState(next.search);
+      setActionOnly(next.actionOnly);
+      setView(next.view);
+      setSection('funnel');
+    },
+    [applyQuery, setActionOnly, setPeriod, setSearchState, setSection, setView],
+  );
+}
+
+/**
+ * A link with `applicationId` lands on that response even when the filters hid it: they
+ * widen once per link, after the row is loaded (B632).
+ */
+function useRevealLinkedApplication({
+  applicationId,
+  applications,
+  poolStatus,
+  filters,
+  selectApplication,
+}: {
+  readonly applicationId?: string;
+  readonly applications: readonly ApplicationView[];
+  readonly poolStatus: 'loading' | 'ready' | 'error';
+  readonly filters: WorkspaceFilters;
+  readonly selectApplication: (id: string) => void;
+}) {
+  const handled = useRef<string | undefined>(undefined);
+  const { query, period, search, actionOnly, revealFilters } = filters;
+  useEffect(() => {
+    if (!applicationId || handled.current === applicationId) return;
+    const target = applications.find((application) => application.id === applicationId);
+    if (!target) {
+      if (poolStatus !== 'loading') handled.current = applicationId;
+      return;
+    }
+    handled.current = applicationId;
+    const reveal = revealApplicationFilters(target, { query, period, search, actionOnly });
+    if (reveal) revealFilters(reveal);
+    selectApplication(applicationId);
+  }, [
+    actionOnly,
+    applicationId,
+    applications,
+    period,
+    poolStatus,
+    query,
+    revealFilters,
+    search,
+    selectApplication,
+  ]);
 }
 
 function useStageFilterSync(
@@ -288,7 +362,11 @@ function useResponseFilterData(
     [applications, query, search, actionOnly, sortMode],
   );
   const needsActionCount = useMemo(() => countResponsesNeedingAction(cohort), [cohort]);
-  return { filteredApplications, stageCounts, needsActionCount };
+  const hiddenByPeriodCount = useMemo(
+    () => countHiddenByPeriod(applications, query, search, actionOnly),
+    [applications, query, search, actionOnly],
+  );
+  return { filteredApplications, stageCounts, needsActionCount, hiddenByPeriodCount };
 }
 
 function useWorkspaceQueryActions({
@@ -526,14 +604,15 @@ interface WorkspacePool {
   readonly retryPool: () => void;
 }
 
-function useWorkspacePool(state: UseApplications, query: ApplicationListQuery): WorkspacePool {
-  // B589: a pool restored from the section cache for this very period is on
-  // screen already; the tracker refreshes it in the background.
-  const [restoredKey] = useState(() => {
-    if (!state.restoredPool) return '';
-    const key = applicationsPoolKey(state.restoredPool);
-    return key === applicationsPoolKey(query) ? key : '';
-  });
+/** The whole pool is loaded: the period trims only closed rows, on the client (B632). */
+function useWorkspacePool(state: UseApplications): WorkspacePool {
+  // B589: a whole pool restored from the section cache is on screen already;
+  // the tracker refreshes it in the background.
+  const [restoredKey] = useState(() =>
+    state.restoredPool && applicationsPoolKey(state.restoredPool) === FULL_POOL_KEY
+      ? FULL_POOL_KEY
+      : '',
+  );
   const [poolStatus, setPoolStatus] = useState<'loading' | 'ready' | 'error'>(
     restoredKey ? 'ready' : 'loading',
   );
@@ -542,7 +621,6 @@ function useWorkspacePool(state: UseApplications, query: ApplicationListQuery): 
   const [loadedPoolKey, setLoadedPoolKey] = useState(restoredKey);
   usePoolLoadEffect({
     state,
-    query,
     poolRetryToken,
     loadedPoolKey,
     setLoadedPoolKey,
@@ -553,9 +631,10 @@ function useWorkspacePool(state: UseApplications, query: ApplicationListQuery): 
   return { poolStatus, poolError, retryPool };
 }
 
+const FULL_POOL_KEY = applicationsPoolKey({});
+
 function usePoolLoadEffect({
   state,
-  query,
   poolRetryToken,
   loadedPoolKey,
   setLoadedPoolKey,
@@ -563,7 +642,6 @@ function usePoolLoadEffect({
   setPoolError,
 }: {
   readonly state: UseApplications;
-  readonly query: ApplicationListQuery;
   readonly poolRetryToken: number;
   readonly loadedPoolKey: string;
   readonly setLoadedPoolKey: (key: string) => void;
@@ -572,9 +650,6 @@ function usePoolLoadEffect({
 }) {
   const { applications, pageMeta, loadPool } = state;
   const loadedCount = applications.length;
-  const from = query.from;
-  const to = query.to;
-  const poolFilterKey = applicationsPoolKey({ from, to });
   useEffect(
     () =>
       runPoolLoadEffect({
@@ -582,8 +657,7 @@ function usePoolLoadEffect({
         pageMeta,
         loadedCount,
         loadedPoolKey,
-        poolFilterKey,
-        query: { from, to },
+        poolFilterKey: FULL_POOL_KEY,
         setLoadedPoolKey,
         setPoolStatus,
         setPoolError,
@@ -593,10 +667,7 @@ function usePoolLoadEffect({
       loadedCount,
       loadedPoolKey,
       pageMeta,
-      poolFilterKey,
       poolRetryToken,
-      from,
-      to,
       setPoolError,
       setPoolStatus,
       setLoadedPoolKey,
@@ -610,7 +681,6 @@ function runPoolLoadEffect({
   loadedCount,
   loadedPoolKey,
   poolFilterKey,
-  query,
   setLoadedPoolKey,
   setPoolStatus,
   setPoolError,
@@ -620,7 +690,6 @@ function runPoolLoadEffect({
   readonly loadedCount: number;
   readonly loadedPoolKey: string;
   readonly poolFilterKey: string;
-  readonly query: ApplicationListQuery;
   readonly setLoadedPoolKey: (key: string) => void;
   readonly setPoolStatus: (status: 'loading' | 'ready' | 'error') => void;
   readonly setPoolError: (error: string) => void;
@@ -639,7 +708,6 @@ function runPoolLoadEffect({
   setPoolError('');
   requestFullPool(
     loadPool,
-    query,
     controller.signal,
     poolFilterKey,
     setLoadedPoolKey,
@@ -651,14 +719,13 @@ function runPoolLoadEffect({
 
 function requestFullPool(
   loadPool: NonNullable<UseApplications['loadPool']>,
-  query: ApplicationListQuery,
   signal: AbortSignal,
   key: string,
   setLoadedPoolKey: (key: string) => void,
   setPoolStatus: (status: 'loading' | 'ready' | 'error') => void,
   setPoolError: (error: string) => void,
 ) {
-  void loadPool({ stage: [], channel: [], from: query.from, to: query.to }, signal)
+  void loadPool({ stage: [], channel: [] }, signal)
     .then(() => finishPoolLoad(signal, key, setLoadedPoolKey, setPoolStatus))
     .catch((reason: unknown) => failPoolLoad(reason, signal, setPoolError, setPoolStatus));
 }

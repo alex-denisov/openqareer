@@ -106,7 +106,7 @@ export function mobileNextStep(application: ApplicationView): MobileNextStep {
 }
 
 function shortStepLabel(step: string): string {
-  if (step === 'Напоминание компании просрочено') return 'Напомнить рекрутеру';
+  if (step === 'Напоминание компании просрочено') return 'Напомнить компании';
   if (step.startsWith('Напоминание компании сегодня')) return 'Напомнить сегодня';
   if (step === 'Подготовиться к интервью') return 'Подготовиться';
   if (step === 'Соберите письмо') return 'Собрать письмо';

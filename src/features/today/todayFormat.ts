@@ -11,6 +11,7 @@ import type {
   TodayQueueItem,
 } from './todayApi';
 import { pluralRu } from '../../../shared/pluralRu';
+import { companyReminderStep } from '../applications/responseCardFace';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 /**
@@ -270,7 +271,7 @@ function followUpTitle(
   if (contact) {
     return `Напомнить ${dativeNameRu(contact)} ${item.afterInterview ? 'про итог интервью' : 'про ответ'}`;
   }
-  return company ? `Напомнить компании ${company} про ответ` : 'Напомнить компании про ответ';
+  return companyReminderStep(company);
 }
 
 /** Заголовок строки 390 по макету: напоминание называет только человека, компания — в подписи, без повтора. */

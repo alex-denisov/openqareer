@@ -268,21 +268,11 @@ function MobileApplicationCard({
       <strong>{company}</strong>
       <span>{vacancy?.title ?? 'Вакансия без названия'}</span>
       <p>
-        {humanSourceLabel(vacancy?.source)} · {responseNextStep(application)}
+        {humanSourceLabel(vacancy?.source)} · {cardNextStep(application).text}
       </p>
       <small>{dueAt ? 'Срок: ' + formatDate(dueAt) : 'Срок шага не указан'}</small>
     </article>
   );
-}
-
-function responseNextStep(application: ApplicationView): string {
-  if (application.nearestInterview?.scheduledAt) return 'Подготовиться к интервью';
-  if (application.followUp?.urgency === 'overdue' || application.followUp?.urgency === 'stale') {
-    return 'Напомнить компании';
-  }
-  if (application.followUp?.urgency === 'due') return 'Напомнить о себе сегодня';
-  if (application.whoseTurn === 'company') return 'Ждём ответа';
-  return 'Выбрать следующий шаг';
 }
 
 /** Mockup 5 at 390: the row date is «08.10», without the year. */

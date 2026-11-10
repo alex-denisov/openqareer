@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ApplicationView } from './applicationsApi';
-import {
-  draftCoveredByLoaded,
-  draftListQuery,
-  draftResultCount,
-  type ResponsesFilterDraft,
-} from './responsesFilterDraft';
+import { draftResultCount, type ResponsesFilterDraft } from './responsesFilterDraft';
 
 const TODAY = new Date(2026, 10, 5);
 
@@ -40,53 +35,24 @@ const LOADED = [
   card('hh-offer', { stage: 'offer' }),
   card('hh-old', { createdAt: '2026-10-20T10:00:00.000Z' }),
   card('hh-closed', { stage: 'rejected' }),
+  card('hh-closed-old', { stage: 'rejected', createdAt: '2026-10-20T10:00:00.000Z' }),
 ];
 
 describe('draftResultCount', () => {
   it('counts the same list the button will show', () => {
-    expect(draftResultCount(LOADED, draft(), '', TODAY)).toBe(5);
+    expect(draftResultCount(LOADED, draft(), '', TODAY)).toBe(6);
   });
 
   it('narrows by stage, channel and period', () => {
     expect(draftResultCount(LOADED, draft({ stage: 'оффер' }), '', TODAY)).toBe(1);
-    expect(draftResultCount(LOADED, draft({ stage: 'закрыто' }), '', TODAY)).toBe(1);
+    expect(draftResultCount(LOADED, draft({ stage: 'закрыто' }), '', TODAY)).toBe(2);
     expect(draftResultCount(LOADED, draft({ channel: 'linkedin' }), '', TODAY)).toBe(1);
-    expect(draftResultCount(LOADED, draft({ period: '7' }), '', TODAY)).toBe(4);
+    // The period trims closed rows only: the old open «hh-old» stays (B632).
+    expect(draftResultCount(LOADED, draft({ period: '7' }), '', TODAY)).toBe(5);
+    expect(draftResultCount(LOADED, draft({ stage: 'закрыто', period: '7' }), '', TODAY)).toBe(1);
   });
 
   it('respects the search already in the bar', () => {
     expect(draftResultCount(LOADED, draft(), 'бета', TODAY)).toBe(1);
-  });
-});
-
-describe('draftCoveredByLoaded', () => {
-  it('can count locally when the loaded period holds the draft period', () => {
-    expect(draftCoveredByLoaded('30', '7')).toBe(true);
-    expect(draftCoveredByLoaded('30', '30')).toBe(true);
-    expect(draftCoveredByLoaded('all', '90')).toBe(true);
-  });
-
-  it('cannot when the draft reaches further back than what is loaded', () => {
-    expect(draftCoveredByLoaded('30', '90')).toBe(false);
-    expect(draftCoveredByLoaded('30', 'all')).toBe(false);
-  });
-});
-
-describe('draftListQuery', () => {
-  it('asks the server for one row of the draft to read its total', () => {
-    expect(draftListQuery(draft({ stage: 'интервью', channel: 'hh', period: '7' }), TODAY)).toEqual(
-      {
-        stage: ['interview'],
-        channel: ['hh'],
-        from: '2026-10-30',
-        to: '2026-11-05',
-        limit: 1,
-        offset: 0,
-      },
-    );
-  });
-
-  it('has no server query for «нужно действие»: the server cannot filter it', () => {
-    expect(draftListQuery(draft({ stage: 'нужно действие', period: 'all' }), TODAY)).toBeNull();
   });
 });

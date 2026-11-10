@@ -96,7 +96,11 @@ describe('responsesFiltering', () => {
           source: 'hh.ru',
         },
       }),
-      application({ id: 'outside-period', stage: 'offer', createdAt: '2026-08-01T10:00:00.000Z' }),
+      application({
+        id: 'outside-period',
+        stage: 'rejected',
+        createdAt: '2026-08-01T10:00:00.000Z',
+      }),
     ];
     const cohort = filterResponseCohort(applications, {
       stage: ['offer'],

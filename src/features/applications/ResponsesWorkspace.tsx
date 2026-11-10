@@ -33,6 +33,8 @@ import type { UseApplications } from './useApplications';
 import { OPEN_APPLICATION_STAGES, useWorkspaceController } from './responsesWorkspaceController';
 import type { WorkspaceController } from './responsesWorkspaceController';
 import { RESPONSES_TAB_TOPICS } from './responsesTabTopics';
+import { bulkFilterQuery } from './responsesFiltering';
+import { OlderResponsesNotice } from './OlderResponsesNotice';
 import { usePublishConsultantTopic } from '../journey/consultantScreenTopic';
 import './responses-workspace.css';
 import './responses-mobile.css';
@@ -161,6 +163,8 @@ interface WorkspaceQueryActionsInput {
 
 function renderTableView({ state, workspace, onOpenResume }: WorkspaceQueryActionsInput) {
   const visibleApplications = workspace.filteredApplications.slice(0, workspace.tableLimit);
+  // The server dates every stage; open rows ignore the period here, so it gets an equal query.
+  const bulkQuery = bulkFilterQuery(workspace.query);
   return (
     <ResponsesApplicationsTable
       applications={visibleApplications}
@@ -171,9 +175,11 @@ function renderTableView({ state, workspace, onOpenResume }: WorkspaceQueryActio
       onSelectAllFiltered={workspace.toggleAllFiltered}
       onClearSelection={workspace.clearSelection}
       allSelectedByFilter={workspace.allSelectedByFilter}
-      allowSelectAllFiltered={!workspace.search.trim() && !workspace.actionOnly}
+      allowSelectAllFiltered={
+        !workspace.search.trim() && !workspace.actionOnly && bulkQuery !== null
+      }
       pageMeta={filteredPageMeta(state.pageMeta, workspace.filteredApplications.length)}
-      query={workspace.query}
+      query={bulkQuery ?? { ...workspace.query, from: undefined, to: undefined }}
       onBulkComplete={workspace.bulkComplete}
       selectedApplicationId={workspace.selectedApplication?.id}
       onSelectApplication={workspace.selectApplication}
@@ -394,10 +400,15 @@ function FunnelMobileFeed({
       onRefreshApplications={props.state.refreshApplications}
       selection={mobileSelection(workspace)}
       header={
-        <ResponsesAutomationLink
-          count={pendingApprovalCount}
-          onOpenAutomation={props.onOpenAutomation}
-        />
+        <>
+          <ResponsesAutomationLink
+            count={pendingApprovalCount}
+            onOpenAutomation={props.onOpenAutomation}
+          />
+          {workspace.filteredApplications.length === 0 ? (
+            <OlderResponses workspace={workspace} />
+          ) : null}
+        </>
       }
     />
   );
@@ -474,6 +485,9 @@ function FunnelBodyContent({
   readonly applications: readonly ApplicationView[];
   readonly tableView: ReactNode;
 }) {
+  if (applications.length === 0 && workspace.hiddenByPeriodCount > 0) {
+    return <OlderResponses workspace={workspace} />;
+  }
   if (applications.length === 0) {
     const filtered = hasActiveResponseFilters(workspace);
     return filtered ? (
@@ -496,6 +510,16 @@ function FunnelBodyContent({
     onSwitchToTable: () => workspace.setView('table'),
     onClearFilter: () => workspace.applyQuery({ stage: OPEN_APPLICATION_STAGES }),
   });
+}
+
+function OlderResponses({ workspace }: { readonly workspace: WorkspaceController }) {
+  return (
+    <OlderResponsesNotice
+      count={workspace.hiddenByPeriodCount}
+      period={workspace.period}
+      onShow={() => workspace.changePeriod('all')}
+    />
+  );
 }
 
 function hasActiveResponseFilters(workspace: WorkspaceController): boolean {

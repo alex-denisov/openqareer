@@ -14,7 +14,6 @@ import {
   SlidersHorizontal,
 } from '@phosphor-icons/react';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
-import { listApplicationsPage } from './applicationsApi';
 import {
   FILTER_OPTION_TITLE_ID,
   FilterOptionSheet,
@@ -23,8 +22,6 @@ import {
 } from './ResponsesStageSheet';
 import {
   DEFAULT_FILTER_DRAFT,
-  draftCoveredByLoaded,
-  draftListQuery,
   draftResultCount,
   type ResponsesFilterDraft,
   type ResponsesPeriod,
@@ -111,34 +108,13 @@ function trapDialogTab(
   }
 }
 
-/** «Показать N»: null until the number is known, so the button never shows a wrong one. */
+/** «Показать N»: null until the pool is loaded, so the button never shows a wrong one. */
 function useDraftCount(
   props: ResponsesFilterSheetProps,
   draft: ResponsesFilterDraft,
-  isOpen: boolean,
 ): number | null {
-  const covered = draftCoveredByLoaded(props.period, draft.period);
-  const askServer = isOpen && !covered && !props.search.trim();
-  const serverQuery = askServer ? draftListQuery(draft) : null;
-  const serverKey = serverQuery ? JSON.stringify(serverQuery) : null;
-  const [served, setServed] = useState<{ key: string; total: number } | null>(null);
-  useEffect(() => {
-    if (!serverKey) return undefined;
-    const controller = new AbortController();
-    void listApplicationsPage(JSON.parse(serverKey) as ApplicationListQuery, controller.signal)
-      .then((page) => {
-        if (!controller.signal.aborted) setServed({ key: serverKey, total: page.meta.total });
-      })
-      .catch(() => {
-        // The button stays a plain «Показать»; applying the filter reports its own errors.
-        if (!controller.signal.aborted) setServed(null);
-      });
-    return () => controller.abort();
-  }, [serverKey]);
-  if (covered) {
-    return props.loadedAll ? draftResultCount(props.applications, draft, props.search) : null;
-  }
-  return served && served.key === serverKey ? served.total : null;
+  // The whole pool is loaded (B632): every period is counted from the rows at hand.
+  return props.loadedAll ? draftResultCount(props.applications, draft, props.search) : null;
 }
 
 function draftFromProps(props: ResponsesFilterSheetProps): ResponsesFilterDraft {
@@ -268,7 +244,7 @@ function FilterForm({
   readonly state: FilterSheetState;
 }) {
   const { draft } = state;
-  const count = useDraftCount(props, draft, state.isOpen);
+  const count = useDraftCount(props, draft);
   return (
     <form
       onSubmit={(event) => {

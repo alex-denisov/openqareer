@@ -697,7 +697,9 @@ test.describe('B251 responses screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
-    await expect(page.locator('.career-responses-empty')).toContainText('Откликов пока нет');
+    await expect(page.locator('.career-responses-empty')).toContainText(
+      'Открытых откликов пока нет',
+    );
     await expect(page.locator('.career-responses-empty')).toContainText(
       'Здесь появится карточка каждого отклика',
     );

@@ -194,7 +194,7 @@ export function MockInterviewCard(props: {
   return (
     <SectionCard id="responses-interviews-title" title="Мок-интервью">
       {interviews.length === 0 ? (
-        <p role="status">В выбранном периоде нет откликов с назначенным этапом интервью.</p>
+        <p role="status">Пока нет откликов на этапе «Интервью».</p>
       ) : (
         interviews.map((application, index) => (
           <MockInterviewRow
