@@ -18,6 +18,12 @@ function directory(): DatabaseSync {
   return db;
 }
 
+function withFreehire(): DatabaseSync {
+  const db = directory();
+  db.exec(`UPDATE company_directory SET evidence = '{"websiteUrl":{"how":"freehire.me listing"}}' WHERE company_key = 'ghost'`);
+  return db;
+}
+
 function fakeFetch(routes: Record<string, [number, string]>): typeof fetch {
   return (async (input: string | URL | Request) => {
     const url = String(input);
@@ -72,6 +78,12 @@ describe('B627 site discovery', () => {
     expect(ghost.website_url).toBeNull();
     expect(ghost.source_type).toBe('linkedin_guest');
     expect(readPendingCompanies(db, 10)).toEqual([]);
+  });
+});
+
+describe('B627 pending companies', () => {
+  it('skips companies whose site came from freehire', () => {
+    expect(readPendingCompanies(withFreehire(), 10).map((c) => c.companyKey)).toEqual(['acme']);
   });
 });
 
