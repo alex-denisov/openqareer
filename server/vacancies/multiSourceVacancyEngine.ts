@@ -281,8 +281,18 @@ function logStaleIntake(
  * её дата публикации не важна. Остальным — 30 дней от публикации.
  */
 function keptOnIntake(vacancy: UnifiedVacancy, sourceId: string, partial: boolean): boolean {
-  return isVacancyFresh(vacancy.publishedAt) || (!partial && confirmsLiveness(sourceId));
+  return (
+    isVacancyFresh(vacancy.publishedAt) ||
+    (KEEP_OLD_ALIVE_ON_INTAKE && !partial && confirmsLiveness(sourceId))
+  );
 }
+
+/**
+ * B642 откат приёма 10.11: за 2 ч после выката траты фона выросли в 3,2 раза
+ * (первичный разбор требований и процент у принятых старых вакансий) — правило
+ * 1,5× требует откатить приём. Ротация, проверка ссылок и уборка остаются.
+ */
+const KEEP_OLD_ALIVE_ON_INTAKE = false;
 
 function vacancyMembershipFields(vacancy: UnifiedVacancy): string {
   return JSON.stringify({

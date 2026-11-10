@@ -79,9 +79,9 @@ describe('приём улова (B642)', () => {
     return engine.getVacancies().items.map((v) => v.id);
   }
 
-  it('полное чтение доски ATS оставляет старую, но открытую вакансию', async () => {
+  it('приём старых живых откатан (B642, 1,5×): полное чтение ATS держит 30 дней', async () => {
     const ids = await kept('ats-greenhouse-acme');
-    expect(ids).toContain('ats-greenhouse-acme-old');
+    expect(ids).not.toContain('ats-greenhouse-acme-old');
     expect(ids).toContain('ats-greenhouse-acme-new');
   });
 
