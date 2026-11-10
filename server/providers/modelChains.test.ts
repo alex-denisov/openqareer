@@ -48,9 +48,8 @@ describe('цепочки моделей по механикам (28.10)', () => 
     }
   });
 
-  it('письмо: DeepSeek дважды, GLM, Gemini последним (B601, 10.11: бонус Vertex кончился 09.11)', () => {
+  it('письмо: по одному вызову — DeepSeek, GLM, Gemini (B640, решение CPO 10.11)', () => {
     expect(labels('coverLetters')).toEqual([
-      'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',
       'vertex',

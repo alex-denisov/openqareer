@@ -350,8 +350,7 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
     let lastFailure: CoverLetterFailure | undefined;
-    for (const [index, stage] of this.stages.entries()) {
-      if (index > 0 && this.repeatsSlowStage(index, lastFailure)) continue;
+    for (const stage of this.stages) {
       const written = await stage.writeCoverLetter(input);
       const outcome = reviewed(written, input);
       if (outcome.body) return outcome;
@@ -359,16 +358,6 @@ export class QueuedCoverLetterWriter implements CoverLetterWriter {
       lastFailure = outcome.failure ?? lastFailure;
     }
     return lastFailure ? { failure: lastFailure } : {};
-  }
-
-  /**
-   * B601, 10.11: повтор той же модели нужен после отказа проверки или обрыва — следующий ответ другой.
-   * После таймаута или ошибки сети провайдер медлит и второй раз: на стенде два таймаута подряд
-   * давали письмо через 50–60 с.
-   */
-  private repeatsSlowStage(index: number, lastFailure: CoverLetterFailure | undefined): boolean {
-    const same = this.descriptors[index] !== undefined && this.descriptors[index] === this.descriptors[index - 1];
-    return same && lastFailure !== undefined && lastFailure.kind !== 'unusable_response';
   }
 }
 
@@ -381,7 +370,7 @@ export interface CoverLetterWriterConfig {
 }
 
 /**
- * Цепочка письма (решение владельца, B601; повтор DeepSeek с 10.11): deepseek-v4.1-flash дважды → glm-5.3-flash → Gemini на Vertex;
+ * Цепочка письма (решение владельца, B601; B640): по одному вызову deepseek-v4.1-flash → glm-5.3-flash → Gemini на Vertex;
  * если отказали все, маршрут отвечает ошибкой с повтором, а не шаблоном.
  */
 export function buildCoverLetterWriter(

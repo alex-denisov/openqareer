@@ -256,7 +256,7 @@ describe('QueuedCoverLetterWriter', () => {
     expect(failures).toEqual([{ stage: 'a', kind: 'unusable_response', detail: 'letter_gate:number' }]);
   });
 
-  it('повтор той же модели после таймаута пропускается, после отказа проверки спрашивается (B601, 10.11)', async () => {
+  it('каждая ступень спрашивается один раз: таймаут и отказ проверки ведут к следующей (B640)', async () => {
     const calls: string[] = [];
     const stage = (label: string, outcome: Awaited<ReturnType<CoverLetterWriter['writeCoverLetter']>>): CoverLetterWriter => ({
       writeCoverLetter: async () => {
@@ -264,32 +264,26 @@ describe('QueuedCoverLetterWriter', () => {
         return outcome;
       },
     });
-    const slow = new QueuedCoverLetterWriter(
-      [stage('d1', { failure: { stage: 'd', kind: 'timeout' } }), stage('d2', { body: 'Письмо.', stage: 'd' }), stage('g', { body: 'Письмо GLM.', stage: 'g' })],
-      ['d', 'd', 'g'],
+    const queue = new QueuedCoverLetterWriter(
+      [
+        stage('d', { failure: { stage: 'd', kind: 'timeout' } }),
+        stage('g', { failure: { stage: 'g', kind: 'unusable_response', detail: 'letter_gate:distorted' } }),
+        stage('v', { body: 'Письмо Gemini.', stage: 'v' }),
+      ],
+      ['d', 'g', 'v'],
       () => undefined,
     );
-    await expect(slow.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'g' });
-    expect(calls).toEqual(['d1', 'g']);
-
-    calls.length = 0;
-    const refused = new QueuedCoverLetterWriter(
-      [stage('d1', { failure: { stage: 'd', kind: 'unusable_response', detail: 'cut' } }), stage('d2', { body: 'Письмо.', stage: 'd' }), stage('g', { body: 'Письмо GLM.', stage: 'g' })],
-      ['d', 'd', 'g'],
-      () => undefined,
-    );
-    await expect(refused.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'd' });
-    expect(calls).toEqual(['d1', 'd2']);
+    await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'v' });
+    expect(calls).toEqual(['d', 'g', 'v']);
   });
 });
 
 describe('цепочка письма (решение владельца, B601)', () => {
-  it('DeepSeek дважды, затем GLM через OpenRouter', () => {
+  it('DeepSeek один раз, затем GLM через OpenRouter (B640)', () => {
     const writer = buildCoverLetterWriter({ providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' } }) as unknown as {
       descriptors: readonly string[];
     };
     expect(writer.descriptors).toEqual([
-      'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:deepseek/deepseek-v4.1-flash',
       'openrouter:z-ai/glm-5.3-flash',
     ]);
