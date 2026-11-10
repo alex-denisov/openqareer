@@ -55,7 +55,7 @@ describe('ProfileEmployerName (B639)', () => {
     const container = await render(
       <ProfileEmployerName place={{ employer: MASK }} onChanged={onChanged} />,
     );
-    expect(container.textContent).toContain('Как называется эта компания на самом деле?');
+    expect(container.textContent).toContain('Название скрыто? Как называется компания на самом деле');
     await type(container.querySelector('input')!, ' Россети Цифра ');
     await act(async () => button(container, 'Сохранить').click());
     expect(api.answerEmployerName).toHaveBeenCalledWith(

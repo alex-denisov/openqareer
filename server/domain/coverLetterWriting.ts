@@ -68,6 +68,8 @@ export interface CoverLetterPromptInput {
   readonly candidateName?: string;
   /** B639: место кандидата в компании вакансии или её группе (`letterCompanyLink`). */
   readonly companyLink?: string;
+  /** B640: причина отказа проверки — отдельным абзацем после утверждённого запроса. */
+  readonly correction?: string;
 }
 
 /**
@@ -140,5 +142,7 @@ export function coverLetterPrompt(input: CoverLetterPromptInput): string {
   const template = input.chosenLanguage
     ? linked.replace('на языке вакансии', LANGUAGE_TEXT[input.chosenLanguage])
     : linked;
-  return template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE|NAME|LINK)\}/gu, (_match, key: string) => values[key] ?? '').trim();
+  const prompt = template.replace(/\{(RECIPIENT|GENDER|VACANCY|PROFILE|NAME|LINK)\}/gu, (_match, key: string) => values[key] ?? '').trim();
+  const correction = input.correction?.trim();
+  return correction ? `${prompt}\n\n${correction}` : prompt;
 }

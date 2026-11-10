@@ -1,5 +1,6 @@
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CandidateMemory } from '../coach/coachApi';
+import { hiddenEmployerPlaces } from './hiddenEmployers';
 import type { ResumeDraft } from './resumeTypes';
 
 const HAS_FIGURE = /\d/u;
@@ -27,9 +28,16 @@ export function teamSizeFinding(draft: Pick<ResumeDraft, 'experience'>): string 
   return `Размер команды неизвестен в ${pluralRu(missing, ['месте', 'местах', 'местах'])}.`;
 }
 
+/** B640: маски LinkedIn без ответа кандидата — письма называют компанию маской. */
+export function hiddenEmployerFinding(draft: Pick<ResumeDraft, 'experience'>): string | undefined {
+  const hidden = hiddenEmployerPlaces(draft.experience).length;
+  if (!hidden) return undefined;
+  return `Название компании скрыто: ${pluralRu(hidden, ['место', 'места', 'мест'])}.`;
+}
+
 /** Findings the review adds to the experience block's issue count on top of the projection. */
 export function experienceFindingCount(draft: Pick<ResumeDraft, 'experience'>): number {
-  return countRolesWithoutTeamSize(draft) ? 1 : 0;
+  return [teamSizeFinding(draft), hiddenEmployerFinding(draft)].filter(Boolean).length;
 }
 
 export function experienceFinding(
@@ -38,7 +46,11 @@ export function experienceFinding(
 ): string | undefined {
   const { withFigures, total } = countRolesWithFigures(draft, memory);
   if (total === 0) return undefined;
-  return [`Результаты в цифрах: в ${withFigures} из ${total} мест.`, teamSizeFinding(draft)]
+  return [
+    `Результаты в цифрах: в ${withFigures} из ${total} мест.`,
+    teamSizeFinding(draft),
+    hiddenEmployerFinding(draft),
+  ]
     .filter(Boolean)
     .join(' ');
 }

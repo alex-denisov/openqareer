@@ -2,8 +2,8 @@
 .profile-employer-name {
   display: grid;
   gap: var(--career-space-2);
-  margin-block-start: var(--career-space-3);
-  padding: var(--career-space-3);
+  margin-block: var(--career-space-2);
+  padding: var(--career-space-2) var(--career-space-3);
   border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-md);
   background: var(--career-accent-soft);
@@ -18,12 +18,12 @@
 }
 
 .profile-employer-name__label {
+  flex: 0 1 auto;
   color: var(--career-text);
   font-size: var(--career-text-sm);
   font-weight: 600;
 }
 
-.profile-employer-name__hint,
 .profile-employer-name__saved {
   margin: 0;
   color: var(--career-text-soft);
@@ -44,7 +44,7 @@
 }
 
 .profile-employer-name__row input {
-  flex: 1 1 14rem;
+  flex: 1 1 9rem;
   min-inline-size: 0;
   padding: var(--career-space-2);
   border: var(--career-border-width) solid var(--career-line-strong);
@@ -66,4 +66,41 @@
 
 .profile-employer-name__row input:disabled {
   opacity: 0.6;
+}
+
+/* B640: замечание «Название компании скрыто» в «Проверке резюме» ведёт к первому вопросу. */
+.career-profile-screen-review-remark-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--career-accent);
+  font: inherit;
+  text-align: start;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.career-profile-screen-review-remark-link:hover {
+  color: var(--career-accent-ink);
+}
+
+.career-profile-screen-review-remark-link:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+  border-radius: var(--career-radius-sm);
+}
+
+/* B640: у свёрнутого старого места вопрос идёт строкой под названием компании. */
+.career-profile-screen-place-compact-question {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.career-profile-screen-place-compact-question:empty {
+  display: none;
+}
+
+.career-profile-screen-place-compact-question .profile-employer-name {
+  margin-block: 0;
 }

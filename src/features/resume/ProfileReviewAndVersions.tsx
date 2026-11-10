@@ -16,8 +16,10 @@ import {
   aboutFinding,
   experienceFinding,
   experienceFindingCount,
+  hiddenEmployerFinding,
   teamSizeFinding,
 } from './reviewFindings';
+import { focusEmployerQuestion } from './hiddenEmployers';
 import { orderUnknowns, previewProjection, selectDocument } from './resumeStudioModel';
 import {
   ProfileAtsAssessment as ProfileAtsAssessmentContent,
@@ -64,6 +66,8 @@ export interface ReviewBlock {
   readonly description?: string;
   /** Review findings counted on top of the projection issues («Размер команды неизвестен…»). */
   readonly extraRemarks?: readonly string[];
+  /** B640: «Название компании скрыто: N мест» — по клику к первому вопросу о названии. */
+  readonly hiddenEmployerRemark?: string;
 }
 
 function reviewBlockForIssue(issue: ResumeUnknown, draft: ResumeDraft): ReviewBlockId {
@@ -167,14 +171,16 @@ function withFindings(
     const description = findings[block.id];
     const described = description && !block.description ? { ...block, description } : block;
     const extra = block.id === 'experience' ? experienceFindingCount(draft) : 0;
-    const remark = extra ? teamSizeFinding(draft) : undefined;
-    return extra
-      ? {
-          ...described,
-          issueCount: actionableIssues(described).length + extra,
-          extraRemarks: remark ? [remark] : [],
-        }
-      : described;
+    if (!extra) return described;
+    const hidden = hiddenEmployerFinding(draft);
+    return {
+      ...described,
+      issueCount: actionableIssues(described).length + extra,
+      extraRemarks: [teamSizeFinding(draft), hidden].filter((item): item is string =>
+        Boolean(item),
+      ),
+      ...(hidden ? { hiddenEmployerRemark: hidden } : {}),
+    };
   });
 }
 
@@ -272,13 +278,46 @@ function ReviewBadgeIcon({ kind }: { readonly kind: 'clear' | 'unknown' | 'issue
   return <Warning size={14} aria-hidden="true" />;
 }
 
+function RemarkItem({
+  remark,
+  block,
+  onOpenEmployerQuestion,
+}: {
+  readonly remark: string;
+  readonly block: ReviewBlock;
+  readonly onOpenEmployerQuestion?: () => void;
+}) {
+  if (remark !== block.hiddenEmployerRemark || !onOpenEmployerQuestion) return <li>{remark}</li>;
+  return (
+    <li>
+      <button
+        type="button"
+        className="career-profile-screen-review-remark-link"
+        onClick={onOpenEmployerQuestion}
+      >
+        {remark}
+      </button>
+    </li>
+  );
+}
+
+function reviewStatusKind(status: string): 'clear' | 'unknown' | 'issues' {
+  if (status === 'Замечаний нет') return 'clear';
+  return status === 'Неизвестно' ? 'unknown' : 'issues';
+}
+
 /** «12 замечаний» opens the twelve remarks themselves (owner, 02.11). */
-function ReviewBlockRow({ block }: { readonly block: ReviewBlock }) {
+function ReviewBlockRow({
+  block,
+  onOpenEmployerQuestion,
+}: {
+  readonly block: ReviewBlock;
+  readonly onOpenEmployerQuestion?: () => void;
+}) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const status = reviewStatus(block);
-  const statusKind =
-    status === 'Замечаний нет' ? 'clear' : status === 'Неизвестно' ? 'unknown' : 'issues';
+  const statusKind = reviewStatusKind(status);
   const remarks = statusKind === 'issues' ? reviewRemarks(block) : [];
   const badgeClass = `career-profile-screen-review-badge is-${statusKind}`;
   return (
@@ -307,21 +346,65 @@ function ReviewBlockRow({ block }: { readonly block: ReviewBlock }) {
         </span>
       )}
       {remarks.length ? (
-        <ul id={listId} className="career-profile-screen-review-remarks" hidden={!open}>
-          {remarks.map((remark) => (
-            <li key={remark}>{remark}</li>
-          ))}
-        </ul>
+        <RemarkList
+          id={listId}
+          open={open}
+          remarks={remarks}
+          block={block}
+          onOpenEmployerQuestion={onOpenEmployerQuestion}
+        />
       ) : null}
     </div>
   );
 }
 
-function ReviewBlockRows({ blocks }: { readonly blocks: readonly ReviewBlock[] }) {
+function RemarkList(props: {
+  readonly id: string;
+  readonly open: boolean;
+  readonly remarks: readonly string[];
+  readonly block: ReviewBlock;
+  readonly onOpenEmployerQuestion?: () => void;
+}) {
+  return (
+    <ul id={props.id} className="career-profile-screen-review-remarks" hidden={!props.open}>
+      {props.remarks.map((remark) => (
+        <RemarkItem
+          key={remark}
+          remark={remark}
+          block={props.block}
+          onOpenEmployerQuestion={props.onOpenEmployerQuestion}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/** B640: вопрос о названии стоит на вкладке «Резюме»; с другой вкладки сначала переключаемся. */
+function employerQuestionOpener(
+  onTabChange?: (tab: 'resume' | 'skills' | 'trace') => void,
+): () => void {
+  return () => {
+    if (focusEmployerQuestion()) return;
+    onTabChange?.('resume');
+    requestAnimationFrame(() => void focusEmployerQuestion());
+  };
+}
+
+function ReviewBlockRows({
+  blocks,
+  onOpenEmployerQuestion,
+}: {
+  readonly blocks: readonly ReviewBlock[];
+  readonly onOpenEmployerQuestion?: () => void;
+}) {
   return (
     <div className="career-profile-screen-review-rows">
       {blocks.map((block) => (
-        <ReviewBlockRow key={block.id} block={block} />
+        <ReviewBlockRow
+          key={block.id}
+          block={block}
+          onOpenEmployerQuestion={onOpenEmployerQuestion}
+        />
       ))}
     </div>
   );
@@ -478,14 +561,18 @@ function ResumeReviewContent({
   issues,
   unknownCount,
   staleCount,
+  onOpenEmployerQuestion,
 }: {
   readonly desktopLayout: boolean;
   readonly blocks: readonly ReviewBlock[];
   readonly issues: readonly ResumeUnknown[];
   readonly unknownCount: number;
   readonly staleCount: number;
+  readonly onOpenEmployerQuestion?: () => void;
 }) {
-  if (desktopLayout) return <ReviewBlockRows blocks={blocks} />;
+  if (desktopLayout) {
+    return <ReviewBlockRows blocks={blocks} onOpenEmployerQuestion={onOpenEmployerQuestion} />;
+  }
   return (
     <>
       <MobileReviewSummary
@@ -554,6 +641,7 @@ function ResumeReviewCard({
         issues={issues}
         unknownCount={document.unknowns.length}
         staleCount={staleCount}
+        onOpenEmployerQuestion={employerQuestionOpener(onTabChange)}
       />
       <ReviewActions
         draft={draft}
