@@ -35,6 +35,9 @@ export interface MaintenanceEngine {
   markSourceSyncStarted(request: RequestedSourceSync, startedAt?: string): boolean;
   clearSourceSyncRequest(request: RequestedSourceSync): boolean;
   probeDueLinks(nowMs?: number): Promise<LinkCheckCensus | undefined>;
+  probeUnseenEmployerLinks(
+    nowMs?: number,
+  ): Promise<{ checked: number; gone: number; open: number; unknown: number }>;
   runCatalogMaintenanceStep(chunk?: number): { processed: number; pending: number } | undefined;
   runClusterKeysBackfillStep(chunk?: number): number;
   runDescriptionSkillsStep?(chunk?: number): {
@@ -392,8 +395,10 @@ export class MaintenanceWorker {
   /** Обходит ссылки одной площадки — той, которую проверяли дольше всех (B200). */
   async runLivenessProbe(): Promise<LinkCheckCensus | undefined> {
     if (this.stopped) return undefined;
-    const probe = this.engine.probeDueLinks().then((census) => {
+    const probe = this.engine.probeDueLinks().then(async (census) => {
       if (census) this.log.info({ ...census }, 'vacancy-link-liveness-checked');
+      const unseen = await this.engine.probeUnseenEmployerLinks();
+      if (unseen.checked > 0) this.log.info({ ...unseen }, 'vacancy-unseen-links-checked');
       return census;
     });
     return this.track(probe, 'vacancy-link-liveness-failed', undefined);

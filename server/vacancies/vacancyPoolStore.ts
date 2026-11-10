@@ -163,6 +163,10 @@ export interface VacancyPoolStore {
    * сколько записей похоронено этим вызовом (B200 срез 2).
    */
   markExpired(vacancyIds: readonly string[], atIso: string): number;
+  /** B642: ссылки записей этих источников, невиденных с `beforeMs`, давние первыми. */
+  loadUnseenLinks?(sourceIds: readonly string[], beforeMs: number, limit: number): VacancyLink[];
+  /** B642: ссылка открылась — запись считается виденной в `nowMs`. */
+  markSeen?(vacancyIds: readonly string[], nowMs: number): void;
   /** Drops rows of sources the registry no longer knows and stale readings. */
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void;
   /**
