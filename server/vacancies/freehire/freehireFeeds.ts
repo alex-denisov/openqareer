@@ -126,6 +126,14 @@ function jsonDetail(
   };
 }
 
+/** Текст вакансии VK: блок `itemprop="description"` до панели «Поделиться». */
+export function readVkDescription(page: string): string {
+  const start = page.search(/<div[^>]*itemprop="description"[^>]*>/);
+  if (start < 0) return '';
+  const end = page.indexOf('<div class="page-control"', start);
+  return htmlToFeedText(page.slice(start, end < 0 ? undefined : end)).trim();
+}
+
 const DETAIL: Record<string, DetailTextSource> = {
   'src-fh-getmatch': jsonDetail(
     'getmatch.ru',
@@ -133,6 +141,16 @@ const DETAIL: Record<string, DetailTextSource> = {
     (m) => `https://getmatch.ru/api/offers/${m[1]}`,
     (p) => html(record(p).description),
   ),
+  // VK: в API карточки нет текста, он только на странице вакансии (как в vk.go freehire).
+  'src-fh-vk': {
+    format: 'html',
+    detailUrl: (_sourceId, vacancy) =>
+      pathMatch(vacancy.url, 'team.vk.company', /^\/vacancy\/\d+\/$/) ? vacancy.url : undefined,
+    readText: (payload) => (typeof payload === 'string' ? readVkDescription(payload) : ''),
+    intervalMs: 3_000,
+    intervalJitterMs: 2_000,
+    throttlePauseMs: 600_000,
+  },
   'src-fh-habr-career': {
     format: 'html',
     detailUrl: (_sourceId, vacancy) =>
