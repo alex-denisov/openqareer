@@ -53,6 +53,12 @@ try {
     WHERE i.expired=0 AND i.source_id=? GROUP BY 1`);
   const samples: { name: string; directoryName: string; companyKey: string; source: string }[] = [];
   let linkedNames = 0;
+  // Reservoir sample of distinct name pairs for the precision check.
+  const keepSample = (pair: (typeof samples)[number], seen: number): void => {
+    if (samples.length < SAMPLE) { samples.push(pair); return; }
+    const j = Math.floor(Math.random() * seen);
+    if (j < SAMPLE) samples[j] = pair;
+  };
   for (const s of nameSources) {
     const type = placementTypeOf(sourceKind(s));
     for (const { company, n } of byName.all(s) as unknown as { company: string | null; n: number }[]) {
@@ -61,10 +67,7 @@ try {
       if (link.status !== 'linked') continue;
       mark(link.companyKey, type);
       linkedNames += 1;
-      // Reservoir sample of distinct name pairs for the precision check.
-      const pair = { name: company ?? '', directoryName: names.get(link.companyKey) ?? '', companyKey: link.companyKey, source: s };
-      if (samples.length < SAMPLE) samples.push(pair);
-      else { const j = Math.floor(Math.random() * linkedNames); if (j < SAMPLE) samples[j] = pair; }
+      keepSample({ name: company ?? '', directoryName: names.get(link.companyKey) ?? '', companyKey: link.companyKey, source: s }, linkedNames);
     }
   }
 
