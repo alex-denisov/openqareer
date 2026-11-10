@@ -20,6 +20,8 @@ export interface EventLoopDelayOptions {
   readonly summaryMs?: number;
   readonly probeMs?: number;
   readonly stallMs?: number;
+  /** Каждая остановка от порога — для предохранителя порций досок ATS (B641). */
+  readonly onStall?: (ms: number) => void;
 }
 
 export function startEventLoopDelayLog(
@@ -46,7 +48,10 @@ export function startEventLoopDelayLog(
   const probe = setInterval(() => {
     const lateMs = Date.now() - expectedAt;
     expectedAt = Date.now() + probeMs;
-    if (lateMs >= stallMs) log.info({ stallMs: lateMs }, 'event-loop-stall');
+    if (lateMs >= stallMs) {
+      log.info({ stallMs: lateMs }, 'event-loop-stall');
+      options.onStall?.(lateMs);
+    }
   }, probeMs);
   probe.unref();
   return () => {

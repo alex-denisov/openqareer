@@ -19,6 +19,7 @@ import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { startEventLoopDelayLog } from './maintenance/eventLoopDelayLog';
+import { recordStepStall, startStepTimingLog } from './maintenance/stepTiming';
 import { RoleLinkStep } from './vacancies/titleParse/roleLinkStep';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
 import { describeFailure, unfreezeLiveTitles } from './vacancies/titleParse/titleFreeze';
@@ -281,7 +282,8 @@ try {
   await restoreInFlight;
   restoreInFlight = undefined;
   worker.reportMemory();
-  startEventLoopDelayLog(log);
+  startEventLoopDelayLog(log, { onStall: (ms) => recordStepStall(ms) });
+  startStepTimingLog(log);
   worker.start();
   // B535: landing numbers are counted here, never on the web server's event loop.
   scheduleLandingStatsJob(semanticDatabase, log);

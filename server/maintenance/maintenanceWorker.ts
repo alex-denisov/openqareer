@@ -12,6 +12,7 @@ import {
   type RequestedSourceSync,
   type SourceSyncOutcome,
 } from '../vacancies/multiSourceVacancyEngine';
+import { timedStep } from './stepTiming';
 
 /** Тот же контракт, что у `fastify.log`: объект контекста, потом сообщение. */
 export interface MaintenanceLog {
@@ -180,6 +181,11 @@ const SKIP_STATUSES: ReadonlySet<string> = new Set([
   'no_target',
   'account_not_ready',
 ]);
+
+/** Имя шага по телу стрелки: `() => this.runCatalogStep()` → `runCatalogStep`. */
+function stepName(tick: () => unknown): string {
+  return /this\.((?:run|refresh|report)\w+)\(/.exec(String(tick))?.[1] ?? 'step';
+}
 
 export class MaintenanceWorker {
   private readonly engine: MaintenanceEngine;
@@ -676,8 +682,9 @@ export class MaintenanceWorker {
 
   /** Заводит таймеры; первая волна — сразу, остальное по расписанию. */
   start(): void {
-    const every = (ms: number, tick: () => unknown) => {
-      const timer = setInterval(() => void tick(), ms);
+    const every = (ms: number, tick: () => unknown, name = stepName(tick)) => {
+      const timed = timedStep(name, tick);
+      const timer = setInterval(() => void timed(), ms);
       this.timers.push(timer);
     };
     every(this.intervals.manualSyncMs, () => this.runManualSyncWave());
@@ -715,9 +722,9 @@ export class MaintenanceWorker {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
     }
     every(CATALOG_TOTALS_TICK_MS, () => this.refreshCatalogTotals());
-    void this.runManualSyncWave();
-    void this.runSyncWave();
-    this.refreshCatalogTotals();
+    void timedStep('runManualSyncWave', () => this.runManualSyncWave())();
+    void timedStep('runSyncWave', () => this.runSyncWave())();
+    timedStep('refreshCatalogTotals', () => this.refreshCatalogTotals())();
   }
 
   /**
