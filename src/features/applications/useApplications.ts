@@ -20,6 +20,12 @@ import {
 } from './applicationsApi';
 import { CoachApiError } from '../coach/apiClient';
 import {
+  DEFAULT_APPLICATIONS_QUERY,
+  cacheApplicationsRead,
+  readCachedApplications,
+  type ApplicationsPoolRange,
+} from './applicationsCache';
+import {
   apiErrorMessage,
   isVersionConflict,
   optimisticStagePatch,
@@ -48,6 +54,8 @@ export interface UseApplications {
     query: ApplicationListQuery,
     signal?: AbortSignal,
   ) => Promise<readonly ApplicationView[]>;
+  /** B589: the list was restored from the whole pool read for this period. */
+  readonly restoredPool?: ApplicationsPoolRange;
   readonly error?: string;
   /** The load failed because the browser has no connection (offline state). */
   readonly offline: boolean;
@@ -85,9 +93,13 @@ const NO_MATERIAL_FALLBACK = 'Не удалось загрузить откли�
 /** Trecker board data (B251 S3): one load, optimistic writes, honest failure states. */
 // eslint-disable-next-line max-lines-per-function
 export function useApplications(): UseApplications {
-  const [status, setStatus] = useState<ApplicationsLoadStatus>('loading');
-  const [applications, setApplications] = useState<readonly ApplicationView[]>([]);
-  const [pageMeta, setPageMeta] = useState<ApplicationListPageMeta>();
+  // B589: a repeat visit shows the last default list; the read below refreshes it.
+  const [cached] = useState(readCachedApplications);
+  const [status, setStatus] = useState<ApplicationsLoadStatus>(cached ? 'ready' : 'loading');
+  const [applications, setApplications] = useState<readonly ApplicationView[]>(
+    cached?.items ?? [],
+  );
+  const [pageMeta, setPageMeta] = useState<ApplicationListPageMeta | undefined>(cached?.meta);
   const [error, setError] = useState<string>();
   const [offline, setOffline] = useState(false);
   const [failedChanges, setFailedChanges] = useState<ReadonlyMap<string, FailedStageChange>>(
@@ -96,11 +108,19 @@ export function useApplications(): UseApplications {
   const [conflicts, setConflicts] = useState<ReadonlySet<string>>(new Set());
   const [reloadToken, setReloadToken] = useState(0);
   const poolLoadedRef = useRef(false);
-  const pageQueryRef = useRef<ApplicationListQuery>({
-    stage: ['saved', 'applied', 'responded', 'interview', 'offer'],
-    limit: 20,
-    offset: 0,
-  });
+  const pageQueryRef = useRef<ApplicationListQuery>(
+    cached?.pool ? { stage: [], limit: 100, offset: 0, ...cached.pool } : DEFAULT_APPLICATIONS_QUERY,
+  );
+  const hasContentRef = useRef(Boolean(cached));
+
+  useEffect(() => {
+    if (status !== 'ready') return;
+    hasContentRef.current = true;
+    cacheApplicationsRead(pageQueryRef.current, poolLoadedRef.current, {
+      items: applications,
+      meta: pageMeta,
+    });
+  }, [applications, pageMeta, status]);
 
   const loadPage = useCallback(
     async (query: ApplicationListQuery, append = false, keepContent = false) => {
@@ -142,9 +162,20 @@ export function useApplications(): UseApplications {
   }, []);
 
   useEffect(() => {
+    const restoredPool = reloadToken === 0 ? cached?.pool : undefined;
+    if (restoredPool) {
+      // The screen shows the cached pool: refresh that same reading in the
+      // background instead of narrowing the list to the first page (B589).
+      poolLoadedRef.current = true;
+      const controller = new AbortController();
+      void loadPool({ ...restoredPool, stage: [] }, controller.signal).catch(() => undefined);
+      return () => controller.abort();
+    }
     let active = true;
     poolLoadedRef.current = false;
-    setStatus('loading');
+    // The mount read keeps the cached list on screen (B589); an explicit retry
+    // still shows that it is loading.
+    if (!hasContentRef.current || reloadToken > 0) setStatus('loading');
     setFailedChanges(new Map());
     setConflicts(new Set());
     void listApplicationsPage(pageQueryRef.current)
@@ -156,6 +187,8 @@ export function useApplications(): UseApplications {
       })
       .catch((reason: unknown) => {
         if (!active) return;
+        // A failed background refresh keeps the cached list on screen (B589).
+        if (reloadToken === 0 && cached) return;
         setError(apiErrorMessage(reason, NO_MATERIAL_FALLBACK));
         setOffline(reason instanceof CoachApiError && reason.code === 'network_error');
         setStatus('error');
@@ -163,7 +196,7 @@ export function useApplications(): UseApplications {
     return () => {
       active = false;
     };
-  }, [reloadToken]);
+  }, [cached, loadPool, reloadToken]);
 
   const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
@@ -324,6 +357,7 @@ export function useApplications(): UseApplications {
     pageMeta,
     loadPage,
     loadPool,
+    restoredPool: cached?.pool,
     error,
     offline,
     failedChanges,

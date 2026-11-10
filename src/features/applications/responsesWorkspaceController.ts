@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
+import { applicationsPoolKey } from './applicationsCache';
 import type {
   ResponsesPeriod,
   ResponsesSummaryFilter,
@@ -526,10 +527,19 @@ interface WorkspacePool {
 }
 
 function useWorkspacePool(state: UseApplications, query: ApplicationListQuery): WorkspacePool {
-  const [poolStatus, setPoolStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // B589: a pool restored from the section cache for this very period is on
+  // screen already; the tracker refreshes it in the background.
+  const [restoredKey] = useState(() => {
+    if (!state.restoredPool) return '';
+    const key = applicationsPoolKey(state.restoredPool);
+    return key === applicationsPoolKey(query) ? key : '';
+  });
+  const [poolStatus, setPoolStatus] = useState<'loading' | 'ready' | 'error'>(
+    restoredKey ? 'ready' : 'loading',
+  );
   const [poolError, setPoolError] = useState('');
   const [poolRetryToken, setPoolRetryToken] = useState(0);
-  const [loadedPoolKey, setLoadedPoolKey] = useState('');
+  const [loadedPoolKey, setLoadedPoolKey] = useState(restoredKey);
   usePoolLoadEffect({
     state,
     query,
@@ -564,7 +574,7 @@ function usePoolLoadEffect({
   const loadedCount = applications.length;
   const from = query.from;
   const to = query.to;
-  const poolFilterKey = JSON.stringify([from ?? '', to ?? '']);
+  const poolFilterKey = applicationsPoolKey({ from, to });
   useEffect(
     () =>
       runPoolLoadEffect({
