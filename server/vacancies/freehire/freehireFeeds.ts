@@ -7,6 +7,8 @@ import { createFeedClient, type FeedClient } from './feedClient';
 import { RUSSIAN_COMPANY_FEEDS, type FreehireFeed } from './russianCompanyFeeds';
 import { RUSSIAN_PLATFORM_FEEDS } from './russianPlatformFeeds';
 import { SITEMAP_FEEDS } from './sitemapJsonLdFeed';
+import { atsBoardFeed, atsFeedId, ORACLE_DETAIL } from './atsFamilies';
+import { MEASURED_ATS_BOARDS } from './atsBoards';
 import { readJsonLdJobPosting } from '../detailTextSources';
 
 /**
@@ -21,6 +23,7 @@ const FEEDS: readonly FreehireFeed[] = [
   ...RUSSIAN_COMPANY_FEEDS,
   ...RUSSIAN_PLATFORM_FEEDS,
   ...SITEMAP_FEEDS,
+  ...MEASURED_ATS_BOARDS.map(atsBoardFeed),
 ];
 const BY_SOURCE_ID = new Map(FEEDS.map((f) => [`${FREEHIRE_SOURCE_PREFIX}${f.id}`, f]));
 
@@ -47,6 +50,7 @@ export const FREEHIRE_FEED_SOURCES: readonly RegisteredVacancySource[] = FEEDS.m
  * число записей после фильтров адаптера. Ответы с прода совпали по объёму.
  */
 const MEASURED_ITEMS: Readonly<Record<string, number>> = {
+  ...Object.fromEntries(MEASURED_ATS_BOARDS.map((b) => [atsFeedId(b), b.jobs])),
   sber: 2485,
   yandex: 150,
   ozon: 2280,
@@ -268,5 +272,6 @@ const DETAIL: Record<string, DetailTextSource> = {
 };
 
 export function freehireDetailTextSource(sourceId: string): DetailTextSource | undefined {
+  if (sourceId.startsWith(`${FREEHIRE_SOURCE_PREFIX}oracle-`)) return ORACLE_DETAIL;
   return DETAIL[sourceId];
 }
