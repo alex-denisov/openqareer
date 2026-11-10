@@ -357,6 +357,9 @@ function CompanyGroup({
   return (
     <div className="career-profile-screen-company-group">
       <CompanyHead group={group} />
+      {group.positions[0] ? (
+        <ProfileEmployerName place={group.positions[0]} onChanged={onManualExperienceFactAdded} />
+      ) : null}
       {group.positions.map((entry) => (
         <PositionRow
           key={entry.id}
@@ -370,9 +373,6 @@ function CompanyGroup({
           onManualExperienceFactAdded={onManualExperienceFactAdded}
         />
       ))}
-      {group.positions[0] ? (
-        <ProfileEmployerName place={group.positions[0]} onChanged={onManualExperienceFactAdded} />
-      ) : null}
     </div>
   );
 }
@@ -441,6 +441,14 @@ function ExperienceGroupsList({
           group={group}
           collapsed={index >= EXPANDED_PLACES}
           period={group.positions[0] ? periodLabel(group.positions[0]) : ''}
+          question={
+            group.positions[0] ? (
+              <ProfileEmployerName
+                place={group.positions[0]}
+                onChanged={onManualExperienceFactAdded}
+              />
+            ) : null
+          }
         >
           <CompanyGroup
             group={group}

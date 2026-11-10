@@ -16,11 +16,14 @@ export function CollapsiblePlace({
   group,
   collapsed: initiallyCollapsed,
   period,
+  question,
   children,
 }: {
   readonly group: PlaceGroup;
   readonly collapsed: boolean;
   readonly period: string;
+  /** B640: вопрос о настоящем названии виден и у свёрнутого места — иначе маски старых мест без вопроса. */
+  readonly question?: ReactNode;
   readonly children: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(initiallyCollapsed);
@@ -52,6 +55,9 @@ export function CollapsiblePlace({
         <CaretDown size={16} aria-hidden="true" />
         Развернуть
       </button>
+      {question ? (
+        <div className="career-profile-screen-place-compact-question">{question}</div>
+      ) : null}
     </article>
   );
 }

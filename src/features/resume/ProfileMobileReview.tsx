@@ -19,6 +19,7 @@ import {
 } from './ProfileReviewAndVersions';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
 import type { ProfileMobileRoute } from './profileMobileNavigation';
+import { hiddenEmployerPlaces } from './hiddenEmployers';
 
 const BLOCK_ICONS: Record<ReviewBlockId, Icon> = {
   experience: Briefcase,
@@ -63,14 +64,25 @@ function ReviewCompleteness({ draft }: Pick<ProfileMobileDataProps, 'draft'>) {
   );
 }
 
+/** B640: «Опыт» со скрытым названием ведёт прямо к месту, где задан первый вопрос. */
+function blockRoute(
+  block: ReviewBlock,
+  draft: ProfileMobileDataProps['draft'],
+): ProfileMobileRoute | undefined {
+  const hidden = block.hiddenEmployerRemark ? hiddenEmployerPlaces(draft.experience)[0] : undefined;
+  return hidden ? { page: 'job', entryId: hidden.id } : BLOCK_ROUTES[block.id];
+}
+
 function ReviewBlockRow({
   block,
+  draft,
   open,
 }: {
   readonly block: ReviewBlock;
+  readonly draft: ProfileMobileDataProps['draft'];
   readonly open: ProfileMobileNavigationProps['open'];
 }) {
-  const route = BLOCK_ROUTES[block.id];
+  const route = blockRoute(block, draft);
   const count = block.issueCount ?? block.issues.length;
   const detail =
     block.description ??
@@ -107,7 +119,7 @@ export function ProfileMobileReview(props: ProfileMobileDataProps & ProfileMobil
         {blocks
           .filter((block) => block.id !== 'confirmations')
           .map((block) => (
-            <ReviewBlockRow key={block.id} block={block} open={props.open} />
+            <ReviewBlockRow key={block.id} block={block} draft={props.draft} open={props.open} />
           ))}
       </ProfileMobileGroup>
       {pending || proposed ? (

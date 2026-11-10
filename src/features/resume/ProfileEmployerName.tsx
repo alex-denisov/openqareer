@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { isMaskedEmployer } from '../../../shared/employerMask';
+import { asksEmployerName, EMPLOYER_QUESTION_ATTRIBUTE } from './hiddenEmployers';
 import { answerEmployerName, type EmployerNameAnswer } from './employerNameApi';
 import type { ResumeExperienceInput } from './resumeTypes';
 import './profileEmployerName.css';
@@ -69,17 +69,20 @@ function SecondaryAction({
   );
 }
 
-function QuestionText({ inputId }: { readonly inputId: string }) {
+/** B640: одна строка под шапкой компании, до пунктов места — иначе вопрос теряется внизу группы. */
+function QuestionLabel({
+  inputId,
+  editing,
+}: {
+  readonly inputId: string;
+  readonly editing: boolean;
+}) {
   return (
-    <>
-      <label className="profile-employer-name__label" htmlFor={inputId}>
-        Как называется эта компания на самом деле?
-      </label>
-      <p className="profile-employer-name__hint">
-        В профиле стоит обобщённое название. В письмах работодателям будет то, что вы напишете
-        здесь.
-      </p>
-    </>
+    <label className="profile-employer-name__label" htmlFor={inputId}>
+      {editing
+        ? 'Настоящее название компании'
+        : 'Название скрыто? Как называется компания на самом деле'}
+    </label>
   );
 }
 
@@ -140,13 +143,14 @@ function NameForm({
     <form
       className="profile-employer-name"
       aria-busy={busy}
+      {...{ [EMPLOYER_QUESTION_ATTRIBUTE]: '' }}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
       }}
     >
-      <QuestionText inputId={inputId} />
       <div className="profile-employer-name__row">
+        <QuestionLabel inputId={inputId} editing={Boolean(onCancel)} />
         <NameInput
           id={inputId}
           value={name}
@@ -214,8 +218,7 @@ export function ProfileEmployerName({ place, onChanged }: ProfileEmployerNamePro
   const employer = place.employer?.trim() ?? '';
   const realName = place.employerRealName?.trim() ?? '';
   const [editing, setEditing] = useState(false);
-  if (!employer || (!realName && (place.employerMaskKept || !isMaskedEmployer(employer))))
-    return null;
+  if (!realName && !asksEmployerName(place)) return null;
   if (realName && !editing) {
     return (
       <SavedName

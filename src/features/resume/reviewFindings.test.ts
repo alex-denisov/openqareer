@@ -4,6 +4,7 @@ import {
   aboutFinding,
   experienceFinding,
   experienceFindingCount,
+  hiddenEmployerFinding,
   teamSizeFinding,
 } from './reviewFindings';
 
@@ -57,5 +58,26 @@ describe('review findings', () => {
     expect(aboutFinding('Первое. Второе. Третье.')).toBe('Один абзац, предложений: 3.');
     expect(aboutFinding('А.\n\nБ.')).toBe('Абзацев: 2, предложений: 2.');
     expect(aboutFinding('  ')).toBeUndefined();
+  });
+
+  it('counts the hidden employer names once per company (B640)', () => {
+    const masked = (id: string, employer: string) => ({ ...role(id, []), teamSize: 5, employer });
+    const draft = {
+      experience: [
+        masked('r1', 'Enterprise Energy IT Services'),
+        masked('r2', 'Enterprise Energy IT Services'),
+        masked('r3', 'Corporate University of a Top-Tier Financial Institution'),
+        masked('r4', 'Kaspersky'),
+      ],
+    };
+    expect(hiddenEmployerFinding(draft as never)).toBe('Название компании скрыто: 2 места.');
+    expect(experienceFindingCount(draft as never)).toBe(1);
+    expect(experienceFinding(draft as never, [])).toBe(
+      'Результаты в цифрах: в 0 из 4 мест. Название компании скрыто: 2 места.',
+    );
+    const answered = {
+      experience: [{ ...masked('r1', 'Enterprise Energy IT Services'), employerMaskKept: true }],
+    };
+    expect(hiddenEmployerFinding(answered as never)).toBe(undefined);
   });
 });

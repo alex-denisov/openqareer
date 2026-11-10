@@ -37,6 +37,8 @@ export interface MockCareerDiaryFixture {
   workplace: (Record<string, unknown> & { id: string }) | null;
   workplaces?: Array<Record<string, unknown> & { id: string }>;
   profileExperience?: Record<string, unknown> & { id: string };
+  /** Several places at once (B640): replaces `profileExperience` when set. */
+  profileExperiences?: Array<Record<string, unknown> & { id: string }>;
   createdByIdempotencyKey?: Record<string, string>;
 }
 
@@ -166,11 +168,12 @@ function mockCareerDiaryWorkplaces(
 
 export function mockProfileSnapshot(fixture?: MockCareerDiaryFixture) {
   const snapshot = structuredClone(candidateSnapshot);
-  const experience = fixture?.profileExperience;
+  const single = fixture?.profileExperience;
+  const experience = fixture?.profileExperiences ?? (single ? [single] : undefined);
   if (experience && snapshot.resume) {
     const draft = snapshot.resume.draft as ResumeDraft;
     Object.assign(draft, {
-      experience: [experience as unknown as ResumeDraft['experience'][number]],
+      experience: experience as unknown as ResumeDraft['experience'],
     });
   }
   return snapshot;
