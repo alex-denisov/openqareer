@@ -36,7 +36,7 @@ describe('freehire feeds registry (B641)', () => {
       expect(source.type).toBe('json_api');
       expect(source.id.startsWith('src-fh-')).toBe(true);
     }
-    expect(FREEHIRE_FEED_SOURCES.length).toBe(17);
+    expect(FREEHIRE_FEED_SOURCES.length).toBe(20);
   });
 
   it('routes card text through detailTextSources', () => {
