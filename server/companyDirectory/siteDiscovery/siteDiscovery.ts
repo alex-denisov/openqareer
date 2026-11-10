@@ -160,13 +160,13 @@ export async function verifyCompany(
   return { companyKey: company.companyKey, websiteUrl, careersUrl, evidence };
 }
 
-/** Companies with no ATS that this step has not looked at yet. */
+/** Companies with no ATS that this step has not looked at yet; freehire.me ones (B629) need no model. */
 export function readPendingCompanies(database: DatabaseSync, limit: number): readonly PendingCompany[] {
   const rows = database
     .prepare(
       `SELECT company_key, company_name, website_url, linkedin_url FROM company_directory
         WHERE status = 'active' AND ats_provider IS NULL
-          AND (evidence IS NULL OR instr(evidence, 'B627') = 0)
+          AND (evidence IS NULL OR (instr(evidence, 'B627') = 0 AND instr(evidence, 'freehire') = 0))
         ORDER BY created_at DESC, company_key LIMIT ?`,
     )
     .all(limit) as unknown as { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null }[];
