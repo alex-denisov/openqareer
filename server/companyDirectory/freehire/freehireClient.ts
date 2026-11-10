@@ -9,6 +9,16 @@ export const FREEHIRE_USER_AGENT = 'openqareer-company-directory/1.0 (+https://o
 const MIN_GAP_MS = 500;
 const MAX_GAP_MS = 10_000;
 const MAX_ATTEMPTS = 5;
+/** A Retry-After longer than this is the daily quota (2000 per IP), not a burst. */
+const LONG_PAUSE_S = 600;
+
+/** freehire.me quota is spent; untilMs is when it resets. */
+export class FreehireQuotaError extends Error {
+  constructor(readonly untilMs: number) {
+    super('freehire daily quota reached');
+    this.name = 'FreehireQuotaError';
+  }
+}
 
 export interface FreehireCompanyListItem {
   readonly slug: string;
@@ -68,6 +78,7 @@ export class FreehireClient {
         status = 0;
       }
       if (status !== 0 && status !== 429 && status < 500) throw new Error(`freehire HTTP ${status}`);
+      if (status === 429 && retryAfter > LONG_PAUSE_S) throw new FreehireQuotaError(this.now() + retryAfter * 1000);
       if (status === 429) this.gapMs = Math.min(MAX_GAP_MS, this.gapMs * 2);
       await this.sleep(Math.max(retryAfter * 1000, 2 ** attempt * 1000));
     }

@@ -96,6 +96,21 @@ describe('B641 freehire import', () => {
     expect((await runFreehireTick(db, client, async () => 1, 100, () => now)).totals).toMatchObject({ offset: 1, failed: 1, added: 0 });
   });
 
+  it('stops at the daily quota and waits for its reset', async () => {
+    const db = directory();
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      return new Response('', { status: 429, headers: { 'retry-after': '60700' } });
+    }) as typeof fetch;
+    const client = new FreehireClient(fetchImpl, async () => {}, () => now.getTime());
+    const first = await runFreehireTick(db, client, async () => 1, 100, () => now);
+    expect(first.read).toBe(0);
+    expect(first.totals.pausedUntil).toBe(new Date(now.getTime() + 60_700_000).toISOString());
+    await runFreehireTick(db, client, async () => 1, 100, () => now);
+    expect(calls).toBe(1);
+  });
+
   it('pages through companies, keeps the offset and slows down on 429', async () => {
     const db = directory();
     let calls = 0;

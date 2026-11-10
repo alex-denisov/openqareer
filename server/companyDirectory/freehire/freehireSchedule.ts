@@ -5,7 +5,7 @@
  * Rollback: OPENQAREER_FREEHIRE_IMPORT_OFF=1. Cap: OPENQAREER_FREEHIRE_MAX_COMPANIES (default 60 000).
  */
 import type { DatabaseSync } from 'node:sqlite';
-import { FreehireClient } from './freehireClient';
+import { FreehireClient, FreehireQuotaError } from './freehireClient';
 import { boardCheck, disableAggregatorBoards, importCompany, loadDirectoryIndex, type BoardCheck } from './freehireImport';
 
 interface Log {
@@ -18,6 +18,7 @@ const FIRST_RUN_MS = 9 * 60_000;
 const BETWEEN_MS = 5_000;
 const DONE_MS = 24 * 60 * 60_000;
 const FAILED_MS = 10 * 60_000;
+const PAUSED_MS = 30 * 60_000;
 export const DEFAULT_MAX_COMPANIES = 60_000;
 
 export interface FreehireTotals {
@@ -26,6 +27,8 @@ export interface FreehireTotals {
   added: number;
   websites: number;
   failed: number;
+  /** ISO time the daily quota resets; no requests before it. */
+  pausedUntil?: string;
   boards: Record<string, number>;
 }
 
@@ -61,15 +64,36 @@ export async function runFreehireTick(
   now: () => Date = () => new Date(),
 ): Promise<{ read: number; totals: FreehireTotals }> {
   const totals = readTotals(database);
+  if (totals.pausedUntil && now() < new Date(totals.pausedUntil)) return { read: 0, totals };
   disableAggregatorBoards(database, now());
   if (totals.offset >= maxCompanies) return { read: 0, totals };
+  try {
+    return await readPage(database, client, check, totals, now);
+  } catch (error: unknown) {
+    if (!(error instanceof FreehireQuotaError)) throw error;
+    const paused = { ...totals, pausedUntil: new Date(error.untilMs).toISOString() };
+    saveTotals(database, paused, now());
+    return { read: 0, totals: paused };
+  }
+}
+
+async function readPage(
+  database: DatabaseSync,
+  client: FreehireClient,
+  check: BoardCheck,
+  totals: FreehireTotals,
+  now: () => Date,
+): Promise<{ read: number; totals: FreehireTotals }> {
   const { items } = await client.listCompanies(totals.offset, PAGE);
   if (items.length === 0) return { read: 0, totals };
   const index = loadDirectoryIndex(database);
   let next: FreehireTotals = { ...totals, boards: { ...totals.boards } };
   for (const item of items) {
     // One card that keeps failing must not pin the whole page to its offset.
-    const card = await client.companyCard(item.slug).catch(() => undefined);
+    const card = await client.companyCard(item.slug).catch((error: unknown) => {
+      if (error instanceof FreehireQuotaError) throw error;
+      return undefined;
+    });
     next = { ...next, read: next.read + 1, failed: next.failed + (card === undefined ? 1 : 0) };
     if (!card) continue;
     const outcome = await importCompany(database, index, card, check, now());
@@ -104,7 +128,7 @@ export function scheduleFreehireImport(database: DatabaseSync, log: Log, env: No
     try {
       const { read, totals } = await runFreehireTick(database, client, check, maxCompanies);
       if (read > 0) log.info({ ...totals, boards: JSON.stringify(totals.boards), gapMs: client.currentGapMs }, 'freehire-import-tick');
-      next(read === 0 ? DONE_MS : BETWEEN_MS);
+      next(read > 0 ? BETWEEN_MS : totals.pausedUntil && Date.now() < Date.parse(totals.pausedUntil) ? PAUSED_MS : DONE_MS);
     } catch (error: unknown) {
       log.error({ errorName: error instanceof Error ? error.name : 'UnknownError', message: error instanceof Error ? error.message : '' }, 'freehire-import-failed');
       next(FAILED_MS);
