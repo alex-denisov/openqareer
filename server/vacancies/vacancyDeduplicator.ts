@@ -1,3 +1,4 @@
+import { isAtsBoardSourceId } from './atsSourceId';
 import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 import type {
   UnifiedVacancy,
@@ -19,8 +20,7 @@ export function getSourcePriority(provenance: VacancyProvenance): number {
   // 1. Direct employer career sites and ATS boards (Priority: 100)
   // Whether delivered via direct scraping, JSON API, RSS (e.g. company career RSS), or ATS adapter
   if (
-    provenance.sourceId.startsWith('ats-') ||
-    provenance.sourceId.startsWith('ats_') ||
+    isAtsBoardSourceId(provenance.sourceId) ||
     provenance.sourceType === 'career_site' ||
     provenance.sourceType === 'direct' ||
     provenance.sourceId === 'src-tradingview' ||

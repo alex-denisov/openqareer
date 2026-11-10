@@ -1,3 +1,4 @@
+import { isAtsBoardSourceId } from './atsSourceId';
 import type { DatabaseSync } from 'node:sqlite';
 import { workdayBoardSource, workdaySourceId } from './workdayBoardSources';
 import { ATS_PROVIDERS, atsBoardSourceId, type AtsProvider } from './atsBoardAdapters';
@@ -39,7 +40,7 @@ export const LINKEDIN_COMPANY_SOURCE_PREFIX = 'src-company-li-';
 const LINKEDIN_COMPANY_REFRESH_MINUTES = 720;
 const KNOWN_PROVIDERS = new Set<string>(ATS_PROVIDERS.map((p) => p.provider));
 const ATS_HOSTS =
-  /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|recruitee\.com|smartrecruiters\.com|breezy\.hr|pinpointhq\.com|personio\.(de|com)|bamboohr\.com|myworkdayjobs\.com|linkedin\.com|comeet\.(co|com))$/i;
+  /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|recruitee\.com|smartrecruiters\.com|breezy\.hr|pinpointhq\.com|personio\.(de|com)|bamboohr\.com|myworkdayjobs\.com|icims\.com|jobvite\.com|oraclecloud\.com|linkedin\.com|comeet\.(co|com))$/i;
 
 /** Регистрируемый хост без www; пустая строка, если адрес не читается. */
 export function siteHost(url: string | null | undefined): string {
@@ -62,7 +63,7 @@ function isOwnSite(url: string | null): boolean {
 }
 
 function isEmployerBoard(source: RegisteredVacancySource): boolean {
-  return source.type === 'career_site' || source.id.startsWith('ats-');
+  return source.type === 'career_site' || isAtsBoardSourceId(source.id);
 }
 
 function findCareerSite(

@@ -1,3 +1,4 @@
+import { atsRolloutAdmits } from './freehire/freehireFeeds';
 import { failureMessage } from './requestTimeout';
 import type { HhTextRateController } from './hhTextRate';
 /* eslint-disable max-lines -- source synchronization and membership lifecycle
@@ -895,6 +896,7 @@ export class MultiSourceVacancyEngine {
     const source = this.sources.get(sourceId);
     if (!source) throw new Error(`Источник ${sourceId} не найден`);
     source.enabled = enabled;
+    this.rolloutWaiting?.delete(sourceId);
     return { ...source };
   }
 
@@ -2041,6 +2043,28 @@ export class MultiSourceVacancyEngine {
     });
   }
 
+  private rolloutDay = -1;
+  /** Доски, выключенные только из-за порции; ручное переключение их отсюда убирает. */
+  private rolloutWaiting: Set<string> | undefined;
+
+  /** B641: на смене суток UTC включает доски ATS новой порции без перезапуска. */
+  private admitRolloutDay(nowMs: number): void {
+    const day = Math.floor(nowMs / 86_400_000);
+    if (day === this.rolloutDay) return;
+    this.rolloutDay = day;
+    this.rolloutWaiting ??= new Set(
+      Array.from(this.sources.values())
+        .filter((source) => !source.enabled && atsRolloutAdmits(source.id, nowMs) === false)
+        .map((source) => source.id),
+    );
+    for (const id of this.rolloutWaiting) {
+      const source = this.sources.get(id);
+      if (!source || atsRolloutAdmits(id, nowMs) !== true) continue;
+      source.enabled = true;
+      this.rolloutWaiting.delete(id);
+    }
+  }
+
   /**
    * Syncs the sources whose own refresh interval has elapsed. Without this
    * nothing but an admin button ever filled the pool, so a fresh process — and
@@ -2048,6 +2072,7 @@ export class MultiSourceVacancyEngine {
    * pressed it by hand (B161 review §2).
    */
   public async syncDue(nowMs: number = Date.now()): Promise<SourceSyncOutcome[]> {
+    this.admitRolloutDay(nowMs);
     const due = Array.from(this.sources.values())
       .filter((source) => source.enabled && !source.requiresQuery && this.isDue(source, nowMs))
       .sort((left, right) => tierOf(left) - tierOf(right) || lastSyncMs(left) - lastSyncMs(right));
