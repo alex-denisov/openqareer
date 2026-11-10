@@ -1,4 +1,9 @@
-import type { AtsBoardEntry } from './atsFamilies';
+import { atsFeedId, type AtsBoardEntry } from './atsFamilies';
+import { ROWS as jobvite1 } from './atsBoards.jobvite1';
+import { ROWS as icims1 } from './atsBoards.icims1';
+import { ROWS as icims2 } from './atsBoards.icims2';
+import { ROWS as oracle1 } from './atsBoards.oracle1';
+import { ROWS as oracle2 } from './atsBoards.oracle2';
 
 /**
  * Доски iCIMS, Jobvite и Oracle, найденные по ссылкам вакансий открытого API freehire.me (развитие
@@ -460,6 +465,18 @@ const ROWS: readonly Row[] = [
   ["oracle", 'fa-evmr-saasfaprod1.fa.ocs.oraclecloud.com/CX_1', 'Nokia', 580],
 ];
 
-export const MEASURED_ATS_BOARDS: readonly AtsBoardEntry[] = ROWS.map(
-  ([provider, board, company, jobs]) => ({ provider, board, company, jobs }),
-);
+type BoardRow = readonly [string, string, number];
+const more = (provider: AtsBoardEntry['provider'], rows: readonly BoardRow[]): Row[] =>
+  rows.map(([board, company, jobs]) => [provider, board, company, jobs]);
+
+const seen = new Set<string>();
+
+export const MEASURED_ATS_BOARDS: readonly AtsBoardEntry[] = [
+  ...ROWS,
+  ...more('jobvite', jobvite1),
+  ...more('icims', [...icims1, ...icims2]),
+  ...more('oracle', [...oracle1, ...oracle2]),
+]
+  .map(([provider, board, company, jobs]): AtsBoardEntry => ({ provider, board, company, jobs }))
+  // Разные доски могут дать один id (регистр, «_» и «-»): оставляем первую.
+  .filter((entry) => !seen.has(atsFeedId(entry)) && Boolean(seen.add(atsFeedId(entry))));
