@@ -2,6 +2,7 @@ import { freshnessAnchorMs, VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN } from './poolL
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { readInWorker } from '../data/readInWorker';
+import { PLACEMENT_TABLES } from '../companyDirectory/placement/placementSchema';
 import {
   prunePoolInBatches,
   pruneClustersInBatches,
@@ -438,7 +439,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
     this.database.exec(CATALOG_TOTALS_TABLE + CATALOG_LISTINGS_TABLE);
     this.database.exec(HH_TEXT_PRIORITY_TABLE + CLUSTER_TEXT_PENDING_TABLE);
-    this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
+    this.database.exec(VACANCY_CLUSTER_KEYS_TABLE + PLACEMENT_TABLES);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
     // (например, `:memory:` в тестах, где второго соединения не будет).
@@ -1687,6 +1688,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       this.database.exec('DELETE FROM vacancy_pool');
       this.database.exec('DELETE FROM vacancy_pool_index');
       this.database.exec('DELETE FROM vacancy_cluster_input');
+      this.database.exec('DELETE FROM vacancy_company');
       this.database.exec('DELETE FROM vacancy_clusters');
       this.database.exec('DELETE FROM catalog_entries');
       this.database.exec('DELETE FROM catalog_entries_seen');

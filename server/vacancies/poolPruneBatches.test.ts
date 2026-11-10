@@ -162,3 +162,16 @@ describe('pool prune at worker start (PRB-041: one transaction held the write lo
     expect(countOf(seed, 'vacancy_pool')).toBe(1);
   });
 });
+
+describe('B643 side tables follow the pool', () => {
+  it('removes vacancy_company rows whose vacancy left the index', () => {
+    const { store, seed } = openStore();
+    seed.prepare(`INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('gone', 'stripe', 'name_exact', 1)`).run();
+    seed.prepare(`INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('kept', 'stripe', 'name_exact', 1)`).run();
+    seed.prepare(`INSERT INTO vacancy_pool_index (id, source_id, published_ms, is_active, url, search_text, expired) VALUES ('kept', 'board', ?, 1, '', '', 0)`).run(Date.now());
+    seedPool(seed, 'board', 1, 'kept');
+    seed.prepare(`UPDATE vacancy_pool SET id='kept' WHERE id='kept0'`).run();
+    store.prune(['board'], '2026-08-01T00:00:00.000Z');
+    expect(seed.prepare('SELECT vacancy_id FROM vacancy_company').all()).toEqual([{ vacancy_id: 'kept' }]);
+  });
+});
