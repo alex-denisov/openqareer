@@ -1,5 +1,5 @@
 import { ProfileEmployerName } from './ProfileEmployerName';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { CollapsiblePlace, EXPANDED_PLACES } from './ProfileExperienceCollapsed';
 import { experienceChips, profileLanguage, type ExperienceChip } from './experienceChips';
 import {
@@ -115,6 +115,14 @@ function CompanyMark({
   );
 }
 
+function descriptionOf(
+  entry: ResumeExperienceInput,
+  memory: readonly CandidateMemory[],
+): string | undefined {
+  const id = entry.descriptionMemoryId;
+  return id ? memory.find((fact) => fact.id === id)?.statement : undefined;
+}
+
 function PositionSummary({
   entry,
   bullets,
@@ -122,6 +130,7 @@ function PositionSummary({
   onEdit,
   onRemove,
   onConfirmed,
+  question,
 }: {
   readonly entry: ResumeExperienceInput;
   readonly bullets: readonly string[];
@@ -129,6 +138,8 @@ function PositionSummary({
   readonly onEdit: () => void;
   readonly onRemove: () => void;
   readonly onConfirmed?: () => Promise<void> | void;
+  /** B640: вопрос о скрытом названии — под шапкой места, до пунктов. */
+  readonly question?: ReactNode;
 }) {
   return (
     <div className="career-profile-screen-position" data-experience-id={entry.id}>
@@ -153,15 +164,8 @@ function PositionSummary({
         memory={memory}
         onConfirmed={onConfirmed}
       />
-      <PositionDetails
-        entry={entry}
-        bullets={bullets}
-        description={
-          entry.descriptionMemoryId
-            ? memory.find((fact) => fact.id === entry.descriptionMemoryId)?.statement
-            : undefined
-        }
-      />
+      {question}
+      <PositionDetails entry={entry} bullets={bullets} description={descriptionOf(entry, memory)} />
     </div>
   );
 }
@@ -275,12 +279,14 @@ function PositionRow({
   onSave,
   onRemove,
   onManualExperienceFactAdded,
+  question,
 }: {
   readonly entry: ResumeExperienceInput;
   readonly bullets: readonly string[];
   readonly memory: readonly CandidateMemory[];
   readonly candidateId?: string;
   readonly saving?: boolean;
+  readonly question?: ReactNode;
   readonly onSave: (
     patch: Partial<ResumeExperienceInput>,
   ) => Promise<boolean | void> | boolean | void;
@@ -310,6 +316,7 @@ function PositionRow({
       onEdit={() => setEditing(true)}
       onRemove={onRemove}
       onConfirmed={onManualExperienceFactAdded}
+      question={question}
     />
   );
 }
@@ -357,10 +364,7 @@ function CompanyGroup({
   return (
     <div className="career-profile-screen-company-group">
       <CompanyHead group={group} />
-      {group.positions[0] ? (
-        <ProfileEmployerName place={group.positions[0]} onChanged={onManualExperienceFactAdded} />
-      ) : null}
-      {group.positions.map((entry) => (
+      {group.positions.map((entry, index) => (
         <PositionRow
           key={entry.id}
           entry={entry}
@@ -371,6 +375,7 @@ function CompanyGroup({
           onSave={(patch) => onUpdateExperience(entry, patch)}
           onRemove={() => onSectionSave(removeExperience(draft, entry.id))}
           onManualExperienceFactAdded={onManualExperienceFactAdded}
+          question={index === 0 ? employerQuestion(group, onManualExperienceFactAdded) : null}
         />
       ))}
     </div>

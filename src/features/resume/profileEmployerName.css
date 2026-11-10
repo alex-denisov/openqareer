@@ -44,7 +44,7 @@
 }
 
 .profile-employer-name__row input {
-  flex: 1 1 12rem;
+  flex: 1 1 9rem;
   min-inline-size: 0;
   padding: var(--career-space-2);
   border: var(--career-border-width) solid var(--career-line-strong);

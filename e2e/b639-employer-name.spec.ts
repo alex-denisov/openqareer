@@ -172,15 +172,26 @@ test('три маски владельца: вопрос сразу под ша�
   } else {
     await page.getByRole('link', { name: 'Опыт', exact: true }).click();
     await expect(page.locator('.profile-employer-name')).toHaveCount(3);
-    // Развёрнутое место: 0 — шапка компании, 1 — вопрос, дальше пункты места.
-    const expanded = await page
-      .locator('.career-profile-screen-company-group:has(.profile-employer-name)')
-      .evaluateAll((groups) =>
-        groups.map((group) =>
-          [...group.children].findIndex((child) => child.matches('.profile-employer-name')),
-        ),
+    // Развёрнутое место: вопрос под шапкой (название, должность, метки) и до пунктов места.
+    const order = await page
+      .locator('.career-profile-screen-position:has(.profile-employer-name)')
+      .evaluateAll((positions) =>
+        positions.map((position) => {
+          const children = [...position.children];
+          const at = (selector: string) => children.findIndex((child) => child.matches(selector));
+          return {
+            head: at('.career-profile-screen-position-title-row'),
+            question: at('.profile-employer-name'),
+            last: children.length - 1,
+            employer: position.querySelector('.profile-position-identity b')?.textContent,
+          };
+        }),
       );
-    expect(expanded).toEqual([1]);
+    expect(order).toEqual([
+      expect.objectContaining({ employer: 'Enterprise Energy IT Services', head: 0 }),
+    ]);
+    expect(order[0]!.question).toBeGreaterThan(order[0]!.head);
+    expect(order[0]!.question).toBeLessThan(order[0]!.last);
     // Свёрнутые старые места: вопрос строкой под названием, без разворачивания.
     await expect(
       page.locator('.career-profile-screen-place-compact:has(.profile-employer-name) b'),
