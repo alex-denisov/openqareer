@@ -43,3 +43,8 @@ export function freshnessAnchorMs(vacancy: UnifiedVacancy): number | undefined {
   if (seen === undefined) return published;
   return published === undefined ? seen : Math.max(seen, published);
 }
+
+/** Первое чтение записи; последнее лежит в `observed_ms`. */
+export const VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN = `
+ALTER TABLE vacancy_pool_index ADD COLUMN first_seen_ms INTEGER;
+`;

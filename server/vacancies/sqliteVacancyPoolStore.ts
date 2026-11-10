@@ -1,4 +1,4 @@
-import { freshnessAnchorMs } from './poolLiveness';
+import { freshnessAnchorMs, VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN } from './poolLiveness';
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
 import { readInWorker } from '../data/readInWorker';
@@ -22,7 +22,6 @@ import {
   MIGRATION_23,
   VACANCY_CLUSTERS_TABLE,
   VACANCY_POOL_EXPIRED_AT_COLUMN,
-  VACANCY_POOL_INDEX_FIRST_SEEN_COLUMN,
   VACANCY_CLUSTER_INPUT_TABLE,
   VACANCY_CATALOG_ENTRIES_TABLE,
   VACANCY_CLUSTER_KEYS_TABLE,
