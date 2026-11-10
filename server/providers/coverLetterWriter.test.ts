@@ -18,6 +18,7 @@ import {
   vacancyText,
   withinTimeBudget,
   type CoverLetterOutcome,
+  type CoverLetterWriter,
 } from './coverLetterWriter';
 
 function client(
@@ -172,7 +173,7 @@ describe('LlmCoverLetterWriter: запрос к модели (B601)', () => {
       expect(sent(fake)).toMatchObject({
         reasoning: { effort: 'low' },
         max_tokens: COVER_LETTER_OUTPUT_TOKENS,
-        provider: { data_collection: 'deny', sort: 'throughput' },
+        provider: { data_collection: 'deny', sort: 'latency' },
       });
     },
   );
@@ -254,14 +255,44 @@ describe('QueuedCoverLetterWriter', () => {
     // Only rule names reach the journal: the letter is the candidate's text.
     expect(failures).toEqual([{ stage: 'a', kind: 'unusable_response', detail: 'letter_gate:number' }]);
   });
+
+  it('повтор той же модели после таймаута пропускается, после отказа проверки спрашивается (B601, 10.11)', async () => {
+    const calls: string[] = [];
+    const stage = (label: string, outcome: Awaited<ReturnType<CoverLetterWriter['writeCoverLetter']>>): CoverLetterWriter => ({
+      writeCoverLetter: async () => {
+        calls.push(label);
+        return outcome;
+      },
+    });
+    const slow = new QueuedCoverLetterWriter(
+      [stage('d1', { failure: { stage: 'd', kind: 'timeout' } }), stage('d2', { body: 'Письмо.', stage: 'd' }), stage('g', { body: 'Письмо GLM.', stage: 'g' })],
+      ['d', 'd', 'g'],
+      () => undefined,
+    );
+    await expect(slow.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'g' });
+    expect(calls).toEqual(['d1', 'g']);
+
+    calls.length = 0;
+    const refused = new QueuedCoverLetterWriter(
+      [stage('d1', { failure: { stage: 'd', kind: 'unusable_response', detail: 'cut' } }), stage('d2', { body: 'Письмо.', stage: 'd' }), stage('g', { body: 'Письмо GLM.', stage: 'g' })],
+      ['d', 'd', 'g'],
+      () => undefined,
+    );
+    await expect(refused.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'd' });
+    expect(calls).toEqual(['d1', 'd2']);
+  });
 });
 
 describe('цепочка письма (решение владельца, B601)', () => {
-  it('DeepSeek, затем GLM через OpenRouter', () => {
+  it('DeepSeek дважды, затем GLM через OpenRouter', () => {
     const writer = buildCoverLetterWriter({ providerCredentials: { openrouter: 'o', gemini: 'g', openai: 'k' } }) as unknown as {
       descriptors: readonly string[];
     };
-    expect(writer.descriptors).toEqual(['openrouter:deepseek/deepseek-v4.1-flash', 'openrouter:z-ai/glm-5.3-flash']);
+    expect(writer.descriptors).toEqual([
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:deepseek/deepseek-v4.1-flash',
+      'openrouter:z-ai/glm-5.3-flash',
+    ]);
   });
 });
 

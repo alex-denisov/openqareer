@@ -103,6 +103,67 @@ describe('reviewLetterBody: неверные цифры', () => {
   });
 });
 
+describe('reviewLetterBody: общий знак процента у «с … до …» в профиле (B601, 10.11)', () => {
+  const profile: LetterGateSources = {
+    language: 'en',
+    candidate: ['Повышение уровня сервиса с 91 до 97 %.', 'Точность сборки выросла с 97,1 до 99,6 %.', 'Текучесть с 9 до 4 % в месяц.'],
+    vacancy: ['Warehouse Manager'],
+  };
+  const numberRules = (body: string) => reviewLetterBody(body, profile).map((item) => item.rule).filter((rule) => rule === 'number');
+
+  it.each([
+    'Service level rose from 91% to 97%. My resume is attached.',
+    'Picking accuracy increased from 97.1% to 99.6%. My resume is attached.',
+    'Turnover fell from 9% to 4% per month. My resume is attached.',
+    'Уровень сервиса вырос с 91% до 97%. Резюме приложено.',
+  ])('процент у обоих чисел подтверждён: %s', (body) => {
+    expect(numberRules(body)).toEqual([]);
+  });
+
+  it('другое число по-прежнему останавливается', () => {
+    expect(numberRules('Service level rose from 91% to 99%. My resume is attached.')).toEqual(['number']);
+  });
+});
+
+describe('reviewLetterBody: кириллица в английском письме (B601, 10.11)', () => {
+  const profile: LetterGateSources = {
+    language: 'en',
+    candidate: ['## Главный бухгалтер | ГК Ресурс-Логистика | Москва | 2019-04 — now', '- Перевела учёт на 1С:Бухгалтерия 8.3.'],
+    vacancy: ['Chief Accountant', 'Daikan Izakaya'],
+  };
+  const cyrillic = (body: string) => reviewLetterBody(body, profile).filter((item) => item.rule === 'cyrillic');
+
+  it('название компании из профиля можно оставить кириллицей', () => {
+    expect(cyrillic('At ГК Ресурс-Логистика I lead accounting. My resume is attached.')).toEqual([]);
+  });
+
+  it('продукт или слово кириллицей останавливает письмо', () => {
+    expect(cyrillic('I moved the books to 1С:Бухгалтерия 8.3. My resume is attached.')).toHaveLength(1);
+  });
+
+  it('русское письмо не проверяется этим правилом, даже если ждали английское (B624)', () => {
+    expect(reviewLetterBody('Перевела учёт на 1С:Бухгалтерия 8.3. Резюме приложено.', profile)
+      .filter((item) => item.rule === 'cyrillic')).toEqual([]);
+  });
+});
+
+describe('reviewLetterBody: переведённое слово в названии (B601, 10.11)', () => {
+  const profile: LetterGateSources = {
+    language: 'en',
+    candidate: ['## Заместитель главного бухгалтера | Торговый дом Север | Москва | 2014-02 — 2019-03', 'Аттестат профессионального бухгалтера ИПБ России | 2016'],
+    vacancy: ['Accounting Manager', 'Colliers'],
+  };
+  const names = (body: string) => reviewLetterBody(body, profile).filter((item) => item.rule === 'name');
+
+  it('переведённые слова из профиля не чужое имя', () => {
+    expect(names('At Trading House Sever I managed settlements. I hold the IPB Russia certificate. My resume is attached.')).toEqual([]);
+  });
+
+  it('переведённое слово без основы в профиле остаётся чужим именем', () => {
+    expect(names('At Furniture House Sever I managed settlements. My resume is attached.')).toHaveLength(1);
+  });
+});
+
 describe('reviewLetterBody: чужие компании', () => {
   it.each([
     ['русское название', 'Руководил разработкой в Газпроме.'],
@@ -130,6 +191,7 @@ describe('reviewLetterBody: чужие компании', () => {
     ['смешанный регистр', 'Строю FinOps и PostgreSQL.'],
     ['термин со строчной', 'Провёл turnaround и self-service.'],
     ['термин из вакансии', 'Работаю с Python и Kubernetes.'],
+    ['аббревиатура во множественном числе (10.11)', 'Ввёл сменные KPIs и SLAs.'],
   ])('термины не отклоняет: %s', (_name, body) => {
     expect(rules(body)).toEqual([]);
   });
@@ -200,9 +262,12 @@ describe('reviewLetterBody: стиль не отклоняет', () => {
     ['личное действие', 'Руководил, построил, увеличил, масштабировал и вырастил команду.'],
     ['оценка опыта', 'Обширный опыт и глубокая экспертиза.'],
     ['месяц', 'С ноября работаю над агентами.'],
-    ['английский глагол', 'I led and scaled the team.'],
   ])('%s', (_name, body) => {
     expect(rules(body)).toEqual([]);
+  });
+
+  it('английский глагол', () => {
+    expect(reviewLetterBody('I led and scaled the team. My resume is attached.', SOURCES)).toEqual([]);
   });
 });
 

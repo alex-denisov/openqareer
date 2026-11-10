@@ -27,13 +27,17 @@ export function assertOpenRouterModelForPersonalData(model: string): void {
 export function openRouterRouting(input: {
   readonly personal: boolean;
   readonly requireParameters?: boolean;
-  /** Кандидат ждёт: провайдер с самым быстрым выводом, а не самый дешёвый. */
+  /**
+   * Кандидат ждёт: провайдер с самым коротким ответом, а не самый дешёвый. 10.11 (B601) на 20 письмах
+   * DeepSeek с выбором по задержке ответил за p50 9,4 с и max 15,6 с, с выбором по скорости вывода —
+   * за 10,8 с и 47,4 с плюс один обрыв на 60 с: быстрый вывод не спасает от долгого старта у провайдера.
+   */
   readonly fastest?: boolean;
-}): { provider?: { data_collection?: 'deny'; require_parameters?: true; sort?: 'throughput' } } {
+}): { provider?: { data_collection?: 'deny'; require_parameters?: true; sort?: 'latency' } } {
   const provider = {
     ...(input.personal ? { data_collection: 'deny' as const } : {}),
     ...(input.requireParameters ? { require_parameters: true as const } : {}),
-    ...(input.fastest ? { sort: 'throughput' as const } : {}),
+    ...(input.fastest ? { sort: 'latency' as const } : {}),
   };
   return Object.keys(provider).length ? { provider } : {};
 }

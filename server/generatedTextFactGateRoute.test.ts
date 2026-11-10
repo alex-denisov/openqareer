@@ -18,6 +18,11 @@ const sampleCluster: VacancyCluster = {
   vacanciesCount: 1,
 };
 
+/** Одноязычное письмо: смешанный текст с перевесом латиницы отсекает правило кириллицы (B601). */
+function letterOf(text: string): string {
+  return `${text}\n\n${/\p{Script=Cyrillic}/u.test(text) ? 'Буду рад обсудить.' : 'Happy to discuss.'}`;
+}
+
 describe('B528 generated text fact gate', () => {
   it('asks for confirmation of imported template claims even without a model writer', async () => {
     const { app, candidates } = await createApp([sampleCluster]);
@@ -220,7 +225,7 @@ describe('B528 generated text fact gate', () => {
     },
   ])('B528 $name', async ({ facts, text, expected, source, ...options }) => {
     const { app, candidates } = await createApp([sampleCluster], {
-      coverLetterWriter: { writeCoverLetter: async () => ({ body: `${text}\n\nHappy to discuss.`, stage: 'test:model' }) },
+      coverLetterWriter: { writeCoverLetter: async () => ({ body: letterOf(text), stage: 'test:model' }) },
     });
     const { cookie, candidateId } = await login(app);
     const owner = options.foreign
@@ -248,7 +253,7 @@ describe('B528 generated text fact gate', () => {
     expect(data.factCheck.claims).toEqual([expect.objectContaining({
       text, status: expected, action: expected === 'confirmed' ? 'none' : 'ask_candidate',
     })]);
-    expect(data.atsCoverLetter).toBe(`${text}\n\nHappy to discuss.`);
+    expect(data.atsCoverLetter).toBe(letterOf(text));
     if (expected === 'confirmed') expect(data.factCheck.claims[0].evidenceIds).toEqual([ids[0]]);
   });
 

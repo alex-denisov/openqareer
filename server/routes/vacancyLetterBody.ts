@@ -88,11 +88,19 @@ function letterGateSources(request: LetterWritingRequest): LetterGateSources {
   };
 }
 
+/**
+ * Язык письма: выбор кандидата, иначе английский для вакансии без кириллицы. 10.11 на проде GLM на
+ * английские вакансии писала по-русски по русскому профилю (3 из 6). Русскую вакансию модель судит сама (B624).
+ */
+function writtenLanguage(letter: LetterWritingRequest): PitchLanguage | undefined {
+  return letter.chosenLanguage ?? (letter.language === 'en' ? 'en' : undefined);
+}
+
 function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, profile, chosenLanguage, gender, resumeAttached, candidateName } = letter;
+  const { vacancy, profile, gender, resumeAttached, candidateName } = letter;
   return {
     profile,
     vacancy: {
@@ -104,7 +112,7 @@ function writerInput(
       requirements: vacancy.requiredSkills,
       ...(vacancy.recipient ? { recipient: vacancy.recipient } : {}),
     },
-    ...(chosenLanguage ? { chosenLanguage } : {}),
+    ...(writtenLanguage(letter) ? { chosenLanguage: writtenLanguage(letter) } : {}),
     ...(gender ? { gender } : {}),
     ...(resumeAttached ? {} : { resumeAttached: false }),
     ...(candidateName?.trim() ? { candidateName: candidateName.trim() } : {}),

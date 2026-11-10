@@ -60,6 +60,21 @@ describe('letterProfileText: весь мастер-профиль для пис�
     expect(text).not.toContain('Директор в Россети Цифра');
   });
 
+  it('уточнения без места работы помечены: модель не приписывает их компании (B601, 10.11)', () => {
+    const text = letterProfileText({ draft, facts });
+    expect(text).toContain('УТОЧНЕНИЯ КАНДИДАТА К ПРОФИЛЮ (место работы у пунктов не указано');
+  });
+
+  it('уточнение, повторяющее «о себе» или строку места работы, не дублируется (B601, 10.11)', () => {
+    const text = letterProfileText({
+      draft,
+      facts: [...facts, fact('about-copy', 'Строю ИТ-организации.'), fact('record-copy', 'Директор, Россети Цифра · Москва')],
+    });
+    expect(text.match(/Строю ИТ-организации\./gu)).toHaveLength(1);
+    expect(text).not.toContain('Директор, Россети Цифра · Москва');
+    expect(text).toContain('- «Enterprise Public Cloud Platform» — это VK Cloud');
+  });
+
   it('контакты, имя кандидата и чужие рекомендации модели не уходят', () => {
     const text = letterProfileText({ draft, facts });
     for (const part of ['ivan@example.com', '+70000000000', 'Иван Петров', 'Чужой Человек', 'Отличный коллега']) {
