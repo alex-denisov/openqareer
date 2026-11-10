@@ -54,10 +54,13 @@ function vacancy(source: VacancySourceConfig, index: number): UnifiedVacancy {
   };
 }
 
-function silentLog(): MaintenanceLog & { entries: Array<{ level: string; msg: string }> } {
-  const entries: Array<{ level: string; msg: string }> = [];
-  const push = (level: string) => (_: unknown, msg: string) => {
-    entries.push({ level, msg });
+function silentLog(): MaintenanceLog & {
+  entries: Array<{ level: string; msg: string; status?: unknown }>;
+} {
+  const entries: Array<{ level: string; msg: string; status?: unknown }> = [];
+  const push = (level: string) => (fields: unknown, msg: string) => {
+    const status = typeof fields === 'object' && fields !== null ? (fields as { status?: unknown }).status : undefined;
+    entries.push({ level, msg, status });
   };
   return { entries, info: push('info'), warn: push('warn'), error: push('error') };
 }
@@ -313,6 +316,27 @@ describe('MaintenanceWorker (B230)', () => {
     expect(linkedinPoolExecutor.runStep).toHaveBeenCalledTimes(1);
     expect(linkedinPoolExecutor.stop).toHaveBeenCalledTimes(1);
     expect(log.entries.some((entry) => entry.msg === 'linkedin-pool-executor-step')).toBe(true);
+  });
+
+  it('logs an idle LinkedIn pool status once per change so a quiet window is visible', async () => {
+    const log = silentLog();
+    const statuses = ['outside_window', 'outside_window', 'daily_limit', 'outside_window'] as const;
+    let call = 0;
+    const linkedinPoolExecutor = {
+      runStep: vi.fn(async () => ({ status: statuses[call++], pageCount: 0, recruiterCount: 0 })),
+      stop: vi.fn(async () => undefined),
+    };
+    const worker = new MaintenanceWorker({
+      engine: {} as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'],
+      log,
+      linkedinPoolExecutor,
+    });
+
+    for (let i = 0; i < statuses.length; i += 1) await worker.runLinkedinPoolExecutorStep();
+    await worker.stop();
+
+    const idle = log.entries.filter((entry) => entry.msg === 'linkedin-pool-executor-idle');
+    expect(idle.map((entry) => entry.status)).toEqual(['outside_window', 'daily_limit', 'outside_window']);
   });
 
   it('a stuck source does not block the next wave for the other sources', async () => {
