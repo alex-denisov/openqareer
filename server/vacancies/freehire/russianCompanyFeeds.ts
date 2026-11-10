@@ -193,7 +193,9 @@ export const yandexFeed = feed(
     const seenCursors = new Set<string>();
     return paged(client, delay, async () => {
       const payload = record(
-        await client.getJson(cursor ? `${YANDEX_LIST}?cursor=${encodeURIComponent(cursor)}` : YANDEX_LIST),
+        await client.getJson(
+          cursor ? `${YANDEX_LIST}?cursor=${encodeURIComponent(cursor)}` : YANDEX_LIST,
+        ),
       );
       const rows = items(payload.results)
         .map(record)
@@ -238,16 +240,14 @@ export const ozonFeed = feed(
       const rows = items(payload.items)
         .map(record)
         .filter((v) => text(v.vacancyType) === 'external_vacancy')
-        .map(
-          (v): Row => ({
-            externalId: text(v.hhId),
-            title: text(v.title),
-            // Публичная страница принимает hhId вместо slug (проверено 10.11).
-            url: `https://career.ozon.ru/vacancy/${text(v.hhId)}/`,
-            location: text(v.city),
-            remote: items(v.workFormat).some((f) => REMOTE_RE.test(text(f))),
-          }),
-        );
+        .map((v): Row => ({
+          externalId: text(v.hhId),
+          title: text(v.title),
+          // Публичная страница принимает hhId вместо slug (проверено 10.11).
+          url: `https://career.ozon.ru/vacancy/${text(v.hhId)}/`,
+          location: text(v.city),
+          remote: items(v.workFormat).some((f) => REMOTE_RE.test(text(f))),
+        }));
       return { rows, more: page + 1 < (numeric(record(payload.meta).totalPages) ?? 0) };
     }),
 );
@@ -267,15 +267,13 @@ export const vkFeed = feed(
       const payload = record(await client.getJson(url));
       const rows = items(payload.results)
         .map(record)
-        .map(
-          (v): Row => ({
-            externalId: text(v.id),
-            title: text(v.title),
-            url: `https://team.vk.company/vacancy/${text(v.id)}/`,
-            location: text(record(v.town).name),
-            remote: v.remote === true,
-          }),
-        );
+        .map((v): Row => ({
+          externalId: text(v.id),
+          title: text(v.title),
+          url: `https://team.vk.company/vacancy/${text(v.id)}/`,
+          location: text(record(v.town).name),
+          remote: v.remote === true,
+        }));
       const next = text(payload.next).replace(/^http:/, 'https:');
       url = next;
       return { rows, more: next.startsWith('https://team.vk.company/') };
@@ -315,7 +313,8 @@ export const x5Feed = feed(
             remote: text(v.work_format) === 'remote',
             description: items(v.key_features).map(text).join('\n'),
             publishedAt: fromIso(v.published_at),
-            salary: fixed !== undefined ? rubSalary(fixed, fixed) : rubSalary(v.salary_min, v.salary_max),
+            salary:
+              fixed !== undefined ? rubSalary(fixed, fixed) : rubSalary(v.salary_min, v.salary_max),
           };
         });
       return { rows, more: page + 1 < (numeric(payload.pages) ?? 0) };
@@ -373,19 +372,17 @@ export const rostelecomFeed = feed(
       );
       const rows = items(payload.vacancies)
         .map(record)
-        .map(
-          (v): Row => ({
-            externalId: text(v.id),
-            title: text(v.name),
-            url: `https://job.rt.ru/vacancy/${text(v.id)}`,
-            location: text(record(v.city).name),
-            description:
-              headed('Чем предстоит заниматься', v.whatWeToDo) +
-              headed('Что мы ожидаем', v.whatWeExpect) +
-              headed('Что мы предлагаем', v.whatWeOffer),
-            salary: rubSalary(v.salaryFrom, v.salaryTo),
-          }),
-        );
+        .map((v): Row => ({
+          externalId: text(v.id),
+          title: text(v.name),
+          url: `https://job.rt.ru/vacancy/${text(v.id)}`,
+          location: text(record(v.city).name),
+          description:
+            headed('Чем предстоит заниматься', v.whatWeToDo) +
+            headed('Что мы ожидаем', v.whatWeExpect) +
+            headed('Что мы предлагаем', v.whatWeOffer),
+          salary: rubSalary(v.salaryFrom, v.salaryTo),
+        }));
       return { rows, more: page + 1 < (numeric(payload.totalPages) ?? 0) };
     }),
 );
@@ -409,16 +406,14 @@ export const lamodaFeed = feed(
       );
       const data = items(payload.data).map(record);
       start += data.length;
-      const rows = data.map(
-        (v): Row => ({
-          externalId: text(v.id),
-          title: text(v.name),
-          url: `https://job.lamoda.ru/vacancies/${text(v.slug)}`,
-          location: text(record(v.location).name),
-          description: text(v.shortInfo).replace(/;/g, '\n'),
-          publishedAt: fromIso(v.externalPublicationDate),
-        }),
-      );
+      const rows = data.map((v): Row => ({
+        externalId: text(v.id),
+        title: text(v.name),
+        url: `https://job.lamoda.ru/vacancies/${text(v.slug)}`,
+        location: text(record(v.location).name),
+        description: text(v.shortInfo).replace(/;/g, '\n'),
+        publishedAt: fromIso(v.externalPublicationDate),
+      }));
       return { rows, more: start < (numeric(record(payload.meta).total) ?? 0) };
     });
   },
@@ -446,16 +441,14 @@ export const kuperFeed = feed(
         if (text(block.category) === 'pagination') pages = numeric(record(block.data).pages) ?? 1;
         if (text(block.category) === 'vacancies') vacancies = items(block.data);
       }
-      const rows = vacancies.map(record).map(
-        (v): Row => ({
-          externalId: text(v.id),
-          title: text(v.title),
-          url: `https://kuper.ru/rabota/${text(v.friendlyUrl)}-${text(v.idForUrl)}`,
-          location: text(v.city),
-          remote: items(v.wf).some((f) => REMOTE_RE.test(text(f))),
-          description: text(v.description),
-        }),
-      );
+      const rows = vacancies.map(record).map((v): Row => ({
+        externalId: text(v.id),
+        title: text(v.title),
+        url: `https://kuper.ru/rabota/${text(v.friendlyUrl)}-${text(v.idForUrl)}`,
+        location: text(v.city),
+        remote: items(v.wf).some((f) => REMOTE_RE.test(text(f))),
+        description: text(v.description),
+      }));
       return { rows, more: page + 1 < pages };
     }),
 );
@@ -474,15 +467,13 @@ export const domclickFeed = feed(
       const payload = record(await client.getJson('https://career.domclick.ru/api/v1/vacancy/'));
       const rows = items(payload.result)
         .map(record)
-        .map(
-          (v): Row => ({
-            externalId: text(v.slug),
-            title: text(v.title),
-            url: `https://career.domclick.ru/vacancy/${text(v.slug)}`,
-            location: text(record(v.area).name),
-            remote: items(record(v.vacancycontent).work_format).some((f) => text(f) === 'REMOTE'),
-          }),
-        );
+        .map((v): Row => ({
+          externalId: text(v.slug),
+          title: text(v.title),
+          url: `https://career.domclick.ru/vacancy/${text(v.slug)}`,
+          location: text(record(v.area).name),
+          remote: items(record(v.vacancycontent).work_format).some((f) => text(f) === 'REMOTE'),
+        }));
       return { rows, more: false };
     }),
 );
@@ -574,16 +565,14 @@ export const mtslinkFeed = feed(
       const rows = list
         .map(record)
         .filter((v) => text(v.state) === 'OPEN' && v.hidden !== true)
-        .map(
-          (v): Row => ({
-            externalId: text(v.id),
-            title: text(v.position),
-            url: `https://mts-link.ru/vacancies/${text(v.id)}/`,
-            remote: REMOTE_RE.test(text(v.workFormat)),
-            description: [v.body, v.requirements, v.conditions].map(text).join('\n'),
-            publishedAt: v.created ? fromLooseDate(record(v.created).date) : undefined,
-          }),
-        );
+        .map((v): Row => ({
+          externalId: text(v.id),
+          title: text(v.position),
+          url: `https://mts-link.ru/vacancies/${text(v.id)}/`,
+          remote: REMOTE_RE.test(text(v.workFormat)),
+          description: [v.body, v.requirements, v.conditions].map(text).join('\n'),
+          publishedAt: v.created ? fromLooseDate(record(v.created).date) : undefined,
+        }));
       return { rows, more: false };
     }),
 );

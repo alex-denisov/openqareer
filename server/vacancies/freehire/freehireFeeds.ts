@@ -191,9 +191,7 @@ const DETAIL: Record<string, DetailTextSource> = {
     (m) => `https://job-site-backend.dodo-ai-platform.io/api/v1/pages/vacancy/${m[1]}`,
     (p) => {
       const blocks = record(record(record(p).data).page).content;
-      return Array.isArray(blocks)
-        ? joined(blocks.map((b) => record(record(b).data).text))
-        : '';
+      return Array.isArray(blocks) ? joined(blocks.map((b) => record(record(b).data).text)) : '';
     },
   ),
   'src-fh-rwb': jsonDetail(

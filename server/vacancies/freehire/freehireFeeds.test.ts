@@ -106,7 +106,12 @@ describe('Russian company feeds', () => {
         : json({
             next: '/jobs/api/jobs/publications/?cursor=c1',
             results: [
-              { id: 1, title: 'A', publication_slug_url: 'a-1', vacancy: { cities: [{ name: 'Москва' }] } },
+              {
+                id: 1,
+                title: 'A',
+                publication_slug_url: 'a-1',
+                vacancy: { cities: [{ name: 'Москва' }] },
+              },
               { id: 9, title: 'Redirect', redirect_url: 'https://x', vacancy: {} },
             ],
           }),
@@ -121,7 +126,13 @@ describe('Russian company feeds', () => {
       json({
         meta: { totalPages: 1 },
         items: [
-          { hhId: 11, title: 'Ext', vacancyType: 'external_vacancy', city: 'Москва', workFormat: ['Удалённо'] },
+          {
+            hhId: 11,
+            title: 'Ext',
+            vacancyType: 'external_vacancy',
+            city: 'Москва',
+            workFormat: ['Удалённо'],
+          },
           { hhId: 12, title: 'Int', vacancyType: 'internal_vacancy' },
         ],
       }),
@@ -136,7 +147,10 @@ describe('Russian company feeds', () => {
     let n = 0;
     const client = clientFor(() =>
       n++ === 0
-        ? json({ meta: { totalPages: 3 }, items: [{ hhId: 1, title: 'A', vacancyType: 'external_vacancy' }] })
+        ? json({
+            meta: { totalPages: 3 },
+            items: [{ hhId: 1, title: 'A', vacancyType: 'external_vacancy' }],
+          })
         : json({}, 404),
     );
     const reading = await fetchFreehireFeed('src-fh-ozon', 'Ozon', client);
@@ -152,11 +166,31 @@ describe('Russian company feeds', () => {
 
 describe('card text', () => {
   const cases: [string, string, string][] = [
-    ['src-fh-yandex', 'https://yandex.ru/jobs/vacancies/inzhener-49593', 'https://yandex.ru/jobs/api/publications/49593'],
-    ['src-fh-ozon', 'https://career.ozon.ru/vacancy/136849808/', 'https://job-api.ozon.ru/vacancy/136849808'],
-    ['src-fh-lamoda', 'https://job.lamoda.ru/vacancies/sofino/operator--3454', 'https://job.lamoda.ru/api/hr/vacancies/3454'],
-    ['src-fh-rwb', 'https://career.rwb.ru/vacancies/41150', 'https://career.rwb.ru/crm-api/api/v1/pub/vacancies/41150'],
-    ['src-fh-dodo', 'https://dodoteam.ru/vacancy/8068', 'https://job-site-backend.dodo-ai-platform.io/api/v1/pages/vacancy/8068'],
+    [
+      'src-fh-yandex',
+      'https://yandex.ru/jobs/vacancies/inzhener-49593',
+      'https://yandex.ru/jobs/api/publications/49593',
+    ],
+    [
+      'src-fh-ozon',
+      'https://career.ozon.ru/vacancy/136849808/',
+      'https://job-api.ozon.ru/vacancy/136849808',
+    ],
+    [
+      'src-fh-lamoda',
+      'https://job.lamoda.ru/vacancies/sofino/operator--3454',
+      'https://job.lamoda.ru/api/hr/vacancies/3454',
+    ],
+    [
+      'src-fh-rwb',
+      'https://career.rwb.ru/vacancies/41150',
+      'https://career.rwb.ru/crm-api/api/v1/pub/vacancies/41150',
+    ],
+    [
+      'src-fh-dodo',
+      'https://dodoteam.ru/vacancy/8068',
+      'https://job-site-backend.dodo-ai-platform.io/api/v1/pages/vacancy/8068',
+    ],
   ];
   it.each(cases)('%s maps the public link to its card API', (sourceId, url, api) => {
     expect(freehireDetailTextSource(sourceId)?.detailUrl(sourceId, { url })).toBe(api);
@@ -164,7 +198,9 @@ describe('card text', () => {
 
   it('refuses a link on another host', () => {
     const source = freehireDetailTextSource('src-fh-ozon');
-    expect(source?.detailUrl('src-fh-ozon', { url: 'https://evil.example/vacancy/1/' })).toBeUndefined();
+    expect(
+      source?.detailUrl('src-fh-ozon', { url: 'https://evil.example/vacancy/1/' }),
+    ).toBeUndefined();
   });
 
   it('reads Ozon card text from HTML', () => {

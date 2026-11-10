@@ -42,8 +42,7 @@ const RETRY_BASE_MS = 1_500;
 /** Дольше ждать хост не имеет смысла: опрос лучше упадёт и придёт по расписанию. */
 const MAX_HOST_BACKOFF_MS = 120_000;
 
-export const FEED_USER_AGENT =
-  'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)';
+export const FEED_USER_AGENT = 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)';
 
 /** Хосты, попросившие паузу: общие для всех лент процесса. */
 const hostPausedUntil = new Map<string, number>();
@@ -76,64 +75,87 @@ function isRetryable(err: unknown): boolean {
   return err instanceof Error; // таймаут, обрыв соединения, TLS
 }
 
+interface ClientConfig {
+  readonly fetchImpl: FeedFetch;
+  readonly sleep: (ms: number) => Promise<void>;
+  readonly now: () => number;
+  readonly timeoutMs: number;
+  readonly retries: number;
+}
+
+async function waitForHost(config: ClientConfig, host: string): Promise<void> {
+  const until = hostPausedUntil.get(host);
+  if (until === undefined) return;
+  const wait = until - config.now();
+  if (wait > 0) await config.sleep(Math.min(wait, MAX_HOST_BACKOFF_MS));
+  hostPausedUntil.delete(host);
+}
+
+function requestInit(init: FeedRequestInit, accept: string, signal: AbortSignal): RequestInit {
+  const isPost = init.method === 'POST';
+  return {
+    method: init.method ?? 'GET',
+    signal,
+    headers: {
+      'User-Agent': FEED_USER_AGENT,
+      Accept: accept,
+      ...(isPost ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
+    ...(isPost ? { body: JSON.stringify(init.body ?? {}) } : {}),
+  };
+}
+
+async function once(
+  config: ClientConfig,
+  url: string,
+  init: FeedRequestInit,
+  accept: string,
+): Promise<Response> {
+  const host = new URL(url).host;
+  await waitForHost(config, host);
+  const res = await withRequestTimeout(config.timeoutMs, (signal) =>
+    config.fetchImpl(url, requestInit(init, accept, signal)),
+  );
+  if (res.status === 429 || res.status === 503) {
+    const pause = retryAfterMs(res.headers, config.now()) ?? RETRY_BASE_MS * 4;
+    hostPausedUntil.set(host, config.now() + Math.min(pause, MAX_HOST_BACKOFF_MS));
+  }
+  if (!res.ok) throw new FeedHttpError(res.status, url, res.headers);
+  return res;
+}
+
+async function request(
+  config: ClientConfig,
+  url: string,
+  init: FeedRequestInit,
+  accept: string,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= config.retries; attempt += 1) {
+    if (attempt > 0) await config.sleep(RETRY_BASE_MS * 2 ** (attempt - 1));
+    try {
+      return await once(config, url, init, accept);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryable(err)) throw err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('vacancy_source_unreachable');
+}
+
 export function createFeedClient(options: FeedClientOptions = {}): FeedClient {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const sleep =
-    options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const now = options.now ?? Date.now;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const retries = options.retries ?? DEFAULT_RETRIES;
-
-  async function waitForHost(host: string): Promise<void> {
-    const until = hostPausedUntil.get(host);
-    if (until === undefined) return;
-    const wait = until - now();
-    if (wait > 0) await sleep(Math.min(wait, MAX_HOST_BACKOFF_MS));
-    hostPausedUntil.delete(host);
-  }
-
-  async function once(url: string, init: FeedRequestInit, accept: string): Promise<Response> {
-    const host = new URL(url).host;
-    await waitForHost(host);
-    const res = await withRequestTimeout(timeoutMs, (signal) =>
-      fetchImpl(url, {
-        method: init.method ?? 'GET',
-        signal,
-        headers: {
-          'User-Agent': FEED_USER_AGENT,
-          Accept: accept,
-          ...(init.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
-          ...init.headers,
-        },
-        ...(init.method === 'POST' ? { body: JSON.stringify(init.body ?? {}) } : {}),
-      }),
-    );
-    if (res.status === 429 || res.status === 503) {
-      const pause = retryAfterMs(res.headers, now()) ?? RETRY_BASE_MS * 4;
-      hostPausedUntil.set(host, now() + Math.min(pause, MAX_HOST_BACKOFF_MS));
-    }
-    if (!res.ok) throw new FeedHttpError(res.status, url, res.headers);
-    return res;
-  }
-
-  async function request(url: string, init: FeedRequestInit, accept: string): Promise<Response> {
-    let lastError: unknown;
-    for (let attempt = 0; attempt <= retries; attempt += 1) {
-      if (attempt > 0) await sleep(RETRY_BASE_MS * 2 ** (attempt - 1));
-      try {
-        return await once(url, init, accept);
-      } catch (err) {
-        lastError = err;
-        if (!isRetryable(err)) throw err;
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error('vacancy_source_unreachable');
-  }
-
+  const config: ClientConfig = {
+    fetchImpl: options.fetchImpl ?? fetch,
+    sleep:
+      options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
+    now: options.now ?? Date.now,
+    timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    retries: options.retries ?? DEFAULT_RETRIES,
+  };
   return {
     async getJson(url, init = {}) {
-      const res = await request(url, init, 'application/json');
-      const body = await res.text();
+      const body = await (await request(config, url, init, 'application/json')).text();
       try {
         return JSON.parse(body) as unknown;
       } catch {
@@ -141,9 +163,9 @@ export function createFeedClient(options: FeedClientOptions = {}): FeedClient {
       }
     },
     async getText(url, init = {}) {
-      const res = await request(url, init, 'text/html,application/xhtml+xml,application/xml');
-      return res.text();
+      const accept = 'text/html,application/xhtml+xml,application/xml';
+      return (await request(config, url, init, accept)).text();
     },
-    pause: (ms) => sleep(ms),
+    pause: (ms) => config.sleep(ms),
   };
 }
