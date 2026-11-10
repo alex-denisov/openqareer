@@ -41,6 +41,8 @@ export interface LetterWritingRequest {
   readonly contextMs: number;
   /** Имя из профиля как есть: модель возвращает его на языке письма (B624). */
   readonly candidateName?: string;
+  /** B639: место кандидата в компании вакансии или её группе (`letterCompanyLink`). */
+  readonly companyLink?: string;
 }
 
 export interface WrittenLetterBody {
@@ -100,7 +102,7 @@ function writerInput(
   letter: LetterWritingRequest,
   review: (body: string) => readonly string[],
 ): CoverLetterWriteInput {
-  const { vacancy, profile, gender, resumeAttached, candidateName } = letter;
+  const { vacancy, profile, gender, resumeAttached, candidateName, companyLink } = letter;
   return {
     profile,
     vacancy: {
@@ -116,6 +118,7 @@ function writerInput(
     ...(gender ? { gender } : {}),
     ...(resumeAttached ? {} : { resumeAttached: false }),
     ...(candidateName?.trim() ? { candidateName: candidateName.trim() } : {}),
+    ...(companyLink ? { companyLink } : {}),
     review,
   };
 }

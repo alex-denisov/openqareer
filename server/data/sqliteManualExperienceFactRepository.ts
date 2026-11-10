@@ -12,7 +12,7 @@ export class SqliteManualExperienceFactRepository {
     private readonly sealedText: SealedText,
   ) {}
 
-  add(candidateId: string, memoryId: string, statement: string): StoredMemory {
+  add(candidateId: string, memoryId: string, statement: string, domain: 'responsibility' | 'other' = 'responsibility'): StoredMemory {
     const clean = statement.trim();
     if (!clean) throw new CandidateStoreConflictError();
     const existing = this.find(candidateId, memoryId);
@@ -24,9 +24,9 @@ export class SqliteManualExperienceFactRepository {
     const messageId = randomUUID();
     const now = new Date().toISOString();
     this.insertSourceMessage(candidateId, conversationId, messageId, clean, now);
-    this.insertMemory(candidateId, conversationId, memoryId, messageId, clean, now);
+    this.insertMemory(candidateId, conversationId, memoryId, messageId, clean, now, domain);
     this.touchConversation(conversationId, now);
-    return this.record(memoryId, messageId, clean, now);
+    return { ...this.record(memoryId, messageId, clean, now), domain };
   }
 
   /**
@@ -127,18 +127,20 @@ export class SqliteManualExperienceFactRepository {
     messageId: string,
     statement: string,
     now: string,
+    domain: 'responsibility' | 'other',
   ): void {
     this.database
       .prepare(
         `INSERT INTO memory
           (id, candidate_id, conversation_id, kind, domain, statement_cipher,
            confidence, source_message_ids, sensitive, status, created_at, updated_at)
-         VALUES (?, ?, ?, 'fact', 'responsibility', ?, 'candidate-confirmed', ?, 0, 'confirmed', ?, ?)`,
+         VALUES (?, ?, ?, 'fact', ?, ?, 'candidate-confirmed', ?, 0, 'confirmed', ?, ?)`,
       )
       .run(
         memoryId,
         candidateId,
         conversationId,
+        domain,
         this.sealedText.seal(statement, memoryAssociatedData(candidateId, memoryId)),
         JSON.stringify([messageId]),
         now,

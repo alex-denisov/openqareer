@@ -51,14 +51,64 @@ function section(title: string, lines: readonly string[]): string[] {
   return lines.length > 0 ? [title, ...lines, ''] : [];
 }
 
-function experienceLines(place: ResumeExperienceInput, usable: ReadonlyMap<string, string>): string[] {
+/**
+ * B639: маску для LinkedIn («Enterprise Energy IT Services») письмо не называет, если кандидат назвал
+ * компанию сам. Название держится на подтверждённом факте: удалённый факт возвращает название профиля.
+ */
+function employerOf(
+  place: ResumeExperienceInput,
+  usable: ReadonlyMap<string, string>,
+): string | undefined {
+  const named = place.employerRealName?.trim();
+  const fact = place.employerNameMemoryId ? usable.get(place.employerNameMemoryId) : undefined;
+  // Кандидат сменил работодателя у места: ответ был о прежней маске и к новому названию не относится.
+  const sameMask = Boolean(place.employer && fact?.includes(`«${place.employer.trim()}»`));
+  return named && sameMask ? named : place.employer;
+}
+
+/**
+ * B639: the mask the candidate named is replaced everywhere in the letter profile, not only in the
+ * place heading. On 10.11 the projects, the about text and the notes still carried
+ * «Corporate University of a Top-Tier …», and the letter to Sber lost the Sber background.
+ */
+function realEmployerNames(
+  draft: ResumeDraft,
+  usable: ReadonlyMap<string, string>,
+): (line: string) => string {
+  const names = new Map(
+    draft.experience.flatMap((place) => {
+      const mask = place.employer?.trim();
+      const named = employerOf(place, usable);
+      return mask && named && named !== place.employer ? [[mask, named] as const] : [];
+    }),
+  );
+  const masks = [...names.keys()].sort((left, right) => right.length - left.length);
+  return (line) => masks.reduce((text, mask) => text.split(mask).join(names.get(mask)!), line);
+}
+
+/** B639: названия мест кандидата для письма, настоящие вместо масок. */
+export function letterEmployerNames<T extends VacancyPitchInputFact>(
+  draft: ResumeDraft,
+  facts: readonly T[],
+): string[] {
+  const usable = new Map(filterUsablePitchFacts(facts).map((fact) => [fact.id, fact.statement.trim()]));
+  return draft.experience.flatMap((place) => {
+    const name = employerOf(place, usable)?.trim();
+    return name ? [name] : [];
+  });
+}
+
+function experienceLines(
+  place: ResumeExperienceInput,
+  usable: ReadonlyMap<string, string>,
+): string[] {
   const evidence = [place.descriptionMemoryId, ...place.bulletMemoryIds];
   const bullets = evidence.flatMap((id) => {
     const statement = id ? usable.get(id) : undefined;
     return statement ? [`- ${statement}`] : [];
   });
   return [
-    `## ${line(place.title, place.employer, place.location, period(place.startDate, place.endDate, place.current))}`,
+    `## ${line(place.title, employerOf(place, usable), place.location, period(place.startDate, place.endDate, place.current))}`,
     ...bullets,
     '',
   ];
@@ -66,8 +116,23 @@ function experienceLines(place: ResumeExperienceInput, usable: ReadonlyMap<strin
 
 function linkedIds(draft: ResumeDraft): Set<string> {
   const evidence = [
-    ...draft.experience.flatMap((place) => [place.chronologyMemoryId, place.descriptionMemoryId, ...place.bulletMemoryIds]),
-    ...[draft.projects, draft.skills, draft.education, draft.courses, draft.tests, draft.languages, draft.certifications, draft.achievements, draft.recommendations]
+    ...draft.experience.flatMap((place) => [
+      place.chronologyMemoryId,
+      place.descriptionMemoryId,
+      place.employerNameMemoryId,
+      ...place.bulletMemoryIds,
+    ]),
+    ...[
+      draft.projects,
+      draft.skills,
+      draft.education,
+      draft.courses,
+      draft.tests,
+      draft.languages,
+      draft.certifications,
+      draft.achievements,
+      draft.recommendations,
+    ]
       .flatMap((items) => (items ?? []) as readonly { readonly evidenceMemoryId?: string }[])
       .map((item) => item.evidenceMemoryId),
     draft.candidate.aboutMemoryId,
@@ -112,13 +177,43 @@ function isLetterBasis(fact: VacancyPitchInputFact): boolean {
 }
 
 /** Факт вне мест работы: уточнение из беседы с консультантом, подтверждённые раньше импортированных. */
-function candidateNotes(draft: ResumeDraft, usable: readonly VacancyPitchInputFact[]): string[] {
+function noteFacts<T extends VacancyPitchInputFact>(draft: ResumeDraft, usable: readonly T[]): T[] {
   const linked = linkedIds(draft);
   const free = usable.filter((fact) =>
     !linked.has(fact.id) && isLetterBasis(fact) && !isStructuredRecordStatement(fact.statement) && !repeatsProfile(fact.statement, draft));
   const confirmed = free.filter((fact) => fact.status !== 'proposed');
   const imported = free.filter((fact) => fact.status === 'proposed');
-  return [...confirmed, ...imported].map((fact) => `- ${fact.statement.trim()}`);
+  return [...confirmed, ...imported];
+}
+
+/** Уточнения письма в том порядке, в каком они идут в профиль: английскому письму их переводят (B639). */
+export function letterNoteFacts<T extends VacancyPitchInputFact>(
+  draft: ResumeDraft,
+  facts: readonly T[],
+): T[] {
+  return noteFacts(draft, filterUsablePitchFacts(facts) as T[]);
+}
+
+/**
+ * Английскому письму уточнения кандидата переводят: по-русски среди английского профиля модель их не
+ * берёт и называет маску работодателя (B601, 10.11, LIYAN в одном прогоне из двух). Первые по порядку
+ * профиля, не больше потолка: остальные остаются как есть.
+ */
+export const LETTER_NOTE_TRANSLATION_LIMIT = 30;
+
+export function letterNotesToTranslate<T extends VacancyPitchInputFact>(
+  draft: ResumeDraft,
+  facts: readonly T[],
+  language: string,
+): T[] {
+  if (language !== 'en') return [];
+  return letterNoteFacts(draft, facts)
+    .filter((fact) => /\p{Script=Cyrillic}/u.test(fact.statement))
+    .slice(0, LETTER_NOTE_TRANSLATION_LIMIT);
+}
+
+function candidateNotes(draft: ResumeDraft, usable: readonly VacancyPitchInputFact[]): string[] {
+  return noteFacts(draft, usable).map((fact) => `- ${fact.statement.trim()}`);
 }
 
 function draftSections(draft: ResumeDraft, withheld: ReadonlySet<string>): string[] {
@@ -175,5 +270,7 @@ export function letterProfileText({
     ...joinedLine('LANGUAGES', visibleItems(draft.languages, withheldEvidenceIds).map((item) => [item.name, item.cefr ?? item.sourceLabel].filter(Boolean).join(' '))),
     ...joinedLine('SKILLS', visibleItems(draft.skills, withheldEvidenceIds).map((item) => item.name)),
     ...section(CANDIDATE_NOTES_TITLE, notes),
-  ].map(withoutContacts));
+  ]
+    .map(withoutContacts)
+    .map(realEmployerNames(draft, usableById)));
 }

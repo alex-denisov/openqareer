@@ -5,9 +5,19 @@ import { COVER_LETTER_PROMPT, coverLetterPrompt } from './coverLetterWriting';
 const base = { vacancy: 'Вакансия про склад', profile: 'Профиль кладовщика' };
 
 describe('coverLetterPrompt: запрос, который принял владелец (B601, live-7)', () => {
-  it('текст запроса не отличается от утверждённого consultant-prompt-live-7.txt', () => {
+  it('текст запроса: live-7 и правка длины B639 (150–180 слов, два-три места работы, короче при нехватке фактов)', () => {
     const hash = createHash('sha256').update(COVER_LETTER_PROMPT).digest('hex');
-    expect(hash).toBe('d3fa04af137d34875c23097b2558d2e5961595cc7d4aa032b1b28670d5c88ba1');
+    expect(hash).toBe('257eef537a4d41cab2eb36dafc1c98ce86a5865de521396e4c47f4689371c3b3');
+  });
+
+  it('B639: работа в компании вакансии или её группе — во вводном абзаце сверх длины и числа мест', () => {
+    const prompt = coverLetterPrompt({ ...base, companyLink: 'Корпоративный университет Сбера' });
+    expect(prompt).toContain(
+      'Кандидат работал в «Корпоративный университет Сбера»: это та же компания, что в вакансии, или её группа.',
+    );
+    expect(prompt).toContain('даже если письмо выйдет длиннее 180 слов или мест работы станет больше');
+    expect(prompt.indexOf('Корпоративный университет Сбера')).toBeLessThan(prompt.indexOf('Вакансия:'));
+    expect(coverLetterPrompt(base)).not.toContain('Кандидат работал в «');
   });
 
   it('подставляет получателя, род, вакансию и профиль', () => {

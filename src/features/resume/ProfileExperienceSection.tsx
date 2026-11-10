@@ -1,3 +1,4 @@
+import { ProfileEmployerName } from './ProfileEmployerName';
 import { useRef, useState } from 'react';
 import { CollapsiblePlace, EXPANDED_PLACES } from './ProfileExperienceCollapsed';
 import { experienceChips, profileLanguage, type ExperienceChip } from './experienceChips';
@@ -313,6 +314,27 @@ function PositionRow({
   );
 }
 
+function CompanyHead({
+  group,
+}: {
+  readonly group: ReturnType<typeof groupExperienceByEmployer>[number];
+}) {
+  return (
+    <div className="career-profile-screen-company-head">
+      <CompanyMark
+        employer={group.employer}
+        employerLogoMediaId={group.positions[0]?.employerLogoMediaId}
+      />
+      <div>
+        <b>{group.employer || 'Работодатель не указан'}</b>
+        {group.location ? (
+          <div className="career-profile-screen-company-span">{group.location}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function CompanyGroup({
   group,
   memory,
@@ -334,18 +356,7 @@ function CompanyGroup({
 }) {
   return (
     <div className="career-profile-screen-company-group">
-      <div className="career-profile-screen-company-head">
-        <CompanyMark
-          employer={group.employer}
-          employerLogoMediaId={group.positions[0]?.employerLogoMediaId}
-        />
-        <div>
-          <b>{group.employer || 'Работодатель не указан'}</b>
-          {group.location ? (
-            <div className="career-profile-screen-company-span">{group.location}</div>
-          ) : null}
-        </div>
-      </div>
+      <CompanyHead group={group} />
       {group.positions.map((entry) => (
         <PositionRow
           key={entry.id}
@@ -359,6 +370,9 @@ function CompanyGroup({
           onManualExperienceFactAdded={onManualExperienceFactAdded}
         />
       ))}
+      {group.positions[0] ? (
+        <ProfileEmployerName place={group.positions[0]} onChanged={onManualExperienceFactAdded} />
+      ) : null}
     </div>
   );
 }

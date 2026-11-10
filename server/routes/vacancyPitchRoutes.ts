@@ -31,7 +31,8 @@ import {
   withDeps,
 } from './helpers';
 import { pitchRankingContext } from './pitchRankingContext';
-import { letterProfileText } from '../domain/letterProfile';
+import { letterEmployerNames, letterNotesToTranslate, letterProfileText } from '../domain/letterProfile';
+import { letterCompanyLink } from '../domain/letterCompanyLink';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
 
@@ -163,6 +164,10 @@ function readLetterContext(
   const rankingContext = pitchRankingContext(deps.candidateStore, deps.titleParseStore, candidateId, vacancy.title);
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const allFacts = snapshot.memory ?? [];
+  const draft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
+  const withheldEvidenceIds = new Set(
+    allFacts.filter((fact) => fact.sensitive === true).map((fact) => fact.id),
+  );
   const usableEvidenceIds = new Set(filterUsablePitchFacts(allFacts).map((fact) => fact.id));
   const candidateWorkplaces = letterWorkplaces(snapshot, usableEvidenceIds);
   // B618: кандидат места работы не выбирает; модель получает весь мастер-профиль.
@@ -174,11 +179,9 @@ function readLetterContext(
     facts: allFacts,
     candidateWorkplaces,
     workplaces,
-    profile: letterProfileText({
-      draft: snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT,
-      facts: allFacts,
-      withheldEvidenceIds: new Set(allFacts.filter((fact) => fact.sensitive === true).map((fact) => fact.id)),
-    }),
+    draft,
+    withheldEvidenceIds,
+    profile: letterProfileText({ draft, facts: allFacts, withheldEvidenceIds }),
     targetCompany: isWantedCompany(deps, candidateId, vacancy.company),
     tone: body?.tone ?? 'executive',
     language: body?.language ?? detectVacancyLanguage(vacancy),
@@ -210,6 +213,46 @@ function letterPitch(
   });
 }
 
+/**
+ * Английскому письму переводятся пункты мест работы и, отдельным вызовом рядом, уточнения кандидата (B639):
+ * второй вызов не задерживает первый, а профиль собирается заново только если перевод уточнений пришёл.
+ */
+/** B639: работа кандидата в компании вакансии или её группе идёт во вводный абзац. */
+function companyLinkInput(
+  context: Awaited<ReturnType<typeof readLetterContext>>,
+  company: string | undefined,
+): { companyLink?: string } {
+  const link = letterCompanyLink(company, letterEmployerNames(context.draft, context.facts));
+  return link ? { companyLink: link } : {};
+}
+
+async function translatedLetterInput(
+  deps: RouteDeps,
+  context: Awaited<ReturnType<typeof readLetterContext>>,
+) {
+  const { facts, workplaces, language, draft, withheldEvidenceIds } = context;
+  const toTranslate = letterFactsToTranslate(facts, workplaces, language);
+  const notesToTranslate = letterNotesToTranslate(draft, facts, language);
+  const [translations, noteTranslations] = await Promise.all([
+    translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS),
+    translateLetterFacts(
+      deps.experienceFactRewriter,
+      notesToTranslate,
+      LETTER_TRANSLATION_BUDGET_MS,
+    ),
+  ]);
+  const translatedFacts = withTranslatedStatements(facts, translations);
+  const profile =
+    noteTranslations.size > 0
+      ? letterProfileText({
+          draft,
+          facts: withTranslatedStatements(translatedFacts, noteTranslations),
+          withheldEvidenceIds,
+        })
+      : context.profile;
+  return { toTranslate, translations, translatedFacts, profile };
+}
+
 async function writeVacancyPitch(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -217,11 +260,14 @@ async function writeVacancyPitch(
   body: z.infer<typeof vacancyPitchInputSchema>,
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
-  const context = await retryOnSqliteBusy(() => readLetterContext(deps, candidateId, body, vacancy));
-  const { candidateName, facts, candidateWorkplaces, workplaces, language, profile, contextMs, resume } = context;
-  const toTranslate = letterFactsToTranslate(facts, workplaces, language);
-  const translations = await translateLetterFacts(deps.experienceFactRewriter, toTranslate, LETTER_TRANSLATION_BUDGET_MS);
-  const translatedFacts = withTranslatedStatements(facts, translations);
+  const context = await retryOnSqliteBusy(() =>
+    readLetterContext(deps, candidateId, body, vacancy),
+  );
+  const { candidateName, candidateWorkplaces, language, contextMs, resume } = context;
+  const { toTranslate, translations, translatedFacts, profile } = await translatedLetterInput(
+    deps,
+    context,
+  );
   const gender = candidateGenderFromName(candidateName);
   const written = await writeCoverLetterBody(deps.coverLetterWriter, request, {
     vacancy: { ...vacancy, description: vacancy.fullDescription },
@@ -232,6 +278,7 @@ async function writeVacancyPitch(
     ...(body?.language ? { chosenLanguage: body.language } : {}),
     resumeAttached: resume.available, contextMs,
     ...(candidateName ? { candidateName } : {}),
+    ...companyLinkInput(context, vacancy.company),
   });
   if (translations.size < toTranslate.length) {
     request.log.warn({ wanted: toTranslate.length, translated: translations.size }, 'letter-result-translation-incomplete');
