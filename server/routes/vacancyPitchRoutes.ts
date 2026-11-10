@@ -32,6 +32,7 @@ import {
 } from './helpers';
 import { pitchRankingContext } from './pitchRankingContext';
 import { letterEmployerNames, letterNotesToTranslate, letterProfileText } from '../domain/letterProfile';
+import { latinEmployerNames, withLatinEmployerNames } from '../domain/letterLatinEmployers';
 import { letterCompanyLink } from '../domain/letterCompanyLink';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
@@ -242,15 +243,30 @@ async function translatedLetterInput(
     ),
   ]);
   const translatedFacts = withTranslatedStatements(facts, translations);
+  const letterFacts = withTranslatedStatements(translatedFacts, noteTranslations);
   const profile =
     noteTranslations.size > 0
-      ? letterProfileText({
-          draft,
-          facts: withTranslatedStatements(translatedFacts, noteTranslations),
-          withheldEvidenceIds,
-        })
+      ? letterProfileText({ draft, facts: letterFacts, withheldEvidenceIds })
       : context.profile;
-  return { toTranslate, translations, translatedFacts, profile };
+  return {
+    toTranslate,
+    translations,
+    translatedFacts,
+    profile: language === 'en' ? latinProfile(profile, context, letterFacts) : profile,
+  };
+}
+
+/** B640: в английском письме названия работодателей латиницей — из уточнений или транслитерацией. */
+function latinProfile(
+  profile: string,
+  context: Awaited<ReturnType<typeof readLetterContext>>,
+  facts: readonly { readonly statement: string }[],
+): string {
+  const names = latinEmployerNames(
+    letterEmployerNames(context.draft, context.facts),
+    facts.map((fact) => fact.statement),
+  );
+  return withLatinEmployerNames(profile, names);
 }
 
 async function writeVacancyPitch(

@@ -1,4 +1,6 @@
 import { MODEL_CHAINS, resolveChain } from './modelChains';
+import { gateRules, letterCorrection } from '../domain/letterCorrection';
+import { SlowStageBreaker } from './letterStageBreaker';
 import OpenAI, { APIConnectionTimeoutError, APIUserAbortError } from 'openai';
 import {
   COVER_LETTER_MAX_CHARS,
@@ -66,6 +68,8 @@ export interface CoverLetterWriteInput {
   readonly candidateName?: string;
   /** B639: место кандидата в компании вакансии или её группе. */
   readonly companyLink?: string;
+  /** B640: причина отказа проверки для второго вызова той же модели (`letterCorrection`). */
+  readonly correction?: string;
 }
 
 /** Спрашивать модель не о чем: это не отказ провайдера. */
@@ -237,6 +241,7 @@ export function letterPrompt(input: CoverLetterWriteInput): string {
     ...(input.resumeAttached === false ? { resumeAttached: false } : {}),
     ...(input.candidateName ? { candidateName: input.candidateName } : {}),
     ...(input.companyLink ? { companyLink: input.companyLink } : {}),
+    ...(input.correction ? { correction: input.correction } : {}),
   });
 }
 
@@ -340,24 +345,62 @@ function reviewed(outcome: CoverLetterOutcome, input: CoverLetterWriteInput): Co
   return { failure: { stage: outcome.stage ?? 'unknown', kind: 'unusable_response', detail } };
 }
 
-/** Очередь ступеней письма: молчание одной — повод спросить следующую. */
+interface RefusedByGate {
+  readonly stage: number;
+  readonly rules: readonly string[];
+}
+
+/**
+ * Очередь ступеней письма: молчание одной — повод спросить следующую. Автомат медленной ступени
+ * (B640) меняет порядок на 10 минут. Если все ступени отказали, а одна из них написала письмо, которое
+ * отклонила проверка, эта ступень пишет ещё раз с причиной отказа: пустое письмо хуже второго вызова.
+ */
 export class QueuedCoverLetterWriter implements CoverLetterWriter {
   constructor(
     private readonly stages: readonly CoverLetterWriter[],
     readonly descriptors: readonly string[] = [],
     private readonly onStageFailure: (failure: CoverLetterFailure) => void = logStageFailure,
+    private readonly breaker?: SlowStageBreaker,
   ) {}
 
   async writeCoverLetter(input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
     let lastFailure: CoverLetterFailure | undefined;
-    for (const stage of this.stages) {
-      const written = await stage.writeCoverLetter(input);
-      const outcome = reviewed(written, input);
+    let refused: RefusedByGate | undefined;
+    for (const index of this.order()) {
+      const outcome = await this.ask(index, input);
       if (outcome.body) return outcome;
-      if (outcome.failure) this.onStageFailure(outcome.failure);
       lastFailure = outcome.failure ?? lastFailure;
+      const rules = gateRules(outcome.failure?.detail);
+      if (rules.length > 0) refused = { stage: index, rules };
     }
-    return lastFailure ? { failure: lastFailure } : {};
+    const retried = refused ? await this.retry(refused, input) : undefined;
+    if (retried?.body) return retried;
+    const failure = retried?.failure ?? lastFailure;
+    return failure ? { failure } : {};
+  }
+
+  private order(): readonly number[] {
+    const indices = this.stages.map((_stage, index) => index);
+    return this.breaker && this.descriptors.length === this.stages.length
+      ? this.breaker.order(this.descriptors)
+      : indices;
+  }
+
+  private async ask(index: number, input: CoverLetterWriteInput): Promise<CoverLetterOutcome> {
+    const outcome = reviewed(await this.stages[index]!.writeCoverLetter(input), input);
+    if (outcome.failure) {
+      this.onStageFailure(outcome.failure);
+      this.breaker?.recordFailure(outcome.failure);
+    }
+    return outcome;
+  }
+
+  private async retry(
+    refused: RefusedByGate,
+    input: CoverLetterWriteInput,
+  ): Promise<CoverLetterOutcome | undefined> {
+    const correction = letterCorrection(refused.rules, input.resumeAttached !== false);
+    return correction ? this.ask(refused.stage, { ...input, correction }) : undefined;
   }
 }
 
@@ -381,6 +424,8 @@ export function buildCoverLetterWriter(
   return new QueuedCoverLetterWriter(
     stages.map((stage) => stage.writer),
     stages.map((stage) => stage.label),
+    logStageFailure,
+    new SlowStageBreaker(stages[0]!.label),
   );
 }
 

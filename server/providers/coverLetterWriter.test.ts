@@ -18,8 +18,10 @@ import {
   vacancyText,
   withinTimeBudget,
   type CoverLetterOutcome,
+  type CoverLetterWriteInput,
   type CoverLetterWriter,
 } from './coverLetterWriter';
+import { SlowStageBreaker } from './letterStageBreaker';
 
 function client(
   content: string | null,
@@ -275,6 +277,74 @@ describe('QueuedCoverLetterWriter', () => {
     );
     await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'v' });
     expect(calls).toEqual(['d', 'g', 'v']);
+  });
+});
+
+describe('QueuedCoverLetterWriter: пустых писем нет (B640, решение CPO 10.11)', () => {
+  const recorded = (label: string, outcomes: Awaited<ReturnType<CoverLetterWriter['writeCoverLetter']>>[], seen: CoverLetterWriteInput[]): CoverLetterWriter => ({
+    writeCoverLetter: async (request) => {
+      seen.push(request);
+      return outcomes.shift() ?? { failure: { stage: label, kind: 'timeout' } };
+    },
+  });
+  const named = (body: string) => (body.includes('Resource-Logistics') ? ['name'] : []);
+
+  it('GLM отклонена проверкой, Gemini нет: второй вызов GLM с причиной отказа', async () => {
+    const seen: CoverLetterWriteInput[] = [];
+    const queue = new QueuedCoverLetterWriter(
+      [
+        recorded('d', [{ failure: { stage: 'd', kind: 'timeout' } }], []),
+        recorded('g', [{ body: 'At GK Resource-Logistics I led.', stage: 'g' }, { body: 'At GK Resurs-Logistika I led.', stage: 'g' }], seen),
+      ],
+      ['d', 'g'],
+      () => undefined,
+    );
+    await expect(queue.writeCoverLetter({ ...input, review: named })).resolves.toMatchObject({
+      body: 'At GK Resurs-Logistika I led.',
+      stage: 'g',
+    });
+    expect(seen.map((request) => request.correction)).toEqual([
+      undefined,
+      expect.stringContaining('Не переводи и не меняй названия работодателей'),
+    ]);
+    expect(letterPrompt(seen[1]!)).toContain('Прошлый вариант письма отклонён.');
+    expect(letterPrompt(seen[0]!)).not.toContain('Прошлый вариант письма отклонён.');
+  });
+
+  it('второй отказ — отказ всей цепочки (маршрут отвечает 503)', async () => {
+    const bad = { body: 'At GK Resource-Logistics I led.', stage: 'g' };
+    const queue = new QueuedCoverLetterWriter([recorded('g', [bad, bad], [])], ['g'], () => undefined);
+    const outcome = await queue.writeCoverLetter({ ...input, review: named });
+    expect(outcome.body).toBeUndefined();
+    expect(outcome.failure).toMatchObject({ stage: 'g', detail: 'letter_gate:name' });
+  });
+
+  it('таймауты без отказа проверки второго вызова не дают', async () => {
+    const seen: CoverLetterWriteInput[] = [];
+    const queue = new QueuedCoverLetterWriter([recorded('g', [], seen)], ['g'], () => undefined);
+    await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({ failure: { kind: 'timeout' } });
+    expect(seen).toHaveLength(1);
+  });
+
+  it('два таймаута DeepSeek — следующее письмо начинается с GLM', async () => {
+    const calls: string[] = [];
+    const stage = (label: string, outcome: Awaited<ReturnType<CoverLetterWriter['writeCoverLetter']>>): CoverLetterWriter => ({
+      writeCoverLetter: async () => {
+        calls.push(label);
+        return outcome;
+      },
+    });
+    const queue = new QueuedCoverLetterWriter(
+      [stage('d', { failure: { stage: 'd', kind: 'timeout' } }), stage('g', { body: 'Письмо GLM.', stage: 'g' })],
+      ['d', 'g'],
+      () => undefined,
+      new SlowStageBreaker('d', () => 0, () => undefined),
+    );
+    await queue.writeCoverLetter(input);
+    await queue.writeCoverLetter(input);
+    calls.length = 0;
+    await expect(queue.writeCoverLetter(input)).resolves.toMatchObject({ stage: 'g' });
+    expect(calls).toEqual(['g']);
   });
 });
 
