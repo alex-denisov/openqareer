@@ -47,7 +47,8 @@ interface ParsedTitle {
 const PRUNE_CHUNK = 5_000;
 /** B641 10.11: whole-table prune at pass end held the loop ~10 s; one rowid window per step. */
 const PRUNE_WINDOW = 20_000;
-const MISSING_WINDOW = 10_000;
+const MISSING_WINDOW = 5_000;
+const CORRECTION_WINDOW = 20_000;
 const CORRECTION_CHUNK = 500;
 const CORRECTION_BUDGET_MS = 300;
 const SLOW_STEP_MS = 1_000;
@@ -85,9 +86,8 @@ export class SemanticBackfill {
   private relabelDone = false;
   private relabelCursor = 0;
   private ontologyCorrectionDone = false;
-  private correctionPhase: 'exact' | 'senior' | 'oneRole' = 'exact';
+  private correctionPhase: 'exact' | 'scan' = 'exact';
   private correctionOffset = 0;
-  private oneRoleRows: OneRoleRow[] | null = null;
   private readonly exactCorrected = new Set<string>();
 
   constructor(
@@ -185,23 +185,24 @@ export class SemanticBackfill {
         this.correctionOffset += CORRECTION_CHUNK;
         return this.exactOntologyCorrections(slice);
       }
-      this.correctionPhase = 'senior';
-      return this.seniorManagerCorrections();
-    }
-    if (this.correctionPhase === 'senior') {
-      this.correctionPhase = 'oneRole';
+      this.correctionPhase = 'scan';
       this.correctionOffset = 0;
-      this.oneRoleRows = this.readOneRoleRows();
       return [];
     }
-    const rows = this.oneRoleRows ?? [];
-    if (this.correctionOffset >= rows.length) {
-      this.oneRoleRows = null;
-      return undefined;
-    }
-    const slice = rows.slice(this.correctionOffset, this.correctionOffset + CORRECTION_CHUNK);
-    this.correctionOffset += CORRECTION_CHUNK;
-    return this.oneRoleCorrections(slice);
+    // B641 10.11: два LIKE-запроса по всему title_parse на холодном кэше
+    // держали шаг до 4 с. Окно CORRECTION_WINDOW строк по rowid за порцию;
+    // в окне сначала «руководитель группы», потом CIO/поддержка — как раньше.
+    const from = this.correctionOffset;
+    const max = (
+      this.database.prepare('SELECT max(rowid) AS m FROM title_parse').get() as { m: number | null }
+    ).m;
+    if (max === null || from >= max) return undefined;
+    const to = from + CORRECTION_WINDOW;
+    this.correctionOffset = to;
+    return [
+      ...this.seniorManagerCorrections(from, to),
+      ...this.oneRoleCorrections(this.readOneRoleRows(from, to)),
+    ];
   }
 
   /**
@@ -209,20 +210,20 @@ export class SemanticBackfill {
    * меняется: пересчитываются только эти названия. Модельный разбор поддержки не трогается, запись
    * идёт лишь при расхождении, поэтому повторный проход не пишет в базу.
    */
-  private readOneRoleRows(): OneRoleRow[] {
+  private readOneRoleRows(from: number, to: number): OneRoleRow[] {
     return this.database
       .prepare(
         `SELECT title_key, sample_title, functions, level_rank, parsed_by FROM title_parse
-         WHERE (parsed_by = 'rules' AND title_key LIKE '%поддержк%')
+         WHERE rowid > ? AND rowid <= ? AND ((parsed_by = 'rules' AND title_key LIKE '%поддержк%')
            OR (parsed_by = 'rules' AND title_key LIKE '%centum vp%')
            OR (parsed_by = 'rules' AND functions LIKE '%public-service%'
              AND (title_key LIKE '% it%' OR title_key LIKE '% ит%'))
            OR ((title_key LIKE '%директор%' OR title_key LIKE '%департамент%' OR title_key LIKE '%director%'
                OR title_key LIKE '%chief information%')
              AND (title_key LIKE '%it%' OR title_key LIKE '%ит%'
-               OR title_key LIKE '%информац%' OR title_key LIKE '%information%'))`,
+               OR title_key LIKE '%информац%' OR title_key LIKE '%information%')))`,
       )
-      .all() as unknown as OneRoleRow[];
+      .all(from, to) as unknown as OneRoleRow[];
   }
 
   private oneRoleCorrections(rows: readonly OneRoleRow[]): Correction[] {
@@ -302,16 +303,23 @@ export class SemanticBackfill {
    * версия словаря не менялась — поэтому переписываются оба вида разбора. Уровень становится lead, функции модели остаются. Один проход
    * по `title_parse` за процесс, вместе с исправлением по онтологии.
    */
-  private seniorManagerCorrections(): { key: string; functions: string; levelRank: number }[] {
+  private seniorManagerCorrections(
+    from: number,
+    to: number,
+  ): { key: string; functions: string; levelRank: number }[] {
     const rows = this.database
       .prepare(
         `SELECT title_key, sample_title, functions FROM title_parse
-         WHERE parsed_by IN ('model', 'rules') AND level_rank > ?
+         WHERE rowid > ? AND rowid <= ? AND parsed_by IN ('model', 'rules') AND level_rank > ?
            AND (title_key LIKE '%senior manager%' OR title_key LIKE '%sr manager%'
              OR title_key LIKE '%sr. manager%' OR title_key LIKE '%senior % manager%'
              OR title_key LIKE '%руководитель группы%' OR title_key LIKE '%group lead%')`,
       )
-      .all(LEVEL_RANK.lead) as { title_key: string; sample_title: string; functions: string }[];
+      .all(from, to, LEVEL_RANK.lead) as {
+      title_key: string;
+      sample_title: string;
+      functions: string;
+    }[];
     return rows
       .filter((row) => isSeniorManagerLead(row.sample_title))
       .map((row) => ({ key: row.title_key, functions: row.functions, levelRank: LEVEL_RANK.lead }));
