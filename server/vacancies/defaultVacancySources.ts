@@ -4,6 +4,7 @@ import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoar
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
 import { DEFAULT_TELEGRAM_RELOCATION_SOURCES } from './defaultTelegramRelocationSources';
 import { DEFAULT_CORPORATE_SOURCES } from './defaultCorporateSources';
+import { FREEHIRE_FEED_MEASUREMENTS, FREEHIRE_FEED_SOURCES } from './freehire/freehireFeeds';
 
 
 /**
@@ -97,6 +98,7 @@ export function vacancySourceMeasurements(sourceId: string): readonly VacancySou
     MEASUREMENTS[sourceId] ??
     ATS_BOARD_MEASUREMENTS[sourceId] ??
     WORKDAY_BOARD_MEASUREMENTS[sourceId] ??
+    FREEHIRE_FEED_MEASUREMENTS[sourceId] ??
     []
   );
 }
@@ -744,4 +746,5 @@ export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
   ...DEFAULT_CORPORATE_SOURCES,
   ...ATS_BOARD_SOURCES,
   ...WORKDAY_BOARD_SOURCES,
+  ...FREEHIRE_FEED_SOURCES,
 ];

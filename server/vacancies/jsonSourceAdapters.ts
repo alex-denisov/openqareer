@@ -1,4 +1,5 @@
 import { himalayasSalaryPeriod } from '../../shared/vacancySalaryPeriod';
+import { freehireFeedFor } from './freehire/freehireFeeds';
 import { repairMojibake, unescapeLiteralBreaks } from './mojibake';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import {
@@ -79,7 +80,9 @@ export function hasJsonAdapter(sourceId: string): boolean {
     // Crossover собирается из sitemap и Kentico своим сборщиком (B217).
     sourceId === CROSSOVER_SOURCE_ID ||
     // LinkedIn собирается своим HTML-разбором (B218).
-    sourceId === LINKEDIN_SOURCE_ID
+    sourceId === LINKEDIN_SOURCE_ID ||
+    // Ленты freehire читают список своим сборщиком (B641).
+    freehireFeedFor(sourceId) !== undefined
   );
 }
 

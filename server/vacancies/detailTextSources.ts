@@ -2,6 +2,7 @@ import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { decodeFeedEntities, htmlToFeedText } from '../connectors/feedText';
 import { record, text } from './jsonVacancyRecord';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
+import { freehireDetailTextSource } from './freehire/freehireFeeds';
 
 /**
  * Площадки, чей список не отдаёт текст вакансии, а карточка — отдаёт (B535).
@@ -248,7 +249,7 @@ const BY_ID: Readonly<Record<string, DetailTextSource>> = {
 export function detailTextSourceFor(sourceId: string): DetailTextSource | undefined {
   if (sourceId.startsWith(WORKDAY_SOURCE_PREFIX)) return workday;
   if (sourceId.startsWith(SMARTRECRUITERS_PREFIX)) return smartRecruiters;
-  return BY_ID[sourceId];
+  return BY_ID[sourceId] ?? freehireDetailTextSource(sourceId);
 }
 
 /** Источник, чей текст дочитывает воркер и чей дочитанный текст сохраняет повторная запись. */

@@ -39,6 +39,7 @@ import {
 } from './linkedinGuestBudget';
 import { fetchGenericCorporateVacancies } from './genericCorporateSiteAdapter';
 import { fetchBamboohrBoard } from './bamboohrBoardFetch';
+import { fetchFreehireFeed, freehireFeedFor } from './freehire/freehireFeeds';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -635,6 +636,7 @@ async function fetchJsonOrCareerSite(
     return fetchGenericCorporateVacancies(source, deps.fetchWithStealth);
   }
   if (source.type === 'json_api') {
+    if (freehireFeedFor(source.id)) return fetchFreehireFeed(source.id, source.name);
     if (source.id === CROSSOVER_SOURCE_ID) return fetchCrossoverSource(source);
     if (source.id === LINKEDIN_SOURCE_ID)
       return fetchLinkedinGuestSource(sleep, linkedinBudget, deps.linkedinFetch ?? fetch);
