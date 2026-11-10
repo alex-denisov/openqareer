@@ -9,6 +9,7 @@ import { RUSSIAN_PLATFORM_FEEDS } from './russianPlatformFeeds';
 import { SITEMAP_FEEDS } from './sitemapJsonLdFeed';
 import { atsBoardFeed, atsFeedId, ORACLE_DETAIL } from './atsFamilies';
 import { MEASURED_ATS_BOARDS } from './atsBoards';
+import { atsFuseTripped, recordAtsReading } from './atsFuse';
 import { readJsonLdJobPosting } from '../detailTextSources';
 
 /**
@@ -122,8 +123,13 @@ export async function fetchFreehireFeed(
 ): Promise<SourceReading> {
   const feed = freehireFeedFor(sourceId);
   if (!feed) throw new Error(`vacancy_source_adapter_missing: ${sourceId}`);
+  const isAts = ATS_IDS.has(feed.id);
+  const tripped = isAts ? atsFuseTripped() : undefined;
+  // Предохранитель: срез сохраняется, новых вакансий нет (частичное чтение без строк).
+  if (tripped) return { vacancies: [], partial: true };
   const observedAt = new Date().toISOString();
   const listing = await feed.list(client, { observedAt, sourceName }, sourceId);
+  if (isAts) recordAtsReading(sourceId, listing.vacancies.length, listing.partial);
   return { vacancies: [...listing.vacancies], partial: listing.partial };
 }
 

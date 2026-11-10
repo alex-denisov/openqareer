@@ -155,3 +155,47 @@ describe('B641 rollout and paid-model gate', () => {
     expect(pick(notExcludedSourceUrlSql('url'))).toEqual(['src-fh-sber:1']);
   });
 });
+
+describe('B641 Oracle per-poll cap and fuse', () => {
+  it('reads at most ORACLE_ROWS_PER_POLL rows per poll, then a full slice', async () => {
+    const { resetOracleCursors, ORACLE_ROWS_PER_POLL } = await import('./atsFamilies');
+    resetOracleCursors();
+    const total = ORACLE_ROWS_PER_POLL + 100;
+    const client = createFeedClient({
+      fetchImpl: (async (input: string | URL | Request) => {
+        const offset = Number(String(input).match(/offset=(\d+)/)?.[1]);
+        const n = Math.min(100, total - offset);
+        const list = Array.from({ length: n }, (_, i) => ({ Id: String(offset + i), Title: 'T' }));
+        return new Response(
+          JSON.stringify({ items: [{ TotalJobsCount: total, requisitionList: list }] }),
+        );
+      }) as typeof fetch,
+      sleep: async () => {},
+    });
+    const entry = {
+      provider: 'oracle' as const,
+      board: 'big.fa.ocs.oraclecloud.com/CX',
+      company: 'Big',
+      jobs: total,
+    };
+    const first = await atsBoardFeed(entry).list(client, ctx, 'src-fh-oracle-big');
+    expect([first.vacancies.length, first.partial]).toEqual([ORACLE_ROWS_PER_POLL, true]);
+    const second = await atsBoardFeed(entry).list(client, ctx, 'src-fh-oracle-big');
+    expect([second.vacancies.length, second.partial]).toEqual([total, false]);
+  });
+
+  it('trips on ATS vacancies over 1.5x the pool and on stalls after an hour', async () => {
+    const fuse = await import('./atsFuse');
+    fuse.resetAtsFuse(0);
+    fuse.recordAtsReading('src-fh-icims-a', 100, false);
+    expect(fuse.atsFuseTripped(1)).toBeUndefined();
+    fuse.recordAtsReading('src-fh-oracle-b', fuse.POOL_BASELINE_VACANCIES / 2, true);
+    expect(fuse.atsFuseTripped(2)).toContain('ATS');
+    fuse.resetAtsFuse(0);
+    const hour = 3_600_000;
+    const heavy = fuse.STALL_BASELINE_SECONDS_PER_HOUR * fuse.FUSE_RATIO * 1000 + 1;
+    fuse.recordEventLoopStall(heavy, hour - 10);
+    expect(fuse.atsFuseTripped(hour - 5)).toBeUndefined();
+    expect(fuse.atsFuseTripped(hour)).toContain('стоянки');
+  });
+});

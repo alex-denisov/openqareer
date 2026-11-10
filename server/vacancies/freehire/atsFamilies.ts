@@ -1,7 +1,7 @@
 import type { DetailTextSource } from '../detailTextSources';
 import { htmlToFeedText } from '../../connectors/feedText';
 import { asArray, fromIso, numeric, record, text } from '../jsonVacancyRecord';
-import { feed, paged, REMOTE_RE, type FreehireFeed, type Row } from './feedKit';
+import { feed, REMOTE_RE, type FreehireFeed, type Row } from './feedKit';
 import { sitemapFeed } from './sitemapJsonLdFeed';
 import type { JsonLdPosting } from './jsonLdPosting';
 
@@ -101,6 +101,36 @@ function oracleListUrl(host: string, site: string, offset: number): string {
   );
 }
 
+/** Новых строк Oracle за опрос (по аналогии с sitemap, B641): крупная доска набирается за несколько опросов. */
+export const ORACLE_ROWS_PER_POLL = 1_500;
+
+interface OracleCursor {
+  offset: number;
+  rows: Map<string, Row>;
+}
+
+/** Прочитанное по доскам Oracle между опросами одного процесса. */
+const oracleCursors = new Map<string, OracleCursor>();
+
+export function resetOracleCursors(): void {
+  oracleCursors.clear();
+}
+
+function oracleRow(host: string, site: string, r: Record<string, unknown>): Row {
+  return {
+    externalId: text(r.Id),
+    title: text(r.Title),
+    url: `https://${host}/hcmUI/CandidateExperience/en/sites/${site}/job/${text(r.Id)}`,
+    location: text(r.PrimaryLocation),
+    remote: REMOTE_RE.test(text(r.WorkplaceTypeCode)),
+    publishedAt: fromIso(r.PostedDate),
+  };
+}
+
+/**
+ * Читает с курсора не больше ORACLE_ROWS_PER_POLL строк. Пока доска не дочитана —
+ * частичное чтение только новых строк; дочитав, отдаёт полный срез и начинает новый круг.
+ */
 function oracleFeed(entry: AtsBoardEntry): FreehireFeed {
   const [host = '', site = ''] = entry.board.split('/');
   return feed(
@@ -112,22 +142,33 @@ function oracleFeed(entry: AtsBoardEntry): FreehireFeed {
       homeUrl: `https://${host}/hcmUI/CandidateExperience/en/sites/${site}/jobs`,
     },
     async (client, delay) => {
-      let offset = 0;
-      return paged(client, delay, async () => {
-        const first = record(
-          asArray(record(await client.getJson(oracleListUrl(host, site, offset))).items)?.[0],
-        );
-        const rows = (asArray(first.requisitionList) ?? []).map(record).map((r): Row => ({
-          externalId: text(r.Id),
-          title: text(r.Title),
-          url: `https://${host}/hcmUI/CandidateExperience/en/sites/${site}/job/${text(r.Id)}`,
-          location: text(r.PrimaryLocation),
-          remote: REMOTE_RE.test(text(r.WorkplaceTypeCode)),
-          publishedAt: fromIso(r.PostedDate),
-        }));
-        offset += rows.length;
-        return { rows, more: offset < (numeric(first.TotalJobsCount) ?? 0) };
-      });
+      const cursor = oracleCursors.get(entry.board) ?? { offset: 0, rows: new Map() };
+      oracleCursors.set(entry.board, cursor);
+      const fresh: Row[] = [];
+      let total = Number.POSITIVE_INFINITY;
+      while (fresh.length < ORACLE_ROWS_PER_POLL && cursor.offset < total) {
+        if (cursor.offset > 0 || fresh.length > 0) await client.pause(delay);
+        let payload: unknown;
+        try {
+          payload = await client.getJson(oracleListUrl(host, site, cursor.offset));
+        } catch (error) {
+          // Первая страница опроса падает громко; дальше — отдаём уже прочитанное.
+          if (fresh.length === 0) throw error;
+          break;
+        }
+        const first = record(asArray(record(payload).items)?.[0]);
+        total = numeric(first.TotalJobsCount) ?? 0;
+        const rows = (asArray(first.requisitionList) ?? [])
+          .map(record)
+          .map((r) => oracleRow(host, site, r));
+        if (rows.length === 0) break;
+        cursor.offset += rows.length;
+        for (const row of rows) cursor.rows.set(row.externalId, row);
+        fresh.push(...rows);
+      }
+      if (cursor.offset < total) return { rows: fresh, partial: true };
+      oracleCursors.delete(entry.board);
+      return { rows: [...cursor.rows.values()], partial: false };
     },
   );
 }
