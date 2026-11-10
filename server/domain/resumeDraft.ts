@@ -62,6 +62,14 @@ export interface ResumeExperienceInput {
   readonly employerGroupKey?: string;
   /** v2: how many people the candidate led in this role; absent means unknown. */
   readonly teamSize?: number;
+  /**
+   * B639: настоящее название компании, если `employer` — маска для LinkedIn («Enterprise Energy IT Services»).
+   * Его назвал кандидат; оно опирается на подтверждённый факт `employerNameMemoryId` и идёт в письмо.
+   */
+  readonly employerRealName?: string;
+  readonly employerNameMemoryId?: string;
+  /** B639: кандидат ответил, что это настоящее название, и вопрос о компании больше не задаётся. */
+  readonly employerMaskKept?: boolean;
 }
 
 export interface ResumeCertificationInput {
@@ -442,6 +450,9 @@ export const resumeDraftSchema = z
             employerLogoMediaId: mediaIdSchema.optional(),
             employerGroupKey: labelSchema.optional(),
             teamSize: z.number().int().min(1).max(100_000).optional(),
+            employerRealName: labelSchema.optional(),
+            employerNameMemoryId: memoryIdSchema.optional(),
+            employerMaskKept: z.boolean().optional(),
           })
           .strict(),
       )

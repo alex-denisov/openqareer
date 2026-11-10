@@ -519,11 +519,7 @@ export interface CandidateStore {
   ): boolean;
   claimConsultantSummary(candidateId: string, task: ConsultantSummaryTask): boolean;
   releaseConsultantSummaryClaim(candidateId: string, task: ConsultantSummaryTask): void;
-  rejectConsultantProposal(
-    candidateId: string,
-    proposalKey: string,
-    reason?: string,
-  ): void;
+  rejectConsultantProposal(candidateId: string, proposalKey: string, reason?: string): void;
   getConsultantRejections(candidateId: string): ConsultantRejection[];
   withdrawConsultantRejection(candidateId: string, proposalKey: string): void;
   addManualExperienceFact(
@@ -532,6 +528,9 @@ export interface CandidateStore {
     statement: string,
     experienceId?: string,
   ): StoredMemory;
+  /** B639: настоящее название вместо маски работодателя или ответ «это и есть название». */
+  answerEmployerName(candidateId: string, memoryId: string, employer: string,
+    answer: { readonly name: string } | { readonly keepAsIs: true }): StoredMemory | null;
   changeMemory(
     candidateId: string,
     memoryId: string,

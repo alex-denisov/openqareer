@@ -1,0 +1,69 @@
+/* B639: вопрос о настоящем названии компании под маской работодателя. */
+.profile-employer-name {
+  display: grid;
+  gap: var(--career-space-2);
+  margin-block-start: var(--career-space-3);
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-accent-soft);
+  min-inline-size: 0;
+}
+
+.profile-employer-name.is-saved {
+  padding: 0;
+  border: 0;
+  background: none;
+  gap: var(--career-space-1);
+}
+
+.profile-employer-name__label {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.profile-employer-name__hint,
+.profile-employer-name__saved {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  overflow-wrap: anywhere;
+}
+
+.profile-employer-name__saved b {
+  color: var(--career-text);
+  font-weight: 600;
+}
+
+.profile-employer-name__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.profile-employer-name__row input {
+  flex: 1 1 14rem;
+  min-inline-size: 0;
+  padding: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-sm);
+}
+
+.profile-employer-name__row input:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 1px;
+}
+
+.profile-employer-name__row input[aria-invalid='true'] {
+  border-color: var(--career-danger);
+}
+
+.profile-employer-name__row input:disabled {
+  opacity: 0.6;
+}

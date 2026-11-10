@@ -28,6 +28,16 @@ export interface RevisionProvenance {
 
 export type ImportPlatform = ResumeProfileUpdateInput['platform'];
 
+/** B639: the candidate's answer about a masked employer survives a re-import of the same place. */
+function employerNameAnswer(entry: ResumeExperienceInput): Partial<ResumeExperienceInput> {
+  const { employerRealName, employerNameMemoryId, employerMaskKept } = entry;
+  return {
+    ...(employerRealName ? { employerRealName } : {}),
+    ...(employerNameMemoryId ? { employerNameMemoryId } : {}),
+    ...(employerMaskKept ? { employerMaskKept } : {}),
+  };
+}
+
 export function protectedEditsFromRevisions(
   revisions: readonly RevisionProvenance[],
 ): ProtectedProfileEdits {
@@ -84,7 +94,7 @@ function mergeExperience(
     const match = findMatch(role);
     if (!match) return role;
     used.add(match.id);
-    if (!edits.experienceIds.has(match.id)) return { ...role, id: match.id };
+    if (!edits.experienceIds.has(match.id)) return { ...role, ...employerNameAnswer(match), id: match.id };
     if (role.title && norm(role.title) !== norm(match.title)) {
       proposals.push({ platform, section: 'experience', entryId: match.id, field: 'title', proposedText: role.title });
     }

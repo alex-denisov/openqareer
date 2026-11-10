@@ -36,6 +36,15 @@ describe('mergeReimportedDraft — a re-import merges, never silently overwrites
     expect(merged.experience.map((entry) => entry.id)).toEqual(['impold-exp-1']);
   });
 
+  it('B639: keeps the answered real employer name when the place is re-imported', () => {
+    const mask = { employer: 'Enterprise Energy IT Services' };
+    const answer = { employerRealName: 'Россети Цифра', employerNameMemoryId: 'm-name' };
+    const existing = draft({ experience: [role('impold-exp-1', { ...mask, ...answer })] });
+    const incoming = draft({ experience: [role('impnew-exp-1', mask)] });
+    const merged = mergeReimportedDraft(incoming, existing, NO_EDITS, 'linkedin');
+    expect(merged.experience[0]).toMatchObject({ id: 'impold-exp-1', ...answer });
+  });
+
   it('keeps a consultant-edited role title and turns the LinkedIn value into a proposal', () => {
     const existing = draft({ experience: [role('impold-exp-1', { title: 'Chief Information Officer' })] });
     const incoming = draft({ experience: [role('impnew-exp-1', { title: 'Head of IT' })] });

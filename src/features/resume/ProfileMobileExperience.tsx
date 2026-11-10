@@ -1,3 +1,4 @@
+import { ProfileEmployerName } from './ProfileEmployerName';
 import { useRef, useState } from 'react';
 import {
   ConfirmExperienceButton,
@@ -131,6 +132,7 @@ export function ProfileMobileExperienceDetail(props: ExperienceProps) {
         <p>{entry.title || 'Должность не указана'}</p>
         <p className="num">{periodLabel(entry)}</p>
       </div>
+      <ProfileEmployerName place={entry} onChanged={props.onManualExperienceFactAdded} />
       <MobileExperienceFacts
         entry={entry}
         memory={props.memory}

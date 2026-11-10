@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from './resumeDraft';
-import { letterProfileText, MAX_LETTER_PROFILE_CHARS } from './letterProfile';
+import {
+  letterNoteFacts,
+  letterNotesToTranslate,
+  letterProfileText,
+  MAX_LETTER_PROFILE_CHARS,
+} from './letterProfile';
 import type { VacancyPitchInputFact } from './vacancyPitchService';
 
 function fact(id: string, statement: string, status: VacancyPitchInputFact['status'] = 'confirmed'): VacancyPitchInputFact {
@@ -76,6 +81,91 @@ describe('letterProfileText: весь мастер-профиль для пис�
     expect(text).toContain('- Тикетов стало на 40% меньше.');
     expect(text).toContain('- Команда 250+ человек.');
     expect(text).toContain('- «Enterprise Public Cloud Platform» — это VK Cloud');
+  });
+
+  it('настоящее название работодателя стоит вместо маски, а факт о нём не дублируется уточнением (B639)', () => {
+    const masked: ResumeDraft = {
+      ...draft,
+      experience: draft.experience.map((place) =>
+        place.id === 'w1'
+          ? {
+              ...place,
+              employer: 'Enterprise Energy IT Services',
+              employerRealName: 'Россети Цифра',
+              employerNameMemoryId: 'name',
+            }
+          : place,
+      ),
+    };
+    const nameFact = {
+      ...fact(
+        'name',
+        'Компания «Enterprise Energy IT Services» в профиле называется «Россети Цифра».',
+      ),
+      domain: 'other',
+    };
+    const text = letterProfileText({ draft: masked, facts: [...facts, nameFact] });
+    expect(text).toContain('## Директор | Россети Цифра | Москва');
+    expect(text).not.toContain('Enterprise Energy IT Services');
+    expect(letterNoteFacts(masked, [...facts, nameFact]).map((item) => item.id)).toEqual(['note']);
+  });
+
+  it('работодатель места сменился: прежний ответ о маске не подставляется (B639)', () => {
+    const changed: ResumeDraft = {
+      ...draft,
+      experience: draft.experience.map((place) =>
+        place.id === 'w1'
+          ? {
+              ...place,
+              employer: 'Газпром нефть',
+              employerRealName: 'Россети Цифра',
+              employerNameMemoryId: 'name',
+            }
+          : place,
+      ),
+    };
+    const nameFact = {
+      ...fact(
+        'name',
+        'Компания «Enterprise Energy IT Services» в профиле называется «Россети Цифра».',
+      ),
+      domain: 'other',
+    };
+    expect(letterProfileText({ draft: changed, facts: [...facts, nameFact] })).toContain(
+      '## Директор | Газпром нефть | Москва',
+    );
+  });
+
+  it('английскому письму переводят только русские уточнения, русскому ничего (B639)', () => {
+    const notes = [
+      ...facts,
+      fact('ru', 'Работаю с Python каждый день'),
+      fact('en', 'Built LLM Gateway in production'),
+    ];
+    expect(letterNotesToTranslate(draft, notes, 'en').map((item) => item.id)).toEqual([
+      'note',
+      'ru',
+    ]);
+    expect(letterNotesToTranslate(draft, notes, 'ru')).toEqual([]);
+  });
+
+  it('без подтверждённого факта о названии остаётся название из профиля (B639)', () => {
+    const masked: ResumeDraft = {
+      ...draft,
+      experience: draft.experience.map((place) =>
+        place.id === 'w1'
+          ? {
+              ...place,
+              employer: 'Enterprise Energy IT Services',
+              employerRealName: 'Россети Цифра',
+              employerNameMemoryId: 'gone',
+            }
+          : place,
+      ),
+    };
+    expect(letterProfileText({ draft: masked, facts })).toContain(
+      '## Директор | Enterprise Energy IT Services | Москва',
+    );
   });
 
   it('уточнение, повторяющее «о себе» или строку места работы, не дублируется (B601, 10.11)', () => {

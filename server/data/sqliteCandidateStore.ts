@@ -540,10 +540,7 @@ export class SqliteCandidateStore implements CandidateStore {
     );
   }
 
-  deleteVacancySubscription(
-    candidateId: string,
-    subscriptionId: string,
-  ): boolean {
+  deleteVacancySubscription(candidateId: string, subscriptionId: string): boolean {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.delete(candidateId, subscriptionId);
   }
@@ -806,6 +803,7 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   declare addManualExperienceFact: MemoryMethods['addManualExperienceFact'];
+  declare answerEmployerName: MemoryMethods['answerEmployerName'];
   declare reviewMemories: MemoryMethods['reviewMemories'];
   declare applyExperienceFactRewrite: MemoryMethods['applyExperienceFactRewrite'];
   declare revertExperienceFactRewrite: MemoryMethods['revertExperienceFactRewrite'];

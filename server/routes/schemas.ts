@@ -457,6 +457,17 @@ export const manualExperienceFactSchema = z
   })
   .strict();
 
+/** B639: ответ на вопрос о маске работодателя — настоящее название или «это и есть название». */
+export const employerNameAnswerSchema = z.union([
+  z
+    .object({
+      employer: z.string().trim().min(1).max(120),
+      name: z.string().trim().min(1).max(120),
+    })
+    .strict(),
+  z.object({ employer: z.string().trim().min(1).max(120), keepAsIs: z.literal(true) }).strict(),
+]);
+
 export const assessmentIdSchema = z.enum(['product-case-v1']);
 
 export const resumeImportSchema = z
