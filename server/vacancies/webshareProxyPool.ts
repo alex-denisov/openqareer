@@ -58,6 +58,33 @@ export function parseWebshareList(
   return out;
 }
 
+/**
+ * Платные/резидентные прокси без API Webshare: OPENQAREER_LINKEDIN_GUEST_PROXY_URLS —
+ * адреса `http://login:pass@host:port` через запятую. Неверные адреса пропускаются.
+ */
+export function readStaticProxyList(env: NodeJS.ProcessEnv = process.env): WebshareProxy[] {
+  const raw = env.OPENQAREER_LINKEDIN_GUEST_PROXY_URLS?.trim();
+  if (!raw) return [];
+  const out: WebshareProxy[] = [];
+  for (const item of raw.split(',')) {
+    try {
+      const url = new URL(item.trim());
+      const port = url.port === '' ? 80 : Number(url.port);
+      if (url.protocol !== 'http:' || !url.hostname || !Number.isInteger(port) || port <= 0)
+        continue;
+      out.push({
+        host: url.hostname,
+        port,
+        username: decodeURIComponent(url.username),
+        password: decodeURIComponent(url.password),
+      });
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
 export function isLinkedinUrl(input: Parameters<typeof fetch>[0]): boolean {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
   try {

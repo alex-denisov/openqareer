@@ -315,6 +315,34 @@ describe('MaintenanceWorker (B230)', () => {
     expect(log.entries.some((entry) => entry.msg === 'linkedin-pool-executor-step')).toBe(true);
   });
 
+  it('logs a pool skip reason once per change', async () => {
+    const seen: string[] = [];
+    const log = {
+      ...silentLog(),
+      info: (fields: unknown, msg: string) => {
+        if (msg === 'linkedin-pool-executor-skipped')
+          seen.push((fields as { status: string }).status);
+      },
+    };
+    const statuses = ['daily_limit', 'daily_limit', 'outside_window', 'processed', 'daily_limit'];
+    const linkedinPoolExecutor = {
+      runStep: vi.fn(async () => ({
+        status: statuses.shift() as 'daily_limit',
+        pageCount: 0,
+        recruiterCount: 0,
+      })),
+      stop: vi.fn(async () => undefined),
+    };
+    const worker = new MaintenanceWorker({
+      engine: {} as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'],
+      log,
+      linkedinPoolExecutor,
+    });
+    for (let i = 0; i < 5; i += 1) await worker.runLinkedinPoolExecutorStep();
+    await worker.stop();
+    expect(seen).toEqual(['daily_limit', 'outside_window', 'daily_limit']);
+  });
+
   it('a stuck source does not block the next wave for the other sources', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
     directories.push(directory);

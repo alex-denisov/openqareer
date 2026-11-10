@@ -171,6 +171,16 @@ const ORPHAN_CLUSTERS_REST_MS = 60 * 60 * 1_000;
  * площадку дважды. На SIGTERM `stop()` ждёт идущие волны не дольше срока и
  * запрещает новые — база закрывается после.
  */
+const SKIP_STATUSES: ReadonlySet<string> = new Set([
+  'disabled',
+  'outside_window',
+  'window_skipped',
+  'rest_day',
+  'daily_limit',
+  'no_target',
+  'account_not_ready',
+]);
+
 export class MaintenanceWorker {
   private readonly engine: MaintenanceEngine;
   private readonly log: MaintenanceLog;
@@ -184,6 +194,8 @@ export class MaintenanceWorker {
   private readonly titleModel?: TitleModelStep;
   private readonly roleLink?: RoleLinkStep;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
+  /** B626: последний статус пропуска — пишем в журнал только смену причины. */
+  private linkedinPoolSkipStatus: string | undefined;
   private readonly purgeRecruiters?: () => number;
   private readonly now: () => number;
   private orphanRestUntil = 0;
@@ -512,6 +524,7 @@ export class MaintenanceWorker {
   async runLinkedinPoolExecutorStep(): Promise<void> {
     if (this.stopped || !this.linkedinPoolExecutor) return;
     const work = this.linkedinPoolExecutor.runStep().then((result) => {
+      this.logLinkedinPoolSkip(result.status);
       if (result.status === 'processed') {
         this.log.info(
           {
@@ -537,6 +550,13 @@ export class MaintenanceWorker {
       }
     });
     await this.track(work, 'linkedin-pool-executor-failed', undefined);
+  }
+
+  private logLinkedinPoolSkip(status: string): void {
+    const skip = SKIP_STATUSES.has(status) ? status : undefined;
+    if (skip === this.linkedinPoolSkipStatus) return;
+    this.linkedinPoolSkipStatus = skip;
+    if (skip) this.log.info({ status: skip }, 'linkedin-pool-executor-skipped');
   }
 
   /** Периодический снимок окон S2, даже если все строки в них уже размечены. */
