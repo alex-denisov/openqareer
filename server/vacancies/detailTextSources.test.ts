@@ -227,7 +227,7 @@ describe('MultiSourceVacancyEngine detail step for registry sources (B535)', () 
       'src-netflix': 'https://explore.jobs.netflix.net/careers/job/7',
       'src-microsoft-careers': 'https://apply.careers.microsoft.com/careers/job/7',
       'src-qualcomm-careers': 'https://careers.qualcomm.com/careers/job/7',
-      'src-habr-career': 'https://career.habr.com/vacancies/7',
+      'src-fh-habr-career': 'https://career.habr.com/vacancies/7',
       'src-yc-work-at-startup': 'https://www.ycombinator.com/companies/a/jobs/b',
     };
     const sources = [

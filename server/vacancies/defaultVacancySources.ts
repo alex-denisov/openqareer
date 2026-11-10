@@ -140,7 +140,9 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     accessClass: 'open_web',
     market: 'Россия',
     addressStatus: 'live',
-    enabled: true,
+    enabled: false,
+    disabledReason:
+      'Заменён лентой src-fh-habr-career (B641, 10.11): RSS отдаёт около 50 последних записей, API фронтенда — весь каталог (1 109 вакансий).',
     targetUrl: 'https://career.habr.com/vacancies/rss',
     refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
