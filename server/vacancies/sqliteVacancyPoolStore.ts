@@ -323,6 +323,11 @@ function listingSummaryOf(row: CatalogListingRow): CatalogListingSummary {
 /** Строк индекса за вызов при поиске снятых hh-записей с живым кластером (B641). */
 const EXPIRED_HH_CLUSTER_WINDOW = 20_000;
 
+/** B641: the worker polls pending requests every 5 s; a covering partial index skips observations. */
+const SOURCE_SYNC_REQUESTED_INDEX = `CREATE INDEX IF NOT EXISTS vacancy_source_state_requested
+  ON vacancy_source_state (source_id, sync_requested_at, sync_started_at)
+  WHERE sync_requested_at IS NOT NULL`;
+
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private readonly database: DatabaseSync;
   private readonly databasePath: string;
@@ -386,7 +391,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       VACANCY_SOURCE_SYNC_STARTED_AT_COLUMN,
     );
     this.ensureColumn('vacancy_pool', 'expired_at', VACANCY_POOL_EXPIRED_AT_COLUMN);
-    this.database.exec(VACANCY_POOL_INDEX_TABLE);
+    this.database.exec(`${VACANCY_POOL_INDEX_TABLE};${SOURCE_SYNC_REQUESTED_INDEX};`);
     // Match LIMIT must stop in index order; CASE remote sorting previously
     // joined and sorted the entire fresh pool, including every wide payload.
     this.database.exec(MATCH_ORDER_SCHEMA);
@@ -898,6 +903,28 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       }
     });
     return buried;
+  }
+
+  loadRequestedSourceSyncs(): {
+    sourceId: string;
+    syncRequestedAt: string;
+    syncStartedAt?: string;
+  }[] {
+    const rows = this.database
+      .prepare(
+        `SELECT source_id, sync_requested_at, sync_started_at
+           FROM vacancy_source_state WHERE sync_requested_at IS NOT NULL`,
+      )
+      .all() as unknown as {
+      source_id: string;
+      sync_requested_at: string;
+      sync_started_at: string | null;
+    }[];
+    return rows.map((row) => ({
+      sourceId: row.source_id,
+      syncRequestedAt: row.sync_requested_at,
+      ...(row.sync_started_at ? { syncStartedAt: row.sync_started_at } : {}),
+    }));
   }
 
   loadSourceStates(): StoredSourceState[] {

@@ -45,6 +45,8 @@ interface ParsedTitle {
 }
 
 const PRUNE_CHUNK = 5_000;
+/** B641 10.11: whole-table prune at pass end held the loop ~10 s; one rowid window per step. */
+const PRUNE_WINDOW = 20_000;
 /** Названий на шаг для грейдов: только правила, модель не вызывается. */
 const GRADE_CHUNK = 2_000;
 /** Выше этой ступени название уже различает `level_rank`. */
@@ -55,6 +57,8 @@ const RELABEL_CHUNK = 200;
 export class SemanticBackfill {
   private readonly database: DatabaseSync;
   private cursor = '';
+  private pruneCursor = 0;
+  private prunedSincePass = 0;
   private missingIds: readonly string[] | null = null;
   private gradeCursor = '';
   /** Устаревших разборов не осталось — до рестарта таблицу больше не обходим. */
@@ -86,7 +90,9 @@ export class SemanticBackfill {
     const poolRowsScanned = windowEnd === null ? this.countRemainingRows() : chunk;
     const passFinished = windowEnd === null;
     this.cursor = windowEnd ?? '';
-    const pruned = passFinished ? this.pruneOrphans() : 0;
+    this.prunedSincePass += this.pruneOrphans();
+    const pruned = passFinished ? this.prunedSincePass : 0;
+    if (passFinished) this.prunedSincePass = 0;
     this.gradeStep();
     return {
       scanned: rows.length + caughtUp.backfilled,
@@ -504,15 +510,17 @@ export class SemanticBackfill {
    * старт сервера и записи HTTP (B303).
    */
   private pruneOrphans(): number {
+    const from = this.pruneCursor;
     const rowids = this.database
       .prepare(
         `SELECT s.rowid AS rowid FROM vacancy_semantic s
          LEFT JOIN vacancy_pool_index i ON i.id = s.id
-         WHERE i.id IS NULL OR i.expired = 1
+         WHERE s.rowid > ? AND s.rowid <= ? AND (i.id IS NULL OR i.expired = 1)
          LIMIT ?`,
       )
-      .all(PRUNE_CHUNK)
+      .all(from, from + PRUNE_WINDOW, PRUNE_CHUNK)
       .map((row) => Number(row.rowid));
+    if (rowids.length < PRUNE_CHUNK) this.advancePruneCursor(from + PRUNE_WINDOW);
     if (rowids.length === 0) return 0;
     const drop = this.database.prepare('DELETE FROM vacancy_semantic WHERE rowid = ?');
     this.database.exec('BEGIN');
@@ -524,6 +532,15 @@ export class SemanticBackfill {
       this.database.exec('ROLLBACK');
       throw error;
     }
+  }
+
+  private advancePruneCursor(next: number): void {
+    const max = (
+      this.database.prepare('SELECT max(rowid) AS m FROM vacancy_semantic').get() as {
+        m: number | null;
+      }
+    ).m;
+    this.pruneCursor = max !== null && next < max ? next : 0;
   }
 }
 
