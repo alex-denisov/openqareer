@@ -1,5 +1,5 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
-import { adoptBoardCompany } from './directoryFromBoards';
+import { adoptBoardCompany, topCompanyName } from './directoryFromBoards';
 import { PLACEMENT_TABLES } from './placementSchema';
 import { buildLinkageIndex, type DirectoryRow } from './placementLinkage';
 import { PLACEMENT_PRIORITY, placementOf, type Placement } from './placementModel';
@@ -29,8 +29,8 @@ interface Options {
 type Work = Placement & { readonly discoveredBy: 'source' | 'directory'; readonly url: string | null };
 
 const DEFAULT_CHUNK = 300;
-/** Имя компании — запрос по записям доски; в одной порции не больше 20 таких. */
-const ADOPT_PER_STEP = 20;
+/** Имена компаний читаются до транзакции и не дольше 150 мс на порцию. */
+const ADOPT_LOOKUP_BUDGET_MS = 150;
 
 interface DirectoryRecord extends DirectoryRow {
   readonly careersUrl: string | null;
@@ -73,7 +73,7 @@ export class PlacementBackfill {
   private changedTotal = 0;
   private duplicateSources = 0;
   private adopted = 0;
-  private adoptedThisStep = 0;
+  private names = new Map<string, string | null>();
   private readonly sourceOf: StatementSync;
   private readonly dropMoved: StatementSync;
   private readonly upsert: StatementSync;
@@ -111,7 +111,7 @@ export class PlacementBackfill {
     this.work ??= this.buildWork();
     const slice = this.work.slice(this.cursor, this.cursor + this.chunk);
     let changed = 0;
-    this.adoptedThisStep = 0;
+    this.names = this.lookupNames(slice);
     this.database.exec('BEGIN IMMEDIATE');
     try {
       for (const item of slice) changed += this.write(item);
@@ -146,12 +146,27 @@ export class PlacementBackfill {
     return changed;
   }
 
+  private needsCompany(item: Work): boolean {
+    return item.discoveredBy === 'source' && !item.companyKey && (item.type === 'ats' || item.type === 'employer_site');
+  }
+
+  /** Чтение вне транзакции: запись не держит блокировку, пока ищутся имена. */
+  private lookupNames(slice: readonly Work[]): Map<string, string | null> {
+    const startedAt = this.now();
+    const names = new Map<string, string | null>();
+    for (const item of slice) {
+      if (this.now() - startedAt >= ADOPT_LOOKUP_BUDGET_MS) break;
+      if (this.needsCompany(item)) names.set(item.sourceId, topCompanyName(this.database, item.sourceId));
+    }
+    return names;
+  }
+
   /** Доска работодателя вне справочника заводит свою компанию (B643). */
   private withAdoptedCompany(item: Work): Work {
-    if (item.discoveredBy !== 'source' || item.companyKey || (item.type !== 'ats' && item.type !== 'employer_site')) return item;
-    if (this.adoptedThisStep >= ADOPT_PER_STEP) return item;
-    this.adoptedThisStep += 1;
-    const companyKey = adoptBoardCompany(this.database, item, new Date(this.now()).toISOString());
+    if (!this.needsCompany(item)) return item;
+    if (!this.names.has(item.sourceId)) return item;
+    const name = this.names.get(item.sourceId) ?? null;
+    const companyKey = adoptBoardCompany(this.database, item, new Date(this.now()).toISOString(), name);
     if (companyKey) this.adopted += 1;
     return companyKey ? { ...item, companyKey } : item;
   }
@@ -168,6 +183,8 @@ export class PlacementBackfill {
 /** Бюджет одного такта и пауза между проходами. */
 export const PLACEMENT_TICK_BUDGET_MS = 300;
 export const PLACEMENT_PASS_PAUSE_MS = 6 * 60 * 60_000;
+/** Проход, заведший компании, повторяется скоро: остаток досок ждёт своей очереди. */
+export const PLACEMENT_ADOPT_PAUSE_MS = 5 * 60_000;
 
 /** Такт обслуживания: порции в бюджете 300 мс, после прохода — пауза 6 ч. */
 export class PlacementBackfillTicker {
@@ -185,7 +202,7 @@ export class PlacementBackfillTicker {
     while (this.now() - startedAt < PLACEMENT_TICK_BUDGET_MS) {
       const report = this.backfill.step();
       if (report.done) {
-        this.nextPassAt = this.now() + PLACEMENT_PASS_PAUSE_MS;
+        this.nextPassAt = this.now() + (report.adoptedCompanies > 0 ? PLACEMENT_ADOPT_PAUSE_MS : PLACEMENT_PASS_PAUSE_MS);
         return report;
       }
     }
