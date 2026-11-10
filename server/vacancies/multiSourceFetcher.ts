@@ -38,6 +38,7 @@ import {
   type LinkedinGuestBudget,
 } from './linkedinGuestBudget';
 import { fetchGenericCorporateVacancies } from './genericCorporateSiteAdapter';
+import { fetchBamboohrBoard } from './bamboohrBoardFetch';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
 type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -151,7 +152,15 @@ async function fetchJsonApi(
   options?: { query?: string },
 ): Promise<UnifiedVacancy[]> {
   const url = withQuery(source, options?.query);
-  const xmlProvider = parseAtsBoardSourceId(source.id)?.provider;
+  const board = parseAtsBoardSourceId(source.id);
+  if (board?.provider === 'bamboohr') {
+    const payload = await fetchBamboohrBoard(board.board);
+    return normalizeJsonSource(source.id, payload, {
+      observedAt: new Date().toISOString(),
+      sourceName: source.name,
+    });
+  }
+  const xmlProvider = board?.provider;
   if (xmlProvider === 'personio' || xmlProvider === 'teamtailor') {
     return fetchXmlAtsBoard(source, url);
   }
