@@ -166,7 +166,7 @@ export function readPendingCompanies(database: DatabaseSync, limit: number): rea
     .prepare(
       `SELECT company_key, company_name, website_url, linkedin_url FROM company_directory
         WHERE status = 'active' AND ats_provider IS NULL
-          AND (evidence IS NULL OR (instr(evidence, 'B627') = 0 AND instr(evidence, 'freehire') = 0))
+          AND (evidence IS NULL OR (instr(evidence, 'B627') = 0 AND instr(evidence, 'freehire') = 0 AND instr(evidence, 'B643') = 0))
         ORDER BY created_at DESC, company_key LIMIT ?`,
     )
     .all(limit) as unknown as { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null }[];
