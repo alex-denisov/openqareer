@@ -95,6 +95,20 @@ describe('PlacementBackfill adopts employers outside the directory', () => {
   });
 });
 
+describe('PlacementBackfillTicker pause', () => {
+  it('repeats soon after a pass that adopted companies', async () => {
+    const { PlacementBackfillTicker, PLACEMENT_ADOPT_PAUSE_MS } = await import('./placementBackfill');
+    let clock = 0;
+    let calls = 0;
+    const step = () => { calls += 1; return { done: true, processed: 1, changed: 1, changedTotal: 1, duplicateSources: 0, adoptedCompanies: 3, ms: 1 }; };
+    const ticker = new PlacementBackfillTicker({ step }, () => clock);
+    ticker.tick();
+    clock += PLACEMENT_ADOPT_PAUSE_MS;
+    ticker.tick();
+    expect(calls).toBe(2);
+  });
+});
+
 describe('PlacementBackfillTicker', () => {
   it('stops at the budget, reports the finished pass and then pauses', async () => {
     const { PlacementBackfillTicker, PLACEMENT_PASS_PAUSE_MS } = await import('./placementBackfill');

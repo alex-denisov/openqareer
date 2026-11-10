@@ -25,7 +25,8 @@ export function boardCompanyKey(sourceId: string, slug: string | null): string {
   return raw.toLowerCase().replace(/[^a-z0-9а-яё]+/g, '-').replace(/^-|-$/g, '');
 }
 
-function topCompanyName(database: DatabaseSync, sourceId: string): string | null {
+/** Самое частое имя компании в живых записях доски. */
+export function topCompanyName(database: DatabaseSync, sourceId: string): string | null {
   const row = database.prepare(`SELECT json_extract(c.cluster_json, '$.company') AS name, count(*) AS n
       FROM vacancy_pool_index i JOIN vacancy_cluster_input c ON c.id = i.id
      WHERE i.source_id = ? AND i.expired = 0 GROUP BY 1 ORDER BY n DESC LIMIT 1`).get(sourceId) as
@@ -41,7 +42,12 @@ function ownerOf(database: DatabaseSync, key: string): string | null | undefined
 }
 
 /** Компания для доски; `null` — у доски нет живых вакансий, называть нечем. */
-export function adoptBoardCompany(database: DatabaseSync, board: BoardRef, nowIso: string): string | null {
+export function adoptBoardCompany(
+  database: DatabaseSync,
+  board: BoardRef,
+  nowIso: string,
+  name: string | null = topCompanyName(database, board.sourceId),
+): string | null {
   const base = boardCompanyKey(board.sourceId, board.slug);
   if (!base) return null;
   const suffix = board.sourceId.startsWith('ats-') || board.sourceId.startsWith('src-fh-')
@@ -51,7 +57,6 @@ export function adoptBoardCompany(database: DatabaseSync, board: BoardRef, nowIs
     const owner = ownerOf(database, key);
     if (owner === board.sourceId) return key;
     if (owner !== undefined) continue;
-    const name = topCompanyName(database, board.sourceId);
     if (!name) return null;
     database.prepare(`INSERT INTO company_directory (company_key, company_name, source_type, status, created_at, updated_at, evidence)
         VALUES (?, ?, ?, 'active', ?, ?, ?)`).run(key, name, board.type === 'ats' ? 'ats_direct' : 'corporate_portal',
