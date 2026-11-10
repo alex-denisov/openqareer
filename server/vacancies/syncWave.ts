@@ -32,25 +32,37 @@ export function pickWave<T>(
  * полоса берёт до COMPANY_LANE_LIMIT каналов, но не больше
  * COMPANY_LANE_PER_HOST на один хост (все доски Greenhouse — один API).
  */
-export const COMPANY_LANE_LIMIT = 24;
+export const COMPANY_LANE_LIMIT = 96;
 export const COMPANY_LANE_PER_HOST = 3;
-export const COMPANY_LANE_CONCURRENCY = 12;
+export const COMPANY_LANE_CONCURRENCY = 24;
+/**
+ * B628: публичный JSON-API сервиса (все доски Greenhouse — один хост) держит
+ * десятки запросов; при 3 на хост сервис получал 36 опросов в час.
+ */
+export const ATS_SERVICE_PER_HOST = 16;
+const ATS_API_HOST =
+  /(?:^|\.)(?:greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|recruitee\.com|personio\.(?:de|com)|pinpointhq\.com|breezy\.hr|bamboohr\.com|teamtailor\.com|myworkdayjobs\.com)$/;
+
+export function companyLanePerHost(host: string): number {
+  return ATS_API_HOST.test(host) ? ATS_SERVICE_PER_HOST : COMPANY_LANE_PER_HOST;
+}
 /** Потолок ожидания одного канала в полосе; сам опрос не прерывается. */
 export const COMPANY_LANE_SOURCE_TIMEOUT_MS = 120_000;
 
 export function pickCompanyLane<T>(
   sorted: readonly T[],
   limit: number,
-  perHost: number,
+  perHost: number | ((host: string) => number),
   hostOf: (item: T) => string,
 ): T[] {
+  const limitOf = typeof perHost === 'number' ? () => perHost : perHost;
   const perHostUsed = new Map<string, number>();
   const picked: T[] = [];
   for (const item of sorted) {
     if (picked.length >= limit) break;
     const host = hostOf(item);
     const used = perHostUsed.get(host) ?? 0;
-    if (used >= perHost) continue;
+    if (used >= limitOf(host)) continue;
     perHostUsed.set(host, used + 1);
     picked.push(item);
   }

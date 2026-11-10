@@ -4,7 +4,7 @@ import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 
 /**
  * B628: каналы компаний (ярус 1) не делят шесть мест волны — у них своя
- * полоса до 24 каналов с лимитом три на хост; агрегаторы своё место сохраняют.
+ * полоса до 96 каналов: три на хост сайта, 16 на API сервиса ATS; агрегаторы своё место сохраняют.
  */
 function source(id: string, host: string, tier: 1 | 3): VacancySourceConfig {
   return {
@@ -22,8 +22,8 @@ function source(id: string, host: string, tier: 1 | 3): VacancySourceConfig {
 
 describe('B628 — полоса каналов компаний', () => {
   it('одна волна опрашивает больше шести сайтов компаний и не забывает агрегаторы', async () => {
-    const sites = Array.from({ length: 30 }, (_, i) => source(`site-${i}`, `c${i}.example`, 1));
-    const shared = Array.from({ length: 5 }, (_, i) =>
+    const sites = Array.from({ length: 100 }, (_, i) => source(`site-${i}`, `c${i}.example`, 1));
+    const shared = Array.from({ length: 20 }, (_, i) =>
       source(`gh-${i}`, 'boards-api.greenhouse.io', 1),
     );
     const aggregators = Array.from({ length: 4 }, (_, i) =>
@@ -41,8 +41,8 @@ describe('B628 — полоса каналов компаний', () => {
     await engine.syncDue();
 
     const companies = synced.filter((id) => !id.startsWith('agg-'));
-    expect(companies).toHaveLength(24);
-    expect(companies.filter((id) => id.startsWith('gh-'))).toHaveLength(3);
+    expect(companies).toHaveLength(96);
+    expect(companies.filter((id) => id.startsWith('gh-'))).toHaveLength(16);
     expect(synced.filter((id) => id.startsWith('agg-'))).toHaveLength(4);
   });
 });
