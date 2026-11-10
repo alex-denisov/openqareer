@@ -37,7 +37,9 @@ function site(files: Record<string, string | Uint8Array>, calls: string[] = []) 
       const url = String(input);
       calls.push(url);
       const body = files[url];
-      return body === undefined ? new Response('', { status: 404 }) : new Response(typeof body === 'string' ? body : Buffer.from(body));
+      return body === undefined
+        ? new Response('', { status: 404 })
+        : new Response(typeof body === 'string' ? body : Buffer.from(body));
     }) as typeof fetch,
     sleep: async () => {},
   });

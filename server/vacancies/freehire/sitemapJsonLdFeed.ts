@@ -3,7 +3,7 @@ import type { UnifiedVacancy } from '../../domain/unifiedVacancy';
 import { buildJsonVacancy, fromIso, type JsonAdapterContext } from '../jsonVacancyRecord';
 import type { FeedClient } from './feedClient';
 import type { FeedListing, FreehireFeed } from './feedKit';
-import { readJsonLdPostings } from './jsonLdPosting';
+import { readJsonLdPostings, type JsonLdPosting } from './jsonLdPosting';
 
 /**
  * Вакансии сайта по его sitemap и разметке JobPosting (B641, вторая очередь).
@@ -28,6 +28,17 @@ export interface SitemapBoard {
   readonly vacancyPattern: RegExp;
   readonly maxNewPerSync?: number;
   readonly pageDelayMs?: number;
+  /**
+   * Список вакансий — HTML-страница со ссылками, а не sitemap (Jobvite): адреса
+   * берутся из `href` по тому же шаблону.
+   */
+  readonly listing?: 'sitemap' | 'html';
+  /** Адрес страницы с разметкой, если это не сама ссылка (iCIMS: `?in_iframe=1`). */
+  readonly postingUrl?: (url: string, id: string) => string;
+  /** Работодатель — сама доска: `hiringOrganization` страницы не читается (freehire jobvite). */
+  readonly boardOwnsCompany?: boolean;
+  /** Разбор страницы, если на ней нет JobPosting (часть досок Jobvite). */
+  readonly fallbackPosting?: (html: string) => JsonLdPosting | undefined;
 }
 
 const MAX_DOCS = 200;
@@ -80,7 +91,30 @@ function sameSite(url: string, root: URL): boolean {
 }
 
 /** Обход индекса sitemap: адреса вакансий по шаблону, без повторов идентификатора. */
+const HREF_RE = /href=["']([^"'#]+)["']/gi;
+
+async function listHtmlHits(client: FeedClient, board: SitemapBoard): Promise<Hit[]> {
+  const root = new URL(board.sitemapUrl);
+  const html = await client.getText(board.sitemapUrl);
+  const seen = new Set<string>();
+  const hits: Hit[] = [];
+  for (const match of html.matchAll(HREF_RE)) {
+    let url: string;
+    try {
+      url = new URL(decodeXmlEntities(match[1] ?? ''), root).toString();
+    } catch {
+      continue;
+    }
+    const id = sameSite(url, root) ? url.match(board.vacancyPattern)?.[1] : undefined;
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    hits.push({ url, id });
+  }
+  return hits;
+}
+
 export async function listSitemapHits(client: FeedClient, board: SitemapBoard): Promise<Hit[]> {
+  if (board.listing === 'html') return listHtmlHits(client, board);
   const root = new URL(board.sitemapUrl);
   const seenDocs = new Set<string>();
   const seenIds = new Set<string>();
@@ -132,14 +166,16 @@ async function hydrate(
   context: JsonAdapterContext,
   sourceId: string,
 ): Promise<UnifiedVacancy | undefined> {
-  const posting = readJsonLdPostings(await client.getText(hit.url))[0];
+  const pageUrl = board.postingUrl ? board.postingUrl(hit.url, hit.id) : hit.url;
+  const html = await client.getText(pageUrl);
+  const posting = readJsonLdPostings(html)[0] ?? board.fallbackPosting?.(html);
   if (!posting?.title) return undefined;
   return buildJsonVacancy({
     sourceId,
     context: { ...context, sourceUrl: hit.url },
     externalId: hit.id,
     title: posting.title,
-    company: posting.company || board.company,
+    company: board.boardOwnsCompany ? board.company : posting.company || board.company,
     location: posting.location || undefined,
     isRemote: posting.remote || /удал|remote/i.test(posting.location),
     description: posting.description,

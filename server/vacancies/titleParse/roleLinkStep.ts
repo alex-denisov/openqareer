@@ -6,6 +6,7 @@ import type { BulkLlmClient } from '../../providers/bulkLlmClient';
 import { hasNoRoleToLink } from './roleLinkTitles';
 import { rulesParse } from './rulesParse';
 import { describeFailure } from './titleFreeze';
+import { notExcludedVacancyIdSql } from '../freehire/paidProcessingGate';
 
 /**
  * Связь названия с ролью словаря (владелец 04.11): правила, затем модель на неизвестных с закрытым
@@ -151,7 +152,8 @@ export class RoleLinkStep {
       .prepare(
         `SELECT p.title_key, p.sample_title, p.functions
          FROM (SELECT title_key, count(*) AS n FROM vacancy_semantic
-               WHERE level_rank >= 2 GROUP BY title_key) s
+               WHERE level_rank >= 2 AND ${notExcludedVacancyIdSql('id')}
+               GROUP BY title_key) s
          JOIN title_parse p ON p.title_key = s.title_key
          LEFT JOIN vacancy_role r ON r.title_key = s.title_key
          WHERE ${

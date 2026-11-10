@@ -7,6 +7,9 @@ import { createFeedClient, type FeedClient } from './feedClient';
 import { RUSSIAN_COMPANY_FEEDS, type FreehireFeed } from './russianCompanyFeeds';
 import { RUSSIAN_PLATFORM_FEEDS } from './russianPlatformFeeds';
 import { SITEMAP_FEEDS } from './sitemapJsonLdFeed';
+import { atsBoardFeed, atsFeedId, ORACLE_DETAIL } from './atsFamilies';
+import { MEASURED_ATS_BOARDS } from './atsBoards';
+import { atsFuseTripped, recordAtsReading } from './atsFuse';
 import { readJsonLdJobPosting } from '../detailTextSources';
 
 /**
@@ -21,11 +24,38 @@ const FEEDS: readonly FreehireFeed[] = [
   ...RUSSIAN_COMPANY_FEEDS,
   ...RUSSIAN_PLATFORM_FEEDS,
   ...SITEMAP_FEEDS,
+  ...MEASURED_ATS_BOARDS.map(atsBoardFeed),
 ];
 const BY_SOURCE_ID = new Map(FEEDS.map((f) => [`${FREEHIRE_SOURCE_PREFIX}${f.id}`, f]));
 
 export function freehireFeedFor(sourceId: string): FreehireFeed | undefined {
   return BY_SOURCE_ID.get(sourceId);
+}
+
+/**
+ * B641: доски ATS включаются порциями по 300 в сутки от даты старта (решение CPO
+ * 10.11 — пул вырастет больше чем вдвое). Порядок — порядок `MEASURED_ATS_BOARDS`.
+ * Набор пересчитывается при каждом старте процесса.
+ */
+export const ATS_ROLLOUT_START_MS = Date.UTC(2026, 10, 10);
+export const ATS_BOARDS_PER_DAY = 300;
+
+export function admittedAtsBoards(nowMs: number): number {
+  const days = Math.floor((nowMs - ATS_ROLLOUT_START_MS) / 86_400_000);
+  return days < 0 ? 0 : (days + 1) * ATS_BOARDS_PER_DAY;
+}
+
+const ATS_IDS = new Set(MEASURED_ATS_BOARDS.map((b) => atsFeedId(b)));
+const ADMITTED_ATS = new Set(
+  MEASURED_ATS_BOARDS.slice(0, admittedAtsBoards(Date.now())).map((b) => atsFeedId(b)),
+);
+
+function rollout(feedId: string): Pick<RegisteredVacancySource, 'enabled' | 'disabledReason'> {
+  if (!ATS_IDS.has(feedId) || ADMITTED_ATS.has(feedId)) return { enabled: true };
+  return {
+    enabled: false,
+    disabledReason: `Доска ATS ждёт своей порции: ${ATS_BOARDS_PER_DAY} досок в сутки с 10.11 (B641).`,
+  };
 }
 
 export const FREEHIRE_FEED_SOURCES: readonly RegisteredVacancySource[] = FEEDS.map((f) => ({
@@ -35,7 +65,7 @@ export const FREEHIRE_FEED_SOURCES: readonly RegisteredVacancySource[] = FEEDS.m
   accessClass: 'open_web',
   market: f.market,
   addressStatus: 'live',
-  enabled: true,
+  ...rollout(f.id),
   targetUrl: f.homeUrl,
   refreshIntervalMinutes: REFRESH_MINUTES,
   itemsFoundTotal: 0,
@@ -47,6 +77,7 @@ export const FREEHIRE_FEED_SOURCES: readonly RegisteredVacancySource[] = FEEDS.m
  * число записей после фильтров адаптера. Ответы с прода совпали по объёму.
  */
 const MEASURED_ITEMS: Readonly<Record<string, number>> = {
+  ...Object.fromEntries(MEASURED_ATS_BOARDS.map((b) => [atsFeedId(b), b.jobs])),
   sber: 2485,
   yandex: 150,
   ozon: 2280,
@@ -92,8 +123,13 @@ export async function fetchFreehireFeed(
 ): Promise<SourceReading> {
   const feed = freehireFeedFor(sourceId);
   if (!feed) throw new Error(`vacancy_source_adapter_missing: ${sourceId}`);
+  const isAts = ATS_IDS.has(feed.id);
+  const tripped = isAts ? atsFuseTripped() : undefined;
+  // Предохранитель: срез сохраняется, новых вакансий нет (частичное чтение без строк).
+  if (tripped) return { vacancies: [], partial: true };
   const observedAt = new Date().toISOString();
   const listing = await feed.list(client, { observedAt, sourceName }, sourceId);
+  if (isAts) recordAtsReading(sourceId, listing.vacancies.length, listing.partial);
   return { vacancies: [...listing.vacancies], partial: listing.partial };
 }
 
@@ -268,5 +304,6 @@ const DETAIL: Record<string, DetailTextSource> = {
 };
 
 export function freehireDetailTextSource(sourceId: string): DetailTextSource | undefined {
+  if (sourceId.startsWith(`${FREEHIRE_SOURCE_PREFIX}oracle-`)) return ORACLE_DETAIL;
   return DETAIL[sourceId];
 }
