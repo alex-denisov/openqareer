@@ -96,11 +96,26 @@ function repeatsProfile(statement: string, draft: ResumeDraft): boolean {
   });
 }
 
+/**
+ * Уточнение, которое письму не опора. 10.11 в профиль владельца шли 75 реплик беседы, среди них «Стало семь»,
+ * «-», «Из семи сменились» без контекста и оговорки «цифра 80% была выдумана». Одобренные письма run-15
+ * писались по девяти связным уточнениям: обрывок модель достраивает сама, а оговорка о том, чего не было,
+ * подсказывает цифру, которой в профиле нет.
+ */
+const MIN_NOTE_WORDS = 4;
+const NOT_A_BASIS_DOMAINS: ReadonlySet<string> = new Set(['gap']);
+
+/** Короткая реплика с числом остаётся: «Команда 250+ человек» — факт, а «Стало семь» — нет. */
+function isLetterBasis(fact: VacancyPitchInputFact): boolean {
+  if (fact.domain && NOT_A_BASIS_DOMAINS.has(fact.domain)) return false;
+  return /\d/u.test(fact.statement) || (fact.statement.match(/[\p{L}\p{N}]+/gu) ?? []).length >= MIN_NOTE_WORDS;
+}
+
 /** Факт вне мест работы: уточнение из беседы с консультантом, подтверждённые раньше импортированных. */
 function candidateNotes(draft: ResumeDraft, usable: readonly VacancyPitchInputFact[]): string[] {
   const linked = linkedIds(draft);
   const free = usable.filter((fact) =>
-    !linked.has(fact.id) && !isStructuredRecordStatement(fact.statement) && !repeatsProfile(fact.statement, draft));
+    !linked.has(fact.id) && isLetterBasis(fact) && !isStructuredRecordStatement(fact.statement) && !repeatsProfile(fact.statement, draft));
   const confirmed = free.filter((fact) => fact.status !== 'proposed');
   const imported = free.filter((fact) => fact.status === 'proposed');
   return [...confirmed, ...imported].map((fact) => `- ${fact.statement.trim()}`);

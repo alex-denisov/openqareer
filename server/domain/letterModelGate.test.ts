@@ -162,6 +162,13 @@ describe('reviewLetterBody: переведённое слово в назван�
   it('переведённое слово без основы в профиле остаётся чужим именем', () => {
     expect(names('At Furniture House Sever I managed settlements. My resume is attached.')).toHaveLength(1);
   });
+
+  it('страна по-английски, если в профиле она по-русски (Daikan, 10.11: «China» при «из Китая»)', () => {
+    const imports: LetterGateSources = { ...profile, candidate: ['Организую импорт из Китая и Турции.'] };
+    expect(reviewLetterBody('I manage import from China and Turkey. My resume is attached.', imports)
+      .filter((item) => item.rule === 'name')).toEqual([]);
+    expect(names('I manage import from China. My resume is attached.')).toHaveLength(1);
+  });
 });
 
 describe('reviewLetterBody: чужие компании', () => {

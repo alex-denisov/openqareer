@@ -238,13 +238,14 @@ function sameSound(word: string, known: string): boolean {
 
 /**
  * Слова названий, которые английское письмо переводит, а не транслитерирует (10.11: «Торговый дом Север» →
- * «Trading House Sever», «ИПБ России» → «IPB Russia»). Слово проходит, только если его русская основа есть в профиле.
+ * «Trading House Sever», «ИПБ России» → «IPB Russia», «из Китая» → «China»). Слово проходит, только если его русская основа есть в профиле.
  */
 const TRANSLATED_NAME_WORDS: Readonly<Record<string, readonly string[]>> = {
   trading: ['торгов'], house: ['дом'], group: ['групп', 'гк'], company: ['компани'], russia: ['росси'], russian: ['росси'],
   logistics: ['логист'], operator: ['оператор'], retail: ['розниц', 'ритейл'], chain: ['сеть', 'сети'], stores: ['магазин'],
   factory: ['фабрик', 'завод'], plant: ['завод'], furniture: ['мебел'], university: ['университет'], institute: ['институт'],
   financial: ['финансов'], government: ['правительств'], distributor: ['дистрибьютор'], appliances: ['техник'],
+  china: ['кита'],
 };
 
 function isTranslatedName(lower: string, known: ReadonlySet<string>): boolean {

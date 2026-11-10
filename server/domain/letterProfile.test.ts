@@ -65,6 +65,19 @@ describe('letterProfileText: весь мастер-профиль для пис�
     expect(text).toContain('УТОЧНЕНИЯ КАНДИДАТА К ПРОФИЛЮ (место работы у пунктов не указано');
   });
 
+  it('обрывки реплик и оговорки «такого не было» в уточнения не идут, связные уточнения идут (B601, 10.11)', () => {
+    const gap = { ...fact('g1', 'Цифра 80% по time-to-market была выдумана, и я не могу её обосновать.'), domain: 'gap' };
+    const text = letterProfileText({
+      draft,
+      facts: [...facts, fact('f1', 'Стало семь'), fact('f2', 'Из семи сменились'), fact('f3', '-'), gap,
+        fact('f4', 'Тикетов стало на 40% меньше.'), fact('f5', 'Команда 250+ человек.')],
+    });
+    for (const dropped of ['Стало семь', 'Из семи сменились', '- -', 'выдумана']) expect(text).not.toContain(dropped);
+    expect(text).toContain('- Тикетов стало на 40% меньше.');
+    expect(text).toContain('- Команда 250+ человек.');
+    expect(text).toContain('- «Enterprise Public Cloud Platform» — это VK Cloud');
+  });
+
   it('уточнение, повторяющее «о себе» или строку места работы, не дублируется (B601, 10.11)', () => {
     const text = letterProfileText({
       draft,
@@ -102,9 +115,9 @@ describe('letterProfileText: весь мастер-профиль для пис�
   it('подтверждённое уточнение идёт раньше импортированного, а запись места работы не считается уточнением', () => {
     const text = letterProfileText({
       draft,
-      facts: [...facts, { ...fact('imp0123456789-a', 'Импортированный факт', 'proposed') }, fact('note2', 'Работаю с Python каждый день')],
+      facts: [...facts, { ...fact('imp0123456789-a', 'Импортированный факт о работе с ITIL', 'proposed') }, fact('note2', 'Работаю с Python каждый день')],
     });
-    expect(text.indexOf('Работаю с Python каждый день')).toBeLessThan(text.indexOf('Импортированный факт'));
+    expect(text.indexOf('Работаю с Python каждый день')).toBeLessThan(text.indexOf('Импортированный факт о работе с ITIL'));
   });
 
   it('снятое кандидатом и закрытое не уходит: о себе, проекты и остальное по своему факту', () => {
