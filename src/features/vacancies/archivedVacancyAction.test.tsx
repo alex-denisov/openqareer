@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import * as openExternalLinkModule from '../../services/desktop/openExternalLink';
 import { VacancyRow } from './VacancyRow';
 import { vacancyRowPushProps } from './VacancyMobilePush';
 import type { VacancyApplications } from './useVacancyApplications';
@@ -74,12 +73,6 @@ function button(text: string): HTMLButtonElement | undefined {
   return Array.from(document.querySelectorAll('button')).find(
     (el) => el.textContent?.trim() === text,
   );
-}
-
-function click(text: string) {
-  const found = button(text);
-  if (!found) throw new Error(`no button ${text}`);
-  act(() => found.click());
 }
 
 afterEach(() => {

@@ -58,6 +58,7 @@ interface LetterRouteState {
 const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'evidence', 'AUD-9');
 const FACT_ID = 'fact-platform-delivery';
 const WORKPLACE_ID = 'work-platform';
+const TARGETED_VERSION_ID = '6f0c1a52-0d4e-5b1a-9c3e-2a7b8d9e0f11';
 
 function createRouteState(
   connectionMode: ConnectionMode = 'rich',
@@ -417,7 +418,7 @@ function approvedResume(state: LetterRouteState, generalResumeId: unknown) {
     ? { kind: 'master', versionId: null, documentId: 'document-b449-resume', snapshotAt }
     : {
         kind: 'targeted',
-        versionId: '6f0c1a52-0d4e-5b1a-9c3e-2a7b8d9e0f11',
+        versionId: TARGETED_VERSION_ID,
         documentId: 'document-b449-resume',
         snapshotAt,
       };
@@ -432,8 +433,12 @@ async function installPrepareResumeRoute(page: Page, state: LetterRouteState): P
       return route.fulfill({ status: 503, json: snapshotFailedBody(state) });
     }
     state.snapshotFailure = 'none';
+    // B631: the targeted version comes back so the letter can open it over itself.
+    const versionId = state.resumeKind === 'targeted' ? TARGETED_VERSION_ID : null;
     return route.fulfill({
-      json: { data: { ready: true, resumeAvailable: true, resumeKind: state.resumeKind } },
+      json: {
+        data: { ready: true, resumeAvailable: true, resumeKind: state.resumeKind, versionId },
+      },
     });
   });
 }
@@ -1108,7 +1113,7 @@ test.describe('B449 — письмо под вакансию', () => {
     await captureState(page, testInfo, 'resume-attached');
   });
 
-  test('opens the resume by pressing the whole row at 390', async ({ page }) => {
+  test('opens the resume over the letter by pressing the whole row at 390', async ({ page }) => {
     const state = createRouteState();
     await installLetterMocks(page, state);
     await openLetter(page);
@@ -1129,7 +1134,9 @@ test.describe('B449 — письмо под вакансию', () => {
     // Нажатие по тексту строки, не по кнопке: нажать и отпустить должно быть в одном слое.
     await page.mouse.click(point.x, point.y);
 
-    await expect(page.locator('.career-letter-screen')).toHaveCount(0);
+    // B631: the resume opens in a panel over the letter; the letter stays where it was.
+    await expect(page.getByRole('dialog', { name: 'Резюме под вакансию' })).toBeVisible();
+    await expect(page.locator('.career-letter-screen')).toHaveCount(1);
   });
 
   test('keeps the screen within 280px and primary interaction targets at 44px', async ({
@@ -1166,5 +1173,142 @@ test.describe('B449 — письмо под вакансию', () => {
     // Д10: (i) при 390 заменены подписью и не рисуются (display: none, размер 0).
     const shown = dimensions.filter(({ width, height }) => width > 0 || height > 0);
     expect(shown.every(({ width, height }) => width >= 44 && height >= 44)).toBe(true);
+  });
+});
+
+/** B631: the targeted resume version the letter opens in its side panel. */
+async function installResumeVersionRoute(page: Page): Promise<void> {
+  const value = (text: string) => ({ value: text });
+  await page.route('**/api/v1/candidate/resume/versions/*', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const document = {
+      contact: { fullName: 'Андрей Лебедев', links: [] },
+      targetRole: 'Head of Platform',
+      about: '',
+      experience: [
+        {
+          title: value('Head of Engineering'),
+          employer: value('Финтех Лаб'),
+          startDate: value('2021-03'),
+          current: { value: true },
+          description: value('Платформа для 40 команд, выпуск раз в день.'),
+          bullets: [],
+        },
+      ],
+      skills: [],
+      education: [],
+      languages: [],
+      courses: [],
+      projects: [],
+    };
+    return route.fulfill({
+      json: {
+        data: {
+          version: {
+            id: TARGETED_VERSION_ID,
+            title: 'Head of Platform',
+            requirements: [],
+            status: 'approved',
+            revision: 1,
+            sourceMasterRevision: 'mock-master-1',
+            createdAt: '2026-11-10T00:00:00.000Z',
+            updatedAt: '2026-11-10T00:00:00.000Z',
+            snapshot: {
+              document,
+              missingRequirements: [],
+              requirements: [],
+              matchedRequirements: [],
+            },
+          },
+          currentMasterRevision: 'mock-master-1',
+        },
+      },
+    });
+  });
+}
+
+test.describe('B631 — новичок откликается с письмом и резюме от раскрытой карточки', () => {
+  test('без прокрутки до «Откликнуться», резюме поверх письма, отклик с письмом и резюме', async ({
+    page,
+  }, testInfo) => {
+    const state = createRouteState();
+    await installLetterMocks(page, state);
+    await installResumeVersionRoute(page);
+    const marks: { clusterId: string; status: string }[] = [];
+    await page.route('**/api/v1/candidate/vacancy-applications', async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      const body = route.request().postDataJSON() as { clusterId: string; status: string };
+      marks.push(body);
+      return route.fulfill({
+        json: {
+          data: {
+            ...body,
+            openedAt: '2026-11-10T12:00:00.000Z',
+            appliedAt: '2026-11-10T12:00:00.000Z',
+            confirmedBy: 'candidate',
+          },
+        },
+      });
+    });
+    await page.addInitScript(() => {
+      window.open = (() => null) as typeof window.open;
+    });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+    const firstItem = page.locator('.vac-list-item').first();
+    await expect(firstItem).toBeVisible({ timeout: 15_000 });
+    const row = firstItem.locator('.vacancies-screen-row-trigger');
+    if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click();
+
+    // Счёт кликов от раскрытой карточки до отправленного отклика.
+    let clicks = 0;
+    const press = async (name: string) => {
+      await page.getByRole('button', { name, exact: true }).first().click();
+      clicks += 1;
+    };
+    const apply = page
+      .locator('.vacancy-push, .vacancies-screen-detail-actions')
+      .first()
+      .getByRole('button', { name: 'Откликнуться' });
+    // Находки 2: главная кнопка видна сразу, без прокрутки карточки.
+    await expect(apply).toBeInViewport();
+    await captureState(page, testInfo, 'b631-card-apply-in-view');
+    await apply.click();
+    clicks += 1;
+    await waitForLetter(page);
+
+    // Находка 5: резюме открывается поверх письма, письмо остаётся на месте.
+    await resumeRow(page)
+      .getByRole('button', { name: /Открыть/u })
+      .click();
+    clicks += 1;
+    const panel = page.getByRole('dialog', { name: 'Резюме под вакансию' });
+    await expect(panel).toContainText('АНДРЕЙ ЛЕБЕДЕВ');
+    await expect(panel).toContainText('Финтех Лаб');
+    await captureState(page, testInfo, 'b631-resume-over-letter');
+    await press('Вернуться к письму');
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveValue(/\S+/u);
+
+    // Находка 6: после одобрения одна дорога — скопировать и открыть, затем отметить.
+    await press('Одобрить письмо');
+    await expect(page.locator('.career-letter-approved')).toBeVisible();
+    const copy = page.getByRole('button', { name: 'Скопировать письмо и открыть площадку' });
+    await expect(copy).toHaveClass(/career-btn-primary/u);
+    await press('Скопировать письмо и открыть площадку');
+    const mark = page.getByRole('button', { name: 'Отметить отправленным' });
+    await expect(mark).toHaveClass(/career-btn-primary/u);
+    await press('Отметить отправленным');
+    await expect.poll(() => marks.at(-1)?.status).toBe('applied');
+    await expect(page.locator('.career-letter-actions')).toContainText(
+      'Отклик отправлен: письмо и резюме привязаны',
+    );
+    // Отметка идёт в ту же вакансию, к заявке которой одобрение привязало письмо и резюме.
+    expect(marks.at(-1)?.clusterId).toBe(state.approvedResult?.vacancyId);
+    expect(state.sendAttempts).toEqual([]);
+    await captureState(page, testInfo, 'b631-sent-with-materials');
+    // 1 «Откликнуться» + 2 резюме (по желанию) + «Одобрить» + «Скопировать» + «Отметить».
+    expect(clicks).toBe(6);
+    testInfo.annotations.push({ type: 'clicks', description: String(clicks) });
   });
 });

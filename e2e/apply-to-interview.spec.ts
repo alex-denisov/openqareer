@@ -577,7 +577,7 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
 
   const detailActions = await openedVacancy(page);
   await applyThroughLetter(page, detailActions.getByRole('button', { name: 'Откликнуться' }));
-  await expect(page.locator('.career-letter-actions')).toContainText('Отклик отмечен');
+  await expect(page.locator('.career-letter-actions')).toContainText('Отклик отправлен:');
   await leaveLetter(page);
   await openFirstVacancy(page);
   const goToResponses = page.getByRole('button', { name: 'Перейти в «Отклики»' });

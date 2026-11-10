@@ -7,6 +7,7 @@ import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons
 import { vacancyConsultantPrompt } from './vacancyConsultantPrompt';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
+import { campaignUpdateHandler, useActiveCampaign } from './vacanciesCampaignState';
 import type { ApplicationView } from '../applications/applicationsApi';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { VacancySubscription, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
@@ -792,39 +793,8 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
   );
 }
 
-function campaignUpdateHandler(
-  setCampaign: ReturnType<typeof useActiveCampaign>[1],
-  setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
-) {
-  return (updated: CampaignMetaView, addedRole: string | undefined) =>
-    applyCampaignUpdate(updated, addedRole, setCampaign, setScreenState);
-}
-
 function careerPathAction(path: VacanciesPathIndicator | undefined) {
   return path ? () => path.onNavigate('career') : undefined;
-}
-
-function useActiveCampaign(campaign?: CampaignMetaView) {
-  const [active, setActive] = useState(campaign);
-  useEffect(() => {
-    if (campaign) setActive(campaign);
-  }, [campaign]);
-  return [active, setActive] as const;
-}
-
-function applyCampaignUpdate(
-  campaign: CampaignMetaView,
-  addedRole: string | undefined,
-  setCampaign: ReturnType<typeof useActiveCampaign>[1],
-  setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
-) {
-  setCampaign(campaign);
-  setScreenState((current: VacanciesScreenState) => ({
-    ...current,
-    roles: addedRole ? [...current.roles, addedRole] : current.roles,
-    regions: current.regions,
-    remoteOnly: current.remoteOnly,
-  }));
 }
 
 /** Единственная точка «есть совпадение» на всех трёх fit-dots (B248/B324). */

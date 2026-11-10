@@ -72,6 +72,27 @@ function PanelBody({ state, onRetry }: { readonly state: LoadState; readonly onR
   return <pre className="career-letter-resume-panel-text">{state.preview.text}</pre>;
 }
 
+function PanelFooter({
+  onClose,
+  onOpenProfile,
+}: {
+  readonly onClose: () => void;
+  readonly onOpenProfile?: () => void;
+}) {
+  return (
+    <footer className="career-letter-resume-panel-foot">
+      <button type="button" className="career-btn career-btn-primary" onClick={onClose}>
+        Вернуться к письму
+      </button>
+      {onOpenProfile ? (
+        <button type="button" className="career-btn career-btn-secondary" onClick={onOpenProfile}>
+          Открыть «Профиль»
+        </button>
+      ) : null}
+    </footer>
+  );
+}
+
 /**
  * B631: «Резюме под вакансию → Открыть» shows the resume that goes with this response in a panel
  * over the letter. The letter stays where it was; the profile is one optional step away.
@@ -114,16 +135,7 @@ export function VacancyLetterResumePanel({
       <div className="career-letter-resume-panel-body">
         <PanelBody state={state} onRetry={retry} />
       </div>
-      <footer className="career-letter-resume-panel-foot">
-        <button type="button" className="career-btn career-btn-primary" onClick={onClose}>
-          Вернуться к письму
-        </button>
-        {onOpenProfile ? (
-          <button type="button" className="career-btn career-btn-secondary" onClick={onOpenProfile}>
-            Открыть «Профиль»
-          </button>
-        ) : null}
-      </footer>
+      <PanelFooter onClose={onClose} onOpenProfile={onOpenProfile} />
     </dialog>
   );
 }

@@ -34,6 +34,7 @@ import {
   type VacancyApplications,
 } from '../vacancies/useVacancyApplications';
 import { useApplications } from '../applications/useApplications';
+import { archivedClusterIds, restoreArchivedVacancy } from './restoreArchivedVacancy';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
@@ -159,12 +160,7 @@ export function CareerCabinet(props: CareerCabinetProps) {
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
   const applicationsTracker = useApplications();
   const archivedApplicationClusterIds = useMemo(
-    () =>
-      new Set(
-        applicationsTracker.applications
-          .filter((application) => application.stage === 'archived' && application.clusterId)
-          .map((application) => application.clusterId as string),
-      ),
+    () => archivedClusterIds(applicationsTracker.applications),
     [applicationsTracker.applications],
   );
   const recordConfirmedVacancy = vacancyApplications.recordConfirmed;
@@ -876,14 +872,3 @@ function nearestInterviewOf(
   };
 }
 
-/** B631: «Вернуть из архива» on a vacancy restores the archived response card of that vacancy. */
-async function restoreArchivedVacancy(
-  tracker: ReturnType<typeof useApplications>,
-  clusterId: string,
-): Promise<void> {
-  const archived = tracker.applications.find(
-    (application) => application.clusterId === clusterId && application.stage === 'archived',
-  );
-  if (!archived) throw new Error('Архивный отклик этой вакансии не найден.');
-  await tracker.restoreFromArchive(archived);
-}
