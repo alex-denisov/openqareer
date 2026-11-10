@@ -23,6 +23,8 @@ export interface VacancyMechanicsStats {
   /** Calls answered by a repeat or the next stage, and why the first try failed (27.10). */
   fallbackCalls: number;
   fallbackReason: string | null;
+  /** B642: old-but-alive requirement jobs moved to the next UTC day by the $2/day catch-up cap. */
+  catchupDeferred: number;
 }
 
 export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
@@ -46,6 +48,7 @@ export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
     providers: [],
     fallbackCalls: 0,
     fallbackReason: null,
+    catchupDeferred: 0,
   };
 }
 
@@ -74,7 +77,7 @@ function modelPart(stats: VacancyMechanicsStats): string {
     `llm_calls=${stats.llmCalls} llm_failed=${stats.llmFailed} ` +
     `llm_avg_ms=${Math.round(stats.llmMs / stats.llmCalls)} ` +
     `extract_unavailable=${stats.requirementsUnavailable} extract_invalid=${stats.requirementsInvalid} ` +
-    `extract_failed_share=${failedShare}%${fallbackPart(stats)}${stats.budgetPaused ? ` extract_budget_paused=${stats.budgetPaused}` : ''}${stats.channelPaused ? ` channel_paused=${stats.channelPaused}` : ''}${issuesPart(stats.modelIssues)}`
+    `extract_failed_share=${failedShare}%${fallbackPart(stats)}${stats.budgetPaused ? ` extract_budget_paused=${stats.budgetPaused}` : ''}${stats.channelPaused ? ` channel_paused=${stats.channelPaused}` : ''}${stats.catchupDeferred ? ` catchup_deferred=${stats.catchupDeferred}` : ''}${issuesPart(stats.modelIssues)}`
   );
 }
 

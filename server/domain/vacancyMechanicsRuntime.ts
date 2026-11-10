@@ -1,3 +1,4 @@
+import { catchupGate, type CatchupDecision } from './requirementsCatchupGate';
 import { minimizeModelText } from '../providers/modelInputPrivacy';
 import { applySqliteBusyTimeout, SQLITE_HTTP_BUSY_TIMEOUT_MS } from '../data/sqliteBusyTimeout';
 import { DatabaseSync } from 'node:sqlite';
@@ -245,7 +246,7 @@ export class VacancyMechanicsRuntime {
     // B556 for the fit call too (01.11): no fit job is claimed for a call the budget would refuse.
     if (client && Date.now() < Math.max(this.budgetPausedUntil, this.channelPausedUntil)) return shown;
     const job = this.fit.claim({ leaseMs: 300000 });
-    if (!job) return shown || (await this.extractNextRequirements(client, runId, workerId));
+    if (!job) return shown || (await this.extractNextRequirements(client, runId, workerId, undefined, true));
     const extracted = shown;
     this.stats.claimed += 1;
     try {
@@ -345,12 +346,18 @@ export class VacancyMechanicsRuntime {
   }
 
   /** One queued requirements job (highest priority first); the counters feed the batch journal line. */
-  private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string, minPriority = Number.NEGATIVE_INFINITY): Promise<boolean> {
+  private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string, minPriority = Number.NEGATIVE_INFINITY, background = false): Promise<boolean> {
     if (client && Date.now() < Math.max(this.budgetPausedUntil, this.channelPausedUntil)) return false;
     const extracted = await this.requirements.runNext(workerId, async (input) => {
+      // B642: the background tail of old-but-alive vacancies has its own $2/day; over it the job waits.
+      const gate = background ? this.catchupDecision(input.vacancyId) : { task: 'vacancy-requirements' };
+      if (gate.deferUntil !== undefined) {
+        this.stats.catchupDeferred += 1;
+        throw new VacancyRequirementsPausedError(gate.deferUntil);
+      }
       const result = await extractVacancyRequirementsWithFallback(input,
         client ? { extract: async ({ description, instructions }) => (await client.complete({
-          runId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
+          runId, task: gate.task, dataClass: 'public', prefix: instructions,
           // 35 entries took ~2 000 tokens on prod (22.10): 50 need headroom, or the JSON is cut.
           input: minimizeModelText(description), maxTokens: 4096,
         }).catch((error: unknown) => {
@@ -370,6 +377,15 @@ export class VacancyMechanicsRuntime {
     }, Date.now(), minPriority);
     if (extracted) this.stats.requirementsDone += 1;
     return Boolean(extracted);
+  }
+
+  /** B642: catch-up gate; a database without the pool tables (tests, desktop) runs as before. */
+  private catchupDecision(vacancyId: string): CatchupDecision {
+    try {
+      return catchupGate(this.database, vacancyId);
+    } catch {
+      return { task: 'vacancy-requirements' };
+    }
   }
 
   /** Until the next UTC day: the day's run is spent (B556). */
