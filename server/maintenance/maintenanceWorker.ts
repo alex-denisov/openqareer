@@ -1,4 +1,5 @@
 import type { RoleLinkStep } from '../vacancies/titleParse/roleLinkStep';
+import type { PlacementBackfillTicker } from '../companyDirectory/placement/placementBackfill';
 import { CATALOG_TOTALS_REFRESH_MS } from '../vacancies/matchedCatalogSummary';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
@@ -101,6 +102,8 @@ export interface TitleParseStep {
 }
 
 const ROLE_LINK_INTERVAL_MS = 60_000;
+/** B643-3: размещения компаний — такт раз в 5 с, пока идёт проход. */
+const PLACEMENT_INTERVAL_MS = 5_000;
 
 export interface TitleModelStep {
   run(): Promise<{
@@ -202,6 +205,7 @@ export class MaintenanceWorker {
   private readonly titleParse?: TitleParseStep;
   private readonly titleModel?: TitleModelStep;
   private readonly roleLink?: RoleLinkStep;
+  private readonly placements?: PlacementBackfillTicker;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   /** B626: последний статус пропуска — пишем в журнал только смену причины. */
   private linkedinPoolSkipStatus: string | undefined;
@@ -234,6 +238,7 @@ export class MaintenanceWorker {
     titleParse?: TitleParseStep;
     titleModel?: TitleModelStep;
     roleLink?: RoleLinkStep;
+    placements?: PlacementBackfillTicker;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
     now?: () => number;
@@ -243,6 +248,7 @@ export class MaintenanceWorker {
     this.titleParse = options.titleParse;
     this.titleModel = options.titleModel;
     this.roleLink = options.roleLink;
+    this.placements = options.placements;
     this.linkedinPoolExecutor = options.linkedinPoolExecutor;
     this.purgeRecruiters = options.purgeRecruiters;
     this.log = options.log;
@@ -608,6 +614,20 @@ export class MaintenanceWorker {
     }
   }
 
+  /** B643-3: порции размещений в бюджете такта; итог прохода — в журнал. */
+  runPlacementStep(): void {
+    if (this.stopped || !this.placements) return;
+    try {
+      const report = this.placements.tick();
+      if (report) this.log.info({ ...report }, 'company-placement-pass');
+    } catch (error: unknown) {
+      this.log.error(
+        { errorName: errorName(error), errorMessage: errorMessage(error) },
+        'company-placement-step-failed',
+      );
+    }
+  }
+
   /** До трёх батчей Vertex; один запуск не пересекается со следующим тиком. */
   async runTitleModelStep(): Promise<void> {
     if (this.stopped || !this.titleModel || this.titleModelRunning) return;
@@ -723,6 +743,7 @@ export class MaintenanceWorker {
     every(ROLE_LINK_INTERVAL_MS, () =>
       this.track(this.runRoleLinkStep(), 'role-link-step-failed', undefined),
     );
+    if (this.placements) every(PLACEMENT_INTERVAL_MS, () => this.runPlacementStep());
     if (this.linkedinPoolExecutor) {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
     }
