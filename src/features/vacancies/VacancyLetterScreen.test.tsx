@@ -141,9 +141,9 @@ describe('VacancyLetterScreen (mockup 9)', () => {
     expect(markup).not.toContain('type="checkbox"');
   });
 
-  it('offers «Открыть» for the resume only when the host gives a way to', () => {
-    expect(html()).not.toContain('>Открыть<');
-    expect(html({ onOpenResume: vi.fn() })).toContain('>Открыть<');
+  it('offers «Открыть» for the resume on every host: it opens over the letter (B631)', () => {
+    expect(html()).toContain('>Открыть<');
+    expect(html()).not.toContain('career-letter-resume-panel');
   });
 });
 

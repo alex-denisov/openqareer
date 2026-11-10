@@ -153,3 +153,18 @@ describe('B601 (08.11): снимок резюме не создался', () => 
     expect((await approve({ generalResumeId: 'document-not-mine' })).statusCode).toBe(503);
   });
 });
+
+describe('B631: резюме под вакансию открывается поверх письма', () => {
+  it('«Подготовить резюме» отдаёт версию, которую одобрение привяжет к отклику', async () => {
+    const { prepareResume, approve } = await setup('Head of Platform');
+    const prepared = (await prepareResume()).json().data;
+    expect(prepared.versionId).toEqual(expect.any(String));
+    const approved = (await approve()).json().data;
+    expect(approved.resume).toMatchObject({ kind: 'targeted', versionId: prepared.versionId });
+  });
+
+  it('Free: версии нет, письмо прикладывает общее резюме', async () => {
+    const { prepareResume } = await setup('Head of Platform', { billingEnforcement: true });
+    expect((await prepareResume()).json().data).toMatchObject({ resumeKind: 'master', versionId: null });
+  });
+});
