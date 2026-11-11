@@ -8,7 +8,12 @@ import {
   withoutFreehireTracking,
 } from './freehirePages';
 import { FreehirePagesClient } from './freehirePagesClient';
-import { employerJobSite, readPagesState, runPagesTick } from './freehirePagesSchedule';
+import {
+  employerJobSite,
+  prefetchedChecks,
+  readPagesState,
+  runPagesTick,
+} from './freehirePagesSchedule';
 
 // Shape of a real `/companies/amazon/__data.json` (11.11), trimmed.
 const AMAZON = {
@@ -144,5 +149,14 @@ describe('B645 freehire pages', () => {
     // shard exhausted → next shard; empty shard → done
     expect((await runPagesTick(db, client, async () => 3, pass)).state.shard).toBe(10_000);
     expect((await runPagesTick(db, client, async () => 3, pass)).state.done).toBeTruthy();
+  });
+
+  it('checks every board of a batch at once and only once', async () => {
+    const card = cardOfPageData('amazon', AMAZON)!;
+    const calls: string[] = [];
+    const cached = await prefetchedChecks([card, card, null], async (b) => (calls.push(b.slug), 5));
+    expect(calls).toEqual(['amazon-leo']);
+    expect(await cached({ provider: 'lever', slug: 'amazon-leo' })).toBe(5);
+    expect(calls).toHaveLength(1);
   });
 });

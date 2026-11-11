@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   boardCheck,
   boardFromJobUrl,
+  boardsOfCard,
   cleanWebsite,
   importCompany,
   isAggregator,
@@ -241,10 +242,40 @@ export async function runPagesTick(
     return { read: 0, state };
   }
   pass.index ??= loadDirectoryIndex(database);
-  state = await writeCards(database, pass.index, cards, check, state, now());
+  state = await writeCards(
+    database,
+    pass.index,
+    cards,
+    await prefetchedChecks(cards, check),
+    state,
+    now(),
+  );
   state = { ...state, index: state.index + slugs.length, pausedUntil: undefined };
   savePagesState(database, state, now());
   return { read: slugs.length, state };
+}
+
+/**
+ * Board API checks of the whole batch run at once (different ATS hosts), so the
+ * sequential writes below only read the cache; one check per board.
+ */
+export async function prefetchedChecks(
+  cards: readonly (FreehirePageCard | null | undefined)[],
+  check: BoardCheck,
+): Promise<BoardCheck> {
+  const results = new Map<string, Promise<number>>();
+  const cached: BoardCheck = (board) => {
+    const id = `${board.provider}:${board.slug}`;
+    let hit = results.get(id);
+    if (!hit) {
+      hit = check(board).catch(() => -1);
+      results.set(id, hit);
+    }
+    return hit;
+  };
+  const boards = cards.flatMap((card) => (card ? boardsOfCard(card).slice(0, 3) : []));
+  await Promise.all(boards.map((board) => cached(board)));
+  return cached;
 }
 
 async function writeCards(
