@@ -1,4 +1,5 @@
 import { isAtsBoardSourceId } from './atsSourceId';
+import { sourceKind } from './poolLiveness';
 import { periodOfEvidence } from '../../shared/vacancySalaryPeriod';
 import type {
   UnifiedVacancy,
@@ -217,6 +218,33 @@ function pickHigherPrioritySource(cluster: VacancyCluster, vacancy: UnifiedVacan
   }
 }
 
+function highestPriority(cluster: VacancyCluster): number {
+  return Math.max(...cluster.sources.map(getSourcePriority));
+}
+
+/** B643-7: ранг размещения при равном приоритете: сайт → ATS → LinkedIn компании → остальное. */
+function placementRank(provenance: VacancyProvenance): number {
+  const { kind } = sourceKind(provenance.sourceId);
+  if (kind === 'employer_site') return 1;
+  if (kind === 'ats') return 2;
+  if (provenance.sourceId.startsWith('src-company-li-')) return 3;
+  return 4;
+}
+
+/**
+ * B643-7: ссылка карточки ведёт на лучшее размещение работодателя. Меняется
+ * только `primaryUrl`: название и компания остаются за прежним правилом, чтобы
+ * адрес карточки в каталоге и связи с ролями не сдвинулись.
+ */
+function pickPrimaryUrl(cluster: VacancyCluster, vacancy: UnifiedVacancy, outranks: boolean): void {
+  if (outranks) return; // pickHigherPrioritySource сам переносит ссылку вместе с названием.
+  const incoming = getSourcePriority(vacancy.provenance);
+  if (incoming < highestPriority(cluster)) return;
+  const tier = cluster.sources.filter((source) => getSourcePriority(source) === incoming);
+  const best = Math.min(...tier.map(placementRank));
+  if (placementRank(vacancy.provenance) < best) cluster.primaryUrl = vacancy.url;
+}
+
 function updateClusterLocation(cluster: VacancyCluster, location?: string): void {
   if (!location) return;
   const isGeneric =
@@ -263,6 +291,7 @@ export function mergeVacancyIntoCluster(cluster: VacancyCluster, vacancy: Unifie
   });
   const isNewMembership = existingSourceIndex === -1;
   if (isNewMembership) cluster.vacanciesCount += 1;
+  pickPrimaryUrl(cluster, vacancy, getSourcePriority(vacancy.provenance) > highestPriority(cluster));
   pickHigherPrioritySource(cluster, vacancy);
   // A cluster built before the platform's category was read learns it from the
   // re-observation of the same employer (INC-023).
