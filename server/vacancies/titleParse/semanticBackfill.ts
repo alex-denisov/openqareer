@@ -7,6 +7,7 @@ import { isSeniorManagerLead } from './rulesLevel';
 import { gradeRangeOfTitle } from './gradeRange';
 import { isChiefInformationTitle } from './chiefInformationTitle';
 import { exactOntologyTitleKeys, rulesParse } from './rulesParse';
+import { isConfirmedNonItTitle } from './freehireClassify/classify';
 
 /**
  * Фоновое наполнение смыслового индекса правилами (B267 S2, план §4 фаза 1).
@@ -542,7 +543,9 @@ export class SemanticBackfill {
           TAXONOMY_VERSION,
           now,
         );
-        enqueueModel.run(key.titleKey, isUncertain(key.parsed) ? 1 : 0);
+        // B646-2: подтверждённое словарём freehire не-ИТ название модели не отдаём.
+        const eligible = isUncertain(key.parsed) && !isConfirmedNonItTitle(key.title);
+        enqueueModel.run(key.titleKey, eligible ? 1 : 0);
       }
       for (const { row, titleKey, parsed } of resolved) {
         for (const code of parsed.functions) {

@@ -4,6 +4,7 @@ import { LEVEL_RANK } from '../levelMatcher';
 import { hasRulesLevelMarker, inferRulesLevel } from './rulesLevel';
 import { isChiefInformationTitle } from './chiefInformationTitle';
 import { normalizeTitleKey } from './normalizeTitleKey';
+import { freehireItFunction } from './freehireClassify/classify';
 
 /**
  * Фолбэк без модели (B267 §3): опорные слова словаря дают функцию, уже
@@ -506,6 +507,16 @@ function pickFallbackFunction(normalizedTitle: string): FunctionCode[] {
 }
 
 /**
+ * B646-2: только когда наши правила не дали ни одной функции, ИТ-категория словаря
+ * freehire (без модели) даёт функцию. Ответ правил, включая `other`, не перекрывается.
+ */
+function withFreehireFallback(title: string, functions: FunctionCode[]): FunctionCode[] {
+  if (functions.length > 0) return functions;
+  const fallback = freehireItFunction(title);
+  return fallback ? [fallback] : functions;
+}
+
+/**
  * Более длинный (специфичный) якорь побеждает: «vp of engineering» важнее
  * общего «engineer» в том же названии. При равной длине сохраняется порядок
  * словаря — не больше двух функций на строку (B267 §2).
@@ -576,8 +587,10 @@ export function rulesParse(title: string): RulesParseResult {
   }
   const hits = findAnchorHits(normalized);
   const specificFunctions = pickTopFunctions(hits);
-  const functions =
-    specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
+  const functions = withFreehireFallback(
+    title,
+    specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized),
+  );
   const level = inferRulesLevel(title);
   return {
     functions,
