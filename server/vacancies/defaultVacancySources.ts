@@ -3,6 +3,7 @@ import { ATS_BOARD_MEASUREMENTS, ATS_BOARD_SOURCES } from './atsBoardSources';
 import { WORKDAY_BOARD_MEASUREMENTS, WORKDAY_BOARD_SOURCES } from './workdayBoardSources';
 import { MEASUREMENTS } from './vacancySourceMeasurementData';
 import { DEFAULT_TELEGRAM_RELOCATION_SOURCES } from './defaultTelegramRelocationSources';
+import { FREEHIRE_TELEGRAM_MEASUREMENTS, FREEHIRE_TELEGRAM_SOURCES } from './freehireTelegramSources';
 import { DEFAULT_CORPORATE_SOURCES } from './defaultCorporateSources';
 import { FREEHIRE_FEED_MEASUREMENTS, FREEHIRE_FEED_SOURCES } from './freehire/freehireFeeds';
 
@@ -99,6 +100,7 @@ export function vacancySourceMeasurements(sourceId: string): readonly VacancySou
     ATS_BOARD_MEASUREMENTS[sourceId] ??
     WORKDAY_BOARD_MEASUREMENTS[sourceId] ??
     FREEHIRE_FEED_MEASUREMENTS[sourceId] ??
+    FREEHIRE_TELEGRAM_MEASUREMENTS[sourceId] ??
     []
   );
 }
@@ -745,6 +747,7 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
 export const DEFAULT_VACANCY_SOURCES: readonly RegisteredVacancySource[] = [
   ...PLATFORM_SOURCES,
   ...DEFAULT_TELEGRAM_RELOCATION_SOURCES,
+  ...FREEHIRE_TELEGRAM_SOURCES,
   ...DEFAULT_CORPORATE_SOURCES,
   ...ATS_BOARD_SOURCES,
   ...WORKDAY_BOARD_SOURCES,
