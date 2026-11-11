@@ -38,6 +38,7 @@ import {
   type LinkedinGuestBudget,
 } from './linkedinGuestBudget';
 import { fetchGenericCorporateVacancies } from './genericCorporateSiteAdapter';
+import type { RenderScriptPage } from './scriptPageRenderer';
 import { fetchBamboohrBoard } from './bamboohrBoardFetch';
 import { fetchFreehireFeed, freehireFeedFor } from './freehire/freehireFeeds';
 
@@ -517,6 +518,8 @@ export interface MultiSourceFetcherDeps {
   readonly linkedinBudget?: LinkedinGuestBudget;
   /** B626: fetch для linkedin.com (ротация Webshare); без него — прямой fetch. */
   readonly linkedinFetch?: typeof fetch;
+  /** B643: один рендер в браузере для страницы карьеры, нарисованной скриптом. */
+  readonly renderScriptPage?: RenderScriptPage;
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -633,7 +636,7 @@ async function fetchJsonOrCareerSite(
     return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
   }
   if (source.type === 'career_site') {
-    return fetchGenericCorporateVacancies(source, deps.fetchWithStealth);
+    return fetchGenericCorporateVacancies(source, deps.fetchWithStealth, deps.renderScriptPage);
   }
   if (source.type === 'json_api') {
     if (freehireFeedFor(source.id)) return fetchFreehireFeed(source.id, source.name);

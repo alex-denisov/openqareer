@@ -27,23 +27,25 @@ describe('hasScriptPageSigns (B643)', () => {
   });
 
   it('ссылка «Вакансии» с href="#"', () => {
-    expect(hasScriptPageSigns(`<body><p>${longText}</p><a href="#" class="nav">Вакансии</a></body>`)).toBe(
-      true,
-    );
+    expect(
+      hasScriptPageSigns(`<body><p>${longText}</p><a href="#" class="nav">Вакансии</a></body>`),
+    ).toBe(true);
     expect(
       hasScriptPageSigns(`<body><p>${longText}</p><a class="x" href='#'>Open positions</a></body>`),
     ).toBe(true);
   });
 
   it('обычная страница с текстом и div#root не считается оболочкой', () => {
-    expect(hasScriptPageSigns(`<body><div id="root"><main><p>${longText}</p></main></div></body>`)).toBe(
-      false,
-    );
+    expect(
+      hasScriptPageSigns(`<body><div id="root"><main><p>${longText}</p></main></div></body>`),
+    ).toBe(false);
   });
 
   it('статическая страница без признаков', () => {
     expect(
-      hasScriptPageSigns(`<body><h1>О компании</h1><p>${longText}</p><a href="/about">О нас</a></body>`),
+      hasScriptPageSigns(
+        `<body><h1>О компании</h1><p>${longText}</p><a href="/about">О нас</a></body>`,
+      ),
     ).toBe(false);
     expect(hasScriptPageSigns('')).toBe(false);
   });

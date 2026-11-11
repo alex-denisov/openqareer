@@ -18,6 +18,7 @@ import {
 import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersistentContext';
 import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
+import { createScriptPageRenderer, launchSiteRenderBrowser } from './vacancies/scriptPageRenderer';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { startEventLoopDelayLog } from './maintenance/eventLoopDelayLog';
@@ -104,10 +105,18 @@ const linkedinBudget = createLinkedinGuestBudget({
     log.info({ ...stats }, 'linkedin-budget');
   },
 });
+// B643: страницы карьеры, нарисованные скриптом, — один рендер в обычном headless Chrome.
+// Откат: OPENQAREER_SITE_RENDER_OFF=1. Нет браузера — одна строка журнала, шаг пропускается.
+const renderScriptPage = createScriptPageRenderer({
+  launch: () =>
+    launchSiteRenderBrowser(playwrightModuleSpecifier(), getLinkedinBrowserLaunch().executablePath),
+  log: (fields, message) => log.warn(fields, message),
+});
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
   linkedinBudget,
   linkedinFetch,
+  renderScriptPage,
   // Сведение по ключам: партия × соседи в куче, полная пересборка запрещена.
   recluster: { mode: 'keyed', batchSize: DEFAULT_KEYED_BATCH_SIZE },
   // Итог каждой замены среза и любая транзакция дольше секунды — в журнал:

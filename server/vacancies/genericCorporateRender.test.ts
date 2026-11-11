@@ -19,7 +19,9 @@ const RENDERED = `<html><body><div id="root"><ul>
 function serve(html: string): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html' } })),
+    vi.fn(
+      async () => new Response(html, { status: 200, headers: { 'content-type': 'text/html' } }),
+    ),
   );
 }
 

@@ -4,21 +4,20 @@
  * отпечатка, без обхода защит и без запасного пути через stealth.
  *
  * Один общий браузер на процесс, не больше двух страниц сразу, страница
- * ограничена ~20 с, картинки, шрифты и медиа не грузятся. Браузер
+ * ограничена ~20 с, картинки, шрифты и медиа не грузятся. Каждый запрос
+ * проходит защиту от SSRF (siteRenderGuard), service workers выключены,
+ * итоговый адрес страницы проверяется перед чтением HTML. Браузер
  * закрывается после минуты простоя: память обслуживания под потолком cgroup.
  */
+
+import { createRequestGuard, type GuardedRoute, type HostIsPublic } from './siteRenderGuard';
 
 /** Отрисованный HTML страницы или undefined, если отрисовать не вышло. */
 export type RenderScriptPage = (url: string) => Promise<string | undefined>;
 
-export interface RenderRoute {
-  request(): { resourceType(): string };
-  abort(): Promise<void>;
-  continue(): Promise<void>;
-}
-
 export interface RenderPage {
-  route(pattern: string, handler: (route: RenderRoute) => Promise<void>): Promise<void>;
+  route(pattern: string, handler: (route: GuardedRoute) => Promise<void>): Promise<void>;
+  url(): string;
   goto(url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>;
   waitForLoadState(state: 'networkidle', options: { timeout: number }): Promise<void>;
   content(): Promise<string>;
@@ -31,7 +30,7 @@ export interface RenderContext {
 }
 
 export interface RenderBrowser {
-  newContext(): Promise<RenderContext>;
+  newContext(options: { serviceWorkers: 'block' }): Promise<RenderContext>;
   isConnected(): boolean;
   close(): Promise<void>;
 }
@@ -45,13 +44,14 @@ export interface ScriptPageRendererOptions {
   readonly maxConcurrent?: number;
   readonly pageTimeoutMs?: number;
   readonly idleCloseMs?: number;
+  /** Проверка DNS хоста; по умолчанию все адреса должны быть публичными. */
+  readonly hostIsPublic?: HostIsPublic;
 }
 
 const DEFAULT_MAX_CONCURRENT = 2;
 const DEFAULT_PAGE_TIMEOUT_MS = 20_000;
 const NETWORK_IDLE_MS = 5_000;
 const DEFAULT_IDLE_CLOSE_MS = 60_000;
-const BLOCKED_RESOURCES = new Set(['image', 'font', 'media']);
 
 function createSemaphore(limit: number) {
   let active = 0;
@@ -81,16 +81,27 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : 'UnknownError';
 }
 
-async function renderOnce(browser: RenderBrowser, url: string, timeoutMs: number): Promise<string> {
-  const context = await browser.newContext();
+interface RenderRequest {
+  readonly url: string;
+  readonly timeoutMs: number;
+  readonly hostIsPublic: HostIsPublic | undefined;
+}
+
+async function renderOnce(
+  browser: RenderBrowser,
+  request: RenderRequest,
+): Promise<string | undefined> {
+  const guard = createRequestGuard(request.hostIsPublic);
+  if (!(await guard.isAllowed(request.url))) return undefined;
+  // Service worker отвечает в обход page.route, поэтому выключен.
+  const context = await browser.newContext({ serviceWorkers: 'block' });
   try {
     const page = await context.newPage();
-    await page.route('**/*', (route) =>
-      BLOCKED_RESOURCES.has(route.request().resourceType()) ? route.abort() : route.continue(),
-    );
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+    await page.route('**/*', (route) => guard.handle(route));
+    await page.goto(request.url, { waitUntil: 'domcontentloaded', timeout: request.timeoutMs });
     // Сеть может не стихнуть из-за аналитики: ждём недолго и берём то, что есть.
     await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_MS }).catch(() => undefined);
+    if (!(await guard.isAllowed(page.url()))) return undefined;
     return await page.content();
   } finally {
     await context.close().catch(() => undefined);
@@ -98,10 +109,7 @@ async function renderOnce(browser: RenderBrowser, url: string, timeoutMs: number
 }
 
 export function createScriptPageRenderer(options: ScriptPageRendererOptions): RenderScriptPage {
-  const env = options.env ?? process.env;
   const log = options.log ?? (() => undefined);
-  const timeoutMs = options.pageTimeoutMs ?? DEFAULT_PAGE_TIMEOUT_MS;
-  const idleCloseMs = options.idleCloseMs ?? DEFAULT_IDLE_CLOSE_MS;
   const limit = createSemaphore(options.maxConcurrent ?? DEFAULT_MAX_CONCURRENT);
   let browser: Promise<RenderBrowser> | undefined;
   let unavailable = false;
@@ -130,21 +138,23 @@ export function createScriptPageRenderer(options: ScriptPageRendererOptions): Re
   };
 
   return async (url) => {
-    if (env.OPENQAREER_SITE_RENDER_OFF?.trim() === '1' || !isHttpUrl(url)) return undefined;
+    if ((options.env ?? process.env).OPENQAREER_SITE_RENDER_OFF?.trim() === '1' || !isHttpUrl(url))
+      return undefined;
     return limit(async () => {
       if (idleTimer) clearTimeout(idleTimer);
       inFlight += 1;
       try {
         const current = await acquire();
         if (!current) return undefined;
-        return await renderOnce(current, url, timeoutMs);
+        const timeoutMs = options.pageTimeoutMs ?? DEFAULT_PAGE_TIMEOUT_MS;
+        return await renderOnce(current, { url, timeoutMs, hostIsPublic: options.hostIsPublic });
       } catch (error: unknown) {
         log({ errorName: errorName(error), host: new URL(url).host }, 'site-render-page-failed');
         return undefined;
       } finally {
         inFlight -= 1;
         if (inFlight === 0 && browser) {
-          idleTimer = setTimeout(closeIdle, idleCloseMs);
+          idleTimer = setTimeout(closeIdle, options.idleCloseMs ?? DEFAULT_IDLE_CLOSE_MS);
           idleTimer.unref();
         }
       }
@@ -152,7 +162,8 @@ export function createScriptPageRenderer(options: ScriptPageRendererOptions): Re
   };
 }
 
-const PLAIN_CHROME_ARGS = ['--no-sandbox', '--disable-dev-shm-usage'];
+/** Песочница Chrome не выключается: страница чужая. */
+const PLAIN_CHROME_ARGS = ['--disable-dev-shm-usage'];
 
 /**
  * Запуск на проде: тот же Google Chrome (B626) и тот же модуль playwright,

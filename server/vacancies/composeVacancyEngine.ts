@@ -11,7 +11,11 @@ import { buildHhPageFetcher } from './hhSearchTransport';
 import { HhTextRateController } from './hhTextRate';
 import { HhVacancyDescriptionLoader } from './hhVacancyDescription';
 import { createHttpLinkProbe } from './linkLivenessProbe';
-import { buildMultiSourceFetcher, fetchRobotsTxt } from './multiSourceFetcher';
+import {
+  buildMultiSourceFetcher,
+  fetchRobotsTxt,
+  type MultiSourceFetcherDeps,
+} from './multiSourceFetcher';
 import type { LinkProbe } from './linkLivenessProbe';
 import {
   MultiSourceVacancyEngine,
@@ -24,6 +28,7 @@ import { planCompanyChannels, readDirectoryCompanies } from './companyDirectoryS
 import { DEFAULT_VACANCY_SOURCES, type RegisteredVacancySource } from './defaultVacancySources';
 import { RobotsPolicyLoader, type RobotsFetcher } from './robotsPolicyLoader';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
+import type { RenderScriptPage } from './scriptPageRenderer';
 
 export interface ComposedVacancyEngine {
   readonly engine: MultiSourceVacancyEngine;
@@ -50,6 +55,8 @@ export interface ComposeVacancyEngineOptions {
   readonly linkedinBudget?: LinkedinGuestBudget;
   /** B626: fetch для linkedin.com через ротацию Webshare. */
   readonly linkedinFetch?: typeof fetch;
+  /** B643: рендер страниц карьеры, нарисованных скриптом; только у фонового процесса. */
+  readonly renderScriptPage?: RenderScriptPage;
 }
 
 function openPoolJobsDatabase(databasePath: string): DatabaseSync {
@@ -98,6 +105,19 @@ export function registryWithCompanyChannels(databasePath: string): RegisteredVac
  * второй процесс неизбежно разошёлся бы с первым по набору площадок или
  * настройкам обхода — а расходятся они молча.
  */
+function buildFetcher(
+  options: ComposeVacancyEngineOptions,
+  hhCrawlCoordinator: HhCrawlCoordinator,
+  readLinkedinPoolJobs: NonNullable<MultiSourceFetcherDeps['readLinkedinPoolJobs']>,
+) {
+  return buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
+    readLinkedinPoolJobs,
+    ...(options.linkedinBudget ? { linkedinBudget: options.linkedinBudget } : {}),
+    ...(options.linkedinFetch ? { linkedinFetch: options.linkedinFetch } : {}),
+    ...(options.renderScriptPage ? { renderScriptPage: options.renderScriptPage } : {}),
+  });
+}
+
 export function composeVacancyEngine(options: ComposeVacancyEngineOptions): ComposedVacancyEngine {
   const pool = new SqliteVacancyPoolStore({
     databasePath: options.databasePath,
@@ -126,13 +146,7 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
     ...(options.linkedinBudget
       ? { holdSource: holdDuringLinkedinPause(options.linkedinBudget) }
       : {}),
-    fetcher:
-      options.fetcher ??
-      buildMultiSourceFetcher(searchHhVacancies, searchRemotiveVacancies, hhCrawlCoordinator, {
-        readLinkedinPoolJobs: poolJobs.read,
-        ...(options.linkedinBudget ? { linkedinBudget: options.linkedinBudget } : {}),
-        ...(options.linkedinFetch ? { linkedinFetch: options.linkedinFetch } : {}),
-      }),
+    fetcher: options.fetcher ?? buildFetcher(options, hhCrawlCoordinator, poolJobs.read),
     pool,
     // Право обхода спрашивается у самой площадки, а не берётся из записи,
     // сделанной когда-то руками; `Crawl-delay` тоже приходит оттуда (B204).
