@@ -34,6 +34,29 @@ describe('B627 site discovery', () => {
     ]);
   });
 
+  it('B646 finds boards freehire atsboard recognises for providers we poll', () => {
+    const html = [
+      'https://acme.bamboohr.com/careers/12',
+      'https://acme.teamtailor.com/jobs',
+      'https://tt.teamtailor.com/x', // vendor's own "powered by" host, not a tenant
+      'https://app.teamtailor.com/login',
+      'https://jobs.eu.lever.co/euco/abc',
+      'https://jobs.smartrecruiters.com/oneclick-ui/company/Bosch/publication/1',
+      'https://www.bamboohr.com/pricing',
+    ].join(' ');
+    expect(boardsFromHtml(html)).toEqual([
+      { provider: 'lever', slug: 'eu-euco' },
+      { provider: 'smartrecruiters', slug: 'Bosch' },
+      { provider: 'bamboohr', slug: 'acme' },
+      { provider: 'teamtailor', slug: 'acme' },
+    ]);
+  });
+
+  it('B646 counts bamboohr and teamtailor jobs', () => {
+    expect(countJobs('bamboohr', '{"result":[1,2,3]}')).toBe(3);
+    expect(countJobs('teamtailor', '<rss><item></item><item></item></rss>')).toBe(2);
+  });
+
   it('counts jobs per provider shape', () => {
     expect(countJobs('greenhouse', '{"jobs":[1,2]}')).toBe(2);
     expect(countJobs('lever', '[1]')).toBe(1);
