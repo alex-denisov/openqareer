@@ -20,6 +20,9 @@ import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersiste
 import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
 import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { createScriptPageRenderer, launchSiteRenderBrowser } from './vacancies/scriptPageRenderer';
+import { createRenderInWorker } from './vacancies/siteRenderInWorker';
+import { existsSync } from 'node:fs';
+import { Worker } from 'node:worker_threads';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { startEventLoopDelayLog } from './maintenance/eventLoopDelayLog';
@@ -109,11 +112,30 @@ const linkedinBudget = createLinkedinGuestBudget({
 });
 // B643: страницы карьеры, нарисованные скриптом, — один рендер в обычном headless Chrome.
 // Откат: OPENQAREER_SITE_RENDER_OFF=1. Нет браузера — одна строка журнала, шаг пропускается.
-const renderScriptPage = createScriptPageRenderer({
-  launch: () =>
-    launchSiteRenderBrowser(playwrightModuleSpecifier(), getLinkedinBrowserLaunch().executablePath),
-  log: (fields, message) => log.warn(fields, message),
-});
+// Рендер в своём потоке (dist/site-render-worker.mjs): цикл обслуживания занят, а каждый
+// запрос страницы идёт через Node. Без файла потока (tsx в разработке) — в этом процессе.
+const siteRenderWorkerFile = new URL('./site-render-worker.mjs', import.meta.url);
+const renderLog = (fields: Record<string, unknown>, message: string): void =>
+  log.warn(fields, message);
+const renderScriptPage = existsSync(siteRenderWorkerFile)
+  ? createRenderInWorker({
+      spawn: () =>
+        new Worker(siteRenderWorkerFile, {
+          workerData: {
+            moduleSpecifier: playwrightModuleSpecifier(),
+            executablePath: getLinkedinBrowserLaunch().executablePath,
+          },
+        }),
+      log: renderLog,
+    })
+  : createScriptPageRenderer({
+      launch: () =>
+        launchSiteRenderBrowser(
+          playwrightModuleSpecifier(),
+          getLinkedinBrowserLaunch().executablePath,
+        ),
+      log: renderLog,
+    });
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
   linkedinBudget,
