@@ -77,6 +77,12 @@ describe('B643-9 careers link from the home page', () => {
     expect(found).toMatchObject({ careersUrl: 'https://www.smiths.com/about/careers', board: { provider: 'smartrecruiters', slug: 'SmithsGroup2', jobs: 544 } });
   });
 
+  it('skips news articles and words that only contain a careers word', async () => {
+    const { careersLinks } = await import('./deterministicResolver');
+    const html = '<a href="/news/members/v-krae-razrabotayut-model/">В крае разработают модель</a><a href="/program?utm=1">Работа мечты</a><a href="/Article/6289/zarabatiyvaj">Зарабатывай</a><a href="/vacansii">Вакансии</a>';
+    expect(careersLinks(html, 'https://asros.ru/')).toEqual(['https://asros.ru/vacansii']);
+  });
+
   it('accepts a jobs subdomain of the same domain but not another site', async () => {
     const { careersLinks } = await import('./deterministicResolver');
     expect(careersLinks('<a href="https://job.sulpak.kz">Вакансии</a><a href="https://jobs.other.com/x">jobs</a><a href="/career/">Карьера</a>', 'https://www.sulpak.kz/'))
