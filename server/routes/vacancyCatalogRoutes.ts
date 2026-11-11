@@ -496,17 +496,23 @@ function archiveEntry(card: CatalogArchiveCard): CatalogEntry {
 }
 
 /** Open cards of the same role and place; the place alone when the role has none. */
-function similarOpen(deps: RouteDeps, card: CatalogArchiveCard): readonly CatalogEntry[] {
-  if (!card.placeSlug) return [];
+function similarOpen(
+  deps: RouteDeps,
+  card: CatalogArchiveCard,
+): { readonly items: readonly CatalogEntry[]; readonly sameRole: boolean } {
+  if (!card.placeSlug) return { items: [], sameRole: true };
   const page = (role?: string) =>
     deps.multiSourceEngine.getPublicCatalogEntriesPage({
       limit: SIMILAR_LIMIT + 1,
       place: card.placeSlug!,
       ...(role ? { role } : {}),
     })?.items ?? [];
-  const sameRole = card.roleSlug ? page(card.roleSlug) : [];
-  const items = sameRole.length > 0 ? sameRole : page();
-  return items.filter((item) => item.key !== card.entryKey).slice(0, SIMILAR_LIMIT);
+  const others = (items: readonly CatalogEntry[]) =>
+    items.filter((item) => item.key !== card.entryKey).slice(0, SIMILAR_LIMIT);
+  const sameRole = card.roleSlug ? others(page(card.roleSlug)) : [];
+  return sameRole.length > 0
+    ? { items: sameRole, sameRole: true }
+    : { items: others(page()), sameRole: false };
 }
 
 function publishedListingPath(deps: RouteDeps, card: CatalogArchiveCard): string | undefined {
@@ -532,12 +538,14 @@ function sendClosedVacancy(
     return sendDocument(reply, gone(), 410);
   }
   const listingPath = publishedListingPath(deps, card);
+  const similar = similarOpen(deps, card);
   return sendDocument(
     reply,
     renderArchivedVacancyDocument({
       entry: archiveEntry(card),
       closedAt: card.lastSeenAt,
-      similar: similarOpen(deps, card),
+      similar: similar.items,
+      similarSameRole: similar.sameRole,
       ...(listingPath ? { listingPath } : {}),
     }),
   );
