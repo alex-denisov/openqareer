@@ -121,6 +121,23 @@ describe('PlacementBackfill adopts employers outside the directory', () => {
   });
 });
 
+describe('PlacementBackfill source index cache', () => {
+  it('reuses the board map within an hour and rereads it after', () => {
+    const db = openDb();
+    let clock = 1;
+    const step = new PlacementBackfill(db, { chunk: 50, now: () => clock });
+    runAll(step);
+    db.exec(`INSERT INTO vacancy_source_state VALUES ('ats-lever-lonely')`);
+    runAll(step);
+    expect(db.prepare(`SELECT count(*) n FROM company_placement WHERE source_id = 'ats-lever-lonely'`).get()).toEqual({ n: 0 });
+    clock += 61 * 60_000;
+    runAll(step);
+    // Размещение из справочника получает площадку, появившуюся позже.
+    expect(db.prepare(`SELECT source_id, company_key FROM company_placement WHERE placement_id = 'ats:lever:lonely'`).get())
+      .toEqual({ source_id: 'ats-lever-lonely', company_key: 'lonely' });
+  });
+});
+
 describe('PlacementBackfillTicker pause', () => {
   it('repeats soon after a pass that adopted companies', async () => {
     const { PlacementBackfillTicker, PLACEMENT_ADOPT_PAUSE_MS } = await import('./placementBackfill');

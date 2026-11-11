@@ -29,6 +29,7 @@ interface Options {
 type Work = Placement & { readonly discoveredBy: 'source' | 'directory'; readonly url: string | null };
 
 const DEFAULT_CHUNK = 200;
+const SOURCE_INDEX_TTL_MS = 60 * 60_000;
 /** Имена компаний читаются до транзакции и не дольше 150 мс на порцию. */
 const ADOPT_LOOKUP_BUDGET_MS = 150;
 
@@ -68,7 +69,7 @@ function directoryWork(row: DirectoryRecord): Work[] {
 export class PlacementBackfill {
   private readonly chunk: number;
   private readonly now: () => number;
-  private sources: { index: LinkageIndex; ids: readonly string[] } | undefined;
+  private sources: { index: LinkageIndex; ids: readonly string[]; builtAt: number } | undefined;
   private cursor = 0;
   private directoryCursor = '';
   private directoryDone = false;
@@ -98,8 +99,12 @@ export class PlacementBackfill {
     this.upsert = database.prepare(`INSERT INTO company_placement
         (placement_id, company_key, type, provider, slug, url, priority, source_id, discovered_by, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(placement_id) DO UPDATE SET company_key = excluded.company_key, updated_at = excluded.updated_at
-      WHERE company_key IS NULL AND excluded.company_key IS NOT NULL`);
+      ON CONFLICT(placement_id) DO UPDATE SET
+        company_key = COALESCE(company_key, excluded.company_key),
+        source_id = COALESCE(source_id, excluded.source_id),
+        updated_at = excluded.updated_at
+      WHERE (company_key IS NULL AND excluded.company_key IS NOT NULL)
+         OR (source_id IS NULL AND excluded.source_id IS NOT NULL)`);
   }
 
   /**
@@ -107,7 +112,7 @@ export class PlacementBackfill {
    * B644) — порциями по курсору ключа и только строки с доской или сайтом.
    * Связь площадки с компанией — точечными запросами, без загрузки справочника.
    */
-  private buildSourceIndex(): { index: LinkageIndex; ids: readonly string[] } {
+  private buildSourceIndex(): { index: LinkageIndex; ids: readonly string[]; builtAt: number } {
     const hasKey = this.database.prepare('SELECT 1 AS hit FROM company_directory WHERE company_key = ?');
     const boards = new Map<string, string>();
     for (const row of this.database.prepare(`SELECT company_key AS k, ats_provider AS p, ats_slug AS s FROM company_directory
@@ -117,7 +122,7 @@ export class PlacementBackfill {
     const index: LinkageIndex = { byKey: { has: (key) => hasKey.get(key) !== undefined }, byBoard: boards, byName: new Map() };
     const ids = (this.database.prepare('SELECT source_id AS id FROM vacancy_source_state ORDER BY source_id')
       .all() as unknown as { id: string }[]).map(({ id }) => id);
-    return { index, ids };
+    return { index, ids, builtAt: this.now() };
   }
 
   private nextDirectoryWork(): readonly Work[] {
@@ -129,7 +134,8 @@ export class PlacementBackfill {
 
   /** Следующая порция работы: сначала площадки, затем страницы справочника. */
   private nextSlice(): readonly Work[] | undefined {
-    this.sources ??= this.buildSourceIndex();
+    // Карта досок и список площадок живут час: короткие повторы прохода их не перечитывают.
+    if (!this.sources || this.now() - this.sources.builtAt > SOURCE_INDEX_TTL_MS) this.sources = this.buildSourceIndex();
     const { index, ids } = this.sources;
     if (this.cursor < ids.length) {
       const slice = ids.slice(this.cursor, this.cursor + this.chunk);
@@ -215,7 +221,6 @@ export class PlacementBackfill {
   }
 
   private reset(): void {
-    this.sources = undefined;
     this.cursor = 0;
     this.directoryCursor = '';
     this.directoryDone = false;
