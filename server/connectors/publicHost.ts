@@ -18,18 +18,18 @@ export function isPublicHost(url: URL): boolean {
 
 const PRIVATE_V4 =
   /^(0|10|127|169\.254|172\.(1[6-9]|2\d|3[01])|192\.168|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7]))\./;
+/** Public unicast address: not loopback, private, link-local, CGNAT or unique-local. */
+export function isPublicAddress(address: string): boolean {
+  const v4 = address.replace(/^::ffff:/i, '');
+  if (isIP(v4) === 4) return !PRIVATE_V4.test(v4);
+  return isIP(address) === 6 && !/^(::1?$|f[cd]|fe[89ab])/i.test(address);
+}
+
 /** Every resolved address must be public; DNS errors reject. */
 export async function resolvesPublic(host: string, resolve = lookup): Promise<boolean> {
   try {
     const addresses = await resolve(host, { all: true });
-    return (
-      addresses.length > 0 &&
-      addresses.every(({ address }) => {
-        const v4 = address.replace(/^::ffff:/i, '');
-        if (isIP(v4) === 4) return !PRIVATE_V4.test(v4);
-        return !/^(::1?$|f[cd]|fe[89ab])/i.test(address);
-      })
-    );
+    return addresses.length > 0 && addresses.every(({ address }) => isPublicAddress(address));
   } catch {
     return false;
   }
