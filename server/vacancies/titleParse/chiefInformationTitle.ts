@@ -8,8 +8,7 @@
 const DEPUTY =
   /(?<!\p{L})(?:deputy|assistant|associate|зам\.?|заместител\p{L}*|помощник\p{L}*)(?!\p{L})/iu;
 
-const OTHER_DIRECTOR =
-  /(?<!\p{L})(?:операционн|финансов|генеральн|коммерческ|исполнительн)\p{L}*\s+$/iu;
+const OTHER_DIRECTOR = /(?<!\p{L})(?:операционн|финансов|генеральн|коммерческ|исполнительн)\p{L}*\s+$/iu;
 
 const IT = '(?:ит|it)';
 

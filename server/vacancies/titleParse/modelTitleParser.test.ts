@@ -97,9 +97,7 @@ describe('TitleModelStep (B267 S4)', () => {
         .get(),
     ).toEqual({ parsed_by: 'rules' });
     expect(
-      db
-        .prepare("SELECT parsed_by, model FROM title_parse WHERE title_key = 'wibble specialist'")
-        .get(),
+      db.prepare("SELECT parsed_by, model FROM title_parse WHERE title_key = 'wibble specialist'").get(),
     ).toEqual({ parsed_by: 'model', model: 'test-model' });
     expect(
       db

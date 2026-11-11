@@ -375,10 +375,7 @@ describe('опыт в поддержке узнаётся не только в �
     ['Vice President of Customer Operations', 'support.vp'],
     ['Начальник департамента поддержки программных решений', 'support.head'],
   ])('%s → %s', (title, roleId) => {
-    expect(rulesParse(title)).toMatchObject({
-      roleId,
-      functions: expect.arrayContaining(['support']),
-    });
+    expect(rulesParse(title)).toMatchObject({ roleId, functions: expect.arrayContaining(['support']) });
   });
 
   it('чужая «поддержка» остаётся своей функцией', () => {
@@ -420,9 +417,7 @@ describe('CIO и ИТ-директор — одна роль (04.11)', () => {
   });
 
   it('VP в названии продукта — не вице-президент', () => {
-    expect(
-      rulesParse('Эксперт по АСУТП / Yokogawa Centum VP (технический консультант)').levelRank,
-    ).toBe(0);
+    expect(rulesParse('Эксперт по АСУТП / Yokogawa Centum VP (технический консультант)').levelRank).toBe(0);
     expect(rulesParse('VP Engineering').levelRank).toBe(3);
   });
 
@@ -449,17 +444,8 @@ describe('CIO и ИТ-директор — одна роль (04.11)', () => {
   });
 
   it('руководитель ИТ остаётся ступенью head той же функции', () => {
-    for (const title of [
-      'руководитель it-отдела',
-      'Руководитель ИТ-отдела',
-      'head of it',
-      'руководитель ит-инфраструктуры',
-      'начальник отдела ит',
-    ]) {
-      expect(rulesParse(title)).toMatchObject({
-        functions: ['it-ops'],
-        levelRank: LEVEL_RANK.head,
-      });
+    for (const title of ['руководитель it-отдела', 'Руководитель ИТ-отдела', 'head of it', 'руководитель ит-инфраструктуры', 'начальник отдела ит']) {
+      expect(rulesParse(title)).toMatchObject({ functions: ['it-ops'], levelRank: LEVEL_RANK.head });
     }
   });
 
@@ -472,9 +458,7 @@ describe('CIO и ИТ-директор — одна роль (04.11)', () => {
       expect(rulesParse(title).functions).toEqual(['support']);
     }
     expect(rulesParse('Начальник отдела технической поддержки').levelRank).toBe(LEVEL_RANK.head);
-    expect(
-      rulesParse('Начальник отдела государственной поддержки промышленности').functions,
-    ).not.toContain('support');
+    expect(rulesParse('Начальник отдела государственной поддержки промышленности').functions).not.toContain('support');
     expect(rulesParse('Руководитель службы').functions).toContain('public-service');
   });
 });
