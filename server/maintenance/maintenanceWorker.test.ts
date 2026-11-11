@@ -120,6 +120,13 @@ describe('MaintenanceWorker (B230)', () => {
     );
     expect(JSON.stringify(log.error.mock.calls)).not.toContain('Private Name');
   });
+  it('runs the careers prune pass without the placement backfill and logs its report (B643)', () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const report = { done: true, processed: 4, dropped: 1, droppedTotal: 1, ms: 2 };
+    const worker = new MaintenanceWorker({ engine: {} as never, log, careersPrune: { tick: () => report } as never });
+    worker.runPlacementStep();
+    expect(log.info).toHaveBeenCalledWith(report, 'careers-prune-pass');
+  });
   it('reports only the number of purged recruiter rows', async () => {
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const worker = new MaintenanceWorker({ engine: {} as never, log, purgeRecruiters: () => 7 });
