@@ -57,6 +57,8 @@ export interface UnifiedVacancy {
   employerIsPerson?: boolean;
   /** B643: id работодателя на hh (`company.id`); ведёт к `company_placement` `hh:<id>`. */
   employerId?: string;
+  /** B647: сайт работодателя, названный агрегатором (Работа России); ведёт к `company_placement` `site:<host>`. */
+  employerSite?: string;
   location?: string;
   isRemote?: boolean;
   salary?: VacancySalary;

@@ -79,6 +79,23 @@ describe('B643-8 aggregator company backfill', () => {
     ]);
   });
 
+  it('B647: Работа России employer site becomes a site placement only on an exact multi-word name', () => {
+    const db = openDb();
+    db.exec(PLACEMENT_TABLES);
+    const add = (id: string, json: object) => {
+      db.prepare(`INSERT INTO vacancy_pool_index (id, source_id, is_active, url, search_text, expired) VALUES (?, 'src-trudvsem', 1, 'u', '', 0)`).run(id);
+      db.prepare('INSERT INTO vacancy_cluster_input (id, cluster_json) VALUES (?, ?)').run(id, JSON.stringify(json));
+    };
+    add('t1', { company: 'Acme Robotics', employerSite: 'https://www.acme.example/career/' });
+    add('t2', { company: 'Яндекс', employerSite: 'https://single.example/' });
+    add('t3', { company: 'Globex Unknown', employerSite: 'https://globex.example/' });
+    runPass(new AggregatorCompanyBackfill(db, { chunk: 2 }));
+    const sites = db.prepare(`SELECT placement_id, company_key, type, priority, discovered_by FROM company_placement ORDER BY placement_id`).all();
+    expect(sites).toEqual([
+      { placement_id: 'site:acme.example', company_key: 'acme', type: 'employer_site', priority: 1, discovered_by: 'aggregator_site' },
+    ]);
+  });
+
   it('pauses after a finished pass', () => {
     let now = 0;
     const step = () => ({ done: true, processed: 0, linked: 0, unlinked: 0, linkedTotal: 0, changedTotal: 0, ms: 0 });

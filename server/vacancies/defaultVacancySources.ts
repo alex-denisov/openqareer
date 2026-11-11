@@ -126,12 +126,13 @@ const PLATFORM_SOURCES: readonly RegisteredVacancySource[] = [
     type: 'json_api',
     accessClass: 'api',
     market: 'Россия',
-    addressStatus: 'robots_forbidden',
-    enabled: false,
-    disabledReason:
-      'Два независимых препятствия. Первое: robots.txt площадки содержит Disallow: / — она отказала словами (замер 2026-09-05). Второе: маршрут продукта её всё равно не обслуживает — с прод-VM в EU тело обрывается на 31 291 байте за 45 с, тогда как из российского ЦОДа приходит 322 121 байт за 5,4 с.',
+    // B647: официальный API открытых данных (trudvsem.ru/opendata/api). robots.txt
+    // opendata-хоста запрещает обход; подключено решением владельца 11.11 —
+    // читаем только документированный API, контакты не храним.
+    addressStatus: 'live',
+    enabled: true,
     targetUrl: 'https://opendata.trudvsem.ru/api/v1/vacancies?limit=100',
-    refreshIntervalMinutes: 180,
+    refreshIntervalMinutes: 60,
     itemsFoundTotal: 0,
     itemsActiveTotal: 0,
   },

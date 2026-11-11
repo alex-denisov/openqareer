@@ -740,7 +740,43 @@ const join: PagingPlan = {
   },
 };
 
+/**
+ * Работа России (B647): `offset` — номер страницы 0..99, не больше 100 записей,
+ * один запрос отдаёт не больше 10 000. Опрос раз в час читает записи,
+ * изменённые за два часа до начала часа: окна перекрываются, поэтому новое
+ * не теряется, а каждый час — не больше 60 страниц. Окно — не вся площадка,
+ * поэтому срез только дополняется (`fanWindow`).
+ */
+const TRUDVSEM_PAGE = 100;
+const TRUDVSEM_WINDOW_MS = 2 * 60 * 60_000;
+const HOUR_MS = 60 * 60_000;
+
+function trudvsemUrl(targetUrl: string, page: number, modifiedFrom?: string): string {
+  const next = new URL(targetUrl);
+  next.searchParams.set('limit', String(TRUDVSEM_PAGE));
+  next.searchParams.set('offset', String(page));
+  if (modifiedFrom) next.searchParams.set('modifiedFrom', modifiedFrom);
+  return next.toString();
+}
+
+const trudvsem: PagingPlan = {
+  pagesPerSync: 60,
+  delayMs: 1000,
+  fanWindow: true,
+  first: (targetUrl, nowMs) => {
+    const from = new Date(Math.floor(nowMs / HOUR_MS) * HOUR_MS - TRUDVSEM_WINDOW_MS);
+    return { url: trudvsemUrl(targetUrl, 0, from.toISOString().replace(/\.\d{3}Z$/, 'Z')) };
+  },
+  next: (previous, payload) => {
+    const rows = asArray(record(record(payload).results).vacancies) ?? [];
+    const page = pageOf(previous.url, 'offset');
+    if (rows.length < TRUDVSEM_PAGE || page >= 99) return null;
+    return { url: trudvsemUrl(previous.url, page + 1) };
+  },
+};
+
 const PLANS: Readonly<Record<string, PagingPlan>> = {
+  'src-trudvsem': trudvsem,
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
   'src-amazon-jobs': amazon,

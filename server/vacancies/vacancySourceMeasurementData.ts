@@ -12,6 +12,12 @@ import type { VacancySourceMeasurement } from './defaultVacancySources';
 export const MEASUREMENTS: Readonly<Record<string, readonly VacancySourceMeasurement[]>> = {
   'src-trudvsem': [
     {
+      items: 100,
+      observedAt: '2026-11-11',
+      route: 'eu-prod',
+      note: 'B647: с прод-VM 200, ~340 КБ за ~10 с на страницу из 100; всего 489 957, изменено за сутки 73 тыс.',
+    },
+    {
       items: 0,
       observedAt: '2026-09-05',
       route: 'eu-prod',

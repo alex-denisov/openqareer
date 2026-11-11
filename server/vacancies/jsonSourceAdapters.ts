@@ -1,3 +1,4 @@
+import { isHiringPlatform } from '../../shared/hiringPlatforms';
 import { himalayasSalaryPeriod } from '../../shared/vacancySalaryPeriod';
 import { freehireFeedFor } from './freehire/freehireFeeds';
 import { repairMojibake, unescapeLiteralBreaks } from './mojibake';
@@ -396,25 +397,29 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
       });
     }),
 
+  // B647: контакты (`contact_list`, `contact_person`) — персональные данные, их не читаем.
   'src-trudvsem': (payload, context, sourceId) =>
     listOf(payload, (value) => asArray(record(record(value).results).vacancies)).map((item) => {
       const job = record(record(item).vacancy);
+      const company = record(job.company);
       const salary = numericSalary(job);
-      return build({
+      const employerSite = trudvsemEmployerSite(company);
+      const vacancy = build({
         sourceId,
         context,
         externalId: text(job.id),
         title: text(job['job-name']),
-        company: text(record(job.company).name),
+        company: text(company.name),
         location: text(record(job.region).name) || undefined,
         isRemote: false,
-        description: text(job.duty) || text(job['job-name']),
-        skills: [],
+        description: [text(job.duty), text(job.requirements)].filter(Boolean).join('\n') || text(job['job-name']),
+        skills: stringList(job.skills),
         employmentType: text(job.schedule) || undefined,
         salary,
         url: text(job.vac_url),
         publishedAt: fromLooseDate(job['creation-date']),
       });
+      return employerSite ? { ...vacancy, employerSite } : vacancy;
     }),
 };
 
@@ -466,6 +471,18 @@ export function fromWorkdayPostedOn(value: unknown, observedAt: string): string 
   const days = /(\d+)\+?\s*days?/.exec(raw);
   if (!days) return UNKNOWN_PUBLISHED_AT;
   return new Date(observed - Number(days[1]) * DAY_MS).toISOString();
+}
+
+/** Сайт работодателя, а не кадрового агентства и не площадки вакансий. */
+function trudvsemEmployerSite(company: JsonRecord): string | undefined {
+  if (company['hr-agency'] === true) return undefined;
+  const site = text(company.site).trim();
+  if (!/^https?:\/\//i.test(site)) return undefined;
+  try {
+    return isHiringPlatform(new URL(site).hostname) ? undefined : site;
+  } catch {
+    return undefined;
+  }
 }
 
 function numericSalary(job: JsonRecord): UnifiedVacancy['salary'] | undefined {

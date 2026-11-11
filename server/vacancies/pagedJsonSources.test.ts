@@ -360,3 +360,26 @@ describe('paging plans (B216)', () => {
     expect(rotatingWindowStart(5 * 60 * 60_000, 60, 10, 50)).toBe(1);
   });
 });
+
+describe('Работа России (B647)', () => {
+  const plan = pagingPlanFor('src-trudvsem')!;
+  const page = (n: number) => ({ results: { vacancies: Array.from({ length: n }, () => ({ vacancy: {} })) } });
+
+  it('reads the records changed in the last two hours, from the top of the hour', () => {
+    const first = plan.first('https://opendata.trudvsem.ru/api/v1/vacancies?limit=100', Date.parse('2026-11-11T14:37:00Z'));
+    const url = new URL(first.url);
+    expect(url.searchParams.get('modifiedFrom')).toBe('2026-11-11T12:00:00Z');
+    expect(url.searchParams.get('offset')).toBe('0');
+    expect(url.searchParams.get('limit')).toBe('100');
+  });
+
+  it('turns pages by number, stops on a short page, and never asks past 60 pages', () => {
+    const first = plan.first('https://opendata.trudvsem.ru/api/v1/vacancies?limit=100', 0);
+    const second = plan.next(first, page(100))!;
+    expect(new URL(second.url).searchParams.get('offset')).toBe('1');
+    expect(plan.next(second, page(40))).toBeNull();
+    expect(plan.pagesPerSync).toBeLessThanOrEqual(60);
+    expect(plan.delayMs).toBeGreaterThanOrEqual(1000);
+    expect(plan.fanWindow).toBe(true);
+  });
+});
