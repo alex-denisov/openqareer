@@ -160,7 +160,9 @@ export function writeDiscovery(database: DatabaseSync, found: Discovery, now: st
          ats_slug = CASE WHEN ats_provider IS NULL AND ? IS NOT NULL THEN ? ELSE ats_slug END,
          ats_provider = COALESCE(ats_provider, ?),
          source_type = CASE WHEN source_type = 'linkedin_guest' AND ? IS NOT NULL THEN ? ELSE source_type END,
-         evidence = json_patch(COALESCE(evidence, '{}'), ?),
+         evidence = CASE WHEN ? IS NOT NULL AND (careers_url IS NULL OR careers_url LIKE '%linkedin.com%')
+           THEN json_set(json_patch(COALESCE(evidence, '{}'), ?), '$.careersUrlSetAt', ?)
+           ELSE json_patch(COALESCE(evidence, '{}'), ?) END,
          updated_at = ?
        WHERE company_key = ?`,
     )
@@ -173,6 +175,9 @@ export function writeDiscovery(database: DatabaseSync, found: Discovery, now: st
       found.board?.provider ?? null,
       sourceType,
       sourceType,
+      found.careersUrl ?? null,
+      JSON.stringify(found.evidence),
+      now,
       JSON.stringify(found.evidence),
       now,
       found.companyKey,

@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
 import { PLACEMENT_TABLES } from '../placement/placementSchema';
-import { CareersPrune, CareersPruneTicker, careersDropReason, type SourceStateRow } from './careersPrune';
+import { CareersPrune, CareersPruneTicker, careersDropReason, careersUrlSetAt, type SourceStateRow } from './careersPrune';
 
 const NOW = Date.parse('2026-11-11T12:00:00Z');
 const DAY = 86_400_000;
@@ -14,6 +14,7 @@ function state(overrides: Partial<SourceStateRow> = {}, observations: Record<str
     lastStatus: 'error',
     lastErrorMessage: 'vacancy_source_unreachable: 403',
     itemsFoundTotal: 0,
+    careersUrlSetAt: NOW - 10 * DAY,
     observations: JSON.stringify({
       firstReadingAt: iso(NOW - 3 * DAY),
       lastNonEmptyReadingAt: null,
@@ -44,7 +45,7 @@ describe('B643 careers drop rule', () => {
   });
 
   it('drops a page that answers but stays empty for 14 days', () => {
-    const empty = state({ lastStatus: 'degraded', lastErrorMessage: 'corporate_quality_failed' }, { firstReadingAt: iso(NOW - 15 * DAY), windowReadings: 4 });
+    const empty = state({ lastStatus: 'degraded', lastErrorMessage: 'corporate_quality_failed', careersUrlSetAt: NOW - 20 * DAY }, { firstReadingAt: iso(NOW - 15 * DAY), windowReadings: 4 });
     expect(careersDropReason(empty, NOW)).toMatch(/0 items for 15 days/);
     const young = state({ lastStatus: 'healthy', lastErrorMessage: null }, { firstReadingAt: iso(NOW - 13 * DAY) });
     expect(careersDropReason(young, NOW)).toBeUndefined();
@@ -54,6 +55,18 @@ describe('B643 careers drop rule', () => {
     expect(careersDropReason(state({ itemsFoundTotal: 1 }), NOW)).toBeUndefined();
     expect(careersDropReason(state({}, { lastNonEmptyReadingAt: iso(NOW - 20 * DAY) }), NOW)).toBeUndefined();
     expect(careersDropReason(state({}, { census: { total: 2 } }), NOW)).toBeUndefined();
+  });
+
+  it('never judges a URL by readings taken before it was set', () => {
+    expect(careersDropReason(state({ careersUrlSetAt: NOW - 2 * DAY }), NOW)).toBeUndefined();
+    expect(careersDropReason(state({ careersUrlSetAt: null }), NOW)).toBeUndefined();
+  });
+
+  it('reads the set time from evidence: explicit time first, else the B643-9 discovery day', () => {
+    expect(careersUrlSetAt({ careersUrlSetAt: '2026-11-10T05:00:00.000Z' })).toBe(Date.parse('2026-11-10T05:00:00.000Z'));
+    expect(careersUrlSetAt({ careersUrl: { how: 'B643-9 site path /careers, HTTP 200 on 2026-11-11' } })).toBe(Date.parse('2026-11-11T00:00:00Z'));
+    expect(careersUrlSetAt({ careersUrl: { how: 'freehire.me listing' } })).toBeNull();
+    expect(careersUrlSetAt(null)).toBeNull();
   });
 
   it('keeps a page with unreadable observations', () => {
@@ -71,12 +84,14 @@ function openDb(): DatabaseSync {
   db.exec(PLACEMENT_TABLES);
   const company = db.prepare(`INSERT INTO company_directory (company_key, company_name, careers_url, website_url, evidence, source_type, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 'corporate_portal', '2026-11-01', '2026-11-01')`);
-  company.run('acme', 'Acme', 'https://acme.com/careers', 'https://acme.com/', '{"careersUrl":{"value":"https://acme.com/careers","how":"B643-9"}}');
+  company.run('acme', 'Acme', 'https://acme.com/careers', 'https://acme.com/', '{"careersUrl":{"value":"https://acme.com/careers","how":"B643-9 site path /careers, HTTP 200 on 2026-11-01"}}');
+  company.run('legacy', 'Legacy', 'https://legacy.com/careers', null, null);
   company.run('good', 'Good', 'https://good.com/jobs', null, null);
   const source = db.prepare(`INSERT INTO vacancy_source_state (source_id, last_status, last_error_message, items_found_total, observations) VALUES (?, ?, ?, ?, ?)`);
   const bad = state();
   source.run(bad.sourceId, bad.lastStatus, bad.lastErrorMessage, 0, bad.observations);
   source.run('src-company-site-good', 'healthy', null, 12, state({}, { lastNonEmptyReadingAt: iso(NOW) }).observations);
+  source.run('src-company-site-legacy', bad.lastStatus, bad.lastErrorMessage, 0, bad.observations);
   source.run('src-hh-search', 'error', 'vacancy_source_unreachable: 403', 0, bad.observations);
   const placement = db.prepare(`INSERT INTO company_placement (placement_id, company_key, type, url, priority, source_id, discovered_by, updated_at)
     VALUES (?, ?, 'employer_site', ?, 3, ?, 'directory', 0)`);
@@ -105,6 +120,7 @@ describe('B643 careers prune pass', () => {
     expect(db.prepare(`SELECT placement_id, health FROM company_placement ORDER BY placement_id`).all())
       .toEqual([{ placement_id: 'site:acme.com', health: 'gone' }, { placement_id: 'site:good.com', health: null }]);
     expect(db.prepare(`SELECT careers_url FROM company_directory WHERE company_key = 'good'`).get()).toEqual({ careers_url: 'https://good.com/jobs' });
+    expect(db.prepare(`SELECT careers_url FROM company_directory WHERE company_key = 'legacy'`).get()).toEqual({ careers_url: 'https://legacy.com/careers' });
   });
 
   it('finishes an empty pass when the poll state table is not there yet', () => {

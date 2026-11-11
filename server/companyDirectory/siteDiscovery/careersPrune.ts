@@ -24,6 +24,25 @@ export interface SourceStateRow {
   readonly lastErrorMessage: string | null;
   readonly itemsFoundTotal: number;
   readonly observations: string | null;
+  /** When the current careers_url was written (ms); `null` — unknown, never dropped. */
+  readonly careersUrlSetAt: number | null;
+}
+
+const DISCOVERY_DAY = /^B643-9 .* on (\d{4}-\d{2}-\d{2})$/;
+
+/**
+ * When the current careers_url was written. `careersUrlSetAt` is stamped by
+ * every writer from B643 on; before that only B643-9 site discovery left its
+ * day in `evidence.careersUrl.how`, and it fills careers_url only when empty,
+ * so no older own-site URL was polled under the same source id. Anything
+ * else is unknown.
+ */
+export function careersUrlSetAt(evidence: Readonly<Record<string, unknown>> | null | undefined): number | null {
+  const explicit = evidence?.careersUrlSetAt;
+  if (typeof explicit === 'string' && !Number.isNaN(Date.parse(explicit))) return Date.parse(explicit);
+  const how = (evidence?.careersUrl as { how?: unknown } | undefined)?.how;
+  const day = typeof how === 'string' ? DISCOVERY_DAY.exec(how)?.[1] : undefined;
+  return day ? Date.parse(`${day}T00:00:00Z`) : null;
 }
 
 interface Observed {
@@ -32,6 +51,16 @@ interface Observed {
   readonly windowReadings?: number;
   readonly consecutiveEmptyReadings?: number;
   readonly census?: unknown;
+}
+
+function parseEvidence(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseObservations(raw: string | null): Observed | undefined {
@@ -58,10 +87,13 @@ function blockingCause(message: string | null): string | undefined {
  * Pure drop rule. Drop when the source was read at least 3 times, never
  * gave items, and either its last reading failed with HTTP 4xx/5xx, timeout
  * or no answer, or it has stayed at 0 items for 14+ days since the first reading.
+ * Every reading must postdate the time the current URL was written.
  */
 export function careersDropReason(row: SourceStateRow, nowMs: number): string | undefined {
   const observed = parseObservations(row.observations);
   if (!observed?.firstReadingAt) return undefined;
+  // Observations of an earlier URL under the same source id never judge the current one.
+  if (row.careersUrlSetAt === null || Date.parse(observed.firstReadingAt) < row.careersUrlSetAt) return undefined;
   if (row.itemsFoundTotal > 0 || observed.lastNonEmptyReadingAt || observed.census) return undefined;
   const readings = Math.max(observed.windowReadings ?? 0, observed.consecutiveEmptyReadings ?? 0);
   if (readings < MIN_READINGS) return undefined;
@@ -109,7 +141,7 @@ export class CareersPrune {
     this.chunk = options.chunk ?? DEFAULT_CHUNK;
     this.now = options.now ?? Date.now;
     database.exec(PLACEMENT_TABLES);
-    this.careersOf = database.prepare('SELECT careers_url AS url FROM company_directory WHERE company_key = ?');
+    this.careersOf = database.prepare('SELECT careers_url AS url, evidence FROM company_directory WHERE company_key = ?');
     this.clearCareers = database.prepare(`UPDATE company_directory SET careers_url = NULL,
         evidence = json_patch(COALESCE(evidence, '{}'), ?), updated_at = ?
       WHERE company_key = ? AND careers_url = ?`);
@@ -134,11 +166,13 @@ export class CareersPrune {
   private findDrops(rows: readonly SourceStateRow[], nowMs: number): Drop[] {
     const drops: Drop[] = [];
     for (const row of rows) {
-      const reason = careersDropReason(row, nowMs);
-      if (!reason) continue;
+      // Cheap pre-check before the directory lookup: the rule as if the URL were the first one.
+      if (!careersDropReason({ ...row, careersUrlSetAt: 0 }, nowMs)) continue;
       const companyKey = row.sourceId.slice(SITE_PREFIX.length);
-      const current = this.careersOf.get(companyKey) as { url: string | null } | undefined;
-      if (current?.url) drops.push({ companyKey, sourceId: row.sourceId, url: current.url, reason });
+      const current = this.careersOf.get(companyKey) as { url: string | null; evidence: string | null } | undefined;
+      if (!current?.url) continue;
+      const reason = careersDropReason({ ...row, careersUrlSetAt: careersUrlSetAt(parseEvidence(current.evidence)) }, nowMs);
+      if (reason) drops.push({ companyKey, sourceId: row.sourceId, url: current.url, reason });
     }
     return drops;
   }
@@ -150,7 +184,7 @@ export class CareersPrune {
     this.database.exec('BEGIN IMMEDIATE');
     try {
       for (const drop of drops) {
-        const patch = JSON.stringify({ careersUrl: null, careersUrlDropped: { value: drop.url, how: `B643 ${drop.reason}, dropped on ${day}` } });
+        const patch = JSON.stringify({ careersUrl: null, careersUrlSetAt: null, careersUrlDropped: { value: drop.url, how: `B643 ${drop.reason}, dropped on ${day}` } });
         const cleared = Number(this.clearCareers.run(patch, at, drop.companyKey, drop.url).changes);
         if (cleared === 0) continue;
         changed += cleared;
@@ -168,7 +202,7 @@ export class CareersPrune {
   /** One chunk; `done` ends the pass and the next call starts a new one. */
   step(): CareersPruneReport {
     const startedAt = this.now();
-    const rows = this.readPage();
+    const rows = this.readPage().map((row) => ({ ...row, careersUrlSetAt: null }));
     const last = rows.at(-1);
     if (last) this.cursor = last.sourceId;
     const drops = this.findDrops(rows, startedAt);
