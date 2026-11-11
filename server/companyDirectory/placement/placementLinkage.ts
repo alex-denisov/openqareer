@@ -16,8 +16,8 @@ export interface DirectoryRow {
 }
 
 export interface LinkageIndex {
-  readonly byKey: ReadonlySet<string>;
-  readonly byBoard: ReadonlyMap<string, string>;
+  readonly byKey: { has(key: string): boolean };
+  readonly byBoard: { get(key: string): string | undefined };
   /** nameKey → компания; `null` — имя носят несколько компаний. */
   readonly byName: ReadonlyMap<string, string | null>;
 }

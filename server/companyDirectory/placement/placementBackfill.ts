@@ -1,7 +1,7 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 import { adoptBoardCompany, topCompanyName } from './directoryFromBoards';
 import { PLACEMENT_TABLES } from './placementSchema';
-import { buildLinkageIndex, type DirectoryRow } from './placementLinkage';
+import type { DirectoryRow, LinkageIndex } from './placementLinkage';
 import { PLACEMENT_PRIORITY, placementOf, type Placement } from './placementModel';
 
 /**
@@ -28,7 +28,7 @@ interface Options {
 
 type Work = Placement & { readonly discoveredBy: 'source' | 'directory'; readonly url: string | null };
 
-const DEFAULT_CHUNK = 300;
+const DEFAULT_CHUNK = 200;
 /** Имена компаний читаются до транзакции и не дольше 150 мс на порцию. */
 const ADOPT_LOOKUP_BUDGET_MS = 150;
 
@@ -68,8 +68,11 @@ function directoryWork(row: DirectoryRecord): Work[] {
 export class PlacementBackfill {
   private readonly chunk: number;
   private readonly now: () => number;
-  private work: readonly Work[] | undefined;
+  private sources: { index: LinkageIndex; ids: readonly string[] } | undefined;
   private cursor = 0;
+  private directoryCursor = '';
+  private directoryDone = false;
+  private readonly directoryPage: StatementSync;
   private changedTotal = 0;
   private duplicateSources = 0;
   private adopted = 0;
@@ -84,6 +87,11 @@ export class PlacementBackfill {
     this.now = options.now ?? Date.now;
     // Обслуживатель может стартовать раньше API, создающего таблицы пула.
     database.exec(PLACEMENT_TABLES);
+    this.directoryPage = database.prepare(`SELECT company_key AS companyKey, company_name AS companyName,
+        website_url AS websiteUrl, careers_url AS careersUrl, ats_provider AS atsProvider, ats_slug AS atsSlug
+      FROM company_directory
+      WHERE company_key > ? AND (ats_provider IS NOT NULL OR careers_url IS NOT NULL OR website_url IS NOT NULL)
+      ORDER BY company_key LIMIT ?`);
     this.sourceOf = database.prepare('SELECT source_id AS sourceId FROM company_placement WHERE placement_id = ?');
     this.companyOfSource = database.prepare('SELECT company_key AS companyKey FROM company_placement WHERE source_id = ?');
     this.dropMoved = database.prepare('DELETE FROM company_placement WHERE source_id = ? AND placement_id <> ?');
@@ -94,24 +102,50 @@ export class PlacementBackfill {
       WHERE company_key IS NULL AND excluded.company_key IS NOT NULL`);
   }
 
-  private buildWork(): readonly Work[] {
-    const directory = this.database.prepare(`SELECT company_key AS companyKey, company_name AS companyName,
-        website_url AS websiteUrl, careers_url AS careersUrl, ats_provider AS atsProvider, ats_slug AS atsSlug
-      FROM company_directory ORDER BY company_key`).all() as unknown as DirectoryRecord[];
-    const index = buildLinkageIndex(directory);
-    const sources = this.database.prepare('SELECT source_id AS id FROM vacancy_source_state ORDER BY source_id')
-      .all() as unknown as { id: string }[];
-    return [
-      ...sources.map(({ id }) => ({ ...placementOf(id, index), discoveredBy: 'source' as const, url: null })),
-      ...directory.flatMap(directoryWork),
-    ];
+  /**
+   * Площадки — список целиком (их тысячи); справочник (до ~165 тыс. строк после
+   * B644) — порциями по курсору ключа и только строки с доской или сайтом.
+   * Связь площадки с компанией — точечными запросами, без загрузки справочника.
+   */
+  private buildSourceIndex(): { index: LinkageIndex; ids: readonly string[] } {
+    const hasKey = this.database.prepare('SELECT 1 AS hit FROM company_directory WHERE company_key = ?');
+    const boards = new Map<string, string>();
+    for (const row of this.database.prepare(`SELECT company_key AS k, ats_provider AS p, ats_slug AS s FROM company_directory
+        WHERE ats_provider IS NOT NULL AND ats_slug IS NOT NULL`).all() as unknown as { k: string; p: string; s: string }[]) {
+      boards.set(`${row.p}:${row.s.toLowerCase()}`, row.k);
+    }
+    const index: LinkageIndex = { byKey: { has: (key) => hasKey.get(key) !== undefined }, byBoard: boards, byName: new Map() };
+    const ids = (this.database.prepare('SELECT source_id AS id FROM vacancy_source_state ORDER BY source_id')
+      .all() as unknown as { id: string }[]).map(({ id }) => id);
+    return { index, ids };
+  }
+
+  private nextDirectoryWork(): readonly Work[] {
+    const rows = this.directoryPage.all(this.directoryCursor, this.chunk) as unknown as DirectoryRecord[];
+    if (rows.length === 0) return [];
+    this.directoryCursor = rows[rows.length - 1]!.companyKey;
+    return rows.flatMap(directoryWork);
+  }
+
+  /** Следующая порция работы: сначала площадки, затем страницы справочника. */
+  private nextSlice(): readonly Work[] | undefined {
+    this.sources ??= this.buildSourceIndex();
+    const { index, ids } = this.sources;
+    if (this.cursor < ids.length) {
+      const slice = ids.slice(this.cursor, this.cursor + this.chunk);
+      this.cursor += slice.length;
+      return slice.map((id) => ({ ...placementOf(id, index), discoveredBy: 'source' as const, url: null }));
+    }
+    if (this.directoryDone) return undefined;
+    const slice = this.nextDirectoryWork();
+    if (slice.length === 0) this.directoryDone = true;
+    return slice;
   }
 
   /** Одна порция; `done` — проход закончен, следующий вызов начнёт новый. */
   step(): PlacementBackfillReport {
     const startedAt = this.now();
-    this.work ??= this.buildWork();
-    const slice = this.work.slice(this.cursor, this.cursor + this.chunk);
+    const slice = this.nextSlice() ?? [];
     let changed = 0;
     this.names = this.lookupNames(slice);
     this.database.exec('BEGIN IMMEDIATE');
@@ -122,9 +156,8 @@ export class PlacementBackfill {
       this.database.exec('ROLLBACK');
       throw error;
     }
-    this.cursor += slice.length;
     this.changedTotal += changed;
-    const done = this.cursor >= this.work.length;
+    const done = this.directoryDone;
     const report = { done, processed: slice.length, changed, changedTotal: this.changedTotal,
       duplicateSources: this.duplicateSources, adoptedCompanies: this.adopted, ms: this.now() - startedAt };
     if (done) this.reset();
@@ -182,8 +215,10 @@ export class PlacementBackfill {
   }
 
   private reset(): void {
-    this.work = undefined;
+    this.sources = undefined;
     this.cursor = 0;
+    this.directoryCursor = '';
+    this.directoryDone = false;
     this.changedTotal = 0;
     this.duplicateSources = 0;
     this.adopted = 0;
