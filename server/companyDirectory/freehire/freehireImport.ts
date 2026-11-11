@@ -83,9 +83,9 @@ const LEGAL_SUFFIX = /\b(inc|llc|ltd|limited|gmbh|ag|sa|sas|bv|corp|corporation|
 
 /** Normalized name for matching: «Agoda Company Pte. Ltd.» and «agoda» meet. */
 export function nameKey(name: string): string {
-  return name
-    .normalize('NFKD')
-    .replace(/[̀-ͯ]/g, '')
+  // ASCII names skip the Unicode fold: same key, several times faster on 150K rows.
+  const folded = /[^\u0020-\u007e]/.test(name) ? name.normalize('NFKD').replace(/[̀-ͯ]/g, '') : name;
+  return folded
     .toLowerCase()
     .replace(/[^a-z0-9а-яё]+/g, ' ')
     .replace(LEGAL_SUFFIX, ' ')
