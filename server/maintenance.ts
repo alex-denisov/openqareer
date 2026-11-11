@@ -324,8 +324,10 @@ try {
   scheduleMarketSalaryEstimateJob(semanticDatabase, log);
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   scheduleRemoteScopeBackfill(semanticDatabase, log);
-  // B627: домен, карьеры и ATS новых компаний реестра через Vertex и проверку HTTP.
-  if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1') {
+  // B627: домен, карьеры и ATS через модель. Решение владельца 11.11: поиск сайтов и ATS
+  // без модели — шаг выключен, пока его не заменит детерминированный решатель (B643-9).
+  // Модель — только для неоднозначного остатка и только по согласованию: OPENQAREER_SITE_DISCOVERY_MODEL_ON=1.
+  if (process.env.OPENQAREER_SITE_DISCOVERY_MODEL_ON === '1') {
     scheduleSiteDiscovery(
       semanticDatabase,
       log,
