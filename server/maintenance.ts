@@ -60,6 +60,7 @@ import { loadBudgetState, saveBudgetState } from './vacancies/linkedinBudgetStat
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 import { scheduleSiteDiscovery } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
 import { scheduleFreehireRepo } from './companyDirectory/freehire/freehireRepoSchedule';
+import { scheduleFreehirePages } from './companyDirectory/freehire/freehirePagesSchedule';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -346,6 +347,8 @@ try {
   if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1') scheduleSiteDiscovery(semanticDatabase, log);
   // B644: компании и доски ATS из каталога репозитория freehire (файл), вместо API freehire.me (B641).
   scheduleFreehireRepo(semanticDatabase, log, process.env);
+  // B645: все ~520 тыс. компаний freehire по публичным страницам (__data.json), ~3 запроса/с, без модели.
+  scheduleFreehirePages(semanticDatabase, log, process.env);
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
   if (process.env.OPENQAREER_LINKEDIN_ORG_RESOLVER_OFF !== '1') {
     stopLinkedinOrgResolver = scheduleLinkedinOrgResolver(
