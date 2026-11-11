@@ -35,7 +35,15 @@ export function parseRetryAfterMs(value: string | null, nowMs = Date.now()): num
 }
 
 /** Прямой путь: обычный запрос с браузерным представлением. */
+function describeFailure(error: unknown, startedAt: number): string {
+  const name = error instanceof Error ? error.name : 'Error';
+  const cause = error instanceof Error ? (error.cause as { code?: unknown } | undefined) : undefined;
+  const code = typeof cause?.code === 'string' ? ` ${cause.code}` : '';
+  return `${name}${code} ${Date.now() - startedAt}ms`;
+}
+
 export const directHhTransport: HhSearchTransport = async (url) => {
+  const startedAt = Date.now();
   try {
     const response = await fetch(url, {
       headers: {
@@ -53,9 +61,9 @@ export const directHhTransport: HhSearchTransport = async (url) => {
       body: keepBody ? await response.text() : '',
       ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
     };
-  } catch {
+  } catch (error) {
     // Недоступность — это отказ, а не пустая страница: разбор обязан упасть.
-    return { status: 0, body: '' };
+    return { status: 0, body: '', failure: describeFailure(error, startedAt) };
   }
 };
 

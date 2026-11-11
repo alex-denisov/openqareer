@@ -26,6 +26,8 @@ export interface HhSearchTransportResult {
   readonly body: string;
   /** Заголовок `Retry-After` в миллисекундах, если площадка его прислала. */
   readonly retryAfterMs?: number;
+  /** Статус 0: тип ошибки, код причины и время до сбоя — для журнала (B643). */
+  readonly failure?: string;
 }
 
 export type HhSearchTransport = (url: string) => Promise<HhSearchTransportResult>;

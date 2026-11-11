@@ -94,6 +94,13 @@ describe('runHhCrawl', () => {
     expect(result.vacancies).toHaveLength(1);
   });
 
+  it('причина отказа транспорта попадает в сообщение о прекращении (B643)', async () => {
+    const fetchPage = vi.fn(async () => ({ status: 0, body: '', failure: 'TimeoutError 30001ms' }));
+    await expect(
+      runHhCrawl(plan(40, 5), { fetchPage, sleep, searchPeriodDays: 30, refusalLimit: 1 }),
+    ).rejects.toThrow(`${HH_CRAWL_ABANDONED}: 0 TimeoutError 30001ms`);
+  });
+
   it('площадка закрылась — проход прекращается, а не долбится дальше', async () => {
     const fetchPage = vi.fn(async () => ({ status: 429, body: '' }));
 

@@ -7,6 +7,17 @@ import {
 } from './hhSearchTransport';
 
 describe('directHhTransport', () => {
+  it('сбой соединения возвращает статус 0 с причиной и временем (B643)', async () => {
+    const cause = Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed', { cause }); }));
+    try {
+      const result = await directHhTransport('https://hh.ru/search/vacancy');
+      expect(result.status).toBe(0);
+      expect(result.failure).toMatch(/^TypeError ECONNRESET \d+ms$/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it('keeps the body of a 403 so a per-vacancy restriction can be told from a refusal (prod 28.10)', async () => {
     vi.stubGlobal(
       'fetch',
