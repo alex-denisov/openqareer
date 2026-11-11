@@ -5,6 +5,8 @@ import { withRequestTimeout } from './requestTimeout';
 import { fetchWithStealthFallback } from './jobspyAdapters';
 import { htmlToFeedText } from '../connectors/feedText';
 import { corporateQualityError, gateCorporateVacancies } from './corporateSourceQuality';
+import { hasScriptPageSigns } from './scriptPageSigns';
+import type { RenderScriptPage } from './scriptPageRenderer';
 
 const CORPORATE_FETCH_TIMEOUT_MS = 15_000;
 
@@ -744,8 +746,9 @@ function mapRawJobsToUnified(
 export async function fetchGenericCorporateVacancies(
   source: VacancySourceConfig,
   fetchStealth?: typeof fetchWithStealthFallback,
+  renderPage?: RenderScriptPage,
 ): Promise<UnifiedVacancy[]> {
-  const read = await readGenericCorporateVacancies(source, fetchStealth);
+  const read = await readGenericCorporateVacancies(source, fetchStealth, renderPage);
   const verdict = gateCorporateVacancies(read, [source.targetUrl], source.name);
   if (!verdict.passed) throw corporateQualityError(verdict);
   return [...verdict.kept];
@@ -754,6 +757,7 @@ export async function fetchGenericCorporateVacancies(
 async function readGenericCorporateVacancies(
   source: VacancySourceConfig,
   fetchStealth?: typeof fetchWithStealthFallback,
+  renderPage?: RenderScriptPage,
 ): Promise<UnifiedVacancy[]> {
   const targetUrl = source.targetUrl;
   const observedAt = new Date().toISOString();
@@ -771,6 +775,19 @@ async function readGenericCorporateVacancies(
   const html = await fetchCorporateHtml(targetUrl, fetchStealth);
   if (!html) return [];
 
+  const fromHtml = await readVacanciesFromHtml(html, source, observedAt);
+  if (fromHtml.length > 0 || !renderPage || !hasScriptPageSigns(html)) return fromHtml;
+  // B643: список рисует скрипт — один рендер в браузере и тот же каскад по его HTML.
+  const rendered = await renderPage(targetUrl);
+  return rendered ? readVacanciesFromHtml(rendered, source, observedAt) : [];
+}
+
+async function readVacanciesFromHtml(
+  html: string,
+  source: VacancySourceConfig,
+  observedAt: string,
+): Promise<UnifiedVacancy[]> {
+  const targetUrl = source.targetUrl;
   const embeddedAts = detectEmbeddedAts(targetUrl + '\n' + html);
   if (embeddedAts) {
     try {
