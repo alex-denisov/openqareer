@@ -1797,7 +1797,7 @@ export class MultiSourceVacancyEngine {
     // частичного прохода «найдено 1 464» при 36 376 в пуле было бы неправдой.
     source.itemsFoundTotal = slice.total;
     source.itemsActiveTotal = slice.active;
-    this.persistSourceState(source);
+    this.persistSourceState(source, !partial);
 
     // В режимах `off` и `keyed` очередь на сведение не копится: `off` её не
     // разберёт, `keyed` уже свёл партию, а на проде за сутки волн она
@@ -2027,7 +2027,7 @@ export class MultiSourceVacancyEngine {
     return undefined;
   }
 
-  private persistSourceState(source: VacancySourceConfig): void {
+  private persistSourceState(source: VacancySourceConfig, fullRead?: boolean): void {
     const observations = this.observations.get(source.id);
     const schedule = this.scheduler.exportState()[source.id] ?? null;
     this.pool.saveSourceState({
@@ -2040,6 +2040,7 @@ export class MultiSourceVacancyEngine {
       itemsActiveTotal: source.itemsActiveTotal,
       ...(source.syncRequestedAt ? { syncRequestedAt: source.syncRequestedAt } : {}),
       ...(source.syncStartedAt ? { syncStartedAt: source.syncStartedAt } : {}),
+      ...(fullRead === undefined ? {} : { fullRead }),
     });
   }
 
