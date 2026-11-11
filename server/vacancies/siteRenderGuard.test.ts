@@ -58,6 +58,8 @@ describe('createRequestGuard (B643, SSRF)', () => {
       'http://169.254.169.254/latest/meta-data',
       'http://localhost/',
       'http://[::1]/',
+      'http://10.0.0.1/',
+      'http://0x7f.1/',
       'https://acme.test:8080/',
       'file:///etc/passwd',
     ]) {
@@ -66,6 +68,15 @@ describe('createRequestGuard (B643, SSRF)', () => {
       expect(r.log.aborted, url).toBe(true);
     }
     expect(fetchPinned).not.toHaveBeenCalled();
+  });
+
+  it('редирект на частные адреса обрывается', async () => {
+    for (const location of ['http://169.254.169.254/latest/meta-data', 'http://10.0.0.5/', 'http://[::1]/', 'https://localhost/']) {
+      const r = route('https://acme.test/careers');
+      const fetchPinned = fetcher({ status: 301, headers: { location } });
+      await createRequestGuard(fetchPinned).handle(r.value);
+      expect(r.log.aborted, location).toBe(true);
+    }
   });
 
   it('редирект на 127.0.0.1 обрывается', async () => {
