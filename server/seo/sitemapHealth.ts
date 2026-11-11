@@ -20,6 +20,9 @@ import { checkUrl, extractLocs, isSitemapIndex, parseRobotsDisallow } from './si
 export const SITEMAP_HEALTH_SAMPLE = 2_000;
 const CONCURRENCY = 4;
 const REQUEST_TIMEOUT_MS = 20_000;
+/** A job file is built live from the catalog; right after a deploy that takes longer. */
+const SITEMAP_TIMEOUT_MS = 120_000;
+const SITEMAP_ATTEMPTS = 3;
 const RECHECK_PAUSE_MS = 60_000;
 const FIRST_RUN_MS = 10 * 60_000;
 const TICK_MS = 60 * 60_000;
@@ -59,12 +62,16 @@ interface Fetched {
   readonly html: string;
 }
 
-async function get(fetcher: typeof fetch, url: string): Promise<Fetched> {
+async function get(
+  fetcher: typeof fetch,
+  url: string,
+  timeoutMs = REQUEST_TIMEOUT_MS,
+): Promise<Fetched> {
   try {
     const response = await fetcher(url, {
       redirect: 'manual',
       headers: { 'user-agent': USER_AGENT },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const html = await response.text();
     return {
@@ -78,13 +85,21 @@ async function get(fetcher: typeof fetch, url: string): Promise<Fetched> {
   }
 }
 
+async function getSitemap(fetcher: typeof fetch, url: string): Promise<Fetched> {
+  let last = await get(fetcher, url, SITEMAP_TIMEOUT_MS);
+  for (let attempt = 1; attempt < SITEMAP_ATTEMPTS && last.status !== 200; attempt += 1) {
+    last = await get(fetcher, url, SITEMAP_TIMEOUT_MS);
+  }
+  return last;
+}
+
 async function sitemapUrls(fetcher: typeof fetch, origin: string): Promise<string[]> {
-  const index = await get(fetcher, `${origin}/sitemap.xml`);
+  const index = await getSitemap(fetcher, `${origin}/sitemap.xml`);
   if (index.status !== 200) throw new Error(`sitemap_${index.status}`);
   if (!isSitemapIndex(index.html)) return extractLocs(index.html);
   const urls: string[] = [];
   for (const child of extractLocs(index.html)) {
-    const file = await get(fetcher, child);
+    const file = await getSitemap(fetcher, child);
     if (file.status !== 200) throw new Error(`sitemap_child_${file.status}`);
     urls.push(...extractLocs(file.html));
   }

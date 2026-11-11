@@ -25,6 +25,7 @@ function site(urls: string[], broken: Record<string, number> = {}, flaky: string
       );
     }
     if (url === `${ORIGIN}/sitemaps/jobs-1.xml`) {
+      if (seen.get(url) === 1) throw new TypeError('fetch failed');
       return new Response(
         `<urlset>${urls.map((u) => `<url><loc>${u}</loc></url>`).join('')}</urlset>`,
       );

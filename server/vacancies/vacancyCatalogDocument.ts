@@ -421,6 +421,8 @@ export interface ArchivedVacancyView {
   readonly closedAt: string;
   /** Open vacancies of the same role and place, newest first. */
   readonly similar: readonly CatalogEntry[];
+  /** False when the role had none and `similar` holds the place's vacancies. */
+  readonly similarSameRole: boolean;
   /** The list of the same role and place, when it is published. */
   readonly listingPath?: string;
 }
@@ -445,7 +447,7 @@ function similarBlock(view: ArchivedVacancyView): string {
     ? `<p class="cat-note"><a href="${escapeHtml(view.listingPath)}">Все открытые вакансии этой роли и города</a></p>`
     : '';
   return (
-    '<section class="cat-similar" aria-labelledby="cat-similar-h"><h2 id="cat-similar-h">Похожие открытые вакансии</h2>' +
+    `<section class="cat-similar" aria-labelledby="cat-similar-h"><h2 id="cat-similar-h">${view.similarSameRole || view.similar.length === 0 ? 'Похожие открытые вакансии' : 'Открытые вакансии в этом городе'}</h2>` +
     (view.similar.length > 0
       ? `<ul class="cat-list">${view.similar.map(entryCard).join('')}</ul>`
       : '<p class="cat-empty">Похожих открытых вакансий сейчас нет. Откройте <a href="/vacancies">весь каталог</a>.</p>') +
@@ -472,7 +474,13 @@ export function renderArchivedVacancyDocument(view: ArchivedVacancyView): string
     `<h1>${escapeHtml(entry.title)}</h1>` +
     metaLine(entry) +
     `<p class="cat-archive-lead">Работодатель закрыл вакансию ${escapeHtml(formatDate(view.closedAt))}, ` +
-    'откликнуться на неё уже нельзя. Ниже открытые вакансии той же роли в том же городе.</p>' +
+    'откликнуться на неё уже нельзя.' +
+    (view.similar.length === 0
+      ? ''
+      : view.similarSameRole
+        ? ' Ниже открытые вакансии той же роли в том же городе.'
+        : ' Ниже открытые вакансии в том же городе.') +
+    '</p>' +
     (text
       ? '<details class="cat-cut"><summary>Описание вакансии</summary>' +
         descriptionBlock('', text) +

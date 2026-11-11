@@ -626,8 +626,11 @@ html[data-oq-signed-in][data-oq-admin] .ps-btn.ps-admin {
 .cat-archived{display:inline-flex;align-items:center;height:28px;padding:0 10px;margin-bottom:12px;border-radius:8px;background:var(--ps-bg-2);font-size:13px;font-weight:600;color:var(--ps-soft)}
 .cat-archive-lead{margin-top:20px;padding:16px 18px;border-radius:12px;background:var(--ps-bg-2);font-size:15px;color:var(--ps-soft)}
 .cat-cut{margin-top:24px;border-top:1px solid var(--ps-line);border-bottom:1px solid var(--ps-line)}
-.cat-cut>summary{display:flex;align-items:center;min-height:48px;cursor:pointer;font-size:15px;font-weight:600;color:var(--ps-ink)}
+.cat-cut>summary{display:flex;list-style:none;align-items:center;min-height:48px;cursor:pointer;font-size:15px;font-weight:600;color:var(--ps-ink)}
 .cat-cut>summary:focus-visible{outline:2px solid var(--ps-blue);outline-offset:2px;border-radius:6px}
+.cat-cut>summary::-webkit-details-marker{display:none}
+.cat-cut>summary::after{content:"Показать";margin-left:auto;font-weight:500;color:var(--ps-blue)}
+.cat-cut[open]>summary::after{content:"Скрыть"}
 .cat-cut .cat-body{margin-top:4px}
 .cat-similar{margin-top:40px}
 .cat-similar>h2{font-size:20px;margin-bottom:14px}
