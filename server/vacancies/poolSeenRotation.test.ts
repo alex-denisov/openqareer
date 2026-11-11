@@ -76,6 +76,7 @@ describe('уборка по последнему чтению (B642)', () => {
       vacancy('gone', 'ats-greenhouse-acme', 20, 8),
     ]);
     store.replaceSourceSlice('src-himalayas-api', [vacancy('agg', 'src-himalayas-api', 40, 0)]);
+    fullReadAt(read, 'ats-greenhouse-acme', Date.now() - DAY);
     store.prune(
       ['ats-greenhouse-acme', 'src-himalayas-api'],
       new Date(Date.now() - 30 * DAY).toISOString(),
@@ -84,6 +85,40 @@ describe('уборка по последнему чтению (B642)', () => {
       read.prepare('SELECT id FROM vacancy_pool ORDER BY id').all() as Array<{ id: string }>
     ).map((row) => row.id);
     expect(ids).toEqual(['alive']);
+  });
+});
+
+function fullReadAt(read: DatabaseSync, sourceId: string, atMs: number | null): void {
+  read.prepare(`INSERT INTO company_placement (placement_id, type, priority, source_id, discovered_by, updated_at, last_full_read_at)
+    VALUES (?, 'ats', 2, ?, 'source', 0, ?)`).run(`ats:${sourceId}`, sourceId, atMs);
+}
+
+describe('B643-6: невиденная запись снимается только после полного чтения', () => {
+  const prune = (store: SqliteVacancyPoolStore) =>
+    store.prune(['ats-greenhouse-acme'], new Date(Date.now() - 30 * DAY).toISOString());
+  const ids = (read: DatabaseSync) =>
+    (read.prepare('SELECT id FROM vacancy_pool ORDER BY id').all() as Array<{ id: string }>).map((row) => row.id);
+
+  it('keeps a row unseen 8 days when the board was not fully read since', () => {
+    const { store, read } = open();
+    store.replaceSourceSlice('ats-greenhouse-acme', [vacancy('paused', 'ats-greenhouse-acme', 20, 8)]);
+    fullReadAt(read, 'ats-greenhouse-acme', Date.now() - 9 * DAY);
+    prune(store);
+    expect(ids(read)).toEqual(['paused']);
+  });
+
+  it('keeps it without any placement row too', () => {
+    const { store, read } = open();
+    store.replaceSourceSlice('ats-greenhouse-acme', [vacancy('unknown', 'ats-greenhouse-acme', 20, 8)]);
+    prune(store);
+    expect(ids(read)).toEqual(['unknown']);
+  });
+
+  it('drops a row unseen 30 days even without a full read: the board stopped reading', () => {
+    const { store, read } = open();
+    store.replaceSourceSlice('ats-greenhouse-acme', [vacancy('dead', 'ats-greenhouse-acme', 20, 31)]);
+    prune(store);
+    expect(ids(read)).toEqual([]);
   });
 });
 

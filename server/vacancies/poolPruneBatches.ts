@@ -123,6 +123,15 @@ function pruneStaleVacancies(pass: PrunePass, oldestPublishedAt: string): void {
 }
 
 /**
+ * B643-6: «не видели» значит «снято», только если доску после этого прочли
+ * целиком. Частичное чтение, пауза квоты или предохранитель полного чтения не
+ * дают — такая запись держится до 30 дней от последнего показа.
+ */
+const NOT_SEEN_UNREAD_PRUNE_DAYS = 30;
+const FULL_READ_AFTER_SEEN = `EXISTS (SELECT 1 FROM company_placement p
+  WHERE p.source_id = i.source_id AND p.last_full_read_at > i.observed_ms)`;
+
+/**
  * B642: запись доски работодателя живёт, пока её видно; невиденная
  * `NOT_SEEN_PRUNE_DAYS` дней (источник перестал читаться) снимается.
  */
@@ -130,23 +139,28 @@ function pruneNotSeenVacancies(pass: PrunePass, knownSourceIds: readonly string[
   const confirming = knownSourceIds.filter(confirmsLiveness);
   if (confirming.length === 0) return;
   const cutoffMs = Date.now() - NOT_SEEN_PRUNE_DAYS * 24 * 60 * 60 * 1000;
+  const unreadCutoffMs = Date.now() - NOT_SEEN_UNREAD_PRUNE_DAYS * 24 * 60 * 60 * 1000;
   const placeholders = confirming.map(() => '?').join(', ');
   const stale = pass.find(
     `SELECT i.id AS key
        FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
       WHERE i.expired = 0 AND i.source_id IN (${placeholders}) AND i.observed_ms < ?
+        AND (i.observed_ms < ? OR ${FULL_READ_AFTER_SEEN})
       LIMIT ${PRUNE_PORTION_ROWS}`,
     ...confirming,
     cutoffMs,
+    unreadCutoffMs,
   );
   pass.remove(
     `DELETE FROM vacancy_pool WHERE id = ?
        AND EXISTS (
          SELECT 1 FROM vacancy_pool_index i
           WHERE i.id = vacancy_pool.id AND i.expired = 0 AND i.observed_ms < ?
+            AND (i.observed_ms < ? OR ${FULL_READ_AFTER_SEEN})
        )`,
     stale,
     cutoffMs,
+    unreadCutoffMs,
   );
 }
 
