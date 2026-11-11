@@ -24,6 +24,12 @@ import { catalogRoleOf } from '../vacancies/vacancyCatalogFacets';
 
 /** A card nobody has re-observed for this long may already be gone at the source. */
 export const CARD_SEEN_WITHIN_DAYS = 14;
+/**
+ * 11.11: the sitemap lists only cards seen within 3 days. A card seen two weeks
+ * ago may already be gone, and Google would come for a 410; the source crawl
+ * re-observes a live card at least daily.
+ */
+export const SITEMAP_CARD_SEEN_WITHIN_DAYS = 3;
 /** Our own horizon for a posting whose source named no withdrawal date. */
 export const POSTING_VALID_DAYS = 30;
 /**

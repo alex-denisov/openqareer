@@ -201,7 +201,7 @@ describe('B351: data-dependent raw HTML budget', () => {
     ]) {
       expect(Buffer.byteLength(html)).toBeLessThan(20_000);
       expect(html).not.toContain(longLabel);
-      expect(html).toContain('noindex, follow');
+      expect(html).not.toContain('noindex');
     }
   });
   it('also bounds the maximum HTML-escape expansion of external labels', () => {

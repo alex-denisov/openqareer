@@ -25,7 +25,6 @@ import type {
   VacancyDetail,
 } from './vacancyCatalogPage';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
-import { isIndexablePage } from '../seo/catalogIndexing';
 import { escapeHtml } from './catalogHtml';
 import { ruSummaryBlock } from './catalogRuSummaryHtml';
 import { ogImageUrl } from '../../shared/seoHead';
@@ -311,12 +310,8 @@ export function renderCatalogDocument(
       description: page.description,
       canonicalPath: page.canonicalPath,
       jsonLd: page.jsonLd,
-      // Пустой каталог индексировать нечего: пустая страница в выдаче вредит
-      // и читателю, и домену. Глубокие страницы — только ради ссылок.
-      ...(empty || !isIndexablePage(page.page) || page.indexable === false
-        ? { noindex: true }
-        : {}),
-      ...(page.indexable === false ? { omitCanonical: true } : {}),
+      // 11.11 (решение владельца): на живой странице нет noindex. Что не нужно
+      // в поиске, просто не попадает в sitemap; курсор и чип ведут canonical на список.
       ...(page.previousPath ? { previousPath: page.previousPath } : {}),
       ...(page.nextPath ? { nextPath: page.nextPath } : {}),
     }),
@@ -413,8 +408,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
       jsonLd,
       ogType: 'article',
       ...(contentLanguage === 'en' ? { ogLocale: 'en_US' } : {}),
-      // Outside the indexable set: reachable and followed, not indexed.
-      ...(detail.indexable ? {} : { noindex: true }),
+      // 11.11: outside the indexable set the card only loses JobPosting and its sitemap line.
     }),
     body,
   );
