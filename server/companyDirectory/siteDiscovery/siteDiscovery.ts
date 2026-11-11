@@ -64,12 +64,19 @@ export async function resolvesPublic(host: string, resolve = lookup): Promise<bo
 /** A slow company site costs a worker; 8 s keeps the batch moving. */
 const PAGE_TIMEOUT_MS = 8_000;
 
-export async function page(url: string, fetchImpl: typeof fetch): Promise<{ status: number; url: string; html: string }> {
+/** Host check before every hop; tests inject one, production always resolves DNS. */
+export type HostCheck = (host: string) => Promise<boolean>;
+
+export async function page(
+  url: string,
+  fetchImpl: typeof fetch,
+  hostIsPublic: HostCheck = (host) => resolvesPublic(host),
+): Promise<{ status: number; url: string; html: string }> {
   try {
     let current = url;
     for (let hop = 0; hop < 4; hop++) {
       const parsed = new URL(current);
-      if (!isPublicHost(parsed) || (fetchImpl === fetch && !(await resolvesPublic(parsed.hostname))))
+      if (!isPublicHost(parsed) || !(await hostIsPublic(parsed.hostname)))
         return { status: 0, url, html: '' };
       const response = await fetchImpl(current, { redirect: 'manual', signal: AbortSignal.timeout(PAGE_TIMEOUT_MS) });
       const location = response.headers?.get('location');

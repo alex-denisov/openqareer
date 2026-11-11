@@ -9,7 +9,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { resolveCompany } from './deterministicResolver';
 import { politeFetch } from './hostLimiter';
-import { orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type PendingCompany } from './siteDiscovery';
+import { orderByVacancies, readPendingPage, vacancyCounts, writeDiscovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 interface Log {
   info(details: Record<string, unknown>, message: string): void;
@@ -71,6 +71,7 @@ export async function runSiteDiscoveryTick(
   fetchImpl: typeof fetch,
   now: Date = new Date(),
   queue: Pick<PendingQueue, 'next'> = new PendingQueue(database),
+  hostIsPublic?: HostCheck,
 ): Promise<TickResult> {
   const companies = await queue.next(BATCH);
   const day = now.toISOString().slice(0, 10);
@@ -80,7 +81,7 @@ export async function runSiteDiscoveryTick(
   const worker = async () => {
     while (cursor < companies.length) {
       const company = companies[cursor++]!;
-      const found = await resolveCompany(company, fetchImpl, day);
+      const found = await resolveCompany(company, fetchImpl, day, hostIsPublic);
       if (found.board) boards += 1;
       if (found.evidence.atsAmbiguous) ambiguous += 1;
       writeDiscovery(database, found, now.toISOString());
