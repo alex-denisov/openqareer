@@ -46,3 +46,7 @@ await mkdir('dist/fonts/resume', { recursive: true });
 for (const font of RESUME_FONTS) {
   await copyFile(`node_modules/dejavu-fonts-ttf/ttf/${font}`, `dist/fonts/resume/${font}`);
 }
+
+// B644: freehire repo board catalog, read by the maintenance step at runtime.
+await mkdir('dist/data/freehire', { recursive: true });
+await copyFile('server/companyDirectory/freehire/data/freehire-boards-2026-09-03.tsv.gz', 'dist/data/freehire/freehire-boards-2026-09-03.tsv.gz');

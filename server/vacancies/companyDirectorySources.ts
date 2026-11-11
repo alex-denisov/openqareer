@@ -274,7 +274,11 @@ interface DirectoryRow {
   ats_slug: string | null;
 }
 
-/** Только чтение: активные компании справочника; без таблицы — пустой список. */
+/**
+ * Только чтение: активные компании справочника, у которых есть что опрашивать
+ * (B644: 140 тыс. имён из каталога freehire без досок не читаются при старте).
+ * Без таблицы — пустой список.
+ */
 export function readDirectoryCompanies(database: DatabaseSync): readonly DirectoryCompany[] {
   const table = database
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'company_directory'")
@@ -284,7 +288,9 @@ export function readDirectoryCompanies(database: DatabaseSync): readonly Directo
     .prepare(
       `SELECT company_key, company_name, website_url, careers_url, linkedin_org_id,
               ats_provider, ats_slug
-         FROM company_directory WHERE status = 'active' ORDER BY company_key`,
+         FROM company_directory WHERE status = 'active'
+          AND (ats_provider IS NOT NULL OR careers_url IS NOT NULL OR website_url IS NOT NULL OR linkedin_org_id IS NOT NULL)
+        ORDER BY company_key`,
     )
     .all() as unknown as DirectoryRow[];
   return rows.map((row) => ({
