@@ -1,7 +1,7 @@
 /**
  * B627 / B643-9: maintenance step — the directory backlog through the
  * deterministic resolver (no model). CPO 11.11: every company without an ATS,
- * the 500/day cap is lifted; target ≥50k a day: 24 companies in parallel,
+ * the 500/day cap is lifted; target ≥50k a day: 12 companies in parallel (24 pushed stalls to ×1.5),
  * ≤1 request a second per host, 5 s rest between batches of 200. The ordered queue (most pool
  * vacancies first) is read in pages once per QUEUE_TTL_MS.
  * Rollback: OPENQAREER_SITE_DISCOVERY_OFF=1.
@@ -18,7 +18,7 @@ interface Log {
 
 const BATCH = 200;
 /** Parallel companies; every host still gets ≤1 request a second (`politeFetch`). */
-const WORKERS = 24;
+const WORKERS = 12;
 const FIRST_RUN_MS = 7 * 60_000;
 const BETWEEN_MS = 5_000;
 const PAGE = 2_000;

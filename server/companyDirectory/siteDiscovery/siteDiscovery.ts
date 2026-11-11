@@ -63,6 +63,8 @@ export async function resolvesPublic(host: string, resolve = lookup): Promise<bo
 
 /** A slow company site costs a worker; 8 s keeps the batch moving. */
 const PAGE_TIMEOUT_MS = 8_000;
+/** Board links sit in the head and nav; scanning more cost event-loop stalls on prod (B643-9). */
+const MAX_HTML_CHARS = 200_000;
 
 /** Host check before every hop; tests inject one, production always resolves DNS. */
 export type HostCheck = (host: string) => Promise<boolean>;
@@ -84,7 +86,7 @@ export async function page(
         current = new URL(location, current).href;
         continue;
       }
-      const html = (await response.text()).slice(0, 600_000);
+      const html = (await response.text()).slice(0, MAX_HTML_CHARS);
       return { status: response.status, url: current, html };
     }
     return { status: 0, url, html: '' };
