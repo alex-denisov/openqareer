@@ -21,6 +21,8 @@ export interface Discovery {
   readonly websiteUrl?: string;
   readonly careersUrl?: string;
   readonly board?: BoardCandidate & { readonly jobs: number };
+  /** B643: hh employer ids linked from the home or careers page. */
+  readonly hhEmployerIds?: readonly string[];
   readonly evidence: Record<string, unknown>;
 }
 
@@ -177,6 +179,7 @@ export function writeDiscovery(database: DatabaseSync, found: Discovery, now: st
   recordCompanyPlacements(database, found.companyKey, {
     boards: found.board ? [found.board] : [],
     siteUrl: found.careersUrl ?? found.websiteUrl ?? null,
+    hhEmployerIds: found.hhEmployerIds ?? [],
     discoveredBy: 'site_discovery',
   }, Date.parse(now) || Date.now());
 }

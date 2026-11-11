@@ -42,6 +42,16 @@ describe('B643-9 deterministic resolver', () => {
     expect(JSON.stringify(found.evidence)).toContain('B643-9');
   });
 
+  it('takes hh employer pages linked from the home and careers pages', async () => {
+    const careers = `<html>${'x'.repeat(600)}<a href="https://hh.kz/employer/3529">hh.kz</a></html>`;
+    const found = await resolveCompany(company('Acme', 'https://acme.com/'), fakeFetch({
+      'https://acme.com/': [200, '<a href="https://hh.ru/employer/1740">hh</a>'],
+      'https://acme.com/careers': [200, careers],
+    }), '2026-11-11', publicHost);
+    expect(found.hhEmployerIds).toEqual(['3529', '1740']);
+    expect(found.evidence.hhEmployer).toMatchObject({ value: ['3529', '1740'], confirmed: true });
+  });
+
   it('falls back to a name slug guess checked by the board API', async () => {
     const found = await resolveCompany(company('Northwind Labs'), fakeFetch({
       'https://api.ashbyhq.com/posting-api/job-board/northwindlabs': [200, '{"jobs":[{},{}]}'],
