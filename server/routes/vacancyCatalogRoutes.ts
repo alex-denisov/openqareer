@@ -52,6 +52,7 @@ import {
 import { getCatalogSitemaps, getListingHistory } from '../seo/catalogSitemapSchedule';
 import { isValidIndexNowKey } from '../seo/indexNow';
 import { renderSitemapIndex, type SitemapFile } from '../seo/sitemapXml';
+import { liveJobsXml } from '../seo/liveSitemap';
 import {
   RELOCATION_LIST_KEY,
   RELOCATION_PLACE,
@@ -490,8 +491,27 @@ function sitemapFileHandler(name: (request: FastifyRequest) => string) {
     const wanted = name(request);
     const found = sitemapFiles().find((file) => file.name === wanted);
     if (!found) return reply.status(404).send({ error: 'not_found' });
-    return sendXml(reply, found.xml);
+    if (!found.name.startsWith('jobs-')) return sendXml(reply, found.xml);
+    return sendXml(reply, liveJobsFile(deps, found));
   };
+}
+
+const LIVE_JOBS_TTL_MS = 60_000;
+const liveJobsMemo = new Map<string, { source: string; xml: string; at: number }>();
+
+/** 11.11: the job file minus cards closed since the build, with moved slugs followed. */
+function liveJobsFile(deps: RouteDeps, file: SitemapFile): string {
+  const cached = liveJobsMemo.get(file.name);
+  const now = Date.now();
+  if (cached && cached.source === file.xml && now - cached.at < LIVE_JOBS_TTL_MS) return cached.xml;
+  const xml = liveJobsXml(file.xml, (key) => {
+    const entry = deps.multiSourceEngine.getPublicCatalogEntry(key);
+    return entry && deps.multiSourceEngine.getPublicCatalogCluster(entry.clusterId)
+      ? entry.path
+      : undefined;
+  });
+  liveJobsMemo.set(file.name, { source: file.xml, xml, at: now });
+  return xml;
 }
 
 /** Cities and roles that have a public list, with counts, for the search box. */
