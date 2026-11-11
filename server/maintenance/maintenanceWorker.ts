@@ -1,5 +1,6 @@
 import type { RoleLinkStep } from '../vacancies/titleParse/roleLinkStep';
 import type { PlacementBackfillTicker } from '../companyDirectory/placement/placementBackfill';
+import type { CareersPruneTicker } from '../companyDirectory/siteDiscovery/careersPrune';
 import type { AggregatorCompanyTicker } from '../companyDirectory/placement/aggregatorBackfill';
 import { CATALOG_TOTALS_REFRESH_MS } from '../vacancies/matchedCatalogSummary';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
@@ -208,6 +209,7 @@ export class MaintenanceWorker {
   private readonly roleLink?: RoleLinkStep;
   private readonly placements?: PlacementBackfillTicker;
   private readonly aggregatorCompanies?: AggregatorCompanyTicker;
+  private readonly careersPrune?: CareersPruneTicker;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   /** B626: последний статус пропуска — пишем в журнал только смену причины. */
   private linkedinPoolSkipStatus: string | undefined;
@@ -242,6 +244,7 @@ export class MaintenanceWorker {
     roleLink?: RoleLinkStep;
     placements?: PlacementBackfillTicker;
     aggregatorCompanies?: AggregatorCompanyTicker;
+    careersPrune?: CareersPruneTicker;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
     now?: () => number;
@@ -253,6 +256,7 @@ export class MaintenanceWorker {
     this.roleLink = options.roleLink;
     this.placements = options.placements;
     this.aggregatorCompanies = options.aggregatorCompanies;
+    this.careersPrune = options.careersPrune;
     this.linkedinPoolExecutor = options.linkedinPoolExecutor;
     this.purgeRecruiters = options.purgeRecruiters;
     this.log = options.log;
@@ -620,13 +624,16 @@ export class MaintenanceWorker {
 
   /** B643-3: порции размещений в бюджете такта; итог прохода — в журнал. */
   runPlacementStep(): void {
-    if (this.stopped || !this.placements) return;
+    if (this.stopped || (!this.placements && !this.careersPrune)) return;
     try {
-      const report = this.placements.tick();
+      const report = this.placements?.tick();
       if (report) this.log.info({ ...report }, 'company-placement-pass');
       // B643-8: компания для строк агрегаторов, тот же бюджет такта следом.
       const aggregator = this.aggregatorCompanies?.tick();
       if (aggregator) this.log.info({ ...aggregator }, 'aggregator-company-pass');
+      // B643: wrong or closed careers pages leave the directory, same tick budget.
+      const pruned = this.careersPrune?.tick();
+      if (pruned) this.log.info({ ...pruned }, 'careers-prune-pass');
     } catch (error: unknown) {
       this.log.error(
         { errorName: errorName(error), errorMessage: errorMessage(error) },
@@ -750,7 +757,7 @@ export class MaintenanceWorker {
     every(ROLE_LINK_INTERVAL_MS, () =>
       this.track(this.runRoleLinkStep(), 'role-link-step-failed', undefined),
     );
-    if (this.placements) every(PLACEMENT_INTERVAL_MS, () => this.runPlacementStep());
+    if (this.placements || this.careersPrune) every(PLACEMENT_INTERVAL_MS, () => this.runPlacementStep());
     if (this.linkedinPoolExecutor) {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
     }

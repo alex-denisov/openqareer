@@ -4,6 +4,7 @@
  * careers paths, ATS links on those pages, then name slugs on board APIs.
  * Only what answers over HTTP is kept.
  */
+import { careersPageVerdict } from './careersPageSignal';
 import { boardJobs, boardsFromHtml, type BoardCandidate, type DiscoveredProvider } from './atsBoards';
 import { hhEmployerIds } from './hhEmployerLinks';
 import { absolute, LINKEDIN, page, resolvesPublic, type Discovery, type HostCheck, type PendingCompany } from './siteDiscovery';
@@ -71,9 +72,13 @@ async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: s
     ...careersLinks(home.html, home.url).map((url) => [url, 'home page link'] as const),
     ...CAREERS_PATHS.map((path) => [`${origin}${path}`, `site path ${path}`] as const),
   ];
+  const dropped = company.droppedCareersUrl ?? null;
   for (const [url, how] of candidates) {
+    // B643: a page the prune step dropped is not offered again.
+    if (url === dropped) continue;
     const result = await page(url, fetchImpl, hostIsPublic);
-    if (result.status === 200 && result.html.length > 500) {
+    if (result.url === dropped) continue;
+    if (result.status === 200 && result.html.length > 500 && careersPageVerdict(result.html) === 'ok') {
       evidence.careersUrl = { value: result.url, how: `B643-9 ${how}, HTTP 200 on ${day}`, confirmed: true };
       return { html: home.html, careersUrl: result.url, careersHtml: result.html };
     }

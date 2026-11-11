@@ -84,7 +84,10 @@ const UPSERT_COMPANY_SQL = `
     industry = COALESCE(excluded.industry, ${COMPANY_DIRECTORY_TABLE}.industry),
     domain_group = COALESCE(excluded.domain_group, ${COMPANY_DIRECTORY_TABLE}.domain_group),
     notes = COALESCE(excluded.notes, ${COMPANY_DIRECTORY_TABLE}.notes),
-    evidence = COALESCE(excluded.evidence, ${COMPANY_DIRECTORY_TABLE}.evidence),
+    -- B643: the time careers_url changed, so old poll readings never judge a new URL.
+    evidence = CASE WHEN excluded.careers_url IS NOT NULL AND excluded.careers_url IS NOT ${COMPANY_DIRECTORY_TABLE}.careers_url
+      THEN json_set(COALESCE(excluded.evidence, ${COMPANY_DIRECTORY_TABLE}.evidence, '{}'), '$.careersUrlSetAt', excluded.updated_at)
+      ELSE COALESCE(excluded.evidence, ${COMPANY_DIRECTORY_TABLE}.evidence) END,
     updated_at = excluded.updated_at;
 `;
 
