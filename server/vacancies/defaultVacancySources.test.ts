@@ -140,13 +140,13 @@ describe('registry of vacancy sources: routes and address status (B199)', () => 
     }
   });
 
-  it('keeps a source measured only on a route production does not use disabled', () => {
-    // ТрудВсем: 322 121 байт за 5,4 с из российского ЦОДа, обрыв на 30 КБ из EU.
+  it('B647: polls Работа России through its official API from production', () => {
     const trudvsem = DEFAULT_VACANCY_SOURCES.find((source) => source.id === 'src-trudvsem');
     const routes = vacancySourceMeasurements('src-trudvsem').map((reading) => reading.route);
 
-    expect(routes).toContain('ru-dc');
-    expect(trudvsem?.enabled).toBe(false);
+    expect(routes).toContain('eu-prod');
+    expect(trudvsem?.enabled).toBe(true);
+    expect(trudvsem?.addressStatus).toBe('live');
   });
 
   it('gives every source an address status that a probe actually established', () => {

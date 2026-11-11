@@ -9,6 +9,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { buildLinkageIndex, type DirectoryRow, type LinkageIndex } from './placementLinkage';
 import { linkAggregatorRow } from './aggregatorLinkage';
 import { PLACEMENT_TABLES } from './placementSchema';
+import { recordCompanyPlacements } from './placementWriter';
 
 export interface AggregatorBackfillReport {
   readonly done: boolean;
@@ -25,7 +26,7 @@ const DEFAULT_CHUNK = 200;
 export const AGGREGATOR_TICK_BUDGET_MS = 300;
 export const AGGREGATOR_PASS_PAUSE_MS = 6 * 60 * 60_000;
 
-interface PoolRow { id: string; source_id: string; company: string | null; person: number | null; employer: string | number | null }
+interface PoolRow { id: string; source_id: string; company: string | null; person: number | null; employer: string | number | null; site: string | null }
 
 export class AggregatorCompanyBackfill {
   private directory: DirectoryRow[] = [];
@@ -53,7 +54,8 @@ export class AggregatorCompanyBackfill {
       .prepare(
         `SELECT i.id, i.source_id, json_extract(c.cluster_json,'$.company') AS company,
                 json_extract(c.cluster_json,'$.employerIsPerson') AS person,
-                json_extract(c.cluster_json,'$.employerId') AS employer
+                json_extract(c.cluster_json,'$.employerId') AS employer,
+                json_extract(c.cluster_json,'$.employerSite') AS site
            FROM vacancy_pool_index i JOIN vacancy_cluster_input c ON c.id = i.id
           WHERE i.id > ? AND i.expired = 0 ORDER BY i.id LIMIT ?`,
       )
@@ -117,6 +119,11 @@ export class AggregatorCompanyBackfill {
         if (link.status === 'linked') {
           linked += 1;
           this.changedTotal += Number(upsert.run(row.id, link.companyKey, link.how, nowMs).changes);
+          // B647: сайт работодателя от агрегатора — только при точном имени из
+          // нескольких слов; чужое размещение не переезжает (placementWriter).
+          if (row.site && link.how === 'exact_name') {
+            recordCompanyPlacements(this.db, link.companyKey, { boards: [], siteUrl: row.site, discoveredBy: 'aggregator_site' }, nowMs);
+          }
         } else {
           unlinked += 1;
           this.changedTotal += Number(drop.run(row.id).changes);
