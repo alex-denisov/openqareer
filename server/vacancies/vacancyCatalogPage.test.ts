@@ -232,8 +232,9 @@ describe('страница публичного каталога ваканси�
     ).toBe(false);
   });
 
-  it('не размечает JobPosting карточку без вилки или без работодателя', () => {
-    for (const overrides of [{ salary: undefined }, { canonicalCompany: '' }]) {
+  it('не размечает JobPosting карточку без работодателя (11.11: вилка не нужна)', () => {
+    expect(buildVacancyDetail(cluster({ salary: undefined }))!.indexable).toBe(true);
+    for (const overrides of [{ canonicalCompany: '' }]) {
       const detail = buildVacancyDetail(cluster(overrides))!;
       expect(detail.indexable).toBe(false);
       expect(detail.jsonLd['@graph'].map((node) => node['@type'])).toEqual(['BreadcrumbList']);

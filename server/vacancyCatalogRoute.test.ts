@@ -437,7 +437,9 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
   }, 20_000);
 
   it('marks a card outside the indexable set noindex, follow and drops its JobPosting', async () => {
-    const app = await appWithPool([vacancy(1)]);
+    const app = await appWithPool([
+      vacancy(1, { description: 'Короткий', fullDescription: undefined }),
+    ]);
     const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
     expect(detail.statusCode).toBe(200);
     expect(detail.body).not.toContain('noindex');

@@ -4,6 +4,7 @@
  * - Web server: read those rows and `catalog_listing_history` every 5 minutes
  *   into memory; the HTTP path only ever reads memory.
  */
+import { googleIndexingKey } from './googleIndexingSwitch';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { OwnerTelegramConfig } from '../notifications/ownerTelegram';
@@ -93,7 +94,7 @@ export function scheduleCatalogSitemapJob(
 ): () => void {
   const notifyIndexNow = createIndexNowNotifier(process.env.INDEXNOW_KEY, log);
   const notifyGoogle = createGoogleIndexingNotifier(
-    process.env.OPENQAREER_GSC_SERVICE_ACCOUNT_B64,
+    googleIndexingKey(process.env),
     log,
   );
   let running = false;
