@@ -385,16 +385,22 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
   }, 20_000);
 
   it('serves each child file and keeps deep pages and unsalaried cards out', async () => {
-    setCatalogSitemaps(
-      buildSitemapFiles({
-        listings: [{ path: '/vacancies/berlin', lastmod: '2026-10-20' }],
-        jobs: [{ path: '/vacancies/job/data-engineer-at-paid-co-test', lastmod: '2026-10-20' }],
-      }),
-    );
     const app = await appWithPool([
       ...Array.from({ length: 30 }, (_, index) => vacancy(index)),
       vacancy(40, { title: 'Data Engineer', company: 'Paid Co', salary: SALARY }),
     ]);
+    const root = await app.inject({ method: 'GET', url: '/vacancies' });
+    const live = /href="(\/vacancies\/job\/data-engineer-at-paid-co-[^"]+)"/u.exec(root.body)![1]!;
+    // 11.11: a closed card (unknown key) is dropped from the served file.
+    setCatalogSitemaps(
+      buildSitemapFiles({
+        listings: [{ path: '/vacancies/berlin', lastmod: '2026-10-20' }],
+        jobs: [
+          { path: live, lastmod: '2026-10-20' },
+          { path: '/vacancies/job/closed-at-gone-co-zzz', lastmod: '2026-10-20' },
+        ],
+      }),
+    );
     const statics = await app.inject({ method: 'GET', url: '/sitemaps/static-1.xml' });
     expect(statics.statusCode).toBe(200);
     expect(statics.body).toContain('<loc>https://openqareer.com/vacancies</loc>');
