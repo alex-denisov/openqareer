@@ -10,6 +10,7 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type { OwnerTelegramConfig } from '../notifications/ownerTelegram';
 import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
+import { snapshotDue, snapshotSitemapCards } from './catalogArchive';
 import {
   computeCatalogSitemaps,
   readCatalogSitemaps,
@@ -86,6 +87,27 @@ function runMarketReport(database: DatabaseSync, log: SitemapLog, now: Date): vo
   }
 }
 
+/** 11.11: today's sitemap cards are copied for their archive pages; never stops the files. */
+function runArchiveSnapshot(
+  database: DatabaseSync,
+  urls: ReadonlyArray<{ readonly path: string }>,
+  log: SitemapLog,
+  now: Date,
+): void {
+  try {
+    if (!snapshotDue(database, now)) return;
+    const started = Date.now();
+    const copied = snapshotSitemapCards(
+      database,
+      urls.map((url) => url.path),
+      now,
+    );
+    log.info({ copied, ms: Date.now() - started }, 'catalog-archive-snapshot');
+  } catch (error: unknown) {
+    log.error({ errorName: errorName(error) }, 'catalog-archive-snapshot-failed');
+  }
+}
+
 /** Maintenance process only: the listings query groups the whole catalog. */
 export function scheduleCatalogSitemapJob(
   database: DatabaseSync,
@@ -93,10 +115,7 @@ export function scheduleCatalogSitemapJob(
   telegram: OwnerTelegramConfig = {},
 ): () => void {
   const notifyIndexNow = createIndexNowNotifier(process.env.INDEXNOW_KEY, log);
-  const notifyGoogle = createGoogleIndexingNotifier(
-    googleIndexingKey(process.env),
-    log,
-  );
+  const notifyGoogle = createGoogleIndexingNotifier(googleIndexingKey(process.env), log);
   let running = false;
   const run = async () => {
     if (running) return;
@@ -110,6 +129,7 @@ export function scheduleCatalogSitemapJob(
       writeCatalogSitemaps(database, files, now);
       await checkIndexCoverage({ database, files, telegram, log, now });
       const urls = files.flatMap((file) => file.urls ?? []);
+      runArchiveSnapshot(database, urls, log, now);
       await notifyIndexNow(database, urls);
       await notifyGoogle(database, urls);
       log.info(
