@@ -12,6 +12,7 @@ import {
   withDeps,
 } from './helpers';
 import { requireAdmin } from './adminAuth';
+import { registerAdminCoverageRoutes } from './adminCoverageRoutes';
 import { registerAdminPermissionRoutes } from './adminPermissions';
 import { registerAdminPartnerRoutes } from './adminPartnerRoutes';
 import { toAdminSourceSchedule } from '../vacancies/adminSourceSchedule';
@@ -456,6 +457,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
   app.get('/api/v1/admin/audit', withDeps(deps, handleListAudit));
 
   registerVacancyList(app, deps);
+  registerAdminCoverageRoutes(app, deps);
   app.get('/api/v1/admin/vacancy-sources', withDeps(deps, handleListSources));
   app.get('/api/v1/admin/vacancy-sources/audit', withDeps(deps, handleSourceOwnershipAudit));
   app.post('/api/v1/admin/vacancy-sources/:sourceId/test', withDeps(deps, testSource));
