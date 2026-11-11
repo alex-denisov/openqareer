@@ -38,6 +38,12 @@ await build({
   entryPoints: ['server/companyDirectory/freehire/freehirePagesWorker.ts'],
   outfile: 'dist/freehire-pages-worker.mjs',
 });
+// B645: the same pass as its own unit (deploy/bootstrap-freehire-pages.sh).
+await build({
+  ...shared,
+  entryPoints: ['server/companyDirectory/freehire/freehirePagesRun.ts'],
+  outfile: 'dist/freehire-pages-run.mjs',
+});
 await build({
   ...shared,
   entryPoints: ['scripts/run-vacancy-mechanics-worker.ts'],

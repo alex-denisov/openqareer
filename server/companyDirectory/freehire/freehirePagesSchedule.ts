@@ -31,7 +31,7 @@ interface Log {
 
 export const SHARD = 10_000;
 const BATCH = 30;
-const IN_FLIGHT = 3;
+const IN_FLIGHT = 4;
 const FIRST_RUN_MS = 8 * 60_000;
 const BETWEEN_MS = 200;
 const DONE_MS = 7 * 24 * 60 * 60_000;
@@ -351,7 +351,11 @@ function logTick(
 }
 
 /** The pass loop itself; runs in the worker thread on prod, in-process elsewhere. */
-export function runFreehirePagesLoop(database: DatabaseSync, log: Log): () => void {
+export function runFreehirePagesLoop(
+  database: DatabaseSync,
+  log: Log,
+  firstRunMs = FIRST_RUN_MS,
+): () => void {
   const client = new FreehirePagesClient();
   const check = boardCheck(fetch);
   const pass: PagesPass = {};
@@ -389,7 +393,7 @@ export function runFreehirePagesLoop(database: DatabaseSync, log: Log): () => vo
       next(FAILED_MS);
     }
   };
-  next(FIRST_RUN_MS);
+  next(firstRunMs);
   return () => {
     stopped = true;
     clearTimeout(timer);
