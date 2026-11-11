@@ -560,7 +560,11 @@ function isPartialCioMatch(variant: OntologyVariant, normalized: string): boolea
 /** Начальник отдела руководит им так же, как руководитель отдела: без словаря уровень не назван. */
 const DEPARTMENT_CHIEF = /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
 
-export function rulesParse(title: string): RulesParseResult {
+/** `freehireFallback: false` is for offline measurement only (freehireClassify/measure.ts). */
+export function rulesParse(
+  title: string,
+  options: { readonly freehireFallback?: boolean } = {},
+): RulesParseResult {
   const normalizedKey = normalizeTitleKey(title);
   const ontologyVariant = findOntologyVariant(normalizedKey);
   const normalized = ` ${title.toLowerCase()} `;
@@ -587,10 +591,10 @@ export function rulesParse(title: string): RulesParseResult {
   }
   const hits = findAnchorHits(normalized);
   const specificFunctions = pickTopFunctions(hits);
-  const functions = withFreehireFallback(
-    title,
-    specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized),
-  );
+  const ownFunctions =
+    specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
+  const functions =
+    options.freehireFallback === false ? ownFunctions : withFreehireFallback(title, ownFunctions);
   const level = inferRulesLevel(title);
   return {
     functions,

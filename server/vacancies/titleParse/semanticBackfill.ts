@@ -543,9 +543,7 @@ export class SemanticBackfill {
           TAXONOMY_VERSION,
           now,
         );
-        // B646-2: подтверждённое словарём freehire не-ИТ название модели не отдаём.
-        const eligible = isUncertain(key.parsed) && !isConfirmedNonItTitle(key.title);
-        enqueueModel.run(key.titleKey, eligible ? 1 : 0);
+        enqueueModel.run(key.titleKey, modelQueueFlag(key.parsed, key.title));
       }
       for (const { row, titleKey, parsed } of resolved) {
         for (const code of parsed.functions) {
@@ -638,6 +636,11 @@ export class SemanticBackfill {
 
 function isUncertain(parsed: ParsedTitle): boolean {
   return parsed.functions.includes('other') || parsed.functions.length === 2 || !parsed.roleId;
+}
+
+/** B646-2: подтверждённое словарём freehire не-ИТ название модели не отдаём. */
+function modelQueueFlag(parsed: ParsedTitle, title: string): 0 | 1 {
+  return isUncertain(parsed) && !isConfirmedNonItTitle(title) ? 1 : 0;
 }
 
 function rulesParseOrOther(title: string): ParsedTitle {
