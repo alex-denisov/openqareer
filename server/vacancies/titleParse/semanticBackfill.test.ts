@@ -341,6 +341,30 @@ describe('SemanticBackfill (B267 S2)', () => {
     expect(restarted.step(100).ontologyCorrected).toBe(0);
   });
 
+  it('B646-2 пустой и other разбор правил получает ИТ-функцию словаря freehire, не-ИТ не трогается', () => {
+    const database = poolDatabase();
+    const titles: readonly [string, string, string][] = [
+      ['f1', 'Analista de Datos Senior', '["other"]'],
+      ['f2', 'Especialista Back-End', '[]'],
+      ['f3', 'Kassierer (m/w/d)', '[]'],
+    ];
+    const backfill = new SemanticBackfill(database);
+    const insert = database.prepare(
+      `INSERT INTO title_parse (title_key, sample_title, functions, level_rank, role_label, parsed_by, model, taxonomy_version, priority, parsed_at)
+       VALUES (?, ?, ?, NULL, NULL, 'rules', NULL, 3, 0, 0)`,
+    );
+    for (const [id, title, functions] of titles) {
+      addVacancy(database, id, title);
+      insert.run(title.toLowerCase(), title, functions);
+    }
+    backfill.step(100);
+    const read = database.prepare('SELECT functions FROM title_parse WHERE title_key = ?');
+    expect(read.get('analista de datos senior')).toMatchObject({ functions: '["data"]' });
+    expect(read.get('especialista back-end')).toMatchObject({ functions: '["eng"]' });
+    expect(read.get('kassierer (m/w/d)')).toMatchObject({ functions: '[]' });
+    expect(new SemanticBackfill(database).step(100).ontologyCorrected).toBe(0);
+  });
+
   it('Senior Manager с маркером Head остаётся Head, функции модели не меняются', () => {
     const database = poolDatabase();
     addVacancy(database, 'v1', 'Senior Manager, Head of Payments');

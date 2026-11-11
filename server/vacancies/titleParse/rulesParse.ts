@@ -4,6 +4,7 @@ import { LEVEL_RANK } from '../levelMatcher';
 import { hasRulesLevelMarker, inferRulesLevel } from './rulesLevel';
 import { isChiefInformationTitle } from './chiefInformationTitle';
 import { normalizeTitleKey } from './normalizeTitleKey';
+import { freehireItFunction } from './freehireClassify/classify';
 
 /**
  * Фолбэк без модели (B267 §3): опорные слова словаря дают функцию, уже
@@ -506,6 +507,17 @@ function pickFallbackFunction(normalizedTitle: string): FunctionCode[] {
 }
 
 /**
+ * B646-2: когда наши правила не дали функции или дали только `other`, ИТ-категория
+ * словаря freehire (без модели) даёт функцию. Конкретный ответ правил не перекрывается.
+ * Выборка 11.11 по замороженным названиям прода: 31 из 32 прочтены верно.
+ */
+function withFreehireFallback(title: string, functions: FunctionCode[]): FunctionCode[] {
+  if (functions.some((code) => code !== 'other')) return functions;
+  const fallback = freehireItFunction(title);
+  return fallback ? [fallback] : functions;
+}
+
+/**
  * Более длинный (специфичный) якорь побеждает: «vp of engineering» важнее
  * общего «engineer» в том же названии. При равной длине сохраняется порядок
  * словаря — не больше двух функций на строку (B267 §2).
@@ -530,7 +542,8 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
  * это служба поддержки и ИТ-отдел (04.11: hh 136956781, 138740300; «начальник отдела ит» — public-service).
  */
 function isGenericServiceTitle(variant: OntologyVariant, key: string, normalized: string): boolean {
-  if ((variant.function as string) !== 'public-service' || ONTOLOGY_VARIANTS.exact.has(key)) return false;
+  if ((variant.function as string) !== 'public-service' || ONTOLOGY_VARIANTS.exact.has(key))
+    return false;
   const functions = pickTopFunctions(findAnchorHits(normalized));
   return functions.includes('support') || functions.includes('it-ops');
 }
@@ -547,15 +560,22 @@ function isPartialCioMatch(variant: OntologyVariant, normalized: string): boolea
 }
 
 /** Начальник отдела руководит им так же, как руководитель отдела: без словаря уровень не назван. */
-const DEPARTMENT_CHIEF = /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
+const DEPARTMENT_CHIEF =
+  /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
 
-export function rulesParse(title: string): RulesParseResult {
+/** `freehireFallback: false` is for offline measurement only (freehireClassify/measure.ts). */
+export function rulesParse(
+  title: string,
+  options: { readonly freehireFallback?: boolean } = {},
+): RulesParseResult {
   const normalizedKey = normalizeTitleKey(title);
   const ontologyVariant = findOntologyVariant(normalizedKey);
   const normalized = ` ${title.toLowerCase()} `;
   if (isChiefInformationTitle(title)) {
     const others = pickTopFunctions(findAnchorHits(normalized)).filter(
-      (code) => code !== 'it-ops' && (code !== 'eng-mgmt' || /\bcto\b|chief tech|технический/iu.test(title)),
+      (code) =>
+        code !== 'it-ops' &&
+        (code !== 'eng-mgmt' || /\bcto\b|chief tech|технический/iu.test(title)),
     );
     return {
       functions: (['it-ops', ...others] as FunctionCode[]).slice(0, 2),
@@ -576,8 +596,10 @@ export function rulesParse(title: string): RulesParseResult {
   }
   const hits = findAnchorHits(normalized);
   const specificFunctions = pickTopFunctions(hits);
-  const functions =
+  const ownFunctions =
     specificFunctions.length > 0 ? specificFunctions : pickFallbackFunction(normalized);
+  const functions =
+    options.freehireFallback === false ? ownFunctions : withFreehireFallback(title, ownFunctions);
   const level = inferRulesLevel(title);
   return {
     functions,
