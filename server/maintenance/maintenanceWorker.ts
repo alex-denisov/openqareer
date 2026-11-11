@@ -1,5 +1,6 @@
 import type { RoleLinkStep } from '../vacancies/titleParse/roleLinkStep';
 import type { PlacementBackfillTicker } from '../companyDirectory/placement/placementBackfill';
+import type { AggregatorCompanyTicker } from '../companyDirectory/placement/aggregatorBackfill';
 import { CATALOG_TOTALS_REFRESH_MS } from '../vacancies/matchedCatalogSummary';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
@@ -206,6 +207,7 @@ export class MaintenanceWorker {
   private readonly titleModel?: TitleModelStep;
   private readonly roleLink?: RoleLinkStep;
   private readonly placements?: PlacementBackfillTicker;
+  private readonly aggregatorCompanies?: AggregatorCompanyTicker;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   /** B626: последний статус пропуска — пишем в журнал только смену причины. */
   private linkedinPoolSkipStatus: string | undefined;
@@ -239,6 +241,7 @@ export class MaintenanceWorker {
     titleModel?: TitleModelStep;
     roleLink?: RoleLinkStep;
     placements?: PlacementBackfillTicker;
+    aggregatorCompanies?: AggregatorCompanyTicker;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
     now?: () => number;
@@ -249,6 +252,7 @@ export class MaintenanceWorker {
     this.titleModel = options.titleModel;
     this.roleLink = options.roleLink;
     this.placements = options.placements;
+    this.aggregatorCompanies = options.aggregatorCompanies;
     this.linkedinPoolExecutor = options.linkedinPoolExecutor;
     this.purgeRecruiters = options.purgeRecruiters;
     this.log = options.log;
@@ -620,6 +624,9 @@ export class MaintenanceWorker {
     try {
       const report = this.placements.tick();
       if (report) this.log.info({ ...report }, 'company-placement-pass');
+      // B643-8: компания для строк агрегаторов, тот же бюджет такта следом.
+      const aggregator = this.aggregatorCompanies?.tick();
+      if (aggregator) this.log.info({ ...aggregator }, 'aggregator-company-pass');
     } catch (error: unknown) {
       this.log.error(
         { errorName: errorName(error), errorMessage: errorMessage(error) },

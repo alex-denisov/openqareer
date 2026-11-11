@@ -1,4 +1,5 @@
 import { PlacementBackfill, PlacementBackfillTicker } from './companyDirectory/placement/placementBackfill';
+import { AggregatorCompanyBackfill, AggregatorCompanyTicker } from './companyDirectory/placement/aggregatorBackfill';
 import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
@@ -220,6 +221,10 @@ const worker = new MaintenanceWorker({
   ...(process.env.OPENQAREER_COMPANY_PLACEMENT_OFF === '1'
     ? {}
     : { placements: new PlacementBackfillTicker(new PlacementBackfill(semanticDatabase)) }),
+  // B643-8: компания для строк агрегаторов по точному имени; откат — OPENQAREER_AGGREGATOR_COMPANY_OFF=1.
+  ...(process.env.OPENQAREER_COMPANY_PLACEMENT_OFF === '1' || process.env.OPENQAREER_AGGREGATOR_COMPANY_OFF === '1'
+    ? {}
+    : { aggregatorCompanies: new AggregatorCompanyTicker(new AggregatorCompanyBackfill(semanticDatabase)) }),
   purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
 });
 
