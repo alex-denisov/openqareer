@@ -43,8 +43,13 @@ async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: s
   return { html: home.html };
 }
 
+/** Joined slug at every provider; the hyphenated one only where boards use hyphens (lever, ashby). */
 function guesses(name: string): readonly BoardCandidate[] {
-  return nameSlugs(name).flatMap((slug) => GUESS_PROVIDERS.map((provider) => ({ provider, slug })));
+  const [joined, hyphenated] = nameSlugs(name);
+  if (!joined) return [];
+  const all: BoardCandidate[] = GUESS_PROVIDERS.map((provider) => ({ provider, slug: joined }));
+  if (hyphenated) all.push({ provider: 'lever', slug: hyphenated }, { provider: 'ashby', slug: hyphenated });
+  return all;
 }
 
 export async function resolveCompany(company: PendingCompany, fetchImpl: typeof fetch, day: string): Promise<Discovery> {
