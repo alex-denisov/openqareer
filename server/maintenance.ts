@@ -56,7 +56,6 @@ import {
 import { loadBudgetState, saveBudgetState } from './vacancies/linkedinBudgetState';
 import { scheduleLinkedinOrgResolver } from './companyDirectory/linkedinOrg/linkedinOrgSchedule';
 import { scheduleSiteDiscovery } from './companyDirectory/siteDiscovery/siteDiscoverySchedule';
-import { discoveryModel } from './companyDirectory/siteDiscovery/discoveryModel';
 import { scheduleFreehireRepo } from './companyDirectory/freehire/freehireRepoSchedule';
 
 /**
@@ -324,16 +323,8 @@ try {
   scheduleMarketSalaryEstimateJob(semanticDatabase, log);
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   scheduleRemoteScopeBackfill(semanticDatabase, log);
-  // B627: домен, карьеры и ATS через модель. Решение владельца 11.11: поиск сайтов и ATS
-  // без модели — шаг выключен, пока его не заменит детерминированный решатель (B643-9).
-  // Модель — только для неоднозначного остатка и только по согласованию: OPENQAREER_SITE_DISCOVERY_MODEL_ON=1.
-  if (process.env.OPENQAREER_SITE_DISCOVERY_MODEL_ON === '1') {
-    scheduleSiteDiscovery(
-      semanticDatabase,
-      log,
-      discoveryModel(semanticDatabase, config.databasePath, process.env),
-    );
-  }
+  // B627 / B643-9: домен, карьеры и ATS без модели (решение владельца 11.11), ≤480 компаний в сутки.
+  if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1') scheduleSiteDiscovery(semanticDatabase, log);
   // B644: компании и доски ATS из каталога репозитория freehire (файл), вместо API freehire.me (B641).
   scheduleFreehireRepo(semanticDatabase, log, process.env);
   // B621: LinkedIn ID компаний реестра через гостевой доступ, одна компания за такт.
