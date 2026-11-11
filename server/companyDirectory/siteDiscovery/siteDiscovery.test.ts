@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
+import { PLACEMENT_TABLES } from '../placement/placementSchema';
 import { boardsFromHtml, countJobs } from './atsBoards';
 import { readPendingCompanies, writeDiscovery } from './siteDiscovery';
 
@@ -8,6 +9,7 @@ function directory(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
   db.exec(COMPANY_DIRECTORY_MIGRATION);
   db.exec('ALTER TABLE company_directory ADD COLUMN evidence TEXT');
+  db.exec(PLACEMENT_TABLES);
   const insert = db.prepare(
     `INSERT INTO company_directory (company_key, company_name, careers_url, source_type, created_at, updated_at)
      VALUES (?, ?, ?, 'linkedin_guest', '2026-11-09', '2026-11-09')`,
@@ -41,9 +43,14 @@ describe('B627 site discovery', () => {
 
 });
 
-describe('B627 pending companies', () => {
-  it('skips companies whose site came from freehire', () => {
-    expect(readPendingCompanies(withFreehire(), 10).map((c) => c.companyKey)).toEqual(['acme']);
+describe('B643-9 pending companies', () => {
+  it('takes freehire companies too, most pool vacancies first, skips ATS placements and checked ones', () => {
+    const db = withFreehire();
+    db.prepare(`INSERT INTO vacancy_company VALUES ('v1','ghost','exact_name',1),('v2','ghost','exact_name',1)`).run();
+    expect(readPendingCompanies(db, 10).map((c) => c.companyKey)).toEqual(['ghost', 'acme']);
+    db.prepare(`INSERT INTO company_placement (placement_id, company_key, type, priority, discovered_by, updated_at) VALUES ('ats:lever:ghost','ghost','ats',2,'source',1)`).run();
+    db.prepare(`UPDATE company_directory SET evidence = '{"siteDiscovery":{"how":"B643-9 checked without model"}}' WHERE company_key = 'acme'`).run();
+    expect(readPendingCompanies(db, 10)).toEqual([]);
   });
 });
 

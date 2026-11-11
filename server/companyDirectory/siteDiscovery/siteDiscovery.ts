@@ -83,22 +83,52 @@ export async function page(url: string, fetchImpl: typeof fetch): Promise<{ stat
   }
 }
 
-/** Companies with no ATS that this step has not looked at yet; freehire.me ones (B629) need no model. */
-export function readPendingCompanies(database: DatabaseSync, limit: number): readonly PendingCompany[] {
+const PENDING_WHERE = `d.status = 'active' AND d.ats_provider IS NULL
+  AND (d.evidence IS NULL OR instr(d.evidence, 'B643-9') = 0)
+  AND NOT EXISTS (SELECT 1 FROM company_placement p WHERE p.company_key = d.company_key AND p.type = 'ats')`;
+
+type PendingRow = { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null };
+const toPending = (row: PendingRow): PendingCompany => ({
+  companyKey: row.company_key,
+  companyName: row.company_name,
+  websiteUrl: row.website_url,
+  linkedinUrl: row.linkedin_url,
+});
+
+/**
+ * B643-9: one page of companies with no ATS the deterministic resolver has not
+ * looked at, by key. Companies already holding an ATS placement (sources, B645
+ * freehire MCP) are skipped. Paging keeps each read short on the 165k directory.
+ */
+export function readPendingPage(database: DatabaseSync, afterKey: string, limit: number): readonly PendingCompany[] {
   const rows = database
     .prepare(
-      `SELECT company_key, company_name, website_url, linkedin_url FROM company_directory
-        WHERE status = 'active' AND ats_provider IS NULL
-          AND (evidence IS NULL OR (instr(evidence, 'B627') = 0 AND instr(evidence, 'freehire') = 0 AND instr(evidence, 'B643') = 0))
-        ORDER BY created_at DESC, company_key LIMIT ?`,
+      `SELECT d.company_key, d.company_name, d.website_url, d.linkedin_url FROM company_directory d
+        WHERE d.company_key > ? AND ${PENDING_WHERE} ORDER BY d.company_key LIMIT ?`,
     )
-    .all(limit) as unknown as { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null }[];
-  return rows.map((row) => ({
-    companyKey: row.company_key,
-    companyName: row.company_name,
-    websiteUrl: row.website_url,
-    linkedinUrl: row.linkedin_url,
-  }));
+    .all(afterKey, limit) as unknown as PendingRow[];
+  return rows.map(toPending);
+}
+
+/** Pool vacancies per company (B643-8 links): the queue order. */
+export function vacancyCounts(database: DatabaseSync): ReadonlyMap<string, number> {
+  const rows = database
+    .prepare(`SELECT company_key, count(*) AS n FROM vacancy_company GROUP BY company_key`)
+    .all() as unknown as { company_key: string; n: number }[];
+  return new Map(rows.map((row) => [row.company_key, row.n]));
+}
+
+/** Whole pending list, most pool vacancies first (tests and one-off reads). */
+export function readPendingCompanies(database: DatabaseSync, limit: number): readonly PendingCompany[] {
+  const counts = vacancyCounts(database);
+  const all: PendingCompany[] = [];
+  for (let page = readPendingPage(database, '', 5_000); page.length > 0; page = readPendingPage(database, page.at(-1)!.companyKey, 5_000))
+    all.push(...page);
+  return orderByVacancies(all, counts).slice(0, limit);
+}
+
+export function orderByVacancies(companies: readonly PendingCompany[], counts: ReadonlyMap<string, number>): PendingCompany[] {
+  return [...companies].sort((a, b) => (counts.get(b.companyKey) ?? 0) - (counts.get(a.companyKey) ?? 0));
 }
 
 /** Idempotent: fills only empty fields; a LinkedIn careers fallback counts as empty. */
