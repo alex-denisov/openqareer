@@ -1,4 +1,4 @@
-import { CoverageReport } from '../companyDirectory/coverage/coverageReport';
+import { CoverageReport } from '../companyDirectory/placementCoverage/coverageReport';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
