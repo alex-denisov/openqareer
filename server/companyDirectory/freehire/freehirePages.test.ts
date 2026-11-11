@@ -8,7 +8,7 @@ import {
   withoutFreehireTracking,
 } from './freehirePages';
 import { FreehirePagesClient } from './freehirePagesClient';
-import { careersOnCompanySite, readPagesState, runPagesTick } from './freehirePagesSchedule';
+import { employerJobSite, readPagesState, runPagesTick } from './freehirePagesSchedule';
 
 // Shape of a real `/companies/amazon/__data.json` (11.11), trimmed.
 const AMAZON = {
@@ -67,25 +67,29 @@ describe('B645 freehire pages', () => {
     expect(withoutFreehireTracking('not a url')).toBe('not a url');
   });
 
-  it('finds the careers section on the company domain', () => {
-    const card = (url: string) => ({
-      slug: 'a',
-      name: 'A',
+  it('takes the employer own jobs domain, not ATS or aggregators', () => {
+    const card = (name: string, url: string) => ({
+      slug: name.toLowerCase(),
+      name,
       website: null,
       linkedin: null,
       profiles: {},
       jobs: [{ source: '', url }],
     });
-    expect(careersOnCompanySite(card('https://acme.com/careers/12'), 'https://www.acme.com/')).toBe(
-      'https://acme.com/careers',
+    expect(employerJobSite(card('Amazon', 'https://www.amazon.jobs/en/jobs/1'))).toEqual({
+      origin: 'https://www.amazon.jobs/',
+      careers: 'https://www.amazon.jobs/',
+    });
+    expect(employerJobSite(card('Acme Inc.', 'https://acme.com/careers/12'))).toEqual({
+      origin: 'https://acme.com/',
+      careers: 'https://acme.com/careers',
+    });
+    expect(employerJobSite(card('Acme', 'https://careers.acme.com/x/1'))?.origin).toBe(
+      'https://careers.acme.com/',
     );
-    expect(careersOnCompanySite(card('https://jobs.acme.com/x/1'), 'https://acme.com/')).toBe(
-      'https://jobs.acme.com/',
-    );
-    expect(
-      careersOnCompanySite(card('https://jobs.lever.co/acme/1'), 'https://acme.com/'),
-    ).toBeNull();
-    expect(careersOnCompanySite(card('https://whatjobs.com/acme'), 'https://acme.com/')).toBeNull();
+    expect(employerJobSite(card('Acme', 'https://jobs.lever.co/acme/1'))).toBeNull();
+    expect(employerJobSite(card('Acme', 'https://recruitingbypaycor.com/acme/1'))).toBeNull();
+    expect(employerJobSite(card('Acme', 'https://nl.whatjobs.com/acme'))).toBeNull();
   });
 
   it('imports a page, writes LinkedIn and placements, and resumes from its position', async () => {
@@ -123,7 +127,12 @@ describe('B645 freehire pages', () => {
       .prepare('SELECT placement_id FROM company_placement ORDER BY 1')
       .all()
       .map((r) => (r as { placement_id: string }).placement_id);
-    expect(placements).toEqual(['ats:lever:amazon-leo', 'site:aboutamazon.com']);
+    expect(placements).toEqual([
+      'ats:lever:amazon-leo',
+      'site:aboutamazon.com',
+      'site:amazon.jobs',
+    ]);
+    expect(row.careers_url).toBe('https://www.amazon.jobs/');
     expect(readPagesState(db)).toMatchObject({
       shard: 0,
       index: 2,
