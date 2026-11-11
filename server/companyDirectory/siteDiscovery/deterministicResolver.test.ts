@@ -90,6 +90,28 @@ describe('B643-9 careers link from the home page', () => {
   });
 });
 
+describe('B643 careers page must look like vacancies', () => {
+  it('does not keep a product page or a 404 page as the careers page', async () => {
+    const found = await resolveCompany(company('Sklad', 'https://sklad.ru/'), fakeFetch({
+      'https://sklad.ru/': [200, '<a href="/konteynery/vakansii-dlya-kontejnera/">Вакансии</a>'],
+      'https://sklad.ru/konteynery/vakansii-dlya-kontejnera/': [200, `<title>Контейнер ПБК-6</title><h1>Контейнер</h1>${'x'.repeat(600)}`],
+      'https://sklad.ru/careers': [200, `<title>Страница не найдена</title>${'x'.repeat(600)}`],
+      'https://sklad.ru/jobs': [200, `<title>Вакансии</title><h1>Работа у нас</h1>${'x'.repeat(600)}`],
+    }), '2026-11-11', publicHost);
+    expect(found.careersUrl).toBe('https://sklad.ru/jobs');
+  });
+
+  it('skips a careers page the directory dropped before', async () => {
+    const seen: string[] = [];
+    const found = await resolveCompany({ ...company('Acme', 'https://acme.com/'), droppedCareersUrl: 'https://acme.com/careers' }, fakeFetch({
+      'https://acme.com/': [200, '<html>home</html>'],
+      'https://acme.com/careers': [200, `<title>Careers</title>${'x'.repeat(600)}`],
+    }, seen), '2026-11-11', publicHost);
+    expect(found.careersUrl).toBeUndefined();
+    expect(seen).not.toContain('https://acme.com/careers');
+  });
+});
+
 describe('B643-9 dns check is never skipped', () => {
   it('refuses a site whose host resolves privately, whatever fetch is used', async () => {
     const seen: string[] = [];
