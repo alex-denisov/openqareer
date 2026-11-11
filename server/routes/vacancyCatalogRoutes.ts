@@ -45,10 +45,14 @@ import {
   type CatalogEntriesPage,
 } from '../vacancies/vacancyCatalogProjection';
 import {
+  renderArchivedVacancyDocument,
   renderCatalogDocument,
   renderGoneDocument,
   renderVacancyDocument,
 } from '../vacancies/vacancyCatalogDocument';
+import { archivePageDecision, readCatalogArchiveCard } from '../seo/catalogArchive';
+import type { CatalogArchiveCard } from '../seo/catalogArchive';
+import type { CatalogEntry } from '../vacancies/vacancyCatalogPage';
 import { getCatalogSitemaps, getListingHistory } from '../seo/catalogSitemapSchedule';
 import { isValidIndexNowKey } from '../seo/indexNow';
 import { renderSitemapIndex, type SitemapFile } from '../seo/sitemapXml';
@@ -439,10 +443,8 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
       const entry = { ...detail.entry, path: projected.path };
       return sendDocument(reply, renderVacancyDocument({ ...detail, entry }));
     }
-    return sendDocument(
-      reply,
+    return sendClosedVacancy(deps, reply, projected.key, () =>
       renderGoneDocument(buildCatalogPageFromEntries([projected], 1, 1)),
-      410,
     );
   }
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();
@@ -465,10 +467,80 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
     : null;
 
   if (!detail) {
-    const page = buildCatalogPage(clusters, 1);
-    return sendDocument(reply, renderGoneDocument(page), 410);
+    if (!key) return sendDocument(reply, renderGoneDocument(buildCatalogPage(clusters, 1)), 410);
+    return sendClosedVacancy(deps, reply, key, () =>
+      renderGoneDocument(buildCatalogPage(clusters, 1)),
+    );
   }
   return sendDocument(reply, renderVacancyDocument(detail));
+}
+
+const SIMILAR_LIMIT = 6;
+
+function archiveEntry(card: CatalogArchiveCard): CatalogEntry {
+  return {
+    key: card.entryKey,
+    path: card.path,
+    title: card.title,
+    company: card.company,
+    isRemote: card.isRemote,
+    summary: card.summary,
+    skills: [],
+    sourceUrl: '',
+    publishedAt: card.publishedAt,
+    lastSeenAt: card.lastSeenAt,
+    sourceCount: 1,
+    ...(card.location ? { location: card.location } : {}),
+    ...(card.salaryLabel ? { salaryLabel: card.salaryLabel } : {}),
+  };
+}
+
+/** Open cards of the same role and place; the place alone when the role has none. */
+function similarOpen(deps: RouteDeps, card: CatalogArchiveCard): readonly CatalogEntry[] {
+  if (!card.placeSlug) return [];
+  const page = (role?: string) =>
+    deps.multiSourceEngine.getPublicCatalogEntriesPage({
+      limit: SIMILAR_LIMIT + 1,
+      place: card.placeSlug!,
+      ...(role ? { role } : {}),
+    })?.items ?? [];
+  const sameRole = card.roleSlug ? page(card.roleSlug) : [];
+  const items = sameRole.length > 0 ? sameRole : page();
+  return items.filter((item) => item.key !== card.entryKey).slice(0, SIMILAR_LIMIT);
+}
+
+function publishedListingPath(deps: RouteDeps, card: CatalogArchiveCard): string | undefined {
+  if (!card.placeSlug) return undefined;
+  const found = (deps.multiSourceEngine.getPublicCatalogListings() ?? []).find(
+    (listing) => listing.place === card.placeSlug && (listing.role ?? undefined) === card.roleSlug,
+  );
+  return found?.path;
+}
+
+/**
+ * 11.11 (hybrid of the hh.ru model): a closed card that was in the sitemap or
+ * had impressions keeps a 200 archive page; any other closed card answers 410.
+ */
+function sendClosedVacancy(
+  deps: RouteDeps,
+  reply: FastifyReply,
+  key: string,
+  gone: () => string,
+): FastifyReply {
+  const card = readCatalogArchiveCard(deps.config.databasePath, key);
+  if (!card || archivePageDecision(card, new Date()) === 'gone') {
+    return sendDocument(reply, gone(), 410);
+  }
+  const listingPath = publishedListingPath(deps, card);
+  return sendDocument(
+    reply,
+    renderArchivedVacancyDocument({
+      entry: archiveEntry(card),
+      closedAt: card.lastSeenAt,
+      similar: similarOpen(deps, card),
+      ...(listingPath ? { listingPath } : {}),
+    }),
+  );
 }
 
 function sitemapFiles(): readonly SitemapFile[] {

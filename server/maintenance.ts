@@ -1,6 +1,12 @@
-import { PlacementBackfill, PlacementBackfillTicker } from './companyDirectory/placement/placementBackfill';
+import {
+  PlacementBackfill,
+  PlacementBackfillTicker,
+} from './companyDirectory/placement/placementBackfill';
 import { CareersPrune, CareersPruneTicker } from './companyDirectory/siteDiscovery/careersPrune';
-import { AggregatorCompanyBackfill, AggregatorCompanyTicker } from './companyDirectory/placement/aggregatorBackfill';
+import {
+  AggregatorCompanyBackfill,
+  AggregatorCompanyTicker,
+} from './companyDirectory/placement/aggregatorBackfill';
 import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
@@ -48,6 +54,7 @@ import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
 import { scheduleCurrencyRatesJob } from './currency/cbrRatesSchedule';
 import { scheduleCatalogSearchEvidence } from './seo/catalogSearchEvidence';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
+import { scheduleSitemapHealth } from './seo/sitemapHealth';
 import { scheduleCatalogRuSummaryJob } from './seo/catalogRuSummarySchedule';
 import { scheduleOpenRouterBalanceAlert } from './providers/openRouterBalanceSchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
@@ -255,9 +262,14 @@ const worker = new MaintenanceWorker({
     ? {}
     : { placements: new PlacementBackfillTicker(new PlacementBackfill(semanticDatabase)) }),
   // B643-8: компания для строк агрегаторов по точному имени; откат — OPENQAREER_AGGREGATOR_COMPANY_OFF=1.
-  ...(process.env.OPENQAREER_COMPANY_PLACEMENT_OFF === '1' || process.env.OPENQAREER_AGGREGATOR_COMPANY_OFF === '1'
+  ...(process.env.OPENQAREER_COMPANY_PLACEMENT_OFF === '1' ||
+  process.env.OPENQAREER_AGGREGATOR_COMPANY_OFF === '1'
     ? {}
-    : { aggregatorCompanies: new AggregatorCompanyTicker(new AggregatorCompanyBackfill(semanticDatabase)) }),
+    : {
+        aggregatorCompanies: new AggregatorCompanyTicker(
+          new AggregatorCompanyBackfill(semanticDatabase),
+        ),
+      }),
   // B643: careers pages that are not vacancy pages or stay closed leave the directory; off — OPENQAREER_CAREERS_PRUNE_OFF=1.
   ...(process.env.OPENQAREER_CAREERS_PRUNE_OFF === '1'
     ? {}
@@ -346,6 +358,8 @@ try {
   stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
   scheduleCatalogSitemapJob(semanticDatabase, log, config);
+  // 11.11: 2 000 random sitemap addresses a day by the same rules as verify-sitemap.
+  scheduleSitemapHealth(semanticDatabase, log, config);
   // 04.11: listings with impressions in Google keep `index` below their threshold.
   stopCatalogSearchEvidence = scheduleCatalogSearchEvidence(
     semanticDatabase,
@@ -366,7 +380,8 @@ try {
   // 03.11: область удалёнки для проекций, записанных до неё, пачками по 200.
   scheduleRemoteScopeBackfill(semanticDatabase, log);
   // B627 / B643-9: домен, карьеры и ATS без модели (решение владельца 11.11), ≤480 компаний в сутки.
-  if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1') scheduleSiteDiscovery(semanticDatabase, log);
+  if (process.env.OPENQAREER_SITE_DISCOVERY_OFF !== '1')
+    scheduleSiteDiscovery(semanticDatabase, log);
   // B644: компании и доски ATS из каталога репозитория freehire (файл), вместо API freehire.me (B641).
   scheduleFreehireRepo(semanticDatabase, log, process.env);
   // B645: все ~520 тыс. компаний freehire по публичным страницам (__data.json), ~3 запроса/с, без модели.

@@ -413,3 +413,90 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     body,
   );
 }
+
+/** 11.11: a closed vacancy search engines already know (`seo/catalogArchive`). */
+export interface ArchivedVacancyView {
+  readonly entry: CatalogEntry;
+  /** The last day a source still showed the vacancy. */
+  readonly closedAt: string;
+  /** Open vacancies of the same role and place, newest first. */
+  readonly similar: readonly CatalogEntry[];
+  /** The list of the same role and place, when it is published. */
+  readonly listingPath?: string;
+}
+
+function archivedAboutBox(view: ArchivedVacancyView, employer: string): string {
+  const { entry } = view;
+  return (
+    '<div class="cat-box"><h2>О вакансии</h2><dl class="cat-facts">' +
+    (entry.salaryLabel ? `<dt>Зарплата</dt><dd>${escapeHtml(entry.salaryLabel)}</dd>` : '') +
+    `<dt>Работодатель</dt><dd>${escapeHtml(employer)}</dd>` +
+    `<dt>Где</dt><dd>${escapeHtml(placeLabel(entry))}</dd>` +
+    `<dt>Опубликована</dt><dd>${escapeHtml(formatDate(entry.publishedAt))}</dd>` +
+    `<dt>В архиве с</dt><dd>${escapeHtml(formatDate(view.closedAt))}</dd>` +
+    '</dl>' +
+    '<button type="button" class="ps-btn is-primary" disabled>Отклик закрыт</button>' +
+    '</div>'
+  );
+}
+
+function similarBlock(view: ArchivedVacancyView): string {
+  const more = view.listingPath
+    ? `<p class="cat-note"><a href="${escapeHtml(view.listingPath)}">Все открытые вакансии этой роли и города</a></p>`
+    : '';
+  return (
+    '<section class="cat-similar" aria-labelledby="cat-similar-h"><h2 id="cat-similar-h">Похожие открытые вакансии</h2>' +
+    (view.similar.length > 0
+      ? `<ul class="cat-list">${view.similar.map(entryCard).join('')}</ul>`
+      : '<p class="cat-empty">Похожих открытых вакансий сейчас нет. Откройте <a href="/vacancies">весь каталог</a>.</p>') +
+    more +
+    '</section>'
+  );
+}
+
+/**
+ * The hh.ru model: the address keeps a page, the text hides under a cut, the
+ * apply button is off. Self-canonical, no JobPosting, no noindex; the sitemap
+ * never lists it, because only active cards enter the job files.
+ */
+export function renderArchivedVacancyDocument(view: ArchivedVacancyView): string {
+  const { entry } = view;
+  const employer = employerLabel(publicEmployerName(entry.company));
+  const text = meaningfulText(entry.summary, entry.title);
+  const body =
+    siteHeader() +
+    '<main id="main" class="ps-wrap ps-page">' +
+    crumbs([{ label: 'Вакансии', path: CATALOG_ROOT }]) +
+    '<div class="cat-detail"><article>' +
+    '<p class="cat-archived">В архиве</p>' +
+    `<h1>${escapeHtml(entry.title)}</h1>` +
+    metaLine(entry) +
+    `<p class="cat-archive-lead">Работодатель закрыл вакансию ${escapeHtml(formatDate(view.closedAt))}, ` +
+    'откликнуться на неё уже нельзя. Ниже открытые вакансии той же роли в том же городе.</p>' +
+    (text
+      ? '<details class="cat-cut"><summary>Описание вакансии</summary>' +
+        descriptionBlock('', text) +
+        '</details>'
+      : '') +
+    similarBlock(view) +
+    '</article><aside class="cat-side">' +
+    archivedAboutBox(view, employer) +
+    CTA_BOX +
+    '</aside></div></main>' +
+    siteFooter();
+
+  return shell(
+    head({
+      title: `${entry.title} — ${employer}, вакансия в архиве · openqareer`,
+      description: plainSummary(
+        `Вакансия в архиве: ${entry.title}, ${employer}, ${placeLabel(entry)}. ` +
+          'Откликнуться уже нельзя, рядом открытые вакансии той же роли.',
+        160,
+      ),
+      canonicalPath: entry.path,
+      jsonLd: { '@context': 'https://schema.org', '@graph': [] },
+      ogType: 'article',
+    }),
+    body,
+  );
+}
