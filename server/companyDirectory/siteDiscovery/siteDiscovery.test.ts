@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
 import { boardsFromHtml, countJobs } from './atsBoards';
-import { parseModelAnswer, readPendingCompanies } from './siteDiscovery';
+import { parseModelAnswer, readPendingCompanies, writeDiscovery } from './siteDiscovery';
 import { runSiteDiscoveryTick } from './siteDiscoverySchedule';
 
 function directory(): DatabaseSync {
@@ -103,5 +103,16 @@ describe('B627 dns check', () => {
     expect(await resolvesPublic('a.com', fake('93.184.216.34'))).toBe(true);
     expect(await resolvesPublic('a.com', fake('10.0.0.5'))).toBe(false);
     expect(await resolvesPublic('a.com', fake('::ffff:127.0.0.1'))).toBe(false);
+  });
+});
+
+describe('B643-4 site discovery writes placements', () => {
+  it('records the found board and careers site for the company', () => {
+    const db = directory();
+    writeDiscovery(db, { companyKey: 'acme', websiteUrl: 'https://acme.com', careersUrl: 'https://careers.acme.com/', board: { provider: 'greenhouse', slug: 'acme', jobs: 4 }, evidence: {} }, '2026-11-11T00:00:00Z');
+    expect(db.prepare(`SELECT placement_id, company_key, discovered_by FROM company_placement ORDER BY placement_id`).all()).toEqual([
+      { placement_id: 'ats:greenhouse:acme', company_key: 'acme', discovered_by: 'site_discovery' },
+      { placement_id: 'site:careers.acme.com', company_key: 'acme', discovered_by: 'site_discovery' },
+    ]);
   });
 });
