@@ -66,6 +66,24 @@ describe('B643-9 deterministic resolver', () => {
   });
 });
 
+describe('B643-9 careers link from the home page', () => {
+  it('follows a careers link of the same site and reads the widget board there', async () => {
+    const careers = `<html>${'x'.repeat(600)}<script src="https://subscriptions.smartrecruiters.com/widget/v1/sr-job-alerts.js?dcr_ci=SmithsGroup2"></script></html>`;
+    const found = await resolveCompany(company('Smiths Group', 'https://www.smiths.com/'), fakeFetch({
+      'https://www.smiths.com/': [200, '<a href="/about/careers">Careers</a><a href="https://evil.example/jobs">x</a>'],
+      'https://www.smiths.com/about/careers': [200, careers],
+      'https://api.smartrecruiters.com/v1/companies/SmithsGroup2/postings?limit=10': [200, '{"totalFound":544}'],
+    }), '2026-11-11', publicHost);
+    expect(found).toMatchObject({ careersUrl: 'https://www.smiths.com/about/careers', board: { provider: 'smartrecruiters', slug: 'SmithsGroup2', jobs: 544 } });
+  });
+
+  it('accepts a jobs subdomain of the same domain but not another site', async () => {
+    const { careersLinks } = await import('./deterministicResolver');
+    expect(careersLinks('<a href="https://job.sulpak.kz">Вакансии</a><a href="https://jobs.other.com/x">jobs</a><a href="/career/">Карьера</a>', 'https://www.sulpak.kz/'))
+      .toEqual(['https://job.sulpak.kz/', 'https://www.sulpak.kz/career/']);
+  });
+});
+
 describe('B643-9 dns check is never skipped', () => {
   it('refuses a site whose host resolves privately, whatever fetch is used', async () => {
     const seen: string[] = [];

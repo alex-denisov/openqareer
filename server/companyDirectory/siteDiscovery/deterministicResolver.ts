@@ -8,6 +8,35 @@ import { boardJobs, boardsFromHtml, type BoardCandidate, type DiscoveredProvider
 import { absolute, LINKEDIN, page, resolvesPublic, type Discovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 const CAREERS_PATHS = ['/careers', '/jobs'] as const;
+const CAREERS_WORD = /career|jobs?\b|vacanc|join-us|work-with-us|karriere|карьер|ваканс|работа/i;
+const HREF = /<a\b[^>]*href="([^"#]+)"[^>]*>([^<]{0,80})/gi;
+const MAX_CAREERS_LINKS = 2;
+
+const siteDomain = (host: string): string => host.toLowerCase().split('.').slice(-2).join('.');
+
+/**
+ * B643-9: careers pages linked from the home page — the same site or its
+ * subdomain (job.sulpak.kz for sulpak.kz); links to other sites are not followed.
+ */
+export function careersLinks(html: string, pageUrl: string): readonly string[] {
+  const base = new URL(pageUrl);
+  const found: string[] = [];
+  for (const [, href = '', text = ''] of html.matchAll(HREF)) {
+    if (!CAREERS_WORD.test(href) && !CAREERS_WORD.test(text)) continue;
+    let url: URL;
+    try {
+      url = new URL(href, base);
+    } catch {
+      continue;
+    }
+    if (!/^https?:$/.test(url.protocol) || siteDomain(url.hostname) !== siteDomain(base.hostname)) continue;
+    url.hash = '';
+    if (url.href === base.href || found.includes(url.href)) continue;
+    found.push(url.href);
+    if (found.length >= MAX_CAREERS_LINKS) break;
+  }
+  return found;
+}
 /** Providers with a slug-addressed public API that answers 404 for unknown slugs. */
 const GUESS_PROVIDERS: readonly DiscoveredProvider[] = ['greenhouse', 'lever', 'ashby', 'workable'];
 const LEGAL = /^(inc|llc|ltd|limited|gmbh|ag|sa|sas|bv|nv|plc|corp|corporation|co|company|oy|ab|as|srl|spa|ooo|zao|pjsc|group|holding|holdings)$/;
@@ -33,10 +62,14 @@ async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: s
   const home = await page(site, fetchImpl, hostIsPublic);
   if (home.status === 0 || home.status >= 400) return { html: '' };
   const origin = new URL(home.url).origin;
-  for (const path of CAREERS_PATHS) {
-    const result = await page(`${origin}${path}`, fetchImpl, hostIsPublic);
+  const candidates = [
+    ...careersLinks(home.html, home.url).map((url) => [url, 'home page link'] as const),
+    ...CAREERS_PATHS.map((path) => [`${origin}${path}`, `site path ${path}`] as const),
+  ];
+  for (const [url, how] of candidates) {
+    const result = await page(url, fetchImpl, hostIsPublic);
     if (result.status === 200 && result.html.length > 500) {
-      evidence.careersUrl = { value: result.url, how: `B643-9 site path ${path}, HTTP 200 on ${day}`, confirmed: true };
+      evidence.careersUrl = { value: result.url, how: `B643-9 ${how}, HTTP 200 on ${day}`, confirmed: true };
       return { html: home.html, careersUrl: result.url, careersHtml: result.html };
     }
   }

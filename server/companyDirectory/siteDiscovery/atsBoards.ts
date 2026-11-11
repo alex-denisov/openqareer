@@ -26,6 +26,8 @@ const LINK_PATTERNS: readonly [RegExp, DiscoveredProvider][] = [
   [/apply\.workable\.com\/([\w-]+)/gi, 'workable'],
   [/([\w-]+)\.recruitee\.com/gi, 'recruitee'],
   [/(?:careers|jobs)\.smartrecruiters\.com\/([\w-]+)/gi, 'smartrecruiters'],
+  // B643-9: the job-alerts widget names the company only in `dcr_ci` (Smiths Group).
+  [/smartrecruiters\.com\/widget\/[^"'\s]*?dcr_ci=([\w-]+)/gi, 'smartrecruiters'],
   [/([\w-]+)\.breezy\.hr/gi, 'breezy'],
   [/([\w-]+)\.pinpointhq\.com/gi, 'pinpoint'],
   [/([\w-]+)\.jobs\.personio\.(?:de|com)/gi, 'personio'],

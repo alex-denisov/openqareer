@@ -65,6 +65,8 @@ export async function resolvesPublic(host: string, resolve = lookup): Promise<bo
 const PAGE_TIMEOUT_MS = 8_000;
 /** Board links sit in the head and nav; scanning more cost event-loop stalls on prod (B643-9). */
 const MAX_HTML_CHARS = 200_000;
+/** An honest bot name: sites that refuse bots are counted, never bypassed with a browser disguise. */
+const PAGE_HEADERS = { 'user-agent': 'Mozilla/5.0 (compatible; OpenQareerBot/1.0; +https://openqareer.com/)', accept: 'text/html' };
 
 /** Host check before every hop; tests inject one, production always resolves DNS. */
 export type HostCheck = (host: string) => Promise<boolean>;
@@ -80,7 +82,7 @@ export async function page(
       const parsed = new URL(current);
       if (!isPublicHost(parsed) || !(await hostIsPublic(parsed.hostname)))
         return { status: 0, url, html: '' };
-      const response = await fetchImpl(current, { redirect: 'manual', signal: AbortSignal.timeout(PAGE_TIMEOUT_MS) });
+      const response = await fetchImpl(current, { redirect: 'manual', headers: PAGE_HEADERS, signal: AbortSignal.timeout(PAGE_TIMEOUT_MS) });
       const location = response.headers?.get('location');
       if (response.status >= 300 && response.status < 400 && location) {
         current = new URL(location, current).href;
