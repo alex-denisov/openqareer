@@ -79,6 +79,21 @@ describe('paging plans (B216)', () => {
     expect(plan.next(next!, { count: 15, positions: [{}] })).toBeNull();
   });
 
+  it('B646-3 SmartRecruiters reads past 100 by offset and stops at totalFound', () => {
+    const plan = pagingPlanFor('ats-smartrecruiters-BoschGroup')!;
+    const base = 'https://api.smartrecruiters.com/v1/companies/BoschGroup/postings?limit=100';
+    const first = plan.first(base, 0);
+    expect(first.url).toBe(`${base}&offset=0`);
+    const page = (n: number) => ({ totalFound: 250, content: Array.from({ length: n }, () => ({})) });
+    const second = plan.next(first, page(100))!;
+    expect(second.url).toBe(`${base}&offset=100`);
+    const third = plan.next(second, page(100))!;
+    expect(third.url).toBe(`${base}&offset=200`);
+    expect(plan.next(third, page(50))).toBeNull();
+    expect(plan.next(first, { totalFound: 40, content: Array.from({ length: 40 }, () => ({})) })).toBeNull();
+    expect(plan.pagesPerSync * 100).toBeGreaterThanOrEqual(5000);
+  });
+
   it('Workday: POST со смещением по 20 до total', () => {
     const plan = pagingPlanFor('ats-workday-nvidia')!;
     const first = plan.first('https://t.wd5.myworkdayjobs.com/wday/cxs/t/Site/jobs', 0);

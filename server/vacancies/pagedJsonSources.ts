@@ -687,6 +687,35 @@ const glassdoor: PagingPlan = {
   },
 };
 
+/**
+ * B646-3: SmartRecruiters отдаёт не больше 100 записей за запрос. Без
+ * перелистывания 48 из 66 досок на проде (11.11) стояли ровно на 100, а чтение
+ * считалось полным и снимало хвост. Правило freehire (MIT, NOTICE): полной
+ * выдачей считается только дочитанная до `totalFound`; обрыв — частичное чтение.
+ */
+const SMARTRECRUITERS_PAGE = 100;
+const SMARTRECRUITERS_SOURCE_PREFIX = 'ats-smartrecruiters-';
+
+function smartrecruitersRequest(base: string, offset: number): PagedRequest {
+  return { url: `${base}&offset=${offset}`, state: { base, offset } };
+}
+
+const smartrecruiters: PagingPlan = {
+  // Bosch 4811 вакансий (B202): 50 страниц дочитывают самую большую доску.
+  pagesPerSync: 50,
+  delayMs: 500,
+  first: (targetUrl) => smartrecruitersRequest(targetUrl, 0),
+  next: (previous, payload) => {
+    const state = record(previous.state);
+    const offset = numeric(state.offset) ?? 0;
+    const total = numeric(record(payload).totalFound) ?? 0;
+    const content = asArray(record(payload).content) ?? [];
+    const nextOffset = offset + SMARTRECRUITERS_PAGE;
+    if (content.length < SMARTRECRUITERS_PAGE || nextOffset >= total) return null;
+    return smartrecruitersRequest(String(state.base), nextOffset);
+  },
+};
+
 const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
@@ -706,6 +735,7 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
 
 export function pagingPlanFor(sourceId: string): PagingPlan | null {
   if (sourceId.startsWith(WORKDAY_SOURCE_PREFIX)) return workday;
+  if (sourceId.startsWith(SMARTRECRUITERS_SOURCE_PREFIX)) return smartrecruiters;
   return PLANS[sourceId] ?? null;
 }
 
