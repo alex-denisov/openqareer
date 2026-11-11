@@ -129,3 +129,20 @@ describe('B641 freehire import', () => {
     expect((await runFreehireTick(db, client, async () => 3, 1, () => now)).read).toBe(0);
   });
 });
+
+describe('B643-4 freehire keeps every confirmed board', () => {
+  it('records all live boards of the company as placements, first stays in the directory', async () => {
+    const db = directory();
+    const index = loadDirectoryIndex(db);
+    const outcome = await importCompany(db, index, {
+      slug: 'initrode', name: 'Initrode', website: 'https://initrode.com',
+      jobs: [job('https://jobs.lever.co/initrode/1'), job('https://jobs.lever.co/initrode/2'), job('https://job-boards.greenhouse.io/initrode/jobs/3'), job('https://jobs.ashbyhq.com/initrodedead/4')],
+    }, async (board) => (board.slug === 'initrodedead' ? -1 : 3), now);
+    expect(outcome?.board).toEqual({ provider: 'lever', slug: 'initrode' });
+    expect(db.prepare(`SELECT placement_id, company_key, discovered_by FROM company_placement ORDER BY placement_id`).all()).toEqual([
+      { placement_id: 'ats:greenhouse:initrode', company_key: 'initrode', discovered_by: 'freehire' },
+      { placement_id: 'ats:lever:initrode', company_key: 'initrode', discovered_by: 'freehire' },
+      { placement_id: 'site:initrode.com', company_key: 'initrode', discovered_by: 'freehire' },
+    ]);
+  });
+});

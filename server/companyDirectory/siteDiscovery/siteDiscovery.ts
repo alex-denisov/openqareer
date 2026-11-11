@@ -3,6 +3,7 @@
  * have LinkedIn. The model's answer is a candidate; only what answers over
  * HTTP (the site, the careers page, a board API listing jobs) is written.
  */
+import { recordCompanyPlacements } from '../placement/placementWriter';
 import type { DatabaseSync } from 'node:sqlite';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
@@ -206,4 +207,10 @@ export function writeDiscovery(database: DatabaseSync, found: Discovery, now: st
       now,
       found.companyKey,
     );
+  // B643-4: the board and the careers site also become the company's placements.
+  recordCompanyPlacements(database, found.companyKey, {
+    boards: found.board ? [found.board] : [],
+    siteUrl: found.careersUrl ?? found.websiteUrl ?? null,
+    discoveredBy: 'site_discovery',
+  }, Date.parse(now) || Date.now());
 }

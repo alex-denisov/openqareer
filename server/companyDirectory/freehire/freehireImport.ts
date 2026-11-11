@@ -9,6 +9,7 @@ import { boardBelongsToCompany } from '../../vacancies/corporateSourceQuality';
 import { boardJobs, PROVIDER_NAMES, type DiscoveredProvider } from '../siteDiscovery/atsBoards';
 import { isPublicHost } from '../siteDiscovery/siteDiscovery';
 import type { FreehireCompanyCard } from './freehireClient';
+import { recordCompanyPlacements } from '../placement/placementWriter';
 
 export interface FoundBoard {
   readonly provider: string;
@@ -173,22 +174,23 @@ export interface ImportOutcome {
   readonly board: FoundBoard | null;
 }
 
-/** First board that belongs to the company and is not dead; null when none. */
-async function pickBoard(
+/** Boards (of the first three) that belong to the company and are not dead, most frequent first. */
+async function liveBoards(
   card: FreehireCompanyCard,
   website: string | null,
   boards: readonly FoundBoard[],
   check: BoardCheck,
-): Promise<{ board: FoundBoard; jobs: number } | null> {
+): Promise<readonly { board: FoundBoard; jobs: number }[]> {
   const hints = [card.name, card.slug, hostRoot(website).split('.')[0] ?? ''].filter(Boolean);
+  const live: { board: FoundBoard; jobs: number }[] = [];
   for (const board of boards.slice(0, 3)) {
     if (isAggregator(board.slug)) continue;
     const flat = board.slug.split('/')[0]!.replace(/[^a-z0-9]/g, '');
     if (!boardBelongsToCompany(flat, hints)) continue;
     const jobs = await check(board);
-    if (jobs !== -1) return { board, jobs };
+    if (jobs !== -1) live.push({ board, jobs });
   }
-  return null;
+  return live;
 }
 
 /**
@@ -235,7 +237,8 @@ export async function importCompany(
   const website = cleanWebsite(card.website);
   const boards = boardsOfCard(card);
   const day = now.toISOString().slice(0, 10);
-  const picked = await pickBoard(card, website, boards, check);
+  const live = await liveBoards(card, website, boards, check);
+  const picked = live[0] ?? null;
   const evidence: Record<string, unknown> = { freehire: { value: card.slug, how: `freehire.me API on ${day}` } };
   if (website) evidence.websiteUrl = { value: website, how: 'freehire company_info.website' };
   if (picked)
@@ -257,9 +260,22 @@ export async function importCompany(
       )
       .run(key, name, website, sourceType, picked?.board.provider ?? null, picked?.board.slug ?? null, stamp, stamp, JSON.stringify(evidence));
     remember(index, key, name, website, picked?.board.provider ?? null, picked?.board.slug ?? null, sourceType);
+    recordFreehirePlacements(database, key, live, website, now);
     return { companyKey: key, isNew: true, websiteAdded: Boolean(website), board: picked?.board ?? null };
   }
+  recordFreehirePlacements(database, existing, live, website, now);
   return updateExisting(database, index, existing, name, website, picked?.board ?? null, evidence, stamp);
+}
+
+/** B643-4: every live board and the site go to `company_placement`, not only the first one. */
+function recordFreehirePlacements(
+  database: DatabaseSync,
+  companyKey: string,
+  live: readonly { board: FoundBoard }[],
+  website: string | null,
+  now: Date,
+): void {
+  recordCompanyPlacements(database, companyKey, { boards: live.map(({ board }) => board), siteUrl: website, discoveredBy: 'freehire' }, now.getTime());
 }
 
 function updateExisting(
