@@ -30,6 +30,7 @@ const FIRST_RUN_MS = 8 * 60_000;
 const BETWEEN_MS = 200;
 const DONE_MS = 7 * 24 * 60 * 60_000;
 const FAILED_MS = 5 * 60_000;
+const HOUR_MS = 60 * 60_000;
 
 export interface PagesState {
   shard: number;
@@ -256,6 +257,25 @@ async function writeCards(
   return state;
 }
 
+function logTick(
+  log: Log,
+  read: number,
+  state: PagesState,
+  client: FreehirePagesClient,
+  ms: number,
+  hourly: boolean,
+): void {
+  const boards = JSON.stringify(state.boards);
+  if (hourly)
+    log.info(
+      { ...state, boards, gapMs: client.currentGapMs, throttled: client.throttled, ms },
+      'freehire-pages-hourly',
+    );
+  if (read === 0 && state.pausedUntil)
+    log.error({ pausedUntil: state.pausedUntil, read: state.read }, 'freehire-pages-limited');
+  if (read === 0 && state.done) log.info({ ...state, boards }, 'freehire-pages-done');
+}
+
 export function scheduleFreehirePages(
   database: DatabaseSync,
   log: Log,
@@ -267,7 +287,8 @@ export function scheduleFreehirePages(
   const pass: PagesPass = {};
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
-  let ticks = 0;
+  // One summary line an hour (and the first tick) for the CPO to read from the journal.
+  let loggedAt = 0;
   const next = (delay: number) => {
     if (stopped) return;
     timer = setTimeout(() => void run(), delay);
@@ -277,22 +298,8 @@ export function scheduleFreehirePages(
     try {
       const started = Date.now();
       const { read, state } = await runPagesTick(database, client, check, pass);
-      ticks += 1;
-      if (read > 0 && ticks % 20 === 0)
-        log.info(
-          {
-            ...state,
-            boards: JSON.stringify(state.boards),
-            gapMs: client.currentGapMs,
-            throttled: client.throttled,
-            ms: Date.now() - started,
-          },
-          'freehire-pages-tick',
-        );
-      if (read === 0 && state.pausedUntil)
-        log.error({ pausedUntil: state.pausedUntil, read: state.read }, 'freehire-pages-limited');
-      if (read === 0 && state.done)
-        log.info({ ...state, boards: JSON.stringify(state.boards) }, 'freehire-pages-done');
+      if (read > 0 && Date.now() - loggedAt >= HOUR_MS) loggedAt = Date.now();
+      logTick(log, read, state, client, Date.now() - started, read > 0 && loggedAt >= started);
       next(
         read > 0
           ? BETWEEN_MS
