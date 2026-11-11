@@ -17,6 +17,8 @@ const START_GAP_MS = 333;
 const MAX_GAP_MS = 15_000;
 const MAX_ATTEMPTS = 4;
 const LONG_RETRY_AFTER_S = 600;
+/** A 10 000-row shard is built on a cache miss: 11.11 four 30 s tries failed on prod. */
+const SITEMAP_TIMEOUT_MS = 120_000;
 
 export class FreehirePagesLimitError extends Error {
   constructor(
@@ -54,7 +56,7 @@ export class FreehirePagesClient {
     if (wait > 0) await this.sleep(wait);
   }
 
-  private async get(path: string, accept: string): Promise<string | null> {
+  private async get(path: string, accept: string, timeoutMs = 30_000): Promise<string | null> {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       await this.slot();
       let status = 0;
@@ -62,7 +64,7 @@ export class FreehirePagesClient {
       try {
         const response = await this.fetchImpl(`${FREEHIRE_SITE}${path}`, {
           headers: { accept, 'user-agent': PAGES_USER_AGENT },
-          signal: AbortSignal.timeout(30_000),
+          signal: AbortSignal.timeout(timeoutMs),
         });
         status = response.status;
         if (status === 200) {
@@ -90,7 +92,11 @@ export class FreehirePagesClient {
   }
 
   async sitemapSlugs(offset: number): Promise<readonly string[]> {
-    const xml = await this.get(`/sitemap-companies.xml?offset=${offset}`, 'application/xml');
+    const xml = await this.get(
+      `/sitemap-companies.xml?offset=${offset}`,
+      'application/xml',
+      SITEMAP_TIMEOUT_MS,
+    );
     return xml ? slugsOfSitemap(xml) : [];
   }
 

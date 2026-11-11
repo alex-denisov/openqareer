@@ -4,7 +4,10 @@
  * in `freehire_pages_state`, so a restart continues where it stopped. No model calls.
  * Rollback: OPENQAREER_FREEHIRE_PAGES_OFF=1.
  */
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+import { Worker } from 'node:worker_threads';
 import {
   boardCheck,
   boardFromJobUrl,
@@ -347,12 +350,8 @@ function logTick(
   if (read === 0 && state.done) log.info({ ...state, boards }, 'freehire-pages-done');
 }
 
-export function scheduleFreehirePages(
-  database: DatabaseSync,
-  log: Log,
-  env: NodeJS.ProcessEnv,
-): () => void {
-  if (env.OPENQAREER_FREEHIRE_PAGES_OFF === '1') return () => {};
+/** The pass loop itself; runs in the worker thread on prod, in-process elsewhere. */
+export function runFreehirePagesLoop(database: DatabaseSync, log: Log): () => void {
   const client = new FreehirePagesClient();
   const check = boardCheck(fetch);
   const pass: PagesPass = {};
@@ -395,4 +394,33 @@ export function scheduleFreehirePages(
     stopped = true;
     clearTimeout(timer);
   };
+}
+
+const WORKER_FILE = 'freehire-pages-worker.mjs';
+
+/**
+ * B645: the maintenance loop stalls for seconds (225 event-loop stalls in 30 min on
+ * 11.11), which held a 30-page batch for 91 s. On prod the pass runs in its own
+ * thread with its own connection; without the built worker file (tests, dev) in-process.
+ */
+export function scheduleFreehirePages(
+  database: DatabaseSync,
+  log: Log,
+  env: NodeJS.ProcessEnv,
+): () => void {
+  if (env.OPENQAREER_FREEHIRE_PAGES_OFF === '1') return () => {};
+  const workerFile = join(dirname(process.argv[1] ?? ''), WORKER_FILE);
+  const path = database.location();
+  if (!path || !existsSync(workerFile)) return runFreehirePagesLoop(database, log);
+  const worker = new Worker(workerFile, { workerData: { path } });
+  worker.on(
+    'message',
+    (m: { level: 'info' | 'error'; details: Record<string, unknown>; message: string }) =>
+      log[m.level]({ ...m.details, thread: 'freehire-pages' }, m.message),
+  );
+  worker.on('error', (error: Error) =>
+    log.error({ errorName: error.name, message: error.message }, 'freehire-pages-failed'),
+  );
+  worker.unref();
+  return () => void worker.terminate();
 }
