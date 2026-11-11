@@ -1631,6 +1631,20 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         state.syncRequestedAt ?? null,
         state.syncStartedAt ?? null,
       );
+    this.stampPlacementHealth(state);
+  }
+
+  /** B643-5: здоровье размещения идёт за состоянием площадки, дата полного чтения — только за полным. */
+  private stampPlacementHealth(state: StoredSourceState): void {
+    const checkedAt = state.lastSyncAt ? Date.parse(state.lastSyncAt) : Number.NaN;
+    if (!state.lastStatus || !Number.isFinite(checkedAt)) return;
+    this.database
+      .prepare(
+        `UPDATE company_placement SET health = ?, last_checked_at = ?,
+           last_full_read_at = CASE WHEN ? = 1 THEN ? ELSE last_full_read_at END
+         WHERE source_id = ?`,
+      )
+      .run(state.lastStatus, checkedAt, state.fullRead === true ? 1 : 0, checkedAt, state.sourceId);
   }
 
   requestSourceSync(sourceId: string, requestedAt: string): void {

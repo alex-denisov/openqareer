@@ -214,7 +214,9 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return Array.from(this.states.values());
   }
 
-  saveSourceState(state: StoredSourceState): void {
+  saveSourceState(written: StoredSourceState): void {
+    // `fullRead` — только для записи (B643-5), обратно не читается.
+    const { fullRead: _fullRead, ...state } = written;
     const current = this.states.get(state.sourceId);
     const requestedAt = [current?.syncRequestedAt, state.syncRequestedAt]
       .filter((value): value is string => typeof value === 'string')
