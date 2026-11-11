@@ -26,6 +26,12 @@ const shared = {
 // Worker activation is a separate release operation.
 await build({ ...shared, entryPoints: ['server/index.ts'], outfile: 'dist/server.mjs' });
 await build({ ...shared, entryPoints: ['server/maintenance.ts'], outfile: 'dist/maintenance.mjs' });
+// B643: site render runs on its own event loop; maintenance.mjs spawns it from the same directory.
+await build({
+  ...shared,
+  entryPoints: ['server/vacancies/siteRenderWorker.ts'],
+  outfile: 'dist/site-render-worker.mjs',
+});
 await build({
   ...shared,
   entryPoints: ['scripts/run-vacancy-mechanics-worker.ts'],
