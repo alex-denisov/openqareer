@@ -1,16 +1,21 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createPinnedFetch, type ResolveAll } from './pinnedFetch';
+import { createPinnedFetch, createPinnedSession, type ResolveAll } from './pinnedFetch';
 
 let server: Server | undefined;
 let hits = 0;
+let connections = 0;
 
 async function listen(handler: Parameters<typeof createServer>[1]): Promise<number> {
   hits = 0;
+  connections = 0;
   server = createServer((req, res) => {
     hits += 1;
     handler?.(req, res);
+  });
+  server.on('connection', () => {
+    connections += 1;
   });
   await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
   return (server.address() as AddressInfo).port;
@@ -74,5 +79,39 @@ describe('createPinnedFetch (B643, DNS rebinding)', () => {
     await expect(
       fetchPinned({ url: `http://acme.test:${port}/`, method: 'GET', headers: {} }),
     ).rejects.toThrow(/body_too_large/);
+  });
+
+  it('сессия рендера держит соединение: два запроса — один сокет', async () => {
+    const port = await listen((_req, res) => res.end('ok'));
+    const session = createPinnedSession({ resolve: to127, isPublicAddress: () => true });
+    const request = { url: `http://acme.test:${port}/a`, method: 'GET', headers: {} };
+    await session.fetch(request);
+    await session.fetch({ ...request, url: `http://acme.test:${port}/b` });
+    session.close();
+    expect(hits).toBe(2);
+    expect(connections).toBe(1);
+  });
+
+  it('сессия тоже отклоняет частный адрес при соединении', async () => {
+    const port = await listen((_req, res) => res.end('secret'));
+    const session = createPinnedSession({ resolve: to127 });
+    await expect(
+      session.fetch({ url: `http://acme.test:${port}/`, method: 'GET', headers: {} }),
+    ).rejects.toThrow(/private_address/);
+    session.close();
+    expect(hits).toBe(0);
+  });
+
+  it('close() обрывает незавершённые запросы рендера', async () => {
+    const port = await listen(() => undefined);
+    const session = createPinnedSession({ resolve: to127, isPublicAddress: () => true });
+    const pending = session.fetch({
+      url: `http://acme.test:${port}/slow`,
+      method: 'GET',
+      headers: {},
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    session.close();
+    await expect(pending).rejects.toThrow();
   });
 });

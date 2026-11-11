@@ -106,4 +106,39 @@ describe('createRequestGuard (B643, SSRF)', () => {
     expect(isRenderableUrl('http://10.0.0.1/')).toBe(false);
     expect(isRenderableUrl('/jobs', 'https://acme.test/')).toBe(true);
   });
+
+  it('трекеры, аналитика и реклама обрываются без сети', async () => {
+    const fetchPinned = fetcher();
+    const guard = createRequestGuard(fetchPinned);
+    for (const url of [
+      'https://www.googletagmanager.com/gtm.js?id=GTM-1',
+      'https://www.google-analytics.com/analytics.js',
+      'https://stats.g.doubleclick.net/r/collect',
+      'https://connect.facebook.net/en_US/fbevents.js',
+      'https://mc.yandex.ru/metrika/tag.js',
+      'https://static.hotjar.com/c/hotjar-1.js',
+      'https://static.cloudflareinsights.com/beacon.min.js',
+      'https://s.go-mpulse.net/boomerang/x',
+      'https://app.usercentrics.eu/browser-ui/latest/loader.js',
+    ]) {
+      const r = route(url, 'script');
+      await guard.handle(r.value);
+      expect(r.log.aborted, url).toBe(true);
+    }
+    expect(fetchPinned).not.toHaveBeenCalled();
+  });
+
+  it('стили не грузятся, скрипты и xhr сайта грузятся', async () => {
+    const fetchPinned = fetcher();
+    const guard = createRequestGuard(fetchPinned);
+    const css = route('https://acme.test/site.css', 'stylesheet');
+    await guard.handle(css.value);
+    expect(css.log.aborted).toBe(true);
+    for (const type of ['script', 'xhr', 'fetch']) {
+      const r = route(`https://acme.test/app-${type}`, type);
+      await guard.handle(r.value);
+      expect(r.log.fulfilledStatus, type).toBe(200);
+    }
+    expect(fetchPinned).toHaveBeenCalledTimes(3);
+  });
 });
