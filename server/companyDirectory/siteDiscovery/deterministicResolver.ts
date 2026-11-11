@@ -8,7 +8,10 @@ import { boardJobs, boardsFromHtml, type BoardCandidate, type DiscoveredProvider
 import { absolute, LINKEDIN, page, resolvesPublic, type Discovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 const CAREERS_PATHS = ['/careers', '/jobs'] as const;
-const CAREERS_WORD = /career|jobs?\b|vacanc|join-us|work-with-us|karriere|карьер|ваканс|работа/i;
+/** Whole words only: «разработают» is not «работа», «program» is not a job page. */
+const CAREERS_WORD = /\b(careers?|jobs?|vacanc(?:y|ies)|join-us|work-with-us|karriere|vakansii|vacansii)\b|(?:^|[^а-яё])(карьера|вакансии|работа у нас|работа в)(?:$|[^а-яё])/iu;
+/** Articles that mention hiring are not the vacancies page. */
+const NOT_CAREERS_PATH = /\/(news|blog|article|articles|press|media|events?|program)\b/i;
 const HREF = /<a\b[^>]*href="([^"#]+)"[^>]*>([^<]{0,80})/gi;
 const MAX_CAREERS_LINKS = 2;
 
@@ -23,6 +26,7 @@ export function careersLinks(html: string, pageUrl: string): readonly string[] {
   const found: string[] = [];
   for (const [, href = '', text = ''] of html.matchAll(HREF)) {
     if (!CAREERS_WORD.test(href) && !CAREERS_WORD.test(text)) continue;
+    if (NOT_CAREERS_PATH.test(href)) continue;
     let url: URL;
     try {
       url = new URL(href, base);
