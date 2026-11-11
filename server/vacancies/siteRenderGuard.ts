@@ -1,5 +1,6 @@
 import { isPublicHost } from '../connectors/publicHost';
 import { createPinnedFetch, type PinnedFetch } from './pinnedFetch';
+import { isTrackerHost } from './siteRenderBlocklist';
 
 /**
  * B643: защита рендера от SSRF. Браузер сам в сеть не ходит: каждый запрос
@@ -28,7 +29,21 @@ export interface GuardedRoute {
   }): Promise<void>;
 }
 
-const BLOCKED_RESOURCES = new Set(['image', 'font', 'media']);
+/** Для списка вакансий не нужны: только тратят соединения и бюджет страницы. */
+const BLOCKED_RESOURCES = new Set([
+  'image',
+  'font',
+  'media',
+  'stylesheet',
+  'texttrack',
+  'manifest',
+  'eventsource',
+]);
+
+function isBlocked(request: GuardedRequest, url: string): boolean {
+  if (BLOCKED_RESOURCES.has(request.resourceType()) || !isRenderableUrl(url)) return true;
+  return isTrackerHost(new URL(url).hostname);
+}
 
 export interface RequestGuard {
   handle(route: GuardedRoute): Promise<void>;
@@ -53,7 +68,7 @@ export function createRequestGuard(fetchPinned: PinnedFetch = createPinnedFetch(
     const request = route.request();
     const url = request.url();
     try {
-      if (BLOCKED_RESOURCES.has(request.resourceType()) || !isRenderableUrl(url)) {
+      if (isBlocked(request, url)) {
         await route.abort();
         return;
       }

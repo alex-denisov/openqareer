@@ -4,14 +4,14 @@
  * отпечатка, без обхода защит и без запасного пути через stealth.
  *
  * Один общий браузер на процесс, не больше двух страниц сразу, страница
- * ограничена ~20 с, картинки, шрифты и медиа не грузятся. Каждый запрос
+ * ограничена ~35 с, картинки, стили, трекеры, шрифты и медиа не грузятся. Каждый запрос
  * выполняет Node через защиту от SSRF (siteRenderGuard, pinnedFetch),
  * WebSocket закрываются, service workers выключены, итоговый адрес страницы
  * проверяется перед чтением HTML. Браузер
  * закрывается после минуты простоя: память обслуживания под потолком cgroup.
  */
 
-import type { PinnedFetch } from './pinnedFetch';
+import { createPinnedSession, type PinnedSession } from './pinnedFetch';
 import { createRequestGuard, isRenderableUrl, type GuardedRoute } from './siteRenderGuard';
 
 /** Отрисованный HTML страницы или undefined, если отрисовать не вышло. */
@@ -22,7 +22,10 @@ export interface RenderPage {
   routeWebSocket(url: RegExp, handler: (ws: { close(): Promise<void> }) => unknown): Promise<void>;
   url(): string;
   goto(url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>;
-  waitForLoadState(state: 'networkidle', options: { timeout: number }): Promise<void>;
+  waitForSelector(
+    selector: string,
+    options: { state: 'attached'; timeout: number },
+  ): Promise<unknown>;
   content(): Promise<string>;
   close(): Promise<void>;
 }
@@ -47,14 +50,29 @@ export interface ScriptPageRendererOptions {
   readonly maxConcurrent?: number;
   readonly pageTimeoutMs?: number;
   readonly idleCloseMs?: number;
-  /** Запрос с проверкой адреса при соединении; по умолчанию pinnedFetch. */
-  readonly fetchPinned?: PinnedFetch;
+  /** Сессия запросов одного рендера с проверкой адреса при соединении. */
+  readonly createFetch?: () => PinnedSession;
 }
 
 const DEFAULT_MAX_CONCURRENT = 2;
-const DEFAULT_PAGE_TIMEOUT_MS = 20_000;
-const NETWORK_IDLE_MS = 5_000;
-const DEFAULT_IDLE_CLOSE_MS = 60_000;
+/** Бюджет страницы: медленные сайты отдают TLS и первый байт за 2-4 с (замер 11.11). */
+const DEFAULT_PAGE_TIMEOUT_MS = 35_000;
+/** После DOM ждём ссылку на вакансию не дольше этого, но в пределах бюджета. */
+const JOB_ANCHOR_WAIT_MS = 8_000;
+const DEFAULT_IDLE_CLOSE_MS = 30_000;
+/** Ссылки и виджеты, по которым каскад узнаёт вакансии. */
+const JOB_ANCHOR_SELECTOR = [
+  'a[href*="/job"]',
+  'a[href*="/vacanc"]',
+  'a[href*="vacancy"]',
+  'a[href*="/position"]',
+  'a[href*="/opening"]',
+  'a[href*="/stelle"]',
+  'a[href*="jobid"]',
+  'script[type="application/ld+json"]',
+  'iframe[src*="greenhouse"]',
+  'iframe[src*="lever.co"]',
+].join(', ');
 
 function createSemaphore(limit: number) {
   let active = 0;
@@ -78,14 +96,17 @@ function errorName(error: unknown): string {
 interface RenderRequest {
   readonly url: string;
   readonly timeoutMs: number;
-  readonly fetchPinned: PinnedFetch | undefined;
+  readonly createFetch: () => PinnedSession;
+  readonly log: RenderLog;
 }
 
 async function renderOnce(
   browser: RenderBrowser,
   request: RenderRequest,
 ): Promise<string | undefined> {
-  const guard = createRequestGuard(request.fetchPinned);
+  const session = request.createFetch();
+  const guard = createRequestGuard(session.fetch);
+  const startedAt = Date.now();
   // Service worker отвечает в обход page.route, поэтому выключен.
   const context = await browser.newContext({ serviceWorkers: 'block' });
   try {
@@ -94,13 +115,40 @@ async function renderOnce(
     // WebSocket идёт мимо page.route: закрывается, не дойдя до сети.
     await page.routeWebSocket(/.*/, (ws) => ws.close());
     await page.goto(request.url, { waitUntil: 'domcontentloaded', timeout: request.timeoutMs });
-    // Сеть может не стихнуть из-за аналитики: ждём недолго и берём то, что есть.
-    await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_MS }).catch(() => undefined);
+    // Список рисует скрипт уже после DOM: ждём первую ссылку на вакансию, не дольше остатка бюджета.
+    const left = request.timeoutMs - (Date.now() - startedAt);
+    const wait = Math.max(1, Math.min(JOB_ANCHOR_WAIT_MS, left));
+    await page
+      .waitForSelector(JOB_ANCHOR_SELECTOR, { state: 'attached', timeout: wait })
+      .catch(() => undefined);
     if (!isRenderableUrl(page.url())) return undefined;
-    return await page.content();
+    const html = await page.content();
+    logDone(request.log, request.url, startedAt, html);
+    return html;
   } finally {
+    session.close();
     await context.close().catch(() => undefined);
   }
+}
+
+function logDone(log: RenderLog, url: string, startedAt: number, html: string): void {
+  log(
+    { host: new URL(url).host, ms: Date.now() - startedAt, htmlChars: html.length },
+    'site-render-page-done',
+  );
+}
+
+function renderRequest(
+  url: string,
+  options: ScriptPageRendererOptions,
+  log: RenderLog,
+): RenderRequest {
+  return {
+    url,
+    timeoutMs: options.pageTimeoutMs ?? DEFAULT_PAGE_TIMEOUT_MS,
+    createFetch: options.createFetch ?? (() => createPinnedSession()),
+    log,
+  };
 }
 
 /** Откат OPENQAREER_SITE_RENDER_OFF=1 или адрес, который рендерить нельзя. */
@@ -145,8 +193,7 @@ export function createScriptPageRenderer(options: ScriptPageRendererOptions): Re
       try {
         const current = await acquire();
         if (!current) return undefined;
-        const timeoutMs = options.pageTimeoutMs ?? DEFAULT_PAGE_TIMEOUT_MS;
-        return await renderOnce(current, { url, timeoutMs, fetchPinned: options.fetchPinned });
+        return await renderOnce(current, renderRequest(url, options, log));
       } catch (error: unknown) {
         log({ errorName: errorName(error), host: new URL(url).host }, 'site-render-page-failed');
         return undefined;
@@ -161,8 +208,11 @@ export function createScriptPageRenderer(options: ScriptPageRendererOptions): Re
   };
 }
 
-/** Песочница Chrome не выключается: страница чужая. */
-const PLAIN_CHROME_ARGS = ['--disable-dev-shm-usage'];
+/**
+ * Песочница Chrome не выключается: страница чужая. Куча V8 каждой страницы
+ * ограничена 256 МБ: обслуживание живёт под MemoryMax cgroup.
+ */
+const PLAIN_CHROME_ARGS = ['--disable-dev-shm-usage', '--js-flags=--max-old-space-size=256'];
 
 /**
  * Запуск на проде: тот же Google Chrome (B626) и тот же модуль playwright,

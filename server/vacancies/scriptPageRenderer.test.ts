@@ -38,9 +38,17 @@ function fakeBrowser(options: FakeOptions = {}) {
     aborted: [] as string[],
     fetched: [] as string[],
     closedSockets: 0,
+    sessionsClosed: 0,
+    selectorWaits: [] as number[],
     closed: false,
   };
   const fetchPinned = fakeFetch(state, options.redirectTo);
+  const createFetch = () => ({
+    fetch: fetchPinned,
+    close: () => {
+      state.sessionsClosed += 1;
+    },
+  });
   const page = (): RenderPage => {
     let handler: Parameters<RenderPage['route']>[1] | undefined;
     let wsHandler: Parameters<RenderPage['routeWebSocket']>[1] | undefined;
@@ -89,7 +97,10 @@ function fakeBrowser(options: FakeOptions = {}) {
         });
         return null;
       },
-      waitForLoadState: async () => undefined,
+      waitForSelector: async (_selector, { timeout }) => {
+        state.selectorWaits.push(timeout);
+        return null;
+      },
       content: async () => options.html ?? '<html><body>rendered</body></html>',
       close: async () => undefined,
     };
@@ -111,16 +122,16 @@ function fakeBrowser(options: FakeOptions = {}) {
       };
     },
   };
-  return { browser, state, fetchPinned };
+  return { browser, state, createFetch };
 }
 
 describe('createScriptPageRenderer (B643)', () => {
   it('рендерит страницу и блокирует картинки', async () => {
-    const { browser, state, fetchPinned } = fakeBrowser({ html: '<p>jobs</p>' });
+    const { browser, state, createFetch } = fakeBrowser({ html: '<p>jobs</p>' });
     const render = createScriptPageRenderer({
       launch: async () => browser,
       env: {},
-      fetchPinned,
+      createFetch,
     });
     await expect(render('https://acme.test/careers')).resolves.toBe('<p>jobs</p>');
     expect(state.aborted).toEqual(['https://acme.test/logo.png']);
@@ -129,9 +140,9 @@ describe('createScriptPageRenderer (B643)', () => {
   });
 
   it('не больше двух рендеров одновременно, браузер один', async () => {
-    const { browser, state, fetchPinned } = fakeBrowser({ gotoDelayMs: 20 });
+    const { browser, state, createFetch } = fakeBrowser({ gotoDelayMs: 20 });
     const launch = vi.fn(async () => browser);
-    const render = createScriptPageRenderer({ launch, env: {}, fetchPinned });
+    const render = createScriptPageRenderer({ launch, env: {}, createFetch });
     await Promise.all(['a', 'b', 'c', 'd', 'e'].map((p) => render(`https://acme.test/${p}`)));
     expect(state.maxOpen).toBe(2);
     expect(launch).toHaveBeenCalledTimes(1);
@@ -139,11 +150,11 @@ describe('createScriptPageRenderer (B643)', () => {
   });
 
   it('ошибка страницы закрывает контекст и даёт undefined', async () => {
-    const { browser, state, fetchPinned } = fakeBrowser({ gotoError: new Error('timeout') });
+    const { browser, state, createFetch } = fakeBrowser({ gotoError: new Error('timeout') });
     const render = createScriptPageRenderer({
       launch: async () => browser,
       env: {},
-      fetchPinned,
+      createFetch,
       log: vi.fn(),
     });
     await expect(render('https://acme.test/careers')).resolves.toBeUndefined();
@@ -158,7 +169,7 @@ describe('createScriptPageRenderer (B643)', () => {
     const render = createScriptPageRenderer({
       launch,
       env: {},
-      fetchPinned: fakeFetch({ fetched: [] }),
+      createFetch: () => ({ fetch: fakeFetch({ fetched: [] }), close: () => undefined }),
       log,
     });
     await expect(render('https://acme.test/a')).resolves.toBeUndefined();
@@ -179,14 +190,14 @@ describe('createScriptPageRenderer (B643)', () => {
     const render = createScriptPageRenderer({
       launch,
       env: {},
-      fetchPinned: fakeFetch({ fetched: [] }),
+      createFetch: () => ({ fetch: fakeFetch({ fetched: [] }), close: () => undefined }),
     });
     await expect(render('file:///etc/passwd')).resolves.toBeUndefined();
     expect(launch).not.toHaveBeenCalled();
   });
 
   it('запросы страницы к частным адресам обрываются', async () => {
-    const { browser, state, fetchPinned } = fakeBrowser({
+    const { browser, state, createFetch } = fakeBrowser({
       subrequests: [
         { url: 'http://169.254.169.254/latest/meta-data/', type: 'xhr' },
         { url: 'https://db.private.test/', type: 'fetch' },
@@ -196,7 +207,7 @@ describe('createScriptPageRenderer (B643)', () => {
     const render = createScriptPageRenderer({
       launch: async () => browser,
       env: {},
-      fetchPinned,
+      createFetch,
     });
     await expect(render('https://acme.test/careers')).resolves.toBeDefined();
     expect(state.aborted).toContain('http://169.254.169.254/latest/meta-data/');
@@ -206,11 +217,11 @@ describe('createScriptPageRenderer (B643)', () => {
   });
 
   it('редирект на 127.0.0.1 обрывается, HTML не читается', async () => {
-    const { browser, state, fetchPinned } = fakeBrowser({ redirectTo: 'http://127.0.0.1/admin' });
+    const { browser, state, createFetch } = fakeBrowser({ redirectTo: 'http://127.0.0.1/admin' });
     const render = createScriptPageRenderer({
       launch: async () => browser,
       env: {},
-      fetchPinned,
+      createFetch,
     });
     await expect(render('https://acme.test/careers')).resolves.toBeUndefined();
     expect(state.aborted).toContain('https://acme.test/careers');
@@ -222,7 +233,7 @@ describe('createScriptPageRenderer (B643)', () => {
     const render = createScriptPageRenderer({
       launch,
       env: {},
-      fetchPinned: fakeFetch({ fetched: [] }),
+      createFetch: () => ({ fetch: fakeFetch({ fetched: [] }), close: () => undefined }),
     });
     await expect(render('https://jobs.private.test/')).resolves.toBeUndefined();
     await expect(render('http://10.0.0.5/careers')).resolves.toBeUndefined();
@@ -230,9 +241,36 @@ describe('createScriptPageRenderer (B643)', () => {
   });
 
   it('WebSocket страницы закрывается, не дойдя до сети', async () => {
-    const { browser, state, fetchPinned } = fakeBrowser();
-    const render = createScriptPageRenderer({ launch: async () => browser, env: {}, fetchPinned });
+    const { browser, state, createFetch } = fakeBrowser();
+    const render = createScriptPageRenderer({ launch: async () => browser, env: {}, createFetch });
     await expect(render('https://acme.test/careers')).resolves.toBeDefined();
     expect(state.closedSockets).toBe(1);
+  });
+
+  it('успех пишется в журнал, сессия запросов закрывается, ждём ссылки на вакансии', async () => {
+    const { browser, state, createFetch } = fakeBrowser({ html: '<p>jobs</p>' });
+    const log = vi.fn();
+    const render = createScriptPageRenderer({
+      launch: async () => browser,
+      env: {},
+      createFetch,
+      log,
+    });
+    await render('https://acme.test/careers');
+    expect(log).toHaveBeenCalledWith(
+      { host: 'acme.test', ms: expect.any(Number), htmlChars: 11 },
+      'site-render-page-done',
+    );
+    expect(state.sessionsClosed).toBe(1);
+    expect(state.selectorWaits).toHaveLength(1);
+    expect(state.selectorWaits[0]).toBeGreaterThan(0);
+    expect(state.selectorWaits[0]).toBeLessThanOrEqual(8_000);
+  });
+
+  it('ошибка страницы тоже закрывает сессию запросов', async () => {
+    const { browser, state, createFetch } = fakeBrowser({ gotoError: new Error('timeout') });
+    const render = createScriptPageRenderer({ launch: async () => browser, env: {}, createFetch });
+    await render('https://acme.test/careers');
+    expect(state.sessionsClosed).toBe(1);
   });
 });
