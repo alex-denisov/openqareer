@@ -25,13 +25,14 @@ const DEFAULT_CHUNK = 200;
 export const AGGREGATOR_TICK_BUDGET_MS = 300;
 export const AGGREGATOR_PASS_PAUSE_MS = 6 * 60 * 60_000;
 
-interface PoolRow { id: string; source_id: string; company: string | null; person: number | null }
+interface PoolRow { id: string; source_id: string; company: string | null; person: number | null; employer: string | number | null }
 
 export class AggregatorCompanyBackfill {
   private directory: DirectoryRow[] = [];
   private directoryCursor: string | undefined = '';
   private index: LinkageIndex | undefined;
   private names = new Map<string, string>();
+  private hhEmployers = new Map<string, string>();
   private cursor = '';
   private linkedTotal = 0;
   private changedTotal = 0;
@@ -51,7 +52,8 @@ export class AggregatorCompanyBackfill {
     const rows = this.db
       .prepare(
         `SELECT i.id, i.source_id, json_extract(c.cluster_json,'$.company') AS company,
-                json_extract(c.cluster_json,'$.employerIsPerson') AS person
+                json_extract(c.cluster_json,'$.employerIsPerson') AS person,
+                json_extract(c.cluster_json,'$.employerId') AS employer
            FROM vacancy_pool_index i JOIN vacancy_cluster_input c ON c.id = i.id
           WHERE i.id > ? AND i.expired = 0 ORDER BY i.id LIMIT ?`,
       )
@@ -77,9 +79,19 @@ export class AggregatorCompanyBackfill {
     if (page.length < DIRECTORY_PAGE) {
       this.index = buildLinkageIndex(this.directory);
       this.names = new Map(this.directory.map((row) => [row.companyKey, row.companyName]));
+      this.hhEmployers = this.readHhEmployers();
       this.directory = [];
     }
     return { done: false, processed: 0, linked: 0, unlinked: 0, linkedTotal: this.linkedTotal, changedTotal: this.changedTotal, ms: this.now() - startedAt };
+  }
+
+  /** B643: hh employer id → company, from links on company sites (`hh:<id>` placements). */
+  private readHhEmployers(): Map<string, string> {
+    const rows = this.db
+      .prepare(`SELECT substr(placement_id, 4) AS employerId, company_key AS companyKey FROM company_placement
+                 WHERE placement_id LIKE 'hh:%' AND company_key IS NOT NULL`)
+      .all() as unknown as { employerId: string; companyKey: string }[];
+    return new Map(rows.map((row) => [row.employerId, row.companyKey]));
   }
 
   private write(rows: readonly PoolRow[]): { linked: number; unlinked: number } {
@@ -96,7 +108,12 @@ export class AggregatorCompanyBackfill {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       for (const row of rows) {
-        const link = linkAggregatorRow({ sourceId: row.source_id, company: row.company, employerIsPerson: row.person === 1 }, index, (key) => this.names.get(key));
+        const employerCompanyKey = row.employer === null ? undefined : this.hhEmployers.get(String(row.employer));
+        const link = linkAggregatorRow(
+          { sourceId: row.source_id, company: row.company, employerIsPerson: row.person === 1, employerCompanyKey },
+          index,
+          (key) => this.names.get(key),
+        );
         if (link.status === 'linked') {
           linked += 1;
           this.changedTotal += Number(upsert.run(row.id, link.companyKey, link.how, nowMs).changes);
@@ -120,6 +137,7 @@ export class AggregatorCompanyBackfill {
     this.directoryCursor = '';
     this.index = undefined;
     this.names = new Map();
+    this.hhEmployers = new Map();
     this.linkedTotal = 0;
     this.changedTotal = 0;
   }

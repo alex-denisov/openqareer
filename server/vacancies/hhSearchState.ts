@@ -219,6 +219,7 @@ function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVaca
   if (!url || !title || !company) return null;
 
   const externalId = text(vacancy.vacancyId);
+  const employerId = text(employer.id);
   const id = `${HH_SEARCH_SOURCE_ID}:${externalId || url}`;
   const location = htmlToFeedText(text(record(vacancy.area).name));
   const descData = readHhDescription(vacancy);
@@ -231,6 +232,7 @@ function readVacancy(value: unknown, context: HhSearchStateContext): UnifiedVaca
     ...(PERSON_EMPLOYER_CATEGORIES.has(text(employer['@category']))
       ? { employerIsPerson: true }
       : {}),
+    ...(employerId ? { employerId } : {}),
     ...(location ? { location } : {}),
     isRemote: readIsRemote(vacancy.workFormats),
     ...(readSalary(vacancy.compensation) ? { salary: readSalary(vacancy.compensation) } : {}),

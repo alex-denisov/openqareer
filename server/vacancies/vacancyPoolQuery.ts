@@ -98,6 +98,7 @@ export function clusterProjectionOf(vacancy: UnifiedVacancy): UnifiedVacancy {
     title: vacancy.title,
     company: vacancy.company ?? '',
     ...(vacancy.employerIsPerson === true ? { employerIsPerson: true } : {}),
+    ...(vacancy.employerId ? { employerId: vacancy.employerId } : {}),
     ...(vacancy.location === undefined ? {} : { location: vacancy.location }),
     ...(vacancy.isRemote === undefined ? {} : { isRemote: vacancy.isRemote }),
     ...(vacancy.salary === undefined ? {} : { salary: vacancy.salary }),

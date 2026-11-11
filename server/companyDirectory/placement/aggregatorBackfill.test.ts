@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { VACANCY_CLUSTER_INPUT_TABLE, VACANCY_POOL_INDEX_TABLE } from '../../data/sqliteSchema';
 import { AggregatorCompanyBackfill, AggregatorCompanyTicker } from './aggregatorBackfill';
+import { PLACEMENT_TABLES } from './placementSchema';
 
 function openDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:');
@@ -54,6 +55,28 @@ describe('B643-8 aggregator company backfill', () => {
     const after = db.prepare('SELECT total_changes() AS n').get() as { n: number };
     expect(after.n - changes.n).toBe(1);
     expect(links(db)).toEqual([{ vacancy_id: 'v2', company_key: 'yandex', match_how: 'exact_name_single_word' }]);
+  });
+
+  it('B643: hh row is tied by employer id first, ahead of the exact name', () => {
+    const db = openDb();
+    db.exec(PLACEMENT_TABLES);
+    const place = db.prepare(`INSERT INTO company_placement (placement_id, company_key, type, provider, slug, priority, discovered_by, updated_at)
+      VALUES (?, ?, 'aggregator', 'hh', ?, 4, 'site_discovery', 0)`);
+    place.run('hh:1740', 'acme', '1740');
+    place.run('hh:555', null, '555');
+    db.prepare(`INSERT INTO vacancy_pool_index (id, source_id, is_active, url, search_text, expired) VALUES (?, ?, 1, 'u', '', 0)`).run('v6', 'src-hh-search');
+    db.prepare('INSERT INTO vacancy_cluster_input (id, cluster_json) VALUES (?, ?)').run('v6', JSON.stringify({ company: 'Яндекс', employerId: '1740' }));
+    db.prepare(`INSERT INTO vacancy_pool_index (id, source_id, is_active, url, search_text, expired) VALUES (?, ?, 1, 'u', '', 0)`).run('v7', 'src-hh-search');
+    db.prepare('INSERT INTO vacancy_cluster_input (id, cluster_json) VALUES (?, ?)').run('v7', JSON.stringify({ company: 'Яндекс', employerId: '555' }));
+    db.prepare(`INSERT INTO vacancy_pool_index (id, source_id, is_active, url, search_text, expired) VALUES (?, ?, 1, 'u', '', 0)`).run('v8', 'src-hh-search');
+    db.prepare('INSERT INTO vacancy_cluster_input (id, cluster_json) VALUES (?, ?)').run('v8', JSON.stringify({ company: 'Иванова Мария', employerIsPerson: true, employerId: '1740' }));
+    runPass(new AggregatorCompanyBackfill(db, { chunk: 3 }));
+    expect(links(db)).toEqual([
+      { vacancy_id: 'v1', company_key: 'acme', match_how: 'exact_name' },
+      { vacancy_id: 'v2', company_key: 'yandex', match_how: 'exact_name_single_word' },
+      { vacancy_id: 'v6', company_key: 'acme', match_how: 'hh_employer_id' },
+      { vacancy_id: 'v7', company_key: 'yandex', match_how: 'exact_name_single_word' },
+    ]);
   });
 
   it('pauses after a finished pass', () => {
