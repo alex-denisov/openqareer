@@ -55,6 +55,8 @@ export interface UnifiedVacancy {
   company: string;
   /** Площадка назвала работодателя частным лицом: имя в публичный каталог не идёт (INC-023). */
   employerIsPerson?: boolean;
+  /** B643: id работодателя на hh (`company.id`); ведёт к `company_placement` `hh:<id>`. */
+  employerId?: string;
   location?: string;
   isRemote?: boolean;
   salary?: VacancySalary;

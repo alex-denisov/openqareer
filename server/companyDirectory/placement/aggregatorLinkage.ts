@@ -24,6 +24,8 @@ export interface AggregatorRow {
   readonly sourceId: string;
   readonly company: string | null | undefined;
   readonly employerIsPerson?: boolean;
+  /** B643: company_key found by the hh employer id in `company_placement`. */
+  readonly employerCompanyKey?: string;
 }
 
 export type AggregatorLink =
@@ -31,7 +33,7 @@ export type AggregatorLink =
   | { readonly status: 'skipped'; readonly reason: 'employer_board' | 'person' | 'generic' | 'ambiguous' | 'unlinked' | 'loose_name' };
 
 /** `exact_name_single_word`: one dictionary-like word («Porter», «Атлант») — B643-12 must not merge on it alone. */
-export type LinkHow = 'exact_name' | 'exact_name_single_word';
+export type LinkHow = 'hh_employer_id' | 'exact_name' | 'exact_name_single_word';
 
 const LEGAL_FORM = /\b(inc|llc|ltd|limited|gmbh|ag|sa|sas|bv|corp|corporation|co|plc|oy|ab|as|srl|spa|pty|ооо|оао|зао|пао|ао)\b\.?/g;
 
@@ -68,6 +70,8 @@ export function linkAggregatorRow(
   if (employerBoard) return { status: 'skipped', reason: 'employer_board' };
   const name = row.company?.trim() ?? '';
   if (publicEmployerName(name, row.employerIsPerson) === PRIVATE_EMPLOYER) return { status: 'skipped', reason: 'person' };
+  // The company site links this hh employer: an id beats any name match.
+  if (row.employerCompanyKey) return { status: 'linked', companyKey: row.employerCompanyKey, how: 'hh_employer_id' };
   if (isGenericEmployerName(name)) return { status: 'skipped', reason: 'generic' };
   const link = linkByEmployerName(name, index);
   if (link.status !== 'linked') return { status: 'skipped', reason: link.status };
