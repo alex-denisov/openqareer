@@ -32,6 +32,12 @@ await build({
   entryPoints: ['server/vacancies/siteRenderWorker.ts'],
   outfile: 'dist/site-render-worker.mjs',
 });
+// B645: freehire pages pass in its own thread of the maintenance process.
+await build({
+  ...shared,
+  entryPoints: ['server/companyDirectory/freehire/freehirePagesWorker.ts'],
+  outfile: 'dist/freehire-pages-worker.mjs',
+});
 await build({
   ...shared,
   entryPoints: ['scripts/run-vacancy-mechanics-worker.ts'],
@@ -55,4 +61,7 @@ for (const font of RESUME_FONTS) {
 
 // B644: freehire repo board catalog, read by the maintenance step at runtime.
 await mkdir('dist/data/freehire', { recursive: true });
-await copyFile('server/companyDirectory/freehire/data/freehire-boards-2026-09-03.tsv.gz', 'dist/data/freehire/freehire-boards-2026-09-03.tsv.gz');
+await copyFile(
+  'server/companyDirectory/freehire/data/freehire-boards-2026-09-03.tsv.gz',
+  'dist/data/freehire/freehire-boards-2026-09-03.tsv.gz',
+);
