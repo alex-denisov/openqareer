@@ -5,7 +5,7 @@
  * Only what answers over HTTP is kept.
  */
 import { boardJobs, boardsFromHtml, type BoardCandidate, type DiscoveredProvider } from './atsBoards';
-import { absolute, LINKEDIN, page, type Discovery, type PendingCompany } from './siteDiscovery';
+import { absolute, LINKEDIN, page, resolvesPublic, type Discovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 const CAREERS_PATHS = ['/careers', '/jobs'] as const;
 /** Providers with a slug-addressed public API that answers 404 for unknown slugs. */
@@ -27,14 +27,14 @@ export function nameSlugs(name: string): readonly string[] {
   return words.length > 1 ? [joined, words.join('-')] : [joined];
 }
 
-async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: string, evidence: Record<string, unknown>) {
+async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: string, evidence: Record<string, unknown>, hostIsPublic: HostCheck) {
   const site = company.websiteUrl && !LINKEDIN.test(company.websiteUrl) ? absolute(company.websiteUrl) : undefined;
   if (!site) return { html: '' } as { html: string; careersUrl?: string; careersHtml?: string };
-  const home = await page(site, fetchImpl);
+  const home = await page(site, fetchImpl, hostIsPublic);
   if (home.status === 0 || home.status >= 400) return { html: '' };
   const origin = new URL(home.url).origin;
   for (const path of CAREERS_PATHS) {
-    const result = await page(`${origin}${path}`, fetchImpl);
+    const result = await page(`${origin}${path}`, fetchImpl, hostIsPublic);
     if (result.status === 200 && result.html.length > 500) {
       evidence.careersUrl = { value: result.url, how: `B643-9 site path ${path}, HTTP 200 on ${day}`, confirmed: true };
       return { html: home.html, careersUrl: result.url, careersHtml: result.html };
@@ -43,13 +43,23 @@ async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: s
   return { html: home.html };
 }
 
+/** Joined slug at every provider; the hyphenated one only where boards use hyphens (lever, ashby). */
 function guesses(name: string): readonly BoardCandidate[] {
-  return nameSlugs(name).flatMap((slug) => GUESS_PROVIDERS.map((provider) => ({ provider, slug })));
+  const [joined, hyphenated] = nameSlugs(name);
+  if (!joined) return [];
+  const all: BoardCandidate[] = GUESS_PROVIDERS.map((provider) => ({ provider, slug: joined }));
+  if (hyphenated) all.push({ provider: 'lever', slug: hyphenated }, { provider: 'ashby', slug: hyphenated });
+  return all;
 }
 
-export async function resolveCompany(company: PendingCompany, fetchImpl: typeof fetch, day: string): Promise<Discovery> {
+export async function resolveCompany(
+  company: PendingCompany,
+  fetchImpl: typeof fetch,
+  day: string,
+  hostIsPublic: HostCheck = (host) => resolvesPublic(host),
+): Promise<Discovery> {
   const evidence: Record<string, unknown> = { siteDiscovery: { value: day, how: 'B643-9 checked without model' } };
-  const site = await readSite(company, fetchImpl, day, evidence);
+  const site = await readSite(company, fetchImpl, day, evidence, hostIsPublic);
   const linked = boardsFromHtml(`${site.careersHtml ?? ''} ${site.html} ${site.careersUrl ?? ''}`).slice(0, MAX_CANDIDATES);
   for (const candidate of linked) {
     const jobs = await boardJobs(candidate, fetchImpl);
