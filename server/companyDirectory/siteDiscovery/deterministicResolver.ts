@@ -4,7 +4,9 @@
  * careers paths, ATS links on those pages, then name slugs on board APIs.
  * Only what answers over HTTP is kept.
  */
+import { careersPageVerdict } from './careersPageSignal';
 import { boardJobs, boardsFromHtml, type BoardCandidate, type DiscoveredProvider } from './atsBoards';
+import { hhEmployerIds } from './hhEmployerLinks';
 import { absolute, LINKEDIN, page, resolvesPublic, type Discovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 const CAREERS_PATHS = ['/careers', '/jobs'] as const;
@@ -70,9 +72,13 @@ async function readSite(company: PendingCompany, fetchImpl: typeof fetch, day: s
     ...careersLinks(home.html, home.url).map((url) => [url, 'home page link'] as const),
     ...CAREERS_PATHS.map((path) => [`${origin}${path}`, `site path ${path}`] as const),
   ];
+  const dropped = company.droppedCareersUrl ?? null;
   for (const [url, how] of candidates) {
+    // B643: a page the prune step dropped is not offered again.
+    if (url === dropped) continue;
     const result = await page(url, fetchImpl, hostIsPublic);
-    if (result.status === 200 && result.html.length > 500) {
+    if (result.url === dropped) continue;
+    if (result.status === 200 && result.html.length > 500 && careersPageVerdict(result.html) === 'ok') {
       evidence.careersUrl = { value: result.url, how: `B643-9 ${how}, HTTP 200 on ${day}`, confirmed: true };
       return { html: home.html, careersUrl: result.url, careersHtml: result.html };
     }
@@ -97,12 +103,17 @@ export async function resolveCompany(
 ): Promise<Discovery> {
   const evidence: Record<string, unknown> = { siteDiscovery: { value: day, how: 'B643-9 checked without model' } };
   const site = await readSite(company, fetchImpl, day, evidence, hostIsPublic);
-  const linked = boardsFromHtml(`${site.careersHtml ?? ''} ${site.html} ${site.careersUrl ?? ''}`).slice(0, MAX_CANDIDATES);
+  const pages = `${site.careersHtml ?? ''} ${site.html} ${site.careersUrl ?? ''}`;
+  const hh = hhEmployerIds(pages);
+  if (hh.length > 0) evidence.hhEmployer = { value: hh, how: `B643 hh employer link on company pages on ${day}`, confirmed: true };
+  const found = (rest: Omit<Discovery, 'companyKey' | 'careersUrl' | 'hhEmployerIds' | 'evidence'> = {}): Discovery =>
+    ({ companyKey: company.companyKey, careersUrl: site.careersUrl, ...(hh.length > 0 ? { hhEmployerIds: hh } : {}), ...rest, evidence });
+  const linked = boardsFromHtml(pages).slice(0, MAX_CANDIDATES);
   for (const candidate of linked) {
     const jobs = await boardJobs(candidate, fetchImpl);
     if (jobs > 0) {
       evidence.ats = { value: `${candidate.provider}:${candidate.slug}`, how: `B643-9 link on company pages, board API returned ${jobs} jobs on ${day}`, confirmed: true };
-      return { companyKey: company.companyKey, careersUrl: site.careersUrl, board: { ...candidate, jobs }, evidence };
+      return found({ board: { ...candidate, jobs } });
     }
   }
   // Name slugs: every guess is asked; boards at two providers mean the name is not unique enough.
@@ -116,7 +127,7 @@ export async function resolveCompany(
   } else if (answered[0]) {
     const board = answered[0];
     evidence.ats = { value: `${board.provider}:${board.slug}`, how: `B643-9 name slug, board API returned ${board.jobs} jobs on ${day}`, confirmed: false };
-    return { companyKey: company.companyKey, careersUrl: site.careersUrl, board, evidence };
+    return found({ board });
   }
-  return { companyKey: company.companyKey, careersUrl: site.careersUrl, evidence };
+  return found();
 }

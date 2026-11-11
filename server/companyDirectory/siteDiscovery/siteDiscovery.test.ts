@@ -25,6 +25,19 @@ function withFreehire(): DatabaseSync {
   return db;
 }
 
+describe('B643 careers url set time', () => {
+  it('writeDiscovery records when it sets careers_url, not when it keeps the old one', () => {
+    const db = directory();
+    db.exec(`UPDATE company_directory SET careers_url = 'https://ghost.co/jobs' WHERE company_key = 'ghost'`);
+    const now = '2026-11-12T08:00:00.000Z';
+    writeDiscovery(db, { companyKey: 'acme', careersUrl: 'https://acme.com/careers', evidence: {} }, now);
+    writeDiscovery(db, { companyKey: 'ghost', careersUrl: 'https://ghost.co/careers', evidence: {} }, now);
+    const setAt = (key: string) => (db.prepare(`SELECT json_extract(evidence, '$.careersUrlSetAt') AS at FROM company_directory WHERE company_key = ?`).get(key) as { at: string | null }).at;
+    expect(setAt('acme')).toBe(now);
+    expect(setAt('ghost')).toBeNull();
+  });
+});
+
 describe('B627 site discovery', () => {
   it('finds boards linked from page html', () => {
     const html = '<a href="https://jobs.lever.co/acme">x</a><script src="https://boards.greenhouse.io/embed/job_board/js?for=acme"></script>';
@@ -80,6 +93,14 @@ describe('B643-4 site discovery writes placements', () => {
     expect(db.prepare(`SELECT placement_id, company_key, discovered_by FROM company_placement ORDER BY placement_id`).all()).toEqual([
       { placement_id: 'ats:greenhouse:acme', company_key: 'acme', discovered_by: 'site_discovery' },
       { placement_id: 'site:careers.acme.com', company_key: 'acme', discovered_by: 'site_discovery' },
+    ]);
+  });
+
+  it('records hh employer pages found on the company site', () => {
+    const db = directory();
+    writeDiscovery(db, { companyKey: 'acme', hhEmployerIds: ['1740'], evidence: {} }, '2026-11-11T00:00:00Z');
+    expect(db.prepare(`SELECT placement_id, type, priority FROM company_placement`).all()).toEqual([
+      { placement_id: 'hh:1740', type: 'aggregator', priority: 4 },
     ]);
   });
 });

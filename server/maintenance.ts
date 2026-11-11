@@ -1,4 +1,5 @@
 import { PlacementBackfill, PlacementBackfillTicker } from './companyDirectory/placement/placementBackfill';
+import { CareersPrune, CareersPruneTicker } from './companyDirectory/siteDiscovery/careersPrune';
 import { AggregatorCompanyBackfill, AggregatorCompanyTicker } from './companyDirectory/placement/aggregatorBackfill';
 import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
@@ -234,6 +235,10 @@ const worker = new MaintenanceWorker({
   ...(process.env.OPENQAREER_COMPANY_PLACEMENT_OFF === '1' || process.env.OPENQAREER_AGGREGATOR_COMPANY_OFF === '1'
     ? {}
     : { aggregatorCompanies: new AggregatorCompanyTicker(new AggregatorCompanyBackfill(semanticDatabase)) }),
+  // B643: careers pages that are not vacancy pages or stay closed leave the directory; off — OPENQAREER_CAREERS_PRUNE_OFF=1.
+  ...(process.env.OPENQAREER_CAREERS_PRUNE_OFF === '1'
+    ? {}
+    : { careersPrune: new CareersPruneTicker(new CareersPrune(semanticDatabase)) }),
   purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
 });
 

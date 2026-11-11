@@ -13,6 +13,8 @@ export interface PendingCompany {
   readonly companyName: string;
   readonly websiteUrl: string | null;
   readonly linkedinUrl: string | null;
+  /** B643: careers page the prune step removed; the resolver never re-adds it. */
+  readonly droppedCareersUrl?: string | null;
 }
 
 export interface Discovery {
@@ -20,6 +22,8 @@ export interface Discovery {
   readonly websiteUrl?: string;
   readonly careersUrl?: string;
   readonly board?: BoardCandidate & { readonly jobs: number };
+  /** B643: hh employer ids linked from the home or careers page. */
+  readonly hhEmployerIds?: readonly string[];
   readonly evidence: Record<string, unknown>;
 }
 
@@ -79,12 +83,13 @@ const PENDING_WHERE = `d.status = 'active' AND d.ats_provider IS NULL
   AND (d.evidence IS NULL OR instr(d.evidence, 'B643-9') = 0)
   AND NOT EXISTS (SELECT 1 FROM company_placement p WHERE p.company_key = d.company_key AND p.type = 'ats')`;
 
-type PendingRow = { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null };
+type PendingRow = { company_key: string; company_name: string; website_url: string | null; linkedin_url: string | null; dropped_careers_url: string | null };
 const toPending = (row: PendingRow): PendingCompany => ({
   companyKey: row.company_key,
   companyName: row.company_name,
   websiteUrl: row.website_url,
   linkedinUrl: row.linkedin_url,
+  droppedCareersUrl: row.dropped_careers_url,
 });
 
 /**
@@ -95,7 +100,8 @@ const toPending = (row: PendingRow): PendingCompany => ({
 export function readPendingPage(database: DatabaseSync, afterKey: string, limit: number): readonly PendingCompany[] {
   const rows = database
     .prepare(
-      `SELECT d.company_key, d.company_name, d.website_url, d.linkedin_url FROM company_directory d
+      `SELECT d.company_key, d.company_name, d.website_url, d.linkedin_url,
+          json_extract(d.evidence, '$.careersUrlDropped.value') AS dropped_careers_url FROM company_directory d
         WHERE d.company_key > ? AND ${PENDING_WHERE} ORDER BY d.company_key LIMIT ?`,
     )
     .all(afterKey, limit) as unknown as PendingRow[];
@@ -134,7 +140,9 @@ export function writeDiscovery(database: DatabaseSync, found: Discovery, now: st
          ats_slug = CASE WHEN ats_provider IS NULL AND ? IS NOT NULL THEN ? ELSE ats_slug END,
          ats_provider = COALESCE(ats_provider, ?),
          source_type = CASE WHEN source_type = 'linkedin_guest' AND ? IS NOT NULL THEN ? ELSE source_type END,
-         evidence = json_patch(COALESCE(evidence, '{}'), ?),
+         evidence = CASE WHEN ? IS NOT NULL AND (careers_url IS NULL OR careers_url LIKE '%linkedin.com%')
+           THEN json_set(json_patch(COALESCE(evidence, '{}'), ?), '$.careersUrlSetAt', ?)
+           ELSE json_patch(COALESCE(evidence, '{}'), ?) END,
          updated_at = ?
        WHERE company_key = ?`,
     )
@@ -147,6 +155,9 @@ export function writeDiscovery(database: DatabaseSync, found: Discovery, now: st
       found.board?.provider ?? null,
       sourceType,
       sourceType,
+      found.careersUrl ?? null,
+      JSON.stringify(found.evidence),
+      now,
       JSON.stringify(found.evidence),
       now,
       found.companyKey,
@@ -155,6 +166,7 @@ export function writeDiscovery(database: DatabaseSync, found: Discovery, now: st
   recordCompanyPlacements(database, found.companyKey, {
     boards: found.board ? [found.board] : [],
     siteUrl: found.careersUrl ?? found.websiteUrl ?? null,
+    hhEmployerIds: found.hhEmployerIds ?? [],
     discoveredBy: 'site_discovery',
   }, Date.parse(now) || Date.now());
 }

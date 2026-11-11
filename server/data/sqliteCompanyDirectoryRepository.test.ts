@@ -98,6 +98,15 @@ describe('SqliteCompanyDirectoryRepository', () => {
     expect(repo.countCompanies()).toBe(1);
   });
 
+  it('records when careers_url changed, and only then (B643)', () => {
+    const repo = makeRepo();
+    repo.upsertCompany(sampleUzum);
+    repo.upsertCompany({ ...sampleUzum, notes: 'x', updatedAt: '2026-11-06T00:00:00Z' });
+    expect(repo.getCompany('uzum')?.evidence?.careersUrlSetAt).toBeUndefined();
+    repo.upsertCompany({ ...sampleUzum, careersUrl: 'https://uzum.com/jobs', updatedAt: '2026-11-07T00:00:00Z' });
+    expect(repo.getCompany('uzum')?.evidence?.careersUrlSetAt).toBe('2026-11-07T00:00:00Z');
+  });
+
   it('фильтрует по типу источника, статусу и поисковой строке', () => {
     const repo = makeRepo();
     repo.upsertBatch([

@@ -42,6 +42,16 @@ describe('B643-9 deterministic resolver', () => {
     expect(JSON.stringify(found.evidence)).toContain('B643-9');
   });
 
+  it('takes hh employer pages linked from the home and careers pages', async () => {
+    const careers = `<html><title>Careers</title>${'x'.repeat(600)}<a href="https://hh.kz/employer/3529">hh.kz</a></html>`;
+    const found = await resolveCompany(company('Acme', 'https://acme.com/'), fakeFetch({
+      'https://acme.com/': [200, '<a href="https://hh.ru/employer/1740">hh</a>'],
+      'https://acme.com/careers': [200, careers],
+    }), '2026-11-11', publicHost);
+    expect(found.hhEmployerIds).toEqual(['3529', '1740']);
+    expect(found.evidence.hhEmployer).toMatchObject({ value: ['3529', '1740'], confirmed: true });
+  });
+
   it('falls back to a name slug guess checked by the board API', async () => {
     const found = await resolveCompany(company('Northwind Labs'), fakeFetch({
       'https://api.ashbyhq.com/posting-api/job-board/northwindlabs': [200, '{"jobs":[{},{}]}'],
@@ -87,6 +97,28 @@ describe('B643-9 careers link from the home page', () => {
     const { careersLinks } = await import('./deterministicResolver');
     expect(careersLinks('<a href="https://job.sulpak.kz">Вакансии</a><a href="https://jobs.other.com/x">jobs</a><a href="/career/">Карьера</a>', 'https://www.sulpak.kz/'))
       .toEqual(['https://job.sulpak.kz/', 'https://www.sulpak.kz/career/']);
+  });
+});
+
+describe('B643 careers page must look like vacancies', () => {
+  it('does not keep a product page or a 404 page as the careers page', async () => {
+    const found = await resolveCompany(company('Sklad', 'https://sklad.ru/'), fakeFetch({
+      'https://sklad.ru/': [200, '<a href="/konteynery/vakansii-dlya-kontejnera/">Вакансии</a>'],
+      'https://sklad.ru/konteynery/vakansii-dlya-kontejnera/': [200, `<title>Контейнер ПБК-6</title><h1>Контейнер</h1>${'x'.repeat(600)}`],
+      'https://sklad.ru/careers': [200, `<title>Страница не найдена</title>${'x'.repeat(600)}`],
+      'https://sklad.ru/jobs': [200, `<title>Вакансии</title><h1>Работа у нас</h1>${'x'.repeat(600)}`],
+    }), '2026-11-11', publicHost);
+    expect(found.careersUrl).toBe('https://sklad.ru/jobs');
+  });
+
+  it('skips a careers page the directory dropped before', async () => {
+    const seen: string[] = [];
+    const found = await resolveCompany({ ...company('Acme', 'https://acme.com/'), droppedCareersUrl: 'https://acme.com/careers' }, fakeFetch({
+      'https://acme.com/': [200, '<html>home</html>'],
+      'https://acme.com/careers': [200, `<title>Careers</title>${'x'.repeat(600)}`],
+    }, seen), '2026-11-11', publicHost);
+    expect(found.careersUrl).toBeUndefined();
+    expect(seen).not.toContain('https://acme.com/careers');
   });
 });
 
