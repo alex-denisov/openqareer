@@ -51,16 +51,25 @@ export async function resolveCompany(company: PendingCompany, fetchImpl: typeof 
   const evidence: Record<string, unknown> = { siteDiscovery: { value: day, how: 'B643-9 checked without model' } };
   const site = await readSite(company, fetchImpl, day, evidence);
   const linked = boardsFromHtml(`${site.careersHtml ?? ''} ${site.html} ${site.careersUrl ?? ''}`).slice(0, MAX_CANDIDATES);
-  const tries: [BoardCandidate, string][] = [
-    ...linked.map((c): [BoardCandidate, string] => [c, 'link on company pages']),
-    ...guesses(company.companyName).map((c): [BoardCandidate, string] => [c, 'name slug']),
-  ];
-  for (const [candidate, how] of tries) {
+  for (const candidate of linked) {
     const jobs = await boardJobs(candidate, fetchImpl);
     if (jobs > 0) {
-      evidence.ats = { value: `${candidate.provider}:${candidate.slug}`, how: `B643-9 ${how}, board API returned ${jobs} jobs on ${day}`, confirmed: how !== 'name slug' };
+      evidence.ats = { value: `${candidate.provider}:${candidate.slug}`, how: `B643-9 link on company pages, board API returned ${jobs} jobs on ${day}`, confirmed: true };
       return { companyKey: company.companyKey, careersUrl: site.careersUrl, board: { ...candidate, jobs }, evidence };
     }
+  }
+  // Name slugs: every guess is asked; boards at two providers mean the name is not unique enough.
+  const answered: (BoardCandidate & { jobs: number })[] = [];
+  for (const candidate of guesses(company.companyName)) {
+    const jobs = await boardJobs(candidate, fetchImpl);
+    if (jobs > 0 && !answered.some((a) => a.provider === candidate.provider)) answered.push({ ...candidate, jobs });
+  }
+  if (answered.length > 1) {
+    evidence.atsAmbiguous = { value: answered.map((a) => `${a.provider}:${a.slug}`), how: `B643-9 name slug answered at several providers on ${day}` };
+  } else if (answered[0]) {
+    const board = answered[0];
+    evidence.ats = { value: `${board.provider}:${board.slug}`, how: `B643-9 name slug, board API returned ${board.jobs} jobs on ${day}`, confirmed: false };
+    return { companyKey: company.companyKey, careersUrl: site.careersUrl, board, evidence };
   }
   return { companyKey: company.companyKey, careersUrl: site.careersUrl, evidence };
 }

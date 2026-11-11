@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { COMPANY_DIRECTORY_MIGRATION } from '../../data/companyDirectorySchema';
+import { PLACEMENT_TABLES } from '../placement/placementSchema';
 import { nameSlugs, resolveCompany } from './deterministicResolver';
 import { readPendingCompanies } from './siteDiscovery';
 import { runSiteDiscoveryTick } from './siteDiscoverySchedule';
@@ -48,6 +49,15 @@ describe('B643-9 deterministic resolver', () => {
     expect(found.evidence.ats).toMatchObject({ how: expect.stringContaining('name slug') });
   });
 
+  it('holds a name slug that answers at two providers as ambiguous', async () => {
+    const found = await resolveCompany(company('Northwind Labs'), fakeFetch({
+      'https://api.ashbyhq.com/posting-api/job-board/northwindlabs': [200, '{"jobs":[{}]}'],
+      'https://api.lever.co/v0/postings/northwindlabs?mode=json&limit=200': [200, '[{}]'],
+    }), '2026-11-11');
+    expect(found.board).toBeUndefined();
+    expect(found.evidence.atsAmbiguous).toBeDefined();
+  });
+
   it('writes nothing for a company nobody answers for', async () => {
     const found = await resolveCompany(company('Ghost Co'), fakeFetch({}), '2026-11-11');
     expect(found.board).toBeUndefined();
@@ -60,12 +70,13 @@ describe('B643-9 tick without a model', () => {
     const db = new DatabaseSync(':memory:');
     db.exec(COMPANY_DIRECTORY_MIGRATION);
     db.exec('ALTER TABLE company_directory ADD COLUMN evidence TEXT');
+    db.exec(PLACEMENT_TABLES);
     db.prepare(`INSERT INTO company_directory (company_key, company_name, source_type, created_at, updated_at)
       VALUES ('northwind', 'Northwind Labs', 'linkedin_guest', '2026-11-09', '2026-11-09')`).run();
     const result = await runSiteDiscoveryTick(db, fakeFetch({
       'https://boards-api.greenhouse.io/v1/boards/northwindlabs/jobs': [200, '{"jobs":[{}]}'],
     }), new Date('2026-11-11T00:00:00Z'));
-    expect(result).toEqual({ checked: 1, boards: 1 });
+    expect(result).toEqual({ checked: 1, boards: 1, ambiguous: 0 });
     expect(db.prepare("SELECT ats_provider, ats_slug FROM company_directory").get()).toEqual({ ats_provider: 'greenhouse', ats_slug: 'northwindlabs' });
     expect(readPendingCompanies(db, 10)).toEqual([]);
   });
