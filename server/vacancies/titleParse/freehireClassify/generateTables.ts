@@ -51,7 +51,8 @@ export function extractTable(source: string, goVar: string): [string, string][] 
     const match = ENTRY.exec(line);
     if (!match) throw new Error(`unparsed line in ${goVar}: ${line}`);
     const alias = JSON.parse(match[1]) as string;
-    const canonical = match[2] === 'categoryNone' ? CATEGORY_NONE : (JSON.parse(match[2]) as string);
+    const canonical =
+      match[2] === 'categoryNone' ? CATEGORY_NONE : (JSON.parse(match[2]) as string);
     entries.push([alias, canonical]);
   }
   throw new Error(`table ${goVar} not terminated`);

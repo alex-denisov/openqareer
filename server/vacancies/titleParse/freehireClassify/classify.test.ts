@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  freehireCategory,
-  freehireItFunction,
-  isConfirmedNonItTitle,
-} from './classify';
+import { freehireCategory, freehireItFunction, isConfirmedNonItTitle } from './classify';
 
 /**
  * Real titles from freehire's classify_*_test.go fixtures (MIT, Copyright (c) 2026
@@ -105,12 +101,14 @@ describe('freehireItFunction', () => {
 });
 
 describe('isConfirmedNonItTitle', () => {
-  it.each(['Рекрутер', 'Главный бухгалтер', 'Kassierer (m/w/d)', 'Registered Nurse (RN) - Back End Days'])(
-    '%s is confirmed non-IT',
-    (title) => {
-      expect(isConfirmedNonItTitle(title)).toBe(true);
-    },
-  );
+  it.each([
+    'Рекрутер',
+    'Главный бухгалтер',
+    'Kassierer (m/w/d)',
+    'Registered Nurse (RN) - Back End Days',
+  ])('%s is confirmed non-IT', (title) => {
+    expect(isConfirmedNonItTitle(title)).toBe(true);
+  });
 
   it.each([
     'Старший backend-разработчик',

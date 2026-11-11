@@ -22,8 +22,5 @@ export function normalizeTitleKey(title: string): string {
   const withoutBrackets = withoutTail.replace(BRACKETED_TAIL, ' ');
   const withoutRemote = withoutBrackets.replace(REMOTE_MARKERS, ' ');
   const withoutNumbers = withoutRemote.replace(NUMBER_OR_HASH, ' ');
-  return withoutNumbers
-    .toLowerCase()
-    .replace(/\s+/gu, ' ')
-    .trim();
+  return withoutNumbers.toLowerCase().replace(/\s+/gu, ' ').trim();
 }

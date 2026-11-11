@@ -83,7 +83,10 @@ function campaignSpecialistTitles(
     const { functions, levelRank } = rulesParse(role);
     if (levelRank !== 0) continue;
     // «Системный аналитик / Business Analyst» целиком в названии вакансии не встречается.
-    const keys = role.split(/\s*\/\s*/u).map(normalizeTitleKey).filter(Boolean);
+    const keys = role
+      .split(/\s*\/\s*/u)
+      .map(normalizeTitleKey)
+      .filter(Boolean);
     for (const code of functions) {
       if ((floors[code] ?? 0) > 0) titles[code] = [...(titles[code] ?? []), ...keys];
     }

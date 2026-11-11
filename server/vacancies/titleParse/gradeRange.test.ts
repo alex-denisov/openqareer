@@ -24,24 +24,35 @@ describe('gradeRangeOfTitle', () => {
     expect(gradeRangeOfTitle('Middle/Senior Developer')).toEqual({ min: 1, max: 5 });
   });
 
-  it.each(['Frontend Developer', 'Бухгалтер', 'Lead generation specialist', 'Internal auditor', 'Seniority analyst', 'Middle East Sales Manager', 'Middle Office Analyst'])(
-    'без слова грейда диапазона нет: %s',
-    (title) => {
-      expect(gradeRangeOfTitle(title)).toBeNull();
-    },
-  );
+  it.each([
+    'Frontend Developer',
+    'Бухгалтер',
+    'Lead generation specialist',
+    'Internal auditor',
+    'Seniority analyst',
+    'Middle East Sales Manager',
+    'Middle Office Analyst',
+  ])('без слова грейда диапазона нет: %s', (title) => {
+    expect(gradeRangeOfTitle(title)).toBeNull();
+  });
 });
 
 describe('candidateGradeRange', () => {
   it('слово в целевой роли важнее мест работы', () => {
     expect(
-      candidateGradeRange({ targetRoles: ['Senior Frontend Developer'], recentTitles: ['Junior Developer'] }),
+      candidateGradeRange({
+        targetRoles: ['Senior Frontend Developer'],
+        recentTitles: ['Junior Developer'],
+      }),
     ).toEqual({ min: 3, max: 5 });
   });
 
   it('без слова в ролях берёт последние места', () => {
     expect(
-      candidateGradeRange({ targetRoles: ['Frontend Developer'], recentTitles: ['Senior Developer', 'Middle Developer'] }),
+      candidateGradeRange({
+        targetRoles: ['Frontend Developer'],
+        recentTitles: ['Senior Developer', 'Middle Developer'],
+      }),
     ).toEqual({ min: 1, max: 5 });
   });
 
@@ -55,6 +66,8 @@ describe('candidateGradeRange', () => {
   });
 
   it('без слова нигде подбор не сужается', () => {
-    expect(candidateGradeRange({ targetRoles: ['Frontend Developer'], recentTitles: ['Developer'] })).toBeNull();
+    expect(
+      candidateGradeRange({ targetRoles: ['Frontend Developer'], recentTitles: ['Developer'] }),
+    ).toBeNull();
   });
 });

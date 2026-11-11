@@ -54,7 +54,7 @@ export const titleBoundary: Boundary = (text, start, end) => {
 /** wordmatch.Contains: some occurrence of `term` in `text` satisfies `boundary`. */
 export function containsWord(text: string, term: string, boundary: Boundary): boolean {
   if (term === '') return false;
-  for (let from = 0; ; ) {
+  for (let from = 0; ;) {
     const index = text.indexOf(term, from);
     if (index < 0) return false;
     if (boundary(text, index, index + term.length)) return true;

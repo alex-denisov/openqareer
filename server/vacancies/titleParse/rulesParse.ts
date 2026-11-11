@@ -507,11 +507,12 @@ function pickFallbackFunction(normalizedTitle: string): FunctionCode[] {
 }
 
 /**
- * B646-2: только когда наши правила не дали ни одной функции, ИТ-категория словаря
- * freehire (без модели) даёт функцию. Ответ правил, включая `other`, не перекрывается.
+ * B646-2: когда наши правила не дали функции или дали только `other`, ИТ-категория
+ * словаря freehire (без модели) даёт функцию. Конкретный ответ правил не перекрывается.
+ * Выборка 11.11 по замороженным названиям прода: 31 из 32 прочтены верно.
  */
 function withFreehireFallback(title: string, functions: FunctionCode[]): FunctionCode[] {
-  if (functions.length > 0) return functions;
+  if (functions.some((code) => code !== 'other')) return functions;
   const fallback = freehireItFunction(title);
   return fallback ? [fallback] : functions;
 }
@@ -541,7 +542,8 @@ function pickTopFunctions(hits: readonly AnchorHit[]): FunctionCode[] {
  * это служба поддержки и ИТ-отдел (04.11: hh 136956781, 138740300; «начальник отдела ит» — public-service).
  */
 function isGenericServiceTitle(variant: OntologyVariant, key: string, normalized: string): boolean {
-  if ((variant.function as string) !== 'public-service' || ONTOLOGY_VARIANTS.exact.has(key)) return false;
+  if ((variant.function as string) !== 'public-service' || ONTOLOGY_VARIANTS.exact.has(key))
+    return false;
   const functions = pickTopFunctions(findAnchorHits(normalized));
   return functions.includes('support') || functions.includes('it-ops');
 }
@@ -558,7 +560,8 @@ function isPartialCioMatch(variant: OntologyVariant, normalized: string): boolea
 }
 
 /** Начальник отдела руководит им так же, как руководитель отдела: без словаря уровень не назван. */
-const DEPARTMENT_CHIEF = /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
+const DEPARTMENT_CHIEF =
+  /(?<!\p{L})начальник\p{L}*\s+(?:отдела|управления|службы|департамента)(?!\p{L})/iu;
 
 /** `freehireFallback: false` is for offline measurement only (freehireClassify/measure.ts). */
 export function rulesParse(
@@ -570,7 +573,9 @@ export function rulesParse(
   const normalized = ` ${title.toLowerCase()} `;
   if (isChiefInformationTitle(title)) {
     const others = pickTopFunctions(findAnchorHits(normalized)).filter(
-      (code) => code !== 'it-ops' && (code !== 'eng-mgmt' || /\bcto\b|chief tech|технический/iu.test(title)),
+      (code) =>
+        code !== 'it-ops' &&
+        (code !== 'eng-mgmt' || /\bcto\b|chief tech|технический/iu.test(title)),
     );
     return {
       functions: (['it-ops', ...others] as FunctionCode[]).slice(0, 2),

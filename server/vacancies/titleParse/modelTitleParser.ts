@@ -5,7 +5,6 @@ import { ontology } from '../../../shared/roleOntology';
 import { MIGRATION_35 } from '../../data/sqliteSchema';
 import type { BulkLlmClient } from '../../providers/bulkLlmClient';
 import { rulesParse } from './rulesParse';
-import { isConfirmedNonItTitle } from './freehireClassify/classify';
 import { describeFailure, ensureLastFailureColumn } from './titleFreeze';
 import { notExcludedVacancyIdSql } from '../freehire/paidProcessingGate';
 
@@ -278,7 +277,8 @@ export class TitleModelStep {
     const insert = this.database.prepare(
       'INSERT OR IGNORE INTO title_parse_model_queue (title_key, eligible, failures, frozen) VALUES (?, ?, 0, 0)',
     );
-    for (const row of rows) insert.run(row.title_key, modelEligible(row.sample_title) ? 1 : 0);
+    for (const row of rows)
+      insert.run(row.title_key, uncertain(rulesParse(row.sample_title)) ? 1 : 0);
   }
 
   private nextBatch(): TitleModelInput[] {
@@ -420,11 +420,6 @@ export class TitleModelStep {
 
 function uncertain(parsed: { functions: readonly FunctionCode[]; roleId?: string }): boolean {
   return parsed.functions.includes('other') || parsed.functions.length === 2 || !parsed.roleId;
-}
-
-/** B646-2: название, которое словарь freehire подтвердил как не-ИТ, модели не отдаём. */
-function modelEligible(sampleTitle: string): boolean {
-  return uncertain(rulesParse(sampleTitle)) && !isConfirmedNonItTitle(sampleTitle);
 }
 
 function safeJson(text: string): unknown {

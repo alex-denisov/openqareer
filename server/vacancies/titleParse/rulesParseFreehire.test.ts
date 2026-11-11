@@ -17,8 +17,13 @@ describe('rulesParse freehire fallback', () => {
     expect(rulesParse(title).functions).toEqual(functions);
   });
 
-  it('never overrides an answer our rules already gave', () => {
-    expect(rulesParse('IT Analyst').functions).toEqual(['other']);
+  it('replaces a bare other with the freehire IT reading', () => {
+    expect(rulesParse('Analista de Datos Senior').functions).toEqual(['data']);
+    expect(rulesParse('IT Analyst', { freehireFallback: false }).functions).toEqual(['other']);
+    expect(rulesParse('IT Analyst').functions).toEqual(['eng']);
+  });
+
+  it('never overrides a specific answer our rules already gave', () => {
     expect(rulesParse('Engineering Manager').functions).toEqual(['eng-mgmt']);
     expect(rulesParse('Data Loss Prevention Analyst').functions).toEqual(['data']);
   });
@@ -47,7 +52,7 @@ function addVacancy(db: DatabaseSync, id: string, title: string): void {
 }
 
 describe('model queue eligibility (B646-2)', () => {
-  it('queues a confirmed non-IT title as not eligible, an unknown one as eligible', async () => {
+  it('still sends a confirmed non-IT title to the model: audience is all professions', async () => {
     const db = database();
     addVacancy(db, 'cashier', 'Kassierer (m/w/d)');
     addVacancy(db, 'unknown', 'Wibble Specialist');
@@ -62,7 +67,7 @@ describe('model queue eligibility (B646-2)', () => {
 
     await new TitleModelStep(db, parser, { dailyCalls: 10, maxBatches: 1, maxWaitMs: 0 }).run();
 
-    expect(seen).toEqual(['Wibble Specialist']);
+    expect(seen.sort()).toEqual(['Kassierer (m/w/d)', 'Wibble Specialist']);
     const rows = db
       .prepare(
         `SELECT p.sample_title AS title, q.eligible FROM title_parse_model_queue q
@@ -70,7 +75,7 @@ describe('model queue eligibility (B646-2)', () => {
       )
       .all();
     expect(rows).toEqual([
-      { title: 'Kassierer (m/w/d)', eligible: 0 },
+      { title: 'Kassierer (m/w/d)', eligible: 1 },
       { title: 'Wibble Specialist', eligible: 1 },
     ]);
   });

@@ -7,7 +7,7 @@ import { isSeniorManagerLead } from './rulesLevel';
 import { gradeRangeOfTitle } from './gradeRange';
 import { isChiefInformationTitle } from './chiefInformationTitle';
 import { exactOntologyTitleKeys, rulesParse } from './rulesParse';
-import { isConfirmedNonItTitle } from './freehireClassify/classify';
+import { freehireItFunction } from './freehireClassify/classify';
 
 /**
  * Фоновое наполнение смыслового индекса правилами (B267 S2, план §4 фаза 1).
@@ -216,6 +216,7 @@ export class SemanticBackfill {
       .prepare(
         `SELECT title_key, sample_title, functions, level_rank, parsed_by FROM title_parse
          WHERE rowid > ? AND rowid <= ? AND ((parsed_by = 'rules' AND title_key LIKE '%поддержк%')
+           OR (parsed_by = 'rules' AND functions IN ('[]', '["other"]') AND taxonomy_version >= ${TAXONOMY_VERSION})
            OR (parsed_by = 'rules' AND title_key LIKE '%centum vp%')
            OR (parsed_by = 'rules' AND functions LIKE '%public-service%'
              AND (title_key LIKE '% it%' OR title_key LIKE '% ит%'))
@@ -232,11 +233,19 @@ export class SemanticBackfill {
       const chief = isChiefInformationTitle(row.sample_title);
       const service = row.parsed_by === 'rules' && !row.functions.includes('"support"');
       const product = row.parsed_by === 'rules' && row.title_key.includes('centum vp');
-      if (!chief && !service && !product) return [];
+      // B646-2: пустой или `other` разбор правил, который словарь freehire читает как ИТ.
+      // Сначала дешёвый словарь (0,2 мс), полный разбор только на совпадении.
+      const unfiledRow =
+        row.parsed_by === 'rules' && (row.functions === '[]' || row.functions === '["other"]');
+      const unfiled = unfiledRow && freehireItFunction(row.sample_title) !== null;
+      if (unfiledRow && !unfiled && !chief && !product && !row.title_key.includes('поддержк'))
+        return [];
+      if (!chief && !service && !product && !unfiled) return [];
       const parsed = rulesParse(row.sample_title);
       const functions = JSON.stringify(parsed.functions);
       const same = functions === row.functions && parsed.levelRank === row.level_rank;
       const fixed =
+        (unfiled && parsed.functions.some((code) => code !== 'other')) ||
         parsed.functions.includes('support') ||
         (row.functions.includes('public-service') && parsed.functions.includes('it-ops'));
       return (chief || fixed || product) && !same
@@ -543,7 +552,7 @@ export class SemanticBackfill {
           TAXONOMY_VERSION,
           now,
         );
-        enqueueModel.run(key.titleKey, modelQueueFlag(key.parsed, key.title));
+        enqueueModel.run(key.titleKey, isUncertain(key.parsed) ? 1 : 0);
       }
       for (const { row, titleKey, parsed } of resolved) {
         for (const code of parsed.functions) {
@@ -636,11 +645,6 @@ export class SemanticBackfill {
 
 function isUncertain(parsed: ParsedTitle): boolean {
   return parsed.functions.includes('other') || parsed.functions.length === 2 || !parsed.roleId;
-}
-
-/** B646-2: подтверждённое словарём freehire не-ИТ название модели не отдаём. */
-function modelQueueFlag(parsed: ParsedTitle, title: string): 0 | 1 {
-  return isUncertain(parsed) && !isConfirmedNonItTitle(title) ? 1 : 0;
 }
 
 function rulesParseOrOther(title: string): ParsedTitle {

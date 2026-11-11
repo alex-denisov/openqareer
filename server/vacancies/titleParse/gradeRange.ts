@@ -11,7 +11,8 @@ export interface GradeRange {
   readonly max: number;
 }
 
-const word = (pattern: string) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${pattern})(?![\\p{L}\\p{N}])`, 'iu');
+const word = (pattern: string) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])(?:${pattern})(?![\\p{L}\\p{N}])`, 'iu');
 
 const GRADES: readonly { readonly pattern: RegExp; readonly range: GradeRange }[] = [
   {
