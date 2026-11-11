@@ -177,7 +177,7 @@ export function renderInterviewDocument(
     .replace(
       '</head>',
       () =>
-        `<meta name="robots" content="${meta.indexable ? 'index, follow' : 'noindex, follow'}"><script type="application/ld+json">${structured}</script></head>`,
+        `<meta name="robots" content="index, follow"><script type="application/ld+json">${structured}</script></head>`,
     )
     .replace('%%SALARY_CONTENT%%', () => content)
     .replace(

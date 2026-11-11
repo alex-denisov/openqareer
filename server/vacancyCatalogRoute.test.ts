@@ -121,9 +121,9 @@ describe('B209: публичный каталог вакансий', () => {
     expect(second.statusCode).toBe(200);
     expect(second.body).toContain('Страница 2 из 2');
     // Курсор сдвигается с каждой новой вакансией: это ссылка для обхода, а не адрес для индекса.
-    // B615: без canonical — noindex вместе с canonical на первую страницу смешивает сигналы.
-    expect(second.body).not.toContain('rel="canonical"');
-    expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
+    // 11.11: без noindex; canonical ведёт на первую страницу.
+    expect(second.body).toContain('rel="canonical"');
+    expect(second.body).not.toContain('noindex');
   });
 
   it('страница списка за курсором не индексируется, но ведёт дальше к карточкам', async () => {
@@ -147,8 +147,10 @@ describe('B209: публичный каталог вакансий', () => {
       url: `/vacancies/moscow/page/2?after=${after}`,
     });
     expect(second.statusCode).toBe(200);
-    expect(second.body).toContain('<meta name="robots" content="noindex, follow">');
-    expect(second.body).not.toContain('rel="canonical"');
+    expect(second.body).not.toContain('noindex');
+    expect(second.body).toContain(
+      '<link rel="canonical" href="https://openqareer.com/vacancies/moscow">',
+    );
     expect(second.body).toContain('/vacancies/job/');
     expect(second.body).toMatch(/\/vacancies\/moscow\/page\/3\?after=/u);
     // Устаревший курсор отвечает так же, а голый адрес по-прежнему ведёт на первую страницу.
@@ -258,7 +260,10 @@ describe('B209: публичный каталог вакансий', () => {
     });
     expect(remote.statusCode).toBe(200);
     expect(remote.body).toContain('aria-current="true">Удалённо или гибрид</a>');
-    expect(remote.body).toContain('noindex');
+    expect(remote.body).not.toContain('noindex');
+    expect(remote.body).toContain(
+      '<link rel="canonical" href="https://openqareer.com/vacancies/berlin/frontend-developer">',
+    );
     expect(remote.body.match(/class="lv-job"/gu)?.length).toBe(2);
 
     const unknown = await app.inject({
@@ -435,7 +440,7 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     const app = await appWithPool([vacancy(1)]);
     const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
     expect(detail.statusCode).toBe(200);
-    expect(detail.body).toContain('<meta name="robots" content="noindex, follow">');
+    expect(detail.body).not.toContain('noindex');
     expect(detail.body).not.toContain('itemtype="https://schema.org/JobPosting"');
   });
 
@@ -463,7 +468,7 @@ describe('03.11: listings keep their address and index between thresholds', () =
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('Здесь пока мало вакансий');
     expect(response.body).toContain('href="/vacancies/berlin"');
-    expect(robots(response.body)).toBe('noindex, follow');
+    expect(robots(response.body)).toBeUndefined();
   });
 
   it('keeps a once-indexed listing with fewer vacancies than the threshold indexable', async () => {

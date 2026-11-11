@@ -56,7 +56,7 @@ describe('bounded salary SSR', () => {
       'analyst',
     );
     expect(html).not.toContain('</script><script>alert(1)</script>');
-    expect(html).toContain('noindex, follow');
+    expect(html).not.toContain('noindex');
     expect(html).toContain('BreadcrumbList');
     expect(html).not.toContain('"@type":"Occupation"');
     expect(html).toContain('https://openqareer.com/salaries/analyst');
@@ -77,7 +77,7 @@ describe('bounded salary SSR', () => {
     try {
       const found = await app.inject('/salaries/analyst?group=999');
       expect(found.statusCode).toBe(200);
-      expect(found.body).toContain('noindex, follow');
+      expect(found.body).not.toContain('noindex');
       const missing = await app.inject('/salaries/missing');
       expect(missing.statusCode).toBe(404);
       expect(missing.body).toContain('Сравнимой зарплатной выборки пока нет');
@@ -190,7 +190,7 @@ describe('bounded salary SSR', () => {
     expect(indexed).toContain('"@type":"Occupation"');
     expect(indexed).not.toContain('"estimatedSalary"');
     const selected = renderSalaryMarketDocument(template, full, 'analyst', 0, undefined, 'unknown');
-    expect(selected).toContain('content="noindex, follow"');
+    expect(selected).not.toContain('noindex');
     expect(selected).not.toContain('"@type":"Occupation"');
     expect(selected).not.toContain('<dt>P50</dt>');
   });
@@ -253,7 +253,7 @@ describe('bounded salary SSR', () => {
       expect(germany.body).toContain('"@type":"Dataset"');
       withPay = false;
       const thin = await app.inject('/salaries/usa');
-      expect(thin.body).toContain('noindex, follow');
+      expect(thin.body).not.toContain('noindex');
       expect(thin.body).not.toContain('"@type":"Dataset"');
     } finally {
       await app.close();

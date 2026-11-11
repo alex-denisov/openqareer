@@ -137,10 +137,9 @@ function withCursor(
 
 /**
  * A page behind a cursor is a crawl path to the cards, not a page for the index:
- * the cursor moves with every new vacancy and any old one still renders, so each
- * address would be a separate unstable URL (05.11, reverses the self-canonical of
- * #423). `noindex, follow` keeps the links; a redirect would lose them and break a
- * reader's next page. The first page is canonical because the bare /page/N is a 301.
+ * the cursor moves with every new vacancy, so it points its canonical at the
+ * first page (the bare /page/N is a 301) and never enters the sitemap. 11.11:
+ * no noindex on a live page (owner decision).
  */
 function cursorPageView(
   page: CatalogPage,
@@ -433,7 +432,12 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
           (clusterId) => isCardInRollout(deps.config.databasePath, clusterId),
         )
       : null;
-    if (detail) return sendDocument(reply, renderVacancyDocument(detail));
+    // 11.11: the stored path is the one the sitemap and the lists link to; a slug
+    // rebuilt from a since-cleaned title must not point the canonical elsewhere.
+    if (detail) {
+      const entry = { ...detail.entry, path: projected.path };
+      return sendDocument(reply, renderVacancyDocument({ ...detail, entry }));
+    }
     return sendDocument(
       reply,
       renderGoneDocument(buildCatalogPageFromEntries([projected], 1, 1)),

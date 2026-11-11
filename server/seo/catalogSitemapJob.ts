@@ -14,16 +14,11 @@ import { countryCatalogFrom } from '../salaryMarket/countryCatalog';
 import { SEARCH_RESTRICTED_JSON_NEEDLES } from './searchRestrictedSources';
 import { listingPath } from '../../shared/vacancyCatalogRoutes';
 import {
-  CARD_SEEN_WITHIN_DAYS,
   INDEXED_CARD_SUMMARY_MIN,
-  isIndexableListing,
+  SITEMAP_CARD_SEEN_WITHIN_DAYS,
+  listingQualifies,
 } from './catalogIndexing';
-import {
-  listingHistoryKey,
-  readListingHistory,
-  recordListingHistory,
-  type ListingCount,
-} from './catalogListingHistory';
+import { recordListingHistory, type ListingCount } from './catalogListingHistory';
 import { CATALOG_CARD_ROLLOUT_TABLE_SQL } from './catalogCardRollout';
 import { CATALOG_RU_SUMMARY_VERSION } from './catalogRuSummary';
 import { CATALOG_RU_SUMMARIES_TABLE_SQL } from './catalogRuSummaryStore';
@@ -75,7 +70,7 @@ function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
     )
     .all(
       ...SEARCH_RESTRICTED_JSON_NEEDLES,
-      now.getTime() - CARD_SEEN_WITHIN_DAYS * DAY_MS,
+      now.getTime() - SITEMAP_CARD_SEEN_WITHIN_DAYS * DAY_MS,
       INDEXED_CARD_SUMMARY_MIN,
       CATALOG_RU_SUMMARY_VERSION,
     ) as Array<{
@@ -132,10 +127,9 @@ function listingCounts(database: DatabaseSync): ListingRow[] {
 function listings(database: DatabaseSync, now: Date): SitemapUrl[] {
   const counts = listingCounts(database);
   recordListingHistory(database, counts, now);
-  const history = readListingHistory(database);
+  // 11.11: only listings at their threshold; a thin list is not offered to search.
   return counts.flatMap((row) => {
-    const known = history.get(listingHistoryKey(row.place, row.role));
-    if (!isIndexableListing(row.count, row.role !== undefined, known, now)) return [];
+    if (!listingQualifies(row.count, row.role !== undefined)) return [];
     const path = listingPath(row.place, row.role);
     return path ? [{ path, lastmod: row.freshest.slice(0, 10) }] : [];
   });

@@ -98,7 +98,7 @@ export function renderPublicSalaryPage(
   return salaryDocumentHead(template, {
     title: escapeHtml(page.title),
     canonical,
-    robots: page.indexable === false ? 'noindex, follow' : 'index, follow',
+    robots: 'index, follow', // 11.11: thin pages stay out of the sitemap, not noindex
     structured,
     description: page.description,
   })
@@ -271,11 +271,8 @@ export function renderSalaryMarketDocument(
   const canonical = `${SITE_ORIGIN}${path}`;
   const visible = selectSalaryGrade(selectSalaryLocation(snapshot, location), grade);
   const title = escapeHtml(salaryPageTitle(visible ?? snapshot));
-  const robots = (
-    directory ? directory.some((entry) => entry.indexable) : salarySnapshotIndexable(visible)
-  )
-    ? 'index, follow'
-    : 'noindex, follow';
+  // 11.11: a live page carries no noindex; thin pages simply stay out of the sitemap.
+  const robots = 'index, follow';
   const structured = salaryStructuredData(visible, canonical);
   const content = renderToStaticMarkup(
     directory
