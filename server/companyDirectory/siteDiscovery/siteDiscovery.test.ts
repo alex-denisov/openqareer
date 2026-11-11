@@ -82,4 +82,12 @@ describe('B643-4 site discovery writes placements', () => {
       { placement_id: 'site:careers.acme.com', company_key: 'acme', discovered_by: 'site_discovery' },
     ]);
   });
+
+  it('records hh employer pages found on the company site', () => {
+    const db = directory();
+    writeDiscovery(db, { companyKey: 'acme', hhEmployerIds: ['1740'], evidence: {} }, '2026-11-11T00:00:00Z');
+    expect(db.prepare(`SELECT placement_id, type, priority FROM company_placement`).all()).toEqual([
+      { placement_id: 'hh:1740', type: 'aggregator', priority: 4 },
+    ]);
+  });
 });

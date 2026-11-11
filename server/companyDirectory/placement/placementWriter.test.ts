@@ -34,4 +34,14 @@ describe('recordCompanyPlacements', () => {
     db.exec(`UPDATE company_placement SET company_key = NULL`);
     expect(recordCompanyPlacements(db, 'acme', { boards: [{ provider: 'lever', slug: 'x' }], discoveredBy: 'freehire' }, 2)).toBe(1);
   });
+
+  it('records hh employer pages as aggregator placements of the company', () => {
+    const db = new DatabaseSync(':memory:');
+    const written = recordCompanyPlacements(db, 'acme', { boards: [], hhEmployerIds: ['1740'], discoveredBy: 'site_discovery' }, 5);
+    expect(written).toBe(1);
+    expect(rows(db)).toEqual([
+      { placement_id: 'hh:1740', company_key: 'acme', type: 'aggregator', provider: 'hh', slug: '1740', url: 'https://hh.ru/employer/1740', priority: 4, discovered_by: 'site_discovery' },
+    ]);
+    expect(recordCompanyPlacements(db, 'other', { boards: [], hhEmployerIds: ['1740'], discoveredBy: 'site_discovery' }, 6)).toBe(0);
+  });
 });
