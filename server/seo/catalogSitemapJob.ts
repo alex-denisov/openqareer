@@ -60,11 +60,10 @@ function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
           AND last_seen_ms >= ?
           AND (EXISTS (SELECT 1 FROM catalog_card_rollout r
                         WHERE r.cluster_id = catalog_entries.cluster_id)
-               OR (salary_label IS NOT NULL AND salary_label GLOB '*[1-9]*'
-                   AND (length(trim(summary)) >= ?
-                        OR EXISTS (SELECT 1 FROM catalog_ru_summaries s
-                                    WHERE s.cluster_id = catalog_entries.cluster_id
-                                      AND s.status = 'ready' AND s.version = ?))))
+               OR length(trim(summary)) >= ?
+               OR EXISTS (SELECT 1 FROM catalog_ru_summaries s
+                           WHERE s.cluster_id = catalog_entries.cluster_id
+                             AND s.status = 'ready' AND s.version = ?))
           AND trim(company) <> '' AND role_slug IS NOT NULL
         ORDER BY published_ms DESC, entry_key ASC`,
     )

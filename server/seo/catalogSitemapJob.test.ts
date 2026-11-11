@@ -170,10 +170,13 @@ describe('computeCatalogSitemaps', () => {
       NOW,
     );
     const jobs = files.find((file) => file.name === 'jobs-1.xml')!;
-    expect(locs(jobs.xml)).toEqual([
+    // 11.11: salary is no longer a condition; the text is.
+    expect(locs(jobs.xml).sort()).toEqual([
       'https://openqareer.com/vacancies/job/frontend-developer-at-acme-good',
+      'https://openqareer.com/vacancies/job/frontend-developer-at-acme-nosalary',
+      'https://openqareer.com/vacancies/job/frontend-developer-at-acme-zero',
     ]);
-    expect(jobs.urlCount).toBe(1);
+    expect(jobs.urlCount).toBe(3);
   });
 
   it('lists a card without a snippet once it has a Russian summary of the current version (03.11)', () => {

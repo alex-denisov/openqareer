@@ -30,8 +30,11 @@ describe('isIndexableCard', () => {
     expect(isIndexableCard(valuable, NOW)).toBe(true);
   });
 
-  it('drops a card without salary, without employer or without an English role', () => {
-    expect(isIndexableCard({ ...valuable, salaryLabel: undefined }, NOW)).toBe(false);
+  it('11.11: indexes a card with a full text and no salary; drops one without employer or role', () => {
+    expect(isIndexableCard({ ...valuable, salaryLabel: undefined }, NOW)).toBe(true);
+    expect(
+      isIndexableCard({ ...valuable, salaryLabel: undefined, summary: 'Бухгалтер' }, NOW),
+    ).toBe(false);
     expect(isIndexableCard({ ...valuable, company: '  ' }, NOW)).toBe(false);
     expect(isIndexableCard({ ...valuable, title: 'Щебень' }, NOW)).toBe(false);
   });
@@ -73,9 +76,8 @@ describe('isIndexableCard', () => {
     expect(isIndexableCard({ ...valuable, withdrawnAt: daysAgo(-5) }, NOW)).toBe(true);
   });
 
-  it('treats a zero salary as no salary', () => {
-    expect(isIndexableCard({ ...valuable, salaryLabel: '0 $' }, NOW)).toBe(false);
-    expect(isIndexableCard({ ...valuable, salaryLabel: '0 — 0 USD' }, NOW)).toBe(false);
+  it('a zero salary no longer blocks a card with a full text', () => {
+    expect(isIndexableCard({ ...valuable, salaryLabel: '0 $' }, NOW)).toBe(true);
   });
 
   it('treats an unparseable date as not fresh', () => {

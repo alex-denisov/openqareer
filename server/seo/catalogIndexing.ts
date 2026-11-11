@@ -93,11 +93,12 @@ export function hasKnownSalary(label: string | undefined): boolean {
  * more line, not a rewrite.
  */
 const CARD_QUALITY_RULES: ReadonlyArray<(entry: IndexableCardFields) => boolean> = [
+  // 11.11 (owner): salary is not a condition; the card needs its text. 03.11: hh.ru
+  // search rows carry no snippet, but a Russian summary of the loaded text describes the card.
   (entry) =>
     entry.rolloutAdmitted === true ||
-    (hasKnownSalary(entry.salaryLabel) &&
-      // 03.11: hh.ru search rows carry no snippet, but a Russian summary of the loaded text describes the card.
-      (entry.hasRuSummary === true || entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN)),
+    entry.hasRuSummary === true ||
+    entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN,
   (entry) => entry.company.trim().length > 0,
   (entry) => catalogRoleOf(entry) !== null,
 ];
