@@ -5,13 +5,15 @@ import { PLACEMENT_TABLES } from './placementSchema';
  * B643-4 — все подтверждённые размещения компании, а не одно на вид: у
  * справочника один `careers_url` и одна пара ATS, а у компании бывает две-три
  * доски. Размещение, уже принадлежащее другой компании, не переезжает.
- * Приоритеты как в `PLACEMENT_PRIORITY` (сайт 1, ATS 2); модель не импортируется,
+ * Приоритеты как в `PLACEMENT_PRIORITY` (сайт 1, ATS 2, агрегатор 4); модель не импортируется,
  * чтобы не замкнуть цикл через `freehireImport`.
  */
 
 export interface CompanyPlacements {
   readonly boards: readonly { readonly provider: string; readonly slug: string }[];
   readonly siteUrl?: string | null;
+  /** B643: hh employer ids linked from the company's own pages. */
+  readonly hhEmployerIds?: readonly string[];
   readonly discoveredBy: 'freehire' | 'site_discovery';
 }
 
@@ -23,6 +25,9 @@ export function placementSiteHost(url: string | null | undefined): string | null
     return null;
   }
 }
+
+/** B643: one id for an hh employer on hh.ru/kz/uz/by — the employer base is shared. */
+export const hhEmployerPlacementId = (employerId: string): string => `hh:${employerId}`;
 
 /** Возвращает число записанных строк (новых или получивших компанию). */
 export function recordCompanyPlacements(database: DatabaseSync, companyKey: string, found: CompanyPlacements, nowMs: number): number {
@@ -42,6 +47,10 @@ export function recordCompanyPlacements(database: DatabaseSync, companyKey: stri
   if (host) {
     written += Number(upsert.run(`site:${host}`, companyKey, 'employer_site', null, null, found.siteUrl ?? null,
       1, found.discoveredBy, nowMs).changes);
+  }
+  for (const employerId of found.hhEmployerIds ?? []) {
+    written += Number(upsert.run(hhEmployerPlacementId(employerId), companyKey, 'aggregator', 'hh', employerId,
+      `https://hh.ru/employer/${employerId}`, 4, found.discoveredBy, nowMs).changes);
   }
   return written;
 }

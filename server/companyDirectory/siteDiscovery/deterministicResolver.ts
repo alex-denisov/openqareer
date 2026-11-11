@@ -6,6 +6,7 @@
  */
 import { careersPageVerdict } from './careersPageSignal';
 import { boardJobs, boardsFromHtml, type BoardCandidate, type DiscoveredProvider } from './atsBoards';
+import { hhEmployerIds } from './hhEmployerLinks';
 import { absolute, LINKEDIN, page, resolvesPublic, type Discovery, type HostCheck, type PendingCompany } from './siteDiscovery';
 
 const CAREERS_PATHS = ['/careers', '/jobs'] as const;
@@ -102,12 +103,17 @@ export async function resolveCompany(
 ): Promise<Discovery> {
   const evidence: Record<string, unknown> = { siteDiscovery: { value: day, how: 'B643-9 checked without model' } };
   const site = await readSite(company, fetchImpl, day, evidence, hostIsPublic);
-  const linked = boardsFromHtml(`${site.careersHtml ?? ''} ${site.html} ${site.careersUrl ?? ''}`).slice(0, MAX_CANDIDATES);
+  const pages = `${site.careersHtml ?? ''} ${site.html} ${site.careersUrl ?? ''}`;
+  const hh = hhEmployerIds(pages);
+  if (hh.length > 0) evidence.hhEmployer = { value: hh, how: `B643 hh employer link on company pages on ${day}`, confirmed: true };
+  const found = (rest: Omit<Discovery, 'companyKey' | 'careersUrl' | 'hhEmployerIds' | 'evidence'> = {}): Discovery =>
+    ({ companyKey: company.companyKey, careersUrl: site.careersUrl, ...(hh.length > 0 ? { hhEmployerIds: hh } : {}), ...rest, evidence });
+  const linked = boardsFromHtml(pages).slice(0, MAX_CANDIDATES);
   for (const candidate of linked) {
     const jobs = await boardJobs(candidate, fetchImpl);
     if (jobs > 0) {
       evidence.ats = { value: `${candidate.provider}:${candidate.slug}`, how: `B643-9 link on company pages, board API returned ${jobs} jobs on ${day}`, confirmed: true };
-      return { companyKey: company.companyKey, careersUrl: site.careersUrl, board: { ...candidate, jobs }, evidence };
+      return found({ board: { ...candidate, jobs } });
     }
   }
   // Name slugs: every guess is asked; boards at two providers mean the name is not unique enough.
@@ -121,7 +127,7 @@ export async function resolveCompany(
   } else if (answered[0]) {
     const board = answered[0];
     evidence.ats = { value: `${board.provider}:${board.slug}`, how: `B643-9 name slug, board API returned ${board.jobs} jobs on ${day}`, confirmed: false };
-    return { companyKey: company.companyKey, careersUrl: site.careersUrl, board, evidence };
+    return found({ board });
   }
-  return { companyKey: company.companyKey, careersUrl: site.careersUrl, evidence };
+  return found();
 }
