@@ -40,6 +40,7 @@ import {
 import { fetchGenericCorporateVacancies } from './genericCorporateSiteAdapter';
 import type { RenderScriptPage } from './scriptPageRenderer';
 import { fetchBamboohrBoard } from './bamboohrBoardFetch';
+import { fetchPaycomBoard } from './paycomBoardFetch';
 import { fetchFreehireFeed, freehireFeedFor } from './freehire/freehireFeeds';
 
 type HhSearch = (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
@@ -162,20 +163,23 @@ async function fetchJsonApi(
       sourceName: source.name,
     });
   }
-  const xmlProvider = board?.provider;
-  if (xmlProvider === 'personio' || xmlProvider === 'teamtailor') {
-    return fetchXmlAtsBoard(source, url);
+  const textProvider = board?.provider;
+  if (textProvider === 'personio' || textProvider === 'teamtailor') {
+    return fetchTextAtsBoard(source, url, 'application/xml, text/xml');
   }
+  // B646-5: список Paylocity — HTML с window.pageData.Jobs, разбор в atsListingReaders.
+  if (textProvider === 'paylocity') return fetchTextAtsBoard(source, url, 'text/html');
   return readJsonPage(source, { url });
 }
 
-async function fetchXmlAtsBoard(
+async function fetchTextAtsBoard(
   source: VacancySourceConfig,
   url: string,
+  accept: string,
 ): Promise<UnifiedVacancy[]> {
   const body = await withRequestTimeout(JSON_SOURCE_TIMEOUT_MS, async (signal) => {
     const res = await fetch(url, {
-      headers: { ...FETCH_HEADERS, Accept: 'application/xml, text/xml' },
+      headers: { ...FETCH_HEADERS, Accept: accept },
       signal,
     });
     if (!res.ok) throw unreachableError(res);
@@ -345,6 +349,20 @@ async function fetchPagedJsonApi(
 
 /** LinkedIn — гостевой список, свой HTML-разбор и вежливый темп (B218). */
 /** Общий гостевой поиск берёт слоты из того же бюджета, что компании и резолвер (B622). */
+/** B646-5: Paycom листается сам (JWT портала); частичность решает fetchPaycomBoard. */
+async function fetchPaycomSource(
+  source: VacancySourceConfig,
+  board: string,
+  sleep: (ms: number) => Promise<void>,
+): Promise<SourceReading> {
+  const { payload, partial } = await fetchPaycomBoard(board, fetch, sleep);
+  const vacancies = normalizeJsonSource(source.id, payload, {
+    observedAt: new Date().toISOString(),
+    sourceName: source.name,
+  });
+  return { vacancies, partial };
+}
+
 async function fetchLinkedinGuestSource(
   sleep: (ms: number) => Promise<void>,
   budget: LinkedinGuestBudget,
@@ -646,6 +664,8 @@ async function fetchJsonOrCareerSite(
     if (source.id === BAYT_SOURCE_ID) {
       return fetchBaytSource(source, sleep, now, options, deps.fetchWithStealth);
     }
+    const board = parseAtsBoardSourceId(source.id);
+    if (board?.provider === 'paycom') return fetchPaycomSource(source, board.board, sleep);
     if (pagingPlanFor(source.id)) {
       return fetchPagedJsonApi(source, sleep, now, deps.fetchWithStealth);
     }

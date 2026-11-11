@@ -18,6 +18,7 @@ import {
 } from './jobspyAdapters';
 import { type FanCombo, currentFanDemand, fanCombosForSync } from './jobspyFan';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
+import { JOIN_PAGE_SIZE } from './atsListingReaders';
 
 /**
  * Постраничные JSON-площадки (B216).
@@ -716,6 +717,29 @@ const smartrecruiters: PagingPlan = {
   },
 };
 
+/**
+ * B646-5: Join отдаёт по 5 записей (больше — 422) и считает частоту: freehire
+ * (MIT, NOTICE; sources/pacer.go) мерил колено между 2 и 3 запросами в секунду
+ * и держит 1,5. Пауза 1 с даже с джиттером −25 % остаётся под этим темпом.
+ * Конец — `pagination.pageCount`; без него последней считается неполная
+ * страница. Потолок страниц оставляет запрос, и чтение остаётся частичным.
+ */
+const JOIN_SOURCE_PREFIX = 'ats-join-';
+
+const join: PagingPlan = {
+  pagesPerSync: 40,
+  delayMs: 1_000,
+  first: (targetUrl) => ({ url: targetUrl, state: { page: pageOf(targetUrl, 'page') || 1 } }),
+  next: (previous, payload) => {
+    const page = numeric(record(previous.state).page) ?? 1;
+    const pageCount = numeric(record(record(payload).pagination).pageCount);
+    const items = asArray(record(payload).items) ?? [];
+    const more = pageCount === undefined ? items.length >= JOIN_PAGE_SIZE : page < pageCount;
+    if (!more) return null;
+    return { url: withParam(previous.url, 'page', String(page + 1)), state: { page: page + 1 } };
+  },
+};
+
 const PLANS: Readonly<Record<string, PagingPlan>> = {
   'src-themuse': themuse,
   'src-himalayas-api': himalayas,
@@ -736,6 +760,7 @@ const PLANS: Readonly<Record<string, PagingPlan>> = {
 export function pagingPlanFor(sourceId: string): PagingPlan | null {
   if (sourceId.startsWith(WORKDAY_SOURCE_PREFIX)) return workday;
   if (sourceId.startsWith(SMARTRECRUITERS_SOURCE_PREFIX)) return smartrecruiters;
+  if (sourceId.startsWith(JOIN_SOURCE_PREFIX)) return join;
   return PLANS[sourceId] ?? null;
 }
 

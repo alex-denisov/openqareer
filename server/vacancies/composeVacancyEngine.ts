@@ -1,3 +1,4 @@
+import { readRolloutPlacementBoards } from './placementBoardRollout';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { readLinkedinPoolJobs } from './linkedinPoolSource';
@@ -89,7 +90,10 @@ export function registryWithCompanyChannels(databasePath: string): RegisteredVac
   try {
     const database = new DatabaseSync(databasePath, { readOnly: true });
     try {
-      companies = readDirectoryCompanies(database);
+      companies = [
+        ...readDirectoryCompanies(database),
+        ...readRolloutPlacementBoards(database, Date.now()),
+      ];
     } finally {
       database.close();
     }

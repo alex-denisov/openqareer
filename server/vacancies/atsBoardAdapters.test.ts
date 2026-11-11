@@ -80,6 +80,8 @@ describe('ats board source id', () => {
       'personio',
       'bamboohr',
       'teamtailor',
+      'paylocity',
+      'join',
     ]);
   });
 });
