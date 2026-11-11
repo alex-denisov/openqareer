@@ -8,7 +8,7 @@ import {
   type IncomingMessage,
 } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
-import type { LookupFunction } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
 import { promisify } from 'node:util';
 import { brotliDecompress, gunzip, inflate } from 'node:zlib';
 import { isPublicAddress as defaultIsPublicAddress } from '../connectors/publicHost';
@@ -112,6 +112,7 @@ async function decode(body: Buffer, encoding: string | undefined): Promise<Buffe
 
 interface SendSettings {
   readonly lookup: LookupFunction;
+  readonly isPublicAddress: (address: string) => boolean;
   readonly timeoutMs: number;
   readonly maxBodyBytes: number;
   readonly agentFor: (protocol: string) => Agent | false;
@@ -147,6 +148,10 @@ function sendPinned(request: PinnedRequest, settings: SendSettings): Promise<Pin
     const send =
       url.protocol === 'https:' ? httpsRequest : url.protocol === 'http:' ? httpRequest : undefined;
     if (!send) return reject(new Error('unsupported_protocol'));
+    // Для IP-литерала Node не зовёт lookup — адрес проверяется здесь.
+    const literal = url.hostname.replace(/^\[|\]$/g, '');
+    if (isIP(literal) !== 0 && !settings.isPublicAddress(literal))
+      return reject(new Error('private_address'));
     // lookup идёт в каждое новое соединение, в том числе созданное агентом сессии.
     const outgoing = send(url, {
       method: request.method,
@@ -166,11 +171,10 @@ function sendPinned(request: PinnedRequest, settings: SendSettings): Promise<Pin
 }
 
 function baseSettings(options: PinnedFetchOptions) {
+  const isPublicAddress = options.isPublicAddress ?? defaultIsPublicAddress;
   return {
-    lookup: pinnedLookup(
-      options.resolve ?? defaultResolve,
-      options.isPublicAddress ?? defaultIsPublicAddress,
-    ),
+    lookup: pinnedLookup(options.resolve ?? defaultResolve, isPublicAddress),
+    isPublicAddress,
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     maxBodyBytes: options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
   };

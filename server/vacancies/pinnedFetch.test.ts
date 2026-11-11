@@ -29,6 +29,26 @@ afterEach(async () => {
 const to127: ResolveAll = async () => [{ address: '127.0.0.1', family: 4 }];
 
 describe('createPinnedFetch (B643, DNS rebinding)', () => {
+  it('IP-литерал частного адреса отклоняется без соединения (Node не зовёт lookup для IP)', async () => {
+    const port = await listen((_req, res) => res.end('secret'));
+    const fetchPinned = createPinnedFetch();
+    for (const host of ['127.0.0.1', '[::1]', '10.0.0.1', '169.254.169.254']) {
+      const url = host === '127.0.0.1' || host === '[::1]' ? `http://${host}:${port}/` : `http://${host}/`;
+      await expect(fetchPinned({ url, method: 'GET', headers: {} }), host).rejects.toThrow(/private_address/);
+    }
+    expect(hits).toBe(0);
+  });
+
+  it('сессия тоже отклоняет IP-литерал частного адреса', async () => {
+    const port = await listen((_req, res) => res.end('secret'));
+    const session = createPinnedSession();
+    await expect(
+      session.fetch({ url: `http://127.0.0.1:${port}/`, method: 'GET', headers: {} }),
+    ).rejects.toThrow(/private_address/);
+    session.close();
+    expect(hits).toBe(0);
+  });
+
   it('lookup вернул 127.0.0.1 — соединение отклонено, сервер запроса не видит', async () => {
     const port = await listen((_req, res) => res.end('secret'));
     const fetchPinned = createPinnedFetch({ resolve: to127 });
