@@ -9,12 +9,14 @@ import {
   boardCheck,
   boardFromJobUrl,
   cleanWebsite,
-  hostRoot,
   importCompany,
+  isAggregator,
+  nameKey,
   loadDirectoryIndex,
   type BoardCheck,
   type DirectoryIndex,
 } from './freehireImport';
+import { recordCompanyPlacements } from '../placement/placementWriter';
 import { FreehirePagesClient, FreehirePagesLimitError } from './freehirePagesClient';
 import type { FreehirePageCard } from './freehirePages';
 
@@ -82,26 +84,53 @@ function savePagesState(database: DatabaseSync, state: PagesState, now: Date): v
     .run(JSON.stringify(state), now.toISOString());
 }
 
+const NOT_A_NAME_LABEL =
+  /^(www|jobs?|careers?|apply|join|work|talent|recruiting|hr|en|us|uk|global|com|net|org|co|io)$/;
+const compact = (value: string): string => nameKey(value).replace(/-/g, '');
+
+/** A host label that is the company's own name: amazon.jobs, careers.acme.com. */
+function hostIsCompany(hostname: string, card: FreehirePageCard): boolean {
+  const names = [compact(card.name), compact(card.slug)].filter((n) => n.length >= 4);
+  const labels = hostname
+    .toLowerCase()
+    .split('.')
+    .slice(0, -1)
+    .map((l) => l.replace(/[^a-z0-9]/g, ''));
+  return labels.some(
+    (label) =>
+      label.length >= 4 &&
+      !NOT_A_NAME_LABEL.test(label) &&
+      names.some((name) => name.startsWith(label) || label.startsWith(name)),
+  );
+}
+
+export interface EmployerJobSite {
+  /** Origin of the employer's own jobs domain. */
+  readonly origin: string;
+  /** Careers section: the jobs host, or `/<first path segment>` on the main site. */
+  readonly careers: string;
+}
+
 /**
- * Careers section on the company's own domain from a job link that is not an ATS
- * board: `careers.acme.com/...` → its origin, `acme.com/careers/123` → `/careers`.
+ * B645: an Apply link that is neither an ATS board nor an aggregator but the
+ * employer's own domain (amazon.jobs, careers.acme.com, acme.com/careers/12).
  */
-export function careersOnCompanySite(
-  card: FreehirePageCard,
-  website: string | null,
-): string | null {
-  const root = hostRoot(website);
-  if (!root) return null;
+export function employerJobSite(card: FreehirePageCard): EmployerJobSite | null {
   for (const job of card.jobs) {
-    if (boardFromJobUrl(job.url)) continue;
+    if (boardFromJobUrl(job.url) || isAggregator(job.url)) continue;
     try {
       const url = new URL(job.url);
       if (url.protocol !== 'https:' && url.protocol !== 'http:') continue;
-      if (hostRoot(url.origin) !== root) continue;
+      if (!cleanWebsite(url.origin) || !hostIsCompany(url.hostname, card)) continue;
       const first = url.pathname.split('/').filter(Boolean)[0];
-      const siteHost = new URL(website!).hostname.replace(/^www\./, '');
-      if (url.hostname.replace(/^www\./, '') !== siteHost || !first) return `${url.origin}/`;
-      return `${url.origin}/${first}`;
+      const onMainSite =
+        /^(www\.)?[^.]+\.[^.]+$/.test(url.hostname) &&
+        first &&
+        /job|career|vacanc|karriere|stellen|empleo|emploi/i.test(first);
+      return {
+        origin: `${url.origin}/`,
+        careers: onMainSite ? `${url.origin}/${first}` : `${url.origin}/`,
+      };
     } catch {
       continue;
     }
@@ -233,12 +262,23 @@ async function writeCards(
       state = { ...state, failed: state.failed + 1 };
       continue;
     }
-    const outcome = card ? await importCompany(database, index, card, check, now) : null;
+    const jobSite = card ? employerJobSite(card) : null;
+    // No site on the page: the employer's own jobs domain stands in for it.
+    const withSite =
+      card && !cleanWebsite(card.website) && jobSite ? { ...card, website: jobSite.origin } : card;
+    const outcome = withSite ? await importCompany(database, index, withSite, check, now) : null;
     if (!card || !outcome) {
       state = { ...state, skipped: state.skipped + 1 };
       continue;
     }
-    const careers = careersOnCompanySite(card, cleanWebsite(card.website));
+    if (jobSite)
+      recordCompanyPlacements(
+        database,
+        outcome.companyKey,
+        { boards: [], siteUrl: jobSite.origin, discoveredBy: 'freehire' },
+        now.getTime(),
+      );
+    const careers = jobSite?.careers ?? null;
     const extras = writePageExtras(database, outcome.companyKey, card, careers, now.toISOString());
     state = {
       ...state,

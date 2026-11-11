@@ -56,7 +56,11 @@ export class LinkedinOrgStore {
     db.exec(MIGRATION);
   }
 
-  /** Следующая строка без ID: новые — первыми, затем просроченные повторы. */
+  /**
+   * Следующая строка без ID: новые — первыми, затем просроченные повторы.
+   * B645: только строки со ссылкой LinkedIn или сайтом (по нему резолвер ищет LinkedIn);
+   * ~500 тыс. компаний freehire без того и другого в очередь не идут.
+   */
   nextDue(now: Date): QueueRow | undefined {
     const iso = now.toISOString();
     const row = this.db
@@ -65,6 +69,7 @@ export class LinkedinOrgStore {
          FROM company_directory d
          LEFT JOIN ${RESOLUTION_TABLE} r ON r.company_key = d.company_key
          WHERE (d.linkedin_org_id IS NULL OR d.linkedin_org_id = '')
+           AND ((d.linkedin_url IS NOT NULL AND d.linkedin_url <> '') OR (d.website_url IS NOT NULL AND d.website_url <> ''))
            AND (r.company_key IS NULL OR r.retry_at IS NULL OR r.retry_at <= ?)
          ORDER BY (r.company_key IS NOT NULL), r.retry_at, d.company_key
          LIMIT 1`,
