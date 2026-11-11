@@ -118,6 +118,8 @@ export interface VacancyCluster {
   salary?: VacancySalary;
   /** Формат работы, посчитанный до обрезки выжимки страницей подборки (B446-g4). */
   workFormat?: import('../../shared/vacancyWorkFormat').VacancyWorkFormat;
+  /** Тип занятости из названия и выжимки до обрезки (B646-7); нет — чипа нет. */
+  employmentKind?: import('../../shared/vacancyEmploymentKind').VacancyEmploymentKind;
   descriptionSummary: string;
   /** Отпечаток «название + полный текст» основателя: тот же текст сводится при другом работодателе. */
   textKey?: string;

@@ -1245,3 +1245,9 @@
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }
+
+/* B646-7: чип занятости под гео-подписью строки, рядом с форматом работы. */
+.vacancies-employment-chip {
+  align-self: flex-start;
+  font-size: var(--career-text-xs);
+}

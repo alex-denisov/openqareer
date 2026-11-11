@@ -1,3 +1,4 @@
+import { employmentKindLabel } from '../../../shared/vacancyEmploymentKind';
 import { vacancyRemoteLabel } from './vacancyRemoteLabel';
 import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
 import { useState, type FormEvent } from 'react';
@@ -193,7 +194,12 @@ function VacancyDetailHeader({
           <span>{trust.reasons.join(' · ')}</span>
         </div>
       ) : null}
-      <VacancyDetailMetaRow explanation={explanation} age={age} source={source} />
+      <VacancyDetailMetaRow
+        explanation={explanation}
+        age={age}
+        source={source}
+        employment={employmentKindLabel(cluster.employmentKind)}
+      />
     </>
   );
 }
@@ -302,14 +308,17 @@ function VacancyDetailMetaRow({
   explanation,
   age,
   source,
+  employment,
 }: {
   readonly explanation: MatchedVacancyItem['explanation'];
   readonly age: ReturnType<typeof vacancyAge>;
   readonly source?: string;
+  readonly employment?: string;
 }) {
   return (
     <div className="vacancies-detail-meta-row">
       <VacancyLevelChip match={explanation.levelMatch} />
+      {employment ? <span className="vacancies-chip">Занятость: {employment}</span> : null}
       <span className="vacancies-chip vacancies-chip-success">
         {age.days === 0 ? 'Сегодня в базе' : `${age.label} в базе`}
       </span>

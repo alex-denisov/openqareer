@@ -146,6 +146,7 @@ interface VacancyCluster {
   remoteScope?: string;
   /** B446-g4: формат работы с сервера; без него — разбор места и выжимки. */
   workFormat?: import('../../../shared/vacancyWorkFormat').VacancyWorkFormat;
+  employmentKind?: import('../../../shared/vacancyEmploymentKind').VacancyEmploymentKind;
   salary?: {
     from?: number;
     to?: number;
