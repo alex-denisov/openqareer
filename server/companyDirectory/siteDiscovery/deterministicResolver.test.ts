@@ -43,7 +43,7 @@ describe('B643-9 deterministic resolver', () => {
   });
 
   it('takes hh employer pages linked from the home and careers pages', async () => {
-    const careers = `<html>${'x'.repeat(600)}<a href="https://hh.kz/employer/3529">hh.kz</a></html>`;
+    const careers = `<html><title>Careers</title>${'x'.repeat(600)}<a href="https://hh.kz/employer/3529">hh.kz</a></html>`;
     const found = await resolveCompany(company('Acme', 'https://acme.com/'), fakeFetch({
       'https://acme.com/': [200, '<a href="https://hh.ru/employer/1740">hh</a>'],
       'https://acme.com/careers': [200, careers],
