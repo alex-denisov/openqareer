@@ -323,21 +323,22 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   }
 
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
+    // Как в SQLite: пустой или неполный реестр значит «источники не
+    // загрузились», а не «всё чужое»; по возрасту чистим всегда.
+    const dropUnknown =
+      knownSourceIds.length > 0 && knownSourceIds.length >= this.states.size * 0.98;
     const known = new Set(knownSourceIds);
     for (const [id, row] of this.rows) {
       if (
         (freshnessAnchorMs(row.vacancy) ?? 0) < Date.parse(oldestPublishedAt) ||
         notSeenTooLong(row.vacancy) ||
-        !known.has(row.sourceId)
+        (dropUnknown && !known.has(row.sourceId))
       ) {
         this.rows.delete(id);
       }
     }
     for (const sourceId of this.states.keys()) {
-      if (!known.has(sourceId)) this.states.delete(sourceId);
-    }
-    if (knownSourceIds.length === 0) {
-      this.clusters.clear();
+      if (dropUnknown && !known.has(sourceId)) this.states.delete(sourceId);
     }
   }
 
