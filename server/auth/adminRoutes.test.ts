@@ -12,6 +12,8 @@ import { AuthService } from './authService';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import type { CandidateFootprintAudit } from '../../shared/candidateFootprint';
+import { PLACEMENT_TABLES } from '../companyDirectory/placement/placementSchema';
+import { VACANCY_POOL_INDEX_TABLE } from '../data/sqliteSchema';
 import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 
 /**
@@ -806,5 +808,66 @@ describe('POST /api/v1/admin/users (admin-created account)', () => {
       payload: { ...payload, password: '1' },
     });
     expect(response.statusCode).toBe(422);
+  });
+});
+
+describe('GET /api/v1/admin/directory/coverage (B643-10)', () => {
+  it('serves totals and a paged list to the admin only', async () => {
+    const app = await createApp();
+    const databasePath = resources[resources.length - 1].directory + '/app.db';
+    const db = new DatabaseSync(databasePath);
+    db.exec(PLACEMENT_TABLES);
+    db.exec(VACANCY_POOL_INDEX_TABLE);
+    db.exec(
+      `INSERT INTO company_directory (company_key, company_name, source_type, status, created_at, updated_at)
+       VALUES ('acme', 'Acme', 'seed', 'active', 'x', 'x'), ('zed', 'Zed', 'seed', 'active', 'x', 'x')`,
+    );
+    db.exec(
+      `INSERT INTO company_placement (placement_id, company_key, type, priority, source_id, discovered_by, updated_at)
+       VALUES ('ats:g:acme', 'acme', 'ats', 2, 'ats-g-acme', 'test', 1)`,
+    );
+    db.close();
+
+    const anonymous = await app.inject({ method: 'GET', url: '/api/v1/admin/directory/coverage' });
+    expect(anonymous.statusCode).toBe(401);
+    const candidate = await signIn(app, CANDIDATE);
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/directory/coverage/companies',
+      headers: { cookie: candidate },
+    });
+    expect(denied.statusCode).toBe(403);
+
+    const cookie = await signIn(app, ADMIN);
+    const totals = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/directory/coverage',
+      headers: { cookie },
+    });
+    expect(totals.statusCode).toBe(200);
+    // The directory seeds itself, so only the seeded ATS company is pinned.
+    expect(totals.json().data.classes.ats.companies).toBeGreaterThanOrEqual(1);
+    expect(Object.keys(totals.json().data.classes)).toHaveLength(5);
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/directory/coverage/companies?class=ats&limit=10',
+      headers: { cookie },
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data.items).toMatchObject([
+      { companyKey: 'acme', class: 'ats', placements: [{ type: 'ats', id: 'ats:g:acme' }] },
+    ]);
+    const bad = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/directory/coverage/companies?limit=101',
+      headers: { cookie },
+    });
+    expect(bad.statusCode).toBe(422);
+    const badCursor = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/directory/coverage/companies?cursor=%25%25',
+      headers: { cookie },
+    });
+    expect(badCursor.statusCode).toBe(400);
   });
 });

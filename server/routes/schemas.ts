@@ -362,6 +362,12 @@ export const adminVacancyQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+export const adminCoverageQuerySchema = z.object({
+  class: z.enum(['site', 'ats', 'linkedin_only', 'aggregator_only', 'none']).optional(),
+  cursor: z.string().min(1).max(500).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+
 export const adminVacancySourceTestSchema = z.object({
   query: z.string().max(100).optional(),
 });

@@ -430,5 +430,9 @@ describe('admin access control', () => {
     });
     expect(directory.statusCode).toBe(403);
     expect(directory.body).not.toContain('unassigned@example.com');
+    for (const url of ['/api/v1/admin/directory/coverage', '/api/v1/admin/directory/coverage/companies']) {
+      const coverage = await app.inject({ method: 'GET', url, headers: { cookie: partnerCookie } });
+      expect(coverage.statusCode, url).toBe(403);
+    }
   }, 20_000);
 });
