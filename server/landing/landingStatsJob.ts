@@ -14,6 +14,8 @@ import {
   type LandingStats,
   type LandingVacancy,
 } from '../../shared/landingStats';
+import { isNamedEmployer } from '../../shared/employerLabel';
+import { type FeedPlaceRow, landingFeedMeta, readLandingReach } from './landingReach';
 
 export const LANDING_STATS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS landing_stats (
   id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -164,29 +166,10 @@ function catalogTotal(database: DatabaseSync): number | undefined {
   return row ? Number(row.catalog_total) : undefined;
 }
 
-interface CatalogFeedRow {
+interface CatalogFeedRow extends FeedPlaceRow {
   title: string;
   path: string;
   salary_label: string | null;
-  place_label: string | null;
-  location: string | null;
-  is_remote: number;
-  source_name: string | null;
-  published_at: string;
-}
-
-/** «26.10» from an ISO timestamp; empty when it does not parse. */
-function shortDate(iso: string): string {
-  const match = /^\d{4}-(\d{2})-(\d{2})/u.exec(iso);
-  return match ? `${match[2]}.${match[1]}` : '';
-}
-
-function feedMeta(row: CatalogFeedRow): string {
-  const place = row.is_remote === 1 ? 'Удалённо' : (row.place_label ?? row.location ?? '');
-  return [place, row.source_name ?? '', shortDate(row.published_at)]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(' · ');
 }
 
 /**
@@ -200,7 +183,7 @@ export function readLandingFeed(database: DatabaseSync): LandingFeedRow[] {
   if (!exists) return [];
   const rows = database
     .prepare(
-      `SELECT title, path, salary_label, place_label, location, is_remote, source_name, published_at
+      `SELECT title, path, salary_label, place_label, location, is_remote, company
        FROM catalog_entries
        WHERE status = 'active' AND salary_label IS NOT NULL AND salary_label != ''
        ORDER BY published_ms DESC LIMIT ?`,
@@ -213,10 +196,29 @@ export function readLandingFeed(database: DatabaseSync): LandingFeedRow[] {
     const title = cleanLandingTitle(row.title);
     if (!isLandingTitle(title) || titles.has(title.toLowerCase())) continue;
     if (!row.path.startsWith('/vacancies/job/') || !row.salary_label) continue;
+    if (!row.company || !isNamedEmployer(row.company)) continue; // B648: the row names the employer
     titles.add(title.toLowerCase());
-    feed.push({ title, salary: row.salary_label, meta: feedMeta(row), href: row.path });
+    feed.push({ title, salary: row.salary_label, meta: landingFeedMeta(row), href: row.path });
   }
   return feed;
+}
+
+/** Russian and international vacancies alternate, so both audiences see their market. */
+function alternateRows(
+  abroad: readonly LandingVacancy[],
+  russian: readonly LandingVacancy[],
+): LandingVacancy[] {
+  const vacancies: LandingVacancy[] = [];
+  for (
+    let index = 0;
+    vacancies.length < LANDING_VACANCY_ROWS && index < LANDING_VACANCY_ROWS;
+    index += 1
+  ) {
+    for (const row of [abroad[index], russian[index]]) {
+      if (row && vacancies.length < LANDING_VACANCY_ROWS) vacancies.push(row);
+    }
+  }
+  return vacancies;
 }
 
 export function computeLandingStats(database: DatabaseSync, now: Date): LandingStats {
@@ -252,16 +254,7 @@ export function computeLandingStats(database: DatabaseSync, now: Date): LandingS
   // Russian and international vacancies alternate, so both audiences see their market.
   const russian = pickLandingVacancies(load(recent(true)));
   const abroad = pickLandingVacancies(load(recent(false)));
-  const vacancies: LandingVacancy[] = [];
-  for (
-    let index = 0;
-    vacancies.length < LANDING_VACANCY_ROWS && index < LANDING_VACANCY_ROWS;
-    index += 1
-  ) {
-    for (const row of [abroad[index], russian[index]]) {
-      if (row && vacancies.length < LANDING_VACANCY_ROWS) vacancies.push(row);
-    }
-  }
+  const vacancies = alternateRows(abroad, russian);
   return {
     activeCount: catalogTotal(database) ?? Number(counts.active),
     sourceCount: Number(counts.sources),
@@ -269,6 +262,7 @@ export function computeLandingStats(database: DatabaseSync, now: Date): LandingS
     updatedAt: now.toISOString().slice(0, 10),
     vacancies,
     feed: readLandingFeed(database),
+    reach: readLandingReach(database, now),
   };
 }
 

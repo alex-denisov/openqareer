@@ -12,10 +12,11 @@ import {
 } from '@phosphor-icons/react';
 import type { AuthUser } from '../coach/coachApi';
 import {
-  LANDING_NAMED_SOURCES,
   LANDING_STATS_SCRIPT_ID,
   LANDING_STATS_SNAPSHOT,
+  LANDING_REACH_CHIPS,
   LANDING_TOKENS,
+  landingReachChips,
   formatPoolCount,
   formatPoolDate,
   landingFeed,
@@ -68,9 +69,9 @@ function counts(stats: LandingStats) {
   const tokens = stats.activeCount < 0;
   return {
     active: tokens ? LANDING_TOKENS.active : formatPoolCount(stats.activeCount),
-    more: tokens
-      ? LANDING_TOKENS.sourcesMore
-      : String(Math.max(stats.sourceCount - LANDING_NAMED_SOURCES, 0)),
+    reach: tokens
+      ? Array.from({ length: LANDING_REACH_CHIPS }, (_, index) => LANDING_TOKENS.reach(index))
+      : landingReachChips(stats),
     date: tokens ? LANDING_TOKENS.date : formatPoolDate(stats.updatedAt),
     json: tokens ? LANDING_TOKENS.json : JSON.stringify(stats).replace(/</gu, '\\u003c'),
   };
@@ -172,7 +173,7 @@ function Hero({ stats, onNavigate, appVersion }: HeroProps) {
           </div>
           <Count active={c.active} date={c.date} />
         </div>
-        <LandingFeed pool={pool} more={c.more} />
+        <LandingFeed pool={pool} reach={c.reach} />
       </div>
       <script
         type="application/json"
@@ -311,13 +312,7 @@ function Faq() {
   );
 }
 
-function End({
-  onNavigate,
-  appVersion,
-}: {
-  onNavigate: Navigate;
-  appVersion: string | null;
-}) {
+function End({ onNavigate, appVersion }: { onNavigate: Navigate; appVersion: string | null }) {
   return (
     <section className="scr end" aria-labelledby="end-heading">
       <div className="wrap">

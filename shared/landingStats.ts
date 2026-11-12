@@ -7,8 +7,9 @@
  * date (DESIGN.md: no number without source and date). The same snapshot is
  * embedded as JSON for the client, so hydration renders identical text.
  *
- * Featured rows never carry a company name (owner decision 20.10: may be stale
- * and sensitive) and only ever include vacancies with a stated salary.
+ * Featured rows only ever include vacancies with a stated salary. The feed
+ * names the employer (B648: the owner lifted the 20.10 «no company» rule on
+ * 12.11); the older `vacancies` rows still carry none.
  */
 export interface LandingVacancy {
   readonly title: string;
@@ -20,10 +21,20 @@ export interface LandingVacancy {
 export interface LandingFeedRow {
   readonly title: string;
   readonly salary: string;
-  /** «Москва · hh.ru · 26.10». */
+  /** «Удалённо · США · GitLab», «Офис · Москва · Сбер» (B648). */
   readonly meta: string;
   /** Path of the public card, `/vacancies/job/<slug>`. */
   readonly href: string;
+}
+
+/** B648: the reach the feed's head shows instead of the aggregators. */
+export interface LandingReach {
+  /** Distinct employers of the active catalog. */
+  readonly companies: number;
+  /** Active ATS boards and employer career sites. */
+  readonly careerSites: number;
+  /** Catalog cards published in the last 24 hours. */
+  readonly newToday: number;
 }
 
 export interface LandingStats {
@@ -35,14 +46,14 @@ export interface LandingStats {
   readonly vacancies: readonly LandingVacancy[];
   /** Newest salaried cards of the open catalog; absent until the next reading. */
   readonly feed?: readonly LandingFeedRow[];
+  /** Absent until the next reading; the snapshot's reach is shown meanwhile. */
+  readonly reach?: LandingReach;
 }
 
 export const LANDING_VACANCY_ROWS = 7;
 /** Rows the feed paints in HTML; the ticker takes the rest from the JSON. */
 export const LANDING_FEED_SHOWN = 5;
 export const LANDING_FEED_ROWS = 12;
-/** Sources the hero names one by one: hh.ru, LinkedIn, Telegram, company sites. */
-export const LANDING_NAMED_SOURCES = 4;
 export { LANDING_STATS_SCRIPT_ID } from './landingStatsScriptId';
 
 /**
@@ -55,6 +66,8 @@ export const LANDING_STATS_SNAPSHOT: LandingStats = {
   sourceCount: 324,
   remoteCount: 155_319,
   updatedAt: '2026-10-26',
+  // Prod reading of 2026-11-12 (B648, owner-approved mockup).
+  reach: { companies: 67_726, careerSites: 13_514, newToday: 5_976 },
   vacancies: [
     { title: 'Manager II, Developer Advocacy', salary: '$212–265 тыс. в год', country: 'США' },
     {
@@ -99,15 +112,46 @@ export const LANDING_TOKENS = {
   active: '%%OQ_ACTIVE%%',
   sources: '%%OQ_SOURCES%%',
   sourcesWord: '%%OQ_SOURCES_WORD%%',
-  /** Sources beyond the four named in the hero. */
-  sourcesMore: '%%OQ_SOURCES_MORE%%',
   remote: '%%OQ_REMOTE%%',
+  /** The three reach chips over the feed (B648). */
+  reach: (index: number) => `%%OQ_REACH_${index}%%`,
   date: '%%OQ_DATE%%',
   json: '%%OQ_STATS_JSON%%',
   vacancy: (index: number, field: keyof LandingVacancy) =>
     `%%OQ_V${index}_${field.toUpperCase()}%%`,
   feed: (index: number, field: keyof LandingFeedRow) => `%%OQ_F${index}_${field.toUpperCase()}%%`,
 } as const;
+
+export const LANDING_REACH_CHIPS = 3;
+
+function plural(value: number, one: string, few: string, many: string): string {
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+/** 67 726 → «67 тыс.», 5 976 → «5,9 тыс.», 320 → «320»; rounded down, never up. */
+function reachCount(value: number): string {
+  if (value >= 1_000 && value < 10_000) {
+    return `${(Math.floor(value / 100) / 10).toLocaleString('ru-RU')} тыс.`;
+  }
+  return formatPoolCount(value);
+}
+
+/** «67 тыс. компаний», «13 тыс. карьерных сайтов», «+5,9 тыс. за сутки». */
+export function landingReachChips(stats: LandingStats): readonly string[] {
+  const reach = stats.reach ?? LANDING_STATS_SNAPSHOT.reach;
+  if (!reach) return [];
+  const word = (value: number, one: string, few: string, many: string) =>
+    value >= 1_000 ? many : plural(value, one, few, many);
+  return [
+    `${reachCount(reach.companies)} ${word(reach.companies, 'компания', 'компании', 'компаний')}`,
+    `${reachCount(reach.careerSites)} ${word(reach.careerSites, 'карьерный сайт', 'карьерных сайта', 'карьерных сайтов')}`,
+    `+${reachCount(reach.newToday)} за сутки`,
+  ];
+}
 
 /** Catalog rows for the feed; before the first reading, the salaried rows with a link to the catalog. */
 export function landingFeed(stats: LandingStats): readonly LandingFeedRow[] {
@@ -162,8 +206,6 @@ export function applyLandingStats(html: string, stats: LandingStats): string {
     .join(escapeHtml(formatPoolCount(stats.activeCount)))
     .split(LANDING_TOKENS.sourcesWord)
     .join(sourcesWord(stats.sourceCount))
-    .split(LANDING_TOKENS.sourcesMore)
-    .join(String(Math.max(stats.sourceCount - LANDING_NAMED_SOURCES, 0)))
     .split(LANDING_TOKENS.sources)
     .join(String(stats.sourceCount))
     .split(LANDING_TOKENS.remote)
@@ -177,6 +219,10 @@ export function applyLandingStats(html: string, stats: LandingStats): string {
     for (const field of ['title', 'salary', 'country'] as const) {
       out = out.split(LANDING_TOKENS.vacancy(index, field)).join(escapeHtml(row?.[field] ?? ''));
     }
+  }
+  const chips = landingReachChips(stats);
+  for (let index = 0; index < LANDING_REACH_CHIPS; index += 1) {
+    out = out.split(LANDING_TOKENS.reach(index)).join(escapeHtml(chips[index] ?? ''));
   }
   const feed = landingFeed(stats);
   for (let index = 0; index < LANDING_FEED_SHOWN; index += 1) {
