@@ -147,6 +147,14 @@ async function expectNoSideScroll(page: Page): Promise<void> {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
+/** Меню «Разделы» стоит у заголовка экрана, а не посреди высокой страницы. */
+async function expectMenuAtHeader(page: Page): Promise<void> {
+  const nav = await page.getByRole('navigation', { name: 'Разделы администратора' }).boundingBox();
+  const head = await page.getByRole('heading', { name: 'Покрытие компаний' }).boundingBox();
+  expect(nav && head).toBeTruthy();
+  expect(Math.abs((nav?.y ?? 0) - (head?.y ?? 0))).toBeLessThanOrEqual(120);
+}
+
 test.describe('B643-11 company coverage', () => {
   test('shows totals, pages companies and switches classes without sideways scrolling', async ({
     page,
@@ -159,6 +167,7 @@ test.describe('B643-11 company coverage', () => {
     await expect(page.getByText('sberbank.ru')).toBeVisible();
     await expect(page.getByText('Показано 5 из 261 964')).toBeVisible();
     await expectNoSideScroll(page);
+    if (testInfo.project.name === 'desktop-1440') await expectMenuAtHeader(page);
 
     await page.getByRole('button', { name: 'Показать ещё 50' }).click();
     await expect(page.getByText('Российские железные дороги')).toBeVisible();
@@ -166,6 +175,9 @@ test.describe('B643-11 company coverage', () => {
     await expect(page.getByRole('button', { name: /Показать ещё/ })).toHaveCount(0);
     expect(requests.some((search) => search.includes('cursor=p2'))).toBe(true);
     await expectNoSideScroll(page);
+    // Клик по «Показать ещё» прокручивает страницу, а меню липкое: снимок — сверху.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    if (testInfo.project.name === 'desktop-1440') await expectMenuAtHeader(page);
     await page.screenshot({ path: testInfo.outputPath('coverage.png'), fullPage: true });
 
     await page
