@@ -123,7 +123,11 @@ describe('MaintenanceWorker (B230)', () => {
   it('runs the careers prune pass without the placement backfill and logs its report (B643)', () => {
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const report = { done: true, processed: 4, dropped: 1, droppedTotal: 1, ms: 2 };
-    const worker = new MaintenanceWorker({ engine: {} as never, log, careersPrune: { tick: () => report } as never });
+    const worker = new MaintenanceWorker({
+      engine: {} as never,
+      log,
+      careersPrune: { tick: () => report } as never,
+    });
     worker.runPlacementStep();
     expect(log.info).toHaveBeenCalledWith(report, 'careers-prune-pass');
   });
@@ -431,6 +435,7 @@ describe('MaintenanceWorker (B230)', () => {
       engine: {
         getSources: () => [],
         restoreAsync: async () => ({ restored: 0 }),
+        maintainStoreAsync: async () => ({ backfillWindows: 0 }),
         syncSource: async () => ({
           sourceId: 'none',
           status: 'unknown_source',
@@ -451,6 +456,52 @@ describe('MaintenanceWorker (B230)', () => {
       log: silentLog(),
     });
     await expect(worker.restore()).rejects.toThrow(/sources/);
+  });
+
+  it('объявляет готовность до чистки и дочитывания, а их проводит после (B649-2)', async () => {
+    const calls: string[] = [];
+    let restoreOptions: unknown;
+    const log = silentLog();
+    const engine = {
+      getSources: () => [{ id: 'src' }],
+      restoreAsync: async (_now?: number, _chunk?: number, options?: unknown) => {
+        restoreOptions = options;
+        calls.push('restore');
+        return { restored: 1 };
+      },
+      maintainStoreAsync: async (_now?: number, shouldStop?: () => boolean) => {
+        calls.push(`store:${String(shouldStop?.())}`);
+        return { backfillWindows: 3 };
+      },
+      runClusterKeysBackfillStep: () => 0,
+      clusterKeysReady: true,
+      poolSize: 1,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log });
+    await worker.restore();
+    expect(restoreOptions).toEqual({ prune: false, backfill: false });
+    expect(calls).toEqual(['restore', 'store:false']);
+    const messages = log.entries.map((entry) => entry.msg);
+    expect(messages.indexOf('maintenance-restored')).toBeLessThan(
+      messages.indexOf('maintenance-store-pass'),
+    );
+  });
+
+  it('сбой чистки после готовности не роняет обслуживание (B649-2)', async () => {
+    const log = silentLog();
+    const engine = {
+      getSources: () => [{ id: 'src' }],
+      restoreAsync: async () => ({ restored: 1 }),
+      maintainStoreAsync: async () => {
+        throw new Error('disk');
+      },
+      runClusterKeysBackfillStep: () => 0,
+      clusterKeysReady: true,
+      poolSize: 1,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log });
+    await expect(worker.restore()).resolves.toEqual({ restored: 1 });
+    expect(log.entries.some((entry) => entry.msg === 'maintenance-store-pass-failed')).toBe(true);
   });
 });
 

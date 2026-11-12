@@ -129,6 +129,11 @@ export interface VacancyPoolStore {
    * памяти этого не знает: у него нечего дочитывать.
    */
   backfillStep?(chunk?: number): number;
+  /** Шаг дочитывания по окну строк: каждый шаг ограничен и по чтению (B649-2). */
+  backfillWindowStep?(windowRows?: number): { done: boolean };
+  /** Чистка, отпускающая цикл событий между транзакциями (B649-2). */
+  pruneAsync?(knownSourceIds: readonly string[], oldestPublishedAt: string): Promise<void>;
+  pruneClustersBeforeAsync?(oldestPublishedAt: string): Promise<number>;
   /**
    * Дополняет срез площадки частичным чтением: прочитанное обновляется,
    * непрочитанное остаётся (B214). С `dropObservedBefore` снимает записи,

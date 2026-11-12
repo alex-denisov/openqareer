@@ -5,7 +5,9 @@ import { readInWorker } from '../data/readInWorker';
 import { PLACEMENT_TABLES } from '../companyDirectory/placement/placementSchema';
 import {
   prunePoolInBatches,
+  prunePoolInBatchesAsync,
   pruneClustersInBatches,
+  pruneClustersInBatchesAsync,
   type PruneLimits,
   type PruneReport,
 } from './poolPruneBatches';
@@ -191,6 +193,16 @@ const SOURCE_STATUSES = new Set(['healthy', 'degraded', 'error']);
 
 /** Сколько строк дочитывается из `payload` за один шаг фонового прохода. */
 export const BACKFILL_CHUNK = 2_000;
+/** Окно `rowid` одного шага дочитывания после готовности (B649-2). */
+export const BACKFILL_WINDOW_ROWS = 5_000;
+
+interface BackfillRow {
+  rowid: number;
+  id: string;
+  source_id: string;
+  payload: string;
+  expired_at: string | null;
+}
 /** Public catalog projection is intentionally smaller than the legacy index pass. */
 export const CATALOG_BACKFILL_CHUNK = 100;
 
@@ -383,6 +395,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   readonly matchMode: 'legacy' | 'semantic';
   /** Докуда дошёл фоновый проход по `rowid`: каждый шаг начинает с него, а не с начала таблицы. */
   private backfillCursor = 0;
+  private backfillWindowCursor = 0;
   /** Докуда дошёл bounded materialized-catalog pass. */
   private catalogBackfillCursor = 0;
   /** Completion is durable and makes later timer ticks pure no-ops. */
@@ -510,17 +523,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
                OR NOT EXISTS (SELECT 1 FROM vacancy_cluster_input c WHERE c.id = p.id))
           ORDER BY p.rowid LIMIT ?`,
       )
-      .all(this.backfillCursor, chunk) as unknown as Array<{
-      rowid: number;
-      id: string;
-      source_id: string;
-      payload: string;
-      expired_at: string | null;
-    }>;
+      .all(this.backfillCursor, chunk) as unknown as BackfillRow[];
     if (rows.length === 0) {
       this.backfillCursor = 0;
       return 0;
     }
+    this.backfillRows(rows);
+    this.backfillCursor = rows[rows.length - 1]!.rowid;
+    return rows.length;
+  }
+
+  private backfillRows(rows: readonly BackfillRow[]): void {
     const insert = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
     const hasIndexRow = this.database.prepare('SELECT 1 FROM vacancy_pool_index WHERE id = ?');
@@ -547,8 +560,35 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         insert.run(...indexColumns(projected, row.source_id), row.expired_at === null ? 0 : 1);
       }
     });
-    this.backfillCursor = rows[rows.length - 1]!.rowid;
-    return rows.length;
+  }
+
+  /**
+   * Шаг дочитывания по окну `rowid` (B649-2): `backfillStep` искал первую
+   * недочитанную строку и на пуле, где дочитывать нечего, проходил его весь
+   * одним запросом (172 с на проде 12.11). Окно ограничивает и чтение.
+   */
+  backfillWindowStep(windowRows: number = BACKFILL_WINDOW_ROWS): { done: boolean } {
+    const from = this.backfillWindowCursor;
+    const upper = from + windowRows;
+    const rows = this.database
+      .prepare(
+        `SELECT p.rowid AS rowid, p.id, p.source_id, p.payload, p.expired_at
+           FROM vacancy_pool p
+          WHERE p.rowid > ? AND p.rowid <= ?
+            AND (NOT EXISTS (SELECT 1 FROM vacancy_pool_index i WHERE i.id = p.id)
+               OR NOT EXISTS (SELECT 1 FROM vacancy_cluster_input c WHERE c.id = p.id))
+          ORDER BY p.rowid`,
+      )
+      .all(from, upper) as unknown as BackfillRow[];
+    if (rows.length > 0) this.backfillRows(rows);
+    const max = (
+      this.database.prepare('SELECT coalesce(max(rowid), 0) AS n FROM vacancy_pool').get() as {
+        n: number;
+      }
+    ).n;
+    const done = upper >= max;
+    this.backfillWindowCursor = done ? 0 : upper;
+    return { done };
   }
 
   private readVacancies(sql: string, params: SQLInputValue[]): UnifiedVacancy[] {
@@ -1701,6 +1741,29 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       this.pruneLimits(),
     );
     this.onWrite?.({ kind: 'prune', ...report });
+  }
+
+  /** То же, что `prune`, но отпускает цикл событий между транзакциями (B649-2). */
+  async pruneAsync(knownSourceIds: readonly string[], oldestPublishedAt: string): Promise<void> {
+    const report = await prunePoolInBatchesAsync(
+      this.database,
+      knownSourceIds,
+      oldestPublishedAt,
+      this.pruneLimits(),
+    );
+    this.onWrite?.({ kind: 'prune', ...report });
+  }
+
+  async pruneClustersBeforeAsync(oldestPublishedAt: string): Promise<number> {
+    const cutoffMs = Date.parse(oldestPublishedAt);
+    if (!Number.isFinite(cutoffMs)) return 0;
+    const { clusters, report } = await pruneClustersInBatchesAsync(
+      this.database,
+      cutoffMs,
+      this.pruneLimits(),
+    );
+    this.onWrite?.({ kind: 'prune', ...report });
+    return clusters;
   }
 
   private pruneLimits(): PruneLimits {

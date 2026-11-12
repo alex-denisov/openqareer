@@ -30,8 +30,12 @@ export interface MaintenanceEngine {
   restoreAsync(
     nowMs?: number,
     chunkSize?: number,
-    options?: { prune?: boolean },
+    options?: { prune?: boolean; backfill?: boolean },
   ): Promise<{ restored: number }>;
+  maintainStoreAsync(
+    nowMs?: number,
+    shouldStop?: () => boolean,
+  ): Promise<{ backfillWindows: number }>;
   syncSource(sourceId: string): Promise<SourceSyncOutcome>;
   syncDue(nowMs?: number): Promise<SourceSyncOutcome[]>;
   getRequestedSourceSyncs(): RequestedSourceSync[];
@@ -275,13 +279,36 @@ export class MaintenanceWorker {
       throw new Error('maintenance refuses to restore an engine without sources');
     }
     const startedAt = Date.now();
-    const result = await this.engine.restoreAsync(Date.now(), 250, { prune: true });
+    // Готовность не ждёт чистки и дочитывания (B649-2): они идут после неё
+    // шагами, отпуская цикл событий.
+    const result = await this.engine.restoreAsync(Date.now(), 250, {
+      prune: false,
+      backfill: false,
+    });
     this.log.info(
       { restored: result.restored, poolSize: this.engine.poolSize, ms: Date.now() - startedAt },
       'maintenance-restored',
     );
     await this.backfillClusterKeys();
+    await this.maintainStore();
     return result;
+  }
+
+  private async maintainStore(): Promise<void> {
+    const startedAt = Date.now();
+    try {
+      const { backfillWindows } = await this.engine.maintainStoreAsync(
+        Date.now(),
+        () => this.stopped,
+      );
+      this.log.info({ backfillWindows, ms: Date.now() - startedAt }, 'maintenance-store-pass');
+    } catch (error) {
+      // Чистка не условие работы: сбой виден в журнале, волны идут дальше.
+      this.log.error(
+        { errorName: (error as Error).name, message: (error as Error).message },
+        'maintenance-store-pass-failed',
+      );
+    }
   }
 
   /**
@@ -757,7 +784,8 @@ export class MaintenanceWorker {
     every(ROLE_LINK_INTERVAL_MS, () =>
       this.track(this.runRoleLinkStep(), 'role-link-step-failed', undefined),
     );
-    if (this.placements || this.careersPrune) every(PLACEMENT_INTERVAL_MS, () => this.runPlacementStep());
+    if (this.placements || this.careersPrune)
+      every(PLACEMENT_INTERVAL_MS, () => this.runPlacementStep());
     if (this.linkedinPoolExecutor) {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
     }

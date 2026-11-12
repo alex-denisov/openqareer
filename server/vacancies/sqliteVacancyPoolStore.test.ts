@@ -381,6 +381,36 @@ describe('SqliteVacancyPoolStore · снятое объявление', () => {
     expect(store.hasVacancy('broken')).toBe(false);
     expect(store.queryVacancies({ window, query: 'company', offset: 0, limit: 10 }).total).toBe(3);
   });
+  it('дочитывает окнами rowid и кончает проход, даже когда дочитывать нечего (B649-2)', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b649-window-'));
+    directories.push(directory);
+    const path = join(directory, 'pool.db');
+    const legacy = new DatabaseSync(path);
+    legacy.exec(MIGRATION_23);
+    const insert = legacy.prepare(
+      'INSERT INTO vacancy_pool (id, source_id, published_at, stored_at, payload) VALUES (?, ?, ?, ?, ?)',
+    );
+    const at = '2026-09-01T10:00:00.000Z';
+    for (let n = 0; n < 7; n += 1)
+      insert.run(`w${n}`, 'src', at, at, JSON.stringify(card(`w${n}`)));
+    legacy.close();
+
+    const store = new SqliteVacancyPoolStore({ databasePath: path });
+    stores.push(store);
+    expect(store.pendingBackfill()).toBe(7);
+    const steps: boolean[] = [];
+    for (let guard = 0; guard < 10; guard += 1) {
+      const { done } = store.backfillWindowStep(3);
+      steps.push(done);
+      if (done) break;
+    }
+    expect(steps).toEqual([false, false, true]);
+    expect(store.pendingBackfill()).toBe(0);
+    // Второй проход по дочитанному пулу — те же три окна, без работы.
+    expect(store.backfillWindowStep(3).done).toBe(false);
+    expect(store.backfillWindowStep(3).done).toBe(false);
+    expect(store.backfillWindowStep(3).done).toBe(true);
+  });
   it('замена среза и повторное чтение не воскрешают строки, ещё не дошедшие до индекса', () => {
     const directory = mkdtempSync(join(tmpdir(), 'vacancy-pool-b221-drift-'));
     directories.push(directory);
