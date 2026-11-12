@@ -123,7 +123,11 @@ describe('MaintenanceWorker (B230)', () => {
   it('runs the careers prune pass without the placement backfill and logs its report (B643)', () => {
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
     const report = { done: true, processed: 4, dropped: 1, droppedTotal: 1, ms: 2 };
-    const worker = new MaintenanceWorker({ engine: {} as never, log, careersPrune: { tick: () => report } as never });
+    const worker = new MaintenanceWorker({
+      engine: {} as never,
+      log,
+      careersPrune: { tick: () => report } as never,
+    });
     worker.runPlacementStep();
     expect(log.info).toHaveBeenCalledWith(report, 'careers-prune-pass');
   });
@@ -431,6 +435,7 @@ describe('MaintenanceWorker (B230)', () => {
       engine: {
         getSources: () => [],
         restoreAsync: async () => ({ restored: 0 }),
+        maintainStoreAsync: async () => ({ backfillWindows: 0 }),
         syncSource: async () => ({
           sourceId: 'none',
           status: 'unknown_source',

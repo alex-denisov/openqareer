@@ -647,16 +647,49 @@ export class MultiSourceVacancyEngine {
     // 250 строк — около 0,6 с на VM прода (0,2 мс на строку локально, прод
     // медленнее в ~12 раз): дольше держать цикл событий на старте нельзя.
     chunkSize = 250,
-    options: { prune?: boolean } = {},
+    options: { prune?: boolean; backfill?: boolean } = {},
   ): Promise<{ restored: number }> {
     // A large SQLite pool may need a write-side maintenance pass. Production
     // readiness must not wait for that pass; callers can keep the historical
     // pruning behavior for small/test stores with the default.
     if (options.prune !== false) this.pruneStore(nowMs);
-    while ((this.pool.backfillStep?.(chunkSize) ?? 0) > 0) {
-      await new Promise((resolve) => setImmediate(resolve));
+    if (options.backfill !== false) {
+      while ((this.pool.backfillStep?.(chunkSize) ?? 0) > 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
     }
     return this.finishRestore(nowMs);
+  }
+
+  /**
+   * Чистка и дочитывание после готовности (B649-2): старт на проде ждал их
+   * 266 с. Здесь каждая транзакция и каждое окно — отдельный шаг, между ними
+   * цикл событий свободен; `shouldStop` прерывает проход при остановке.
+   * Чистка неизвестных источников — та же, с защитой неполного реестра.
+   */
+  public async maintainStoreAsync(
+    nowMs: number = Date.now(),
+    shouldStop: () => boolean = () => false,
+  ): Promise<{ backfillWindows: number }> {
+    const oldestPublishedAt = new Date(
+      nowMs - MAX_VACANCY_AGE_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const known = Array.from(this.sources.keys());
+    if (this.pool.pruneAsync) await this.pool.pruneAsync(known, oldestPublishedAt);
+    else this.pool.prune(known, oldestPublishedAt);
+    if (shouldStop()) return { backfillWindows: 0 };
+    if (this.pool.pruneClustersBeforeAsync) {
+      await this.pool.pruneClustersBeforeAsync(oldestPublishedAt);
+    } else {
+      this.pruneClusters(oldestPublishedAt);
+    }
+    let backfillWindows = 0;
+    while (this.pool.backfillWindowStep && !shouldStop()) {
+      backfillWindows += 1;
+      if (this.pool.backfillWindowStep().done) break;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    return { backfillWindows };
   }
 
   private pruneStore(nowMs: number): void {

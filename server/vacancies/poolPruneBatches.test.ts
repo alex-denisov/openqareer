@@ -239,3 +239,47 @@ describe('prune with more known sources than SQLite variables (prod 12.11: too m
     expect(store.loadUnseenLinks(manySources([]), Date.now(), 10)).toEqual([]);
   });
 });
+
+describe('prune after readiness yields between transactions (B649-2)', () => {
+  it('removes the same rows as the sync pass and lets timers run in between', async () => {
+    const { store, events, seed } = openStore({ writeChunkSize: 10 });
+    seedPool(seed, 'gone', 25, 'g');
+    const turns: number[] = [];
+    const pending = store.pruneAsync(['board'], '2026-08-01T00:00:00.000Z');
+    // Отдельные макрозадачи между транзакциями: цикл событий получает ход.
+    for (let n = 0; n < 3; n += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+      turns.push(countOf(seed, 'vacancy_pool'));
+    }
+    await pending;
+    expect(countOf(seed, 'vacancy_pool')).toBe(0);
+    expect(turns[0]).toBeGreaterThan(0);
+    expect(pruneReports(events)).toEqual([
+      expect.objectContaining({ scope: 'pool', removed: 25, transactions: 3 }),
+    ]);
+  });
+
+  it('keeps the half-loaded registry guard', async () => {
+    const { store, seed, events } = openStore();
+    const ids = Array.from({ length: 10 }, (_, index) => `s${index}`);
+    const state = seed.prepare('INSERT INTO vacancy_source_state (source_id) VALUES (?)');
+    ids.forEach((id) => {
+      state.run(id);
+      seedPool(seed, id, 1, `${id}-`);
+    });
+    await store.pruneAsync(ids.slice(0, 5), '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(10);
+    expect(pruneReports(events).at(-1)?.unknownSkipped).toEqual({ known: 5, stateSources: 10 });
+  });
+
+  it('prunes clusters the same way', async () => {
+    const { store, seed } = openStore();
+    seed
+      .prepare(
+        `INSERT INTO vacancy_clusters (id, fingerprint, title, company, cluster_json, items_count, updated_at)
+         VALUES ('old', 'old', 't', 'c', '{}', 1, 0)`,
+      )
+      .run();
+    expect(await store.pruneClustersBeforeAsync('2026-01-01T00:00:00.000Z')).toBe(1);
+  });
+});
