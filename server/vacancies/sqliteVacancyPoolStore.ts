@@ -654,8 +654,9 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const where: string[] = [FRESH];
     const params: SQLInputValue[] = [query.window.fromMs, query.window.toMs];
     if (query.sourceIds) {
-      where.push(`i.source_id IN (${query.sourceIds.map(() => '?').join(', ')})`);
-      params.push(...query.sourceIds);
+      // Один JSON-параметр: источников больше предела переменных SQLite (B649).
+      where.push('i.source_id IN (SELECT value FROM json_each(?))');
+      params.push(JSON.stringify(query.sourceIds));
     }
     if (query.isRemote !== undefined) {
       where.push('i.is_remote = ?');
@@ -693,9 +694,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const termFilter = terms.length
       ? `AND (${terms.map(() => 'i.search_text LIKE ?').join(' OR ')})`
       : '';
-    const exclusion = seenIds.size
-      ? `AND i.id NOT IN (${[...seenIds].map(() => '?').join(',')})`
-      : '';
+    const exclusion = seenIds.size ? 'AND i.id NOT IN (SELECT value FROM json_each(?))' : '';
     const index = preferRemote ? 'vacancy_pool_match_remote' : 'vacancy_pool_match_recent';
     return {
       // Only selected IDs join wide cluster JSON. MATERIALIZED is intentional:
@@ -709,7 +708,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       ) SELECT c.cluster_json AS payload FROM selected s
         JOIN vacancy_cluster_input c ON c.id = s.id
         ORDER BY ${preferRemote ? 's.remote_order DESC, ' : ''}s.published_ms DESC, s.id ASC`,
-      params: [window.fromMs, window.toMs, ...terms.map((term) => `%${term}%`), ...seenIds, limit],
+      params: [
+        window.fromMs,
+        window.toMs,
+        ...terms.map((term) => `%${term}%`),
+        ...(seenIds.size ? [JSON.stringify([...seenIds])] : []),
+        limit,
+      ],
     };
   }
 

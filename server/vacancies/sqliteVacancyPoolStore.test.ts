@@ -865,3 +865,33 @@ describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
  * длиннее секунды — срез пишется и снимается порциями, а незавершённая замена
  * доделывается следующей.
  */
+
+describe('SqliteVacancyPoolStore · списки без предела переменных SQLite (B649-1)', () => {
+  it('queryVacancies принимает 50 000 источников одним параметром', () => {
+    const { store } = openStore();
+    store.replaceSourceSlice('src', [
+      {
+        id: 'v1',
+        fingerprint: 'fp-v1',
+        title: 'Role',
+        company: 'Company',
+        description: '',
+        requiredSkills: [],
+        url: 'https://example.test/v1',
+        provenance: {
+          sourceType: 'json_api' as const,
+          sourceId: 'src',
+          sourceUrl: 'https://example.test/v1',
+          observedAt: '2026-09-01T10:00:00.000Z',
+        },
+        publishedAt: '2026-09-01T10:00:00.000Z',
+        status: 'active' as const,
+      },
+    ]);
+    const sourceIds = [...Array.from({ length: 50_000 }, (_, n) => `s${n}`), 'src'];
+    const window = freshnessWindow(Date.parse('2026-09-02T10:00:00.000Z'));
+    const page = store.queryVacancies({ window, sourceIds, offset: 0, limit: 10 });
+    expect(page.total).toBe(1);
+    expect(page.items.map((v) => v.id)).toEqual(['v1']);
+  });
+});
