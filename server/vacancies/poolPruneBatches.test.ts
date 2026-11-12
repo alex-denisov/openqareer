@@ -166,13 +166,27 @@ describe('pool prune at worker start (PRB-041: one transaction held the write lo
 describe('B643 side tables follow the pool', () => {
   it('removes vacancy_company rows whose vacancy left the index', () => {
     const { store, seed } = openStore();
-    seed.prepare(`INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('gone', 'stripe', 'name_exact', 1)`).run();
-    seed.prepare(`INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('kept', 'stripe', 'name_exact', 1)`).run();
-    seed.prepare(`INSERT INTO vacancy_pool_index (id, source_id, published_ms, is_active, url, search_text, expired) VALUES ('kept', 'board', ?, 1, '', '', 0)`).run(Date.now());
+    seed
+      .prepare(
+        `INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('gone', 'stripe', 'name_exact', 1)`,
+      )
+      .run();
+    seed
+      .prepare(
+        `INSERT INTO vacancy_company (vacancy_id, company_key, match_how, linked_at) VALUES ('kept', 'stripe', 'name_exact', 1)`,
+      )
+      .run();
+    seed
+      .prepare(
+        `INSERT INTO vacancy_pool_index (id, source_id, published_ms, is_active, url, search_text, expired) VALUES ('kept', 'board', ?, 1, '', '', 0)`,
+      )
+      .run(Date.now());
     seedPool(seed, 'board', 1, 'kept');
     seed.prepare(`UPDATE vacancy_pool SET id='kept' WHERE id='kept0'`).run();
     store.prune(['board'], '2026-08-01T00:00:00.000Z');
-    expect(seed.prepare('SELECT vacancy_id FROM vacancy_company').all()).toEqual([{ vacancy_id: 'kept' }]);
+    expect(seed.prepare('SELECT vacancy_id FROM vacancy_company').all()).toEqual([
+      { vacancy_id: 'kept' },
+    ]);
   });
 });
 
@@ -188,7 +202,9 @@ describe('prune with more known sources than SQLite variables (prod 12.11: too m
     seedPool(seed, 'board', 2, 'b');
     seedPool(seed, 'gone', 3, 'g');
     store.prune(manySources(['board']), '2026-01-01T00:00:00.000Z');
-    const left = seed.prepare('SELECT source_id AS s, count(*) AS n FROM vacancy_pool GROUP BY s ORDER BY s').all();
+    const left = seed
+      .prepare('SELECT source_id AS s, count(*) AS n FROM vacancy_pool GROUP BY s ORDER BY s')
+      .all();
     expect(left).toEqual([
       { s: 'ats:company-39999', n: 2 },
       { s: 'board', n: 2 },
@@ -200,6 +216,22 @@ describe('prune with more known sources than SQLite variables (prod 12.11: too m
     seedPool(seed, 'board', 2, 'b');
     store.prune([], '2026-01-01T00:00:00.000Z');
     expect(countOf(seed, 'vacancy_pool')).toBe(2);
+  });
+
+  it('skips unknown-source removal when the registry is half loaded', () => {
+    const { store, seed, events } = openStore();
+    const ids = Array.from({ length: 10 }, (_, index) => `s${index}`);
+    const state = seed.prepare('INSERT INTO vacancy_source_state (source_id) VALUES (?)');
+    ids.forEach((id) => {
+      state.run(id);
+      seedPool(seed, id, 1, `${id}-`);
+    });
+    store.prune(ids.slice(0, 5), '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(10);
+    expect(countOf(seed, 'vacancy_source_state')).toBe(10);
+    expect(pruneReports(events).at(-1)?.unknownSkipped).toEqual({ known: 5, stateSources: 10 });
+    store.prune(ids, '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(10);
   });
 
   it('reads unseen links for that many sources', () => {

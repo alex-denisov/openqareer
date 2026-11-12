@@ -1687,9 +1687,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
-    // Пустой список значит «источники не загрузились», а не «всё чужое»:
-    // стирать пул по нему нельзя (инцидент 12.11).
-    if (knownSourceIds.length === 0) return;
+    // Пустой или неполный список значит «источники не загрузились», а не
+    // «всё чужое»: чистка неизвестных тогда пропускается (инцидент 12.11).
     const report = prunePoolInBatches(
       this.database,
       knownSourceIds,

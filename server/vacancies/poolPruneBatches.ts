@@ -19,6 +19,8 @@ export interface PruneReport {
   /** Поиск строк: идёт без блокировки записи и в удержание не входит. */
   readonly readMs: number;
   readonly totalMs: number;
+  /** Чистка неизвестных источников пропущена: реестр неполон. */
+  readonly unknownSkipped?: { readonly known: number; readonly stateSources: number };
 }
 
 type RowKey = string | number;
@@ -33,6 +35,7 @@ interface PrunePass {
   find(sql: string, ...params: SQLInputValue[]): RowKey[];
   remove(sql: string, keys: readonly RowKey[], ...params: SQLInputValue[]): number;
   report(): PruneReport;
+  skipUnknown(known: number, stateSources: number): void;
 }
 
 /** Удаляет, пока есть строки и не вышло время; возвращает, сколько держал запись. */
@@ -70,7 +73,11 @@ function startPass(
   let transactions = 0;
   let maxTransactionMs = 0;
   let readMs = 0;
+  let unknownSkipped: PruneReport['unknownSkipped'];
   return {
+    skipUnknown(known, stateSources) {
+      unknownSkipped = { known, stateSources };
+    },
     find(sql, ...params) {
       const readAt = performance.now();
       const rows = database.prepare(sql).all(...params) as Array<{ key: RowKey }>;
@@ -101,6 +108,7 @@ function startPass(
       maxTransactionMs,
       readMs,
       totalMs: performance.now() - startedAt,
+      ...(unknownSkipped ? { unknownSkipped } : {}),
     }),
   };
 }
@@ -204,18 +212,24 @@ function pruneOrphanIndexes(pass: PrunePass): void {
   );
 }
 
-export function prunePoolInBatches(
-  database: DatabaseSync,
-  knownSourceIds: readonly string[],
-  oldestPublishedAt: string,
-  limits: PruneLimits,
-): PruneReport {
-  const pass = startPass(database, limits, 'pool');
-  // Пустой список значит «ничего не знаем», а не «всё чужое».
-  if (knownSourceIds.length === 0) return pass.report();
-  const known = JSON.stringify(knownSourceIds);
-  pruneStaleVacancies(pass, oldestPublishedAt);
-  pruneNotSeenVacancies(pass, knownSourceIds);
+/** Доля источников, которой реестру позволено не хватать до полного. */
+const UNKNOWN_PRUNE_TOLERANCE = 0.02;
+
+/**
+ * Удалять «чужие» источники можно, только если реестр полон: источники
+ * справочника регистрируются после старта, и неполный список стёр бы живые
+ * доски необратимо. Мерило полноты — источники, которые пул уже знает.
+ */
+function registryLooksComplete(database: DatabaseSync, known: number): number | null {
+  const row = database
+    .prepare('SELECT count(DISTINCT source_id) AS n FROM vacancy_source_state')
+    .get() as { n: number };
+  const stateSources = Number(row.n);
+  if (known === 0) return stateSources;
+  return known >= stateSources * (1 - UNKNOWN_PRUNE_TOLERANCE) ? null : stateSources;
+}
+
+function pruneUnknownSources(pass: PrunePass, known: string): void {
   const unknown = pass.find(
     `SELECT rowid AS key FROM vacancy_pool
       WHERE source_id NOT IN ${SOURCE_SET} LIMIT ${PRUNE_PORTION_ROWS}`,
@@ -226,7 +240,6 @@ export function prunePoolInBatches(
     unknown,
     known,
   );
-  pruneOrphanIndexes(pass);
   const lostStates = pass.find(
     `SELECT source_id AS key FROM vacancy_source_state WHERE source_id NOT IN ${SOURCE_SET}`,
     known,
@@ -236,6 +249,21 @@ export function prunePoolInBatches(
     lostStates,
     known,
   );
+}
+
+export function prunePoolInBatches(
+  database: DatabaseSync,
+  knownSourceIds: readonly string[],
+  oldestPublishedAt: string,
+  limits: PruneLimits,
+): PruneReport {
+  const pass = startPass(database, limits, 'pool');
+  pruneStaleVacancies(pass, oldestPublishedAt);
+  pruneNotSeenVacancies(pass, knownSourceIds);
+  const incomplete = registryLooksComplete(database, knownSourceIds.length);
+  if (incomplete === null) pruneUnknownSources(pass, JSON.stringify(knownSourceIds));
+  else pass.skipUnknown(knownSourceIds.length, incomplete);
+  pruneOrphanIndexes(pass);
   return pass.report();
 }
 

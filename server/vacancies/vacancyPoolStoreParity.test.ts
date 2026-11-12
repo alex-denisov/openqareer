@@ -341,7 +341,6 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     const store = open();
     seed(store);
     store.saveSourceState({ sourceId: 'board', itemsFoundTotal: 1, itemsActiveTotal: 1 });
-    store.saveSourceState({ sourceId: 'gone', itemsFoundTotal: 1, itemsActiveTotal: 1 });
     store.prune(['board'], daysAgo(30));
     expect(
       store
@@ -352,7 +351,12 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     expect(store.countSourceSlice('channel').total).toBe(0);
     expect(store.loadSourceStates().map((s) => s.sourceId)).toEqual(['board']);
     store.prune([], daysAgo(30));
-    expect(store.loadVacancies().map((v) => v.id).sort()).toEqual(['b1', 'b2', 'b4']);
+    expect(
+      store
+        .loadVacancies()
+        .map((v) => v.id)
+        .sort(),
+    ).toEqual(['b1', 'b2', 'b4']);
     expect(store.loadSourceStates().map((s) => s.sourceId)).toEqual(['board']);
   });
 
