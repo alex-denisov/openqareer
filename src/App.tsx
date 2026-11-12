@@ -149,6 +149,7 @@ async function loadAdminConsole() {
   if (typeof document !== 'undefined') {
     await import('./features/admin/admin-console.css');
     await import('./features/admin/admin-linkedin-remote-login.css');
+    await import('./features/admin/admin-coverage.css');
   }
   const module = await import('./features/admin/AdminConsole');
   markAppReady();
