@@ -14,14 +14,10 @@ function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-/** B643-11: итоги и постраничный список; ответ устаревшего запроса не пишется. */
-export function useAdminCoverage(): AdminCoverageViewProps {
+/** Итоги; `onLoaded` сдвигает «сейчас», чтобы «Обновлено N мин назад» считалось от ответа. */
+function useCoverageTotals(onLoaded: (at: number) => void) {
   const [totals, setTotals] = useState<CoverageTotalsState>({ status: 'loading' });
-  const [list, setList] = useState<CoverageListState>(EMPTY_LIST);
-  const [now, setNow] = useState(() => Date.now());
-  const listRequest = useRef<AbortController | null>(null);
   const totalsRequest = useRef<AbortController | null>(null);
-
   const loadTotals = useCallback(() => {
     totalsRequest.current?.abort();
     const controller = new AbortController();
@@ -29,7 +25,7 @@ export function useAdminCoverage(): AdminCoverageViewProps {
     setTotals({ status: 'loading' });
     getCoverageTotals(controller.signal)
       .then((data) => {
-        setNow(Date.now());
+        onLoaded(Date.now());
         setTotals({ status: 'ready', totals: data });
       })
       .catch((error: unknown) => {
@@ -40,7 +36,18 @@ export function useAdminCoverage(): AdminCoverageViewProps {
             : { status: 'error', message: error instanceof Error ? error.message : 'unknown' },
         );
       });
-  }, []);
+  }, [onLoaded]);
+
+  const abortTotals = useCallback(() => totalsRequest.current?.abort(), []);
+  return { totals, loadTotals, abortTotals };
+}
+
+/** B643-11: итоги и постраничный список; ответ устаревшего запроса не пишется. */
+export function useAdminCoverage(): AdminCoverageViewProps {
+  const [now, setNow] = useState(() => Date.now());
+  const { totals, loadTotals, abortTotals } = useCoverageTotals(setNow);
+  const [list, setList] = useState<CoverageListState>(EMPTY_LIST);
+  const listRequest = useRef<AbortController | null>(null);
 
   const loadPage = useCallback((filter: CoverageFilter, base: CoverageListState | null) => {
     listRequest.current?.abort();
@@ -65,10 +72,10 @@ export function useAdminCoverage(): AdminCoverageViewProps {
     const tick = window.setInterval(() => setNow(Date.now()), MINUTE_MS);
     return () => {
       window.clearInterval(tick);
-      totalsRequest.current?.abort();
+      abortTotals();
       listRequest.current?.abort();
     };
-  }, [loadTotals, loadPage]);
+  }, [loadTotals, loadPage, abortTotals]);
 
   const onRefresh = useCallback(() => {
     loadTotals();

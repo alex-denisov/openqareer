@@ -91,6 +91,49 @@ function perCompany(vacancies: number, companies: number): string {
   return formatCount(companies > 0 ? Math.round((vacancies / companies) * 10) / 10 : 0);
 }
 
+interface ClassRowProps {
+  cls: CoverageClass;
+  totals: CoverageTotals;
+  pool: number;
+  selected: boolean;
+  onFilter: (filter: CoverageFilter) => void;
+}
+
+function ClassRow({ cls, totals, pool, selected, onFilter }: ClassRowProps) {
+  const { companies, vacancies } = totals.classes[cls];
+  return (
+    <button
+      type="button"
+      className={`admin-coverage-class${selected ? ' is-selected' : ''}`}
+      aria-pressed={selected}
+      onClick={() => onFilter(selected ? 'all' : cls)}
+    >
+      <span className="admin-coverage-class__name">
+        <i className={`admin-coverage-swatch admin-coverage-c-${cls}`} />
+        {COVERAGE_CLASS_LABELS[cls]}
+      </span>
+      <span className="admin-coverage-num">
+        <strong>{formatCount(companies)}</strong> <span className="admin-coverage-num__label">компаний</span>
+        <small>{shareLabel(companies, totals.totalCompanies)}</small>
+      </span>
+      <span className="admin-coverage-num">
+        <strong>{formatCount(vacancies)}</strong> <span className="admin-coverage-num__label">объявлений</span>
+        <small>{shareLabel(vacancies, pool)}</small>
+      </span>
+      <span className="admin-coverage-num">
+        {cls === 'none' ? (
+          <span className="admin-coverage-gap">Сайт ещё не найден</span>
+        ) : (
+          <>
+            <strong>{perCompany(vacancies, companies)}</strong>{' '}
+            <span className="admin-coverage-num__label">на компанию</span>
+          </>
+        )}
+      </span>
+    </button>
+  );
+}
+
 interface ClassTableProps {
   totals: CoverageTotals;
   filter: CoverageFilter;
@@ -107,42 +150,9 @@ export function CoverageClassTable({ totals, filter, onFilter }: ClassTableProps
         <span>Объявлений в пуле</span>
         <span>В среднем на компанию</span>
       </div>
-      {COVERAGE_CLASS_ORDER.map((cls) => {
-        const { companies, vacancies } = totals.classes[cls];
-        const selected = cls === filter;
-        return (
-          <button
-            key={cls}
-            type="button"
-            className={`admin-coverage-class${selected ? ' is-selected' : ''}`}
-            aria-pressed={selected}
-            onClick={() => onFilter(selected ? 'all' : cls)}
-          >
-            <span className="admin-coverage-class__name">
-              <i className={`admin-coverage-swatch admin-coverage-c-${cls}`} />
-              {COVERAGE_CLASS_LABELS[cls]}
-            </span>
-            <span className="admin-coverage-num">
-              <strong>{formatCount(companies)}</strong> <span className="admin-coverage-num__label">компаний</span>
-              <small>{shareLabel(companies, totals.totalCompanies)}</small>
-            </span>
-            <span className="admin-coverage-num">
-              <strong>{formatCount(vacancies)}</strong> <span className="admin-coverage-num__label">объявлений</span>
-              <small>{shareLabel(vacancies, pool)}</small>
-            </span>
-            <span className="admin-coverage-num">
-              {cls === 'none' ? (
-                <span className="admin-coverage-gap">Сайт ещё не найден</span>
-              ) : (
-                <>
-                  <strong>{perCompany(vacancies, companies)}</strong>{' '}
-                  <span className="admin-coverage-num__label">на компанию</span>
-                </>
-              )}
-            </span>
-          </button>
-        );
-      })}
+      {COVERAGE_CLASS_ORDER.map((cls) => (
+        <ClassRow key={cls} cls={cls} totals={totals} pool={pool} selected={cls === filter} onFilter={onFilter} />
+      ))}
       <div className="admin-coverage-class-total">
         <span>Всего</span>
         <span>

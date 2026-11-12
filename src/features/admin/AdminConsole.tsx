@@ -121,11 +121,8 @@ function AdminNav({
       >
         <Broadcast size={16} aria-hidden="true" /> Источники вакансий
       </button>
-      <button type="button" className={`admin-nav-item ${activeTab === 'coverage' ? 'is-active' : ''}`}
-        onClick={() => onSelectTab('coverage')}
-      >
-        <Buildings size={16} aria-hidden="true" /> Покрытие компаний
-      </button>
+      <button type="button" className={`admin-nav-item ${activeTab === 'coverage' ? 'is-active' : ''}`} onClick={() => onSelectTab('coverage')}>
+        <Buildings size={16} aria-hidden="true" /> Покрытие компаний</button>
       <button
         type="button"
         className={`admin-nav-item ${activeTab === 'audit' ? 'is-active' : ''}`}
