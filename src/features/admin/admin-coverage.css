@@ -1,0 +1,167 @@
+/* B643-11: «Покрытие компаний». Перенос макета B643-11-coverage-mockup.html на
+   токены App.css; шкала кегля и отступов из DESIGN.md (B232), объявлена здесь,
+   как и в admin-linkedin-remote-login.css, потому что .career-shell в админке нет. */
+.admin-coverage {
+  --career-space-5: 20px;
+  --career-space-6: 24px;
+  --career-space-8: 32px;
+  --career-text-lg: 20px;
+  --career-text-xl: 28px;
+  --career-text-display: 40px;
+  container: admin-coverage / inline-size;
+  min-width: 0;
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.admin-coverage-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--career-space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--career-space-6);
+}
+.admin-coverage-head h1 { margin: 0; font-size: var(--career-text-xl); letter-spacing: -0.02em; line-height: 1.2; }
+.admin-coverage-head .admin-note { margin: var(--career-space-1) 0 0; }
+.admin-coverage-head__actions { display: flex; align-items: center; gap: var(--career-space-3); flex-wrap: wrap; }
+.admin-coverage-fresh { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.admin-coverage-fresh.is-stale { color: var(--warning-amber); }
+.admin-coverage .admin-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--career-target-min); }
+
+.admin-coverage-panel { border: 1px solid var(--line); border-radius: var(--radius-medium); background: var(--surface); min-width: 0; }
+
+.admin-coverage-lead { padding: var(--career-space-6); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--career-space-4) var(--career-space-8); align-items: end; }
+.admin-coverage-lead__number { font-size: var(--career-text-display); font-weight: 650; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.admin-coverage-lead__number span { font-size: var(--career-text-lg); color: var(--text-muted); font-weight: 500; letter-spacing: 0; margin-left: var(--career-space-2); }
+.admin-coverage-lead__text { margin: var(--career-space-2) 0 0; color: var(--text-muted); font-size: var(--career-text-sm); max-width: 34rem; }
+.admin-coverage-lead__side { display: grid; gap: var(--career-space-1); text-align: right; }
+.admin-coverage-metric { font-size: var(--career-text-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.admin-coverage-metric-label { color: var(--text-dim); }
+
+.admin-coverage-bar { grid-column: 1 / -1; display: block; width: 100%; height: 12px; border-radius: 6px; overflow: hidden; background: var(--surface-soft); }
+.admin-coverage-bar .admin-coverage-c-ats { fill: var(--primary-accent); }
+.admin-coverage-bar .admin-coverage-c-site { fill: var(--primary-success); }
+.admin-coverage-bar .admin-coverage-c-aggregator_only { fill: var(--warning-amber); }
+.admin-coverage-bar .admin-coverage-c-linkedin_only { fill: var(--text-muted); }
+.admin-coverage-hatch { fill: var(--line-strong); }
+.admin-coverage-c-ats { background: var(--primary-accent); }
+.admin-coverage-c-site { background: var(--primary-success); }
+.admin-coverage-c-aggregator_only { background: var(--warning-amber); }
+.admin-coverage-c-linkedin_only { background: var(--text-muted); }
+.admin-coverage-c-none { background: repeating-linear-gradient(135deg, var(--line-strong) 0 3px, transparent 3px 6px); }
+.admin-coverage-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: none; }
+
+.admin-coverage-classes { margin-top: var(--career-space-4); overflow: hidden; }
+.admin-coverage-class-head,
+.admin-coverage-class {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.6fr) repeat(2, minmax(8rem, 1fr)) minmax(9rem, 1fr);
+  gap: var(--career-space-3);
+  align-items: center;
+  padding: var(--career-space-3) var(--career-space-4);
+}
+.admin-coverage-class-head { color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--line); }
+.admin-coverage-class-head span:not(:first-child),
+.admin-coverage-num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin-coverage-class { width: 100%; min-height: 52px; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; transition: background 180ms; }
+.admin-coverage-class:hover { background: var(--surface-soft); }
+.admin-coverage-class.is-selected { background: var(--surface-raised); box-shadow: inset 3px 0 0 var(--primary-accent); }
+.admin-coverage-class.is-selected small { color: var(--text-muted); }
+.admin-coverage-class__name { display: flex; align-items: center; gap: var(--career-space-2); font-size: var(--career-text-sm); font-weight: 600; }
+.admin-coverage-num strong { font-size: var(--career-text-sm); font-weight: 600; }
+.admin-coverage-num small { display: block; color: var(--text-dim); font-size: var(--career-text-xs); }
+.admin-coverage-num__label { display: none; }
+.admin-coverage-gap { color: var(--text-muted); }
+.admin-coverage-class-total { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--career-space-1) var(--career-space-3); padding: var(--career-space-3) var(--career-space-4); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.admin-coverage-section-title { display: flex; justify-content: space-between; align-items: baseline; gap: var(--career-space-3); flex-wrap: wrap; margin: var(--career-space-8) 0 var(--career-space-3); }
+.admin-coverage-section-title h2 { margin: 0; font-size: var(--career-text-lg); letter-spacing: -0.01em; }
+.admin-coverage-section-title .admin-note { margin: 0; }
+
+.admin-coverage-chips { display: flex; flex-wrap: wrap; gap: var(--career-space-2); margin-bottom: var(--career-space-3); }
+.admin-coverage-chips button { min-height: var(--career-target-min); padding: 0 var(--career-space-4); border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--text-muted); font: inherit; font-size: var(--career-text-sm); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: background 180ms, color 180ms; }
+.admin-coverage-chips button:hover { background: var(--surface-soft); color: var(--text-main); }
+.admin-coverage-chips button[aria-pressed='true'] { background: var(--surface-raised); color: var(--text-main); border-color: var(--line-strong); font-weight: 600; }
+.admin-coverage-chips button[aria-pressed='true'] svg { color: var(--primary-accent); }
+
+.admin-coverage-list { overflow: hidden; }
+.admin-coverage-list-head,
+.admin-coverage-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.5fr) 9rem minmax(14rem, 2fr) 7rem;
+  gap: var(--career-space-3);
+  align-items: center;
+  padding: var(--career-space-3) var(--career-space-4);
+}
+.admin-coverage-list-head { color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--line); }
+.admin-coverage-list-head span:last-child { text-align: right; }
+.admin-coverage-row { border-bottom: 1px solid var(--line); min-height: 56px; }
+.admin-coverage-row:hover { background: var(--surface-soft); }
+.admin-coverage-row__name { min-width: 0; }
+.admin-coverage-row__name strong { display: block; font-size: var(--career-text-sm); font-weight: 600; overflow-wrap: anywhere; }
+.admin-coverage-row__name code { font-family: var(--font-mono); color: var(--text-dim); font-size: var(--career-text-xs); overflow-wrap: anywhere; }
+.admin-coverage-row__class { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
+.admin-coverage-places { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.admin-coverage-place { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 6px; max-width: 100%; padding: 2px var(--career-space-2); border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
+.admin-coverage-place b { font-weight: 600; overflow-wrap: anywhere; }
+.admin-coverage-place__state { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.admin-coverage-place__state svg { color: var(--text-dim); }
+.admin-coverage-place.is-ok svg { color: var(--primary-success); }
+.admin-coverage-place.is-error svg { color: var(--danger-red); }
+.admin-coverage-place.is-warn svg { color: var(--warning-amber); }
+.admin-coverage-no-place { color: var(--text-dim); }
+.admin-coverage-row__count { text-align: right; font-size: var(--career-text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+.admin-coverage-row__count small { display: none; font-size: var(--career-text-xs); }
+.admin-coverage-list-foot { display: flex; justify-content: space-between; align-items: center; gap: var(--career-space-3); flex-wrap: wrap; padding: var(--career-space-3) var(--career-space-4); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.admin-coverage-state,
+.admin-coverage-empty,
+.admin-coverage-loading { padding: var(--career-space-5); display: grid; gap: var(--career-space-3); justify-items: start; }
+.admin-coverage-empty p { margin: 0; color: var(--text-muted); }
+.admin-coverage-loading { justify-items: stretch; }
+.admin-coverage-skel { height: 12px; border-radius: 6px; background: var(--surface-soft); animation: admin-coverage-pulse 1.6s ease-in-out infinite; }
+.admin-coverage-list > .admin-coverage-skel { margin: var(--career-space-4); }
+.admin-coverage-skel.is-big { height: 40px; width: 40%; }
+.admin-coverage-skel.is-short { width: 70%; }
+@keyframes admin-coverage-pulse { 50% { opacity: 0.55; } }
+
+.admin-coverage-alert { display: flex; flex-wrap: wrap; gap: var(--career-space-2); align-items: flex-start; padding: var(--career-space-3); border-radius: var(--radius-small); border: 1px solid var(--line-strong); background: var(--surface-soft); color: var(--text-main); }
+.admin-coverage-alert > div { flex: 1 1 14rem; min-width: 0; }
+.admin-coverage-alert > svg { flex: none; margin-top: 2px; }
+.admin-coverage-alert.is-error > svg { color: var(--danger-red); }
+.admin-coverage-alert.is-warning > svg { color: var(--warning-amber); }
+.admin-coverage-list-foot .admin-coverage-alert { width: 100%; }
+
+.admin-coverage-class:focus-visible,
+.admin-coverage-chips button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-coverage-class,
+  .admin-coverage-chips button { transition: none; }
+  .admin-coverage-skel { animation: none; }
+}
+
+@container admin-coverage (max-width: 640px) {
+  .admin-coverage-head { align-items: flex-start; margin-bottom: var(--career-space-4); }
+  .admin-coverage-head h1 { font-size: var(--career-text-lg); }
+  .admin-coverage-head__actions { width: 100%; justify-content: space-between; }
+  .admin-coverage-lead { grid-template-columns: minmax(0, 1fr); padding: var(--career-space-4); }
+  .admin-coverage-lead__number span { display: block; margin: var(--career-space-2) 0 0; }
+  .admin-coverage-lead__side { text-align: left; grid-auto-flow: column; justify-content: start; gap: var(--career-space-2); align-items: baseline; }
+  .admin-coverage-class-head { display: none; }
+  .admin-coverage-class { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--career-space-1) var(--career-space-3); }
+  .admin-coverage-class__name { grid-column: 1 / -1; }
+  .admin-coverage-class .admin-coverage-num { text-align: left; }
+  .admin-coverage-num__label { display: inline; color: var(--text-dim); font-weight: 400; }
+  .admin-coverage-gap { grid-column: 1 / -1; }
+  .admin-coverage-chips button { padding: 0 var(--career-space-3); }
+  .admin-coverage-list-head { display: none; }
+  .admin-coverage-row { grid-template-columns: minmax(0, 1fr) auto; gap: var(--career-space-2) var(--career-space-3); }
+  .admin-coverage-row__name { grid-column: 1; }
+  .admin-coverage-row__count { grid-column: 2; grid-row: 1; }
+  .admin-coverage-row__count small { display: block; color: var(--text-dim); font-weight: 400; }
+  .admin-coverage-row__class,
+  .admin-coverage-places { grid-column: 1 / -1; }
+  .admin-coverage-list-foot .admin-btn { width: 100%; }
+}

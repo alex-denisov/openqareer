@@ -93,9 +93,44 @@ describe('CoverageReport', () => {
     expect(ats.items[0]).toMatchObject({ companyKey: 'b', name: 'B', class: 'ats', vacancies: 1 });
     const top = (await report.list({ limit: 1 })).items[0];
     expect(top.placements).toEqual([
-      { type: 'employer_site', id: 'site:a', health: 'ok', lastCheckedAt: 100 },
-      { type: 'ats', id: 'ats:x:a', health: 'ok', lastCheckedAt: 90 },
+      { type: 'employer_site', id: 'site:a', health: 'ok', lastCheckedAt: 100, domain: null },
+      { type: 'ats', id: 'ats:x:a', health: 'ok', lastCheckedAt: 90, domain: null },
     ]);
+  });
+
+  it('names the site domain of employer_site placements (B643-11)', async () => {
+    const db = openDb();
+    const company = db.prepare(
+      `INSERT INTO company_directory (company_key, company_name, website_url, careers_url, source_type, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'seed', 'active', 'x', 'x')`,
+    );
+    company.run('mts', 'МТС', 'https://www.mts.ru', 'https://job.mts.ru/vacancies');
+    company.run('sber', 'Сбер', 'https://www.sberbank.ru/', null);
+    company.run('magnit', 'Магнит', null, null);
+    const placement = db.prepare(
+      `INSERT INTO company_placement (placement_id, company_key, type, url, priority, source_id, discovered_by, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'test', 1)`,
+    );
+    placement.run('site:src-company-site-mts', 'mts', 'employer_site', null, 1, 'src-company-site-mts');
+    placement.run('site:job.mts.ru', 'mts', 'employer_site', 'https://job.mts.ru/', 1, null);
+    placement.run('ats:lever:mts', 'mts', 'ats', null, 2, 'ats-lever-mts');
+    placement.run('site:src-fh-sber', 'sber', 'employer_site', null, 1, 'src-fh-sber');
+    placement.run('site:magnit.com', 'magnit', 'employer_site', null, 1, null);
+    const items = (await new CoverageReport(db).list({ limit: 10 })).items;
+    const domains = Object.fromEntries(
+      items.map((row) => [row.companyKey, row.placements.map((p) => [p.id, p.domain])]),
+    );
+    expect(domains).toEqual({
+      // Своя ссылка размещения, затем адрес вакансий, затем сайт компании; без www и поддомена.
+      mts: [
+        ['site:job.mts.ru', 'mts.ru'],
+        ['site:src-company-site-mts', 'mts.ru'],
+        ['ats:lever:mts', null],
+      ],
+      sber: [['site:src-fh-sber', 'sberbank.ru']],
+      // Ссылок нет, но имя размещения уже хост.
+      magnit: [['site:magnit.com', 'magnit.com']],
+    });
   });
 
   it('rejects a malformed cursor', () => {
