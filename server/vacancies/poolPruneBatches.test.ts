@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
+import { pruneClustersInBatchesAsync } from './poolPruneBatches';
 import { SqliteVacancyPoolStore, type PoolWriteEvent } from './sqliteVacancyPoolStore';
 
 const directories: string[] = [];
@@ -281,5 +282,29 @@ describe('prune after readiness yields between transactions (B649-2)', () => {
       )
       .run();
     expect(await store.pruneClustersBeforeAsync('2026-01-01T00:00:00.000Z')).toBe(1);
+  });
+});
+
+describe('cluster prune reads rowid windows (B649-3: one scan of 630 000 clusters held the loop 26 s)', () => {
+  it('finds stale clusters past the first window and reads them window by window', async () => {
+    const { seed } = openStore();
+    const insert = seed.prepare(
+      `INSERT INTO vacancy_clusters (id, fingerprint, title, company, cluster_json, items_count, updated_at)
+       VALUES (?, ?, 't', 'c', '{}', 1, ?)`,
+    );
+    for (let index = 1; index <= 35; index += 1) {
+      const stale = index === 3 || index === 33;
+      insert.run(`c${index}`, `c${index}`, stale ? 0 : Date.now());
+    }
+    const reads = watchReads({ database: seed } as unknown as SqliteVacancyPoolStore);
+    const { clusters } = await pruneClustersInBatchesAsync(seed, Date.parse('2026-01-01'), {
+      chunkRows: 100,
+      budgetMs: 1000,
+      scanWindowRows: 10,
+    });
+    expect(clusters).toBe(2);
+    expect(countOf(seed, 'vacancy_clusters')).toBe(33);
+    // 35 rows in windows of 10: at least four reads for stale clusters.
+    expect(reads.length).toBeGreaterThanOrEqual(4);
   });
 });

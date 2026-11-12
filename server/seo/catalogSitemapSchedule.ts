@@ -11,8 +11,8 @@ import type { OwnerTelegramConfig } from '../notifications/ownerTelegram';
 import { admitCardRollout, cardRolloutDailyCap } from './catalogCardRollout';
 import { checkIndexCoverage } from './catalogIndexCoverage';
 import { snapshotDue, snapshotSitemapCards } from './catalogArchive';
+import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
 import {
-  computeCatalogSitemaps,
   readCatalogSitemaps,
   writeCatalogSitemaps,
 } from './catalogSitemapJob';
@@ -125,7 +125,8 @@ export function scheduleCatalogSitemapJob(
       const now = new Date();
       runCardRollout(database, log, now);
       runMarketReport(database, log, now);
-      const files = computeCatalogSitemaps(database, now);
+      // B649-3: grouping the catalog held the loop ~40 s; read in its own thread.
+      const files = await heavyRead(database, 'sitemaps', { nowMs: now.getTime() }, log);
       writeCatalogSitemaps(database, files, now);
       await checkIndexCoverage({ database, files, telegram, log, now });
       const urls = files.flatMap((file) => file.urls ?? []);
