@@ -94,6 +94,8 @@ export interface VacancyPoolStore {
   getVacancy(id: string): UnifiedVacancy | undefined;
   hasVacancy(id: string): boolean;
   countVacancies(window: FreshnessWindow): number;
+  /** B649-4: тот же счёт в потоке со своим соединением readOnly. */
+  countVacanciesInWorker?(window: FreshnessWindow): Promise<number>;
   countBySource(window: FreshnessWindow): ReadonlyMap<string, number>;
   /** Срез площадки как он лежит: сколько записей и сколько из них активных. */
   countSourceSlice(sourceId: string): { total: number; active: number };

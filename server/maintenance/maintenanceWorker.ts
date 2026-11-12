@@ -64,6 +64,8 @@ export interface MaintenanceEngine {
   refreshCatalogTotals?(observedAt: string): unknown;
   getCatalogTotals?(): { readonly computedAt?: string } | undefined;
   readonly poolSize: number;
+  /** B649-4: тот же счёт в своём потоке, для строки памяти раз в минуту. */
+  poolSizeInWorker?(): Promise<number>;
 }
 
 export interface SyncWaveReport {
@@ -713,7 +715,16 @@ export class MaintenanceWorker {
   }
 
   /** Раз в минуту — сколько занято: без этого `MemoryMax` срабатывает молча. */
-  reportMemory(): void {
+  async reportMemory(): Promise<void> {
+    // B649-4 13.11: count(*) по 1,15 млн строк индекса держал цикл до 2,9 с.
+    let poolSize: number | null;
+    try {
+      poolSize = this.engine.poolSizeInWorker
+        ? await this.engine.poolSizeInWorker()
+        : this.engine.poolSize;
+    } catch {
+      poolSize = null;
+    }
     const heap = this.readHeap();
     const rss = process.memoryUsage().rss;
     this.log.info(
@@ -721,7 +732,7 @@ export class MaintenanceWorker {
         heapUsedMb: Math.round(heap.heapUsedBytes / (1024 * 1024)),
         heapLimitMb: Math.round(heap.heapLimitBytes / (1024 * 1024)),
         rssMb: Math.round(rss / (1024 * 1024)),
-        poolSize: this.engine.poolSize,
+        poolSize,
         ingestPaused: this.memoryGuard.isPaused,
       },
       'maintenance-memory',
