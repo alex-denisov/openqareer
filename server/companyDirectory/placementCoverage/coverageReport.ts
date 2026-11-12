@@ -1,6 +1,7 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { readInWorker } from '../../data/readInWorker';
 import { ADMIN_VACANCY_PAGE_BYTE_BUDGET } from '../../vacancies/adminVacancyPage';
+import { registrableDomain } from '../linkedinOrg/linkedinOrgResolver';
 import { PLACEMENT_TABLES } from '../placement/placementSchema';
 
 /**
@@ -32,6 +33,8 @@ export interface CoveragePlacement {
   readonly id: string;
   readonly health: string | null;
   readonly lastCheckedAt: number | null;
+  /** B643-11: registrable site domain of an `employer_site` placement, else null. */
+  readonly domain: string | null;
 }
 
 export interface CoverageCompany {
@@ -106,6 +109,32 @@ interface PlacementRow {
   type: string;
   health: string | null;
   last_checked_at: number | null;
+  url: string | null;
+  careers_url: string | null;
+  website_url: string | null;
+}
+
+const HOST_LIKE = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i;
+
+/**
+ * B643-11: the site an `employer_site` placement reads. Order: the placement's
+ * own url, a host already in its id (`site:magnit.com`), then the directory
+ * row's careers_url and website_url (source placements carry no url).
+ */
+export function placementDomain(row: PlacementRow): string | null {
+  if (row.type !== 'employer_site') return null;
+  const idHost = row.placement_id.replace(/^site:/, '');
+  const candidates = [
+    row.url,
+    HOST_LIKE.test(idHost) ? `https://${idHost}` : null,
+    row.careers_url,
+    row.website_url,
+  ];
+  for (const url of candidates) {
+    const domain = url ? registrableDomain(url) : null;
+    if (domain) return domain;
+  }
+  return null;
 }
 
 /** Placements per row stay few; the page also stops at the admin byte budget. */
@@ -198,8 +227,11 @@ export class CoverageReport {
     if (keys.length === 0) return byCompany;
     const rows = await readInWorker<PlacementRow>(
       this.database,
-      `SELECT company_key, placement_id, type, health, last_checked_at FROM company_placement
-       WHERE company_key IN (${keys.map(() => '?').join(',')}) ORDER BY company_key, priority, placement_id`,
+      `SELECT p.company_key, p.placement_id, p.type, p.health, p.last_checked_at, p.url,
+              d.careers_url, d.website_url
+       FROM company_placement p LEFT JOIN company_directory d ON d.company_key = p.company_key
+       WHERE p.company_key IN (${keys.map(() => '?').join(',')})
+       ORDER BY p.company_key, p.priority, p.placement_id`,
       keys,
     );
     for (const row of rows) {
@@ -209,6 +241,7 @@ export class CoverageReport {
         id: row.placement_id,
         health: row.health,
         lastCheckedAt: row.last_checked_at,
+        domain: placementDomain(row),
       });
       byCompany.set(row.company_key, list);
     }
