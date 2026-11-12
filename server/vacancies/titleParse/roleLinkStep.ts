@@ -28,7 +28,7 @@ const SAMPLE_QUEUE = 600;
 const PASS_QUEUE = 3_000;
 /** Фон не вытесняет вызовы, где ждёт кандидат: пачка не чаще раза в 2 минуты. */
 const MIN_GAP_MS = 2 * 60_000;
-/** Отказы подряд удваивают паузу: лежащий Vertex этот шаг не долбит. */
+/** Отказы подряд удваивают паузу: лежащая цепочка моделей этот шаг не долбит. */
 const REFUSAL_PAUSE_MS = 2 * 60_000;
 const REFUSAL_PAUSE_MAX_MS = 30 * 60_000;
 const ROLE_LINK_TASK = 'role-link';
@@ -101,8 +101,13 @@ function decodeAnswers(content: string, keys: ReadonlySet<string>) {
   });
 }
 
-/** Ответ не с Gemini (партия 04.11: DeepSeek на 40 из 40 сказал «нет роли») спрашивается заново. */
-const STALE = `(r.source = 'model' AND r.role_id IS NULL AND r.model NOT LIKE 'gemini%')`;
+/**
+ * Ответ не с Gemini до 12.11 (партия 04.11: DeepSeek на 40 из 40 сказал «нет роли» без настройки
+ * рассуждений) спрашивается заново. С 12.11 шаг идёт по общей цепочке, и «нет роли» любой модели
+ * окончательно: иначе одни и те же названия спрашивались бы на каждом проходе.
+ */
+const CHAIN_SINCE_MS = Date.parse('2026-11-12T00:00:00Z');
+const STALE = `(r.source = 'model' AND r.role_id IS NULL AND r.model NOT LIKE 'gemini%' AND r.created_ms < ${CHAIN_SINCE_MS})`;
 
 export class RoleLinkStep {
   private calls = 0;
@@ -257,7 +262,7 @@ export class RoleLinkStep {
         titles: batch.map((item) => ({ titleKey: item.title_key, title: item.sample_title })),
       }),
       maxTokens: ROLE_LINK_MAX_TOKENS,
-      onlyVertex: true,
+      // Владелец 12.11: общая цепочка Vertex → DeepSeek → GLM вместо одного Vertex.
       accept: (content) => decodeAnswers(content, keys).length > 0,
     });
     const counts = { linked: 0, noRole: 0, outsideList: 0 };
@@ -298,7 +303,7 @@ export class RoleLinkStep {
       this.queue = this.queue.slice(batch.length);
       return { ...EMPTY_REPORT, ...settled, ...answered };
     } catch (error) {
-      // Нет ответа Gemini: строк нет, ключи остаются в очереди.
+      // Цепочка не ответила: строк нет, ключи остаются в очереди.
       const pause = Math.min(REFUSAL_PAUSE_MS * 2 ** this.refusalsInRow, REFUSAL_PAUSE_MAX_MS);
       this.refusalsInRow += 1;
       this.nextCallAt = this.now() + pause;

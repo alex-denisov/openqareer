@@ -96,16 +96,43 @@ describe('связь названия с ролью (малая партия)', 
     expect(client.complete).not.toHaveBeenCalled();
   });
 
-  it('зовёт только Vertex: нет ответа, значит нет строки', async () => {
+  it('идёт по общей цепочке Vertex → DeepSeek → GLM, а не только Vertex (12.11)', async () => {
     const database = databaseWith([['странная служба ит', '["it-ops"]']]);
     const client = answer([{ titleKey: 'странная служба ит', roleId: null }]);
     await new RoleLinkStep(database, client as never).run();
-    expect(
-      (client.complete.mock.calls[0] as never as [{ onlyVertex: boolean }])[0].onlyVertex,
-    ).toBe(true);
+    const request = (client.complete.mock.calls[0] as never as [Record<string, unknown>])[0];
+    expect(request).not.toHaveProperty('onlyVertex');
+    expect(request).not.toHaveProperty('withoutVertex');
   });
 
-  it('«нет роли» от другой модели спрашивается заново', async () => {
+  it('«нет роли» от DeepSeek после 12.11 не спрашивается снова', async () => {
+    const database = databaseWith([['странная служба ит', '["it-ops"]']]);
+    database
+      .prepare(
+        `INSERT INTO vacancy_role (title_key, role_id, source, model, raw_role, created_ms) VALUES (?, NULL, 'model', 'deepseek/deepseek-v4-flash', NULL, ?)`,
+      )
+      .run('странная служба ит', Date.parse('2026-11-12T12:00:00Z'));
+    const client = answer([{ titleKey: 'странная служба ит', roleId: 'it-ops.head' }]);
+    await new RoleLinkStep(database, client as never).run();
+    expect(client.complete).not.toHaveBeenCalled();
+  });
+
+  it('отказ всей цепочки ставит паузу, а не повтор на следующем такте', async () => {
+    const database = databaseWith([['странная служба ит', '["it-ops"]']]);
+    const client = {
+      complete: vi.fn(async () => {
+        throw new Error('Bulk channel unavailable');
+      }),
+    };
+    let now = Date.parse('2026-11-12T12:00:00Z');
+    const step = new RoleLinkStep(database, client as never, undefined, () => now);
+    expect((await step.run()).failed).toBe(true);
+    now += 60_000;
+    await step.run();
+    expect(client.complete).toHaveBeenCalledTimes(1);
+  });
+
+  it('«нет роли» от другой модели до 12.11 спрашивается заново', async () => {
     const database = databaseWith([['странная служба ит', '["it-ops"]']]);
     database
       .prepare(
