@@ -934,14 +934,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
    */
   loadUnseenLinks(sourceIds: readonly string[], beforeMs: number, limit: number): VacancyLink[] {
     if (sourceIds.length === 0 || limit <= 0) return [];
-    const placeholders = sourceIds.map(() => '?').join(', ');
     return this.database
       .prepare(
         `SELECT i.id, i.url FROM vacancy_pool_index i INDEXED BY vacancy_pool_index_source
-          WHERE i.expired = 0 AND i.source_id IN (${placeholders}) AND i.observed_ms < ?
+          WHERE i.expired = 0 AND i.source_id IN (SELECT value FROM json_each(?)) AND i.observed_ms < ?
           ORDER BY i.observed_ms LIMIT ?`,
       )
-      .all(...sourceIds, beforeMs, limit) as unknown as VacancyLink[];
+      .all(JSON.stringify(sourceIds), beforeMs, limit) as unknown as VacancyLink[];
   }
 
   markSeen(vacancyIds: readonly string[], nowMs: number): void {
@@ -1688,31 +1687,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
-    if (knownSourceIds.length > 0) {
-      const report = prunePoolInBatches(
-        this.database,
-        knownSourceIds,
-        oldestPublishedAt,
-        this.pruneLimits(),
-      );
-      this.onWrite?.({ kind: 'prune', ...report });
-      return;
-    }
-    this.inTransaction(() => {
-      this.database.exec('DELETE FROM vacancy_pool');
-      this.database.exec('DELETE FROM vacancy_pool_index');
-      this.database.exec('DELETE FROM vacancy_cluster_input');
-      this.database.exec('DELETE FROM vacancy_company');
-      this.database.exec('DELETE FROM vacancy_clusters');
-      this.database.exec('DELETE FROM catalog_entries');
-      this.database.exec('DELETE FROM catalog_entries_seen');
-      this.database.exec(
-        `UPDATE catalog_projection_state
-            SET cursor_rowid = 0, completed = 1, updated_at = ${Date.now()}
-          WHERE id = 1`,
-      );
-      this.database.exec('DELETE FROM vacancy_source_state');
-    });
+    // Пустой список значит «источники не загрузились», а не «всё чужое»:
+    // стирать пул по нему нельзя (инцидент 12.11).
+    if (knownSourceIds.length === 0) return;
+    const report = prunePoolInBatches(
+      this.database,
+      knownSourceIds,
+      oldestPublishedAt,
+      this.pruneLimits(),
+    );
+    this.onWrite?.({ kind: 'prune', ...report });
   }
 
   private pruneLimits(): PruneLimits {

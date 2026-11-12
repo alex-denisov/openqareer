@@ -323,6 +323,8 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   }
 
   prune(knownSourceIds: readonly string[], oldestPublishedAt: string): void {
+    // Пустой список значит «источники не загрузились», а не «всё чужое».
+    if (knownSourceIds.length === 0) return;
     const known = new Set(knownSourceIds);
     for (const [id, row] of this.rows) {
       if (
@@ -335,9 +337,6 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     }
     for (const sourceId of this.states.keys()) {
       if (!known.has(sourceId)) this.states.delete(sourceId);
-    }
-    if (knownSourceIds.length === 0) {
-      this.clusters.clear();
     }
   }
 

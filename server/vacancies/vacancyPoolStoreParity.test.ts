@@ -337,7 +337,7 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     expect(store.markExpired([], daysAgo(0))).toBe(0);
   });
 
-  it('prune drops stale readings and unknown sources, and wipes everything without sources', () => {
+  it('prune drops stale readings and unknown sources, and keeps everything without sources', () => {
     const store = open();
     seed(store);
     store.saveSourceState({ sourceId: 'board', itemsFoundTotal: 1, itemsActiveTotal: 1 });
@@ -352,8 +352,8 @@ describe.each(implementations)('VacancyPoolStore parity: %s', (_name, open) => {
     expect(store.countSourceSlice('channel').total).toBe(0);
     expect(store.loadSourceStates().map((s) => s.sourceId)).toEqual(['board']);
     store.prune([], daysAgo(30));
-    expect(store.loadVacancies()).toEqual([]);
-    expect(store.loadSourceStates()).toEqual([]);
+    expect(store.loadVacancies().map((v) => v.id).sort()).toEqual(['b1', 'b2', 'b4']);
+    expect(store.loadSourceStates().map((s) => s.sourceId)).toEqual(['board']);
   });
 
   it('streams the cluster input: fresh records as compact projections', () => {

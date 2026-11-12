@@ -417,7 +417,10 @@ try {
   );
 } catch (error: unknown) {
   log.error(
-    { errorName: error instanceof Error ? error.name : 'UnknownError' },
+    {
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      message: error instanceof Error ? error.message : String(error),
+    },
     'maintenance-start-failed',
   );
   composed.close();

@@ -114,7 +114,7 @@ describe('SqliteVacancyPoolStore', () => {
     expect(store.loadSourceStates()[0]?.lastStatus).toBeUndefined();
   });
 
-  it('empties the pool when the registry knows no sources at all', () => {
+  it('keeps the pool when the registry knows no sources (empty list = not loaded)', () => {
     const { store } = openStore();
     store.replaceSourceSlice('src', [
       {
@@ -139,8 +139,8 @@ describe('SqliteVacancyPoolStore', () => {
 
     store.prune([], '2026-08-01T00:00:00.000Z');
 
-    expect(store.loadVacancies()).toHaveLength(0);
-    expect(store.loadSourceStates()).toHaveLength(0);
+    expect(store.loadVacancies()).toHaveLength(1);
+    expect(store.loadSourceStates()).toHaveLength(1);
   });
 
   it('ignores stored payloads that are not a vacancy', () => {

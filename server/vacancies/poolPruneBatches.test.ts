@@ -175,3 +175,35 @@ describe('B643 side tables follow the pool', () => {
     expect(seed.prepare('SELECT vacancy_id FROM vacancy_company').all()).toEqual([{ vacancy_id: 'kept' }]);
   });
 });
+
+describe('prune with more known sources than SQLite variables (prod 12.11: too many SQL variables)', () => {
+  const manySources = (extra: readonly string[]) => [
+    ...Array.from({ length: 40_000 }, (_, index) => `ats:company-${index}`),
+    ...extra,
+  ];
+
+  it('prunes unknown sources and keeps every known one', () => {
+    const { store, seed } = openStore();
+    seedPool(seed, 'ats:company-39999', 2, 'k');
+    seedPool(seed, 'board', 2, 'b');
+    seedPool(seed, 'gone', 3, 'g');
+    store.prune(manySources(['board']), '2026-01-01T00:00:00.000Z');
+    const left = seed.prepare('SELECT source_id AS s, count(*) AS n FROM vacancy_pool GROUP BY s ORDER BY s').all();
+    expect(left).toEqual([
+      { s: 'ats:company-39999', n: 2 },
+      { s: 'board', n: 2 },
+    ]);
+  });
+
+  it('removes nothing when the known list is empty', () => {
+    const { store, seed } = openStore();
+    seedPool(seed, 'board', 2, 'b');
+    store.prune([], '2026-01-01T00:00:00.000Z');
+    expect(countOf(seed, 'vacancy_pool')).toBe(2);
+  });
+
+  it('reads unseen links for that many sources', () => {
+    const { store } = openStore();
+    expect(store.loadUnseenLinks(manySources([]), Date.now(), 10)).toEqual([]);
+  });
+});
