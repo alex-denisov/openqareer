@@ -44,6 +44,12 @@ await build({
   entryPoints: ['server/companyDirectory/freehire/freehirePagesRun.ts'],
   outfile: 'dist/freehire-pages-run.mjs',
 });
+// B649-3: heavy maintenance reads (landing, salary snapshots, sitemaps) in their own thread.
+await build({
+  ...shared,
+  entryPoints: ['server/maintenance/heavyReads/heavyReadWorker.ts'],
+  outfile: 'dist/heavy-read-worker.mjs',
+});
 await build({
   ...shared,
   entryPoints: ['scripts/run-vacancy-mechanics-worker.ts'],

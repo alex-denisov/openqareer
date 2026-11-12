@@ -160,6 +160,8 @@ const composed = composeVacancyEngine({
 // транзакции порциями, WAL и busy_timeout как у остальных писателей пула.
 const semanticDatabase = new DatabaseSync(config.databasePath);
 semanticDatabase.exec('PRAGMA journal_mode = WAL;');
+// B649-3: a checkpoint that resets the WAL truncates the file back to 256 MB (872 MB on 12.11).
+semanticDatabase.exec('PRAGMA journal_size_limit = 268435456;');
 applySqliteBusyTimeout(semanticDatabase);
 // Роли кандидатов идут первыми в опросы LinkedIn и Indeed (27.10): новые первыми.
 const MAX_DEMAND_TERMS = 40;

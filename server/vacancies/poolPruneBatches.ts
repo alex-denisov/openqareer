@@ -9,7 +9,15 @@ export interface PruneLimits {
   readonly chunkRows: number;
   /** Работы на транзакцию: дольше неё другой процесс ждёт запись. */
   readonly budgetMs: number;
+  /** Строк кластеров на одно чтение без индекса (B649-3); по умолчанию CLUSTER_SCAN_WINDOW_ROWS. */
+  readonly scanWindowRows?: number;
 }
+
+/**
+ * B649-3: у vacancy_clusters нет индекса по updated_at, и один поиск старых
+ * кластеров шёл по 630 000 толстых строк 26 с. Окно по rowid ~0,4 с на проде.
+ */
+const CLUSTER_SCAN_WINDOW_ROWS = 10_000;
 
 export interface PruneReport {
   readonly scope: 'pool' | 'clusters';
@@ -334,17 +342,42 @@ export function pruneClustersInBatchesAsync(
   return drainYielding(clusterPruneSteps(database, cutoffMs, limits));
 }
 
+/** Старые кластеры окнами по rowid с уступкой между окнами; не больше одной порции. */
+function* findStaleClusters(
+  pass: PrunePass,
+  database: DatabaseSync,
+  cutoffMs: number,
+  limits: PruneLimits,
+): PruneSteps<RowKey[]> {
+  const window = Math.max(1, limits.scanWindowRows ?? CLUSTER_SCAN_WINDOW_ROWS);
+  const top = database.prepare('SELECT max(rowid) AS top FROM vacancy_clusters').get() as {
+    top: number | null;
+  };
+  const stale: RowKey[] = [];
+  for (let from = 0; top.top !== null && from < top.top && stale.length < PRUNE_PORTION_ROWS; ) {
+    const to = from + window;
+    stale.push(
+      ...pass.find(
+        `SELECT rowid AS key FROM vacancy_clusters
+          WHERE rowid > ? AND rowid <= ? AND updated_at < ?`,
+        from,
+        to,
+        cutoffMs,
+      ),
+    );
+    from = to;
+    yield;
+  }
+  return stale.slice(0, PRUNE_PORTION_ROWS);
+}
+
 function* clusterPruneSteps(
   database: DatabaseSync,
   cutoffMs: number,
   limits: PruneLimits,
 ): PruneSteps<ClusterPruneResult> {
   const pass = startPass(database, limits, 'clusters');
-  const stale = pass.find(
-    `SELECT rowid AS key FROM vacancy_clusters WHERE updated_at < ? LIMIT ${PRUNE_PORTION_ROWS}`,
-    cutoffMs,
-  );
-  yield;
+  const stale = yield* findStaleClusters(pass, database, cutoffMs, limits);
   const clusters = yield* pass.remove(
     'DELETE FROM vacancy_clusters WHERE rowid = ? AND updated_at < ?',
     stale,

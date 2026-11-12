@@ -34,35 +34,35 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('счёт лендинга и фишек по сохранённому сроку', () => {
-  it('перезапуск до срока счёт не повторяет, а в срок он идёт', () => {
+  it('перезапуск до срока счёт не повторяет, а в срок он идёт', async () => {
     const database = new DatabaseSync(':memory:');
     const stopFirst = scheduleLandingStatsJob(database, silentLog());
-    vi.advanceTimersByTime(MINUTE);
+    await vi.advanceTimersByTimeAsync(MINUTE);
     expect(computeLandingStats).toHaveBeenCalledOnce();
     stopFirst();
 
-    vi.advanceTimersByTime(10 * MINUTE);
+    await vi.advanceTimersByTimeAsync(10 * MINUTE);
     const stopSecond = scheduleLandingStatsJob(database, silentLog());
-    vi.advanceTimersByTime(20 * MINUTE - 1);
+    await vi.advanceTimersByTimeAsync(20 * MINUTE - 1);
     expect(computeLandingStats).toHaveBeenCalledOnce();
-    vi.advanceTimersByTime(1);
+    await vi.advanceTimersByTimeAsync(1);
     expect(computeLandingStats).toHaveBeenCalledTimes(2);
     stopSecond();
   });
 
-  it('сбой счёта пишется в журнал, и новый старт повторяет его', () => {
+  it('сбой счёта пишется в журнал, и новый старт повторяет его', async () => {
     vi.mocked(computeLandingStats).mockImplementationOnce(() => {
       throw new Error('locked');
     });
     const database = new DatabaseSync(':memory:');
     const log = silentLog();
     const stopFirst = scheduleLandingStatsJob(database, log);
-    vi.advanceTimersByTime(MINUTE);
+    await vi.advanceTimersByTimeAsync(MINUTE);
     stopFirst();
     expect(log.error).toHaveBeenCalledOnce();
 
     const stopSecond = scheduleLandingStatsJob(database, silentLog());
-    vi.advanceTimersByTime(MINUTE);
+    await vi.advanceTimersByTimeAsync(MINUTE);
     expect(computeLandingStats).toHaveBeenCalledTimes(2);
     stopSecond();
   });

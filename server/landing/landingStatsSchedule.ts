@@ -7,18 +7,15 @@ import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
 import { setLandingStats } from './landingStatsCache';
+import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
 import {
-  computeCatalogSources,
   readCatalogSources,
   setCatalogSources,
   writeCatalogSources,
 } from '../vacancies/catalogSources';
-import {
-  computeCatalogSalaryStats,
-  writeCatalogSalaryStats,
-} from '../vacancies/catalogSalaryStatsStore';
-import { computeCatalogChips, writeCatalogChips } from '../vacancies/catalogChipStore';
-import { computeLandingStats, readLandingStats, writeLandingStats } from './landingStatsJob';
+import { writeCatalogSalaryStats } from '../vacancies/catalogSalaryStatsStore';
+import { writeCatalogChips } from '../vacancies/catalogChipStore';
+import { readLandingStats, writeLandingStats } from './landingStatsJob';
 
 interface StatsLog {
   info(details: Record<string, unknown>, message: string): void;
@@ -35,15 +32,17 @@ function errorName(error: unknown): string {
 
 /** Maintenance process only: the counts scan the whole pool index. */
 export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): () => void {
-  const run = (): boolean => {
+  // B649-3: the counts read in their own thread (117–160 s on the loop, 12.11).
+  const run = async (): Promise<boolean> => {
     const started = Date.now();
     try {
       const now = new Date();
-      const stats = computeLandingStats(database, now);
+      const read = await heavyRead(database, 'landing', { nowMs: now.getTime() }, log);
+      const stats = read.landing;
       writeLandingStats(database, stats, now);
-      writeCatalogSources(database, computeCatalogSources(database), now);
-      writeCatalogSalaryStats(database, computeCatalogSalaryStats(database), now);
-      const chips = writeCatalogChips(database, computeCatalogChips(database, now.getTime()), now);
+      writeCatalogSources(database, read.sources, now);
+      writeCatalogSalaryStats(database, read.salaryStats, now);
+      const chips = writeCatalogChips(database, read.chips, now);
       log.info({ ...chips }, 'catalog-chips-written');
       log.info(
         { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
