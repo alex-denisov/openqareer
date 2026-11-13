@@ -47,13 +47,14 @@ interface ParsedTitle {
 
 const PRUNE_CHUNK = 5_000;
 /** B641 10.11: whole-table prune at pass end held the loop ~10 s; one rowid window per step. */
-const PRUNE_WINDOW = 20_000;
+// B649-4 13.11: на проде окно 20 000 держало шаг ~0,9 с, весь шаг 1,1 с; окна по 5 000.
+const PRUNE_WINDOW = 5_000;
 const MISSING_WINDOW = 5_000;
-const CORRECTION_WINDOW = 20_000;
+const CORRECTION_WINDOW = 5_000;
 const CORRECTION_CHUNK = 500;
 const CORRECTION_BUDGET_MS = 300;
 const SLOW_STEP_MS = 1_000;
-const RELABEL_WINDOW = 20_000;
+const RELABEL_WINDOW = 5_000;
 
 interface Correction {
   key: string;
@@ -69,7 +70,7 @@ interface OneRoleRow {
   parsed_by: string;
 }
 /** Названий на шаг для грейдов: только правила, модель не вызывается. */
-const GRADE_CHUNK = 2_000;
+const GRADE_CHUNK = 500;
 /** Выше этой ступени название уже различает `level_rank`. */
 const GRADE_MAX_LEVEL_RANK = 1;
 /** Названий на переразбор за шаг: удаление строк индекса идёт по `title_key`. */

@@ -654,6 +654,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return row.n;
   }
 
+  async countVacanciesInWorker(window: FreshnessWindow): Promise<number> {
+    const rows = await readInWorker<{ n: number }>(
+      this.database,
+      `SELECT count(*) AS n FROM vacancy_pool_index i WHERE ${FRESH}`,
+      [window.fromMs, window.toMs],
+    );
+    return Number(rows[0]?.n ?? 0);
+  }
+
   countBySource(window: FreshnessWindow): ReadonlyMap<string, number> {
     const rows = this.database
       .prepare(

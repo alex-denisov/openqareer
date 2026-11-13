@@ -1380,6 +1380,14 @@ export class MultiSourceVacancyEngine {
     return this.pool.countVacancies(freshnessWindow());
   }
 
+  /** B649-4: счёт пула в своём потоке; у хранилища без потока — как poolSize. */
+  public poolSizeInWorker(): Promise<number> {
+    const window = freshnessWindow();
+    return this.pool.countVacanciesInWorker
+      ? this.pool.countVacanciesInWorker(window)
+      : Promise.resolve(this.pool.countVacancies(window));
+  }
+
   public getVacancy(id: string): UnifiedVacancy | undefined {
     return this.pool.getVacancy(id);
   }

@@ -174,3 +174,20 @@ describe('PlacementBackfillTicker', () => {
     expect(calls).toBeGreaterThan(5);
   });
 });
+
+describe('PlacementBackfill board linkage (B649-4: all boards in memory held the loop 7 s)', () => {
+  it('looks a board up by key instead of loading every board of the directory', () => {
+    const db = openDb();
+    const sqls: string[] = [];
+    const prepare = db.prepare.bind(db);
+    db.prepare = ((sql: string) => {
+      sqls.push(sql);
+      return prepare(sql);
+    }) as DatabaseSync['prepare'];
+    runAll(new PlacementBackfill(db, { chunk: 2, now: () => 1 }));
+    expect(sqls.some((sql) => /ats_provider IS NOT NULL AND ats_slug IS NOT NULL/u.test(sql))).toBe(false);
+    expect(
+      db.prepare(`SELECT company_key FROM company_placement WHERE placement_id = 'ats:greenhouse:stripe'`).get(),
+    ).toEqual({ company_key: 'stripe' });
+  });
+});
