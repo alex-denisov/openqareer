@@ -177,6 +177,33 @@ if [[ "$PUBLIC_KEY_FILE" == "--caddy-only" ]]; then
   install_caddy_configuration
   exit 0
 fi
+# B649-6: only the three units. Installs a unit whose file differs, reloads,
+# verifies and restarts just the changed ones; a repeat run changes nothing.
+install_units_only() {
+  local unit changed=()
+  for unit in openqareer-static.service openqareer-maintenance.service \
+    openqareer-vacancy-mechanics.service; do
+    if ! cmp -s "$SCRIPT_DIR/$unit" "/etc/systemd/system/$unit"; then
+      install -o root -g root -m 0644 "$SCRIPT_DIR/$unit" "/etc/systemd/system/$unit"
+      changed+=("$unit")
+    fi
+  done
+  if [[ "${#changed[@]}" -eq 0 ]]; then
+    printf 'openqareer-bootstrap: units unchanged\n'
+    return 0
+  fi
+  systemctl daemon-reload
+  for unit in "${changed[@]}"; do
+    systemd-analyze verify "/etc/systemd/system/$unit"
+    systemctl restart "$unit"
+    printf 'openqareer-bootstrap: restarted %s\n' "$unit"
+  done
+}
+
+if [[ "$PUBLIC_KEY_FILE" == "--units-only" ]]; then
+  install_units_only
+  exit 0
+fi
 for command_name in apt-get awk basename cat chmod chown cmp curl cut \
   dpkg-query flock getent grep id install ip ln mktemp readlink rm scp seq \
   sha256sum tar systemctl systemd-analyze touch tr useradd visudo; do
