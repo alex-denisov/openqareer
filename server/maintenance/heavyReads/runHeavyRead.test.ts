@@ -92,7 +92,12 @@ describe('runHeavyRead', () => {
       `import { parentPort, workerData } from 'node:worker_threads';
        parentPort.postMessage({ result: { job: workerData.job, path: workerData.path, args: workerData.args } });`,
     );
-    const result = (await runHeavyRead(database, 'sitemaps', { nowMs: 5 }, { workerFile })) as unknown;
+    const result = (await runHeavyRead(
+      database,
+      'sitemaps',
+      { nowMs: 5 },
+      { workerFile },
+    )) as unknown;
     expect(result).toEqual({ job: 'sitemaps', path: database.location(), args: { nowMs: 5 } });
     database.close();
   });
@@ -105,9 +110,9 @@ describe('runHeavyRead', () => {
       `import { parentPort } from 'node:worker_threads';
        parentPort.postMessage({ error: 'no such table: vacancy_pool_index' });`,
     );
-    await expect(
-      runHeavyRead(database, 'landing', { nowMs: 1 }, { workerFile }),
-    ).rejects.toThrow(/vacancy_pool_index/);
+    await expect(runHeavyRead(database, 'landing', { nowMs: 1 }, { workerFile })).rejects.toThrow(
+      /vacancy_pool_index/,
+    );
     database.close();
   });
 
@@ -115,9 +120,9 @@ describe('runHeavyRead', () => {
     const database = fileDatabase();
     const workerFile = join(tempDir(), 'silent-worker.mjs');
     writeFileSync(workerFile, 'process.exitCode = 0;');
-    await expect(
-      runHeavyRead(database, 'landing', { nowMs: 1 }, { workerFile }),
-    ).rejects.toThrow(/exited/);
+    await expect(runHeavyRead(database, 'landing', { nowMs: 1 }, { workerFile })).rejects.toThrow(
+      /exited/,
+    );
     database.close();
   });
 });
@@ -125,7 +130,7 @@ describe('runHeavyRead', () => {
 describe('checkpointAfterRead', () => {
   it('runs a passive checkpoint and logs the WAL size', () => {
     const database = fileDatabase();
-    database.exec('CREATE TABLE t (v TEXT); INSERT INTO t VALUES (\'x\');');
+    database.exec("CREATE TABLE t (v TEXT); INSERT INTO t VALUES ('x');");
     const log = memoryLog();
     checkpointAfterRead(database, 'landing', 1234, log);
     const line = log.lines.find((entry) => entry.message === 'heavy-read-done');
@@ -139,6 +144,20 @@ describe('checkpointAfterRead', () => {
     const log = memoryLog();
     checkpointAfterRead(database, 'landing', 1, log);
     expect(log.lines[0]?.details).toMatchObject({ job: 'landing', walMb: null });
+    database.close();
+  });
+});
+
+describe('landingWrite job (B649-5)', () => {
+  it('writes the landing tables from the job connection and returns only a summary', () => {
+    const database = fileDatabase();
+    const path = database.location() ?? '';
+    const summary = runHeavyReadJob(path, 'landingWrite', {
+      nowMs: Date.parse('2026-11-15T00:00:00Z'),
+    });
+    expect(summary).toMatchObject({ active: 0, rows: 0, sources: { written: 0 } });
+    const row = database.prepare('SELECT count(*) AS n FROM landing_stats').get() as { n: number };
+    expect(row.n).toBe(1);
     database.close();
   });
 });
