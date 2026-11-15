@@ -10,6 +10,8 @@ import { computeCatalogSalaryStats } from '../../vacancies/catalogSalaryStatsSto
 import { computeCatalogChips } from '../../vacancies/catalogChipStore';
 import { computeSalaryMarketSnapshots } from '../../salaryMarket/salaryMarketSnapshot';
 import { computeCatalogSitemaps } from '../../seo/catalogSitemapJob';
+import { computeAndWriteLanding } from '../../landing/landingResultWrite';
+import { applySqliteBusyTimeout } from '../../data/sqliteBusyTimeout';
 
 export interface HeavyReadArgs {
   readonly nowMs: number;
@@ -26,6 +28,9 @@ const JOBS = {
     computeSalaryMarketSnapshots(database, new Date(nowMs)),
   sitemaps: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
     computeCatalogSitemaps(database, new Date(nowMs)),
+  // B649-5: в процессе (тесты, dev) читатель и писатель — одно соединение.
+  landingWrite: (database: DatabaseSync, { nowMs }: HeavyReadArgs) =>
+    computeAndWriteLanding(database, () => database, nowMs),
 };
 
 export type HeavyReadJob = keyof typeof JOBS;
@@ -45,11 +50,45 @@ export function runHeavyReadJob<K extends HeavyReadJob>(
   job: K,
   args: HeavyReadArgs,
 ): HeavyReadResult<K> {
+  if (job === 'landingWrite') return runLandingWriteJob(path, args) as HeavyReadResult<K>;
   const database = new DatabaseSync(path, { readOnly: true });
   try {
     database.exec('PRAGMA busy_timeout = 10000;');
     return computeHeavyRead(database, job, args);
   } finally {
     database.close();
+  }
+}
+
+/**
+ * B649-5: поток считает на readOnly-соединении, закрывает снимок и пишет
+ * итоги порциями своим соединением-писателем; наружу — только сводка.
+ */
+function runLandingWriteJob(
+  path: string,
+  { nowMs }: HeavyReadArgs,
+): HeavyReadResult<'landingWrite'> {
+  const reader = new DatabaseSync(path, { readOnly: true });
+  let readerOpen = true;
+  let writer: DatabaseSync | undefined;
+  const closeReader = () => {
+    if (readerOpen) reader.close();
+    readerOpen = false;
+  };
+  try {
+    reader.exec('PRAGMA busy_timeout = 10000;');
+    return computeAndWriteLanding(
+      reader,
+      () => {
+        writer = new DatabaseSync(path);
+        applySqliteBusyTimeout(writer);
+        return writer;
+      },
+      nowMs,
+      closeReader,
+    );
+  } finally {
+    closeReader();
+    writer?.close();
   }
 }

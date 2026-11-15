@@ -87,8 +87,7 @@ export function checkpointAfterRead(
   let checkpointBusy: number | null = null;
   try {
     const row = database.prepare('PRAGMA wal_checkpoint(PASSIVE)').get() as
-      | { busy: number }
-      | undefined;
+      { busy: number } | undefined;
     checkpointBusy = row ? Number(row.busy) : null;
   } catch (error: unknown) {
     log.error(

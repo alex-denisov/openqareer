@@ -8,14 +8,8 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { schedulePersistedJob } from '../maintenance/persistedJobSchedule';
 import { setLandingStats } from './landingStatsCache';
 import { heavyRead } from '../maintenance/heavyReads/runHeavyRead';
-import {
-  readCatalogSources,
-  setCatalogSources,
-  writeCatalogSources,
-} from '../vacancies/catalogSources';
-import { writeCatalogSalaryStats } from '../vacancies/catalogSalaryStatsStore';
-import { writeCatalogChips } from '../vacancies/catalogChipStore';
-import { readLandingStats, writeLandingStats } from './landingStatsJob';
+import { readCatalogSources, setCatalogSources } from '../vacancies/catalogSources';
+import { readLandingStats } from './landingStatsJob';
 
 interface StatsLog {
   info(details: Record<string, unknown>, message: string): void;
@@ -36,16 +30,19 @@ export function scheduleLandingStatsJob(database: DatabaseSync, log: StatsLog): 
   const run = async (): Promise<boolean> => {
     const started = Date.now();
     try {
-      const now = new Date();
-      const read = await heavyRead(database, 'landing', { nowMs: now.getTime() }, log);
-      const stats = read.landing;
-      writeLandingStats(database, stats, now);
-      writeCatalogSources(database, read.sources, now);
-      writeCatalogSalaryStats(database, read.salaryStats, now);
-      const chips = writeCatalogChips(database, read.chips, now);
-      log.info({ ...chips }, 'catalog-chips-written');
+      // B649-5: поток сам пишет итоги порциями; в главный поток — только сводка.
+      const summary = await heavyRead(database, 'landingWrite', { nowMs: Date.now() }, log);
+      log.info({ ...summary.chips }, 'catalog-chips-written');
       log.info(
-        { ms: Date.now() - started, active: stats.activeCount, rows: stats.vacancies.length },
+        {
+          ms: Date.now() - started,
+          active: summary.active,
+          rows: summary.rows,
+          sourcesRows: summary.sources.written,
+          sourcesTransactions: summary.sources.transactions,
+          salaryRows: summary.salaryStats.written,
+          salaryTransactions: summary.salaryStats.transactions,
+        },
         'landing-stats-written',
       );
       return true;
