@@ -77,3 +77,9 @@ await copyFile(
   'server/companyDirectory/freehire/data/freehire-boards-2026-09-03.tsv.gz',
   'dist/data/freehire/freehire-boards-2026-09-03.tsv.gz',
 );
+
+// B645: employer board pointers from Career Ops (CC BY 4.0, see NOTICE).
+await mkdir('dist/data/careerOps', { recursive: true });
+for (const name of ['employer-boards.ndjson', 'LICENSE', 'CONTRIBUTIONS.md']) {
+  await copyFile(`server/companyDirectory/careerOps/data/${name}`, `dist/data/careerOps/${name}`);
+}
