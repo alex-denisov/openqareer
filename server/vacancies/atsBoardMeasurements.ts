@@ -22,6 +22,22 @@ export const MEASURED_ATS_BOARDS: readonly MeasuredAtsBoard[] = [
     lists: ['career-ops'],
   },
   {
+    company: 'Aave Labs',
+    provider: 'lever',
+    board: 'eu-aavelabs',
+    jobs: 13,
+    observedAt: '2026-11-15',
+    lists: ['freehire'],
+  },
+  {
+    company: 'Abode Money',
+    provider: 'ashby',
+    board: 'Abode%20Money',
+    jobs: 11,
+    observedAt: '2026-11-15',
+    lists: ['freehire'],
+  },
+  {
     company: 'Telnyx',
     provider: 'greenhouse',
     board: 'telnyx54',
