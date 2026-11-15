@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resumeDraftSchema, EMPTY_RESUME_DRAFT } from './resumeDraft';
+import { assertTargetedResumeQuantities, buildTargetedResumeSlice } from './resumeStudioTargeted';
 import {
   buildResumeStudioProjection,
   validateResumeEvidenceFreshness,
@@ -788,3 +789,20 @@ function assertionsIn(
     (item): item is ResumeAssertion<string | boolean> => item !== null,
   );
 }
+
+describe('targeted CV quantitative fact gate', () => {
+  it('permits verbatim claims and rejects changed metrics and their transfer between employments', () => {
+    const { master } = buildResumeStudioProjection(completeInput());
+    const targeted = buildTargetedResumeSlice(master, { title: 'Operations Director', requirements: [] }).document;
+    expect(() => assertTargetedResumeQuantities(master, targeted)).not.toThrow();
+    const role = targeted.experience.find((entry) => entry.id === 'current-role')!;
+    const bullet = role.bullets.find((item) => item.memoryId === 'outcome-current')!;
+    const changed = { ...bullet, value: 'Вырастил выручку на 99%' };
+    expect(() => assertTargetedResumeQuantities(master, {
+      ...targeted, experience: [{ ...role, bullets: [changed] }],
+    })).toThrow('targeted_resume_unsubstantiated_quantity');
+    expect(() => assertTargetedResumeQuantities(master, {
+      ...targeted, experience: [{ ...role, id: 'another-role', bullets: [bullet] }],
+    })).toThrow('targeted_resume_unsubstantiated_quantity');
+  });
+});

@@ -3,7 +3,8 @@ import type { VacancyCluster } from './domain/unifiedVacancy';
 import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
 import type { CoverLetterWriter, CoverLetterWriteInput } from './providers/coverLetterWriter';
 import { normalizeJsonSource } from './vacancies/jsonSourceAdapters';
-import { resolvePitchVacancy } from './routes/vacancyPitchRoutes';
+import { readFreshPitchSkills, resolvePitchVacancy } from './routes/vacancyPitchRoutes';
+import { vacancyDescriptionHash } from './domain/vacancyRequirements';
 import { createApp, login } from './testHelpers/vacancyPitchHarness';
 import type { VacancyDescriptionLoader } from './vacancies/multiSourceVacancyEngine';
 
@@ -842,5 +843,31 @@ describe('GET /api/v1/candidate/vacancies/:id/detail (B266)', () => {
       headers: { cookie },
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe('shared public vacancy facts in the letter', () => {
+  it('reuses current facts only for the same, recently seen posting and description', () => {
+    const description = 'Operate production Kubernetes clusters';
+    const fresh = { ...sampleCluster, lastSeenAt: '2026-11-15T12:00:00Z' };
+    const now = Date.parse('2026-11-15T12:01:00Z');
+    const getLatest = vi.fn((id: string, hash?: string) =>
+      id === fresh.id && hash === vacancyDescriptionHash(description) ? {
+        vacancyId: fresh.id, descriptionHash: hash, extractorVersion: 'coverage-2',
+        method: 'model' as const, status: 'extracted' as const,
+        requirements: [{
+          id: 'r1', text: description, sourceQuote: description,
+          origin: 'explicit' as const, importance: 'high' as const, kind: 'other' as const,
+          hard: false, stopFactor: false, label: 'Kubernetes', skill: true,
+        }],
+      } : null);
+    const store = { getLatest };
+    expect(readFreshPitchSkills(store, fresh, fresh.id, description, now)).toEqual(['Kubernetes']);
+    expect(readFreshPitchSkills(store, fresh, fresh.id, 'Changed posting', now)).toEqual([]);
+    expect(readFreshPitchSkills(store, fresh, 'different-posting', description, now)).toEqual([]);
+    expect(readFreshPitchSkills(store, { ...fresh, deadLink: true }, fresh.id, description, now)).toEqual([]);
+    expect(readFreshPitchSkills(store, { ...fresh, linkStatus: 'unknown' }, fresh.id, description, now)).toEqual([]);
+    expect(readFreshPitchSkills(store, fresh, fresh.id, description, now + 24 * 60 * 60_000)).toEqual([]);
+    expect(getLatest).toHaveBeenCalledTimes(2);
   });
 });
