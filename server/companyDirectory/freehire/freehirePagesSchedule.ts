@@ -1,26 +1,14 @@
 /**
- * B645: maintenance step — every freehire.me company page, shard by shard of the
- * sitemap, ~3 pages a second. Position (shard offset + index in it) and totals live
- * in `freehire_pages_state`, so a restart continues where it stopped. No model calls.
+ * B645: stage source links from company pages, following the FreeHire sitemap.
+ * The shard cursor and totals in `freehire_pages_state` survive process restarts.
  * Rollback: OPENQAREER_FREEHIRE_PAGES_OFF=1.
  */
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { Worker } from 'node:worker_threads';
-import {
-  boardCheck,
-  boardFromJobUrl,
-  boardsOfCard,
-  cleanWebsite,
-  importCompany,
-  isAggregator,
-  nameKey,
-  loadDirectoryIndex,
-  type BoardCheck,
-  type DirectoryIndex,
-} from './freehireImport';
-import { recordCompanyPlacements } from '../placement/placementWriter';
+import { runSqliteTransaction } from '../../data/sqliteTransaction';
+import { boardFromJobUrl, boardsOfCard, cleanWebsite, isAggregator, nameKey } from './freehireImport';
 import { FreehirePagesClient, FreehirePagesLimitError } from './freehirePagesClient';
 import type { FreehirePageCard } from './freehirePages';
 
@@ -42,11 +30,11 @@ export interface PagesState {
   shard: number;
   index: number;
   done?: string;
+  candidatePass?: true;
   pausedUntil?: string;
   read: number;
   failed: number;
   skipped: number;
-  added: number;
   websites: number;
   linkedin: number;
   careers: number;
@@ -60,7 +48,6 @@ const EMPTY: PagesState = {
   read: 0,
   failed: 0,
   skipped: 0,
-  added: 0,
   websites: 0,
   linkedin: 0,
   careers: 0,
@@ -142,53 +129,6 @@ export function employerJobSite(card: FreehirePageCard): EmployerJobSite | null 
   return null;
 }
 
-/** LinkedIn page, careers section and other profiles; only empty fields are filled. */
-export function writePageExtras(
-  database: DatabaseSync,
-  companyKey: string,
-  card: FreehirePageCard,
-  careersUrl: string | null,
-  stamp: string,
-): { linkedinAdded: boolean; careersAdded: boolean } {
-  const before = database
-    .prepare('SELECT linkedin_url, careers_url FROM company_directory WHERE company_key = ?')
-    .get(companyKey) as { linkedin_url: string | null; careers_url: string | null } | undefined;
-  if (!before) return { linkedinAdded: false, careersAdded: false };
-  const linkedinAdded = Boolean(card.linkedin && !before.linkedin_url);
-  const careersAdded = Boolean(careersUrl && !before.careers_url);
-  const evidence: Record<string, unknown> = {};
-  if (Object.keys(card.profiles).length > 0)
-    evidence.profiles = { value: card.profiles, how: 'freehire.me company page' };
-  if (linkedinAdded)
-    evidence.linkedinUrl = { value: card.linkedin, how: 'freehire.me company page' };
-  if (careersAdded)
-    evidence.careersUrl = {
-      value: careersUrl,
-      how: 'freehire.me job Apply link on the company domain',
-    };
-  if (!linkedinAdded && !careersAdded && Object.keys(evidence).length === 0)
-    return { linkedinAdded, careersAdded };
-  database
-    .prepare(
-      `UPDATE company_directory SET
-         linkedin_url = COALESCE(linkedin_url, ?),
-         careers_url = COALESCE(careers_url, ?),
-         source_type = CASE WHEN ? IS NOT NULL AND source_type = 'linkedin_guest' THEN 'corporate_portal' ELSE source_type END,
-         evidence = json_patch(COALESCE(evidence, '{}'), ?),
-         updated_at = ?
-       WHERE company_key = ?`,
-    )
-    .run(
-      linkedinAdded ? card.linkedin : null,
-      careersAdded ? careersUrl : null,
-      careersAdded ? careersUrl : null,
-      JSON.stringify(evidence),
-      stamp,
-      companyKey,
-    );
-  return { linkedinAdded, careersAdded };
-}
-
 async function fetchCards(
   client: FreehirePagesClient,
   slugs: readonly string[],
@@ -207,23 +147,29 @@ async function fetchCards(
 
 export interface PagesPass {
   slugs?: readonly string[];
-  index?: DirectoryIndex;
 }
 
 /** One batch; returns read = 0 when the pass is done or paused. */
 export async function runPagesTick(
   database: DatabaseSync,
   client: FreehirePagesClient,
-  check: BoardCheck,
   pass: PagesPass,
   now: () => Date = () => new Date(),
 ): Promise<{ read: number; state: PagesState }> {
   let state = readPagesState(database);
-  if (state.done) return { read: 0, state };
+  if (state.done) {
+    // The completed legacy pass retained only selected placements. Collect its
+    // first evidence snapshot immediately, then observe the weekly cadence.
+    if (state.candidatePass && now().getTime() < Date.parse(state.done) + DONE_MS)
+      return { read: 0, state };
+    state = { ...EMPTY, candidatePass: true };
+    savePagesState(database, state, now());
+    pass.slugs = undefined;
+  }
   if (state.pausedUntil && now() < new Date(state.pausedUntil)) return { read: 0, state };
   pass.slugs ??= await client.sitemapSlugs(state.shard);
   if (pass.slugs.length === 0) {
-    state = { ...state, done: now().toISOString() };
+    state = { ...state, done: now().toISOString(), candidatePass: true };
     savePagesState(database, state, now());
     return { read: 0, state };
   }
@@ -231,7 +177,6 @@ export async function runPagesTick(
     state = { ...state, shard: state.shard + SHARD, index: 0 };
     savePagesState(database, state, now());
     pass.slugs = undefined;
-    pass.index = undefined;
     return { read: 1, state };
   }
   const slugs = pass.slugs.slice(state.index, state.index + BATCH);
@@ -244,89 +189,54 @@ export async function runPagesTick(
     savePagesState(database, state, now());
     return { read: 0, state };
   }
-  pass.index ??= loadDirectoryIndex(database);
-  state = await writeCards(
-    database,
-    pass.index,
-    cards,
-    await prefetchedChecks(cards, check),
-    state,
-    now(),
-  );
-  state = { ...state, index: state.index + slugs.length, pausedUntil: undefined };
-  savePagesState(database, state, now());
+  state = runSqliteTransaction(database, () => {
+    const observedAt = now();
+    const next = writeCandidates(database, cards, state, observedAt);
+    next.index += slugs.length;
+    next.pausedUntil = undefined;
+    savePagesState(database, next, observedAt);
+    return next;
+  });
   return { read: slugs.length, state };
 }
 
 /**
- * Board API checks of the whole batch run at once (different ATS hosts), so the
- * sequential writes below only read the cache; one check per board.
+ * Discovery is evidence only. Neither these cards nor their links enter the
+ * vacancy polling registry until company identity and source eligibility are verified.
  */
-export async function prefetchedChecks(
-  cards: readonly (FreehirePageCard | null | undefined)[],
-  check: BoardCheck,
-): Promise<BoardCheck> {
-  const results = new Map<string, Promise<number>>();
-  const cached: BoardCheck = (board) => {
-    const id = `${board.provider}:${board.slug}`;
-    let hit = results.get(id);
-    if (!hit) {
-      hit = check(board).catch(() => -1);
-      results.set(id, hit);
-    }
-    return hit;
-  };
-  const boards = cards.flatMap((card) => (card ? boardsOfCard(card).slice(0, 3) : []));
-  await Promise.all(boards.map((board) => cached(board)));
-  return cached;
-}
-
-async function writeCards(
+function writeCandidates(
   database: DatabaseSync,
-  index: DirectoryIndex,
   cards: readonly (FreehirePageCard | null | undefined)[],
-  check: BoardCheck,
   start: PagesState,
   now: Date,
-): Promise<PagesState> {
-  let state: PagesState = { ...start, boards: { ...start.boards } };
+): PagesState {
+  database.exec(`CREATE TABLE IF NOT EXISTS freehire_company_source_candidates (
+    slug TEXT PRIMARY KEY, evidence TEXT NOT NULL, fetched_at TEXT NOT NULL
+  ) STRICT`);
+  const save = database.prepare(`INSERT INTO freehire_company_source_candidates (slug, evidence, fetched_at)
+    VALUES (?, ?, ?) ON CONFLICT(slug) DO UPDATE SET
+      evidence = excluded.evidence, fetched_at = excluded.fetched_at`);
+  const state: PagesState = { ...start, boards: { ...start.boards } };
+  const stamp = now.toISOString();
   for (const card of cards) {
-    state = { ...state, read: state.read + 1 };
+    state.read++;
     if (card === undefined) {
-      state = { ...state, failed: state.failed + 1 };
+      state.failed++;
       continue;
     }
-    const jobSite = card ? employerJobSite(card) : null;
-    // No site on the page: the employer's own jobs domain stands in for it.
-    const withSite =
-      card && !cleanWebsite(card.website) && jobSite ? { ...card, website: jobSite.origin } : card;
-    const outcome = withSite ? await importCompany(database, index, withSite, check, now) : null;
-    if (!card || !outcome) {
-      state = { ...state, skipped: state.skipped + 1 };
+    if (card === null) {
+      state.skipped++;
       continue;
     }
-    if (jobSite)
-      recordCompanyPlacements(
-        database,
-        outcome.companyKey,
-        { boards: [], siteUrl: jobSite.origin, discoveredBy: 'freehire' },
-        now.getTime(),
-      );
-    const careers = jobSite?.careers ?? null;
-    const extras = writePageExtras(database, outcome.companyKey, card, careers, now.toISOString());
-    state = {
-      ...state,
-      added: state.added + (outcome.isNew ? 1 : 0),
-      websites: state.websites + (outcome.websiteAdded ? 1 : 0),
-      linkedin: state.linkedin + (extras.linkedinAdded ? 1 : 0),
-      careers: state.careers + (extras.careersAdded ? 1 : 0),
-      boards: outcome.board
-        ? {
-            ...state.boards,
-            [outcome.board.provider]: (state.boards[outcome.board.provider] ?? 0) + 1,
-          }
-        : state.boards,
-    };
+    const employerSite = employerJobSite(card);
+    const careers = employerSite?.careers ?? null;
+    // These parser-derived IDs are hints. Raw job URLs preserve case and region.
+    const boards = boardsOfCard(card);
+    save.run(card.slug, JSON.stringify({ ...card, employerSite, careers, boards }), stamp);
+    if (card.website) state.websites++;
+    if (card.linkedin) state.linkedin++;
+    if (careers) state.careers++;
+    for (const { provider } of boards) state.boards[provider] = (state.boards[provider] ?? 0) + 1;
   }
   return state;
 }
@@ -357,7 +267,6 @@ export function runFreehirePagesLoop(
   firstRunMs = FIRST_RUN_MS,
 ): () => void {
   const client = new FreehirePagesClient();
-  const check = boardCheck(fetch);
   const pass: PagesPass = {};
   let timer: NodeJS.Timeout | undefined;
   let stopped = false;
@@ -371,15 +280,16 @@ export function runFreehirePagesLoop(
   const run = async () => {
     try {
       const started = Date.now();
-      const { read, state } = await runPagesTick(database, client, check, pass);
+      const { read, state } = await runPagesTick(database, client, pass);
       if (read > 0 && Date.now() - loggedAt >= HOUR_MS) loggedAt = Date.now();
       logTick(log, read, state, client, Date.now() - started, read > 0 && loggedAt >= started);
+      const refreshAt = state.done ? Date.parse(state.done) + DONE_MS : Date.now() + DONE_MS;
       next(
         read > 0
           ? BETWEEN_MS
           : state.pausedUntil
             ? Math.max(60_000, Date.parse(state.pausedUntil) - Date.now())
-            : DONE_MS,
+            : Math.max(BETWEEN_MS, refreshAt - Date.now()),
       );
     } catch (error: unknown) {
       pass.slugs = undefined;

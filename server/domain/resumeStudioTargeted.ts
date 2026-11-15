@@ -1,5 +1,6 @@
 import { estimateLength } from './resumeStudioInternals';
 import type {
+  ResumeAssertion,
   ResumeDocument,
   ResumeExperience,
   ResumeProject,
@@ -35,11 +36,41 @@ export function buildTargetedResumeSlice(
   const requirements = normalizeRequirements(vacancy.requirements);
   const coverage = coverRequirements(master, requirements);
   const prepared = prepareTargetedDocument(master, vacancy, requirements, coverage.missingRequirements);
+  assertTargetedResumeQuantities(master, prepared.document);
   return {
     ...coverage,
     ...prepared,
     estimatedPages: prepared.document.length.pages,
   };
+}
+
+// Include quantities in English and Russian words as well as Unicode digits.
+const QUANTITY = /\p{N}|(?<!\p{L})(?:hundred|thousand|million|billion|double[ds]?|triple[ds]?|percent|тысяч\p{L}*|миллион\p{L}*|миллиард\p{L}*|процент\p{L}*|вдвое|втрое)(?!\p{L})/iu;
+
+function checkQuantity(value: string | null | undefined, sources: readonly string[]): void {
+  if (value && QUANTITY.test(value) && !sources.includes(value)) {
+    throw new Error('targeted_resume_unsubstantiated_quantity');
+  }
+}
+
+function assertionQuantity(claim: ResumeAssertion | null | undefined, sources: readonly (ResumeAssertion | null | undefined)[]): void {
+  if (!claim) return;
+  checkQuantity(claim.value, sources.flatMap((source) =>
+    source?.memoryId === claim.memoryId ? [source.value] : []));
+}
+
+/** Quantitative achievements in a targeted draft must retain text and evidence from the same entry. */
+export function assertTargetedResumeQuantities(master: ResumeDocument, targeted: ResumeDocument): void {
+  checkQuantity(targeted.about, master.about ? [master.about] : []);
+  for (const entry of targeted.experience) {
+    const source = master.experience.find((item) => item.id === entry.id);
+    assertionQuantity(entry.description, [source?.description]);
+    for (const bullet of entry.bullets) assertionQuantity(bullet, source?.bullets ?? []);
+  }
+  for (const project of targeted.projects ?? []) {
+    const source = master.projects?.find((item) => item.id === project.id);
+    assertionQuantity(project.description, [source?.description]);
+  }
 }
 
 function coverRequirements(

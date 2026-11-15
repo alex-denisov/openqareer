@@ -36,6 +36,9 @@ import { latinEmployerNames, withLatinEmployerNames } from '../domain/letterLati
 import { letterCompanyLink } from '../domain/letterCompanyLink';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
 import { checkPitchOutputFacts } from '../domain/generatedTextFactGate';
+import type { VacancyCluster } from '../domain/unifiedVacancy';
+import { vacancyDescriptionHash } from '../domain/vacancyRequirements';
+import { labelVacancyRequirement } from '../domain/vacancyRequirementLabel';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -108,7 +111,7 @@ export function resolvePitchVacancy(
       body?.vacancy?.description ?? cluster?.descriptionSummary ?? poolVacancy?.description,
     // Письмо модели пишется по полному тексту из пула: экран письма присылает в description сводку (B601).
     fullDescription:
-      poolVacancy?.description ?? body?.vacancy?.description ?? cluster?.descriptionSummary,
+      poolVacancy?.fullDescription ?? poolVacancy?.description ?? body?.vacancy?.description ?? cluster?.descriptionSummary,
     requiredSkills:
       body?.vacancy?.requiredSkills ?? cluster?.skills ?? poolVacancy?.requiredSkills ?? [],
     responsibilities: body?.vacancy?.responsibilities ?? poolVacancy?.responsibilities ?? [],
@@ -368,7 +371,30 @@ function reservePitchVacancy(
   }
   // B579: письмо к вакансии — единица квоты откликов; повтор к той же вакансии бесплатен.
   if (!requireTariffQuota(deps, request, reply, access.candidateId, 'applications', vacancyId)) return undefined;
-  return { ...vacancy, title: vacancy.title };
+  const requiredSkills = vacancy.requiredSkills.length > 0 ? vacancy.requiredSkills
+    : readFreshPitchSkills(deps.vacancyMechanics?.requirements, cluster, vacancyId,
+      poolVacancy?.fullDescription ?? poolVacancy?.description);
+  return { ...vacancy, requiredSkills, title: vacancy.title };
+}
+
+const PITCH_FACTS_LIVENESS_MS = 24 * 60 * 60_000;
+
+export function readFreshPitchSkills(
+  store: Pick<NonNullable<RouteDeps['vacancyMechanics']>['requirements'], 'getLatest'> | undefined,
+  cluster: VacancyCluster | null | undefined,
+  vacancyId: string,
+  description: string | undefined,
+  now = Date.now(),
+): string[] {
+  const seen = Date.parse(cluster?.lastSeenAt ?? '');
+  if (!store || cluster?.id !== vacancyId || cluster.status !== 'active' ||
+      cluster.deadLink || cluster.linkStatus === 'gone' || cluster.linkStatus === 'unknown' ||
+      !description?.trim() || !Number.isFinite(seen) || seen > now || now - seen >= PITCH_FACTS_LIVENESS_MS) return [];
+  const cached = store.getLatest(vacancyId, vacancyDescriptionHash(description));
+  if (cached?.method !== 'model' || cached.fallbackStatus) return [];
+  const skills = cached.requirements.map(labelVacancyRequirement).flatMap((item) =>
+    item.skill && item.label ? [item.label.trim()] : []);
+  return [...new Set(skills.filter(Boolean))];
 }
 
 function pitchSourceId(vacancyId: string): string {

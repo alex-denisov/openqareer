@@ -22,3 +22,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+The Career Ops employer board snapshot in
+server/companyDirectory/careerOps/data/employer-boards.ndjson is attributed to
+the Career Ops contributors and database maker Santiago Fernández de Valderrama.
+Source: https://github.com/career-ops-hq/career-ops/tree/4eb444d0ba5fa75569c11ec503e2c0a864cf41fd/employers
+The source board files were concatenated into a single file. The data is under
+CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). The license and
+individual contribution credits accompany the snapshot.

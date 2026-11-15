@@ -8,8 +8,8 @@ import { mapWithConcurrency } from './boundedConcurrency';
  * 180 дней. Но лента может исправно отдавать свежие даты у объявлений, которых
  * на сайте уже нет. Единственное доказательство — сходить по ссылке.
  *
- * Замер осторожный намеренно. Смертью объявления считаются только `404` и
- * `410` — ответы, которыми сервер сам говорит «этого адреса больше нет».
+ * Замер учитывает явный ответ о снятии объявления и признаки закрытия
+ * на HTML-странице ATS.
  * Стена антибота (`403`), защита частоты (`429`), отказ сервера (`5xx`) и
  * молчание сети не доказывают ничего и остаются «неизвестно»: похоронить живое
  * объявление хуже, чем не заметить мёртвое.
@@ -19,6 +19,7 @@ import { mapWithConcurrency } from './boundedConcurrency';
 export interface LinkProbeOutcome {
   readonly status?: number;
   readonly error?: string;
+  readonly pageSignal?: 'closed' | 'challenge' | 'different_posting';
   /** Куда отправляет ответ `3xx` (заголовок `Location`), если он есть. */
   readonly location?: string;
 }
@@ -77,6 +78,17 @@ const DEFAULT_LINK_CONCURRENCY = 2;
 
 export function judgeLinkOutcome(outcome: LinkProbeOutcome, url?: string): LinkJudgement {
   const { status } = outcome;
+  if (outcome.pageSignal === 'challenge') {
+    return { verdict: 'unknown', reason: 'Площадка запросила проверку браузера' };
+  }
+  if (outcome.pageSignal === 'different_posting' ||
+      (url && outcome.location && status && status >= 300 && status < 400 &&
+        redirectsToAnotherPosting(url, outcome.location))) {
+    return { verdict: 'unknown', reason: 'Площадка открыла другое объявление' };
+  }
+  if (outcome.pageSignal === 'closed') {
+    return { verdict: 'gone', reason: 'Площадка явно указала, что вакансия закрыта' };
+  }
   if (
     url &&
     outcome.location &&
@@ -248,14 +260,63 @@ export interface HttpLinkProbeOptions {
   readonly timeoutMs?: number;
 }
 
-/**
- * Проба по сети: сначала `HEAD` — тело объявления нам не нужно, а площадке
- * дешевле. Площадке, которая `HEAD` не принимает, задаётся тот же вопрос
- * страницей: иначе её объявления навсегда остались бы «неизвестно».
- *
- * Продукт представляется своим именем (та же строка, что у опроса площадок):
- * обход, который прячется, — это обход, о котором площадка не договаривалась.
- */
+// These hosts are ATS surfaces where HTTP 200 commonly serves an HTML job page.
+const ATS_PAGE_HOST = /(?:^|\.)(?:greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|myworkdaysite\.com)$/iu;
+const PAGE_PREFIX_LIMIT = 64 * 1024;
+const PAGE_TITLE = /<title\b[^>]*>([^<]*)<\/title>/iu;
+const CLOSED_HEADING = /^(?:job (?:not found|no longer available)|this (?:job|position|role) (?:is |has )?(?:closed|expired|been filled|no longer available)|vacancy not found)[.!]?$/iu;
+
+function postingId(url: URL): string | null {
+  return url.searchParams.get('gh_jid') ??
+    /(?:\/jobs?\/(?:[^/]+\/)?)?(?:^|\/|_)(\d{5,}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|R[-_]?\d{4,})\/?$/iu
+      .exec(url.pathname)?.[1] ?? null;
+}
+
+function redirectsToAnotherPosting(url: string, location: string): boolean {
+  try {
+    const original = new URL(url);
+    const target = new URL(location, original);
+    if (target.host !== original.host) return false;
+    const before = postingId(original);
+    const after = postingId(target);
+    return Boolean(before && after && before.toLowerCase() !== after.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+async function pagePrefix(response: Response): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return '';
+  const decoder = new TextDecoder();
+  let remaining = PAGE_PREFIX_LIMIT;
+  let html = '';
+  try {
+    while (remaining > 0) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      html += decoder.decode(chunk.value.subarray(0, remaining), { stream: true });
+      remaining -= chunk.value.length;
+    }
+    return html + decoder.decode();
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+}
+
+function htmlPageSignal(html: string, url: string): LinkProbeOutcome['pageSignal'] {
+  const title = PAGE_TITLE.exec(html)?.[1]?.trim() ?? '';
+  if (/^(?:just a moment|attention required|access denied|verify (?:you are human|your browser))/iu.test(title) ||
+      /<script\b[^>]+src=["'][^"']*\/cdn-cgi\/challenge-platform\//iu.test(html)) {
+    return 'challenge';
+  }
+  const canonical = /<link\b[^>]*\brel=["']canonical["'][^>]*\bhref=["']([^"']+)["']/iu.exec(html)?.[1];
+  if (canonical && redirectsToAnotherPosting(url, canonical)) return 'different_posting';
+  const heading = /<h1\b[^>]*>([^<]*)<\/h1>/iu.exec(html)?.[1]?.trim() ?? '';
+  if (CLOSED_HEADING.test(title) || CLOSED_HEADING.test(heading)) return 'closed';
+  return undefined;
+}
+
 function outcomeOf(response: Response): LinkProbeOutcome {
   const location = response.headers.get('location');
   return location ? { status: response.status, location } : { status: response.status };
@@ -270,7 +331,7 @@ export function createHttpLinkProbe(options: HttpLinkProbeOptions = {}): LinkPro
       method,
       // Переход не выполняется: адрес назначения выбирает чужая площадка, и
       // следовать за ним — значит снова открыть тот же путь во внутреннюю сеть.
-      // Ответ `3xx` сам по себе доказывает, что объявление на месте.
+      // Сверяем адрес из Location без нового запроса.
       redirect: 'manual',
       headers: { 'User-Agent': 'openqareer/1.0 (support@openqareer.com)' },
       signal: AbortSignal.timeout(timeoutMs),
@@ -279,9 +340,19 @@ export function createHttpLinkProbe(options: HttpLinkProbeOptions = {}): LinkPro
 
   return async (url: string): Promise<LinkProbeOutcome> => {
     try {
-      const head = await ask(url, 'HEAD');
-      if (!HEAD_NOT_SUPPORTED.has(head.status)) return outcomeOf(head);
-      return outcomeOf(await ask(url, 'GET'));
+      if (!ATS_PAGE_HOST.test(new URL(url).hostname)) {
+        const head = await ask(url, 'HEAD');
+        if (!HEAD_NOT_SUPPORTED.has(head.status)) return outcomeOf(head);
+      }
+      const page = await ask(url, 'GET');
+      const outcome = outcomeOf(page);
+      try {
+        const pageSignal = page.ok && page.headers.get('content-type')?.includes('text/html')
+          ? htmlPageSignal(await pagePrefix(page), url) : undefined;
+        return pageSignal ? { ...outcome, pageSignal } : outcome;
+      } finally {
+        if (page.body && !page.body.locked) await page.body.cancel().catch(() => {});
+      }
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
     }

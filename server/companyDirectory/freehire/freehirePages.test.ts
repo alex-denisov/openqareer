@@ -10,7 +10,6 @@ import {
 import { FreehirePagesClient } from './freehirePagesClient';
 import {
   employerJobSite,
-  prefetchedChecks,
   readPagesState,
   runPagesTick,
 } from './freehirePagesSchedule';
@@ -97,7 +96,7 @@ describe('B645 freehire pages', () => {
     expect(employerJobSite(card('Acme', 'https://nl.whatjobs.com/acme'))).toBeNull();
   });
 
-  it('imports a page, writes LinkedIn and placements, and resumes from its position', async () => {
+  it('stages direct sources, keeps them out of the live directory, and starts the next pass', async () => {
     const db = new DatabaseSync(':memory:');
     db.exec(COMPANY_DIRECTORY_MIGRATION);
     db.exec('ALTER TABLE company_directory ADD COLUMN evidence TEXT');
@@ -120,43 +119,40 @@ describe('B645 freehire pages', () => {
       () => 0,
     );
     const pass = {};
-    const first = await runPagesTick(db, client, async () => 3, pass);
+    readPagesState(db);
+    const legacyDone = new Date('2026-11-13T04:49:00Z').toISOString();
+    db.prepare('INSERT INTO freehire_pages_state VALUES (1, ?, ?)')
+      .run(JSON.stringify({ shard: 530_000, done: legacyDone }), legacyDone);
+    const first = await runPagesTick(db, client, pass, () => new Date(legacyDone));
     expect(first.read).toBe(2);
-    const row = db
-      .prepare("SELECT * FROM company_directory WHERE company_key = 'amazon'")
-      .get() as Record<string, string>;
-    expect(row.website_url).toBe('https://aboutamazon.com/');
-    expect(row.linkedin_url).toBe('https://www.linkedin.com/company/amazon');
-    expect(JSON.parse(row.evidence).profiles.value.twitter).toBe('https://twitter.com/amazon');
-    const placements = db
-      .prepare('SELECT placement_id FROM company_placement ORDER BY 1')
-      .all()
-      .map((r) => (r as { placement_id: string }).placement_id);
-    expect(placements).toEqual([
-      'ats:lever:amazon-leo',
-      'site:aboutamazon.com',
-      'site:amazon.jobs',
-    ]);
-    expect(row.careers_url).toBe('https://www.amazon.jobs/');
+    const row = db.prepare("SELECT evidence FROM freehire_company_source_candidates WHERE slug = 'amazon'")
+      .get() as { evidence: string };
+    expect(JSON.parse(row.evidence)).toMatchObject({
+      website: 'aboutamazon.com',
+      linkedin: 'https://www.linkedin.com/company/amazon',
+      careers: 'https://www.amazon.jobs/',
+      employerSite: { origin: 'https://www.amazon.jobs/' },
+      boards: [{ provider: 'lever', slug: 'amazon-leo' }],
+    });
+    expect(db.prepare('SELECT count(*) AS count FROM company_directory').get()).toMatchObject({ count: 0 });
     expect(readPagesState(db)).toMatchObject({
       shard: 0,
       index: 2,
       read: 2,
-      added: 1,
       linkedin: 1,
       skipped: 1,
     });
     // shard exhausted → next shard; empty shard → done
-    expect((await runPagesTick(db, client, async () => 3, pass)).state.shard).toBe(10_000);
-    expect((await runPagesTick(db, client, async () => 3, pass)).state.done).toBeTruthy();
+    expect((await runPagesTick(db, client, pass)).state.shard).toBe(10_000);
+    const completedAt = new Date('2026-11-13T04:50:32Z');
+    const at = (elapsed: number) => () => new Date(completedAt.getTime() + elapsed);
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const finished = await runPagesTick(db, client, pass, at(0));
+    expect(finished.state.done).toBe(completedAt.toISOString());
+    expect(await runPagesTick(db, client, {}, at(week - 1))).toEqual(finished);
+    const refreshed = await runPagesTick(db, client, {}, at(week));
+    expect(refreshed).toMatchObject({ read: 2, state: { shard: 0, index: 2, read: 2 } });
+    expect(refreshed.state.done).toBeUndefined();
   });
 
-  it('checks every board of a batch at once and only once', async () => {
-    const card = cardOfPageData('amazon', AMAZON)!;
-    const calls: string[] = [];
-    const cached = await prefetchedChecks([card, card, null], async (b) => (calls.push(b.slug), 5));
-    expect(calls).toEqual(['amazon-leo']);
-    expect(await cached({ provider: 'lever', slug: 'amazon-leo' })).toBe(5);
-    expect(calls).toHaveLength(1);
-  });
 });
