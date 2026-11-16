@@ -1,4 +1,5 @@
 import { readRolloutPlacementBoards } from './placementBoardRollout';
+import { readVerifiedRequestedAts } from './verifiedRequestedAts';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { readLinkedinPoolJobs } from './linkedinPoolSource';
@@ -41,6 +42,7 @@ export interface ComposedVacancyEngine {
 
 export interface ComposeVacancyEngineOptions {
   readonly databasePath: string;
+  readonly registerRequestedAts?: boolean;
   /** Подмена сети в тестах: по умолчанию — настоящие площадки, robots и ссылки. */
   readonly fetcher?: SourceFetcher;
   readonly fetchRobots?: RobotsFetcher;
@@ -146,6 +148,9 @@ export function composeVacancyEngine(options: ComposeVacancyEngineOptions): Comp
   const poolJobs = createPoolJobsReader(options.databasePath, (id) => engine.hasVacancy(id));
   const engine: MultiSourceVacancyEngine = new MultiSourceVacancyEngine({
     sources: registryWithCompanyChannels(options.databasePath),
+    ...(options.registerRequestedAts
+      ? { loadRequestedSource: (sourceId) => readVerifiedRequestedAts(options.databasePath, sourceId) }
+      : {}),
     // Во время паузы бюджета LinkedIn-источники не занимают места в волне (B622).
     ...(options.linkedinBudget
       ? { holdSource: holdDuringLinkedinPause(options.linkedinBudget) }
