@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CoachApiError } from '../../coach/apiClient';
 import * as todayApi from '../../today/todayApi';
 import type { TodaySnapshot } from '../../today/todayApi';
 import { click, mount, type Mounted } from '../kit/testDom';
@@ -111,6 +112,48 @@ describe('useTodayDay: чтение дня для нового «Сегодня�
     click(view.container.querySelector('button'));
     await settle();
     expect(text()).toBe('rows:2');
+  });
+
+  it('каждая попытка идёт со своим сроком ожидания, а не с голым сигналом экрана', async () => {
+    const read = vi.spyOn(todayApi, 'getTodaySnapshot').mockResolvedValue(SNAPSHOT);
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    view = mount(<Probe />);
+    await settle();
+    expect(timeout).toHaveBeenCalledWith(20_000);
+    expect(read.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
+  });
+
+  it('отказ, который повтор не исправит, не повторяет', async () => {
+    const denied = new CoachApiError('Сессия истекла.', 'unauthorized', false);
+    const read = vi.spyOn(todayApi, 'getTodaySnapshot').mockRejectedValue(denied);
+    view = mount(<Probe />);
+    await settle();
+    expect(text()).toBe('failed');
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it('ответ раннего чтения не перезаписывает более новое', async () => {
+    const finish: Array<(value: TodaySnapshot) => void> = [];
+    vi.spyOn(todayApi, 'getTodaySnapshot').mockImplementation(
+      () => new Promise<TodaySnapshot>((resolve) => finish.push(resolve)),
+    );
+    view = mount(<Probe />);
+    await settle();
+    click(view.container.querySelector('button'));
+    await settle();
+    expect(finish).toHaveLength(2);
+    await act(async () => finish[1]({ ...SNAPSHOT, queue: SNAPSHOT.queue.slice(0, 1) }));
+    await act(async () => finish[0](SNAPSHOT));
+    expect(text()).toBe('rows:1');
+  });
+
+  it('после действия дня перечитывает очередь', async () => {
+    const read = vi.spyOn(todayApi, 'getTodaySnapshot').mockResolvedValue(SNAPSHOT);
+    view = mount(<Probe />);
+    await settle();
+    act(() => void window.dispatchEvent(new Event(todayApi.TODAY_DECISION_CHANGED)));
+    await settle();
+    expect(read).toHaveBeenCalledTimes(2);
   });
 
   it('после ухода с экрана ничего не повторяет и не пишет', async () => {

@@ -6,7 +6,9 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
+import { API_READ_TIMEOUT_MS, apiRequestSignal, CoachApiError } from '../../coach/apiClient';
 import {
+  TODAY_DECISION_CHANGED,
   getTodayQueueRemainder,
   getTodaySnapshot,
   recordCandidateVisit,
@@ -14,9 +16,9 @@ import {
 } from '../../today/todayApi';
 
 /**
- * День кандидата для нового «Сегодня». Первый ответ `/candidate/today` на
- * проде бывает дольше срока ожидания клиента (20 с), поэтому чтение само
- * повторяется, а ошибка показывается только после трёх сбоев подряд.
+ * День кандидата для нового «Сегодня». Один сбой сети или затянувшийся ответ
+ * `/candidate/today` не должен прятать дела: чтение ограничено сроком ожидания
+ * и само повторяется, ошибка показывается только после трёх сбоев подряд.
  * Причину сбоя пишем в консоль: молчаливый сбой на проде не разобрать.
  */
 export interface TodayDay {
@@ -38,12 +40,19 @@ function timeZone(): string {
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => {
+    const done = () => {
       clearTimeout(timer);
+      signal.removeEventListener('abort', done);
       resolve();
-    });
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
   });
+}
+
+/** Отказ сервера, который повтор не исправит: истёкшая сессия, нет доступа. */
+function isFinal(reason: unknown): boolean {
+  return reason instanceof CoachApiError && !reason.retryable;
 }
 
 function report(what: string, reason: unknown): void {
@@ -51,15 +60,19 @@ function report(what: string, reason: unknown): void {
   console.error(`B640 «Сегодня»: ${what}`, reason);
 }
 
-/** Читает день; при сбое пробует ещё. Последнюю причину бросает вызывающему. */
+/**
+ * Читает день; при сбое сети, истёкшем ожидании и ошибке сервера пробует ещё.
+ * `signal` — уход с экрана: после него не повторяем. Последнюю причину бросает вызывающему.
+ */
 async function readDay(signal: AbortSignal): Promise<TodaySnapshot> {
   let lastReason: unknown = null;
   for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt += 1) {
     try {
-      return await getTodaySnapshot(timeZone(), signal);
+      // Свой срок на каждую попытку: с переданным сигналом клиент API срок не ставит.
+      return await getTodaySnapshot(timeZone(), apiRequestSignal(signal, API_READ_TIMEOUT_MS));
     } catch (reason) {
       lastReason = reason;
-      if (signal.aborted) break;
+      if (signal.aborted || isFinal(reason)) break;
       if (attempt < READ_ATTEMPTS) await pause(RETRY_PAUSE_MS, signal);
     }
   }
@@ -121,15 +134,21 @@ export function useTodayDay(): TodayDay {
   const [failed, setFailed] = useState(false);
   const unmounted = useRef<AbortController | null>(null);
 
+  const sequence = useRef(0);
+
   const load = useCallback(async (signal: AbortSignal, visit: boolean) => {
+    // Ответ более раннего чтения не должен перезаписать более новое.
+    sequence.current += 1;
+    const id = sequence.current;
+    const current = () => !signal.aborted && id === sequence.current;
     setFailed(false);
     if (visit) await recordVisit(signal);
-    if (signal.aborted) return;
+    if (!current()) return;
     try {
       const next = await readDay(signal);
-      if (!signal.aborted) setSnapshot(next);
+      if (current()) setSnapshot(next);
     } catch (reason) {
-      if (signal.aborted) return;
+      if (!current()) return;
       report('не прочитали дела дня', reason);
       setFailed(true);
     }
@@ -139,7 +158,13 @@ export function useTodayDay(): TodayDay {
     const controller = new AbortController();
     unmounted.current = controller;
     void load(controller.signal, true);
-    return () => controller.abort();
+    // Действие дня выполнено на этом же экране — перечитываем очередь.
+    const onDecision = () => void load(controller.signal, false);
+    window.addEventListener(TODAY_DECISION_CHANGED, onDecision);
+    return () => {
+      window.removeEventListener(TODAY_DECISION_CHANGED, onDecision);
+      controller.abort();
+    };
   }, [load]);
 
   const refresh = useCallback(async () => {
