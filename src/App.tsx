@@ -29,6 +29,7 @@ import {
 import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
 import { loadCareerWorkspaceShell } from './features/shell/careerWorkspaceLoader';
 import { CareerShellBootstrap } from './features/shell/CareerShellBootstrap';
+import { loadCabinetB640 } from './features/b640/loadCabinetB640';
 import { legalSlugFromPath } from '../shared/legalRegistry';
 import { getLoadedAuthPages, loadAuthPages } from './features/site/authPagesLoader';
 import {
@@ -57,6 +58,11 @@ const CareerWorkspaceShell = lazy(async () => {
   const module = await loadCareerWorkspaceShell();
   markAppReady();
   return { default: module.CareerWorkspaceShell };
+});
+const CabinetB640 = lazy(async () => {
+  const module = await loadCabinetB640();
+  markAppReady();
+  return { default: module.CabinetB640 };
 });
 const landingPage = preloadablePage(loadLandingPage);
 const LandingPage = landingPage.Page;
@@ -646,7 +652,9 @@ export default function App() {
         !state.onboardingStatusKnown ||
         (state.onboardingComplete && !state.workspace)),
     );
-  const renderWorkspace = (pending = sessionPending) => (
+  // B649: аккаунт с флагом получает новый кабинет B640; остальным — прежний.
+  const b640Session = state.session?.features?.cabinetB640 === true ? state.session : null;
+  const renderLegacyWorkspace = (pending: boolean) => (
     <Suspense fallback={<WorkspaceLoadingFallback />}>
       <CareerWorkspaceShell
         workspace={state.workspace}
@@ -665,6 +673,14 @@ export default function App() {
       />
     </Suspense>
   );
+  const renderWorkspace = (pending = sessionPending) =>
+    b640Session ? (
+      <Suspense fallback={<WorkspaceLoadingFallback />}>
+        <CabinetB640 session={b640Session} onSessionChange={handleSessionChange} />
+      </Suspense>
+    ) : (
+      renderLegacyWorkspace(pending)
+    );
 
   // Routing checks
   if (isAdminPath(currentPath)) {

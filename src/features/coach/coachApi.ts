@@ -63,6 +63,11 @@ export type {
   VacancySourceRegistryEntry,
 } from './cabinetTypes';
 
+export interface AuthUserFeatures {
+  /** Новый кабинет B640 вместо прежнего. */
+  cabinetB640: boolean;
+}
+
 export interface AuthUser {
   username: string;
   email: string | null;
@@ -70,6 +75,8 @@ export interface AuthUser {
   role: UserRole;
   isTest: boolean;
   candidateId: string | null;
+  /** B649: что включено этому аккаунту; старый сервер поля не присылает. */
+  features?: AuthUserFeatures;
   sessionToken?: string;
   emailVerified?: boolean;
   emailVerificationEmailSent?: boolean;
