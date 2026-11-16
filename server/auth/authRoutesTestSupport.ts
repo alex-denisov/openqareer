@@ -18,6 +18,8 @@ export const resources: Array<{
 export interface AuthRouteTestOptions {
   readonly release?: string;
   readonly logDestination?: { write(line: string): void };
+  /** B649: имена входа, которым включён новый кабинет. */
+  readonly cabinetB640Usernames?: readonly string[];
 }
 
 afterEach(async () => {
@@ -118,6 +120,9 @@ function createTestConfig(
     release: testOptions.release ?? 'test',
     logLevel: testOptions.logDestination ? 'warn' : 'fatal',
     secureCookies: false,
+    ...(testOptions.cabinetB640Usernames
+      ? { cabinetB640Usernames: testOptions.cabinetB640Usernames }
+      : {}),
     emailVerificationRequired: authOptions.emailVerificationRequired ?? false,
     allowedOrigins: ['http://localhost:3000'],
     seedAccounts: [],
