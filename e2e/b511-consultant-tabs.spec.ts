@@ -501,9 +501,14 @@ test.describe('B511 G3b', () => {
     await expect(trainer.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
     await trainer.getByRole('button', { name: 'Следующий вопрос' }).click();
     const content = page.locator('.career-mock-content');
+    // The result can replace the question between the check and the click; a skip
+    // button that has just left the screen must not hold the test for 30 seconds.
+    const skip = trainer.getByRole('button', { name: /^Пропустить( вопрос)?$/u });
+    const result = page.locator('.career-mock-topic-list');
     for (let step = 0; step < 12; step += 1) {
-      if (await page.locator('.career-mock-topic-list').isVisible()) break;
-      await trainer.getByRole('button', { name: /^Пропустить( вопрос)?$/u }).click();
+      await expect(skip.or(result).first()).toBeVisible();
+      if (await result.isVisible()) break;
+      await skip.click({ timeout: 5_000 }).catch(() => undefined);
     }
     await expect(content).toContainText('Мок-интервью завершено');
     const topics = page.locator('.career-mock-topic-list');
