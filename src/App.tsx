@@ -30,6 +30,7 @@ import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
 import { loadCareerWorkspaceShell } from './features/shell/careerWorkspaceLoader';
 import { CareerShellBootstrap } from './features/shell/CareerShellBootstrap';
 import { loadCabinetB640 } from './features/b640/loadCabinetB640';
+import { CabinetB640Bootstrap } from './features/b640/CabinetB640Bootstrap';
 import { legalSlugFromPath } from '../shared/legalRegistry';
 import { getLoadedAuthPages, loadAuthPages } from './features/site/authPagesLoader';
 import {
@@ -49,7 +50,7 @@ import {
 import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
 import { SESSION_EXPIRED_TEXT } from './features/onboarding/firstRunSpecialState';
-import { rememberSignedIn } from './features/site/signedInFlag';
+import { readRememberedCabinetB640, rememberSignedIn } from './features/site/signedInFlag';
 
 const EXPIRED_SESSION_NOTICE = SESSION_EXPIRED_TEXT;
 
@@ -286,7 +287,7 @@ export default function App() {
       session = await getSession();
       if (!isCurrent()) return;
       // B574: the public header learns the answer now, not after the workspace read.
-      rememberSignedIn(Boolean(session), session?.role);
+      rememberSignedIn(Boolean(session), session?.role, session?.features?.cabinetB640);
       if (session?.emailVerified === false) {
         setState({
           session,
@@ -369,7 +370,13 @@ export default function App() {
   }, [isDesktop, connectorAccount]);
 
   useEffect(() => {
-    if (state.session !== undefined) rememberSignedIn(Boolean(state.session), state.session?.role);
+    if (state.session !== undefined) {
+      rememberSignedIn(
+        Boolean(state.session),
+        state.session?.role,
+        state.session?.features?.cabinetB640,
+      );
+    }
   }, [state.session]);
 
   useEffect(() => {
@@ -654,6 +661,10 @@ export default function App() {
     );
   // B649: аккаунт с флагом получает новый кабинет B640; остальным — прежний.
   const b640Session = state.session?.features?.cabinetB640 === true ? state.session : null;
+  // Пока сессия неизвестна, устройство, где новый кабинет уже открывался, видит
+  // нейтральный кадр, а не прежнюю оболочку; ошибку сессии показывает прежний экран.
+  const b640Expected =
+    state.session === undefined && !sessionError && readRememberedCabinetB640();
   const renderLegacyWorkspace = (pending: boolean) => (
     <Suspense fallback={<WorkspaceLoadingFallback />}>
       <CareerWorkspaceShell
@@ -675,9 +686,16 @@ export default function App() {
   );
   const renderWorkspace = (pending = sessionPending) =>
     b640Session ? (
-      <Suspense fallback={<WorkspaceLoadingFallback />}>
-        <CabinetB640 session={b640Session} onSessionChange={handleSessionChange} />
+      <Suspense fallback={<CabinetB640Bootstrap />}>
+        <CabinetB640
+          session={b640Session}
+          path={currentPath}
+          onNavigate={navigate}
+          onSessionChange={handleSessionChange}
+        />
       </Suspense>
+    ) : b640Expected ? (
+      <CabinetB640Bootstrap />
     ) : (
       renderLegacyWorkspace(pending)
     );

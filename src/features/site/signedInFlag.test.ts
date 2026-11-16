@@ -4,7 +4,9 @@ import {
   ADMIN_ATTRIBUTE,
   ROLE_FLAG_KEY,
   SIGNED_IN_ATTRIBUTE,
+  CABINET_B640_FLAG_KEY,
   SIGNED_IN_FLAG_KEY,
+  readRememberedCabinetB640,
   rememberSignedIn,
 } from './signedInFlag';
 
@@ -32,5 +34,27 @@ describe('signed-in header hint (B574)', () => {
     expect(window.localStorage.getItem(SIGNED_IN_FLAG_KEY)).toBeNull();
     expect(window.localStorage.getItem(ROLE_FLAG_KEY)).toBeNull();
     expect(document.documentElement.hasAttribute(ADMIN_ATTRIBUTE)).toBe(false);
+  });
+});
+
+describe('remembered cabinet B640 flag (B649)', () => {
+  afterEach(() => rememberSignedIn(false));
+
+  it('remembers the flag of a signed-in account for the first frame', () => {
+    expect(readRememberedCabinetB640()).toBe(false);
+    rememberSignedIn(true, 'candidate', true);
+    expect(window.localStorage.getItem(CABINET_B640_FLAG_KEY)).toBe('1');
+    expect(readRememberedCabinetB640()).toBe(true);
+  });
+
+  it('forgets the flag when the server turns it off or the account signs out', () => {
+    rememberSignedIn(true, 'candidate', true);
+    rememberSignedIn(true, 'candidate', false);
+    expect(readRememberedCabinetB640()).toBe(false);
+    rememberSignedIn(true, 'candidate', true);
+    rememberSignedIn(false);
+    expect(readRememberedCabinetB640()).toBe(false);
+    rememberSignedIn(true, 'candidate');
+    expect(readRememberedCabinetB640()).toBe(false);
   });
 });

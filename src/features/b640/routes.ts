@@ -59,6 +59,8 @@ export interface B640Node {
   readonly crumb?: string;
   /** Вкладки раздела над страницей. */
   readonly tabs?: B640TabSetId;
+  /** Какая вкладка подсвечена, если не своя: узел живёт внутри чужой вкладки. */
+  readonly tabOf?: string;
 }
 
 type NodeRow = readonly [
@@ -69,7 +71,7 @@ type NodeRow = readonly [
   path: string,
   title: string,
   template: B640Template,
-  extra?: { parent?: string; crumb?: string; tabs?: B640TabSetId },
+  extra?: { parent?: string; crumb?: string; tabs?: B640TabSetId; tabOf?: string },
 ];
 
 const ROWS: readonly NodeRow[] = [
@@ -88,14 +90,14 @@ const ROWS: readonly NodeRow[] = [
   ['p11', 'p11-svyazi', 'profile', 'profile', '/app/profile/connections', 'Связи', 'list', { parent: 's01' }],
   // Цифровой след
   ['p02', 'p02-profil-cifrovoj-sled', 'footprint', 'profile', '/app/profile/footprint', 'Профиль', 'list', { tabs: 'profile', crumb: 'Цифровой след' }],
-  ['f01', 'f01-cifrovoj-sled-do-poiska', 'footprint', 'profile', '/app/profile/footprint/start', 'Профиль', 'list', { tabs: 'profile', crumb: 'Цифровой след' }],
+  ['f01', 'f01-cifrovoj-sled-do-poiska', 'footprint', 'profile', '/app/profile/footprint/start', 'Профиль', 'list', { tabs: 'profile', crumb: 'Цифровой след', tabOf: 'p02' }],
   ['f03', 'f03-razbor-po-odnoj', 'footprint', 'profile', '/app/profile/footprint/findings', 'Профиль', 'focus', { parent: 'p02', crumb: 'Сводка' }],
   ['f03b', 'f03b-nahodka-put-udaleniya', 'footprint', 'profile', '/app/profile/footprint/findings/:findingId', 'Профиль', 'focus', { parent: 'f03', crumb: 'Находка' }],
   // Карьера
   ['s09', 's09-karera-ishchu', 'career', 'career', '/app/career', 'Карьера', 'object', { tabs: 'career' }],
-  ['s10', 's10-karera-ishchu-kem', 'career', 'career', '/app/career/roles', 'Карьера', 'focus', { tabs: 'career' }],
-  ['s11', 's11-karera-menyayu', 'career', 'career', '/app/career/change', 'Карьера', 'object', { tabs: 'career' }],
-  ['s12', 's12-karera-rabotayu', 'career', 'career', '/app/career/growth', 'Карьера', 'object', { tabs: 'career' }],
+  ['s10', 's10-karera-ishchu-kem', 'career', 'career', '/app/career/roles', 'Карьера', 'focus', { tabs: 'career', tabOf: 's09' }],
+  ['s11', 's11-karera-menyayu', 'career', 'career', '/app/career/change', 'Карьера', 'object', { tabs: 'career', tabOf: 's09' }],
+  ['s12', 's12-karera-rabotayu', 'career', 'career', '/app/career/growth', 'Карьера', 'object', { tabs: 'career', tabOf: 's09' }],
   ['c04', 'c04-proverka-navykov', 'career', 'career', '/app/career/skills', 'Карьера', 'focus', { parent: 's09', crumb: 'Проверка навыков' }],
   ['c06', 'c06-relokaciya', 'career', 'career', '/app/career/relocation', 'Карьера', 'list', { tabs: 'career', crumb: 'Релокация' }],
   // Вакансии
@@ -107,9 +109,9 @@ const ROWS: readonly NodeRow[] = [
   ['v10b', 'v10b-kompaniya-ladoga', 'companies', 'vacancies', '/app/vacancies/companies/:companyId', 'Компания', 'object', { parent: 'v10' }],
   // Профиль: LinkedIn, hh.ru, Контакты, Журнал
   ['a03', 'a03-linkedin-profil-i-posty', 'platforms', 'profile', '/app/profile/linkedin', 'Профиль', 'desk', { tabs: 'profile', crumb: 'LinkedIn' }],
-  ['a03b', 'a03b-linkedin-posty', 'platforms', 'profile', '/app/profile/linkedin/posts', 'Профиль', 'desk', { tabs: 'profile', crumb: 'Посты' }],
-  ['a03p', 'a03p-linkedin-publikacii', 'platforms', 'profile', '/app/profile/linkedin/published', 'Профиль', 'list', { tabs: 'profile', crumb: 'Публикации' }],
-  ['a05', 'a05-radar-lenty', 'platforms', 'profile', '/app/profile/linkedin/feed', 'Профиль', 'focus', { tabs: 'profile', crumb: 'Лента' }],
+  ['a03b', 'a03b-linkedin-posty', 'platforms', 'profile', '/app/profile/linkedin/posts', 'Профиль', 'desk', { tabs: 'profile', crumb: 'Посты', tabOf: 'a03' }],
+  ['a03p', 'a03p-linkedin-publikacii', 'platforms', 'profile', '/app/profile/linkedin/published', 'Профиль', 'list', { tabs: 'profile', crumb: 'Публикации', tabOf: 'a03' }],
+  ['a05', 'a05-radar-lenty', 'platforms', 'profile', '/app/profile/linkedin/feed', 'Профиль', 'focus', { tabs: 'profile', crumb: 'Лента', tabOf: 'a03' }],
   ['a11', 'a11-hh-rezyume', 'platforms', 'profile', '/app/profile/hh', 'Профиль', 'desk', { tabs: 'profile', crumb: 'hh.ru' }],
   ['a02', 'a02-rekrutery-i-kontakty', 'platforms', 'profile', '/app/profile/contacts', 'Профиль', 'list', { tabs: 'profile', crumb: 'Контакты' }],
   ['a05c', 'a05c-linkedin-zhurnal', 'platforms', 'profile', '/app/profile/journal', 'Профиль', 'focus', { tabs: 'profile', crumb: 'Журнал' }],
@@ -175,10 +177,21 @@ export const B640_NODES: readonly B640Node[] = ROWS.map(
   }),
 );
 
+export interface B640Tab {
+  readonly label: string;
+  readonly code: string;
+  /** Параметры адреса, если вкладка ведёт на узел с параметром. */
+  readonly params?: Readonly<Record<string, string>>;
+}
+
 export interface B640TabSet {
   /** Подпись навигации для чтения с экрана. */
   readonly label: string;
-  readonly tabs: readonly { readonly label: string; readonly code: string }[];
+  readonly tabs: readonly B640Tab[];
+  /** Дополнительные классы строки вкладок из макета. */
+  readonly className?: string;
+  /** На 390 вкладки заменяет экран-список: «Назад» ведёт на него. */
+  readonly mobileHub?: string;
 }
 
 export const B640_TAB_SETS: Readonly<Record<B640TabSetId, B640TabSet>> = {
@@ -217,6 +230,8 @@ export const B640_TAB_SETS: Readonly<Record<B640TabSetId, B640TabSet>> = {
       { label: 'Воронка', code: 'o01e' },
       { label: 'Разбор отказов', code: 'o07' },
       { label: 'Хочу в компанию', code: 'o08' },
+      // «next» — ближайшее интервью: раздел сам находит отклик.
+      { label: 'Подготовка', code: 'i01', params: { responseId: 'next' } },
       { label: 'Офферы', code: 'o06' },
     ],
   },
@@ -231,6 +246,8 @@ export const B640_TAB_SETS: Readonly<Record<B640TabSetId, B640TabSet>> = {
   },
   account: {
     label: 'Разделы аккаунта',
+    className: 'tabs acct-tabs',
+    mobileHub: 'n00',
     tabs: [
       { label: 'Подключения', code: 'n03' },
       { label: 'Уведомления', code: 'n02' },

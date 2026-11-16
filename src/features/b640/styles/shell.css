@@ -1,0 +1,23 @@
+/* B649: добавления оболочки к стилям макета. */
+@layer b640.shell {
+  div.b640 {
+    min-block-size: 100dvh;
+  }
+
+  /* Нейтральная страница узла до подключения раздела и «такой страницы нет». */
+  .b640 .b640-stub {
+    display: grid;
+    gap: var(--career-space-4);
+    justify-items: start;
+  }
+
+  .b640 .b640-stub h2 {
+    font-size: var(--career-text-xl);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .b640 .b640-loading {
+    min-block-size: 40vh;
+  }
+}
