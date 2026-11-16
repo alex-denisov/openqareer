@@ -4,12 +4,15 @@ import { VoiceInputController } from '../../coach/voiceInputController';
 import type { VoiceInputState } from '../../coach/voiceInputMachine';
 
 const DENIED_TOAST_MS = 4000;
+// Макет рисует один исход сбоя диктовки (K3b): строка о микрофоне и возврат к тексту.
 const FAILED: readonly VoiceInputState[] = ['denied', 'unsupported', 'error'];
 
 export interface Dictation {
   /** Браузер умеет распознавать речь: иначе способ «Голосом» не предлагается. */
   readonly supported: boolean;
   readonly recording: boolean;
+  /** Диктовка остановлена, последние слова ещё дописываются в поле. */
+  readonly settling: boolean;
   /** Показано «Нет доступа к микрофону». */
   readonly denied: boolean;
   /** Начать диктовку: сказанное дописывается к `currentText`. */
@@ -20,6 +23,15 @@ export interface Dictation {
 function speechSupported(): boolean {
   if (typeof window === 'undefined') return false;
   return typeof (window as SpeechRecognitionScope).SpeechRecognition?.available === 'function';
+}
+
+/** Строка о микрофоне гаснет сама через четыре секунды. */
+function useExpiry(shown: boolean, setShown: (shown: boolean) => void): void {
+  useEffect(() => {
+    if (!shown) return undefined;
+    const timer = setTimeout(() => setShown(false), DENIED_TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [shown, setShown]);
 }
 
 /** Диктовка в поле ввода: распознанный текст приходит в `onText` по мере речи. */
@@ -55,11 +67,7 @@ export function useDictation(onText: (text: string) => void, onFail: () => void)
     };
   }, []);
 
-  useEffect(() => {
-    if (!denied) return undefined;
-    const timer = setTimeout(() => setDenied(false), DENIED_TOAST_MS);
-    return () => clearTimeout(timer);
-  }, [denied]);
+  useExpiry(denied, setDenied);
 
   const start = useCallback((currentText: string) => {
     const voice = controller.current;
@@ -74,6 +82,7 @@ export function useDictation(onText: (text: string) => void, onFail: () => void)
   return {
     supported,
     recording: state === 'starting' || state === 'recording',
+    settling: state === 'finishing',
     denied,
     start,
     stop,

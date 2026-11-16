@@ -1,5 +1,9 @@
 import type { CandidateMemory, CoachTurnStage } from '../../coach/coachApi';
-import { QUOTA_PLAN_NAMES, type TariffQuotaSummary } from '../../tariffs/tariffQuotaApi';
+import {
+  QUOTA_PLAN_NAMES,
+  type TariffQuotaPlanId,
+  type TariffQuotaSummary,
+} from '../../tariffs/tariffQuotaApi';
 import type { B640Nav } from '../routes';
 
 /** Реплика ленты: то, что нужно панели от сообщения разговора. */
@@ -94,18 +98,33 @@ function parseDate(iso: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+/** Отказ сервера на отправку: тариф, который он назвал для перехода. */
+export interface TurnRefusal {
+  readonly upgradePlan: TariffQuotaPlanId | null;
+}
+
+const PLAN_IDS = Object.keys(QUOTA_PLAN_NAMES);
+
+/** Тариф из ответа сервера: только известные названия. */
+export function refusalOf(details: Readonly<Record<string, unknown>>): TurnRefusal {
+  const plan = details.upgradePlan;
+  const known = typeof plan === 'string' && PLAN_IDS.includes(plan);
+  return { upgradePlan: known ? (plan as TariffQuotaPlanId) : null };
+}
+
 /** Предел сообщений: по остатку квоты или по отказу сервера на отправку. */
 export function limitOf(
   summary: TariffQuotaSummary | null,
-  refused: boolean,
+  refused: TurnRefusal | null,
 ): ConsultantLimit | null {
   const quota = summary?.quotas.find((item) => item.key === 'coach_turns');
   const spent = Boolean(summary && !summary.unlimited && quota && quota.remaining <= 0);
   if (!refused && !spent) return null;
+  const upgrade = quota?.upgradePlan ?? refused?.upgradePlan ?? null;
   const endsAt = summary?.period ? parseDate(summary.period.endsAt) : null;
   return {
     resetLabel: endsAt ? DAY_MONTH.format(endsAt) : null,
-    upgradePlan: quota?.upgradePlan ? QUOTA_PLAN_NAMES[quota.upgradePlan] : null,
+    upgradePlan: upgrade ? QUOTA_PLAN_NAMES[upgrade] : null,
   };
 }
 

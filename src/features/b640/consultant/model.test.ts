@@ -9,6 +9,7 @@ import {
   panelTitle,
   pendingLabel,
   proposedFacts,
+  refusalOf,
   stageOfNav,
 } from './model';
 
@@ -98,21 +99,29 @@ describe('модель «Консультанта»', () => {
   });
 
   it('предел: остаток 0 закрывает ввод, дата и тариф берутся из квот', () => {
-    expect(limitOf(quotas(), false)).toEqual({ resetLabel: '20 ноября', upgradePlan: 'Basic' });
-    expect(limitOf(quotas({}, 5), false)).toBeNull();
-    expect(limitOf(quotas({ unlimited: true }), false)).toBeNull();
-    expect(limitOf(null, false)).toBeNull();
+    expect(limitOf(quotas(), null)).toEqual({ resetLabel: '20 ноября', upgradePlan: 'Basic' });
+    expect(limitOf(quotas({}, 5), null)).toBeNull();
+    expect(limitOf(quotas({ unlimited: true }), null)).toBeNull();
+    expect(limitOf(null, null)).toBeNull();
   });
 
   it('предел после отказа сервера показывается и без данных квот', () => {
-    expect(limitOf(null, true)).toEqual({ resetLabel: null, upgradePlan: null });
-    expect(limitOf(quotas({}, 5), true)).toEqual({ resetLabel: '20 ноября', upgradePlan: 'Basic' });
+    expect(limitOf(null, refusalOf({}))).toEqual({ resetLabel: null, upgradePlan: null });
+    expect(limitOf(null, refusalOf({ upgradePlan: 'pro' }))).toEqual({
+      resetLabel: null,
+      upgradePlan: 'Pro',
+    });
+    expect(limitOf(null, refusalOf({ upgradePlan: '<b>x</b>' }))?.upgradePlan).toBeNull();
+    expect(limitOf(quotas({}, 5), refusalOf({}))).toEqual({
+      resetLabel: '20 ноября',
+      upgradePlan: 'Basic',
+    });
   });
 
   it('у высшего тарифа пути к другому тарифу нет', () => {
     const max = quotas({ plan: 'max' });
     const top = { ...max, quotas: [{ ...max.quotas[0], upgradePlan: null }] };
-    expect(limitOf(top, false)).toEqual({ resetLabel: '20 ноября', upgradePlan: null });
+    expect(limitOf(top, null)).toEqual({ resetLabel: '20 ноября', upgradePlan: null });
   });
 
   it('тема разговора — выжимка, иначе первая фраза', () => {

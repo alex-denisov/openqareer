@@ -8,7 +8,7 @@ import { useDictation } from './useDictation';
 
 export interface ConsultantComposerProps {
   readonly onSubmit: (text: string) => void;
-  /** Ответ ещё пишется: новая отправка ждёт. */
+  /** Ответ ещё пишется или не пришёл: новая отправка ждёт, набранное остаётся в поле. */
   readonly busy: boolean;
   /** Сообщения по тарифу закончились: ввод закрыт, строка ведёт к тарифам. */
   readonly limit: ConsultantLimit | null;
@@ -45,26 +45,90 @@ function sendLabel(mode: Mode, recording: boolean): string {
   return mode === 'voice' ? 'Надиктовать' : 'Отправить';
 }
 
+interface SendButtonProps {
+  readonly mode: Mode;
+  readonly recording: boolean;
+  readonly busy: boolean;
+  readonly off: boolean;
+}
+
+function SendButton({ mode, recording, busy, off }: SendButtonProps) {
+  return (
+    <button
+      className={recording ? 'cmp-send is-rec' : 'cmp-send'}
+      type="submit"
+      aria-label={sendLabel(mode, recording)}
+      aria-pressed={recording ? true : undefined}
+      aria-busy={busy || undefined}
+      disabled={off}
+    >
+      <span className="cmp-dot">
+        <Icon name="send" className="cmp-i-send" />
+        <Icon name="mic" className="cmp-i-mic" />
+      </span>
+    </button>
+  );
+}
+
+/** Закрытый ввод (K3): способ ввода виден, но недоступен. */
+function ModeOff() {
+  return (
+    <span className="cmp-mode">
+      <button className="cmp-caret" type="button" aria-label="Способ ввода: текстом" disabled>
+        <Icon name="down" />
+      </button>
+    </span>
+  );
+}
+
+function MicDenied({ shown }: { readonly shown: boolean }) {
+  return (
+    <div className="cmp-toast-wrap" role="status">
+      {shown ? (
+        <p className="cmp-toast">
+          <Icon name="micoff" />
+          Нет доступа к микрофону
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Enter отправляет, Shift+Enter — перенос строки. */
+function submitOnEnter(event: KeyboardEvent<HTMLTextAreaElement>, send: () => void): void {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+  event.preventDefault();
+  send();
+}
+
+/** Высота поля идёт за текстом (до 13 строк). */
+function useFitHeight(text: string) {
+  const area = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (area.current) fitComposerHeight(area.current);
+  }, [text]);
+  return area;
+}
+
+function formClass(hasText: boolean, off: boolean): string {
+  return ['compose', 'cmp', hasText ? 'has-text' : '', off ? 'is-off' : ''].filter(Boolean).join(' ');
+}
+
 /**
- * Панель ввода консультанта по макету K1: текст или диктовка, предел сообщений (K3),
- * «Нет доступа к микрофону» (K3b). Набранное не теряется при сбое отправки: поле
- * очищается только после того, как вопрос ушёл в ленту.
+ * Панель ввода консультанта по макету K1: текст или диктовка (K1b), предел сообщений (K3),
+ * «Нет доступа к микрофону» (K3b). Поле очищается, только когда вопрос ушёл в ленту.
  */
 export function ConsultantComposer({ onSubmit, busy, limit, tariffsPath }: ConsultantComposerProps) {
   const id = useId();
-  const area = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState('');
+  const area = useFitHeight(text);
   const [mode, setMode] = useState<Mode>('text');
   const voice = useDictation(setText, () => setMode('text'));
   const off = limit !== null;
 
-  useEffect(() => {
-    if (area.current) fitComposerHeight(area.current);
-  }, [text]);
-
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (off) return;
+    if (off || voice.settling) return;
     if (voice.recording) return voice.stop();
     const value = text.trim();
     if (mode === 'voice' && !value) return voice.start(text);
@@ -72,23 +136,13 @@ export function ConsultantComposer({ onSubmit, busy, limit, tariffsPath }: Consu
     onSubmit(value);
     setText('');
   }
-
-  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    submit();
-  }
-
   function choose(next: Mode) {
     if (voice.recording) voice.stop();
     setMode(next);
   }
 
-  const className = ['compose', 'cmp', text ? 'has-text' : '', off ? 'is-off' : '']
-    .filter(Boolean)
-    .join(' ');
   return (
-    <form className={className} data-mode={mode} onSubmit={submit}>
+    <form className={formClass(Boolean(text), off)} data-mode={mode} onSubmit={submit}>
       {limit ? <LimitLine limit={limit} tariffsPath={tariffsPath} /> : null}
       <label className="vh" htmlFor={id}>
         Ваш вопрос консультанту
@@ -103,40 +157,15 @@ export function ConsultantComposer({ onSubmit, busy, limit, tariffsPath }: Consu
           value={text}
           disabled={off}
           onChange={(event) => setText(event.target.value)}
-          onKeyDown={onKeyDown}
+          onKeyDown={(event) => submitOnEnter(event, submit)}
         />
-        <button
-          className={voice.recording ? 'cmp-send is-rec' : 'cmp-send'}
-          type="submit"
-          aria-label={sendLabel(mode, voice.recording)}
-          aria-pressed={voice.recording ? true : undefined}
-          aria-busy={busy || undefined}
-          disabled={off}
-        >
-          <span className="cmp-dot">
-            <Icon name="send" className="cmp-i-send" />
-            <Icon name="mic" className="cmp-i-mic" />
-          </span>
-        </button>
+        <SendButton mode={mode} recording={voice.recording} busy={busy} off={off} />
         {voice.supported && !off ? (
           <ComposerMenu id={`${id}-menu`} mode={mode} onChoose={choose} />
         ) : null}
-        {voice.supported && off ? (
-          <span className="cmp-mode">
-            <button className="cmp-caret" type="button" aria-label="Способ ввода: текстом" disabled>
-              <Icon name="down" />
-            </button>
-          </span>
-        ) : null}
+        {voice.supported && off ? <ModeOff /> : null}
       </div>
-      <div className="cmp-toast-wrap" role="status">
-        {voice.denied ? (
-          <p className="cmp-toast">
-            <Icon name="micoff" />
-            Нет доступа к микрофону
-          </p>
-        ) : null}
-      </div>
+      <MicDenied shown={voice.denied} />
     </form>
   );
 }
