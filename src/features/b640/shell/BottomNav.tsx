@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from '../kit/Icon';
 import type { B640Nav } from '../routes';
 import { Link } from './Link';
-import { BOTTOM_ITEMS, MORE_ITEMS } from './navigation';
+import { BOTTOM_ITEMS, MORE_ITEMS, type NavItem } from './navigation';
 
 export interface BottomNavProps {
   readonly active: B640Nav | null;
@@ -11,13 +11,11 @@ export interface BottomNavProps {
   readonly initial: string;
 }
 
-/** Нижняя навигация 390: пять равных колонок, пятая — меню «Ещё». */
-export function BottomNav({ active, bellCount, initial }: BottomNavProps) {
+/** Меню «Ещё»: открывается кнопкой, закрывается повторным нажатием, Esc и нажатием мимо. */
+function useMoreMenu() {
   const [open, setOpen] = useState(false);
-  const menuId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const moreActive = MORE_ITEMS.some((item) => item.id === active);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -40,6 +38,47 @@ export function BottomNav({ active, bellCount, initial }: BottomNavProps) {
     };
   }, [open]);
 
+  return { open, setOpen, buttonRef, menuRef };
+}
+
+function MoreItem({
+  item,
+  active,
+  bellCount,
+  initial,
+  onPick,
+}: {
+  readonly item: NavItem;
+  readonly active: boolean;
+  readonly bellCount: number;
+  readonly initial: string;
+  readonly onPick: () => void;
+}) {
+  return (
+    <Link role="menuitem" to={item.path} aria-current={active ? 'page' : undefined} onClick={onPick}>
+      {item.id === 'settings' ? (
+        <span className="av-ini" aria-hidden="true">
+          {initial}
+        </span>
+      ) : (
+        <Icon name={item.icon} />
+      )}
+      <span>{item.label}</span>
+      {item.id === 'bell' && bellCount ? (
+        <span className="num">
+          {bellCount}
+          <span className="vh"> новых</span>
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
+/** Нижняя навигация 390: пять равных колонок, пятая — меню «Ещё». */
+export function BottomNav({ active, bellCount, initial }: BottomNavProps) {
+  const { open, setOpen, buttonRef, menuRef } = useMoreMenu();
+  const menuId = useId();
+  const moreActive = MORE_ITEMS.some((item) => item.id === active);
   return (
     <>
       <nav className="bottomnav" aria-label="Разделы">
@@ -72,28 +111,14 @@ export function BottomNav({ active, bellCount, initial }: BottomNavProps) {
         hidden={!open}
       >
         {MORE_ITEMS.map((item) => (
-          <Link
+          <MoreItem
             key={item.id}
-            role="menuitem"
-            to={item.path}
-            aria-current={item.id === active ? 'page' : undefined}
-            onClick={() => setOpen(false)}
-          >
-            {item.id === 'settings' ? (
-              <span className="av-ini" aria-hidden="true">
-                {initial}
-              </span>
-            ) : (
-              <Icon name={item.icon} />
-            )}
-            <span>{item.label}</span>
-            {item.id === 'bell' && bellCount ? (
-              <span className="num">
-                {bellCount}
-                <span className="vh"> новых</span>
-              </span>
-            ) : null}
-          </Link>
+            item={item}
+            active={item.id === active}
+            bellCount={bellCount}
+            initial={initial}
+            onPick={() => setOpen(false)}
+          />
         ))}
       </div>
     </>

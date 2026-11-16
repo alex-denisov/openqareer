@@ -85,6 +85,19 @@ function isTokenRule(rule) {
  * правила и отбрасывает это правило целиком. Делаем то же, чтобы перенос
  * совпадал с тем, что видно в макете.
  */
+/** Индекс закрывающей скобки первого блока, который начинается после `from`. */
+function endOfNextBlock(text, from) {
+  let inner = 0;
+  for (let cursor = from; cursor < text.length; cursor += 1) {
+    if (text[cursor] === '{') inner += 1;
+    if (text[cursor] === '}') {
+      inner -= 1;
+      if (inner === 0) return cursor;
+    }
+  }
+  return text.length;
+}
+
 function dropStrayBraces(text) {
   let result = '';
   let depth = 0;
@@ -102,18 +115,8 @@ function dropStrayBraces(text) {
     if (char === '{') depth += 1;
     if (char === '}') {
       if (depth === 0) {
-        let inner = 0;
-        let cursor = index + 1;
-        while (cursor < text.length) {
-          if (text[cursor] === '{') inner += 1;
-          if (text[cursor] === '}') {
-            inner -= 1;
-            if (inner === 0) break;
-          }
-          cursor += 1;
-        }
+        index = endOfNextBlock(text, index + 1) + 1;
         dropped += 1;
-        index = cursor + 1;
         continue;
       }
       depth -= 1;

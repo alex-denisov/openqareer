@@ -8,6 +8,38 @@ export interface Crumb {
   readonly path: string | null;
 }
 
+function ContextTrail({
+  first,
+  contextSlot,
+}: {
+  readonly first: Crumb;
+  readonly contextSlot: (slot: HTMLElement | null) => void;
+}) {
+  return (
+    <nav className="crumbs only-desk has-ctx" aria-label="Путь">
+      <ol>
+        <li>
+          {first.path ? <Link to={first.path}>{first.label}</Link> : <span>{first.label}</span>}
+          <Icon name="right" />
+        </li>
+        <li ref={contextSlot} />
+      </ol>
+    </nav>
+  );
+}
+
+function BackTrail({ previous }: { readonly previous: Crumb }) {
+  if (!previous.path) return null;
+  return (
+    <nav className="crumbs only-desk" aria-label="Путь">
+      <Link className="crumb-back" to={previous.path}>
+        <Icon name="back" />
+        {backLabel(previous.label)}
+      </Link>
+    </nav>
+  );
+}
+
 /**
  * Путь вложенного экрана на 1440 и 1176. Три звена и больше — крошки,
  * два — ссылка «Назад к …». На 390 пути нет: «Назад» стоит в шапке.
@@ -21,32 +53,8 @@ export function Crumbs({
   readonly contextSlot?: (slot: HTMLElement | null) => void;
 }) {
   if (trail.length < 2) return null;
-  if (contextSlot) {
-    const [first] = trail;
-    return (
-      <nav className="crumbs only-desk has-ctx" aria-label="Путь">
-        <ol>
-          <li>
-            {first.path ? <Link to={first.path}>{first.label}</Link> : <span>{first.label}</span>}
-            <Icon name="right" />
-          </li>
-          <li ref={contextSlot} />
-        </ol>
-      </nav>
-    );
-  }
-  if (trail.length === 2) {
-    const [previous] = trail;
-    if (!previous.path) return null;
-    return (
-      <nav className="crumbs only-desk" aria-label="Путь">
-        <Link className="crumb-back" to={previous.path}>
-          <Icon name="back" />
-          {backLabel(previous.label)}
-        </Link>
-      </nav>
-    );
-  }
+  if (contextSlot) return <ContextTrail first={trail[0]} contextSlot={contextSlot} />;
+  if (trail.length === 2) return <BackTrail previous={trail[0]} />;
   return (
     <nav className="crumbs only-desk" aria-label="Путь">
       <ol>
