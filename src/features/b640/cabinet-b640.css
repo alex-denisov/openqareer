@@ -1,0 +1,47 @@
+/* B649: стили корня нового кабинета. Всё под классом .b640: прежний
+   career-shell.css может быть уже загружен в документ и не должен сюда попадать. */
+.b640 {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+}
+
+.b640 .b640-root-main {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+  text-align: center;
+}
+
+.b640 .b640-root-title {
+  margin: 0;
+  font-size: 1.75rem;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.b640 .b640-root-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.b640 .b640-root-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.b640 .b640-root-error {
+  margin: 0;
+  font-size: 0.875rem;
+}

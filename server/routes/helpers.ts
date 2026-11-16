@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { SESSION_IDLE_DAYS, type AuthPrincipal, type SessionAuth } from '../auth/authService';
+import { cabinetB640Features } from '../auth/cabinetB640Access';
 import type { ServerConfig } from '../config';
 import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
 import type { RouteDeps } from './deps';
@@ -213,7 +214,10 @@ export function requireVerifiedEmail(
   return false;
 }
 
-export function publicPrincipal(principal: AuthPrincipal) {
+export function publicPrincipal(
+  principal: AuthPrincipal,
+  config: Pick<ServerConfig, 'cabinetB640Usernames'>,
+) {
   return {
     username: principal.username,
     email: principal.email,
@@ -221,6 +225,7 @@ export function publicPrincipal(principal: AuthPrincipal) {
     role: principal.role,
     isTest: principal.isTest,
     candidateId: principal.candidate?.id ?? null,
+    features: cabinetB640Features(config, principal),
     ...(principal.emailVerified === undefined ? {} : { emailVerified: principal.emailVerified }),
     ...(principal.emailVerified === false
       ? {

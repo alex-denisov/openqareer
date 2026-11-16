@@ -400,6 +400,8 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   /** Freeze Date at FIXTURE_NOW for specs that compare fixture dates with the present. */
   readonly freezeNow?: boolean;
   readonly candidateId?: string;
+  /** B649: сервер включил этому аккаунту новый кабинет B640. */
+  readonly cabinetB640?: boolean;
   readonly initialSession?:
     | (Omit<AuthUser, 'role'> & {
         role: AuthUser['role'] | 'CareerPartner';
@@ -1692,7 +1694,11 @@ export async function mockSignedInCabinet(
         json: {
           data:
             options.initialSession === undefined
-              ? { ...candidate, emailVerified: true }
+              ? {
+                  ...candidate,
+                  emailVerified: true,
+                  ...(options.cabinetB640 ? { features: { cabinetB640: true } } : {}),
+                }
               : options.initialSession,
         },
       });
