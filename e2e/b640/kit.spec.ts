@@ -114,6 +114,34 @@ test.describe('B649: витрина общих компонентов', () => {
     await expect(row.locator('label[for]').first()).toBeVisible();
   });
 
+  test('замеры: строка результата, подвал окна, полоса действия, цели касания', async ({
+    page,
+  }, testInfo) => {
+    await openKit(page);
+    const result = await section(page, 'result-line').locator('.res-row').boundingBox();
+    expect(result?.height ?? 99).toBeLessThanOrEqual(40);
+    for (const button of await section(page, 'buttons').locator('.btn:not(.is-sm)').all()) {
+      expect((await button.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    for (const action of await section(page, 'row-action').locator('.row-act:not(.is-sm)').all()) {
+      expect((await action.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    const dock = section(page, 'action-dock').locator('.m-commit');
+    if (testInfo.project.name === 'mobile-390') {
+      await expect(dock).toHaveCSS('position', 'fixed');
+      const dockBox = await dock.boundingBox();
+      const nav = await page.locator('.b640 .bottomnav').boundingBox();
+      expect((dockBox?.y ?? 0) + (dockBox?.height ?? 0)).toBeLessThanOrEqual((nav?.y ?? 0) + 1);
+    }
+    await section(page, 'dialog').getByRole('button', { name: 'Выбрать резюме' }).click();
+    const footer = page.locator('.pf-dialog .pf-df');
+    await expect(footer).toHaveCSS('padding-bottom', '16px');
+    await expect(footer).toHaveCSS('padding-left', '16px');
+    const box = await page.locator('.pf-dialog').boundingBox();
+    const viewport = page.viewportSize();
+    expect((box?.height ?? 0) + (box?.y ?? 0)).toBeLessThanOrEqual(viewport?.height ?? 0);
+  });
+
   test('снимки витрины и окна: 1440, 1176, 390, светлая и тёмная', async ({ page }, testInfo) => {
     test.skip(
       !SHOTS || testInfo.project.name !== 'desktop-1440',

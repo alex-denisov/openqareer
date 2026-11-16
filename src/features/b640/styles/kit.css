@@ -2,6 +2,8 @@
 @layer b640.kit {
   /* ⓘ закреплён нажатием: на телефоне наведения нет */
   .b640 .tip.kit-pinned .tip-bubble { display: block; }
+  /* Esc убирает подсказку, даже пока на кнопке фокус или наведение */
+  .b640 .tip.kit-dismissed .tip-bubble { display: none; }
 
   /* витрина: секция и ряд полей одной высоты */
   .b640 .kit-section { display: grid; gap: var(--career-space-4); padding-block: var(--career-space-5); border-block-end: var(--career-border-width) solid var(--career-line); min-inline-size: 0; }
