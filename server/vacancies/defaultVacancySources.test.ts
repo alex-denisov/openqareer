@@ -99,6 +99,7 @@ describe('registry of vacancy sources', () => {
       'src-indeed',
       'src-linkedin-crawler',
       'src-linkedin-guest',
+      'src-trudvsem',
     ]);
   });
 });
@@ -147,6 +148,7 @@ describe('registry of vacancy sources: routes and address status (B199)', () => 
     expect(routes).toContain('eu-prod');
     expect(trudvsem?.enabled).toBe(true);
     expect(trudvsem?.addressStatus).toBe('live');
+    expect(trudvsem?.robotsOverride?.grantedBy).toBe('owner');
   });
 
   it('gives every source an address status that a probe actually established', () => {
