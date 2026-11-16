@@ -1,0 +1,39 @@
+/* «Отклики»: только то, чего нет в стилях макета. */
+@layer b640.sections {
+  /* Полоса «6 из 20»: ширина шагами по 5 %, атрибут style в кабинете запрещён. */
+  .b640 .meter > .rs-w-0 { inline-size: 0%; }
+  .b640 .meter > .rs-w-5 { inline-size: 5%; }
+  .b640 .meter > .rs-w-10 { inline-size: 10%; }
+  .b640 .meter > .rs-w-15 { inline-size: 15%; }
+  .b640 .meter > .rs-w-20 { inline-size: 20%; }
+  .b640 .meter > .rs-w-25 { inline-size: 25%; }
+  .b640 .meter > .rs-w-30 { inline-size: 30%; }
+  .b640 .meter > .rs-w-35 { inline-size: 35%; }
+  .b640 .meter > .rs-w-40 { inline-size: 40%; }
+  .b640 .meter > .rs-w-45 { inline-size: 45%; }
+  .b640 .meter > .rs-w-50 { inline-size: 50%; }
+  .b640 .meter > .rs-w-55 { inline-size: 55%; }
+  .b640 .meter > .rs-w-60 { inline-size: 60%; }
+  .b640 .meter > .rs-w-65 { inline-size: 65%; }
+  .b640 .meter > .rs-w-70 { inline-size: 70%; }
+  .b640 .meter > .rs-w-75 { inline-size: 75%; }
+  .b640 .meter > .rs-w-80 { inline-size: 80%; }
+  .b640 .meter > .rs-w-85 { inline-size: 85%; }
+  .b640 .meter > .rs-w-90 { inline-size: 90%; }
+  .b640 .meter > .rs-w-95 { inline-size: 95%; }
+  .b640 .meter > .rs-w-100 { inline-size: 100%; }
+
+  /*
+   * Раскрытый отклик на телефоне: только он, без списка и строки автооткликов.
+   * Правила есть в макете, но при переносе попали в ранний слой (base.p03) и проигрывают
+   * поздним файлам независимо от специфичности. Повтор здесь — до правки переноса в основе.
+   */
+  @media (max-width: 767px) {
+    .b640 .ot-open .ot-wrap > :not(.ot-scroll),
+    .b640 .ot-open .ot-row,
+    .b640 .ot-open .ot thead { display: none; }
+    .b640 .ot-open .vt-detail-row,
+    .b640 .ot-open .vt-detail-row > td { display: block; padding: 0; }
+    .b640 .ot-row > .ot-c-act { inline-size: auto; }
+  }
+}
