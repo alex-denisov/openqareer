@@ -132,3 +132,14 @@ export function moneyView(item: MatchedVacancyItem, options: MoneyOptions): Mone
     title: `В вакансии ${original}; ${ratesNote(options.rates)}`,
   };
 }
+
+/** Внешний адрес вакансии: в ссылку и буфер идут только http и https. */
+export function safeHttpUrl(value: string | undefined | null): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}

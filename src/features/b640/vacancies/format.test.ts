@@ -8,6 +8,7 @@ import {
   rowDate,
   rowFormat,
   rowGeo,
+  safeHttpUrl,
   vacanciesWord,
 } from './format';
 
@@ -94,5 +95,13 @@ describe('format: строка вакансии B640', () => {
     expect(vacanciesWord(214)).toBe('вакансий');
     expect(vacanciesWord(122)).toBe('вакансии');
     expect(pluralRu(3, 'навык', 'навыка', 'навыков')).toBe('навыка');
+  });
+
+  it('внешний адрес — только http и https', () => {
+    expect(safeHttpUrl('https://hh.ru/vacancy/1')).toBe('https://hh.ru/vacancy/1');
+    expect(safeHttpUrl('javascript:alert(1)')).toBeUndefined();
+    expect(safeHttpUrl('data:text/html,x')).toBeUndefined();
+    expect(safeHttpUrl('не адрес')).toBeUndefined();
+    expect(safeHttpUrl(undefined)).toBeUndefined();
   });
 });
