@@ -200,4 +200,42 @@ describe('extractTelegramJobHeader', () => {
     expect(header.title).toBe('Senior 3D Character Artist');
     expect(header.company).toBe('4A Games');
   });
+
+  it('reads employer from About the company block when followed by company introduction', () => {
+    const header = extractTelegramJobHeader([
+      'We are looking for a Sales Manager',
+      'About the company',
+      'ICODA is ranked among the world’s top three marketing agencies.',
+    ]);
+    expect(header.title).toBe('We are looking for a Sales Manager');
+    expect(header.company).toBe('ICODA');
+  });
+
+  it('reads employer from dash descriptor pattern in description', () => {
+    const header = extractTelegramJobHeader([
+      'Графический дизайнер / Graphic Designer',
+      'AnyXPay — международная финтех-компания, специализируется на удобных решениях.',
+    ]);
+    expect(header.title).toBe('Графический дизайнер / Graphic Designer');
+    expect(header.company).toBe('AnyXPay');
+  });
+
+  it('reads employer from invitation sentence in description', () => {
+    const header = extractTelegramJobHeader([
+      'Менеджер по коммуникации с клиентами',
+      'Genesis приглашает в команду новых сотрудников для работы с клиентами.',
+    ]);
+    expect(header.title).toBe('Менеджер по коммуникации с клиентами');
+    expect(header.company).toBe('Genesis');
+  });
+
+  it('reads labelled employer with «Клиент:» or «О компании:»', () => {
+    const header = extractTelegramJobHeader([
+      'Frontend Developer',
+      'Клиент: Яндекс Музыка',
+      'Обязанности:',
+    ]);
+    expect(header.title).toBe('Frontend Developer');
+    expect(header.company).toBe('Яндекс Музыка');
+  });
 });
