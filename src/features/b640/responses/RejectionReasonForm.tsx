@@ -47,6 +47,28 @@ interface FormProps {
   readonly item: RejectionReviewItem | null;
 }
 
+interface NoteFieldProps {
+  readonly id: string;
+  readonly note: string;
+  readonly onChange: (value: string) => void;
+}
+
+function NoteField({ id, note, onChange }: NoteFieldProps) {
+  return (
+    <div className="field">
+      <label htmlFor={id}>
+        Что написали <span className="au3-opt">необязательно</span>
+      </label>
+      <textarea
+        id={id}
+        value={note}
+        maxLength={REJECTION_NOTE_MAX_LENGTH}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </div>
+  );
+}
+
 function ReasonFields({ labelId, applicationId, item }: FormProps) {
   const id = useId();
   const [reason, setReason] = useState<RejectionReason | null>(item?.candidateReason?.reason ?? null);
@@ -76,30 +98,24 @@ function ReasonFields({ labelId, applicationId, item }: FormProps) {
           setSaving({ kind: 'idle' });
         }}
       />
-      <div className="field">
-        <label htmlFor={`${id}-note`}>
-          Что написали <span className="au3-opt">необязательно</span>
-        </label>
-        <textarea
-          id={`${id}-note`}
-          value={note}
-          maxLength={REJECTION_NOTE_MAX_LENGTH}
-          onChange={(event) => {
-            setNote(event.currentTarget.value);
-            setSaving({ kind: 'idle' });
-          }}
-        />
-      </div>
+      <NoteField
+        id={`${id}-note`}
+        note={note}
+        onChange={(value) => {
+          setNote(value);
+          setSaving({ kind: 'idle' });
+        }}
+      />
       <div className="actions">
         <Button icon="check" busy={saving.kind === 'busy'} onClick={save}>
           Отметить, чего не хватило
         </Button>
-        <Link className="row-act" to={buildNodePath('o07')}>
-          Что исправить
-        </Link>
       </div>
       {saving.kind === 'done' ? <ResultLine text="Отмечено" /> : null}
       {saving.kind === 'error' ? <StatusLine state="err" text={saving.text} /> : null}
+      <Link className="row-act" to={buildNodePath('o07')}>
+        Что исправить
+      </Link>
     </>
   );
 }
