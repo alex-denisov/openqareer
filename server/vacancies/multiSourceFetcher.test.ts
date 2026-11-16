@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildMultiSourceFetcher } from './multiSourceFetcher';
+import { buildMultiSourceFetcher, jsonSourceTimeoutMs } from './multiSourceFetcher';
 import type { UnifiedVacancy, VacancySourceConfig } from '../domain/unifiedVacancy';
 
 const refuse = () => {
@@ -462,5 +462,13 @@ describe('multi-source fetcher: Glassdoor Cloudflare 403 challenge fallback (B21
     expect(vacancies[0].company).toBe('Delivery Hero');
     expect(vacancies[0].location).toBe('Berlin, Germany');
     expect(vacancies[0].url).toBe('https://careers.deliveryhero.com/job/lead-platform-engineer');
+  });
+});
+
+describe('multi-source fetcher request timeout', () => {
+  it('allows large Greenhouse and SmartRecruitters board pages more time', () => {
+    expect(jsonSourceTimeoutMs('https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs')).toBe(120_000);
+    expect(jsonSourceTimeoutMs('https://api.smartrecruiters.com/v1/companies/Eurofins/postings?limit=100&offset=200')).toBe(120_000);
+    expect(jsonSourceTimeoutMs('https://api.lever.co/v0/postings/Autify?mode=json')).toBe(45_000);
   });
 });

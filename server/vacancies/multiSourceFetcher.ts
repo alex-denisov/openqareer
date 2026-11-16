@@ -54,16 +54,17 @@ type RemotiveSearch = (input: { text: string; perPage?: number }) => Promise<Vac
  */
 const JSON_SOURCE_TIMEOUT_MS = 45_000;
 /**
- * B622: Greenhouse с текстом — до 33 МБ (SpaceX), Stripe 6 МБ, Cloudflare 8 МБ.
- * С прода они скачиваются за 0,3–1,5 с, но в волне на занятом цикле событий
- * 45 с не хватало: 10 досок падали «aborted due to timeout» 08.11.
+ * B622: большие ответы Greenhouse и SmartRecruiters могут занимать весь слот
+ * опроса, пока maintenance обслуживает другие источники. На загруженном цикле
+ * событий прежних 45 с не хватало и страница терялась как timeout.
  */
 const LARGE_BOARD_TIMEOUT_MS = 120_000;
 
 export function jsonSourceTimeoutMs(url: string): number {
-  return /^https:\/\/boards-api\.greenhouse\.io\//.test(url)
-    ? LARGE_BOARD_TIMEOUT_MS
-    : JSON_SOURCE_TIMEOUT_MS;
+  const isLargeBoard =
+    /^https:\/\/boards-api\.greenhouse\.io\//i.test(url) ||
+    /^https:\/\/api\.smartrecruiters\.com\/v1\/companies\/[^/]+\/postings(?:\?|$)/i.test(url);
+  return isLargeBoard ? LARGE_BOARD_TIMEOUT_MS : JSON_SOURCE_TIMEOUT_MS;
 }
 const LINKEDIN_PAGE_TIMEOUT_MS = 20_000;
 
