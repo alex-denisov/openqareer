@@ -1,6 +1,6 @@
 import { Button, Icon, Link } from '../kit';
 import { buildNodePath } from '../routes';
-import type { TodayRead } from '../../today/useToday';
+import type { TodayDay } from './useTodayDay';
 import { ActionLink, BlockError, BlockSkeleton, LeadActions } from './parts';
 import { applicationsSummary, queueAction, type TodayAction } from './todayModel';
 
@@ -11,11 +11,11 @@ const VACANCIES_ACTION = {
   path: buildNodePath('s07'),
 } as const;
 
-function actions(today: TodayRead): readonly TodayAction[] {
+function actions(today: TodayDay): readonly TodayAction[] {
   return (today.snapshot?.queue ?? []).map(queueAction);
 }
 
-function TodayReadFallback({ today }: { readonly today: TodayRead }) {
+function TodayDayFallback({ today }: { readonly today: TodayDay }) {
   if (today.failed) {
     return (
       <BlockError
@@ -32,10 +32,10 @@ export function NextActionModule({
   today,
   lead,
 }: {
-  readonly today: TodayRead;
+  readonly today: TodayDay;
   readonly lead: boolean;
 }) {
-  if (!today.snapshot) return <TodayReadFallback today={today} />;
+  if (!today.snapshot) return <TodayDayFallback today={today} />;
   const [first] = actions(today);
   if (!first) {
     return (
@@ -91,7 +91,7 @@ function ActionRow({ action }: { readonly action: TodayAction }) {
 }
 
 /** «Ещё N дел»: остальные строки очереди, догрузка — «Показать ещё». */
-export function MoreActionsModule({ today }: { readonly today: TodayRead }) {
+export function MoreActionsModule({ today }: { readonly today: TodayDay }) {
   const rest = actions(today).slice(1);
   if (!today.snapshot) return null;
   const total = Math.max(today.snapshot.queueTotal ?? 0, today.snapshot.queue.length);
@@ -130,7 +130,7 @@ export function MoreActionsModule({ today }: { readonly today: TodayRead }) {
 }
 
 /** Отклики вне активного поиска: сколько идёт и что ближайшее. */
-export function ApplicationsModule({ today }: { readonly today: TodayRead }) {
+export function ApplicationsModule({ today }: { readonly today: TodayDay }) {
   const snapshot = today.snapshot;
   const summary = snapshot
     ? applicationsSummary(snapshot.funnel, snapshot.digest.nextInterview, TIME_ZONE)

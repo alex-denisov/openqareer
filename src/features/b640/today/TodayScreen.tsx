@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { CandidateStatusToday, TodayStatusModule } from '../../../../shared/candidateStatus';
 import { pluralRu } from '../../../../shared/pluralRu';
 import { listNotifications } from '../../notifications/notificationsApi';
-import { useToday, type TodayRead } from '../../today/useToday';
+import { useTodayDay, type TodayDay } from './useTodayDay';
 import type { B640Node } from '../routes';
 import { useScreenChrome } from '../shell/ShellContext';
 import { BlockError, BlockSkeleton } from './parts';
@@ -28,7 +28,7 @@ async function loadUnreadCount(signal: AbortSignal): Promise<number> {
   return page.unreadCount;
 }
 
-function weeklyTitle(today: TodayRead, fallback: string): string {
+function weeklyTitle(today: TodayDay, fallback: string): string {
   const count = today.snapshot?.digest.newVacancies ?? 0;
   return count > 0
     ? pluralRu(count, ['новая вакансия', 'новые вакансии', 'новых вакансий'])
@@ -38,7 +38,7 @@ function weeklyTitle(today: TodayRead, fallback: string): string {
 interface ModuleProps {
   readonly module: TodayStatusModule;
   readonly status: CandidateStatusToday;
-  readonly today: TodayRead;
+  readonly today: TodayDay;
   /** Первый модуль левой колонки: у него главная кнопка экрана. */
   readonly lead: boolean;
 }
@@ -72,7 +72,7 @@ function TodayModule({ module, status, today, lead }: ModuleProps) {
 
 interface TodayBodyProps {
   readonly status: CandidateStatusToday;
-  readonly today: TodayRead;
+  readonly today: TodayDay;
   readonly revertedTitle: string | null;
   readonly onReverted: (title: string) => void;
 }
@@ -110,7 +110,7 @@ function TodayBody({ status, today, revertedTitle, onReverted }: TodayBodyProps)
 export function TodayScreen({ node }: { readonly node: B640Node }) {
   const status = useLoad(getStatusToday);
   const [revertedTitle, setRevertedTitle] = useState<string | null>(null);
-  const today = useToday();
+  const today = useTodayDay();
   const unread = useLoad(loadUnreadCount);
   useScreenChrome({ bellCount: unread.state === 'ready' ? unread.data : 0 });
 

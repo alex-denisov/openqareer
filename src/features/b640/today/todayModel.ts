@@ -66,9 +66,17 @@ function actionFace(item: TodayQueueItem): ActionFace {
   };
 }
 
+/**
+ * Подпись строки. У поста — только площадка: служебную приписку очереди
+ * («сам не опубликуется») кандидату не показываем.
+ */
+function actionSub(item: TodayQueueItem): string {
+  return item.kind === 'linkedin_post' ? 'LinkedIn' : queueDesktopSubtitle(item);
+}
+
 /** Строка очереди дня: что сделать и куда ведёт кнопка в новом кабинете. */
 export function queueAction(item: TodayQueueItem): TodayAction {
-  return { title: queueActionTitle(item), sub: queueDesktopSubtitle(item), ...actionFace(item) };
+  return { title: queueActionTitle(item), sub: actionSub(item), ...actionFace(item) };
 }
 
 /** «13 откликов → 1 интервью → 1 оффер»; без откликов строки нет. */
