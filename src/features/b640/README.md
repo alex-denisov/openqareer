@@ -76,8 +76,8 @@
 - Гейты макетов лежат в `e2e/b640/gates/`. Прогон на своём экране:
 
   ```ts
-  import { runGates } from './gates';
-  await runGates(page); // все семь; падение называет гейт и элемент
+  import { expectGates } from './gates';
+  await expectGates(page); // все семь; падение называет гейт, размер окна и элемент
   ```
 
   `npx playwright test e2e/b640` — все спеки нового кабинета на 1440 и 390.

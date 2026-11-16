@@ -17,7 +17,7 @@
 
   /* вид «Панель ввода»: панель у нижнего края окна, на 390 над нижней навигацией */
   .b640 .kit-chat-log { padding-block-end: calc(var(--career-space-12) * 3); }
-  .b640 .kit-chat-dock .compose { position: fixed; z-index: 10; inset-block-end: 0; inset-inline: var(--career-rail-width) 0; background: var(--career-bg); }
+  .b640 .kit-chat-dock .compose { position: fixed; z-index: 10; inset-block-end: 0; inset-inline: var(--career-rail-width) 0; inline-size: auto; background: var(--career-bg); }
   @media (max-width: 767px) {
     .b640 .kit-chat-dock .compose { inset-inline: 0; inset-block-end: calc(var(--career-mobile-nav-height) + env(safe-area-inset-bottom, 0px)); }
   }
