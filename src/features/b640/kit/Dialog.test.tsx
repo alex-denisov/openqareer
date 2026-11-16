@@ -56,7 +56,9 @@ describe('Dialog', () => {
     const title = dialog.querySelector('.pf-dh h2') as HTMLElement;
     expect(dialog.getAttribute('aria-labelledby')).toBe(title.id);
     expect(dialog.querySelector('span.grab')).not.toBeNull();
-    expect(dialog.querySelector('.pf-dh button.icon-btn')?.getAttribute('aria-label')).toBe('Закрыть');
+    expect(dialog.querySelector('.pf-dh button.icon-btn')?.getAttribute('aria-label')).toBe(
+      'Закрыть',
+    );
     expect(dialog.querySelector('.pf-db #first')).not.toBeNull();
     expect(dialog.querySelector('.pf-df #last')).not.toBeNull();
     expect(view.container.querySelector('.pf-back')?.getAttribute('aria-hidden')).toBe('true');

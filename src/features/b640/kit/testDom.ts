@@ -33,6 +33,8 @@ export function click(element: Element | null): void {
 
 export function press(target: Element | Document, key: string, init: KeyboardEventInit = {}): void {
   act(() => {
-    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+    target.dispatchEvent(
+      new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
+    );
   });
 }

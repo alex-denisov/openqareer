@@ -22,11 +22,17 @@ describe('StatusLine', () => {
     expect(html).toContain('aria-live="polite"');
   });
   it('успех', () => {
-    expect(renderToStaticMarkup(<StatusLine state="ok" text="Отправлено" />)).toContain('re-line is-ok');
+    expect(renderToStaticMarkup(<StatusLine state="ok" text="Отправлено" />)).toContain(
+      're-line is-ok',
+    );
   });
   it('ошибка: role=alert и действие', () => {
     const html = renderToStaticMarkup(
-      <StatusLine state="err" text="Не отправлен" action={<button type="button">Повторить</button>} />,
+      <StatusLine
+        state="err"
+        text="Не отправлен"
+        action={<button type="button">Повторить</button>}
+      />,
     );
     expect(html).toContain('re-line is-err');
     expect(html).toContain('role="alert"');

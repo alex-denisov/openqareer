@@ -11,7 +11,9 @@ interface RowActionBase {
 
 export type RowActionProps = RowActionBase &
   (
-    | (Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'children'> & { href?: undefined })
+    | (Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'children'> & {
+        href?: undefined;
+      })
     | (Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'className' | 'children'> & { href: string })
   );
 

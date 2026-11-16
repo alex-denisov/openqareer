@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { logout, type AuthUser } from '../coach/coachApi';
 import { B640_TAB_SETS, matchNode } from './routes';
+import { ToastHost } from './kit/Toast';
 import { ShellFrame } from './shell/ShellFrame';
 import { ShellProvider, useShell } from './shell/ShellContext';
 import { useB640Theme, useDocumentTheme } from './theme';
@@ -60,6 +61,7 @@ function CabinetRoot() {
         К содержанию
       </a>
       <ShellFrame />
+      <ToastHost />
     </div>
   );
 }

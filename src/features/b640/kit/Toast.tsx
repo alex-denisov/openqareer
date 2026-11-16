@@ -38,7 +38,10 @@ const toastApi = {
   },
 };
 
-export function useToast(): { readonly show: (options: ToastOptions) => void; readonly hide: () => void } {
+export function useToast(): {
+  readonly show: (options: ToastOptions) => void;
+  readonly hide: () => void;
+} {
   return toastApi;
 }
 

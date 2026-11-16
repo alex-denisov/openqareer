@@ -1,3 +1,15 @@
 /* B649: добавления общих компонентов к стилям макета. */
 @layer b640.kit {
+  /* ⓘ закреплён нажатием: на телефоне наведения нет */
+  .b640 .tip.kit-pinned .tip-bubble { display: block; }
+
+  /* витрина: секция и ряд полей одной высоты */
+  .b640 .kit-section { display: grid; gap: var(--career-space-4); padding-block: var(--career-space-5); border-block-end: var(--career-border-width) solid var(--career-line); min-inline-size: 0; }
+  .b640 .kit-section > h2 { margin: 0; font-size: var(--career-text-lg); }
+  .b640 .kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--career-space-3); }
+  .b640 .kit-form-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--career-space-3); }
+  .b640 .kit-form-row > .pf-f { flex: 1 1 calc(var(--career-space-12) * 3); }
+  .b640 .kit-form-row > .seg-ctl { flex: 0 1 auto; display: inline-flex; }
+  .b640 .kit-dialog-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--career-space-3); }
+  .b640 .kit-dock-stage { position: relative; min-block-size: calc(var(--career-space-12) * 2); }
 }

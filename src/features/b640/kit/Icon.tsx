@@ -246,7 +246,12 @@ export function Icon({ name, className, label }: IconProps) {
   const Component = filled ? ICONS.star : ICONS[name];
   const classes = className ? `ico ${className}` : 'ico';
   return label ? (
-    <Component className={classes} weight={filled ? 'fill' : 'regular'} role="img" aria-label={label} />
+    <Component
+      className={classes}
+      weight={filled ? 'fill' : 'regular'}
+      role="img"
+      aria-label={label}
+    />
   ) : (
     <Component className={classes} weight={filled ? 'fill' : 'regular'} aria-hidden="true" />
   );

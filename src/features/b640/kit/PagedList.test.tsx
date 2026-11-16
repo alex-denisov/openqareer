@@ -32,7 +32,12 @@ describe('PagedList', () => {
     let finish: () => void = () => undefined;
     const onLoadMore = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)));
     view = mount(
-      <PagedList items={items.slice(0, 20)} renderItem={render} total={1500} onLoadMore={onLoadMore} />,
+      <PagedList
+        items={items.slice(0, 20)}
+        renderItem={render}
+        total={1500}
+        onLoadMore={onLoadMore}
+      />,
     );
     expect(view.container.querySelector('.ct-count')?.textContent).toContain('20 из');
     click(more(view));
@@ -44,7 +49,12 @@ describe('PagedList', () => {
   it('ошибка догрузки — под списком, список остался', async () => {
     const onLoadMore = vi.fn(() => Promise.reject(new Error('x')));
     view = mount(
-      <PagedList items={items.slice(0, 20)} renderItem={render} total={100} onLoadMore={onLoadMore} />,
+      <PagedList
+        items={items.slice(0, 20)}
+        renderItem={render}
+        total={100}
+        onLoadMore={onLoadMore}
+      />,
     );
     await act(async () => more(view as Mounted).click());
     expect(view.container.querySelector('.re-line.is-err')?.textContent).toContain('Не удалось');
