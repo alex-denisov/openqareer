@@ -33,7 +33,12 @@ export function guessFromFit(view: VacancyFitView): RejectionGuess | null {
   if (view.state !== 'ready' && view.state !== 'refreshing') return null;
   const assessments = view.result?.assessments ?? [];
   const gaps = assessments
-    .filter((item) => item.status === 'unmatched' || item.status === 'partial')
+    // Частичное покрытие без цитаты из профиля нечем подтвердить: такой пробел не называем.
+    .filter(
+      (item) =>
+        item.status === 'unmatched' ||
+        (item.status === 'partial' && item.evidence.some((evidence) => evidence.quote.trim())),
+    )
     .flatMap((item) => {
       const requirement = view.requirements.find((entry) => entry.id === item.requirementId);
       return requirement ? [{ requirement, item }] : [];
@@ -47,7 +52,7 @@ export function guessFromFit(view: VacancyFitView): RejectionGuess | null {
   if (!top) return null;
   const fact = top.item.evidence.map((evidence) => evidence.quote.trim()).find(Boolean);
   return {
-    requirement: clip(top.requirement.label ?? top.requirement.text),
+    requirement: clip(top.requirement.label || top.requirement.text),
     quote: clip(top.requirement.sourceQuote || top.requirement.text),
     profileFact: top.item.status === 'partial' && fact ? clip(fact) : null,
   };
@@ -82,11 +87,11 @@ function recommendations(items: readonly RejectionReviewItem[]): readonly Reject
   const guessed = items.flatMap((item) => (item.guess ? [item.guess] : []));
   const groups = new Map<string, { guess: RejectionGuess; count: number }>();
   for (const guess of guessed) {
-    const key = guess.requirement.toLocaleLowerCase('ru');
+    // Частично покрытое и неподтверждённое — разные советы, даже при одном требовании.
+    const key = `${guess.profileFact ? 'partial' : 'none'}:${guess.requirement.toLocaleLowerCase('ru')}`;
     const known = groups.get(key);
     groups.set(key, {
-      // Факт профиля берём у первой догадки, где он есть: совет стоит только на подтверждённом.
-      guess: known?.guess.profileFact ? known.guess : guess,
+      guess: known?.guess ?? guess,
       count: (known?.count ?? 0) + 1,
     });
   }
@@ -97,7 +102,7 @@ function recommendations(items: readonly RejectionReviewItem[]): readonly Reject
       requirement: guess.requirement,
       profileFact: guess.profileFact,
       count,
-      total: guessed.length,
+      total: items.length,
     }));
 }
 

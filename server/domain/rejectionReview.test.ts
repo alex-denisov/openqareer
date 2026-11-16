@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { RejectionGuess } from '../../shared/rejectionReview';
 import type { VacancyFitView } from '../../shared/vacancyFit';
 import type { VacancyRequirement } from './vacancyRequirements';
 import {
@@ -92,8 +93,8 @@ function sent(id: string, stage: RejectionReviewApplication['stage'], changedAt 
   return { id, stage, title: `Роль ${id}`, company: 'Компания', stageChangedAt: changedAt };
 }
 
-const TEAM = { requirement: 'Команда от 20 человек', quote: 'команда от 20', profileFact: 'команда 9' };
-const BROKER = { requirement: 'Опыт в брокерских системах', quote: 'брокерские системы', profileFact: null };
+const TEAM: RejectionGuess = { requirement: 'Команда от 20 человек', quote: 'команда от 20', profileFact: 'команда 9' };
+const BROKER: RejectionGuess = { requirement: 'Опыт в брокерских системах', quote: 'брокерские системы', profileFact: null };
 
 describe('B679: разбор отказов', () => {
   it('мало данных: отказы показаны, выводов нет', () => {
@@ -134,6 +135,31 @@ describe('B679: разбор отказов', () => {
       { kind: 'match_vacancies', requirement: BROKER.requirement, profileFact: null, count: 1, total: 3 },
     ]);
     expect(review.helped).toBe(true);
+  });
+
+  it('частичное покрытие без цитаты из профиля не называется', () => {
+    expect(
+      guessFromFit(view([requirement('r1', 'Команда от 20')], [{ id: 'r1', status: 'partial' }])),
+    ).toBeNull();
+  });
+
+  it('одно требование с фактом и без факта — разные советы, доля от всех отказов', () => {
+    const applications = [
+      sent('r1', 'rejected'),
+      sent('r2', 'rejected'),
+      sent('r3', 'rejected'),
+      ...Array.from({ length: 18 }, (_, index) => sent(`s${index}`, 'applied')),
+    ];
+    const review = buildRejectionReview({
+      applications,
+      guesses: new Map([['r1', TEAM], ['r2', { ...TEAM, profileFact: null }]]),
+      reasons: new Map(),
+      helped: null,
+    });
+    expect([review.firstStep, ...review.recommendations]).toEqual([
+      { kind: 'show_in_resume', requirement: TEAM.requirement, profileFact: 'команда 9', count: 1, total: 3 },
+      { kind: 'match_vacancies', requirement: TEAM.requirement, profileFact: null, count: 1, total: 3 },
+    ]);
   });
 
   it('без догадок рекомендаций нет: совет не выдумывается', () => {

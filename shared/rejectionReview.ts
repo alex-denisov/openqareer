@@ -25,7 +25,10 @@ export interface RejectionGuess {
   readonly requirement: string;
   /** Цитата из текста вакансии. */
   readonly quote: string;
-  /** Что об этом есть в профиле; `null` — в профиле этого нет. */
+  /**
+   * Подтверждённый факт профиля, который закрывает требование частично.
+   * `null` — сверка не нашла подтверждения (это не значит, что опыта нет).
+   */
   readonly profileFact: string | null;
 }
 
@@ -47,7 +50,7 @@ export interface RejectionReviewItem {
 export type RejectionRecommendationKind =
   /** Факт в профиле есть, но требование закрыто не полностью: показать его в резюме. */
   | 'show_in_resume'
-  /** В профиле этого нет: выбирать вакансии без такого требования. */
+  /** Подтверждения в профиле не нашлось: выбирать вакансии без такого требования. */
   | 'match_vacancies'
   /** Мало данных: сначала обновить статусы откликов без ответа. */
   | 'update_statuses';
@@ -57,7 +60,7 @@ export interface RejectionRecommendation {
   /** Требование, на котором стоит рекомендация; у `update_statuses` — `null`. */
   readonly requirement: string | null;
   readonly profileFact: string | null;
-  /** Во скольких отказах встретилось и из скольких разобранных. */
+  /** Во скольких отказах встретилось и сколько отказов разобрано всего. */
   readonly count: number;
   readonly total: number;
 }

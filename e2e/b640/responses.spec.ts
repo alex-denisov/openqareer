@@ -168,13 +168,56 @@ test.describe('B656: «Отклики» нового кабинета', () => {
     await expectGates(page);
   });
 
-  test('разбор отказов: мало данных и список отказов', async ({ page }) => {
+  test('разбор отказов: мало данных, отказ с догадкой, первый шаг', async ({ page }) => {
     await open(page, '/app/responses/review', 'o07');
     await expect(
       page.getByRole('heading', { name: 'Мало данных для вывода: 6 откликов' }),
     ).toBeVisible();
     await expect(page.getByRole('img', { name: '6 откликов из 20 нужных' })).toBeVisible();
     await expect(page.getByText('Сбыт Онлайн')).toBeVisible();
+    await expect(page.getByText(/Вероятно, не хватило: Команда от 20 человек/u)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Обновить статусы' })).toHaveAttribute(
+      'href',
+      '/app/responses',
+    );
+    await expect(page.getByRole('heading', { name: 'Разбор помог?' })).toHaveCount(0);
+    await expectGates(page);
+  });
+
+  test('разбор отказов: что сделать первым, другие рекомендации, «Разбор помог?»', async ({
+    page,
+  }) => {
+    const mock = await open(page, '/app/responses/review', 'o07', { reviewReady: true });
+    await expect(
+      page.getByRole('heading', { name: 'Показать в резюме: Команда от 20 человек' }),
+    ).toBeVisible();
+    await expect(page.locator('.lead-text')).toContainText(
+      'в профиле: руководил командой из 9 человек',
+    );
+    await expect(page.getByRole('link', { name: 'Открыть профиль' })).toHaveClass(/is-primary/u);
+    await expect(page.locator('.rec-card')).toHaveCount(1);
+    await expect(page.locator('.rec-card')).toContainText('подтверждения в профиле не нашли');
+    await expectGates(page);
+    await page.getByRole('button', { name: 'Да', exact: true }).click();
+    await expect(page.getByText('Спасибо, ответ записан')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Да', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(mock.calls).toContain('PUT feedback true');
+  });
+
+  test('отказ в раскрытом отклике: догадка и отметка «чего не хватило»', async ({ page }) => {
+    const mock = await open(page, '/app/responses/a-rejected', 'o01c');
+    const detail = page.locator('#otklik-a-rejected');
+    await expect(detail.getByText(/Вероятно, не хватило: Команда от 20 человек/u)).toBeVisible();
+    await detail.getByRole('button', { name: 'Отметить, чего не хватило' }).click();
+    await expect(detail.getByRole('alert')).toContainText('Выберите');
+    await detail.getByRole('button', { name: 'Деньги' }).click();
+    await detail.getByLabel(/Что написали/u).fill('Вилка ниже ожиданий');
+    await detail.getByRole('button', { name: 'Отметить, чего не хватило' }).click();
+    await expect(detail.getByText('Отмечено', { exact: true })).toBeVisible();
+    expect(mock.calls).toContain('PUT reason money Вилка ниже ожиданий');
     await expectGates(page);
   });
 

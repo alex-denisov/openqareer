@@ -65,6 +65,16 @@ export class SqliteRejectionReviewRepository {
     return `rejection-reason:${applicationId}`;
   }
 
+  /** Повреждённая запись не роняет весь разбор: причина остаётся, текст — нет. */
+  private openNote(row: ReasonRow): string | null {
+    if (!row.note_cipher) return null;
+    try {
+      return this.sealedText.open(row.note_cipher, this.noteScope(row.application_id));
+    } catch {
+      return null;
+    }
+  }
+
   /** Отметки кандидата по его отказам: ключ — отклик. */
   reasons(candidateId: string): Map<string, RejectionCandidateReason> {
     const rows = this.database
@@ -78,9 +88,7 @@ export class SqliteRejectionReviewRepository {
         row.application_id,
         {
           reason: row.reason,
-          note: row.note_cipher
-            ? this.sealedText.open(row.note_cipher, this.noteScope(row.application_id))
-            : null,
+          note: this.openNote(row),
           recordedAt: row.recorded_at,
         },
       ]),

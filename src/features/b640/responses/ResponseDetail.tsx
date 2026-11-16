@@ -6,6 +6,7 @@ import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
 import { pluralRu } from './model/responseRow';
+import { RejectionReasonForm } from './RejectionReasonForm';
 import { actionPath } from './ResponsesTable';
 import {
   marksFor,
@@ -266,6 +267,9 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
       ) : null}
       <NextActions item={item} actions={actions} draft={draft} />
       <OutcomeLine outcome={actions.outcome} />
+      {application.stage === 'rejected' ? (
+        <RejectionReasonForm key={application.id} applicationId={application.id} />
+      ) : null}
       <History application={application} />
       <NoteField fieldId={`${titleId}-note`} application={application} writer={writer} />
       <VacancyLink application={application} />

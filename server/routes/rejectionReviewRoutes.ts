@@ -63,7 +63,7 @@ function guessFor(
     const input = vacancyFitContext(deps, candidate, target, []);
     return guessFromFit(runtime.view(input, { queueRequirements: false }));
   } catch (error) {
-    request.log.warn({ error }, 'rejection_review_guess_failed');
+    request.log.warn({ err: error }, 'rejection_review_guess_failed');
     return null;
   }
 }
