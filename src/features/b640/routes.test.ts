@@ -46,6 +46,14 @@ describe('адреса узлов нового кабинета (B649)', () => {
     expect(matchNode('/app/responses/r7/interview/mock')?.params).toEqual({ responseId: 'r7' });
   });
 
+  it('при равном числе точных звеньев побеждает адрес с точным звеном левее', () => {
+    expect(matchNode('/app/responses/offers/letter')?.node.code).toBe('o06a');
+    expect(matchNode('/app/responses/offers/interview')?.node.code).toBe('o06a');
+    expect(matchNode('/app/responses/r7/letter')?.node.code).toBe('o02');
+    expect(matchNode('/app/diary/goals/new')?.node.code).toBe('d02b');
+    expect(matchNode('/app/diary/goals/g1')?.node.code).toBe('d02a');
+  });
+
   it('не узнаёт чужие адреса', () => {
     expect(matchNode('/app/nope')).toBeNull();
     expect(matchNode('/app/profile/status/extra')).toBeNull();

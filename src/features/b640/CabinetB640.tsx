@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { logout, type AuthUser } from '../coach/coachApi';
 import { B640_TAB_SETS, matchNode } from './routes';
 import { ToastHost } from './kit/Toast';
@@ -21,20 +21,42 @@ export interface CabinetB640Props {
  */
 export function CabinetB640({ session, path, onNavigate, onSessionChange }: CabinetB640Props) {
   const { theme, setTheme } = useB640Theme();
-  const match = useMemo(() => matchNode(path), [path]);
+  // `App` ведёт путь; параметры после `?` читаются из адреса окна, чтобы «Назад»
+  // и «Вперёд» браузера между ними тоже перерисовывали экран.
+  const pathname = path.split(/[?#]/u)[0];
+  const search = useSyncExternalStore(
+    subscribeToHistory,
+    () => window.location.search,
+    () => (path.includes('?') ? `?${path.split('?')[1].split('#')[0]}` : ''),
+  );
+  const match = useMemo(() => matchNode(pathname), [pathname]);
   const signOut = useCallback(async () => {
     await logout();
     onSessionChange(null);
   }, [onSessionChange]);
   const value = useMemo(
-    () => ({ session, path, match, navigate: onNavigate, signOut, theme, setTheme }),
-    [session, path, match, onNavigate, signOut, theme, setTheme],
+    () => ({
+      session,
+      path: pathname,
+      search,
+      match,
+      navigate: onNavigate,
+      signOut,
+      theme,
+      setTheme,
+    }),
+    [session, pathname, search, match, onNavigate, signOut, theme, setTheme],
   );
   return (
     <ShellProvider value={value}>
       <CabinetRoot />
     </ShellProvider>
   );
+}
+
+function subscribeToHistory(onChange: () => void): () => void {
+  window.addEventListener('popstate', onChange);
+  return () => window.removeEventListener('popstate', onChange);
 }
 
 /** Атрибуты корня повторяют атрибуты `<body>` макета: от них зависят его стили. */

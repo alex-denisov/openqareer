@@ -2,8 +2,8 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -34,11 +34,14 @@ export interface ScreenChrome {
 
 export interface ShellContextValue extends B640ThemeState {
   readonly session: AuthUser;
-  /** Текущий адрес без домена. */
+  /** Текущий адрес без домена и без параметров после `?`. */
   readonly path: string;
+  /** Параметры адреса после `?`, вместе со знаком; пусто, если их нет. */
+  readonly search: string;
   /** Узел карты по адресу; `null` — адрес не из карты. */
   readonly match: B640Match | null;
   readonly navigate: (path: string) => void;
+  /** Выход из аккаунта. При сбое бросает ошибку: покажите её на месте действия. */
   readonly signOut: () => Promise<void>;
   readonly chrome: ScreenChrome;
   readonly setChromeEntry: (id: string, chrome: ScreenChrome | null) => void;
@@ -106,7 +109,8 @@ export function useScreenChrome(chrome: ScreenChrome): void {
   const { setChromeEntry } = useShell();
   const id = useId();
   const key = JSON.stringify(chrome);
-  useEffect(() => {
+  // До отрисовки: заголовок и путь не мигают значениями по умолчанию.
+  useLayoutEffect(() => {
     setChromeEntry(id, JSON.parse(key) as ScreenChrome);
     return () => setChromeEntry(id, null);
   }, [id, key, setChromeEntry]);

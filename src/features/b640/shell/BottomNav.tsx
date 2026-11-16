@@ -11,6 +11,14 @@ export interface BottomNavProps {
   readonly initial: string;
 }
 
+/** Стрелки, Home и End переносят фокус между пунктами меню по кругу. */
+const MENU_KEYS: Readonly<Record<string, (current: number, last: number) => number>> = {
+  ArrowDown: (current, last) => (current >= last ? 0 : current + 1),
+  ArrowUp: (current, last) => (current <= 0 ? last : current - 1),
+  Home: () => 0,
+  End: (_current, last) => last,
+};
+
 /** Меню «Ещё»: открывается кнопкой, закрывается повторным нажатием, Esc и нажатием мимо. */
 function useMoreMenu() {
   const [open, setOpen] = useState(false);
@@ -21,9 +29,25 @@ function useMoreMenu() {
     if (!open) return undefined;
     menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      buttonRef.current?.focus();
+      if (event.key === 'Escape') {
+        setOpen(false);
+        buttonRef.current?.focus();
+        return;
+      }
+      // Tab уводит фокус из меню: меню закрывается, а не остаётся открытым позади.
+      if (event.key === 'Tab') {
+        setOpen(false);
+        return;
+      }
+      const items = Array.from(
+        menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+      );
+      const current = items.indexOf(document.activeElement as HTMLElement);
+      const last = items.length - 1;
+      const next = MENU_KEYS[event.key]?.(current, last);
+      if (next === undefined) return;
+      event.preventDefault();
+      items[next]?.focus();
     };
     const onPointer = (event: PointerEvent) => {
       const target = event.target as Node;

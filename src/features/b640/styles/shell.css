@@ -1,7 +1,21 @@
 /* B649: добавления оболочки к стилям макета. */
 @layer b640.shell {
+  /* Наследуемые свойства корень задаёт сам: значения со страницы вокруг него
+     (body, html) в новый кабинет не переходят. */
   div.b640 {
     min-block-size: 100dvh;
+    font-style: normal;
+    font-weight: 400;
+    font-variant: normal;
+    letter-spacing: normal;
+    word-spacing: normal;
+    text-transform: none;
+    text-align: start;
+    text-indent: 0;
+    white-space: normal;
+    direction: ltr;
+    cursor: auto;
+    visibility: visible;
   }
 
   /* Нейтральная страница узла до подключения раздела и «такой страницы нет». */

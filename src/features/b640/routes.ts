@@ -278,10 +278,7 @@ function segmentsOf(path: string): string[] {
   return path.split(/[?#]/u)[0].split('/').filter(Boolean);
 }
 
-const COMPILED = B640_NODES.map((node) => {
-  const segments = segmentsOf(node.path);
-  return { node, segments, weight: segments.filter((segment) => !segment.startsWith(':')).length };
-});
+const COMPILED = B640_NODES.map((node) => ({ node, segments: segmentsOf(node.path) }));
 
 function safeDecode(value: string): string {
   try {
@@ -291,14 +288,26 @@ function safeDecode(value: string): string {
   }
 }
 
-/** Узел по адресу; точные звенья важнее параметров (`/vacancies/saved` — не вакансия). */
+/** Из двух подходящих адресов важнее тот, у кого точное звено стоит раньше. */
+function moreExact(candidate: readonly string[], best: readonly string[]): boolean {
+  for (let index = 0; index < candidate.length; index += 1) {
+    const exact = !candidate[index].startsWith(':');
+    if (exact !== !best[index].startsWith(':')) return exact;
+  }
+  return false;
+}
+
+/**
+ * Узел по адресу. Точное звено важнее параметра, считая слева: `/vacancies/saved`
+ * — не вакансия, `/responses/offers/…` — всегда офферы, а не отклик с таким кодом.
+ */
 export function matchNode(path: string): B640Match | null {
   const segments = segmentsOf(path);
   if (segments.length === 1 && segments[0] === 'app') {
     const home = NODE_BY_CODE.get('s03');
     return home ? { node: home, params: {} } : null;
   }
-  let best: (B640Match & { weight: number }) | null = null;
+  let best: (B640Match & { segments: readonly string[] }) | null = null;
   for (const candidate of COMPILED) {
     if (candidate.segments.length !== segments.length) continue;
     const params: Record<string, string> = {};
@@ -307,8 +316,8 @@ export function matchNode(path: string): B640Match | null {
       params[expected.slice(1)] = safeDecode(segments[index]);
       return true;
     });
-    if (fits && (!best || candidate.weight > best.weight)) {
-      best = { node: candidate.node, params, weight: candidate.weight };
+    if (fits && (!best || moreExact(candidate.segments, best.segments))) {
+      best = { node: candidate.node, params, segments: candidate.segments };
     }
   }
   return best ? { node: best.node, params: best.params } : null;

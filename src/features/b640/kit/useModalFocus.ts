@@ -36,6 +36,14 @@ function trapTab(event: KeyboardEvent, dialog: HTMLElement): void {
   }
 }
 
+/** Открытые окна в порядке открытия; последнее — верхнее. */
+const OPEN_DIALOGS: HTMLElement[] = [];
+
+/** Открыто ли сейчас модальное окно: тост в это время на Esc не реагирует. */
+export function hasOpenModal(): boolean {
+  return OPEN_DIALOGS.length > 0;
+}
+
 export interface ModalFocusRefs {
   readonly host: HTMLElement | null;
   readonly dialog: RefObject<HTMLDivElement>;
@@ -59,12 +67,16 @@ export function useModalFocus(shown: boolean, refs: ModalFocusRefs, onClose: () 
     const release = isolate(host, [dialog, back.current]);
     const body = dialog.querySelector<HTMLElement>('.pf-db');
     ((body ? focusables(body)[0] : undefined) ?? dialog).focus();
+    OPEN_DIALOGS.push(dialog);
+    // Клавиши слушает только верхнее окно: Esc не закрывает сразу все вложенные.
     const onKey = (event: KeyboardEvent) => {
+      if (OPEN_DIALOGS[OPEN_DIALOGS.length - 1] !== dialog) return;
       if (event.key === 'Escape') closeRef.current();
       else if (event.key === 'Tab') trapTab(event, dialog);
     };
     document.addEventListener('keydown', onKey);
     return () => {
+      OPEN_DIALOGS.splice(OPEN_DIALOGS.indexOf(dialog), 1);
       document.removeEventListener('keydown', onKey);
       release();
       opener?.focus();

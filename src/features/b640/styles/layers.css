@@ -9,6 +9,11 @@
 .b640:not(#\#),
 .b640:not(#\#) *,
 .b640:not(#\#) *::before,
-.b640:not(#\#) *::after {
+.b640:not(#\#) *::after,
+.b640:not(#\#) *::placeholder,
+.b640:not(#\#) *::marker,
+.b640:not(#\#) *::selection,
+.b640:not(#\#) *::file-selector-button,
+.b640:not(#\#) *::backdrop {
   all: revert-layer;
 }

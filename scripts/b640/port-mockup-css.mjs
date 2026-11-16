@@ -68,6 +68,18 @@ function scopeSelector(selector) {
   return `${ROOT_CLASS} ${selector}`;
 }
 
+/** Формы селектора, которые перенос не умеет: лучше остановиться, чем молча сломать правило. */
+const UNSUPPORTED = /(^|[\s>+~(,])(:root|html|body)(?![\w-])|::backdrop/u;
+
+function scopeChecked(selector) {
+  const scoped = scopeSelector(selector);
+  const rest = scoped.replace(/^(div)?\.b640(:not\(a\))?/u, '');
+  if (UNSUPPORTED.test(rest)) {
+    throw new Error(`port-mockup-css: селектор не переносится автоматически — ${selector}`);
+  }
+  return scoped;
+}
+
 function isTokenRule(rule) {
   const selectors = splitSelectors(rule.selector);
   if (!selectors.every((selector) => /^:root(\[data-theme="[a-z]+"\])?$/u.test(selector))) {
@@ -166,7 +178,7 @@ for (const node of tree.nodes) {
 for (const root of [tokens, base]) {
   root.walkRules((rule) => {
     if (rule.parent?.type === 'atrule' && /keyframes$/u.test(rule.parent.name)) return;
-    rule.selector = splitSelectors(rule.selector).map(scopeSelector).join(',\n');
+    rule.selector = splitSelectors(rule.selector).map(scopeChecked).join(',\n');
   });
 }
 

@@ -12,7 +12,9 @@ export function CabinetB640Bootstrap() {
       className="b640-boot"
       data-testid="cabinet-b640-boot"
       data-theme={readStoredTheme()}
+      role="status"
       aria-busy="true"
+      aria-label="Открываем кабинет"
     />
   );
 }

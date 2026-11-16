@@ -85,6 +85,7 @@ test.describe('B649: новый кабинет изолирован от пре�
 
     // Проверка самой проверки: без границы слоёв прежние стили меняют новый кабинет.
     const removed = await page.evaluate(() => {
+      let count = 0;
       for (const sheet of document.styleSheets) {
         let rules: CSSRuleList;
         try {
@@ -92,17 +93,18 @@ test.describe('B649: новый кабинет изолирован от пре�
         } catch {
           continue;
         }
+        // Сборка может разнести границу на несколько правил: убираем все.
         for (let index = rules.length - 1; index >= 0; index -= 1) {
           const rule = rules[index];
           if (rule instanceof CSSStyleRule && rule.selectorText.includes('.b640:not(#')) {
             sheet.deleteRule(index);
-            return true;
+            count += 1;
           }
         }
       }
-      return false;
+      return count;
     });
-    expect(removed, 'граница слоёв найдена в стилях').toBe(true);
+    expect(removed, 'граница слоёв найдена в стилях').toBeGreaterThan(0);
     const withoutBarrier = await page.screenshot({ fullPage: true });
     expect(
       Buffer.compare(withoutBarrier, withOldCss) === 0,

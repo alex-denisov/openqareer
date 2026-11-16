@@ -660,7 +660,13 @@ export default function App() {
         (state.onboardingComplete && !state.workspace)),
     );
   // B649: аккаунт с флагом получает новый кабинет B640; остальным — прежний.
-  const b640Session = state.session?.features?.cabinetB640 === true ? state.session : null;
+  // Ошибку сессии и неподтверждённый email по-прежнему ведёт прежний экран.
+  const b640Session =
+    state.session?.features?.cabinetB640 === true &&
+    !sessionError &&
+    state.session.emailVerified !== false
+      ? state.session
+      : null;
   // Пока сессия неизвестна, устройство, где новый кабинет уже открывался, видит
   // нейтральный кадр, а не прежнюю оболочку; ошибку сессии показывает прежний экран.
   const b640Expected =

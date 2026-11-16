@@ -84,7 +84,7 @@ function NotFound() {
 /** Оболочка вокруг экрана: рейл, верхняя полоса, путь, вкладки, нижняя навигация. */
 export function ShellFrame() {
   const { match, path, session, chrome, setCtxSlot } = useShell();
-  const isKit = path.split(/[?#]/u)[0].replace(/\/$/u, '') === B640_KIT_PATH;
+  const isKit = path.replace(/\/$/u, '') === B640_KIT_PATH;
   const node = match?.node ?? null;
   const trail = match ? trailOf(match, chrome.crumb) : [];
   const tabs = match ? tabsOf(match) : null;

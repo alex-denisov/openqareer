@@ -60,9 +60,9 @@ function ButtonsView() {
  * `?view=buttons`, `?view=composer`; `?open=dialog` и `?open=toast` — для снимков.
  */
 export default function Showcase() {
-  useShell(); // смена адреса перерисовывает витрину
-  const params = new URLSearchParams(window.location.search);
-  const view = readView(window.location.search);
+  const { search } = useShell();
+  const params = new URLSearchParams(search);
+  const view = readView(search);
   const tabs: readonly SecTab[] = VIEWS.map((item) => ({
     label: item.label,
     path: item.path,
