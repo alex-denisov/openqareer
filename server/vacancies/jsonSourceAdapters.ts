@@ -399,7 +399,12 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
 
   // B647: контакты (`contact_list`, `contact_person`) — персональные данные, их не читаем.
   'src-trudvsem': (payload, context, sourceId) =>
-    listOf(payload, (value) => asArray(record(record(value).results).vacancies)).map((item) => {
+    listOf(payload, (value) => {
+      const envelope = record(value);
+      if (!('results' in envelope)) return null;
+      const results = record(envelope.results);
+      return asArray(results.vacancies) ?? (Object.keys(results).length === 0 ? [] : null);
+    }).map((item) => {
       const job = record(record(item).vacancy);
       const company = record(job.company);
       const salary = numericSalary(job);
