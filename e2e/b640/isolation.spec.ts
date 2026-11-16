@@ -5,18 +5,10 @@ import { mockSignedInCabinet } from '../fixtures/mockSignedInCabinet';
 
 const flagged = { ...candidate, features: { cabinetB640: true } };
 
-/** Загружен ли в документ прежний career-shell.css (его правила под `.career-shell`). */
+/** Загружен ли в документ прежний career-shell.css: он приходит отдельным файлом сборки. */
 function oldShellCssLoaded(page: Page): Promise<boolean> {
   return page.evaluate(() =>
-    [...document.styleSheets].some((sheet) => {
-      try {
-        return [...sheet.cssRules].some(
-          (rule) => rule instanceof CSSStyleRule && rule.selectorText.startsWith('.career-shell'),
-        );
-      } catch {
-        return false;
-      }
-    }),
+    [...document.styleSheets].some((sheet) => /\/career-shell-[\w-]+\.css/u.test(sheet.href ?? '')),
   );
 }
 
@@ -82,12 +74,40 @@ test.describe('B649: новый кабинет изолирован от пре�
     });
     const clean = await context.newPage();
     await mockSignedInCabinet(clean, { cabinetB640: true });
+    // Устройство, где новый кабинет уже открывался: прежняя оболочка не грузится вовсе.
+    await clean.addInitScript(() => window.localStorage.setItem('oq_cabinet_b640', '1'));
     await clean.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(clean.getByTestId('cabinet-b640')).toBeVisible({ timeout: 15_000 });
     await openKit(clean);
     expect(await oldShellCssLoaded(clean), 'прежних стилей в документе нет').toBe(false);
     const withoutOldCss = await clean.screenshot({ fullPage: true });
     await context.close();
+
+    // Проверка самой проверки: без границы слоёв прежние стили меняют новый кабинет.
+    const removed = await page.evaluate(() => {
+      for (const sheet of document.styleSheets) {
+        let rules: CSSRuleList;
+        try {
+          rules = sheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (let index = rules.length - 1; index >= 0; index -= 1) {
+          const rule = rules[index];
+          if (rule instanceof CSSStyleRule && rule.selectorText.includes('.b640:not(#')) {
+            sheet.deleteRule(index);
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+    expect(removed, 'граница слоёв найдена в стилях').toBe(true);
+    const withoutBarrier = await page.screenshot({ fullPage: true });
+    expect(
+      Buffer.compare(withoutBarrier, withOldCss) === 0,
+      'без границы прежние стили видны в новом кабинете',
+    ).toBe(false);
 
     const same = Buffer.compare(withOldCss, withoutOldCss) === 0;
     if (!same) {
