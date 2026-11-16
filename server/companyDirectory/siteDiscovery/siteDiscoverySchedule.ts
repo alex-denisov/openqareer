@@ -111,8 +111,18 @@ export async function runSiteDiscoveryTick(
       if (found.board) boards += 1;
       if (found.evidence.atsAmbiguous) ambiguous += 1;
       // A guessed board or careers URL can activate an incomplete profile.
-      // Keep the observation in evidence until the company is reviewed.
-      writeDiscovery(database, { companyKey: found.companyKey, evidence: found.evidence }, now.toISOString());
+      // Keep the observation in evidence until the company is reviewed,
+      // while verified site pages and hh employer IDs go to placements.
+      writeDiscovery(
+        database,
+        {
+          companyKey: found.companyKey,
+          evidence: found.evidence,
+          ...(found.evidence.careersUrl ? { careersUrl: found.careersUrl } : {}),
+          ...(found.hhEmployerIds && found.hhEmployerIds.length > 0 ? { hhEmployerIds: found.hhEmployerIds } : {}),
+        },
+        now.toISOString(),
+      );
     }
   };
   await Promise.all(Array.from({ length: Math.min(WORKERS, companies.length) }, worker));

@@ -10,6 +10,8 @@ import { buildLinkageIndex, type DirectoryRow, type LinkageIndex } from './place
 import { linkAggregatorRow } from './aggregatorLinkage';
 import { PLACEMENT_TABLES } from './placementSchema';
 import { recordCompanyPlacements } from './placementWriter';
+import { resolveCompanyFromAggregator, updateCompanySiteFromAggregator } from './aggregatorCompanyResolve';
+import { nameKey } from '../freehire/freehireImport';
 
 export interface AggregatorBackfillReport {
   readonly done: boolean;
@@ -28,6 +30,12 @@ export const AGGREGATOR_PASS_PAUSE_MS = 6 * 60 * 60_000;
 
 interface PoolRow { id: string; source_id: string; company: string | null; person: number | null; employer: string | number | null; site: string | null }
 
+export interface AggregatorBackfillOptions {
+  chunk?: number;
+  now?: () => number;
+  autoResolve?: boolean;
+}
+
 export class AggregatorCompanyBackfill {
   private directory: DirectoryRow[] = [];
   private directoryCursor: string | undefined = '';
@@ -39,10 +47,12 @@ export class AggregatorCompanyBackfill {
   private changedTotal = 0;
   private readonly chunk: number;
   private readonly now: () => number;
+  private readonly autoResolve: boolean;
 
-  constructor(private readonly db: DatabaseSync, options: { chunk?: number; now?: () => number } = {}) {
+  constructor(private readonly db: DatabaseSync, options: AggregatorBackfillOptions = {}) {
     this.chunk = options.chunk ?? DEFAULT_CHUNK;
     this.now = options.now ?? Date.now;
+    this.autoResolve = options.autoResolve ?? (process.env.OPENQAREER_AGGREGATOR_AUTO_RESOLVE === '1');
     db.exec(PLACEMENT_TABLES);
   }
 
@@ -96,6 +106,56 @@ export class AggregatorCompanyBackfill {
     return new Map(rows.map((row) => [row.employerId, row.companyKey]));
   }
 
+  private handleLinkedRow(
+    row: PoolRow,
+    link: { companyKey: string; how: import('./aggregatorLinkage').LinkHow },
+    nowMs: number,
+  ): void {
+    if (row.site && link.how === 'exact_name') {
+      if (this.autoResolve) {
+        updateCompanySiteFromAggregator(this.db, link.companyKey, row.site, nowMs);
+      } else {
+        recordCompanyPlacements(this.db, link.companyKey, { boards: [], siteUrl: row.site, discoveredBy: 'aggregator_site' }, nowMs);
+      }
+    }
+    if (row.employer !== null && row.employer !== undefined && this.autoResolve) {
+      recordCompanyPlacements(this.db, link.companyKey, {
+        boards: [],
+        hhEmployerIds: [String(row.employer)],
+        discoveredBy: 'aggregator_site',
+      }, nowMs);
+      this.hhEmployers.set(String(row.employer), link.companyKey);
+    }
+  }
+
+  private handleUnlinkedRow(
+    row: PoolRow,
+    index: LinkageIndex,
+    nowMs: number,
+  ): import('./aggregatorCompanyResolve').AutoResolvedCompany | null {
+    if (!this.autoResolve) return null;
+    const auto = resolveCompanyFromAggregator(
+      this.db,
+      {
+        company: row.company ?? '',
+        site: row.site,
+        employerId: row.employer,
+        sourceId: row.source_id,
+        sampleVacancyId: row.id,
+        employerIsPerson: row.person === 1,
+      },
+      nowMs,
+    );
+    if (!auto) return null;
+    this.names.set(auto.companyKey, row.company!);
+    (index.byKey as Set<string>).add(auto.companyKey);
+    (index.byName as Map<string, string | null>).set(nameKey(row.company!), auto.companyKey);
+    if (row.employer !== null && row.employer !== undefined) {
+      this.hhEmployers.set(String(row.employer), auto.companyKey);
+    }
+    return auto;
+  }
+
   private write(rows: readonly PoolRow[]): { linked: number; unlinked: number } {
     const index = this.index!;
     const upsert = this.db.prepare(
@@ -119,11 +179,13 @@ export class AggregatorCompanyBackfill {
         if (link.status === 'linked') {
           linked += 1;
           this.changedTotal += Number(upsert.run(row.id, link.companyKey, link.how, nowMs).changes);
-          // B647: сайт работодателя от агрегатора — только при точном имени из
-          // нескольких слов; чужое размещение не переезжает (placementWriter).
-          if (row.site && link.how === 'exact_name') {
-            recordCompanyPlacements(this.db, link.companyKey, { boards: [], siteUrl: row.site, discoveredBy: 'aggregator_site' }, nowMs);
-          }
+          this.handleLinkedRow(row, link, nowMs);
+          continue;
+        }
+        const auto = this.handleUnlinkedRow(row, index, nowMs);
+        if (auto) {
+          linked += 1;
+          this.changedTotal += Number(upsert.run(row.id, auto.companyKey, auto.how, nowMs).changes);
         } else {
           unlinked += 1;
           this.changedTotal += Number(drop.run(row.id).changes);
