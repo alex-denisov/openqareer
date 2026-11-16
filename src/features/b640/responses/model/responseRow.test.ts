@@ -82,7 +82,7 @@ describe('B656: строка отклика', () => {
     const view = row({
       stage: 'offer',
       stageChangedAt: '2026-11-10T10:00:00.000Z',
-      offer: { applicationId: 'a1', terms: {}, respondBy: '2026-11-14T00:00:00.000Z', createdAt: '', updatedAt: '' },
+      offer: { applicationId: 'a1', terms: {}, respondBy: '2026-11-14T12:00:00.000Z', createdAt: '', updatedAt: '' },
     });
     expect(view.tag).toEqual({ tone: 'ok', label: 'оффер' });
     expect(view.next).toBe('Ответить до 14 ноября');

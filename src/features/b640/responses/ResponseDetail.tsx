@@ -1,50 +1,22 @@
-import { useEffect, useRef, useState } from 'react';
-import type { ApplicationStage } from '../../../../shared/applicationStage';
+import { useRef, useState } from 'react';
 import { vacancySourceLabel } from '../../../../shared/vacancySourceLabel';
-import {
-  patchApplication,
-  recordFollowUpSent,
-  restoreApplicationFromArchive,
-  type ApplicationView,
-} from '../../applications/applicationsApi';
+import type { ApplicationView } from '../../applications/applicationsApi';
 import { generateCompanyReminderDraft } from '../../applications/companyReminderDraft';
-import { apiErrorMessage } from '../../coach/apiClient';
 import { Button, Icon, Link, ResultLine, StatusLine, useToast } from '../kit';
 import { buildNodePath } from '../routes';
 import { timeline, type ListedResponse, type TimelineEvent } from './model/responseList';
+import { pluralRu } from './model/responseRow';
 import { actionPath } from './ResponsesTable';
-
-type Outcome =
-  | { readonly kind: 'idle' }
-  | { readonly kind: 'busy' }
-  | { readonly kind: 'done'; readonly text: string }
-  | { readonly kind: 'error'; readonly text: string; readonly retry: () => void };
-
-interface Mark {
-  readonly stage: ApplicationStage;
-  readonly label: string;
-  readonly done: string;
-}
-
-const MARKS: readonly Mark[] = [
-  { stage: 'responded', label: 'Ответили', done: 'Отмечено: ответили' },
-  { stage: 'interview', label: 'Пригласили на интервью', done: 'Отмечено: интервью' },
-  { stage: 'offer', label: 'Прислали оффер', done: 'Отмечено: оффер' },
-  { stage: 'rejected', label: 'Отказали', done: 'Отмечено: отказ' },
-  { stage: 'archived', label: 'В архив', done: 'Отклик в архиве' },
-];
-
-const STAGE_ORDER: readonly ApplicationStage[] = [
-  'saved', 'applied', 'responded', 'interview', 'offer', 'rejected', 'archived',
-];
-
-/** Что можно отметить дальше: только стадии после текущей. */
-export function marksFor(stage: ApplicationStage): readonly Mark[] {
-  if (stage === 'rejected' || stage === 'archived') return [];
-  if (stage === 'saved') return MARKS.filter((mark) => mark.stage === 'archived');
-  const at = STAGE_ORDER.indexOf(stage);
-  return MARKS.filter((mark) => STAGE_ORDER.indexOf(mark.stage) > at);
-}
+import {
+  marksFor,
+  useResponseActions,
+  useResponseNote,
+  useResponseWriter,
+  type Mark,
+  type Outcome,
+  type ResponseActions,
+  type ResponseWriter,
+} from './useResponseActions';
 
 function Events({ events }: { readonly events: readonly TimelineEvent[] }) {
   return (
@@ -75,12 +47,190 @@ function History({ application }: { readonly application: ApplicationView }) {
         <details className="more-n">
           <summary>
             <Icon name="down" />
-            {`Ещё ${rest.length}`}
+            {`Ещё ${rest.length} ${pluralRu(rest.length, ['событие', 'события', 'событий'])}`}
           </summary>
           <Events events={rest} />
         </details>
       ) : null}
     </div>
+  );
+}
+
+/** Результат или ошибка действия на его месте. */
+function OutcomeLine({ outcome }: { readonly outcome: Outcome }) {
+  if (outcome.kind === 'done') return <ResultLine text={outcome.text} />;
+  if (outcome.kind !== 'error') return null;
+  return (
+    <StatusLine
+      state="err"
+      text={outcome.text}
+      action={
+        <Button size="sm" onClick={outcome.retry}>
+          Повторить
+        </Button>
+      }
+    />
+  );
+}
+
+interface MarksProps {
+  readonly marks: readonly Mark[];
+  readonly disabled: boolean;
+  readonly onMark: (target: Mark) => void;
+}
+
+function MarkMenu({ marks, disabled, onMark }: MarksProps) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  if (marks.length === 0) return null;
+  return (
+    <details className="ways" ref={ref}>
+      <summary className="btn">
+        <Icon name="more" />
+        Отметить ответ
+      </summary>
+      <ul className="ways-list">
+        {marks.map((target) => (
+          <li key={target.stage}>
+            <button
+              className="row-act"
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                if (ref.current) ref.current.open = false;
+                onMark(target);
+              }}
+            >
+              {target.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+interface ReminderProps {
+  readonly fieldId: string;
+  readonly draft: string;
+  readonly onChange: (value: string) => void;
+}
+
+function ReminderDraft({ fieldId, draft, onChange }: ReminderProps) {
+  return (
+    <div className="lk-inline">
+      <div className="lk-dr-top">
+        <label className="lk-lbl" htmlFor={fieldId}>
+          Напоминание
+        </label>
+      </div>
+      <textarea
+        className="lk-draft lk-edit"
+        id={fieldId}
+        rows={5}
+        value={draft}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </div>
+  );
+}
+
+/** Копирует текст и говорит о результате тостом. */
+function useCopy(text: string): () => void {
+  const toast = useToast();
+  return () => {
+    const failed = () => toast.show({ text: 'Не получилось скопировать' });
+    try {
+      void navigator.clipboard
+        .writeText(text)
+        .then(() => toast.show({ text: 'Текст скопирован' }))
+        .catch(failed);
+    } catch {
+      failed();
+    }
+  };
+}
+
+interface ActionsProps {
+  readonly item: ListedResponse;
+  readonly actions: ResponseActions;
+  readonly draft: string;
+}
+
+function NextActions({ item, actions, draft }: ActionsProps) {
+  const { application, row } = item;
+  const copy = useCopy(draft);
+  const busy = actions.outcome.kind === 'busy';
+  const interviewAhead = application.stage === 'interview' && row.tag.tone !== 'ok';
+  return (
+    <div className="actions">
+      {row.action ? (
+        <Link className="btn is-primary" to={actionPath(row)}>
+          <Icon name={row.action.icon} />
+          {row.action.label}
+        </Link>
+      ) : null}
+      {row.remind ? (
+        <>
+          <Button variant="primary" icon="check" busy={busy} onClick={actions.remindSent}>
+            Я напомнил
+          </Button>
+          <Button icon="copy" onClick={copy}>
+            Скопировать
+          </Button>
+        </>
+      ) : null}
+      {application.stage === 'interview' ? (
+        <Link
+          className="btn is-primary"
+          to={buildNodePath(interviewAhead ? 'i01' : 'i04', { responseId: application.id })}
+        >
+          <Icon name={interviewAhead ? 'checkc' : 'mic'} />
+          {interviewAhead ? 'Подготовиться к интервью' : 'Рассказать, как прошло'}
+        </Link>
+      ) : null}
+      {application.stage === 'archived' ? (
+        <Button icon="undo" busy={busy} onClick={actions.restore}>
+          Вернуть из архива
+        </Button>
+      ) : null}
+      <MarkMenu marks={marksFor(application.stage)} disabled={busy} onMark={actions.mark} />
+    </div>
+  );
+}
+
+interface NoteProps {
+  readonly fieldId: string;
+  readonly application: ApplicationView;
+  readonly writer: ResponseWriter;
+}
+
+function NoteField({ fieldId, application, writer }: NoteProps) {
+  const state = useResponseNote(application, writer);
+  return (
+    <div className="field">
+      <label htmlFor={fieldId}>Ваша заметка</label>
+      <textarea
+        id={fieldId}
+        value={state.note}
+        maxLength={20000}
+        onChange={(event) => state.setNote(event.currentTarget.value)}
+        onBlur={state.save}
+      />
+      <OutcomeLine outcome={state.outcome} />
+    </div>
+  );
+}
+
+function VacancyLink({ application }: { readonly application: ApplicationView }) {
+  const url = application.vacancy?.url;
+  if (!url || !/^https?:\/\//u.test(url)) return null;
+  const source = application.vacancy?.source
+    ? vacancySourceLabel({ sourceType: application.vacancy.source })
+    : null;
+  return (
+    <a className="row-act" href={url} target="_blank" rel="noopener noreferrer">
+      <Icon name="out" /> {source ? `Вакансия на ${source}` : 'Вакансия'}
+    </a>
   );
 }
 
@@ -94,92 +244,14 @@ export interface ResponseDetailProps {
 /** Раскрытый отклик (O1c): что дальше, что было, заметка и ссылка на вакансию. */
 export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps) {
   const { application, row } = item;
-  const toast = useToast();
-  const [outcome, setOutcome] = useState<Outcome>({ kind: 'idle' });
-  const [note, setNote] = useState(application.notes ?? '');
-  const [noteState, setNoteState] = useState<Outcome>({ kind: 'idle' });
+  const writer = useResponseWriter(application, onChanged);
+  const actions = useResponseActions(application, writer);
   const [draft, setDraft] = useState(() =>
     generateCompanyReminderDraft({
       company: application.vacancy?.company,
       positionTitle: application.vacancy?.title ?? '',
     }),
   );
-  const marksRef = useRef<HTMLDetailsElement>(null);
-
-  useEffect(() => {
-    setNote(application.notes ?? '');
-  }, [application.id, application.notes]);
-
-  async function run(action: () => Promise<ApplicationView>, done: string, undo?: () => void) {
-    setOutcome({ kind: 'busy' });
-    try {
-      const next = await action();
-      onChanged(next);
-      setOutcome({ kind: 'done', text: done });
-      if (undo) toast.show({ text: done, undo: { label: 'Отменить', onUndo: undo } });
-    } catch (reason: unknown) {
-      setOutcome({
-        kind: 'error',
-        text: apiErrorMessage(reason, 'Не получилось сохранить. Повторите.'),
-        retry: () => void run(action, done, undo),
-      });
-    }
-  }
-
-  function mark(target: Mark) {
-    if (marksRef.current) marksRef.current.open = false;
-    const previous = application.stage;
-    void run(
-      () => patchApplication(application.id, { expectedVersion: application.version, stage: target.stage }),
-      target.done,
-      () => {
-        void patchApplication(application.id, {
-          expectedVersion: application.version + 1,
-          stage: previous,
-        })
-          .then((restored) => {
-            onChanged(restored);
-            setOutcome({ kind: 'idle' });
-          })
-          .catch((reason: unknown) =>
-            setOutcome({
-              kind: 'error',
-              text: apiErrorMessage(reason, 'Не получилось отменить.'),
-              retry: () => setOutcome({ kind: 'idle' }),
-            }),
-          );
-      },
-    );
-  }
-
-  async function saveNote() {
-    const value = note.trim();
-    if (value === (application.notes ?? '').trim()) return;
-    setNoteState({ kind: 'busy' });
-    try {
-      onChanged(
-        await patchApplication(application.id, {
-          expectedVersion: application.version,
-          notes: value || null,
-        }),
-      );
-      setNoteState({ kind: 'done', text: 'Заметка сохранена' });
-    } catch (reason: unknown) {
-      setNoteState({
-        kind: 'error',
-        text: apiErrorMessage(reason, 'Заметка не сохранилась.'),
-        retry: () => void saveNote(),
-      });
-    }
-  }
-
-  const marks = marksFor(application.stage);
-  const interviewAhead = application.stage === 'interview' && row.tag.tone !== 'ok';
-  const source = application.vacancy?.source
-    ? vacancySourceLabel({ sourceType: application.vacancy.source })
-    : null;
-  const url = application.vacancy?.url;
-
   return (
     <>
       <h3 className="od-head" id={titleId}>
@@ -190,132 +262,13 @@ export function ResponseDetail({ item, titleId, onChanged }: ResponseDetailProps
         <b>{row.next}</b>
       </p>
       {row.remind ? (
-        <div className="lk-inline" role="group" aria-labelledby={`${titleId}-dr`}>
-          <div className="lk-dr-top">
-            <label className="lk-lbl" id={`${titleId}-dr`} htmlFor={`${titleId}-drt`}>
-              Напоминание
-            </label>
-          </div>
-          <textarea
-            className="lk-draft lk-edit"
-            id={`${titleId}-drt`}
-            rows={5}
-            value={draft}
-            onChange={(event) => setDraft(event.currentTarget.value)}
-          />
-        </div>
+        <ReminderDraft fieldId={`${titleId}-drt`} draft={draft} onChange={setDraft} />
       ) : null}
-      <div className="actions">
-        {row.action ? (
-          <Link className="btn is-primary" to={actionPath(row)}>
-            <Icon name={row.action.icon} />
-            {row.action.label}
-          </Link>
-        ) : null}
-        {row.remind ? (
-          <>
-            <Button
-              variant="primary"
-              icon="check"
-              busy={outcome.kind === 'busy'}
-              onClick={() => void run(() => recordFollowUpSent(application.id), 'Отмечено: вы напомнили о себе')}
-            >
-              Я напомнил
-            </Button>
-            <Button
-              icon="copy"
-              onClick={() => {
-                void navigator.clipboard
-                  .writeText(draft)
-                  .then(() => toast.show({ text: 'Текст скопирован' }))
-                  .catch(() => toast.show({ text: 'Не получилось скопировать' }));
-              }}
-            >
-              Скопировать
-            </Button>
-          </>
-        ) : null}
-        {application.stage === 'interview' ? (
-          <Link
-            className="btn is-primary"
-            to={buildNodePath(interviewAhead ? 'i01' : 'i04', { responseId: application.id })}
-          >
-            <Icon name={interviewAhead ? 'checkc' : 'mic'} />
-            {interviewAhead ? 'Подготовиться к интервью' : 'Рассказать, как прошло'}
-          </Link>
-        ) : null}
-        {application.stage === 'archived' ? (
-          <Button
-            icon="undo"
-            busy={outcome.kind === 'busy'}
-            onClick={() =>
-              void run(
-                () => restoreApplicationFromArchive(application.id, application.version),
-                'Отклик возвращён из архива',
-              )
-            }
-          >
-            Вернуть из архива
-          </Button>
-        ) : null}
-        {marks.length > 0 ? (
-          <details className="ways" ref={marksRef}>
-            <summary className="btn">
-              <Icon name="more" />
-              Отметить ответ
-            </summary>
-            <ul className="ways-list">
-              {marks.map((target) => (
-                <li key={target.stage}>
-                  <button className="row-act" type="button" onClick={() => mark(target)}>
-                    {target.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </div>
-      {outcome.kind === 'done' ? <ResultLine text={outcome.text} /> : null}
-      {outcome.kind === 'error' ? (
-        <StatusLine
-          state="err"
-          text={outcome.text}
-          action={
-            <Button size="sm" onClick={outcome.retry}>
-              Повторить
-            </Button>
-          }
-        />
-      ) : null}
+      <NextActions item={item} actions={actions} draft={draft} />
+      <OutcomeLine outcome={actions.outcome} />
       <History application={application} />
-      <div className="field">
-        <label htmlFor={`${titleId}-note`}>Ваша заметка</label>
-        <textarea
-          id={`${titleId}-note`}
-          value={note}
-          maxLength={20000}
-          onChange={(event) => setNote(event.currentTarget.value)}
-          onBlur={() => void saveNote()}
-        />
-        {noteState.kind === 'error' ? (
-          <StatusLine
-            state="err"
-            text={noteState.text}
-            action={
-              <Button size="sm" onClick={noteState.retry}>
-                Повторить
-              </Button>
-            }
-          />
-        ) : null}
-        {noteState.kind === 'done' ? <ResultLine text={noteState.text} /> : null}
-      </div>
-      {url && /^https?:\/\//u.test(url) ? (
-        <a className="row-act" href={url} target="_blank" rel="noopener noreferrer">
-          <Icon name="out" /> {source ? `Вакансия на ${source}` : 'Вакансия'}
-        </a>
-      ) : null}
+      <NoteField fieldId={`${titleId}-note`} application={application} writer={writer} />
+      <VacancyLink application={application} />
       <p className="vd-kbd od-kbd">
         <kbd>Esc</kbd> — свернуть
       </p>

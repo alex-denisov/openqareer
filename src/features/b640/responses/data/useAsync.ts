@@ -42,7 +42,7 @@ export function useAsync<T>(load: (signal: AbortSignal) => Promise<T>, fallback:
   const reload = useCallback(() => setAttempt((value) => value + 1), []);
   const setData = useCallback((update: (current: T) => T) => {
     setState((current) =>
-      current.status === 'ready' ? { status: 'ready', data: update(current.data) } : current,
+      current.data === null ? current : { ...current, data: update(current.data) },
     );
   }, []);
 

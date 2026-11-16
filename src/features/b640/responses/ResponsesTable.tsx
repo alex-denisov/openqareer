@@ -108,6 +108,51 @@ function RowActionCell({ row, primary }: { readonly row: ResponseRow; readonly p
   );
 }
 
+interface RowProps {
+  readonly row: ResponseRow;
+  readonly open: boolean;
+  readonly next: boolean;
+  readonly detailId: string;
+  readonly onToggle: (id: string) => void;
+}
+
+function TableRow({ row, open, next, detailId, onToggle }: RowProps) {
+  const className = ['vt-row ot-row', open ? 'is-open' : '', next ? 'is-next' : '']
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <tr className={className} data-response-id={row.id}>
+      <td className="vt-c ot-c ot-c-role">
+        <button
+          className="vt-toggle"
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? detailId : undefined}
+          onClick={() => onToggle(row.id)}
+        >
+          <span>{row.role}</span>
+          <Icon name="down" className="vt-chev" />
+        </button>
+        <span className="ot-sub">
+          {row.company} · <span className="num">{row.sent}</span>
+        </span>
+      </td>
+      <td className="vt-c ot-c ot-c-co">{row.company}</td>
+      <td className="vt-c ot-c ot-c-st">
+        <span className={`tag ${row.tag.tone}`}>{row.tag.label}</span>
+      </td>
+      <td className="vt-c ot-c ot-c-nxt">
+        {row.next}
+        <small className="ot-ev num">{row.event}</small>
+      </td>
+      <td className="vt-c ot-c ot-c-sent is-num num">{row.sent}</td>
+      <td className="vt-c ot-c ot-c-act">
+        {open ? null : <RowActionCell row={row} primary={next} />}
+      </td>
+    </tr>
+  );
+}
+
 export interface ResponsesTableProps {
   readonly items: readonly ListedResponse[];
   readonly sort: SortState;
@@ -131,44 +176,16 @@ export function ResponsesTable(props: ResponsesTableProps) {
         <tbody>
           {items.map(({ row }) => {
             const open = row.id === openId;
-            const next = row.id === nextId && !open;
             const detailId = `otklik-${row.id}`;
             return (
               <Fragment key={row.id}>
-                <tr
-                  className={['vt-row ot-row', open ? 'is-open' : '', next ? 'is-next' : '']
-                    .filter(Boolean)
-                    .join(' ')}
-                  data-response-id={row.id}
-                >
-                  <td className="vt-c ot-c ot-c-role">
-                    <button
-                      className="vt-toggle"
-                      type="button"
-                      aria-expanded={open}
-                      aria-controls={open ? detailId : undefined}
-                      onClick={() => onToggle(row.id)}
-                    >
-                      <span>{row.role}</span>
-                      <Icon name="down" className="vt-chev" />
-                    </button>
-                    <span className="ot-sub">
-                      {row.company} · <span className="num">{row.sent}</span>
-                    </span>
-                  </td>
-                  <td className="vt-c ot-c ot-c-co">{row.company}</td>
-                  <td className="vt-c ot-c ot-c-st">
-                    <span className={`tag ${row.tag.tone}`}>{row.tag.label}</span>
-                  </td>
-                  <td className="vt-c ot-c ot-c-nxt">
-                    {row.next}
-                    <small className="ot-ev num">{row.event}</small>
-                  </td>
-                  <td className="vt-c ot-c ot-c-sent is-num num">{row.sent}</td>
-                  <td className="vt-c ot-c ot-c-act">
-                    {open ? null : <RowActionCell row={row} primary={next} />}
-                  </td>
-                </tr>
+                <TableRow
+                  row={row}
+                  open={open}
+                  next={row.id === nextId && !open}
+                  detailId={detailId}
+                  onToggle={onToggle}
+                />
                 {open ? (
                   <tr className="vt-detail-row is-next">
                     <td colSpan={6}>
