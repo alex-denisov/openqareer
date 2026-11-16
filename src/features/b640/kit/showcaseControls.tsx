@@ -52,9 +52,6 @@ export function ButtonSection() {
   return (
     <Section name="buttons" title="Кнопки">
       <div className="kit-row">
-        <Button variant="primary" icon="check">
-          Сохранить
-        </Button>
         <Button>Отмена</Button>
         <Button variant="quiet">Позже</Button>
         <Button size="sm" icon="down">
@@ -63,9 +60,7 @@ export function ButtonSection() {
         <Button variant="danger" icon="trash">
           Удалить
         </Button>
-        <Button variant="primary" busy>
-          Отправляем
-        </Button>
+        <Button busy>Отправляем</Button>
       </div>
     </Section>
   );

@@ -14,27 +14,32 @@ const section = (page: Page, name: string) => page.locator(`[data-kit="${name}"]
 
 test.describe('B649: витрина общих компонентов', () => {
   test('все секции на месте, горизонтальной прокрутки нет', async ({ page }) => {
-    await openKit(page);
-    for (const name of [
-      'settings-row',
-      'paged-list',
-      'toast',
-      'result-line',
-      'dialog',
-      'info-tip',
-      'composer',
-      'action-dock',
-      'row-action',
-      'buttons',
-      'form-row',
-      'theme',
-    ]) {
-      await expect(section(page, name).locator('h2')).toHaveCount(1);
+    const views: Record<string, readonly string[]> = {
+      '': [
+        'settings-row',
+        'paged-list',
+        'toast',
+        'result-line',
+        'dialog',
+        'info-tip',
+        'row-action',
+        'form-row',
+        'theme',
+        'action-dock',
+      ],
+      '?view=buttons': ['buttons', 'action-dock'],
+      '?view=composer': ['composer'],
+    };
+    for (const [query, names] of Object.entries(views)) {
+      await openKit(page, query);
+      for (const name of names) {
+        await expect(section(page, name).locator('h2')).toHaveCount(1);
+      }
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, query).toBeLessThanOrEqual(0);
     }
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
   });
 
   test('окно: фокус внутрь, Tab не выходит, Esc закрывает и возвращает фокус', async ({ page }) => {
@@ -89,11 +94,13 @@ test.describe('B649: витрина общих компонентов', () => {
   });
 
   test('панель ввода: Enter отправляет', async ({ page }) => {
-    await openKit(page);
+    await openKit(page, '?view=composer');
     const field = section(page, 'composer').getByLabel('Ваш вопрос консультанту');
     await field.fill('Как сменить роль?');
     await field.press('Enter');
-    await expect(section(page, 'composer').locator('.res-t')).toContainText('Как сменить роль?');
+    await expect(section(page, 'composer').locator('.msg.me').last()).toHaveText(
+      'Как сменить роль?',
+    );
     await expect(field).toHaveValue('');
   });
 
@@ -120,9 +127,11 @@ test.describe('B649: витрина общих компонентов', () => {
     await openKit(page);
     const result = await section(page, 'result-line').locator('.res-row').boundingBox();
     expect(result?.height ?? 99).toBeLessThanOrEqual(40);
+    await page.goto('/app/kit?view=buttons', { waitUntil: 'domcontentloaded' });
     for (const button of await section(page, 'buttons').locator('.btn:not(.is-sm)').all()) {
       expect((await button.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
     }
+    await page.goto('/app/kit', { waitUntil: 'domcontentloaded' });
     for (const action of await section(page, 'row-action').locator('.row-act:not(.is-sm)').all()) {
       expect((await action.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
     }
@@ -151,6 +160,8 @@ test.describe('B649: витрина общих компонентов', () => {
     mkdirSync('.s13-shots', { recursive: true });
     const views = [
       { name: 'page', query: '' },
+      { name: 'buttons', query: '?view=buttons' },
+      { name: 'composer', query: '?view=composer' },
       { name: 'dialog', query: '?open=dialog' },
     ];
     for (const theme of ['light', 'dark']) {
@@ -170,7 +181,7 @@ test.describe('B649: витрина общих компонентов', () => {
           await expect(page.locator('[data-b640-kit]')).toBeVisible({ timeout: 15_000 });
           await page.screenshot({
             path: `.s13-shots/kit-${view.name}-${width}-${theme}.png`,
-            fullPage: view.name === 'page',
+            fullPage: view.name === 'page' || view.name === 'buttons',
           });
         }
       }

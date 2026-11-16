@@ -82,7 +82,7 @@ export function ResultSection() {
         state="err"
         text="Не отправлен · нужен вход в hh.ru"
         action={
-          <Button variant="primary" size="sm" icon="out">
+          <Button size="sm" icon="out">
             Войти в hh.ru
           </Button>
         }
@@ -127,34 +127,40 @@ export function DialogSection({ autoOpen }: { autoOpen: boolean }) {
 }
 
 export function ComposerSection() {
-  const [last, setLast] = useState<string | null>(null);
+  const [asked, setAsked] = useState<string | null>(null);
   return (
     <Section name="composer" title="Панель ввода">
-      {last ? <ResultLine text={`Отправлено: ${last}`} /> : null}
-      <Composer
-        label="Ваш вопрос консультанту"
-        placeholder="Спросите своими словами"
-        onSubmit={setLast}
-        onVoice={() => Promise.reject(new Error('mic'))}
-      />
+      <div className="chat kit-chat-log" aria-live="polite">
+        <p className="msg me">Почему у Ладога Банка 86 %, а у Гринкода только 81?</p>
+        <div className="msg bot">
+          <p>В Ладога Банке 6 из 7 требований есть в вашем профиле. Не хватает одного.</p>
+        </div>
+        {asked ? <p className="msg me">{asked}</p> : null}
+      </div>
+      <div className="kit-chat-dock">
+        <Composer
+          label="Ваш вопрос консультанту"
+          placeholder="Спросите своими словами"
+          onSubmit={setAsked}
+          onVoice={() => Promise.reject(new Error('mic'))}
+        />
+      </div>
     </Section>
   );
 }
 
-export function DockSection() {
+export function DockSection({ title }: { readonly title: string }) {
   return (
-    <Section name="action-dock" title="Закреплённая главная кнопка">
-      <div className="kit-dock-stage">
-        <ActionDock
-          kind="commit"
-          primary={
-            <Button variant="primary" icon="check">
-              Сохранить итог
-            </Button>
-          }
-          secondary={<Button>Позже</Button>}
-        />
-      </div>
+    <Section name="action-dock" title={title}>
+      <ActionDock
+        kind="commit"
+        primary={
+          <Button variant="primary" icon="check">
+            Сохранить
+          </Button>
+        }
+        secondary={<Button>Позже</Button>}
+      />
     </Section>
   );
 }
