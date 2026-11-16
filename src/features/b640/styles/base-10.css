@@ -1,0 +1,5 @@
+/* Сгенерировано scripts/b640/port-mockup-css.mjs из макетов B640. Руками не править:
+   правки вносятся в макет и переносятся скриптом. */
+@layer b640.base.p10 {
+  .b640 .vt tbody.st-in { scroll-margin-block-start: calc(var(--career-topbar-height) + var(--career-space-12)); }
+}

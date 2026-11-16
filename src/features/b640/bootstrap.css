@@ -1,0 +1,17 @@
+/* B649: первый кадр нового кабинета до загрузки его стилей. Цвета — фон светлой
+   и тёмной темы из tokens.css; файл входит в основную сборку, поэтому он мал. */
+.b640-boot {
+  position: fixed;
+  inset: 0;
+  background: oklch(98.2% 0.004 200);
+}
+
+.b640-boot[data-theme='dark'] {
+  background: oklch(15.5% 0.012 200);
+}
+
+@media (prefers-color-scheme: dark) {
+  .b640-boot[data-theme='system'] {
+    background: oklch(15.5% 0.012 200);
+  }
+}
